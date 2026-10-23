@@ -21,7 +21,7 @@ using UnitSport.Tools.RoadGen.Rewrite;
 public static partial class SignalTestRegion
 {
     /// <summary>Tiles written: a row of junction tiles (N 1322) with a flat tile row either side. Outside Switzerland on purpose: no real tile, cached or not, shares an id.</summary>
-    public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1324;
+    public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1320, MaxTileN = 1324;
     /// <summary>
     /// The rail row (#1052), LV95 N <see cref="RailN"/>: a double-track tram in a town street (houses along its north side, none
     /// south), a reserved double tram track, the same as two single tracks mapped apart (Geneva, #1094), and a double-track main line with a 600 m curve, for their overhead lines.
@@ -105,6 +105,13 @@ public static partial class SignalTestRegion
     /// <summary>J20 (#1176): J19 with the tracks' stage unlit, walkers giving way to the trams (Geneva tile, north-west quarter).</summary>
     public const double UnlitTramE = 2913240, UnlitTramN = 1323760;
     /// <summary>
+    /// The gantries' junctions (#1189), LV95 E <see cref="GantryE"/> on the tile row N 1320: a short motorway from the south ends in
+    /// an exit and an entry ramp at a 2+2 main road's south end (<see cref="GantryRampN"/>); north of it the main road crosses two 2+2
+    /// roads at lights, J21 (<see cref="GantryNearN"/>) and J22 (<see cref="GantryFarN"/>), both within the rule's 300 m of the ramps:
+    /// direction-sign gantries with a horizontal head per lane (#1110), green toward the motorway, blue elsewhere.
+    /// </summary>
+    public const double GantryE = 2912500, GantryRampN = 1320300, GantryNearN = 1320400, GantryFarN = 1320560;
+    /// <summary>
     /// The region's cantons (#1038), by kilometre tile: only those whose lights or poles differ (pedestrian heads, arrow plates,
     /// pole colours, #1037; <c>tools/traffic-signals</c>); every other tile is the default zone (the cantons not checked yet).
     /// </summary>
@@ -132,7 +139,7 @@ public static partial class SignalTestRegion
     /// <summary>One TLM line as the extractor would read it, with its OSM overlay row.</summary>
     private sealed record Line(string Id, string Objektart, string Verkehrsbedeutung, string Eigentuemer, (double E, double N)[] Points,
         string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null, bool Divided = false, bool Ring = false,
-        RoadFlags? Rail = null, bool OnStreet = false)
+        RoadFlags? Rail = null, bool OnStreet = false, string OneWay = "")
     {
         public string Uuid => "{386-" + Id + "}";
     }
@@ -142,7 +149,7 @@ public static partial class SignalTestRegion
 
     /// <summary>An OSM row over part of a line (#700): metres along it, and the lane columns it carries (turn lanes in the line's drawing direction).</summary>
     private sealed record OsmRow(double From, double To, string Lanes = "", string LanesFwd = "", string LanesBwd = "", string TurnFwd = "", string TurnBwd = "",
-        string BikeFwd = "", string BikeBwd = "", bool Tram = false);
+        string BikeFwd = "", string BikeBwd = "", bool Tram = false, string DestFwd = "", string DestBwd = "", string DestLanesFwd = "", string DestLanesBwd = "");
 
     /// <summary>An OSM <c>highway=crossing</c> node (#700) on a line, metres along it, with its <c>crossing=*</c> value.</summary>
     private sealed record CrossingNode(string LineId, double Along, string Value, string? Tags = null);
@@ -645,6 +652,45 @@ public static partial class SignalTestRegion
                 Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
         }
 
+        // 18. direction-sign gantries (#1189, #1110): a short motorway from the south (two carriageways, TLM richtungsgetrennt) ends
+        // in an exit and an entry ramp at the south end of a 2+2 main road (OSM lanes=4); north of it the main road crosses two
+        // 2+2 roads at lights, J21 100 m and J22 260 m from the ramps (between them each widens over 40 m: the plain half keeps the link 2+2) (the rule: two lanes at the line, a 2+2 street, a main road
+        // within 300 m of a motorway or ramp). Every approach widens to left|through|right over its last 90 m, and OSM names each
+        // lane's destinations (invented towns): the signs green toward the motorway (the rule: a motorway that way within 800 m),
+        // blue on the others (cantonal roads)
+        {
+            const double ge = GantryE, gr = GantryRampN, g1 = GantryNearN, g2 = GantryFarN, arm = 400, widen = 90;
+            const string Ltr = "left|through|right", South = "Bergwiler;Talheim", North = "Seldwyla", East = "Güllen", West = "Brunnwil";
+            // the motorway: northbound on the east, southbound on the west, from the tile's south edge; the ramps bend apart and meet
+            lines.Add(new Line("GMN", "Autobahn", "Hochleistungsstrasse", "Bund", [(ge + 12, 1320005), (ge + 12, 1320150)], "motorway", Divided: true));
+            lines.Add(new Line("GMS", "Autobahn", "Hochleistungsstrasse", "Bund", [(ge - 12, 1320150), (ge - 12, 1320005)], "motorway", Divided: true));
+            lines.Add(new Line("GXN", "Ausfahrt", "Hochleistungsstrasse", "Bund", [(ge + 12, 1320150), (ge + 20, 1320200), (ge + 16, 1320260), (ge, gr)], "motorway_link",
+                Divided: true, OneWay: "1", Rows: [new OsmRow(0, 150, Lanes: "2")]));
+            lines.Add(new Line("GXS", "Einfahrt", "Hochleistungsstrasse", "Bund", [(ge, gr), (ge - 16, 1320260), (ge - 20, 1320200), (ge - 12, 1320150)], "motorway_link",
+                Divided: true, OneWay: "1", Rows: [new OsmRow(0, 150, Lanes: "2")]));
+            // a 2+2 cantonal road widened to three lanes toward the lights (lanes:forward=3), its lanes' destinations from OSM
+            OsmRow Plain(double from, double to) => new(from, to, Lanes: "4");
+            OsmRow ToEnd(double from, double to, string dest) => new(from, to, Lanes: "5", LanesFwd: "3", LanesBwd: "2", TurnFwd: Ltr, DestLanesFwd: dest);
+            OsmRow ToStart(double from, double to, string dest) => new(from, to, Lanes: "5", LanesFwd: "2", LanesBwd: "3", TurnBwd: Ltr, DestLanesBwd: dest);
+            void Road(string id, (double E, double N) a, (double E, double N) b, params OsmRow[] rows) =>
+                lines.Add(new Line(id, "10m Strasse", "Durchgangsstrasse", "Kanton", [a, b], "primary", Rows: rows));
+            // the main road, south to north: from the ramps to J21 (northbound into J21), J21 to J22 (southbound into J21, northbound
+            // into J22), J22 north (southbound into J22)
+            Road("GM0", (ge, gr), (ge, g1), Plain(0, g1 - gr - widen), ToEnd(g1 - gr - widen, g1 - gr, $"{West}|{North}|{East}"));
+            Road("GM1", (ge, g1), (ge, g2), ToStart(0, 40, $"{East}|{South}|{West}"), Plain(40, g2 - g1 - 40), ToEnd(g2 - g1 - 40, g2 - g1, $"{West}|{North}|{East}"));
+            Road("GM2", (ge, g2), (ge, g2 + 380), ToStart(0, widen, $"{East}|{South}|{West}"), Plain(widen, 380));
+            // the cross roads, west to east: eastbound into the junction on the west arm, westbound on the east arm
+            foreach (var (id, gn) in new[] { ("GA", g1), ("GB", g2) })
+            {
+                Road(id + "W", (ge - arm, gn), (ge, gn), Plain(0, arm - widen), ToEnd(arm - widen, arm, $"{North}|{East}|{South}"));
+                Road(id + "E", (ge, gn), (ge + arm, gn), ToStart(0, widen, $"{South}|{West}|{North}"), Plain(widen, arm));
+            }
+            junctions.Add(new Junction("J21-gantry-near", ge, g1, "2+2 roads 100 m from a motorway's ramps: direction-sign gantries, green toward the motorway",
+                Arms(null, null, null, null)));
+            junctions.Add(new Junction("J22-gantry-far", ge, g2, "J21 again 260 m from the ramps, still within the gantry rule's reach",
+                Arms(null, null, null, null)));
+        }
+
         return new Design(lines, boxes, junctions, crossings);
 
         // a main road of two one-way carriageways (TLM richtungsgetrennt) 2 x half apart, east and west of (e, n), node at each
@@ -695,7 +741,7 @@ public static partial class SignalTestRegion
         var stats = TileRewriter.Run(chunkDir, roadTiles, new TileRewriter.Options(
             RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), TramStops: Path.Combine(tempDir, "tram_stops.tsv"),
             NewJunctions: newJunctions, WriteJunctions: writeJunctions,
-            Cantons: TileRewriter.Cantons.Of(CantonTiles), Decorate: MarkBorders), log);
+            Cantons: TileRewriter.Cantons.Of(CantonTiles), Decorate: MarkBorders, GantryFacts: Path.Combine(tempDir, "gantry_facts.tsv")), log);
         log(stats.Network.Format(stats.TilesWritten));
         log("");
         int bad = Report(chunkDir, design.Junctions, log) + BorderReport(chunkDir, log);
@@ -1046,14 +1092,16 @@ public static partial class SignalTestRegion
     {
         var inv = CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
-        sb.Append(inv, $"# osm_overlay v3 {FileTag} bbox={MinTileE * 1000},{MinTileN * 1000},{(MaxTileE + 1) * 1000},{(MaxTileN + 1) * 1000} synthetic (#386)\n");
+        sb.Append(inv, $"# osm_overlay v4 {FileTag} bbox={MinTileE * 1000},{MinTileN * 1000},{(MaxTileE + 1) * 1000},{(MaxTileN + 1) * 1000} synthetic (#386)\n");
         sb.Append("uuid\tpart\tfrom_m\tto_m\tosm_way\tdir\thighway\toneway\tlanes\tlanes_fwd\tlanes_bwd\twidth"
-            + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\tbicycle_lanes_fwd\tbicycle_lanes_bwd\n");
+            + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\tbicycle_lanes_fwd\tbicycle_lanes_bwd"
+            + "\tdestination_fwd\tdestination_bwd\tdestination_lanes_fwd\tdestination_lanes_bwd\n");
         int way = 0;
         foreach (var line in lines.Where(l => l.Rail is null).OrderBy(l => l.Uuid, StringComparer.Ordinal))
             foreach (var row in line.Rows ?? [new OsmRow(0, Length(line))])
-                sb.Append(inv, $"{line.Uuid}\t0\t{row.From:F1}\t{row.To:F1}\t{386000 + ++way}\t+\t{line.Highway}\t\t{row.Lanes}\t{row.LanesFwd}\t{row.LanesBwd}\t")
-                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t{(row.Tram ? 1 : 0)}\t\t\t{row.BikeFwd}\t{row.BikeBwd}\n");
+                sb.Append(inv, $"{line.Uuid}\t0\t{row.From:F1}\t{row.To:F1}\t{386000 + ++way}\t+\t{line.Highway}\t{line.OneWay}\t{row.Lanes}\t{row.LanesFwd}\t{row.LanesBwd}\t")
+                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t{(row.Tram ? 1 : 0)}\t\t\t{row.BikeFwd}\t{row.BikeBwd}")
+                    .Append(inv, $"\t{row.DestFwd}\t{row.DestBwd}\t{row.DestLanesFwd}\t{row.DestLanesBwd}\n");
         File.WriteAllText(Path.Combine(tempDir, "osm_overlay.tsv"), sb.ToString());
     }
 
