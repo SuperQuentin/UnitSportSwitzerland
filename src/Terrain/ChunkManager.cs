@@ -759,6 +759,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// </summary>
     public static bool OcclusionCells { get; set; } = Core.CmdArgs.Value("--occlusion", notFlag: true) != "off";
 
+    /// <summary>
+    /// Detail chosen by the distance from the eye, height included (LodPolicy.WithAltitude): a standalone
+    /// headset (#1112), or <c>--verticallod</c>. Below 150 m above the ground nothing changes.
+    /// </summary>
+    public static bool VerticalLod { get; } = Platform.IsStandaloneVr || Core.CmdArgs.Has("--verticallod");
+
     /// <summary>Tiles within this many of an anchor's draw their buildings in cells.</summary>
     public const int CellRings = 1;
 
@@ -1885,12 +1891,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             int radius = Lod.MaxDist;
             bool byRadius = CollisionByRadius && _collisionAnchors.Contains(anchor);
             var reach = byRadius ? ReachOf(anchor) : default;
+            // how high the anchor is above its ground, for the vertical LOD (LodPolicy.WithAltitude)
+            float agl = VerticalLod && TryGetHeight(anchor.GlobalPosition, out float under) ? anchor.GlobalPosition.Y - under : 0f;
             for (int de = -radius; de <= radius; de++)
                 for (int dn = -radius; dn <= radius; dn++)
                 {
                     var id = new TileId(center.E + de, center.N + dn);
                     if (!IsAvailable(id)) continue;
-                    int dist = Math.Max(Math.Abs(de), Math.Abs(dn));
+                    int ring = Math.Max(Math.Abs(de), Math.Abs(dn));
+                    // the ring the detail is chosen by: further out the higher the anchor flies, never
+                    // past the last ring (a tile under a high flight stays loaded at the coarsest stride)
+                    int dist = VerticalLod ? Math.Min(LodPolicy.WithAltitude(ring, agl), Lod.MaxDist) : ring;
                     int stride = BuildMeshes ? Lod.StrideFor(dist) : 0;
                     if (stride < 0) continue;
                     // Only a body needs ground to stand on. The fly camera and a replay's ghosts
@@ -1900,7 +1911,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     bool collision = BuildCollision && _collisionAnchors.Contains(anchor)
                         && (byRadius
                             ? CollisionReach.Wants(id, reach.E, reach.N, reach.AheadE, reach.AheadN, reach.Airborne)
-                            : dist <= Lod.CollisionMaxDist);
+                            : ring <= Lod.CollisionMaxDist);   // the ground a body may land on: by the ring only
                     bool roads = BuildMeshes && dist <= Lod.RoadMaxDist;
                     bool buildings = BuildMeshes && dist <= Lod.BuildingMaxDist;
                     // strides are all 0 when meshes are off, otherwise all > 0: min = finest

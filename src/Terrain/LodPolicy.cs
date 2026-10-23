@@ -69,6 +69,20 @@ public sealed class LodPolicy
         return -1;
     }
 
+    /// <summary>
+    /// The ring a tile <paramref name="ring"/> rings out is worth from <paramref name="aglM"/> metres
+    /// above the ground (#1112): the ring of its 3D distance, from its near edge ((ring - 0.5) km) and the
+    /// height, never nearer than the ring itself. Below 150 m it is the ring: a body on the ground, a car.
+    /// </summary>
+    public static int WithAltitude(int ring, float aglM)
+    {
+        if (aglM <= 150f) return ring;
+        double h = Math.Max(0.0, ring - 0.5), v = aglM / 1000.0;
+        double d = Math.Sqrt(h * h + v * v);
+        int byDistance = d < 0.5 ? 0 : (int)Math.Ceiling(d - 0.5);
+        return Math.Max(ring, byDistance);
+    }
+
     public static int Distance(TileId a, TileId b) =>
         Math.Max(Math.Abs(a.E - b.E), Math.Abs(a.N - b.N));
 
