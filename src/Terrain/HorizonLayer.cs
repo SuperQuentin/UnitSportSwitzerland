@@ -26,6 +26,9 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private static readonly int MaxBuildsInFlight = Core.Platform.IsMobile ? 2   // a phone's cores are the tiles' (#63)
         : Math.Clamp(System.Environment.ProcessorCount / 2, 2, 8);
 
+    /// <summary>The lattice step: 200 m on a standalone headset, a quarter of the triangles (#1112).</summary>
+    private static readonly int HorizonStep = Core.Platform.IsStandaloneVr ? 2 : 1;
+
     /// <summary>Main-thread time a frame may spend committing blocks; one always goes through.</summary>
     private const double CommitBudgetMs = 3;
 
@@ -246,7 +249,7 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
             Task.Run(() =>
             {
                 TerrainMeshBuilder.MeshData? mesh = null;
-                try { mesh = TerrainMeshBuilder.BuildHorizonBlock(index, key.E, key.N); }
+                try { mesh = TerrainMeshBuilder.BuildHorizonBlock(index, key.E, key.N, HorizonStep); }
                 catch (Exception e) { GD.PushError($"[horizon] block {key} failed: {e}"); }
                 _ready.Enqueue((key, epoch, generation, mesh));
             });

@@ -177,7 +177,14 @@ public partial class XrUi : Node3D
 
         // nobody sees a standalone headset's window: it draws no 2D (the panel, its own mask, shows it
         // all). Not the window inactive: the headset's viewport is its child and stopped with it
-        if (Platform.IsStandaloneVr && _layer != null) root.CanvasCullMask = 0;
+        if (Platform.IsStandaloneVr && _layer != null)
+        {
+            root.CanvasCullMask = 0;
+            // nor anything at all: no clear, and straight to the screen, with no copy of it to blit
+            // (the window's two passes were 4 ms of a Quest 2's frame)
+            RenderingServer.ViewportSetClearMode(root.GetViewportRid(), RenderingServer.ViewportClearMode.Never);
+            RenderingServer.ViewportSetRenderDirectToScreen(root.GetViewportRid(), true);
+        }
         GD.Print($"[xr] panel {_view.Size.X}x{_view.Size.Y} for a {_size.X}x{_size.Y} canvas");
 
         foreach (var node in AllNodes(root)) Redirect(node);
