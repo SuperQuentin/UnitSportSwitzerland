@@ -1010,6 +1010,11 @@
 6688.5	Terrain / Traffic light - Bern
 6688.5	Terrain / Traffic light - Bike right on red
 6688.5	Terrain / Traffic light - Bike right on red, no bike head
+9825.4	Terrain / Traffic light - Bike right-turn head
+9825.4	Terrain / Traffic light - Bike right-turn head alone
+9825.4	Terrain / Traffic light - Bike right-turn head, Vaud plates
+6926	Terrain / Traffic light - Bike right-turn head, giving way
+9825.4	Terrain / Traffic light - Bike right-turn head, right on red
 6688.5	Terrain / Traffic light - Flasher, arrow plate
 5134	Terrain / Traffic light - Flasher, bike plate
 4990.9	Terrain / Traffic light - Flasher, left turn on the left pole
