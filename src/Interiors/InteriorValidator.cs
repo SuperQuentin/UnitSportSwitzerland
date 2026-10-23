@@ -44,7 +44,7 @@ public static class InteriorValidator
                 var r = rooms[i];
                 if (r.X0 < -hw || r.X1 > hw || r.Z0 < -hd || r.Z1 > hd)
                     errors.Add($"floor {f} room {i} {r.Type} outside the footprint");
-                if (Math.Min(r.Width, r.Depth) < 1.0f)
+                if (Math.Min(r.Width, r.Depth) < 1.0f && !r.Piece)
                     errors.Add($"floor {f} room {i} {r.Type} is {r.Width:F1}x{r.Depth:F1} m");
                 // An opening cannot be taller than the room it is cut in. Worth stating because a
                 // room's headroom is no longer always the storey's: a site's service block is a

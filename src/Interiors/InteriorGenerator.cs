@@ -101,9 +101,12 @@ public static partial class InteriorGenerator
         var site = BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY);
         if (house != null)
         {
-            if (!TryHouse(layout, fp, house, new TileId(fp.Key.TileE, fp.Key.TileN), out why)) return null;
+            if (!TryHouse(layout, fp, house, new TileId(fp.Key.TileE, fp.Key.TileN), out why, out var extra)) return null;
             if (fp.Extra.Count > 0) Entrances(layout, fp);
+            // a room cut into pieces is furnished once, in its biggest piece
+            foreach (var (piece, _) in extra) piece.Type = RoomType.Corridor;
             Furnish(layout, rng);
+            foreach (var (piece, t) in extra) piece.Type = t;
             return layout;
         }
         bool planned = type == BuildingType.Ikea

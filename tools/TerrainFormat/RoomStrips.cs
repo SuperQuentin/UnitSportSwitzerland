@@ -36,9 +36,15 @@ public static class RoomStrips
     /// <summary>Slivers thinner than this (an acute corner's tip) are dropped.</summary>
     public const double MinPiece = 0.2;
 
+    /// <param name="keep">
+    /// Bands of z left whole: where a door or window is drawn on an angled wall, the wall stays one straight step
+    /// there, at least as long as the opening, instead of steps too short to hold it.
+    /// </param>
     public static (List<RoomPiece> Pieces, List<PieceContact> Contacts) Cut(
-        IReadOnlyList<(double X, double Z)[]> rooms, IReadOnlyList<(double X0, double Z0, double X1, double Z1)> stairs)
+        IReadOnlyList<(double X, double Z)[]> rooms, IReadOnlyList<(double X0, double Z0, double X1, double Z1)> stairs,
+        IReadOnlyList<(double Z0, double Z1)>? keep = null)
     {
+        keep ??= [];
         // --- strip lines: corners and stair ends, merged when close, angled walls cut finer ---
         var lines = rooms.SelectMany(r => r.Select(p => p.Z)).Concat(stairs.SelectMany(s => new[] { s.Z0, s.Z1 }))
             .Select(z => Math.Round(z, 3)).OrderBy(z => z).ToList();
@@ -52,13 +58,19 @@ public static class RoomStrips
             if (i + 1 == kept.Count) break;
             double a = kept[i], b = kept[i + 1];
             if (b - a <= Step + 0.3 || !Angled(rooms, a, b)) continue;
+            // the band's own lines: an even step, but none inside a kept band and one at each of its ends
+            var cuts = new List<double>();
             int n = (int)Math.Ceiling((b - a) / Step);
-            for (int k = 1; k < n; k++) all.Add(a + (b - a) * k / n);
+            for (int k = 1; k < n; k++) cuts.Add(a + (b - a) * k / n);
+            foreach (var (k0, k1) in keep) cuts.AddRange(new[] { k0, k1 });
+            double last = a;
+            foreach (var z in cuts.Where(z => z > a + Merge && z < b - Merge && !keep.Any(k => z > k.Z0 + 1e-6 && z < k.Z1 - 1e-6))
+                         .OrderBy(z => z))
+                if (z - last >= Merge) { all.Add(z); last = z; }
         }
 
         // --- each strip: every room's spans at the strip's middle ---
-        var pieces = new List<RoomPiece>();
-        var open = new Dictionary<(int Room, long X0, long X1), int>(); // a piece that may still grow down
+        var strips = new List<(double Za, double Zb, List<(int Room, double X0, double X1)> Spans)>();
         for (int s = 0; s + 1 < all.Count; s++)
         {
             double za = all[s], zb = all[s + 1], zm = (za + zb) / 2;
@@ -89,7 +101,17 @@ public static class RoomStrips
                     spans.InsertRange(i, parts);
                     i += parts.Count - 1;
                 }
+            strips.Add((za, zb, spans));
+        }
 
+        // --- an angled room keeps a core: its biggest rectangle in one piece, to furnish and walk in ---
+        for (int r = 0; r < rooms.Count; r++) Core(strips, r);
+
+        // --- pieces: a room's spans, merged down the strips while they keep the same width ---
+        var pieces = new List<RoomPiece>();
+        var open = new Dictionary<(int Room, long X0, long X1), int>(); // a piece that may still grow down
+        foreach (var (za, zb, spans) in strips)
+        {
             var next = new Dictionary<(int, long, long), int>();
             foreach (var (r, x0, x1) in spans)
             {
@@ -111,6 +133,50 @@ public static class RoomStrips
         // thin strips (two corners nearly level) leave pieces too shallow to stand in: dropped
         pieces = pieces.Where(p => p.Depth >= MinPiece / 2).ToList();
         return (pieces, Contacts(pieces));
+    }
+
+    /// <summary>
+    /// The biggest rectangle across consecutive strips inside a room whose spans change from strip to strip (an
+    /// angled wall), cut out of its spans so the merge makes one piece of it; what is left beside it stays as steps.
+    /// A leftover too thin to stand in goes to the core in that strip instead.
+    /// </summary>
+    private static void Core(List<(double Za, double Zb, List<(int Room, double X0, double X1)> Spans)> strips, int room)
+    {
+        // the room's widest span in each strip, -1 where it has none
+        var widest = strips.Select(st => st.Spans.Select((p, i) => (p, i)).Where(t => t.p.Room == room)
+            .OrderByDescending(t => t.p.X1 - t.p.X0).Select(t => t.i).DefaultIfEmpty(-1).First()).ToList();
+        var mine = widest.Select((w, s) => (w, s)).Where(t => t.w >= 0).Select(t => strips[t.s].Spans[t.w]).ToList();
+        if (mine.Select(p => (Math.Round(p.X0, 3), Math.Round(p.X1, 3))).Distinct().Count() < 2) return;
+
+        double best = 0;
+        int bi = -1, bj = -1;
+        double blo = 0, bhi = 0;
+        for (int i = 0; i < strips.Count; i++)
+        {
+            if (widest[i] < 0) continue;
+            double lo = double.MinValue, hi = double.MaxValue;
+            for (int j = i; j < strips.Count && widest[j] >= 0; j++)
+            {
+                if (j > i && Math.Abs(strips[j].Za - strips[j - 1].Zb) > 1e-6) break;
+                var p = strips[j].Spans[widest[j]];
+                lo = Math.Max(lo, p.X0);
+                hi = Math.Min(hi, p.X1);
+                if (hi - lo < 1.0) break;
+                double area = (hi - lo) * (strips[j].Zb - strips[i].Za);
+                if (area > best) { best = area; bi = i; bj = j; blo = lo; bhi = hi; }
+            }
+        }
+        if (bi < 0) return;
+        for (int s = bi; s <= bj; s++)
+        {
+            var spans = strips[s].Spans;
+            int w = widest[s];
+            var (r, x0, x1) = spans[w];
+            double lo = blo - x0 < 0.3 ? x0 : blo, hi = x1 - bhi < 0.3 ? x1 : bhi;
+            var parts = new[] { (x0, lo), (lo, hi), (hi, x1) }.Where(p => p.Item2 - p.Item1 > 1e-6).Select(p => (r, p.Item1, p.Item2)).ToList();
+            spans.RemoveAt(w);
+            spans.InsertRange(w, parts);
+        }
     }
 
     /// <summary>Every place two pieces touch, with how long they touch.</summary>

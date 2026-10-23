@@ -27,8 +27,11 @@ public partial class HouseLayoutCheck : Node
         HouseLayouts.Warn = m => { _warned.Add(m); GD.Print("[houselayout] warned: " + m); };
         if (CmdArgs.Value("--houselayoutcheck", notFlag: true) is { } file) Export(file, CmdArgs.Value("--chunks", notFlag: true) ?? "terrain_chunks");
         else
+            {
             foreach (float turn in new[] { 0f, 30f, 90f })
                 House(turn);
+            Angled();
+        }
         HouseLayouts.Set([]);
         GD.Print($"[houselayout] RESULT: {(_failures == 0 ? "ok" : $"FAILED ({_failures})")}");
         GetTree().Quit(_failures == 0 ? 0 : 1);
@@ -57,8 +60,9 @@ public partial class HouseLayoutCheck : Node
         if (l == null) { Check(false, $"{at}: no plan"); return; }
         Check(l.House == layout.Hash(), $"{at}: planned without the drawn layout ({l.Floors.Count} floors)");
         Check(l.Floors.Count == 2 && l.Below == 0, $"{at}: {l.Floors.Count} floors, {l.Below} below, want 2 and 0");
-        Check(l.Floors.Count == 2 && l.Floors[0].Rooms.Count == 3 && l.Floors[1].Rooms.Count == 4,
-            $"{at}: rooms {string.Join("/", l.Floors.Select(f => f.Rooms.Count))}, want 3/4");
+        // the hall's stair is carved out as a lane of its own: count the rooms by type, not the pieces
+        Check(l.Floors.Count == 2 && l.Floors[0].Rooms.Select(r => r.Type).Distinct().Count() == 3 && l.Floors[1].Rooms.Count == 4,
+            $"{at}: rooms {string.Join("/", l.Floors.Select(f => f.Rooms.Count))}, want 3 types / 4");
         Check(l.Floors[0].AllFlights().Count() == 1 && l.Floors.Count > 1 && l.Floors[1].Holes.Count == 1, $"{at}: no stair with its hole above");
         Check(l.Floors[0].Rooms.Any(r => r.Type == RoomType.Kitchen) && l.Floors.Last().Rooms.Count(r => r.Type == RoomType.Bedroom) == 2,
             $"{at}: room types lost");
@@ -134,6 +138,61 @@ public partial class HouseLayoutCheck : Node
         System.IO.File.WriteAllText(System.IO.Path.Combine(Out, name + ".svg"), InteriorValidator.ToSvg(l));
     }
 
+    /// <summary>
+    /// One storey drawn as polygons: a living room and a kitchen split by an angled wall with a door in it. The game
+    /// builds them from strips joined full height, so each stays one room to walk, and the door finds the wall.
+    /// </summary>
+    private void Angled()
+    {
+        var id = new TileId(2594, 1120);
+        var b = Box(500, 500, 12, 8, 3, 0);
+        var tile = new BuildingTile { Id = id, Buildings = [b] };
+        var o = BuildingOutline.Compute(b, id);
+        var layout = new HouseLayout
+        {
+            Egid = 777, E = o.CenterE, N = o.CenterN, YawDeg = o.YawDeg,
+            Floors =
+            [
+                new HouseFloor
+                {
+                    Level = 0,
+                    Rooms =
+                    [
+                        new HouseRoom { Type = "Living", Points = [[-6, -4], [2, -4], [-1, 4], [-6, 4]] },
+                        new HouseRoom { Type = "Kitchen", Points = [[2, -4], [6, -4], [6, 4], [-1, 4]] },
+                    ],
+                    Openings =
+                    [
+                        new HouseOpening { Kind = "door", X0 = 0.875, Z0 = -1, X1 = 0.5, Z1 = 0 },
+                        new HouseOpening { Kind = "door", X0 = -5, Z0 = -4, X1 = -4, Z1 = -4 },
+                        new HouseOpening { Kind = "window", X0 = 6, Z0 = -1, X1 = 6, Z1 = 0.5 },
+                    ],
+                },
+            ],
+        };
+        var drawn = layout.Validate(o.LocalRings());
+        Check(drawn.Count == 0, $"angled: the drawn layout breaks the web's rules: {string.Join("; ", drawn)}");
+        HouseLayouts.Set([layout]);
+        _warned.Clear();
+        var l = InteriorGenerator.Generate(tile, 0, null, null);
+        if (l == null) { Check(false, "angled: no plan"); return; }
+        Check(l.House == layout.Hash(), $"angled: planned without the drawn layout: {string.Join("; ", _warned)}");
+        var rooms = l.Floors[0].Rooms;
+        Check(rooms.Count > 2 && rooms.All(r => r.Piece), $"angled: {rooms.Count} pieces, want the two rooms cut into strips");
+        Check(rooms.Count(r => r.Type == RoomType.Living) > 1 && rooms.Count(r => r.Type == RoomType.Kitchen) > 1, "angled: room types lost");
+        Check(rooms.Sum(r => r.Area) > 12 * 8 * 0.97, $"angled: the pieces cover {rooms.Sum(r => r.Area):F1} of 96 m²");
+        Check(rooms.Any(r => r.Openings.Any(x => x.Kind == OpeningKind.Door && x.Other >= 0 && rooms[x.Other].Type != r.Type)),
+            "angled: no door between the living room and the kitchen");
+        Check(l.Furniture.Count(f => f.Type == FurnitureType.Sofa) <= 1, "angled: the living room furnished once per piece");
+        Check(l.Furniture.Count > 0, "angled: nothing furnished (no piece big enough to hold the furniture)");
+        var problems = InteriorValidator.Validate(l);
+        Check(problems.Count == 0, $"angled: the game's validator: {string.Join("; ", problems.Take(4))}");
+        try { InteriorMeshBuilder.Build(l); }
+        catch (Exception ex) { Check(false, $"angled: the mesh builder threw {ex.GetType().Name}: {ex.Message}"); }
+        Svg("angled", l);
+        GD.Print($"[houselayout] angled: {rooms.Count} pieces, {l.Furniture.Count} pieces of furniture");
+    }
+
     /// <summary>The house's layout in its outline's frame: x along its 12 m, z across its 8 m.</summary>
     private static HouseLayout Layout(BuildingOutline o) => new()
     {
@@ -145,9 +204,9 @@ public partial class HouseLayoutCheck : Node
                 Level = 0,
                 Rooms =
                 [
-                    new HouseRoom { X0 = -6, Z0 = -4, X1 = 0, Z1 = 4, Type = "Living" },
-                    new HouseRoom { X0 = 0, Z0 = -4, X1 = 2, Z1 = 4, Type = "Hall" },
-                    new HouseRoom { X0 = 2, Z0 = -4, X1 = 6, Z1 = 4, Type = "Kitchen" },
+                    HouseRoom.Rect(-6, -4, 0, 4, "Living"),
+                    HouseRoom.Rect(0, -4, 2, 4, "Hall"),
+                    HouseRoom.Rect(2, -4, 6, 4, "Kitchen"),
                 ],
                 Openings =
                 [
@@ -164,10 +223,10 @@ public partial class HouseLayoutCheck : Node
                 Level = 1,
                 Rooms =
                 [
-                    new HouseRoom { X0 = -6, Z0 = -4, X1 = 0, Z1 = 4, Type = "Bedroom" },
-                    new HouseRoom { X0 = 0, Z0 = -4, X1 = 2, Z1 = 4, Type = "Hall" },
-                    new HouseRoom { X0 = 2, Z0 = -4, X1 = 6, Z1 = 0, Type = "Bedroom" },
-                    new HouseRoom { X0 = 2, Z0 = 0, X1 = 6, Z1 = 4, Type = "Bathroom" },
+                    HouseRoom.Rect(-6, -4, 0, 4, "Bedroom"),
+                    HouseRoom.Rect(0, -4, 2, 4, "Hall"),
+                    HouseRoom.Rect(2, -4, 6, 0, "Bedroom"),
+                    HouseRoom.Rect(2, 0, 6, 4, "Bathroom"),
                 ],
                 Openings =
                 [

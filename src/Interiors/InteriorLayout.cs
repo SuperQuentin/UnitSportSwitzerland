@@ -74,6 +74,12 @@ public sealed class RoomPlan
     /// <see cref="Span"/> (<see cref="InteriorLayout.ClearOf"/>).
     /// </summary>
     public float Clear { get; set; }
+    /// <summary>
+    /// One rectangle of a room drawn as a polygon on the web (#1186), cut into strips: it may be narrower than a
+    /// room may be, and opens onto the room's other pieces. Left out of the JSON when false.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Piece { get; set; }
     public List<OpeningPlan> Openings { get; set; } = new();
 
     public float Width => X1 - X0;
