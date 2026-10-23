@@ -110,7 +110,7 @@ public static partial class SignalTestRegion
     /// roads at lights, J21 (<see cref="GantryNearN"/>) and J22 (<see cref="GantryFarN"/>), both within the rule's 300 m of the ramps:
     /// direction-sign gantries with a horizontal head per lane (#1110), green toward the motorway, blue elsewhere.
     /// </summary>
-    public const double GantryE = 2912500, GantryRampN = 1320300, GantryNearN = 1320400, GantryFarN = 1320560;
+    public const double GantryE = 2912500, GantryRampN = 1320300, GantryNearN = 1320380, GantryFarN = 1320560;
     /// <summary>
     /// The region's cantons (#1038), by kilometre tile: only those whose lights or poles differ (pedestrian heads, arrow plates,
     /// pole colours, #1037; <c>tools/traffic-signals</c>); every other tile is the default zone (the cantons not checked yet).
@@ -654,7 +654,8 @@ public static partial class SignalTestRegion
 
         // 18. direction-sign gantries (#1189, #1110): a short motorway from the south (two carriageways, TLM richtungsgetrennt) ends
         // in an exit and an entry ramp at the south end of a 2+2 main road (OSM lanes=4); north of it the main road crosses two
-        // 2+2 roads at lights, J21 100 m and J22 260 m from the ramps (between them each widens over 40 m: the plain half keeps the link 2+2) (the rule: two lanes at the line, a 2+2 street, a main road
+        // 2+2 roads at lights, J21 80 m and J22 260 m from the ramps (between them the approaches widen over 50 and 30 m: the plain half keeps the link 2+2;
+        // 160 m between the two left J22's northbound right pocket without its lane in LANE) (the rule: two lanes at the line, a 2+2 street, a main road
         // within 300 m of a motorway or ramp). Every approach widens to left|through|right over its last 90 m, and OSM names each
         // lane's destinations (invented towns): the signs green toward the motorway (the rule: a motorway that way within 800 m),
         // blue on the others (cantonal roads)
@@ -674,10 +675,10 @@ public static partial class SignalTestRegion
             OsmRow ToStart(double from, double to, string dest) => new(from, to, Lanes: "5", LanesFwd: "2", LanesBwd: "3", TurnBwd: Ltr, DestLanesBwd: dest);
             void Road(string id, (double E, double N) a, (double E, double N) b, params OsmRow[] rows) =>
                 lines.Add(new Line(id, "10m Strasse", "Durchgangsstrasse", "Kanton", [a, b], "primary", Rows: rows));
-            // the main road, south to north: from the ramps to J21 (northbound into J21), J21 to J22 (southbound into J21, northbound
-            // into J22), J22 north (southbound into J22)
-            Road("GM0", (ge, gr), (ge, g1), Plain(0, g1 - gr - widen), ToEnd(g1 - gr - widen, g1 - gr, $"{West}|{North}|{East}"));
-            Road("GM1", (ge, g1), (ge, g2), ToStart(0, 40, $"{East}|{South}|{West}"), Plain(40, g2 - g1 - 40), ToEnd(g2 - g1 - 40, g2 - g1, $"{West}|{North}|{East}"));
+            // the main road: from the ramps north to J21 (northbound into J21), J22 south to J21 (northbound into J22, southbound
+            // into J21; drawn so, the northbound approach to J22 keeps its right lane), J22 north (southbound into J22)
+            Road("GM0", (ge, gr), (ge, g1), Plain(0, 20), ToEnd(20, g1 - gr, $"{West}|{North}|{East}"));
+            Road("GM1", (ge, g2), (ge, g1), ToStart(0, 50, $"{West}|{North}|{East}"), Plain(50, g2 - g1 - 30), ToEnd(g2 - g1 - 30, g2 - g1, $"{East}|{South}|{West}"));
             Road("GM2", (ge, g2), (ge, g2 + 380), ToStart(0, widen, $"{East}|{South}|{West}"), Plain(widen, 380));
             // the cross roads, west to east: eastbound into the junction on the west arm, westbound on the east arm
             foreach (var (id, gn) in new[] { ("GA", g1), ("GB", g2) })
@@ -685,7 +686,7 @@ public static partial class SignalTestRegion
                 Road(id + "W", (ge - arm, gn), (ge, gn), Plain(0, arm - widen), ToEnd(arm - widen, arm, $"{North}|{East}|{South}"));
                 Road(id + "E", (ge, gn), (ge + arm, gn), ToStart(0, widen, $"{South}|{West}|{North}"), Plain(widen, arm));
             }
-            junctions.Add(new Junction("J21-gantry-near", ge, g1, "2+2 roads 100 m from a motorway's ramps: direction-sign gantries, green toward the motorway",
+            junctions.Add(new Junction("J21-gantry-near", ge, g1, "2+2 roads 80 m from a motorway's ramps: direction-sign gantries, green toward the motorway",
                 Arms(null, null, null, null)));
             junctions.Add(new Junction("J22-gantry-far", ge, g2, "J21 again 260 m from the ramps, still within the gantry rule's reach",
                 Arms(null, null, null, null)));
