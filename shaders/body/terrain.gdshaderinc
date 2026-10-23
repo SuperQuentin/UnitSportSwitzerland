@@ -109,8 +109,10 @@ void fragment() {
     // Steep ground is lit by the smoothed normal (#883): a cliff's 1-2 m facets tilt with the
     // height data's noise, and lit one by one they read as vertical stripes, not as a wall.
     // Gentle ground keeps its facets.
+#ifndef STANDALONE
     vec3 sn = normalize(smooth_n);
     n = normalize(mix(n, sn, smoothstep(0.8, 0.55, sn.y)));
+#endif
 
     vec3 col = COLOR.rgb;
 
@@ -120,6 +122,10 @@ void fragment() {
     // screen-space normal without turning to confetti. Each fades out before it aliases,
     // the same way the road markings do.
     int pattern = int(COLOR.a * 4.0 + 0.5);
+#ifdef STANDALONE
+    // a standalone headset (#1112): no surface patterns, a few pixels at its resolution
+    pattern = 0;
+#endif
     if (pattern > 0) {
         float detail = max(fwidth(world_pos.x), fwidth(world_pos.z));
         vec2 ground = pattern_xz(world_pos);
