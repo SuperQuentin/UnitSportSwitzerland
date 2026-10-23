@@ -697,10 +697,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // not open yet rides the through lane, a transition's strip leads onto it) saw it only once within 2 m of its line, 12 m
             // short of it at 40 km/h, and stopped on top of it; or one ahead on a bend or a junction path, measured across its heading now)
             float across = d.Dot(rightOf), toward = car.LaneAim - car.Lane;
-            if (along < 1f || along > FollowLook || Mathf.Abs(d.Y) > 3f
+            if (along < 1f || along > FollowLook || Mathf.Abs(d.Y) > 3f || other.Route.At(0).Dir.Dot(dir) < 0.3f
                 || Mathf.Abs(across) > AheadWidth && Mathf.Abs(across - toward) > AheadWidth
                    && !OnLineAhead(car, other.Head, d.Length())) continue;
-            if (other.Route.At(0).Dir.Dot(dir) < 0.3f) continue;
             // side by side, each in the other's way (#1134, the user: two cars at a lane split, one moving over into the other's lane,
             // both stopped for good): only one gives way. The one changing lanes yields to the one keeping its lane; both or neither
             // changing, the lower habit yields. The other drives on as if it were not there
@@ -1214,6 +1213,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float centre = approach.LaneCentre - KeepRight(car.Route.Edge, car.Route.Forward, car.Habit);
             car.LaneWanted = centre * onto + approach.Lateral(car.LaneIndex, d);
             car.LaneAim = centre + approach.Lateral(car.LaneIndex, 0f);
+            // (#1172) on a road that already has its lane here (an artery's lanes run on before the record's 24 m of them): straight to
+            // it, not to the original lane's centre first. Upstream every car rode its usual line, so a queue longer than the record
+            // stood in one or two lanes (J13's west arm: L 0, T 5, T 9, TR 20 at its longest)
+            if (HasLane(car.Route.Edge, car.Route.Forward, KeepRight(car.Route.Edge, car.Route.Forward, car.Habit) + car.LaneAim))
+                car.LaneWanted = car.LaneAim;
         }
         bool crossed = before > 0f && before < float.MaxValue && toLine <= 0f;
         bool pocketLeft = car.Turn == SignalMoves.Left && car.LaneIndex >= 0 && approach.Parent[car.LaneIndex] >= 0
@@ -1850,6 +1854,22 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     public int GivingWayCars => _cars.Count(c => c.GivingWay);
 
     /// <summary>
+    /// Whether edge <paramref name="e"/>, driven <paramref name="forward"/>, has a car lane of that way whose centre lies within 1 m of
+    /// <paramref name="right"/> m right of its centreline (#1172).
+    /// </summary>
+    private static bool HasLane(LaneEdge e, bool forward, float right)
+    {
+        if (e.Path is not null || e.Connector || e.LaneWidth <= 0f) return false;
+        bool oneWay = e.OneWay != 0;
+        if ((e.Flags & RoadFlags.Divided) != 0 && !oneWay) return false;
+        int lanes = oneWay ? e.OneWayLanes : forward ? e.LanesFwd : e.LanesBwd;
+        float first = oneWay ? e.RightLane : forward ? e.RightLaneFwd : e.RightLaneBwd;
+        for (int k = 0; k < lanes; k++)
+            if (Mathf.Abs(first - k * e.LaneWidth - right) < 1f) return true;
+        return false;
+    }
+
+    /// <summary>
     /// Right-hand traffic: an undivided road is shared, so each car keeps to the rightmost lane of its
     /// direction (#700: where the road has the lanes and a car's habit takes the next lane in: a third of
     /// them on 2+ lanes), clear of a painted bike lane.
@@ -1942,6 +1962,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             float d = Mathf.Max(0f, car.ToLine - ahead);
             float onto = Mathf.Clamp((a.Reach + 15f - d) / 15f, 0f, 1f);
+            if (HasLane(edge, forward, KeepRight(edge, forward, car.Habit) + car.LaneAim)) return car.LaneAim;
             return (a.LaneCentre - KeepRight(edge, forward, car.Habit)) * onto + a.Lateral(car.LaneIndex, d);
         }
         return car.LaneWanted;
