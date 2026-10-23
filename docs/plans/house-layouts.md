@@ -53,11 +53,11 @@ room edges, with openings cut in them. The editor draws exactly that, so no new 
   file and a move. Mutating calls need a JSON body and the `X-Requested-With` header (CSRF, with SameSite).
 - Plans and layouts are private: only their owner and admins read them. Nothing personal goes in the export.
 
-## Pages (`tools/deploy/web/`)
+## Page (`tools/deploy/web/houses.html`)
 
-- `houses.html`: Leaflet map (the live map's swisstopo look), address search (geo.admin.ch SearchServer,
+- Leaflet map (the live map's swisstopo look, an aerial toggle), address search (geo.admin.ch SearchServer,
   which gives the EGID), click a building; login; claim; the editor; status of my claims.
-- `houses-admin.html`: the queue, the plan beside the drawing, approve / reject with a reason.
+- For moderators, in the same page: the queue, the plan under the drawing, approve / reject with a reason.
 
 ## Game (phase 2)
 
@@ -68,8 +68,12 @@ room edges, with openings cut in them. The editor draws exactly that, so no new 
   room it opens into. The stored-plan cache must not mask it (the layout's hash goes into the stored key).
 - A layout that fails `InteriorValidator` is logged and ignored: the generated interior stays.
 
-## Phases
+## Phases (status: all three built, #1187; the note `net/house-layouts` is the reference)
 
-1. Shared `HouseLayout` + validation + unit tests; the service; the two pages; local check.
-2. Game: the override, a fixture check (`--houselayoutcheck`) that loads a layout for a fixture building.
-3. Deploy: Caddy `/api/*` and the two pages, systemd unit, `deploy-linux.sh` publish + upload, notes.
+1. Done: shared `HouseLayout` + validation (reachability added: a front door, every room reached) + unit tests; the
+   service, SQLite or PostgreSQL (asked for during the work); **one** page, `houses.html`, the review queue in it for moderators.
+2. Done: the override in `InteriorGenerator.Generate`, `--houselayoutcheck` on a box house turned three ways.
+3. Done: Caddy `/api/*` and `houses.html`; the service in a tmux loop (`start-layouts.sh`) like the game server
+   rather than a systemd unit, so a deploy needs no sudo to restart it; `deploy-linux.sh` publish + upload. Not deployed yet.
+4. Done (asked after the first review): rooms are polygons, with a ruler, wall lengths, typed lengths and two-point plan
+   alignment; the game cuts polygons into joined strips around a core. Exact angled walls in the game: #1197.
