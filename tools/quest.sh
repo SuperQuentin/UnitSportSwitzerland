@@ -102,6 +102,7 @@ package/name="UnitSport Switzerland"
 package/signed=true
 screen/immersive_mode=true
 command_line/extra_args="${QUEST_ENGINE_ARGS:-}"
+shader_baker/enabled=true
 xr_features/xr_mode=1
 xr_features/enable_meta_plugin=true
 meta_xr_features/hand_tracking=1

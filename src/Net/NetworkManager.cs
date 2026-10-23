@@ -10,6 +10,17 @@ public partial class NetworkManager : Node
     public const int MaxClients = 32;
 
     /// <summary>
+    /// A peer is dropped only after this long without an answer (ENet's default, ~5 s, cut off
+    /// a Quest whose first draw of a city compiled its shaders for 5 s, #1112), and always by
+    /// <see cref="StallMaxMs"/>. A clean quit says goodbye and is not delayed by either.
+    /// </summary>
+    public const int StallMinMs = 15000, StallMaxMs = 30000;
+
+    /// <summary>Gives a connected peer <see cref="StallMinMs"/> before ENet gives up on it.</summary>
+    private static void TolerateStalls(ENetMultiplayerPeer enet, int peerId) =>
+        enet.GetPeer(peerId)?.SetTimeout(32, StallMinMs, StallMaxMs);
+
+    /// <summary>
     /// This process is the dedicated server (the same test <c>Main</c> boots on). Not
     /// <c>Multiplayer.IsServer()</c>: offline, Godot's default peer calls itself the server too.
     /// </summary>
@@ -53,6 +64,7 @@ public partial class NetworkManager : Node
         }
 
         Multiplayer.MultiplayerPeer = peer;
+        Multiplayer.PeerConnected += id => TolerateStalls(peer, (int)id);
 
         bool boundToOne = !string.IsNullOrWhiteSpace(bindIp);
 
@@ -76,6 +88,8 @@ public partial class NetworkManager : Node
             return false;
         }
         Multiplayer.MultiplayerPeer = peer;
+        // the server as a peer of this client (id 1): as patient with a stalled server as it is with us
+        Multiplayer.ConnectedToServer += () => { if (Multiplayer.MultiplayerPeer == peer) TolerateStalls(peer, 1); };
         GD.Print($"[net] connecting to {Format(host, port)}");
         return true;
     }
