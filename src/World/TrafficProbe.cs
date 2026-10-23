@@ -118,6 +118,8 @@ public partial class TrafficProbe : Node
                 GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_car.png"));
         }
 
+        // --merge (#1172): the merge scenario alone, its own end
+        if (_merge) { MergeTick(); return; }
         if (_stay && _shot != null && _placed && _t > CaptureFrom) Capture();
         if (_t >= TickFrom && _t - delta < TickFrom) _traffic.ResetTickCost();
         // the test world (#971): its cars from a generator and destination on each arm of the junction, not --dense or --feed
@@ -198,7 +200,7 @@ public partial class TrafficProbe : Node
             string perLane = !a.MultiLane ? ""
                 : ", at the line " + string.Join(", ", a.Lanes.Select((l, i) => (l, i)).Where(x => x.l.Kind == ApproachLaneKind.Car)
                     .Select(x => $"{Letters(x.l.Moves)} {a.Crossings[x.i]}{(a.Crossings[x.i] > 0 ? $" at {a.OffsetSum[x.i] / a.Crossings[x.i]:+0.0;-0.0} m" : "")}"))
-                  + $" (lane {string.Join("/", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => $"{l.Offset:+0.0;-0.0}"))} m from the original lane), worst lag {a.LaneError:F2} m";
+                  + $" (lane {string.Join("/", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => $"{l.Offset:+0.0;-0.0}"))} m from the original lane, from {string.Join("/", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => $"{l.TaperFrom:F0}"))} m before the line), worst lag {a.LaneError:F2} m";
             GD.Print($"[trafficcheck] approach {where} arm {heading:F0} deg, {(a.Site is null ? "no lights" : "lights")}, lanes {lanes}"
                 + $"{(a.Banned != 0 ? $", no {Letters(a.Banned)}" : "")}, {new Vector2(a.Stop.X - at.X, a.Stop.Z - at.Z).Length():F0} m away: "
                 + $"stopped at red {a.RedStops}, entered on red {a.RedRuns} (cleared yellow {a.AmberClears}), {(a.Site is null ? "crossed" : "on green")} {a.GreenCrossings}, "

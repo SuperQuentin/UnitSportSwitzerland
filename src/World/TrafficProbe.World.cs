@@ -23,6 +23,8 @@ public partial class TrafficProbe
     private string? _junction;
     private readonly Dictionary<LaneApproach, (int Max, List<int> CycleMins, int Now, double CycleStart)> _queues = new();
     private LaneGraph? _queuesOf;
+    /// <summary>Per approach with lanes side by side, the cars standing in each lane when its queue was longest (#1172).</summary>
+    private readonly Dictionary<LaneApproach, int[]> _laneSplit = new();
 
     /// <summary>Whether the world's endpoints run instead of the probe's (#1134).</summary>
     private bool WorldEndpoints => _stay && _traffic.GeneratorsOnly && _traffic.WorldEndpoints.Count > 0 && _feedTurns is null;
@@ -51,6 +53,11 @@ public partial class TrafficProbe
         {
             var (max, mins, now, start) = _queues[a];
             int standing = _traffic.Standing(a, 200f);
+            if (standing > max && a.MultiLane)
+            {
+                var lanes = _laneSplit.TryGetValue(a, out var l) ? l : _laneSplit[a] = new int[a.Lanes.Length];
+                _traffic.StandingByLane(a, 200f, lanes);
+            }
             max = Math.Max(max, standing);
             now = Math.Min(now, standing);
             if (_t - start >= a.Site!.Plan.Cycle)
@@ -101,7 +108,7 @@ public partial class TrafficProbe
                 var (e, n) = origin.ToLv95(a.Stop);
                 bool growing = mins.Count >= 2 && mins[^1] > GrowingQueue && mins[^2] > GrowingQueue;
                 GD.Print($"[trafficcheck] {_junction} queue at {e:F0},{n:F0} (arm {Mathf.RadToDeg(Mathf.Atan2(-a.Out.Z, a.Out.X)):F0} deg, cycle {a.Site!.Plan.Cycle:F0} s): "
-                    + $"longest {max} standing, shortest in each cycle [{string.Join(" ", mins)}]{(growing ? " NOT CLEARING" : "")}");
+                    + $"longest {max} standing{(_laneSplit.TryGetValue(a, out var split) ? $" (by lane {string.Join(" | ", a.Lanes.Select((l, i) => (l, i)).Where(x => x.l.Kind == ApproachLaneKind.Car).Select(x => $"{Letters(x.l.Moves)} {split[x.i]}"))})" : "")}, shortest in each cycle [{string.Join(" ", mins)}]{(growing ? " NOT CLEARING" : "")}");
                 if (growing) failure ??= $"{_junction}: the queue at {e:F0},{n:F0} kept over {GrowingQueue} cars through its last two cycles";
             }
         var stuck = _traffic.StuckDropped;
