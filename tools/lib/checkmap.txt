@@ -188,6 +188,7 @@ src/Ui/WorldPick         quick  --worldpickcheck --world fixture
 src/Ui/SoloScreen        quick  --worldpickcheck --world fixture
 src/Core/TerrainPaths    quick  --worldpickcheck --world fixture
 src/Core/Debug           quick  --debugcheck --systems ui
+src/Terrain/LanePlanDebug quick  --debugcheck --systems ui
 src/Styles/StyleKit      quick  --debugcheck --systems ui
 src/Terrain/ChunkNode    quick  --debugcheck --systems ui
 src/BattleRoyale/        quick  --brcheck

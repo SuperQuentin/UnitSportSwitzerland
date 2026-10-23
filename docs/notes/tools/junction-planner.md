@@ -187,7 +187,8 @@ off, `--junctions new` plans and reports without writing.
   where each side starts and its profile; an ordinary segment's is constant (`ShiftAt` a case of it), a `TRNS` piece's varies.
   `RoadMeshBuilder.AppendSegment` (edges per point, no type join on a transition), `RoadStreetBuilder` (a profile per point, one
   shape; a varying side simplified on every profile line), the road blend (`Line`: edges per piece, so the heightfield collision
-  holds the carriageway), `KerbCheck` and `--street-svg` all read it. Ordinary streets: kerb and seam checks identical to main.
+  holds the carriageway), `KerbCheck`, `--street-svg` and the debug menu's lane plan (#1181, `core/debug-menu`: every
+  strip from above by kind, arrows, mouth labels) all read it. Ordinary streets: kerb and seam checks identical to main.
 - **Measured** (Oct 14 2026): test region 10 of 13 junctions written (2 a street beyond the block, 1 its partner), 30 transitions
   over 32 pieces, 0 decoded differently, kerb check ok, seams as before. Sion 423 of 1,017 written (546 multi-node, 24 a check, 12
   beyond the block, 9 partners, 3 a path joins), 83 transitions over 142 pieces, 0 decoded differently, no piece lost (a piece
