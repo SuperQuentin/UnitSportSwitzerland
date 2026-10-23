@@ -94,7 +94,7 @@ public partial class GameShell : Node
             "--traffic", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
-            "--multiplayer", "--solo", "--map", "--character", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
+            "--multiplayer", "--solo", "--map", "--character", "--welcome", "--welcomecheck", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands", "--xrring", "--xrspace",
             "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
@@ -185,6 +185,7 @@ public partial class GameShell : Node
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
+        if (WelcomeCheck.Requested()) AddChild(new WelcomeCheck(this));
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
         if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
@@ -426,8 +427,17 @@ public partial class GameShell : Node
         }
         ClearStack();
         Push(TitleScreen.Create());
+        // the first-run welcome (#1131): once, over the title, on the first title of the session
+        if (!_welcomeShown && WelcomeScreen.Wanted())
+        {
+            _welcomeShown = true;
+            GD.Print("[welcome] first run: the welcome opens over the title");
+            Push(WelcomeScreen.Create());
+        }
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
+
+    private static bool _welcomeShown;
 
     public override void _UnhandledInput(InputEvent e)
     {

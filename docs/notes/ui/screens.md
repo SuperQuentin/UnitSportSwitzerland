@@ -8,7 +8,7 @@
   `TitleScreen` (Play solo / Multiplayer / Map / Character / Settings / Controls / Quit over `TitleDiorama`),
   `SoloScreen` (Explore and GPX cards + session options; the Explore card picks the world, `core/test-worlds`), `GpxPicker`, `MultiplayerScreen`,
   `SettingsScreen` (tabs), `CharacterScreen` (the figure editor, #1127: title, pause menu, P on foot, quick menu),
-  `PauseScreen`. `Shell.Push` / `Shell.Back`; Esc / pad B pops,
+  `WelcomeScreen` (the first-run welcome over the title, #1131, `ui/welcome`), `PauseScreen`. `Shell.Push` / `Shell.Back`; Esc / pad B pops,
   and is always consumed (the title refuses, see `core/menu-refuses-close-still-consume`).
   Pages are created fresh on every push, so a page always shows the current settings.
 - **Pause menu** (`Ui/PauseScreen`): Esc / Start in the world raises `ClientWorld.PauseRequested`;
