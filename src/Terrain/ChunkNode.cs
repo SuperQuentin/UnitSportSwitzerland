@@ -239,7 +239,7 @@ public partial class ChunkNode : Node3D
         {
             // the ground, its roads and its water never cast sun shadows (lit styles): millions
             // of triangles under the cascades, for shade the cel light already gives the slopes
-            _meshInstance = new MeshInstance3D { CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Ground) };
+            _meshInstance = new MeshInstance3D { Name = "Ground", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Ground) };
             AddChild(_meshInstance);
         }
         Swap(_meshInstance, mesh);
