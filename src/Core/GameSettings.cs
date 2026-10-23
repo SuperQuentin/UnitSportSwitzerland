@@ -416,8 +416,10 @@ public sealed class GameSettings
     /// <summary>
     /// A standalone headset's Application SpaceWarp (#1112): the game renders every other frame and the headset makes
     /// the one between from the motion it is given, so a frame has twice the time (XR/XrSession.ApplySpaceWarp).
+    /// Off, and only <c>--spacewarp on</c>: on a Quest 2 a black patch flashed in the left eye, and the made frames felt
+    /// less smooth than the headset's own reprojection of a slower game.
     /// </summary>
-    public bool VrSpaceWarp { get; set; } = true;
+    public bool VrSpaceWarp { get; set; }
     /// <summary>
     /// The headset's refresh rate, Hz: 60, 72, 80, 90 or 120 (the nearest the runtime offers). Physics
     /// ticks at it in VR, so every frame moves the view once. 72 by default: a Quest 2 over Air

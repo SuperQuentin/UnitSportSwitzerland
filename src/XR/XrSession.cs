@@ -214,7 +214,8 @@ public static class XrSession
     {
         if (!Active || Simulated || !Engine.HasSingleton(SpaceWarpName)) return;
         var ext = Engine.GetSingleton(SpaceWarpName);
-        bool want = Platform.IsStandaloneVr && GameSettings.Current.VrSpaceWarp;
+        // only asked for on the command line: a settings file from the builds that offered it may still say on
+        bool want = Platform.IsStandaloneVr && CmdArgs.Has("--spacewarp") && GameSettings.Current.VrSpaceWarp;
         ext.Call(SetSpaceWarp, want);
         bool on = ext.Call(SpaceWarpOn).AsBool();
         if (on != SpaceWarp) GD.Print($"[xr] SpaceWarp {(on ? "on" : "off")}");

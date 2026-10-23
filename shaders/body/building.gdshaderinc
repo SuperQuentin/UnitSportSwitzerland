@@ -770,6 +770,10 @@ void fragment() {
         float slats = fine_detail(0.075, px);
 
 #ifdef STANDALONE
+        // past ChunkNode.ProxyFromM (300 m from a 125 m cell's middle, so from 212 m for a building in its corner)
+        // the building is its far stand-in, which has no windows: they fade into the wall before, and the stand-in
+        // takes over unseen (#1112)
+        legible *= 1.0 - smoothstep(150.0, 210.0, length(world_pos - CAMERA_POSITION_WORLD));
         if (windowed && in_row && in_col) {
             // a standalone headset (#1112): the window as flat glass, lit or not by the same per-window
             // hash; the recess traced into the wall, the room behind, the shutters, the sills and the
