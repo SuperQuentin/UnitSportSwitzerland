@@ -101,7 +101,7 @@ internal sealed class XrHands
             hand.PrevLocal = local;
             PokeRadio(hand);
 
-            float g = hand.Ctl.GetHasTrackingData() ? hand.Ctl.GetFloat("grip") : 0f;
+            float g = hand.Ctl.GetHasTrackingData() ? hand.Ctl.GetFloat(XrPad.Inputs.Grip) : 0f;
             bool closing = !hand.Closed && g > GripClose;
             if (hand.Closed && g < GripOpen)
             {

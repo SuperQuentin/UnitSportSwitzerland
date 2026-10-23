@@ -95,7 +95,7 @@ public partial class GameShell : Node
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
-            "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands", "--xrring", "--xrspace",
+            "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmsaa", "--vrscale", "--vrfoveation", "--shadows", "--rendercensus", "--hidenodes", "--hidetoggle", "--soakcheck", "--perflevel", "--foveation", "--nosky", "--overdraw", "--hideui", "--plainterrain", "--litterrain", "--terrainvariant", "--vrmult", "--vrfloor", "--verticallod", "--buildingrings", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands", "--xrring", "--xrspace",
             "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)
@@ -108,11 +108,12 @@ public partial class GameShell : Node
         Instance = this;
         // a phone: fingers, not a pointer, so every menu a size up (#63; the canvas shrinks to match,
         // and the touch overlay lays out on what is left)
-        if (Platform.IsMobile) GetTree().Root.ContentScaleFactor = MobileUiScale;
+        if (Platform.IsTouch) GetTree().Root.ContentScaleFactor = MobileUiScale;
         Audio.SfxBus.Ensure();
         PlayerInput.Install(GetParent());
         // VR (#186) before any menu or camera exists, so the title is in the headset too
         bool vr = XR.XrSession.TryStart(GetParent());
+        RenderCensus.Install(this);
         AddChild(new DisplaySettings { Name = "Display" });
         AddChild(new DataWatch { Name = "DataWatch" });
 

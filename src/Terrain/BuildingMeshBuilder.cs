@@ -201,6 +201,90 @@ public static partial class BuildingMeshBuilder
     public static bool Drawn(Building b) => b.Kind != BuildingKind.UnderConstruction;
 
     /// <summary>
+    /// Each building as its roof on walls (#1112): its surveyed roof triangles where they are, in its roof colour, and a
+    /// wall in its wall colour from its floor up to every outer edge of that roof, no window grid (UV.y &lt; 0). The far
+    /// stand-in a standalone headset draws past <see cref="ChunkNode.ProxyFromM"/>: the building's own outline and
+    /// roofline, courtyards and all (a plan box reached across the street of an L or a ring), with a few dozen triangles
+    /// where the drawn building has hundreds. Its windows have faded out by then (building.gdshaderinc), so it takes
+    /// over unseen.
+    /// </summary>
+    public static MeshData? BuildProxies(BuildingTile tile)
+    {
+        var types = BuildingTypes.For(tile);
+        var verts = new List<Vector3>();
+        var colors = new List<Color>();
+        var edges = new Dictionary<(long, long), (Vector3 A, Vector3 B, Vector2 Inside, int Count)>();
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+        {
+            var b = tile.Buildings[bi];
+            if (!Drawn(b) || b.MaxY <= b.MinY + 0.5f) continue;
+            var type = types.TypeOf(bi);
+            var kind = KindOf(b, type);
+            var wall = WallColor(kind, b.YearBuilt, type).SrgbToLinear();
+            var roof = RoofColor(kind, type).SrgbToLinear();
+            float bottom = b.MinY;
+            // the roof: every triangle with an area seen from above that is not the floor
+            edges.Clear();
+            var t = b.Triangles;
+            for (int i = 0; i + 8 < t.Length; i += 9)
+            {
+                var p0 = new Vector3(t[i], t[i + 1], t[i + 2]);
+                var p1 = new Vector3(t[i + 3], t[i + 4], t[i + 5]);
+                var p2 = new Vector3(t[i + 6], t[i + 7], t[i + 8]);
+                if (MathF.Abs((p1.X - p0.X) * (p2.Z - p0.Z) - (p1.Z - p0.Z) * (p2.X - p0.X)) < 0.01f) continue;   // a wall, edge-on from above
+                if ((p0.Y + p1.Y + p2.Y) / 3f < bottom + 1f) continue;   // the floor
+                ProxyTriangle(verts, colors, p0, p1, p2, roof);
+                var inside = new Vector2((p0.X + p1.X + p2.X) / 3f, (p0.Z + p1.Z + p2.Z) / 3f);
+                Edge(edges, p0, p1, inside);
+                Edge(edges, p1, p2, inside);
+                Edge(edges, p2, p0, inside);
+            }
+            // the walls: under each roof edge no other roof triangle shares, the outline of the plan
+            foreach (var (a, c, inside, count) in edges.Values)
+            {
+                if (count != 1) continue;
+                var outward = new Vector3((a.X + c.X) / 2f - inside.X, 0f, (a.Z + c.Z) / 2f - inside.Y);
+                ProxyQuad(verts, colors, a with { Y = bottom }, c with { Y = bottom }, c, a, outward, wall);
+            }
+        }
+        if (verts.Count == 0) return null;
+        int n = verts.Count;
+        var uvs = new Vector2[n];
+        Array.Fill(uvs, new Vector2(0f, -1f));   // no window grid
+        return new MeshData(verts.ToArray(), colors.ToArray(), uvs, new Vector2[n], new float[n * 4]);
+    }
+
+    /// <summary>A roof edge, counted under its two ends welded to 5 cm in plan, whichever way round it runs.</summary>
+    private static void Edge(Dictionary<(long, long), (Vector3 A, Vector3 B, Vector2 Inside, int Count)> edges,
+        Vector3 a, Vector3 b, Vector2 inside)
+    {
+        long ka = (long)MathF.Round(a.X * 20f) * 1_000_000 + (long)MathF.Round(a.Z * 20f);
+        long kb = (long)MathF.Round(b.X * 20f) * 1_000_000 + (long)MathF.Round(b.Z * 20f);
+        if (ka == kb) return;
+        var key = ka < kb ? (ka, kb) : (kb, ka);
+        edges[key] = edges.TryGetValue(key, out var e) ? e with { Count = e.Count + 1 } : (a, b, inside, 1);
+    }
+
+    /// <summary>A triangle wound to face up (Godot culls the back).</summary>
+    private static void ProxyTriangle(List<Vector3> verts, List<Color> colors, Vector3 a, Vector3 b, Vector3 c, Color color)
+    {
+        if ((b - a).Cross(c - a).Y > 0f) { verts.Add(a); verts.Add(c); verts.Add(b); }
+        else { verts.Add(a); verts.Add(b); verts.Add(c); }
+        for (int i = 0; i < 3; i++) colors.Add(color);
+    }
+
+    /// <summary>A quad as two triangles wound so their front faces <paramref name="outward"/> (Godot culls the back).</summary>
+    private static void ProxyQuad(List<Vector3> verts, List<Color> colors, Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+        Vector3 outward, Color color)
+    {
+        // Godot's front face is clockwise seen from in front: the right-hand normal then points away from the viewer
+        bool flip = (b - a).Cross(c - a).Dot(outward) > 0f;
+        if (flip) { verts.Add(a); verts.Add(c); verts.Add(b); verts.Add(a); verts.Add(d); verts.Add(c); }
+        else { verts.Add(a); verts.Add(b); verts.Add(c); verts.Add(a); verts.Add(c); verts.Add(d); }
+        for (int i = 0; i < 6; i++) colors.Add(color);
+    }
+
+    /// <summary>
     /// The tile's solids as one mesh. <see cref="Styles.MeshDetail.High"/> (Cartoon and the styles
     /// above it) carries every pitched roof past its walls (<see cref="RoofOverhangs"/>, #1067);
     /// Low (PS1) draws the surveyed solid alone. Collision is the solid either way.

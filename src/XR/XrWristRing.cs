@@ -123,7 +123,7 @@ internal sealed partial class XrWristRing : Node3D
     public void Update(Transform3D head, Transform3D watch, bool watchShown, XRController3D aim, FootPlayer? player, bool inWorld, float dt)
     {
         _player = player;
-        if (aim.GetFloat("trigger") < 0.3f) _triggerAfterPick = false;
+        if (aim.GetFloat(XrPad.Inputs.Trigger) < 0.3f) _triggerAfterPick = false;
         var to = head.Origin - watch.Origin;
         float d = to.Length();
         float facing = d > 0.01f ? watch.Basis.Z.Normalized().Dot(to / d) : 0f;
@@ -199,7 +199,7 @@ internal sealed partial class XrWristRing : Node3D
         int highlight = -1;
         Pointing = false;
         // the stick first: pushed, it aims (up is the top wedge); let back to the middle, its wedge stays lit
-        var stick = aim.GetVector2("primary");
+        var stick = aim.GetVector2(XrPad.Inputs.Primary);
         if (stick.Length() > 0.5f) _stickAim = Radial.Aimed(new Vector2(stick.X, -stick.Y), _wedges.Length, 0.5f);
         if (aim.GetHasTrackingData())
         {
@@ -228,7 +228,7 @@ internal sealed partial class XrWristRing : Node3D
             if (highlight >= 0) aim.TriggerHapticPulse("haptic", 0.0, 0.1, 0.015, 0.0);
         }
 
-        bool trigger = aim.GetFloat("trigger") > 0.6f, a = aim.IsButtonPressed("ax_button");
+        bool trigger = aim.GetFloat(XrPad.Inputs.Trigger) > 0.6f, a = aim.IsButtonPressed(XrPad.Inputs.AxButton);
         bool pressed = trigger && !_triggerWas && (Pointing || _stickAim >= 0) || a && !_aWas;
         _aWas = a;
         if (pressed && highlight >= 0 && _wedges[highlight].Refusal(player) == null)

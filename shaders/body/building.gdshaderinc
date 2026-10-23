@@ -676,9 +676,11 @@ void vertex() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD) || open_door_leaf(world_pos)) {
         discard;
     }
+#endif
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     // faces are not consistently wound in the source TINs, so orient toward the viewer
     if (!FRONT_FACING) {
@@ -767,6 +769,24 @@ void fragment() {
         float leaf_w = (hi.x - lo.x) * 0.5;
         float slats = fine_detail(0.075, px);
 
+#ifdef STANDALONE
+        // past ChunkNode.ProxyFromM (300 m from a 125 m cell's middle, so from 212 m for a building in its corner)
+        // the building is its far stand-in, which has no windows: they fade into the wall before, and the stand-in
+        // takes over unseen (#1112)
+        legible *= 1.0 - smoothstep(150.0, 210.0, length(world_pos - CAMERA_POSITION_WORLD));
+        if (windowed && in_row && in_col) {
+            // a standalone headset (#1112): the window as flat glass, lit or not by the same per-window
+            // hash; the recess traced into the wall, the room behind, the shutters, the sills and the
+            // string courses cost a Quest 2 most of a city's frame seen from above
+            float r = hash(cell);
+            float busy = occupancy(world_pos);
+            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night) - busy * 0.45;
+            vec3 win = lit ? window_lit : window_color;
+            col = mix(col, win, legible);
+            glass = legible;
+            if (lit) glow = win * legible;
+        }
+#else
         if (windowed && in_row && in_col) {
             // stable per-window hash decides which ones are lit
             float r = hash(cell);
@@ -841,6 +861,7 @@ void fragment() {
         } else if (base_m < plinth_height + 0.04) {
             col *= mix(1.0, 1.1, bands); // its chamfered top catches the light
         }
+#endif
     }
 
     // --- festive lights (a running occasion's world_lights) ---------------------------
@@ -882,9 +903,11 @@ void fragment() {
     // dissolve anything between the camera and its subject, using the same 4x4 Bayer pattern
     // the colour quantiser below uses, so the fade reads as part of the renderer
     float keep = sightline_keep(world_pos);
+#ifndef NO_DISCARD
     if (keep < 1.0 && keep < bayer4(FRAGCOORD.xy)) {
         discard;
     }
+#endif
 
 #ifdef STYLE_LIT
     // valley mist of a running occasion; a no-op on an ordinary day

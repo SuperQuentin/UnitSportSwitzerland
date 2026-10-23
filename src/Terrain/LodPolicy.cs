@@ -51,7 +51,9 @@ public sealed class LodPolicy
     /// Full on the tile underfoot and its neighbours; past them every tree is a billboard of a
     /// few pixels, and a forest 49 tiles wide drew all of up to 60k per tile.
     /// </summary>
-    public float TreeDensity(int dist) => dist <= 1 ? 1f : dist == 2 ? 0.5f : 0.25f;
+    public float TreeDensity(int dist) => Core.Platform.IsStandaloneVr
+        ? (dist == 0 ? 1f : dist == 1 ? 0.5f : 0.15f)   // a standalone headset's GPU (#1112)
+        : dist <= 1 ? 1f : dist == 2 ? 0.5f : 0.25f;
 
     /// <summary>Extra rings a chunk may drift out before being unloaded (hysteresis).</summary>
     public int UnloadSlack { get; init; } = 1;
@@ -65,6 +67,20 @@ public sealed class LodPolicy
             if (dist <= ring.MaxDist)
                 return ring.Stride;
         return -1;
+    }
+
+    /// <summary>
+    /// The ring a tile <paramref name="ring"/> rings out is worth from <paramref name="aglM"/> metres
+    /// above the ground (#1112): the ring of its 3D distance, from its near edge ((ring - 0.5) km) and the
+    /// height, never nearer than the ring itself. Below 150 m it is the ring: a body on the ground, a car.
+    /// </summary>
+    public static int WithAltitude(int ring, float aglM)
+    {
+        if (aglM <= 150f) return ring;
+        double h = Math.Max(0.0, ring - 0.5), v = aglM / 1000.0;
+        double d = Math.Sqrt(h * h + v * v);
+        int byDistance = d < 0.5 ? 0 : (int)Math.Ceiling(d - 0.5);
+        return Math.Max(ring, byDistance);
     }
 
     public static int Distance(TileId a, TileId b) =>
@@ -81,6 +97,8 @@ public sealed class LodPolicy
     {
         (Ring[] inner, int roads, int buildings) = detail switch
         {
+            // a standalone headset (#1112): 4 m quads underfoot (125k triangles, Low's were 500k), 10 m on the neighbours
+            DetailPreset.VeryLow => (new Ring[] { new(0, 4), new(1, 10), new(3, 20) }, 1, 1),
             DetailPreset.Low => (new Ring[] { new(0, 2), new(1, 4), new(2, 10), new(5, 20) }, 2, 1),
             DetailPreset.High => (new Ring[] { new(1, 1), new(3, 2), new(5, 4), new(8, 10), new(12, 20) }, 6, 5),
             // Rings by screen-space error: a ring-d tile is at least (d-1) km away, where an
@@ -99,7 +117,8 @@ public sealed class LodPolicy
         {
             Rings = rings.ToArray(),
             RoadMaxDist = Math.Min(roads, maxRings),
-            BuildingMaxDist = Math.Min(buildings, maxRings),
+            // "--buildingrings N": how far buildings reach, to measure what they cost (#1112)
+            BuildingMaxDist = Math.Min(Core.CmdArgs.Int("--buildingrings") ?? buildings, maxRings),
         };
     }
 

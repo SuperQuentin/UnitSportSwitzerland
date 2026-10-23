@@ -39,6 +39,10 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     /// <summary>The headset camera and tracking origin, for the monitor's eye views.</summary>
     internal XRCamera3D Head => _camera;
+    /// <summary>The headset's own viewport: what the GPU spends a VR frame on (PerfRecorder times it).</summary>
+    internal SubViewport HeadsetView => _view;
+    /// <summary>A standalone headset's dynamic resolution; null elsewhere.</summary>
+    internal XrDynamicResolution? Resolution { get; private set; }
     internal XROrigin3D Origin => _origin;
 
     private SubViewport _view = null!;
@@ -243,6 +247,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         if (XrSession.Simulated) Notice.CallDeferred(XrNotice.MethodName.Show, "VR", "simulated");
         _monitor = new XrMonitor(this) { Name = "Monitor" };
         AddChild(_monitor);
+        if (Platform.IsStandaloneVr && !XrSession.Simulated && XRServer.FindInterface("OpenXR") is OpenXRInterface openxr)
+        {
+            Resolution = new XrDynamicResolution(_view, openxr);
+            AddChild(Resolution);
+        }
 
         _camera.Current = true;
 
@@ -278,6 +287,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         ApplyQuality();
         ApplyHands();
         XrSession.ApplyRefresh();
+        XrSession.ApplySpaceWarp();
     }
 
     /// <summary>
@@ -300,7 +310,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _view.UseTaa = false;
         _view.UseDebanding = false;
         _view.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
-        _view.Scaling3DScale = s.VrRenderScale;
+        // a standalone headset scales by its render region instead (XrDynamicResolution, #1112)
+        _view.Scaling3DScale = Platform.IsStandaloneVr ? 1f : s.VrRenderScale;
         // only on GPUs with variable rate shading; ignored elsewhere
         _view.VrsMode = s.VrFoveation ? Viewport.VrsModeEnum.XR : Viewport.VrsModeEnum.Disabled;
     }
@@ -325,7 +336,13 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             GD.Print($"[xr] eyes {xr.GetRenderTargetSize()} x{_view.Scaling3DScale:F2}, {RenderingServer.GetCurrentRenderingMethod()}, MSAA {_view.Msaa3D}");
         GD.Print($"[xr] load: frame {_load[1] / n:F1} ms, headset gpu {_load[2] / n:F1} ms, "
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
-            + $"physics {Engine.PhysicsTicksPerSecond} Hz");
+            + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame)} draws, "
+            + (Resolution is { } dyn ? $"resolution {dyn.Scale * 100:F0} %, " : "")
+            + $"physics {Engine.PhysicsTicksPerSecond} Hz, "
+            + $"{Performance.GetMonitor(Performance.Monitor.Physics3DActiveObjects):F0} active bodies, "
+            + $"{Performance.GetMonitor(Performance.Monitor.Physics3DCollisionPairs):F0} pairs, "
+            + $"{Performance.GetMonitor(Performance.Monitor.Physics3DIslandCount):F0} islands, "
+            + $"{Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000:F1} ms");
         Array.Clear(_load);
     }
 
@@ -363,6 +380,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         var player = Anchor?.GetParent() as FootPlayer;
         ReseatOnRideChange(player);
         UpdateAnchor(player);
+        SkipWarpOnJump();
         var calibrated = _calib * head;
 
         HandleSticks(player, calibrated, dt);
@@ -575,6 +593,24 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     /// </summary>
     public void Blink() => _blink = 1f;
 
+    /// <summary>
+    /// The origin moving further than anything travels in a frame, or turning further than a head does, is a cut: a
+    /// snap turn, a teleport, a seat change or the world's origin moving (#1112). SpaceWarp makes no frame across it.
+    /// </summary>
+    private void SkipWarpOnJump()
+    {
+        if (!XrSession.SpaceWarp) return;
+        var now = _origin.GlobalTransform;
+        if (now.Origin.DistanceTo(_warpLast.Origin) > WarpJumpM
+            || now.Basis.GetRotationQuaternion().AngleTo(_warpLast.Basis.GetRotationQuaternion()) > WarpTurnRad)
+            XrSession.SkipSpaceWarpFrame();
+        _warpLast = now;
+    }
+
+    private Transform3D _warpLast;
+    /// <summary>An airliner covers 7 m a frame at 36 fps; a snap turn is 30° at least.</summary>
+    private const float WarpJumpM = 20f, WarpTurnRad = 0.35f;
+
     private static readonly StringName EyeHeight = "eye_height";
 
     /// <summary>
@@ -651,10 +687,10 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     private void HandleSticks(FootPlayer? player, Transform3D calibrated, float dt)
     {
-        var stick = _right.GetVector2("primary");
+        var stick = _right.GetVector2(XrPad.Inputs.Primary);
 
         // the moving hand's stick pushed forward aims a teleport, when the setting asks (#439)
-        _pad.SuppressMove = _teleport.Update(player, _left, _left.GetVector2("primary").Y, Blink, dt);
+        _pad.SuppressMove = _teleport.Update(player, _left, _left.GetVector2(XrPad.Inputs.Primary).Y, Blink, dt);
 
         // turning on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
         // while perched or walking (PigeonSnap says no in the air)
@@ -677,7 +713,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         else if (Mathf.Abs(stick.X) < 0.35f) _snapArmed = true;
 
         // hold the right stick in: recentre (a tap is still R3, passed through by the pad)
-        if (_right.IsButtonPressed("primary_click"))
+        if (_right.IsButtonPressed(XrPad.Inputs.PrimaryClick))
         {
             _recentreHeld += dt;
             if (_recentreHeld > RecentreHold && !_recentreDone)
@@ -771,10 +807,18 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;
-        _vignetteMat.SetShaderParameter("strength", _vignetteLevel);
-        // eased out: black long enough to hide the jump, then the world comes back quickly
-        _vignetteMat.SetShaderParameter("blackout", _blink * _blink);
+        // only while it shows (and once more as it goes): the parameters of a hidden quad are never seen
+        if (_vignette.Visible || _vignetteShown)
+        {
+            _vignetteMat.SetShaderParameter(VignetteStrength, _vignetteLevel);
+            // eased out: black long enough to hide the jump, then the world comes back quickly
+            _vignetteMat.SetShaderParameter(VignetteBlackout, _blink * _blink);
+        }
+        _vignetteShown = _vignette.Visible;
     }
+
+    private static readonly StringName VignetteStrength = "strength", VignetteBlackout = "blackout";
+    private bool _vignetteShown;
 
     private Godot.Environment? _sceneEnv, _linearEnv;
 

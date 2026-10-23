@@ -21,6 +21,12 @@ public partial class XrUi : Node3D
 {
     /// <summary>Panel width in metres, and how far ahead of the eyes it floats.</summary>
     private const float Width = 1.5f, Distance = 1.7f;
+    /// <summary>
+    /// The panel's pixels across on a standalone headset (#1112): it spans ~50 degrees, where a
+    /// Quest 2 has ~20 pixels a degree. Its Android window is 3664 wide, and drawing the 2D that big
+    /// (twice: the window and this panel) was half of a Quest 2's frame.
+    /// </summary>
+    private const float StandalonePixels = 1600f;
     /// <summary>The panel stays put until the head has turned this far from it, then glides round.</summary>
     private const float FollowAngle = 0.6f;
 
@@ -30,7 +36,16 @@ public partial class XrUi : Node3D
     private readonly XRCamera3D _head;
     private readonly XRController3D _hand;
     private SubViewport _view = null!;
+    /// <summary>
+    /// Where the panel is (and, without a composition layer, the panel itself). With a headset the
+    /// picture goes on <see cref="_layer"/> instead: the compositor draws it at its own resolution,
+    /// so text stays sharp; drawn into the 3D frame it was resampled at the eyes' resolution and
+    /// unreadable on a Quest (#1112).
+    /// </summary>
     private MeshInstance3D _panel = null!;
+    private OpenXRCompositionLayerQuad? _layer;
+    /// <summary>The reticle drawn into the panel's picture when it is a layer (a 3D one would be under it).</summary>
+    private Control? _cursor;
     private MeshInstance3D _ray = null!;
     private MeshInstance3D _dot = null!;
     private StandardMaterial3D _panelMat = null!;
@@ -56,10 +71,14 @@ public partial class XrUi : Node3D
         var root = GetTree().Root;
         _size = root.GetVisibleRect().Size;
 
+        // the layout stays the root's (Size2DOverride); a standalone headset draws it smaller
+        var pixels = Platform.IsStandaloneVr && _size.X > StandalonePixels ? _size * (StandalonePixels / _size.X) : _size;
         _view = new SubViewport
         {
             Name = "UiView",
-            Size = (Vector2I)_size,
+            Size = (Vector2I)pixels,
+            Size2DOverride = (Vector2I)_size,
+            Size2DOverrideStretch = true,
             TransparentBg = true,
             Disable3D = true,
             World2D = root.World2D,
@@ -127,11 +146,67 @@ public partial class XrUi : Node3D
         };
         AddChild(_dot);
 
+        // the panel as a composition layer of its own, child of the tracking origin as OpenXR wants;
+        // in front of the world like the NoDepthTest quad. Not with --xrsim: no compositor there
+        if (!XrSession.Simulated && _head.GetParent() is XROrigin3D origin)
+        {
+            _layer = new OpenXRCompositionLayerQuad
+            {
+                Name = "UiLayer",
+                LayerViewport = _view,
+                QuadSize = ((QuadMesh)_panel.Mesh).Size,
+                SortOrder = 1,
+                AlphaBlend = true,
+            };
+            origin.AddChild(_layer);
+            if (_layer.IsNativelySupported())
+            {
+                _panel.Visible = false;
+                var cursorLayer = new CanvasLayer { Name = "XrCursor", Layer = 128, CustomViewport = _view };
+                _cursor = new Control { Name = "Reticle", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+                _cursor.Draw += DrawCursor;
+                cursorLayer.AddChild(_cursor);
+                AddChild(cursorLayer);
+            }
+            else
+            {
+                _layer.QueueFree();
+                _layer = null;
+            }
+        }
+
+        // nobody sees a standalone headset's window: it draws no 2D (the panel, its own mask, shows it
+        // all). Not the window inactive: the headset's viewport is its child and stopped with it
+        if (Platform.IsStandaloneVr && _layer != null)
+        {
+            root.CanvasCullMask = 0;
+            // nor anything at all: no clear, and straight to the screen, with no copy of it to blit
+            // (the window's two passes were 4 ms of a Quest 2's frame)
+            RenderingServer.ViewportSetClearMode(root.GetViewportRid(), RenderingServer.ViewportClearMode.Never);
+            RenderingServer.ViewportSetRenderDirectToScreen(root.GetViewportRid(), true);
+            // and not updated at all: its pass was still ~1.3 ms (the headset's viewport, its child, still renders)
+            RenderingServer.ViewportSetUpdateMode(root.GetViewportRid(), RenderingServer.ViewportUpdateMode.Disabled);
+        }
+        GD.Print($"[xr] panel {_view.Size.X}x{_view.Size.Y} for a {_size.X}x{_size.Y} canvas");
+
         foreach (var node in AllNodes(root)) Redirect(node);
         GetTree().NodeAdded += Redirect;
     }
 
-    public override void _ExitTree() => GetTree().NodeAdded -= Redirect;
+    public override void _ExitTree()
+    {
+        GetTree().NodeAdded -= Redirect;
+        _layer?.QueueFree();
+    }
+
+    /// <summary>The reticle in the panel's own pixels: a ring, filled while the trigger holds.</summary>
+    private void DrawCursor()
+    {
+        float r = _size.X / 160f;   // in the canvas' units: the override scales it with the panel
+        var colour = _clickWas ? UiTheme.Amber : UiTheme.AmberDim with { A = 0.85f };
+        if (_clickWas) _cursor!.DrawCircle(Vector2.Zero, r, colour);
+        else _cursor!.DrawArc(Vector2.Zero, r, 0f, Mathf.Tau, 24, colour, r * 0.35f, antialiased: true);
+    }
 
     private static IEnumerable<Node> AllNodes(Node n)
     {
@@ -172,6 +247,7 @@ public partial class XrUi : Node3D
         var centre = eye.Origin + forward * Distance + Vector3.Down * 0.12f;
         // the quad faces +Z: turn it so its front looks back at the eyes
         _panel.GlobalTransform = new Transform3D(new Basis(Vector3.Up, _yaw), centre);
+        if (_layer != null) _layer.GlobalTransform = _panel.GlobalTransform;
 
         UpdatePointer();
     }
@@ -181,6 +257,7 @@ public partial class XrUi : Node3D
         Pointing = false;
         _ray.Visible = false;
         _dot.Visible = false;
+        if (_cursor != null) _cursor.Visible = false;
         if (MouseCapture.Mode == Input.MouseModeEnum.Captured || !Aim(out var window))
         {
             // a click held as the hand left the panel (or the menu closed) still has to come up
@@ -194,7 +271,7 @@ public partial class XrUi : Node3D
             Input.ParseInputEvent(new InputEventMouseMotion { Position = window, GlobalPosition = window });
             _lastPoint = window;
         }
-        bool click = _hand.GetFloat("trigger") > 0.6f;
+        bool click = _hand.GetFloat(XrPad.Inputs.Trigger) > 0.6f;
         if (click != _clickWas)
         {
             Click(click, window);
@@ -238,9 +315,18 @@ public partial class XrUi : Node3D
             Basis.LookingAt(dir, Vector3.Up) * new Basis(Vector3.Right, -Mathf.Pi / 2f) * Basis.FromScale(new Vector3(1f, length, 1f)),
             from + dir * length * 0.5f);
         // the reticle sits on the panel; pressed, it fills to the full amber, as a pressed button does
-        _dot.Visible = true;
-        _dot.GlobalPosition = hit;
-        _dotMat.AlbedoColor = _clickWas ? UiTheme.Amber : UiTheme.AmberDim with { A = 0.75f };
+        if (_cursor != null)
+        {
+            _cursor.Visible = true;
+            _cursor.Position = uv * _size;
+            _cursor.QueueRedraw();
+        }
+        else
+        {
+            _dot.Visible = true;
+            _dot.GlobalPosition = hit;
+            _dotMat.AlbedoColor = _clickWas ? UiTheme.Amber : UiTheme.AmberDim with { A = 0.75f };
+        }
 
         // a point on the panel is a point on the root canvas; the root's stretch takes it to the window
         window = GetTree().Root.GetFinalTransform() * (uv * _size);

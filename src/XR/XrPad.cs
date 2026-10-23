@@ -20,6 +20,16 @@ namespace UnitSport.XR;
 /// </summary>
 internal sealed class XrPad
 {
+    /// <summary>
+    /// The OpenXR action names every hand reads each frame, made once: a string there became a new
+    /// <see cref="StringName"/> on every read (#1112, docs/notes/general/perf-no-per-frame-allocations.md).
+    /// </summary>
+    internal static class Inputs
+    {
+        public static readonly StringName Primary = "primary", PrimaryClick = "primary_click", Trigger = "trigger",
+            Grip = "grip", AxButton = "ax_button", ByButton = "by_button", MenuButton = "menu_button";
+    }
+
     /// <summary>A device number no real pad gets; the bindings listen to every device.</summary>
     private const int Device = 7;
     /// <summary>The virtual pad's device id, so other readers can tell it from a real pad.</summary>
@@ -82,7 +92,7 @@ internal sealed class XrPad
         }
 
         // --- left stick: on foot, forward is where the head looks, not where the body faces ---
-        var stick = SuppressMove ? Vector2.Zero : (_left.GetVector2("primary") + BodyStick).LimitLength(1f);
+        var stick = SuppressMove ? Vector2.Zero : (_left.GetVector2(XrPad.Inputs.Primary) + BodyStick).LimitLength(1f);
         if (onFoot && player != null)
         {
             float yaw = XrRig.YawOf(calibrated.Basis);
@@ -93,8 +103,8 @@ internal sealed class XrPad
         Axis(JoyAxis.LeftY, -stick.Y);
 
         // --- triggers and grips ---
-        float lt = _left.GetFloat("trigger"), rt = uiActive ? 0f : _right.GetFloat("trigger");
-        float lg = LeftGripBusy ? 0f : _left.GetFloat("grip"), rg = RightGripBusy ? 0f : _right.GetFloat("grip");
+        float lt = _left.GetFloat(XrPad.Inputs.Trigger), rt = uiActive ? 0f : _right.GetFloat(XrPad.Inputs.Trigger);
+        float lg = LeftGripBusy ? 0f : _left.GetFloat(XrPad.Inputs.Grip), rg = RightGripBusy ? 0f : _right.GetFloat(XrPad.Inputs.Grip);
         if (shoulders)
         {
             Axis(JoyAxis.TriggerLeft, 0f);
@@ -112,22 +122,22 @@ internal sealed class XrPad
         }
 
         // --- face buttons ---
-        Button(JoyButton.A, !SuppressRight && _right.IsButtonPressed("ax_button"));
+        Button(JoyButton.A, !SuppressRight && _right.IsButtonPressed(XrPad.Inputs.AxButton));
         // crouching for real slides (running) or dives (swimming), like B (#437); not while a menu
         // is open, where B is back
         bool crouched = onFoot && player != null && calibrated.Origin.Y < -CrouchDrop
                         && Core.MouseCapture.Mode == Input.MouseModeEnum.Captured;
         RealCrouch = crouched;
-        RightB = _right.IsButtonPressed("by_button");
+        RightB = _right.IsButtonPressed(XrPad.Inputs.ByButton);
         Button(JoyButton.B, RightB || crouched);
-        Button(JoyButton.X, _left.IsButtonPressed("ax_button"));
-        Button(JoyButton.Y, _left.IsButtonPressed("by_button"));
-        Button(JoyButton.LeftStick, _left.IsButtonPressed("primary_click"));
+        Button(JoyButton.X, _left.IsButtonPressed(XrPad.Inputs.AxButton));
+        Button(JoyButton.Y, _left.IsButtonPressed(XrPad.Inputs.ByButton));
+        Button(JoyButton.LeftStick, _left.IsButtonPressed(XrPad.Inputs.PrimaryClick));
 
         // --- right stick: on foot, up / down are the two D-pad directions that matter most (left /
         // right snap-turn, XrRig); mounted, where the head is the look, it is the whole D-pad (#436):
         // up engine, right lights, left roof / horn / couple / speedbrake, down tune ---
-        var r = SuppressRight ? Vector2.Zero : _right.GetVector2("primary");
+        var r = SuppressRight ? Vector2.Zero : _right.GetVector2(XrPad.Inputs.Primary);
         // the stronger axis only, so a diagonal never presses two directions
         bool vertical = Mathf.Abs(r.Y) >= Mathf.Abs(r.X);
         // a crane's hoist is the right stick's Y (#618): back raises, as on a pad; ← stays the hook (couple)
@@ -141,12 +151,12 @@ internal sealed class XrPad
         Button(JoyButton.DpadRight, shoulders ? down : right);
 
         // --- R3: a tap is the view switch; a hold belongs to the rig's recentre ---
-        bool r3 = _right.IsButtonPressed("primary_click");
+        bool r3 = _right.IsButtonPressed(XrPad.Inputs.PrimaryClick);
         if (_r3Was && !r3 && !RecentreHeld) Pulse(JoyButton.RightStick);
         _r3Was = r3;
 
         // --- menu: tap = Start, hold = Back ---
-        if (_left.IsButtonPressed("menu_button"))
+        if (_left.IsButtonPressed(XrPad.Inputs.MenuButton))
         {
             _menuHeld += dt;
             if (_menuHeld > MenuHold && !_menuLong)
