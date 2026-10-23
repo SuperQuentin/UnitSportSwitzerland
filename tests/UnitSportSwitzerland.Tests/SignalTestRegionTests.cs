@@ -879,3 +879,38 @@ public class GenevaTramJunctionTests(SignalTestRegionFixture region) : IClassFix
         Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Bike);
     }
 }
+
+/// <summary>The trams' own stop lines (#1155, the user: "the stopline should be drawn for trams").</summary>
+public class TramStopLineTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
+{
+    [Fact]
+    public void Every_tram_lane_at_lights_has_its_stop_line_across_its_track_on_the_cars_line()
+    {
+        int lanes = 0;
+        foreach (var (_, tile) in region.Tiles())
+        {
+            var lines = tile.Paint.Where(p => p.Type == PaintType.StopLine && p.Variant == RoadPaint.OverTrack).ToList();
+            foreach (var a in tile.Approaches.Where(a => a.Signal >= 0 && a.Lanes.Any(l => l.Kind == ApproachLaneKind.Tram)))
+            {
+                // the arriving driver's way in (tile-local x east, z south): the arm's heading points out
+                double inE = -Math.Cos(a.Heading), inN = -Math.Sin(a.Heading);
+                int trams = a.Lanes.Count(l => l.Kind == ApproachLaneKind.Tram);
+                lanes += trams;
+                // on the cars' line (the record's stop, the line's middle) within 0.3 m along, beside it within 15 m: one per tram lane
+                var on = lines.Where(p =>
+                {
+                    double e = (p.Vertices[0] + p.Vertices[3]) / 2.0 - a.X, n = -(p.Vertices[2] + p.Vertices[5]) / 2.0 + a.Z;
+                    return Math.Abs(e * inE + n * inN) < 0.3 && Math.Abs(e * inN - n * inE) < 15;
+                }).ToList();
+                Assert.True(on.Count == trams, $"approach at {a.X:F0},{a.Z:F0}: {on.Count} tram stop lines on its line for {trams} tram lanes");
+                foreach (var p in on)
+                {
+                    double length = Math.Sqrt(Math.Pow(p.Vertices[3] - p.Vertices[0], 2) + Math.Pow(p.Vertices[5] - p.Vertices[2], 2));
+                    Assert.InRange(length, 2.5, 3.2);
+                    Assert.Equal(0.5f, p.Width, 3);
+                }
+            }
+        }
+        Assert.True(lanes >= 8, $"{lanes} tram lanes at lights");
+    }
+}
