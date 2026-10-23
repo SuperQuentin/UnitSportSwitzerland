@@ -7,4 +7,6 @@ render_mode cull_disabled;
 #define STANDALONE
 // the occasions' snow and mist cost a Quest 2 about a millisecond even on a day without one
 #define LITE_NO_OCCASION
+// nor the doors' lamp light on the ground at night (~0.7 ms)
+#define LITE_NO_EMISSION
 #include "res://shaders/body/terrain.gdshaderinc"

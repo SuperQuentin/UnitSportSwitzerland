@@ -184,8 +184,8 @@ public partial class XrUi : Node3D
             // (the window's two passes were 4 ms of a Quest 2's frame)
             RenderingServer.ViewportSetClearMode(root.GetViewportRid(), RenderingServer.ViewportClearMode.Never);
             RenderingServer.ViewportSetRenderDirectToScreen(root.GetViewportRid(), true);
-            // "--noroot": the window not updated at all (a frame-time check: its pass is ~1.3 ms)
-            if (CmdArgs.Has("--noroot")) RenderingServer.ViewportSetUpdateMode(root.GetViewportRid(), RenderingServer.ViewportUpdateMode.Disabled);
+            // and not updated at all: its pass was still ~1.3 ms (the headset's viewport, its child, still renders)
+            RenderingServer.ViewportSetUpdateMode(root.GetViewportRid(), RenderingServer.ViewportUpdateMode.Disabled);
         }
         GD.Print($"[xr] panel {_view.Size.X}x{_view.Size.Y} for a {_size.X}x{_size.Y} canvas");
 
