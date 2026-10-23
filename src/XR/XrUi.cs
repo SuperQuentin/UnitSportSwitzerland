@@ -271,7 +271,7 @@ public partial class XrUi : Node3D
             Input.ParseInputEvent(new InputEventMouseMotion { Position = window, GlobalPosition = window });
             _lastPoint = window;
         }
-        bool click = _hand.GetFloat("trigger") > 0.6f;
+        bool click = _hand.GetFloat(XrPad.Inputs.Trigger) > 0.6f;
         if (click != _clickWas)
         {
             Click(click, window);

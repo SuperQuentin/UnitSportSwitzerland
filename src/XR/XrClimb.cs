@@ -57,7 +57,7 @@ internal sealed class XrClimb
 
         foreach (var g in new[] { _l, _r })
         {
-            float grip = g.Ctl.GetHasTrackingData() ? g.Ctl.GetFloat("grip") : 0f;
+            float grip = g.Ctl.GetHasTrackingData() ? g.Ctl.GetFloat(XrPad.Inputs.Grip) : 0f;
             if (g.Closed && grip < 0.35f)
             {
                 g.Closed = false;

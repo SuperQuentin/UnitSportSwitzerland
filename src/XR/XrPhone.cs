@@ -129,13 +129,13 @@ internal sealed class XrPhone
         bool simulated = XrSession.Simulated && SimHold != null;
         var hold = simulated ? SimHold!.Value : holdingGrip.GlobalTransform;
         bool tracked = simulated || holdingGrip.GetHasTrackingData();
-        float g = simulated ? (SimGrip ? 1f : 0f) : tracked ? _left.GetFloat("grip") : 0f;
+        float g = simulated ? (SimGrip ? 1f : 0f) : tracked ? _left.GetFloat(XrPad.Inputs.Grip) : 0f;
         bool closing = !_gripClosed && g > GripClose, opening = _gripClosed && g < GripOpen;
         if (closing) _gripClosed = true;
         if (opening) _gripClosed = false;
         bool simFree = XrSession.Simulated && SimFree != null;
         var freeAt = simFree ? SimFree!.Value : freeGrip.GlobalPosition;
-        float fg = simFree ? (SimFreeGrip ? 1f : 0f) : freeGrip.GetHasTrackingData() ? _right.GetFloat("grip") : 0f;
+        float fg = simFree ? (SimFreeGrip ? 1f : 0f) : freeGrip.GetHasTrackingData() ? _right.GetFloat(XrPad.Inputs.Grip) : 0f;
         bool freeClosing = !_freeClosed && fg > GripClose, freeOpening = _freeClosed && fg < GripOpen;
         if (freeClosing) _freeClosed = true;
         if (freeOpening) _freeClosed = false;
@@ -217,7 +217,7 @@ internal sealed class XrPhone
         var frame = model.GlobalTransform.Orthonormalized();
 
         Hinge(phone, frame, model.Fold, freeAt, freeClosing, freeOpening);
-        Camera(phone, frame, head, tracked && !simulated ? _left.GetFloat("trigger") : SimTrigger ? 1f : 0f, dt);
+        Camera(phone, frame, head, tracked && !simulated ? _left.GetFloat(XrPad.Inputs.Trigger) : SimTrigger ? 1f : 0f, dt);
         Near(phone, frame, model.Fold, head);
 
         // the pointing fingertip on the glass (not while that hand holds the hinge); off it, the ray
@@ -262,7 +262,7 @@ internal sealed class XrPhone
     {
         bool simulated = XrSession.Simulated && SimRay != null;
         bool tracked = simulated || _right.GetHasTrackingData();
-        float trigger = simulated ? (SimRayTrigger ? 1f : 0f) : tracked ? _right.GetFloat("trigger") : 0f;
+        float trigger = simulated ? (SimRayTrigger ? 1f : 0f) : tracked ? _right.GetFloat(XrPad.Inputs.Trigger) : 0f;
         bool pulled = _rayTrigger ? trigger > 0.3f : trigger > 0.7f;
         bool pull = pulled && !_rayTrigger;
         _rayTrigger = pulled;

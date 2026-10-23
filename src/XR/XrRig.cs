@@ -580,10 +580,10 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     private void HandleSticks(FootPlayer? player, Transform3D calibrated, float dt)
     {
-        var stick = _right.GetVector2("primary");
+        var stick = _right.GetVector2(XrPad.Inputs.Primary);
 
         // the moving hand's stick pushed forward aims a teleport, when the setting asks (#439)
-        _pad.SuppressMove = _teleport.Update(player, _left, _left.GetVector2("primary").Y, Blink, dt);
+        _pad.SuppressMove = _teleport.Update(player, _left, _left.GetVector2(XrPad.Inputs.Primary).Y, Blink, dt);
 
         // turning on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
         // while perched or walking (PigeonSnap says no in the air)
@@ -604,7 +604,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         else if (Mathf.Abs(stick.X) < 0.35f) _snapArmed = true;
 
         // hold the right stick in: recentre (a tap is still R3, passed through by the pad)
-        if (_right.IsButtonPressed("primary_click"))
+        if (_right.IsButtonPressed(XrPad.Inputs.PrimaryClick))
         {
             _recentreHeld += dt;
             if (_recentreHeld > RecentreHold && !_recentreDone)
@@ -698,10 +698,18 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;
-        _vignetteMat.SetShaderParameter("strength", _vignetteLevel);
-        // eased out: black long enough to hide the jump, then the world comes back quickly
-        _vignetteMat.SetShaderParameter("blackout", _blink * _blink);
+        // only while it shows (and once more as it goes): the parameters of a hidden quad are never seen
+        if (_vignette.Visible || _vignetteShown)
+        {
+            _vignetteMat.SetShaderParameter(VignetteStrength, _vignetteLevel);
+            // eased out: black long enough to hide the jump, then the world comes back quickly
+            _vignetteMat.SetShaderParameter(VignetteBlackout, _blink * _blink);
+        }
+        _vignetteShown = _vignette.Visible;
     }
+
+    private static readonly StringName VignetteStrength = "strength", VignetteBlackout = "blackout";
+    private bool _vignetteShown;
 
     private Godot.Environment? _sceneEnv, _linearEnv;
 

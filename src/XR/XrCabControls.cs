@@ -267,7 +267,7 @@ internal sealed partial class XrCabControls : Node3D
             else if (d > PokeRearm) c.Armed = true;
         }
 
-        float grip = ctl.GetFloat("grip");
+        float grip = ctl.GetFloat(XrPad.Inputs.Grip);
         if (g.Closed && grip < 0.35f)
         {
             g.Closed = false;
