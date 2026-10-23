@@ -130,7 +130,9 @@ grep -q godotopenxrvendors .godot/extension_list.cfg || { echo "The vendors addo
 mkdir -p "$(dirname "$OUT")"; rm -f "$OUT"
 # not headless: the Shader Baker (shader_baker/enabled) bakes the material shaders into the APK only with the
 # Mobile renderer up; without them a Quest compiled a city's shaders on their first draw (a 5 s freeze)
-GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.daemon=false" \
+# Optimize=true: a debug export's C# is otherwise built unoptimized (Godot.NET.Sdk's ExportDebug), and Mono's JIT
+# then skips its own optimizations, so a measured debug APK ran slower C# than players get; it stays debuggable (run-as)
+Optimize=true GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.daemon=false" \
   "$GODOT" --rendering-driver vulkan --rendering-method mobile --path . --install-android-build-template "--export-$KIND" "Quest" "$OUT" || true
 [ -s "$OUT" ] || { echo "The export produced no APK"; exit 1; }
 # a failed dotnet publish still writes an APK, just without the game
