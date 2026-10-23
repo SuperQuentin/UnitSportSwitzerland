@@ -676,7 +676,9 @@ public static class StyleKit
     /// <summary>The sun's shadow cascades: 4, or <c>--shadows off|1|2|4</c> to measure their cost (#1112).</summary>
     private static readonly int ShadowSplits = Core.CmdArgs.Value("--shadows") switch
     {
-        "off" or "0" => 0, "1" => 1, "2" => 2, _ => 4,
+        "off" or "0" => 0, "1" => 1, "2" => 2, "4" => 4,
+        // a standalone headset (#1112): one cascade over the near ground, where a shadow reads
+        _ => Core.Platform.IsStandaloneVr ? 1 : 4,
     };
 
     /// <summary>
@@ -696,7 +698,7 @@ public static class StyleKit
                 2 => DirectionalLight3D.ShadowMode.Parallel2Splits,
                 _ => DirectionalLight3D.ShadowMode.Parallel4Splits,
             },
-            DirectionalShadowMaxDistance = 400f,
+            DirectionalShadowMaxDistance = ShadowSplits == 1 ? 120f : 400f,
             DirectionalShadowSplit1 = 0.025f,
             DirectionalShadowSplit2 = 0.1f,
             DirectionalShadowSplit3 = 0.35f,

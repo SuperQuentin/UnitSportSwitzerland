@@ -508,8 +508,21 @@ public sealed class GameSettings
         CommitBudgetMs = 3;
         MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
         CacheGb = 0.5f;
-        // a Quest 2's GPU first sorts every triangle into tiles: Low's 1.5 M near the player held it to 10 fps (#1112)
-        if (Platform.IsStandaloneVr) VrDetail = DetailPreset.VeryLow;
+        if (Platform.IsStandaloneVr) UseStandaloneVrDefaults();
+    }
+
+    /// <summary>
+    /// A standalone headset's first launch (#1112, docs/notes/xr/quest-standalone.md), measured on a Quest 2:
+    /// its GPU sorts every triangle into screen bins and replays every draw in each, so fewer tiles
+    /// (each a draw) and fewer triangles count more than pixels; traffic is its CPU's physics.
+    /// </summary>
+    private void UseStandaloneVrDefaults()
+    {
+        VrDetail = DetailPreset.VeryLow;   // Low's 1.5 M triangles near the player held it to 10 fps
+        RenderDistanceRings = 3;           // the horizon's merged blocks beyond
+        VrMsaa = 2;                        // 4x halves the screen bins' size: ~10 ms more
+        TrafficCars = 6;
+        TrafficRiders = 4;
     }
 
     /// <summary>Writes the touch layout alone, as the editor's Done does (a command-line run's other values stay out).</summary>

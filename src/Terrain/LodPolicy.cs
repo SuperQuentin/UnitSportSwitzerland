@@ -51,7 +51,9 @@ public sealed class LodPolicy
     /// Full on the tile underfoot and its neighbours; past them every tree is a billboard of a
     /// few pixels, and a forest 49 tiles wide drew all of up to 60k per tile.
     /// </summary>
-    public float TreeDensity(int dist) => dist <= 1 ? 1f : dist == 2 ? 0.5f : 0.25f;
+    public float TreeDensity(int dist) => Core.Platform.IsStandaloneVr
+        ? (dist == 0 ? 1f : dist == 1 ? 0.5f : 0.15f)   // a standalone headset's GPU (#1112)
+        : dist <= 1 ? 1f : dist == 2 ? 0.5f : 0.25f;
 
     /// <summary>Extra rings a chunk may drift out before being unloaded (hysteresis).</summary>
     public int UnloadSlack { get; init; } = 1;
