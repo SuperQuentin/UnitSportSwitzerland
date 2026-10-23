@@ -148,6 +148,18 @@ public partial class CdLibrary : Node
     private readonly ConcurrentQueue<(int Id, bool Personal, CdAnalysis? Analysis, bool NoFfmpeg)> _reanalysed = new();
     private bool _reanalysing, _noFfmpeg;
 
+    /// <summary>
+    /// Stops this library's re-analysis when it leaves the tree (#1169): a world left behind used to
+    /// keep separating its CD on a worker, and every join queued another beside it.
+    /// </summary>
+    private readonly CancellationTokenSource _backfillStop = new();
+
+    /// <summary>
+    /// One vocal separation in the process at a time (#1169), across every library: the network takes
+    /// gigabytes while it runs, and a library just left may not have reached its next cancellation point.
+    /// </summary>
+    private static readonly SemaphoreSlim OneAnalysis = new(1, 1);
+
     /// <summary>What a queued burn of this process marks its CD with (a default link, the bundled beat).</summary>
     private readonly Dictionary<string, string> _sources = new();
 
@@ -174,6 +186,7 @@ public partial class CdLibrary : Node
 
     public override void _ExitTree()
     {
+        _backfillStop.Cancel();
         if (_server) Multiplayer.PeerConnected -= SendAll;
         if (Instance == this) Instance = null;
     }
@@ -403,6 +416,13 @@ public partial class CdLibrary : Node
     /// </summary>
     private void QueueBackfill()
     {
+        // a headless client is a check, never a player (#1169): it would separate the user's own CDs
+        // for minutes, gigabytes at a time, and rewrite them; '/cd reanalyse' still queues them by hand
+        if (!_server && DisplayServer.GetName() == "headless")
+        {
+            GD.Print("[cd] headless client: no analysis backfill at start");
+            return;
+        }
         if (Owns)
             foreach (var cd in _all.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, false));
         foreach (var cd in _personal.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, true));
@@ -451,13 +471,22 @@ public partial class CdLibrary : Node
         if (!File.Exists(ogg)) return;
         _reanalysing = true;
         float bpm = cd.Bpm, offset = cd.BeatOffset;
+        var stop = _backfillStop.Token;
         Task.Run(async () =>
         {
             CdAnalysis? analysis = null;
             bool noFfmpeg = false;
-            try { analysis = await CdBurner.ReanalyseAsync(ogg, bpm, offset, CancellationToken.None); }
+            bool held = false;
+            try
+            {
+                await OneAnalysis.WaitAsync(stop);
+                held = true;
+                analysis = await CdBurner.ReanalyseAsync(ogg, bpm, offset, stop);
+            }
+            catch (OperationCanceledException) { GD.Print($"[cd] analysis of CD {id} stopped: the library left"); }
             catch (System.ComponentModel.Win32Exception) { noFfmpeg = true; }   // ffmpeg missing: skip quietly
             catch (Exception e) { GD.Print($"[cd] could not analyse CD {id} again: {e.Message}"); }
+            finally { if (held) OneAnalysis.Release(); }
             _reanalysed.Enqueue((id, personal, analysis, noFfmpeg));
         });
     }
