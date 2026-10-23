@@ -769,6 +769,20 @@ void fragment() {
         float leaf_w = (hi.x - lo.x) * 0.5;
         float slats = fine_detail(0.075, px);
 
+#ifdef STANDALONE
+        if (windowed && in_row && in_col) {
+            // a standalone headset (#1112): the window as flat glass, lit or not by the same per-window
+            // hash; the recess traced into the wall, the room behind, the shutters, the sills and the
+            // string courses cost a Quest 2 most of a city's frame seen from above
+            float r = hash(cell);
+            float busy = occupancy(world_pos);
+            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night) - busy * 0.45;
+            vec3 win = lit ? window_lit : window_color;
+            col = mix(col, win, legible);
+            glass = legible;
+            if (lit) glow = win * legible;
+        }
+#else
         if (windowed && in_row && in_col) {
             // stable per-window hash decides which ones are lit
             float r = hash(cell);
@@ -843,6 +857,7 @@ void fragment() {
         } else if (base_m < plinth_height + 0.04) {
             col *= mix(1.0, 1.1, bands); // its chamfered top catches the light
         }
+#endif
     }
 
     // --- festive lights (a running occasion's world_lights) ---------------------------
