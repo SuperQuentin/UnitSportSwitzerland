@@ -46,6 +46,7 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/unit
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
+lights_and_shadows/directional_shadow/size.quest=1024
 textures/vram_compression/import_etc2_astc=true
 scaling_3d/scale=0.75
 limits/global_shader_variables/buffer_size=262144
