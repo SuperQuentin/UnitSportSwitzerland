@@ -104,7 +104,7 @@ public partial class Traffic
                 case SignalAspect.Amber: WalkerAmberStarts++; break;
                 case SignalAspect.Red or SignalAspect.RedAmber:
                     WalkerRedStarts++;
-                    if (WalkerRedStarts <= 5) GD.Print($"[traffic] a walker stepped onto a lit crossing at red at {route.Edge.Points[0]} (from {(LaneGraph.CrossingOf(route.Legs[Math.Max(0, route.Leg - 1)].Edge) is { } prev ? (prev.Island ? "an island" : prev.TramYield ? "an unlit stage" : "a crossing") : "a walkway")})");
+                    if (WalkerRedStarts <= 5) GD.Print($"[traffic] a walker stepped onto a lit crossing at red at {route.Edge.Points[0]} (from {(LaneGraph.CrossingOf(route.Legs[Math.Max(0, route.Leg - 1)].Edge) is { } prev ? (prev.Island ? "an island" : prev.TramYield ? "an unlit stage" : $"a crossing g{prev.Group}") : "a walkway")}, leg {route.Leg}, group {lit.Group}, its edge {route.Edge.Length:F1} m)");
                     break;
             }
         }
@@ -161,7 +161,9 @@ public partial class Traffic
             }
             // already on its way to it when it was clear, and too close to stop at a walker's pace now: it goes
             int id = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(edge);
-            if (!go && m.Wait > 0f && m.Group == id && m.Speed > 0.5f && stopIn < m.Speed * m.Speed / (2f * 3f)) go = true;
+            // (never onto a lit crossing at red: a walker stops on the spot, #1179: islands crowded between stages)
+            if (!go && m.Wait > 0f && m.Group == id && m.Speed > 0.5f && stopIn < m.Speed * m.Speed / (2f * 3f)
+                && !(c.Lit && c.Site!.Plan.State(c.Group, SignalLamps.Clock()) is SignalAspect.Red or SignalAspect.RedAmber)) go = true;
             m.Wait = go ? 1f : 0f;
             m.Group = id;
             crossingAhead = true;

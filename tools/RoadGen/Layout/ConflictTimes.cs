@@ -231,7 +231,7 @@ public static class ConflictTimes
     public const double StageWidth = 3;
 
     /// <summary>A walker waits on an island this far in from its kerb (m), clear of the carriageway and of the trams.</summary>
-    public const double IslandIn = 1.2;
+    public const double IslandIn = 1.8;
 
     /// <summary>
     /// The middle stage of a crossing over a divided road with its tram on the central reservation (#1176): from the island beside
