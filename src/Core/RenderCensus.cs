@@ -34,7 +34,8 @@ public static partial class RenderCensus
             root.AddChild(timer);
         }
         // "--hidetoggle A,B": those nodes hidden and shown again in turns of 5 s, the headset's GPU time averaged
-        // per state: what a part of the scene costs, measured in one run (between runs a Quest varies by 2 ms)
+        // per state: what a part of the scene costs, measured in one run (between runs a Quest varies by 2 ms).
+        // Besides node names: @shadows (the sun's shadows off), @sky (a plain colour behind), @msaa (the headset's off)
         if (CmdArgs.Value("--hidetoggle") is { } toggled)
             root.AddChild(new HideToggle(toggled.Split(',', StringSplitOptions.RemoveEmptyEntries)));
         // "--hideui": every 2D layer hidden, each second, to measure what the 2D costs a headset
@@ -63,6 +64,27 @@ public static partial class RenderCensus
 
     private sealed partial class HideToggle(string[] names) : Node
     {
+        private Viewport.Msaa _msaa;
+        private Godot.Environment.BGMode _background;
+
+        private void Switch(SubViewport view, bool off)
+        {
+            var root = GetTree().Root;
+            if (names.Contains("@shadows"))
+                foreach (var light in root.FindChildren("*", nameof(DirectionalLight3D), true, false).OfType<DirectionalLight3D>())
+                    light.ShadowEnabled = !off;
+            if (names.Contains("@sky") && view.FindWorld3D()?.Environment is { } env)
+            {
+                if (off) (_background, env.BackgroundMode) = (env.BackgroundMode, Godot.Environment.BGMode.Color);
+                else env.BackgroundMode = _background;
+            }
+            if (names.Contains("@msaa"))
+            {
+                if (off) (_msaa, view.Msaa3D) = (view.Msaa3D, Viewport.Msaa.Disabled);
+                else view.Msaa3D = _msaa;
+            }
+        }
+
         private const double Turn = 5, Settle = 1;
         private double _clock;
         private bool _hidden;
@@ -85,6 +107,7 @@ public static partial class RenderCensus
             _hidden = !_hidden;
             // tiles come and go: the whole tree each turn
             Hide(GetTree().Root, names, _hidden);
+            Switch(view, _hidden);
             if (++_turns % 4 == 0 && _count[0] > 0 && _count[1] > 0)
                 GD.Print(System.FormattableString.Invariant(
                     $"[hidetoggle] {string.Join(',', names)}: shown {_sum[0] / _count[0]:F2} ms, hidden {_sum[1] / _count[1]:F2} ms, saves {_sum[0] / _count[0] - _sum[1] / _count[1]:F2} ms ({_count[0]}/{_count[1]} frames)"));
