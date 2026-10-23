@@ -41,6 +41,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     internal XRCamera3D Head => _camera;
     /// <summary>The headset's own viewport: what the GPU spends a VR frame on (PerfRecorder times it).</summary>
     internal SubViewport HeadsetView => _view;
+    /// <summary>A standalone headset's dynamic resolution; null elsewhere.</summary>
+    internal XrDynamicResolution? Resolution { get; private set; }
     internal XROrigin3D Origin => _origin;
 
     private SubViewport _view = null!;
@@ -216,6 +218,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         if (XrSession.Simulated) Notice.CallDeferred(XrNotice.MethodName.Show, "VR", "simulated");
         _monitor = new XrMonitor(this) { Name = "Monitor" };
         AddChild(_monitor);
+        if (Platform.IsStandaloneVr && !XrSession.Simulated && XRServer.FindInterface("OpenXR") is OpenXRInterface openxr)
+        {
+            Resolution = new XrDynamicResolution(_view, openxr);
+            AddChild(Resolution);
+        }
 
         _camera.Current = true;
 
@@ -273,7 +280,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _view.UseTaa = false;
         _view.UseDebanding = false;
         _view.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
-        _view.Scaling3DScale = s.VrRenderScale;
+        // a standalone headset scales by its render region instead (XrDynamicResolution, #1112)
+        _view.Scaling3DScale = Platform.IsStandaloneVr ? 1f : s.VrRenderScale;
         // only on GPUs with variable rate shading; ignored elsewhere
         _view.VrsMode = s.VrFoveation ? Viewport.VrsModeEnum.XR : Viewport.VrsModeEnum.Disabled;
     }
@@ -298,6 +306,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         GD.Print($"[xr] load: frame {_load[1] / n:F1} ms, headset gpu {_load[2] / n:F1} ms, "
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame)} draws, "
+            + (Resolution is { } dyn ? $"resolution {dyn.Scale * 100:F0} %, " : "")
             + $"physics {Engine.PhysicsTicksPerSecond} Hz");
         Array.Clear(_load);
     }

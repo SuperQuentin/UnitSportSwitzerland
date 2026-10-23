@@ -393,6 +393,12 @@ public sealed class GameSettings
     public int VrMsaa { get; set; } = 4;
     /// <summary>The headset's 3D resolution, relative to the eye size the runtime asks for.</summary>
     public float VrRenderScale { get; set; } = 1f;
+    /// <summary>
+    /// A standalone headset's dynamic resolution never goes under this share of its eye buffers'
+    /// width and height (#1112, XR/XrDynamicResolution).
+    /// </summary>
+    public float VrResolutionFloor { get; set; } = 0.75f;
+    public const float MinVrResolutionFloor = 0.5f;
     public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
     /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
     public bool VrFoveation { get; set; } = true;
@@ -596,6 +602,7 @@ public sealed class GameSettings
         ConcertScreenWidth = ConcertScreenWidth switch { <= 384 => 256, <= 768 => 512, _ => 1024 };
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
+        VrResolutionFloor = Math.Clamp(VrResolutionFloor, MinVrResolutionFloor, 1f);
         if (Array.IndexOf(VrRefreshRates, VrRefreshHz) < 0) VrRefreshHz = 72;
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
@@ -732,6 +739,8 @@ public sealed class GameSettings
                 case "--vrscale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vs):
                     VrRenderScale = Math.Clamp(vs, MinVrRenderScale, MaxVrRenderScale); break;
                 case "--vrfoveation": VrFoveation = v is "on" or "1" or "true"; break;
+                case "--vrfloor" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vf):
+                    VrResolutionFloor = Math.Clamp(vf, MinVrResolutionFloor, 1f); break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 // a film's render profile sets the picture itself (#924, tools/trailer.sh RENDER), never the player's file
                 case "--render-scale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float rs):
