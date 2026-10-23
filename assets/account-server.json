@@ -1,0 +1,5 @@
+{
+  "about": "The official account server this build signs in to (#1123, docs/notes/net/accounts.md). Fill both in once Nakama is deployed: tools/deploy-linux.sh --nakama prints the address and the server key. The server key is not a secret: every client carries it. Empty: players set a server under Settings > Account > Advanced.",
+  "url": "",
+  "serverKey": ""
+}

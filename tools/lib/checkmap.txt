@@ -312,6 +312,9 @@ src/Ui/MultiplayerScreen net    tools/consolelinknetcheck.sh
 src/Ui/ServerConsole     net    tools/consolelinknetcheck.sh
 src/Ui/ConsoleLinkCheck  net    tools/consolelinknetcheck.sh
 src/Net/ConsoleLink      net    tools/consolelinknetcheck.sh
+# #1123: the account step after the version check (needs Docker for its throwaway Nakama)
+src/Net/Accounts         net    tools/accountnetcheck.sh
+src/Net/Handshake        net    tools/accountnetcheck.sh
 src/Net/Handshake        net    tools/consolelinknetcheck.sh
 src/Net/Handshake        net    tools/autoupdatenetcheck.sh
 src/Net/ServerAutoUpdate net    tools/autoupdatenetcheck.sh
