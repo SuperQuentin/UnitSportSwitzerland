@@ -116,6 +116,8 @@ internal sealed partial class XrCabControls : Node3D
             _ when p.Ride == RideKind.CompactRoller => "roller",
             _ when p.Ride == RideKind.MiniDumper => "minidumper",
             _ when p.Ride == RideKind.Telehandler => "telehandler",
+            // the e-bike's remote on the bar (#1167): its mode button by hand
+            Bicycle { Spec.Assist: not null } => "ebike",
             _ => "",
         };
     }
@@ -218,6 +220,16 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Hold, new(0.44f, -0.42f, -0.28f), Vector3.Forward, PlayerInput.ShiftUp, PlayerInput.ShiftDown);
             Add(Kind.Poke, new(0.22f, -0.3f, -0.48f), plus: PlayerInput.DigMode);
             Add(Kind.Poke, new(-0.16f, -0.26f, -0.5f), plus: PlayerInput.RoofToggle);
+        }
+        else if (context == "ebike")
+        {
+            // the Bosch remote inboard of the left grip (#1167): where the mesh draws it, from the rider's
+            // eye on this bike's fit. Both are bike space flipped to the eye frame's (−x the rider's left,
+            // −z ahead), so the poke sits on the drawn remote; it steps the assist level
+            var bike = player?.Vehicle as Bicycle;
+            var remote = bike != null ? Avatar.BikeMeshBuilder.RemoteAt(bike.Frame) : new Vector3(0.2f, 1.15f, 0.3f);
+            var eye = bike?.FirstPersonEye ?? new Vector3(0f, 1.6f, -0.05f);
+            Add(Kind.Poke, new Vector3(-remote.X, remote.Y, -remote.Z) - eye, plus: PlayerInput.EngineToggle);
         }
         else if (context == "steamer")
             // the whistle cord overhead: pulled down, it blows

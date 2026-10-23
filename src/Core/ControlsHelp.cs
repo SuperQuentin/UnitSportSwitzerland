@@ -132,6 +132,10 @@ public partial class ControlsHelp : CanvasLayer
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
         }),
+        ("E-bike (#1167)", new Row[]
+        {
+            new("Assist level: Off, Eco, Tour, Sport, Turbo (the Bosch remote's button; in VR also a poke at the left grip)", PlayerInput.EngineToggle),
+        }),
         ("Home-trainer training (phone › Training)", new Row[]
         {
             new("Next junction: take the road to the left / right", Keys: "{move_left} {move_right}", Pad: "{move_left} {move_right}"),

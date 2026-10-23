@@ -1072,6 +1072,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public event Action<float>? Shaken;
     public event Action<bool>? EngineToggled;
 
+    /// <summary>The e-bike's remote stepped to a mode (#1167): the feel layer beeps it.</summary>
+    public event Action<AssistLevel>? AssistChanged;
+
     private double _sinceHurt = 99;
 
     /// <summary>
@@ -2932,6 +2935,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Telehandler parkedBoom) parkedBoom.UnpackFlags(state.Flags);
         // a saucer's ramp and lamps as they were left (#861)
         if (_ride is Ufo parkedUfo) parkedUfo.UnpackFlags(state.Flags);
+        // an e-bike's battery and mode as they were left (#1167)
+        if (_ride is Bicycle parkedBike) parkedBike.UnpackFlags(state.Flags, state.Load);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2971,7 +2976,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Ufo uf ? uf.PackFlags() : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Ufo uf ? uf.PackFlags() : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : _ride is Bicycle bf ? bf.PackFlags() : 0,
+            Load: _ride is Truck tl ? tl.Load : _ride is Bicycle { Spec.Assist: not null } bl ? bl.Charge : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw,
             Name: _rideName);
@@ -3561,6 +3567,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && SeatIndex == 0 && AirlinerEngines())
         {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // on an e-bike the engine switch is the Bosch remote's mode button (#1167): Off, Eco, Tour, Sport, Turbo
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is Bicycle { Spec.Assist: not null } ebike && SeatIndex == 0)
+        {
+            ebike.CycleAssist();
+            AssistChanged?.Invoke(ebike.Level);
             GetViewport().SetInputAsHandled();
             return;
         }

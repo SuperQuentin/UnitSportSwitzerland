@@ -72,6 +72,8 @@ internal sealed class TouchMore
             "Steamer" => new[] { "Paddle steamer" },
             "Airliner" => new[] { "Airliners" },
             "Ufo" => new[] { "UFO" },
+            // the e-bike's remote (#1167) before "Riding and driving", so its button reads "assist level"
+            "Bicycle" => new[] { "E-bike" },
             _ => Array.Empty<string>(),
         };
         string[] mode = s.Mode switch
