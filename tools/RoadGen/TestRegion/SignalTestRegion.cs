@@ -527,18 +527,29 @@ public static partial class SignalTestRegion
             lines.Add(new Line("KTM", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - half), (ce, cn + half)], "secondary"));
             lines.Add(new Line("KTN", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn + half), (ce, cn + arm)], "secondary",
                 Rows: [new OsmRow(0, arm - half, Tram: true)]));
-            var track = new List<(double E, double N)> { (ce - arm, cn) };
+            // two single tracks as TLM maps them (Geneva, #1094), TrackOffset either side of the line: from the reservation round
+            // (E - radius, N + radius) to the cross road's axis and on up its middle (embedded there)
+            var line = new List<(double E, double N)> { (ce - arm, cn) };
             for (int k = 0; k <= 12; k++)
             {
-                double a = Math.PI / 2 * k / 12;   // round (E - radius, N + radius) from the reservation to the cross road's axis
-                track.Add((ce - radius + radius * Math.Sin(a), cn + radius - radius * Math.Cos(a)));
+                double a = Math.PI / 2 * k / 12;
+                line.Add((ce - radius + radius * Math.Sin(a), cn + radius - radius * Math.Cos(a)));
             }
-            track.Add((ce, cn + 2 * radius));   // (straight on past the north mouth: the double line's end there would bend its offset)
-            lines.Add(new Line("KTT", "", "", "", [.. track], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
-            // (in the street two single tracks, as TLM maps them, each on from its track of the reservation's double line)
-            foreach (var (id, side) in (ReadOnlySpan<(string, double)>)[("KTTNW", -RoadFormat.TrackOffset(RoadFlags.Tramway | RoadFlags.DoubleTrack)),
-                         ("KTTNE", RoadFormat.TrackOffset(RoadFlags.Tramway | RoadFlags.DoubleTrack))])
-                lines.Add(new Line(id, "", "", "", [(ce + side, cn + 2 * radius), (ce + side, cn + arm)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            line.Add((ce, cn + 2 * radius));
+            double off = RoadFormat.TrackOffset(RoadFlags.Tramway | RoadFlags.DoubleTrack);
+            foreach (var (id, side) in (ReadOnlySpan<(string, double)>)[("KTTR", 1.0), ("KTTL", -1.0)])
+            {
+                // (right of the line's way: the eastbound, then northbound track; left: the trams the other way)
+                var track = new List<(double E, double N)>();
+                for (int i = 0; i < line.Count; i++)
+                {
+                    var (p0, p1) = (line[Math.Max(0, i - 1)], line[Math.Min(line.Count - 1, i + 1)]);
+                    double dx = p1.E - p0.E, dn = p1.N - p0.N, len = Math.Sqrt(dx * dx + dn * dn);
+                    track.Add((line[i].E + dn / len * off * side, line[i].N - dx / len * off * side));
+                }
+                lines.Add(new Line(id, "", "", "", [.. track], "", Rail: RoadFlags.Tramway));
+                lines.Add(new Line(id + "N", "", "", "", [track[^1], (ce + off * side, cn + arm)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            }
             junctions.Add(new Junction("J17-tram-turning", ce, cn, "the divided road's tram turning off its reservation into the cross road's middle",
                 Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
         }
