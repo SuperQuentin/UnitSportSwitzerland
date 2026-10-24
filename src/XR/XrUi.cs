@@ -28,8 +28,12 @@ public partial class XrUi : Node3D
     /// (twice: the window and this panel) was half of a Quest 2's frame.
     /// </summary>
     private const float StandalonePixels = 1600f;
-    /// <summary>The panel stays put until the head has turned this far from it, then glides round.</summary>
-    private const float FollowAngle = 0.6f;
+    /// <summary>
+    /// The panel stays where it was put, in the play space (it goes along with the body and a vehicle, not with the
+    /// head: one that glided after the head made a playtest dizzy, #1112). It is put before the eyes when it first
+    /// shows, when a menu opens, on a recentre, and at once when the head has turned this far from it.
+    /// </summary>
+    private const float TurnedAway = Mathf.Pi / 2f;
 
     /// <summary>Screen-effect layers that mean nothing on a floating panel (speed lines, flashes).</summary>
     private static readonly HashSet<string> Hidden = new() { "FeelScreen", "LensLayer" };
@@ -50,9 +54,11 @@ public partial class XrUi : Node3D
     private MeshInstance3D _ray = null!;
     private MeshInstance3D _dot = null!;
     private StandardMaterial3D _panelMat = null!;
+    private static readonly StringName PanelTexture = "panel";
     private StandardMaterial3D _dotMat = null!;
     private Vector2 _size;
-    private float _yaw = float.NaN;
+    private Transform3D _placed;
+    private bool _place = true, _menuWas;
     private bool _clickWas;
     private Vector2 _lastPoint;
 
@@ -162,7 +168,13 @@ public partial class XrUi : Node3D
             origin.AddChild(_layer);
             if (_layer.IsNativelySupported())
             {
-                _panel.Visible = false;
+                // behind the 3D picture, seen through a hole the size of what it shows (xr_panel_hole.gdshader): a
+                // hand, the pointer and anything nearer draw over it, where in front of the picture it covered them
+                // (a Quest 2 playtest, #1112). A layer behind makes Godot blend the picture by its alpha
+                _layer.SortOrder = -1;
+                var hole = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/xr_panel_hole.gdshader") };
+                hole.SetShaderParameter(PanelTexture, _view.GetTexture());
+                _panel.MaterialOverride = hole;
                 var cursorLayer = new CanvasLayer { Name = "XrCursor", Layer = 128, CustomViewport = _view };
                 _cursor = new Control { Name = "Reticle", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
                 _cursor.Draw += DrawCursor;
@@ -294,21 +306,28 @@ public partial class XrUi : Node3D
         }
     }
 
+    /// <summary>Puts the panel before the eyes again on the next frame (a recentre).</summary>
+    public void PlaceAgain() => _place = true;
+
     public void UpdatePanel(float dt)
     {
         UpdatePopups();
 
         var eye = _head.GlobalTransform;
         float headYaw = XrRig.YawOf(eye.Basis);
-        if (float.IsNaN(_yaw)) _yaw = headYaw;
-        // glide toward the head's heading only once it has looked well away
-        float off = Mathf.AngleDifference(_yaw, headYaw);
-        if (Mathf.Abs(off) > FollowAngle) _yaw += off * MathX.Damp(3f, dt);
-
-        var forward = new Basis(Vector3.Up, _yaw) * Vector3.Forward;
-        var centre = eye.Origin + forward * Distance + Vector3.Down * 0.12f;
-        // the quad faces +Z: turn it so its front looks back at the eyes
-        _panel.GlobalTransform = new Transform3D(new Basis(Vector3.Up, _yaw), centre);
+        var space = _head.GetParent<Node3D>().GlobalTransform;   // the tracking origin: the body, a vehicle
+        bool menu = MouseCapture.Mode != Input.MouseModeEnum.Captured;
+        if (_place || menu && !_menuWas
+            || Mathf.Abs(Mathf.AngleDifference(XrRig.YawOf((space * _placed).Basis), headYaw)) > TurnedAway)
+        {
+            _place = false;
+            var forward = new Basis(Vector3.Up, headYaw) * Vector3.Forward;
+            var centre = eye.Origin + forward * Distance + Vector3.Down * 0.12f;
+            // the quad faces +Z: turn it so its front looks back at the eyes
+            _placed = space.AffineInverse() * new Transform3D(new Basis(Vector3.Up, headYaw), centre);
+        }
+        _menuWas = menu;
+        _panel.GlobalTransform = space * _placed;
         if (_layer != null) _layer.GlobalTransform = _panel.GlobalTransform;
 
         UpdatePointer();

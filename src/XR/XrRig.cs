@@ -670,6 +670,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         var head = _camera.Transform;
         _calib = new Transform3D(YawOnly(head.Basis), head.Origin).AffineInverse();
         _calibrated = true;
+        _ui?.PlaceAgain();
         GD.Print($"[xr] recentred at head height {head.Origin.Y:F2} m");
     }
 
