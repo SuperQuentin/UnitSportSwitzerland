@@ -176,10 +176,12 @@ if [ $S_SETUP = 1 ]; then
 fi
 
 stopped=0
-# the website's accounts and dashboard (#1207): the shared sign-in control and admin.html, uploaded with the pages and by --nakama
+# the website's accounts and dashboard (#1207): the shared sign-in control, admin.html and the home page that shows the
+# control, uploaded with the pages and by --nakama
 web_accounts() {
   [ -n "$WEB" ] && [ $DRY = 0 ] || return 0
   rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/account.js")" < tools/deploy/web/account.js
+  rq "cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
   rq "cat > $(qd "$WEB/admin.html")" < tools/deploy/web/admin.html
 }
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
