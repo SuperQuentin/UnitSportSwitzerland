@@ -58,6 +58,9 @@ public static class CharacterPage
     }
 
     /// <summary>What the player looks like now: their choice, or the figure their network id gives them.</summary>
+    /// <summary>The player's figure: their choice, or the one their network id gives them (also the profile picture, #1209).</summary>
+    public static Appearance Mine(Node any) => Current(any);
+
     private static Appearance Current(Node any) =>
         Appearance.Unpack(GameSettings.Current.AppearanceBits)
         ?? Appearance.For(any.IsInsideTree() && any.Multiplayer.HasMultiplayerPeer() ? any.Multiplayer.GetUniqueId() : 1);
