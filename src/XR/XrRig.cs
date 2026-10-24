@@ -411,7 +411,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _watch.Tick(player, _leftHand.Visible, _leftHand.WatchSpot, dt);
         // "--xrring <wedge>" with --xrsim: the ring held open before the eyes, that wedge lit, for a headset shot
         if (_ringShot is int lit) _ring.ShowForShot(_camera.GlobalTransform, lit);
-        else _ring.Update(_camera.GlobalTransform, _watch.GlobalTransform, _watch.Visible, _leftHanded ? _left : _right, player, InWorld, dt);
+        else _ring.Update(_camera.GlobalTransform, _watch.GlobalTransform, _watch.Visible, _leftHanded ? _left : _right, player, InWorld && !Ui.LoadingScreen.Active, dt);   // no wheel over a load
         _pad.SuppressRight = _ring.IsOpen;
         _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing || _ring.HoldsTrigger, dt);
         UpdateHandAim();

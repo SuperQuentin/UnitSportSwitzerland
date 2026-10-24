@@ -383,7 +383,8 @@ public partial class XrUi : Node3D
         _ray.Visible = false;
         _dot.Visible = false;
         if (_cursor != null) _cursor.Visible = false;
-        if (MouseCapture.Mode == Input.MouseModeEnum.Captured || !Aim(out var window))
+        // the loading screen is a menu (its Cancel) though the game has already captured the mouse
+        if (MouseCapture.Mode == Input.MouseModeEnum.Captured && !Ui.LoadingScreen.Active || !Aim(out var window))
         {
             // a click held as the hand left the panel (or the menu closed) still has to come up
             if (_clickWas) Click(false, _lastPoint);
