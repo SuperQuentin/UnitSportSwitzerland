@@ -222,12 +222,15 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
         _pad = new XrPad(_left, _right);
         XrProfile.Watch();
+        // the headset's own recentre (holding the Meta button) moves the tracking space: ours and the panel follow
+        if (XRServer.FindInterface("OpenXR") is OpenXRInterface recentring) recentring.PoseRecentered += Recentre;
         _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
         _wrist = new XrWristMenu(this);
         AddChild(_wrist);
         _ring = new XrWristRing(this, _wrist);
+        _ring.ComposeOn(_origin);
         AddChild(_ring);
         if (XrSession.Simulated) _ringShot = CmdArgs.Int("--xrring");
         _cab = new XrCabControls(_left, _right);
@@ -277,6 +280,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     public override void _ExitTree()
     {
+        if (XRServer.FindInterface("OpenXR") is OpenXRInterface openxr) openxr.PoseRecentered -= Recentre;
         Core.GameSettings.Changed -= OnSettings;
         XrProfile.Unwatch();
     }

@@ -189,7 +189,7 @@ public partial class XrUi : Node3D
                 // behind the 3D picture, seen through a hole the size of what it shows (xr_panel_hole.gdshader): a
                 // hand, the pointer and anything nearer draw over it, where in front of the picture it covered them
                 // (a Quest 2 playtest, #1112). A layer behind makes Godot blend the picture by its alpha
-                _layer.SortOrder = -1;
+                _layer.SortOrder = -2;   // behind the watch's wheel (XrWristRing, -1)
                 _panel.MaterialOverride = HoleMaterial();
                 var cursorLayer = new CanvasLayer { Name = "XrCursor", Layer = 128, CustomViewport = _view };
                 _cursor = new Control { Name = "Reticle", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
