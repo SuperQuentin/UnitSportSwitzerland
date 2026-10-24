@@ -101,6 +101,7 @@
     "border-radius:10px;padding:8px;font:600 14px system-ui,sans-serif;cursor:pointer}",
     ".acct-dlg .tabs button[aria-pressed=true]{background:var(--glow,#ff7a45);color:#1a0d10;border-color:transparent}",
     ".acct-dlg label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted,#c2b3b0)}",
+    ".acct-dlg [hidden]{display:none}",
     ".acct-dlg input{font:400 15px system-ui,sans-serif;padding:10px 12px;border-radius:10px;border:1px solid var(--line,rgba(255,220,200,.14));",
     "background:rgba(255,255,255,.05);color:var(--text,#fbf4ee)}",
     ".acct-dlg input:focus{outline:2px solid var(--glow,#ff7a45);outline-offset:1px}",
