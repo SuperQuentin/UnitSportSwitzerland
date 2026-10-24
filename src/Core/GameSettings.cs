@@ -763,6 +763,7 @@ public sealed class GameSettings
                     VrRenderScale = Math.Clamp(vs, MinVrRenderScale, MaxVrRenderScale); break;
                 case "--vrfoveation": VrFoveation = v is "on" or "1" or "true"; break;
                 case "--spacewarp": VrSpaceWarp = v is "on" or "1" or "true"; break;
+                case "--replayminutes" when int.TryParse(v, out int replay): ReplayMinutes = replay; break;
                 case "--vrfloor" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vf):
                     VrResolutionFloor = Math.Clamp(vf, MinVrResolutionFloor, 1f); break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;

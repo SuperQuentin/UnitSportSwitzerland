@@ -115,6 +115,18 @@ public sealed partial class SoakCheck : Node
         if (_lap == _laps) Node.PrintOrphanNodes();
         foreach (var (key, count) in orphans.OrderByDescending(kv => kv.Value).Take(12))
             GD.Print(System.FormattableString.Invariant($"[soak]   orphan {count,6} {key}"));
+        // the real vehicles: what they are and how far from the camera (a woken car never sleeps again?)
+        var eye = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
+        var vehicles = new Dictionary<string, (int Count, float Nearest, float Farthest)>();
+        foreach (var v in root.FindChildren("*", "", true, false).OfType<Vehicles.VehicleBody>())
+        {
+            string key = $"{v.Ride?.GetType().Name ?? "?"} {System.Text.RegularExpressions.Regex.Replace(v.Name.ToString(), "[0-9_@]+", "#")}";
+            float d = v.GlobalPosition.DistanceTo(eye);
+            var c = vehicles.TryGetValue(key, out var seen) ? seen : (Count: 0, Nearest: float.MaxValue, Farthest: 0f);
+            vehicles[key] = (c.Count + 1, Math.Min(c.Nearest, d), Math.Max(c.Farthest, d));
+        }
+        foreach (var (key, c) in vehicles.OrderByDescending(kv => kv.Value.Count).Take(10))
+            GD.Print(System.FormattableString.Invariant($"[soak]   vehicle {c.Count,4} {key}, {c.Nearest:F0}-{c.Farthest:F0} m away"));
         foreach (var (name, count) in branches.OrderByDescending(kv => kv.Value).Take(14))
             GD.Print(System.FormattableString.Invariant($"[soak]   {count,7} {name} ({count - _firstBranches.GetValueOrDefault(name):+0;-0;0} since lap 0)"));
     }
