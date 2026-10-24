@@ -278,9 +278,17 @@ public partial class XrUi : Node3D
         foreach (var (window, picture) in _popups)
         {
             bool shown = IsInstanceValid(window) && window.Visible && window.IsEmbedded();
-            if (picture.Visible != shown) picture.Visible = shown;
+            if (picture.Visible != shown)
+            {
+                picture.Visible = shown;
+                // a standalone headset's window is not updated (above), and a popup only draws when its parent does:
+                // its picture stayed empty there, though the preview drew it. Drawn on its own while it is open
+                if (IsInstanceValid(window))
+                    RenderingServer.ViewportSetUpdateMode(window.GetViewportRid(),
+                        shown ? RenderingServer.ViewportUpdateMode.Always : RenderingServer.ViewportUpdateMode.WhenParentVisible);
+            }
             if (!shown) continue;
-            if (picture.Texture == null) picture.Texture = window.GetTexture();
+            picture.Texture ??= window.GetTexture();
             picture.Position = window.Position;
             picture.Size = window.Size;
         }

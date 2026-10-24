@@ -181,6 +181,9 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _origin.AddChild(_rightGrip);
         _leftHand = new XrHand(right: false);
         _rightHand = new XrHand(right: true);
+        // half a turn about the hand's length (#1112): as built on the grip pose each hand showed its back where the
+        // real palm was, the thumb on the outside and the watch on the inner wrist (a Quest 2 playtest's shots)
+        _leftHand.Basis = _rightHand.Basis = new Basis(Vector3.Up, Mathf.Pi);
         _leftGrip.AddChild(_leftHand);
         _rightGrip.AddChild(_rightHand);
 
