@@ -312,8 +312,10 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _view.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
         // a standalone headset scales by its render region instead (XrDynamicResolution, #1112)
         _view.Scaling3DScale = Platform.IsStandaloneVr ? 1f : s.VrRenderScale;
-        // only on GPUs with variable rate shading; ignored elsewhere
-        _view.VrsMode = s.VrFoveation ? Viewport.VrsModeEnum.XR : Viewport.VrsModeEnum.Disabled;
+        // only on GPUs with variable rate shading; ignored elsewhere. A standalone headset's foveation is its level
+        // (XrSession.ApplyFoveation): the mode stays on for its density map
+        _view.VrsMode = s.VrFoveation || Platform.IsStandaloneVr ? Viewport.VrsModeEnum.XR : Viewport.VrsModeEnum.Disabled;
+        XrSession.ApplyFoveation();
     }
 
     /// <summary>The one-line notices (recentred, monitor view), on the monitor and the panel.</summary>

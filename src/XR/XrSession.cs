@@ -102,12 +102,7 @@ public static class XrSession
 
         // Meta's fixed foveation on a standalone headset (#1112): the Mobile renderer draws it with
         // a fragment density map; over Link the headset viewport's VRS does it (XrRig.ApplyQuality)
-        if (Platform.IsStandaloneVr && xr is OpenXRInterface fov && fov.IsFoveationSupported())
-        {
-            fov.FoveationLevel = CmdArgs.Int("--foveation") ?? (GameSettings.Current.VrFoveation ? 3 : 0);
-            fov.FoveationDynamic = true;
-            GD.Print($"[xr] foveation level {fov.FoveationLevel}, dynamic");
-        }
+        ApplyFoveation();
         // A standalone headset's clocks (#1112): left to the runtime they fell to levels 2 and 3 whenever the GPU
         // waited on the main thread, slowing that thread, the one holding the frame back. Sustained high keeps
         // them up; "--perflevel low|high|boost" (sustained low, sustained high, boost) to measure.
@@ -198,6 +193,22 @@ public static class XrSession
     }
 
     private static bool _watchingRate;
+
+    /// <summary>
+    /// Meta's fixed foveation on a standalone headset (#1112), from <see cref="GameSettings.VrFoveation"/> (level 3 or
+    /// none; <c>--foveation n</c> for a run), at start and on a settings change. The Mobile renderer draws it with a
+    /// fragment density map, which the headset view's VRS mode stays on for (XrRig.ApplyQuality): switching that
+    /// off instead left a stray image at the bottom of the view and never changed the level.
+    /// </summary>
+    public static void ApplyFoveation(int? level = null)
+    {
+        if (!Platform.IsStandaloneVr || XRServer.FindInterface("OpenXR") is not OpenXRInterface fov || !fov.IsFoveationSupported()) return;
+        int want = level ?? CmdArgs.Int("--foveation") ?? (GameSettings.Current.VrFoveation ? 3 : 0);
+        if (fov.FoveationLevel == want && fov.FoveationDynamic) return;
+        fov.FoveationLevel = want;
+        fov.FoveationDynamic = true;
+        GD.Print($"[xr] foveation level {want}, dynamic");
+    }
 
     /// <summary>Whether Application SpaceWarp runs (#1112): the game renders at half the headset's rate.</summary>
     public static bool SpaceWarp { get; private set; }
