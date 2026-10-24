@@ -2313,9 +2313,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _poseWait += dt;
         // a restyle to or from a lit style changes the figure's build (#311): a new look
         bool smooth = Avatar.HumanMeshBuilder.SmoothFigures;
-        // VR hands (#439) keyed to 2 cm, so a hand held still does not rebuild the figure
+        // VR hands (#439) as they are: posing the arms is bones only (#1202), no need to snap them to 2 cm
         var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
-        if (vr is { } v) vr = new Avatar.HumanMeshBuilder.VrArms(SnapHand(v.Right), SnapHand(v.Left));
         // a finger on the phone's screen (#889): the owner's own, keyed to 4 mm
         Avatar.HumanMeshBuilder.Pointing? point = PoseKind == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
             ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
@@ -2384,9 +2383,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
         bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null, Vector3 Wind = default);
-
-    /// <summary>A VR hand to the 2 cm the figure is keyed on (#439).</summary>
-    private static Vector3 SnapHand(Vector3 p) => (p / 0.02f).Round() * 0.02f;
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;

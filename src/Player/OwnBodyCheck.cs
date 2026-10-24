@@ -131,9 +131,12 @@ public partial class OwnBodyCheck : Node3D
             $"{view}: the body is {(bare ? "drawn for the mirrors only" : "seen by the eye")} (layers {driver.Layers:X})");
     }
 
+    // a skinned figure's twin (#1202) moves by the figure's bones, or its shadow would stand at rest
     private static bool TwinCasts(MeshInstance3D figure) =>
         figure.GetNodeOrNull<MeshInstance3D>("Shadow") is { Visible: true, Layers: Avatar.OwnBody.World } twin
-        && twin.CastShadow == GeometryInstance3D.ShadowCastingSetting.ShadowsOnly && twin.Mesh == figure.Mesh;
+        && twin.CastShadow == GeometryInstance3D.ShadowCastingSetting.ShadowsOnly && twin.Mesh == figure.Mesh
+        && (figure is not Avatar.SkinnedFigure skinned
+            || twin is Avatar.SkinnedFigure { Following: { } leader } && leader == (skinned.Following ?? skinned));
 
     private void Spawn()
     {

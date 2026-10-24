@@ -26,6 +26,8 @@ public sealed class DriverFigure
         Body = new SkinnedFigure { Name = "Driver", MaterialOverride = material, Position = offset };
         Head = new SkinnedFigure { Name = "DriverHead", MaterialOverride = material, Position = offset };
         Show();
+        // seated from the start: unposed, the bones would hold the look's standing rest pose
+        Pose(0f, 0f, 0f);
     }
 
     private void Show()

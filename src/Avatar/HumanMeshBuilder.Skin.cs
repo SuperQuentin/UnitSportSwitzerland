@@ -122,7 +122,7 @@ public static partial class HumanMeshBuilder
         var key = look with { Palette = look.Palette.Wind == Vector3.Zero ? look.Palette : look.Palette with { Wind = Vector3.Zero } };
         if (Skins.TryGetValue(key, out var skin)) return skin;
         // a full cache is emptied, not evicted by age: a figure keeps the skin it was given
-        if (Skins.Count >= 256) Skins.Clear();
+        if (Skins.Count >= 128) Skins.Clear();
         return Skins[key] = BuildSkin(key);
     }
 
@@ -607,7 +607,8 @@ public static partial class HumanMeshBuilder
         float speed = wind.Length();
         if (speed <= 0.05f) return Vector2.Zero;
         float gust = Mathf.Clamp(speed / 14f, 0f, 1f);
-        float phase = Time.GetTicksMsec() / 1000f * (5f + 1.1f * Mathf.Min(speed, 30f));
+        // presentation: the hem's flutter runs on real time, as the drape's always did
+        float phase = (float)(Core.RealClock.Now % 3600.0) * (5f + 1.1f * Mathf.Min(speed, 30f));
         return new Vector2(0.03f + 0.13f * gust, Mathf.PosMod(phase, Mathf.Tau * 100f));
     }
 
