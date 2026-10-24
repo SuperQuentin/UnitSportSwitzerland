@@ -346,6 +346,16 @@ internal sealed partial class XrHand : Node3D
             foreach (var (name, grip, trigger, thumb) in poses)
                 yield return ($"{(right ? "right" : "left")} {name}", () => Posed(right, grip, trigger, thumb, HumanPalette.Default));
         yield return ("fingerless gloves", () => Posed(true, 0.4f, 0.2f, 1f, gloved));
+        // the watch where it sits on the wrist (XrWatch, WatchSpot), its strap round the forearm
+        yield return ("left with watch", () =>
+        {
+            var raised = Posed(false, 0f, 0f, 0f, HumanPalette.Default);
+            var hand = raised.GetChild<XrHand>(0);
+            var watch = XrWatch.Viewable();
+            watch.Transform = hand.WatchSpot;
+            hand.AddChild(watch);
+            return raised;
+        });
     }
 
     /// <summary>A hand held as the controller fallback would hold it, raised: fingers up, the right palm to the camera.</summary>

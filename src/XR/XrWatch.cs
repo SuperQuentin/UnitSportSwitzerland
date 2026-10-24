@@ -19,7 +19,7 @@ internal sealed partial class XrWatch : Node3D
     {
         Name = "Watch";
         var steel = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.72f, 0.74f, 0.76f), Metallic = 0.6f, Roughness = 0.35f });
-        var strap = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.11f, 0.1f) });
+        var strap = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.11f, 0.1f), CullMode = BaseMaterial3D.CullModeEnum.Disabled });
         AddChild(new MeshInstance3D
         {
             Mesh = new CylinderMesh { TopRadius = 0.021f, BottomRadius = 0.021f, Height = 0.008f, RadialSegments = 16 },
@@ -27,10 +27,12 @@ internal sealed partial class XrWatch : Node3D
             MaterialOverride = steel,
             Layers = XrSession.HeadsetOnlyLayer,
         });
+        // the strap: a band round the wrist (its axis the arm's, local Y; the dial sits 3 cm off the arm's line,
+        // XrHand.WatchSpot), its top under the case. A flat bar along the arm pointed at the fingers (#1112)
         AddChild(new MeshInstance3D
         {
-            Mesh = new BoxMesh { Size = new Vector3(0.024f, 0.09f, 0.004f) },
-            Transform = new Transform3D(Basis.Identity, new Vector3(0, 0, -0.008f)),
+            Mesh = new CylinderMesh { TopRadius = 0.029f, BottomRadius = 0.029f, Height = 0.02f, RadialSegments = 20, Rings = 1, CapTop = false, CapBottom = false },
+            Transform = new Transform3D(Basis.Identity, new Vector3(0, 0, -0.03f)),
             MaterialOverride = strap,
             Layers = XrSession.HeadsetOnlyLayer,
         });
@@ -80,8 +82,16 @@ internal sealed partial class XrWatch : Node3D
     {
         // stood on the strap's end, the dial clear of the viewer's ground
         var root = new Node3D();
-        var watch = new XrWatch { Position = new Vector3(0, 0.045f, 0) };
+        var watch = Viewable();
+        watch.Position = new Vector3(0, 0.045f, 0);
         root.AddChild(watch);
+        return root;
+    }
+
+    /// <summary>A watch the model viewer's camera sees (not on the headset-only layer), with sample readings.</summary>
+    internal static XrWatch Viewable()
+    {
+        var watch = new XrWatch();
         watch.Ready += () =>
         {
             watch._time.Text = "10:32";
@@ -89,7 +99,7 @@ internal sealed partial class XrWatch : Node3D
             watch._speed.Text = "112 km/h";
             foreach (var v in watch.FindChildren("*", "VisualInstance3D", true, false).OfType<VisualInstance3D>()) v.Layers = 1;
         };
-        return root;
+        return watch;
     }
 
     /// <summary>Twice a second: the time, the altitude above the sea and the speed, set only when they change.</summary>
