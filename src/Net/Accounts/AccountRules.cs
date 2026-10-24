@@ -15,7 +15,7 @@ public enum ServerAccounts
     Required,
 }
 
-/// <summary>Which identity this install joins with (#1123, Settings › Account).</summary>
+/// <summary>Which identity this install joins with (#1123, the title screen's account button, #1209).</summary>
 public enum AccountMode
 {
     /// <summary>No account: the install's <see cref="PlayerKey"/> is the only identity.</summary>
@@ -48,8 +48,8 @@ public static class AccountRules
     {
         if (mode != ServerAccounts.Required || verified) return null;
         return presented
-            ? "This server could not check your online account (signed out or expired). Sign in again under Settings › Account, then join again."
-            : $"This server requires an online account on {accountServer}. Sign in under Settings › Account, then join again.";
+            ? "This server could not check your online account (signed out or expired). Sign in again with the account button on the title screen, then join again."
+            : $"This server requires an online account on {accountServer}. Sign in with the account button on the title screen (top right), then join again.";
     }
 
     /// <summary>An account server's address in one spelling: trimmed, no trailing slash, http:// when none is given.</summary>

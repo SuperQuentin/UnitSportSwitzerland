@@ -4,7 +4,7 @@ using UnitSport.Net.Accounts;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings → Account and the welcome's last page (#1123): play offline (no account, the default) or online.
+/// The Account page (#1209, from the title screen's account button) and the welcome's last page (#1123): play offline (no account, the default) or online.
 /// <list type="bullet">
 /// <item>Signed in: one card, "Signed in as …", and Sign out.</item>
 /// <item>Signed out: two choices, "I have an account" (email, password, Sign in) and "New account" (email, password, a

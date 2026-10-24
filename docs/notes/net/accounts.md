@@ -3,7 +3,16 @@
 
 # Accounts: offline or online players, servers that require, allow or ignore an account (#1123)
 
-## Client: two modes (Settings › Account, `src/Ui/AccountPage.cs`)
+## Where the player meets it (#1209)
+
+- **The title screen's account button** sits at the top right. It shows the **profile picture** (`Ui/AvatarBadge`: the
+  player's figure's face, rendered once in a small world of its own, cut to a circle with the skin's accent ring) and the
+  account name. Signed out, it shows a drawn silhouette and **Sign in**.
+- **The button opens the Account page** (`Ui/AccountScreen`): the picture and name, **Change your figure** (to the
+  Character menu), and the account page below. Settings no longer has an Account tab.
+- The welcome's step 3 keeps the same account page.
+
+## Client: two modes (the Account page from the title screen's account button, #1209; `src/Ui/AccountPage.cs`)
 
 - **Offline** is the default and is how the game was before #1123. There is no account: the install's
   `PlayerKey` is the only identity (`net/sleepers`).
@@ -37,7 +46,7 @@
   joins as an offline player. A token that fails the check also joins offline: the account is a bonus here,
   never a lock.
 - **required**: only a checked account joins. Any other player is refused with a sentence that points to
-  Settings › Account (`AccountRules.Refusal`).
+  the title screen's account button (`AccountRules.Refusal`).
 - A mode other than off with no `--nakama-url`, or an unknown mode, stops the server at start with the reason,
   before any world loads.
 
