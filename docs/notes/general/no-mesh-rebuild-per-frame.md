@@ -33,8 +33,9 @@ Measured (#1202): 24 walking bots round a windowed client on the fixture world (
 RTX 4070 / Ryzen 2700X, two runs each). Before, each figure rebuilt its whole mesh every frame:
 **131 ms a frame (7.7 fps), ~1075 gen0 and 335 gen1 collections in 90 s**; the client's trace is
 `ApplyFootPose -> BuildStride`, two thirds building the figure, a third uploading it. With skinned
-figures: **18-19 ms (53-54 fps), ~40 and ~25**; posing is the bone calls to the rendering server. On the Quest (#1112) the frame rate quadrupled when the tracked hands stopped the own
-figure's arms from moving, which was the first sign.
+figures: **18-19 ms (53-54 fps), ~40 and ~25**; posing is the bone calls to the rendering server.
+On the Quest (#1112) the frame rate quadrupled when the tracked hands stopped the own figure's
+arms from moving, which was the first sign.
 
 ## How to check
 - `--perflog` (`core/session-perf-log`): `gc0` per minute and frame time with the thing moving in view.
