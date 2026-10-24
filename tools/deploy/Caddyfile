@@ -28,9 +28,10 @@
 	}
 	handle {
 		root * @WEB_DIR@
-		@hidden not path / /index.html /status.json /media/* /map.html /players.json /antennas-4g.json /houses.html
+		@hidden not path / /index.html /status.json /media/* /map.html /players.json /antennas-4g.json /houses.html /admin.html /account.js /nakama.json
 		respond @hidden 404
 		header /status.json Cache-Control "no-store"
+		header /nakama.json Cache-Control "no-store"
 		header /players.json Cache-Control "no-store"
 		header /antennas-4g.json Cache-Control "public, max-age=86400"
 		header /media/* Cache-Control "public, max-age=86400"

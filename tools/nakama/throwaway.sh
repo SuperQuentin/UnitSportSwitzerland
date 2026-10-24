@@ -19,6 +19,7 @@ NAKAMA_CONSOLE_PASSWORD=$(_nk_rand 24)
 NAKAMA_ENCRYPTION_KEY=$(_nk_rand 24)
 NAKAMA_PORT=$2
 NAKAMA_CONSOLE_PORT=$3
+NAKAMA_ADMIN_EMAILS=admin@check.example
 EOF
   trap nk_down EXIT
   nk up -d --wait > "$NK_OUT/up.log" 2>&1
