@@ -45,7 +45,10 @@ LBUILD=build/layouts
 # Nakama, the account server (#1121, docs/notes/net/nakama.md): a step of its own (--nakama), in "everything" when NAKAMA=1
 NAKAMA=${NAKAMA:-0} NAKAMA_DIR=${NAKAMA_DIR:-$DEPLOY_DIR/nakama} NAKAMA_PORT=${NAKAMA_PORT:-7350}
 # the game server's account step (#1123, net/accounts): off, optional or required, against the Nakama players sign in to
-NAKAMA_URL=${NAKAMA_URL:-http://${DEPLOY_HOST#*@}:$NAKAMA_PORT} ACCOUNTS=${ACCOUNTS:-off}
+# behind the site's Caddy at /nakama/ when there is one (#1205: HTTPS, 7350 closed), else published on NAKAMA_PORT
+NAKAMA_PUBLIC=$([ -n "$WEB" ] && { [ -n "$TILES_DOMAIN" ] && echo "https://$TILES_DOMAIN" || echo "${TILES_URL%/tiles/}"; } || true)
+NAKAMA_BIND=$([ -n "$NAKAMA_PUBLIC" ] && echo 127.0.0.1 || echo 0.0.0.0)
+NAKAMA_URL=${NAKAMA_URL:-$([ -n "$NAKAMA_PUBLIC" ] && echo "$NAKAMA_PUBLIC/nakama" || echo "http://${DEPLOY_HOST#*@}:$NAKAMA_PORT")} ACCOUNTS=${ACCOUNTS:-off}
 case $ACCOUNTS in off|optional|required) ;; *) { echo "ERROR: ACCOUNTS=$ACCOUNTS: use off, optional or required" >&2; exit 1; } ;; esac
 [ $S_NAKAMA = 2 ] && S_NAKAMA=$([ "$NAKAMA" = 1 ] && echo 1 || echo 0)
 [ $CHECK = 1 ] && [ "$NAKAMA" = 1 ] && S_NAKAMA=1
@@ -163,7 +166,7 @@ if [ $S_SETUP = 1 ]; then
   envs+=" SSH_PORT=$DEPLOY_PORT_SSH WEB_PORTS=$(qd "$WEB_PORTS") MDNS_NAME=$(qd "$MDNS_NAME") VERSION=$(qd "$VERSION")"
   envs+=" DOTNET_MAJOR=$DOTNET_MAJOR NEED_DOTNET=$NEED_DOTNET HERE=$rdir"
   envs+=" TILES=$TILES TILES_SITE=$(qd "$TILES_SITE") TILES_PRECOMPRESS=$TILES_PRECOMPRESS"
-  envs+=" LAYOUTS_PORT=$LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES=$(qd "${LAYOUTS_TRUSTED_PROXIES:-}")"
+  envs+=" LAYOUTS_PORT=$LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES=$(qd "${LAYOUTS_TRUSTED_PROXIES:-}") NAKAMA_PORT=$NAKAMA_PORT"
   set +e
   "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "$SUDO env $envs bash $rdir/remote-setup.sh; rc=\$?; rm -rf $rdir; exit \$rc"
   rc=$?; set -e
@@ -310,16 +313,27 @@ if [ $S_NAKAMA = 1 ]; then
     rq "$SUDO -n docker compose version" >/dev/null 2>&1 || "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "$SUDO docker compose version" >/dev/null 2>&1       || die "no 'docker compose' (v2) on $DEPLOY_HOST after apt: install Docker's own packages (https://docs.docker.com/engine/install/), then run --nakama again"
   fi
   if [ $DRY = 1 ]; then
-    echo "  [dry] upload tools/nakama/ (without .env) -> $NAKAMA_DIR, up.sh up, ufw allow $NAKAMA_PORT/tcp"
+    echo "  [dry] upload tools/nakama/ (without .env) -> $NAKAMA_DIR, up.sh up on $NAKAMA_BIND:$NAKAMA_PORT, $([ "$NAKAMA_BIND" = 127.0.0.1 ] && echo "ufw closes $NAKAMA_PORT/tcp; Caddy serves $NAKAMA_URL" || echo "ufw allow $NAKAMA_PORT/tcp")"
     rq "test -f $(qd "$NAKAMA_DIR/.env")" 2>/dev/null && echo "  .env    present (kept)" || echo "  .env    none yet (up.sh makes one with new keys)"
     rq "cd $(qd "$NAKAMA_DIR") 2>/dev/null && $SUDO -n docker compose ps --format '{{.Service}} {{.Status}}'" 2>/dev/null | sed 's/^/  | /' || true
   else
     tar -C tools/nakama --exclude=.env -cf - docker-compose.yml local.yml .env.example up.sh modules       | rq "mkdir -p $(qd "$NAKAMA_DIR") && tar -xf - -C $(qd "$NAKAMA_DIR")"
-    # the port players and game servers reach, in .env (up.sh writes .env from .env.example the first time)
-    "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "cd $(qd "$NAKAMA_DIR") && sed -i 's/^NAKAMA_PORT=.*/NAKAMA_PORT=$NAKAMA_PORT/' .env.example       && { [ ! -f .env ] || sed -i 's/^NAKAMA_PORT=.*/NAKAMA_PORT=$NAKAMA_PORT/' .env; } && chmod 600 .env 2>/dev/null; $SUDO bash up.sh up" | sed 's/^/  | /'
+    # the port and the bind in .env (up.sh writes .env from .env.example the first time); .env is root's, mode 600
+    "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "cd $(qd "$NAKAMA_DIR") && sed -i 's/^NAKAMA_PORT=.*/NAKAMA_PORT=$NAKAMA_PORT/; s/^NAKAMA_BIND=.*/NAKAMA_BIND=$NAKAMA_BIND/' .env.example \
+      && { [ ! -f .env ] || { $SUDO sed -i 's/^NAKAMA_PORT=.*/NAKAMA_PORT=$NAKAMA_PORT/' .env; $SUDO grep -q '^NAKAMA_BIND=' .env         && $SUDO sed -i 's/^NAKAMA_BIND=.*/NAKAMA_BIND=$NAKAMA_BIND/' .env || echo 'NAKAMA_BIND=$NAKAMA_BIND' | $SUDO tee -a .env >/dev/null; }; }       && $SUDO bash up.sh up" | sed 's/^/  | /'
     rq "$SUDO -n chmod 600 $(qd "$NAKAMA_DIR/.env") 2>/dev/null || chmod 600 $(qd "$NAKAMA_DIR/.env")" || true
-    rx "if command -v ufw >/dev/null && $SUDO -n ufw status 2>/dev/null | grep -q 'Status: active'; then $SUDO -n ufw allow $NAKAMA_PORT/tcp >/dev/null && echo '  ufw: $NAKAMA_PORT/tcp open'; fi" || true
+    # behind Caddy the port stays closed (and is closed again if an older deploy opened it); without Caddy it is opened
+    if [ "$NAKAMA_BIND" = 127.0.0.1 ]; then
+      rx "if command -v ufw >/dev/null && $SUDO -n ufw status 2>/dev/null | grep -q '$NAKAMA_PORT/tcp'; then $SUDO -n ufw delete allow $NAKAMA_PORT/tcp >/dev/null && echo '  ufw: $NAKAMA_PORT/tcp closed (Caddy serves it at /nakama/)'; fi" || true
+    else
+      rx "if command -v ufw >/dev/null && $SUDO -n ufw status 2>/dev/null | grep -q 'Status: active'; then $SUDO -n ufw allow $NAKAMA_PORT/tcp >/dev/null && echo '  ufw: $NAKAMA_PORT/tcp open'; fi" || true
+    fi
     rq "curl -fsS http://127.0.0.1:$NAKAMA_PORT/healthcheck >/dev/null" && echo "  healthcheck    OK" || die "Nakama does not answer on port $NAKAMA_PORT (ssh in, then: cd $NAKAMA_DIR && $SUDO bash up.sh logs)"
+    # through Caddy too, when the site is plain HTTP on this host (a domain's HTTPS is checked from outside)
+    if [ "$NAKAMA_BIND" = 127.0.0.1 ] && [ -z "$TILES_DOMAIN" ]; then
+      rq "curl -fsS http://127.0.0.1/nakama/healthcheck >/dev/null" && echo "  through Caddy (/nakama/)    OK" \
+        || echo "  WARNING: Caddy does not serve /nakama/ yet: run tools/deploy-linux.sh --setup once (it installs the new Caddyfile)"
+    fi
     key=$(rq "sed -n 's/^NAKAMA_SERVER_KEY=//p' $(qd "$NAKAMA_DIR/.env") 2>/dev/null || $SUDO -n sed -n 's/^NAKAMA_SERVER_KEY=//p' $(qd "$NAKAMA_DIR/.env")" | tr -d '
 ')
     echo "  account server for players: $NAKAMA_URL, server key ${key:-<in $NAKAMA_DIR/.env>}"
