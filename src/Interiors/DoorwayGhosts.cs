@@ -143,7 +143,8 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
         if (!_ghosts.TryGetValue(thing, out var ghosts)) _ghosts[thing] = ghosts = new List<MeshInstance3D>();
         while (ghosts.Count < _meshes.Count)
         {
-            var g = new MeshInstance3D { Name = "Ghost", TopLevel = true, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+            // a figure's ghost moves by the figure's bones (#1202)
+            var g = new Avatar.SkinnedFigure { Name = "Ghost", TopLevel = true, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(g);
             ghosts.Add(g);
         }
@@ -159,6 +160,8 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
                 for (int s = 0; s < m.GetSurfaceOverrideMaterialCount(); s++)
                     g.SetSurfaceOverrideMaterial(s, m.GetSurfaceOverrideMaterial(s));
             }
+            if (m is Avatar.SkinnedFigure figure) { if (((Avatar.SkinnedFigure)g).Following != figure) figure.Share(g); }
+            else if (((Avatar.SkinnedFigure)g).Following != null) Avatar.SkinnedFigure.Unshare(g);
             g.MaterialOverride = m.MaterialOverride;
             g.Layers = m.Layers;
             g.GlobalTransform = map * m.GlobalTransform;

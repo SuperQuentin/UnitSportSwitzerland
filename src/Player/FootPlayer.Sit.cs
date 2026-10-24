@@ -103,15 +103,4 @@ public partial class FootPlayer
         return true;
     }
 
-    /// <summary>The seated figure for <see cref="ApplyFootPose"/>: built around the hip, the feet <c>Anim.X</c> under it.</summary>
-    private ArrayMesh SeatedWalker(Avatar.HumanPalette palette)
-    {
-        var key = (palette, Hat, Mathf.Round(Anim.X * 100f), Mathf.Round(Anim.Y * 100f));
-        if (_sitMesh != null && key.Equals(_sitKey)) return _sitMesh;
-        _sitKey = key;
-        return _sitMesh = Avatar.SeatedFigure.Build(palette, new Avatar.SeatAnchor(0, new Vector3(0, Anim.X, 0), Anim.Y, 0f), Hat);
-    }
-
-    private ArrayMesh? _sitMesh;
-    private (Avatar.HumanPalette, Avatar.Headwear, float, float) _sitKey;
 }

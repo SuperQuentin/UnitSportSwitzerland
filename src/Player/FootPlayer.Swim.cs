@@ -425,7 +425,8 @@ public partial class FootPlayer
             _poseKey = key;
             _mountsKey = key;
             _poseWait = 0f;
-            _walker.Mesh = HumanMeshBuilder.BuildSwim(_walkPalette, style, _swimDrawPhase, Hat, _poseMesh ??= new ArrayMesh());
+            _walker.Show(new FigureLook(_walkPalette, Hat: Hat));
+            HumanMeshBuilder.PoseSwim(_walker, style, _swimDrawPhase);
             _poseMounts = HumanMeshBuilder.MountsForSwim(style, _swimDrawPhase);
         }
         _walker.Transform = BodyPose * FlinchPose(dt);

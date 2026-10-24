@@ -24,7 +24,7 @@ public partial class FootPlayer
     private const int MaxBreaks = 8;
 
     private Ragdoll? _ragdoll;
-    private MeshInstance3D? _ragdollMesh;
+    private SkinnedFigure? _ragdollMesh;
     private float _ragdollClock, _crackCooldown;
     private int _bonesBroken;
     private readonly Random _crashRng = new();
@@ -293,7 +293,7 @@ public partial class FootPlayer
         }
         if (_ragdollMesh == null)
         {
-            _ragdollMesh = new MeshInstance3D { Name = "Ragdoll", TopLevel = true, MaterialOverride = HumanMeshBuilder.FigureMaterial() };
+            _ragdollMesh = new SkinnedFigure { Name = "Ragdoll", TopLevel = true, MaterialOverride = HumanMeshBuilder.FigureMaterial() };
             // thrown off: seeing stars the whole way (#657)
             Avatar.Face.FaceAnimator.Apply(_ragdollMesh, Avatar.Face.FaceExpressions.Of(Avatar.Face.FaceExpression.Dizzy));
             AddChild(_ragdollMesh);
@@ -350,7 +350,10 @@ public partial class FootPlayer
         Span<Vector3> local = stackalloc Vector3[HumanMeshBuilder.JointCount];
         // relative to the hips, and pre-flipped: the mesh builder turns everything a half turn on the way out
         for (int i = 0; i < local.Length; i++) local[i] = Flip(points[i] - pelvis);
-        _ragdollMesh.Mesh = HumanMeshBuilder.BuildJoints(FigurePalette(RiderIndex()), local, Hat);
+        // its look built once (#1202), the joints its bones every frame
+        if (_ragdollMesh.Skin == null || _ragdollMesh.Skin.Look.Hat != Hat || _ragdollMesh.Skin.Look.Smooth != HumanMeshBuilder.SmoothFigures)
+            _ragdollMesh.Show(new FigureLook(FigurePalette(RiderIndex()), Hat: Hat));
+        HumanMeshBuilder.PoseJoints(_ragdollMesh, local);
         _ragdollMesh.GlobalTransform = new Transform3D(Basis.Identity, pelvis);
         if (_walker != null) _walker.Visible = false;
         return true;

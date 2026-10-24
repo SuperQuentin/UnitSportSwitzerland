@@ -523,7 +523,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     [Export] public int HeadwearId { get; set; }
 
     private Avatar.Headwear Hat => (Avatar.Headwear)HeadwearId;
-    private Avatar.Headwear _poseHat;
 
     /// <summary>
     /// The clothes on the figure, an <see cref="Avatar.Outfit"/> packed into 60 bits (#251).
@@ -714,7 +713,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DeviceKind", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
 
     // --- figure animation ---
-    private MeshInstance3D? _walker;
+    private Avatar.SkinnedFigure? _walker;
     private Avatar.HumanPalette _walkPalette = Avatar.HumanPalette.Default;
     /// <summary>The figure's colours and clothes as drawn now: the VR hands wear its skin and gloves (#648).</summary>
     public Avatar.HumanPalette WalkPalette => _walkPalette;
@@ -757,9 +756,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Seconds airborne, so a single frame off a kerb does not flash the jump pose.</summary>
     private float _airTime;
-
-    /// <summary>Fixed poses for the local body, built once: they do not animate, only swap.</summary>
-    private ArrayMesh? _airPose, _slidePose;
 
     private const float ShoulderHeight = 1.55f;
     private const float ShoulderOffset = 0.55f;
@@ -1610,12 +1606,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _walkPalette = FigurePalette(rider);
             _poseOutfit = OutfitBits;
             _face.Reset();   // a new node: its face uniforms start over
-            _walker = new MeshInstance3D
-            {
-                Name = "Body",
-                Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
-                MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
-            };
+            // its look's skinned mesh, built once and posed by its bones (#1202)
+            _walker = new Avatar.SkinnedFigure { Name = "Body", MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial() };
+            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat));
+            Avatar.HumanMeshBuilder.PoseStride(_walker, 0f, 0f);
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = Avatar.OwnBody.Layer;
             _visual = _walker;
         }
@@ -2292,12 +2286,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void ApplyFootPose()
     {
         if (_walker == null) return;
-        // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
-        if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
-        // and so do clothes put on or taken off (#251)
+        // clothes put on or taken off (#251) are a new look
         if (_poseOutfit != OutfitBits)
         {
-            _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
+            _poseOutfit = OutfitBits;
             _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
         }
         float dt = (float)GetProcessDeltaTime();
@@ -2313,25 +2305,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
         if (!armed) { arm = Avatar.ItemArmPose.None; blend = 0f; }   // what the builder does with them anyway
-        // Rebuilt only when what it shows changes (#221): a figure standing still is built once, and
-        // a remote one far away or out of view at most 15 times a second. The speed is keyed to the
-        // centimetre per second, so a standing figure's float noise does not rebuild it.
+        // Posed only when what it shows changes (#221), by its bones (#1202): a figure standing still
+        // is posed once, and a remote one far away or out of view at most 15 times a second. The
+        // speed is keyed to the centimetre per second, so a standing figure's float noise does not.
         // a skirt streams in the air the figure moves through (#251): walking, running, falling
-        var palette = _walkPalette;
-        if (Avatar.HumanMeshBuilder.Flutters(palette.Outfit))
-        {
-            palette = palette with { Wind = _walkWind.Update(_walker, dt) };
-            _slidePose = null;
-            _airPose = null;
-        }
+        var wind = Avatar.HumanMeshBuilder.Flutters(_walkPalette.Outfit) ? _walkWind.Update(_walker, dt) : Vector3.Zero;
         _poseWait += dt;
-        // a restyle to or from a lit style changes the figure's build (#311): the held poses go too
+        // a restyle to or from a lit style changes the figure's build (#311): a new look
         bool smooth = Avatar.HumanMeshBuilder.SmoothFigures;
-        if (smooth != _poseKey.Smooth)
-        {
-            _slidePose = null;
-            _airPose = null;
-        }
         // VR hands (#439) keyed to 2 cm, so a hand held still does not rebuild the figure
         var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
         if (vr is { } v) vr = new Avatar.HumanMeshBuilder.VrArms(SnapHand(v.Right), SnapHand(v.Left));
@@ -2343,7 +2324,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a fall's windmill runs on this peer's clock: nothing more is replicated than the pose kind
         _flailClock = PoseKind == PoseFall ? _flailClock + dt : 0f;
         float phase = PoseKind == PoseFall ? _flailClock : _stridePhase;
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, palette, smooth, vr, point);
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2366,19 +2347,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             _poseKey = key;
             _poseWait = 0f;
-            _walker.Mesh = PoseKind switch
+            // a new look (clothes, hat, style, a finger out to point) is the only thing that builds a mesh
+            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat, Point: point != null) { Smooth = smooth });
+            switch (PoseKind)
             {
-                PoseTucked => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
-                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
-                PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
-                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
-                PoseFall => Avatar.HumanMeshBuilder.BuildFalling(palette, _flailClock, arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
-                PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
+                case PoseTucked: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Tucked, arm, blend, wind); break;
+                case PoseAir: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Running, arm, blend, wind); break;
+                case PoseFall: Avatar.HumanMeshBuilder.PoseFalling(_walker, _flailClock, arm, blend, wind); break;
+                case PoseHang or PoseClimb: Avatar.HumanMeshBuilder.PosePosed(_walker, CarriedFigure(), arm, blend, wind); break;
                 // seated on a stand (#885): the figure round its hip, which BodyPose lifts
-                PoseSit => SeatedWalker(palette),
-                _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
-                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr, point: point),
-            };
+                case PoseSit: Avatar.SeatedFigure.Pose(_walker, new Avatar.SeatAnchor(0, new Vector3(0, Anim.X, 0), Anim.Y, 0f)); break;
+                default: Avatar.HumanMeshBuilder.PoseStride(_walker, Anim.X, _stridePhase, arm, blend, dance, vr, point, wind); break;
+            }
         }
         var mounts = _poseMounts;
         _walker.Transform = BodyPose;
@@ -2403,15 +2383,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
-        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null);
+        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null, Vector3 Wind = default);
 
     /// <summary>A VR hand to the 2 cm the figure is keyed on (#439).</summary>
     private static Vector3 SnapHand(Vector3 p) => (p / 0.02f).Round() * 0.02f;
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
-    /// <summary>The animated figure's one mesh, rebuilt in place (the cached held poses aside).</summary>
-    private ArrayMesh? _poseMesh;
     private float _poseWait;
 
     /// <summary>

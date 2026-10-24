@@ -45,6 +45,11 @@ public sealed class MeshScratch
     private readonly List<Vector2> _uv2s = new();
     // filled only once a vertex is drawn under a Rest map (a figure, #724); otherwise no CUSTOM0 at all
     private readonly List<Vector3> _rest = new();
+    // filled only while a Weigher is set (a skinned figure, #1202): four bones and weights a vertex; otherwise none
+    private readonly List<int> _bones = new();
+    private readonly List<float> _weights = new();
+    // filled only once a drape's hem flutters (#1202): its ripple, for the figure's shader, in CUSTOM1
+    private readonly List<Vector4> _flutter = new();
     // panes go in a second surface, so they can take a translucent material of their own
     private readonly List<Vector3> _glassVertices = new();
     private readonly List<Color> _glassColors = new();
@@ -114,9 +119,13 @@ public sealed class MeshScratch
     /// either side so the cloth over the joint stretches instead of tearing. Both take the joint
     /// to the same place, so the blend never jumps.
     /// </summary>
-    public readonly record struct RestMap(Transform3D First, Transform3D Second, Vector3 Joint, Vector3 Split, float Blend)
+    /// <remarks>
+    /// <paramref name="Part"/> names the body part it maps (the figure builder's own numbering), for
+    /// a skinned build's <see cref="Weigher"/> (#1202); 0 is none.
+    /// </remarks>
+    public readonly record struct RestMap(Transform3D First, Transform3D Second, Vector3 Joint, Vector3 Split, float Blend, int Part = 0)
     {
-        public static RestMap Rigid(Transform3D t) => new(t, t, Vector3.Zero, Vector3.Zero, 1f);
+        public static RestMap Rigid(Transform3D t, int part = 0) => new(t, t, Vector3.Zero, Vector3.Zero, 1f, part);
 
         public Vector3 Of(Vector3 p)
         {
@@ -126,6 +135,26 @@ public sealed class MeshScratch
             return (First * p).Lerp(Second * p, (d + Blend) / (2f * Blend));
         }
     }
+
+    /// <summary>
+    /// What a skinned figure (#1202) gives each vertex: two bones and the second one's weight
+    /// (the first takes the rest). A figure's bones are the figure builder's
+    /// (<c>HumanMeshBuilder.Skin.cs</c>); bone 0 is the figure's own origin.
+    /// </summary>
+    public readonly record struct BoneWeights(int A, int B = 0, float WeightB = 0f);
+
+    /// <summary>Weighs each vertex of a skinned build by the part it is drawn for (<see cref="RestMap.Part"/>) and where it is.</summary>
+    public interface IBoneWeigher
+    {
+        BoneWeights Weigh(int part, Vector3 position);
+    }
+
+    /// <summary>
+    /// While set, every vertex is also given bones and weights (#1202): the figure is built once,
+    /// standing at rest, and posed by its bones from then on. A vertex drawn under no
+    /// <see cref="Rest"/> map is part 0.
+    /// </summary>
+    public IBoneWeigher? Weigher { get; set; }
 
     /// <summary>
     /// A tapered tube from <paramref name="a"/> to <paramref name="b"/>. Six sides by default:
@@ -248,7 +277,12 @@ public sealed class MeshScratch
     /// of <paramref name="slit"/> are left out. Under <see cref="Smooth"/> each point gets a normal
     /// from its neighbours, so the light rolls over the folds.
     /// </summary>
-    public void Drape(Vector3[][] rings, int from, int count, ReadOnlySpan<Color> bands, Vector3 slit = default, float gapAngle = 0f)
+    /// <remarks>
+    /// <paramref name="hem"/>, one per point of the last ring: how its point flutters (#1202), the
+    /// offset it ripples along and its index round the hem (<see cref="Flutter"/>); empty: none.
+    /// </remarks>
+    public void Drape(Vector3[][] rings, int from, int count, ReadOnlySpan<Color> bands, Vector3 slit = default, float gapAngle = 0f,
+        ReadOnlySpan<Vector4> hem = default)
     {
         if (count < 2) return;
         int m = rings[from].Length;
@@ -280,6 +314,8 @@ public sealed class MeshScratch
                 bool flip = (c - a).Cross(b - a).Dot(outward) < 0f;
                 if (flip) (b, d) = (d, b);
                 int s = _vertices.Count;
+                // the hem ring's points flutter: the last band's r1, b and c (d and c once flipped)
+                bool atHem = hem.Length == m && i + 2 == count;
                 if (Smooth)
                 {
                     int ib = flip ? k1 : k, id = flip ? k : k1;
@@ -296,6 +332,12 @@ public sealed class MeshScratch
                     Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
                     Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
                 }
+                if (atHem)
+                    for (int side = 0; side < 8; side += 4)
+                    {
+                        Flutter(s + side + 2, hem[k1]);
+                        Flutter(s + side + (flip ? 3 : 1), hem[k]);
+                    }
                 Quad(s, s + 1, s + 2, s + 3);           // outside
                 Quad(s + 4, s + 7, s + 6, s + 5);       // inside
             }
@@ -688,7 +730,7 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, pivot, "body");
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, pivot, "body", _bones, _weights, _flutter);
         AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, pivot, GlassSurface);
         return mesh;
     }
@@ -700,6 +742,7 @@ public sealed class MeshScratch
     public void Clear()
     {
         _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear(); _uv2s.Clear(); _rest.Clear();
+        _bones.Clear(); _weights.Clear(); _flutter.Clear();
         _glassVertices.Clear(); _glassColors.Clear(); _glassIndices.Clear();
     }
 
@@ -712,13 +755,14 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         mesh.ClearSurfaces();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, Vector3.Zero, "body");
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, Vector3.Zero, "body", _bones, _weights, _flutter);
         AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, Vector3.Zero, GlassSurface);
         return mesh;
     }
 
     private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<Vector3>? normals,
-        List<Vector2>? uvs, List<Vector2>? uv2s, List<Vector3>? rest, List<int> indices, Vector3 pivot, string name)
+        List<Vector2>? uvs, List<Vector2>? uv2s, List<Vector3>? rest, List<int> indices, Vector3 pivot, string name,
+        List<int>? bones = null, List<float>? weights = null, List<Vector4>? flutter = null)
     {
         if (indices.Count == 0) return;
         var facing = new Vector3[vertices.Count];
@@ -763,6 +807,26 @@ public sealed class MeshScratch
             }
             arrays[(int)Mesh.ArrayType.Custom0] = packed;
             flags = (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift);
+        }
+        if (bones is { Count: > 0 } && weights != null)
+        {
+            // a skinned figure (#1202): the vertices after the last weighed one ride on bone 0
+            while (bones.Count < vertices.Count * 4) { bones.Add(0); weights.Add(bones.Count % 4 == 1 ? 1f : 0f); }
+            arrays[(int)Mesh.ArrayType.Bones] = bones.ToArray();
+            arrays[(int)Mesh.ArrayType.Weights] = weights.ToArray();
+        }
+        if (flutter is { Count: > 0 })
+        {
+            // turned round like the positions; w is the hem index plus one, 0 for every other vertex
+            while (flutter.Count < vertices.Count) flutter.Add(Vector4.Zero);
+            var packed = new float[vertices.Count * 4];
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                var f = flutter[i];
+                packed[i * 4] = -f.X; packed[i * 4 + 1] = f.Y; packed[i * 4 + 2] = -f.Z; packed[i * 4 + 3] = f.W;
+            }
+            arrays[(int)Mesh.ArrayType.Custom1] = packed;
+            flags |= (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom1Shift);
         }
 
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
@@ -917,12 +981,37 @@ public sealed class MeshScratch
     // vertex before it its own position (a vehicle drawn first, a figure's rider after)
     private void AddRest(Vector3 position)
     {
+        if (Weigher is { } weigher)
+        {
+            // a vehicle drawn before the figure rides on its origin, bone 0 at full weight
+            while (_bones.Count < _vertices.Count * 4) { _bones.Add(0); _weights.Add(_bones.Count % 4 == 1 ? 1f : 0f); }
+            var w = weigher.Weigh(Rest?.Part ?? 0, position);
+            _bones.Add(w.A); _bones.Add(w.B); _bones.Add(0); _bones.Add(0);
+            _weights.Add(1f - w.WeightB); _weights.Add(w.WeightB); _weights.Add(0f); _weights.Add(0f);
+        }
+        else if (_bones.Count > 0)
+        {
+            _bones.Add(0); _bones.Add(0); _bones.Add(0); _bones.Add(0);
+            _weights.Add(1f); _weights.Add(0f); _weights.Add(0f); _weights.Add(0f);
+        }
+        if (_flutter.Count > 0) _flutter.Add(Vector4.Zero);
         if (Rest is { } map)
         {
             while (_rest.Count < _vertices.Count) _rest.Add(_vertices[_rest.Count]);
             _rest.Add(map.Of(position));
         }
         else if (_rest.Count > 0) _rest.Add(position);
+    }
+
+    /// <summary>
+    /// Marks vertex <paramref name="v"/> as a fluttering hem's (#1202): <paramref name="f"/> is the
+    /// offset it ripples along (xyz, metres, author space) and its index round the hem plus one (w).
+    /// The figure's shader ripples it (<c>shaders/body/avatar.gdshaderinc</c>, <c>skirt_flutter</c>).
+    /// </summary>
+    private void Flutter(int v, Vector4 f)
+    {
+        while (_flutter.Count < _vertices.Count) _flutter.Add(Vector4.Zero);
+        _flutter[v] = f;
     }
 
     /// <summary>

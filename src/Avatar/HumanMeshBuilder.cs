@@ -875,7 +875,7 @@ public static partial class HumanMeshBuilder
     /// each build, so a figure cached by its pose keys on it too (<c>FootPlayer.FootPoseKey</c>,
     /// <see cref="DriverBody"/>, <c>Cyclist</c>'s legs).
     /// </summary>
-    public static bool SmoothFigures => Styles.StyleKit.Detail == Styles.MeshDetail.High;
+    public static bool SmoothFigures => _smoothOverride ?? Styles.StyleKit.Detail == Styles.MeshDetail.High;
 
     /// <summary>
     /// A hat on the head, built in the head's own frame so it follows the neck like the helmet

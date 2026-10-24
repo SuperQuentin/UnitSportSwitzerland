@@ -23,6 +23,19 @@ public static class SeatedFigure
     }
 
     /// <summary>
+    /// <see cref="Build"/>'s figure as the bones of a skinned one (#1202): its look (the palette, the
+    /// hat; no head for the one sitting in it) is the caller's, <see cref="SkinnedFigure.Show"/>.
+    /// </summary>
+    public static void Pose(SkinnedFigure figure, SeatAnchor seat)
+    {
+        if (seat.Pose == SeatPose.Straddle)
+            HumanMeshBuilder.PoseRider(figure, Vector3.Zero,
+                CarMeshBuilder.Turned(seat.Grip - seat.Hip), CarMeshBuilder.Turned(seat.Peg - seat.Hip));
+        else
+            HumanMeshBuilder.PoseDriver(figure, Lap(seat), 0f, 0f, 0f);
+    }
+
+    /// <summary>
     /// A chair as <see cref="HumanMeshBuilder.AppendDriver"/> poses it, authored around the hip: a
     /// "wheel" lying in the lap for the hands to rest on, both feet flat on the floor ahead, the
     /// knees bent more than a driver's (nothing to reach for).
