@@ -221,14 +221,19 @@ internal sealed partial class XrWristRing : Node3D
     }
 
     private bool _placed;
+    private Vector3 _atInRoom;
     private Vector3 _at;
 
     /// <summary>Over the watch, square to the eyes, eased so the wrist's tremble does not shake it.</summary>
     private void Place(Transform3D watch, Transform3D head, float dt)
     {
-        var want = watch.Origin + Vector3.Up * Above;
-        _at = _placed ? _at.Lerp(want, MathX.Damp(14f, dt)) : want;
+        // smoothed in the tracking space, not the world's: a walk, a car or a flight moves the room and the wheel with
+        // it, only the wrist's own jitter is damped (it trailed behind a running player, #1112)
+        var space = GetViewport().GetCamera3D()?.GetParent() is Node3D origin ? origin.GlobalTransform : Transform3D.Identity;
+        var want = space.AffineInverse() * (watch.Origin + Vector3.Up * Above);
+        _atInRoom = _placed ? _atInRoom.Lerp(want, MathX.Damp(14f, dt)) : want;
         _placed = true;
+        _at = space * _atInRoom;
         var toEyes = head.Origin - _at;
         if (toEyes.LengthSquared() < 1e-4f) return;
         // the quad's front is +Z: face the eyes, upright in the world
