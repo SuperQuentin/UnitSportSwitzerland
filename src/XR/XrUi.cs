@@ -40,7 +40,7 @@ public partial class XrUi : Node3D
 
     private readonly XRCamera3D _head;
     private readonly XRController3D _hand;
-    private SubViewport _view = null!;
+    private SubViewport _view = null!, _mask = null!;
     /// <summary>
     /// Where the panel is (and, without a composition layer, the panel itself). With a headset the
     /// picture goes on <see cref="_layer"/> instead: the compositor draws it at its own resolution,
@@ -93,6 +93,21 @@ public partial class XrUi : Node3D
             GuiDisableInput = true,
         };
         AddChild(_view);
+        // the same UI a quarter the size, for the hole's mask (xr_panel_hole.gdshader): a viewport that feeds a
+        // compositor layer is drawn straight into the layer's image, and its own texture is no longer updated (#1112)
+        _mask = new SubViewport
+        {
+            Name = "UiMask",
+            Size = (Vector2I)(pixels / 4f),
+            Size2DOverride = (Vector2I)_size,
+            Size2DOverrideStretch = true,
+            TransparentBg = true,
+            Disable3D = true,
+            World2D = root.World2D,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            GuiDisableInput = true,
+        };
+        AddChild(_mask);
 
         _panelMat = new StandardMaterial3D
         {
@@ -112,6 +127,9 @@ public partial class XrUi : Node3D
             Layers = XrSession.HeadsetOnlyLayer,
         };
         AddChild(_panel);
+        // "--xrhole" with --xrsim: the simulated panel drawn as the headset's hole is (xr_panel_hole.gdshader), dark
+        // where the UI is, to see what draws over it
+        if (XrSession.Simulated && CmdArgs.Has("--xrhole")) _panel.MaterialOverride = HoleMaterial();
 
         // The pointer in the menus' look (docs/notes/ui/style-guide.md): a faint white beam, and
         // amber only where it marks something, the reticle on the panel.
@@ -172,9 +190,7 @@ public partial class XrUi : Node3D
                 // hand, the pointer and anything nearer draw over it, where in front of the picture it covered them
                 // (a Quest 2 playtest, #1112). A layer behind makes Godot blend the picture by its alpha
                 _layer.SortOrder = -1;
-                var hole = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/xr_panel_hole.gdshader") };
-                hole.SetShaderParameter(PanelTexture, _view.GetTexture());
-                _panel.MaterialOverride = hole;
+                _panel.MaterialOverride = HoleMaterial();
                 var cursorLayer = new CanvasLayer { Name = "XrCursor", Layer = 128, CustomViewport = _view };
                 _cursor = new Control { Name = "Reticle", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
                 _cursor.Draw += DrawCursor;
@@ -204,6 +220,9 @@ public partial class XrUi : Node3D
         // the popups (a drop-down's list, a menu) on the panel too, under the cursor
         _popupLayer = new CanvasLayer { Name = "XrPopups", Layer = 127, CustomViewport = _view };
         AddChild(_popupLayer);
+        // and on the mask: the layer is the panel's, so it is attached by hand as Redirect does the others
+        RenderingServer.ViewportAttachCanvas(_mask.GetViewportRid(), _popupLayer.GetCanvas());
+        RenderingServer.ViewportSetCanvasStacking(_mask.GetViewportRid(), _popupLayer.GetCanvas(), _popupLayer.Layer, 0);
         // "--xrpopup [s]": that long in, the first drop-down on screen opens, for a headset shot of its list
         if (CmdArgs.Has("--xrpopup"))
             GetTree().CreateTimer(CmdArgs.Double("--xrpopup") ?? 6).Timeout += () =>
@@ -253,11 +272,19 @@ public partial class XrUi : Node3D
         // the monitor by its type: it is added under another name and renamed in its _Ready, after this ran (#1036)
         if (node is not CanvasLayer layer || layer is XrMonitor || Hidden.Contains(layer.Name) || layer.CustomViewport != null) return;
         var view = _view.GetViewportRid();
+        var mask = _mask.GetViewportRid();
         var canvas = layer.GetCanvas();
-        RenderingServer.ViewportAttachCanvas(view, canvas);
-        RenderingServer.ViewportSetCanvasStacking(view, canvas, layer.Layer, layer.GetIndex());
+        foreach (var target in new[] { view, mask })
+        {
+            RenderingServer.ViewportAttachCanvas(target, canvas);
+            RenderingServer.ViewportSetCanvasStacking(target, canvas, layer.Layer, layer.GetIndex());
+        }
         // a layer taken out of the tree (not just hidden) stops showing on screen: and on the panel
-        layer.TreeExiting += () => RenderingServer.ViewportRemoveCanvas(view, canvas);
+        layer.TreeExiting += () =>
+        {
+            RenderingServer.ViewportRemoveCanvas(view, canvas);
+            RenderingServer.ViewportRemoveCanvas(mask, canvas);
+        };
     }
 
     private CanvasLayer? _popupLayer;
@@ -304,6 +331,13 @@ public partial class XrUi : Node3D
             picture.Position = window.Position;
             picture.Size = window.Size;
         }
+    }
+
+    private ShaderMaterial HoleMaterial()
+    {
+        var hole = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/xr_panel_hole.gdshader") };
+        hole.SetShaderParameter(PanelTexture, _mask.GetTexture());
+        return hole;
     }
 
     /// <summary>Puts the panel before the eyes again on the next frame (a recentre).</summary>
