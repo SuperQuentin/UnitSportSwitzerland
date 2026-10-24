@@ -8,10 +8,12 @@ render_mode unshaded, blend_mul, depth_draw_never, cull_disabled, shadows_disabl
 /// The glass disc's radius in the quad's UV (1 = the quad's width) and how opaque it is.
 uniform float radius = 0.43;
 uniform float opacity = 0.78;
+/// What leaves the picture as it is (XrUi.HoleWhite, as xr_panel_hole.gdshader).
+uniform float white = 1.0;
 
 void fragment() {
 	float r = length(UV - vec2(0.5));
 	float shown = opacity * (1.0 - smoothstep(radius - 0.004, radius, r));
-	ALBEDO = vec3(1.0 - shown);
+	ALBEDO = vec3(white * (1.0 - shown));
 	ALPHA = 1.0 - shown;
 }

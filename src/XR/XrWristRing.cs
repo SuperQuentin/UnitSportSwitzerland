@@ -142,6 +142,7 @@ internal sealed partial class XrWristRing : Node3D
         _layer = layer;
         var hole = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/xr_ring_hole.gdshader") };
         hole.SetShaderParameter(HoleRadius, (Outer + 6f) / Pixels);
+        hole.SetShaderParameter(XrUi.HoleWhiteParam, XrUi.HoleWhite);
         _quad.MaterialOverride = hole;
     }
 

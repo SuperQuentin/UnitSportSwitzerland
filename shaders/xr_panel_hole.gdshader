@@ -7,9 +7,12 @@ shader_type spatial;
 render_mode unshaded, blend_mul, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
 uniform sampler2D panel : hint_default_transparent, filter_linear;
+/// What leaves the picture as it is: the Mobile renderer keeps colour at half scale in its 3D buffer, so a multiplied
+/// 1 would halve the world under the whole quad (XrUi.HoleWhite, 2 there).
+uniform float white = 1.0;
 
 void fragment() {
 	float shown = texture(panel, UV).a;
-	ALBEDO = vec3(1.0 - shown);
+	ALBEDO = vec3(white * (1.0 - shown));
 	ALPHA = 1.0 - shown;
 }

@@ -337,8 +337,18 @@ public partial class XrUi : Node3D
     {
         var hole = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/xr_panel_hole.gdshader") };
         hole.SetShaderParameter(PanelTexture, _mask.GetTexture());
+        hole.SetShaderParameter(HoleWhiteParam, HoleWhite);
         return hole;
     }
+
+    /// <summary>
+    /// The colour a hole multiplies by to leave the picture as it is: the Mobile renderer keeps its 3D colour at half
+    /// scale (its 10-bit buffer reaches 2), so a 1 halved the world under the whole panel, a dark sheet over it on a
+    /// Quest 2 (#1112). Stored halved, 2 is 1 again.
+    /// </summary>
+    internal static float HoleWhite => RenderingServer.GetCurrentRenderingMethod() == "mobile" ? 2f : 1f;
+
+    internal static readonly StringName HoleWhiteParam = "white";
 
     /// <summary>Puts the panel before the eyes again on the next frame (a recentre).</summary>
     public void PlaceAgain() => _place = true;
