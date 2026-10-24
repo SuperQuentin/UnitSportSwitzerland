@@ -198,14 +198,18 @@ public static class BoatMeshBuilder
     public static ArrayMesh RunaboutDriver(HumanPalette palette, float wheelTurn = 0f)
     {
         var m = new MeshScratch();
-        float floor = CockpitFloor + 0.04f;
-        var seat = new DriverSeat(HelmHip, SeatRecline, Wheel.Hub, Wheel.Axis, 0.17f,
-            Throttle: new Vector3(HelmHip.X - 0.1f, floor, HelmHip.Z + 0.62f),
-            Brake: new Vector3(HelmHip.X + 0.08f, floor, HelmHip.Z + 0.62f),
-            Rest: new Vector3(HelmHip.X + 0.12f, floor, HelmHip.Z + 0.58f));
-        HumanMeshBuilder.AppendDriver(m, palette, seat, wheelTurn, 0.3f, 0f);
+        HumanMeshBuilder.AppendDriver(m, palette, RunaboutSeat, wheelTurn, RunaboutThrottle, 0f);
         return m.Build();
     }
+
+    /// <summary>The runabout's helm seat (author space): the wheel, and the floor the feet rest on.</summary>
+    public static readonly DriverSeat RunaboutSeat = new(HelmHip, SeatRecline, Wheel.Hub, Wheel.Axis, 0.17f,
+        Throttle: new Vector3(HelmHip.X - 0.1f, CockpitFloor + 0.04f, HelmHip.Z + 0.62f),
+        Brake: new Vector3(HelmHip.X + 0.08f, CockpitFloor + 0.04f, HelmHip.Z + 0.62f),
+        Rest: new Vector3(HelmHip.X + 0.12f, CockpitFloor + 0.04f, HelmHip.Z + 0.58f));
+
+    /// <summary>The driver's foot on the runabout's throttle, always a little down.</summary>
+    public const float RunaboutThrottle = 0.3f;
 
     /// <summary>The driver, a passenger beside, three on the bench (#158 seats), node space.</summary>
     public static SeatAnchor[] RunaboutSeats()
@@ -345,8 +349,9 @@ public static class BoatMeshBuilder
 public partial class BoatRig : Node3D
 {
     private MeshInstance3D? _driver;
+    /// <summary>The runabout's driver, posed by its bones with the wheel (#1202); null on a jetski.</summary>
+    private SkinnedFigure? _helm;
     private Node3D? _wheel;
-    private HumanPalette? _palette;
     private GpuParticles3D? _wake, _spray, _jet;
     private ParticleProcessMaterial? _sprayMat;
     private BoatSpec _spec = null!;
@@ -379,16 +384,17 @@ public partial class BoatRig : Node3D
             rig._wheel = new Node3D { Name = "Wheel", Position = BoatMeshBuilder.Flip(BoatMeshBuilder.Wheel.Hub) };
             rig._wheel.AddChild(new MeshInstance3D { Mesh = BoatMeshBuilder.RunaboutWheel(), MaterialOverride = body });
             rig.AddChild(rig._wheel);
-            rig._palette = driver;
         }
         if (driver != null)
         {
-            rig._driver = new MeshInstance3D
+            if (jet) rig._driver = new MeshInstance3D { Name = "Driver", Mesh = BoatMeshBuilder.JetskiRider(driver), MaterialOverride = body };
+            else
             {
-                Name = "Driver",
-                Mesh = jet ? BoatMeshBuilder.JetskiRider(driver) : BoatMeshBuilder.RunaboutDriver(driver),
-                MaterialOverride = body,
-            };
+                // the hands go round with the rim: its bones, never a mesh per turn (#1202)
+                rig._driver = rig._helm = new SkinnedFigure { Name = "Driver", MaterialOverride = body };
+                rig._helm.Show(new FigureLook(driver));
+                HumanMeshBuilder.PoseDriver(rig._helm, BoatMeshBuilder.RunaboutSeat, 0f, BoatMeshBuilder.RunaboutThrottle, 0f);
+            }
             rig.AddChild(rig._driver);
         }
         if (DisplayServer.GetName() != "headless")
@@ -508,7 +514,6 @@ public partial class BoatRig : Node3D
     // ---- the wheel (#380) ------------------------------------------------------------------------
 
     private float _steer, _shownTurn = float.NaN;
-    private readonly Dictionary<int, ArrayMesh> _driverTurns = new();
 
     /// <summary>The wheel's turn now, rad (+ is the helm to starboard).</summary>
     public float WheelTurn => _steer * BoatMeshBuilder.Wheel.Lock;
@@ -521,18 +526,13 @@ public partial class BoatRig : Node3D
     {
         if (_wheel == null) return;
         _steer = Mathf.Lerp(_steer, Mathf.Clamp(helm, -1f, 1f), 1f - Mathf.Exp(-10f * dt));
-        float turn = Mathf.Round(WheelTurn / 0.06f) * 0.06f;
-        if (turn == _shownTurn) return;
+        float turn = WheelTurn;
+        if (Mathf.Abs(turn - _shownTurn) < 1e-4f) return;
         _shownTurn = turn;
         _wheel.Basis = new Basis(BoatMeshBuilder.Flip(BoatMeshBuilder.Wheel.Axis), WheelSign * turn);
-        // the hands go round with the rim: one figure per 0.06 rad, kept
-        if (_driver != null && _palette is { } palette && DisplayServer.GetName() != "headless")
-        {
-            int key = Mathf.RoundToInt(turn / 0.06f);
-            if (!_driverTurns.TryGetValue(key, out var mesh))
-                _driverTurns[key] = mesh = BoatMeshBuilder.RunaboutDriver(palette, WheelSign * turn);
-            _driver.Mesh = mesh;
-        }
+        // the hands go round with the rim: bones only
+        if (_helm != null && DisplayServer.GetName() != "headless")
+            HumanMeshBuilder.PoseDriver(_helm, BoatMeshBuilder.RunaboutSeat, WheelSign * turn, BoatMeshBuilder.RunaboutThrottle, 0f);
     }
 
     /// <summary>Which way about the wheel's axis a turn to starboard is (clockwise as the driver sees it).</summary>

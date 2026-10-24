@@ -54,7 +54,7 @@ public static partial class HumanMeshBuilder
     private const int BoneTrunk = 1;
     private const int BoneArmL = BoneTrunk + TrunkStations, BoneArmR = BoneArmL + 4;   // upper, elbow, lower, hand
     private const int BoneLegL = BoneArmR + 4, BoneLegR = BoneLegL + 4;                // upper, knee, lower, foot
-    private const int BoneHead = BoneLegR + 4, BoneNeck = BoneHead + 1, BoneSkirt = BoneNeck + 1;   // a skirt's rings: upper, middle, hem
+    private const int BoneHead = BoneLegR + 4, BoneNeck = BoneHead + 1, BoneCollar = BoneNeck + 1, BoneSkirt = BoneCollar + 1;
 
     /// <summary>
     /// How many bones a skinned figure has (<see cref="FigureSkin.BoneCount"/>): the body's, and a
@@ -67,7 +67,7 @@ public static partial class HumanMeshBuilder
 
     // ---- the parts a vertex is drawn for (MeshScratch.RestMap.Part)
     private const int PartTrunk = 1, PartArmL = 2, PartArmR = 3, PartLegL = 4, PartLegR = 5, PartFootL = 6, PartFootR = 7,
-        PartHead = 8, PartNeck = 9, PartSkirt = 10, PartTier = 11;
+        PartHead = 8, PartNeck = 9, PartSkirt = 10, PartTier = 11, PartCollar = 12;
 
     /// <summary>The trunk station (0..16) a skirt hangs from: its waistband is at spine 2.</summary>
     private const int SkirtStation = 8;
@@ -343,6 +343,10 @@ public static partial class HumanMeshBuilder
         var neckUp = neck.LengthSquared() > 1e-8f ? neck.Normalized() : Vector3.Up;
         var neckSide = (shoulderLine - neckUp * shoulderLine.Dot(neckUp)).Normalized();
         frames[BoneNeck] = new Transform3D(new Basis(neckSide, neck, neckSide.Cross(neckUp)), neckBottom);
+        // what is worn round the neck, as AppendNeckwear lays it along the neck from its base
+        var collar = neckTop - r.Neck;
+        var f = Frame.Along(collar);
+        frames[BoneCollar] = new Transform3D(new Basis(f.Side, collar, f.Fwd), r.Neck);
 
         if (frames.Length > BoneSkirt) SkirtBones(r, torso, body, frames[BoneTrunk + SkirtStation], wind, frames[BoneSkirt..]);
     }
@@ -625,18 +629,22 @@ public static partial class HumanMeshBuilder
             _spineY = new[] { crotch.Y, r.Hip.Y, r.Waist.Y, r.Chest.Y, r.Neck.Y };
         }
 
-        public MeshScratch.BoneWeights Weigh(int part, Vector3 p) => part switch
+        public MeshScratch.BoneWeights Weigh(int part, Vector3 p, Vector3? centre, bool compact) => part switch
         {
-            PartTrunk => Trunk(p.Y),
-            PartArmL => Limb(p, _r.ShoulderL, _r.ElbowL, _r.WristL, BoneArmL),
-            PartArmR => Limb(p, _r.ShoulderR, _r.ElbowR, _r.WristR, BoneArmR),
-            PartLegL => Limb(p, _r.HipL, _r.KneeL, _r.AnkleL, BoneLegL),
-            PartLegR => Limb(p, _r.HipR, _r.KneeR, _r.AnkleR, BoneLegR),
+            // a box or a ring on the trunk moves as one piece, at its middle
+            PartTrunk => Trunk((compact ? centre ?? p : p).Y),
+            // a tube, box or skirt on a limb (a band, a puffed sleeve, a pocket) on the bone its middle is on:
+            // LimbBand never runs one across a joint, so only the limb's own skin bends there
+            PartArmL => Limb(centre ?? p, _r.ShoulderL, _r.ElbowL, _r.WristL, BoneArmL),
+            PartArmR => Limb(centre ?? p, _r.ShoulderR, _r.ElbowR, _r.WristR, BoneArmR),
+            PartLegL => Limb(centre ?? p, _r.HipL, _r.KneeL, _r.AnkleL, BoneLegL),
+            PartLegR => Limb(centre ?? p, _r.HipR, _r.KneeR, _r.AnkleR, BoneLegR),
             PartFootL => new(BoneLegL + 3),
             PartFootR => new(BoneLegR + 3),
             PartHead => new(BoneHead),
             // the neck and what is round it, on the neck's own bone
             PartNeck => new(BoneNeck),
+            PartCollar => new(BoneCollar),
             PartSkirt => Skirt(p),
             PartTier => Tier(p),
             _ => new(0),

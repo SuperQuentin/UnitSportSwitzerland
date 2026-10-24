@@ -120,7 +120,7 @@ public static partial class HumanMeshBuilder
         bool hair = look.HairStyle != HairStyle.None && cover != HairCover.Head;
         var f = new Frame(h.Side, h.UpAxis, h.Fwd);
         if (o[WearSlot.Neck] is { } neck)
-            using (s.Resting(TrunkRest(r) with { Part = PartNeck }))
+            using (s.Resting(TrunkRest(r) with { Part = PartCollar }))
                 AppendNeckwear(s, fit, neck);
         using var headRest = s.Resting(HeadRest(r));
         if (fullFace)
@@ -937,7 +937,8 @@ public static partial class HumanMeshBuilder
             }
             case GarmentShape.Chain:
             {
-                // hangs from the base of the neck onto the chest, a small cross at the bottom
+                // hangs from the base of the neck onto the chest, a small cross at the bottom: on the trunk
+                using var onChest = s.Resting(TrunkRest(r));
                 var t = fit.Torso;
                 for (int i = 0; i <= 10; i++)
                 {

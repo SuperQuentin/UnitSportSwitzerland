@@ -143,10 +143,15 @@ public sealed class MeshScratch
     /// </summary>
     public readonly record struct BoneWeights(int A, int B = 0, float WeightB = 0f, int C = 0, float WeightC = 0f, int D = 0, float WeightD = 0f);
 
-    /// <summary>Weighs each vertex of a skinned build by the part it is drawn for (<see cref="RestMap.Part"/>) and where it is.</summary>
+    /// <summary>
+    /// Weighs each vertex of a skinned build by the part it is drawn for (<see cref="RestMap.Part"/>)
+    /// and where it is; <paramref name="centre"/> is the middle of the primitive it belongs to (a
+    /// box, ring, tube or skirt; null for a loft's, a drape's, a face's), <paramref name="compact"/>
+    /// whether that is a small solid (a box, a ring) rather than a long one.
+    /// </summary>
     public interface IBoneWeigher
     {
-        BoneWeights Weigh(int part, Vector3 position);
+        BoneWeights Weigh(int part, Vector3 position, Vector3? centre, bool compact);
     }
 
     /// <summary>
@@ -162,20 +167,36 @@ public sealed class MeshScratch
     /// </summary>
     public bool OverFloor { get; set; }
 
-    // a small rigid primitive (a box, a ring) is weighed at its centre, so it moves as one piece:
-    // weighed vertex by vertex, a buckle across two trunk rings would stretch with the spine
+    // the primitive being drawn, for the weigher: a buckle across two trunk rings is weighed at its
+    // middle, so it moves as one piece instead of stretching with the spine
     private Vector3? _anchor;
+    private bool _compact;
 
-    private AnchorScope Anchored(Vector3 at)
+    private AnchorScope Anchored(Vector3 at, bool compact = true)
     {
-        var scope = new AnchorScope(this, _anchor);
-        _anchor ??= at;
+        var scope = new AnchorScope(this, _anchor, _compact);
+        if (_anchor == null) (_anchor, _compact) = (at, compact);
         return scope;
     }
 
-    private readonly struct AnchorScope(MeshScratch scratch, Vector3? was) : IDisposable
+    private readonly struct AnchorScope(MeshScratch scratch, Vector3? was, bool compact) : IDisposable
     {
-        public void Dispose() => scratch._anchor = was;
+        public void Dispose() => (scratch._anchor, scratch._compact) = (was, compact);
+    }
+
+    /// <summary>
+    /// <c>--skincheck</c> only: turns each tube's and ring's facets with the part they are drawn
+    /// for (part to turn), so a figure rebuilt in a pose has them where its skinned figure does.
+    /// Null in the game: their facets lie as world up puts them.
+    /// </summary>
+    internal Func<int, Basis>? FacetTurn { get; set; }
+
+    private Vector3 Reference(Vector3 axis)
+    {
+        if (FacetTurn is not { } turn) return Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var basis = turn(Rest?.Part ?? 0);
+        var up = basis * Vector3.Up;
+        return Mathf.Abs(axis.Dot(up)) > 0.95f ? basis * Vector3.Right : up;
     }
 
     /// <summary>
@@ -189,6 +210,7 @@ public sealed class MeshScratch
         if (length < 1e-5f || sides < 3) return;
 
         axis /= length;
+        using var anchor = Anchored((a + b) * 0.5f, compact: false);
         if (Smooth)
         {
             SmoothTube(a, b, axis, length, radiusA, radiusB, colour.SrgbToLinear(), Math.Max(sides, SmoothSides));
@@ -196,7 +218,7 @@ public sealed class MeshScratch
         }
 
         // any vector not parallel to the axis will do for the first perpendicular
-        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(axis);
         var u = axis.Cross(reference).Normalized();
         var v = axis.Cross(u);
 
@@ -243,9 +265,10 @@ public sealed class MeshScratch
         float length = axis.Length();
         if (length < 1e-5f || sides < 3) return;
         axis /= length;
+        using var anchor = Anchored((a + b) * 0.5f, compact: false);
 
         // the same frame as Tube, so a skirt's facets line up with the body's
-        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(axis);
         var u = axis.Cross(reference).Normalized();
         var v = axis.Cross(u);
         var slit = gap - axis * gap.Dot(axis);
@@ -473,7 +496,7 @@ public sealed class MeshScratch
     {
         using var anchor = Anchored(centre);
         normal = normal.Normalized();
-        var reference = Mathf.Abs(normal.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(normal);
         var u = normal.Cross(reference).Normalized();
         var v = normal.Cross(u);
         var half = normal * (thickness * 0.5f);
@@ -1010,7 +1033,7 @@ public sealed class MeshScratch
         {
             // a vehicle drawn before the figure rides on its origin, bone 0 at full weight
             while (_bones.Count < _vertices.Count * 4) { _bones.Add(0); _weights.Add(_bones.Count % 4 == 1 ? 1f : 0f); }
-            var w = weigher.Weigh(Rest?.Part ?? 0, _anchor ?? position);
+            var w = weigher.Weigh(Rest?.Part ?? 0, position, _anchor, _compact);
             _bones.Add(w.A); _bones.Add(w.B); _bones.Add(w.C); _bones.Add(w.D);
             _weights.Add(1f - w.WeightB - w.WeightC - w.WeightD); _weights.Add(w.WeightB); _weights.Add(w.WeightC); _weights.Add(w.WeightD);
         }
@@ -1057,7 +1080,7 @@ public sealed class MeshScratch
     private void SmoothTube(Vector3 a, Vector3 b, Vector3 axis, float length, float radiusA, float radiusB,
         Color linear, int sides)
     {
-        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(axis);
         var u = axis.Cross(reference).Normalized();
         var v = axis.Cross(u);
 

@@ -181,19 +181,15 @@ public static class SteamerMeshBuilder
 
     // ---- the gangway's plank (#383: it tilts to the pier alongside) ------------------------
 
-    private static readonly Dictionary<(int Door, int Run, int Drop), ArrayMesh> _plankMeshes = new();
 
     /// <summary>
     /// A gangway's plank from its hinge on the deck's edge <paramref name="run"/> out and
-    /// <paramref name="drop"/> down (negative: up to a higher pier), with its hand ropes; one mesh per
-    /// centimetre of each, kept. Main thread.
+    /// <paramref name="drop"/> down (negative: up to a higher pier), with its hand ropes. Built once
+    /// at <see cref="PlankOut"/>, <see cref="PlankDrop"/>; the rig tilts it to the pier with
+    /// <see cref="PlankFrame"/> rather than a mesh per centimetre (#1202).
     /// </summary>
     public static ArrayMesh PlankMesh(int door, float run, float drop)
     {
-        var key = (door, Mathf.RoundToInt(run * 100f), Mathf.RoundToInt(drop * 100f));
-        if (_plankMeshes.TryGetValue(key, out var known)) return known;
-        run = key.Item2 / 100f;
-        drop = key.Item3 / 100f;
         float side = door == 0 ? 1f : -1f;
         var p = new MeshScratch();
         var low = new Vector3(side * (PlankEdge + run), DeckY - drop, 0);
@@ -205,8 +201,20 @@ public static class SteamerMeshBuilder
         p.Box(new Vector3(mid.X, mid.Y - 0.05f, zc), new Vector3(length, 0.08f, GangTo - GangFrom - 0.3f), Teak, new Basis(Vector3.Back, -tilt));
         foreach (float e in new[] { -1f, 1f })
             p.Tube(new Vector3(low.X, low.Y + 0.9f, zc + e * 0.8f), new Vector3(high.X, high.Y + 0.9f, zc + e * 0.8f), 0.025f, White, 5);
-        if (_plankMeshes.Count > 400) _plankMeshes.Clear();
-        return _plankMeshes[key] = p.Build();
+        return p.Build();
+    }
+
+    /// <summary>
+    /// Where the plank built at <see cref="PlankOut"/>, <see cref="PlankDrop"/> goes to reach
+    /// <paramref name="run"/> out and <paramref name="drop"/> down (node space): sheared about its
+    /// hinge, so its foot moves and its hand ropes stay upright over it.
+    /// </summary>
+    public static Transform3D PlankFrame(int door, float run, float drop)
+    {
+        float side = door == 0 ? 1f : -1f;
+        var hinge = BoatMeshBuilder.Flip(new Vector3(side * PlankEdge, DeckY, 0));
+        var basis = new Basis(new Vector3(run / PlankOut, side * (drop - PlankDrop) / PlankOut, 0), Vector3.Up, Vector3.Back);
+        return new Transform3D(basis, hinge - basis * hinge);
     }
 
     /// <summary>
@@ -754,14 +762,15 @@ public static class SteamerMeshBuilder
     public static ArrayMesh Helmsman(HumanPalette palette, float wheelTurn)
     {
         var m = new MeshScratch();
-        float floor = UpperY + 0.32f;   // feet on the stool's ring
-        var seat = new DriverSeat(HelmHip, 0.05f, HelmWheel, Vector3.Forward, HelmRadius - 0.05f,
-            Throttle: new Vector3(HelmHip.X - 0.12f, floor, HelmHip.Z + 0.22f),
-            Brake: new Vector3(HelmHip.X + 0.12f, floor, HelmHip.Z + 0.22f),
-            Rest: new Vector3(HelmHip.X + 0.12f, floor, HelmHip.Z + 0.22f));
-        HumanMeshBuilder.AppendDriver(m, palette, seat, wheelTurn, 0f, 0f);
+        HumanMeshBuilder.AppendDriver(m, palette, HelmSeat, wheelTurn, 0f, 0f);
         return m.Build();
     }
+
+    /// <summary>The helmsman's stool at the wheel (author space), the feet on its ring: the rig poses the figure from it.</summary>
+    public static readonly DriverSeat HelmSeat = new(HelmHip, 0.05f, HelmWheel, Vector3.Forward, HelmRadius - 0.05f,
+        Throttle: new Vector3(HelmHip.X - 0.12f, UpperY + 0.32f, HelmHip.Z + 0.22f),
+        Brake: new Vector3(HelmHip.X + 0.12f, UpperY + 0.32f, HelmHip.Z + 0.22f),
+        Rest: new Vector3(HelmHip.X + 0.12f, UpperY + 0.32f, HelmHip.Z + 0.22f));
 
     // ---- funnel, stairs, fittings ----------------------------------------------------------------
 
@@ -876,7 +885,7 @@ public static class SteamerMeshBuilder
 /// </summary>
 public partial class SteamerRig : Node3D
 {
-    private MeshInstance3D? _helmsman;
+    private SkinnedFigure? _helmsman;
     private readonly MeshInstance3D[] _wheels = new MeshInstance3D[2];
     private readonly MeshInstance3D[] _gates = new MeshInstance3D[2], _planks = new MeshInstance3D[2];
     private MeshInstance3D _lever = null!;
@@ -923,10 +932,12 @@ public partial class SteamerRig : Node3D
         rig._helm = new Node3D { Name = "HelmWheel", Position = BoatMeshBuilder.Flip(SteamerMeshBuilder.HelmWheel) };
         rig._helm.AddChild(new MeshInstance3D { Mesh = SteamerMeshBuilder.HelmWheelMesh(), MaterialOverride = body });
         rig.AddChild(rig._helm);
-        rig._helmPalette = helmsman;
         if (helmsman != null)
         {
-            rig._helmsman = new MeshInstance3D { Name = "Driver", Mesh = SteamerMeshBuilder.Helmsman(helmsman, 0f), MaterialOverride = body };
+            // the hands go round with the wheel: its bones (#1202)
+            rig._helmsman = new SkinnedFigure { Name = "Driver", MaterialOverride = body };
+            rig._helmsman.Show(new FigureLook(helmsman));
+            HumanMeshBuilder.PoseDriver(rig._helmsman, SteamerMeshBuilder.HelmSeat, 0f, 0f, 0f);
             rig.AddChild(rig._helmsman);
         }
         if (DisplayServer.GetName() != "headless")
@@ -1064,9 +1075,7 @@ public partial class SteamerRig : Node3D
     // ---- the wheelhouse wheel (#380) ----------------------------------------------------------------
 
     private Node3D? _helm;
-    private HumanPalette? _helmPalette;
     private float _steer, _shownHelm = float.NaN;
-    private readonly Dictionary<int, ArrayMesh> _helmsmanTurns = new();
 
     /// <summary>The wheel's turn now, rad (+ is the helm to starboard).</summary>
     public float WheelTurn => _steer * SteamerMeshBuilder.HelmLock;
@@ -1076,18 +1085,13 @@ public partial class SteamerRig : Node3D
     {
         if (_helm == null) return;
         _steer = Mathf.Lerp(_steer, Mathf.Clamp(helm, -1f, 1f), 1f - Mathf.Exp(-6f * dt));
-        float turn = Mathf.Round(WheelTurn / 0.06f) * 0.06f;
-        if (turn == _shownHelm) return;
+        float turn = WheelTurn;
+        if (Mathf.Abs(turn - _shownHelm) < 1e-4f) return;
         _shownHelm = turn;
         // clockwise as the helmsman sees it, looking forward
         _helm.Basis = new Basis(Vector3.Back, -turn);
-        if (_helmsman != null && _helmPalette is { } palette && DisplayServer.GetName() != "headless")
-        {
-            int key = Mathf.RoundToInt(turn / 0.06f);
-            if (!_helmsmanTurns.TryGetValue(key, out var mesh))
-                _helmsmanTurns[key] = mesh = SteamerMeshBuilder.Helmsman(palette, -turn);
-            _helmsman.Mesh = mesh;
-        }
+        if (_helmsman != null && DisplayServer.GetName() != "headless")
+            HumanMeshBuilder.PoseDriver(_helmsman, SteamerMeshBuilder.HelmSeat, -turn, 0f, 0f);
     }
     private HullSlap? _slap;
     private bool _blowing;
@@ -1128,8 +1132,7 @@ public partial class SteamerRig : Node3D
             if (_planks[i].Visible && IsInsideTree())
             {
                 var (run, drop) = World.GangwayFit.Of(GlobalTransform, i);
-                var mesh = SteamerMeshBuilder.PlankMesh(i, run, drop);
-                if (_planks[i].Mesh != mesh) _planks[i].Mesh = mesh;
+                _planks[i].Transform = SteamerMeshBuilder.PlankFrame(i, run, drop);
             }
         if (_wake == null) return;
         float work = Mathf.Abs(shaft);

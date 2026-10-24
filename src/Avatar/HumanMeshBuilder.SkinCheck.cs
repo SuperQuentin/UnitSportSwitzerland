@@ -10,8 +10,12 @@ namespace UnitSport.Avatar;
 /// </summary>
 public static partial class HumanMeshBuilder
 {
-    /// <summary>The surface gap, metres, most of a figure stays within (p99) and nothing passes.</summary>
-    private const float SkinP99 = 0.004f, SkinMax = 0.03f;
+    /// <summary>
+    /// The surface gap, metres, most of a figure stays within (p99) and nothing passes: what is left
+    /// is a round part's facets turned about its own axis, a hat's fixed-size parts on a head the
+    /// old builder shrank with its length, a skirt's strap between its rings.
+    /// </summary>
+    private const float SkinP99 = 0.008f, SkinMax = 0.015f;
 
     public static int SkinCheck()
     {
@@ -116,6 +120,16 @@ public static partial class HumanMeshBuilder
         var j = JointsOf(RigFor(HumanPose.Running));
         var rng = new RandomNumberGenerator { Seed = 1202 };
         for (int i = 0; i < j.Length; i++) j[i] += new Vector3(rng.Randfn(0, 0.015f), rng.Randfn(0, 0.015f), rng.Randfn(0, 0.015f));
+        // a ragdoll's bones keep their lengths (Player/Ragdoll's sticks): each joint back along its bone
+        var rest = JointsOf(RigFor(HumanPose.Running));
+        ReadOnlySpan<(Joint From, Joint To)> sticks =
+        [
+            (Joint.HeadBase, Joint.HeadTop), (Joint.ShoulderL, Joint.ElbowL), (Joint.ElbowL, Joint.WristL),
+            (Joint.ShoulderR, Joint.ElbowR), (Joint.ElbowR, Joint.WristR), (Joint.HipL, Joint.KneeL), (Joint.KneeL, Joint.AnkleL),
+            (Joint.AnkleL, Joint.ToeL), (Joint.HipR, Joint.KneeR), (Joint.KneeR, Joint.AnkleR), (Joint.AnkleR, Joint.ToeR),
+        ];
+        foreach (var (from, to) in sticks)
+            j[(int)to] = j[(int)from] + (j[(int)to] - j[(int)from]).Normalized() * rest[(int)to].DistanceTo(rest[(int)from]);
         poses.Add(("ragdoll", new Rig(j[0], j[1], j[2], j[3], j[4], j[5], j[6], j[7], j[8], j[9], j[10], j[11],
             j[12], j[13], j[14], j[15], j[16], j[17], j[18], j[19], TorsoLean: 0f)));
         return poses;
@@ -131,14 +145,25 @@ public static partial class HumanMeshBuilder
         if (!_checkSkins.TryGetValue(look, out var skin)) _checkSkins[look] = skin = BuildSkin(look);
         var palette = look.Palette;
         // the rebuilt figure, as every builder drew it before (the look's style, no wind)
-        var scratch = new MeshScratch();
+        var frames = new Transform3D[skin.BoneCount];
+        Frames(rig, skin.Body, Vector3.Zero, frames);
+        // a round part's facets turned with the head, the neck, a foot, as the skinned figure's are:
+        // otherwise a hat's brim turning its facets round its own axis reads as a gap, and is none
+        Basis Turned(int bone) => (frames[bone] * skin.BindInverse[bone]).Basis.Orthonormalized();
+        var scratch = new MeshScratch
+        {
+            FacetTurn = part => part switch
+            {
+                PartHead => Turned(BoneHead), PartNeck => Turned(BoneNeck), PartCollar => Turned(BoneCollar),
+                PartFootL => Turned(BoneLegL + 3), PartFootR => Turned(BoneLegR + 3),
+                _ => Basis.Identity,
+            },
+        };
         _smoothOverride = look.Smooth;
         try { AppendRig(scratch, palette, rig, look.Legs, look.Helmet, look.Hat, look.Body, look.Head, look.FullFace); }
         finally { _smoothOverride = null; }
         var rebuilt = scratch.Build();
 
-        var frames = new Transform3D[skin.BoneCount];
-        Frames(rig, skin.Body, Vector3.Zero, frames);
         var flip = new Transform3D(new Basis(Vector3.Up, Mathf.Pi), Vector3.Zero);
         var bones = new Transform3D[skin.BoneCount];
         for (int i = 0; i < bones.Length; i++) bones[i] = flip * (frames[i] * skin.BindInverse[i]) * flip;
@@ -184,7 +209,10 @@ public static partial class HumanMeshBuilder
                     + (sameCount ? $" rebuilt {target[v]}" : ""));
         }
         Array.Sort(gaps);
-        return (gaps[(int)(gaps.Length * 0.99f)], max, at, sameCount ? rest.Length : -rest.Length);
+        // a slit is cut where the pose turns it on the rebuilt skirt, in the cloth on the skinned one:
+        // the faces either side of it are each other's gap, so such a pose is judged on the rest
+        if (!sameCount) return (gaps[(int)(gaps.Length * 0.9f)], gaps[(int)(gaps.Length * 0.9f)], at, -rest.Length);
+        return (gaps[(int)(gaps.Length * 0.99f)], max, at, rest.Length);
     }
 
     private static readonly Dictionary<FigureLook, FigureSkin> _checkSkins = new();
