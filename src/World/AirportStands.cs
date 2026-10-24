@@ -31,7 +31,7 @@ public partial class AirportStands : Node
     public const float ClearOfPlayers = 300f;
 
     /// <summary>A stand is filled only with a player within this, m (vehicles further off are cleared as lonely anyway).</summary>
-    public const float PlaceRadius = 2800f;
+    public static readonly float PlaceRadius = VehicleManager.LonelyDistance - 200f;
 
     private readonly ChunkManager _chunks;
     /// <summary>The stands whose tiles have been seen, and since when each stood empty (NaN: filled; -inf: never filled).</summary>

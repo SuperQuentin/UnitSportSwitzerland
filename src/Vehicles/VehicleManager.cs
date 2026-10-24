@@ -91,9 +91,12 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
 
     /// <summary>Wrecks are cleared this long after they burn.</summary>
     private const double WreckLifetime = 90;
-    /// <summary>A vehicle this far from every player, for this long, is cleared.</summary>
-    private const float LonelyDistance = 3000f;
-    private const double LonelyTime = 300;
+    /// <summary>
+    /// A vehicle this far from every player, for this long, is cleared. Nearer and sooner where a standalone headset
+    /// decides (#1112, offline): an airport's parked aircraft 4 km off kept its physics step at three times its cost.
+    /// </summary>
+    public static readonly float LonelyDistance = Core.Platform.IsStandaloneVr ? 1500f : 3000f;
+    private static readonly double LonelyTime = Core.Platform.IsStandaloneVr ? 60 : 300;
 
     /// <summary>The manager of this process's world, if there is one.</summary>
     public static VehicleManager? Instance { get; private set; }
