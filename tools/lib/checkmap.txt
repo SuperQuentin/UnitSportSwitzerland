@@ -326,6 +326,10 @@ src/Net/ConsoleLink      net    tools/consolelinknetcheck.sh
 # #1123: the account step after the version check (needs Docker for its throwaway Nakama)
 src/Net/Accounts         net    tools/accountnetcheck.sh
 src/Net/Handshake        net    tools/accountnetcheck.sh
+src/Net/AdminHttp        net    tools/adminhttpnetcheck.sh
+src/Net/AdminApi         net    tools/adminhttpnetcheck.sh
+src/Net/ChatManager.Web  net    tools/adminhttpnetcheck.sh
+tools/deploy/start-server net   tools/adminhttpnetcheck.sh
 src/Net/Handshake        net    tools/consolelinknetcheck.sh
 src/Net/Handshake        net    tools/autoupdatenetcheck.sh
 src/Net/ServerAutoUpdate net    tools/autoupdatenetcheck.sh
