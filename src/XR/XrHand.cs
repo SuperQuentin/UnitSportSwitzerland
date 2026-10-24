@@ -50,6 +50,8 @@ internal sealed partial class XrHand : Node3D
     private static readonly StringName LeftTracker = "/user/hand_tracker/left", RightTracker = "/user/hand_tracker/right";
 
     private readonly bool _right;
+    /// <summary>The reflection across the hand's X: the left hand is the right one seen in it.</summary>
+    private static readonly Basis MirrorX = new(new Vector3(-1f, 0f, 0f), Vector3.Up, Vector3.Back);
     private readonly float _m;
     private readonly Node3D[] _joints = new Node3D[Bones];
     private readonly MeshInstance3D[] _bones = new MeshInstance3D[Bones];
@@ -85,15 +87,23 @@ internal sealed partial class XrHand : Node3D
     public XrHand(bool right)
     {
         _right = right;
-        _m = right ? 1f : -1f;
+        // every hand is built as the right one; the left is that hand seen in a mirror across its X (#1112): built
+        // with mirrored numbers, its thumb frames were turns, never a mirror image, and stood out of its fist
+        _m = 1f;
         Name = right ? "RightHand" : "LeftHand";
-        _palm = Part(this);
-        _cuff = Part(this);
+        Node3D root = this;
+        if (!right)
+        {
+            root = new Node3D { Name = "Mirror", Scale = new Vector3(-1f, 1f, 1f) };
+            AddChild(root);
+        }
+        _palm = Part(root);
+        _cuff = Part(root);
         _thumbBase = new Node3D { Name = "Thumb" };
-        AddChild(_thumbBase);
+        root.AddChild(_thumbBase);
         for (int f = 0; f < 5; f++)
         {
-            Node3D parent = f == Thumb ? _thumbBase : this;
+            Node3D parent = f == Thumb ? _thumbBase : root;
             for (int j = 0; j < 3; j++)
             {
                 int b = f * 3 + j;
@@ -143,15 +153,18 @@ internal sealed partial class XrHand : Node3D
         s.Tube(Vector3.Zero, new Vector3(0f, 0.77f, -0.64f) * 0.09f * k, 0.026f * k, 0.031f * k, look.Cuff, 7);
         _cuff.Mesh = s.Build();
         s.Clear();
-        // the forearm runs from the cuff along (0, 0.77, 0.64) as built (the tube is authored −Z). The dial
-        // faces the side that is up with the controller held (the thumb's, a quarter turn round the arm from
-        // the back of the hand, −Z; playtest #1097), 3.5 cm up the arm, on its skin
+        // the forearm runs from the cuff along (0, 0.77, 0.64) as built (the tube is authored −Z). The dial is on the
+        // back of the wrist, +X on the right hand as on the grip pose (OpenXR: +X out of the right hand's back), 12 toward
+        // the hand, 3.5 cm up the arm on its skin. A quarter turn from it toward the thumb (#1097) put it under the wrist
+        // once the left hand was a true mirror of the right (#1112)
         var arm = new Vector3(0f, 0.77f, 0.64f);
-        var back = new Vector3(_m, 0f, 0f).Rotated(arm.Normalized(), -_m * Mathf.Pi / 2f);
+        var back = new Vector3(1f, 0f, 0f);
         var dial = back;
         var twelve = -arm;
         WatchSpot = new Transform3D(new Basis(twelve.Cross(dial), twelve, dial),
             _cuff.Position + (arm * 0.035f + back * 0.03f) * k);
+        // on the left wrist, the right one's spot seen in the mirror: a turn still (the dial is not read backwards)
+        if (!_right) WatchSpot = new Transform3D(MirrorX, Vector3.Zero) * WatchSpot * new Transform3D(MirrorX, Vector3.Zero);
 
         for (int f = 0; f < 5; f++)
         {
@@ -174,8 +187,8 @@ internal sealed partial class XrHand : Node3D
 
         // the thumb from the heel of the palm; up: off the controller, down: lying on its face
         _thumbBase.Position = new Vector3(_m * 0.026f, 0.052f, -0.034f) * k;
-        _thumbUp = Aim(new Vector3(-_m * 0.2f, -0.6f, -0.78f));
-        _thumbDown = Aim(new Vector3(-_m * 0.6f, -0.62f, -0.5f));
+        _thumbUp = Aim(new Vector3(-0.2f, -0.6f, -0.78f));
+        _thumbDown = Aim(new Vector3(-0.6f, -0.62f, -0.5f));
         Apply();
     }
 
@@ -183,7 +196,7 @@ internal sealed partial class XrHand : Node3D
     private Basis Aim(Vector3 dir)
     {
         var y = -dir.Normalized();
-        var toPalm = new Vector3(-_m, 0f, 0f);
+        var toPalm = new Vector3(-1f, 0f, 0f);   // the right hand's: the left is it in a mirror
         var x = (toPalm - y * toPalm.Dot(y)).Normalized();
         // turning −Y about +Z moves it toward +X: x is the way the bone bends
         return new Basis(x, y, x.Cross(y));
@@ -205,8 +218,9 @@ internal sealed partial class XrHand : Node3D
             }
         }
         _thumbBase.Basis = new Basis(new Quaternion(_thumbUp).Slerp(new Quaternion(_thumbDown), Mathf.Clamp(ThumbDown, 0f, 1f)));
+        // about Z as the fingers, the left hand the other way: the left thumb bent out of its fist (#1112)
         for (int j = 0; j < 3; j++)
-            _joints[Thumb * 3 + j].Basis = new Basis(Vector3.Back, Bend[Thumb * 3 + j]);
+            _joints[Thumb * 3 + j].Basis = new Basis(Vector3.Back, _m * Bend[Thumb * 3 + j]);
     }
 
     /// <summary>
@@ -217,7 +231,10 @@ internal sealed partial class XrHand : Node3D
     public void Drive(XRController3D ctl, float dt)
     {
         float ease;
+        // a hand the runtime makes up from the controller held in it (Meta's controller data source, on in the
+        // project) is the controller's: its own sensors curl the fingers, where its made-up joints barely did (#1112)
         Tracked = XRServer.GetTracker(_right ? RightTracker : LeftTracker) is XRHandTracker { HasTrackingData: true } tracker
+            && tracker.HandTrackingSource != XRHandTracker.HandTrackingSourceEnum.Controller
             && FromTracker(tracker);
         if (Tracked) ease = MathX.Damp(40f, dt);
         else
@@ -228,7 +245,17 @@ internal sealed partial class XrHand : Node3D
         for (int b = 0; b < Bones; b++) Bend[b] += (_target[b] - Bend[b]) * ease;
         ThumbDown += (_thumbTarget - ThumbDown) * ease;
         Apply();
+        // "--xrhandlog": once a second, where this hand's fingers come from and what the controller reads
+        if (LogHands && (_logIn -= dt) <= 0f)
+        {
+            _logIn = 1f;
+            GD.Print(System.FormattableString.Invariant(
+                $"[xrhand] {(_right ? "right" : "left")} {(Tracked ? "hand tracker" : "controller")}: grip {ctl.GetFloat(GripAction):F2} trigger {ctl.GetFloat(TriggerAction):F2} tracked {ctl.GetHasTrackingData()} profile {ctl.GetTrackerHand()} bend {Bend[3]:F2}"));
+        }
     }
+
+    private static readonly bool LogHands = Core.CmdArgs.Has("--xrhandlog");
+    private float _logIn;
 
     private float _thumbTarget;
 
