@@ -547,6 +547,7 @@ public sealed class GameSettings
         VrMsaa = 2;                        // 4x halves the screen bins' size: ~10 ms more
         TrafficCars = 6;
         TrafficRiders = 4;
+        ReplayMinutes = 1;                 // the replay holds what it saw that long (Movie/WorldRecorder): memory
     }
 
     /// <summary>Writes the touch layout alone, as the editor's Done does (a command-line run's other values stay out).</summary>

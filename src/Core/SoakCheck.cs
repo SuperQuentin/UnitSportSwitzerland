@@ -102,6 +102,19 @@ public sealed partial class SoakCheck : Node
         });
         GD.Print(line);
         _report.AppendLine(line);
+        // the nodes out of the tree and never freed, by class and name: whatever left them behind
+        var orphans = new Dictionary<string, int>();
+        foreach (ulong id in Node.GetOrphanNodeIds())
+            if (InstanceFromId(id) is Node orphan)
+            {
+                string key = $"{orphan.GetClass()} {System.Text.RegularExpressions.Regex.Replace(orphan.Name.ToString(), "[0-9_@]+", "")}"
+                    + (orphan.GetParent() == null ? " (root)" : "");
+                orphans[key] = orphans.GetValueOrDefault(key) + 1;
+            }
+        GD.Print($"[soak]   orphan ids listed: {Node.GetOrphanNodeIds().Count}");
+        if (_lap == _laps) Node.PrintOrphanNodes();
+        foreach (var (key, count) in orphans.OrderByDescending(kv => kv.Value).Take(12))
+            GD.Print(System.FormattableString.Invariant($"[soak]   orphan {count,6} {key}"));
         foreach (var (name, count) in branches.OrderByDescending(kv => kv.Value).Take(14))
             GD.Print(System.FormattableString.Invariant($"[soak]   {count,7} {name} ({count - _firstBranches.GetValueOrDefault(name):+0;-0;0} since lap 0)"));
     }
