@@ -227,11 +227,11 @@ upload_layouts() { # the published service: a new app/ dir, then the session res
   [ "$LAYOUTS" = 1 ] && [ -d "$LBUILD" ] || return 0
   if [ $DRY = 1 ]; then echo "  [dry] upload $LBUILD -> $LAYOUTS_DIR/app, restart the layout service"; return; fi
   tar -C "$LBUILD" -czf - . | rq "rm -rf $(qd "$LAYOUTS_DIR/app.new") && mkdir -p $(qd "$LAYOUTS_DIR/app.new") && tar -xzf - -C $(qd "$LAYOUTS_DIR/app.new") \
-    && chmod 755 $(qd "$LAYOUTS_DIR/app.new/LayoutService") && { tmux kill-session -t unitsport-layouts 2>/dev/null || true; } \
+    && chmod 755 $(qd "$LAYOUTS_DIR/app.new/LayoutService") && { tmux kill-session -t =unitsport-layouts 2>/dev/null || true; } \
     && rm -rf $(qd "$LAYOUTS_DIR/app") && mv $(qd "$LAYOUTS_DIR/app.new") $(qd "$LAYOUTS_DIR/app")" || die "layout service upload failed"
   echo "  $LAYOUTS_DIR/app (house layout service; start-server.sh starts it)"
 }
-stop_server() { [ $stopped = 1 ] && return; rx "tmux kill-session -t unitsport 2>/dev/null || true"; stopped=1; }
+stop_server() { [ $stopped = 1 ] && return; rx "tmux kill-session -t =unitsport 2>/dev/null || true"; stopped=1; }
 
 # --- 4. upload the build ------------------------------------------------------------------------
 if [ $S_BUILD = 1 ]; then
@@ -365,12 +365,12 @@ if [ $S_RESTART = 1 ] || [ $stopped = 1 ]; then
   say "Start server"
   install_start
   # wait for the old process to let go of the port, or the "listening" check below sees it and not the new one
-  rx "tmux kill-session -t unitsport 2>/dev/null; for i in \$(seq 30); do ss -Hlun 'sport = :$GAME_PORT' | grep -q . || break; sleep 0.5; done; $(qd "$DEPLOY_DIR/start-server.sh")"
+  rx "tmux kill-session -t =unitsport 2>/dev/null; for i in \$(seq 30); do ss -Hlun 'sport = :$GAME_PORT' | grep -q . || break; sleep 0.5; done; $(qd "$DEPLOY_DIR/start-server.sh")"
   if [ $DRY = 0 ]; then
     printf '  waiting for UDP %s' "$GAME_PORT"
     for _ in $(seq 60); do
       rq "ss -Hlun 'sport = :$GAME_PORT' | grep -q ." && { echo " - listening"; break; }
-      rq "tmux has-session -t unitsport 2>/dev/null" || { echo " - server exited"; break; }
+      rq "tmux has-session -t =unitsport 2>/dev/null" || { echo " - server exited"; break; }
       printf .; sleep 2
     done
     # this run only: everything after the last start marker

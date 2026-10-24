@@ -20,6 +20,6 @@ if [ "${1-}" = run ]; then
 fi
 
 [ -x "$L/app/LayoutService" ] || { echo "no layout service in $L/app (deploy with --build)"; exit 0; }
-tmux has-session -t "$SESSION" 2>/dev/null && exit 0
+tmux has-session -t "=$SESSION" 2>/dev/null && exit 0
 tmux new-session -d -s "$SESSION" -x 200 -y 50 "bash '$0' run >> '$L/layouts.log' 2>&1"
 echo "layout service started (tmux attach -t $SESSION, log $L/layouts.log)"
