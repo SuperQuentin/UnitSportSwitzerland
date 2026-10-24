@@ -517,6 +517,13 @@ public partial class ChatManager : Node
                 Show(Clear(null), ChatKind.Admin);
                 return;
 
+            case "despawn":
+            {
+                var (line, refused) = Despawn(parts[1..], GetViewport().GetCamera3D()?.GlobalPosition);
+                Show(line, refused ? ChatKind.Error : ChatKind.Admin);
+                return;
+            }
+
             case "transfer":
                 Show("Offline you are the only player: nobody to transfer to.", ChatKind.Error);
                 return;
@@ -959,11 +966,40 @@ public partial class ChatManager : Node
             case "give": CommandGive(sender, parts); return;
             case "money": CommandMoney(sender, parts); return;
             case "bank": CommandBank(sender, parts); return;
+            case "despawn":
+            {
+                var (line, refused) = Despawn(parts[1..], _players?.GetNodeOrNull<Node3D>(sender.ToString())?.GlobalPosition);
+                if (!refused) GD.Print($"[despawn] {NameOf(sender)}: {line}");
+                ReplyTo(sender, line, refused ? ChatKind.Error : ChatKind.Admin);
+                return;
+            }
 
             default:
                 ReplyTo(sender, $"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
                 return;
         }
+    }
+
+    /// <summary>
+    /// <c>/despawn &lt;vehicles | items | all&gt; [radius m | everywhere]</c> (#1200), offline or on the
+    /// server: parked vehicles and dropped items within the radius of <paramref name="at"/> taken out of
+    /// the world. Without a body to measure from (the server console), only <c>everywhere</c>. The line
+    /// for whoever asked, and whether it is a refusal.
+    /// </summary>
+    private static (string Line, bool Refused) Despawn(string[] args, Vector3? at)
+    {
+        if (!AdminArgs.TryDespawn(args, out bool vehicles, out bool items, out float? radius))
+            return ($"{AdminArgs.DespawnUsage}, radius up to {AdminArgs.MaxDespawnRadius:F0} m", true);
+        if (radius is { } && at == null) return ("Nowhere to measure from: /despawn <what> everywhere.", true);
+        Vector3? centre = radius is null ? null : at;
+        float r = radius ?? 0;
+        int v = vehicles ? Vehicles.VehicleManager.Instance?.Despawn(centre, r) ?? 0 : 0;
+        int i = items ? Items.DroppedItems.Instance?.Despawn(centre, r) ?? 0 : 0;
+        var gone = new List<string>();
+        if (vehicles) gone.Add(v == 1 ? "1 vehicle" : $"{v} vehicles");
+        if (items) gone.Add(i == 1 ? "1 item" : $"{i} items");
+        string where = radius is { } m ? FormattableString.Invariant($"within {m:0.#} m") : "everywhere";
+        return ($"Despawned {string.Join(" and ", gone)} {where}.", false);
     }
 
     /// <summary>/pvp on|off: whether foot weapons hurt players (#178). Bare /pvp says which.</summary>
