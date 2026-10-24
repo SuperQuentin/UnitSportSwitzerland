@@ -495,6 +495,7 @@ public sealed class GameSettings
                     loaded.MusicVolume = old;
                 if (!text.Contains("\"cartoonDefault\"", StringComparison.OrdinalIgnoreCase) && loaded.VisualStyle == Styles.VisualStyle.Ps1)
                     loaded.VisualStyle = Styles.StyleKit.Default;
+                if (Platform.IsStandaloneVr) loaded.MigrateStandalone();
             }
             else if (OldRadioVolume() is float old) loaded.MusicVolume = old;
         }
@@ -542,12 +543,37 @@ public sealed class GameSettings
     /// </summary>
     private void UseStandaloneVrDefaults()
     {
+        StandaloneDefaults = LatestStandaloneDefaults;
         VrDetail = DetailPreset.VeryLow;   // Low's 1.5 M triangles near the player held it to 10 fps
         RenderDistanceRings = 3;           // the horizon's merged blocks beyond
         VrMsaa = 2;                        // 4x halves the screen bins' size: ~10 ms more
         TrafficCars = 6;
         TrafficRiders = 4;
         ReplayMinutes = 1;                 // the replay holds what it saw that long (Movie/WorldRecorder): memory
+    }
+
+    /// <summary>
+    /// Which of a standalone headset's defaults a saved file has had (#1112): a file saved before a default changed
+    /// is given the new value once, for that setting alone, and keeps every other choice. 1: a minute of replay
+    /// (the recorder's memory) and SpaceWarp off (it flashed black in one eye).
+    /// </summary>
+    public int StandaloneDefaults { get; set; }
+    private const int LatestStandaloneDefaults = 1;
+
+    /// <summary>Brings a headset's saved settings up to <see cref="LatestStandaloneDefaults"/>, written to the file at once.</summary>
+    private void MigrateStandalone()
+    {
+        if (StandaloneDefaults >= LatestStandaloneDefaults) return;
+        if (StandaloneDefaults < 1)
+        {
+            ReplayMinutes = 1;
+            VrSpaceWarp = false;
+            SaveOnly(nameof(ReplayMinutes), ReplayMinutes);
+            SaveOnly(nameof(VrSpaceWarp), VrSpaceWarp);
+        }
+        StandaloneDefaults = LatestStandaloneDefaults;
+        SaveOnly(nameof(StandaloneDefaults), StandaloneDefaults);
+        GD.Print($"[settings] standalone defaults brought to {LatestStandaloneDefaults}: replay {ReplayMinutes} min, SpaceWarp off");
     }
 
     /// <summary>Writes the touch layout alone, as the editor's Done does (a command-line run's other values stay out).</summary>
