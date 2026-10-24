@@ -188,6 +188,9 @@ public partial class XrUi : Node3D
             RenderingServer.ViewportSetUpdateMode(root.GetViewportRid(), RenderingServer.ViewportUpdateMode.Disabled);
         }
         GD.Print($"[xr] panel {_view.Size.X}x{_view.Size.Y} for a {_size.X}x{_size.Y} canvas");
+        // the popups (a drop-down's list, a menu) on the panel too, under the cursor
+        _popupLayer = new CanvasLayer { Name = "XrPopups", Layer = 127, CustomViewport = _view };
+        AddChild(_popupLayer);
 
         foreach (var node in AllNodes(root)) Redirect(node);
         GetTree().NodeAdded += Redirect;
@@ -223,6 +226,7 @@ public partial class XrUi : Node3D
     /// </summary>
     private void Redirect(Node node)
     {
+        if (node is Window window) TrackPopup(window);
         // the monitor by its type: it is added under another name and renamed in its _Ready, after this ran (#1036)
         if (node is not CanvasLayer layer || layer is XrMonitor || Hidden.Contains(layer.Name) || layer.CustomViewport != null) return;
         var view = _view.GetViewportRid();
@@ -233,8 +237,47 @@ public partial class XrUi : Node3D
         layer.TreeExiting += () => RenderingServer.ViewportRemoveCanvas(view, canvas);
     }
 
+    private CanvasLayer? _popupLayer;
+    private readonly List<(Window Window, TextureRect Picture)> _popups = new();
+
+    /// <summary>
+    /// A popup window (a drop-down's list, a context menu) is embedded in the root viewport and drawn by it, not by
+    /// any canvas the panel draws: in VR it answered the pointer but was never seen (#1112). Its picture, the
+    /// window's own viewport texture, is drawn on the panel where it stands on the root's canvas.
+    /// </summary>
+    private void TrackPopup(Window window)
+    {
+        if (_popupLayer == null || window == GetTree().Root || window is XrMonitor) return;
+        var picture = new TextureRect
+        {
+            Name = "Popup", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+        };
+        _popupLayer.AddChild(picture);
+        _popups.Add((window, picture));
+        window.TreeExiting += () =>
+        {
+            _popups.RemoveAll(p => p.Window == window);
+            picture.QueueFree();
+        };
+    }
+
+    private void UpdatePopups()
+    {
+        foreach (var (window, picture) in _popups)
+        {
+            bool shown = IsInstanceValid(window) && window.Visible && window.IsEmbedded();
+            if (picture.Visible != shown) picture.Visible = shown;
+            if (!shown) continue;
+            if (picture.Texture == null) picture.Texture = window.GetTexture();
+            picture.Position = window.Position;
+            picture.Size = window.Size;
+        }
+    }
+
     public void UpdatePanel(float dt)
     {
+        UpdatePopups();
 
         var eye = _head.GlobalTransform;
         float headYaw = XrRig.YawOf(eye.Basis);
