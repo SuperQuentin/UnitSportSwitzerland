@@ -14,7 +14,9 @@
 - **Godot 4.7 casts no shadow from an instance on a layer the camera culls** (measured: a box on
   bit 15 cast nothing, on layer 1 a full shadow). So `OwnBody.See` also keeps a `Shadow` child: a
   `ShadowsOnly` twin on layer 1 sharing the figure's mesh (synced each call, so call it after the
-  pose sets the mesh). No camera draws a `ShadowsOnly` instance; the twin only casts.
+  pose sets the mesh). No camera draws a `ShadowsOnly` instance; the twin only casts. A skinned
+  figure's twin (#1202) is a `SkinnedFigure` on the figure's own bones (`Share`), so its shadow
+  moves with the pose; a driver's head mesh shares its body's bones the same way.
 - The twin is never ghosted: `DoorwayGhosts.Collect` skips `ShadowsOnly` meshes. Its ghost (which
   casts nothing) drew it as a plain mesh on layer 1, so by an open door the portal showed your own
   head a second time.

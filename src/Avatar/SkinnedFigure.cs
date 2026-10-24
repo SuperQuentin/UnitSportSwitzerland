@@ -161,6 +161,20 @@ public partial class SkinnedFigure : MeshInstance3D
         return baked;
     }
 
+    private ArrayMesh? _still;
+    private FigureSkin? _stillOf;
+
+    /// <summary>
+    /// The figure as posed when its look was first asked for, kept while the look is: what the movie
+    /// recorder keeps of a skinned figure in the recorded world (#775), which would otherwise replay
+    /// its bare rest pose. A look per pose would be a new copy kept twice a second.
+    /// </summary>
+    public ArrayMesh Still()
+    {
+        if (_still == null || _stillOf != Skin) (_still, _stillOf) = (Baked(), Skin);
+        return _still;
+    }
+
     /// <summary>The figure's bounds as its bones pose it now, in its own space (a skinned mesh's own are its rest pose's).</summary>
     public Aabb PosedAabb() => Skin == null ? GetAabb() : Baked().GetAabb();
 
