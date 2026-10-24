@@ -79,7 +79,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
   frame or per pose. A human figure is a `SkinnedFigure` posed by its bones, a moving rigid part is
   its own node (turned, scaled or sheared), cloth and patterns go in a shader
   (`docs/notes/general/no-mesh-rebuild-per-frame.md`; 24 walking figures cost 131 ms a frame
-  rebuilt, 18 ms skinned).
+  rebuilt, 18 ms skinned). `MeshRebuildDisciplineTests` fails on a build in a per-frame path.
 - **Every new synthesised sound is in the sound player**: a static `SfxBank`/`AudioStreamWav` shows by itself;
   a sound built per call (surface, species, voice) gets a `[SoundShowcase]` set; check with
   `--sounds,check` (`docs/notes/audio/sound-player.md`).

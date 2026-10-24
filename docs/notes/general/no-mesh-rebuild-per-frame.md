@@ -38,6 +38,13 @@ On the Quest (#1112) the frame rate quadrupled when the tracked hands stopped th
 arms from moving, which was the first sign.
 
 ## How to check
+- **`MeshRebuildDisciplineTests`** (tier 0) fails on a mesh build in a per-frame method (`_Process`,
+  `_PhysicsProcess`, `Step…`, `Animate…`, `Apply…Pose`, `Steer…`) or a same-class method it calls;
+  an exception goes in its `Allowed` list as `file:Method` with a reason (`on change:`, `cache:`,
+  `tool:`, `live:`), and a stale one fails too. It cannot see a build behind a call into another
+  class or in a property set every frame (the airstairs' `Height`): the rule holds there anyway.
+  Run against the code before #1202 it named the walker, swimmer, ragdoll, cyclist, car and truck
+  drivers, motorbike rider and concert performers.
 - `--perflog` (`core/session-perf-log`): `gc0` per minute and frame time with the thing moving in view.
 - `tools/botperf.sh N` for figures: frame time and GC with N bots walking round the client.
 - Before a new animated thing lands, grep its per-frame path:
