@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using HttpClient = System.Net.Http.HttpClient;
 
@@ -50,6 +51,29 @@ public static class NakamaRest
         return new NakamaAccount(user.GetProperty("id").GetString() ?? "", user.TryGetProperty("username", out var n) ? n.GetString() ?? "" : "");
     }
 
+    /// <summary>
+    /// The name of the admin a session token belongs to, from the module's <c>me</c> RPC (#1211: admins are the group
+    /// "admins"); null when the token is refused or is no admin's. Throws <see cref="NakamaException"/> when the account
+    /// server cannot be reached.
+    /// </summary>
+    public static async Task<string?> AdminName(string url, string token, CancellationToken cancel = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, AccountRules.NormalizeUrl(url) + "/v2/rpc/me")
+        {
+            // an RPC's body is a JSON string holding the payload
+            Content = new StringContent("\"{}\"", Encoding.UTF8, "application/json"),
+        };
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var res = await Send(req, cancel);
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound) return null;
+        string body = await res.Content.ReadAsStringAsync(cancel);
+        if (!res.IsSuccessStatusCode) throw new NakamaException(Message(body, res.StatusCode));
+        using var doc = JsonDocument.Parse(body);
+        using var me = JsonDocument.Parse(doc.RootElement.GetProperty("payload").GetString() ?? "{}");
+        bool admin = me.RootElement.TryGetProperty("admin", out var a) && a.ValueKind == JsonValueKind.True;
+        return admin && me.RootElement.TryGetProperty("username", out var n) ? n.GetString() ?? "admin" : null;
+    }
+
     private static async Task<NakamaSession> Session(string url, string serverKey, string path, object body)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, AccountRules.NormalizeUrl(url) + path)
@@ -66,9 +90,9 @@ public static class NakamaRest
             root.TryGetProperty("refresh_token", out var r) ? r.GetString() ?? "" : "");
     }
 
-    private static async Task<HttpResponseMessage> Send(HttpRequestMessage req)
+    private static async Task<HttpResponseMessage> Send(HttpRequestMessage req, CancellationToken cancel = default)
     {
-        try { return await Http.SendAsync(req); }
+        try { return await Http.SendAsync(req, cancel); }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or InvalidOperationException or UriFormatException)
         {
             throw new NakamaException($"The account server at {req.RequestUri?.GetLeftPart(UriPartial.Authority)} does not answer.");

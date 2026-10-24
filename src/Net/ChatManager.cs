@@ -690,10 +690,11 @@ public partial class ChatManager : Node
     /// <summary>Sends a line to one peer. Server only.</summary>
     private void ReplyTo(long peerId, string line, ChatKind kind)
     {
-        // The console is not a peer; its replies go to the server's own log.
+        // The console is not a peer; its replies go to the server's own log (and to the website's console, #1211)
         if (peerId == ConsolePeerId)
         {
-            GD.Print($"[console] {line}");
+            _capture?.Add(line);
+            if (!_quietCapture) GD.Print($"[console] {line}");
             return;
         }
         if (IsBodiless(peerId))
