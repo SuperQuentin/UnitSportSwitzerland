@@ -23,7 +23,7 @@ done
 # --- config: tools/deploy.env, but variables already set in the environment win ---
 VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA WEB_ANTENNAS"
 VARS+=" LAYOUTS LAYOUTS_ADMINS LAYOUTS_PUBLIC_URL LAYOUTS_DB LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM"
-VARS+=" NAKAMA NAKAMA_DIR NAKAMA_PORT NAKAMA_URL ACCOUNTS"
+VARS+=" NAKAMA NAKAMA_DIR NAKAMA_PORT NAKAMA_URL ACCOUNTS NAKAMA_ADMIN_EMAILS"
 for v in $VARS; do [ -n "${!v+x}" ] && eval "_keep_$v=\${$v}"; done
 [ -f tools/deploy.env ] && . tools/deploy.env
 for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
@@ -50,6 +50,8 @@ NAKAMA_PUBLIC=$([ -n "$WEB" ] && { [ -n "$TILES_DOMAIN" ] && echo "https://$TILE
 NAKAMA_BIND=$([ -n "$NAKAMA_PUBLIC" ] && echo 127.0.0.1 || echo 0.0.0.0)
 NAKAMA_URL=${NAKAMA_URL:-$([ -n "$NAKAMA_PUBLIC" ] && echo "$NAKAMA_PUBLIC/nakama" || echo "http://${DEPLOY_HOST#*@}:$NAKAMA_PORT")} ACCOUNTS=${ACCOUNTS:-off}
 case $ACCOUNTS in off|optional|required) ;; *) { echo "ERROR: ACCOUNTS=$ACCOUNTS: use off, optional or required" >&2; exit 1; } ;; esac
+# the first admins of the website's dashboard, by email (#1207): they join Nakama's "admins" group on their first sign-in
+NAKAMA_ADMIN_EMAILS=${NAKAMA_ADMIN_EMAILS:-${LAYOUTS_ADMINS:-}}
 [ $S_NAKAMA = 2 ] && S_NAKAMA=$([ "$NAKAMA" = 1 ] && echo 1 || echo 0)
 [ $CHECK = 1 ] && [ "$NAKAMA" = 1 ] && S_NAKAMA=1
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.2-stable_mono_win64/godot_v4.7.2-stable_mono_win64_console.exe'}
@@ -174,12 +176,19 @@ if [ $S_SETUP = 1 ]; then
 fi
 
 stopped=0
+# the website's accounts and dashboard (#1207): the shared sign-in control and admin.html, uploaded with the pages and by --nakama
+web_accounts() {
+  [ -n "$WEB" ] && [ $DRY = 0 ] || return 0
+  rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/account.js")" < tools/deploy/web/account.js
+  rq "cat > $(qd "$WEB/admin.html")" < tools/deploy/web/admin.html
+}
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
     | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}$([ "$ACCOUNTS" != off ] && echo " --accounts $ACCOUNTS --nakama-url $NAKAMA_URL")${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}$([ "$LAYOUTS" = 1 ] && echo " --house-layouts $LAYOUTS_DIR/house-layouts.json")" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
   # the status page (#740), served by the same Caddy as the tiles; the server keeps status.json beside it
   [ -n "$WEB" ] && rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
+  web_accounts
   # the live map (#896): the page, and OFCOM's 4G sites, fetched again when a week old
   if [ -n "$WEB" ]; then
     rq "cat > $(qd "$WEB/map.html")" < tools/deploy/web/map.html
@@ -320,7 +329,7 @@ if [ $S_NAKAMA = 1 ]; then
     tar -C tools/nakama --exclude=.env -cf - docker-compose.yml local.yml .env.example up.sh modules       | rq "mkdir -p $(qd "$NAKAMA_DIR") && tar -xf - -C $(qd "$NAKAMA_DIR")"
     # the port and the bind in .env (up.sh writes .env from .env.example the first time); .env is root's, mode 600
     "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "cd $(qd "$NAKAMA_DIR") && sed -i 's/^NAKAMA_PORT=.*/NAKAMA_PORT=$NAKAMA_PORT/; s/^NAKAMA_BIND=.*/NAKAMA_BIND=$NAKAMA_BIND/' .env.example \
-      && { [ ! -f .env ] || { $SUDO sed -i 's/^NAKAMA_PORT=.*/NAKAMA_PORT=$NAKAMA_PORT/' .env; $SUDO grep -q '^NAKAMA_BIND=' .env         && $SUDO sed -i 's/^NAKAMA_BIND=.*/NAKAMA_BIND=$NAKAMA_BIND/' .env || echo 'NAKAMA_BIND=$NAKAMA_BIND' | $SUDO tee -a .env >/dev/null; }; }       && $SUDO bash up.sh up" | sed 's/^/  | /'
+      && { [ ! -f .env ] || { $SUDO sed -i 's/^NAKAMA_PORT=.*/NAKAMA_PORT=$NAKAMA_PORT/' .env; $SUDO grep -q '^NAKAMA_BIND=' .env         && $SUDO sed -i 's/^NAKAMA_BIND=.*/NAKAMA_BIND=$NAKAMA_BIND/' .env || echo 'NAKAMA_BIND=$NAKAMA_BIND' | $SUDO tee -a .env >/dev/null; }; }       && { [ ! -f .env ] || { $SUDO grep -q '^NAKAMA_ADMIN_EMAILS=' .env && $SUDO sed -i 's/^NAKAMA_ADMIN_EMAILS=.*/NAKAMA_ADMIN_EMAILS=$NAKAMA_ADMIN_EMAILS/' .env         || echo 'NAKAMA_ADMIN_EMAILS=$NAKAMA_ADMIN_EMAILS' | $SUDO tee -a .env >/dev/null; }; }       && sed -i 's/^NAKAMA_ADMIN_EMAILS=.*/NAKAMA_ADMIN_EMAILS=$NAKAMA_ADMIN_EMAILS/' .env.example       && $SUDO bash up.sh up" | sed 's/^/  | /'
     rq "$SUDO -n chmod 600 $(qd "$NAKAMA_DIR/.env") 2>/dev/null || chmod 600 $(qd "$NAKAMA_DIR/.env")" || true
     # behind Caddy the port stays closed (and is closed again if an older deploy opened it); without Caddy it is opened
     if [ "$NAKAMA_BIND" = 127.0.0.1 ]; then
@@ -337,6 +346,13 @@ if [ $S_NAKAMA = 1 ]; then
     key=$(rq "sed -n 's/^NAKAMA_SERVER_KEY=//p' $(qd "$NAKAMA_DIR/.env") 2>/dev/null || $SUDO -n sed -n 's/^NAKAMA_SERVER_KEY=//p' $(qd "$NAKAMA_DIR/.env")" | tr -d '
 ')
     echo "  account server for players: $NAKAMA_URL, server key ${key:-<in $NAKAMA_DIR/.env>}"
+    # the website's accounts (#1207): where to sign in, for account.js; the pages that use it
+    if [ -n "$WEB" ] && [ -n "$key" ] && [ "$NAKAMA_BIND" = 127.0.0.1 ]; then
+      printf '{"url":"/nakama","serverKey":"%s"}
+' "$key" | rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/nakama.json")"
+      web_accounts
+      echo "  website accounts: nakama.json, account.js and admin.html in $WEB; first admins: ${NAKAMA_ADMIN_EMAILS:-none}"
+    fi
     echo "  official server of a build: put both in assets/account-server.json (url, serverKey) before releasing"
     echo "  admin console: ssh -L 7351:127.0.0.1:7351 -p $DEPLOY_PORT_SSH $DEPLOY_HOST, then http://127.0.0.1:7351 (login in $NAKAMA_DIR/.env)"
   fi
