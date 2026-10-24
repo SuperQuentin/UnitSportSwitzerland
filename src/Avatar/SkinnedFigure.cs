@@ -107,6 +107,69 @@ public partial class SkinnedFigure : MeshInstance3D
 
     private SkinnedFigure? _follow;
 
+    private ArrayMesh? _baked;
+    private int _bakedAt = -1;
+
+    /// <summary>
+    /// The figure as its bones pose it now, as a plain mesh in its own space: for what measures or
+    /// copies a mesh (bounds, the z-fight scan, a still). Skinned on the CPU, so never per frame;
+    /// the same one until the next pose.
+    /// </summary>
+    public ArrayMesh Baked()
+    {
+        var leader = Leader;
+        if (Mesh is not ArrayMesh mesh || Skin == null) return Mesh as ArrayMesh ?? new ArrayMesh();
+        if (_baked != null && _bakedAt == leader.Poses + (leader == this ? 0 : 1 << 30)) return _baked;
+        // a new one per pose: what reads it may key on the mesh (the z-fight scan's cache)
+        var baked = _baked = new ArrayMesh();
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+        {
+            var arrays = mesh.SurfaceGetArrays(s);
+            var format = mesh.SurfaceGetFormat(s);
+            if (arrays[(int)Mesh.ArrayType.Bones].VariantType != Variant.Type.Nil)
+            {
+                var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var bones = arrays[(int)Mesh.ArrayType.Bones].AsInt32Array();
+                var weights = arrays[(int)Mesh.ArrayType.Weights].AsFloat32Array();
+                bool normals = arrays[(int)Mesh.ArrayType.Normal].VariantType != Variant.Type.Nil;
+                var n = normals ? arrays[(int)Mesh.ArrayType.Normal].AsVector3Array() : null;
+                for (int v = 0; v < vertices.Length; v++)
+                {
+                    var p = Vector3.Zero;
+                    var q = Vector3.Zero;
+                    for (int k = 0; k < 4; k++)
+                    {
+                        float w = weights[v * 4 + k];
+                        if (w <= 0f) continue;
+                        var m = leader._bones[bones[v * 4 + k]];
+                        p += m * vertices[v] * w;
+                        if (n != null) q += m.Basis * n[v] * w;
+                    }
+                    vertices[v] = p;
+                    if (n != null) n[v] = q.Normalized();
+                }
+                arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+                if (n != null) arrays[(int)Mesh.ArrayType.Normal] = n;
+                arrays[(int)Mesh.ArrayType.Bones] = default;
+                arrays[(int)Mesh.ArrayType.Weights] = default;
+            }
+            baked.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, null, null,
+                format & ~(Mesh.ArrayFormat.FormatBones | Mesh.ArrayFormat.FormatWeights));
+            baked.SurfaceSetName(s, mesh.SurfaceGetName(s));
+        }
+        _bakedAt = leader.Poses + (leader == this ? 0 : 1 << 30);
+        return baked;
+    }
+
+    /// <summary>The figure's bounds as its bones pose it now, in its own space (a skinned mesh's own are its rest pose's).</summary>
+    public Aabb PosedAabb() => Skin == null ? GetAabb() : Baked().GetAabb();
+
+    /// <summary>A drawn thing's bounds in its own space: a skinned figure's as posed (<see cref="PosedAabb"/>), else its own.</summary>
+    public static Aabb BoundsOf(VisualInstance3D v) => v is SkinnedFigure f ? f.PosedAabb() : v.GetAabb();
+
+    /// <summary>The mesh a drawn thing shows now: a skinned figure's posed (<see cref="Baked"/>), else its mesh.</summary>
+    public static Mesh? MeshOf(MeshInstance3D m) => m is SkinnedFigure { Skin: not null } f ? f.Baked() : m.Mesh;
+
     /// <summary>The figure whose bones this copy moves by (<see cref="Share"/>), or null.</summary>
     public SkinnedFigure? Following => _follow;
 

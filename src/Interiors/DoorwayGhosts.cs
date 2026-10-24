@@ -109,7 +109,7 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
         var toFrame = frame.AffineInverse();
         foreach (var m in meshes)
         {
-            var box = m.GetAabb();
+            var box = Avatar.SkinnedFigure.BoundsOf(m);
             var centre = toFrame * (m.GlobalTransform * box.GetCenter());
             float radius = box.Size.Length() * 0.5f * m.GlobalBasis.Scale.X;
             if (Mathf.Abs(centre.Z) > Reach + radius) continue;

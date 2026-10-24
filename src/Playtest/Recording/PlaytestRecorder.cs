@@ -516,7 +516,7 @@ public partial class PlaytestRecorder : Node
             if (++visited > 400 || depth > 8) return;
             if (node is GeometryInstance3D gi and not (GpuParticles3D or CpuParticles3D) && gi.Visible)
             {
-                var b = inv * gi.GlobalTransform * gi.GetAabb();
+                var b = inv * gi.GlobalTransform * Avatar.SkinnedFigure.BoundsOf(gi);
                 meshes = meshes?.Merge(b) ?? b;
             }
             else if (node is CollisionShape3D { Disabled: false, Shape: { } shape } cs)

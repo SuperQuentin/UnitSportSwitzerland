@@ -275,7 +275,7 @@ public partial class ModelViewer : Node3D
             // hidden parts (a pigeon's folded wings, a door left out) do not count
             if (node is VisualInstance3D vi and not Light3D && vi.IsVisibleInTree())
             {
-                var b = inverse * vi.GlobalTransform * vi.GetAabb();
+                var b = inverse * vi.GlobalTransform * SkinnedFigure.BoundsOf(vi);
                 box = box is { } a ? a.Merge(b) : b;
             }
         return box;

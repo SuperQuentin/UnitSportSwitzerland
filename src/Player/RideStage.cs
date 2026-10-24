@@ -217,7 +217,7 @@ public partial class RideStage : SubViewport
         foreach (var g in Descendants<GeometryInstance3D>(root).Prepend(root as GeometryInstance3D).OfType<GeometryInstance3D>())
         {
             if (!g.Visible) continue;
-            var b = (inv * g.GlobalTransform) * g.GetAabb();
+            var b = (inv * g.GlobalTransform) * Avatar.SkinnedFigure.BoundsOf(g);
             box = box is { } a ? a.Merge(b) : b;
         }
         return box ?? new Aabb();

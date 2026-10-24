@@ -16,7 +16,8 @@ public static class MeshBounds
     /// </summary>
     public static Aabb Of(Node3D root, params string[] skip)
     {
-        Aabb? box = root is MeshInstance3D { Mesh: { } own } ? own.GetAabb() : null;
+        // a skinned figure (a seated driver) counts as posed, not as its standing rest pose (#1202)
+        Aabb? box = root is MeshInstance3D { Mesh: not null } own ? SkinnedFigure.BoundsOf(own) : null;
         Walk(root, Transform3D.Identity, skip, ref box);
         return box ?? new Aabb();
     }
@@ -27,9 +28,9 @@ public static class MeshBounds
         {
             if (child is not Node3D n || Array.IndexOf(skip, n.Name.ToString()) >= 0) continue;
             var t = toRoot * n.Transform;
-            if (n is MeshInstance3D { Mesh: { } mesh })
+            if (n is MeshInstance3D { Mesh: not null } mi)
             {
-                var b = t * mesh.GetAabb();
+                var b = t * SkinnedFigure.BoundsOf(mi);
                 box = box is { } acc ? acc.Merge(b) : b;
             }
             Walk(n, t, skip, ref box);
@@ -67,7 +68,7 @@ public static class MeshBounds
 
     private static void Visit(Node3D root, Transform3D toRoot, string[] skip, Action<Vector3> add)
     {
-        if (root is MeshInstance3D { Mesh: { } own }) AddVertices(own, toRoot, add);
+        if (root is MeshInstance3D { Mesh: not null } own && SkinnedFigure.MeshOf(own) is { } mesh) AddVertices(mesh, toRoot, add);
         VisitChildren(root, toRoot, skip, add);
     }
 
@@ -77,7 +78,7 @@ public static class MeshBounds
         {
             if (child is not Node3D n || Array.IndexOf(skip, n.Name.ToString()) >= 0) continue;
             var t = toRoot * n.Transform;
-            if (n is MeshInstance3D { Mesh: { } mesh }) AddVertices(mesh, t, add);
+            if (n is MeshInstance3D { Mesh: not null } mi && SkinnedFigure.MeshOf(mi) is { } mesh) AddVertices(mesh, t, add);
             VisitChildren(n, t, skip, add);
         }
     }
