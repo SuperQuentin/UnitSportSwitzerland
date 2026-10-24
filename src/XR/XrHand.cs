@@ -85,9 +85,7 @@ internal sealed partial class XrHand : Node3D
     public XrHand(bool right)
     {
         _right = right;
-        // the side the palm and thumb are built on: −1 for the right hand. It was +1, and each hand was built as the
-        // other one (a playtest on a Quest 2, #1112; --xrhands shows the left's thumb up only this way)
-        _m = right ? -1f : 1f;
+        _m = right ? 1f : -1f;
         Name = right ? "RightHand" : "LeftHand";
         _palm = Part(this);
         _cuff = Part(this);
@@ -201,7 +199,7 @@ internal sealed partial class XrHand : Node3D
             for (int j = 0; j < 3; j++)
             {
                 int b = f * 3 + j;
-                // −Y bends toward the palm (+X right, −X left): about Z, the left hand the other way
+                // −Y bends toward the palm (−X right, +X left): about Z, the left hand the other way
                 var bend = new Basis(Vector3.Back, -_m * Bend[b]);
                 _joints[b].Basis = j == 0 ? new Basis(Vector3.Right, -splay) * bend : bend;
             }
