@@ -230,8 +230,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _wrist = new XrWristMenu(this);
         AddChild(_wrist);
         _ring = new XrWristRing(this, _wrist);
-        _ring.ComposeOn(_origin);
         AddChild(_ring);
+        _ring.ComposeOn(_origin);   // after its _Ready made its picture and quad
         if (XrSession.Simulated) _ringShot = CmdArgs.Int("--xrring");
         _cab = new XrCabControls(_left, _right);
         AddChild(_cab);
