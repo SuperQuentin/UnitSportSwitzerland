@@ -789,7 +789,7 @@ public partial class ChatManager : Node
     public void Tell(long peerId, string line, ChatKind kind) => ReplyTo(peerId, line, kind);
 
     private string NameOf(long peerId) => peerId == ConsolePeerId
-        ? "Console"
+        ? _consoleAs ?? "Console"
         : _registry?.Find(peerId)?.Name ?? $"Rider{peerId}";
 
     /// <summary>

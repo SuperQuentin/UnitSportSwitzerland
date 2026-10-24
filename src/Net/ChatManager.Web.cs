@@ -11,6 +11,9 @@ public partial class ChatManager
     /// <summary>The console's replies while a website command runs (<see cref="ReplyTo"/> adds to it).</summary>
     private List<string>? _capture;
 
+    /// <summary>Whose website command runs as the console: what the chat calls the console meanwhile ("Quentin changed the weather").</summary>
+    private string? _consoleAs;
+
     /// <summary>The replies are captured only, not printed: the status polls ask the same questions every few seconds.</summary>
     private bool _quietCapture;
 
@@ -22,7 +25,9 @@ public partial class ChatManager
     {
         line = line.Trim().TrimStart('/');
         GD.Print($"[admin] {admin} (website): /{line}");
-        return Captured(line, quiet: false);
+        _consoleAs = admin;
+        try { return Captured(line, quiet: false); }
+        finally { _consoleAs = null; }
     }
 
     /// <summary>A console question asked for the dashboard's status, neither logged nor printed.</summary>

@@ -23,7 +23,7 @@ done
 # --- config: tools/deploy.env, but variables already set in the environment win ---
 VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA WEB_ANTENNAS"
 VARS+=" LAYOUTS LAYOUTS_ADMINS LAYOUTS_PUBLIC_URL LAYOUTS_DB LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM"
-VARS+=" NAKAMA NAKAMA_DIR NAKAMA_PORT NAKAMA_URL ACCOUNTS NAKAMA_ADMIN_EMAILS"
+VARS+=" NAKAMA NAKAMA_DIR NAKAMA_PORT NAKAMA_URL ACCOUNTS NAKAMA_ADMIN_EMAILS DASHBOARD ADMIN_HTTP_PORT"
 for v in $VARS; do [ -n "${!v+x}" ] && eval "_keep_$v=\${$v}"; done
 [ -f tools/deploy.env ] && . tools/deploy.env
 for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
@@ -49,6 +49,9 @@ NAKAMA=${NAKAMA:-0} NAKAMA_DIR=${NAKAMA_DIR:-$DEPLOY_DIR/nakama} NAKAMA_PORT=${N
 NAKAMA_PUBLIC=$([ -n "$WEB" ] && { [ -n "$TILES_DOMAIN" ] && echo "https://$TILES_DOMAIN" || echo "${TILES_URL%/tiles/}"; } || true)
 NAKAMA_BIND=$([ -n "$NAKAMA_PUBLIC" ] && echo 127.0.0.1 || echo 0.0.0.0)
 NAKAMA_URL=${NAKAMA_URL:-$([ -n "$NAKAMA_PUBLIC" ] && echo "$NAKAMA_PUBLIC/nakama" || echo "http://${DEPLOY_HOST#*@}:$NAKAMA_PORT")} ACCOUNTS=${ACCOUNTS:-off}
+# the dashboard's Server and Console tabs (#1211): the game server's admin API on loopback, served by Caddy at
+# /server-api/, admins checked against the Nakama on this host
+DASHBOARD=$([ -n "$WEB" ] && echo "${DASHBOARD:-1}" || echo 0) ADMIN_HTTP_PORT=${ADMIN_HTTP_PORT:-7790}
 case $ACCOUNTS in off|optional|required) ;; *) { echo "ERROR: ACCOUNTS=$ACCOUNTS: use off, optional or required" >&2; exit 1; } ;; esac
 # the first admins of the website's dashboard, by email (#1207): they join Nakama's "admins" group on their first sign-in
 NAKAMA_ADMIN_EMAILS=${NAKAMA_ADMIN_EMAILS:-${LAYOUTS_ADMINS:-}}
@@ -168,7 +171,7 @@ if [ $S_SETUP = 1 ]; then
   envs+=" SSH_PORT=$DEPLOY_PORT_SSH WEB_PORTS=$(qd "$WEB_PORTS") MDNS_NAME=$(qd "$MDNS_NAME") VERSION=$(qd "$VERSION")"
   envs+=" DOTNET_MAJOR=$DOTNET_MAJOR NEED_DOTNET=$NEED_DOTNET HERE=$rdir"
   envs+=" TILES=$TILES TILES_SITE=$(qd "$TILES_SITE") TILES_PRECOMPRESS=$TILES_PRECOMPRESS"
-  envs+=" LAYOUTS_PORT=$LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES=$(qd "${LAYOUTS_TRUSTED_PROXIES:-}") NAKAMA_PORT=$NAKAMA_PORT"
+  envs+=" LAYOUTS_PORT=$LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES=$(qd "${LAYOUTS_TRUSTED_PROXIES:-}") NAKAMA_PORT=$NAKAMA_PORT ADMIN_HTTP_PORT=$ADMIN_HTTP_PORT"
   set +e
   "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "$SUDO env $envs bash $rdir/remote-setup.sh; rc=\$?; rm -rf $rdir; exit \$rc"
   rc=$?; set -e
@@ -186,7 +189,7 @@ web_accounts() {
 }
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
-    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}$([ "$ACCOUNTS" != off ] && echo " --accounts $ACCOUNTS --nakama-url $NAKAMA_URL")${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}$([ "$LAYOUTS" = 1 ] && echo " --house-layouts $LAYOUTS_DIR/house-layouts.json")" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
+    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}$([ "$ACCOUNTS" != off ] && echo " --accounts $ACCOUNTS --nakama-url $NAKAMA_URL")${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}$([ "$LAYOUTS" = 1 ] && echo " --house-layouts $LAYOUTS_DIR/house-layouts.json")$([ "$DASHBOARD" = 1 ] && echo " --admin-http $ADMIN_HTTP_PORT --admin-nakama http://127.0.0.1:$NAKAMA_PORT")" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
   # the status page (#740), served by the same Caddy as the tiles; the server keeps status.json beside it
   [ -n "$WEB" ] && rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
