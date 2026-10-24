@@ -12,7 +12,7 @@ namespace UnitSport.XR;
 internal sealed partial class XrWatch : Node3D
 {
     private const float Every = 0.5f;
-    private Label3D _text = null!;
+    private Label3D _time = null!, _alt = null!, _speed = null!;
     private float _wait;
 
     public override void _Ready()
@@ -34,19 +34,16 @@ internal sealed partial class XrWatch : Node3D
             MaterialOverride = strap,
             Layers = XrSession.HeadsetOnlyLayer,
         });
-        _text = new Label3D
-        {
-            PixelSize = 0.00045f,
-            FontSize = 24,
-            OutlineSize = 0,
-            Modulate = new Color(0.1f, 0.1f, 0.12f),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Position = new Vector3(0, 0, 0.0005f),
-            Layers = XrSession.HeadsetOnlyLayer,
-            Shaded = false,
-            DoubleSided = false,
-        };
-        AddChild(_text);
+        // the face: upright to the eye that reads it, a quarter turn left of the strap's line (#1112: the text read
+        // sideways), the time in the middle and the altitude and the speed small above and under it, inside the dial
+        var face = new Node3D { Name = "Face", Basis = new Basis(Vector3.Back, Mathf.Pi / 2) };
+        AddChild(face);
+        _time = Line(32, 0.00034f, 0f);
+        _alt = Line(24, 0.00022f, 0.0085f);
+        _speed = Line(24, 0.00022f, -0.0085f);
+        face.AddChild(_time);
+        face.AddChild(_alt);
+        face.AddChild(_speed);
         // the dial: white under the text, a red Swiss cross at 12
         AddChild(new MeshInstance3D
         {
@@ -55,25 +52,44 @@ internal sealed partial class XrWatch : Node3D
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.96f, 0.96f, 0.94f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
             Layers = XrSession.HeadsetOnlyLayer,
         });
-        AddChild(new MeshInstance3D
+        face.AddChild(new MeshInstance3D
         {
-            Mesh = new BoxMesh { Size = new Vector3(0.005f, 0.005f, 0.0012f) },
-            Position = new Vector3(0, 0.013f, 0.0004f),
+            Mesh = new BoxMesh { Size = new Vector3(0.004f, 0.004f, 0.0012f) },
+            Position = new Vector3(0, 0.0148f, 0.0004f),
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.1f, 0.1f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
             Layers = XrSession.HeadsetOnlyLayer,
         });
     }
 
+    private static Label3D Line(int fontSize, float pixel, float y) => new()
+    {
+        PixelSize = pixel,
+        FontSize = fontSize,
+        OutlineSize = 0,
+        Modulate = new Color(0.1f, 0.1f, 0.12f),
+        HorizontalAlignment = HorizontalAlignment.Center,
+        Position = new Vector3(0, y, 0.0009f),   // clear of the dial's face (0.0005)
+        Layers = XrSession.HeadsetOnlyLayer,
+        Shaded = false,
+        DoubleSided = false,
+    };
+
     /// <summary>The watch in the model viewer, moved off the headset-only layer so the viewer's camera sees it.</summary>
     [Core.Showcase("Figures", "VR watch")]
     private static Node3D ShowcaseWatch()
     {
-        var watch = new XrWatch();
+        // stood on the strap's end, the dial clear of the viewer's ground
+        var root = new Node3D();
+        var watch = new XrWatch { Position = new Vector3(0, 0.045f, 0) };
+        root.AddChild(watch);
         watch.Ready += () =>
         {
+            watch._time.Text = "10:32";
+            watch._alt.Text = "1048 m";
+            watch._speed.Text = "112 km/h";
             foreach (var v in watch.FindChildren("*", "VisualInstance3D", true, false).OfType<VisualInstance3D>()) v.Layers = 1;
         };
-        return watch;
+        return root;
     }
 
     /// <summary>Twice a second: the time, the altitude above the sea and the speed, set only when they change.</summary>
@@ -88,13 +104,13 @@ internal sealed partial class XrWatch : Node3D
         _wait = Every;
         double hour = World.DayNight.Instance?.Hour ?? 12.0;
         int h = (int)hour % 24, m = (int)((hour - Math.Floor(hour)) * 60.0);
-        string text = $"{h:00}:{m:00}";
-        if (player != null)
-        {
-            double alt = player.Global.Alt;
-            float kmh = player.Velocity.Length() * 3.6f;
-            text += $"\n{alt:0} m\n{kmh:0} km/h";
-        }
-        if (text != _text.Text) _text.Text = text;
+        Set(_time, $"{h:00}:{m:00}");
+        Set(_alt, player != null ? $"{player.Global.Alt:0} m" : "");
+        Set(_speed, player != null ? $"{player.Velocity.Length() * 3.6f:0} km/h" : "");
+    }
+
+    private static void Set(Label3D label, string text)
+    {
+        if (text != label.Text) label.Text = text;
     }
 }
