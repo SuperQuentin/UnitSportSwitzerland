@@ -14,7 +14,8 @@ public partial class SkinnedFigure : MeshInstance3D
     private static readonly StringName FlutterParam = "skirt_flutter";
 
     private Rid _skeleton;
-    private readonly Transform3D[] _bones = new Transform3D[HumanMeshBuilder.BoneCount];
+    private readonly Transform3D[] _bones = new Transform3D[HumanMeshBuilder.MaxBones];
+    private int _boneCount;
     private bool _posed;
     private Vector2 _flutter;
 
@@ -30,10 +31,14 @@ public partial class SkinnedFigure : MeshInstance3D
         if (Skin == skin) return;
         Skin = skin;
         Mesh = skin.Mesh;
-        EnsureSkeleton();
-        Attach(this);
+        var leader = Leader;
+        leader.EnsureSkeleton(skin.BoneCount);
+        leader.Attach(this);
         if (!skin.Flutters && _flutter != Vector2.Zero) SetFlutter(Vector2.Zero);
     }
+
+    /// <summary>The figure whose bones this one moves by: itself, or the one it was <see cref="Share"/>d by.</summary>
+    private SkinnedFigure Leader => _follow is { } f && IsInstanceValid(f) ? f : this;
 
     /// <summary>Shows the look of <paramref name="look"/> (<see cref="HumanMeshBuilder.Skin"/>).</summary>
     public void Show(in FigureLook look) => Show(HumanMeshBuilder.Skin(look));
@@ -44,9 +49,10 @@ public partial class SkinnedFigure : MeshInstance3D
     /// </summary>
     internal void Pose(ReadOnlySpan<Transform3D> frames)
     {
+        if (Leader is var leader && leader != this) { leader.Pose(frames); return; }
         if (Skin is not { } skin) return;
-        EnsureSkeleton();
-        for (int i = 0; i < _bones.Length; i++)
+        EnsureSkeleton(skin.BoneCount);
+        for (int i = 0; i < skin.BoneCount; i++)
         {
             // author space (+Z forward) to the mesh's (−Z): a half turn either side
             var m = Flip * (frames[i] * skin.BindInverse[i]) * Flip;
@@ -57,6 +63,17 @@ public partial class SkinnedFigure : MeshInstance3D
         _posed = true;
         Poses++;
     }
+
+    /// <summary>The lowest a skirt hangs, model space (the shader's <c>skirt_floor</c>), set only when it changes.</summary>
+    public void SetFloor(float floor)
+    {
+        if (floor == _floor) return;
+        _floor = floor;
+        SetInstanceShaderParameter(FloorParam, floor);
+    }
+
+    private float _floor = float.NaN;
+    private static readonly StringName FloorParam = "skirt_floor";
 
     /// <summary>The hem's ripple and phase for the figure's shader (<see cref="HumanMeshBuilder.SkirtFlutter"/>), set only when it changes.</summary>
     public void SetFlutter(Vector2 flutter)
@@ -73,10 +90,11 @@ public partial class SkinnedFigure : MeshInstance3D
     /// </summary>
     public void Share(MeshInstance3D copy)
     {
-        if (copy == this) return;
-        EnsureSkeleton();
-        if (copy is SkinnedFigure f) f._follow = this;
-        Attach(copy);
+        var leader = Leader;
+        if (copy == leader) return;
+        leader.EnsureSkeleton(leader.Skin?.BoneCount ?? HumanMeshBuilder.BodyBones);
+        if (copy is SkinnedFigure f) f._follow = leader;
+        leader.Attach(copy);
         if (Skin is { Flutters: true }) copy.SetInstanceShaderParameter(FlutterParam, _flutter);
     }
 
@@ -94,16 +112,19 @@ public partial class SkinnedFigure : MeshInstance3D
 
     private static readonly Transform3D Flip = new(new Basis(Vector3.Up, Mathf.Pi), Vector3.Zero);
 
-    private void EnsureSkeleton()
+    /// <summary>A skeleton of at least <paramref name="bones"/> (a look with a skirt has more), its bones at rest.</summary>
+    private void EnsureSkeleton(int bones)
     {
-        if (_skeleton.IsValid) return;
-        _skeleton = RenderingServer.SkeletonCreate();
-        RenderingServer.SkeletonAllocateData(_skeleton, HumanMeshBuilder.BoneCount);
-        for (int i = 0; i < _bones.Length; i++)
+        if (_skeleton.IsValid && _boneCount >= bones) return;
+        if (!_skeleton.IsValid) _skeleton = RenderingServer.SkeletonCreate();
+        _boneCount = bones;
+        RenderingServer.SkeletonAllocateData(_skeleton, bones);
+        for (int i = 0; i < bones; i++)
         {
             _bones[i] = Transform3D.Identity;
             RenderingServer.SkeletonBoneSetTransform(_skeleton, i, Transform3D.Identity);
         }
+        _posed = false;
     }
 
     private void Attach(MeshInstance3D to)

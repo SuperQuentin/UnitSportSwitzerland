@@ -137,11 +137,11 @@ public sealed class MeshScratch
     }
 
     /// <summary>
-    /// What a skinned figure (#1202) gives each vertex: two bones and the second one's weight
-    /// (the first takes the rest). A figure's bones are the figure builder's
+    /// What a skinned figure (#1202) gives each vertex: up to four bones and the weights of the
+    /// last three (the first takes the rest). A figure's bones are the figure builder's
     /// (<c>HumanMeshBuilder.Skin.cs</c>); bone 0 is the figure's own origin.
     /// </summary>
-    public readonly record struct BoneWeights(int A, int B = 0, float WeightB = 0f);
+    public readonly record struct BoneWeights(int A, int B = 0, float WeightB = 0f, int C = 0, float WeightC = 0f, int D = 0, float WeightD = 0f);
 
     /// <summary>Weighs each vertex of a skinned build by the part it is drawn for (<see cref="RestMap.Part"/>) and where it is.</summary>
     public interface IBoneWeigher
@@ -155,6 +155,28 @@ public sealed class MeshScratch
     /// <see cref="Rest"/> map is part 0.
     /// </summary>
     public IBoneWeigher? Weigher { get; set; }
+
+    /// <summary>
+    /// While set, every vertex is marked as a skinned skirt's (#1202, CUSTOM1.w = −1): the figure's
+    /// shader keeps it over the figure's floor (<c>skirt_floor</c>), as the drape did (<c>HangSkirt</c>).
+    /// </summary>
+    public bool OverFloor { get; set; }
+
+    // a small rigid primitive (a box, a ring) is weighed at its centre, so it moves as one piece:
+    // weighed vertex by vertex, a buckle across two trunk rings would stretch with the spine
+    private Vector3? _anchor;
+
+    private AnchorScope Anchored(Vector3 at)
+    {
+        var scope = new AnchorScope(this, _anchor);
+        _anchor ??= at;
+        return scope;
+    }
+
+    private readonly struct AnchorScope(MeshScratch scratch, Vector3? was) : IDisposable
+    {
+        public void Dispose() => scratch._anchor = was;
+    }
 
     /// <summary>
     /// A tapered tube from <paramref name="a"/> to <paramref name="b"/>. Six sides by default:
@@ -360,6 +382,7 @@ public sealed class MeshScratch
     /// <summary>An axis-aligned box, optionally rotated about its own centre.</summary>
     public void Box(Vector3 centre, Vector3 size, Color colour, Basis? orientation = null)
     {
+        using var anchor = Anchored(centre);
         var basis = orientation ?? Basis.Identity;
         var half = size * 0.5f;
         int start = _vertices.Count;
@@ -405,6 +428,7 @@ public sealed class MeshScratch
             Box(centre, size, colour, orientation);
             return;
         }
+        using var anchor = Anchored(centre);
         var basis = orientation ?? Basis.Identity;
         var half = size * 0.5f;
         var linear = colour.SrgbToLinear();
@@ -447,6 +471,7 @@ public sealed class MeshScratch
     public void Ring(Vector3 centre, Vector3 normal, float innerRadius, float outerRadius,
         float thickness, Color colour, int segments = 16)
     {
+        using var anchor = Anchored(centre);
         normal = normal.Normalized();
         var reference = Mathf.Abs(normal.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
         var u = normal.Cross(reference).Normalized();
@@ -817,7 +842,7 @@ public sealed class MeshScratch
         }
         if (flutter is { Count: > 0 })
         {
-            // turned round like the positions; w is the hem index plus one, 0 for every other vertex
+            // turned round like the positions; w is the hem index plus one, −1 the rest of a skirt, 0 every other vertex
             while (flutter.Count < vertices.Count) flutter.Add(Vector4.Zero);
             var packed = new float[vertices.Count * 4];
             for (int i = 0; i < vertices.Count; i++)
@@ -985,16 +1010,21 @@ public sealed class MeshScratch
         {
             // a vehicle drawn before the figure rides on its origin, bone 0 at full weight
             while (_bones.Count < _vertices.Count * 4) { _bones.Add(0); _weights.Add(_bones.Count % 4 == 1 ? 1f : 0f); }
-            var w = weigher.Weigh(Rest?.Part ?? 0, position);
-            _bones.Add(w.A); _bones.Add(w.B); _bones.Add(0); _bones.Add(0);
-            _weights.Add(1f - w.WeightB); _weights.Add(w.WeightB); _weights.Add(0f); _weights.Add(0f);
+            var w = weigher.Weigh(Rest?.Part ?? 0, _anchor ?? position);
+            _bones.Add(w.A); _bones.Add(w.B); _bones.Add(w.C); _bones.Add(w.D);
+            _weights.Add(1f - w.WeightB - w.WeightC - w.WeightD); _weights.Add(w.WeightB); _weights.Add(w.WeightC); _weights.Add(w.WeightD);
         }
         else if (_bones.Count > 0)
         {
             _bones.Add(0); _bones.Add(0); _bones.Add(0); _bones.Add(0);
             _weights.Add(1f); _weights.Add(0f); _weights.Add(0f); _weights.Add(0f);
         }
-        if (_flutter.Count > 0) _flutter.Add(Vector4.Zero);
+        if (OverFloor)
+        {
+            while (_flutter.Count < _vertices.Count) _flutter.Add(Vector4.Zero);
+            _flutter.Add(new Vector4(0, 0, 0, -1f));
+        }
+        else if (_flutter.Count > 0) _flutter.Add(Vector4.Zero);
         if (Rest is { } map)
         {
             while (_rest.Count < _vertices.Count) _rest.Add(_vertices[_rest.Count]);

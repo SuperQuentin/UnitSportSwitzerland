@@ -8,8 +8,13 @@ namespace UnitSport.Avatar;
 /// pose only moves the bones. The palette's wind is not part of it (it moves the bones and the
 /// shader), and <see cref="Point"/> is the pointing hand's folded fingers (#889).
 /// </summary>
+/// <remarks>
+/// <see cref="Pedalling"/>: a cyclist's legs (<see cref="Cyclist"/>), as they were drawn apart from
+/// the rider: dressed ones as the figure's, bare ones as plain tubes and a shoe on the pedal.
+/// </remarks>
 public readonly record struct FigureLook(HumanPalette Palette, bool Legs = true, bool Helmet = false,
-    Headwear Hat = Headwear.None, bool Body = true, bool Head = true, bool FullFace = false, bool Point = false)
+    Headwear Hat = Headwear.None, bool Body = true, bool Head = true, bool FullFace = false, bool Point = false,
+    bool Pedalling = false)
 {
     /// <summary>Whether it is built for a lit style (<see cref="HumanMeshBuilder.SmoothFigures"/>): read when the look is made.</summary>
     public bool Smooth { get; init; } = HumanMeshBuilder.SmoothFigures;
@@ -22,8 +27,10 @@ public sealed class FigureSkin
     public required ArrayMesh Mesh { get; init; }
     /// <summary>Each bone's frame at rest, inverted (author space): a pose's frame times this moves a vertex.</summary>
     internal Transform3D[] BindInverse { get; init; } = Array.Empty<Transform3D>();
-    /// <summary>The skirt's waistband centre at rest, author space (only a look with a skirt uses it).</summary>
-    internal Vector3 SkirtTop { get; init; }
+    /// <summary>What its bones are measured with besides the rig: its clothes, its build, its skirt at rest.</summary>
+    internal HumanMeshBuilder.SkinBody Body { get; init; } = null!;
+    /// <summary>How many bones it is posed by: the body's, and a skirt's when it has one.</summary>
+    public int BoneCount => BindInverse.Length;
     /// <summary>Whether its hem flutters in the wind (a skirt, robe or dress): the shader's <c>skirt_flutter</c>.</summary>
     public bool Flutters { get; init; }
 }
@@ -47,17 +54,62 @@ public static partial class HumanMeshBuilder
     private const int BoneTrunk = 1;
     private const int BoneArmL = BoneTrunk + TrunkStations, BoneArmR = BoneArmL + 4;   // upper, elbow, lower, hand
     private const int BoneLegL = BoneArmR + 4, BoneLegR = BoneLegL + 4;                // upper, knee, lower, foot
-    private const int BoneHead = BoneLegR + 4, BoneSkirt = BoneHead + 1;
+    private const int BoneHead = BoneLegR + 4, BoneNeck = BoneHead + 1, BoneSkirt = BoneNeck + 1;   // a skirt's rings: upper, middle, hem
 
-    /// <summary>How many bones a skinned figure has; bone 0 is its origin, which never moves.</summary>
-    public const int BoneCount = BoneSkirt + 1;
+    /// <summary>
+    /// How many bones a skinned figure has (<see cref="FigureSkin.BoneCount"/>): the body's, and a
+    /// skirt's after them; bone 0 is its origin, which never moves.
+    /// </summary>
+    public const int BodyBones = BoneSkirt, MaxBones = BoneSkirt + 2 * SkirtBoneCount;
+
+    /// <summary>A skirt's bones, and as many again for a tier under it (<see cref="SkirtBones"/>).</summary>
+    private const int SkirtBoneCount = SkirtLevels * SkirtSectors;
 
     // ---- the parts a vertex is drawn for (MeshScratch.RestMap.Part)
     private const int PartTrunk = 1, PartArmL = 2, PartArmR = 3, PartLegL = 4, PartLegR = 5, PartFootL = 6, PartFootR = 7,
-        PartHead = 8, PartNeck = 9, PartSkirt = 10;
+        PartHead = 8, PartNeck = 9, PartSkirt = 10, PartTier = 11;
 
     /// <summary>The trunk station (0..16) a skirt hangs from: its waistband is at spine 2.</summary>
     private const int SkirtStation = 8;
+
+    /// <summary>
+    /// A skirt's bones (<see cref="SkirtBones"/>): one for each point of the drape's rings below the
+    /// waistband (<see cref="DrapeAt"/>, <see cref="DrapeSides"/> round each), so it hangs as drawn.
+    /// </summary>
+    private const int SkirtLevels = 10, SkirtSectors = DrapeSides;
+
+    /// <summary>
+    /// What a look's bones are measured with besides the rig (#1202): its clothes and build, and a
+    /// skirt's waistband and ring extents at rest.
+    /// </summary>
+    internal sealed class SkinBody
+    {
+        public Garment? Top, Bottom;
+        public Physique Shape;
+        /// <summary>The skirt, robe or dress it wears (<see cref="SkirtCutOf"/>), or null.</summary>
+        public SkirtCut? Cut;
+        /// <summary>The waistband's middle at rest, author space.</summary>
+        public Vector3 SkirtTop;
+        /// <summary>At rest, how far out each skirt bone hangs from the skirt's axis, and each tier bone from the tier's (<see cref="SkirtExtents"/>).</summary>
+        public readonly float[] SkirtRest = new float[SkirtBoneCount], TierRest = new float[SkirtBoneCount];
+        /// <summary>The skirt's axis at rest (down to its hem), its length, and its side and front square to it; the tier's axis and length.</summary>
+        public Vector3 SkirtAxis, SkirtSide, SkirtFwd, TierAxis;
+        public float SkirtLength, TierLength;
+
+        /// <summary>The bones it is posed by: the body's, a skirt's, a tier's.</summary>
+        public int Bones => Cut is not { } c ? BodyBones : c.Tiered ? BoneSkirt + 2 * SkirtBoneCount : BoneSkirt + SkirtBoneCount;
+
+        public static SkinBody Of(HumanPalette palette)
+        {
+            var top = palette.Outfit[WearSlot.Top];
+            return new SkinBody
+            {
+                Top = top,
+                Bottom = top is { CoversBottom: true } ? null : palette.Outfit[WearSlot.Bottom],
+                Shape = Physique.Of(palette.Appearance.Build),
+            };
+        }
+    }
 
     private static readonly Dictionary<FigureLook, FigureSkin> Skins = new();
 
@@ -78,32 +130,54 @@ public static partial class HumanMeshBuilder
     private static Rig BindRig(in FigureLook look)
     {
         var r = RestRig;
-        return look.Point ? r with { PointDirR = (r.WristR - r.ElbowR).Normalized() } : r;
+        if (look.Point) r = r with { PointDirR = (r.WristR - r.ElbowR).Normalized() };
+        // a pedalling foot points straight ahead along its pedal (PoseCyclist)
+        if (look.Pedalling) r = r with { ToeL = r.AnkleL + PedalToe, ToeR = r.AnkleR + PedalToe };
+        return r;
     }
+
+    /// <summary>A pedalling foot's toe from its ankle, and a dressed one's ankle from the pedal (as the cyclist's legs always were).</summary>
+    private static readonly Vector3 PedalToe = new(0, 0, 0.09f), PedalAnkle = new(0, 0.03f, -0.03f);
 
     private static FigureSkin BuildSkin(in FigureLook look)
     {
         var rig = BindRig(look);
         var palette = look.Palette;
-        var top = palette.Outfit[WearSlot.Top];
-        var bottom = top is { CoversBottom: true } ? null : palette.Outfit[WearSlot.Bottom];
+        var body = SkinBody.Of(palette);
         var fit = new Fit(rig, palette.Appearance.Build);
-        var skirtTop = SkirtTopOf(fit);
-        var weigher = new Weigher(rig, fit, skirtTop, SkirtHem(rig, top, bottom));
+        body.SkirtTop = SkirtTopOf(fit);
+        if ((body.Cut = SkirtCutOf(rig, fit.Torso, body.Top, body.Bottom)) is { } cut)
+        {
+            var (axis, len, side, fwd) = SkirtAxes(fit.Torso, body.SkirtTop, cut.Hem);
+            (body.SkirtAxis, body.SkirtLength, body.SkirtSide, body.SkirtFwd) = (axis, len, side, fwd);
+            SkirtExtents(rig, fit.Torso, body.Shape, body.SkirtTop, axis, len, side, fwd, cut.Radius, body.SkirtRest);
+            if (cut.Tiered)
+            {
+                var (tAxis, tLen, tSide, tFwd) = SkirtAxes(fit.Torso, body.SkirtTop, cut.TierHem);
+                (body.TierAxis, body.TierLength) = (tAxis, tLen);
+                SkirtExtents(rig, fit.Torso, body.Shape, body.SkirtTop, tAxis, tLen, tSide, tFwd, cut.TierRadius, body.TierRest);
+            }
+        }
+        var weigher = new Weigher(rig, body);
         var scratch = new MeshScratch { Weigher = weigher };
         _smoothOverride = look.Smooth;
         try
         {
-            AppendRig(scratch, palette, rig, look.Legs, look.Helmet, look.Hat, look.Body, look.Head, look.FullFace);
+            AppendRig(scratch, palette, rig, look.Legs && !look.Pedalling, look.Helmet, look.Hat, look.Body, look.Head, look.FullFace);
+            if (look.Pedalling)
+            {
+                PedallingLeg(scratch, palette, rig.HipL, rig.KneeL, rig.AnkleL, rig.ToeL);
+                PedallingLeg(scratch, palette, rig.HipR, rig.KneeR, rig.AnkleR, rig.ToeR);
+            }
         }
         finally { _smoothOverride = null; }
-        var frames = new Transform3D[BoneCount];
-        Frames(rig, top, bottom, skirtTop, Vector3.Zero, frames);
-        var inverse = new Transform3D[BoneCount];
-        for (int i = 0; i < BoneCount; i++) inverse[i] = frames[i].AffineInverse();
+        var frames = new Transform3D[body.Bones];
+        Frames(rig, body, Vector3.Zero, frames);
+        var inverse = new Transform3D[frames.Length];
+        for (int i = 0; i < frames.Length; i++) inverse[i] = frames[i].AffineInverse();
         return new FigureSkin
         {
-            Look = look, Mesh = scratch.Build(), BindInverse = inverse, SkirtTop = skirtTop,
+            Look = look, Mesh = scratch.Build(), BindInverse = inverse, Body = body,
             Flutters = Flutters(palette.Outfit),
         };
     }
@@ -119,12 +193,12 @@ public static partial class HumanMeshBuilder
     private static void PoseRig(SkinnedFigure f, in Rig r, Vector3 wind)
     {
         if (f.Skin is not { } skin) return;
-        var frames = _frames ??= new Transform3D[BoneCount];
-        var o = skin.Look.Palette.Outfit;
-        var top = o[WearSlot.Top];
-        Frames(r, top, top is { CoversBottom: true } ? null : o[WearSlot.Bottom], skin.SkirtTop, wind, frames);
+        var frames = (_frames ??= new Transform3D[MaxBones]).AsSpan(0, skin.BoneCount);
+        Frames(r, skin.Body, wind, frames);
         f.Pose(frames);
-        if (skin.Flutters) f.SetFlutter(SkirtFlutter(wind));
+        if (!skin.Flutters) return;
+        f.SetFlutter(SkirtFlutter(wind));
+        f.SetFloor(SkirtFloor(r));
     }
 
     /// <summary><see cref="BuildStride"/>'s figure as bones: the gait, a dance, an item's arms, VR hands, a pointing finger.</summary>
@@ -134,6 +208,70 @@ public static partial class HumanMeshBuilder
         // a skirt with no measured wind still feels the stride's own (#251)
         if (wind == Vector3.Zero && speed > 0.05f && f.Skin is { Flutters: true }) wind = new Vector3(0, 0, -speed);
         PoseRig(f, ApplyPoint(ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr), point), wind);
+    }
+
+    /// <summary>
+    /// A cyclist (<see cref="Cyclist"/>) on <paramref name="frame"/>: part way (<paramref name="t"/>,
+    /// eased) from riding position <paramref name="from"/> to <paramref name="to"/>, the legs solved
+    /// from the pedals at <paramref name="crankAngle"/>, the upper body turned <paramref name="sway"/>
+    /// (rad, about the node's forward axis) against a standing rider's rocking bike.
+    /// </summary>
+    public static void PoseCyclist(SkinnedFigure f, Player.BikeFrame frame, Player.RidingPosition from, Player.RidingPosition to,
+        float t, float crankAngle, float sway, Vector3 wind)
+    {
+        var rig = t >= 1f ? CyclingRigFor(to, frame) : Lerp(CyclingRigFor(from, frame), CyclingRigFor(to, frame), t);
+        if (sway != 0f)
+        {
+            // the node's turn about its forward axis (−Z) is the opposite turn about author +Z
+            var turn = new Basis(Vector3.Back, -sway);
+            rig = rig with
+            {
+                HeadTop = turn * rig.HeadTop, HeadBase = turn * rig.HeadBase, Neck = turn * rig.Neck, Chest = turn * rig.Chest,
+                Waist = turn * rig.Waist, Hip = turn * rig.Hip,
+                ShoulderL = turn * rig.ShoulderL, ElbowL = turn * rig.ElbowL, WristL = turn * rig.WristL,
+                ShoulderR = turn * rig.ShoulderR, ElbowR = turn * rig.ElbowR, WristR = turn * rig.WristR,
+            };
+        }
+        bool dressed = f.Skin is { } skin && !skin.Look.Palette.Outfit.IsEmpty;
+        (Vector3 Hip, Vector3 Knee, Vector3 Ankle, Vector3 Toe) Leg(int side)
+        {
+            var hip = t >= 1f ? frame.LegHip(side, to) : frame.LegHip(side, from).Lerp(frame.LegHip(side, to), t);
+            // BikeFrame.Pedal carries the sign: the cranks are drawn from the same call, so the two cannot disagree
+            var pedal = frame.Pedal(crankAngle, side);
+            // the knee leads the hip on a bicycle; +Z is forward in author space
+            var knee = Limb.Solve(hip, pedal, Player.BikeFrame.ThighLength, Player.BikeFrame.ShinLength, new Vector3(0, 0, 1));
+            return (hip, knee, dressed ? pedal + PedalAnkle : pedal, pedal + PedalToe);
+        }
+        var plus = Leg(1);
+        var minus = Leg(-1);
+        rig = rig with
+        {
+            HipR = plus.Hip, KneeR = plus.Knee, AnkleR = plus.Ankle, ToeR = plus.Toe,
+            HipL = minus.Hip, KneeL = minus.Knee, AnkleL = minus.Ankle, ToeL = minus.Toe,
+        };
+        PoseRig(f, rig, wind);
+    }
+
+    /// <summary>
+    /// A cyclist's leg at rest, as it was drawn apart from the rider: in its clothes (#251), or bare,
+    /// the cycling shorts and a shoe on the pedal (the ankle).
+    /// </summary>
+    private static void PedallingLeg(MeshScratch s, HumanPalette p, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe)
+    {
+        if (!p.Outfit.IsEmpty)
+        {
+            AppendLeg(s, p, hip, knee, ankle, toe);
+            return;
+        }
+        using var smoothing = s.Smoothing(SmoothFigures);
+        bool left = hip.X < 0;
+        using (s.Resting(LegRest(hip, knee, ankle, Vector3.Right, left)))
+        {
+            s.Tube(hip, knee, 0.088f, 0.062f, p.Shorts, 6);
+            s.Tube(knee, ankle, 0.062f, 0.042f, p.Skin, 6);
+        }
+        using (s.Resting(FootRest(ankle, toe, Vector3.Right, left)))
+            s.Box(ankle, new Vector3(0.058f, 0.045f, 0.115f), p.Shoes);
     }
 
     /// <summary>A fixed pose with the item arm override on top (<see cref="BuildPosed"/>'s).</summary>
@@ -168,10 +306,10 @@ public static partial class HumanMeshBuilder
     /// Every bone's frame in <paramref name="r"/>, author space, into <paramref name="frames"/>:
     /// joint math only. <paramref name="wind"/> blows a skirt's hem downwind (<see cref="AppendSkirt"/>).
     /// </summary>
-    private static void Frames(in Rig r, Garment? top, Garment? bottom, Vector3 bindSkirtTop, Vector3 wind, Span<Transform3D> frames)
+    private static void Frames(in Rig r, SkinBody body, Vector3 wind, Span<Transform3D> frames)
     {
         frames[0] = Transform3D.Identity;
-        var torso = new Torso(r, default);
+        var torso = new Torso(r, body.Shape);
         for (int k = 0; k < TrunkStations; k++)
         {
             float s = k * 0.25f;
@@ -194,9 +332,19 @@ public static partial class HumanMeshBuilder
         float len = axis.Length();
         var headUp = len > 1e-4f ? axis / len : Vector3.Up;
         var headSide = (shoulderLine - headUp * shoulderLine.Dot(headUp)).Normalized();
-        frames[BoneHead] = new Transform3D(new Basis(headSide * len, headUp * len, headSide.Cross(headUp) * len), r.HeadBase);
+        var headFwd = headSide.Cross(headUp);
+        frames[BoneHead] = new Transform3D(new Basis(headSide * len, headUp * len, headFwd * len), r.HeadBase);
 
-        frames[BoneSkirt] = SkirtBone(r, torso, top, bottom, frames[BoneTrunk + SkirtStation], bindSkirtTop, wind);
+        // the neck as AppendBody draws it: a tube from the top of the trunk into the skull behind the jaw
+        float scale = body.Shape.Head * len / 0.19f;
+        var neckTop = r.HeadBase + (headUp * 0.045f - headFwd * 0.012f) * scale;
+        var neckBottom = r.Neck - torso.Up(4f) * 0.03f;
+        var neck = neckTop - neckBottom;
+        var neckUp = neck.LengthSquared() > 1e-8f ? neck.Normalized() : Vector3.Up;
+        var neckSide = (shoulderLine - neckUp * shoulderLine.Dot(neckUp)).Normalized();
+        frames[BoneNeck] = new Transform3D(new Basis(neckSide, neck, neckSide.Cross(neckUp)), neckBottom);
+
+        if (frames.Length > BoneSkirt) SkirtBones(r, torso, body, frames[BoneTrunk + SkirtStation], wind, frames[BoneSkirt..]);
     }
 
     /// <summary>
@@ -263,23 +411,121 @@ public static partial class HumanMeshBuilder
     }
 
     /// <summary>
-    /// A skirt's bone: at its waistband, Y down to its hem (scaled to the length), the hem where
-    /// <see cref="AppendSkirt"/> puts it, blown downwind.
+    /// A skirt's bones: one for each point of its rings below the waistband (where
+    /// <see cref="AppendSkirt"/> hangs it, its hem blown downwind), each moved out as far as
+    /// <see cref="HangSkirt"/> pushes its point out round the hips and legs. A tier under it (a
+    /// petticoat, a second ruffle) is hung the same way to its own hem, on bones of its own.
     /// </summary>
-    private static Transform3D SkirtBone(in Rig r, in Torso torso, Garment? top, Garment? bottom, in Transform3D station,
-        Vector3 bindTop, Vector3 wind)
+    private static void SkirtBones(in Rig r, in Torso torso, SkinBody body, in Transform3D station, Vector3 wind, Span<Transform3D> bones)
     {
-        if (SkirtHem(r, top, bottom) is not { } hem) return Transform3D.Identity;
+        if (body.Cut is not { } rest || SkirtCutOf(r, torso, body.Top, body.Bottom) is not { } cut)
+        {
+            bones.Fill(Transform3D.Identity);
+            return;
+        }
         // the waistband rides on the trunk's ring at spine 2
-        var bind = RestStation(SkirtStation);
-        var c0 = station * (bind.AffineInverse() * bindTop);
-        hem = Blown(hem, r.Waist, wind);
+        var c0 = station * (RestStation(SkirtStation).AffineInverse() * body.SkirtTop);
+        DrapeBones(r, torso, body.Shape, c0, Blown(cut.Hem, r.Waist, wind), rest.Radius, body.SkirtRest, bones[..SkirtBoneCount]);
+        if (rest.Tiered && bones.Length >= 2 * SkirtBoneCount)
+            DrapeBones(r, torso, body.Shape, c0, Blown(cut.TierHem, r.Waist, wind), rest.TierRadius, body.TierRest, bones[SkirtBoneCount..]);
+    }
+
+    /// <summary>One drape's bones, from the waistband's middle <paramref name="c0"/> to <paramref name="hem"/>, each point pushed out from where it was at rest.</summary>
+    private static void DrapeBones(in Rig r, in Torso torso, Physique shape, Vector3 c0, Vector3 hem, float radius, float[] atRest,
+        Span<Transform3D> into)
+    {
+        var (axis, len, side, fwd) = SkirtAxes(torso, c0, hem);
+        Span<float> reach = stackalloc float[SkirtBoneCount];
+        SkirtExtents(r, torso, shape, c0, axis, len, side, fwd, radius, reach);
+        var basis = new Basis(side, axis * len, fwd);
+        for (int i = 0; i < SkirtLevels; i++)
+        {
+            var at = c0 + axis * (len * DrapeAt[i + 1]);
+            for (int q = 0; q < SkirtSectors; q++)
+            {
+                int b = i * SkirtSectors + q;
+                into[b] = new Transform3D(basis, at + SectorDir(q, side, fwd) * (reach[b] - atRest[b]));
+            }
+        }
+    }
+
+    /// <summary>Point <paramref name="q"/>'s way out round a skirt's axis: 0 its side, then round by the front (<see cref="HangSkirt"/>'s).</summary>
+    private static Vector3 SectorDir(int q, Vector3 side, Vector3 fwd)
+    {
+        float a = Mathf.Tau * q / SkirtSectors;
+        return side * Mathf.Cos(a) + fwd * Mathf.Sin(a);
+    }
+
+    /// <summary>A skirt's axis from its waistband to its hem, its length, and the side and front square to it (<see cref="HangSkirt"/>'s).</summary>
+    private static (Vector3 Axis, float Length, Vector3 Side, Vector3 Fwd) SkirtAxes(in Torso torso, Vector3 c0, Vector3 hem)
+    {
         var axis = hem - c0;
         float len = Mathf.Max(axis.Length(), 0.05f);
         axis /= len;
         var side = torso.Frame(2f).Side;
         side = (side - axis * side.Dot(axis)).Normalized();
-        return new Transform3D(new Basis(side, axis * len, axis.Cross(side)), c0);
+        return (axis, len, side, axis.Cross(side));
+    }
+
+    /// <summary>
+    /// How far <see cref="HangSkirt"/> hangs each point of each ring below the waistband out from
+    /// the axis: the waistband's own shape flared toward a hem of <paramref name="hemRadius"/>, pushed
+    /// out round the trunk below it and the legs, never in again on the way down.
+    /// </summary>
+    private static void SkirtExtents(in Rig r, in Torso torso, Physique shape, Vector3 c0, Vector3 axis, float len,
+        Vector3 side, Vector3 fwd, float hemRadius, Span<float> levels)
+    {
+        const float band = 2f;
+        Span<float> start = stackalloc float[SkirtSectors];
+        float topRadius = 0f;
+        for (int k = 0; k < SkirtSectors; k++)
+        {
+            var off = torso.Surface(band, Mathf.Tau * k / SkirtSectors, 0.006f) - c0;
+            start[k] = (off - axis * off.Dot(axis)).Length();
+            topRadius += start[k] / SkirtSectors;
+        }
+        // what the skirt must clear, as HangSkirt has it: the trunk below the band, then each leg
+        Span<Vector4> points = stackalloc Vector4[128];
+        int n = 0;
+        for (float sp = 0f; sp < band - 0.05f; sp += 0.25f)
+            for (int k = 0; k < 10; k++)
+            {
+                var q = torso.Surface(sp, Mathf.Tau * k / 10f, 0.010f);
+                points[n++] = new Vector4(q.X, q.Y, q.Z, 0f);
+            }
+        for (int leg = 0; leg < 2; leg++)
+        {
+            var (hip, knee, ankle) = leg == 0 ? (r.HipL, r.KneeL, r.AnkleL) : (r.HipR, r.KneeR, r.AnkleR);
+            for (int j = 0; j <= 14 && n < points.Length; j++)
+            {
+                float lt = j / 7f;
+                var q = Along(hip, knee, ankle, lt);
+                points[n++] = new Vector4(q.X, q.Y, q.Z, LegRadius(shape, lt) + 0.014f);
+            }
+        }
+        points = points[..n];
+        Span<float> need = stackalloc float[SkirtSectors];
+        start.CopyTo(need);
+        for (int i = 1; i <= SkirtLevels; i++)
+        {
+            float f = DrapeAt[i];
+            var c = c0 + axis * len * f;
+            float flare = Mathf.Max(hemRadius - topRadius, 0f) * Mathf.Pow(f, 1.5f);
+            float reach = (DrapeAt[i] - DrapeAt[i - 1]) * len * 0.6f + 0.02f;
+            for (int q = 0; q < SkirtSectors; q++)
+            {
+                var d = SectorDir(q, side, fwd);
+                float want = Mathf.Max(need[q], start[q] * (1f + flare / topRadius));
+                foreach (var b in points)
+                {
+                    var v = new Vector3(b.X, b.Y, b.Z) - c;
+                    if (Mathf.Abs(v.Dot(axis)) > reach) continue;
+                    want = Mathf.Max(want, v.Dot(d) + b.W);
+                }
+                need[q] = want;
+            }
+            need.CopyTo(levels.Slice(SkirtSectors * (i - 1), SkirtSectors));
+        }
     }
 
     private static Transform3D? _restStation8;
@@ -295,22 +541,46 @@ public static partial class HumanMeshBuilder
         return frame;
     }
 
-    /// <summary>The hem a skirt, robe or dress hangs to (<see cref="AppendSkirt"/>'s, before the wind), or null without one.</summary>
-    private static Vector3? SkirtHem(in Rig r, Garment? top, Garment? bottom)
+    /// <summary>
+    /// How a skirt, robe or dress hangs (<see cref="AppendSkirt"/>'s, before the wind): its hem and
+    /// the hem's radius, and a tier under it (a dress's petticoat, a ruffle's second): its own hem
+    /// and radius, and the fraction of the skirt it starts at (<see cref="Tier"/>).
+    /// </summary>
+    internal readonly record struct SkirtCut(Vector3 Hem, float Radius, Vector3 TierHem = default, float TierRadius = 0f, float TierFrom = 0f)
+    {
+        public bool Tiered => TierRadius > 0f;
+    }
+
+    private static SkirtCut? SkirtCutOf(in Rig r, in Torso torso, Garment? top, Garment? bottom)
     {
         var knees = (r.KneeL + r.KneeR) * 0.5f;
         var ankles = (r.AnkleL + r.AnkleR) * 0.5f;
+        // hips wider than the old figure's (a curvy build) widen every hem with them
+        float extra = Mathf.Max(0f, torso.Width(1f) - 0.135f);
         if (top is { Draped: true })
-            return top.Shape == GarmentShape.Robe ? ankles + Vector3.Up * 0.06f : r.Hip.Lerp(knees, 0.85f);
+        {
+            if (top.Shape == GarmentShape.Robe) return new SkirtCut(ankles + Vector3.Up * 0.06f, 0.30f + extra);
+            var dress = r.Hip.Lerp(knees, 0.85f);
+            return new SkirtCut(dress, 0.29f + extra, dress - Vector3.Up * 0.035f, 0.32f + extra, 0.78f);
+        }
         if (!IsSkirt(bottom)) return null;
+        var mini = r.Hip.Lerp(knees, 0.40f);
         return bottom!.Shape switch
         {
-            GarmentShape.PleatedSkirt => r.Hip.Lerp(knees, 0.55f),
-            GarmentShape.RuffleMini => r.Hip.Lerp(knees, 0.40f),
-            GarmentShape.HighLowSkirt => r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f),
-            GarmentShape.SlitMaxi => ankles + Vector3.Up * 0.07f,
-            _ => r.Hip.Lerp(ankles, 0.80f),   // LongPleated
+            GarmentShape.PleatedSkirt => new SkirtCut(r.Hip.Lerp(knees, 0.55f), 0.25f + extra),
+            GarmentShape.RuffleMini => new SkirtCut(mini, 0.22f + extra, mini - Vector3.Up * 0.045f, 0.255f + extra, 0.55f),
+            GarmentShape.HighLowSkirt => new SkirtCut(r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f), 0.27f + extra),
+            GarmentShape.SlitMaxi => new SkirtCut(ankles + Vector3.Up * 0.07f, 0.29f + extra),
+            _ => new SkirtCut(r.Hip.Lerp(ankles, 0.80f), 0.29f + extra),   // LongPleated
         };
+    }
+
+    /// <summary>The first of a tier's rings, from the fraction of the skirt it starts at (<see cref="Tier"/>'s).</summary>
+    private static int TierRing(float from)
+    {
+        int i0 = 1;
+        while (i0 < DrapeAt.Length - 2 && DrapeAt[i0] < from) i0++;
+        return i0;
     }
 
     /// <summary>A hem carried downwind, never further than the skirt is long, nor up past the waist (<see cref="AppendSkirt"/>).</summary>
@@ -323,6 +593,9 @@ public static partial class HumanMeshBuilder
         var shifted = hem + wind / speed * length * 0.65f * gust;
         return waist + (shifted - waist).Normalized() * length;
     }
+
+    /// <summary>The hem never comes within 9 cm of the ground under the lower foot (<see cref="AppendSkirt"/>'s).</summary>
+    private static float SkirtFloor(in Rig r) => Mathf.Min(r.AnkleL.Y, r.AnkleR.Y) - AnkleHeight + 0.09f;
 
     /// <summary>The shader's <c>skirt_flutter</c> for <paramref name="wind"/>: the hem's ripple and its phase now (<see cref="AppendSkirt"/>'s).</summary>
     public static Vector2 SkirtFlutter(Vector3 wind)
@@ -342,22 +615,14 @@ public static partial class HumanMeshBuilder
     {
         private readonly Rig _r;
         private readonly float[] _spineY;   // crotch, hip, waist, chest, neck
-        private readonly float _neckLow, _neckHigh;
-        private readonly Vector3 _skirtTop, _skirtAxis;
-        private readonly float _skirtLength;
+        private readonly SkinBody _body;
 
-        public Weigher(in Rig r, in Fit fit, Vector3 skirtTop, Vector3? skirtHem)
+        public Weigher(in Rig r, SkinBody body)
         {
             _r = r;
+            _body = body;
             var crotch = r.Hip - (r.Waist - r.Hip).Normalized() * 0.085f;
             _spineY = new[] { crotch.Y, r.Hip.Y, r.Waist.Y, r.Chest.Y, r.Neck.Y };
-            // the neck from the bottom of its tube to where it goes into the skull (AppendBody)
-            _neckLow = r.Neck.Y - 0.03f;
-            _neckHigh = fit.Head.NeckTop.Y;
-            _skirtTop = skirtTop;
-            var axis = (skirtHem ?? skirtTop + Vector3.Down) - skirtTop;
-            _skirtLength = Mathf.Max(axis.Length(), 0.05f);
-            _skirtAxis = axis / _skirtLength;
         }
 
         public MeshScratch.BoneWeights Weigh(int part, Vector3 p) => part switch
@@ -370,12 +635,64 @@ public static partial class HumanMeshBuilder
             PartFootL => new(BoneLegL + 3),
             PartFootR => new(BoneLegR + 3),
             PartHead => new(BoneHead),
-            // the neck and what is round it: from the top of the trunk into the head
-            PartNeck => new(BoneTrunk + TrunkStations - 1, BoneHead, Mathf.Clamp((p.Y - _neckLow) / (_neckHigh - _neckLow), 0f, 1f)),
-            // a skirt from its waistband (the trunk) down to its hem (its own bone)
-            PartSkirt => new(BoneTrunk + SkirtStation, BoneSkirt, Mathf.Clamp((p - _skirtTop).Dot(_skirtAxis) / _skirtLength, 0f, 1f)),
+            // the neck and what is round it, on the neck's own bone
+            PartNeck => new(BoneNeck),
+            PartSkirt => Skirt(p),
+            PartTier => Tier(p),
             _ => new(0),
         };
+
+        /// <summary>The ring point a point of a skirt is drawn at: its ring (1..10 below the waistband) and its place round it, and how far toward the next.</summary>
+        private (float Down, int Q, int Q1, float Next) Round(Vector3 p, Vector3 axis, float length)
+        {
+            var b = _body;
+            var off = p - b.SkirtTop;
+            float a = Mathf.PosMod(Mathf.Atan2(off.Dot(b.SkirtFwd), off.Dot(b.SkirtSide)), Mathf.Tau) / Mathf.Tau * SkirtSectors;
+            int q = (int)a % SkirtSectors;
+            return (off.Dot(axis) / length, q, (q + 1) % SkirtSectors, a - (int)a);
+        }
+
+        /// <summary>
+        /// A point of a skirt: on the bones of its ring point, or (a trim, a strap) between the ring
+        /// points round it and the rings above and below.
+        /// </summary>
+        private MeshScratch.BoneWeights Skirt(Vector3 p)
+        {
+            var (f, q, q1, next) = Round(p, _body.SkirtAxis, _body.SkirtLength);
+            int level = 1;
+            while (level < SkirtLevels && f > DrapeAt[level]) level++;
+            float above = DrapeAt[level - 1], at = DrapeAt[level];
+            float w = Mathf.Clamp((f - above) / (at - above), 0f, 1f);
+            int lower = BoneSkirt + (level - 1) * SkirtSectors;
+            if (level == 1)
+                // the waistband's ring on the trunk, then the first ring's points
+                return new(BoneTrunk + SkirtStation, lower + q, w * (1f - next), lower + q1, w * next);
+            int upper = lower - SkirtSectors;
+            return new(upper + q, upper + q1, (1f - w) * next, lower + q, w * (1f - next), lower + q1, w * next);
+        }
+
+        /// <summary>
+        /// A point of a tier: its ring is a blend of the skirt's over it and the tier's own
+        /// (<see cref="Tier"/>), so it rides on both ring points' bones by that blend.
+        /// </summary>
+        private MeshScratch.BoneWeights Tier(Vector3 p)
+        {
+            var b = _body;
+            int i0 = TierRing(b.Cut!.Value.TierFrom);
+            var (f, q, _, next) = Round(p, b.TierAxis, b.TierLength);
+            // the ring whose blended height (along the tier's axis) is nearest
+            int ring = i0;
+            float best = float.MaxValue;
+            for (int i = i0; i <= SkirtLevels; i++)
+            {
+                float w0 = (DrapeAt[i] - DrapeAt[i0]) / (1f - DrapeAt[i0]);
+                float h = ((b.SkirtAxis * b.SkirtLength * (1f - w0) + b.TierAxis * b.TierLength * w0) * DrapeAt[i]).Dot(b.TierAxis) / b.TierLength;
+                if (Mathf.Abs(h - f) < best) { best = Mathf.Abs(h - f); ring = i; }
+            }
+            float w = (DrapeAt[ring] - DrapeAt[i0]) / (1f - DrapeAt[i0]);
+            int point = (ring - 1) * SkirtSectors + (next < 0.5f ? q : (q + 1) % SkirtSectors);
+            return new(BoneSkirt + point, BoneSkirt + SkirtBoneCount + point, w);
+        }
 
         /// <summary>Between the two trunk rings either side of its height on the straight rest spine.</summary>
         private MeshScratch.BoneWeights Trunk(float y)

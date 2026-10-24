@@ -107,7 +107,12 @@ public static partial class HumanMeshBuilder
             }
             // with the legs or without (a cyclist's are their own mesh, driven by the cranks)
             using (s.Resting(TrunkRest(r) with { Part = PartSkirt }))
+            {
+                // a skinned one's shader keeps it over the floor, as the drape does (#1202)
+                s.OverFloor = s.Weigher != null;
                 AppendSkirt(s, fit, top, bottom, palette.Wind);
+                s.OverFloor = false;
+            }
         }
         if (!head) return;
 
@@ -615,7 +620,9 @@ public static partial class HumanMeshBuilder
                 if (dir.LengthSquared() < 1e-6f) break;
                 var at = ankle.Lerp(toe, 0.30f);
                 var along = dir.Normalized() * 0.008f;
-                s.Tube(at - along, at + along, 0.054f, b.A, 6);
+                // on the foot: a skinned figure's (#1202) bends with it at the ankle
+                using (s.Resting(FootRest(ankle, toe, outward, hip.X < 0)))
+                    s.Tube(at - along, at + along, 0.054f, b.A, 6);
                 break;
             }
         }
@@ -797,7 +804,8 @@ public static partial class HumanMeshBuilder
                 // the dress, the petticoat frothing out under it
                 var hem = r.Hip.Lerp(knees, 0.85f);
                 Hang(hem, 0.29f + extra, c.A, bands);
-                Tier(s, fit, rings, 0.78f, Blown(hem - Vector3.Up * 0.035f), 0.32f + extra, c.B, ripple, phase, floor);
+                using (s.Resting(TrunkRest(r) with { Part = PartTier }))
+                    Tier(s, fit, rings, 0.78f, Blown(hem - Vector3.Up * 0.035f), 0.32f + extra, c.B, ripple, phase, floor);
             }
             return;
         }
@@ -814,7 +822,8 @@ public static partial class HumanMeshBuilder
                 var hem = r.Hip.Lerp(knees, 0.40f);
                 Hang(hem, 0.22f + extra, b.A, bands);
                 // a second tier of ruffle under the first
-                Tier(s, fit, rings, 0.55f, Blown(hem - Vector3.Up * 0.045f), 0.255f + extra, b.B, ripple, phase, floor);
+                using (s.Resting(TrunkRest(r) with { Part = PartTier }))
+                    Tier(s, fit, rings, 0.55f, Blown(hem - Vector3.Up * 0.045f), 0.255f + extra, b.B, ripple, phase, floor);
                 break;
             }
             case GarmentShape.HighLowSkirt:

@@ -21,10 +21,26 @@
 varying vec3 v_pos;
 varying flat int v_fx;
 
+// A skinned figure's hem flutters here (#1202, HumanMeshBuilder.SkirtFlutter): the ripple and its
+// phase, set on the figure while it moves through the air; CUSTOM1 is each hem point's offset it
+// ripples along (xyz) and its index round the hem plus one (w), -1 the rest of the skirt, 0
+// everywhere else. The skirt never drops under skirt_floor (the figure's, model space).
+instance uniform vec2 skirt_flutter;
+instance uniform float skirt_floor = -1000000.0;
+
 void vertex() {
     v_pos = CUSTOM0.w > 0.5 ? CUSTOM0.xyz : VERTEX;
     v_fx = int(round((1.0 - COLOR.a) * 255.0));
     v_face = UV2;
+    if (CUSTOM1.w > 0.5 && skirt_flutter.x > 0.0) {
+        // two waves of different speed round the hem, so it never pulses as one (MeshScratch.Skirt)
+        float k = CUSTOM1.w - 1.0;
+        float ph = skirt_flutter.y;
+        float wave = sin(ph + k * 2.4) * 0.7 + sin(ph * 1.7 + k * 1.1) * 0.3;
+        float lift = cos(ph * 1.3 + k * 1.9);
+        VERTEX += CUSTOM1.xyz * (skirt_flutter.x * wave) - vec3(0.0, length(CUSTOM1.xyz) * skirt_flutter.x * 0.6 * lift, 0.0);
+    }
+    if (CUSTOM1.w != 0.0) VERTEX.y = max(VERTEX.y, skirt_floor);
 }
 
 float hash13(vec3 p) {

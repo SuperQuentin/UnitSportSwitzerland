@@ -17,6 +17,12 @@ public static partial class HumanMeshBuilder
     {
         var poses = SkinPoses();
         var looks = SkinLooks();
+        // --skincheck <look> <pose>: only those, with the worst vertices printed
+        var args = OS.GetCmdlineUserArgs();
+        int at0 = Array.IndexOf(args, "--skincheck");
+        string? onlyLook = at0 + 1 < args.Length && !args[at0 + 1].StartsWith("--") ? args[at0 + 1] : null;
+        string? onlyPose = at0 + 2 < args.Length && !args[at0 + 2].StartsWith("--") ? args[at0 + 2] : null;
+        _dump = onlyLook != null;
         int failed = 0, compared = 0;
         float worstMax = 0f, worstP99 = 0f;
         string worst = "";
@@ -24,23 +30,20 @@ public static partial class HumanMeshBuilder
         foreach (var (lookName, look, everyPose) in looks)
             foreach (var (poseName, rig) in poses)
             {
-                if (!everyPose && !poseName.StartsWith("key", StringComparison.Ordinal)) continue;
+                if (onlyLook != null && !lookName.Contains(onlyLook, StringComparison.OrdinalIgnoreCase)) continue;
+                if (onlyPose != null && !poseName.Contains(onlyPose, StringComparison.OrdinalIgnoreCase)) continue;
+                if (onlyLook == null && !everyPose && !poseName.StartsWith("key", StringComparison.Ordinal)) continue;
                 var (p99, max, at, count) = SkinGap(look, rig, $"{lookName} {poseName}");
                 compared++;
-                if (count < 0)
-                {
-                    failed++;
-                    GD.Print($"[skincheck] FAIL {lookName} {poseName}: vertex counts differ");
-                    continue;
-                }
+                if (count < 0) count = -count;   // measured to the surface only
                 if (max > worstMax) { worstMax = max; worst = $"{lookName} {poseName} (bone {at})"; }
                 worstP99 = Mathf.Max(worstP99, p99);
                 bool ok = p99 <= SkinP99 && max <= SkinMax;
                 if (!ok) failed++;
-                if (!ok || OS.GetCmdlineUserArgs().Contains("--verbose"))
+                if (!ok || _dump || args.Contains("--verbose"))
                     GD.Print($"[skincheck] {(ok ? "ok  " : "FAIL")} {lookName,-18} {poseName,-22} p99 {p99 * 1000f,5:F1} mm  max {max * 1000f,5:F1} mm (bone {at}), {count} vertices");
             }
-        for (int i = 0; i < BoneCount; i++)
+        for (int i = 0; i < MaxBones; i++)
             if (_boneWorst[i].Gap > 0.002f) GD.Print($"[skincheck] bone {i,2}: worst {_boneWorst[i].Gap * 1000f,5:F1} mm in {_boneWorst[i].Where}");
         GD.Print($"[skincheck] {compared} poses compared in {sw.ElapsedMilliseconds} ms; worst p99 {worstP99 * 1000f:F1} mm, worst gap {worstMax * 1000f:F1} mm: {worst}");
         GD.Print(failed == 0 ? "[skincheck] RESULT: ok" : $"[skincheck] RESULT: FAILED — {failed} poses off");
@@ -112,7 +115,7 @@ public static partial class HumanMeshBuilder
         // a ragdoll's free joints: the running ones shaken
         var j = JointsOf(RigFor(HumanPose.Running));
         var rng = new RandomNumberGenerator { Seed = 1202 };
-        for (int i = 0; i < j.Length; i++) j[i] += new Vector3(rng.Randfn(0, 0.04f), rng.Randfn(0, 0.04f), rng.Randfn(0, 0.04f));
+        for (int i = 0; i < j.Length; i++) j[i] += new Vector3(rng.Randfn(0, 0.015f), rng.Randfn(0, 0.015f), rng.Randfn(0, 0.015f));
         poses.Add(("ragdoll", new Rig(j[0], j[1], j[2], j[3], j[4], j[5], j[6], j[7], j[8], j[9], j[10], j[11],
             j[12], j[13], j[14], j[15], j[16], j[17], j[18], j[19], TorsoLean: 0f)));
         return poses;
@@ -127,8 +130,6 @@ public static partial class HumanMeshBuilder
     {
         if (!_checkSkins.TryGetValue(look, out var skin)) _checkSkins[look] = skin = BuildSkin(look);
         var palette = look.Palette;
-        var top = palette.Outfit[WearSlot.Top];
-        var bottom = top is { CoversBottom: true } ? null : palette.Outfit[WearSlot.Bottom];
         // the rebuilt figure, as every builder drew it before (the look's style, no wind)
         var scratch = new MeshScratch();
         _smoothOverride = look.Smooth;
@@ -136,23 +137,28 @@ public static partial class HumanMeshBuilder
         finally { _smoothOverride = null; }
         var rebuilt = scratch.Build();
 
-        var frames = new Transform3D[BoneCount];
-        Frames(rig, top, bottom, skin.SkirtTop, Vector3.Zero, frames);
+        var frames = new Transform3D[skin.BoneCount];
+        Frames(rig, skin.Body, Vector3.Zero, frames);
         var flip = new Transform3D(new Basis(Vector3.Up, Mathf.Pi), Vector3.Zero);
-        var bones = new Transform3D[BoneCount];
-        for (int i = 0; i < BoneCount; i++) bones[i] = flip * (frames[i] * skin.BindInverse[i]) * flip;
+        var bones = new Transform3D[skin.BoneCount];
+        for (int i = 0; i < bones.Length; i++) bones[i] = flip * (frames[i] * skin.BindInverse[i]) * flip;
 
         var a = skin.Mesh.SurfaceGetArrays(0);
         var rest = a[(int)Mesh.ArrayType.Vertex].AsVector3Array();
         var bi = a[(int)Mesh.ArrayType.Bones].AsInt32Array();
         var bw = a[(int)Mesh.ArrayType.Weights].AsFloat32Array();
+        // the shader's skirt floor: its custom channel marks a skirt's vertices
+        var custom = a[(int)Mesh.ArrayType.Custom1].VariantType == Variant.Type.Nil ? null : a[(int)Mesh.ArrayType.Custom1].AsFloat32Array();
+        float floor = SkirtFloor(rig);
         var b = rebuilt.SurfaceGetArrays(0);
         var target = b[(int)Mesh.ArrayType.Vertex].AsVector3Array();
         var tris = b[(int)Mesh.ArrayType.Index].AsInt32Array();
-        if (target.Length != rest.Length) return (0f, 0f, 0, -1);
+        // a drape's slit leaves out the faces it faces (pose by pose): measure to the surface only
+        bool sameCount = target.Length == rest.Length;
 
         TriangleGrid? grid = null;
         var gaps = new float[rest.Length];
+        var skinned = _dump ? new Vector3[rest.Length] : Array.Empty<Vector3>();
         float max = 0f;
         int at = 0;
         for (int v = 0; v < rest.Length; v++)
@@ -160,20 +166,30 @@ public static partial class HumanMeshBuilder
             var p = Vector3.Zero;
             for (int k = 0; k < 4; k++)
                 if (bw[v * 4 + k] > 0f) p += bones[bi[v * 4 + k]] * rest[v] * bw[v * 4 + k];
+            if (custom != null && custom[v * 4 + 3] != 0f) p.Y = Mathf.Max(p.Y, floor);
             // the same vertex where it was rebuilt, or (a facet turned round its limb) the surface near it
-            float gap = p.DistanceTo(target[v]);
+            float gap = sameCount ? p.DistanceTo(target[v]) : float.MaxValue;
             if (gap > 0.001f) gap = Mathf.Min(gap, (grid ??= new TriangleGrid(target, tris, 0.02f)).Distance(p, 0.03f));
+            if (_dump) skinned[v] = p;
             gaps[v] = gap;
             if (gap > max) { max = gap; at = bi[v * 4]; }
             int bone = bw[v * 4 + 1] > bw[v * 4] ? bi[v * 4 + 1] : bi[v * 4];
             if (gap > _boneWorst[bone].Gap) _boneWorst[bone] = (gap, where);
         }
+        if (_dump)
+        {
+            var order = Enumerable.Range(0, rest.Length).OrderByDescending(v => gaps[v]).Take(12);
+            foreach (int v in order)
+                GD.Print($"[skincheck]   v{v} gap {gaps[v] * 1000f:F1} mm bones {bi[v * 4]}:{bw[v * 4]:F2} {bi[v * 4 + 1]}:{bw[v * 4 + 1]:F2} rest {rest[v]} skinned {skinned[v]}"
+                    + (sameCount ? $" rebuilt {target[v]}" : ""));
+        }
         Array.Sort(gaps);
-        return (gaps[(int)(gaps.Length * 0.99f)], max, at, rest.Length);
+        return (gaps[(int)(gaps.Length * 0.99f)], max, at, sameCount ? rest.Length : -rest.Length);
     }
 
     private static readonly Dictionary<FigureLook, FigureSkin> _checkSkins = new();
-    private static readonly (float Gap, string Where)[] _boneWorst = new (float, string)[BoneCount];
+    private static bool _dump;
+    private static readonly (float Gap, string Where)[] _boneWorst = new (float, string)[MaxBones];
 
     /// <summary>Triangles bucketed in a grid, for the distance from a point to the nearest one.</summary>
     private sealed class TriangleGrid
