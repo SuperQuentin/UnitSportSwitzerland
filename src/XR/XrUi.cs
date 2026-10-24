@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using UnitSport.Ui;
 using UnitSport.Core;
@@ -191,6 +192,15 @@ public partial class XrUi : Node3D
         // the popups (a drop-down's list, a menu) on the panel too, under the cursor
         _popupLayer = new CanvasLayer { Name = "XrPopups", Layer = 127, CustomViewport = _view };
         AddChild(_popupLayer);
+        // "--xrpopup [s]": that long in, the first drop-down on screen opens, for a headset shot of its list
+        if (CmdArgs.Has("--xrpopup"))
+            GetTree().CreateTimer(CmdArgs.Double("--xrpopup") ?? 6).Timeout += () =>
+            {
+                var drop = root.FindChildren("*", nameof(OptionButton), true, false).OfType<OptionButton>().FirstOrDefault(o => o.IsVisibleInTree());
+                drop?.ShowPopup();
+                var popup = drop?.GetPopup();
+                GD.Print($"[xr] popup {(drop == null ? "none on screen" : $"{drop.Name}: embedded {popup!.IsEmbedded()}, at {popup.Position} {popup.Size}, visible {popup.Visible}, tracked {_popups.Any(p => p.Window == popup)} of {_popups.Count}")}");
+            };
 
         foreach (var node in AllNodes(root)) Redirect(node);
         GetTree().NodeAdded += Redirect;
@@ -214,7 +224,8 @@ public partial class XrUi : Node3D
     private static IEnumerable<Node> AllNodes(Node n)
     {
         yield return n;
-        foreach (var c in n.GetChildren())
+        // internal children too: a drop-down's list is one of its button's
+        foreach (var c in n.GetChildren(includeInternal: true))
             foreach (var d in AllNodes(c)) yield return d;
     }
 
