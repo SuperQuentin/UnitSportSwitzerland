@@ -194,14 +194,6 @@ public static class BoatMeshBuilder
         return m.Build();
     }
 
-    /// <summary>The driver at the wheel turned <paramref name="wheelTurn"/> rad (author space, about the wheel's axis).</summary>
-    public static ArrayMesh RunaboutDriver(HumanPalette palette, float wheelTurn = 0f)
-    {
-        var m = new MeshScratch();
-        HumanMeshBuilder.AppendDriver(m, palette, RunaboutSeat, wheelTurn, RunaboutThrottle, 0f);
-        return m.Build();
-    }
-
     /// <summary>The runabout's helm seat (author space): the wheel, and the floor the feet rest on.</summary>
     public static readonly DriverSeat RunaboutSeat = new(HelmHip, SeatRecline, Wheel.Hub, Wheel.Axis, 0.17f,
         Throttle: new Vector3(HelmHip.X - 0.1f, CockpitFloor + 0.04f, HelmHip.Z + 0.62f),

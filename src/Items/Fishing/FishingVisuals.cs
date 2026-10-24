@@ -34,6 +34,7 @@ public partial class FishingVisuals : Node3D
     private readonly List<long> _gone = new();
     private ItemEvents _events = null!;
     private ImmediateMesh _mesh = null!;
+    private bool _drawn;
     /// <summary>This machine's own angler, as its events name it (1 offline, the unique id online).</summary>
     private long _localPeer = long.MinValue;
 
@@ -141,8 +142,14 @@ public partial class FishingVisuals : Node3D
 
     public override void _Process(double delta)
     {
+        // nothing out, nothing drawn: the mesh is left alone, not cleared every frame (#1202)
+        if (_lines.Count == 0 || _events.Origin is not { } origin)
+        {
+            if (_drawn) _mesh.ClearSurfaces();
+            _drawn = false;
+            return;
+        }
         _mesh.ClearSurfaces();
-        if (_lines.Count == 0 || _events.Origin is not { } origin) return;
         double t = Time.GetTicksMsec() / 1000.0;
         bool begun = false;
         foreach (var (peer, line) in _lines)
@@ -181,6 +188,7 @@ public partial class FishingVisuals : Node3D
             }
         }
         if (begun) _mesh.SurfaceEnd();
+        _drawn = begun;
         foreach (long peer in _gone)
             if (_lines.Remove(peer, out var line)) line.Bobber.QueueFree();
         _gone.Clear();

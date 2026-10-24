@@ -196,6 +196,18 @@ public static class GadgetMeshes
         s.Box(A(foot.X, foot.Y + Gadgets.PostHeight - 0.1f, foot.Z), new Vector3(0.2f, 0.12f, 0.2f), Steel);
     }
 
+    /// <summary>One post and its pulley, foot at the origin: the placing ghost draws it twice and stretches its cable between (#1202).</summary>
+    public static ArrayMesh ZipPost()
+    {
+        if (Cache.TryGetValue("zippost", out var cached)) return cached;
+        var s = new MeshScratch();
+        Post(s, Vector3.Zero);
+        return Cache["zippost"] = s.Build();
+    }
+
+    /// <summary>The height of a zipline's cable at a post, over the post's foot.</summary>
+    public static float CableHeight => Gadgets.PostHeight - 0.05f;
+
     /// <summary>Both posts and the cable between their tops; <paramref name="high"/> is the high post's foot in the low post's frame.</summary>
     public static ArrayMesh Zipline(Vector3 high)
     {

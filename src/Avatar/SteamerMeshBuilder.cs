@@ -758,14 +758,6 @@ public static class SteamerMeshBuilder
         return m.Build();
     }
 
-    /// <summary>The helmsman on the stool at the wheel, author space.</summary>
-    public static ArrayMesh Helmsman(HumanPalette palette, float wheelTurn)
-    {
-        var m = new MeshScratch();
-        HumanMeshBuilder.AppendDriver(m, palette, HelmSeat, wheelTurn, 0f, 0f);
-        return m.Build();
-    }
-
     /// <summary>The helmsman's stool at the wheel (author space), the feet on its ring: the rig poses the figure from it.</summary>
     public static readonly DriverSeat HelmSeat = new(HelmHip, 0.05f, HelmWheel, Vector3.Forward, HelmRadius - 0.05f,
         Throttle: new Vector3(HelmHip.X - 0.12f, UpperY + 0.32f, HelmHip.Z + 0.22f),

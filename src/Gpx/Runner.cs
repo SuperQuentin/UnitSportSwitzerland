@@ -31,7 +31,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
 
     private WorldOrigin _origin = null!;
     private ChunkManager _chunks = null!;
-    private MeshInstance3D? _body;
+    private UnitSport.Avatar.SkinnedFigure? _body;
     private UnitSport.Avatar.Cyclist? _cyclist;
     private UnitSport.Avatar.CarRig? _car;
     /// <summary>The replayed car's steering ratio: its wheel turns with the front wheels.</summary>
@@ -85,7 +85,6 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
     private UnitSport.Avatar.HumanPalette _palette = null!;
     private float _stridePhase;
     // the runner's one mesh, rebuilt in place only when speed (cm/s) or phase changes (#221)
-    private readonly ArrayMesh _bodyMesh = new();
     private (float Speed, float Phase) _poseKey = (float.NaN, 0f);
     private Vector3 _smoothPos;
 
@@ -202,16 +201,13 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
         {
             // A running figure, jerseyed in the runner's own tint so the leaderboard colour and
             // the avatar agree. One mesh, one material, one draw call — a race can have a dozen
-            // of these on screen and each is a few hundred triangles. The mesh is rebuilt each
-            // frame from the gait, which is the same cost again and buys legs that actually run.
+            // of these on screen and each is a few hundred triangles. The figure is posed each
+            // frame from the gait by its bones (#1202), which buys legs that actually run.
             // a figure of its own from the tint, so a field of ghosts is not one person cloned (#394)
             _palette = (UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint, Helmet = Tint }).With(UnitSport.Avatar.Appearance.ForSeed((int)Tint.ToRgba32()));
-            _body = new MeshInstance3D
-            {
-                Name = "Body",
-                Mesh = UnitSport.Avatar.HumanMeshBuilder.BuildStride(_palette, 0f, 0f),
-                MaterialOverride = UnitSport.Avatar.HumanMeshBuilder.FigureMaterial(),
-            };
+            _body = new UnitSport.Avatar.SkinnedFigure { Name = "Body", MaterialOverride = UnitSport.Avatar.HumanMeshBuilder.FigureMaterial() };
+            _body.Show(new UnitSport.Avatar.FigureLook(_palette));
+            UnitSport.Avatar.HumanMeshBuilder.PoseStride(_body, 0f, 0f);
             Avatar.AddChild(_body);
         }
 
@@ -348,8 +344,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
             if (key != _poseKey)
             {
                 _poseKey = key;
-                _body!.Mesh = UnitSport.Avatar.HumanMeshBuilder.BuildStride(
-                    _palette, (float)Speed, _stridePhase, into: _bodyMesh);
+                UnitSport.Avatar.HumanMeshBuilder.PoseStride(_body!, (float)Speed, _stridePhase);
             }
         }
 
