@@ -702,18 +702,25 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // turning on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
         // while perched or walking (PigeonSnap says no in the air)
         bool onFoot = player != null && player.Ride == RideKind.OnFoot && player.RidingWith == 0;
+        // the spectator turns as on foot: its heading is the rig's held one, the camera's own is not followed (#1112)
+        bool spectating = player == null && Anchor is SpectatorCamera;
         int snapDegrees = Core.GameSettings.Current.VrSnapDegrees;
         // the wrist ring open (#1097): the right stick aims its wedges, it does not turn
         bool turning = !_ui.Pointing && !_ring.IsOpen;
-        if (onFoot && snapDegrees == 0 && turning)
+        if ((onFoot || spectating) && snapDegrees == 0 && turning)
         {
             // smooth, past a small deadzone (#439)
-            if (Mathf.Abs(stick.X) > 0.2f) player!.LookYaw -= stick.X * SmoothTurnRate * dt;
+            if (Mathf.Abs(stick.X) > 0.2f)
+            {
+                if (spectating) _heldYaw -= stick.X * SmoothTurnRate * dt;
+                else player!.LookYaw -= stick.X * SmoothTurnRate * dt;
+            }
         }
-        else if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && turning)
+        else if ((onFoot || spectating || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && turning)
         {
             float turn = -Mathf.Sign(stick.X) * Mathf.DegToRad(snapDegrees == 0 ? 30 : snapDegrees);
-            if (onFoot) player!.LookYaw += turn;
+            if (spectating) _heldYaw += turn;
+            else if (onFoot) player!.LookYaw += turn;
             else player!.PigeonSnap(turn);
             _snapArmed = false;
         }
