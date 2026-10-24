@@ -55,6 +55,11 @@ public static class SkinTheme
             b.Skew = new Vector2(s.Shape.Skew, 0);
             b.ContentMarginLeft += 6;
             b.ContentMarginRight += 6;
+            // the lean pushes the bottom-left and top-right corners out of the control by skew x half its height; drawn
+            // inset by that much (for a usual 44 px control), so no parent that clips (a scroll page) cuts a corner off
+            float lean = Mathf.Ceil(s.Shape.Skew * 22);
+            b.ExpandMarginLeft = -lean;
+            b.ExpandMarginRight = -lean;
         }
         // the default 1 px anti-aliasing shows the fill as a halo outside a thick outline at the corners
         b.AntiAliasingSize = 0.5f;

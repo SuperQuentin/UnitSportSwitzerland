@@ -93,12 +93,15 @@ public static class AccountPage
 
         var note = UiKit.Text(message, UiTheme.FontSmall, UiTheme.Amber, wrap: true);
         note.Visible = message.Length > 0;
-        var go = UiKit.Button(creating ? "Create account" : "Sign in", primary: true, minWidth: 180);
-        var actions = UiKit.HBox(12);
-        actions.AddChild(note);
-        note.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        actions.AddChild(go);
-        into.AddChild(actions);
+        // as wide as the fields above it, the note under it
+        var go = UiKit.Button(creating ? "Create account" : "Sign in", primary: true);
+        go.CustomMinimumSize = new Vector2(UiKit.FormFieldWidth, 44);
+        go.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        into.AddChild(UiKit.Spacer(4));
+        into.AddChild(go);
+        note.CustomMinimumSize = new Vector2(UiKit.FormFieldWidth, 0);
+        note.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        into.AddChild(note);
 
         async void Go()
         {
