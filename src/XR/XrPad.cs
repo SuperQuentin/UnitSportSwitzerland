@@ -71,8 +71,9 @@ internal sealed class XrPad
     }
 
     /// <param name="calibrated">The head in the anchor's frame, for walking where you look.</param>
-    /// <param name="uiActive">The right hand is pointing at the UI panel: its trigger is a click, not a pull.</param>
-    public void Update(FootPlayer? player, Transform3D calibrated, bool uiActive, float dt)
+    /// <param name="uiActive">A hand is pointing at the UI panel: its trigger is a click, not a pull.</param>
+    /// <param name="uiLeft">That hand is the left one (the right otherwise).</param>
+    public void Update(FootPlayer? player, Transform3D calibrated, bool uiActive, bool uiLeft, float dt)
     {
         // pulses (a tap of R3, a long menu press) go up the frame after they went down, so the
         // action is seen pressed for at least one frame
@@ -103,7 +104,7 @@ internal sealed class XrPad
         Axis(JoyAxis.LeftY, -stick.Y);
 
         // --- triggers and grips ---
-        float lt = _left.GetFloat(XrPad.Inputs.Trigger), rt = uiActive ? 0f : _right.GetFloat(XrPad.Inputs.Trigger);
+        float lt = uiActive && uiLeft ? 0f : _left.GetFloat(XrPad.Inputs.Trigger), rt = uiActive && !uiLeft ? 0f : _right.GetFloat(XrPad.Inputs.Trigger);
         float lg = LeftGripBusy ? 0f : _left.GetFloat(XrPad.Inputs.Grip), rg = RightGripBusy ? 0f : _right.GetFloat(XrPad.Inputs.Grip);
         if (shoulders)
         {

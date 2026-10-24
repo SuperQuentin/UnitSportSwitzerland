@@ -225,7 +225,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // the headset's own recentre (holding the Meta button) moves the tracking space: ours and the panel follow
         if (XRServer.FindInterface("OpenXR") is OpenXRInterface recentring) recentring.PoseRecentered += Recentre;
         _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
-        _ui = new XrUi(_camera, _right);
+        _ui = new XrUi(_camera, _right, _left);
         AddChild(_ui);
         _wrist = new XrWristMenu(this);
         AddChild(_wrist);
@@ -413,7 +413,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         if (_ringShot is int lit) _ring.ShowForShot(_camera.GlobalTransform, lit);
         else _ring.Update(_camera.GlobalTransform, _watch.GlobalTransform, _watch.Visible, _leftHanded ? _left : _right, player, InWorld && !Ui.LoadingScreen.Active, dt);   // no wheel over a load
         _pad.SuppressRight = _ring.IsOpen;
-        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing || _ring.HoldsTrigger, dt);
+        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing || _ring.HoldsTrigger, uiLeft: _ui.Pointing && _ui.PointsLeft, dt);
         UpdateHandAim();
         ShareHands(player);
         _ui.UpdatePanel(dt);

@@ -39,7 +39,10 @@ public partial class XrUi : Node3D
     private static readonly HashSet<string> Hidden = new() { "FeelScreen", "LensLayer" };
 
     private readonly XRCamera3D _head;
-    private readonly XRController3D _hand;
+    /// <summary>The hand with the pointer: the right one first, then whichever trigger was last pressed.</summary>
+    private XRController3D _hand;
+    private readonly XRController3D _right, _left;
+    private bool _otherPressed = true;
     private SubViewport _view = null!, _mask = null!;
     /// <summary>
     /// Where the panel is (and, without a composition layer, the panel itself). With a headset the
@@ -62,13 +65,17 @@ public partial class XrUi : Node3D
     private bool _clickWas;
     private Vector2 _lastPoint;
 
-    /// <summary>The right hand is on the panel while the mouse is free (a menu is open).</summary>
+    /// <summary>A hand is on the panel while the mouse is free (a menu is open).</summary>
     public bool Pointing { get; private set; }
 
-    public XrUi(XRCamera3D head, XRController3D hand)
+    /// <summary>The pointer is on the left hand.</summary>
+    public bool PointsLeft => _hand == _left;
+
+    public XrUi(XRCamera3D head, XRController3D right, XRController3D left)
     {
         _head = head;
-        _hand = hand;
+        _hand = _right = right;
+        _left = left;
     }
 
     public override void _Ready()
@@ -384,7 +391,18 @@ public partial class XrUi : Node3D
         _dot.Visible = false;
         if (_cursor != null) _cursor.Visible = false;
         // the loading screen is a menu (its Cancel) though the game has already captured the mouse
-        if (MouseCapture.Mode == Input.MouseModeEnum.Captured && !Ui.LoadingScreen.Active || !Aim(out var window))
+        bool menu = MouseCapture.Mode != Input.MouseModeEnum.Captured || Ui.LoadingScreen.Active;
+        // the other hand's trigger, starting to press, takes the pointer over (#1112); a click held comes up first
+        var other = _hand == _right ? _left : _right;
+        bool otherPressed = other.GetFloat(XrPad.Inputs.Trigger) > 0.2f;
+        if (menu && otherPressed && !_otherPressed && other.GetHasTrackingData())
+        {
+            if (_clickWas) Click(false, _lastPoint);
+            _hand = other;
+            otherPressed = _hand == _right ? _left.GetFloat(XrPad.Inputs.Trigger) > 0.2f : _right.GetFloat(XrPad.Inputs.Trigger) > 0.2f;
+        }
+        _otherPressed = otherPressed;
+        if (!menu || !Aim(out var window))
         {
             // a click held as the hand left the panel (or the menu closed) still has to come up
             if (_clickWas) Click(false, _lastPoint);
