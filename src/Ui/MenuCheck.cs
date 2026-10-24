@@ -37,6 +37,8 @@ public partial class MenuCheck : Node
         (Esc, Top<TitleScreen>, 1, "Esc from settings goes back to the title"),
         (() => _shell.Push(CharacterScreen.Create()), Top<CharacterScreen>, 1, "character opens from the title"),
         (Esc, Top<TitleScreen>, 1, "Esc from character goes back to the title"),
+        (() => (_shell.Top!.FindChild("AccountButton", true, false) as Button)?.EmitSignal(BaseButton.SignalName.Pressed), Top<AccountScreen>, 1, "the account button opens the Account page (#1209)"),
+        (Esc, Top<TitleScreen>, 1, "Esc from the Account page goes back to the title"),
         (() => _shell.Push(SoloScreen.Create()), Top<SoloScreen>, 1, "play solo opens"),
         (() => Pad(JoyButton.B), Top<TitleScreen>, 1, "pad B goes back"),
         (() => _shell.Launch(new WorldLaunch { Mode = GameMode.Explore }), () => _shell.InWorld, 120, "Explore loads behind the loading screen"),

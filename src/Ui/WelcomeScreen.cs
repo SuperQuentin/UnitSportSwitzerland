@@ -121,7 +121,7 @@ public partial class WelcomeScreen : Screen
                 break;
             default:
                 rows.AddChild(UiKit.Text("Offline needs nothing: solo and most servers work without an account. Online signs you in for the "
-                    + "servers that require one, and keeps your name and scores across them. Later: Settings › Account.",
+                    + "servers that require one, and keeps your name and scores across them. Later: the account button at the top right of the title screen.",
                     UiTheme.FontBody, UiTheme.TextDim, wrap: true));
                 rows.AddChild(UiKit.Spacer(8));
                 AccountPage.Fill(rows);

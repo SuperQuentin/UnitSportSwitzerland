@@ -32,6 +32,9 @@ public abstract partial class Screen : Control
     /// The usual frame of a sub-page: a centred glass panel with a back arrow and a title. Returns
     /// the body to fill and the header row (for extra controls on the right).
     /// </summary>
+    /// <summary>The least room left around a framed page's panel, px of the menus' canvas.</summary>
+    private const float FrameMargin = 20;
+
     protected (VBoxContainer Body, HBoxContainer Header) Framed(string title, string? subtitle, Vector2 size)
     {
         var centre = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
@@ -40,6 +43,16 @@ public abstract partial class Screen : Control
 
         var panel = new PanelContainer { CustomMinimumSize = size, ThemeTypeVariation = Skins.SkinTheme.Page };
         centre.AddChild(panel);
+        // never taller or wider than the menus' canvas (1152 x 648 before stretching), with a margin: a page asks for its
+        // size and gets what fits; its body scrolls (#1209: the Account page ran off the top and bottom of the screen)
+        void Fit()
+        {
+            if (!IsInsideTree()) return;
+            var room = GetViewportRect().Size - new Vector2(2 * FrameMargin, 2 * FrameMargin);
+            panel.CustomMinimumSize = new Vector2(Mathf.Min(size.X, room.X), Mathf.Min(size.Y, room.Y));
+        }
+        Ready += Fit;
+        Resized += Fit;
 
         var column = UiKit.VBox(14);
         panel.AddChild(column);

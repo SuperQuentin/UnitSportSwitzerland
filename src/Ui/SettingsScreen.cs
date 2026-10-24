@@ -146,7 +146,6 @@ public partial class SettingsScreen : Screen
                 "The first-launch pages: your name, your figure, your account");
         });
 
-        Tab("Account", AccountPage.Fill);
 
         Tab("Vehicles", rows =>
         {
