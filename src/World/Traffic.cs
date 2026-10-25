@@ -794,7 +794,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         FollowTransition(car);
         // a car just spawned starts on the lane it would be in (#818 phase 5: else one spawned close to a junction reaches its path
         // off its lane); after that it eases
-        if (!car.Placed) (car.Lane, car.Placed) = (car.LaneWanted, true);
+        bool first = !car.Placed;
+        if (first) (car.Lane, car.Placed) = (car.LaneWanted, true);
         target = Mathf.Min(target, lights);
         target = Mathf.Min(target, LitLimit(car, edge));
         // a turn that gives way on its green: in to the conflict point, and wait there for a gap (#1046)
@@ -1010,6 +1011,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float lane = car.Lane;
         car.Place(e => KeepRight(e, car.Route.Forward, car.Habit) + pull + lane);
         car.Vel = dt > 0f ? MathX.Flat(car.Head - before) / dt : Vector3.Zero;
+        if (first && car.FromEndpoint) CheckStart(car);
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
         for (int k = 0; k < PathSteps; k++) car.Path[k] = car.Route.At(-car.Speed * 0.5f * (k + 1)).Pos;
     }
@@ -1146,9 +1148,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// red and yellow, it stops half a metre short of its lane's stop line; yellow, it stops if it
     /// can at <see cref="AmberBrake"/>, else goes; green, it goes, unless it turns left across
     /// oncoming traffic from a shared lane, or there is no room for it past the junction. +∞ when
-    /// nothing holds it.
+    /// nothing holds it. With <paramref name="laneOnly"/> only its lane (<see cref="StartLine"/>: no lights read, nothing counted).
     /// </summary>
-    private float Approach(Vehicle car)
+    private float Approach(Vehicle car, bool laneOnly = false)
     {
         car.AtRed = car.RoomHeld = false;
         // the next approach on its route within reach: it may be a short edge after another (a
@@ -1244,6 +1246,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (HasLane(car.Route.Edge, car.Route.Forward, KeepRight(car.Route.Edge, car.Route.Forward, car.Habit) + car.LaneAim))
                 car.LaneWanted = car.LaneAim;
         }
+        if (laneOnly) return float.MaxValue;
         bool crossed = before > 0f && before < float.MaxValue && toLine <= 0f;
         bool pocketLeft = car.Turn == SignalMoves.Left && car.LaneIndex >= 0 && approach.Parent[car.LaneIndex] >= 0
             && approach.Lanes[car.LaneIndex].Moves == SignalMoves.Left;
@@ -1492,6 +1495,36 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     public float OverlapLongest { get; private set; }
     public const float OverlapFails = 15f;
+
+    /// <summary>
+    /// Generated cars that started, where their lane put them, too fast to stop behind a car ahead in it even braking hard (#1195: the
+    /// probe fails on any; they stop on its last car).
+    /// </summary>
+    public int HotStarts { get; private set; }
+
+    /// <summary>A generated car on its first step, placed on its lane (#1195): whether it can still stop behind the car ahead on its way.</summary>
+    private void CheckStart(Vehicle car)
+    {
+        var (_, dir) = car.Route.At(0);
+        var right = new Vector3(-dir.Z, 0f, dir.X).Normalized();
+        foreach (var other in _cars)
+        {
+            if (other == car) continue;
+            var d = other.Head - car.Head;
+            float along = d.Dot(dir);
+            if (along <= 0f || along > FollowLook || Mathf.Abs(d.Y) > 3f || other.Route.At(0).Dir.Dot(dir) < 0.3f) continue;
+            // in its way as StepCar follows: by its line now, or on its route's line where its lane takes it (a strip opening)
+            if (Mathf.Abs(d.Dot(right)) > AheadWidth && !OnLineAhead(car, other.Head, d.Length())) continue;
+            // bodies touch at a car's length apart; it brakes at 6 m/s²
+            if (car.Speed * car.Speed <= other.Speed * other.Speed + 2f * 6f * Mathf.Max(0f, along - 2f * CarFront)) continue;
+            if (++HotStarts <= 5)
+            {
+                var (e, n) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] a car started too fast behind one in its lane (#1195) at {e:F0},{n:F0}: v {car.Speed:F1}, {along:F1} m behind one at {other.Speed:F1}, lane {car.Lane:F2} strip {car.Strip}, t {Core.GameClock.Now:F1}");
+            }
+            return;
+        }
+    }
 
     /// <summary>Lane changes begun, and those that crossed more than one lane at once (#1134: must stay 0).</summary>
     public int LaneChanges { get; private set; }
@@ -1952,6 +1985,20 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     }
 
     /// <summary>
+    /// Where a car starting on <paramref name="route"/> will stand on its first step (#1195), m right of the road's line: its usual line,
+    /// or the lane its approach or the transition's strip puts it on at once (<c>Placed</c>: a car just spawned starts on the lane it would
+    /// be in). Read through a car with no body (lanes only: no lights read, nothing counted); its plan stays on the route.
+    /// </summary>
+    private float StartLine(Route route, uint habit, List<(LaneEdge, bool)>? planned)
+    {
+        var car = new Vehicle(route, 0f, Array.Empty<float>(), Array.Empty<Node3D>()) { Habit = habit, Planned = planned };
+        route.Plan(ApproachLookAhead + 20f, leg => NextRoad(leg, car));
+        Approach(car, laneOnly: true);
+        FollowTransition(car, count: false);
+        return KeepRight(route.Edge, route.Forward, habit) + car.LaneWanted;
+    }
+
+    /// <summary>
     /// Whether <paramref name="at"/> lies on this car's way <paramref name="ahead"/> m on (#1172): its route's line at that distance (round
     /// a bend, along a junction path), and across it anywhere from where the car drives now to the lane it will be in there
     /// (<see cref="LineAhead"/>), with <see cref="AheadWidth"/> either side: its lane lags the one it wants, so it may still be anywhere
@@ -2011,7 +2058,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// starts from at the mouth (carried back over the transition's pieces before it), or the one the path behind ended on;
     /// while it opens or closes, between it and the lane it branches from or merges into. Overrides the lane record and the lead-in there.
     /// </summary>
-    private void FollowTransition(Vehicle car)
+    private void FollowTransition(Vehicle car, bool count = true)
     {
         var (edge, forward) = (car.Route.Edge, car.Route.Forward);
         if (edge.Transition is null || edge.Path is not null) { car.Strip = -1; return; }
@@ -2023,7 +2070,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             {
                 var (mouth, mouthForward) = legs[i - 1];
                 int strip = mouth.StripAt(mouthForward, atTravelEnd: true, path.FromOffset);
-                if (strip >= 0 && car.Strip < 0) TransitionFollows++;
+                if (strip >= 0 && car.Strip < 0 && count) TransitionFollows++;
                 car.Strip = strip;
                 break;
             }

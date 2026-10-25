@@ -58,7 +58,7 @@ public partial class ActivitiesScreen : Screen
             b.AddThemeStyleboxOverride("normal", normal);
             b.AddThemeStyleboxOverride("pressed", on);
             b.AddThemeStyleboxOverride("hover_pressed", on);
-            b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+            UiKit.DimFont(b);
             b.AddThemeColorOverride("font_pressed_color", UiTheme.Amber);
             b.AddThemeColorOverride("font_hover_pressed_color", UiTheme.Amber);
             var tab = (Tab)_tabs.Count;

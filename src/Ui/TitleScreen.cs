@@ -17,6 +17,7 @@ public partial class TitleScreen : Screen
     private Button _first = null!;
     private UpdatePrompt? _update;
     private Button _updateEntry = null!;
+    private Container? _entries;
 
     public static TitleScreen Create() => new() { Name = "Title" };
 
@@ -24,28 +25,29 @@ public partial class TitleScreen : Screen
     {
         AddChild(SideShade(0.92f, 0.62f));
 
-        var column = UiKit.VBox(6);
+        var skin = Skins.MenuSkin.Current;
+        bool slanted = skin.Shape.Skew > 0;
+        var column = UiKit.VBox(slanted ? 5 : 6);
         column.SetAnchorsPreset(LayoutPreset.LeftWide);
         // centred above the footer, so a shown "Update to" entry does not push Quit onto it
         column.OffsetLeft = 72; column.OffsetRight = 72 + 380; column.OffsetTop = 0; column.OffsetBottom = -50;
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
-        var name = UiKit.Text("UnitSport", 58, Colors.White, bold: true);
-        name.AddThemeConstantOverride("line_spacing", -8);
+        // the logo: the skin's display face (#1135), a condensed italic in capitals for Low-poly Sport
+        var name = UiKit.Text("UnitSport", slanted ? 72 : 58);
+        UiKit.Display(name);
+        name.AddThemeConstantOverride("line_spacing", -12);
         column.AddChild(name);
-        var country = UiKit.Text("SWITZERLAND", 16, UiTheme.Amber);
-        country.AddThemeFontOverride("font", new FontVariation { BaseFont = UiTheme.Bold, SpacingGlyph = 7 });
-        column.AddChild(country);
-
-        var occasion = OccasionLine();
-        column.AddChild(UiKit.Spacer(occasion != null ? 10 : 34));
-        if (occasion != null)
-        {
-            var o = UiKit.Text(occasion, UiTheme.FontSmall, new Color(0.98f, 0.58f, 0.22f));
-            column.AddChild(o);
-            column.AddChild(UiKit.Spacer(16));
-        }
+        var countryRow = UiKit.HBox(14);
+        var country = UiKit.Text("SWITZERLAND", slanted ? 18 : 16, UiTheme.Amber);
+        country.AddThemeFontOverride("font", new FontVariation { BaseFont = UiTheme.Bold, SpacingGlyph = slanted ? 8 : 7 });
+        country.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        countryRow.AddChild(country);
+        // the skin's second accent as a slanted dash beside the name
+        if (slanted) countryRow.AddChild(Dash(Skins.MenuSkin.Role("accent2"), skin.Shape.Skew));
+        column.AddChild(countryRow);
+        column.AddChild(UiKit.Spacer(slanted ? 18 : 34));
 
         // hidden until the update check finds a newer release (#845); one press updates, no questions
         _updateEntry = Entry(column, "", PressUpdate);
@@ -55,6 +57,8 @@ public partial class TitleScreen : Screen
         Entry(column, "Multiplayer", () => Shell.Push(MultiplayerScreen.Create()));
         // The map of Switzerland: what terrain is downloaded, and how to get more (#515)
         Entry(column, "Map", () => Shell.Push(MapScreen.Create()));
+        // the figure editor (#1127), its own menu rather than a Settings tab
+        Entry(column, "Character", () => Shell.Push(CharacterScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         // VR (#186): a restart either way, after a confirmation
         if (Platform.CanSpawnProcesses) // a restart with OpenXR (#63)
@@ -63,16 +67,23 @@ public partial class TitleScreen : Screen
         Entry(column, "Controls", () => Shell.ShowControls());
         column.AddChild(UiKit.Spacer(8));
         Entry(column, "Quit", () => Shell.Quit(), dim: true);
+        _entries = column;
 
-        // footer: version and the way back to here
+        // the occasion of the day (Halloween, Christmas...): a card at the bottom right
+        if (OccasionLine() is { } occasion) AddChild(OccasionCard(occasion, slanted));
+
+        // footer: the keys on the left, the version on the right
         var foot = UiKit.HBox(18);
         foot.SetAnchorsPreset(LayoutPreset.BottomWide);
-        foot.OffsetLeft = 72; foot.OffsetBottom = -26; foot.OffsetTop = -50;
-        string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-        foot.AddChild(UiKit.Text(version.Length > 0 ? $"v{version}" : "development build", UiTheme.FontTiny, UiTheme.TextFaint));
+        foot.OffsetLeft = 72; foot.OffsetRight = -64; foot.OffsetBottom = -26; foot.OffsetTop = -50;
         if (!Platform.IsMobile) // keyboard hints, and the room Quit needs on a phone's shorter canvas (#63)
-            foot.AddChild(UiKit.Text(InputHints.Format("{help} all controls  ·  F11 fullscreen"), UiTheme.FontTiny, UiTheme.TextFaint));
+            foot.AddChild(UiKit.Text(InputHints.Format("{help} all controls  ·  F11 fullscreen"), UiTheme.FontSmall, UiTheme.TextDim));
+        string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+        foot.AddChild(UiKit.Text(version.Length > 0 ? $"v{version}" : "development build", UiTheme.FontSmall, UiTheme.TextFaint));
         AddChild(foot);
+
+        // the account (#1209): a button at the top right with the profile picture, to the Account page
+        AddChild(AccountButton());
 
         _jingle = new AudioStreamPlayer { Bus = Audio.SfxBus.Name, VolumeDb = -6 };
         AddChild(_jingle);
@@ -82,8 +93,64 @@ public partial class TitleScreen : Screen
         if (UpdatePrompt.Available is { } tag) ShowUpdate(tag);
     }
 
-    public override void _EnterTree() => UpdatePrompt.Found += ShowUpdate;
-    public override void _ExitTree() => UpdatePrompt.Found -= ShowUpdate;
+    public override void _EnterTree()
+    {
+        UpdatePrompt.Found += ShowUpdate;
+        Net.Accounts.Account.Changed += ShowAccount;
+    }
+
+    public override void _ExitTree()
+    {
+        UpdatePrompt.Found -= ShowUpdate;
+        Net.Accounts.Account.Changed -= ShowAccount;
+    }
+
+    private Button? _account;
+    private AvatarBadge? _badge;
+    private Label? _accountName, _accountState;
+
+    /// <summary>
+    /// The account button (#1209): the profile picture (the player's figure's face, or a silhouette signed out), the
+    /// account name or "Sign in", and the state under it. It opens the Account page.
+    /// </summary>
+    private Control AccountButton()
+    {
+        _account = UiKit.Button("");
+        _account.Name = "AccountButton";
+        _account.TooltipText = "Your account: sign in, create one, or play offline";
+        _account.CustomMinimumSize = new Vector2(250, 62);
+        _account.SetAnchorsPreset(LayoutPreset.TopRight);
+        _account.GrowHorizontal = GrowDirection.Begin;
+        _account.OffsetRight = -48; _account.OffsetTop = 36; _account.OffsetLeft = -48 - 250; _account.OffsetBottom = 36 + 62;
+        _account.Pressed += () => Shell.Push(AccountScreen.Create());
+
+        var row = UiKit.HBox(12);
+        row.MouseFilter = MouseFilterEnum.Ignore;
+        row.SetAnchorsPreset(LayoutPreset.FullRect);
+        row.OffsetLeft = 14; row.OffsetRight = -14;
+        _badge = new AvatarBadge(44);
+        row.AddChild(_badge);
+        var text = UiKit.VBox(0);
+        text.MouseFilter = MouseFilterEnum.Ignore;
+        text.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        _accountName = UiKit.Text("", UiTheme.FontBody + 2, bold: true);
+        _accountState = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim);
+        text.AddChild(_accountName);
+        text.AddChild(_accountState);
+        row.AddChild(text);
+        _account.AddChild(row);
+        ShowAccount();
+        return _account;
+    }
+
+    private void ShowAccount()
+    {
+        if (_account == null || !IsInstanceValid(_account)) return;
+        var a = Net.Accounts.Account.Current();
+        _badge!.Portrait = a.SignedIn;
+        _accountName!.Text = a.SignedIn ? a.Username : "Sign in";
+        _accountState!.Text = a.SignedIn ? "Online account" : a.Offline ? "Playing offline" : "Online, not signed in";
+    }
 
     private void ShowUpdate(string tag)
     {
@@ -100,8 +167,10 @@ public partial class TitleScreen : Screen
 
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
-        var b = UiKit.MenuButton(text, dim ? 17 : 22);
-        if (dim) b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        bool slanted = Skins.MenuSkin.Current.Shape.Skew > 0;
+        var b = UiKit.MenuButton(text, dim ? (slanted ? 19 : 17) : (slanted ? 23 : 22));
+        if (slanted) b.CustomMinimumSize = new Vector2(0, dim ? 36 : 42);
+        if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
         into.AddChild(b);
         return b;
@@ -110,6 +179,65 @@ public partial class TitleScreen : Screen
     public override void OnShown()
     {
         _first.CallDeferred(Control.MethodName.GrabFocus);
+        _badge?.Refresh();   // back from Character or Account: the new face and name
+        ShowAccount();
+        Callable.From(SlideIn).CallDeferred();
+    }
+
+    /// <summary>The entries slide in one after another (#1135), once laid out; none of it with Reduce motion.</summary>
+    private void SlideIn()
+    {
+        if (_entries == null || GameSettings.Current.ReduceMotion || Skins.MenuSkin.Current.Shape.Skew <= 0) return;
+        int i = 0;
+        foreach (var child in _entries.GetChildren())
+        {
+            if (child is not Button { Visible: true } b) continue;
+            var at = b.Position;
+            b.Position = at - new Vector2(16, 0);
+            b.Modulate = new Color(1, 1, 1, 0);
+            var tween = b.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+            tween.TweenProperty(b, "position", at, 0.32).SetDelay(i * 0.05);
+            tween.TweenProperty(b, "modulate:a", 1f, 0.32).SetDelay(i * 0.05);
+            i++;
+        }
+    }
+
+    /// <summary>A short slanted bar in <paramref name="color"/>: the skin's dash beside the logo.</summary>
+    private static Control Dash(Color color, float skew)
+    {
+        var box = new StyleBoxFlat { BgColor = color, Skew = new Vector2(skew * 2.5f, 0), AntiAliasing = true };
+        var p = new Panel { CustomMinimumSize = new Vector2(70, 6), SizeFlagsVertical = SizeFlags.ShrinkCenter, MouseFilter = MouseFilterEnum.Ignore };
+        p.AddThemeStyleboxOverride("panel", box);
+        return p;
+    }
+
+    /// <summary>The occasion running now, as a card at the bottom right ("Now on").</summary>
+    private static Control OccasionCard(string occasion, bool slanted)
+    {
+        var body = UiKit.VBox(2);
+        var head = UiKit.Text("NOW ON", UiTheme.FontSmall);
+        UiKit.Display(head);
+        head.AddThemeColorOverride("font_color", Skins.MenuSkin.Role("accent2"));
+        body.AddChild(head);
+        // "NOW ON" says it is running: the card names it only
+        body.AddChild(UiKit.Text(occasion.Replace(" is on", ""), UiTheme.FontBody, bold: true, wrap: true));
+        var card = UiKit.Card(body, margin: 16);
+        if (slanted)
+            card.Ready += () =>
+            {
+                if (card.GetThemeStylebox("panel").Duplicate() is StyleBoxFlat box)
+                {
+                    box.Skew = new Vector2(Skins.MenuSkin.Current.Shape.Skew * 0.5f, 0);
+                    box.ContentMarginLeft += 10; box.ContentMarginRight += 10;
+                    card.AddThemeStyleboxOverride("panel", box);
+                }
+            };
+        card.CustomMinimumSize = new Vector2(300, 0);
+        card.SetAnchorsPreset(LayoutPreset.BottomRight);
+        card.GrowHorizontal = GrowDirection.Begin;
+        card.GrowVertical = GrowDirection.Begin;
+        card.OffsetRight = -64; card.OffsetBottom = -96;
+        return card;
     }
 
     /// <summary>Nothing behind the title: Esc stays here.</summary>
@@ -118,13 +246,15 @@ public partial class TitleScreen : Screen
     /// <summary>A left-to-right shade so text stays readable over the 3D backdrop.</summary>
     internal static TextureRect SideShade(float left, float width)
     {
+        var Ground = Skins.MenuSkin.Role("ground");
         var shade = new TextureRect
         {
             Texture = new GradientTexture2D
             {
                 Gradient = new Gradient
                 {
-                    Colors = new[] { new Color(0.02f, 0.025f, 0.04f, left), new Color(0.02f, 0.025f, 0.04f, left * 0.6f), new Color(0.02f, 0.025f, 0.04f, 0) },
+                    // the skin's ground (#1135): cream under Alpine's ink, indigo under Night Arcade's
+                    Colors = new[] { new Color(Ground, left), new Color(Ground, left * 0.6f), new Color(Ground, 0) },
                     Offsets = new[] { 0f, 0.45f, 1f },
                 },
                 FillFrom = new Vector2(0, 0), FillTo = new Vector2(1, 0),

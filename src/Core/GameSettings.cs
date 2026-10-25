@@ -99,6 +99,17 @@ public sealed class GameSettings
     public bool Fog { get; set; }
 
     /// <summary>
+    /// The menus' look (#1135, <see cref="Ui.Skins.MenuSkin"/>): "auto" (the day skin by day, the night skin by night)
+    /// or a skin's id (a file in <c>assets/skins/</c> or <c>user://skins/</c>).
+    /// </summary>
+    public string MenuSkin { get; set; } = Ui.Skins.MenuSkin.SportId;
+    public string MenuSkinDay { get; set; } = Ui.Skins.MenuSkin.DayDefault;
+    public string MenuSkinNight { get; set; } = Ui.Skins.MenuSkin.NightDefault;
+
+    /// <summary>No hover tilts, pops or ambient animation in the menus (#1135): plain fades only.</summary>
+    public bool ReduceMotion { get; set; }
+
+    /// <summary>
     /// Generate the terrain there is no data for, blended into the real tiles beside it
     /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region; offline on a
     /// copy with no terrain it generates anyway, the only ground there is (#1002).
@@ -345,6 +356,13 @@ public sealed class GameSettings
     public string PlayerName { get; set; } = "";
 
     /// <summary>
+    /// The first-run welcome (#1131, <see cref="Ui.WelcomeScreen"/>) was finished or skipped. True by default, so a
+    /// settings file from before the welcome never shows it; <see cref="Load"/> sets it false when there is no file
+    /// yet (a fresh install), and the welcome saves false as it opens, so quitting half-way shows it again.
+    /// </summary>
+    public bool FirstRunDone { get; set; } = true;
+
+    /// <summary>
     /// The first-run tutorial (#517, <see cref="Tutorial"/>) was finished or skipped. Off until
     /// then; Settings › Gameplay turns it off again to replay it.
     /// </summary>
@@ -358,7 +376,7 @@ public sealed class GameSettings
 
     /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
-    /// Settings → Character (#806; till then the figure comes from the player's network id).
+    /// the Character menu (#806; till then the figure comes from the player's network id).
     /// Saved alone with <see cref="SaveOnly"/>; <c>ClientWorld.PublishAppearance</c> puts it on the player.
     /// </summary>
     public int AppearanceBits { get; set; }
@@ -483,6 +501,8 @@ public sealed class GameSettings
         // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
         if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
+        // a fresh install: the welcome (#1131) runs before the title
+        if (!Godot.FileAccess.FileExists(File)) loaded.FirstRunDone = false;
         try
         {
             if (Godot.FileAccess.FileExists(File))

@@ -57,11 +57,14 @@ public class ClockDisciplineTests
         ["src/Net/ClockSync.cs"] = "clock: LocalNow's fallback off --fixed-fps, and the server's Unix offset",
         ["src/Core/DebugMenu.cs"] = "clock: a speed change is scheduled at a server instant (SimClock.Schedule)",
         ["src/Phone/PhoneController.cs"] = "calendar: the phone's lock screen shows today's date, as a phone does",
+        ["src/Ui/Skins/MenuSkin.cs"] = "calendar: Auto picks the day or the night menu skin by the player's own clock on the title screen (#1135)",
         ["src/World/WorldClock.cs"] = "clock: Hour reads the sky at a server instant, through SimClock",
         ["src/Net/ChatManager.cs"] = "clock: /speed is scheduled at a server instant; plumbing: the rate limit on asking the server for player names",
 
         // ---- plumbing: real whatever the world is doing ----
         ["src/Net/Handshake.cs"] = "plumbing: the protocol handshake times out in real time",
+        ["src/Net/Accounts/AccountGate.cs"] = "plumbing: the account step times out in real time, as the handshake before it (#1123)",
+        ["src/Net/Accounts/Account.cs"] = "plumbing: a Nakama session token runs out at a Unix time (#1123)",
         ["src/Net/ServerStats.cs"] = "plumbing: the stats sampling window",
         ["src/Net/Swarm.cs"] = "plumbing: a load tool that measures frame times, so it wants the engine's own delta",
         ["src/Net/StatusFile.cs"] = "plumbing: Unix stamps a web page compares with its own clock",

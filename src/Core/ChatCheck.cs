@@ -34,6 +34,8 @@ public static class ChatCheck
         Expect(completer.Complete("/spawn ene").Any(s => s.Text == "/spawn EnergyBar"), "item prefix");
         Expect(completer.Complete("/spawn bar").Any(s => s.Text == "/spawn EnergyBar"), "item substring");
         Expect(completer.Complete("/spawn EnergyBar ").Count == 0, "no suggestions for the count");
+        ExpectTexts(completer, "/despawn ", ["/despawn vehicles", "/despawn items", "/despawn all"], "/despawn completes what");
+        ExpectTexts(completer, "/despawn items e", ["/despawn items everywhere"], "/despawn completes everywhere");
 
         // towns have spaces
         ExpectTexts(completer, "/city La C", ["/city La Chaux-de-Fonds"], "town with spaces");
@@ -203,6 +205,25 @@ public static class ChatCheck
         Expect(opened == 2, $"/catalogue and /items open the panel offline ({opened})");
         chat.Send("/debug");
         Expect(debugOpened == 1, $"/debug opens the debug menu offline ({debugOpened}): {last}");
+
+        // /despawn (#1200): measured from the camera, the near stone goes, the far one only "everywhere"
+        chat.Send("/despawn items");
+        Expect(last.StartsWith("Nowhere to measure from"), $"/despawn with no camera wants everywhere: {last}");
+        var camera = new Camera3D();
+        host.AddChild(camera);
+        camera.MakeCurrent();
+        var dropped = DroppedItems.Create(host, WorldOrigin.SwissDefault());
+        dropped.Drop(new ItemStack(ItemId.Stone, 1), new Vector3(5, 0, 0), Vector3.Zero, Vector3.Zero, Vector3.Zero);
+        dropped.Drop(new ItemStack(ItemId.Stone, 1), new Vector3(200, 0, 0), Vector3.Zero, Vector3.Zero, Vector3.Zero);
+        chat.Send("/despawn trees");
+        Expect(last.StartsWith("Usage: /despawn"), $"/despawn of something else: {last}");
+        chat.Send("/despawn items");
+        Expect(last == "Despawned 1 item within 30 m.", $"/despawn items takes the near stone: {last}");
+        chat.Send("/despawn all everywhere");
+        Expect(last == "Despawned 0 vehicles and 1 item everywhere.", $"/despawn all everywhere takes the far one: {last}");
+        Expect(dropped.Items.All(i => i.IsQueuedForDeletion()), "no stone left");
+        dropped.QueueFree();
+        camera.QueueFree();
 
         chat.QueueFree();
     }

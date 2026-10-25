@@ -4,6 +4,10 @@
 # Everything else is the status page (#740): WEB_DIR holds index.html (uploaded by the deploy) and the
 # status.json the game server keeps up to date (--status-file), media/ the clips and pictures (tools/web-media.sh).
 # The live map (#896): map.html, players.json (--livemap-file, every 2 s) and antennas-4g.json (tools/deploy/antennas.py).
+# House layouts (#1186): houses.html, and /api/ to the layout service on loopback (tools/LayoutService).
+# Nakama (#1205, tools/nakama): /nakama/ to its API and realtime socket on loopback, the prefix stripped.
+# The global block below (empty by default): the proxies in front trusted for X-Forwarded-For (LAYOUTS_TRUSTED_PROXIES), so the service sees the visitor.
+@GLOBAL@
 @TILES_SITE@ {
 	handle_path /tiles/* {
 		root * @CHUNKS_DIR@
@@ -13,11 +17,21 @@
 		header Cache-Control "public, max-age=300"
 		@COMPRESS@
 	}
+	handle_path /nakama/* {
+		reverse_proxy 127.0.0.1:@NAKAMA_PORT@
+	}
+	handle /api/* {
+		request_body {
+			max_size 12MB
+		}
+		reverse_proxy 127.0.0.1:@LAYOUTS_PORT@
+	}
 	handle {
 		root * @WEB_DIR@
-		@hidden not path / /index.html /status.json /media/* /map.html /players.json /antennas-4g.json
+		@hidden not path / /index.html /status.json /media/* /map.html /players.json /antennas-4g.json /houses.html /admin.html /account.js /nakama.json
 		respond @hidden 404
 		header /status.json Cache-Control "no-store"
+		header /nakama.json Cache-Control "no-store"
 		header /players.json Cache-Control "no-store"
 		header /antennas-4g.json Cache-Control "public, max-age=86400"
 		header /media/* Cache-Control "public, max-age=86400"

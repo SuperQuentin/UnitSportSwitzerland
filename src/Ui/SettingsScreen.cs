@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings, in tabs: Video, Audio, Gameplay, Character, Vehicles, Controls, Wheel, World, Performance, About. Every
+/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, Wheel, World, Performance, About. Every
 /// control writes straight into <see cref="GameSettings.Current"/> and commits, so the world
 /// re-applies itself live and the file is saved — there is no Apply button to forget. LB / RB
 /// (or Q / E) change tab. One instance serves the title screen and the in-game pause menu.
@@ -32,15 +32,8 @@ public partial class SettingsScreen : Screen
         {
             names.Add(name);
             var b = new Button { Text = name, ToggleMode = true, ButtonGroup = group, FocusMode = FocusModeEnum.All, CustomMinimumSize = new Vector2(0, 36) };
-            var normal = UiTheme.Flat(new Color(0, 0, 0, 0), 6, 14, 6);
-            var on = UiTheme.Flat(new Color(UiTheme.Amber, 0.12f), 6, 14, 6);
-            on.BorderColor = UiTheme.Amber; on.BorderWidthBottom = 2;
-            b.AddThemeStyleboxOverride("normal", normal);
-            b.AddThemeStyleboxOverride("pressed", on);
-            b.AddThemeStyleboxOverride("hover_pressed", on);
-            b.AddThemeColorOverride("font_color", UiTheme.TextDim);
-            b.AddThemeColorOverride("font_pressed_color", UiTheme.Amber);
-            b.AddThemeColorOverride("font_hover_pressed_color", UiTheme.Amber);
+            // the menu skin's tab (#1135): a slanted tab fills with the accent, a square one is underlined
+            b.ThemeTypeVariation = Skins.SkinTheme.Tab;
             int index = _tabs.Count;
             b.Toggled += pressed => { if (pressed) Show(index); };
             tabRow.AddChild(b);
@@ -94,6 +87,7 @@ public partial class SettingsScreen : Screen
                 UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
+            SkinRows(rows);
             // VR is a relaunch with OpenXR (#63); a standalone headset is always in it (#1112)
             if (Platform.CanSpawnProcesses || Platform.IsStandaloneVr)
             {
@@ -153,9 +147,11 @@ public partial class SettingsScreen : Screen
                 replay.Disabled = true;
             }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
             if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
+            // the first-run welcome (#1131): name, figure and account, again
+            UiKit.ActionRow(rows, "Welcome", "Show again", () => Shell.Push(WelcomeScreen.Create()),
+                "The first-launch pages: your name, your figure, your account");
         });
 
-        Tab("Character", CharacterPage.Fill);
 
         Tab("Vehicles", rows =>
         {
@@ -447,6 +443,35 @@ public partial class SettingsScreen : Screen
     }
 
     /// <summary>VR mode (#186): saved, and applied by starting the game again.</summary>
+    /// <summary>
+    /// The menus' look (#1135): Auto or a skin, Auto's day and night skins, Reduce motion. Every skin file found is
+    /// listed; the next page takes the change (pages are built on every push).
+    /// </summary>
+    private static void SkinRows(VBoxContainer rows)
+    {
+        var s = GameSettings.Current;
+        var skins = Skins.MenuSkin.All.Values.ToList();
+        string[] names = skins.Select(k => k.Name).ToArray();
+        int Index(string id) => Math.Max(0, skins.FindIndex(k => k.Id == id));
+        rows.AddChild(UiKit.Spacer(6));
+        rows.AddChild(UiKit.Section("Menus"));
+        var look = new[] { "Auto: day and night" }.Concat(names).ToArray();
+        int at = s.MenuSkin == Skins.SkinRules.Auto ? 0 : Index(s.MenuSkin) + 1;
+        var day = UiKit.OptionRow(rows, "By day", names, Index(s.MenuSkinDay), i => GameSettings.Current.MenuSkinDay = skins[i].Id,
+            "Auto's skin from 07:00 to 19:00 (the world's time in a world)");
+        var night = UiKit.OptionRow(rows, "By night", names, Index(s.MenuSkinNight), i => GameSettings.Current.MenuSkinNight = skins[i].Id);
+        var lookRow = UiKit.OptionRow(rows, "Menu look", look, at, i =>
+        {
+            GameSettings.Current.MenuSkin = i == 0 ? Skins.SkinRules.Auto : skins[i - 1].Id;
+            day.Disabled = night.Disabled = i != 0;
+        }, "A skin is a file in assets/skins (or user://skins): the next page shows a change");
+        // the look first, its day and night under it
+        lookRow.GetParent().GetParent().MoveChild(lookRow.GetParent(), day.GetParent().GetIndex());
+        day.Disabled = night.Disabled = at != 0;
+        UiKit.ToggleRow(rows, "Reduce motion", s.ReduceMotion, on => GameSettings.Current.ReduceMotion = on,
+            "No tilts, pops or moving backgrounds in the menus");
+    }
+
     private void VrRow(Container rows)
     {
         // a standalone headset (#1112) has no flat mode to go back to and no monitor

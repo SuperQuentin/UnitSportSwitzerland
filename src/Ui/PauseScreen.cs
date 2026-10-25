@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// The in-game Esc menu: Resume, Settings, Controls (Skip tutorial while it runs), Leave to the main menu, Quit. It does not
+/// The in-game Esc menu: Resume, Character, Settings, Controls (Skip tutorial while it runs), Leave to the main menu, Quit. It does not
 /// stop the world — online nothing can, and one rule is simpler than two — but it takes the
 /// pointer and holds the movement keys while open. Esc / Start / B resumes.
 /// </summary>
@@ -28,7 +28,9 @@ public partial class PauseScreen : Screen
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
-        column.AddChild(UiKit.Text("Paused", 44, Colors.White, bold: true));
+        var paused = UiKit.Text("Paused", 48);
+        UiKit.Display(paused);   // the skin's title face (#1135)
+        column.AddChild(paused);
         column.AddChild(UiKit.Text(Shell.SessionLine(), UiTheme.FontSmall, UiTheme.Amber));
         column.AddChild(UiKit.Spacer(26));
 
@@ -58,6 +60,7 @@ public partial class PauseScreen : Screen
                 Shell.Push(Movie.MovieStudio.Create(world));
             });
         }
+        Entry(column, "Character", () => Shell.Push(CharacterScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         Entry(column, "Controls", () => Shell.ShowControls());
         if (Tutorial.Current is { } tutorial)
@@ -81,7 +84,7 @@ public partial class PauseScreen : Screen
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
         var b = UiKit.MenuButton(text, dim ? 17 : 21);
-        if (dim) b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
         into.AddChild(b);
         return b;

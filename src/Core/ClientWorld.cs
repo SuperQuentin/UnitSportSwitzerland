@@ -36,6 +36,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private CachingChunkSource? _cache;
     private ClientTerrainSync? _terrainSync;
     private Handshake? _handshake;
+    private Net.Accounts.AccountGate? _accountGate;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
     private WorldEnvironment? _worldEnvironment;
@@ -194,6 +195,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
+        // a house drawn on the web is the interior the game plans (#1186)
+        if (Interiors.HouseLayoutCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.HouseLayoutCheck { Name = "HouseLayoutCheck" });
             return;
         }
         // whether a block of flats' stairwells can be climbed, from their collision (#571)
@@ -1354,7 +1362,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private double _appearanceIn;
 
     /// <summary>
-    /// The figure chosen in Settings → Character (#394, #806) onto this peer's own player, which
+    /// The figure chosen in the Character menu (#394, #806) onto this peer's own player, which
     /// replicates it (<see cref="FootPlayer.AppearanceBits"/>). Right away on a settings change,
     /// and every 0.25 s for a player that just spawned or respawned (or a probe's in-memory set).
     /// </summary>
@@ -1646,7 +1654,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // the version check comes first: nothing else is sent before the server welcomes us
         _handshake = Handshake.CreateClient();
-        _handshake.Welcomed += OnWelcomed;
+        _handshake.Welcomed += () => GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
         _handshake.Refused += reason =>
         {
             RefusedForVersion = true;
@@ -1655,6 +1663,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             ReportDisconnect(reason);
         };
         AddChild(_handshake);
+        // then the account step (#1123, World/Accounts): this player joins for real only once the server admits it
+        _accountGate = Net.Accounts.AccountGate.CreateClient();
+        _accountGate.Welcomed += _ => OnWelcomed();
+        _accountGate.Refused += reason =>
+        {
+            GD.PushWarning($"[net] {reason}");
+            Multiplayer.MultiplayerPeer?.Close();
+            ReportDisconnect(reason);
+        };
+        AddChild(_accountGate);
+        if (Net.Accounts.AccountProbe.Expect != null) AddChild(new Net.Accounts.AccountProbe(_accountGate));
 
         // before any player arrives: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(this);
@@ -1691,11 +1710,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _handshake?.Begin();
     }
 
-    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>): join for real.</summary>
+    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>) and admitted its account (<see cref="Net.Accounts.AccountGate"/>): join for real.</summary>
     private void OnWelcomed()
     {
-        GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
-
         // The server assigns the final name — it deduplicates and sanitises — so this is
         // a request, not a claim.
         string requested = Launch.PlayerName;
@@ -1812,6 +1829,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
         if (_places is { IsOpen: true }) return;
+
+        // the Character menu (#1127): P on foot; mounted, P is the radio's previous station
+        if (@event.IsActionPressed(PlayerInput.CharacterMenu) && !UiFocus.TextEntryActive
+            && _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 })
+        {
+            GetViewport().SetInputAsHandled();
+            Ui.CharacterScreen.Open();
+            return;
+        }
 
         // replay owns the screen and its own keys (R there snaps to roads)
         if (_gpx is { Active: true }) return;

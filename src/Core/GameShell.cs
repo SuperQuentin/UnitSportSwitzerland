@@ -94,7 +94,7 @@ public partial class GameShell : Node
             "--traffic", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
-            "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
+            "--multiplayer", "--solo", "--map", "--menuskin", "--character", "--account", "--welcome", "--welcomecheck", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmsaa", "--vrscale", "--vrfoveation", "--shadows", "--rendercensus", "--hidenodes", "--hidetoggle", "--xrhole", "--xrhandlog", "--xrpopup", "--soakcheck", "--replayminutes", "--perflevel", "--foveation", "--nosky", "--overdraw", "--hideui", "--plainterrain", "--litterrain", "--terrainvariant", "--vrmult", "--vrfloor", "--verticallod", "--buildingrings", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands", "--xrring", "--xrspace",
             "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
@@ -173,6 +173,10 @@ public partial class GameShell : Node
             else if (CmdArgs.Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (CmdArgs.Has("--solo")) Push(SoloScreen.Create());
             else if (CmdArgs.Has("--map")) Push(Ui.MapScreen.Create());
+            // "--character": the figure editor (#1127), for screenshotting it
+            else if (CmdArgs.Has("--character")) Push(CharacterScreen.Create());
+            // "--account": the Account page (#1209), for screenshotting it
+            else if (CmdArgs.Has("--account")) Push(AccountScreen.Create());
             else if (CmdArgs.Has("--landing")) LaunchVia(new WorldLaunch { Mode = GameMode.Explore });
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
@@ -184,6 +188,7 @@ public partial class GameShell : Node
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
+        if (WelcomeCheck.Requested()) AddChild(new WelcomeCheck(this));
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
         if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
@@ -425,8 +430,17 @@ public partial class GameShell : Node
         }
         ClearStack();
         Push(TitleScreen.Create());
+        // the first-run welcome (#1131): once, over the title, on the first title of the session
+        if (!_welcomeShown && WelcomeScreen.Wanted())
+        {
+            _welcomeShown = true;
+            GD.Print("[welcome] first run: the welcome opens over the title");
+            Push(WelcomeScreen.Create());
+        }
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
+
+    private static bool _welcomeShown;
 
     public override void _UnhandledInput(InputEvent e)
     {

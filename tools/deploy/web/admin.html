@@ -1,0 +1,222 @@
+<!doctype html>
+<!-- Served at /admin.html by Caddy on a deployed server (#1207, docs/plans/web-dashboard.md). The admin dashboard: the
+     Users tab manages the Nakama accounts through the module's admin RPCs, which check the caller is in the "admins" group
+     (this page only hides what a non-admin cannot do). Server and Console come with the game server's admin API (phase 2). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UnitSport Dashboard</title>
+<meta name="robots" content="noindex">
+<style>
+:root {
+  --bg: #120c14; --bg2: #1a121c; --text: #fbf4ee; --muted: #c2b3b0; --dim: #8d7e80;
+  --glow: #ff7a45; --glow2: #ffb36b; --rose: #e0567a; --ok: #4fe08a;
+  --glass: rgba(26, 16, 26, .55); --line: rgba(255, 220, 200, .14);
+  --radius: 16px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--glow2); }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--text); text-decoration: none; font-size: 17px; }
+.brand i { display: inline-flex; width: 30px; height: 30px; border-radius: 9px; align-items: center; justify-content: center;
+  background: var(--rose); }
+.brand small { font-weight: 600; color: var(--dim); }
+header .grow { flex: 1; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 40px) 64px; display: flex; flex-direction: column; gap: 18px; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tabs button { font: 600 14px system-ui, sans-serif; color: var(--muted); background: none; border: 1px solid var(--line);
+  border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+.tabs button[aria-selected=true] { background: var(--glow); color: #1a0d10; border-color: transparent; }
+.tabs button[disabled] { opacity: .45; cursor: default; }
+.panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.gate { text-align: center; padding: 48px 20px; color: var(--muted); }
+.gate button { margin-top: 12px; font: 700 15px system-ui, sans-serif; padding: 10px 20px; border-radius: 999px; border: none;
+  background: var(--glow); color: #1a0d10; cursor: pointer; }
+.users { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .users { grid-template-columns: minmax(0, 1fr); } }
+.search { display: flex; gap: 10px; margin-bottom: 14px; }
+.search input { flex: 1; min-width: 0; font: 400 15px system-ui, sans-serif; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--text); }
+.search input:focus { outline: 2px solid var(--glow); outline-offset: 1px; }
+.table { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 600; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px; }
+td { padding: 9px 8px; border-top: 1px solid var(--line); white-space: nowrap; }
+td.mail { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+tbody tr { cursor: pointer; }
+tbody tr:hover, tbody tr[aria-selected=true] { background: rgba(255, 122, 69, .08); }
+tbody tr:focus-visible { outline: 2px solid var(--glow); outline-offset: -2px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 4px; }
+.pill.admin { background: rgba(255, 179, 107, .18); color: var(--glow2); }
+.pill.banned { background: rgba(224, 86, 122, .2); color: var(--rose); }
+.empty { color: var(--dim); padding: 18px 8px; }
+.detail h2 { margin: 0 0 4px; font-size: 22px; overflow-wrap: anywhere; }
+.detail dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 14px 0; font-size: 14px; }
+.detail dt { color: var(--dim); }
+.detail dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions button { font: 600 14px system-ui, sans-serif; padding: 9px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--text); }
+.actions button.danger { border-color: rgba(224, 86, 122, .6); color: var(--rose); }
+.actions button.confirm { background: var(--rose); color: #1a0d10; border-color: transparent; }
+.actions button[disabled] { opacity: .5; cursor: default; }
+.note { color: var(--dim); font-size: 13px; }
+.err { color: var(--rose); font-size: 13px; min-height: 1em; margin-top: 10px; }
+.soon { color: var(--muted); }
+.soon ul { margin: 8px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="./"><i><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true"><path d="M13 4h6v9h9v6h-9v9h-6v-9H4v-6h9z" fill="#fff"/></svg></i>UnitSport <small>Dashboard</small></a>
+  <div class="grow"></div>
+  <div data-account></div>
+</header>
+<main>
+  <div class="tabs" role="tablist" aria-label="Dashboard">
+    <button role="tab" id="tab-users" aria-selected="true" aria-controls="view-users">Users</button>
+    <button role="tab" id="tab-server" aria-selected="false" aria-controls="view-server">Server</button>
+    <button role="tab" id="tab-console" aria-selected="false" aria-controls="view-console">Console</button>
+  </div>
+
+  <section id="gate" class="panel gate" hidden></section>
+
+  <section id="view-users" role="tabpanel" aria-labelledby="tab-users" hidden>
+    <div class="users">
+      <div class="panel">
+        <form class="search" id="search" role="search">
+          <label for="q" class="note" style="align-self:center">Find</label>
+          <input id="q" name="q" type="search" placeholder="A name or an email" autocomplete="off">
+        </form>
+        <div class="table">
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Status</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="err" id="list-err" role="alert"></div>
+      </div>
+      <div class="panel detail" id="detail">
+        <p class="note">Pick an account to see it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-server" role="tabpanel" aria-labelledby="tab-server" class="panel soon" hidden>
+    <strong>Server</strong>: coming with the game server's admin API.
+    <ul><li>Players online: kick, send to spawn</li><li>Live settings: time of day, day length, weather, teleporting, message of the day</li>
+      <li>Restart and update, with a warning to the players</li><li>Startup settings: accounts, name, world (on the next restart)</li></ul>
+  </section>
+  <section id="view-console" role="tabpanel" aria-labelledby="tab-console" class="panel soon" hidden>
+    <strong>Console</strong>: the server's log live, and its commands (<code>/say</code>, <code>/time</code>, <code>/kick</code>, <code>/update</code>...), coming with the game server's admin API.
+  </section>
+</main>
+<script src="account.js"></script>
+<script>
+(function () {
+  "use strict";
+  var A = window.UnitSportAccount;
+  var gate = document.getElementById("gate");
+  var views = { users: document.getElementById("view-users"), server: document.getElementById("view-server"), console: document.getElementById("view-console") };
+  var tabs = { users: document.getElementById("tab-users"), server: document.getElementById("tab-server"), console: document.getElementById("tab-console") };
+  var tab = "users", selected = null;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function day(v) {
+    if (v == null || v === "") return "";
+    var d = typeof v === "number" ? new Date(v * 1000) : new Date(v);
+    return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+  }
+
+  function show() {
+    var me = A.me();
+    Object.keys(views).forEach(function (k) { views[k].hidden = true; tabs[k].setAttribute("aria-selected", k === tab ? "true" : "false"); });
+    if (!me || !me.admin) {
+      gate.hidden = false; gate.textContent = "";
+      gate.appendChild(el("p", null, me ? "This dashboard is for admins. Your account " + me.username + " is not one." : "Sign in with an admin account to use the dashboard."));
+      if (!me) { var b = el("button", null, "Sign in"); b.type = "button"; b.addEventListener("click", function () { A.open("in"); }); gate.appendChild(b); }
+      return;
+    }
+    gate.hidden = true;
+    views[tab].hidden = false;
+    if (tab === "users" && !views.users.dataset.loaded) { views.users.dataset.loaded = "1"; search(""); }
+  }
+  Object.keys(tabs).forEach(function (k) { tabs[k].addEventListener("click", function () { tab = k; show(); }); });
+
+  // ---- users --------------------------------------------------------------------------------------------------------
+  var rows = document.getElementById("rows"), listErr = document.getElementById("list-err"), detail = document.getElementById("detail");
+  var q = document.getElementById("q"), timer = 0;
+  q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { search(q.value); }, 250); });
+  document.getElementById("search").addEventListener("submit", function (ev) { ev.preventDefault(); search(q.value); });
+
+  function search(text) {
+    listErr.textContent = "";
+    A.rpc("admin_users", { q: text }).then(function (r) {
+      rows.textContent = "";
+      if (!r.users.length) { var tr = el("tr"); var td = el("td", "empty", "No account matches."); td.colSpan = 4; tr.appendChild(td); rows.appendChild(tr); return; }
+      r.users.forEach(function (u) {
+        var tr = el("tr"); tr.tabIndex = 0; tr.setAttribute("aria-selected", selected === u.id ? "true" : "false");
+        tr.appendChild(el("td", null, u.username));
+        tr.appendChild(el("td", "mail", u.email || "(no email: a game account)"));
+        tr.appendChild(el("td", null, day(u.created)));
+        var st = el("td"); if (u.banned) st.appendChild(el("span", "pill banned", "banned")); tr.appendChild(st);
+        function pick() { selected = u.id; rows.querySelectorAll("tr").forEach(function (x) { x.setAttribute("aria-selected", "false"); }); tr.setAttribute("aria-selected", "true"); open(u.id); }
+        tr.addEventListener("click", pick);
+        tr.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+        rows.appendChild(tr);
+      });
+    }, function (e) { listErr.textContent = e.message; });
+  }
+
+  function open(id) {
+    detail.textContent = "";
+    detail.appendChild(el("p", "note", "Loading..."));
+    A.rpc("admin_user", { id: id }).then(function (u) { draw(u); }, function (e) { detail.textContent = ""; detail.appendChild(el("p", "err", e.message)); });
+  }
+
+  function draw(u) {
+    var me = A.me();
+    detail.textContent = "";
+    detail.appendChild(el("h2", null, u.username));
+    var badges = el("div"); if (u.admin) badges.appendChild(el("span", "pill admin", "admin")); if (u.banned) badges.appendChild(el("span", "pill banned", "banned"));
+    detail.appendChild(badges);
+    var dl = el("dl");
+    [["Email", u.email || "none (a game account)"], ["Joined", day(u.created)], ["Last change", day(u.updated)], ["Devices", String(u.devices)], ["Id", u.id]]
+      .forEach(function (p) { dl.appendChild(el("dt", null, p[0])); dl.appendChild(el("dd", null, p[1])); });
+    detail.appendChild(dl);
+    var actions = el("div", "actions"), err = el("div", "err"); err.setAttribute("role", "alert");
+    var self = me && me.id === u.id;
+
+    var adminBtn = el("button", null, u.admin ? "Remove admin" : "Make admin"); adminBtn.type = "button";
+    if (self && u.admin) { adminBtn.disabled = true; adminBtn.title = "You cannot remove your own admin rights"; }
+    adminBtn.addEventListener("click", function () { act(adminBtn, err, "admin_set_admin", { id: u.id, admin: !u.admin }, u.id); });
+    actions.appendChild(adminBtn);
+
+    // a ban asks once more on the button itself (the page never uses browser dialogs)
+    var banBtn = el("button", u.banned ? null : "danger", u.banned ? "Unban" : "Ban"); banBtn.type = "button";
+    if (self) { banBtn.disabled = true; banBtn.title = "You cannot ban yourself"; }
+    banBtn.addEventListener("click", function () {
+      if (!u.banned && !banBtn.classList.contains("confirm")) { banBtn.classList.add("confirm"); banBtn.textContent = "Ban " + u.username + "? Click again"; return; }
+      act(banBtn, err, "admin_ban", { id: u.id, ban: !u.banned }, u.id);
+    });
+    actions.appendChild(banBtn);
+    detail.appendChild(actions);
+    detail.appendChild(el("p", "note", u.banned ? "Banned: cannot sign in, and servers that check accounts refuse it." :
+      "A ban ends the account's sessions; it cannot sign in until unbanned."));
+    detail.appendChild(err);
+  }
+
+  function act(button, err, rpc, payload, id) {
+    button.disabled = true; err.textContent = "";
+    A.rpc(rpc, payload).then(function () { open(id); search(q.value); }, function (e) { err.textContent = e.message; button.disabled = false; });
+  }
+
+  A.onChange(show);
+  A.ready.then(show);
+})();
+</script>
+</body>
+</html>

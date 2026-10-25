@@ -43,6 +43,23 @@
 - **Keeping it current** (#1088): a release-stamped server installs newer releases by itself once nobody plays
   (`net/server-update`; a `--build` deploy has no version and stays as deployed). When your game is newer than
   the server, its console (`net/console-link`) still joins it for the chat, with your admin rights there.
+- **Nakama, the account server** (#1121, `net/nakama`): this is the `--nakama` step. It is part of a full deploy only
+  with `NAKAMA=1` in `deploy.env`, which is off by default.
+  - It installs Docker and the compose v2 plugin from apt when they are missing (`docker.io` plus `docker-compose-v2`,
+    else `docker-compose-plugin`, else `docker-compose`). If none of them gives `docker compose`, it stops and points
+    to Docker's install page.
+  - It uploads `tools/nakama/` **without `.env`** to `$NAKAMA_DIR` (default `$DEPLOY_DIR/nakama`), then runs
+    `up.sh up` as root.
+  - The first run makes the host's `.env` (random keys, mode 600). Every later deploy keeps it: a new encryption key
+    would log everyone out, and a new Postgres password would lock Nakama out of its volume.
+  - **Behind Caddy** (#1205, a host with `TILES=1`): Nakama listens on 127.0.0.1 only and Caddy serves it at
+    `https://<site>/nakama/`. The step closes `NAKAMA_PORT/tcp` (7350) in ufw if an older deploy opened it, then checks
+    `/healthcheck` directly and through Caddy. A host set up before #1205 needs `--setup` once, for the new Caddyfile.
+    `NAKAMA_URL` defaults to that public address. Without Caddy (`TILES=0`), 7350 is published and opened in ufw.
+  - It prints what players need (`http://<host>:7350` and the server key) and the `ssh -L` tunnel for the console.
+  - `--check` reports whether Docker, the `.env` and the containers are there.
+  - Simulated locally by running the upload and `up.sh` twice: the keys stayed the same. A real host run was not
+    done yet.
 - **Terrain chunks** (the real set is ~111 GB in ~246k files, one flat directory): the source is MapSetup's
   `terrain_location.json` `"chunks"`, else `terrain_chunks/`, else `CHUNKS_SRC=`; run from the main checkout (worktrees have no tiles).
   Files whose name, size or mtime differ are copied (`--checksum` compares md5 instead: reads every byte on both sides).

@@ -3,7 +3,7 @@ using System.Globalization;
 namespace UnitSport.Net;
 
 /// <summary>
-/// Parsing for the money admin commands (<c>/money</c>, <c>/bank</c>, #262) and <c>/tp</c>'s coordinates. Pure, no Godot, so the
+/// Parsing for the money admin commands (<c>/money</c>, <c>/bank</c>, #262), <c>/despawn</c> and <c>/tp</c>'s coordinates. Pure, no Godot, so the
 /// unit tests cover it and the offline chat and the server share one reading.
 /// </summary>
 public static class AdminArgs
@@ -51,6 +51,35 @@ public static class AdminArgs
     }
 
     private static bool IsBankVerb(string word) => word.ToLowerInvariant() is "set" or "add" or "take";
+
+    /// <summary><c>/despawn</c>'s radius when none is typed, m (#1200).</summary>
+    public const float DespawnRadius = 30f;
+
+    /// <summary>The widest <c>/despawn</c> radius, m; past it, <c>everywhere</c>.</summary>
+    public const float MaxDespawnRadius = 5000f;
+
+    public const string DespawnUsage = "Usage: /despawn <vehicles | items | all> [radius m | everywhere]";
+
+    /// <summary>
+    /// <c>/despawn &lt;vehicles | items | all&gt; [radius m | everywhere]</c> (#1200): what to take out of
+    /// the world, and within how many metres of the asker (null: everywhere).
+    /// </summary>
+    public static bool TryDespawn(string[] args, out bool vehicles, out bool items, out float? radius)
+    {
+        vehicles = items = false;
+        radius = DespawnRadius;
+        if (args.Length is 0 or > 2) return false;
+        string what = args[0].ToLowerInvariant();
+        vehicles = what is "vehicles" or "vehicle" or "all";
+        items = what is "items" or "item" or "all";
+        if (!vehicles && !items) return false;
+        if (args.Length == 1) return true;
+        if (args[1].ToLowerInvariant() == "everywhere") { radius = null; return true; }
+        if (!float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float r) || !(r > 0) || r > MaxDespawnRadius)
+            return false;
+        radius = r;
+        return true;
+    }
 
     /// <summary>
     /// <c>/tp &lt;E&gt; &lt;N&gt;</c> (#994): an LV95 point, "2600000 1200000" or "2600000,1200000" (what

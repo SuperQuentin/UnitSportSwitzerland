@@ -16,6 +16,7 @@ namespace UnitSport.Items;
 /// park is then spawned by the server;</item>
 /// <item>cash deposited away from a bank is refused by the server and stays in the pocket (#213:
 /// money moves only at a bank's counter; <c>tools/bankcheck.sh</c> checks the counter itself).</item>
+/// <item>as an admin, <c>/despawn all</c> takes the bike and a dropped stone out of this client's world (#1200).</item>
 /// </list>
 /// Runs on a scratch inventory.
 /// </summary>
@@ -93,8 +94,20 @@ public partial class EconomyProbe : ChatProbe
         _chat.Send("/clear");
         Expect(await Until(() => !_inventory.Contains(ItemId.Bread), 5), "/clear: the pack is empty");
 
+        // #1200: /despawn on the server takes the admin's bike and a dropped stone out of this client's world too
+        var dropped = DroppedItems.Instance!;
+        dropped.Drop(new ItemStack(ItemId.Stone, 1), at + new Vector3(-2, 1, 0), Vector3.Zero, Vector3.Zero, Vector3.Zero);
+        Expect(await Until(() => Near(dropped.Items.Where(i => !i.Proxy), at) > 0, 5), "the dropped stone is spawned by the server");
+        Expect(Near(vehicles.GetChildren().OfType<VehicleBody>(), at) > 0, "the admin's bike stands near");
+        _chat.Send("/despawn all");
+        Expect(await Until(() => Near(vehicles.GetChildren().OfType<VehicleBody>(), at) == 0
+            && Near(dropped.Items.Where(i => !i.Proxy), at) == 0, 5), "/despawn all: no vehicle nor item left within 30 m");
+
         await Finish(0);
     }
 
     private static int Count(Node vehicles) => vehicles.GetChildren().OfType<VehicleBody>().Count();
+
+    private static int Near(IEnumerable<Node3D> nodes, Vector3 at) =>
+        nodes.Count(n => !n.IsQueuedForDeletion() && n.GlobalPosition.DistanceTo(at) < 25f);
 }

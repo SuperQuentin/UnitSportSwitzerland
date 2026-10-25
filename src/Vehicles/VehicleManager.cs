@@ -456,6 +456,28 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     }
 
     /// <summary>
+    /// Server or offline (<c>/despawn</c>, #1200): every vehicle within <paramref name="radius"/> of
+    /// <paramref name="at"/> (null: everywhere) leaves the world for good, as a claimed one does: off the
+    /// containers' book, then freed, the spawner removing it on every client. Not one being claimed.
+    /// How many went.
+    /// </summary>
+    public int Despawn(Vector3? at, float radius)
+    {
+        if (Online && !Multiplayer.IsServer()) return 0;
+        int count = 0;
+        foreach (var node in GetChildren())
+            if (node is VehicleBody v && !v.IsQueuedForDeletion() && !_claimed.Contains(v.Name)
+                && (at is not { } p || v.GlobalPosition.DistanceTo(p) <= radius))
+            {
+                Removing?.Invoke(v);
+                v.Retire();
+                v.QueueFree();
+                count++;
+            }
+        return count;
+    }
+
+    /// <summary>
     /// Clears burnt-out wrecks and vehicles nobody has been near for a long time. Done by whoever
     /// owns the list: the server online, the client offline.
     /// </summary>

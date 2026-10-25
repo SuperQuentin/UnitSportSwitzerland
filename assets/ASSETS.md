@@ -39,3 +39,14 @@ pictures. Only CC0, MIT-style and Swiss open government data so far; nothing AI-
 |---|---|---|
 | `chess_type_beat.ogg` | "Chess Type Beat" by The Vibe Guide ([YouTube](https://www.youtube.com/watch?v=EK2w6qA5zz8)), audio only, Vorbis q4; the church radio's track and the rat dance (#370) | **not an open licence**: all rights with the artist; added by the project owner; dev runs and checks only: excluded from every export (#718), a release burns it from its link |
 | `yaris_bounce.ogg` (optional, not yet added) | the clip the Yaris loops while its hydraulics bounce (#464); played only if the file is there, else just the synthesized thuds | record its source and licence here when it is added |
+
+## `fonts/` (the menus, #1135)
+
+| File | Source | Licence |
+|---|---|---|
+| `Saira-Variable.ttf` | [Saira](https://github.com/Omnibus-Type/Saira), Google Fonts | SIL OFL 1.1 (`Saira-OFL.txt`) |
+| `SairaCondensed-ExtraBold.ttf`, `SairaCondensed-SemiBold.ttf` | [Saira Condensed](https://fonts.google.com/specimen/Saira+Condensed), Google Fonts | SIL OFL 1.1 (`SairaCondensed-OFL.txt`) |
+
+## `skins/` (the menus, #1135)
+
+The menu skins as JSON (`docs/notes/ui/menu-skins.md`): written here, no third-party content.

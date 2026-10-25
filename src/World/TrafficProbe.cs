@@ -166,6 +166,9 @@ public partial class TrafficProbe : Node
             + $"lane changes {_traffic.LaneChanges} ({_traffic.LaneChanges / (float)Math.Max(1, _traffic.Generated):F2} a generated car), across more than one lane at once {_traffic.MultiLaneJumps}; passed one coming on a narrow road, moved over at a crawl (#1180) {_traffic.NarrowPasses}");
         if (_traffic.MultiLaneJumps > 0) modeFailure ??= $"{_traffic.MultiLaneJumps} lane changes across more than one lane at once";
         if (_traffic.OverlapLongest > Traffic.OverlapFails) modeFailure ??= $"two cars stood body on body for {_traffic.OverlapLongest:F0} s";
+        // (#1195) a generated car started where it could not stop behind the car ahead in its lane
+        GD.Print($"[trafficcheck] generated cars started too fast behind one in their lane: {_traffic.HotStarts}");
+        if (_traffic.HotStarts > 0) modeFailure ??= $"{_traffic.HotStarts} generated cars started too fast behind one in their lane";
         bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0 && modeFailure is null;
         GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way, "
                         + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run{ModesSummary()})"

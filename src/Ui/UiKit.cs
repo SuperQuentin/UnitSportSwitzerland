@@ -21,21 +21,61 @@ public static class UiKit
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         if (size != UiTheme.FontBody) l.AddThemeFontSizeOverride("font_size", size);
-        if (color is { } c) l.AddThemeColorOverride("font_color", c);
-        if (bold) l.AddThemeFontOverride("font", UiTheme.Bold);
+        // a role colour becomes a variation, so the theme above (the HUD's or a menu skin's, #1135) colours it
+        if (color is { } c)
+        {
+            if (Variation(c) is { } v) l.ThemeTypeVariation = v;
+            else if (c != UiTheme.Text) l.AddThemeColorOverride("font_color", c);
+        }
+        if (bold) Bold(l);
         return l;
+    }
+
+    /// <summary>The theme variation standing for one of <see cref="UiTheme"/>'s role colours, or null.</summary>
+    public static string? Variation(Color c) =>
+        c == UiTheme.TextDim ? Skins.SkinTheme.Dim
+        : c == UiTheme.TextFaint ? Skins.SkinTheme.Faint
+        : c == UiTheme.Amber ? Skins.SkinTheme.Accent
+        : c == UiTheme.Good ? Skins.SkinTheme.Good
+        : c == UiTheme.Warn ? Skins.SkinTheme.Warn
+        : c == UiTheme.Bad ? Skins.SkinTheme.Bad
+        : null;
+
+    /// <summary>The bold face of the theme a control ends up under (the skin's rounded font, or the HUD's).</summary>
+    public static void Bold(Control c)
+    {
+        c.AddThemeFontOverride("font", UiTheme.Bold);
+        c.Ready += () =>
+        {
+            if (c.HasThemeFont("bold_font", "Label")) c.AddThemeFontOverride("font", c.GetThemeFont("bold_font", "Label"));
+        };
+    }
+
+    /// <summary>A big title in its theme's display face (#1135): the logo, a page's name; in capitals when the skin says so.</summary>
+    public static void Display(Label l)
+    {
+        l.AddThemeFontOverride("font", UiTheme.Bold);
+        l.Ready += () =>
+        {
+            if (l.HasThemeFont("display_font", "Label")) l.AddThemeFontOverride("font", l.GetThemeFont("display_font", "Label"));
+            if (l.GetThemeConstant("display_uppercase", "Label") == 1) l.Uppercase = true;
+        };
+    }
+
+    /// <summary>A button's text in its theme's dim colour (a secondary entry: Quit, an inactive tab).</summary>
+    public static void DimFont(Button b)
+    {
+        b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        b.Ready += () => b.AddThemeColorOverride("font_color", b.GetThemeColor("font_color", Skins.SkinTheme.Dim));
     }
 
     /// <summary>A small uppercase section heading, letter-spaced.</summary>
     public static Label Section(string text)
     {
-        var l = Text(text.ToUpperInvariant(), UiTheme.FontTiny, UiTheme.TextDim);
-        l.AddThemeFontOverride("font", Spaced);
+        var l = Text(text.ToUpperInvariant());
+        l.ThemeTypeVariation = Skins.SkinTheme.Section;
         return l;
     }
-
-    private static FontVariation? _spaced;
-    private static FontVariation Spaced => _spaced ??= new FontVariation { BaseFont = UiTheme.Bold, SpacingGlyph = 2 };
 
     public static VBoxContainer VBox(int separation = 8) { var v = new VBoxContainer(); v.AddThemeConstantOverride("separation", separation); return v; }
     public static HBoxContainer HBox(int separation = 8) { var h = new HBoxContainer(); h.AddThemeConstantOverride("separation", separation); return h; }
@@ -61,12 +101,17 @@ public static class UiKit
         return m;
     }
 
-    /// <summary>A glass card: a panel with a lighter fill than the screen panel.</summary>
+    /// <summary>A card: the theme's (a glass card on a HUD, a sticker or glowing card in a menu skin), with its own margin.</summary>
     public static PanelContainer Card(Control content, float alpha = 0.55f, int margin = 18)
     {
-        var p = new PanelContainer();
-        var s = UiTheme.Flat(new Color(0.10f, 0.115f, 0.14f, alpha), 12, margin, margin, new Color(1, 1, 1, 0.07f), 1);
-        p.AddThemeStyleboxOverride("panel", s);
+        var p = new PanelContainer { ThemeTypeVariation = Skins.SkinTheme.Card };
+        p.Ready += () =>
+        {
+            if (p.GetThemeStylebox("panel", Skins.SkinTheme.Card).Duplicate() is not StyleBoxFlat s) return;
+            s.ContentMarginLeft = s.ContentMarginRight = s.ContentMarginTop = s.ContentMarginBottom = margin;
+            s.BgColor = new Color(s.BgColor, s.BgColor.A * alpha / 0.55f);
+            p.AddThemeStyleboxOverride("panel", s);
+        };
         p.AddChild(content);
         return p;
     }
@@ -86,21 +131,20 @@ public static class UiKit
             FocusMode = Control.FocusModeEnum.All,
         };
         b.AddThemeFontSizeOverride("font_size", fontSize);
-        b.AddThemeFontOverride("font", UiTheme.Bold);
-        var normal = UiTheme.Flat(new Color(1, 1, 1, 0), 8, 18, 8);
-        var hover = UiTheme.Flat(new Color(1, 1, 1, 0.06f), 8, 18, 8);
-        var pressed = UiTheme.Flat(new Color(1, 1, 1, 0.10f), 8, 18, 8);
-        b.AddThemeStyleboxOverride("normal", normal);
-        b.AddThemeStyleboxOverride("hover", hover);
-        b.AddThemeStyleboxOverride("pressed", pressed);
-        b.AddThemeStyleboxOverride("hover_pressed", pressed);
-        b.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
-        b.AddThemeStyleboxOverride("disabled", normal);
-        b.AddThemeColorOverride("font_color", UiTheme.Text);
-        b.AddThemeColorOverride("font_focus_color", Colors.White);
-        b.AddThemeColorOverride("font_hover_color", Colors.White);
-
-        HoverSlide.Attach(b, new[] { normal, hover, pressed });
+        b.ThemeTypeVariation = Skins.SkinTheme.MenuButton;
+        // the slide tweens the boxes' left margin: this button's own copies of its theme's boxes
+        b.Ready += () =>
+        {
+            var boxes = new List<StyleBoxFlat>();
+            foreach (string state in new[] { "normal", "hover", "pressed", "hover_pressed", "disabled" })
+                if (b.GetThemeStylebox(state).Duplicate() is StyleBoxFlat box)
+                {
+                    b.AddThemeStyleboxOverride(state, box);
+                    boxes.Add(box);
+                }
+            HoverSlide.Attach(b, boxes.ToArray());
+        };
+        Juice.Attach(b);
         return b;
     }
 
@@ -108,20 +152,8 @@ public static class UiKit
     public static Button Button(string text, bool primary = false, int minWidth = 0)
     {
         var b = new Button { Text = text, CustomMinimumSize = new Vector2(minWidth, 38), FocusMode = Control.FocusModeEnum.All };
-        if (primary)
-        {
-            b.AddThemeStyleboxOverride("normal", UiTheme.Flat(UiTheme.Amber, 8, 18, 8));
-            b.AddThemeStyleboxOverride("hover", UiTheme.Flat(UiTheme.Amber.Lightened(0.12f), 8, 18, 8));
-            b.AddThemeStyleboxOverride("pressed", UiTheme.Flat(UiTheme.Amber.Darkened(0.1f), 8, 18, 8));
-            b.AddThemeStyleboxOverride("hover_pressed", UiTheme.Flat(UiTheme.Amber.Darkened(0.1f), 8, 18, 8));
-            b.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(0, 0, 0, 0), 8, 18, 8, Colors.White, 2));
-            b.AddThemeStyleboxOverride("disabled", UiTheme.Flat(new Color(UiTheme.Amber, 0.25f), 8, 18, 8));
-            var dark = new Color(0.07f, 0.07f, 0.08f);
-            foreach (string c in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color" })
-                b.AddThemeColorOverride(c, dark);
-            b.AddThemeColorOverride("font_disabled_color", new Color(dark, 0.6f));
-            b.AddThemeFontOverride("font", UiTheme.Bold);
-        }
+        if (primary) b.ThemeTypeVariation = Skins.SkinTheme.Primary;
+        Juice.Attach(b);
         return b;
     }
 
@@ -137,12 +169,8 @@ public static class UiKit
             FocusMode = Control.FocusModeEnum.All,
             ExpandIcon = false,
         };
-        var clear = UiTheme.Flat(new Color(1, 1, 1, 0), 8, 6, 6);
-        b.AddThemeStyleboxOverride("normal", clear);
-        b.AddThemeColorOverride("icon_normal_color", UiTheme.TextDim);
-        b.AddThemeColorOverride("icon_hover_color", Colors.White);
-        b.AddThemeColorOverride("icon_focus_color", Colors.White);
-        b.AddThemeColorOverride("icon_pressed_color", UiTheme.Amber);
+        b.ThemeTypeVariation = Skins.SkinTheme.Icon;
+        Juice.Attach(b);
         return b;
     }
 
@@ -161,6 +189,57 @@ public static class UiKit
         if (hint != null) names.AddChild(Text(hint, UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
         row.AddChild(names);
         return row;
+    }
+
+    /// <summary>
+    /// A text field. It holds the keyboard while focused (<see cref="Core.UiFocus"/>), so typing never walks the
+    /// player; <paramref name="secret"/> hides what is typed (a password).
+    /// </summary>
+    public static LineEdit TextRow(Container into, string name, string text, string placeholder, string? hint = null, bool secret = false)
+    {
+        var row = Row(name, hint);
+        var edit = Edit(text, placeholder, secret);
+        edit.CustomMinimumSize = new Vector2(ControlWidth, 36);
+        row.AddChild(edit);
+        into.AddChild(row);
+        return edit;
+    }
+
+    /// <summary>
+    /// A form's text field (#1209): the name just above the field, as on a sign-in form, rather than a settings row's
+    /// name at the far left and control at the far right.
+    /// </summary>
+    public static LineEdit FormField(Container into, string name, string text, string placeholder, string? hint = null, bool secret = false)
+    {
+        var field = VBox(4);
+        var title = HBox(10);
+        title.AddChild(Text(name));
+        if (hint != null)
+        {
+            var h = Text(hint, UiTheme.FontTiny, UiTheme.TextFaint);
+            h.SizeFlagsVertical = Control.SizeFlags.ShrinkEnd;
+            title.AddChild(h);
+        }
+        field.AddChild(title);
+        var edit = Edit(text, placeholder, secret);
+        edit.CustomMinimumSize = new Vector2(FormFieldWidth, 40);
+        edit.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        field.AddChild(edit);
+        into.AddChild(field);
+        return edit;
+    }
+
+    /// <summary>How wide a form's text field is: an email address and then some.</summary>
+    public const float FormFieldWidth = 460;
+
+    /// <summary>A line edit that holds the keyboard while focused (<see cref="Core.UiFocus"/>).</summary>
+    private static LineEdit Edit(string text, string placeholder, bool secret)
+    {
+        var edit = new LineEdit { Text = text, PlaceholderText = placeholder, Secret = secret };
+        edit.FocusEntered += () => Core.UiFocus.Set(edit, true);
+        edit.FocusExited += () => Core.UiFocus.Set(edit, false);
+        edit.TreeExiting += () => Core.UiFocus.Set(edit, false);
+        return edit;
     }
 
     /// <summary>
@@ -302,7 +381,7 @@ public static class HoverSlide
     {
         var bar = new ColorRect
         {
-            Color = UiTheme.Amber,
+            Color = b.HasThemeColor("accent_bar") ? b.GetThemeColor("accent_bar") : UiTheme.Amber,
             MouseFilter = Control.MouseFilterEnum.Ignore,
             Modulate = new Color(1, 1, 1, 0),
         };
@@ -328,5 +407,46 @@ public static class HoverSlide
         b.MouseExited += () => { hovered = false; Update(); };
         b.FocusEntered += () => { focused = true; Update(); };
         b.FocusExited += () => { focused = false; Update(); };
+    }
+}
+
+/// <summary>
+/// The juice of a control (#1135): it grows and tilts a little under the pointer or focus and squashes while pressed,
+/// springing back (<c>TRANS_BACK</c>). How much comes from its theme (a skin's <c>hoverScale</c> and <c>hoverTilt</c>;
+/// the HUD's is none), and Settings › Video › Reduce motion turns it off.
+/// </summary>
+public static class Juice
+{
+    private const float Seconds = 0.25f;
+
+    public static void Attach(Control c)
+    {
+        Tween? tween = null;
+        bool hovered = false, focused = false, down = false;
+        void Update()
+        {
+            if (!c.IsInsideTree() || GameSettings.Current.ReduceMotion) return;
+            int pct = c.GetThemeConstant("hover_scale_pct", Skins.SkinTheme.JuiceType);
+            int tilt = c.GetThemeConstant("hover_tilt_tenths", Skins.SkinTheme.JuiceType);
+            if (pct == 0 && tilt == 0) return;
+            bool lit = (hovered || focused) && !(c is BaseButton { Disabled: true });
+            float scale = down ? 1f - pct / 200f : lit ? 1f + pct / 100f : 1f;
+            // neighbours lean opposite ways, as stickers on a page do
+            float angle = lit && !down ? Mathf.DegToRad(tilt / 10f) * (c.GetIndex() % 2 == 0 ? -1 : 1) : 0;
+            c.PivotOffset = c.Size / 2;
+            tween?.Kill();
+            tween = c.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+            tween.TweenProperty(c, "scale", new Vector2(scale, scale), Seconds);
+            tween.TweenProperty(c, "rotation", angle, Seconds);
+        }
+        c.MouseEntered += () => { hovered = true; Update(); };
+        c.MouseExited += () => { hovered = false; down = false; Update(); };
+        c.FocusEntered += () => { focused = true; Update(); };
+        c.FocusExited += () => { focused = false; Update(); };
+        if (c is BaseButton b)
+        {
+            b.ButtonDown += () => { down = true; Update(); };
+            b.ButtonUp += () => { down = false; Update(); };
+        }
     }
 }

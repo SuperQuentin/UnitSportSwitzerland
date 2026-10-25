@@ -23,11 +23,12 @@
   </PropertyGroup>
 
   <!-- ... and the APK carries every .so of the publish folder (#1082): keep out SDL (the wheel never starts on a
-       phone), mono's debugger, hot-reload and tracing components (mono falls back to its built-in stubs) and
-       the runtime pack's static .a libraries, which Android never loads -->
+       phone), mono's debugger, hot-reload and tracing components (mono falls back to its built-in stubs), ONNX
+       Runtime's natives (a phone never runs the vocal model, VocalSeparator.ModelName; its 53 MB .aar landed in
+       assets/) and the runtime pack's static .a libraries, which Android never loads -->
   <Target Name="DropUnusedAndroidNatives" AfterTargets="ComputeResolvedFilesToPublishList" Condition=" '$(GodotTargetPlatform)' == 'android' ">
     <ItemGroup>
-      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition=" '%(Filename)%(Extension)' == 'libSDL3.so' or '%(Filename)' == 'libmono-component-debugger' or '%(Filename)' == 'libmono-component-hot_reload' or '%(Filename)' == 'libmono-component-diagnostics_tracing' or '%(Extension)' == '.a' " />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition=" '%(Filename)%(Extension)' == 'libSDL3.so' or '%(Filename)' == 'libmono-component-debugger' or '%(Filename)' == 'libmono-component-hot_reload' or '%(Filename)' == 'libmono-component-diagnostics_tracing' or '%(Extension)' == '.a' or $([System.String]::Copy('%(Filename)').StartsWith('onnxruntime')) or $([System.String]::Copy('%(Filename)').StartsWith('libonnxruntime')) " />
     </ItemGroup>
   </Target>
 

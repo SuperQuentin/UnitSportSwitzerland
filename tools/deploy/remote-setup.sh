@@ -104,6 +104,10 @@ if [ "${TILES:-1}" = 1 ]; then
   if [ "${TILES_PRECOMPRESS:-1}" = 1 ]; then serve=$'file_server {\n\t\t\tprecompressed gzip\n\t\t}'
   else serve=$'encode gzip\n\t\tfile_server'; fi
   new=$(<"$HERE/Caddyfile"); new=${new//@TILES_SITE@/"$TILES_SITE"}; new=${new//@CHUNKS_DIR@/"$CHUNKS_DIR"}; new=${new//@WEB_DIR@/"$DEPLOY_DIR/web"}; new=${new//@COMPRESS@/"$serve"}
+  new=${new//@LAYOUTS_PORT@/"${LAYOUTS_PORT:-5080}"}
+  new=${new//@NAKAMA_PORT@/"${NAKAMA_PORT:-7350}"}   # Nakama behind the same Caddy at /nakama/ (#1205)
+  if [ -n "${LAYOUTS_TRUSTED_PROXIES:-}" ]; then global=$'{\n\tservers {\n\t\ttrusted_proxies static '"$LAYOUTS_TRUSTED_PROXIES"$'\n\t}\n}'; else global=""; fi
+  new=${new//@GLOBAL@/"$global"}
   cf=/etc/caddy/Caddyfile
   if [ "$DRY" = 1 ]; then echo "  [dry] write $cf (site $TILES_SITE, /tiles/ -> $CHUNKS_DIR)"
   elif [ "$(cat "$cf" 2>/dev/null)" != "$new" ]; then printf '%s\n' "$new" > "$cf"; fi
