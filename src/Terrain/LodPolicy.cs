@@ -51,9 +51,29 @@ public sealed class LodPolicy
     /// Full on the tile underfoot and its neighbours; past them every tree is a billboard of a
     /// few pixels, and a forest 49 tiles wide drew all of up to 60k per tile.
     /// </summary>
-    public float TreeDensity(int dist) => Core.Platform.IsStandaloneVr
-        ? (dist == 0 ? 1f : dist == 1 ? 0.5f : 0.15f)   // a standalone headset's GPU (#1112)
+    public float TreeDensity(int dist) => SparseFarTrees
+        ? (dist == 0 ? 1f : dist == 1 ? 0.5f : 0.15f)   // Very low, a standalone headset's GPU (#1112)
         : dist <= 1 ? 1f : dist == 2 ? 0.5f : 0.25f;
+
+    /// <summary>Very low (#1112, #1216): the neighbours' trees halved and the farther ones at 15 %.</summary>
+    public bool SparseFarTrees { get; init; }
+
+    /// <summary>
+    /// A building cell's own mesh is drawn to this far from the eye, its boxes beyond
+    /// (<see cref="BuildingMeshBuilder.BuildProxies"/>): a 3D distance per 125 m cell (#1112; every
+    /// preset since #1216, each at its own distance).
+    /// </summary>
+    public float BuildingBoxFromM { get; init; } = 1000f;
+
+    /// <summary>
+    /// The tiles round an anchor whose buildings are drawn in 125 m cells, each its own mesh or its boxes
+    /// (<see cref="BuildingBoxFromM"/>): those whose near edge, (ring - 1) km off, is nearer than the boxes start.
+    /// Beyond, a tile is one mesh of boxes (#1216).
+    /// </summary>
+    public int CellRings => 1 + (int)((BuildingBoxFromM - 1f) / 1000f);
+
+    /// <summary>The road markings are drawn to this far, per 125 m cell; 0 everywhere they are loaded (#1112, #1216).</summary>
+    public float RoadPaintToM { get; init; } = 1000f;
 
     /// <summary>Extra rings a chunk may drift out before being unloaded (hysteresis).</summary>
     public int UnloadSlack { get; init; } = 1;
@@ -113,8 +133,19 @@ public sealed class LodPolicy
             if (r.MaxDist < maxRings) rings.Add(r with { Stride = Math.Max(r.Stride, finestStride) });
         rings.Add(new Ring(maxRings, FarStride));
 
+        // far buildings as their boxes and the road markings cut off, nearer the lower the preset (#1216)
+        (float boxFrom, float paintTo) = detail switch
+        {
+            DetailPreset.VeryLow => (300f, 250f),
+            DetailPreset.Low => (600f, 500f),
+            DetailPreset.High => (2000f, 0f),
+            _ => (1000f, 1000f),
+        };
         return new LodPolicy
         {
+            SparseFarTrees = detail == DetailPreset.VeryLow,
+            BuildingBoxFromM = boxFrom,
+            RoadPaintToM = paintTo,
             Rings = rings.ToArray(),
             RoadMaxDist = Math.Min(roads, maxRings),
             // "--buildingrings N": how far buildings reach, to measure what they cost (#1112)
@@ -129,6 +160,6 @@ public sealed class LodPolicy
     /// (<see cref="GameSettings.VrDetail"/>, #1036).
     /// </summary>
     public static LodPolicy FromSettings(GameSettings s) => s.LowDataActive
-        ? Create(DetailPreset.Low, Math.Min(s.RenderDistanceRings, GameSettings.LowDataRings), Styles.StyleKit.FinestStride)
-        : Create(XR.XrSession.Active ? s.VrDetail : s.Detail, s.RenderDistanceRings, Styles.StyleKit.FinestStride);
+        ? Create(s.EffectiveDetail, Math.Min(s.RenderDistanceRings, GameSettings.LowDataRings), Styles.StyleKit.FinestStride)
+        : Create(s.EffectiveDetail, s.RenderDistanceRings, Styles.StyleKit.FinestStride);
 }

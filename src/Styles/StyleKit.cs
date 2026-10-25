@@ -109,6 +109,12 @@ public static class StyleKit
     /// <summary>Whether this run is on Forward+ (<c>--rendering-method forward_plus</c>).</summary>
     public static bool OnForwardPlus => RenderingServer.GetCurrentRenderingMethod() == "forward_plus";
 
+    /// <summary>
+    /// Whether this run is on the Mobile renderer: a phone's or a standalone headset's tiled GPU, where the draw
+    /// order decides what early depth rejection saves (<see cref="CoverFirst"/>, #1112, #1216).
+    /// </summary>
+    public static bool OnMobileRenderer => RenderingServer.GetCurrentRenderingMethod() == "mobile";
+
     /// <summary>"PS1", "Cartoon", "Realistic−", "Realistic+": for menus.</summary>
     public static string Label(VisualStyle style) => style switch
     {
@@ -138,6 +144,8 @@ public static class StyleKit
     public static VisualStyle Applied => _applied ??= Style;
 
     private static VisualStyle? _applied;
+    private static bool _appliedLean;
+    private static int _appliedSplits;
 
     /// <summary>The style a style borrows from; null for the base.</summary>
     public static VisualStyle? Parent(VisualStyle style) => style switch
@@ -225,8 +233,9 @@ public static class StyleKit
     }
 
     /// <summary>
-    /// Whether the roads, buildings and water draw before the ground (a standalone headset, #1112); settable to
-    /// measure it (<c>--hidetoggle @order</c>), which moves every live material of those roles at once.
+    /// Whether the roads, buildings and water draw before the ground (#1112): on the Mobile renderer (#1216), whose
+    /// tiled GPUs shade every opaque pixel that is not rejected by depth first; a desktop GPU sorts by depth anyway.
+    /// Settable to measure it (<c>--hidetoggle @order</c>), which moves every live material of those roles at once.
     /// </summary>
     public static bool CoverFirst
     {
@@ -240,7 +249,7 @@ public static class StyleKit
                         m.RenderPriority = value ? -1 : 0;
         }
     }
-    private static bool _coverFirst = Core.Platform.IsStandaloneVr;
+    private static bool _coverFirst = OnMobileRenderer;
 
     /// <summary>
     /// Measuring only (<c>--hidetoggle @plainground</c>, #1112): every live ground material on the cheapest shader
@@ -272,8 +281,13 @@ public static class StyleKit
     /// </summary>
     public static bool Restyle()
     {
-        if (_applied == Style) return false;
+        // the Detail preset also picks shaders (Very low's lighter variants) and the sun's cascades (#1216)
+        bool lean = GameSettings.Lean;
+        int splits = ShadowSplits;
+        if (_applied == Style && _appliedLean == lean && _appliedSplits == splits) return false;
         _applied = Style;
+        _appliedLean = lean;
+        _appliedSplits = splits;
         lock (Live)
         {
             Live.RemoveAll(l => !l.Material.TryGetTarget(out _));
@@ -374,9 +388,9 @@ public static class StyleKit
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
     {
         var (from, path) = Resolve(style, role);
-        // a standalone headset's own variant where a style has one (#1112): no discard (it turned a Quest's
-        // early depth rejection off), no read of the scene's depth, a lighter finish (NO_DISCARD, STANDALONE)
-        if (Core.Platform.IsStandaloneVr && path.Replace(".gdshader", "_standalone.gdshader") is var standalone
+        // Very low's own variant where a style has one (#1112, any device since #1216): no discard (it turned a
+        // Quest's early depth rejection off), no read of the scene's depth, a lighter finish (NO_DISCARD, STANDALONE)
+        if (GameSettings.Lean && path.Replace(".gdshader", "_standalone.gdshader") is var standalone
             && ResourceLoader.Exists(standalone))
             path = standalone;
         if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--plainterrain")) path = "res://shaders/debug_plain_terrain.gdshader";
@@ -387,9 +401,9 @@ public static class StyleKit
         // PS1's finish (shaders/common/retro.gdshaderinc) belongs to PS1: off wherever another
         // style draws with a PS1 body, borrowed or wrapped
         if (HasUniform(shader, "retro")) m.SetShaderParameter("retro", style == VisualStyle.Ps1);
-        // a standalone headset (#1112): the trees' dissolve discards, which turns a Quest's early depth
+        // the Mobile renderer (#1112, #1216): the trees' dissolve discards, which turns a tiled GPU's early depth
         // rejection off for every draw after it, so they go last (opaque draws sort by priority first)
-        if (Core.Platform.IsStandaloneVr && role is MaterialRole.Tree or MaterialRole.TreeFar) m.RenderPriority = 2;
+        if (OnMobileRenderer && role is MaterialRole.Tree or MaterialRole.TreeFar) m.RenderPriority = 2;
         // and what covers the ground goes before it: the roads on it, the buildings in front of it and the (opaque)
         // water over the lake bed, so the ground's costly pixels under them are rejected instead of shaded twice
         if (CoverFirst && role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water) m.RenderPriority = -1;
@@ -709,12 +723,14 @@ public static class StyleKit
     /// </summary>
     public static float Dusk(float sunElevationDeg) => Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
 
-    /// <summary>The sun's shadow cascades: 4, or <c>--shadows off|1|2|4</c> to measure their cost (#1112).</summary>
-    private static readonly int ShadowSplits = Core.CmdArgs.Value("--shadows") switch
+    /// <summary>
+    /// The sun's shadow cascades by the Detail preset (#1216): 4, 2 on Low, 1 over the near ground on Very low (where
+    /// a shadow reads, a Quest's since #1112); <c>--shadows off|1|2|4</c> to measure their cost.
+    /// </summary>
+    private static int ShadowSplits => Core.CmdArgs.Value("--shadows") switch
     {
         "off" or "0" => 0, "1" => 1, "2" => 2, "4" => 4,
-        // a standalone headset (#1112): one cascade over the near ground, where a shadow reads
-        _ => Core.Platform.IsStandaloneVr ? 1 : 4,
+        _ => GameSettings.Lean ? 1 : GameSettings.Cheap ? 2 : 4,
     };
 
     /// <summary>

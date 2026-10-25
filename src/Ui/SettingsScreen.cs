@@ -260,8 +260,12 @@ public partial class SettingsScreen : Screen
             }
             UiKit.SliderRow(rows, "Render distance", GameSettings.MinRingsHere, GameSettings.MaxRings, 1,
                 s.RenderDistanceRings, v => GameSettings.Current.RenderDistanceRings = (int)v, RingsText);
-            UiKit.OptionRow(rows, "Detail", new[] { "Low", "Medium", "High" }, (int)s.Detail,
-                i => GameSettings.Current.Detail = (DetailPreset)i);
+            // Very low on every device since #1216 (a standalone headset's, #1112): first, as in the VR row
+            DetailPreset[] details = { DetailPreset.VeryLow, DetailPreset.Low, DetailPreset.Medium, DetailPreset.High };
+            UiKit.OptionRow(rows, "Detail", new[] { "Very low", "Low", "Medium", "High" },
+                Math.Max(0, Array.IndexOf(details, s.Detail)), i => GameSettings.Current.Detail = details[i],
+                "Lower: far buildings become boxes and road markings stop nearer, fewer shadow cascades. "
+                + "Very low also takes lighter shaders, sparse far trees and a coarse horizon");
             UiKit.SliderRow(rows, "Horizon", 0, GameSettings.MaxHorizonKm, 5, s.HorizonKm,
                 v => GameSettings.Current.HorizonKm = (int)v, v => v <= 0 ? "off" : $"{v:F0} km");
             UiKit.SliderRow(rows, "Parallel tile builds", 0, GameSettings.MaxBuildsCap, 1, s.MaxConcurrentBuilds,
