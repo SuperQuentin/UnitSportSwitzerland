@@ -167,6 +167,7 @@ internal sealed class XrHands
             Buzz(hand, 0.45f, 0.05f);
             return;
         }
+        if (player == null) return;   // before the world is up: nothing to take (an NRE on a Quest, #1112)
         // a ski lift's station (#912), on skis too: grab the bar or the chair
         if ((player.Lift != null || player.LiftInReach() != null) && player.TryLift())
         {
