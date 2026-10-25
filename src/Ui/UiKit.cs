@@ -198,12 +198,47 @@ public static class UiKit
     public static LineEdit TextRow(Container into, string name, string text, string placeholder, string? hint = null, bool secret = false)
     {
         var row = Row(name, hint);
-        var edit = new LineEdit { Text = text, PlaceholderText = placeholder, Secret = secret, CustomMinimumSize = new Vector2(ControlWidth, 36) };
+        var edit = Edit(text, placeholder, secret);
+        edit.CustomMinimumSize = new Vector2(ControlWidth, 36);
+        row.AddChild(edit);
+        into.AddChild(row);
+        return edit;
+    }
+
+    /// <summary>
+    /// A form's text field (#1209): the name just above the field, as on a sign-in form, rather than a settings row's
+    /// name at the far left and control at the far right.
+    /// </summary>
+    public static LineEdit FormField(Container into, string name, string text, string placeholder, string? hint = null, bool secret = false)
+    {
+        var field = VBox(4);
+        var title = HBox(10);
+        title.AddChild(Text(name));
+        if (hint != null)
+        {
+            var h = Text(hint, UiTheme.FontTiny, UiTheme.TextFaint);
+            h.SizeFlagsVertical = Control.SizeFlags.ShrinkEnd;
+            title.AddChild(h);
+        }
+        field.AddChild(title);
+        var edit = Edit(text, placeholder, secret);
+        edit.CustomMinimumSize = new Vector2(FormFieldWidth, 40);
+        edit.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        field.AddChild(edit);
+        into.AddChild(field);
+        return edit;
+    }
+
+    /// <summary>How wide a form's text field is: an email address and then some.</summary>
+    public const float FormFieldWidth = 460;
+
+    /// <summary>A line edit that holds the keyboard while focused (<see cref="Core.UiFocus"/>).</summary>
+    private static LineEdit Edit(string text, string placeholder, bool secret)
+    {
+        var edit = new LineEdit { Text = text, PlaceholderText = placeholder, Secret = secret };
         edit.FocusEntered += () => Core.UiFocus.Set(edit, true);
         edit.FocusExited += () => Core.UiFocus.Set(edit, false);
         edit.TreeExiting += () => Core.UiFocus.Set(edit, false);
-        row.AddChild(edit);
-        into.AddChild(row);
         return edit;
     }
 

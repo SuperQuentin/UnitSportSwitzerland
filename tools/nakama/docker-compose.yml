@@ -30,6 +30,8 @@ services:
       NAKAMA_CONSOLE_USER: ${NAKAMA_CONSOLE_USER:?}
       NAKAMA_CONSOLE_PASSWORD: ${NAKAMA_CONSOLE_PASSWORD:?}
       NAKAMA_ENCRYPTION_KEY: ${NAKAMA_ENCRYPTION_KEY:?}
+      # the first admins, by email (#1207): they join the admins group on their first sign-in to the website
+      NAKAMA_ADMIN_EMAILS: ${NAKAMA_ADMIN_EMAILS:-}
     # Nakama's config file cannot read the environment, so the secrets go in as flags; local.yml holds the rest
     entrypoint:
       - /bin/sh
@@ -40,12 +42,14 @@ services:
         --socket.server_key "$$NAKAMA_SERVER_KEY" --runtime.http_key "$$NAKAMA_HTTP_KEY"
         --console.username "$$NAKAMA_CONSOLE_USER" --console.password "$$NAKAMA_CONSOLE_PASSWORD"
         --session.encryption_key "$$NAKAMA_ENCRYPTION_KEY" --session.refresh_encryption_key "r$$NAKAMA_ENCRYPTION_KEY"
-        --console.signing_key "c$$NAKAMA_ENCRYPTION_KEY"
+        --console.signing_key "c$$NAKAMA_ENCRYPTION_KEY" --runtime.env "ADMIN_EMAILS=$$NAKAMA_ADMIN_EMAILS"
     volumes:
       - ./local.yml:/nakama/data/local.yml:ro
       - ./modules:/nakama/data/modules:ro
     ports:
-      - "${NAKAMA_PORT:-7350}:7350"                    # API and realtime socket: the game and the race servers
+      # API and realtime socket. Loopback by default: a host's Caddy serves it at https://<site>/nakama/ (#1205);
+      # NAKAMA_BIND=0.0.0.0 publishes it on every interface (a host without Caddy)
+      - "${NAKAMA_BIND:-127.0.0.1}:${NAKAMA_PORT:-7350}:7350"
       - "127.0.0.1:${NAKAMA_CONSOLE_PORT:-7351}:7351"  # admin console: this machine only (ssh -L on a server)
     healthcheck:
       test: ["CMD", "/nakama/nakama", "healthcheck"]

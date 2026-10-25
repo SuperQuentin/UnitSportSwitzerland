@@ -53,6 +53,7 @@ public partial class PlayerFeel : Node3D
     private CanvasLayer _screen = null!;
     private Label _speedLabel = null!, _popup = null!;
     private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!, _airBar = null!;
+    private float _rpmShown = -1f;
     private StyleBoxFlat _airFill = null!;
     private Label _driftLabel = null!;
     private StyleBoxFlat _rpmFill = null!;
@@ -796,7 +797,7 @@ public partial class PlayerFeel : Node3D
         _engineLabel.GrowHorizontal = Control.GrowDirection.Begin;
         _engineLabel.GrowVertical = Control.GrowDirection.Begin;
         _engineLabel.OffsetRight = -18; _engineLabel.OffsetBottom = -16;
-        if (Core.Platform.IsMobile)
+        if (Core.Platform.IsTouch)
         {
             // the pedals take the bottom right on a phone (#1043), the cards the top left: top centre
             _engineLabel.SetAnchorsPreset(Control.LayoutPreset.CenterTop);
@@ -1025,21 +1026,24 @@ public partial class PlayerFeel : Node3D
 
         // the rev counter, amber turning red toward the limit
         _rpmBar.Visible = _player.Vehicle is IEngined && !dash;
-        if (_player.Vehicle is IEngined rev)
+        // written only when it moves by a visible step: each write is an engine call and a redraw (#1112, a Quest's CPU)
+        if (_player.Vehicle is IEngined rev && Mathf.Abs(rev.Rpm01 - _rpmShown) > 0.005f)
         {
+            _rpmShown = rev.Rpm01;
             _rpmBar.Value = rev.Rpm01;
-            _rpmFill.BgColor = new Color(1f, 0.85f, 0.25f).Lerp(new Color(1f, 0.2f, 0.15f), Mathf.Clamp((rev.Rpm01 - 0.8f) / 0.15f, 0f, 1f));
+            var colour = new Color(1f, 0.85f, 0.25f).Lerp(new Color(1f, 0.2f, 0.15f), Mathf.Clamp((rev.Rpm01 - 0.8f) / 0.15f, 0f, 1f));
+            if (_rpmFill.BgColor != colour) _rpmFill.BgColor = colour;
         }
 
         // health only when it is not full: a bar that is always full is clutter
         _healthBar.Visible = _player.Health < FootPlayer.MaxHealth - 0.5f;
-        _healthBar.Value = _player.Health;
+        if (_healthBar.Visible && _healthBar.Value != _player.Health) _healthBar.Value = _player.Health;
         // air: shown while it is not full, blinking once it runs low
         float air = _player.Air;
         _airBar.Visible = air < FootPlayer.AirMax - 0.05f;
         if (_airBar.Visible)
         {
-            _airBar.Value = air;
+            if (_airBar.Value != air) _airBar.Value = air;
             bool low = air < FootPlayer.AirMax * 0.25f;
             var colour = low && Mathf.PosMod(_time * 3f, 1f) < 0.5f ? new Color(1f, 0.35f, 0.25f) : new Color(0.35f, 0.75f, 1f);
             if (_airFill.BgColor != colour) _airFill.BgColor = colour;

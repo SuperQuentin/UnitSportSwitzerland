@@ -61,6 +61,9 @@ public static class Account
     /// <summary>Online with a session that can still be refreshed.</summary>
     public static bool SignedIn => _current.Mode == AccountMode.Online && _current.RefreshToken.Length > 0;
 
+    /// <summary>The account as the title screen shows it (#1209).</summary>
+    public static (bool SignedIn, bool Offline, string Username) Current() => (SignedIn, Mode == AccountMode.Offline, Username);
+
     /// <summary>One line for the settings page and the menus.</summary>
     public static string Status => _current.Mode == AccountMode.Offline ? "Offline: no account"
         : SignedIn ? $"Online as {_current.Username} on {Url}"

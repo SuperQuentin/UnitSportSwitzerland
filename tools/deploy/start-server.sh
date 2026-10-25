@@ -11,6 +11,7 @@ DIR='@DEPLOY_DIR@'
 export UNITSPORT_CHUNKS='@CHUNKS_DIR@'
 export UNITSPORT_UPDATER="$DIR/update-server.sh"
 SESSION=unitsport
+# tmux takes a bare name as a prefix: "unitsport" would match unitsport-layouts, so every lookup is exact ("=")
 
 if [ "${1-}" = run ]; then
   while :; do
@@ -26,12 +27,12 @@ fi
 
 # the house layout service (#1186), its own session: started here so cron and every deploy bring it up too
 [ -x "$DIR/start-layouts.sh" ] && "$DIR/start-layouts.sh"
-tmux has-session -t "$SESSION" 2>/dev/null && { echo "already running (tmux attach -t $SESSION)"; exit 0; }
+tmux has-session -t "=$SESSION" 2>/dev/null && { echo "already running (tmux attach -t $SESSION)"; exit 0; }
 # a fetch whose server was then stopped from outside (a deploy, a reboot): that start decides the build, not it
 rm -f "$DIR/pending-update"
 echo "=== start $(date -Is) ===" >> "$DIR/server.log"
 # The server writes straight to the pane (a tty, so its output is line-buffered and the console shows it);
 # pipe-pane copies the pane to the log. Piping through tee instead block-buffers everything until exit.
 tmux new-session -d -s "$SESSION" -x 200 -y 50 "bash '$DIR/start-server.sh' run"
-tmux pipe-pane -t "$SESSION" -o "cat >> '$DIR/server.log'"
+tmux pipe-pane -t "=$SESSION:" -o "cat >> '$DIR/server.log'"
 echo "started (tmux attach -t $SESSION, log $DIR/server.log)"

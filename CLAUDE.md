@@ -72,6 +72,8 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
   gameplay acts on an intent (`WalkControls`, `RideControls`, an item entry taking the player), never a
   raw `Input` read, every client RPC action has a server method a bot can call, and its row goes in
   `bots/bot-capability-map`; the PR says what a bot would need (`docs/notes/general/new-feature-bots.md`).
+- **Every new or reworked interface follows `ui/ux-guidelines`** (menus, HUDs, popups, VR panels): run
+  its self-review checklist before finishing, and its look comes from `ui/style-guide`.
 - **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
   or extend the set that already covers it (a new enum value or catalog row usually shows by
   itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).

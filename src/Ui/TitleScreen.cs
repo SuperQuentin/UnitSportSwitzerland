@@ -82,6 +82,9 @@ public partial class TitleScreen : Screen
         foot.AddChild(UiKit.Text(version.Length > 0 ? $"v{version}" : "development build", UiTheme.FontSmall, UiTheme.TextFaint));
         AddChild(foot);
 
+        // the account (#1209): a button at the top right with the profile picture, to the Account page
+        AddChild(AccountButton());
+
         _jingle = new AudioStreamPlayer { Bus = Audio.SfxBus.Name, VolumeDb = -6 };
         AddChild(_jingle);
         PlayJingle();
@@ -90,8 +93,64 @@ public partial class TitleScreen : Screen
         if (UpdatePrompt.Available is { } tag) ShowUpdate(tag);
     }
 
-    public override void _EnterTree() => UpdatePrompt.Found += ShowUpdate;
-    public override void _ExitTree() => UpdatePrompt.Found -= ShowUpdate;
+    public override void _EnterTree()
+    {
+        UpdatePrompt.Found += ShowUpdate;
+        Net.Accounts.Account.Changed += ShowAccount;
+    }
+
+    public override void _ExitTree()
+    {
+        UpdatePrompt.Found -= ShowUpdate;
+        Net.Accounts.Account.Changed -= ShowAccount;
+    }
+
+    private Button? _account;
+    private AvatarBadge? _badge;
+    private Label? _accountName, _accountState;
+
+    /// <summary>
+    /// The account button (#1209): the profile picture (the player's figure's face, or a silhouette signed out), the
+    /// account name or "Sign in", and the state under it. It opens the Account page.
+    /// </summary>
+    private Control AccountButton()
+    {
+        _account = UiKit.Button("");
+        _account.Name = "AccountButton";
+        _account.TooltipText = "Your account: sign in, create one, or play offline";
+        _account.CustomMinimumSize = new Vector2(250, 62);
+        _account.SetAnchorsPreset(LayoutPreset.TopRight);
+        _account.GrowHorizontal = GrowDirection.Begin;
+        _account.OffsetRight = -48; _account.OffsetTop = 36; _account.OffsetLeft = -48 - 250; _account.OffsetBottom = 36 + 62;
+        _account.Pressed += () => Shell.Push(AccountScreen.Create());
+
+        var row = UiKit.HBox(12);
+        row.MouseFilter = MouseFilterEnum.Ignore;
+        row.SetAnchorsPreset(LayoutPreset.FullRect);
+        row.OffsetLeft = 14; row.OffsetRight = -14;
+        _badge = new AvatarBadge(44);
+        row.AddChild(_badge);
+        var text = UiKit.VBox(0);
+        text.MouseFilter = MouseFilterEnum.Ignore;
+        text.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        _accountName = UiKit.Text("", UiTheme.FontBody + 2, bold: true);
+        _accountState = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim);
+        text.AddChild(_accountName);
+        text.AddChild(_accountState);
+        row.AddChild(text);
+        _account.AddChild(row);
+        ShowAccount();
+        return _account;
+    }
+
+    private void ShowAccount()
+    {
+        if (_account == null || !IsInstanceValid(_account)) return;
+        var a = Net.Accounts.Account.Current();
+        _badge!.Portrait = a.SignedIn;
+        _accountName!.Text = a.SignedIn ? a.Username : "Sign in";
+        _accountState!.Text = a.SignedIn ? "Online account" : a.Offline ? "Playing offline" : "Online, not signed in";
+    }
 
     private void ShowUpdate(string tag)
     {
@@ -120,6 +179,8 @@ public partial class TitleScreen : Screen
     public override void OnShown()
     {
         _first.CallDeferred(Control.MethodName.GrabFocus);
+        _badge?.Refresh();   // back from Character or Account: the new face and name
+        ShowAccount();
         Callable.From(SlideIn).CallDeferred();
     }
 

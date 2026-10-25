@@ -52,7 +52,10 @@
     `up.sh up` as root.
   - The first run makes the host's `.env` (random keys, mode 600). Every later deploy keeps it: a new encryption key
     would log everyone out, and a new Postgres password would lock Nakama out of its volume.
-  - It opens `NAKAMA_PORT/tcp` (7350) in ufw and checks `/healthcheck`.
+  - **Behind Caddy** (#1205, a host with `TILES=1`): Nakama listens on 127.0.0.1 only and Caddy serves it at
+    `https://<site>/nakama/`. The step closes `NAKAMA_PORT/tcp` (7350) in ufw if an older deploy opened it, then checks
+    `/healthcheck` directly and through Caddy. A host set up before #1205 needs `--setup` once, for the new Caddyfile.
+    `NAKAMA_URL` defaults to that public address. Without Caddy (`TILES=0`), 7350 is published and opened in ufw.
   - It prints what players need (`http://<host>:7350` and the server key) and the `ssh -L` tunnel for the console.
   - `--check` reports whether Docker, the `.env` and the containers are there.
   - Simulated locally by running the upload and `up.sh` twice: the keys stayed the same. A real host run was not

@@ -103,7 +103,7 @@ public partial class TouchControls : CanvasLayer
     public static TouchControls Create() => new() { Name = "TouchControls" };
 
     /// <summary>Whether this device should get the overlay at all.</summary>
-    public static bool Wanted => Platform.IsMobile && (DisplayServer.GetName() != "headless" || TouchCheck.Requested);
+    public static bool Wanted => Platform.IsTouch && (DisplayServer.GetName() != "headless" || TouchCheck.Requested);
 
     /// <summary>Touch holds are real time (docs/notes/core/three-clocks.md): read as deadlines.</summary>
     private static double Now => RealClock.Now;

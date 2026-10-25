@@ -40,7 +40,7 @@ public class AccountRulesTests
         Assert.Null(AccountRules.Refusal(ServerAccounts.Required, presented: true, verified: true, "http://a:7350"));
         string? offline = AccountRules.Refusal(ServerAccounts.Required, presented: false, verified: false, "http://a:7350");
         Assert.Contains("requires an online account on http://a:7350", offline);
-        Assert.Contains("Settings › Account", offline);
+        Assert.Contains("account button on the title screen", offline);
         string? expired = AccountRules.Refusal(ServerAccounts.Required, presented: true, verified: false, "http://a:7350");
         Assert.Contains("could not check", expired);
     }

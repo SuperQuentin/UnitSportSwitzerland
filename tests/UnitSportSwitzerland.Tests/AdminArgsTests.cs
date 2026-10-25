@@ -101,4 +101,28 @@ public class AdminArgsTests
     [InlineData("2600000 1200000 5")]
     [InlineData("2600000,5 1200000")] // a French decimal comma
     public void TryLv95_rejects(string text) => Assert.False(AdminArgs.TryLv95(text, out _, out _));
+
+    [Theory]
+    [InlineData("vehicles", true, false, 30f)]
+    [InlineData("Items 12.5", false, true, 12.5f)]
+    [InlineData("all 5000", true, true, 5000f)]
+    [InlineData("all everywhere", true, true, null)]
+    [InlineData("vehicle EVERYWHERE", true, false, null)]
+    public void TryDespawn_accepts(string text, bool vehicles, bool items, float? radius)
+    {
+        Assert.True(AdminArgs.TryDespawn(text.Split(' '), out bool v, out bool i, out float? r));
+        Assert.Equal((vehicles, items, radius), (v, i, r));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("players")]
+    [InlineData("items 0")]
+    [InlineData("items -5")]
+    [InlineData("items 5001")]
+    [InlineData("items 3,5")]   // a French decimal comma
+    [InlineData("items NaN")]
+    [InlineData("items 10 more")]
+    public void TryDespawn_rejects(string text) =>
+        Assert.False(AdminArgs.TryDespawn(text.Split(' ', StringSplitOptions.RemoveEmptyEntries), out _, out _, out _));
 }

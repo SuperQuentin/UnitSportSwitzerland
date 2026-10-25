@@ -12,6 +12,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `invites` — One invite system (#840): `InviteBook`/`PartyBook` (pure, unit-tested), `InviteService` at World/Invites (kinds register an accept), `Parties` at World/Parties; kinds br/tp/tphere/party/fight/race, `/invites /accept /decline /tpa /tphere /party`, toasts, F2 / Shift+F2, `tools/invitecheck.sh`
 - `chat-commands` — Chat and commands: (`Net/ChatManager`, `Core/ChatUi`): one class runs on both sides at `World/Chat` — the path must...
 - `admin` — Admin: (`Net/PlayerRegistry`): identity is the ENet peer id, which a client cannot forge; the display name is a...
+- `despawn` — `/despawn <vehicles | items | all> [radius | everywhere]` (admin online, offline free) and the F9 Despawn buttons: `VehicleManager`/`DroppedItems.Despawn` on the server through `Removing` + the spawner, claims and proxies skipped; `tools/econcheck.sh` (#1200)
 - `vision-interest` — Vision-based interest: the server decides who sees whom (size at render resolution, sky, line of sight, race); out of view = despawned
 - `entity-interest` — Vehicles, dropped items and radios exist on a peer only within the range they stay 1.5 px wide at its lens (hysteresis, look-ahead, 32 spawns a round, fade before the edge); `Vis` + server `Relay` per entity (`EntityNet`), the awake slot set sent to all (#689)
 - `perf-visibility-on-change` — Player synchronizers keep `VisibilityUpdateMode.None`: every change to what a peer may see must call `UpdateVisibility` (`RefreshNetVisibility`/`RefreshRelays`) where it happens
@@ -40,7 +41,8 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `sleepers` — A player who leaves lies asleep where they were (saved), and wakes there on return; identity is a per-install ECDSA key proven on join, never the name (#644)
 - `server-update` — `/update` (admin): newest GitHub release fetched while players play, then kick all and quit; `start-server.sh run` switches `current` and restarts (#730); automatic every 10 min, restart only once empty, admins told (`ServerAutoUpdate`, #1088)
 - `nakama` — Nakama in Docker (`tools/nakama/up.sh`, `check.sh`): accounts and `course:<id>` leaderboards for the trainer edition; only race servers write results (`submit_result` with the http key, a player session gets 403), the ride stays on ENet (#1121)
-- `accounts` — Offline (default) or online players (Settings › Account, `user://online_account.json`); server `--accounts off|optional|required --nakama-url`: `World/Accounts` after the version check checks the session token by reading the account from Nakama; the client joins only on its Welcome (#1123)
+- `web-dashboard` — Website accounts (`tools/deploy/web/account.js`: sign in or create on Nakama through /nakama/) and `admin.html` for the Nakama group `admins` (first admins by email, NAKAMA_ADMIN_EMAILS): Users tab (search, admin, ban); Server and Console tabs are phase 2 (#1207)
+- `accounts` — Offline (default) or online players (the title screen's account button and Account page, `user://online_account.json`); server `--accounts off|optional|required --nakama-url`: `World/Accounts` after the version check checks the session token by reading the account from Nakama; the client joins only on its Welcome (#1123)
 - `console-link` — `World/ConsoleLink`: join for the chat only from a client of any version, no body, one's own name and rights (admins.json, /login), two RPCs that never change; Multiplayer › console button or the refusal banner (#1088)
 
 ## Commands

@@ -59,6 +59,12 @@ public sealed class SeatStart
         _overlay.Status("Finding solid ground");
     }
 
+    /// <summary>
+    /// How long the seat is tried, s: a Quest's first tiles took 17 to 23 s to give a road, so a phone or a headset
+    /// gets longer, or a measured run (#1112) stood somewhere else on foot half of the time.
+    /// </summary>
+    private static double GiveUpAfter => Platform.IsMobile ? 90 : 30;
+
     private static (Vector3, bool) Still() => (Vector3.Zero, false);
 
     /// <summary>One frame: true once seated (or given up).</summary>
@@ -67,9 +73,9 @@ public sealed class SeatStart
         if (Done) return true;
         if (_player == null || _chunks == null || _origin == null) return false;
         _waited += delta;
-        if (_waited > 30 || !GodotObject.IsInstanceValid(_player))
+        if (_waited > GiveUpAfter || !GodotObject.IsInstanceValid(_player))
         {
-            GD.PushWarning($"[seat] could not seat the player in {_kind} within 30 s; on foot instead");
+            GD.PushWarning($"[seat] could not seat the player in {_kind} within {GiveUpAfter:F0} s; on foot instead");
             Finish();
             return true;
         }

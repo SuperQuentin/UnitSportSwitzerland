@@ -17,11 +17,16 @@
     is the only copy of the keys.
   - `up` waits until both containers are healthy.
   - `down` keeps the database volume. `docker compose down -v` deletes every account and record.
-- **Ports**:
-  - **7350** is the API and realtime socket, used by the game and the race servers.
-  - **7351** is the admin console, bound to `127.0.0.1` only. On a server, reach it with `ssh -L 7351:127.0.0.1:7351`.
+- **Ports** (#1205):
+  - **7350** is the API and realtime socket. Docker publishes it on **127.0.0.1** only (`NAKAMA_BIND`, the compose
+    default). On the server, Caddy serves it at **`https://unitsport.infrack.ch/nakama/`** (`handle_path /nakama/*`,
+    the prefix stripped), as `/api/` goes to the layout service. Players, the website and game servers use that
+    address, over the site's HTTPS.
+  - **7351** is the admin console, bound to `127.0.0.1` only. On a server, reach it with
+    `ssh -L 7351:127.0.0.1:7351`.
   - gRPC (7349) is not published.
-  - `NAKAMA_PORT` and `NAKAMA_CONSOLE_PORT` in `.env` move the API and console ports.
+  - A host without Caddy (`TILES=0`) still publishes 7350 on every interface (`NAKAMA_BIND=0.0.0.0`) and opens it in ufw.
+  - `NAKAMA_PORT`, `NAKAMA_CONSOLE_PORT` and `NAKAMA_BIND` in `.env` move them.
 - **Keys** (`.env`):
   - `NAKAMA_SERVER_KEY`: in the game client, for authentication (basic auth). It is not a secret from players.
   - `NAKAMA_HTTP_KEY`: **race servers only**, for server-to-server RPCs. Never ship it in a client build.

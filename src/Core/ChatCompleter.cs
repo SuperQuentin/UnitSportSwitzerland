@@ -97,6 +97,7 @@ public sealed class ChatCompleter
         ("kick", true, false, "<player> [reason]", "Admin", "kick a player"),
         ("pvp", true, false, "on | off", "Admin", "player-on-player damage"),
         ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list", "Admin", "server-run bots"),
+        ("despawn", true, true, "<vehicles | items | all> [radius m | everywhere]", "Admin", "remove parked vehicles or dropped items around you"),
         ("debug", true, true, "", "Admin", "the debug menu"),
         ("update", true, false, "", "Admin", "update and restart the server"),
     ];
@@ -316,6 +317,15 @@ public sealed class ChatCompleter
 
             case "pvp":
                 options = argIndex == 0 ? ["on", "off"] : [];
+                break;
+
+            case "despawn":   // #1200
+                options = argIndex switch
+                {
+                    0 => ["vehicles", "items", "all"],
+                    1 => ["10", "30", "100", "everywhere"],
+                    _ => [],
+                };
                 break;
 
             case "bot" or "bots":   // #837

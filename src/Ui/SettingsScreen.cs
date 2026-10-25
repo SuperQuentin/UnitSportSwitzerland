@@ -58,8 +58,12 @@ public partial class SettingsScreen : Screen
                 SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
                     (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             }
-            ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
-            AntiAliasingRow(rows, s.AntiAliasing);
+            // a standalone headset's window draws no world (#1112): its picture is the VR rows' below
+            if (!Platform.IsStandaloneVr)
+            {
+                ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
+                AntiAliasingRow(rows, s.AntiAliasing);
+            }
             int[] imag = { 256, 512, 1024 };
             UiKit.OptionRow(rows, "Concert screens", new[] { "Low (256x144)", "Medium (512x288)", "High (1024x576)" },
                 Math.Max(0, Array.IndexOf(imag, s.ConcertScreenWidth)), i => GameSettings.Current.ConcertScreenWidth = imag[i],
@@ -79,11 +83,13 @@ public partial class SettingsScreen : Screen
                     styleOption.SetItemText(i, $"{Styles.StyleKit.Label(styles[i])} (in development)");
                     styleOption.SetItemDisabled(i, true);
                 }
-            UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
+            if (!Platform.IsStandaloneVr) // the headset paces the frames
+                UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
             SkinRows(rows);
-            if (Platform.CanSpawnProcesses) // VR is a relaunch with OpenXR (#63)
+            // VR is a relaunch with OpenXR (#63); a standalone headset is always in it (#1112)
+            if (Platform.CanSpawnProcesses || Platform.IsStandaloneVr)
             {
                 rows.AddChild(UiKit.Spacer(6));
                 rows.AddChild(UiKit.Section("Virtual reality"));
@@ -146,7 +152,6 @@ public partial class SettingsScreen : Screen
                 "The first-launch pages: your name, your figure, your account");
         });
 
-        Tab("Account", AccountPage.Fill);
 
         Tab("Vehicles", rows =>
         {
@@ -253,7 +258,7 @@ public partial class SettingsScreen : Screen
                 };
                 rows.AddChild(phone);
             }
-            UiKit.SliderRow(rows, "Render distance", GameSettings.MinRings, GameSettings.MaxRings, 1,
+            UiKit.SliderRow(rows, "Render distance", GameSettings.MinRingsHere, GameSettings.MaxRings, 1,
                 s.RenderDistanceRings, v => GameSettings.Current.RenderDistanceRings = (int)v, RingsText);
             UiKit.OptionRow(rows, "Detail", new[] { "Low", "Medium", "High" }, (int)s.Detail,
                 i => GameSettings.Current.Detail = (DetailPreset)i);
@@ -469,33 +474,52 @@ public partial class SettingsScreen : Screen
 
     private void VrRow(Container rows)
     {
-        CheckButton toggle = null!;
-        toggle = UiKit.ToggleRow(rows, "VR mode", XR.XrSession.Active, on =>
+        // a standalone headset (#1112) has no flat mode to go back to and no monitor
+        if (!Platform.IsStandaloneVr)
         {
-            if (on == XR.XrSession.Active) return;
-            AskVr(this, Shell, on, () => toggle.SetPressedNoSignal(!on));
-        }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
-        UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
-            (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
-            "What the computer screen shows while you play in the headset (F8 cycles it)");
+            CheckButton toggle = null!;
+            toggle = UiKit.ToggleRow(rows, "VR mode", XR.XrSession.Active, on =>
+            {
+                if (on == XR.XrSession.Active) return;
+                AskVr(this, Shell, on, () => toggle.SetPressedNoSignal(!on));
+            }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
+            UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
+                (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
+                "What the computer screen shows while you play in the headset (F8 cycles it)");
+        }
         // the headset's picture (#244, docs/notes/xr/air-link.md)
         int[] samples = { 0, 2, 4, 8 };
         UiKit.OptionRow(rows, "VR anti-aliasing", new[] { "Off", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
             Math.Max(0, Array.IndexOf(samples, GameSettings.Current.VrMsaa)), i => GameSettings.Current.VrMsaa = samples[i],
             "Steady edges stream cleanly over Air Link");
-        float[] scales = { 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f };
-        int scale = Array.FindIndex(scales, v => Math.Abs(v - GameSettings.Current.VrRenderScale) < 0.001f);
-        UiKit.OptionRow(rows, "VR resolution", scales.Select(v => $"{v * 100:F0} %").ToArray(), scale < 0 ? 4 : scale,
-            i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
+        if (Platform.IsStandaloneVr)
+        {
+            // dynamic resolution (#1112): the 3D scaling below would cost a standalone headset its single pass
+            float[] floors = { 0.5f, 0.6f, 0.7f, 0.75f, 0.8f, 0.9f, 1f };
+            int floor = Array.FindIndex(floors, v => Math.Abs(v - GameSettings.Current.VrResolutionFloor) < 0.001f);
+            UiKit.OptionRow(rows, "VR minimum resolution", floors.Select(v => v >= 1f ? "Full (no dynamic)" : $"{v * 100:F0} %").ToArray(),
+                floor < 0 ? 3 : floor, i => GameSettings.Current.VrResolutionFloor = floors[i],
+                "The picture shrinks toward this when the frame runs late, and grows back when it can");
+        }
+        else
+        {
+            float[] scales = { 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f };
+            int scale = Array.FindIndex(scales, v => Math.Abs(v - GameSettings.Current.VrRenderScale) < 0.001f);
+            UiKit.OptionRow(rows, "VR resolution", scales.Select(v => $"{v * 100:F0} %").ToArray(), scale < 0 ? 4 : scale,
+                i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
+        }
         UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
             "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
         // frame pacing and triangles (#1036, docs/notes/xr/air-link.md)
         int[] rates = GameSettings.VrRefreshRates;
         UiKit.OptionRow(rows, "VR refresh rate", rates.Select(hz => $"{hz} Hz").ToArray(),
             Math.Max(0, Array.IndexOf(rates, GameSettings.Current.VrRefreshHz)), i => GameSettings.Current.VrRefreshHz = rates[i],
-            "72 Hz holds steady over Air Link; higher only if the frame keeps up");
-        UiKit.OptionRow(rows, "VR terrain detail", new[] { "Low", "Medium", "High" }, (int)GameSettings.Current.VrDetail,
-            i => GameSettings.Current.VrDetail = (DetailPreset)i, "The headset's own Detail. Low draws a third of Medium's triangles");
+            Platform.IsStandaloneVr ? "72 Hz is what a Quest 2 holds; 60 flickers a little but buys time"
+                : "72 Hz holds steady over Air Link; higher only if the frame keeps up");
+        DetailPreset[] vrDetails = { DetailPreset.VeryLow, DetailPreset.Low, DetailPreset.Medium, DetailPreset.High };
+        UiKit.OptionRow(rows, "VR terrain detail", new[] { "Very low", "Low", "Medium", "High" },
+            Math.Max(0, Array.IndexOf(vrDetails, GameSettings.Current.VrDetail)), i => GameSettings.Current.VrDetail = vrDetails[i],
+            "The headset's own Detail. Low draws a third of Medium's triangles, Very low a quarter of Low's");
         // comfort (#439, docs/notes/xr/rig.md)
         int[] snaps = { 0, 15, 30, 45 };
         UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },

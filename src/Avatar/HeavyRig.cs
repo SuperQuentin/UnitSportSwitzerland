@@ -572,7 +572,8 @@ public partial class HeavyRig : Node3D, IHingedDoors, Items.IBeatReactive
         // the hands follow the wheel and the feet the pedals: bones only (#1202)
         _driver.Pose(WheelTurn, Throttle, Brake);
         OwnBody.See(_driver.Head, View != CockpitView.Outside, ref _driverHeadShadow);
-        OwnBody.See(_driver.Body, View == CockpitView.Bare, ref _driverBodyShadow);
+        // in VR the hands are the controllers' (XR/XrHands): a driver body under them was a second pair (#1112)
+        OwnBody.See(_driver.Body, View == CockpitView.Bare || View != CockpitView.Outside && XR.XrSession.Active, ref _driverBodyShadow);
     }
 
     private float _beatDy, _beatRoll;

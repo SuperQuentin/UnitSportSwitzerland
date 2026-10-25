@@ -258,28 +258,30 @@ public partial class OccasionDecor : Node
         if (into.Instances.Count == 0 && into.Meshes.Count == 0) return;
 
         var root = new Node3D { Name = "OccasionDecor" };
-        foreach (var (kind, list) in into.Instances)
-        {
-            var multi = new MultiMesh
+        foreach (var (kind, all) in into.Instances)
+            foreach (var list in Cells(all))
             {
-                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-                UseCustomData = true,
-                Mesh = kind.Mesh,
-                InstanceCount = list.Count,
-            };
-            for (int i = 0; i < list.Count; i++)
-            {
-                multi.SetInstanceTransform(i, list[i].Xf);
-                multi.SetInstanceCustomData(i, new Color(list[i].Seed, list[i].Glow, 0, 0));
+                var multi = new MultiMesh
+                {
+                    TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                    UseCustomData = true,
+                    Mesh = kind.Mesh,
+                    InstanceCount = list.Count,
+                };
+                for (int i = 0; i < list.Count; i++)
+                {
+                    multi.SetInstanceTransform(i, list[i].Xf);
+                    multi.SetInstanceCustomData(i, new Color(list[i].Seed, list[i].Glow, 0, 0));
+                }
+                root.AddChild(new MultiMeshInstance3D
+                {
+                    Name = kind.Name,
+                    Multimesh = multi,
+                    MaterialOverride = kind.Candle ? _candle : _steady,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                    VisibilityRangeEnd = Core.Platform.IsStandaloneVr ? StandaloneDrawnM : 0f,
+                });
             }
-            root.AddChild(new MultiMeshInstance3D
-            {
-                Name = kind.Name,
-                Multimesh = multi,
-                MaterialOverride = kind.Candle ? _candle : _steady,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            });
-        }
         foreach (var mesh in into.Meshes)
             root.AddChild(new MeshInstance3D
             {
@@ -290,6 +292,35 @@ public partial class OccasionDecor : Node
 
         tile.Node.AddChild(root);
         tile.Decor = root;
+    }
+
+    /// <summary>
+    /// How far a standalone headset draws the decor, m (#1112): a pumpkin or a gift past it is a few pixels, and
+    /// a Halloween city's were a millisecond of a Quest's frame from the air.
+    /// </summary>
+    private const float StandaloneDrawnM = 150f;
+
+    /// <summary>
+    /// One kind's props as drawn: all in one MultiMesh, or on a standalone headset in the buildings' 125 m cells
+    /// (<see cref="Terrain.BuildingOcclusion.Cells"/>), so each cell's range is measured from where its props stand.
+    /// </summary>
+    private static IEnumerable<List<(Transform3D Xf, float Seed, float Glow)>> Cells(List<(Transform3D Xf, float Seed, float Glow)> all)
+    {
+        if (!Core.Platform.IsStandaloneVr)
+        {
+            yield return all;
+            yield break;
+        }
+        const int n = Terrain.BuildingOcclusion.Cells;
+        const float size = (float)(Terrain.Format.ChunkFormat.TileSizeM / n);
+        var cells = new Dictionary<int, List<(Transform3D Xf, float Seed, float Glow)>>();
+        foreach (var p in all)
+        {
+            int cx = Math.Clamp((int)(p.Xf.Origin.X / size), 0, n - 1), cz = Math.Clamp((int)(p.Xf.Origin.Z / size), 0, n - 1);
+            if (!cells.TryGetValue(cz * n + cx, out var list)) cells[cz * n + cx] = list = new();
+            list.Add(p);
+        }
+        foreach (var list in cells.Values) yield return list;
     }
 
     // ---- queries -------------------------------------------------------------------------------

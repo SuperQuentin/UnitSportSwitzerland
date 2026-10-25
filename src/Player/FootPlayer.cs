@@ -2339,9 +2339,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
             };
         }
-        // the dedicated server draws nothing (#842): a bot it runs walks without its figure being rebuilt
-        // every frame (0.8 ms and 180 KB a bot a frame, the whole of a bot's cost); clients rebuild their
-        // copy from the replicated pose, and the hand's mounts above stay exact for what it holds
+        // the dedicated server draws nothing (#842): a bot it runs walks without its figure being posed;
+        // clients pose their copy from the replicated pose, and the hand's mounts above stay exact for
+        // what it holds. The own figure in VR needs no hold (#1112's): its arms are bones (#1202)
         if (key != _poseKey && !HoldRemoteFigure() && !Net.NetworkManager.DedicatedServer)
         {
             _poseKey = key;
@@ -2389,8 +2389,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private float _poseWait;
 
     /// <summary>
-    /// Whether a remote figure keeps last frame's mesh: beyond 40 m or outside the camera's view
-    /// cone it is rebuilt at 15 Hz, not every frame. Not frozen: mirrors, portals and photos see
+    /// Whether a remote figure keeps last frame's pose: beyond 40 m or outside the camera's view
+    /// cone it is posed at 15 Hz, not every frame. Not frozen: mirrors, portals and photos see
     /// what the main camera does not. The cone holds the whole screen and the figure's size, so a
     /// figure at the edge of the picture still counts as in view.
     /// </summary>

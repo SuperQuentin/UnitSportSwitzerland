@@ -4,7 +4,7 @@ using UnitSport.Net.Accounts;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings → Account and the welcome's last page (#1123): play offline (no account, the default) or online.
+/// The Account page (#1209, from the title screen's account button) and the welcome's last page (#1123): play offline (no account, the default) or online.
 /// <list type="bullet">
 /// <item>Signed in: one card, "Signed in as …", and Sign out.</item>
 /// <item>Signed out: two choices, "I have an account" (email, password, Sign in) and "New account" (email, password, a
@@ -21,8 +21,17 @@ public static class AccountPage
 
     public static void Fill(VBoxContainer rows)
     {
-        UiKit.OptionRow(rows, "Mode", new[] { "Offline", "Online" }, (int)Account.Mode, chosen => Account.SetMode((AccountMode)chosen),
-            "Offline joins the servers that do not ask for an account. Online signs in, for the ones that require one", commit: () => { });
+        // a form, so the name sits just above its control (as the fields below)
+        rows.AddChild(UiKit.Text("Mode"));
+        var mode = new OptionButton { CustomMinimumSize = new Vector2(UiKit.FormFieldWidth, 40), FocusMode = Control.FocusModeEnum.All };
+        mode.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        mode.AddItem("Offline");
+        mode.AddItem("Online");
+        mode.Selected = (int)Account.Mode;
+        mode.ItemSelected += chosen => Account.SetMode((AccountMode)(int)chosen);
+        rows.AddChild(mode);
+        rows.AddChild(UiKit.Text("Offline joins the servers that do not ask for an account. Online signs in, for the ones that require one.",
+            UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
         rows.AddChild(UiKit.Spacer(10));
         var body = UiKit.VBox(10);
         rows.AddChild(body);
@@ -77,19 +86,22 @@ public static class AccountPage
         }
         into.AddChild(tabs);
 
-        var email = UiKit.TextRow(into, "Email", _typedEmail ?? Account.Email, "you@example.ch");
+        var email = UiKit.FormField(into, "Email", _typedEmail ?? Account.Email, "you@example.ch");
         email.TextChanged += t => _typedEmail = t;
-        var password = UiKit.TextRow(into, "Password", "", "8 characters or more", secret: true);
-        LineEdit? name = creating ? UiKit.TextRow(into, "Name", "", "e.g. Heidi_92", "Your name on the scoreboards; empty picks one") : null;
+        var password = UiKit.FormField(into, "Password", "", "8 characters or more", secret: true);
+        LineEdit? name = creating ? UiKit.FormField(into, "Name", "", "e.g. Heidi_92", "Your name on the scoreboards; empty picks one") : null;
 
         var note = UiKit.Text(message, UiTheme.FontSmall, UiTheme.Amber, wrap: true);
         note.Visible = message.Length > 0;
-        var go = UiKit.Button(creating ? "Create account" : "Sign in", primary: true, minWidth: 180);
-        var actions = UiKit.HBox(12);
-        actions.AddChild(note);
-        note.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        actions.AddChild(go);
-        into.AddChild(actions);
+        // as wide as the fields above it, the note under it
+        var go = UiKit.Button(creating ? "Create account" : "Sign in", primary: true);
+        go.CustomMinimumSize = new Vector2(UiKit.FormFieldWidth, 44);
+        go.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        into.AddChild(UiKit.Spacer(4));
+        into.AddChild(go);
+        note.CustomMinimumSize = new Vector2(UiKit.FormFieldWidth, 0);
+        note.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        into.AddChild(note);
 
         async void Go()
         {
@@ -131,8 +143,8 @@ public static class AccountPage
             ? "This build names no official account server. Ask the server's admin for its address and key."
             : $"The official one is {Account.Official.Url}. Set another only to sign in to a private server.",
             UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
-        var url = UiKit.TextRow(box, "Address", Account.CustomServer ? Account.Url : "", none ? "http://host:7350" : Account.Official.Url);
-        var key = UiKit.TextRow(box, "Server key", Account.CustomServer ? Account.ServerKey : "", "from the server's admin", "Not a password");
+        var url = UiKit.FormField(box, "Address", Account.CustomServer ? Account.Url : "", none ? "http://host:7350" : Account.Official.Url);
+        var key = UiKit.FormField(box, "Server key", Account.CustomServer ? Account.ServerKey : "", "from the server's admin", "Not a password");
         void Server() => Account.SetServer(url.Text, key.Text);
         url.TextSubmitted += _ => Server();
         url.FocusExited += Server;
