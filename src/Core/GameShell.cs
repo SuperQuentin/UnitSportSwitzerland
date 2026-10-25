@@ -184,6 +184,9 @@ public partial class GameShell : Node
             // a .gpx opened with the game (#1029): straight into its replay
             GpxOpenWith.Register();
             if ((GpxOpenWith.FromArgs() ?? AndroidBridge.OpenedFile()) is { } opened) Callable.From(() => OpenGpx(opened)).CallDeferred();
+            // the website's Join button (#1220): straight onto that server
+            JoinLink.Register();
+            if (JoinLink.FromArgs() is { } endpoint) Callable.From(() => Join(endpoint)).CallDeferred();
         }
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
