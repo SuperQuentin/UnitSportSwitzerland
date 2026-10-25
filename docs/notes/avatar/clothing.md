@@ -54,10 +54,11 @@
   public `HumanMeshBuilder.AppendLeg`; skirts are drawn even when the legs are not (`includeLegs: false`).
 - **Wind**: `HumanPalette.Wind` (author space, m/s of air past the figure). `FigureWind` measures it
   from the figure node's own motion each frame (owner and remote copies alike, nothing replicated);
-  the walker, cyclist and motorcyclist rebuild while `HumanMeshBuilder.Flutters(outfit)` (a skirt, robe
-  or dress). `AppendSkirt` carries the hem downwind (full by ~14 m/s, length kept) and
-  the hem ripples round its edge faster with speed. `BuildStride` with
-  no measured wind uses the stride's own speed. Cars give no wind (closed cabin, driver pose cached).
+  the walker, cyclist and motorcyclist pose their skirt's bones with it while
+  `HumanMeshBuilder.Flutters(outfit)` (a skirt, robe or dress; #1202, `skinned-figures`).
+  `AppendSkirt` carries the hem downwind (full by ~14 m/s, length kept) and the hem ripples round
+  its edge faster with speed: on a skinned figure in the shader (`skirt_flutter`). `PoseStride` with
+  no measured wind uses the stride's own speed. Cars give no wind (closed cabin).
 - Preview: `--avatars <s> <png> --outfits riders [--speed m/s] [--focus 0..3]` moves a dressed cyclist,
   motorcyclist, driver and runner together with the camera, so the skirts blow as in the game.
 - **Skirts, dresses and robes are draped** (#671): `HangSkirt` fills 11 rings × 24 sides

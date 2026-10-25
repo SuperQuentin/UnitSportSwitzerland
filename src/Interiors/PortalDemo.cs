@@ -34,7 +34,7 @@ public partial class PortalDemo : Node3D
     private readonly Dictionary<string, InteriorNode> _interiors = new();
     private Camera3D _camera = null!;
     private Node3D _walker = null!;
-    private MeshInstance3D _walkerMesh = null!;
+    private Avatar.SkinnedFigure _walkerMesh = null!;
     private float _walkerZ = 99f, _phase;
     private double _t;
     private int _view = -1;
@@ -159,7 +159,8 @@ public partial class PortalDemo : Node3D
 
         // someone who walks in through A's front door
         _walker = new Node3D { Name = "Walker" };
-        _walkerMesh = new MeshInstance3D { MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial() };
+        _walkerMesh = new Avatar.SkinnedFigure { MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial() };
+        _walkerMesh.Show(new Avatar.FigureLook(Avatar.HumanPalette.Default));
         _walker.AddChild(_walkerMesh);
         _walker.AddToGroup(DoorwayGhosts.Group);
         AddChild(_walker);
@@ -503,9 +504,8 @@ public partial class PortalDemo : Node3D
         const float speed = 1.3f;
         _walkerZ -= speed * dt;
         _phase = Avatar.HumanMeshBuilder.AdvancePhase(_phase, speed, dt);
-        // one mesh rebuilt in place, not a new ArrayMesh per frame (#221)
-        _walkerMesh.Mesh = Avatar.HumanMeshBuilder.BuildStride(Avatar.HumanPalette.Default, speed, _phase,
-            into: _walkerMesh.Mesh as ArrayMesh ?? new ArrayMesh());
+        // one skinned figure posed by its bones (#1202)
+        Avatar.HumanMeshBuilder.PoseStride(_walkerMesh, speed, _phase);
         var a = _links.First(l => l.Plan == "0_0_0" && l.Outside.Basis.Z.Z > 0);
         // facing north: the figure is authored facing +Z
         var street = new Transform3D(new Basis(Vector3.Up, Mathf.Pi), new Vector3(0.15f, 0, _walkerZ));

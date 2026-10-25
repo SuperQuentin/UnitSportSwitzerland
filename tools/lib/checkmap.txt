@@ -52,6 +52,9 @@ src/Items/Radio          quick  --radiopanelcheck --world fixture
 src/Player/FootPlayer.Ears quick --earscheck --world fixture --view third
 src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
+# #1202: every look's skinned figure posed as the rebuilt one, across poses (looks x poses, ~70 s)
+src/Avatar/              quick  --skincheck
+src/Avatar/MeshScratch   quick  --skincheck
 # #788: every model of the model viewer scanned for faces that z-fight, against tests/zfight-baseline.txt
 src/Avatar/              quick  --zfightcheck
 src/Build/               quick  --zfightcheck

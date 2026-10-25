@@ -89,10 +89,11 @@ public partial class AircraftCockpit : Node3D
     public HumanPalette Palette = HumanPalette.Default;
     /// <summary>What <see cref="Palette"/> was made from (the owner's outfit, rider): made again only when it changes.</summary>
     public (long Outfit, int Rider) PaletteKey = (long.MinValue, 0);
-    private MeshInstance3D? _pilotBody, _pilotHead;
+    /// <summary>The pilot's body and head: two skinned meshes on one set of bones (#1202), posed from what the hands and feet hold.</summary>
+    private SkinnedFigure? _pilotBody, _pilotHead;
     private HumanPalette? _builtFor;
-    private (int, int, int, bool) _pose = (int.MinValue, 0, 0, false);
-    private readonly System.Collections.Generic.Dictionary<(int, int, int, bool), ArrayMesh> _bodies = new();
+    private bool _builtSmooth;
+    private (float, float, float, bool) _pose = (float.NaN, 0f, 0f, false);
 
     // ---- the instruments ---------------------------------------------------------------------------
     private SubViewport? _viewport;
@@ -508,40 +509,31 @@ public partial class AircraftCockpit : Node3D
     {
         bool body = PilotShown && View != CockpitView.Bare, head = PilotShown && View == CockpitView.Outside;
         if (_pilotHead == null && !PilotShown) return;
-        if (!Equals(_builtFor, Palette))
+        if (_pilotHead == null || _pilotBody == null)
+        {
+            _pilotHead = new SkinnedFigure { Name = "PilotHead", MaterialOverride = HumanMeshBuilder.FigureMaterial() };
+            _pilotBody = new SkinnedFigure { Name = "Pilot", MaterialOverride = HumanMeshBuilder.FigureMaterial() };
+            AddChild(_pilotHead);
+            AddChild(_pilotBody);
+        }
+        // a new pilot or a restyle (#311) is a new look; the pose only moves the bones
+        if (!Equals(_builtFor, Palette) || _builtSmooth != HumanMeshBuilder.SmoothFigures || _pilotBody.Skin == null)
         {
             _builtFor = Palette;
-            _bodies.Clear();
-            _pose = (int.MinValue, 0, 0, false);
-            _pilotHead?.QueueFree();
-            _pilotHead = null;
-        }
-        if (_pilotHead == null)
-        {
-            var hs = new MeshScratch();
-            var (o, i, fo, fi) = Holds(Vector2.Zero, 0f, false);
-            HumanMeshBuilder.AppendPilot(hs, Palette, Seat, o, i, fo, fi, body: false, head: true);
-            _pilotHead = new MeshInstance3D { Name = "PilotHead", Mesh = hs.Build(), MaterialOverride = HumanMeshBuilder.FigureMaterial() };
-            _pilotBody ??= new MeshInstance3D { Name = "Pilot", MaterialOverride = HumanMeshBuilder.FigureMaterial() };
-            AddChild(_pilotHead);
-            if (_pilotBody.GetParent() == null) AddChild(_pilotBody);
+            _builtSmooth = HumanMeshBuilder.SmoothFigures;
+            _pilotBody.Show(new FigureLook(Palette, Head: false));
+            _pilotHead.Show(new FigureLook(Palette, Body: false));
+            _pilotBody.Share(_pilotHead);
+            _pose = (float.NaN, 0f, 0f, false);
         }
         if (_pilotHead.Visible != head) _pilotHead.Visible = head;
-        if (_pilotBody!.Visible != body) _pilotBody.Visible = body;
-        if (!body) return;
-        // the pose quantised to what shows (a tenth of the stick, an eighth of the levers)
-        var key = (Mathf.RoundToInt(stick.X * 10f), Mathf.RoundToInt(stick.Y * 10f), Mathf.RoundToInt(look.Lever * 8f), look.Reverse);
+        if (_pilotBody.Visible != body) _pilotBody.Visible = body;
+        if (!body && !head) return;
+        var key = (stick.X, stick.Y, look.Lever, look.Reverse);
         if (key == _pose) return;
         _pose = key;
-        if (!_bodies.TryGetValue(key, out var mesh))
-        {
-            if (_bodies.Count >= 256) _bodies.Clear();
-            var s = new MeshScratch();
-            var (o, i, fo, fi) = Holds(new Vector2(key.Item1 / 10f, key.Item2 / 10f), key.Item3 / 8f, key.Item4);
-            HumanMeshBuilder.AppendPilot(s, Palette, Seat, o, i, fo, fi, body: true, head: false);
-            mesh = _bodies[key] = s.Build();
-        }
-        _pilotBody.Mesh = mesh;
+        var (o, i, fo, fi) = Holds(stick, look.Lever, look.Reverse);
+        HumanMeshBuilder.PosePilot(_pilotBody, Seat, o, i, fo, fi);
     }
 
     // ---- the screens -----------------------------------------------------------------------------------

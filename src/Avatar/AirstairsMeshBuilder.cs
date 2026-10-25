@@ -232,6 +232,30 @@ public static class AirstairsMeshBuilder
     public static void Stairs(MeshScratch s, float h)
     {
         h = AirstairsLayout.Clamp(h);
+        Flight(s, h);
+        Platform(s, h);
+        float beam = Beam(h);
+        foreach (int side in new[] { 1, -1 })
+        {
+            s.Box(new Vector3(side * AirstairsLayout.ColumnX, (ColumnFoot + beam) * 0.5f, AirstairsLayout.ColumnZ),
+                new Vector3(0.14f, beam - ColumnFoot, 0.14f), Steel);
+            if (StrutTop(h) is { } under)
+                s.Box(new Vector3(side * 0.45f, (AirstairsLayout.FrameTop + under) * 0.5f, StrutZ), new Vector3(0.1f, under - AirstairsLayout.FrameTop, 0.1f), Steel);
+        }
+    }
+
+    /// <summary>How many treads the flight has at platform height <paramref name="h"/> (every 18-20 cm of rise), and how many rail posts.</summary>
+    public static (int Treads, int Posts) FlightCounts(float h)
+    {
+        h = AirstairsLayout.Clamp(h);
+        float length = new Vector2(AirstairsLayout.PlatformRear - AirstairsLayout.FootZ, h).Length();
+        return (Mathf.CeilToInt(h / 0.2f), Mathf.Max(2, Mathf.CeilToInt(length / 1.4f)));
+    }
+
+    /// <summary>The flight up to platform height <paramref name="h"/>: stringers, level treads, handrails on their posts.</summary>
+    public static void Flight(MeshScratch s, float h)
+    {
+        h = AirstairsLayout.Clamp(h);
         float fz = AirstairsLayout.FootZ, tz = AirstairsLayout.PlatformRear;
         var foot = new Vector3(0, 0f, fz);
         var top = new Vector3(0, h, tz);
@@ -240,12 +264,12 @@ public static class AirstairsMeshBuilder
         var along = run / length;
         // a frame for the flight's sloped parts: x across, z up the slope, y out of its face
         var flight = new Basis(Vector3.Right, along.Cross(Vector3.Right), along).Orthonormalized();
+        var (steps, posts) = FlightCounts(h);
 
         // stringers either side of the treads, and level treads every 18-20 cm of rise
         foreach (int side in new[] { 1, -1 })
             s.Box(new Vector3(side * AirstairsLayout.RailX, 0, 0) + (foot + top) * 0.5f - flight.Y * 0.1f,
                 new Vector3(0.08f, 0.3f, length), Steel, flight);
-        int steps = Mathf.CeilToInt(h / 0.2f);
         float tread = run.Z / steps;
         for (int i = 1; i <= steps; i++)
         {
@@ -255,7 +279,6 @@ public static class AirstairsMeshBuilder
             s.Box(at + new Vector3(0, 0.005f, -0.005f), new Vector3(AirstairsLayout.FlightHalfWidth * 2f, 0.03f, 0.05f), Cab);   // nosing, (#755) 2 cm proud of the tread
         }
         // handrails on posts up the flight
-        int posts = Mathf.Max(2, Mathf.CeilToInt(length / 1.4f));
         foreach (int side in new[] { 1, -1 })
         {
             var off = new Vector3(side * AirstairsLayout.RailX, AirstairsLayout.RailHeight, 0);
@@ -267,8 +290,14 @@ public static class AirstairsMeshBuilder
                 s.Tube(p, p + Vector3.Up * AirstairsLayout.RailHeight, 0.03f, Rail, 4);
             }
         }
+    }
 
-        // the platform, its side rails, the bridge plate
+    /// <summary>
+    /// The platform at height <paramref name="h"/>: its side rails, the bridge plate, the canopy over
+    /// it and the lift's beam under it. Everything here rises with the platform as one.
+    /// </summary>
+    public static void Platform(MeshScratch s, float h)
+    {
         float pr = AirstairsLayout.PlatformRear, pf = AirstairsLayout.PlatformFront, pw = AirstairsLayout.PlatformHalfWidth;
         s.Box(new Vector3(0, h - AirstairsLayout.PlatformThick * 0.5f, (pr + pf) * 0.5f), new Vector3(pw * 2f, AirstairsLayout.PlatformThick, pf - pr), Steel);
         s.Box(new Vector3(0, h + 0.004f, (pr + pf) * 0.5f), new Vector3(pw * 2f - 0.1f, 0.01f, pf - pr - 0.1f), Tread);
@@ -288,19 +317,35 @@ public static class AirstairsMeshBuilder
         var plate = new Vector3(0, h - AirstairsLayout.PlateDrop * 0.5f - 0.02f, (pf + AirstairsLayout.LipZ) * 0.5f);
         var slope = new Vector3(0, -AirstairsLayout.PlateDrop, AirstairsLayout.LipZ - pf).Normalized();
         s.Box(plate, new Vector3(1.2f, 0.04f, AirstairsLayout.LipZ - pf), Stripe, new Basis(Vector3.Right, slope.Cross(Vector3.Right), slope).Orthonormalized());
+        // the lift's beam under the platform
+        s.Box(new Vector3(0, Beam(h), AirstairsLayout.ColumnZ), new Vector3(AirstairsLayout.ColumnX * 2f + 0.16f, 0.12f, 0.14f), Steel);
+    }
 
-        // the lift: a column either side of the cab up to a beam under the platform, struts under the flight
-        float beam = h - AirstairsLayout.PlatformThick - 0.06f;
-        s.Box(new Vector3(0, beam, AirstairsLayout.ColumnZ), new Vector3(AirstairsLayout.ColumnX * 2f + 0.16f, 0.12f, 0.14f), Steel);
+    /// <summary>The lift: a column either side of the cab from <see cref="ColumnFoot"/> up to the beam; one metre tall, scaled to it.</summary>
+    public static void Columns(MeshScratch s)
+    {
         foreach (int side in new[] { 1, -1 })
-        {
-            s.Box(new Vector3(side * AirstairsLayout.ColumnX, (0.6f + beam) * 0.5f, AirstairsLayout.ColumnZ),
-                new Vector3(0.14f, beam - 0.6f, 0.14f), Steel);
-            float mid = -1.0f;
-            float under = AirstairsLayout.FloorAt(h, mid) - AirstairsLayout.RampThick - 0.15f;
-            if (under > AirstairsLayout.FrameTop + 0.1f)
-                s.Box(new Vector3(side * 0.45f, (AirstairsLayout.FrameTop + under) * 0.5f, mid), new Vector3(0.1f, under - AirstairsLayout.FrameTop, 0.1f), Steel);
-        }
+            s.Box(new Vector3(side * AirstairsLayout.ColumnX, 0.5f, AirstairsLayout.ColumnZ), new Vector3(0.14f, 1f, 0.14f), Steel);
+    }
+
+    /// <summary>The struts under the flight, from the frame up; one metre tall, scaled to <see cref="StrutTop"/>.</summary>
+    public static void Struts(MeshScratch s)
+    {
+        foreach (int side in new[] { 1, -1 })
+            s.Box(new Vector3(side * 0.45f, 0.5f, StrutZ), new Vector3(0.1f, 1f, 0.1f), Steel);
+    }
+
+    /// <summary>The lift's beam under a platform at <paramref name="h"/>.</summary>
+    public static float Beam(float h) => h - AirstairsLayout.PlatformThick - 0.06f;
+
+    /// <summary>Where the lift's columns stand, and the struts' station under the flight.</summary>
+    public const float ColumnFoot = 0.6f, StrutZ = -1.0f;
+
+    /// <summary>The struts' top under the ramp at <paramref name="h"/>, or null when the ramp is too low for them.</summary>
+    public static float? StrutTop(float h)
+    {
+        float under = AirstairsLayout.FloorAt(h, StrutZ) - AirstairsLayout.RampThick - 0.15f;
+        return under > AirstairsLayout.FrameTop + 0.1f ? under : null;
     }
 
     /// <summary>
@@ -381,29 +426,52 @@ public static class AirstairsMeshBuilder
 }
 
 /// <summary>
-/// The stairs of a drawn airstairs (#417): flight, platform, rails, lift, canopy and the gate, rebuilt
-/// in place (one mesh, one scratch) only when the platform has moved a couple of centimetres;
-/// nothing per frame at rest. A child of the truck's <see cref="HeavyRig"/>, named "Stairs".
+/// The stairs of a drawn airstairs (#417): flight, platform, rails, lift, canopy and the gate, each
+/// built once and moved as the platform rises (#1202): the platform, canopy and beam ride up as one,
+/// the columns and struts stretch to it, and the flight (one mesh per count of treads and posts) is
+/// sheared up from its foot, so its rails, posts and treads stay where they were drawn. Nothing
+/// is rebuilt per frame. A child of the truck's <see cref="HeavyRig"/>, named "Stairs".
 /// </summary>
 public partial class AirstairsStairs : Node3D
 {
-    private readonly MeshScratch _scratch = new();
-    private readonly ArrayMesh _mesh = new();
-    private MeshInstance3D _gate = null!;
+    // one flight mesh per count of treads and posts, and the height it was drawn at
+    private static readonly Dictionary<(int, int), (ArrayMesh Mesh, float Height)> Flights = new();
+    private static ArrayMesh? _platform, _columns, _struts, _gateMesh;
+
+    private MeshInstance3D _flight = null!, _platformNode = null!, _columnNode = null!, _strutNode = null!, _gate = null!;
     private float _drawn = float.NaN;
 
-    /// <summary>The platform's height over the ground, m; the stairs are redrawn when it moves 2 cm.</summary>
+    /// <summary>The platform's height over the ground, m: the stairs' parts move to it.</summary>
     public float Height
     {
         get => _drawn;
         set
         {
-            if (!float.IsNaN(_drawn) && Mathf.Abs(value - _drawn) < 0.02f) return;
+            if (value == _drawn) return;
             _drawn = value;
-            _scratch.Clear();
-            AirstairsMeshBuilder.Stairs(_scratch, value);
-            _scratch.BuildInto(_mesh);
-            _gate.Position = new Vector3(0, AirstairsLayout.Clamp(value), 0);
+            float h = AirstairsLayout.Clamp(value);
+            var counts = AirstairsMeshBuilder.FlightCounts(h);
+            if (!Flights.TryGetValue(counts, out var flight))
+            {
+                var s = new MeshScratch();
+                AirstairsMeshBuilder.Flight(s, h);
+                Flights[counts] = flight = (s.Build(), h);
+            }
+            if (_flight.Mesh != flight.Mesh) _flight.Mesh = flight.Mesh;
+            // node space (+Z aft): a point rises with how far up the flight it is from its foot
+            float k = (h - flight.Height) / (AirstairsLayout.PlatformRear - AirstairsLayout.FootZ);
+            _flight.Transform = new Transform3D(new Basis(Vector3.Right, Vector3.Up, new Vector3(0, -k, 1f)),
+                new Vector3(0, -k * AirstairsLayout.FootZ, 0));
+            _platformNode.Position = new Vector3(0, h, 0);
+            float beam = AirstairsMeshBuilder.Beam(h);
+            _columnNode.Transform = new Transform3D(Basis.FromScale(new Vector3(1f, beam - AirstairsMeshBuilder.ColumnFoot, 1f)),
+                new Vector3(0, AirstairsMeshBuilder.ColumnFoot, 0));
+            var strut = AirstairsMeshBuilder.StrutTop(h);
+            _strutNode.Visible = strut != null;
+            if (strut is { } top)
+                _strutNode.Transform = new Transform3D(Basis.FromScale(new Vector3(1f, top - AirstairsLayout.FrameTop, 1f)),
+                    new Vector3(0, AirstairsLayout.FrameTop, 0));
+            _gate.Position = new Vector3(0, h, 0);
         }
     }
 
@@ -418,17 +486,35 @@ public partial class AirstairsStairs : Node3D
     {
         var material = HumanMeshBuilder.FigureMaterial();
         var node = new AirstairsStairs { Name = "Stairs" };
-        node.AddChild(new MeshInstance3D { Name = "Flight", Mesh = node._mesh, MaterialOverride = material });
-        // the gate: a yellow and black bar across the front at hand height, its posts (height 0 here)
-        var g = new MeshScratch();
+        MeshInstance3D Part(string name, ArrayMesh? mesh)
+        {
+            var part = new MeshInstance3D { Name = name, Mesh = mesh, MaterialOverride = material };
+            node.AddChild(part);
+            return part;
+        }
+        node._flight = Part("Flight", null);
+        node._platformNode = Part("Platform", _platform ??= Built(s => AirstairsMeshBuilder.Platform(s, 0f)));
+        node._columnNode = Part("Columns", _columns ??= Built(AirstairsMeshBuilder.Columns));
+        node._strutNode = Part("Struts", _struts ??= Built(AirstairsMeshBuilder.Struts));
+        node._gate = Part("Gate", _gateMesh ??= Built(Gate));
+        node.Height = height;
+        return node;
+    }
+
+    private static ArrayMesh Built(Action<MeshScratch> draw)
+    {
+        var s = new MeshScratch();
+        draw(s);
+        return s.Build();
+    }
+
+    /// <summary>The gate: a yellow and black bar across the front at hand height, its posts (height 0 here).</summary>
+    private static void Gate(MeshScratch g)
+    {
         float pw = AirstairsLayout.PlatformHalfWidth, z = AirstairsLayout.PlatformFront - 0.03f;
         for (int i = 0; i < 6; i++)
             g.Box(new Vector3(-pw + (i + 0.5f) * pw / 3f, AirstairsLayout.RailHeight - 0.05f, z), new Vector3(pw / 3f, 0.08f, 0.04f),
                 i % 2 == 0 ? new Color(0.95f, 0.74f, 0.12f) : new Color(0.12f, 0.12f, 0.12f));
         g.Box(new Vector3(0, 0.5f, z), new Vector3(pw * 2f, 0.04f, 0.03f), new Color(0.9f, 0.9f, 0.88f));
-        node._gate = new MeshInstance3D { Name = "Gate", Mesh = g.Build(), MaterialOverride = material };
-        node.AddChild(node._gate);
-        node.Height = height;
-        return node;
     }
 }

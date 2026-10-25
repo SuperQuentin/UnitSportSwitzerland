@@ -59,10 +59,11 @@ public static class ZFightScan
             if (node is Node3D { Visible: false }) continue;
             for (int c = node.GetChildCount() - 1; c >= 0; c--) stack.Push(node.GetChild(c));
 
-            if (node is MeshInstance3D { Mesh: { } mesh } mi)
+            // a skinned figure is scanned as its bones pose it (#1202)
+            if (node is MeshInstance3D { Mesh: not null } mi && Avatar.SkinnedFigure.MeshOf(mi) is { } mesh)
             {
                 var xf = space * mi.GlobalTransform;
-                if (within is { } box && !box.Intersects(xf * mi.GetAabb())) continue;
+                if (within is { } box && !box.Intersects(xf * mesh.GetAabb())) continue;
                 int part = Part(scene, root, node);
                 var surfaces = Read(mesh, cache);
                 for (int s = 0; s < surfaces.Length; s++)

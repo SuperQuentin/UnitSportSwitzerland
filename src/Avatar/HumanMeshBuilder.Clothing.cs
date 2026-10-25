@@ -106,14 +106,22 @@ public static partial class HumanMeshBuilder
                 }
             }
             // with the legs or without (a cyclist's are their own mesh, driven by the cranks)
-            AppendSkirt(s, fit, top, bottom, palette.Wind);
+            using (s.Resting(TrunkRest(r) with { Part = PartSkirt }))
+            {
+                // a skinned one's shader keeps it over the floor, as the drape does (#1202)
+                s.OverFloor = s.Weigher != null;
+                AppendSkirt(s, fit, top, bottom, palette.Wind);
+                s.OverFloor = false;
+            }
         }
         if (!head) return;
 
         var h = fit.Head;
         bool hair = look.HairStyle != HairStyle.None && cover != HairCover.Head;
         var f = new Frame(h.Side, h.UpAxis, h.Fwd);
-        if (o[WearSlot.Neck] is { } neck) AppendNeckwear(s, fit, neck);
+        if (o[WearSlot.Neck] is { } neck)
+            using (s.Resting(TrunkRest(r) with { Part = PartCollar }))
+                AppendNeckwear(s, fit, neck);
         using var headRest = s.Resting(HeadRest(r));
         if (fullFace)
         {
@@ -612,7 +620,9 @@ public static partial class HumanMeshBuilder
                 if (dir.LengthSquared() < 1e-6f) break;
                 var at = ankle.Lerp(toe, 0.30f);
                 var along = dir.Normalized() * 0.008f;
-                s.Tube(at - along, at + along, 0.054f, b.A, 6);
+                // on the foot: a skinned figure's (#1202) bends with it at the ankle
+                using (s.Resting(FootRest(ankle, toe, outward, hip.X < 0)))
+                    s.Tube(at - along, at + along, 0.054f, b.A, 6);
                 break;
             }
         }
@@ -665,8 +675,12 @@ public static partial class HumanMeshBuilder
     /// thrown forward in a run), and never comes in again on the way down, so the cloth hangs over
     /// the knee instead of the knee going through it. No point drops below <paramref name="floor"/>.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="flutter"/>, when given (a skinned figure's, #1202): each hem point's offset it
+    /// ripples along and its index, for <see cref="MeshScratch.Drape"/>; the shader ripples it then.
+    /// </remarks>
     private static void HangSkirt(Vector3[][] rings, in Fit fit, float band, Vector3 hem, float hemRadius,
-        float ripple, float phase, float floor)
+        float ripple, float phase, float floor, Span<Vector4> flutter = default)
     {
         var t = fit.Torso;
         var r = fit.Rig;
@@ -732,6 +746,7 @@ public static partial class HumanMeshBuilder
                 }
                 radius[k] = need;   // never in again below
                 var p = c + d * need;
+                if (i == rings.Length - 1 && flutter.Length == DrapeSides) flutter[k] = new Vector4(d.X * need, d.Y * need, d.Z * need, k + 1);
                 if (i == rings.Length - 1 && ripple > 0f)
                 {
                     float wave = Mathf.Sin(phase + k * 2.4f) * 0.7f + Mathf.Sin(phase * 1.7f + k * 1.1f) * 0.3f;
@@ -771,23 +786,26 @@ public static partial class HumanMeshBuilder
         var rings = DrapeRings(ref _drape);
         int count = DrapeAt.Length;
         Span<Color> bands = stackalloc Color[count - 1];
+        // a skinned figure's hem flutters in its shader (#1202), so it is told how
+        Span<Vector4> hemFlutter = s.Weigher != null ? stackalloc Vector4[DrapeSides] : default;
 
         if (top is { Draped: true })
         {
             var c = Cols.Of(top);
             if (top.Shape == GarmentShape.Robe)
             {
-                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.06f), 0.30f + extra, ripple, phase, floor);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.06f), 0.30f + extra, ripple, phase, floor, hemFlutter);
                 bands.Fill(c.A);
                 bands[^1] = c.B;   // the trim
-                s.Drape(rings, 0, count, bands);
+                s.Drape(rings, 0, count, bands, hem: hemFlutter);
             }
             else
             {
                 // the dress, the petticoat frothing out under it
                 var hem = r.Hip.Lerp(knees, 0.85f);
                 Hang(hem, 0.29f + extra, c.A, bands);
-                Tier(s, fit, rings, 0.78f, Blown(hem - Vector3.Up * 0.035f), 0.32f + extra, c.B, ripple, phase, floor);
+                using (s.Resting(TrunkRest(r) with { Part = PartTier }))
+                    Tier(s, fit, rings, 0.78f, Blown(hem - Vector3.Up * 0.035f), 0.32f + extra, c.B, ripple, phase, floor);
             }
             return;
         }
@@ -804,7 +822,8 @@ public static partial class HumanMeshBuilder
                 var hem = r.Hip.Lerp(knees, 0.40f);
                 Hang(hem, 0.22f + extra, b.A, bands);
                 // a second tier of ruffle under the first
-                Tier(s, fit, rings, 0.55f, Blown(hem - Vector3.Up * 0.045f), 0.255f + extra, b.B, ripple, phase, floor);
+                using (s.Resting(TrunkRest(r) with { Part = PartTier }))
+                    Tier(s, fit, rings, 0.55f, Blown(hem - Vector3.Up * 0.045f), 0.255f + extra, b.B, ripple, phase, floor);
                 break;
             }
             case GarmentShape.HighLowSkirt:
@@ -813,9 +832,9 @@ public static partial class HumanMeshBuilder
                 break;
             case GarmentShape.SlitMaxi:
                 // to the ankles, with a slit up the front of the right leg (−X)
-                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.07f), 0.29f + extra, ripple, phase, floor);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.07f), 0.29f + extra, ripple, phase, floor, hemFlutter);
                 bands.Fill(b.A);
-                s.Drape(rings, 0, count, bands, new Vector3(-0.55f, 0, 1f), 0.42f);
+                s.Drape(rings, 0, count, bands, new Vector3(-0.55f, 0, 1f), 0.42f, hemFlutter);
                 break;
             case GarmentShape.LongPleated:
             {
@@ -844,9 +863,10 @@ public static partial class HumanMeshBuilder
         // the skirt in one colour
         void Hang(Vector3 hem, float rh, Color colour, Span<Color> bands)
         {
-            HangSkirt(rings, figure, band, Blown(hem), rh, ripple, phase, floor);
+            Span<Vector4> flutter = s.Weigher != null ? stackalloc Vector4[DrapeSides] : default;
+            HangSkirt(rings, figure, band, Blown(hem), rh, ripple, phase, floor, flutter);
             bands.Fill(colour);
-            s.Drape(rings, 0, bands.Length + 1, bands);
+            s.Drape(rings, 0, bands.Length + 1, bands, hem: flutter);
         }
     }
 
@@ -858,7 +878,8 @@ public static partial class HumanMeshBuilder
         float ripple, float phase, float floor)
     {
         var tier = DrapeRings(ref _tier);
-        HangSkirt(tier, fit, 2f, hem, rh, ripple, phase, floor);
+        Span<Vector4> flutter = s.Weigher != null ? stackalloc Vector4[DrapeSides] : default;
+        HangSkirt(tier, fit, 2f, hem, rh, ripple, phase, floor, flutter);
         int count = DrapeAt.Length;
         int i0 = 1;
         while (i0 < count - 2 && DrapeAt[i0] < from) i0++;
@@ -870,7 +891,7 @@ public static partial class HumanMeshBuilder
                 tier[i][k] = centre.Lerp(over[i][k], 0.97f).Lerp(tier[i][k], w);
         }
         Span<Color> one = [colour];
-        s.Drape(tier, i0, count - i0, one);
+        s.Drape(tier, i0, count - i0, one, hem: flutter);
     }
 
     /// <summary>Whether the outfit has something that blows in the wind: a skirt, a robe, a dress.</summary>
@@ -916,7 +937,8 @@ public static partial class HumanMeshBuilder
             }
             case GarmentShape.Chain:
             {
-                // hangs from the base of the neck onto the chest, a small cross at the bottom
+                // hangs from the base of the neck onto the chest, a small cross at the bottom: on the trunk
+                using var onChest = s.Resting(TrunkRest(r));
                 var t = fit.Torso;
                 for (int i = 0; i <= 10; i++)
                 {

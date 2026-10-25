@@ -291,29 +291,23 @@ public partial class ConcertCameras : Node3D
 
 /// <summary>
 /// The artists on stage (#885): a DJ, a singer and two dancers, or a band of four, by genre — the game's
-/// own figures, dancing the music's moves on the show's beat, rebuilt in place (one mesh each).
-/// What the cameras film.
+/// own figures, dancing the music's moves on the show's beat: skinned figures posed by their bones
+/// (#1202), each built once. What the cameras film.
 /// </summary>
 public partial class ConcertPerformers : Node3D
 {
     private readonly StagePlan _plan;
     private readonly LightDesk _desk;
-    private readonly List<(MeshInstance3D Node, HumanPalette Palette, int Offset)> _people = new();
+    private readonly List<(SkinnedFigure Node, HumanPalette Palette, int Offset)> _people = new();
 
+    /// <summary><see cref="PerBeat"/> poses a beat over a move's 8 counts: the artists move in those steps.</summary>
+    private const int PerBeat = 8;
     /// <summary>
-    /// Poses built once and kept (a figure costs milliseconds to build): per artist, move and frame,
-    /// <see cref="PerBeat"/> frames a beat over the move's 8 counts. At most one new pose a frame; until
-    /// it is built the artist holds the one before.
-    /// </summary>
-    private readonly Dictionary<long, (Godot.Collections.Array Arrays, Mesh.ArrayFormat Format)[]> _poses = new();
-    private const int PerBeat = 8, MaxPoses = 1200;
-    /// <summary>
-    /// The pose each artist shows. Its mesh is never swapped: the figure material's face parameters
-    /// are per instance, and Godot registers them again on every new mesh without freeing the old
-    /// (the buffer overflowed, an error a swap); a pose is copied into the artist's own mesh instead.
+    /// The pose each artist shows. Its mesh is never swapped once shown: the figure material's face
+    /// parameters are per instance, and Godot registers them again on every new mesh without freeing
+    /// the old (the buffer overflowed); a skinned figure keeps its look's mesh and only moves its bones.
     /// </summary>
     private readonly List<long> _showing = new();
-    private ArrayMesh? _scratch;
     private Audio.Cd.MusicStyle _style;
 
     /// <summary>The lead artist (centre stage, the first) sings the song's vocal (#1153); the others keep the shader's idle face.</summary>
@@ -350,13 +344,16 @@ public partial class ConcertPerformers : Node3D
             float back = e.Genre == Genre.Rock && i == 3 ? -4f : 0f;
             var at = _plan.StagePoint(xs[i], h, z + back);
             var face = (_plan.StagePoint(xs[i], h, z + back + 10f) - at) with { Y = 0 };
-            var node = new MeshInstance3D
+            var node = new SkinnedFigure
             {
                 Name = $"Artist{i}", Position = at, MaterialOverride = HumanMeshBuilder.FigureMaterial(),
-                Basis = new Basis(Vector3.Up, Mathf.Atan2(-face.X, -face.Z)), Mesh = new ArrayMesh(),
+                Basis = new Basis(Vector3.Up, Mathf.Atan2(-face.X, -face.Z)),
             };
+            var palette = HumanPalette.ForRider(e.Seed + i * 7);
+            node.Show(new FigureLook(palette));
+            HumanMeshBuilder.PoseStride(node, 0f, 0f);
             AddChild(node);
-            _people.Add((node, HumanPalette.ForRider(e.Seed + i * 7), i * 3));
+            _people.Add((node, palette, i * 3));
             _showing.Add(long.MinValue);
         }
     }
@@ -404,31 +401,17 @@ public partial class ConcertPerformers : Node3D
         float fBeats = (frame + 0.5f) / PerBeat;
         int fBar = (int)(fBeats / 4f);
         float fBarPhase = fBeats / 4f - fBar, fPhase = fBeats - MathF.Floor(fBeats);
-        bool built = false;
         for (int p = 0; p < _people.Count; p++)
         {
             var (node, palette, offset) = _people[p];
             int move = dancing ? ((bar / 2) + offset) % moves : -1;
             if (flashHash != 0) move = (int)((flashHash >> 4) + (uint)offset * 7u) % moves;
-            long key = ((long)p << 40) | ((long)(move + 1) << 20) | (long)(dancing ? frame : 0);
+            long key = ((long)(move + 1) << 20) | (long)(dancing ? frame : 0);
             if (_showing[p] == key) continue;
-            if (!_poses.TryGetValue(key, out var surfaces))
-            {
-                if (built) continue;
-                if (_poses.Count >= MaxPoses) _poses.Clear();
-                var dance = dancing ? new DanceParams(_style, move, fPhase, fBarPhase, fBar, 1f) : (DanceParams?)null;
-                _scratch ??= new ArrayMesh();
-                HumanMeshBuilder.BuildStride(palette, 0f, 0f, dance: dance, into: _scratch);
-                // the format too: the figure's custom channels are packed bytes only it can read back
-                surfaces = new (Godot.Collections.Array, Mesh.ArrayFormat)[_scratch.GetSurfaceCount()];
-                for (int k = 0; k < surfaces.Length; k++) surfaces[k] = (_scratch.SurfaceGetArrays(k), _scratch.SurfaceGetFormat(k));
-                _poses[key] = surfaces;
-                built = true;
-            }
-            var target = (ArrayMesh)node.Mesh;
-            target.ClearSurfaces();
-            foreach (var (arrays, format) in surfaces)
-                target.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, null, null, format);
+            // a restyle to or from a lit style (#311) is a new look; a pose only moves the bones
+            node.Show(new FigureLook(palette));
+            var dance = dancing ? new DanceParams(_style, move, fPhase, fBarPhase, fBar, 1f) : (DanceParams?)null;
+            HumanMeshBuilder.PoseStride(node, 0f, 0f, dance: dance);
             _showing[p] = key;
         }
     }

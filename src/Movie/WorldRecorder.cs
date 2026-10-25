@@ -404,7 +404,8 @@ public sealed class WorldRecorder
 
     private int LookOf(MeshInstance3D m)
     {
-        var mesh = m.Mesh!;
+        // a skinned figure (#1202) as it stood when first seen, not its bare rest pose
+        var mesh = m is Avatar.SkinnedFigure { Skin: not null } figure ? figure.Still() : m.Mesh!;
         int surfaces = mesh.GetSurfaceCount();
         ulong hash = 0;
         for (int s = 0; s < surfaces; s++)

@@ -372,7 +372,8 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         // forward as the fallback: the trunk never lies along its own shoulder line
-        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f);
+        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f)
+            with { Part = PartTrunk };
     }
 
     /// <summary>An arm, shoulder to wrist (and the hand, on the forearm).</summary>
@@ -381,7 +382,9 @@ public static partial class HumanMeshBuilder
         var q = RestRig;
         return left
             ? TwoBoneRest(r.ShoulderL, r.ElbowL, r.WristL, ShoulderLine(r), TrunkUp(r), q.ShoulderL, q.ElbowL, q.WristL, ShoulderLine(q), TrunkUp(q), 0.04f)
-            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f);
+                with { Part = PartArmL }
+            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f)
+                with { Part = PartArmR };
     }
 
     /// <summary>A leg from free joints (a cyclist's too), hip to ankle, <paramref name="side"/> across the figure.</summary>
@@ -389,7 +392,8 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         var (rh, rk, ra) = left ? (q.HipL, q.KneeL, q.AnkleL) : (q.HipR, q.KneeR, q.AnkleR);
-        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f);
+        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f)
+            with { Part = left ? PartLegL : PartLegR };
     }
 
     /// <summary>A foot, ankle to toe.</summary>
@@ -397,7 +401,7 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         var (ra, rt) = left ? (q.AnkleL, q.ToeL) : (q.AnkleR, q.ToeR);
-        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up));
+        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up), left ? PartFootL : PartFootR);
     }
 
     /// <summary>The head and the neck under it.</summary>
@@ -405,7 +409,7 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         return MeshScratch.RestMap.Rigid(BoneRest(r.HeadBase, r.HeadTop, ShoulderLine(r), TrunkFwd(r),
-            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)));
+            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)), PartHead);
     }
 
     /// <summary>
@@ -471,7 +475,9 @@ public static partial class HumanMeshBuilder
         using var headRest = s.Resting(HeadRest(r));
         // a straight neck up into the skull behind the jaw: the jaw's underside overhangs it, so the
         // head reads as a head on a neck rather than one cone running down into the collar
-        s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
+        // from the top of the trunk into the head, so a skinned one (#1202) bends with both
+        using (s.Resting(HeadRest(r) with { Part = PartNeck }))
+            s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
         fit.Head.Draw(s, look.Skin);
         if (cover != HairCover.Head)
         {

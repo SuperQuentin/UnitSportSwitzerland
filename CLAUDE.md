@@ -27,6 +27,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
+`no-mesh-rebuild-per-frame` (what moves never rebuilds its mesh: figures skinned, rigid parts as nodes, cloth and patterns in shaders; #1202),
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
 `new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
 `new-feature-bots` (every new action, item, mount or interactable decided for server-run bots: intent seams, a server path, senses, server collision, a row in `bots/bot-capability-map`; #837),
@@ -76,6 +77,11 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 - **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
   or extend the set that already covers it (a new enum value or catalog row usually shows by
   itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).
+- **Nothing that moves rebuilds its mesh**: a mesh is built when what it is changes, never per
+  frame or per pose. A human figure is a `SkinnedFigure` posed by its bones, a moving rigid part is
+  its own node (turned, scaled or sheared), cloth and patterns go in a shader
+  (`docs/notes/general/no-mesh-rebuild-per-frame.md`; 24 walking figures cost 131 ms a frame
+  rebuilt, 18 ms skinned). `MeshRebuildDisciplineTests` fails on a build in a per-frame path.
 - **Every new synthesised sound is in the sound player**: a static `SfxBank`/`AudioStreamWav` shows by itself;
   a sound built per call (surface, species, voice) gets a `[SoundShowcase]` set; check with
   `--sounds,check` (`docs/notes/audio/sound-player.md`).

@@ -30,7 +30,8 @@ public static class OwnBody
         if (!had && !fromEye) return;
         if (!had)
         {
-            shadow = new MeshInstance3D
+            // a skinned figure's twin is posed by its bones (#1202), and keeps them when re-parented
+            shadow = new SkinnedFigure
             {
                 Name = "Shadow",
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.ShadowsOnly,
@@ -41,7 +42,12 @@ public static class OwnBody
         var twin = shadow!;
         if (twin.Layers != World) twin.Layers = World;
         if (twin.Visible != fromEye) twin.Visible = fromEye;
-        if (fromEye && twin.Mesh != figure.Mesh) twin.Mesh = figure.Mesh;
+        if (fromEye && twin.Mesh != figure.Mesh)
+        {
+            twin.Mesh = figure.Mesh;
+            if (figure is SkinnedFigure skinned) skinned.Share(twin);
+            else SkinnedFigure.Unshare(twin);
+        }
     }
 
     /// <summary>Sets the visual layers of a node and everything under it.</summary>

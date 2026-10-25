@@ -1,5 +1,9 @@
 # Perf: no figure mesh rebuilt per frame
 
+> Since #1202 a moving figure is a `SkinnedFigure` posed by its bones (`skinned-figures`): nothing
+> below rebuilds a figure any more. The pose keys, the remote throttle and the "a node that turns"
+> rule still hold; the rest is how it was done before, for older branches.
+
 ## Rule
 - **Never build a new `ArrayMesh` per frame** for an animated figure or rig part. A figure whose
   pose is computed (gait, arm blend, dance) keeps ONE mesh and rebuilds it in place:

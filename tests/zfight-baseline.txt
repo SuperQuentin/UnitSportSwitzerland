@@ -311,7 +311,7 @@
 20.6	Birds / Yellowhammer
 193.7	Boats / Jetski
 178	Boats / Jetski (parked)
-523.8	Boats / Paddle steamer
+522.1	Boats / Paddle steamer
 459.8	Boats / Paddle steamer (parked)
 646.9	Boats / Speedboat
 97.9	Boats / Speedboat (parked)
@@ -331,9 +331,9 @@
 72	Cars / AE85 Levin (parked)
 72	Cars / AE86 coupe
 72	Cars / AE86 coupe (parked)
-344.9	Cars / AE86 hatch
+346.4	Cars / AE86 hatch
 73.7	Cars / AE86 hatch (parked)
-399.1	Cars / BNR32
+400.6	Cars / BNR32
 78.2	Cars / BNR32 (parked)
 175.2	Cars / BNR34
 79.7	Cars / BNR34 (parked)
@@ -360,7 +360,7 @@
 857.6	Cars / GC8 rally saloon (parked)
 174.1	Cars / JZA80 Supra
 80.9	Cars / JZA80 Supra (parked)
-996.5	Cars / NA1 NSX
+78.5	Cars / NA1 NSX
 996.5	Cars / NA1 NSX (parked)
 17	Cars / NA6CE Roadster
 17	Cars / NA6CE Roadster (parked)
@@ -370,32 +370,32 @@
 75	Cars / PS13 Sileighty (parked)
 168.4	Cars / RPS13 180SX
 75	Cars / RPS13 180SX (parked)
-837.8	Cars / Rental kart
+797.2	Cars / Rental kart
 722.4	Cars / Rental kart (parked)
 298.7	Cars / Rental kart - Army M 28 148
 758.7	Cars / Rental kart - Army M 41 185
 411.8	Cars / Rental kart - Army M 54 222
-532.4	Cars / Rental kart - Blue no. 11
-1077.4	Cars / Rental kart - Cyan no. 46
-675.7	Cars / Rental kart - Green no. 25
-1104.7	Cars / Rental kart - Lime no. 60
-678	Cars / Rental kart - Orange no. 32
-676.2	Cars / Rental kart - Pink no. 53
-795	Cars / Rental kart - Purple no. 39
-531.7	Cars / Rental kart - Red no. 4
-747.5	Cars / Rental kart - White no. 67
-1033.1	Cars / Rental kart - Yellow no. 18
-1033.1	Cars / Rental kart - cornering on three wheels
-795	Cars / Rental kart - tipped over
+491.8	Cars / Rental kart - Blue no. 11
+1021.8	Cars / Rental kart - Cyan no. 46
+635.1	Cars / Rental kart - Green no. 25
+1051.5	Cars / Rental kart - Lime no. 60
+637.4	Cars / Rental kart - Orange no. 32
+635.6	Cars / Rental kart - Pink no. 53
+741.8	Cars / Rental kart - Purple no. 39
+491.1	Cars / Rental kart - Red no. 4
+706.9	Cars / Rental kart - White no. 67
+992.5	Cars / Rental kart - Yellow no. 18
+992.5	Cars / Rental kart - cornering on three wheels
+741.8	Cars / Rental kart - tipped over
 75	Cars / S13 Silvia
 75	Cars / S13 Silvia (parked)
 75.4	Cars / SW20 MR2
 75.4	Cars / SW20 MR2 (parked)
 630.4	Cars / XP90 Yaris
 630.4	Cars / XP90 Yaris (parked)
-911.8	Cars / XW20 Prius
+910.3	Cars / XW20 Prius
 911.8	Cars / XW20 Prius (parked)
-905	Cars / XW30 Prius
+901.9	Cars / XW30 Prius
 905	Cars / XW30 Prius (parked)
 4.8	Cars / Z33
 4.8	Cars / Z33 (parked)
@@ -480,6 +480,12 @@
 99.1	Clothes / UwU mask
 115.4	Clothes / White marcel
 533.3	Clothes / Witch robe
+418	Concert / Stage - Center: Remy Rossi (Pop, screens CenterAndSides)
+313.2	Concert / Stage - EndNorth: Silent Echoes (HipHop, screens None)
+281.6	Concert / Stage - EndSouth: Paper Foxes (Pop, screens Center)
+2.8	Concert / Stage - SideEast: Kai Duval (Pop, screens Sides)
+5.6	Concert / Stage - SideWest: The Electric Glaciers (Ballad, screens Sides)
+321.1	Concert / Stage - Thrust: Lunar Comets (Ballad, screens CenterAndSides)
 7.8	Crafting / Ashes
 96.1	Emotes / Air drums
 391.5	Emotes / Air guitar
@@ -553,13 +559,24 @@
 2.8	Figures / Pose - Standing
 382.9	Figures / Running
 96.1	Figures / Seated passenger
+408	Figures / Skinned - Aiming
+382.9	Figures / Skinned - Dancing
+1277	Figures / Skinned - Dress, seated
+382.8	Figures / Skinned - Driving
+200.8	Figures / Skinned - Robe, running
+3454.2	Figures / Skinned - Ruffle, running
+382.9	Figures / Skinned - Sprinting
+382.5	Figures / Skinned - Swimming
+382.9	Figures / Skinned - Walking
+9.5	Figures / Snow poses - Board - heel edge
 9.5	Figures / Snow poses - Board - pushing
 9.5	Figures / Snow poses - Board - stance
+9.5	Figures / Snow poses - Board - toe edge
 9.5	Figures / Snow poses - Board - tuck
-26.9	Figures / Snow poses - Ski - carving left
-303.6	Figures / Snow poses - Ski - in the air
-309.4	Figures / Snow poses - Ski - landing
-294.1	Figures / Snow poses - Ski - schuss
+9.5	Figures / Snow poses - Ski - carving left
+305	Figures / Snow poses - Ski - in the air
+309.7	Figures / Snow poses - Ski - landing
+303.6	Figures / Snow poses - Ski - schuss
 302	Figures / Snow poses - Ski - skating push
 297.6	Figures / Snow poses - Ski - snowplough
 303.6	Figures / Snow poses - Ski - stance
@@ -955,44 +972,44 @@
 7.9	Parts / Phone back half
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
-348.3	Rides / Airstairs
+336.1	Rides / Airstairs
 64	Rides / Airstairs (parked)
-305.3	Rides / Compact roller
+294.4	Rides / Compact roller
 270.6	Rides / Compact roller (parked)
-143.5	Rides / E-bike
-113.5	Rides / E-bike (low frame)
+142.5	Rides / E-bike
+112.4	Rides / E-bike (low frame)
 43.2	Rides / E-bike (low frame) (parked)
 43.2	Rides / E-bike (parked)
-718.5	Rides / Excavator
+709.2	Rides / Excavator
 271	Rides / Excavator (parked)
-450.1	Rides / Forklift
+429.5	Rides / Forklift
 427.2	Rides / Forklift (parked)
 976	Rides / Mini dumper
 972.4	Rides / Mini dumper (parked)
-898.4	Rides / Mini excavator
+897.1	Rides / Mini excavator
 454.1	Rides / Mini excavator (parked)
 4.5	Rides / Parachute
 109.5	Rides / Paraglider
 75.6	Rides / Pigeon
-13.7	Rides / Road bike
-7	Rides / Road bike riding position - Hoods
-7	Rides / Road bike riding position - Drops
-7.1	Rides / Road bike riding position - Tuck
+12.6	Rides / Road bike
+5.9	Rides / Road bike riding position - Drops
+5.9	Rides / Road bike riding position - Hoods
 2.8	Rides / Road bike riding position - Standing
+7.1	Rides / Road bike riding position - Tuck
 606.9	Rides / Skis
 115.4	Rides / Snowboard
-208.3	Rides / Telehandler
+190.3	Rides / Telehandler
 208.3	Rides / Telehandler (parked)
-515.9	Rides / Wheel loader
-484.9	Rides / Wheel loader (forks)
+495	Rides / Wheel loader
+441.2	Rides / Wheel loader (forks)
 483.9	Rides / Wheel loader (forks) (parked)
 513.1	Rides / Wheel loader (parked)
 9.5	Rides / Wingsuit
 295728	Terrain / Building site - a site office with its gallery, one stack (#827)
 591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
-157117.3	Terrain / Building site - foundations, a block of four floors
+157094	Terrain / Building site - foundations, a block of four floors
 153956.6	Terrain / Building site - foundations, a house
-152451.4	Terrain / Building site - shell, a block of four floors
+152483.6	Terrain / Building site - shell, a block of four floors
 709075.2	Terrain / Building site - topped out, a house
 1957418	Terrain / Building site - topped out, a six-floor block
 91640	Terrain / Garage door - Sidewalk
@@ -1033,41 +1050,41 @@
 3702.7	Terrain / Traffic light - Two-stage island, Geneva
 6688.5	Terrain / Traffic light - Vaud
 42281.1	Trailer / Drognens dormitory
-344.1	Trucks and buses / Arocs 3240 8x4 mixer
+322	Trucks and buses / Arocs 3240 8x4 mixer
 67.9	Trucks and buses / Arocs 3240 8x4 mixer (parked)
-88.9	Trucks and buses / Arocs 3245 8x4 tipper
+66.9	Trucks and buses / Arocs 3245 8x4 tipper
 67.9	Trucks and buses / Arocs 3245 8x4 tipper (parked)
-304.2	Trucks and buses / Citaro G articulated
+257	Trucks and buses / Citaro G articulated
 376	Trucks and buses / Citaro G articulated (parked)
-336.2	Trucks and buses / Citaro city bus
+268.9	Trucks and buses / Citaro city bus
 336.2	Trucks and buses / Citaro city bus (parked)
 75.8	Trucks and buses / Claas Lexion 6800
 75.8	Trucks and buses / Claas Lexion 6800 (parked)
-195.6	Trucks and buses / Fendt 724 Vario
+172.3	Trucks and buses / Fendt 724 Vario
 125.4	Trucks and buses / Fendt 724 Vario (parked)
 125.4	Trucks and buses / Fendt 724 Vario + Disc mower 3 m
 125.4	Trucks and buses / Fendt 724 Vario + Reversible plough
 119.3	Trucks and buses / Fendt 724 Vario + Seed drill 3 m
-442	Trucks and buses / Ford F-150 Raptor
+435.8	Trucks and buses / Ford F-150 Raptor
 125	Trucks and buses / Ford F-150 Raptor (parked)
-174.8	Trucks and buses / Iveco Trakker 6x6 lorry
+146	Trucks and buses / Iveco Trakker 6x6 lorry
 153.8	Trucks and buses / Iveco Trakker 6x6 lorry (parked)
-346	Trucks and buses / MAN TGS 26.440 rigid
+324	Trucks and buses / MAN TGS 26.440 rigid
 67.9	Trucks and buses / MAN TGS 26.440 rigid (parked)
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Drawbar trailer
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Jetski trailer
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Speedboat trailer
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Tipping trailer
-113.9	Trucks and buses / Mercedes-Benz G 300 CDI
+95.7	Trucks and buses / Mercedes-Benz G 300 CDI
 113.9	Trucks and buses / Mercedes-Benz G 300 CDI (parked)
-891.5	Trucks and buses / Mowag Duro II 4x4
+874.7	Trucks and buses / Mowag Duro II 4x4
 848.9	Trucks and buses / Mowag Duro II 4x4 (parked)
-117.8	Trucks and buses / Scania R 450 tractor
+93.9	Trucks and buses / Scania R 450 tractor
 75.2	Trucks and buses / Scania R 450 tractor (parked)
 75.2	Trucks and buses / Scania R 450 tractor + Curtainsider 13.6 m
 75.2	Trucks and buses / Scania R 450 tractor + Fuel tanker
 75.2	Trucks and buses / Scania R 450 tractor + Timber trailer
-2661.2	Trucks and buses / Setra S 516 HD coach
+2676.9	Trucks and buses / Setra S 516 HD coach
 2580	Trucks and buses / Setra S 516 HD coach (parked)
 2.2	Unlisted / BoatMeshBuilder.RunaboutWheel
 28.3	Unlisted / FarmStandVisual.StandMesh

@@ -23,6 +23,33 @@ public static partial class HumanMeshBuilder
         Each(Enum.GetValues<ItemArmPose>().Where(arm => arm != ItemArmPose.None),
             (arm, i) => BuildPosed(HumanPalette.ForRider(i), HumanPose.Standing, arm, 1f));
 
+    // #1202: skinned figures (built once, posed by their bones on the GPU), to set beside the rebuilt ones
+    [Showcase("Figures", "Skinned")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseSkinned()
+    {
+        var plain = HumanPalette.ForRider(2);
+        HumanPalette Wearing(GarmentShape shape, int rider) =>
+            Garments.All.First(g => g.Shape == shape) is var g ? HumanPalette.ForRider(rider) with { Outfit = Outfit.Empty.With(g.Slot, g.Code) } : plain;
+        var kart = KartMeshBuilder.SeatFor(1.05f);
+        yield return ("Walking", () => Skinned(plain, f => PoseStride(f, 1.6f, 0.3f)));
+        yield return ("Sprinting", () => Skinned(plain, f => PoseStride(f, 7f, 0.2f)));
+        yield return ("Dancing", () => Skinned(plain, f => PoseStride(f, 0f, 0f, dance: new DanceParams(Audio.Cd.MusicStyle.HipHop, 10, 0.55f, 0.3f, 1, 1f))));
+        yield return ("Aiming", () => Skinned(plain, f => PoseStride(f, 1.6f, 0.7f, ItemArmPose.ShoulderAim, 1f)));
+        yield return ("Driving", () => Skinned(plain, f => PoseDriver(f, kart, 1.2f, 0.5f, 0f)));
+        yield return ("Swimming", () => Skinned(plain, f => PoseSwim(f, SwimStyle.Crawl, 0.3f)));
+        yield return ("Robe, running", () => Skinned(Wearing(GarmentShape.Robe, 4), f => PoseStride(f, 4.6f, 0.3f)));
+        yield return ("Dress, seated", () => Skinned(Wearing(GarmentShape.Dress, 5), f => PoseDriver(f, kart, 0f, 0.3f, 0f)));
+        yield return ("Ruffle, running", () => Skinned(Wearing(GarmentShape.RuffleMini, 6), f => PoseStride(f, 4.6f, 0.6f)));
+    }
+
+    private static Node3D Skinned(HumanPalette palette, Action<SkinnedFigure> pose)
+    {
+        var figure = new SkinnedFigure { MaterialOverride = FigureMaterial() };
+        figure.Show(new FigureLook(palette));
+        pose(figure);
+        return figure;
+    }
+
     [Showcase("Figures", "Build")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseBuilds() =>
         Each(Enum.GetValues<BodyBuild>(),

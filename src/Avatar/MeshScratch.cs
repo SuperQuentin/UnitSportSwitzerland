@@ -45,6 +45,11 @@ public sealed class MeshScratch
     private readonly List<Vector2> _uv2s = new();
     // filled only once a vertex is drawn under a Rest map (a figure, #724); otherwise no CUSTOM0 at all
     private readonly List<Vector3> _rest = new();
+    // filled only while a Weigher is set (a skinned figure, #1202): four bones and weights a vertex; otherwise none
+    private readonly List<int> _bones = new();
+    private readonly List<float> _weights = new();
+    // filled only once a drape's hem flutters (#1202): its ripple, for the figure's shader, in CUSTOM1
+    private readonly List<Vector4> _flutter = new();
     // panes go in a second surface, so they can take a translucent material of their own
     private readonly List<Vector3> _glassVertices = new();
     private readonly List<Color> _glassColors = new();
@@ -114,9 +119,13 @@ public sealed class MeshScratch
     /// either side so the cloth over the joint stretches instead of tearing. Both take the joint
     /// to the same place, so the blend never jumps.
     /// </summary>
-    public readonly record struct RestMap(Transform3D First, Transform3D Second, Vector3 Joint, Vector3 Split, float Blend)
+    /// <remarks>
+    /// <paramref name="Part"/> names the body part it maps (the figure builder's own numbering), for
+    /// a skinned build's <see cref="Weigher"/> (#1202); 0 is none.
+    /// </remarks>
+    public readonly record struct RestMap(Transform3D First, Transform3D Second, Vector3 Joint, Vector3 Split, float Blend, int Part = 0)
     {
-        public static RestMap Rigid(Transform3D t) => new(t, t, Vector3.Zero, Vector3.Zero, 1f);
+        public static RestMap Rigid(Transform3D t, int part = 0) => new(t, t, Vector3.Zero, Vector3.Zero, 1f, part);
 
         public Vector3 Of(Vector3 p)
         {
@@ -125,6 +134,69 @@ public sealed class MeshScratch
             if (d >= Blend) return Second * p;
             return (First * p).Lerp(Second * p, (d + Blend) / (2f * Blend));
         }
+    }
+
+    /// <summary>
+    /// What a skinned figure (#1202) gives each vertex: up to four bones and the weights of the
+    /// last three (the first takes the rest). A figure's bones are the figure builder's
+    /// (<c>HumanMeshBuilder.Skin.cs</c>); bone 0 is the figure's own origin.
+    /// </summary>
+    public readonly record struct BoneWeights(int A, int B = 0, float WeightB = 0f, int C = 0, float WeightC = 0f, int D = 0, float WeightD = 0f);
+
+    /// <summary>
+    /// Weighs each vertex of a skinned build by the part it is drawn for (<see cref="RestMap.Part"/>)
+    /// and where it is; <paramref name="centre"/> is the middle of the primitive it belongs to (a
+    /// box, ring, tube or skirt; null for a loft's, a drape's, a face's), <paramref name="compact"/>
+    /// whether that is a small solid (a box, a ring) rather than a long one.
+    /// </summary>
+    public interface IBoneWeigher
+    {
+        BoneWeights Weigh(int part, Vector3 position, Vector3? centre, bool compact);
+    }
+
+    /// <summary>
+    /// While set, every vertex is also given bones and weights (#1202): the figure is built once,
+    /// standing at rest, and posed by its bones from then on. A vertex drawn under no
+    /// <see cref="Rest"/> map is part 0.
+    /// </summary>
+    public IBoneWeigher? Weigher { get; set; }
+
+    /// <summary>
+    /// While set, every vertex is marked as a skinned skirt's (#1202, CUSTOM1.w = −1): the figure's
+    /// shader keeps it over the figure's floor (<c>skirt_floor</c>), as the drape did (<c>HangSkirt</c>).
+    /// </summary>
+    public bool OverFloor { get; set; }
+
+    // the primitive being drawn, for the weigher: a buckle across two trunk rings is weighed at its
+    // middle, so it moves as one piece instead of stretching with the spine
+    private Vector3? _anchor;
+    private bool _compact;
+
+    private AnchorScope Anchored(Vector3 at, bool compact = true)
+    {
+        var scope = new AnchorScope(this, _anchor, _compact);
+        if (_anchor == null) (_anchor, _compact) = (at, compact);
+        return scope;
+    }
+
+    private readonly struct AnchorScope(MeshScratch scratch, Vector3? was, bool compact) : IDisposable
+    {
+        public void Dispose() => (scratch._anchor, scratch._compact) = (was, compact);
+    }
+
+    /// <summary>
+    /// <c>--skincheck</c> only: turns each tube's and ring's facets with the part they are drawn
+    /// for (part to turn), so a figure rebuilt in a pose has them where its skinned figure does.
+    /// Null in the game: their facets lie as world up puts them.
+    /// </summary>
+    internal Func<int, Basis>? FacetTurn { get; set; }
+
+    private Vector3 Reference(Vector3 axis)
+    {
+        if (FacetTurn is not { } turn) return Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var basis = turn(Rest?.Part ?? 0);
+        var up = basis * Vector3.Up;
+        return Mathf.Abs(axis.Dot(up)) > 0.95f ? basis * Vector3.Right : up;
     }
 
     /// <summary>
@@ -138,6 +210,7 @@ public sealed class MeshScratch
         if (length < 1e-5f || sides < 3) return;
 
         axis /= length;
+        using var anchor = Anchored((a + b) * 0.5f, compact: false);
         if (Smooth)
         {
             SmoothTube(a, b, axis, length, radiusA, radiusB, colour.SrgbToLinear(), Math.Max(sides, SmoothSides));
@@ -145,7 +218,7 @@ public sealed class MeshScratch
         }
 
         // any vector not parallel to the axis will do for the first perpendicular
-        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(axis);
         var u = axis.Cross(reference).Normalized();
         var v = axis.Cross(u);
 
@@ -192,9 +265,10 @@ public sealed class MeshScratch
         float length = axis.Length();
         if (length < 1e-5f || sides < 3) return;
         axis /= length;
+        using var anchor = Anchored((a + b) * 0.5f, compact: false);
 
         // the same frame as Tube, so a skirt's facets line up with the body's
-        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(axis);
         var u = axis.Cross(reference).Normalized();
         var v = axis.Cross(u);
         var slit = gap - axis * gap.Dot(axis);
@@ -248,7 +322,12 @@ public sealed class MeshScratch
     /// of <paramref name="slit"/> are left out. Under <see cref="Smooth"/> each point gets a normal
     /// from its neighbours, so the light rolls over the folds.
     /// </summary>
-    public void Drape(Vector3[][] rings, int from, int count, ReadOnlySpan<Color> bands, Vector3 slit = default, float gapAngle = 0f)
+    /// <remarks>
+    /// <paramref name="hem"/>, one per point of the last ring: how its point flutters (#1202), the
+    /// offset it ripples along and its index round the hem (<see cref="Flutter"/>); empty: none.
+    /// </remarks>
+    public void Drape(Vector3[][] rings, int from, int count, ReadOnlySpan<Color> bands, Vector3 slit = default, float gapAngle = 0f,
+        ReadOnlySpan<Vector4> hem = default)
     {
         if (count < 2) return;
         int m = rings[from].Length;
@@ -280,6 +359,8 @@ public sealed class MeshScratch
                 bool flip = (c - a).Cross(b - a).Dot(outward) < 0f;
                 if (flip) (b, d) = (d, b);
                 int s = _vertices.Count;
+                // the hem ring's points flutter: the last band's r1, b and c (d and c once flipped)
+                bool atHem = hem.Length == m && i + 2 == count;
                 if (Smooth)
                 {
                     int ib = flip ? k1 : k, id = flip ? k : k1;
@@ -296,6 +377,12 @@ public sealed class MeshScratch
                     Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
                     Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
                 }
+                if (atHem)
+                    for (int side = 0; side < 8; side += 4)
+                    {
+                        Flutter(s + side + 2, hem[k1]);
+                        Flutter(s + side + (flip ? 3 : 1), hem[k]);
+                    }
                 Quad(s, s + 1, s + 2, s + 3);           // outside
                 Quad(s + 4, s + 7, s + 6, s + 5);       // inside
             }
@@ -318,6 +405,7 @@ public sealed class MeshScratch
     /// <summary>An axis-aligned box, optionally rotated about its own centre.</summary>
     public void Box(Vector3 centre, Vector3 size, Color colour, Basis? orientation = null)
     {
+        using var anchor = Anchored(centre);
         var basis = orientation ?? Basis.Identity;
         var half = size * 0.5f;
         int start = _vertices.Count;
@@ -363,6 +451,7 @@ public sealed class MeshScratch
             Box(centre, size, colour, orientation);
             return;
         }
+        using var anchor = Anchored(centre);
         var basis = orientation ?? Basis.Identity;
         var half = size * 0.5f;
         var linear = colour.SrgbToLinear();
@@ -405,8 +494,9 @@ public sealed class MeshScratch
     public void Ring(Vector3 centre, Vector3 normal, float innerRadius, float outerRadius,
         float thickness, Color colour, int segments = 16)
     {
+        using var anchor = Anchored(centre);
         normal = normal.Normalized();
-        var reference = Mathf.Abs(normal.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(normal);
         var u = normal.Cross(reference).Normalized();
         var v = normal.Cross(u);
         var half = normal * (thickness * 0.5f);
@@ -688,7 +778,7 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, pivot, "body");
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, pivot, "body", _bones, _weights, _flutter);
         AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, pivot, GlassSurface);
         return mesh;
     }
@@ -700,6 +790,7 @@ public sealed class MeshScratch
     public void Clear()
     {
         _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear(); _uv2s.Clear(); _rest.Clear();
+        _bones.Clear(); _weights.Clear(); _flutter.Clear();
         _glassVertices.Clear(); _glassColors.Clear(); _glassIndices.Clear();
     }
 
@@ -712,13 +803,14 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         mesh.ClearSurfaces();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, Vector3.Zero, "body");
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, Vector3.Zero, "body", _bones, _weights, _flutter);
         AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, Vector3.Zero, GlassSurface);
         return mesh;
     }
 
     private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<Vector3>? normals,
-        List<Vector2>? uvs, List<Vector2>? uv2s, List<Vector3>? rest, List<int> indices, Vector3 pivot, string name)
+        List<Vector2>? uvs, List<Vector2>? uv2s, List<Vector3>? rest, List<int> indices, Vector3 pivot, string name,
+        List<int>? bones = null, List<float>? weights = null, List<Vector4>? flutter = null)
     {
         if (indices.Count == 0) return;
         var facing = new Vector3[vertices.Count];
@@ -763,6 +855,26 @@ public sealed class MeshScratch
             }
             arrays[(int)Mesh.ArrayType.Custom0] = packed;
             flags = (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift);
+        }
+        if (bones is { Count: > 0 } && weights != null)
+        {
+            // a skinned figure (#1202): the vertices after the last weighed one ride on bone 0
+            while (bones.Count < vertices.Count * 4) { bones.Add(0); weights.Add(bones.Count % 4 == 1 ? 1f : 0f); }
+            arrays[(int)Mesh.ArrayType.Bones] = bones.ToArray();
+            arrays[(int)Mesh.ArrayType.Weights] = weights.ToArray();
+        }
+        if (flutter is { Count: > 0 })
+        {
+            // turned round like the positions; w is the hem index plus one, −1 the rest of a skirt, 0 every other vertex
+            while (flutter.Count < vertices.Count) flutter.Add(Vector4.Zero);
+            var packed = new float[vertices.Count * 4];
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                var f = flutter[i];
+                packed[i * 4] = -f.X; packed[i * 4 + 1] = f.Y; packed[i * 4 + 2] = -f.Z; packed[i * 4 + 3] = f.W;
+            }
+            arrays[(int)Mesh.ArrayType.Custom1] = packed;
+            flags |= (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom1Shift);
         }
 
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
@@ -917,12 +1029,42 @@ public sealed class MeshScratch
     // vertex before it its own position (a vehicle drawn first, a figure's rider after)
     private void AddRest(Vector3 position)
     {
+        if (Weigher is { } weigher)
+        {
+            // a vehicle drawn before the figure rides on its origin, bone 0 at full weight
+            while (_bones.Count < _vertices.Count * 4) { _bones.Add(0); _weights.Add(_bones.Count % 4 == 1 ? 1f : 0f); }
+            var w = weigher.Weigh(Rest?.Part ?? 0, position, _anchor, _compact);
+            _bones.Add(w.A); _bones.Add(w.B); _bones.Add(w.C); _bones.Add(w.D);
+            _weights.Add(1f - w.WeightB - w.WeightC - w.WeightD); _weights.Add(w.WeightB); _weights.Add(w.WeightC); _weights.Add(w.WeightD);
+        }
+        else if (_bones.Count > 0)
+        {
+            _bones.Add(0); _bones.Add(0); _bones.Add(0); _bones.Add(0);
+            _weights.Add(1f); _weights.Add(0f); _weights.Add(0f); _weights.Add(0f);
+        }
+        if (OverFloor)
+        {
+            while (_flutter.Count < _vertices.Count) _flutter.Add(Vector4.Zero);
+            _flutter.Add(new Vector4(0, 0, 0, -1f));
+        }
+        else if (_flutter.Count > 0) _flutter.Add(Vector4.Zero);
         if (Rest is { } map)
         {
             while (_rest.Count < _vertices.Count) _rest.Add(_vertices[_rest.Count]);
             _rest.Add(map.Of(position));
         }
         else if (_rest.Count > 0) _rest.Add(position);
+    }
+
+    /// <summary>
+    /// Marks vertex <paramref name="v"/> as a fluttering hem's (#1202): <paramref name="f"/> is the
+    /// offset it ripples along (xyz, metres, author space) and its index round the hem plus one (w).
+    /// The figure's shader ripples it (<c>shaders/body/avatar.gdshaderinc</c>, <c>skirt_flutter</c>).
+    /// </summary>
+    private void Flutter(int v, Vector4 f)
+    {
+        while (_flutter.Count < _vertices.Count) _flutter.Add(Vector4.Zero);
+        _flutter[v] = f;
     }
 
     /// <summary>
@@ -938,7 +1080,7 @@ public sealed class MeshScratch
     private void SmoothTube(Vector3 a, Vector3 b, Vector3 axis, float length, float radiusA, float radiusB,
         Color linear, int sides)
     {
-        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var reference = Reference(axis);
         var u = axis.Cross(reference).Normalized();
         var v = axis.Cross(u);
 
