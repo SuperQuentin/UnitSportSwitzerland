@@ -681,6 +681,7 @@ public partial class ChatManager : Node
     public void Broadcast(string line, ChatKind kind)
     {
         GD.Print($"[chat] {line}");
+        _capture?.Add(line);   // what everyone was told answers a website command too (#1211)
         Rpc(MethodName.Deliver, line, (int)kind);
         if (RemoteLine != null && _registry != null)
             foreach (var player in _registry.Players)

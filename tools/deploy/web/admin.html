@@ -178,10 +178,15 @@ td.act button.confirm { background: var(--rose); color: #1a0d10; }
           <div class="controls">
             <select id="time-at" aria-label="Time of day"><option>sunrise</option><option>day</option><option>noon</option><option>sunset</option><option>night</option><option>midnight</option></select>
             <button type="button" data-cmd="time set {time-at}">Set</button>
+            <span class="note">or</span>
             <input id="time-hm" size="5" placeholder="14:30" aria-label="Time as hh:mm">
             <button type="button" data-cmd="time set {time-hm}">Set</button>
-            <input id="time-speed" size="4" placeholder="24" inputmode="numeric" aria-label="Minutes per day">
-            <button type="button" data-cmd="time speed {time-speed}">Minutes per day</button>
+          </div>
+          <div class="controls">
+            <label class="note" for="time-speed">A day lasts</label>
+            <input id="time-speed" size="4" placeholder="24" inputmode="numeric">
+            <span class="note">minutes (0 stops the clock)</span>
+            <button type="button" data-cmd="time speed {time-speed}">Set</button>
           </div>
         </div>
         <div class="setting">
@@ -359,17 +364,20 @@ td.act button.confirm { background: var(--rose); color: #1a0d10; }
 
   // ---- the game server's admin API (#1211) ---------------------------------------------------------------------------
   function api(method, path, body) {
-    var headers = { Authorization: "Bearer " + A.token() };
-    if (body) headers["Content-Type"] = "application/json";
-    return fetch("server-api" + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined, cache: "no-store" })
-      .then(function (r) {
-        return r.text().then(function (t) {
-          var j = null; try { j = JSON.parse(t); } catch (e) { /* Caddy's own page when the game server is down */ }
-          if (r.ok && j) return j;
-          if (!j && r.status >= 500) throw new Error("The game server does not answer (stopped, restarting, or started without --admin-http).");
-          throw new Error((j && j.error) || ("The server answered " + r.status + "."));
-        });
+    // the session token, renewed first when it is about to run out
+    return A.token().then(function (token) {
+      if (!token) throw new Error("Signed out: sign in again.");
+      var headers = { Authorization: "Bearer " + token };
+      if (body) headers["Content-Type"] = "application/json";
+      return fetch("server-api" + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null; try { j = JSON.parse(t); } catch (e) { /* Caddy's own page when the game server is down */ }
+        if (r.ok && j) return j;
+        if (!j && r.status >= 500) throw new Error("The game server does not answer (stopped, restarting, or started without --admin-http).");
+        throw new Error((j && j.error) || ("The server answered " + r.status + "."));
       });
+    });
   }
   function run(line) { return api("POST", "/command", { line: line }); }
   function say(id, text) { document.getElementById(id).textContent = text; }
