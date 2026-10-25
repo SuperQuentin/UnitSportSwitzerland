@@ -113,12 +113,17 @@ public partial class FootPlayer
     /// <summary>How far the body tips at full lean (radians, 80°), about its middle.</summary>
     private const float FlyTilt = 1.4f;
 
-    private float _flyLean, _flyBank;
+    /// <summary>The lean and bank springs (#1219): quick, with a touch of overshoot, so the body swings into a lean and settles rather than sliding there.</summary>
+    private const float FlySpring = 5.5f, FlyDamping = 0.6f;
+
+    private float _flyLean, _flyLeanV, _flyBank, _flyBankV, _flyYaw = float.NaN, _flyGlide;
 
     /// <summary>
     /// Creative flight's pose (#1219): leaning into the flight with its forward speed, Superman when
-    /// fast, upright with a slow bob when slowing to a hover; back a little flying backwards, banked
-    /// a little sideways, head down a little diving. Eased, so a stop stands the body up gently.
+    /// fast, upright with a slow bob when slowing to a hover; back a little flying backwards, head down
+    /// a little diving, banked into turns and strafes. The lean and bank are springs, so a burst of
+    /// speed swings the body down past its lean and a stop pitches it up a little as it stands; flying
+    /// on, it breathes: a slow roll and pitch, as if riding the air.
     /// </summary>
     private void PublishFlyPose(float dt)
     {
@@ -126,20 +131,59 @@ public partial class FootPlayer
         // the flight as the body sees it: a node faces -Z
         var local = GlobalBasis.Inverse() * Velocity;
         float lean = Mathf.Clamp(-local.Z / FlyFullLean, -0.25f, 1f);
-        float bank = Mathf.Clamp(local.X / FlyFullLean, -1f, 1f);
-        _flyLean = Mathf.Lerp(_flyLean, lean, MathX.Damp(4f, dt));
-        _flyBank = Mathf.Lerp(_flyBank, bank, MathX.Damp(4f, dt));
+        // turning left (yaw growing) dips the left side, as far as it flies; strafing right, the right side
+        float yawRate = float.IsNaN(_flyYaw) || dt <= 0f ? 0f : Mathf.AngleDifference(_flyYaw, Rotation.Y) / dt;
+        _flyYaw = Rotation.Y;
+        float forward = Mathf.Clamp(_flyLean, 0f, 1f);
+        float bank = Mathf.Clamp(local.X / FlyFullLean - yawRate * 0.35f * forward, -1f, 1f);
+        StepFlySprings(lean, bank, dt);
         PoseKind = PoseFly;
-        Anim = new Vector4(Mathf.Max(_flyLean, 0f), 0f, 0f, 0f);
+        Anim = new Vector4(Mathf.Clamp(_flyLean, 0f, 1f), 0f, 0f, 0f);
 
-        float forward = Mathf.Max(_flyLean, 0f);
         // diving tips the head further down, climbing lifts it, only as far as it leans
         float dive = Mathf.Clamp(-Velocity.Y / FlyFullLean, -1f, 1f) * 0.3f * forward;
-        // negative about X tips the head ahead (-Z); flying right puts the right side down
-        var tilt = new Basis(Vector3.Back, -_flyBank * 0.4f) * new Basis(Vector3.Right, -(_flyLean * FlyTilt + dive));
-        // hovering, a slow bob; gone once it flies
-        float bob = Mathf.Sin((float)GameClock.Now * Mathf.Tau / 2.4f) * 0.04f * (1f - forward);
+        // gliding, a slow swell of roll and pitch; hovering, a bob; each fades as the other comes
+        _flyGlide += dt;
+        float roll = Mathf.Sin(_flyGlide * Mathf.Tau / 3.1f) * 0.06f * forward;
+        float swell = Mathf.Sin(_flyGlide * Mathf.Tau / 2.3f) * 0.05f * forward;
+        float bob = Mathf.Sin(_flyGlide * Mathf.Tau / 2.4f) * 0.05f * (1f - forward);
+        BodyPose = FlyTiltPose(_flyLean * FlyTilt + dive + swell, _flyBank * 0.5f + roll) * new Transform3D(Basis.Identity, new Vector3(0, bob, 0));
+    }
+
+    /// <summary>The lean and bank springs toward their targets (semi-implicit, steady at any frame rate this game runs).</summary>
+    private void StepFlySprings(float lean, float bank, float dt)
+    {
+        dt = Mathf.Min(dt, 0.05f);
+        float k = FlySpring * FlySpring, c = 2f * FlyDamping * FlySpring;
+        _flyLeanV += (k * (lean - _flyLean) - c * _flyLeanV) * dt;
+        _flyLean += _flyLeanV * dt;
+        _flyBankV += (k * (bank - _flyBank) - c * _flyBankV) * dt;
+        _flyBank += _flyBankV * dt;
+    }
+
+    /// <summary>The figure tipped <paramref name="pitch"/> ahead and <paramref name="bank"/> right side down, about its middle.</summary>
+    private static Transform3D FlyTiltPose(float pitch, float bank)
+    {
+        // negative about X tips the head ahead (-Z); negative about +Z puts the right side down
+        var tilt = new Basis(Vector3.Back, -bank) * new Basis(Vector3.Right, -pitch);
         var middle = new Vector3(0, 1f, 0);
-        BodyPose = new Transform3D(tilt, middle - tilt * middle + new Vector3(0, bob, 0));
+        return new Transform3D(tilt, middle - tilt * middle);
+    }
+
+    /// <summary>
+    /// Off the flight (landed, or creative switched off), what lean is left springs out over the
+    /// figure's own pose, so a touch-down rocks it upright instead of snapping it.
+    /// </summary>
+    private void SettleFlyPose(float dt)
+    {
+        _flyYaw = float.NaN;
+        if (_flyLean == 0f && _flyBank == 0f) return;
+        StepFlySprings(0f, 0f, dt);
+        if (Mathf.Abs(_flyLean) + Mathf.Abs(_flyBank) + Mathf.Abs(_flyLeanV) + Mathf.Abs(_flyBankV) < 0.01f)
+        {
+            _flyLean = _flyLeanV = _flyBank = _flyBankV = 0f;
+            return;
+        }
+        BodyPose = FlyTiltPose(_flyLean * FlyTilt, _flyBank * 0.5f) * BodyPose;
     }
 }

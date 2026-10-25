@@ -13,9 +13,12 @@
   there, at the end of the walk step, and without it the view stayed level (#1002 playtest). It runs after the swim, fight,
   beam and aura steps, before the walk, so water and duels still win.
 - **The figure flies like Superman** (#1219): `PoseFly = 8` (`PublishFlyPose`), `Anim.X` the lean 0..1
-  from the forward speed in the body's frame (full at `FlyFullLean` 9 m/s, eased at `Damp(4)`), and
-  `BodyPose` tips the figure about its middle up to 80° (`FlyTilt`), banks it a little strafing, back a
-  little flying backwards, head down a little diving, with a slow bob hovering. `HumanMeshBuilder.FlyRig`
+  from the forward speed in the body's frame (full at `FlyFullLean` 9 m/s), and `BodyPose` tips the
+  figure about its middle up to 80° (`FlyTilt`), back a little flying backwards, head down a little
+  diving, banked into turns (the yaw rate) and strafes. Lean and bank are springs (`FlySpring` 5.5,
+  damping 0.6: a little overshoot), not a lerp, which read stiff in play; gliding adds a slow roll and
+  pitch swell and the rig's legs and reaching arm drift, hovering a bob. Landing, what lean is left
+  springs out over the standing pose (`SettleFlyPose`) instead of snapping. `HumanMeshBuilder.FlyRig`
   turns the arms between the hover (loose at the sides, legs dangling) and Superman (right fist up
   over the head, left arm along the body, legs straight, the left knee bent, toes pointed, head tipped
   back to look ahead); the hover's paddle runs on each peer's clock (`_flailClock`). Third person, the

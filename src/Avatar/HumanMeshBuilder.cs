@@ -1320,6 +1320,9 @@ public static partial class HumanMeshBuilder
         var r = RigFor(HumanPose.Standing) with { TorsoLean = 0f };
         float l = Mathf.SmoothStep(0f, 1f, Mathf.Clamp(lean, 0f, 1f)), idle = 1f - l;
         float sway = Mathf.Sin(Mathf.Tau * t / 2.4f) * idle;
+        // flying on, the legs ride the air: the bent knee flexes, the straight leg trails a little,
+        // the reaching arm drifts; slower than the hover's paddle and only as far as it leans
+        float ride = Mathf.Sin(Mathf.Tau * t / 1.7f) * l, drift = Mathf.Sin(Mathf.Tau * t / 2.9f + 1f) * l;
         float reach = (UpperArmLength + ForearmLength) * 0.98f;
         (Vector3, Vector3) Arm(Vector3 shoulder, float side, Vector3 hover, Vector3 full, float stretch)
         {
@@ -1335,10 +1338,10 @@ public static partial class HumanMeshBuilder
             // the foot hangs pointed, and points on along the leg once it streams out behind
             return (knee, ankle, ankle + new Vector3(0f, -0.07f, 0.13f).Lerp(new Vector3(0f, -0.14f, 0.02f), l));
         }
-        var (elbowR, wristR) = Arm(r.ShoulderR, 1f, new Vector3(0.22f, -0.95f, 0.10f + 0.06f * sway), new Vector3(0.06f, 1f, 0.12f), 1f);
-        var (elbowL, wristL) = Arm(r.ShoulderL, -1f, new Vector3(-0.22f, -0.95f, 0.10f - 0.06f * sway), new Vector3(-0.22f, -0.95f, -0.18f), 0.95f);
-        var (kneeL, ankleL, toeL) = Leg(r.HipL, -1f, 1f, new Vector3(0.03f, -0.74f, -0.20f));
-        var (kneeR, ankleR, toeR) = Leg(r.HipR, 1f, -0.4f, new Vector3(-0.03f, -0.835f, -0.03f));
+        var (elbowR, wristR) = Arm(r.ShoulderR, 1f, new Vector3(0.22f, -0.95f, 0.10f + 0.10f * sway), new Vector3(0.06f + 0.04f * drift, 1f, 0.12f + 0.05f * drift), 1f);
+        var (elbowL, wristL) = Arm(r.ShoulderL, -1f, new Vector3(-0.22f, -0.95f, 0.10f - 0.10f * sway), new Vector3(-0.22f, -0.95f, -0.18f - 0.06f * drift), 0.95f);
+        var (kneeL, ankleL, toeL) = Leg(r.HipL, -1f, 1f, new Vector3(0.03f, -0.74f + 0.03f * ride, -0.20f - 0.08f * ride));
+        var (kneeR, ankleR, toeR) = Leg(r.HipR, 1f, -0.4f, new Vector3(-0.03f, -0.835f, -0.03f - 0.04f * ride));
         // the head tips back to look where it flies
         float nod = 0.85f * l;
         var head = r.HeadTop - r.HeadBase;

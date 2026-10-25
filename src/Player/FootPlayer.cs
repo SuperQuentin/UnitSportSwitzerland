@@ -2080,7 +2080,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
         if (CreativeFlying) { PublishFlyPose(dt); return; }
-        _flyLean = _flyBank = 0f;
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -2109,6 +2108,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
             new Vector3(0, Mathf.Abs(_downRot) * 0.12f, 0));
+        SettleFlyPose(dt);
     }
 
     /// <summary>
