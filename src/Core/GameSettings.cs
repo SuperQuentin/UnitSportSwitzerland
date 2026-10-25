@@ -18,6 +18,8 @@ public enum DetailPreset
     Low = 0,
     Medium = 1,
     High = 2,
+    /// <summary>Under Low, for a standalone headset's GPU (#1112): offered in VR only.</summary>
+    VeryLow = 3,
 }
 
 /// <summary>How the game window occupies the screen.</summary>
@@ -80,6 +82,11 @@ public sealed class GameSettings
     /// <summary>Tile rings of real terrain around each anchor (Chebyshev radius in km).</summary>
     public int RenderDistanceRings { get; set; } = 15;
     public const int MinRings = 6, MaxRings = 40;
+    /// <summary>
+    /// The fewest rings this device may load: 3 on a standalone headset (#1112), where every tile is a
+    /// draw call a Quest 2 replays in each of its screen bins; the horizon's merged blocks cover the rest.
+    /// </summary>
+    public static int MinRingsHere => Platform.IsStandaloneVr ? 3 : MinRings;
 
     /// <summary>How far the 100 m horizon lattice is drawn, in km. 0 turns it off.</summary>
     public int HorizonKm { get; set; } = 60;
@@ -415,16 +422,31 @@ public sealed class GameSettings
     public int VrMsaa { get; set; } = 4;
     /// <summary>The headset's 3D resolution, relative to the eye size the runtime asks for.</summary>
     public float VrRenderScale { get; set; } = 1f;
+    /// <summary>
+    /// A standalone headset's dynamic resolution never goes under this share of its eye buffers'
+    /// width and height (#1112, XR/XrDynamicResolution).
+    /// </summary>
+    public float VrResolutionFloor { get; set; } = 0.75f;
+    public const float MinVrResolutionFloor = 0.5f;
     public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
     /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
     public bool VrFoveation { get; set; } = true;
     /// <summary>
-    /// The headset's refresh rate, Hz: 72, 80, 90 or 120 (the nearest the runtime offers). Physics
+    /// A standalone headset's Application SpaceWarp (#1112): the game renders every other frame and the headset makes
+    /// the one between from the motion it is given, so a frame has twice the time (XR/XrSession.ApplySpaceWarp).
+    /// Off, and only <c>--spacewarp on</c>: on a Quest 2 a black patch flashed in the left eye, and the made frames felt
+    /// less smooth than the headset's own reprojection of a slower game.
+    /// </summary>
+    public bool VrSpaceWarp { get; set; }
+    /// <summary>
+    /// The headset's refresh rate, Hz: 60, 72, 80, 90 or 120 (the nearest the runtime offers). Physics
     /// ticks at it in VR, so every frame moves the view once. 72 by default: a Quest 2 over Air
-    /// Link holds 72 far more often than 90, and each frame gets more of the stream's bitrate (#1036).
+    /// Link holds 72 far more often than 90, and each frame gets more of the stream's bitrate (#1036);
+    /// on its own GPU (#1112) 72 is its budget too, and 60 the fallback for a scene it cannot hold.
     /// </summary>
     public int VrRefreshHz { get; set; } = 72;
-    public static readonly int[] VrRefreshRates = { 72, 80, 90, 120 };
+    /// <summary>The rates Settings offers: 60 only on a standalone headset (Link offers none under 72).</summary>
+    public static readonly int[] VrRefreshRates = Platform.IsStandaloneVr ? new[] { 60, 72, 80, 90, 120 } : new[] { 72, 80, 90, 120 };
     /// <summary>
     /// The terrain's detail preset in the headset, in place of <see cref="Detail"/>. Low by default:
     /// a headset is held back by triangles (it draws the scene for each eye), and Medium has
@@ -493,6 +515,7 @@ public sealed class GameSettings
                     loaded.MusicVolume = old;
                 if (!text.Contains("\"cartoonDefault\"", StringComparison.OrdinalIgnoreCase) && loaded.VisualStyle == Styles.VisualStyle.Ps1)
                     loaded.VisualStyle = Styles.StyleKit.Default;
+                if (Platform.IsStandaloneVr) loaded.MigrateStandalone();
             }
             else if (OldRadioVolume() is float old) loaded.MusicVolume = old;
         }
@@ -530,6 +553,47 @@ public sealed class GameSettings
         CommitBudgetMs = 3;
         MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
         CacheGb = 0.5f;
+        if (Platform.IsStandaloneVr) UseStandaloneVrDefaults();
+    }
+
+    /// <summary>
+    /// A standalone headset's first launch (#1112, docs/notes/xr/quest-standalone.md), measured on a Quest 2:
+    /// its GPU sorts every triangle into screen bins and replays every draw in each, so fewer tiles
+    /// (each a draw) and fewer triangles count more than pixels; traffic is its CPU's physics.
+    /// </summary>
+    private void UseStandaloneVrDefaults()
+    {
+        StandaloneDefaults = LatestStandaloneDefaults;
+        VrDetail = DetailPreset.VeryLow;   // Low's 1.5 M triangles near the player held it to 10 fps
+        RenderDistanceRings = 3;           // the horizon's merged blocks beyond
+        VrMsaa = 2;                        // 4x halves the screen bins' size: ~10 ms more
+        TrafficCars = 6;
+        TrafficRiders = 4;
+        ReplayMinutes = 1;                 // the replay holds what it saw that long (Movie/WorldRecorder): memory
+    }
+
+    /// <summary>
+    /// Which of a standalone headset's defaults a saved file has had (#1112): a file saved before a default changed
+    /// is given the new value once, for that setting alone, and keeps every other choice. 1: a minute of replay
+    /// (the recorder's memory) and SpaceWarp off (it flashed black in one eye).
+    /// </summary>
+    public int StandaloneDefaults { get; set; }
+    private const int LatestStandaloneDefaults = 1;
+
+    /// <summary>Brings a headset's saved settings up to <see cref="LatestStandaloneDefaults"/>, written to the file at once.</summary>
+    private void MigrateStandalone()
+    {
+        if (StandaloneDefaults >= LatestStandaloneDefaults) return;
+        if (StandaloneDefaults < 1)
+        {
+            ReplayMinutes = 1;
+            VrSpaceWarp = false;
+            SaveOnly(nameof(ReplayMinutes), ReplayMinutes);
+            SaveOnly(nameof(VrSpaceWarp), VrSpaceWarp);
+        }
+        StandaloneDefaults = LatestStandaloneDefaults;
+        SaveOnly(nameof(StandaloneDefaults), StandaloneDefaults);
+        GD.Print($"[settings] standalone defaults brought to {LatestStandaloneDefaults}: replay {ReplayMinutes} min, SpaceWarp off");
     }
 
     /// <summary>Writes the touch layout alone, as the editor's Done does (a command-line run's other values stay out).</summary>
@@ -594,7 +658,7 @@ public sealed class GameSettings
 
     private void Clamp()
     {
-        RenderDistanceRings = Math.Clamp(RenderDistanceRings, MinRings, MaxRings);
+        RenderDistanceRings = Math.Clamp(RenderDistanceRings, MinRingsHere, MaxRings);
         HorizonKm = Math.Clamp(HorizonKm, 0, MaxHorizonKm);
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
@@ -603,6 +667,7 @@ public sealed class GameSettings
         ConcertScreenWidth = ConcertScreenWidth switch { <= 384 => 256, <= 768 => 512, _ => 1024 };
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
+        VrResolutionFloor = Math.Clamp(VrResolutionFloor, MinVrResolutionFloor, 1f);
         if (Array.IndexOf(VrRefreshRates, VrRefreshHz) < 0) VrRefreshHz = 72;
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
@@ -738,6 +803,15 @@ public sealed class GameSettings
                 // the headset's refresh rate and terrain detail (#1036), for frame-time checks
                 case "--vrhz" when int.TryParse(v, out int hz): VrRefreshHz = hz; break;
                 case "--vrdetail" when Enum.TryParse<DetailPreset>(v, true, out var vd): VrDetail = vd; break;
+                // the headset's picture, for frame-time checks on a Quest (#1112)
+                case "--vrmsaa" when int.TryParse(v, out int ms): VrMsaa = ms; break;
+                case "--vrscale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vs):
+                    VrRenderScale = Math.Clamp(vs, MinVrRenderScale, MaxVrRenderScale); break;
+                case "--vrfoveation": VrFoveation = v is "on" or "1" or "true"; break;
+                case "--spacewarp": VrSpaceWarp = v is "on" or "1" or "true"; break;
+                case "--replayminutes" when int.TryParse(v, out int replay): ReplayMinutes = replay; break;
+                case "--vrfloor" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vf):
+                    VrResolutionFloor = Math.Clamp(vf, MinVrResolutionFloor, 1f); break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 // a film's render profile sets the picture itself (#924, tools/trailer.sh RENDER), never the player's file
                 case "--render-scale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float rs):

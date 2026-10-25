@@ -149,12 +149,15 @@ public partial class Traffic
             while (s.Due >= 1.0) { s.Due -= 1.0; if (s.Queue < MaxQueue) s.Queue++; }
             // one a tick, as soon as there is room (the user: a car that cannot start waits in the queue)
             if (s.Queue == 0) continue;
+            // no more of a kind than Settings → World → Traffic asks, whoever made them (a generator kept making
+            // them up to its own cap, hundreds, whatever the setting: a Quest's test world crawled, #1112)
+            var set = GameSettings.Current;
             bool started = s.Ep.Mode switch
             {
-                MoverKind.Car => _generatedLive < MaxGenerated && Start(s),
-                MoverKind.Tram => _trams.Count < MaxGeneratedTrams && StartTram(s),
-                MoverKind.Rider => _riders.Count < MaxGeneratedRiders && StartSlow(s),
-                MoverKind.Walker => _walkers.Count < MaxGeneratedWalkers && StartSlow(s),
+                MoverKind.Car => _generatedLive < MaxGenerated && _cars.Count < set.TrafficCars && Start(s),
+                MoverKind.Tram => _trams.Count < Math.Min(MaxGeneratedTrams, set.Trams) && StartTram(s),
+                MoverKind.Rider => _riders.Count < Math.Min(MaxGeneratedRiders, set.TrafficRiders) && StartSlow(s),
+                MoverKind.Walker => _walkers.Count < Math.Min(MaxGeneratedWalkers, set.TrafficWalkers) && StartSlow(s),
                 _ => false,
             };
             if (!started) continue;

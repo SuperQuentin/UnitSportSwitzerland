@@ -62,20 +62,53 @@ varying vec3 world_pos;
 varying vec3 local_vertex;
 // the mesh's normal, smoothed over a few metres (TerrainMeshBuilder.SmoothNormal), world space
 varying vec3 smooth_n;
+#if defined(STANDALONE) && defined(STYLE_CARTOON)
+#define VERTEX_FINISH
+// a standalone headset (#1112): the ground's colour finished per vertex (rock, grade, paint), not per
+// pixel; the paint's patches are 38 m wide and the vertices 4 m apart, and a Quest 2 has a few
+// million pixels a frame to shade against a hundred thousand vertices
+varying vec3 v_col;
+#endif
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef NO_DISCARD
+    // a standalone headset (#1112): no discard anywhere in the terrain, which turned a Quest's early
+    // depth rejection off for every draw after it. The horizon goes under the real tiles instead:
+    // a lattice vertex whose four neighbouring tiles are all covered sinks out of sight
+    if (use_cover) {
+        float covered = 1.0;
+        for (int i = 0; i < 4; i++) {
+            vec2 probe = world_pos.xz + vec2(i < 2 ? -1.0 : 1.0, (i & 1) == 0 ? -1.0 : 1.0);
+            vec2 uv = (probe - cover_origin) / cover_extent;
+            covered *= (uv == clamp(uv, vec2(0.0), vec2(1.0)) && textureLod(detail_cover, uv, 0.0).r > 0.5) ? 1.0 : 0.0;
+        }
+        VERTEX.y -= covered * 400.0;
+        world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    }
+#endif
     local_vertex = VERTEX;
     smooth_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
 #ifdef STYLE_REAL
     // a tile's mesh runs from its NW corner, x east and z south, 1000 m each: the photo's frame
     tile_uv = clamp(VERTEX.xz / 1000.0, vec2(0.0), vec2(1.0));
 #endif
+#ifdef VERTEX_FINISH
+    {
+        vec3 c = COLOR.rgb;
+        float vertex_rock = smoothstep(0.62, 0.38, normalize(smooth_n).y);
+        c = mix(c, vec3(0.30, 0.28, 0.26), vertex_rock * 0.75);
+        c = style_grade(c);
+        c *= mix(0.9, 1.1, style_paint_noise(pattern_xz(world_pos) / 38.0) * 0.6 + 0.2);
+        v_col = c;
+    }
+#endif
     POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
 }
 
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
@@ -85,6 +118,7 @@ void fragment() {
             discard;
         }
     }
+#endif
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     if (n.y < 0.0) {
         n = -n;
@@ -92,10 +126,16 @@ void fragment() {
     // Steep ground is lit by the smoothed normal (#883): a cliff's 1-2 m facets tilt with the
     // height data's noise, and lit one by one they read as vertical stripes, not as a wall.
     // Gentle ground keeps its facets.
+#ifndef STANDALONE
     vec3 sn = normalize(smooth_n);
     n = normalize(mix(n, sn, smoothstep(0.8, 0.55, sn.y)));
+#endif
 
+#ifdef VERTEX_FINISH
+    vec3 col = v_col;
+#else
     vec3 col = COLOR.rgb;
+#endif
 
     // Surface patterns. COLOR.a carries a pattern code in quarter steps (CoverPalette /
     // SurfacePattern). All of them run on world axes rather than the feature's true
@@ -103,6 +143,10 @@ void fragment() {
     // screen-space normal without turning to confetti. Each fades out before it aliases,
     // the same way the road markings do.
     int pattern = int(COLOR.a * 4.0 + 0.5);
+#ifdef STANDALONE
+    // a standalone headset (#1112): no surface patterns, a few pixels at its resolution
+    pattern = 0;
+#endif
     if (pattern > 0) {
         float detail = max(fwidth(world_pos.x), fwidth(world_pos.z));
         vec2 ground = pattern_xz(world_pos);
@@ -130,7 +174,9 @@ void fragment() {
     }
 
     // a running occasion's snow lies on whatever faces up; the rock test below still bares cliffs
+#ifndef LITE_NO_OCCASION
     col = occasion_snow(col, n, 1.0);
+#endif
 
     // steep faces read as bare rock whatever the mapped cover says
     float rockiness = smoothstep(0.62, 0.38, n.y);
@@ -184,7 +230,9 @@ void fragment() {
         }
     }
 #else
+#ifndef VERTEX_FINISH
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);
+#endif
 #endif
 
     // ski slopes (#887): their snow, by the hour's state, over whatever the cover was
@@ -197,17 +245,28 @@ void fragment() {
 
 #ifdef STYLE_LIT
     // valley mist of a running occasion; a no-op on an ordinary day
+#ifndef LITE_NO_OCCASION
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+#endif
+#if !defined(LITE_NO_PAINT) && !defined(VERTEX_FINISH)
     col = style_grade(col);
-#ifdef STYLE_CARTOON
+#endif
+#if defined(STYLE_CARTOON) && !defined(LITE_NO_PAINT) && !defined(VERTEX_FINISH)
     // big painted patches of lighter and darker ground
     vec2 paint_xz = pattern_xz(world_pos);
+#ifdef STANDALONE
+    // (only the big patches: the 9 m ones are a few pixels on a headset's display)
+    col *= mix(0.9, 1.1, style_paint_noise(paint_xz / 38.0) * 0.6 + 0.2);
+#else
     col *= mix(0.9, 1.1, style_paint_noise(paint_xz / 38.0) * 0.6 + style_paint_noise(paint_xz / 9.0) * 0.4);
+#endif
 #endif
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
     ROUGHNESS = rough;
+#ifndef LITE_NO_EMISSION
     EMISSION = col * door_light(world_pos, n);
+#endif
 #else
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     // cliffs get a harder light ramp so faceting reads as rock rather than soft ground

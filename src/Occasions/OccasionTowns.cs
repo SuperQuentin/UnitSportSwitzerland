@@ -85,6 +85,19 @@ public static class OccasionTowns
 	}
 
 	/// <summary>The towns within <paramref name="radius"/> metres of a point, nearest first.</summary>
+	/// <summary>The nearest town within <paramref name="radius"/> metres, or null: a loop, for per-frame callers (#1112).</summary>
+	public static Town? Nearest(double e, double n, double radius)
+	{
+		Town? best = null;
+		double bestD2 = radius * radius;
+		foreach (var t in All)
+		{
+			double d2 = (t.E - e) * (t.E - e) + (t.N - n) * (t.N - n);
+			if (d2 <= bestD2) { bestD2 = d2; best = t; }
+		}
+		return best;
+	}
+
 	public static IEnumerable<Town> Near(double e, double n, double radius)
 	{
 		double r2 = radius * radius;

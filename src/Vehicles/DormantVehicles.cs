@@ -60,8 +60,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>A slot this close to a point is the one that point means.</summary>
     public const float ReachM = 3.0f;
 
-    /// <summary>Dormant cars are drawn to here, as <c>Traffic</c> draws its own to 600 m.</summary>
-    private const float DrawnM = 400f;
+    /// <summary>
+    /// Dormant cars are drawn to here, as <c>Traffic</c> draws its own to 600 m; a standalone headset to 250 m
+    /// (#1112): Geneva's loaded parked cars were 2.5 million triangles.
+    /// </summary>
+    private static readonly float DrawnM = Core.Platform.IsStandaloneVr ? 250f : 400f;
+    private const double CellM = 125.0;
 
     /// <summary>
     /// A tile holds its fleet while it is within this many tiles of an anchor's tile (#552): at
@@ -833,11 +837,14 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_drawn.Remove(id, out var old)) Free(old);
         if (!_slots.TryGetValue(id, out var slots)) return;
 
-        var byLook = new Dictionary<DormantLooks.Key, List<VehicleSlot>>();
+        // a standalone headset's are also cut into 125 m cells (#1112): an instancer's drawn range counts from its
+        // middle, which for a whole tile's cars of one look was the tile's, far from the cars at its edge
+        var byLook = new Dictionary<(DormantLooks.Key Look, long Cell), List<VehicleSlot>>();
         foreach (var s in slots)
         {
             if (_awake.Contains(KeyOf(s))) continue;
-            var key = DormantLooks.KeyOf(s);
+            long cell = Core.Platform.IsStandaloneVr ? (long)Math.Floor(s.E / CellM) * 100_000 + (long)Math.Floor(s.N / CellM) : 0;
+            var key = (DormantLooks.KeyOf(s), cell);
             if (!byLook.TryGetValue(key, out var list)) byLook[key] = list = new List<VehicleSlot>();
             list.Add(s);
         }

@@ -42,7 +42,7 @@ public partial class PisteLayer : Node
     private readonly ConcurrentQueue<(TileId Id, PisteTile Tile, Image Image)> _ready = new();
     private readonly List<TileId> _gone = new();
 
-    private static readonly StringName PisteLayerParam = "piste_layer";
+    public static readonly StringName PisteLayerParam = "piste_layer";
     private static readonly StringName UsePistes = "use_pistes";
     private static readonly StringName PisteMap = "piste_map";
     private static readonly StringName PisteState = "piste_state";
@@ -122,7 +122,15 @@ public partial class PisteLayer : Node
     private void Tag(TileId id, int layer)
     {
         _chunks.GroundAt(id)?.SetInstanceShaderParameter(PisteLayerParam, layer);
-        _chunks.RoadsAt(id)?.SetInstanceShaderParameter(PisteLayerParam, layer);
+        if (_chunks.RoadsAt(id) is { } roads) TagRoads(roads, layer);
+    }
+
+    /// <summary>The roads mesh and its cells (a standalone headset's, <see cref="ChunkNode.SetRoadCells"/>).</summary>
+    private static void TagRoads(MeshInstance3D roads, int layer)
+    {
+        roads.SetInstanceShaderParameter(PisteLayerParam, layer);
+        foreach (var child in roads.GetChildren())
+            if (child is MeshInstance3D cell) cell.SetInstanceShaderParameter(PisteLayerParam, layer);
     }
 
     private void Poll(TileId centre)
@@ -153,7 +161,7 @@ public partial class PisteLayer : Node
                         }
                         if (_chunks.RoadsAt(id) is { } roads && roads.GetInstanceId() != shown.Roads)
                         {
-                            roads.SetInstanceShaderParameter(PisteLayerParam, shown.Layer);
+                            TagRoads(roads, shown.Layer);
                             _shown[id] = shown with { Roads = roads.GetInstanceId() };
                         }
                         continue;

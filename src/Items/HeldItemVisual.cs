@@ -389,7 +389,9 @@ void fragment() {{
 
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
-        bool firstPerson = (_player.IsFirstPerson || _player.ScopeView) && !vrGun;
+        // in VR the item is the one in the figure's hand, where the controller holds it (above): a viewmodel
+        // before the eyes was a second copy of every item, not just the gun (#460, #1112)
+        bool firstPerson = (_player.IsFirstPerson || _player.ScopeView) && !XR.XrSession.Active;
         StepShot(dt);
         EnsureViewmodel();
         if (_viewmodel == null) return;

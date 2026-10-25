@@ -224,6 +224,41 @@ public static class StyleKit
         return m;
     }
 
+    /// <summary>
+    /// Whether the roads, buildings and water draw before the ground (a standalone headset, #1112); settable to
+    /// measure it (<c>--hidetoggle @order</c>), which moves every live material of those roles at once.
+    /// </summary>
+    public static bool CoverFirst
+    {
+        get => _coverFirst;
+        set
+        {
+            _coverFirst = value;
+            lock (Live)
+                foreach (var (weak, role) in Live)
+                    if (role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water && weak.TryGetTarget(out var m))
+                        m.RenderPriority = value ? -1 : 0;
+        }
+    }
+    private static bool _coverFirst = Core.Platform.IsStandaloneVr;
+
+    /// <summary>
+    /// Measuring only (<c>--hidetoggle @plainground</c>, #1112): every live ground material on the cheapest shader
+    /// there is (unshaded vertex colour) and back, to tell what the ground's shading costs from what its triangles do.
+    /// </summary>
+    public static void PlainGround(bool on)
+    {
+        var plain = GD.Load<Shader>("res://shaders/debug_plain_terrain.gdshader");
+        lock (Live)
+            foreach (var (weak, role) in Live)
+                if (role == MaterialRole.Terrain && weak.TryGetTarget(out var m))
+                {
+                    if (on) { if (m.Shader != plain) { m.SetMeta(PlainWas, m.Shader); m.Shader = plain; } }
+                    else if (m.HasMeta(PlainWas)) { m.Shader = m.GetMeta(PlainWas).As<Shader>(); m.RemoveMeta(PlainWas); }
+                }
+    }
+    private static readonly StringName PlainWas = "plain_was";
+
     /// <summary>Every material handed out that is still alive, and its role.</summary>
     private static readonly List<(System.WeakReference<ShaderMaterial> Material, MaterialRole Role)> Live = new();
 
@@ -339,11 +374,25 @@ public static class StyleKit
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
     {
         var (from, path) = Resolve(style, role);
+        // a standalone headset's own variant where a style has one (#1112): no discard (it turned a Quest's
+        // early depth rejection off), no read of the scene's depth, a lighter finish (NO_DISCARD, STANDALONE)
+        if (Core.Platform.IsStandaloneVr && path.Replace(".gdshader", "_standalone.gdshader") is var standalone
+            && ResourceLoader.Exists(standalone))
+            path = standalone;
+        if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--plainterrain")) path = "res://shaders/debug_plain_terrain.gdshader";
+        if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--litterrain")) path = "res://shaders/debug_lit_terrain.gdshader";
+        if (role == MaterialRole.Terrain && Core.CmdArgs.Int("--terrainvariant") is int tv) path = $"res://shaders/debug_terrain_variant_{tv}.gdshader";
         var shader = GD.Load<Shader>(path);
         if (m.Shader != shader) m.Shader = shader;
         // PS1's finish (shaders/common/retro.gdshaderinc) belongs to PS1: off wherever another
         // style draws with a PS1 body, borrowed or wrapped
         if (HasUniform(shader, "retro")) m.SetShaderParameter("retro", style == VisualStyle.Ps1);
+        // a standalone headset (#1112): the trees' dissolve discards, which turns a Quest's early depth
+        // rejection off for every draw after it, so they go last (opaque draws sort by priority first)
+        if (Core.Platform.IsStandaloneVr && role is MaterialRole.Tree or MaterialRole.TreeFar) m.RenderPriority = 2;
+        // and what covers the ground goes before it: the roads on it, the buildings in front of it and the (opaque)
+        // water over the lake bed, so the ground's costly pixels under them are rejected instead of shaded twice
+        if (CoverFirst && role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water) m.RenderPriority = -1;
         switch (role)
         {
             case MaterialRole.Tree:
@@ -581,7 +630,8 @@ public static class StyleKit
         }
         if (StyleFinish == Finish.Cartoon)
         {
-            env.BackgroundMode = Godot.Environment.BGMode.Sky;
+            // "--nosky": the flat background colour, to measure what the sky costs a headset (#1112)
+            if (!Core.CmdArgs.Has("--nosky")) env.BackgroundMode = Godot.Environment.BGMode.Sky;
             env.Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial { SunAngleMax = 20f, SkyCurve = 0.12f } };
             env.TonemapMode = Godot.Environment.ToneMapper.Filmic;
             env.TonemapExposure = 1.05f;
@@ -659,6 +709,14 @@ public static class StyleKit
     /// </summary>
     public static float Dusk(float sunElevationDeg) => Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
 
+    /// <summary>The sun's shadow cascades: 4, or <c>--shadows off|1|2|4</c> to measure their cost (#1112).</summary>
+    private static readonly int ShadowSplits = Core.CmdArgs.Value("--shadows") switch
+    {
+        "off" or "0" => 0, "1" => 1, "2" => 2, "4" => 4,
+        // a standalone headset (#1112): one cascade over the near ground, where a shadow reads
+        _ => Core.Platform.IsStandaloneVr ? 1 : 4,
+    };
+
     /// <summary>
     /// The applied style's sun, or null when it has none (PS1: the shaders light themselves from
     /// <c>world_sun_dir</c>). <c>World/DayNight</c> points and colours it every frame.
@@ -667,11 +725,16 @@ public static class StyleKit
         ? new DirectionalLight3D
         {
             Name = "Sun",
-            ShadowEnabled = true,
+            ShadowEnabled = ShadowSplits > 0,
             // about the 3D trees' reach (the billboards beyond cast none), in cascades of 10, 40,
             // 140 and 400 m: the default 40 m first one left a sawtooth on every near shadow
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
-            DirectionalShadowMaxDistance = 400f,
+            DirectionalShadowMode = ShadowSplits switch
+            {
+                1 => DirectionalLight3D.ShadowMode.Orthogonal,
+                2 => DirectionalLight3D.ShadowMode.Parallel2Splits,
+                _ => DirectionalLight3D.ShadowMode.Parallel4Splits,
+            },
+            DirectionalShadowMaxDistance = ShadowSplits == 1 ? 120f : 400f,
             DirectionalShadowSplit1 = 0.025f,
             DirectionalShadowSplit2 = 0.1f,
             DirectionalShadowSplit3 = 0.35f,

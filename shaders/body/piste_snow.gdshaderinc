@@ -37,11 +37,19 @@ float piste_cover(vec2 local_xz) {
 // The slope's snow over `col` at a tile-local point (x east, z south, metres) and its altitude.
 // `rough` comes back lower on ice and slush for the lit styles. `sun` is the light direction.
 vec3 piste_snow(vec3 col, vec2 local_xz, float altitude, vec3 n, vec3 sun, inout float rough) {
+#ifdef STANDALONE
+    // a uniform branch keeps derivatives defined: a headset pays for them only on a piste (#1112)
+    if (!use_pistes || piste_layer < 0) {
+        return col;
+    }
+    float px = length(fwidth(local_xz));
+#else
     // metres a pixel spans: taken before any branch, where derivatives are still defined
     float px = length(fwidth(local_xz));
     if (!use_pistes || piste_layer < 0) {
         return col;
     }
+#endif
     vec2 tx = local_xz * 0.5;
     vec4 m = texture(piste_map, vec3((tx + 0.5) / 512.0, float(piste_layer)));
     if (m.g < 0.004) {

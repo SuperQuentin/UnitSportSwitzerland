@@ -114,6 +114,50 @@ internal sealed partial class XrWristRing : Node3D
         AddChild(_quad);
     }
 
+    private OpenXRCompositionLayerQuad? _layer;
+
+    /// <summary>
+    /// On a headset that composes layers itself: the wheel as its own compositor layer, sharp as the UI panel, behind
+    /// the 3D picture through a hole the size of its glass (xr_ring_hole.gdshader) so a hand covers it (#1112). A layer
+    /// is a child of the tracking origin; in front of the panel's. The quad stays, as the hole.
+    /// </summary>
+    public void ComposeOn(XROrigin3D origin)
+    {
+        if (XrSession.Simulated) return;
+        var layer = new OpenXRCompositionLayerQuad
+        {
+            Name = "WheelLayer",
+            LayerViewport = _view,
+            QuadSize = new Vector2(Size, Size),
+            SortOrder = -1,
+            AlphaBlend = true,
+            Visible = false,
+        };
+        origin.AddChild(layer);
+        if (!layer.IsNativelySupported())
+        {
+            layer.QueueFree();
+            return;
+        }
+        _layer = layer;
+        var hole = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/xr_ring_hole.gdshader") };
+        hole.SetShaderParameter(HoleRadius, (Outer + 6f) / Pixels);
+        hole.SetShaderParameter(XrUi.HoleWhiteParam, XrUi.HoleWhite);
+        _quad.MaterialOverride = hole;
+    }
+
+    private static readonly StringName HoleRadius = "radius";
+
+    /// <summary>The layer where the quad is, shown while the wheel is; a layer's picture is drawn every frame it shows.</summary>
+    private void SyncLayer()
+    {
+        if (_layer == null) return;
+        _layer.Visible = Visible;
+        if (!Visible) return;
+        _layer.GlobalTransform = _quad.GlobalTransform;
+        _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+    }
+
     /// <summary>
     /// Once a frame, from the rig, after the hands are placed: opens on a read watch, follows it,
     /// aims with <paramref name="aim"/> (the right hand's aim pose) and picks on its trigger.
@@ -123,7 +167,7 @@ internal sealed partial class XrWristRing : Node3D
     public void Update(Transform3D head, Transform3D watch, bool watchShown, XRController3D aim, FootPlayer? player, bool inWorld, float dt)
     {
         _player = player;
-        if (aim.GetFloat("trigger") < 0.3f) _triggerAfterPick = false;
+        if (aim.GetFloat(XrPad.Inputs.Trigger) < 0.3f) _triggerAfterPick = false;
         var to = head.Origin - watch.Origin;
         float d = to.Length();
         float facing = d > 0.01f ? watch.Basis.Z.Normalized().Dot(to / d) : 0f;
@@ -173,21 +217,28 @@ internal sealed partial class XrWristRing : Node3D
         Visible = false;
         Pointing = false;
         _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        SyncLayer();
     }
 
     private bool _placed;
+    private Vector3 _atInRoom;
     private Vector3 _at;
 
     /// <summary>Over the watch, square to the eyes, eased so the wrist's tremble does not shake it.</summary>
     private void Place(Transform3D watch, Transform3D head, float dt)
     {
-        var want = watch.Origin + Vector3.Up * Above;
-        _at = _placed ? _at.Lerp(want, MathX.Damp(14f, dt)) : want;
+        // smoothed in the tracking space, not the world's: a walk, a car or a flight moves the room and the wheel with
+        // it, only the wrist's own jitter is damped (it trailed behind a running player, #1112)
+        var space = GetViewport().GetCamera3D()?.GetParent() is Node3D origin ? origin.GlobalTransform : Transform3D.Identity;
+        var want = space.AffineInverse() * (watch.Origin + Vector3.Up * Above);
+        _atInRoom = _placed ? _atInRoom.Lerp(want, MathX.Damp(14f, dt)) : want;
         _placed = true;
+        _at = space * _atInRoom;
         var toEyes = head.Origin - _at;
         if (toEyes.LengthSquared() < 1e-4f) return;
         // the quad's front is +Z: face the eyes, upright in the world
         GlobalTransform = Transform3D.Identity.Translated(_at).LookingAt(_at - toEyes, Vector3.Up);
+        SyncLayer();
     }
 
     /// <summary>The wedge the right stick last aimed, kept when it is let go back to the middle; −1 none.</summary>
@@ -199,7 +250,7 @@ internal sealed partial class XrWristRing : Node3D
         int highlight = -1;
         Pointing = false;
         // the stick first: pushed, it aims (up is the top wedge); let back to the middle, its wedge stays lit
-        var stick = aim.GetVector2("primary");
+        var stick = aim.GetVector2(XrPad.Inputs.Primary);
         if (stick.Length() > 0.5f) _stickAim = Radial.Aimed(new Vector2(stick.X, -stick.Y), _wedges.Length, 0.5f);
         if (aim.GetHasTrackingData())
         {
@@ -228,7 +279,7 @@ internal sealed partial class XrWristRing : Node3D
             if (highlight >= 0) aim.TriggerHapticPulse("haptic", 0.0, 0.1, 0.015, 0.0);
         }
 
-        bool trigger = aim.GetFloat("trigger") > 0.6f, a = aim.IsButtonPressed("ax_button");
+        bool trigger = aim.GetFloat(XrPad.Inputs.Trigger) > 0.6f, a = aim.IsButtonPressed(XrPad.Inputs.AxButton);
         bool pressed = trigger && !_triggerWas && (Pointing || _stickAim >= 0) || a && !_aWas;
         _aWas = a;
         if (pressed && highlight >= 0 && _wedges[highlight].Refusal(player) == null)
@@ -255,7 +306,8 @@ internal sealed partial class XrWristRing : Node3D
     private void Redraw()
     {
         _face.QueueRedraw();
-        _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        // a layer's viewport draws every frame anyway (SyncLayer)
+        if (_layer == null) _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
     }
 
     /// <summary>The ring's picture: the wedges, faint when they cannot be used now, the aimed one's name in the middle.</summary>

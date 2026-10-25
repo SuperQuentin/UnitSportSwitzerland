@@ -563,7 +563,8 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
             _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, _cabin.Seat);
         }
         OwnBody.See(_driverHead, View != CockpitView.Outside, ref _driverHeadShadow);
-        OwnBody.See(_driverBody, View == CockpitView.Bare, ref _driverBodyShadow);
+        // in VR the hands are the controllers' (XR/XrHands): a driver body under them was a second pair (#1112)
+        OwnBody.See(_driverBody, View == CockpitView.Bare || View != CockpitView.Outside && XR.XrSession.Active, ref _driverBodyShadow);
     }
 
     /// <summary>

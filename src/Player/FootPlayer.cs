@@ -2362,7 +2362,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // the dedicated server draws nothing (#842): a bot it runs walks without its figure being rebuilt
         // every frame (0.8 ms and 180 KB a bot a frame, the whole of a bot's cost); clients rebuild their
         // copy from the replicated pose, and the hand's mounts above stay exact for what it holds
-        if (key != _poseKey && !HoldRemoteFigure() && !Net.NetworkManager.DedicatedServer)
+        if (key != _poseKey && !HoldRemoteFigure() && !HoldOwnVrFigure() && !Net.NetworkManager.DedicatedServer)
         {
             _poseKey = key;
             _poseWait = 0f;
@@ -2420,6 +2420,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// what the main camera does not. The cone holds the whole screen and the figure's size, so a
     /// figure at the edge of the picture still counts as in view.
     /// </summary>
+    /// <summary>
+    /// The owner's own figure in VR, seen from its own eye (#1112): the headset never draws it, only mirrors, its
+    /// shadow and a monitor do. Its arms follow the real hands, which move more than the 2 cm key every frame, so it
+    /// was rebuilt every frame (on a desktop 0.8 ms and 180 KB of garbage each time): a Quest held it to a crawl
+    /// that the system menu, taking the hands away, lifted. Ten times a second is enough for what sees it.
+    /// </summary>
+    private bool HoldOwnVrFigure() => XR.XrSession.Active && IsMultiplayerAuthority() && BodyFromEye && _poseWait < 1f / 10f;
+
     private bool HoldRemoteFigure()
     {
         if (IsMultiplayerAuthority() || _poseWait >= 1f / 15f || XR.XrSession.Active) return false;

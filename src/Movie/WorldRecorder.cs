@@ -129,7 +129,63 @@ public sealed class WorldRecorder
         }
         Drop(now);
         Environment(now);
+        if (now >= _nextRelease)
+        {
+            _nextRelease = now + ReleaseEvery;
+            Release(now);
+        }
         _tickTime.Stop();
+    }
+
+    // ---- looks no recording can reach any more (#1112) ------------------------------------------
+
+    /// <summary>
+    /// Set while a stopped session is still being saved from a copy of <see cref="Looks"/> (the same looks): none is
+    /// emptied under it.
+    /// </summary>
+    public bool Holding { get; set; }
+
+    /// <summary>When each look was last worn by a live object, by its index in <see cref="Looks"/>.</summary>
+    private readonly List<double> _worn = new();
+    private double _nextRelease;
+    private const double ReleaseEvery = 10, ReleaseSlack = 5;
+
+    private void Worn(int look, double now)
+    {
+        if (look < 0) return;
+        while (_worn.Count <= look) _worn.Add(now);
+        _worn[look] = now;
+    }
+
+    /// <summary>
+    /// The looks nothing alive has worn for longer than the replay buffer reaches back, emptied: a detached copy freed,
+    /// the mesh and materials let go. Every tile visited redraws its car parks and each redraw is a new look, kept for
+    /// good: a Quest exploring Geneva ran out of memory in ten minutes, 7000 copies held (#1112). Only while the replay
+    /// buffer is the one ring (or there is none): a Record / Stop session resolves every look it used when it ends,
+    /// however long ago. The slot stays, empty, so an index still means the same look; drawn again, a look is a new one.
+    /// </summary>
+    private void Release(double now)
+    {
+        if (_rings.Count > 1 || Holding) return;
+        foreach (var e in _ents) Worn(e.Look, now);
+        double before = now - (_rings.Count == 1 ? _rings[0].Window : 0) - ReleaseSlack;
+        HashSet<int>? released = null;
+        for (int i = 0; i < Looks.Count && i < _worn.Count; i++)
+        {
+            var look = Looks[i];
+            if (_worn[i] >= before || (look.Template == null && look.Mesh == null)) continue;
+            if (look.Template != null && GodotObject.IsInstanceValid(look.Template)) look.Template.Free();
+            look.Template = null;
+            look.Mesh = null;
+            look.Override = null;
+            look.Surfaces = Array.Empty<Material?>();
+            (released ??= new HashSet<int>()).Add(i);
+        }
+        if (released == null) return;
+        // a look drawn again later is a new one
+        foreach (var key in _instancesIndex.Where(kv => released.Contains(kv.Value)).Select(kv => kv.Key).ToList()) _instancesIndex.Remove(key);
+        foreach (var key in _templateIndex.Where(kv => released.Contains(kv.Value)).Select(kv => kv.Key).ToList()) _templateIndex.Remove(key);
+        foreach (var key in _lookIndex.Where(kv => released.Contains(kv.Value)).Select(kv => kv.Key).ToList()) _lookIndex.Remove(key);
     }
 
     private void Environment(double now)
@@ -230,6 +286,7 @@ public sealed class WorldRecorder
             MultiMeshInstance3D mm => InstancesLookOf(mm),
             _ => TemplateLookOf(mesh),
         };
+        Worn(look, now);
         // an instancer is its own group's part: the same node, told apart by its key
         ulong key = mesh == group.Node ? ~mesh.GetInstanceId() : mesh.GetInstanceId();
         if (_byNode.TryGetValue(key, out var e))
