@@ -19,7 +19,7 @@ public partial class AdminHttp : Node, IAdminBackend
     private readonly AdminLogRing _log = new();
     private RingLogger? _logger;
     private AdminApi? _api;
-    private readonly double _started = Time.GetUnixTimeFromSystem();
+    private readonly double _started = RealClock.Now;
 
     private AdminHttp(ChatManager chat, Accounts.AccountGate? gate, int port, string nakama)
     {
@@ -95,7 +95,7 @@ public partial class AdminHttp : Node, IAdminBackend
         name = CmdArgs.Value("--server-name", notFlag: true) ?? "",
         version = ServerUpdater.RunningVersion,
         players = _chat.PlayerCount,
-        uptimeSeconds = (long)(Time.GetUnixTimeFromSystem() - _started),
+        uptimeSeconds = (long)(RealClock.Now - _started),
         time = _chat.AskQuietly("time"),
         speed = _chat.AskQuietly("speed"),
         weather = _chat.AskQuietly("weather"),
