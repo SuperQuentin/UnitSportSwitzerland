@@ -64,6 +64,7 @@ public class ClockDisciplineTests
         // ---- plumbing: real whatever the world is doing ----
         ["src/Net/Handshake.cs"] = "plumbing: the protocol handshake times out in real time",
         ["src/Net/Accounts/AccountGate.cs"] = "plumbing: the account step times out in real time, as the handshake before it (#1123)",
+        ["src/Net/AdminApi.cs"] = "plumbing: the dashboard's admin token is trusted for a minute of real time (#1211); no Godot, so no RealClock",
         ["src/Net/Accounts/Account.cs"] = "plumbing: a Nakama session token runs out at a Unix time (#1123)",
         ["src/Net/ServerStats.cs"] = "plumbing: the stats sampling window",
         ["src/Net/Swarm.cs"] = "plumbing: a load tool that measures frame times, so it wants the engine's own delta",

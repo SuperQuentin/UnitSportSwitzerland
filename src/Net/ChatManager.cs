@@ -681,6 +681,7 @@ public partial class ChatManager : Node
     public void Broadcast(string line, ChatKind kind)
     {
         GD.Print($"[chat] {line}");
+        _capture?.Add(line);   // what everyone was told answers a website command too (#1211)
         Rpc(MethodName.Deliver, line, (int)kind);
         if (RemoteLine != null && _registry != null)
             foreach (var player in _registry.Players)
@@ -690,10 +691,11 @@ public partial class ChatManager : Node
     /// <summary>Sends a line to one peer. Server only.</summary>
     private void ReplyTo(long peerId, string line, ChatKind kind)
     {
-        // The console is not a peer; its replies go to the server's own log.
+        // The console is not a peer; its replies go to the server's own log (and to the website's console, #1211)
         if (peerId == ConsolePeerId)
         {
-            GD.Print($"[console] {line}");
+            _capture?.Add(line);
+            if (!_quietCapture) GD.Print($"[console] {line}");
             return;
         }
         if (IsBodiless(peerId))
@@ -788,7 +790,7 @@ public partial class ChatManager : Node
     public void Tell(long peerId, string line, ChatKind kind) => ReplyTo(peerId, line, kind);
 
     private string NameOf(long peerId) => peerId == ConsolePeerId
-        ? "Console"
+        ? _consoleAs ?? "Console"
         : _registry?.Find(peerId)?.Name ?? $"Rider{peerId}";
 
     /// <summary>

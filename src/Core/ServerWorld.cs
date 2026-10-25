@@ -381,6 +381,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
+        // the website's dashboard (#1211): the server's log, its commands, players, restart, startup arguments
+        if (AdminHttp.Create(_chat, _accountGate) is { } adminHttp) AddChild(adminHttp);
 
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.

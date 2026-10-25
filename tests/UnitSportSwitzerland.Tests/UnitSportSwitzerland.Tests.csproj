@@ -77,6 +77,9 @@
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the server's admin API (#1211) and the loopback transport it shares with the playtest MCP endpoint -->
+    <Compile Include="..\..\src\Net\AdminApi.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\LoopbackServer.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- /stadium (#994): the venue catalog and finding a venue in it -->
     <Compile Include="..\..\src\Terrain\Stadiums\StadiumSpec.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Stadiums\StadiumCatalog.cs" Link="Game\%(Filename)%(Extension)" />
