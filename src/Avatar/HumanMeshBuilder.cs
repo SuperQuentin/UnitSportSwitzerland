@@ -41,6 +41,14 @@ public enum HumanPose
     /// the player draws it moving (<see cref="HumanMeshBuilder.BuildFalling"/>).
     /// </summary>
     Falling,
+
+    /// <summary>
+    /// Creative flight at full speed (#1219), as Superman: the right fist reaching ahead over the
+    /// head, the left arm along the body, legs straight and together, toes pointed. Authored upright
+    /// like every pose; the player lays it along the flight and eases it from the hover
+    /// (<see cref="HumanMeshBuilder.PoseFlying"/>).
+    /// </summary>
+    Flying,
 }
 
 /// <summary>
@@ -1234,6 +1242,7 @@ public static partial class HumanMeshBuilder
 
         // a still of the fall's windmill (the viewer's entry); the figure draws it moving, BuildFalling
         HumanPose.Falling => FallRig(0.15f),
+        HumanPose.Flying => FlyRig(1f, 0f),
 
         // bone lengths within a centimetre or two of the tucked rig's
         HumanPose.Boarding => new Rig(
@@ -1297,6 +1306,53 @@ public static partial class HumanMeshBuilder
             KneeL = kneeL, AnkleL = ankleL, ToeL = toeL, KneeR = kneeR, AnkleR = ankleR, ToeR = toeR,
         };
     }
+
+    /// <summary>
+    /// Creative flight (#1219): <paramref name="lean"/> 0 hovers upright, arms loose a little out from
+    /// the sides and the legs dangling, one a little ahead; 1 is Superman (<see cref="HumanPose.Flying"/>),
+    /// the right arm straight up (ahead, once the player lays the body along the flight), the left one
+    /// down the side, the legs straight and the toes pointed. Arms turn between the two rather than
+    /// sliding, so they keep their length. <paramref name="t"/> in seconds: the hover's slow paddle,
+    /// gone at full lean. Bone lengths as the standing rig's, the elbows and knees solved.
+    /// </summary>
+    private static Rig FlyRig(float lean, float t)
+    {
+        var r = RigFor(HumanPose.Standing) with { TorsoLean = 0f };
+        float l = Mathf.SmoothStep(0f, 1f, Mathf.Clamp(lean, 0f, 1f)), idle = 1f - l;
+        float sway = Mathf.Sin(Mathf.Tau * t / 2.4f) * idle;
+        float reach = (UpperArmLength + ForearmLength) * 0.98f;
+        (Vector3, Vector3) Arm(Vector3 shoulder, float side, Vector3 hover, Vector3 full, float stretch)
+        {
+            var way = hover.Normalized().Slerp(full.Normalized(), l);
+            var wrist = shoulder + way * reach * Mathf.Lerp(0.92f, stretch, l);
+            return (Limb.Solve(shoulder, wrist, UpperArmLength, ForearmLength, new Vector3(side, -0.3f, -0.6f)), wrist);
+        }
+        (Vector3, Vector3, Vector3) Leg(Vector3 hip, float side, float ahead, Vector3 full)
+        {
+            var hover = new Vector3(side * 0.03f, -0.80f, 0.04f + ahead * (0.06f + 0.03f * sway));
+            var ankle = hip + hover.Lerp(full, l);
+            var knee = Limb.Solve(hip, ankle, ThighLength, ShinLength, new Vector3(0, 0, 1));
+            // the foot hangs pointed, and points on along the leg once it streams out behind
+            return (knee, ankle, ankle + new Vector3(0f, -0.07f, 0.13f).Lerp(new Vector3(0f, -0.14f, 0.02f), l));
+        }
+        var (elbowR, wristR) = Arm(r.ShoulderR, 1f, new Vector3(0.22f, -0.95f, 0.10f + 0.06f * sway), new Vector3(0.06f, 1f, 0.12f), 1f);
+        var (elbowL, wristL) = Arm(r.ShoulderL, -1f, new Vector3(-0.22f, -0.95f, 0.10f - 0.06f * sway), new Vector3(-0.22f, -0.95f, -0.18f), 0.95f);
+        var (kneeL, ankleL, toeL) = Leg(r.HipL, -1f, 1f, new Vector3(0.03f, -0.74f, -0.20f));
+        var (kneeR, ankleR, toeR) = Leg(r.HipR, 1f, -0.4f, new Vector3(-0.03f, -0.835f, -0.03f));
+        // the head tips back to look where it flies
+        float nod = 0.85f * l;
+        var head = r.HeadTop - r.HeadBase;
+        return r with
+        {
+            HeadTop = r.HeadBase + new Vector3(0f, head.Y * Mathf.Cos(nod), -head.Y * Mathf.Sin(nod)),
+            ElbowL = elbowL, WristL = wristL, ElbowR = elbowR, WristR = wristR,
+            KneeL = kneeL, AnkleL = ankleL, ToeL = toeL, KneeR = kneeR, AnkleR = ankleR, ToeR = toeR,
+        };
+    }
+
+    /// <summary>Mounts for <see cref="PoseFlying"/> at the same lean and time.</summary>
+    public static GaitMounts MountsForFly(float lean, float t, ItemArmPose arm = ItemArmPose.None, float armBlend = 0f) =>
+        MountsForRig(ApplyArms(FlyRig(lean, t), arm, armBlend));
 
     /// <summary>
     /// The figure falling from height (#1154), <paramref name="t"/> seconds into its windmill

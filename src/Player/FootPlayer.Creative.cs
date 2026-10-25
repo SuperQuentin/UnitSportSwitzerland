@@ -98,8 +98,48 @@ public partial class FootPlayer
             // sinking onto the ground lands, as in Minecraft
             if (IsOnFloor() && climb < 0f) CreativeFlying = false;
         }
+        // third person, the body turns to where it flies, as the walk's does: Superman faces his way (#1219)
+        if (_thirdPerson) FaceTravel(dt, flat);
         // the first-person eye takes its pitch here, as the walk and the swim do: without it the view stays level
         UpdateCameraFeel(dt, false, false);
         return true;
+    }
+
+    /// <summary>Creative flight's figure (#1219): <c>Anim.X</c> is the lean, the tilt goes in <see cref="BodyPose"/>.</summary>
+    public const int PoseFly = 8;
+
+    /// <summary>Flying this fast forward (m/s) the figure lies flat out, Superman; slower it stands up toward the hover.</summary>
+    private const float FlyFullLean = 9f;
+    /// <summary>How far the body tips at full lean (radians, 80°), about its middle.</summary>
+    private const float FlyTilt = 1.4f;
+
+    private float _flyLean, _flyBank;
+
+    /// <summary>
+    /// Creative flight's pose (#1219): leaning into the flight with its forward speed, Superman when
+    /// fast, upright with a slow bob when slowing to a hover; back a little flying backwards, banked
+    /// a little sideways, head down a little diving. Eased, so a stop stands the body up gently.
+    /// </summary>
+    private void PublishFlyPose(float dt)
+    {
+        _airTime = 0f;
+        // the flight as the body sees it: a node faces -Z
+        var local = GlobalBasis.Inverse() * Velocity;
+        float lean = Mathf.Clamp(-local.Z / FlyFullLean, -0.25f, 1f);
+        float bank = Mathf.Clamp(local.X / FlyFullLean, -1f, 1f);
+        _flyLean = Mathf.Lerp(_flyLean, lean, MathX.Damp(4f, dt));
+        _flyBank = Mathf.Lerp(_flyBank, bank, MathX.Damp(4f, dt));
+        PoseKind = PoseFly;
+        Anim = new Vector4(Mathf.Max(_flyLean, 0f), 0f, 0f, 0f);
+
+        float forward = Mathf.Max(_flyLean, 0f);
+        // diving tips the head further down, climbing lifts it, only as far as it leans
+        float dive = Mathf.Clamp(-Velocity.Y / FlyFullLean, -1f, 1f) * 0.3f * forward;
+        // negative about X tips the head ahead (-Z); flying right puts the right side down
+        var tilt = new Basis(Vector3.Back, -_flyBank * 0.4f) * new Basis(Vector3.Right, -(_flyLean * FlyTilt + dive));
+        // hovering, a slow bob; gone once it flies
+        float bob = Mathf.Sin((float)GameClock.Now * Mathf.Tau / 2.4f) * 0.04f * (1f - forward);
+        var middle = new Vector3(0, 1f, 0);
+        BodyPose = new Transform3D(tilt, middle - tilt * middle + new Vector3(0, bob, 0));
     }
 }
