@@ -90,7 +90,30 @@ public sealed class PlayerProgress
     }
 
     /// <summary>Sections touched since the last save.</summary>
-    public bool NeedsSave => _slots.Values.Any(s => s.SaveDirty);
+    public bool NeedsSave
+    {
+        get
+        {
+            foreach (var s in _slots.Values) if (s.SaveDirty) return true;
+            return false;
+        }
+    }
+
+    /// <summary>Sections touched since the last sync (checked every frame by the service: no allocation).</summary>
+    public bool NeedsSync
+    {
+        get
+        {
+            foreach (var s in _slots.Values) if (s.SyncDirty) return true;
+            return false;
+        }
+    }
+
+    /// <summary>Marks every section for the next sync (a player just loaded: its owner gets everything).</summary>
+    public void SyncAll()
+    {
+        foreach (var s in _slots.Values) s.SyncDirty = true;
+    }
 
     /// <summary>The ids of the sections touched since the last sync, cleared.</summary>
     public List<string> TakeSync()

@@ -202,7 +202,7 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     /// <summary>
     /// The quick menu (#840, <see cref="Ui.QuickMenu"/>): hold F2, or hold Back on a pad (a tap of Back is still the
-    /// inventory), for a ring of Activities, Invites, Inventory, Vehicles, Map, Emotes, Bird journal, Controls.
+    /// inventory), for a ring of Activities, Invites, Inventory, Vehicles, Map, Emotes, Journal, Controls.
     /// A tap of F2 while an invite is up accepts it.
     /// </summary>
     public const string QuickMenu = "quick_menu";
@@ -246,7 +246,10 @@ public partial class PlayerInput : Node
     /// <summary>Hotbar slots 1-6 (#391): select on foot, swap the hovered slot in the inventory, pick in the quick wheel. Same keys as the truck's gates, never at the same time.</summary>
     public static readonly StringName[] Slots = { "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6" };
     public const string PrevItem = "prev_item";
-    /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
+    /// <summary>
+    /// Opens and closes the Journal (<see cref="Ui.AdventureLog"/>, #1223): quests, birds, fish and the
+    /// Adventure plans' tabs. The id stays "bird_journal" so players' rebinds of J carry over.
+    /// </summary>
     public const string BirdJournal = "bird_journal";
 
     /// <summary>Opens the Character menu, the figure editor (<see cref="Ui.CharacterScreen"/>, #1127). On foot only: P is the radio's previous station in a vehicle.</summary>

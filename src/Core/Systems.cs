@@ -30,10 +30,12 @@ public static class Systems
         // the ski slopes' snow: the virtual weather, the wear and the slopes drawn on the terrain (#887)
         Snow = "snow",
         // the ski lifts: their carriers on the shared clock, boarding at a station (#912)
-        Lifts = "lifts";
+        Lifts = "lifts",
+        // the Adventure layer (#1223): progress, quests, the Journal's adventure tabs; off on test worlds unless named
+        Adventure = "adventure";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming, Containers, Snow, Lifts };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming, Containers, Snow, Lifts, Adventure };
 
     public enum WorldKind { Real, Fixture, Flat }
 
@@ -43,8 +45,11 @@ public static class Systems
 
     /// <summary>True when this run boots <paramref name="system"/>: always, unless a test narrowed it.</summary>
     public static bool On(string system) =>
-        // a test world (#999) is the whole game on its own tiles: nothing generated round them
-        (system != Generated || WorldChoice.Active == null) && (Parsed.On == null || Parsed.On.Contains(system));
+        // a test world (#999) is the whole game on its own tiles: nothing generated round them, and no
+        // adventure progress (#1223) unless a probe names it
+        (system != Generated || WorldChoice.Active == null)
+        && (system != Adventure || WorldChoice.Active == null || Parsed.On?.Contains(Adventure) == true)
+        && (Parsed.On == null || Parsed.On.Contains(system));
 
     /// <summary>A test narrowed the systems (<c>--systems</c> or <c>--world flat|fixture</c>).</summary>
     public static bool Narrowed => Parsed.On != null;
@@ -82,7 +87,8 @@ public static class Systems
             }
         }
         // a fixture world is a client world on code-built tiles: everything but the generated fill and the map
-        if (world == WorldKind.Fixture) on ??= All.Where(s => s is not (Generated or Terrain)).ToHashSet();
+        // ... and no adventure progress either (#1223): a probe that wants it names it in --systems
+        if (world == WorldKind.Fixture) on ??= All.Where(s => s is not (Generated or Terrain or Adventure)).ToHashSet();
         // a playtest stages its own vehicles: no ambient traffic, trains or parked fleets crossing the scene (#751)
         if (world == WorldKind.Fixture && Array.IndexOf(args, "--playtest") >= 0 && Array.IndexOf(args, "--systems") < 0)
             on!.ExceptWith(new[] { Traffic, Trains, Dormant });

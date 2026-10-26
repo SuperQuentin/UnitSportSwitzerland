@@ -156,6 +156,7 @@ public partial class PhoneController : Node
         };
         _screens.CallAnswered += Answer;
         _screens.ActivitiesPicked += () => ActivitiesScreen.Open(ActivitiesScreen.Tab.BattleRoyale);
+        _screens.JournalPicked += () => AdventureLog.Open();
         _screens.ShutterPressed += () => _ = TakePhoto();
         _screens.SelfiePressed += () => SetSelfie(!_selfie);
         _screens.WallpaperPicked += SetWallpaper;
