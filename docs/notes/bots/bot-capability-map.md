@@ -96,3 +96,16 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | revive a team-mate | — | `ServerRevive(peer, target)` (`RequestRevive` calls it) | `TeamView` (mates' state) | `BrBrain.Revive` (5 s hold) | ok (`brsquadcheck`) |
 | pings | — | `ServerPing(peer, e, n, alt)` (`RequestPing` calls it) | `HumanPing(team)` | Ping goal; pings enemies for a human mate | ok (`brsquadcheck`); loot pings: gap |
 | recall with a dogtag | — | `ServerRecall(peer)`; a bot target by `RecallBot` | `NearestStop` (inside the circle) | `AlsoWants` the tag, Recall goal | ok (`brsquadcheck`) |
+
+## Adventure (#1223)
+
+The Adventure layer is off for Battle Royale entrants (`AdventureService.Active`), the only bot mode
+today, so no brain uses it in phase 1. Bots have no `PlayerKey`: `AdventureService.SessionFor(peer)`
+gives one progress for the session, never saved.
+
+| Capability | Seam | Server path | Sense | Skill | Status |
+|---|---|---|---|---|---|
+| start / abandon / track a quest | — | `AdventureService.Start(peer, id)`, `Abandon`, `Track` (the RPCs call them) | `Progress(peer)` (its own quests section) | — | n/a phase 1 (no brain adventures); the server path exists |
+| reach a quest's area | `WalkControls` | the server's 2 Hz reach check (`PositionOf` reads the body) | the step's `Target` (`QuestEngine.Locate`) | `MoveTo` | n/a phase 1 |
+| hand a delivery over | — | `AdventureService.Deliver(peer, id, step)` | the step's target | `MoveTo` + `Deliver` | gap: a co-op brain; a bot's pack is its own (`BotHands`), the client's `DeliverOk` take has no bot side |
+| adventure progress, rewards | — | `SessionFor(peer)`, `Grant` | — | — | n/a: no identity, never saved; cash goes to the bank by name (`Bank.Credit` skips the RPC for a bot id) |

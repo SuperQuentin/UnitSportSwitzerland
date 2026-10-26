@@ -70,7 +70,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | quick_wheel | X / D-pad ← | ok: hold a grip at the left hip, aim with the right hand, let go to pick (#489) | keep |
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
 | fishing rod: cast, strike, reel, wind in (#493) | hold LMB + let go, LMB, hold LMB, RMB / the same on RB, LB | ok: R trigger (hold, let go: cast; press: strike; hold: reel), L trigger winds in | gap: **flick the rod hand** to cast (release speed = distance), **crank the reel** with the left hand (R1, R4) |
-| bird_journal (birds and fish pages, #493) | J / — | ok: wrist menu (#437); the page buttons by pointer | keep |
+| bird_journal: the Journal (#1223: Quests, Birds, Fish and the Adventure plans' tabs; was the bird journal, #493) | J / quick menu › Journal, LB / RB tabs | ok: wrist menu › Journal, phone › Journal; tabs and buttons by pointer | keep |
+| quest: track / start / abandon (#1223) | buttons in the Journal / A on the button | ok: laser + trigger on the button | keep |
+| quest: hand over a delivery (#1223) | the Journal's Hand over button / A on it | ok: laser + trigger on the button | gap: `interact` (E / X) or a **grip** on the target's marker, once navigation draws markers (#1226) |
 | character_menu (the figure editor, #1127) | P on foot / quick menu › Character, Start › Character | ok: the quick menu ring aimed by the hand, the pause menu; the page by pointer | keep |
 | server console (#1088): Multiplayer › a server's console button, or the refusal banner | click / A on the focused button; commands and messages are typed | ok: the menu panel and the laser; typing needs a keyboard (an admin tool, no pad or VR way to type) | keep |
 | traffic tool: place / open a generator (#971) | LMB / RB with the tool in hand | ok: R trigger (`use_item`, no new action); the window by the laser | keep |

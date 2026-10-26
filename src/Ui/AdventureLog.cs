@@ -63,7 +63,8 @@ public partial class AdventureLog : Screen
     {
         if (GameShell.Instance is not { InWorld: true } shell) return;
         if (shell.Top is AdventureLog) shell.Back();
-        else if (shell.Top == null) Open();
+        // the rod in hand opens it on the fish (#493)
+        else if (shell.Top == null) Open(Items.ItemController.Instance?.Inventory.HeldId == Items.ItemId.FishingRod ? FishTab : null);
     }
 
     public override void _Ready()
