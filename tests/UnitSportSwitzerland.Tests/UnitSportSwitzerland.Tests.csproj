@@ -97,6 +97,11 @@
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the Adventure layer's progress store, events and quests (#1223) -->
+    <Compile Include="..\..\src\Adventure\SectionKey.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\PlayerProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\AdventureEvents.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Quests\*.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishCatalog.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
