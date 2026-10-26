@@ -103,6 +103,8 @@ public static partial class HumanMeshBuilder
         foreach (var style in Enum.GetValues<SwimStyle>())
             foreach (float phase in new[] { 0f, 0.3f, 0.7f })
                 poses.Add(($"swim {style} {phase}", SwimRig(style, phase)));
+        foreach (var (phase, jump) in new[] { (0f, 0f), (0.25f, 0f), (0.5f, 0f), (0.8f, 0f), (0.3f, 1f) })
+            poses.Add(($"wallclimb {phase}/{jump}", WallClimbRig(phase, jump)));
         foreach (var style in Enum.GetValues<Audio.Cd.MusicStyle>())
             for (int move = 0; move < MoveCount(style); move += 2)
                 foreach (float beat in new[] { 0.1f, 0.55f })
