@@ -701,6 +701,88 @@ public static class SfxSynth
         return s;
     });
 
+    // ---- stamina (#1225) -----------------------------------------------------------------------
+
+    private static SfxBank? _pantBank, _varioBank;
+
+    /// <summary>
+    /// Out of breath (#1225): three short, heavy breaths in a row, each an in-out of breathy noise
+    /// through the same two mouth formants as the gasp, the out-breath a little lower. Played once when
+    /// the meter hits empty, with the ring blinking, so the warning is never colour alone.
+    /// </summary>
+    public static SfxBank PantBank => _pantBank ??= SfxBank.Build("pant", 3, 1.5f, 1225, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var air = Noise(rng, n);
+        var s = new float[n];
+        float lo = 0f, hp = 0f, f1a = 0f, f1b = 0f, f2a = 0f, f2b = 0f;
+        float f1 = 700f * J(), f2 = 1500f * J(), period = 0.46f * J();
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float u = Mathf.PosMod(t, period) / period;          // 0..1 inside one breath
+            bool inhale = u < 0.45f;
+            float x = inhale ? u / 0.45f : (u - 0.45f) / 0.55f;
+            // in: a bright rising rush; out: a softer, lower puff
+            float cut = inhale ? Mathf.Lerp(1800f, 3600f, x) : Mathf.Lerp(1400f, 900f, x);
+            lo += Coef(cut) * (air[i] - lo);
+            hp += Coef(320f) * (lo - hp);
+            float breath = lo - hp;
+            Resonate(breath, f1 * (inhale ? 1f : 0.85f), 0.985f, ref f1a, ref f1b);
+            Resonate(breath, f2 * (inhale ? 1f : 0.8f), 0.98f, ref f2a, ref f2b);
+            float env = Mathf.Min(1f, x * 7f) * Mathf.Pow(1f - x, 1.4f) * (inhale ? 1f : 0.75f);
+            // three breaths, the last one fading
+            float fade = Mathf.Clamp(3.2f - t / period, 0f, 1f);
+            s[i] = (breath * 1.2f + f1a * 0.05f + f2a * 0.035f) * env * Mathf.Min(1f, fade);
+        }
+        return s;
+    });
+
+    /// <summary>The variometer's rising beeps, variants 0..3 (low to high), then variant 4, the low sink tone (#1225).</summary>
+    public const int VarioSink = 4;
+
+    /// <summary>
+    /// The variometer (#1225): four short clean beeps at rising pitches (a climb), and a low falling
+    /// buzz for sink. Not a jittered bank: <see cref="Audio.Variometer"/> picks the variant by climb rate.
+    /// </summary>
+    public static SfxBank VarioBank => _varioBank ??= new SfxBank("vario", BuildVario());
+
+    private static AudioStreamWav[] BuildVario()
+    {
+        float[] hz = [660f, 880f, 1100f, 1320f];
+        var all = new AudioStreamWav[5];
+        for (int v = 0; v < 4; v++)
+        {
+            float f = hz[v];
+            all[v] = OneShot(0.14f, 1225 + v, (rng, n) =>
+            {
+                var s = new float[n];
+                for (int i = 0; i < n; i++)
+                {
+                    float t = (float)i / Rate, x = (float)i / n;
+                    float env = Mathf.Min(1f, t * 400f) * Mathf.Min(1f, (1f - x) * 12f);
+                    s[i] = (Mathf.Sin(Mathf.Tau * f * t) * 0.8f + Mathf.Sin(Mathf.Tau * f * 2f * t) * 0.12f) * env * 0.7f;
+                }
+                return s;
+            });
+        }
+        // sink: a low tone sliding down, a soft saw-ish buzz
+        all[VarioSink] = OneShot(0.5f, 1225 + 9, (rng, n) =>
+        {
+            var s = new float[n];
+            float phase = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float t = (float)i / Rate, x = (float)i / n;
+                phase += Mathf.Tau * Mathf.Lerp(190f, 140f, x) / Rate;
+                float env = Mathf.Min(1f, t * 60f) * Mathf.Min(1f, (1f - x) * 10f);
+                s[i] = (Mathf.Sin(phase) * 0.6f + Mathf.Sin(phase * 2f) * 0.25f + Mathf.Sin(phase * 3f) * 0.1f) * env * 0.6f;
+            }
+            return s;
+        });
+        return all;
+    }
+
     // ---- wading and hulls (#380) ---------------------------------------------------------------
 
     private static SfxBank? _wadeBank, _hullSlapBank;

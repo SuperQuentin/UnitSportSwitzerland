@@ -55,6 +55,8 @@ public partial class PlayerFeel : Node3D
     private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!, _airBar = null!;
     private float _rpmShown = -1f;
     private StyleBoxFlat _airFill = null!;
+    private Ui.StaminaRing _staminaRing = null!;   // #1225
+    private readonly Variometer _vario = new();
     private Label _driftLabel = null!;
     private StyleBoxFlat _rpmFill = null!;
     private Label _engineLabel = null!, _hint = null!;
@@ -139,6 +141,7 @@ public partial class PlayerFeel : Node3D
         };
         _player.Stroked += () => Play(SfxSynth.StrokeBank, 0.22f, 0.9f + (float)_rng.NextDouble() * 0.2f);
         _player.Gasped += () => Play(SfxSynth.GaspBank, 0.55f, 1f);
+        _player.WindedStarted += () => Play(SfxSynth.PantBank, 0.55f, 1f);   // out of breath (#1225)
         _player.Mantled += () =>
         {
             Play(SfxSynth.StepsBank, 0.6f, 0.75f);   // hands on the lip
@@ -478,6 +481,15 @@ public partial class PlayerFeel : Node3D
         Play(SfxSynth.ChimeBank, 0.45f, ChimeSteps[_chimeStep]);
     }
 
+    /// <summary>The variometer (#1225): a beep that rises with the climb on a glider, a low tone in strong sink.</summary>
+    private void UpdateVario(float dt, RideKind ride)
+    {
+        if (!GameSettings.Current.Variometer || !Variometer.Carries(ride)) { _vario.Reset(); return; }
+        int v = _vario.Tick(dt, _player.Velocity.Y);
+        if (v < 0) return;
+        Play(SfxSynth.VarioBank.Variants[v], v == SfxSynth.VarioSink ? 0.3f : 0.22f, 1f);
+    }
+
     private Surface SurfaceUnderfoot() => _player.Terrain is { } chunks
         ? Surfaces.At(chunks, _player.GlobalPosition, _player.Indoors)
         : Surface.Grass;
@@ -792,6 +804,11 @@ public partial class PlayerFeel : Node3D
         _airBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.5f) });
         _screen.AddChild(_airBar);
 
+        // the stamina ring (#1225): beside the shoulder, only while the meter is not full
+        _staminaRing = new Ui.StaminaRing(_player);
+        _screen.AddChild(_staminaRing);
+        Ui.StaminaRing.RunShotIfAsked(_player, _staminaRing);
+
         _engineLabel = HudLabel(16);
         _engineLabel.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
         _engineLabel.GrowHorizontal = Control.GrowDirection.Begin;
@@ -1048,6 +1065,8 @@ public partial class PlayerFeel : Node3D
             var colour = low && Mathf.PosMod(_time * 3f, 1f) < 0.5f ? new Color(1f, 0.35f, 0.25f) : new Color(0.35f, 0.75f, 1f);
             if (_airFill.BgColor != colour) _airFill.BgColor = colour;
         }
+        _staminaRing.Tick(dt);
+        UpdateVario(dt, ride);
         _hurtFlash.Color = _hurtFlash.Color with { A = Mathf.MoveToward(_hurtFlash.Color.A, 0f, 1.2f * dt) };
 
         var vehicle = _player.Vehicle;
