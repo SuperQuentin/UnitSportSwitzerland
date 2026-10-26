@@ -31,7 +31,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site", "crag" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -155,6 +155,7 @@ public sealed class FixtureCourse
         "airport" => FixtureAirport.Create(),
         "garage" => Garage(),
         "site" => Site(),
+        "crag" => Crag.Create(),
         _ => null,
     };
 

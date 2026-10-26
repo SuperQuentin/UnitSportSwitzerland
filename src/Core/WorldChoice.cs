@@ -43,6 +43,7 @@ public sealed record WorldChoice(string Id, string Title, string Blurb, string? 
         new("parking", "Car park", "A big-box store's car park off a main road, turned off the grid.", "parking"),
         new("garage", "Garage blocks", "Blocks of flats along a street, each with an underground garage ramp.", "garage"),
         new("site", "Building sites", "Three building sites with pits along a street: foundations, a shell, a turned house plot.", "site"),
+        new("crag", "Crag", "A rock wall with a ledge, a scree slope, a glacier wall, a block, a sunny slope and a ridge: climbing and lift.", "crag"),
         new("flat", "Flat ground", "No roads: open grass, three fields, a paved strip and a ridge.", "flat"),
     };
 
