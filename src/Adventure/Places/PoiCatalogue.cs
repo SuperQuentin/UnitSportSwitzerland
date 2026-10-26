@@ -211,6 +211,9 @@ public sealed class PoiCatalogue
     /// <summary>The fixture worlds' start (<c>SpawnPoint.DefaultLv95E/N</c>).</summary>
     public const double FixtureE = 2583250, FixtureN = 1113250;
 
+    /// <summary>The fixture courses' flat ground (<c>FixtureCourse.FlatHeight</c>): the POIs' elevations are above it.</summary>
+    public const double FixtureGround = 500;
+
     /// <summary>
     /// The fixture POIs (<c>--pois fixture</c>): ten places built in code at known offsets from the
     /// fixture world's start (metres, X east, Y north), in canton VS. The lake POI's outline is the
@@ -227,7 +230,7 @@ public sealed class PoiCatalogue
             var r = new PoiRecord
             {
                 Hash = PoiId.Hash("fixture:" + name), Kind = kind, Flags = flags | PoiFlags.Named, Tier = tier, Canton = "VS",
-                E = startE + x, N = startN + y, Elevation = elevation, Name = name,
+                E = startE + x, N = startN + y, Elevation = (short)(FixtureGround + elevation), Name = name,
                 DiscoverRadius = kind switch
                 {
                     PoiKind.Peak or PoiKind.SummitCross => 40, PoiKind.Pass => 80, PoiKind.Lake => 60,
