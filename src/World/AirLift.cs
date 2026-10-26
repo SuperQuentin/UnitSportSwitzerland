@@ -218,7 +218,7 @@ public static class AirLift
         if (x > 2.4f) return 0f;
         float peak = MaxCoreLift * Math.Min(1f, strength / 0.8f);
         float ring = x - 1.5f;
-        float lift = peak * MathF.Exp(-2f * x * x) - 0.8f * (peak / MaxCoreLift) * MathF.Exp(-(ring * ring) / 0.1225f);
+        float lift = peak * MathF.Exp(-x * x) - 0.8f * (peak / MaxCoreLift) * MathF.Exp(-(ring * ring) / 0.1225f);
         float fadeFrom = top * 0.85f;
         if (height > fadeFrom) lift *= (top - height) / (top - fadeFrom);
         return lift;

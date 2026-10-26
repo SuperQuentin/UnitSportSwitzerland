@@ -30,6 +30,17 @@ public partial class FootPlayer
     private const float ClimbChest = 1.25f, FaceReach = 0.9f;
     /// <summary>The body's centre this far off the face.</summary>
     private const float ClimbStandOff = BodyRadius + 0.05f;
+
+    /// <summary>
+    /// How far the chest stays off a face leaning back by <paramref name="n"/>: the stand-off at the
+    /// capsule's foot, which on a slab is nearer the rock than the chest (a slab at 55° holds the chest
+    /// about a metre off, or the feet would scrape and slow every step).
+    /// </summary>
+    private static float StandOffFor(Vector3 n)
+    {
+        float flat = new Vector2(n.X, n.Z).Length();
+        return ClimbStandOff + (n.Y > 0f && flat > 1e-3f ? (ClimbChest - BodyRadius) * n.Y / flat : 0f);
+    }
     private const float ClimbUp = 1.2f, ClimbSide = 1.4f, ClimbDown = 1.6f;
     /// <summary>A climb-jump: this far along the face in this long.</summary>
     private const float ClimbJumpDist = 1.9f, ClimbJumpTime = 0.4f;
@@ -53,6 +64,9 @@ public partial class FootPlayer
     private float _climbDrawPhase, _climbSeenPhase = float.NaN;
     private readonly RayQuery _climbRay = new();
     private static bool _climbHintSeen;
+    /// <summary>No grabbing again before this (game time): a let-go or a kick-off with the stick still into the face falls.</summary>
+    private double _climbAgainAt;
+    private const double ClimbRegrab = 0.6;
 
     /// <summary>Free climbing a face (on every peer: a remote copy reads it from the replicated pose).</summary>
     public bool IsClimbing => !Net.NetLink.Dropped(this) && IsMultiplayerAuthority()
@@ -129,13 +143,13 @@ public partial class FootPlayer
     private bool TryBeginClimb(float dt, Vector3 direction, bool onFloor, bool botClimb)
     {
         bool pushing = direction != Vector3.Zero;
-        if (!pushing || (Npc && !botClimb) || !ClimbingAllowed || _sliding || Downed || KnockedOut || _stunTimer > 0f || Indoors)
+        if (!pushing || (Npc && !botClimb) || GameClock.Now < _climbAgainAt || !ClimbingAllowed || _sliding || Downed || KnockedOut || _stunTimer > 0f || Indoors)
         {
             _climbPush = 0f;
             return false;
         }
         var chest = GlobalPosition + Vector3.Up * ClimbChest;
-        if (!ProbeFace(chest, direction, FaceReach + 0.35f, out var point, out var normal, out bool loose, out string? why))
+        if (!ProbeFace(chest, direction, FaceReach + 0.9f, out var point, out var normal, out bool loose, out string? why))
         {
             if (why != null) ClimbRefused = why;
             _climbPush = 0f;
@@ -238,6 +252,7 @@ public partial class FootPlayer
         {
             ClimbRefused = "let go";
             EndClimb();
+            _climbAgainAt = GameClock.Now + ClimbRegrab;
             Velocity = n * 0.6f;
             return true;
         }
@@ -246,6 +261,7 @@ public partial class FootPlayer
             // back + jump: off the face, free, then an ordinary fall (the base jump rule opens the wingsuit)
             ClimbRefused = "kicked off";
             EndClimb();
+            _climbAgainAt = GameClock.Now + ClimbRegrab;
             var outward = new Vector3(n.X, 0, n.Z).Normalized();
             Velocity = outward * KickOut + Vector3.Up * KickUp;
             _groundCoyote = 0f;
@@ -272,47 +288,38 @@ public partial class FootPlayer
 
         // --- the face under the hands ------------------------------------------------------------
         var chest = GlobalPosition + Vector3.Up * ClimbChest;
-        bool face = ProbeFace(chest, -n, FaceReach, out var point, out var hitN, out bool loose, out string? why);
-        if (!face)
+        float standOff = StandOffFor(n);
+        bool face = ProbeFace(chest, -n, standOff + 0.55f, out var point, out var hitN, out bool loose, out string? why);
+        if (!face && (why == null || hitN.Y > Climbable.SteepNormalY))
         {
-            if (why == null)
+            // nothing at the chest, or the face lies back into a top: a lip. The mantle pulls the body
+            // over (reaching further for a top a 1 m height grid rounds off), or it climbs on by the hips
+            var flatN = new Vector3(n.X, 0, n.Z);
+            if (sUp > 0f && flatN.LengthSquared() > 1e-4f && TopOut(-flatN.Normalized()))
             {
-                // nothing at the chest: a lip. The mantle pulls the body over, or it holds below it
-                var flatN = new Vector3(n.X, 0, n.Z);
-                if (sUp > 0f && flatN.LengthSquared() > 1e-4f && TryBeginMantle(-flatN.Normalized(), 1.5f))
-                {
-                    ClimbRefused = "topped out";
-                    EndClimb();
-                    _mantling = true;   // EndClimb keeps the mantle TryBeginMantle started
-                    return true;
-                }
-                // hips still on the face: hold (a cornice too high), traverse or let go
-                var hips = GlobalPosition + Vector3.Up * 0.6f;
-                if (!ProbeFace(hips, -n, FaceReach + 0.3f, out point, out hitN, out loose, out _))
-                {
-                    ClimbRefused = "nothing to hold";
-                    EndClimb();
-                    return true;
-                }
-                sUp = Mathf.Min(sUp, 0f);
-                share = Mathf.Min(new Vector2(sUp, sRight).Length(), 1f);
-                // the body is held from the hips' point, as if the chest's were there
-                point += Vector3.Up * (ClimbChest - 0.6f);
-            }
-            else if (hitN.Y > Climbable.SteepNormalY)
-            {
-                // the face lies back into ground you can stand on: walk on
+                ClimbRefused = "topped out";
                 EndClimb();
-                return false;
-            }
-            else
-            {
-                // an overhang, ice, a tree, a vehicle: let go
-                ClimbRefused = why;
-                EndClimb();
-                Velocity = n * 0.6f;
                 return true;
             }
+            var hips = GlobalPosition + Vector3.Up * 0.6f;
+            if (!ProbeFace(hips, -n, standOff + 0.85f, out point, out hitN, out loose, out _))
+            {
+                // nothing under the hands at all: a ledge you can stand on is walked onto, else a fall
+                ClimbRefused = why == null ? "nothing to hold" : null;
+                EndClimb();
+                return why != null ? false : true;
+            }
+            // the body is held from the hips' point, as if the chest's were there
+            point += Vector3.Up * (ClimbChest - 0.6f);
+            face = true;
+        }
+        else if (!face)
+        {
+            // an overhang, ice, a tree, a vehicle: let go
+            ClimbRefused = why;
+            EndClimb();
+            Velocity = n * 0.6f;
+            return true;
         }
         // follow the face's turn, eased so the height grid's 1 m facets do not jerk the body about
         _climbNormal = n = n.Slerp(hitN.Normalized(), 1f - Mathf.Exp(-12f * dt)).Normalized();
@@ -352,7 +359,7 @@ public partial class FootPlayer
 
         // held ClimbStandOff off the face: a spring along the normal
         float off = (GlobalPosition + Vector3.Up * ClimbChest - point).Dot(n);
-        var keep = n * Mathf.Clamp((ClimbStandOff - off) * 10f, -3f, 3f);
+        var keep = n * Mathf.Clamp((StandOffFor(n) - off) * 10f, -3f, 3f);
         Velocity = wish + keep;
         var before = GlobalPosition;
         MoveAndSlide();
@@ -372,6 +379,16 @@ public partial class FootPlayer
         UpdateCameraFeel(dt, false, false);
         return true;
     }
+
+    /// <summary>The mantle at a lip, reaching further over it each try: the first top it can stand on wins.</summary>
+    private bool TopOut(Vector3 forward)
+    {
+        foreach (float beyond in TopOutReach)
+            if (TryBeginMantle(forward, 1.5f, beyond)) return true;
+        return false;
+    }
+
+    private static readonly float[] TopOutReach = { 0.45f, 0.8f, 1.2f };
 
     /// <summary>
     /// The owner's climbing pose (<see cref="PublishFootPose"/>): the limb phase from the distance

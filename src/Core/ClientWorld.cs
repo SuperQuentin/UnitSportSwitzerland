@@ -820,6 +820,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.TractorCheck.Role is { } tractorRole) AddChild(new Player.TractorCheck(tractorRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
+        if (Player.ClimbCheck.Requested) AddChild(new Player.ClimbCheck(() => LocalPlayer));   // #1225
         if (Items.Fishing.FishProbe.Requested) AddChild(new Items.Fishing.FishProbe(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
         if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));

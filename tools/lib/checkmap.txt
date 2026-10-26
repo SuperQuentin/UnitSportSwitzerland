@@ -858,3 +858,25 @@ src/Net/Sleepers         net    tools/adventurenetcheck.sh
 src/Items/Bank           net    tools/adventurenetcheck.sh
 src/BattleRoyale/BrManager.cs net tools/adventurenetcheck.sh
 tools/adventurenetcheck.sh net  tools/adventurenetcheck.sh
+# #1225: stamina, free climbing, the crag; thermals, ridge lift and campfire updrafts
+src/Player/FootPlayer.Climb    quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Stamina  quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/ClimbCheck          quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/Stamina             quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/Climbable           quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/StaminaUpgrades  quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Terrain/Fixture/FixtureCrag quick --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/XR/XrClimb                 quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Ui/StaminaRing             quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Avatar/HumanMeshBuilder.WallClimb quick --skincheck
+src/World/AirLift              quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/World/AirLift              quick  --flycheck thermal --time 22 --chunks fixture:crag
+src/World/AirLift              quick  --flycheck campfire --chunks fixture:crag
+src/World/AirLift              quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+src/World/SunPath              quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/World/DayNight             quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/Player/FlightCheckProbe    quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/Player/Flight.cs           quick  --flycheck campfire --chunks fixture:crag
+src/Player/PigeonFlight        quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+src/Net/Arrival                net    tools/climbnetcheck.sh
+src/Player/FootPlayer.Climb    net    tools/climbnetcheck.sh

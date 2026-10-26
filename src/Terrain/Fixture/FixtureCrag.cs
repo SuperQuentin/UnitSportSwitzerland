@@ -8,7 +8,7 @@ namespace UnitSport.Terrain.Fixture;
 /// Y north, on flat open ground at <see cref="FixtureCourse.FlatHeight"/>. Every face rises toward the
 /// east (it faces west, -X) across a band of Y, so walking east from the start meets it:
 /// <list type="bullet">
-/// <item>the rock wall (Y ±<see cref="BandHalf"/>): from x = <see cref="WallX"/>, 80° up to a 2 m ledge at
+/// <item>the rock wall (Y ±<see cref="BandHalf"/>): from x = <see cref="WallX"/>, 80° up to a 3 m ledge at
 /// <see cref="LedgeH"/>, 80° on to <see cref="WallH"/>, a plateau, then a gentle way down east;</item>
 /// <item>the scree slope (Y round <see cref="ScreeY"/>): <see cref="ScreeH"/> m at 55°, loose scree;</item>
 /// <item>the glacier wall (Y round <see cref="GlacierY"/>): <see cref="GlacierH"/> m at 80°, ice (refused);</item>
@@ -22,7 +22,7 @@ public static class Crag
     public const double Flat = FixtureCourse.FlatHeight;
     /// <summary>Each climbing feature is this wide either side of its centre line.</summary>
     public const double BandHalf = 12;
-    public const double WallX = 20, LedgeH = 14, LedgeDepth = 2, WallH = 30;
+    public const double WallX = 20, LedgeH = 14, LedgeDepth = 3, WallH = 30;
     public const double ScreeY = 60, ScreeH = 60;
     public const double GlacierY = -55, GlacierH = 20;
     public const double BlockX = -25, BlockSize = 8;

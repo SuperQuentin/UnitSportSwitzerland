@@ -4161,7 +4161,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="MantleMin"/> and <see cref="MantleMax"/> above the feet, and room to stand on
     /// it. Starts the pull-up when all three hold.
     /// </summary>
-    private bool TryBeginMantle(Vector3 forward, float speed)
+    private bool TryBeginMantle(Vector3 forward, float speed, float beyond = 0.45f)
     {
         var space = GetWorld3D().DirectSpaceState;
         var exclude = new Godot.Collections.Array<Rid> { GetRid() };
@@ -4170,7 +4170,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // nothing in the way at the height the hands reach over, or it is a wall, not a ledge
         var high = feet + Vector3.Up * reach;
-        var over = high + forward * (BodyRadius + 0.45f);
+        var over = high + forward * (BodyRadius + beyond);
         if (space.IntersectRay(PhysicsRayQueryParameters3D.Create(high, over, CollisionMask, exclude)).Count > 0)
             return false;
 
