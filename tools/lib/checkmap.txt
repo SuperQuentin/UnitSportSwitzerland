@@ -853,6 +853,15 @@ tools/TerrainFormat/PoiFile quick --poischeck --world fixture --pois fixture
 src/Terrain/IChunkSource  quick  --poischeck --world fixture --pois fixture
 src/Terrain/LocalChunkSource quick --poischeck --world fixture --pois fixture
 src/Net/ClientTerrainSync net    @netsmoke
+# #1224 adventure places part 2: discovery, fog, viewpoints, the adventure map and the Atlas (offline quick probe; server + two clients)
+src/Adventure/Places/     quick  --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Quests/     quick  --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Ui/MapView            quick  --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Interiors/InteriorManager quick --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Places/     net    tools/placesnetcheck.sh
+src/Adventure/AdventureService net tools/placesnetcheck.sh
+src/Net/ChatManager.Invites net  tools/placesnetcheck.sh
+tools/placesnetcheck.sh   net    tools/placesnetcheck.sh
 # #1223: the Adventure layer: progress store, quests, the Journal (offline quick probe; server + clients over loopback)
 src/Adventure/           quick  --adventurecheck --systems ui,physics,adventure
 src/Ui/AdventureLog      quick  --adventurecheck --systems ui,physics,adventure
