@@ -99,7 +99,7 @@ public sealed class Pigeon : Flyer
     {
         // into the ground too fast: the player's wall check only counts the flat part of a floor hit
         if (env.OnFloor && ModeOf(m) == PigeonFlight.Mode.Air && m.Velocity.Length() > CrashSpeed) return FlightEvent.Crashed;
-        var c = new PigeonFlight.Controls(input.Stick, input.Up > 0.5f, input.Down > 0.5f, input.Effort);
+        var c = new PigeonFlight.Controls(input.Stick, input.Up > 0.5f, input.Down > 0.5f, input.Effort, env.Air);
         var s = PigeonFlight.Step(ToState(m), c, env.OnFloor, dt);
         FromState(s, ref m);
         // the body leans with the turn and noses down in a dive, level on the ground

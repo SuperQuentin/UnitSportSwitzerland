@@ -30,7 +30,8 @@ public readonly record struct FlightInput(Vector2 Stick, float Up, float Down, f
 /// <param name="OnFloor">Touching walkable ground.</param>
 /// <param name="Clearance">Height above the terrain surface, m (buildings not counted).</param>
 /// <param name="Altitude">Above sea level, m: how thin the air is (an airliner's, #414).</param>
-public readonly record struct FlightEnv(bool OnFloor, float Clearance, float Altitude = 500f);
+/// <param name="Air">The air's own velocity here, world axes, m/s: thermals, ridge lift, updrafts (<c>World/AirLift</c>, #1225). Zero = still air.</param>
+public readonly record struct FlightEnv(bool OnFloor, float Clearance, float Altitude = 500f, Vector3 Air = default);
 
 /// <summary>What a flight step asks the player to do next.</summary>
 public enum FlightEvent
@@ -257,7 +258,8 @@ public sealed class Wingsuit : Flyer
         bank = Mathf.Clamp(bank + input.Stick.X * MaxBank, -MaxBank, MaxBank);
         m.Bank = Approach(m.Bank, bank, 5f, dt);
 
-        var v = m.Velocity;
+        // the forces act on the velocity through the air; the air itself carries the suit (#1225)
+        var v = m.Velocity - env.Air;
         float speed = v.Length();
         var heading = Heading(m.Yaw);
         var flow = speed > 0.5f ? v / speed : heading;
@@ -287,7 +289,7 @@ public sealed class Wingsuit : Flyer
         float horizontal = new Vector2(v.X, v.Z).Length();
         float steadySink = -horizontal * cd / Mathf.Max(m.Control, 0.05f);
         if (horizontal > 15f) accel.Y += (steadySink - v.Y) * 0.6f;
-        m.Velocity = v + accel * dt;
+        m.Velocity = v + accel * dt + env.Air;
 
         var flat = new Vector2(m.Velocity.X, m.Velocity.Z);
         if (flat.Length() > 3f) m.Yaw = Mathf.Atan2(-flat.X, -flat.Y);
@@ -381,7 +383,7 @@ public class Canopy : Flyer
 
         m.Yaw -= turn * TurnRate * dt;
         heading = Heading(m.Yaw);
-        var target = heading * airspeed + Vector3.Down * sink;
+        var target = heading * airspeed + Vector3.Down * sink + env.Air;
         m.Velocity = m.Velocity.Lerp(target, MathX.Damp(1.6f, dt));
 
         // the pilot swings out under the wing in a turn
