@@ -46,6 +46,32 @@ public class PlacesRulesTests
     }
 
     [Fact]
+    public void Ground_vehicles_and_boats_clear_fog_airliners_do_not()
+    {
+        for (int k = 0; k <= 120; k++) Assert.True(PlacesRules.ClearsFog(k) || k == (int)RideKind.Trailer, $"ride {k}");
+        for (int k = 121; k <= 123; k++) Assert.True(PlacesRules.ClearsFog(k), $"boat {k}");
+        for (int k = 129; k <= 192; k++) Assert.True(PlacesRules.ClearsFog(k), $"motorbike {k}");
+        Assert.True(PlacesRules.ClearsFog((int)RideKind.EBike));
+        Assert.True(PlacesRules.ClearsFog((int)RideKind.Forklift));
+        Assert.False(PlacesRules.ClearsFog((int)RideKind.A320));
+        Assert.False(PlacesRules.ClearsFog((int)RideKind.Freighter));
+        Assert.False(PlacesRules.ClearsFog((int)RideKind.An124));
+        Assert.False(PlacesRules.ClearsFog((int)RideKind.Ufo));
+        Assert.False(PlacesRules.ClearsFog(PlacesRules.Aboard));
+    }
+
+    [Fact]
+    public void A_car_clears_fog_but_finds_no_place()
+    {
+        var t = new DiscoveryTracker();
+        var found = new List<Poi>();
+        var car = new PlacesBody(2_600_000, 1_200_000, 500, 0.5f, 8);
+        Assert.True(DiscoveryRules.Step(t, car, 1, Array.Empty<Poi>(), _ => false, found));
+        var airliner = new PlacesBody(2_600_010, 1_200_000, 3_000, 2_500f, (int)RideKind.A320);
+        Assert.False(DiscoveryRules.Step(t, airliner, 1, Array.Empty<Poi>(), _ => false, found));
+    }
+
+    [Fact]
     public void The_stamp_says_how()
     {
         Assert.Equal(StampMode.OnFoot, PlacesRules.ModeOf((int)RideKind.OnFoot));

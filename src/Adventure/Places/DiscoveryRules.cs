@@ -19,8 +19,9 @@ public enum TravelClass
 }
 
 /// <summary>
-/// The decided travel rule (#1224, <c>docs/plans/adventure-overview.md</c> "Decisions taken"): places and fog
-/// count only on foot or in a light aircraft. One table keyed on the replicated ride kind, so changing the
+/// The decided travel rule (#1224, <c>docs/plans/adventure-overview.md</c> "Decisions taken"): places count
+/// only on foot or in a light aircraft; the map's fog also clears in any ground vehicle or boat
+/// (<see cref="ClearsFog"/>). One table keyed on the replicated ride kind, so changing the
 /// rule is a one-line edit here. <see cref="Aboard"/> stands for "on a vehicle that is not one's own ride":
 /// a deck, a lift, a seat in someone else's vehicle that is not a light aircraft.
 /// </summary>
@@ -37,8 +38,20 @@ public static class PlacesRules
         _ => TravelClass.None,
     };
 
-    /// <summary>Whether a body travelling as <paramref name="rideKind"/> finds places and clears fog.</summary>
+    /// <summary>Whether a body travelling as <paramref name="rideKind"/> finds places (stamps).</summary>
     public static bool Reveals(int rideKind) => Class(rideKind) != TravelClass.None;
+
+    /// <summary>
+    /// Whether a body travelling as <paramref name="rideKind"/> clears the map's fog: wider than
+    /// <see cref="Reveals"/>, every ground vehicle and boat counts too (cars, bikes, trucks, buses, boats,
+    /// machines). Airliners, the UFO and a body <see cref="Aboard"/> something (a deck, a lift) do not.
+    /// </summary>
+    public static bool ClearsFog(int rideKind) => rideKind switch
+    {
+        (int)RideKind.A320 or (int)RideKind.Freighter or (int)RideKind.An124 or (int)RideKind.Ufo
+            or (int)RideKind.Trailer or Aboard => false,
+        _ => true,
+    };
 
     /// <summary>What the stamp says about how it was earned.</summary>
     public static StampMode ModeOf(int rideKind) => rideKind switch
@@ -155,8 +168,9 @@ public static class DiscoveryRules
     /// <summary>
     /// One tick: moves the tracker, then adds to <paramref name="discovered"/> the POIs of
     /// <paramref name="near"/> not yet <paramref name="found"/> that were in range on this tick and the one
-    /// before. Returns whether the body earns this tick (reveals fog): its ride reveals, it is not out, and
-    /// it is not within a jump's landing zone.
+    /// before (only when its ride finds places, <see cref="PlacesRules.Reveals"/>). Returns whether the body
+    /// clears fog this tick: its ride clears fog (<see cref="PlacesRules.ClearsFog"/>, wider), it is not out,
+    /// and it is not within a jump's landing zone.
     /// </summary>
     public static bool Step(DiscoveryTracker t, in PlacesBody b, double seconds, IReadOnlyList<Poi> near,
         Func<Poi, bool> found, List<Poi> discovered)
@@ -178,9 +192,9 @@ public static class DiscoveryRules
             double ae = b.E - t.AnchorE, an = b.N - t.AnchorN;
             if (ae * ae + an * an >= (double)JumpClearM * JumpClearM) t.Anchored = false;
         }
-        bool earns = !t.Anchored && !b.Out && PlacesRules.Reveals(b.RideKind);
+        bool counts = !t.Anchored && !b.Out;
         t.HitNow.Clear();
-        if (earns)
+        if (counts && PlacesRules.Reveals(b.RideKind))
             foreach (var p in near)
             {
                 if (found(p) || !InRange(p, b)) continue;
@@ -188,6 +202,6 @@ public static class DiscoveryRules
                 if (t.HitLast.Contains(p)) discovered.Add(p);
             }
         (t.HitLast, t.HitNow) = (t.HitNow, t.HitLast);
-        return earns;
+        return counts && PlacesRules.ClearsFog(b.RideKind);
     }
 }

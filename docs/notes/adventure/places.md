@@ -7,10 +7,11 @@
 ## Rules
 
 - **The travel rule is one table**, `PlacesRules.Class(rideKind)`: on foot (walk, run, climb, swim, skis,
-  snowboard, paraglider, wingsuit, parachute, pigeon) or a light aircraft (`Helicopter`, `Plane`) find places
-  and clear fog. Every other ride kind (cars, motorbikes, bikes, trucks, buses, boats, the airliners, the UFO)
-  and `PlacesRules.Aboard` (a deck, a ski lift, a seat in a vehicle that is not a light aircraft) reveal
-  nothing. Change the rule there, nowhere else. `PlacesBodies.Of` turns a `FootPlayer` into the body the
+  snowboard, paraglider, wingsuit, parachute, pigeon) or a light aircraft (`Helicopter`, `Plane`) find places.
+  Every other ride kind (cars, motorbikes, bikes, trucks, buses, boats, the airliners, the UFO) and
+  `PlacesRules.Aboard` (a deck, a ski lift, a seat in a vehicle that is not a light aircraft) find nothing.
+  **The map's fog is wider** (`PlacesRules.ClearsFog`, decided Oct 2026): every ground vehicle and boat
+  clears it too; airliners, the UFO, a trailer and `Aboard` do not. Change the rule there, nowhere else. `PlacesBodies.Of` turns a `FootPlayer` into the body the
   rules see (the host's ride for a passenger, `Down` as out).
 - **Server only** (offline the client plays the server, as `AdventureService` does): a 1 Hz tick per peer
   with `Active(peer)` reads its proxy's `NetGlobal`, `PoiCatalogue.Near(200 m)` into a reused list, then

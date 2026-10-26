@@ -203,7 +203,9 @@ instance plays the server part). The rules are pure: `DiscoveryRules` (unit-test
     pigeon.
   - Light aircraft are small planes, gliders and helicopters.
   - Commercial aircraft (the airliners with cockpits) and every ground vehicle (cars, trucks, buses,
-    bikes, boats, trains) reveal nothing: you have to get out.
+    bikes, boats, trains) find no place: you have to get out for the stamp.
+  - **The map's fog is wider** (decided later, Oct 2026): every ground vehicle and boat clears it too
+    (`PlacesRules.ClearsFog`). Airliners, the UFO and a body aboard a deck or lift do not.
 
   The check is one server-side table, `PlacesRules.Reveals(rideKind)`, keyed on the ride kind the
   server already replicates, so changing the rule is a one-line edit. Mounts will count as on foot

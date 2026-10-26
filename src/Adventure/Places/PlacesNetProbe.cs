@@ -11,8 +11,8 @@ namespace UnitSport.Adventure.Places;
 /// <c>--placesnet walk|watch|back</c> with <c>--connect</c> and <c>--pois fixture</c> (driven by
 /// <c>tools/placesnetcheck.sh</c>, #1224). The server finds places; each role checks what reached this client:
 /// <list type="bullet">
-/// <item><c>walk</c> (A): walks up the peak: the server stamps it, A's mirror and fog show it; in a car at the
-/// tower nothing is found, on foot it is; a jump onto the station stamps nothing; E at the summit cross syncs
+/// <item><c>walk</c> (A): walks up the peak: the server stamps it, A's mirror and fog show it; driving a car
+/// clears fog but at the tower finds nothing, on foot it is found; a jump onto the station stamps nothing; E at the summit cross syncs
 /// it (its 3 km disc reaches A's fog by <c>FogDelta</c>).</item>
 /// <item><c>watch</c> (B, at the same time): none of A's stamps or fog reach B.</item>
 /// <item><c>back</c> (A again, after a server restart, the same <c>user://</c>): the stamps, the synced view and
@@ -65,6 +65,10 @@ public partial class PlacesNetProbe : ChatProbe
         await WalkTo(tower.E - 120, tower.N);
         var me = Me!;
         Expect(me.SetRide((RideKind)CarCatalog.First), "in a car");
+        // the map's fog is wider than finding places: a ground vehicle clears it (PlacesRules.ClearsFog)
+        int cells = places.MyFog.Count;
+        await WalkTo(tower.E - 700, tower.N - 500);
+        Expect(await Until(() => places.MyFog.Count > cells, 5), $"driving clears the map's fog ({cells} -> {places.MyFog.Count} cells)");
         await WalkTo(tower.E, tower.N - 5);
         await Seconds(3.5);
         Expect(!Mine.Found.ContainsKey(tower.Id), $"driving to the tower finds nothing (ride {me.RideKindId})");
