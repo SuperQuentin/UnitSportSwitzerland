@@ -200,7 +200,7 @@ public partial class ItemController : Node
             var p = CurrentPlayer();
             // downed (#475): no items until a team-mate picks you up; in a fist fight (#495) the hands are fists
             // the phone out (#889): both hands are on it
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, InDuel: false, PhoneState: 0 } && p.Ride == RideKind.OnFoot ? p : null;
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, IsClimbing: false, Downed: false, InDuel: false, PhoneState: 0 } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 

@@ -155,7 +155,7 @@ public partial class BotDirector : Node
         var bot = new Bot(id, n, body, profile) { NextThink = Now, World = _world ??= new BotWorld(_players) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
-        body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch);
+        body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch, bot.Intent.Climb);
         // in a car or on a bike: the pilot, else the handbrake (never the keys: a null RideControls reads them)
         body.RideControls = () => BotDriving.Controls(bot, (float)body.GetPhysicsProcessDeltaTime());
         // in the air: the wingsuit follows where it faces (LookYaw/LookPitch), the canopy its stick; the

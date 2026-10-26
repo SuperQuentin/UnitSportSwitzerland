@@ -1133,7 +1133,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// read with <see cref="WalkControls"/>: held, as the keys would be (a jump is a press = false then
     /// true). Null: neither.
     /// </summary>
-    public Func<(bool Jump, bool Crouch)>? FootActions { get; set; }
+    public Func<(bool Jump, bool Crouch, bool Climb)>? FootActions { get; set; }
 
     /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
     public bool JumpTaken { get; set; }
@@ -2079,6 +2079,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (_climbing) { PublishClimbPose(dt); return; }   // #1225
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -2295,6 +2296,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float dt = (float)GetProcessDeltaTime();
         // a swimmer's face lives too (#802): blinks, glances, a blow's grimace
         if (PoseKind == PoseSwim) { ApplySwimFigure(); StepFace(dt); return; }
+        if (PoseKind == PoseWallClimb) { ApplyClimbFigure(); StepFace(dt); return; }   // #1225
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
@@ -3414,6 +3416,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // into the sky by the solver
         if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
+        EndClimb();   // #1225: no climbing on any ride
         DropPhoneBackdrop();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
@@ -3788,6 +3791,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Health, Bot))
         {
             TickHealth(dt, onFloor);
+            TickStamina(dt, onFloor);   // #1225, FootPlayer.Stamina.cs
             TickFarmFoot(dt);
         }
         using var walkTime = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Walk, Bot);
@@ -3821,6 +3825,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // on a face (#1225, FootPlayer.Climb.cs)
+        if (ClimbPhysics(dt, onFloor)) return;
         // in the water (#301, FootPlayer.Swim.cs)
         if (SwimPhysics(dt, onFloor)) return;
         // in a fist fight (#495, FootPlayer.Fight.cs)
@@ -3921,6 +3927,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _jumpBuffer = 0;
             return;
         }
+
+        // --- free climbing (#1225, FootPlayer.Climb.cs) ----------------------------------------
+        // pushing into a climbable face grabs it (a low ledge still vaults, above); Space then climb-jumps
+        if (TryBeginClimb(dt, direction, onFloor, acts.Climb)) { _jumpBuffer = 0; return; }
 
         // --- enter / leave the slide -------------------------------------------------
         float flatSpeed = MathX.FlatLength(velocity);
