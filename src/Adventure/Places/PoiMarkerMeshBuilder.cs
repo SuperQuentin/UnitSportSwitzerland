@@ -30,7 +30,7 @@ public static class PoiMarkerMeshBuilder
     [Showcase("Adventure", "Telescope")]
     public static ArrayMesh Telescope() => _telescope ??= Build(st =>
     {
-        Box(st, new Vector3(0, 0.6f, 0), new Vector3(0.12f, 1.2f, 0.12f), Metal);
+        Box(st, new Vector3(0, 0.63f, 0), new Vector3(0.12f, 1.14f, 0.12f), Metal);
         Box(st, new Vector3(0, 1.25f, 0.05f), new Vector3(0.22f, 0.22f, 0.6f), Brass);
         Box(st, new Vector3(0, 1.25f, -0.3f), new Vector3(0.14f, 0.14f, 0.12f), Black);
         Box(st, new Vector3(0, 0.03f, 0), new Vector3(0.5f, 0.06f, 0.5f), Stone);
@@ -43,7 +43,7 @@ public static class PoiMarkerMeshBuilder
         // the yellow hiking sign and the stamp box under it, as a real Stempelstelle
         Box(st, new Vector3(0.28f, 1.95f, 0), new Vector3(0.6f, 0.18f, 0.04f), Yellow);
         Box(st, new Vector3(0, 1.15f, 0.12f), new Vector3(0.3f, 0.26f, 0.16f), Yellow);
-        Box(st, new Vector3(0, 1.26f, 0.205f), new Vector3(0.18f, 0.03f, 0.01f), Black);
+        Box(st, new Vector3(0, 1.26f, 0.215f), new Vector3(0.18f, 0.03f, 0.01f), Black);
     });
 
     [Showcase("Adventure", "Synced flag")]
@@ -51,8 +51,10 @@ public static class PoiMarkerMeshBuilder
     {
         Box(st, new Vector3(0, 0.35f, 0), new Vector3(0.03f, 0.7f, 0.03f), Metal);
         Box(st, new Vector3(0.2f, 0.58f, 0), new Vector3(0.36f, 0.24f, 0.01f), Red);
-        Box(st, new Vector3(0.2f, 0.58f, 0.006f), new Vector3(0.16f, 0.05f, 0.005f), White);
-        Box(st, new Vector3(0.2f, 0.58f, 0.006f), new Vector3(0.05f, 0.16f, 0.005f), White);
+        // the white cross stands 1.5 cm proud of the red, in three pieces that never overlap (no z-fight)
+        Box(st, new Vector3(0.2f, 0.58f, 0.02f), new Vector3(0.16f, 0.05f, 0.01f), White);
+        Box(st, new Vector3(0.2f, 0.6325f, 0.02f), new Vector3(0.05f, 0.055f, 0.01f), White);
+        Box(st, new Vector3(0.2f, 0.5275f, 0.02f), new Vector3(0.05f, 0.055f, 0.01f), White);
     });
 
     /// <summary>Vertex colour as the albedo, as the other markers.</summary>

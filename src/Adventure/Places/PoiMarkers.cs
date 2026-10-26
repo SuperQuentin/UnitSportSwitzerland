@@ -99,7 +99,7 @@ public partial class PoiMarkers : Node3D
         var places = PlacesService.Instance;
         var me = _me();
         _shown.Clear();
-        if (places != null && me != null && IsInstanceValid(me) && _origin() is { } origin && Ui.AdventureLog.Adventuring)
+        if (places is { Catalogue.Count: > 0 } && me != null && IsInstanceValid(me) && _origin() is { } origin && Ui.AdventureLog.Adventuring)
         {
             var at = me.Global;
             places.Catalogue.Near(at.E, at.N, RangeM, _near);

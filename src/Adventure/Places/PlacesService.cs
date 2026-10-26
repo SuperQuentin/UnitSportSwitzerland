@@ -186,7 +186,8 @@ public partial class PlacesService : Node
         {
             double dt = _nextTick == 0 ? TickEvery : now - _nextTick + TickEvery;
             _nextTick = now + TickEvery;
-            if (Catalogue.Count > 0 || BodyOf != null) Tick(Math.Max(dt, 0.1), now);
+            // no places on this map (the generated world, an older region): places stay idle, no section is made
+            if (Catalogue.Count > 0) Tick(Math.Max(dt, 0.1), now);
         }
         foreach (var (peer, s) in _peers)
         {
