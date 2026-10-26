@@ -16,7 +16,8 @@ Plain C#, linked into the unit tests (`QuestEngineTests`, `QuestCatalogTests`).
   (for the tracker), and `Plan` (`places`, `rewards`, `navigation`, `stamina`, or null when this
   service raises its events).
 - **Quests are offered only when every step's plan runs** (`QuestEngine.Playable`; a plan calls
-  `AdventureService.Provides("places")` when its system starts). Until the other plans land, the five
+  `AdventureService.Provides("places")` when its system starts, **on the server and on clients**: the
+  server refuses to start an unplayable quest, the client's Journal offers only playable ones). Until the other plans land, the five
   starter quests are in the catalog but not offered: the Journal says new quests come with the Atlas,
   travel points and chests.
 - `Unlock(kind, arg)` rewards name a kind another plan registers (`RegisterReward`): `reveal`, `travel`,

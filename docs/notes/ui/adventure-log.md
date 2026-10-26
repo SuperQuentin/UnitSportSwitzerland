@@ -41,7 +41,8 @@ and builds the **Birds** and **Fish** pages.
 
 ## HUD
 
-- **Tracker**: right edge at 64 % height (below the invite cards), glass panel: title (amber), the step
+- **Tracker**: right edge, its bottom at 62 % of the height growing upward (below the invite cards,
+  above the corner's key hints), glass panel: title (amber), the step
   with `count/needed`, the distance (4 Hz, rounded to 10 m, then km). Fades out while a page is open, in
   a Battle Royale round, and over 22 m/s. Texts set only on change.
 - **Toasts**: top centre, 3 s, "Quest started", "Step done: … / Next: …", "Quest complete: …" with the

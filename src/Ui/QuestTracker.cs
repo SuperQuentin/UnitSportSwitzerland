@@ -45,9 +45,11 @@ public partial class QuestTracker : CanvasLayer
         AddChild(root);
         _panel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Modulate = new Color(1, 1, 1, 0) };
         _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.6f, 10, 10));
-        // the right edge, below the invite cards' band (InviteToasts at a third of the way down)
+        // the right edge, below the invite cards' band (InviteToasts at a third of the way down) and
+        // above the corner's key hints: its bottom at 62 % of the height, growing upward
         _panel.AnchorLeft = _panel.AnchorRight = 1f;
-        _panel.AnchorTop = _panel.AnchorBottom = 0.64f;
+        _panel.AnchorTop = _panel.AnchorBottom = 0.62f;
+        _panel.GrowVertical = Control.GrowDirection.Begin;
         _panel.OffsetLeft = -Width - 16f;
         _panel.OffsetRight = -16f;
         root.AddChild(_panel);
