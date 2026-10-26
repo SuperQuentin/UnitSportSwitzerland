@@ -348,6 +348,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
             if (accounts.Mode == Net.Accounts.ServerAccounts.Required)
                 adventure.AccountKey = peer => gate?.Of(peer) is { } account ? "acct:" + account.UserId : null;
             _sleepers.Proven += adventure.PeerProven;
+            // places (#1224): discovery, fog and viewpoints for every adventuring peer, from its proxy's published state
+            Player.FootPlayer? PlayerOf(long peer) => _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
+            Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+            Adventure.Places.PlacesService.Create(adventure, server: true, networked: true).BodyOf = peer =>
+                PlayerOf(peer) is { } body ? Adventure.Places.PlacesBodies.Of(body, body.NetGlobal, PlayerOf, ground) : null;
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
@@ -646,6 +651,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // before the registry forgets its name and the body is freed: it lies down where it was (#644)
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _adventure?.PeerLeft(id);
+        Adventure.Places.PlacesService.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);

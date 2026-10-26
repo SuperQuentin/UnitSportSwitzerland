@@ -79,6 +79,23 @@ public class DiscoveryRulesTests
     }
 
     [Fact]
+    public void A_body_on_the_fixture_ground_beside_the_peak_finds_it()
+    {
+        var peak = Of(PoiKind.Peak);
+        var body = new PlacesBody(peak.E, peak.N - 5, Ground, 0, (int)RideKind.OnFoot);
+        Assert.Equal(Ground + 10, peak.Elevation);
+        Assert.True(DiscoveryRules.InRange(peak, body));
+        var t = new DiscoveryTracker();
+        var near = new List<Poi>();
+        Cat.Near(body.E, body.N, 200, near);
+        Assert.Contains(peak, near);
+        var got = new List<Poi>();
+        DiscoveryRules.Step(t, body, 1, near, _ => false, got);
+        DiscoveryRules.Step(t, body, 1, near, _ => false, got);
+        Assert.Contains(peak, got);
+    }
+
+    [Fact]
     public void A_castle_counts_from_a_light_aircraft_low_enough_but_never_from_a_car()
     {
         var castle = Of(PoiKind.Castle);

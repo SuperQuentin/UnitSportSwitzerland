@@ -1021,6 +1021,18 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Ui.QuestToasts());
             if (Adventure.AdventureCheck.Requested) AddChild(new Adventure.AdventureCheck(items, () => LocalPlayer));
             if (Adventure.AdventureNetProbe.Role != null) AddChild(new Adventure.AdventureNetProbe(items));
+            // places (#1224): stamps, fog, viewpoints; offline this client finds its own places
+            Func<double, double, float?> ground = (e, n) => _chunks != null && _worldOrigin is { } o && _chunks.TryGetHeight(o.ToWorld(e, n, 0), out float h) ? h : null;
+            var places = Adventure.Places.PlacesService.Create(adventure, server: false, networked: Launch.Networked);
+            places.BodyOf = _ => LocalPlayer is { } me ? Adventure.Places.PlacesBodies.Of(me, me.Global, _ => null, ground) : null;
+            AddChild(new Adventure.Places.StampToast());
+            AddChild(new Adventure.Places.PoiMarkers(() => _onFoot ? LocalPlayer : null, () => _worldOrigin,
+                p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
+            Adventure.Places.AtlasPage.Register();
+            Adventure.Places.AdventureMap.Me = () => LocalPlayer is { } me ? (me.Global, me.GlobalRotation.Y) : null;
+            Adventure.Places.AdventureMap.PlaceSearch = () => _places?.SetOpen(true);
+            if (Adventure.Places.PlacesCheck.Requested) AddChild(new Adventure.Places.PlacesCheck(items, () => LocalPlayer));
+            if (Adventure.Places.PlacesNetProbe.Role != null) AddChild(new Adventure.Places.PlacesNetProbe(items));
         }
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
@@ -1847,6 +1859,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             // in a Battle Royale match M is the match map, and there is no teleporting anyway
             if (BattleRoyale.BrManager.Instance?.ToggleMap() == true) return;
+            // adventuring (#1224): the adventure map; its side panel still reaches the town search
+            if (Adventure.Places.AdventureMap.Available && _places is not { IsOpen: true })
+            {
+                GetViewport().SetInputAsHandled();
+                Adventure.Places.AdventureMap.Toggle();
+                return;
+            }
             _places?.Toggle();
             return;
         }

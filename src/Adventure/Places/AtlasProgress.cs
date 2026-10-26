@@ -66,7 +66,7 @@ public static class AtlasProgress
         int found = 0, total = 0;
         foreach (var poi in cat.InCanton(canton))
         {
-            if (poi.Tier is < 1 or > 2) continue;
+            if (poi.Tier is < 1 or > 2 && !cat.IsCurated(poi)) continue;
             total++;
             if (p.Found.ContainsKey(poi.Id)) found++;
         }

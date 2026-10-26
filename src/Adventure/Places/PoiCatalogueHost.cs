@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Places;
 
@@ -15,6 +16,33 @@ namespace UnitSport.Adventure.Places;
 public static class PoiCatalogueHost
 {
     public static PoiCatalogue Current { get; private set; } = PoiCatalogue.Empty;
+
+    /// <summary>The curated Atlas cards that resolve in <see cref="Current"/>, by POI (<c>res://assets/adventure/atlas_cards.json</c>).</summary>
+    public static IReadOnlyDictionary<Poi, AtlasCard> Cards { get; private set; } = new Dictionary<Poi, AtlasCard>();
+    private static Dictionary<Poi, AtlasCard> _nextCards = new();
+
+    public const string CardsPath = "res://assets/adventure/atlas_cards.json";
+
+    /// <summary>
+    /// Reads the curated cards into a catalogue before it is shared: their aliases resolve, their POIs are
+    /// landmarks. Any thread (FileAccess on <c>res://</c>).
+    /// </summary>
+    public static Dictionary<Poi, AtlasCard> ApplyCards(PoiCatalogue catalogue)
+    {
+        var byPoi = new Dictionary<Poi, AtlasCard>();
+        if (catalogue.Count == 0) return byPoi;
+        try
+        {
+            string json = Godot.FileAccess.GetFileAsString(CardsPath);
+            if (string.IsNullOrEmpty(json)) return byPoi;
+            var cards = AtlasFacts.ParseCards(json);
+            catalogue.AddAliases(cards.Select(c => (c.Alias, c.Id)));
+            foreach (var c in cards)
+                if (catalogue.Resolve(c.Id) is { } poi) byPoi[poi] = c;
+        }
+        catch (Exception e) { GD.PushWarning($"[pois] {CardsPath}: {e.Message}"); }
+        return byPoi;
+    }
 
     /// <summary>Raised on the main thread after <see cref="Current"/> was replaced.</summary>
     public static event Action? Changed;
@@ -34,7 +62,29 @@ public static class PoiCatalogueHost
         if (FixtureRequested)
         {
             var (e, n) = fixtureStart ?? (PoiCatalogue.FixtureE, PoiCatalogue.FixtureN);
-            Replace(PoiCatalogue.Fixture(e, n), "fixture");
+            var fixture = PoiCatalogue.Fixture(e, n);
+            // the fixture's own alias, as a curated card would give one
+            fixture.AddAliases(new[] { ("peak:fixture-peak", fixture.OfKind(PoiKind.Peak)[0].Id) });
+            _nextCards = new Dictionary<Poi, AtlasCard>
+            {
+                [fixture.OfKind(PoiKind.Peak)[0]] = new("peak:fixture-peak", fixture.OfKind(PoiKind.Peak)[0].Id, "Fixture Peak",
+                    "The fixture world's own summit, with a cross on top. A check climbs it every run."),
+            };
+            Replace(fixture, "fixture");
+            return;
+        }
+        // --pois <file>: a pois.bin of one's own (a region built with --pois-file), in place of the source's
+        if (CmdArgs.Value("--pois") is { Length: > 0 } file && file != "fixture")
+        {
+            string path = ProjectSettings.GlobalizePath(file);
+            Task.Run(() =>
+            {
+                PoiCatalogue c = PoiCatalogue.Empty;
+                try { c = PoiCatalogue.Load(System.IO.File.ReadAllBytes(path)); }
+                catch (Exception e) { GD.PushWarning($"[pois] {path}: {e.Message}"); }
+                var cards = ApplyCards(c);
+                Callable.From(() => { _nextCards = cards; Replace(c, path); }).CallDeferred();
+            });
             return;
         }
         if (source == null)
@@ -59,7 +109,8 @@ public static class PoiCatalogueHost
                 GD.PushWarning($"[pois] pois.bin does not load: {e.Message}");
                 from = "a pois.bin that does not load";
             }
-            Callable.From(() => Replace(catalogue, from)).CallDeferred();
+            var cards = ApplyCards(catalogue);
+            Callable.From(() => { _nextCards = cards; Replace(catalogue, from); }).CallDeferred();
         });
     }
 
@@ -67,6 +118,7 @@ public static class PoiCatalogueHost
     public static void Reset()
     {
         Current = PoiCatalogue.Empty;
+        Cards = new Dictionary<Poi, AtlasCard>();
         Changed = null;
         Loads = 0;
     }
@@ -75,6 +127,8 @@ public static class PoiCatalogueHost
     public static void Replace(PoiCatalogue catalogue, string from)
     {
         Current = catalogue;
+        Cards = _nextCards;
+        _nextCards = new();
         Loads++;
         GD.Print($"[pois] {catalogue.Count} points of interest ({from})");
         Changed?.Invoke();

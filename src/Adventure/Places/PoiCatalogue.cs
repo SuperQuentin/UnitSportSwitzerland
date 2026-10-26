@@ -83,6 +83,7 @@ public sealed class PoiCatalogue
     private readonly Poi[] _lakes;
     private readonly Dictionary<(PoiKind, ulong), Poi> _byHash = new();
     private readonly Dictionary<string, Poi> _aliases = new(StringComparer.Ordinal);
+    private readonly HashSet<Poi> _curated = new();
     private readonly Dictionary<string, List<Poi>> _byCanton = new(StringComparer.Ordinal);
     private readonly Dictionary<PoiKind, List<Poi>> _byKind = new();
     private readonly Dictionary<string, CantonTotals> _totals = new(StringComparer.Ordinal);
@@ -127,11 +128,28 @@ public sealed class PoiCatalogue
         var missing = new List<string>();
         foreach (var (alias, id) in aliases)
         {
-            if (Resolve(id) is { } poi) _aliases[alias] = poi;
+            if (Resolve(id) is { } poi)
+            {
+                _aliases[alias] = poi;
+                _curated.Add(poi);
+            }
             else missing.Add(alias);
         }
         return missing;
     }
+
+    /// <summary>A curated Atlas card names this POI (a landmark, with a stamp post, whatever tier the file gave it).</summary>
+    public bool IsCurated(Poi poi) => _curated.Contains(poi);
+
+    /// <summary>The curated alias of a POI, or null.</summary>
+    public string? AliasOf(Poi poi)
+    {
+        foreach (var (alias, p) in _aliases) if (p == poi) return alias;
+        return null;
+    }
+
+    /// <summary>A landmark: tier 1, or named by a curated card.</summary>
+    public bool IsLandmark(Poi poi) => poi.Tier == 1 || _curated.Contains(poi);
 
     /// <summary>
     /// The POI an id or a curated alias names: a canonical id matches on its tag and hash only (the slug is
@@ -216,7 +234,9 @@ public sealed class PoiCatalogue
 
     /// <summary>
     /// The fixture POIs (<c>--pois fixture</c>): ten places built in code at known offsets from the
-    /// fixture world's start (metres, X east, Y north), in canton VS. The lake POI's outline is the
+    /// fixture world's start (metres, X east, Y north), in canton VS. The peak, the pass, the tower and the
+    /// station are on the flat course's one tile (the start is 250 m in from its south-west corner), so a
+    /// check walks to them; the elevations are above <see cref="FixtureGround"/>. The lake POI's outline is the
     /// <c>lake</c> course's ellipse (<c>Terrain/Fixture/FixtureLake</c>), so it is on the water there.
     /// </summary>
     public static PoiCatalogue Fixture(double startE = FixtureE, double startN = FixtureN) => new(FixtureData(startE, startN));
@@ -242,8 +262,8 @@ public sealed class PoiCatalogue
             return r;
         }
         Add(PoiKind.Peak, "Fixture Peak", 60, 40, 10, PoiFlags.Cross | PoiFlags.Viewpoint, tier: 1);
-        Add(PoiKind.Pass, "Fixture Pass", -400, 300, 0, PoiFlags.Viewpoint);
-        Add(PoiKind.LookoutTower, "Fixture Tower", 200, -250, 0, PoiFlags.Viewpoint);
+        Add(PoiKind.Pass, "Fixture Pass", -200, 400, 0, PoiFlags.Viewpoint);
+        Add(PoiKind.LookoutTower, "Fixture Tower", 200, -150, 0, PoiFlags.Viewpoint);
         Add(PoiKind.Chapel, "Fixture Chapel", -150, -120, 0, tier: 3);
         Add(PoiKind.RailStation, "Fixture Station", 300, 120, 0, tier: 3);
         Add(PoiKind.BusStop, "Fixture Bus Stop", -60, -40, 0, PoiFlags.Named | PoiFlags.VillageStop, tier: 3);

@@ -111,6 +111,8 @@ public partial class ChatManager
         if (_players?.GetNodeOrNull<Player.FootPlayer>(to.ToString()) is not { } target) return $"{NameOf(to)} has no position yet.";
         if (_players.GetNodeOrNull<Player.FootPlayer>(mover.ToString()) == null) return $"{NameOf(mover)} is no longer here.";
         RpcId(mover, MethodName.ForceTeleport, target.Global.E, target.Global.N, NameOf(to));
+        // an accepted invite is a sanctioned move (#1224): it lands where nothing is found until walked away from
+        Adventure.Places.PlacesService.Instance?.Arrived(mover, target.Global.E, target.Global.N);
         GD.Print($"[chat] teleport request: {mover} to {to}");
         if (mover == accepter)
         {
