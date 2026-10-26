@@ -72,6 +72,7 @@ public sealed class ChatCompleter
         ("water", false, true, "[E N]", "World", "the water surface at a point"),
         ("occasion", false, true, "[list | start | stop | auto] [id]", "World", "world events"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]", "World", "the visual style"),
+        ("stamina", false, true, "[infinite | on | full]", "World", "your stamina meter (infinite: admin online)"),
         ("inertia", false, false, "[steady | sway | full]", "World", "how standing passengers sway"),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel", "Activities", "races"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status", "Activities", "Battle Royale"),

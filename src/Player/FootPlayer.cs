@@ -3899,6 +3899,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             running = walk.Run;
         }
         if (_slideCooldown > 0) _slideCooldown -= dt;
+        // sprinting in a fight costs stamina (#1225); out of one it is free. Empty or winded: a run is a walk
+        if (running && moveAmount > 0.1f && onFloor && InCombat && !SpendStamina(StaminaKind.SprintCombat, dt)) running = false;
 
         // Remember the last usable wall, and the last jump press, for a moment each. Contact
         // and input almost never line up on the same physics frame otherwise.
@@ -4430,7 +4432,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
-        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
+        // the air itself (#1225, World/AirLiftField): thermals, ridge lift, a campfire's updraft; the own flyer only
+        var air = Vector3.Zero;
+        if (!Npc && !flyer.IsVehicle && flyer is Canopy or Wingsuit or Pigeon)
+        {
+            World.AirLiftField.Use(Terrain, Origin);
+            air = World.AirLiftField.AirAt(GlobalPosition);
+        }
+        AirNow = air;
+        // a pigeon's wings are muscles: flapping spends stamina, empty it glides (#1225)
+        if (flyer is Pigeon bird)
+        {
+            bool flapping = input.Up > 0.5f && Pigeon.ModeOf(_flight) == PigeonFlight.Mode.Air;
+            bird.MayFlap = !flapping || SpendStamina(input.Effort ? StaminaKind.PigeonFlapBoost : StaminaKind.PigeonFlap, dt);
+        }
+        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude, air), dt, ref _flight);
         // a game mode's fence (#485: a Battle Royale's zone, while gliding): no flying out of it
         if (ev == FlightEvent.None && FlightFence?.Invoke(this, _flight.Velocity) is { } fenced) _flight.Velocity = fenced;
         // an airliner's hard landing or belly scrape: the airframe pays for it (#414)

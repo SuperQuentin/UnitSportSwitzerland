@@ -35,6 +35,12 @@ public partial class Arrival : Node
     /// <summary>Server: players who are not admins may teleport (place search, <c>/city</c>, the fly camera).</summary>
     public bool FreeTeleport { get; private set; } = true;
 
+    /// <summary>Server: the stamina meter counts (#1225); <c>--stamina off</c> keeps the Adventure layer and drops the meter.</summary>
+    public bool Stamina { get; private set; } = true;
+
+    /// <summary>Server: thermals, ridge lift and updrafts carry gliders (#1225); <c>--lift off</c> stills the air.</summary>
+    public bool Lift { get; private set; } = true;
+
     /// <summary>Client: the server said where to start, LV95 metres.</summary>
     public event Action<double, double>? Told;
 
@@ -47,7 +53,10 @@ public partial class Arrival : Node
         // a test world starts at its own start unless told otherwise (#999)
         if ((SpawnPoint.ParseLv95("--spawn") ?? WorldChoice.Active?.Start) is { } spawn) a.Spawn = spawn;
         a.FreeTeleport = !CmdArgs.Has("--no-teleport");
-        GD.Print($"[arrival] players start at {a.Spawn.E:F0}/{a.Spawn.N:F0}, teleporting {(a.FreeTeleport ? "allowed" : "admins only")}");
+        a.Stamina = CmdArgs.Value("--stamina") != "off";
+        a.Lift = CmdArgs.Value("--lift") != "off";
+        GD.Print($"[arrival] players start at {a.Spawn.E:F0}/{a.Spawn.N:F0}, teleporting {(a.FreeTeleport ? "allowed" : "admins only")}, "
+                 + $"stamina {(a.Stamina ? "on" : "off")}, lift {(a.Lift ? "on" : "off")}");
         world.AddChild(a);
         return a;
     }
@@ -60,10 +69,10 @@ public partial class Arrival : Node
     }
 
     /// <summary>Server: a peer was accepted; tell it where it starts and what it may do.</summary>
-    public void SendTo(long peer) => RpcId(peer, MethodName.Rules, Spawn.E, Spawn.N, FreeTeleport, WorldChoice.ActiveId);
+    public void SendTo(long peer) => RpcId(peer, MethodName.Rules, Spawn.E, Spawn.N, FreeTeleport, WorldChoice.ActiveId, Stamina, Lift);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Rules(double e, double n, bool freeTeleport, string world)
+    private void Rules(double e, double n, bool freeTeleport, string world, bool stamina, bool lift)
     {
         if (_server) return;
         // the world this client loaded came from the server list; a server it could not ask says it here
@@ -73,6 +82,8 @@ public partial class Arrival : Node
             return;
         }
         Permissions.SetServerTeleport(freeTeleport);
+        Permissions.SetServerBody(stamina, lift);
+        GD.Print($"[arrival] server rules: stamina {(stamina ? "on" : "off")}, lift {(lift ? "on" : "off")}");
         Told?.Invoke(e, n);
     }
 }

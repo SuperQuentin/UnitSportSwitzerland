@@ -142,6 +142,9 @@ public partial class PlayerFeel : Node3D
         _player.Stroked += () => Play(SfxSynth.StrokeBank, 0.22f, 0.9f + (float)_rng.NextDouble() * 0.2f);
         _player.Gasped += () => Play(SfxSynth.GaspBank, 0.55f, 1f);
         _player.WindedStarted += () => Play(SfxSynth.PantBank, 0.55f, 1f);   // out of breath (#1225)
+        _player.ClimbSlipped += () => Play(SfxSynth.GaspBank, 0.5f, 0.7f);   // empty on a face: a low grunt, the hands slide
+        _player.ClimbStarted += () => Play(SfxSynth.StepsBank, 0.45f, 0.8f);   // hands on the rock
+        _player.ClimbJumped += () => Play(SfxSynth.StepsBank, 0.55f, 0.65f);
         _player.Mantled += () =>
         {
             Play(SfxSynth.StepsBank, 0.6f, 0.75f);   // hands on the lip
@@ -536,7 +539,7 @@ public partial class PlayerFeel : Node3D
         // on foot only: time spent flying a plane is not a jump
         // and neither is being thrown through a windscreen (#214)
         // nor is swimming (#301)
-        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled || _player.IsSwimming) _airTime = 0;
+        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled || _player.IsSwimming || _player.IsClimbing) _airTime = 0;
         else if (!grounded) _airTime += dt;
         else if (!_wasGrounded)
         {
@@ -1129,6 +1132,10 @@ public partial class PlayerFeel : Node3D
             case RideKind.OnFoot when _player.IsSwimming:
                 // the first moments in the water (#301): how to go down and up
                 if (_player.SwimTime < 5f) text = InputHints.Format("{crouch_slide}  dive     {jump}  up · climb out");
+                break;
+            case RideKind.OnFoot when _player.IsClimbing:
+                // the first climb of the session (#1225): the face's controls
+                if (_player.ClimbHintDue) text = InputHints.Format("{jump} climb-jump · {crouch_slide} let go · {move_back}+{jump} kick off");
                 break;
             case RideKind.OnFoot when _player.SackSource != null:
                 // a loaded tipping trailer or combine tank at hand (#494)

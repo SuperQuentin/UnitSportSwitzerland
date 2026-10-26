@@ -20,8 +20,38 @@ public partial class FootPlayer
     /// <summary>The meter as it is now (owner only; a copy: spend through the body's own paths).</summary>
     public Stamina StaminaMeter => _stamina;
 
+    /// <summary>The air's velocity the own glider flew in this step (#1225, <c>AirLiftField</c>): zero on foot. Probes and the variometer.</summary>
+    public Vector3 AirNow { get; private set; }
+
     /// <summary><c>/stamina infinite</c> (admin online, free offline; a test hook): the meter never drains this session.</summary>
     public bool StaminaInfiniteCommand { get; set; }
+
+    /// <summary>The player this peer plays (the last owner body to tick), for <see cref="StaminaCommand"/>.</summary>
+    private static FootPlayer? LocalOwner;
+
+    /// <summary>
+    /// <c>/stamina [infinite | on | full]</c> on this screen (#1225): free offline, an admin's online (an
+    /// honest client's rule; the server's <c>StaminaWatch</c> logs what it could not have climbed). The
+    /// line to show, or null when the text is not this command.
+    /// </summary>
+    public static string? StaminaCommand(string text)
+    {
+        var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || !parts[0].Equals("/stamina", StringComparison.OrdinalIgnoreCase)) return null;
+        if (LocalOwner is not { } me || !IsInstanceValid(me)) return "No body to tire.";
+        string arg = parts.Length > 1 ? parts[1].ToLowerInvariant() : "";
+        var m = me._stamina;
+        string state = $"Stamina {m.Points:F0}/{m.Max:F0} ({m.Steps} steps){(m.Infinite ? ", not counted here" : "")}.";
+        if (arg == "") return state;
+        if (Permissions.Online && !Permissions.IsAdmin) return "'/stamina " + arg + "' is an admin's online.";
+        switch (arg)
+        {
+            case "infinite": me.StaminaInfiniteCommand = true; return "Stamina is infinite this session.";
+            case "on": me.StaminaInfiniteCommand = false; return "Stamina counts again.";
+            case "full": me._stamina.Refill(); return "Stamina full.";
+            default: return "Usage: /stamina [infinite | on | full]";
+        }
+    }
 
     /// <summary>Hit empty (owner only): the ring blinks orange, a panting breath plays.</summary>
     public event Action? WindedStarted;
@@ -85,6 +115,21 @@ public partial class FootPlayer
         _stamina.Winded = points <= 0f;
     }
 
+    /// <summary>XR hand climbing (<c>XrClimb</c>): points per metre gained, the arms working harder than on the stick.</summary>
+    public const float XrClimbPerMetre = 9f;
+
+    /// <summary>
+    /// XR hand climbing (#1225): holding on costs 1 /s and each metre gained <see cref="XrClimbPerMetre"/>.
+    /// False when empty: the hands let go. True always where the meter does not count.
+    /// </summary>
+    public bool SpendXrClimb(float dt, float metresUp)
+    {
+        if (_stamina.Infinite) return true;
+        bool held = _stamina.Spend(StaminaKind.ClimbHold, dt);
+        if (metresUp > 0f) held &= _stamina.Spend(StaminaKind.ClimbHold, 1f, metresUp * XrClimbPerMetre);
+        return held && !_stamina.Winded;
+    }
+
     /// <summary>Spends a rate (the body's own paths call it). False: not enough, the act does not happen.</summary>
     private bool SpendStamina(StaminaKind kind, float dt, float scale = 1f, bool loose = false) =>
         _stamina.Spend(kind, dt, scale, loose);
@@ -95,6 +140,8 @@ public partial class FootPlayer
     /// </summary>
     private void TickStamina(float dt, bool onFloor)
     {
+        if (_ride is not Flyer) AirNow = Vector3.Zero;
+        if (!Bot && !Npc) LocalOwner = this;
         bool infinite = !StaminaApplies;
         if (infinite != _stamina.Infinite)
         {
