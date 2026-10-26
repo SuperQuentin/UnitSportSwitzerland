@@ -14,8 +14,8 @@ namespace UnitSport.Adventure;
 /// <para>
 /// The starter quests of <c>docs/plans/adventure-objectives.md</c> §6 lean on the other Adventure plans
 /// (POIs, chests, trials, photos, travel points): each is offered only once the plans of its steps run
-/// (<see cref="QuestEngine.Playable"/>). Coordinates are approximate LV95 areas until the places
-/// catalogue's ids exist. "All aboard" and "Grand tour" wait for the navigation plan's half-fare and GA
+/// (<see cref="QuestEngine.Playable"/>). Places are the catalogue's canonical POI ids (<see cref="Places"/>,
+/// the same as the curated Atlas cards', #1224): the events carry canonical ids. "All aboard" and "Grand tour" wait for the navigation plan's half-fare and GA
 /// items (<c>ItemId.HalfFare</c>, <c>ItemId.GaCard</c>), which do not exist yet.
 /// </para>
 /// </summary>
@@ -27,10 +27,29 @@ public sealed class QuestCatalog : IQuestSource
     /// <summary>The plans a step may need (<see cref="Step.Plan"/>).</summary>
     public static readonly string[] KnownPlans = { "places", "rewards", "navigation", "stamina" };
 
+    /// <summary>
+    /// The POIs the starter quests name, canonical (<c>&lt;tag&gt;:&lt;slug&gt;.&lt;hash&gt;</c>: the hash comes from the
+    /// swissTLM3D uuid, so any build of the catalogue agrees); their curated aliases in the comments.
+    /// <c>QuestCatalogTests</c> checks each is a curated card's id.
+    /// </summary>
+    public static class Places
+    {
+        /// <summary><c>tower:uetliberg</c>.</summary>
+        public const string UetlibergTower = "tower:uetliberg.ea0080b47b";
+        /// <summary><c>peak:rigi-kulm</c>.</summary>
+        public const string RigiKulm = "peak:rigi-kulm.e43942aa5b";
+        /// <summary><c>castle:gruyeres</c>.</summary>
+        public const string GruyeresCastle = "castle:chateau-de-gruyeres.57c0285757";
+        /// <summary><c>cablecar:bettmerhorn</c>, the top station.</summary>
+        public const string BettmerhornTop = "cablecar:bettmergrat.8ca146ecdd";
+
+        public static readonly string[] All = { UetlibergTower, RigiKulm, GruyeresCastle, BettmerhornTop };
+    }
+
     public static readonly QuestDef[] All =
     {
         Q("uetliberg-tower", "Top of Zurich", "Climb the Uetliberg lookout tower and photograph the city.",
-            [Reach(Area("the Uetliberg tower", 2679480, 1244760, 40)), Photo("view:uetliberg-zurich")],
+            [Reach(Poi(Places.UetlibergTower)) with { Text = "Climb the Uetliberg tower" }, Photo("view:uetliberg-zurich")],
             [new Cash(60), new Unlock("reveal", "tower:uetliberg")]) with { Canton = "ZH", Start = QuestStart.OnEvent },
 
         Q("uri-passes", "Passes of Uri", "Find three mountain passes in Uri.",
@@ -38,15 +57,15 @@ public sealed class QuestCatalog : IQuestSource
             [new Cash(150), new Title("Pass hunter"), new Unlock("travel", "busstop:andermatt")]) with { Canton = "UR" },
 
         Q("gruyere-for-bern", "Cheese for the capital", "Fetch a Gruyère in Gruyères and sell it at Bern's market.",
-            [new InteractStep("poi:gruyeres-dairy"), Deliver(ItemId.Cheese, 1, Area("Bern's market", 2600420, 1199550, 40))],
+            [new InteractStep(Places.GruyeresCastle) { Text = "Stamp the castle of Gruyères" }, Deliver(ItemId.Cheese, 1, Area("Bern's market", 2600420, 1199550, 40))],
             [new Cash(120), new Item(ItemId.Fondue)]) with { Canton = "BE", Requires = ["uetliberg-tower"] },
 
         Q("rigi-chest", "Queen of the mountains", "Reach Rigi Kulm and open the chest near the summit.",
-            [Reach(Area("Rigi Kulm", 2679520, 1212220, 60)), new OpenChestStep(PoiId: "peak:rigi-kulm")],
+            [Reach(Poi(Places.RigiKulm)) with { Text = "Reach Rigi Kulm" }, new OpenChestStep(PoiId: Places.RigiKulm)],
             [new Cash(80), new Unlock("stamina", "+1")]) with { Canton = "SZ" },
 
         Q("aletsch-glide", "Over the ice", "Unlock Bettmerhorn's cable car, then glide the Aletsch rings under 3 minutes.",
-            [new UnlockStep(PointId: "cablecar:bettmerhorn"), new TrialStep("trial:aletsch-rings", MaxSeconds: 180)],
+            [new UnlockStep(PointId: Places.BettmerhornTop), new TrialStep("trial:aletsch-rings", MaxSeconds: 180)],
             [new Title("Glacier glider"), new Item(ItemId.HotChocolate, 2)]) with { Canton = "VS", Requires = ["uri-passes"] },
     };
 

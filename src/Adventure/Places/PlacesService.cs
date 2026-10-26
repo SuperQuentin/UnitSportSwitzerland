@@ -84,6 +84,9 @@ public partial class PlacesService : Node
     public override void _Ready()
     {
         _adventure.SyncsItself(FogProgress.Section.Id);
+        // quests that name a POI: located for the tracker, reached by finding it (the travel rule holds)
+        _adventure.Quests.ResolvePoi = id => Catalogue.Resolve(id) is { } poi ? (poi.E, poi.N, Math.Max(DiscoveryRules.RadiusOf(poi), 30f)) : null;
+        _adventure.Quests.PoisByDiscoveryOnly = true;
         PoiCatalogueHost.Changed += OnCatalogue;
         OnCatalogue();
         if (!Authority) return;
