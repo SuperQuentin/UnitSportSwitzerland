@@ -182,6 +182,9 @@
     <Compile Include="..\..\src\Player\Stamina.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\Climbable.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\StaminaUpgrades.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- the lift of the air and the sun it reads (#1225): Godot maths only -->
+    <Compile Include="..\..\src\World\SunPath.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\AirLift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\JoinLink.cs" Link="Game\%(Filename)%(Extension)" />

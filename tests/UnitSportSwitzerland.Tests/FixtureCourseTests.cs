@@ -66,7 +66,7 @@ public class FixtureCourseTests
                     roadPoints++;
                 }
         }
-        Assert.Equal(name != "flat", roadPoints > 0);
+        Assert.Equal(name is not ("flat" or "crag"), roadPoints > 0);   // the crag (#1225) has no roads either
         Assert.Null(await source.LoadChunkAsync(new TileId(0, 0)));
     }
 

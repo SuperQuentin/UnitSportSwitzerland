@@ -130,8 +130,8 @@ public sealed partial class StaminaRing : ColorRect
         var tree = GetTree();
         async System.Threading.Tasks.Task Frames(double seconds)
         {
-            double until = Time.GetTicksMsec() / 1000.0 + seconds;
-            while (Time.GetTicksMsec() / 1000.0 < until)
+            // frames, not the wall clock: a shot taken a few seconds' worth of frames in
+            for (int frames = (int)(seconds * 60); frames > 0; frames--)
             {
                 _player!.DebugSetStamina(points);
                 await ToSignal(tree, SceneTree.SignalName.ProcessFrame);

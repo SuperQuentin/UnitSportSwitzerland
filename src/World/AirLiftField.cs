@@ -69,7 +69,7 @@ public static class AirLiftField
     public static Vector3 AirAt(Vector3 global)
     {
         if (!Permissions.LiftOn || Ground.Origin is not { } origin) return Vector3.Zero;
-        double now = Net.ClockSync.ServerNow;
+        double now = Net.ClockSync.SimNow;
         SyncCampfires(now);
         var p = origin.ToGlobal(global);
         return AirLift.At(p.E, p.N, (float)p.Alt, now, Ground);
@@ -80,7 +80,7 @@ public static class AirLiftField
     {
         if (!Permissions.LiftOn || Ground.Origin is not { } origin) return 0;
         var p = origin.ToGlobal(global);
-        return AirLift.ThermalsNear(p.E, p.N, radius, Net.ClockSync.ServerNow, Ground, into);
+        return AirLift.ThermalsNear(p.E, p.N, radius, Net.ClockSync.SimNow, Ground, into);
     }
 
     /// <summary>A thermal's source as a world point (the cues place their specks there).</summary>
