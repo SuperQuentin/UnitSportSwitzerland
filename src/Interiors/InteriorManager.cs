@@ -1095,7 +1095,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             }
             else if (!p.Indoors) door = OutsideDoorInReach(p);
             // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
-            if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p);
+            if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p) ?? Adventure.Places.PoiMarkers.PromptFor(p);
             if (door != null)
                 text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
             // a building site's skip or materials faced outdoors (#627): E searches it before a door

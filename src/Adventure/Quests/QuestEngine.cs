@@ -53,6 +53,13 @@ public sealed class QuestEngine
     /// <summary>A POI's position and radius (places plan); null until the catalogue exists.</summary>
     public Func<string, (double E, double N, float RadiusM)?>? ResolvePoi { get; set; }
 
+    /// <summary>
+    /// A POI is reached only by being found (<see cref="PoiDiscovered"/>), never by the position check: set by
+    /// the places service (#1224), so the travel rule (on foot or a light aircraft) holds for quests too.
+    /// <see cref="ResolvePoi"/> still locates it for the tracked target.
+    /// </summary>
+    public bool PoisByDiscoveryOnly { get; set; }
+
     public QuestEngine(params IQuestSource[] sources) => _sources.AddRange(sources);
 
     public void AddSource(IQuestSource source)
@@ -179,6 +186,7 @@ public sealed class QuestEngine
 
     private bool Inside(TargetRef target, double e, double n)
     {
+        if (PoisByDiscoveryOnly && target is PoiTarget) return false;
         if (Locate(target) is not { } at) return false;
         double de = e - at.E, dn = n - at.N;
         return de * de + dn * dn <= (double)at.RadiusM * at.RadiusM;

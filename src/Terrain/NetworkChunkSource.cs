@@ -212,6 +212,11 @@ public sealed class NetworkChunkSource : IChunkSource
         await _local.LoadRopewayInfoAsync(ct).ConfigureAwait(false)
         ?? await LocalChunkSource.ReadRopewayInfoAsync(_cacheDirectory, ct).ConfigureAwait(false);
 
+    /// <summary>The points of interest (#1224): shipped, else the server's copy <see cref="ClientTerrainSync"/> pulled into the cache.</summary>
+    public async Task<byte[]?> LoadPoisAsync(CancellationToken ct = default) =>
+        await _local.LoadPoisAsync(ct).ConfigureAwait(false)
+        ?? await LocalChunkSource.ReadPoisAsync(_cacheDirectory, ct).ConfigureAwait(false);
+
     public async Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) =>
         await _local.LoadLandingsAsync(ct).ConfigureAwait(false)
         ?? await LocalChunkSource.ReadLandingsAsync(_cacheDirectory, ct).ConfigureAwait(false);

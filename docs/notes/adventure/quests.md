@@ -41,6 +41,12 @@ Plain C#, linked into the unit tests (`QuestEngineTests`, `QuestCatalogTests`).
 
 Builders: `Reach`, `Photo`, `Deliver`, `Area(name, E, N, radius)` (LV95), `Poi(id)`.
 
+**Places in quests are canonical POI ids** (`QuestCatalog.Places`: the curated Atlas cards' ids, checked by
+`QuestCatalogTests`): the places service raises its events with canonical ids, never aliases. With places
+running (#1224) a `Poi` reach step advances only on `PoiDiscovered` (`QuestEngine.PoisByDiscoveryOnly`): the
+travel rule holds; `ResolvePoi` still locates it for the tracker. Uri passes is offered once places run; Top of
+Zurich and Rigi wait for rewards (photos, chests), Gruyère for its requirement, Aletsch for navigation.
+
 ## Rules (`QuestEngine`, pure)
 
 - Steps run in order; one event moves one step. At most 8 quests run at once; one is tracked (the first

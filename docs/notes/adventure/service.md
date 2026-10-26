@@ -59,6 +59,17 @@ need that plan's events are offered only then: `QuestEngine.Plans`), `Start/Aban
 area's own or a POI's through `QuestEngine.ResolvePoi`; `TrackedChanged` when it changes (on the quests
 section's sync, never polled).
 
+## For the other plans (#1224)
+
+- `SyncsItself(id)`: a section its plan sends by its own RPCs (fog): `Touch` then only saves it.
+- `Loaded(peer)`: a peer's progress loaded and its owner hears (an account, a proof, the session's once told,
+  offline at once): send a full state then. `Saving(progress)`: write a working copy into its section first.
+- `Peers` (loaded peers), `Withdraws(plan)` (the opposite of `Provides`).
+- `TrackPlace(label, e, n, radius)` / `UntrackPlace()` / `TrackedPlace` (client only, for the session): a place
+  that is no quest's target (the map's and the Atlas's Track button) is the `TrackedTarget` until another place
+  or a quest is tracked (`AskTrack` clears it) or its POI is stamped. Navigation may persist it later (its
+  `pins` section).
+
 ## Wire (protocol 50)
 
 Client -> server: `RequestStart(id)`, `RequestAbandon(id)`, `RequestTrack(id)` ("" untracks),

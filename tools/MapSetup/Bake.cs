@@ -20,11 +20,7 @@ public static partial class Bake
     private static readonly (double W, double S, double E, double N) Switzerland = (5.9, 45.8, 10.55, 47.85);
 
     /// <summary>BFS canton numbers are fixed; swissBOUNDARIES3D carries the number, not the code.</summary>
-    private static readonly string[] CantonCodes =
-    [
-        "ZH", "BE", "LU", "UR", "SZ", "OW", "NW", "GL", "ZG", "FR", "SO", "BS", "BL",
-        "SH", "AR", "AI", "SG", "GR", "AG", "TG", "TI", "VD", "VS", "NE", "GE", "JU",
-    ];
+    private static readonly string[] CantonCodes = CantonRings.Codes;
 
     [GeneratedRegex(@"^swissalti3d_(\d{4})_(\d{4})-(\d{4})$")]
     private static partial Regex AltiId();
@@ -231,85 +227,24 @@ public static partial class Bake
             File.Delete(zip);
         }
 
-        using var conn = GeoPackageReader.Open(gpkg);
-        string table;
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "select table_name from gpkg_contents where lower(table_name) like '%kantonsgebiet%'";
-            table = cmd.ExecuteScalar() as string ?? throw new InvalidDataException("no canton layer in " + gpkg);
-        }
-        string geom = GeoPackageReader.GeometryColumn(conn, table);
-        var columns = new List<string>();
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $"pragma table_info(\"{table}\")";
-            using var r = cmd.ExecuteReader();
-            while (r.Read()) columns.Add(r.GetString(1));
-        }
-        string numberCol = columns.First(c => c.Equals("kantonsnummer", StringComparison.OrdinalIgnoreCase));
-        string nameCol = columns.First(c => c.Equals("name", StringComparison.OrdinalIgnoreCase));
-
-        var rings = new List<(byte Id, double[] Xy, double MinE, double MinN, double MaxE, double MaxN, double Area)>();
-        var names = new Dictionary<int, string>();
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $"select \"{numberCol}\", \"{nameCol}\", \"{geom}\" from \"{table}\"";
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-            {
-                if (r.IsDBNull(0) || r.IsDBNull(2)) continue;
-                int number = r.GetInt32(0);
-                if (number < 1 || number > CantonCodes.Length) continue;
-                names.TryAdd(number, r.GetString(1));
-                foreach (var ring in GeoPackageReader.ParsePolygons((byte[])r[2]))
-                {
-                    int n = ring.Count;
-                    var xy = new double[n * 2];
-                    for (int i = 0; i < n; i++) { xy[i * 2] = ring.Xyz[i * 3]; xy[i * 2 + 1] = ring.Xyz[i * 3 + 1]; }
-                    double area = 0;
-                    for (int i = 0, j = n - 1; i < n; j = i++) area += (xy[j * 2] + xy[i * 2]) * (xy[j * 2 + 1] - xy[i * 2 + 1]);
-                    rings.Add(((byte)number, xy,
-                        Enumerable.Range(0, n).Min(i => xy[i * 2]), Enumerable.Range(0, n).Min(i => xy[i * 2 + 1]),
-                        Enumerable.Range(0, n).Max(i => xy[i * 2]), Enumerable.Range(0, n).Max(i => xy[i * 2 + 1]),
-                        Math.Abs(area / 2)));
-                }
-            }
-        }
+        var rings = CantonRings.Read(gpkg);
 
         country.Cantons.Clear();
         for (int i = 0; i < CantonCodes.Length; i++)
-            country.Cantons.Add(new Canton((byte)(i + 1), CantonCodes[i], names.GetValueOrDefault(i + 1, CantonCodes[i])));
+            country.Cantons.Add(new Canton((byte)(i + 1), CantonCodes[i], rings.Names.GetValueOrDefault(i + 1, CantonCodes[i])));
 
         int stamped = 0;
         var tiles = country.AllTiles().ToList();
         Parallel.ForEach(tiles, t =>
         {
             double e = t.MinE + 500, n = t.MinN + 500;
-            byte best = 0;
-            double bestArea = double.MaxValue;
-            foreach (var ring in rings)
-            {
-                if (e < ring.MinE || e > ring.MaxE || n < ring.MinN || n > ring.MaxN || ring.Area >= bestArea) continue;
-                if (Inside(ring.Xy, e, n)) { best = ring.Id; bestArea = ring.Area; }
-            }
+            byte best = rings.At(e, n);
             if (best != 0)
             {
                 country.SetCanton(t, best);
                 Interlocked.Increment(ref stamped);
             }
         });
-        AnsiConsole.MarkupLine($"  {rings.Count:N0} canton rings, {stamped:N0} of {tiles.Count:N0} tiles inside a canton");
-    }
-
-    private static bool Inside(double[] xy, double x, double y)
-    {
-        bool inside = false;
-        int n = xy.Length / 2;
-        for (int i = 0, j = n - 1; i < n; j = i++)
-        {
-            double xi = xy[i * 2], yi = xy[i * 2 + 1], xj = xy[j * 2], yj = xy[j * 2 + 1];
-            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
-        }
-        return inside;
+        AnsiConsole.MarkupLine($"  {rings.RingCount:N0} canton rings, {stamped:N0} of {tiles.Count:N0} tiles inside a canton");
     }
 }

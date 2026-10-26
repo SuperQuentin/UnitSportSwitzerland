@@ -97,6 +97,18 @@ public enum AssetKind
     /// <see cref="Landings"/>: fetched once during sync; an older server answers "missing".
     /// </summary>
     Ropeways = 16,
+
+    /// <summary>
+    /// <c>pois.bin</c>, the region's points of interest (#1224). Not tile-scoped, like <see cref="Ropeways"/>:
+    /// fetched once during sync; an older server answers "missing" (an empty catalogue: adventure places idle).
+    /// </summary>
+    Pois = 17,
+
+    /// <summary>
+    /// <c>atlas_facts.json</c>, the region's Wikidata facts for the Swiss Atlas's cards (#1224). Not
+    /// tile-scoped, like <see cref="Pois"/>; an older server answers "missing" (cards keep their generated line).
+    /// </summary>
+    AtlasFacts = 18,
 }
 
 /// <summary>
@@ -150,6 +162,8 @@ public static class AssetStream
         AssetKind.Fields => FieldFormat.FileName(id),
         AssetKind.Pistes => PisteFormat.FileName(id),
         AssetKind.Ropeways => RopewayInfoIndex.FileName,
+        AssetKind.Pois => PoiFile.FileName,
+        AssetKind.AtlasFacts => "atlas_facts.json",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

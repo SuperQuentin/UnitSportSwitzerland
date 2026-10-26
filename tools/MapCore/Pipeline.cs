@@ -447,7 +447,7 @@ public static partial class Planner
         steps.Add(new Step
         {
             Title = "Place index",
-            Detail = "places.json for the in-game Tab search (towns, summits, passes)",
+            Detail = "places.json for the in-game Tab search (towns, summits, passes), then pois.bin, the adventure's places (#1224)",
             Seconds = 6 + builtTotal * 0.0003,
             Skip = !wantPlaces ? "places layer off"
                  : toBuild.Count == 0 && File.Exists(Path.Combine(p.Chunks, PlaceIndex.FileName)) ? "no new terrain" : null,
@@ -456,6 +456,12 @@ public static partial class Planner
                 if (!File.Exists(p.GwrSqlite)) { r.Fail("places need the GWR data.sqlite"); return Task.FromResult(false); }
                 var args = new List<string> { "--out", p.Chunks, "--places-only", "--gwr", p.GwrSqlite };
                 if (p.TlmGpkg is { } tlm) args.AddRange(["--tlm", tlm]);
+                // the points of interest follow the places (#1224): castles from OSM, cantons from swissBOUNDARIES3D
+                // (MapSetup's country bake caches it) when they are here, else the nearest town's canton
+                if (p.OsmPbf is { } osm) args.AddRange(["--osm-pbf", osm]);
+                var bake = Path.Combine(p.Temp, "mapsetup_bake");
+                if (Directory.Exists(bake) && Directory.GetFiles(bake, "swissboundaries3d_*.gpkg").OrderDescending(StringComparer.Ordinal).FirstOrDefault() is { } boundaries)
+                    args.AddRange(["--boundaries", boundaries]);
                 return r.Tool("TerrainPreprocessor", args, LineProgress.None);
             },
         });

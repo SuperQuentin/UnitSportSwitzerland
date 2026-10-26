@@ -84,6 +84,7 @@ public class ClockDisciplineTests
         ["src/Net/ChunkStreamer.cs"] = "plumbing: chunk request timeouts",
         ["src/Net/ServerBook.cs"] = "plumbing: when a saved server was last played",
         ["src/Adventure/AdventureService.cs"] = "calendar: a quest's start and done dates, and a player's first and last visit, are real dates saved with its progress (#1223)",
+        ["src/Adventure/Places/PlacesProgress.cs"] = "calendar: a stamp's day is the real date the place was found, saved with the Atlas (#1224)",
         ["src/Vehicles/VehicleState.cs"] = "plumbing: SpawnedAt is a Unix stamp that outlives the server on disk (#452)",
         ["src/Bots/BotDirector.cs"] = "plumbing: a random seed",
         ["src/Playtest/PlaytestDirector.cs"] = "plumbing: the live listener's poll liveness, and a ledger entry's date",

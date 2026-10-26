@@ -83,8 +83,9 @@ its feature branch (`general/plans-on-main`).
   "All aboard" quest or bought at an SBB ticket office) allows travel from anywhere. `NetworkStrict` is
   dropped (`adventure-navigation` 5.3).
 - **Discovery and fog**: only on foot (including climbing, swimming, skiing, the paraglider, wingsuit
-  and pigeon) or in a light aircraft (small planes, gliders, helicopters). Airliners and every ground
-  vehicle reveal nothing (`adventure-places` 3).
+  and pigeon) or in a light aircraft (small planes, gliders, helicopters) for landmark stamps. The map's
+  fog also clears in any ground vehicle or boat (cars, bikes, trucks, buses, boats). Airliners reveal
+  nothing (`adventure-places` 3).
 - **Chests**: an opened chest disappears for that player.
 - **Trial leaderboards**: per server.
 - **Atlas texts**: every POI gets a generated line plus Wikidata facts (CC0). Claude drafts the ~200

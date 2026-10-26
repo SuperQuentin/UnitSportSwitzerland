@@ -137,6 +137,15 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => ReadRopewayInfoAsync(_dir, ct);
 
+    public Task<byte[]?> LoadPoisAsync(CancellationToken ct = default) => ReadPoisAsync(_dir, ct);
+
+    /// <summary><c>pois.bin</c> (#1224) in a directory, raw, or null.</summary>
+    public static Task<byte[]?> ReadPoisAsync(string dir, CancellationToken ct = default) => Task.Run(() =>
+    {
+        string path = Path.Combine(dir, PoiFile.FileName);
+        return File.Exists(path) ? File.ReadAllBytes(path) : null;
+    }, ct);
+
     /// <summary><c>ropeways.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
     public static Task<RopewayInfoIndex?> ReadRopewayInfoAsync(string dir, CancellationToken ct = default) => Task.Run(() =>
     {
