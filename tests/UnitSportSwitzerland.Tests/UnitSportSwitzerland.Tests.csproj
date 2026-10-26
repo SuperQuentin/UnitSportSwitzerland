@@ -167,6 +167,9 @@
     <Compile Include="..\..\src\Terrain\SignalGlyphs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the water pass's exact distance transform (#298); the rest of the preprocessor is not linked -->
     <Compile Include="..\..\tools\TerrainPreprocessor\DistanceTransform.cs" Link="Tools\%(Filename)%(Extension)" />
+    <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\PoiPick.cs" Link="Tools\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Places\PoiCatalogue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\WaveSpectrum.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\SeaStateCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\WaterLayer.cs" Link="Game\%(Filename)%(Extension)" />

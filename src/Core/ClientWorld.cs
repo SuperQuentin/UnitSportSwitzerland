@@ -266,6 +266,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
         }
         else source = new LocalChunkSource(TerrainPaths.FindChunkDir());
+        // the region's points of interest (#1224): this client's own pois.bin, again once a server sent its own
+        Adventure.Places.PoiCatalogueHost.Load(source, _fixtureStart);
+        if (Adventure.Places.PoiCheck.Requested) AddChild(new Adventure.Places.PoiCheck(_fixtureStart) { Name = "PoiCheck" });
         var manifest = await source.LoadManifestAsync();
         if (!IsInsideTree()) return;   // left during the load
         Report(LoadStage.BuildingWorld, 0.06f);
@@ -1636,6 +1639,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _ambience?.ReloadPlaces();
                 Occasions.OccasionTowns.Reload();
             }).CallDeferred();
+
+        // The points of interest (#1224): the server's, from the cache dir the sync wrote it to
+        _terrainSync.PoisReceived += () =>
+            Callable.From(() => Adventure.Places.PoiCatalogueHost.Load(_chunks?.Source, _fixtureStart)).CallDeferred();
 
         // The landings (#377): the server's, and the tiles holding a pier build it again
         _terrainSync.LandingsReceived += index =>

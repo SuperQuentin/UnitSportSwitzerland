@@ -113,6 +113,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // interior plan reads lazily: 32 MB is thousands of tiles, and a fixed ceiling.
         const long cacheBytes = 32L * 1024 * 1024;
         var source = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(local, cacheBytes);
+        // the region's points of interest (#1224): what the server serves as AssetKind.Pois is the same file
+        Adventure.Places.PoiCatalogueHost.Load(source);
 
         // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core
         // allows. 60 matches the physics tick and every client's send rate is well under it.

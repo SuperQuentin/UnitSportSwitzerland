@@ -46,6 +46,9 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>The lifts' OSM details arrived in the cache (#915): the lifts are rebuilt with them.</summary>
     public event Action? RopewaysReceived;
 
+    /// <summary>The server's points of interest (#1224) are in the cache dir; fired on the sync task's thread.</summary>
+    public event Action? PoisReceived;
+
     /// <summary>The far-horizon file arrived from the server and is in the cache.</summary>
     public event Action? HorizonReceived;
 
@@ -67,6 +70,7 @@ public sealed partial class ClientTerrainSync : Node
         await SyncPlacesAsync(ct).ConfigureAwait(false);
         await SyncLandingsAsync(ct).ConfigureAwait(false);
         await SyncRopewaysAsync(ct).ConfigureAwait(false);
+        await SyncPoisAsync(ct).ConfigureAwait(false);
         await SyncHorizonAsync(ct).ConfigureAwait(false);
     }
 
@@ -214,6 +218,15 @@ public sealed partial class ClientTerrainSync : Node
             {
                 GD.Print($"[stream] ropeways received: {bytes.Length / 1024} KB");
                 RopewaysReceived?.Invoke();
+            });
+
+    /// <summary>Pulls the points of interest (#1224): a few hundred KB, once per session.</summary>
+    private Task SyncPoisAsync(CancellationToken ct) =>
+        SyncFileAsync(AssetKind.Pois, PoiFile.FileName, "points of interest",
+            "server has no pois.bin; adventure places stay idle", ct, bytes =>
+            {
+                GD.Print($"[stream] points of interest received: {bytes.Length / 1024} KB");
+                PoisReceived?.Invoke();
             });
 
     private Task SyncLandingsAsync(CancellationToken ct) =>

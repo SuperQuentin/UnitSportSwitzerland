@@ -37,5 +37,6 @@ public static class WorldStatics
         Vehicles.PassengerService.ResetEvents();
         Vehicles.VehicleManager.ResetEvents();
         Vehicles.DormantLooks.Reset();
+        Adventure.Places.PoiCatalogueHost.Reset();
     }
 }

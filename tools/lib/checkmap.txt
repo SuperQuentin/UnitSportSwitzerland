@@ -847,3 +847,9 @@ UnitSportSwitzerland.csproj  quick  tools/apksizecheck.sh
 tools/ci/export_presets.cfg  quick  tools/apksizecheck.sh
 tools/release.sh             quick  tools/apksizecheck.sh
 tools/apksizecheck.sh        quick  tools/apksizecheck.sh
+# #1224 adventure places: the POI catalogue loads at boot (fixture POIs) and from a pois.bin through the chunk source
+src/Adventure/Places/     quick  --poischeck --world fixture --pois fixture
+tools/TerrainFormat/PoiFile quick --poischeck --world fixture --pois fixture
+src/Terrain/IChunkSource  quick  --poischeck --world fixture --pois fixture
+src/Terrain/LocalChunkSource quick --poischeck --world fixture --pois fixture
+src/Net/ClientTerrainSync net    @netsmoke
