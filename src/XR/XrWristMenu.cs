@@ -101,7 +101,7 @@ public partial class XrWristMenu : CanvasLayer
         if (onFoot) Entry("Map in your hand", null, () => _rig.ToggleHandMap());
         // the phone (#920): into the holding hand, as from the front pocket
         if (onFoot) Entry("Phone", PlayerInput.Phone);
-        Entry("Bird journal", PlayerInput.BirdJournal);
+        Entry("Journal: quests, birds, fish", PlayerInput.BirdJournal);
         if (onFoot) Entry("Drop the item in hand", PlayerInput.DropItem);
         Entry(player == null ? "Walk" : player.Creative ? "Survival mode" : "Creative mode", PlayerInput.ToggleMode);
         if (player != null) Entry("Spectator camera", PlayerInput.Spectator);

@@ -919,6 +919,12 @@ public partial class BrManager : Node
     /// <summary>Server: <paramref name="peer"/> is alive in a running match (no teleporting out of it).</summary>
     public bool Playing(long peer) => _state.Phase == BrPhase.Playing && _state.Find(peer) is { Alive: true };
 
+    /// <summary>
+    /// Server: <paramref name="peer"/> is an entrant of a lobby or a match, alive or out, until the round ends
+    /// (<see cref="Finish"/>). The Adventure layer is off for it then (#1223).
+    /// </summary>
+    public bool InRound(long peer) => _state.Phase != BrPhase.Idle && _state.Find(peer) != null;
+
     /// <summary>Server: a peer left the game. Out of the lobby, or out of the match.</summary>
     public void PeerLeft(long peer)
     {

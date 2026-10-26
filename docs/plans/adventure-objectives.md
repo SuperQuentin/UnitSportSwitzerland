@@ -3,7 +3,7 @@
 
 # Adventure: progress store, objectives and the quest log
 
-Status: **planned**. Tracking issue: #1223 (overview: #1228).
+Status: **built** (PR #1229). Tracking issue: #1223 (overview: #1228).
 
 One of the five Adventure plans (phases 1 and 2), written together: `adventure-places` (POIs,
 discovery, fog, Swiss Atlas), `adventure-navigation` (compass, pins, quest marker, fast travel),
@@ -13,13 +13,13 @@ progress store (section 1) and the adventure events (section 2). They land first
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Progress store | planned | `AdventureBook`: per-player, server-kept, keyed by `PlayerKey` fingerprint; typed sections each system declares for itself, versioned |
-| 2 Adventure events | planned | `AdventureEvents`: the server-side bus other systems raise (POI found, chest opened, trial done...) |
-| 3 Service and switch | planned | `World/Adventure` on server and clients, offline playing the server's part; `Systems.Adventure`; off in a BR round |
-| 4 Quest framework | planned | `QuestDef` catalog in plain C#, step kinds, `QuestEngine` matching events, rewards, quest sources (dailies later) |
-| 5 Quest log and tracker | planned | `Ui/AdventureLog` (tabs other plans add), `Ui/QuestTracker` HUD, toasts, the tracked target for navigation |
-| 6 Starter quests | planned | Five quests that exercise the other four plans |
-| 7 Checks and notes | planned | Tier-0 tests, an offline quick probe, `tools/adventurecheck.sh` (net), notes and map rows |
+| 1 Progress store | done | `AdventureBook`: per-player, server-kept, keyed by `PlayerKey` fingerprint; typed sections each system declares for itself, versioned |
+| 2 Adventure events | done | `AdventureEvents`: the server-side bus other systems raise (POI found, chest opened, trial done...) |
+| 3 Service and switch | done | `World/Adventure` on server and clients, offline playing the server's part; `Systems.Adventure`; off in a BR round |
+| 4 Quest framework | done (Postkarte source: seam only, as planned) | `QuestDef` catalog in plain C#, step kinds, `QuestEngine` matching events, rewards, quest sources (dailies later) |
+| 5 Quest log and tracker | done: the Journal on J | `Ui/AdventureLog` (tabs other plans add), `Ui/QuestTracker` HUD, toasts, the tracked target for navigation |
+| 6 Starter quests | 5 of 7 in the catalog, offered once their plans run | Five quests that exercise the other four plans |
+| 7 Checks and notes | done | Tier-0 tests, an offline quick probe, `tools/adventurecheck.sh` (net), notes and map rows |
 
 ## Goal
 
@@ -388,6 +388,34 @@ progress" (n/a: no identity, never saved).
 - Notes: new `docs/notes/adventure/` (`progress-store`, `adventure-events`, `quests`, `commands`) and a
   `src/Adventure/CLAUDE.md` index; `ui/adventure-log`; `xr/vr-action-map`, `bots/bot-capability-map`,
   `net/sleepers`, `items/cash-account` updated.
+
+## Built differently from the plan (#1229)
+
+- **The Journal, not a separate log** (overview decision): `Ui/AdventureLog` is titled "Journal" and opens
+  on J with the existing `bird_journal` action (id kept so rebinds carry over), not a new
+  `adventure_log` action. The bird journal's panel is gone: `BirdJournal` keeps its data and builds the
+  **Birds** and **Fish** tabs. The quick menu wedge, the wrist menu, the touch "More" sheet and the
+  phone (a **Journal** tile opening the full Journal, not a `Page.Adventure` of its own) all say Journal.
+- **Quests are offered only when their steps' plans run** (`Step.Plan`, `QuestEngine.Plans`,
+  `AdventureService.Provides(plan)`): every starter quest needs places, rewards or navigation events,
+  so none is offered until those plans call `Provides`. Starting one would leave it stuck.
+- **Starter quests**: five are in the catalog. Their `Reach` steps use approximate LV95 `Area`s until
+  the places catalogue's ids exist (Rigi Kulm also an area, not `Poi("peak:rigi-kulm")`). "All aboard"
+  and "Grand tour" are left out: `ItemId.HalfFare` / `GaCard` do not exist yet and `Unlock(Count, Cantons)`
+  needs the canton on `TravelUnlocked` (navigation adds both).
+- **Step and reward names**: steps are `ReachStep`, `DiscoverStep`... (`Reach`, `Photo`, `Deliver`,
+  `Area`, `Poi` builders), so `Unlock` stays the reward record; `Start` is the enum `QuestStart`.
+- **Reach also starts `OnEvent` quests** whose first step is an area the player stands in (the plan's
+  "auto on reaching it": an area has no event of its own).
+- **Session progress until proof**: a joining peer gets `peer:<id>` progress at once; its saved
+  progress replaces it on `Proven`; the owner hears `Unsaved` only if no proof came within 12 s.
+- **Cash rewards** use a new `Bank.Credited` RPC rather than `Report`/`SendBalance`: `Deposited(0, …)`
+  would clear a pending deposit and let its cash be counted twice.
+- **Extra RPC** `TellRefused(why)`: the Journal shows why a request was refused.
+- **Hand-over** is the Journal's button for now; `interact` on the target's marker comes with
+  navigation's markers.
+- `Systems.Parse` has no unit test (it uses Godot's logging); the quick and net checks run with and
+  without `adventure` in `--systems`.
 
 ## Open questions
 

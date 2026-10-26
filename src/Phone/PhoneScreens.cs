@@ -49,6 +49,9 @@ public partial class PhoneScreens : Node
     public event Action<int, bool>? CallAnswered;
     /// <summary>The Menu app: the full Activities screen opens over the phone.</summary>
     public event Action? ActivitiesPicked;
+
+    /// <summary>The Journal app (#1223): the Journal opens over the phone.</summary>
+    public event Action? JournalPicked;
     /// <summary>The camera app's shutter.</summary>
     public event Action? ShutterPressed;
     /// <summary>The camera app's turn: the phone turned round, the main camera filming you, the cover showing you (a selfie).</summary>
@@ -401,6 +404,7 @@ public partial class PhoneScreens : Node
         row.AddChild(Tile("Photos", "Your album; set a photo as a wallpaper", new Color(0.86f, 0.30f, 0.45f), () => ShowPage(Page.Photos)));
         row.AddChild(Tile("Activities", "Join a Battle Royale or a race", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
         row.AddChild(Tile("Menu", "The full Activities menu: set up a race, a Battle Royale", new Color(0.50f, 0.30f, 0.62f), () => ActivitiesPicked?.Invoke()));
+        row.AddChild(Tile("Journal", "Your quests, and the birds and fish you found", new Color(0.62f, 0.48f, 0.18f), () => JournalPicked?.Invoke()));
         row.AddChild(Tile("Training", "Ride a GPX course on your home trainer, the road's grade on the trainer", new Color(0.10f, 0.55f, 0.58f), () => ShowPage(Page.Training)));
         col.AddChild(row);
         col.AddChild(UiKit.Spacer(expand: true));

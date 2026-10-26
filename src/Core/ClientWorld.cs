@@ -841,7 +841,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
-            || World.ContainerNetProbe.Role != null
+            || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
@@ -1005,6 +1005,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
+        // the Adventure layer (#1223): the server keeps this player's progress and quests, offline this client
+        // does; the Journal's Quests tab, the tracked quest on the HUD and the quest toasts
+        if (Systems.On(Systems.Adventure))
+        {
+            var adventure = Adventure.AdventureService.Create(this, server: false, networked: Launch.Networked);
+            adventure.GiveItems = items.Give;
+            adventure.Pack = inventory;
+            adventure.NameOf = _ => GameSettings.Current.PlayerName;
+            adventure.PositionOf = _ => LocalPlayer is { } me ? me.Global : null;
+            AddChild(new Ui.QuestTracker(() => LocalPlayer is { } me ? new Ui.QuestTracker.FootPlayerView(me.Global, me.WorldVelocity.Length()) : null));
+            AddChild(new Ui.QuestToasts());
+            if (Adventure.AdventureCheck.Requested) AddChild(new Adventure.AdventureCheck(items, () => LocalPlayer));
+            if (Adventure.AdventureNetProbe.Role != null) AddChild(new Adventure.AdventureNetProbe(items));
+        }
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
         {
@@ -1830,6 +1844,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
         if (_places is { IsOpen: true }) return;
+
+        // the Journal (#1223): quests, birds, fish and what the Adventure plans add; J opens and closes it
+        if (@event.IsActionPressed(PlayerInput.BirdJournal) && !UiFocus.TextEntryActive)
+        {
+            GetViewport().SetInputAsHandled();
+            Ui.AdventureLog.Toggle();
+            return;
+        }
 
         // the Character menu (#1127): P on foot; mounted, P is the radio's previous station
         if (@event.IsActionPressed(PlayerInput.CharacterMenu) && !UiFocus.TextEntryActive

@@ -10,3 +10,7 @@
   client's — and a name is not a password.
   The account is also the **card** in shops (#273, the loot `shops` note): the server debits it
   itself (`Bank.Charge`, no overdraft) and sends the new balance (`Bank.Report`).
+  **Rewards** (#1223, a quest's cash) are paid into the account, never the pocket a knock-out empties:
+  `Bank.Credit(peer, amount, why)` on the server (offline this machine's account), which tells the owner
+  through its own `Credited(amount, balance)` RPC, so a deposit waiting for its answer is never cleared.
+  `Bank.Scratch` (a check's run) moves balances without writing the file.

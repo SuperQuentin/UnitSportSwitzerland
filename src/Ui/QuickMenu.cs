@@ -7,7 +7,7 @@ namespace UnitSport.Ui;
 /// <summary>
 /// The quick menu (#840): a ring, drawn as the emote wheel is (<see cref="Radial"/>), with the ways
 /// into everything that is not walking about: Activities, Invites, Inventory, Vehicles, Map, Phone, Emotes,
-/// Bird journal, Character, Controls. Docs: <c>docs/notes/ui/quick-menu.md</c>.
+/// Journal, Character, Controls. Docs: <c>docs/notes/ui/quick-menu.md</c>.
 /// <list type="bullet">
 /// <item>Keyboard: hold F2, aim with the mouse, let go (a click picks too). A tap opens it until a
 /// pick, unless an invite is on screen: then the tap accepts it, and Shift+F2 declines it.</item>
@@ -62,7 +62,8 @@ public partial class QuickMenu : CanvasLayer
                 () => Key(PlayerInput.Phone)),
             new("Emotes", () => emotes() is { CanOpen: true } ? null : "Not now",
                 () => emotes()?.Open(latched: true), () => Key(PlayerInput.EmoteWheel)),
-            new("Bird journal", () => null, () => Press(PlayerInput.BirdJournal), () => Key(PlayerInput.BirdJournal)),
+            // the Journal (#1223): quests, birds, fish; opened straight, not by a key press the ring would eat
+            new("Journal", () => null, () => Callable.From(() => AdventureLog.Open()).CallDeferred(), () => Key(PlayerInput.BirdJournal)),
             // the figure editor (#1127): from anywhere here, mounted too (only the key is on foot only)
             new("Character", () => null, () => Callable.From(CharacterScreen.Open).CallDeferred(), () => Key(PlayerInput.CharacterMenu)),
             new("Controls", () => null, () => Press(PlayerInput.Help), () => Key(PlayerInput.Help)),
