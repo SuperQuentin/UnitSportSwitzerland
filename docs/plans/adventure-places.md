@@ -3,7 +3,7 @@
 
 # Adventure places: POI catalogue, discovery, fog of war and the Swiss Atlas
 
-Status: **planned**. Tracking issue: #1224 (overview: #1228).
+Status: **in progress**: parts 1 and 2 built (PR #1230); 3-7 wait for #1223's `AdventureService`. Tracking issue: #1224 (overview: #1228).
 
 One of five Adventure plans (phases 1 and 2), written together: `adventure-objectives` (progress
 store, events, quests, `AdventureLog`), `adventure-navigation` (compass, pins, tracked marker, travel
@@ -26,14 +26,14 @@ into) and the phase-1 **interactable POI markers**.
 
 | Part | State | What it does |
 |---|---|---|
-| 1 POI stage and format | planned | `PoiStage` in the preprocessor: swissTLM3D names and objects, castles, ropeway ends -> `pois.bin` (`PoiFile` in `tools/TerrainFormat`) |
-| 2 Catalogue at runtime | planned | `PoiCatalogue`: loaded on server and clients, synced once (`AssetKind.Pois`), spatial queries, id and alias resolution |
+| 1 POI stage and format | built (#1230) | `PoiStage` in the preprocessor: swissTLM3D names and objects, castles, ropeway ends -> `pois.bin` (`PoiFile` in `tools/TerrainFormat`) |
+| 2 Catalogue at runtime | built (#1230) | `PoiCatalogue`: loaded on server and clients, synced once (`AssetKind.Pois`), spatial queries, id and alias resolution |
 | 3 Discovery | planned | Server 1 Hz proximity check per kind, anti-cheat, `places` section, `PoiDiscovered`, the stamp toast |
 | 4 Fog of war | planned | 250 m cells, sparse per-tile masks in the `fog` section, own delta RPC, shader-drawn fog on the map |
 | 5 Viewpoints and markers | planned | Summit crosses, lookout towers, cable-car tops, passes: interact to sync, reveal fog; stamp posts; `Interacted` |
 | 6 Adventure map | planned | Free-roam map screen: relief + fog + POI icons, `IMapOverlay` for navigation's pins and travel points |
 | 7 Swiss Atlas | planned | `AdventureLog` tab: stamps and fact cards, completion per canton and per macro-region, `CantonMilestone` |
-| 8 Checks and notes | planned | Tier-0 tests, an offline quick probe on a fixture POI set, `tools/placesnetcheck.sh`, notes, map rows |
+| 8 Checks and notes | part (#1230: tier 0 for ids, file, `PoiPick`, catalogue; `--poischeck`; notes `adventure/poi-pipeline`, `poi-catalogue`) | Tier-0 tests, an offline quick probe on a fixture POI set, `tools/placesnetcheck.sh`, notes, map rows |
 
 ## Goal
 
@@ -453,3 +453,34 @@ acceptable once. Lookups by id go through `Resolve`, so a renamed slug matches t
   the ~200 curated cards from those facts, and the team reviews them in a PR. Player-suggested facts
   (moderated) may come later. Translation stays open: the repo is English only, so a player-facing
   translation would be a separate data file.
+
+## Built differently from the plan
+
+Parts 1 and 2 (#1230); the reasons are in `docs/notes/adventure/poi-pipeline.md` and `poi-catalogue.md`.
+
+- **Record size 37 bytes**, not 32: the fields listed in 1.4 add up to 37 (hash 5, six bytes, E and N 8,
+  elevation 2, name 4, line key 8, outline 4). 7 082 POIs of the dev region make 398 KB.
+- **Identities beyond the row uuid**: a lake is many shore LINESTRINGs in TLM (not a polygon), so its
+  identity is `tlm_gewaesser_name_uuid`; a tower, church, chapel or hut is often several footprints (the
+  Berner Münster has 31), so its identity is `tlm_bauten_name_uuid`. Same stability, one place per object.
+- **Elevation** is TLM's own Z (the layers are 3D) where `hoehe` is missing; the `.terr` is sampled only
+  where there is none (OSM castles).
+- **Castles** come from `CastleStage.FromOsm`/`FromGwr` directly (their existing `Source`, prefixed `osm:` /
+  `egid:`, is the identity), without the solid check that needs built `.bldg` tiles: 928 nationwide
+  instead of ~600. `CastleStage.Candidate` gained no new field.
+- **`VillageStop` and the canton fallback** read the region's `places.json` (the stage runs after
+  `--places`); `--gwr` only adds the GWR castle names.
+- **Cable cars**: both ends of every Luftseilbahn/Gondelbahn line, named after the `Uebrige Bahnen` stop
+  within 150 m; `LineKey` from the TLM line's lower end (the game's `Ropeway.Key` comes from the `.road`
+  geometry: not yet checked to agree on every line).
+- **Dams**: Staumauer, Staudamm and Wehr of at least 50 m (248 nationwide). Unnamed bridges, dams and
+  standalone crosses get a made-up name ("Covered bridge near Riddes") without the `Named` flag.
+- **Wikidata** is its own step, `--wikidata`, because it needs the network: per kind one SPARQL query
+  (items in Switzerland with a position), cached; a label equal to the name (or containing it, >= 5
+  letters) within 500 m, scored down with distance; ties dropped. Facts kept: elevation, year (inception),
+  length, area, the Commons image file name (its credit is fetched with the image, later). No first
+  ascent yet. `atlas_facts.json` is not synced or read by the game yet (the Atlas, 7).
+- **No protocol bump yet**: a new `AssetKind` is backward compatible (an older server answers "missing",
+  an older client never asks). The plan's one bump comes with the RPCs of 3-5.
+- **`PoiCatalogueHost`** (static) holds the catalogue until `PlacesService` (3) exists; `Fixture` takes the
+  fixture start (`Fixture(startE, startN)`, `FixtureData` for a file).
