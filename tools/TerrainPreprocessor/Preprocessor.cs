@@ -97,7 +97,8 @@ public static partial class Preprocessor
                 case "--io-jobs" when i + 1 < args.Count && int.TryParse(args[i + 1], out int n): ioJobs = n; i++; break;
                 case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
                     or "--dem-check" or "--rgealti-check" or "--dem-probe"
-                    or "--osm-overlay" or "--landings-file" or "--airports-file" or "--sitg-signs":
+                    or "--osm-overlay" or "--landings-file" or "--airports-file" or "--sitg-signs"
+                    or "--pois" or "--pois-file" or "--poisstats" or "--wikidata":
                     return false;
             }
         }
@@ -144,6 +145,10 @@ public static partial class Preprocessor
         string? airportsFile = null, airportsOsm = null;
         // castles (#859): which solids of the built tiles are castles, into a C# list the game compiles in
         string? castlesFile = null;
+        // points of interest (#1224): standalone with --pois (needs --out, --tlm), and after every --places pass
+        // given --tlm; --boundaries <swissBOUNDARIES3D gpkg> for the cantons, --osm-pbf for castles
+        bool poisOnly = false, poisStats = false, wikidata = false;
+        string? poisFile = null, boundariesGpkg = null, atlasCards = null;
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false, hashOnly = false;
         string? franceBox = null;
@@ -202,6 +207,13 @@ public static partial class Preprocessor
                 case "--airports": airportsOnly = true; break;
                 case "--airports-file": airportsFile = args[++i]; break;
                 case "--castles": castlesFile = args[++i]; break;
+                case "--pois": poisOnly = true; break;
+                case "--pois-file": poisFile = args[++i]; break;
+                case "--poisstats": poisStats = true; break;
+                // Wikidata facts for the Atlas cards (#1224): network, so a step of its own after --pois
+                case "--wikidata": wikidata = true; break;
+                case "--boundaries": boundariesGpkg = args[++i]; break;
+                case "--atlas-cards": atlasCards = args[++i]; break;
                 case "--osm": airportsOsm = args[++i]; break;
                 case "--bathy": bathyDir = args[++i]; break;
                 case "--png-crop":
@@ -397,6 +409,38 @@ public static partial class Preprocessor
                 return 2;
             }
             return TramStopStage.Run(outDir, tlmGpkg);
+        }
+
+        // ---- points of interest (#1224): pois.bin from swissTLM3D (+ castles, cantons) ---------------
+        if (wikidata)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--wikidata requires --out <chunk dir> (with a pois.bin, or --pois-file f)");
+                return 2;
+            }
+            SetStage("wikidata");
+            return await WikidataStage.RunAsync(outDir, poisFile, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", ct);
+        }
+        if (poisStats)
+        {
+            if (outDir == null && poisFile == null)
+            {
+                Console.Error.WriteLine("--poisstats requires --out <chunk dir> or --pois-file <pois.bin>");
+                return 2;
+            }
+            return PoiStage.Stats(outDir ?? "", poisFile, atlasCards);
+        }
+        if (poisOnly)
+        {
+            if (outDir == null || tlmGpkg == null || !File.Exists(Path.Combine(outDir, "manifest.json")))
+            {
+                Console.Error.WriteLine("--pois requires --out <built chunk dir> and --tlm <swisstlm3d .gpkg> " +
+                                        "[--boundaries <swissboundaries3d .gpkg>] [--osm-pbf <switzerland .osm.pbf> [--gwr <data.sqlite>]] [--pois-file f]");
+                return 2;
+            }
+            SetStage("pois");
+            return PoiStage.Run(tlmGpkg, outDir, ManifestTiles(outDir), PoiOptions());
         }
 
         // ---- landings: piers and jetties from swissTLM3D over the built beds and water -------------
@@ -707,6 +751,11 @@ public static partial class Preprocessor
 
         return 0;
 
+        PoiStage.Options PoiOptions() => new(boundariesGpkg, osmFieldsPbf, gwrPath, poisFile, atlasCards, jobs);
+
+        static HashSet<TileId> ManifestTiles(string dir) =>
+            TerrainManifest.FromJson(File.ReadAllText(Path.Combine(dir, "manifest.json"))).Tiles.Select(t => t.Id).ToHashSet();
+
         // Batched: loading every chunk grid at once is ~2 MB x tile count (13 GB for the 6,699-tile
         // import) before feature data is even extracted. Tiles are ordered by (E, N) so each batch is a
         // compact strip and its bbox query stays tight.
@@ -723,6 +772,13 @@ public static partial class Preprocessor
                 SetStage("places");
                 int rc = PlaceStage.Run(gwrPath, outDir, existing.Tiles.Select(t => t.Id).ToHashSet(), tlmGpkg);
                 if (rc != 0) return rc;
+                // the points of interest follow the place index (#1224): its towns name and place village stops
+                if (tlmGpkg != null)
+                {
+                    SetStage("pois");
+                    rc = PoiStage.Run(tlmGpkg, outDir!, existing.Tiles.Select(t => t.Id).ToHashSet(), PoiOptions());
+                    if (rc != 0) return rc;
+                }
                 if (placesOnly || (tlmGpkg == null && buildingsGpkg == null && buildingsGdb.Count == 0)) return 0;
             }
 
