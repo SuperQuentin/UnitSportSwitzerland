@@ -74,6 +74,10 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | bird_journal: the Journal (#1223: Quests, Birds, Fish and the Adventure plans' tabs; was the bird journal, #493) | J / quick menu › Journal, LB / RB tabs | ok: wrist menu › Journal, phone › Journal; tabs and buttons by pointer | keep |
 | quest: track / start / abandon (#1223) | buttons in the Journal / A on the button | ok: laser + trigger on the button | keep |
 | quest: hand over a delivery (#1223) | the Journal's Hand over button / A on it | ok: laser + trigger on the button | gap: `interact` (E / X) or a **grip** on the target's marker, once navigation draws markers (#1226) |
+| place: look out from a viewpoint / use a stamp post (#1224) | `interact_mount` E / Y within 3 m of the cross, telescope or stamp post (`PoiMarkers`) | ok: reach out and grip it (`TryInteract(byHand)`) | keep |
+| adventure map (#1224) | M (`teleport`) while adventuring / quick menu › Map; drag, wheel, click; left stick, LB / RB, A | ok: wrist menu › Map on the `XrUi` panel, ray drag and trigger (the shoulders do not zoom in VR) | keep |
+| Atlas (#1224) | J then Q / E, LB / RB to the Atlas tab; buttons | ok: wrist menu › Journal, laser + trigger | keep |
+| place card: Track / Show on map / Show in Atlas (#1224) | the card's buttons / A on them | ok: laser + trigger | keep |
 | character_menu (the figure editor, #1127) | P on foot / quick menu › Character, Start › Character | ok: the quick menu ring aimed by the hand, the pause menu; the page by pointer | keep |
 | server console (#1088): Multiplayer › a server's console button, or the refusal banner | click / A on the focused button; commands and messages are typed | ok: the menu panel and the laser; typing needs a keyboard (an admin tool, no pad or VR way to type) | keep |
 | traffic tool: place / open a generator (#971) | LMB / RB with the tool in hand | ok: R trigger (`use_item`, no new action); the window by the laser | keep |

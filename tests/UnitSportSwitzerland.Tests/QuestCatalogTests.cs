@@ -86,7 +86,6 @@ public class QuestCatalogTests
         const long now = 1_793_000_000;
         var done = new List<string>();
         void Feed(AdventureEvent e) => done.AddRange(engine.OnEvent(p, e, now).Where(c => c.What == QuestChangeKind.Completed).Select(c => c.QuestId));
-        void At(double e, double n) => done.AddRange(engine.OnPosition(p, e, n, now).Where(c => c.What == QuestChangeKind.Completed).Select(c => c.QuestId));
 
         Assert.Null(engine.Start(p, "uri-passes", now));
         Assert.Null(engine.Start(p, "rigi-chest", now));
@@ -97,28 +96,45 @@ public class QuestCatalogTests
         Feed(new PoiDiscovered(1, "k", "pass:klausen.d4", "pass", "UR"));
         Assert.Contains("uri-passes", done);
 
-        At(2679530, 1212250);   // Rigi Kulm
-        Feed(new ChestOpened(1, "k", "chest:rigi.1", 1, "peak:rigi-kulm"));
+        Feed(new PoiDiscovered(1, "k", QuestCatalog.Places.RigiKulm, "peak", "SZ"));
+        Feed(new ChestOpened(1, "k", "chest:rigi.1", 1, QuestCatalog.Places.RigiKulm));
         Assert.Contains("rigi-chest", done);
 
         Assert.Null(engine.Start(p, "aletsch-glide", now));
-        Feed(new TravelUnlocked(1, "k", "cablecar:bettmerhorn", "cablecar"));
+        Feed(new TravelUnlocked(1, "k", QuestCatalog.Places.BettmerhornTop, "cablecar"));
         Feed(new TrialFinished(1, "k", "trial:aletsch-rings", 200, 1));   // too slow
         Feed(new TrialFinished(1, "k", "trial:aletsch-rings", 175, 2));
         Assert.Contains("aletsch-glide", done);
 
         // "Top of Zurich" starts by itself on reaching the tower, its first step
-        At(2679470, 1244770);
+        Feed(new PoiDiscovered(1, "k", QuestCatalog.Places.UetlibergTower, "tower", "ZH"));
         Assert.Equal(1, p.Active["uetliberg-tower"].Step);
         Feed(new PhotoTaken(1, "k", "view:uetliberg-zurich", "tower:uetliberg"));
         Assert.Contains("uetliberg-tower", done);
 
         Assert.Null(engine.Start(p, "gruyere-for-bern", now));
-        Feed(new Interacted(1, "k", "poi:gruyeres-dairy"));
+        Feed(new Interacted(1, "k", QuestCatalog.Places.GruyeresCastle));
         Feed(new ItemDelivered(1, "k", ItemId.Cheese, 1, "area:Bern's market"));
         Assert.Contains("gruyere-for-bern", done);
 
         Assert.Equal(QuestCatalog.All.Length, p.Done.Count);
+    }
+
+    /// <summary>The places the quests name are the curated cards' canonical ids (#1224): what the places service raises.</summary>
+    [Fact]
+    public void Quest_places_are_curated_cards_canonical_ids()
+    {
+        string? dir = System.AppContext.BaseDirectory;
+        while (dir != null && !System.IO.File.Exists(System.IO.Path.Combine(dir, "project.godot"))) dir = System.IO.Path.GetDirectoryName(dir);
+        var cards = UnitSport.Adventure.Places.AtlasFacts.ParseCards(System.IO.File.ReadAllText(System.IO.Path.Combine(dir!, "assets", "adventure", "atlas_cards.json")));
+        foreach (string id in QuestCatalog.Places.All)
+        {
+            Assert.True(UnitSport.Terrain.Format.PoiId.TryParse(id, out _, out _), id);
+            Assert.Contains(cards, c => c.Id == id);
+        }
+        foreach (var q in QuestCatalog.All)
+            foreach (var step in q.Steps)
+                if (step.Target is PoiTarget poi) Assert.Contains(poi.PoiId, QuestCatalog.Places.All);
     }
 
     [Fact]

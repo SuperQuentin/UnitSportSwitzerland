@@ -216,6 +216,19 @@ public class QuestEngineTests
     }
 
     [Fact]
+    public void With_places_running_a_poi_is_reached_only_by_finding_it()
+    {
+        var engine = Engine(One("go", Reach(Poi("tower:x"))));
+        engine.ResolvePoi = id => id == "tower:x" ? (0, 0, 10f) : null;
+        engine.PoisByDiscoveryOnly = true;
+        var p = new QuestsProgress();
+        engine.Start(p, "go", Now);
+        Assert.Empty(engine.OnPosition(p, 3, 4, Now));   // driven there: not reached
+        Assert.Equal((0d, 0d, 10f), engine.Locate(new PoiTarget("tower:x")));   // still tracked
+        Assert.Single(engine.OnEvent(p, new PoiDiscovered(1, "k", "tower:x", "tower", "ZH"), Now));
+    }
+
+    [Fact]
     public void An_on_event_quest_starts_and_counts_on_its_first_steps_event()
     {
         var engine = Engine(Q("auto", "Auto", "", [Photo("x"), Photo("y")], []) with { Start = QuestStart.OnEvent });

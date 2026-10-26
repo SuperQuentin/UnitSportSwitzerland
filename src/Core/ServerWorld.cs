@@ -114,6 +114,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // interior plan reads lazily: 32 MB is thousands of tiles, and a fixed ceiling.
         const long cacheBytes = 32L * 1024 * 1024;
         var source = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(local, cacheBytes);
+        // the region's points of interest (#1224): what the server serves as AssetKind.Pois is the same file
+        Adventure.Places.PoiCatalogueHost.Load(source);
 
         // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core
         // allows. 60 matches the physics tick and every client's send rate is well under it.
@@ -346,6 +348,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
             if (accounts.Mode == Net.Accounts.ServerAccounts.Required)
                 adventure.AccountKey = peer => gate?.Of(peer) is { } account ? "acct:" + account.UserId : null;
             _sleepers.Proven += adventure.PeerProven;
+            // places (#1224): discovery, fog and viewpoints for every adventuring peer, from its proxy's published state
+            Player.FootPlayer? PlayerOf(long peer) => _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
+            Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+            Adventure.Places.PlacesService.Create(adventure, server: true, networked: true).BodyOf = peer =>
+                PlayerOf(peer) is { } body ? Adventure.Places.PlacesBodies.Of(body, body.NetGlobal, PlayerOf, ground) : null;
             // climbs higher than the stamina rules allow, logged (#1225): no correction
             AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
         }
@@ -646,6 +653,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // before the registry forgets its name and the body is freed: it lies down where it was (#644)
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _adventure?.PeerLeft(id);
+        Adventure.Places.PlacesService.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);

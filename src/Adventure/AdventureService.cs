@@ -119,7 +119,7 @@ public partial class AdventureService : Node
             StaminaUpgrades.Attach(this);   // #1225: the owner's steps from the section sync
             return;
         }
-        if (AdventureCheck.Requested) AdventureCheck.ClearScratch();
+        if (AdventureCheck.Requested || Places.PlacesCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -138,6 +138,9 @@ public partial class AdventureService : Node
     /// <summary>A peer's progress, or null when it is not known (not joined yet, or gone).</summary>
     public PlayerProgress? Progress(long peer) => _keyOf.TryGetValue(peer, out var key) && _book.TryGet(key, out var p) ? p : null;
 
+    /// <summary>The peers whose progress is loaded (the authority's).</summary>
+    public IReadOnlyCollection<long> Peers => _keyOf.Keys;
+
     /// <summary>The progress key of a peer (checks, admin tools), or null.</summary>
     public string? KeyOf(long peer) => _keyOf.GetValueOrDefault(peer);
 
@@ -146,6 +149,27 @@ public partial class AdventureService : Node
 
     /// <summary>A plan says its system runs here: quests with steps of that plan are offered (<c>places</c>, <c>rewards</c>, <c>navigation</c>, <c>stamina</c>).</summary>
     public void Provides(string plan) => Quests.Plans.Add(plan);
+
+    /// <summary>A plan's system stopped running here (the places catalogue went empty): its quests are no longer offered.</summary>
+    public void Withdraws(string plan) => Quests.Plans.Remove(plan);
+
+    private readonly HashSet<string> _ownSync = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// A section its plan sends to the owner by its own RPCs (fog's deltas): <c>Touch</c> then only saves it,
+    /// <c>SectionSync</c> never carries it.
+    /// </summary>
+    public void SyncsItself(string sectionId) => _ownSync.Add(sectionId);
+
+    /// <summary>
+    /// Authority: a peer's progress is loaded and its owner hears from now on (on join with an account, on
+    /// proof, or once told its progress is the session's; offline at once). Plans that sync by themselves send
+    /// their full state then.
+    /// </summary>
+    public event Action<long>? Loaded;
+
+    /// <summary>Authority: a progress is about to be saved: plans that keep a working copy write it into their section now.</summary>
+    public event Action<PlayerProgress>? Saving;
 
     /// <summary>
     /// A plan's reward kind (<c>"reveal"</c>, <c>"travel"</c>, <c>"stamina"</c>): <paramref name="apply"/>
@@ -183,6 +207,7 @@ public partial class AdventureService : Node
             RpcId(peer, MethodName.TellUnsaved);
             _toldUnsaved.Add(peer);
             _book.For(session).SyncAll();
+            Loaded?.Invoke(peer);
         };
     }
 
@@ -224,6 +249,8 @@ public partial class AdventureService : Node
         if (saved) _saved.Add(key);
         p.SyncAll();
         _lastSync.Remove(peer);
+        // offline the local player loads in _Ready, before any plan's node is there: the plans read it when they start
+        if (IsInsideTree()) Loaded?.Invoke(peer);
         GD.Print($"[adventure] peer {peer} is {Short(key)}: {p.Get(QuestsProgress.Section).Active.Count} running, {p.Get(QuestsProgress.Section).Done.Count} done");
     }
 
@@ -258,13 +285,15 @@ public partial class AdventureService : Node
 
     /// <summary>Where a check keeps its progress instead of <c>user://adventure</c>, or null.</summary>
     public static string? ScratchDir => CmdArgs.Value("--adventure-dir") is { } dir ? ProjectSettings.GlobalizePath(dir)
-        : AdventureCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/adventurecheck") : null;
+        : AdventureCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/adventurecheck")
+        : Places.PlacesCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/placescheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));
 
     private void Save(PlayerProgress p)
     {
+        Saving?.Invoke(p);
         foreach (string id in p.Untouched())
             GD.PushWarning($"[adventure] {Short(p.Key)}: section '{id}' changed without Touch (a bug: saved now, but its owner was never told)");
         try
@@ -464,7 +493,7 @@ public partial class AdventureService : Node
             OnSectionChanged(id);
             return;
         }
-        if (!Connected(peer)) return;
+        if (_ownSync.Contains(id) || !Connected(peer)) return;
         // an unproven peer hears nothing until it is told its progress is the session's
         if (p.Key.StartsWith("peer:", StringComparison.Ordinal) && !_toldUnsaved.Contains(peer)) return;
         RpcId(peer, MethodName.SectionSync, id, p.VersionOf(id), p.DataOf(id)?.ToJsonString(AdventureJson.Options) ?? "null");
@@ -502,6 +531,7 @@ public partial class AdventureService : Node
 
     public void AskTrack(string? questId)
     {
+        _place = null;
         if (Authority) Track(LocalPeer, questId);
         else RpcId(1, MethodName.RequestTrack, questId ?? "");
     }
@@ -569,11 +599,35 @@ public partial class AdventureService : Node
 
     // ---- the tracked target (navigation's contract, §5.3) -------------------------------------------------
 
+    private (string Label, double E, double N, float RadiusM)? _place;
+
+    /// <summary>
+    /// Client: tracks a place that is no quest's (the adventure map's and the Atlas's Track button, #1224):
+    /// it is the <see cref="TrackedTarget"/> until another place or a quest is tracked, or
+    /// <see cref="UntrackPlace"/>. Kept on this client only, for the session (navigation may persist it later).
+    /// </summary>
+    public void TrackPlace(string label, double e, double n, float radiusM)
+    {
+        _place = (label, e, n, radiusM);
+        UpdateTracked();
+    }
+
+    /// <summary>Client: drops a tracked place (reached, or the button again); the tracked quest's target shows again.</summary>
+    public void UntrackPlace()
+    {
+        if (_place == null) return;
+        _place = null;
+        UpdateTracked();
+    }
+
+    /// <summary>Client: the place tracked with <see cref="TrackPlace"/>, or null.</summary>
+    public (string Label, double E, double N, float RadiusM)? TrackedPlace => _place;
+
     private void UpdateTracked()
     {
         var q = Mine.Get(QuestsProgress.Section);
-        (string, double, double, float)? target = null;
-        if (q.Tracked is { } id && q.Active.TryGetValue(id, out var state) && Quests.Current(id, state) is { Target: { } t } step
+        (string, double, double, float)? target = _place;
+        if (target == null && q.Tracked is { } id && q.Active.TryGetValue(id, out var state) && Quests.Current(id, state) is { Target: { } t } step
             && Quests.Locate(t) is { } at)
             target = (step.Line, at.E, at.N, at.RadiusM);
         if (target == TrackedTarget) return;

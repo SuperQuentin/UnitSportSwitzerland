@@ -77,8 +77,9 @@ public partial class Handshake : Node
     /// 48: a CD's voice and music stems over AssetKind.Cd (TileId.N 1 and 2), the radios' and the concert's voice/music mix (#1153).
     /// 49: World/Accounts (Ask, Present, Welcome, Refuse): the account step after this check (#1123).
     /// 50: World/Adventure (#1223: RequestStart/Abandon/Track/Deliver; SectionSync, QuestNote, Granted, DeliverOk, Refused, Unsaved), World/Bank Credited.
-    /// 51: World/Arrival Rules carries the stamina and lift switches; FootPlayer.PoseKind 8 (PoseWallClimb) (#1225).
-    public const int Protocol = 51;
+    /// 51: World/Adventure/Places (#1224: RequestInteract; Stamped, Synced, FogFull, FogDelta), AssetKind.AtlasFacts 18.
+    /// 52: World/Arrival Rules carries the stamina and lift switches; FootPlayer.PoseKind 8 (PoseWallClimb) (#1225).
+    public const int Protocol = 52;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

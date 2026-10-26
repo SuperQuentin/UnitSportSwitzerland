@@ -39,7 +39,7 @@
   climb-jump 0..1, 0)`, `BodyPose = ClimbBodyPose(n, yaw)`: the figure turned to the face (first person
   keeps the node on the view) and leant about the chest by asin(n.Y). Drawn by `ApplyClimbFigure` with the
   skinned figure's bones (`avatar/wall-climb-pose`); a remote advances the phase from `Anim.X`.
-  `IsClimbing` reads the pose on a remote. Protocol 51.
+  `IsClimbing` reads the pose on a remote. Protocol 52.
 - **Controls hint**: the first climb of the session, 5 s (`ClimbHintDue`, `PlayerFeel`).
 - **VR**: `XrClimb` keeps its grip-and-pull and its `PoseClimb` carrier pose (open question 7), and spends
   `FootPlayer.SpendXrClimb` (1 /s, 9 a metre) where the meter counts, its own 15 s elsewhere.

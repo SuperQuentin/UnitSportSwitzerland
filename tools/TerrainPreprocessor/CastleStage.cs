@@ -55,7 +55,7 @@ public static class CastleStage
 
     private static readonly Regex RuinName = new(@"ruine|rovine|diroccat|\bruin", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    private sealed record Candidate(string Name, string Source, double E, double N, List<(double E, double N)>? Outline, int Kind = Unknown);
+    internal sealed record Candidate(string Name, string Source, double E, double N, List<(double E, double N)>? Outline, int Kind = Unknown);
 
     /// <summary>
     /// The kind OSM gives (castle_type, ruins) or the name says. "schloss" and "stately" are the
@@ -128,7 +128,7 @@ public static class CastleStage
         return 0;
     }
 
-    private static IEnumerable<Candidate> FromOsm(string pbf, int jobs)
+    internal static IEnumerable<Candidate> FromOsm(string pbf, int jobs)
     {
         var keys = new HashSet<string> { "historic", "name", "castle_type", "ruins" };
         static bool IsCastle(Dictionary<string, string> t) => t.GetValueOrDefault("historic") == "castle";
@@ -162,7 +162,7 @@ public static class CastleStage
 
     private static string NameOf(Dictionary<string, string> tags) => tags.GetValueOrDefault("name") ?? "Castle";
 
-    private static IEnumerable<Candidate> FromGwr(string gwrPath)
+    internal static IEnumerable<Candidate> FromGwr(string gwrPath)
     {
         using var conn = GeoPackageReader.Open(gwrPath);
         using var cmd = conn.CreateCommand();

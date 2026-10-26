@@ -62,6 +62,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
+| discover a place, clear fog (#1224) | the body's position and ride (`PlacesBodies`) | `PlacesService` tick, after `Enroll(bot)` (session-only progress, `SessionFor`) | `PoiCatalogue.Near` | — | gap: the bot director does not call `Enroll` yet |
+| sync a viewpoint / use a stamp post (#1224) | `TryInteract` at a marker | `PlacesService.ServerInteract(peer, poiId)` | `PoiCatalogue.Near` ("nearest summit cross") | — | gap: no brain uses it (a guide bot later) |
 | BR crates, supply drops, death boxes: take | — | `BrCrates.TryTake` (a player's request goes through it too) | a crate within 120 m in sight (a ray), or within 25 m | `BotSkills.TakeOne`, `Wants` | ok |
 | a bot's own death box | — | `BrManager.DeathBox` from `Bot.Inventory` | — | — | ok |
 | building loot (furniture) | — | `LootService.ServeTake` needs the bot in the interior's space | — | `Loot` | gap: interiors on the server (a follow-up) |

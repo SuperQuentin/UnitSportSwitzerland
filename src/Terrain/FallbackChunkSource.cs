@@ -354,6 +354,9 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
     public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => _inner.LoadRopewayInfoAsync(ct);
 
+    /// <summary>The real region's places only (#1224): the generated fill has none.</summary>
+    public Task<byte[]?> LoadPoisAsync(CancellationToken ct = default) => _inner.LoadPoisAsync(ct);
+
     /// <summary>Farm fields (#494): the real tile's; a generated tile has none.</summary>
     public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
         Covers(id) ? Task.FromResult<List<FieldPolygon>?>(null) : _inner.LoadFieldsAsync(id, ct);

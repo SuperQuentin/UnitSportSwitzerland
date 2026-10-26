@@ -5,6 +5,8 @@
   and places) MUST go through `SyncFileAsync(kind, fileName, what, missingMsg, ct, onDone)` in
   `src/Net/ClientTerrainSync.cs`; put only the file-specific log and event in `onDone`.
 - Do not copy `SyncHorizonAsync`/`SyncPlacesAsync` bodies again.
+- Files on it today: places, landings, ropeways, `pois.bin` (`AssetKind.Pois`, #1224, `adventure/poi-catalogue`),
+  `atlas_facts.json` (`AssetKind.AtlasFacts` 18, #1224, `adventure/atlas`), horizon.
 
 ## Why
 #221 investigation 3/3, cluster #15: the two methods were the same 30 lines. Pure consolidation, no runtime change. PR #268.
