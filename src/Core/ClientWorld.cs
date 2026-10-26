@@ -1100,6 +1100,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
         }
+        // the rising air made visible (#1225): specks in the thermals near the camera, a cumulus over strong ones
+        if (_chunks != null && DisplayServer.GetName() != "headless") AddChild(new World.ThermalCues(_chunks, origin));
 
         // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
         if (Systems.On(Systems.Occasions))

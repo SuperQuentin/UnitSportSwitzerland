@@ -228,6 +228,14 @@ public partial class ClimbCheck : Node
         Expect(await Grab(), "grabs the lower wall");
         float before = _me.StaminaMeter.Points;
         await Shot("wall_climb");
+        await Shot("ring_third", own: true);
+        if (ShotsMode)
+        {
+            _me.DebugThirdPerson(false);
+            _me.LookPitch = 0.6f;
+            await Shot("ring_first", own: true);
+            _me.DebugThirdPerson(true);
+        }
         bool onLedge = await Until(() => !_me.IsClimbing && _me.IsOnFloor() && Height > Crag.LedgeH - 1, 25);
         float spent = before - _me.StaminaMeter.Points;
         Expect(onLedge, $"climbs {Crag.LedgeH} m and stands on the ledge (at {Height:F1} m, {_me.ClimbRefused})");
@@ -356,10 +364,17 @@ public partial class ClimbCheck : Node
 
     // ---- screenshots ----------------------------------------------------------------------
 
-    private async Task Shot(string name)
+    private async Task Shot(string name, bool own = false)
     {
         if (!ShotsMode) return;
         await Wait(1.2);
+        if (own)
+        {
+            // the player's own view: the HUD's stamina ring where the player sees it
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            Save(name);
+            return;
+        }
         var before = GetViewport().GetCamera3D();
         var side = East.Cross(Vector3.Up);
         var at = _me.GlobalPosition + Vector3.Up * 1.1f;
@@ -370,12 +385,17 @@ public partial class ClimbCheck : Node
         cam.MakeCurrent();
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        Save(name);
+        before?.MakeCurrent();
+        cam.QueueFree();
+    }
+
+    private void Save(string name)
+    {
         var dir = ProjectSettings.GlobalizePath("res://test_output/climb");
         System.IO.Directory.CreateDirectory(dir);
         string path = System.IO.Path.Combine(dir, name + ".png");
         var err = GetViewport().GetTexture().GetImage().SavePng(path);
         Log($"shot {path}: {err}");
-        before?.MakeCurrent();
-        cam.QueueFree();
     }
 }

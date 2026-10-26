@@ -47,14 +47,14 @@ public sealed partial class StaminaRing : ColorRect
         Visible = false;
     }
 
-    /// <summary>A body-anchored screen point pushed out of the centre 20 % of the screen (to the side it is on) and kept on screen.</summary>
+    /// <summary>A body-anchored screen point pushed out of the centre 20 % of the screen (to the right) and kept on screen.</summary>
     public static Vector2 ClampedOutOfCentre(Vector2 at, Vector2 screen)
     {
         var half = screen * 0.1f;
         var c = screen * 0.5f;
         var d = at - c;
         if (Mathf.Abs(d.X) < half.X && Mathf.Abs(d.Y) < half.Y)
-            at.X = c.X + (d.X < 0f ? -(half.X + Side * 0.5f) : half.X + Side * 0.5f);
+            at.X = c.X + half.X + Side * 0.5f;   // out to the right, beside the shoulder it belongs to
         float m = Side * 0.5f + 4f;
         return new Vector2(Mathf.Clamp(at.X, m, screen.X - m), Mathf.Clamp(at.Y, m, screen.Y - m));
     }
