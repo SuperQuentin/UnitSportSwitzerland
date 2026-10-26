@@ -191,6 +191,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // the venue list, its rules on a hand-made tile, and the real tiles when there are any (#1232)
+        if (Interiors.VenueProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.VenueProbe { Name = "VenueProbe" });
+            return;
+        }
         // the nine IKEA stores and one store built in code (#501): no terrain, no server
         if (Interiors.IkeaProbe.ParseArgs())
         {
@@ -541,6 +548,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(_chunks));   // neon over every venue (#1232)
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
         // tonight's concert in each stadium (#885)
