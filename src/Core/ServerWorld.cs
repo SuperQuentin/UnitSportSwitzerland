@@ -346,6 +346,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
             if (accounts.Mode == Net.Accounts.ServerAccounts.Required)
                 adventure.AccountKey = peer => gate?.Of(peer) is { } account ? "acct:" + account.UserId : null;
             _sleepers.Proven += adventure.PeerProven;
+            // climbs higher than the stamina rules allow, logged (#1225): no correction
+            AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);

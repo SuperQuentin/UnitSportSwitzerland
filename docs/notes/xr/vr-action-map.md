@@ -55,7 +55,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | creative mode (#1002): toggle_mode, then jump twice to fly, jump / crouch up and down, boost | T, Space Space, Space / Shift, Ctrl / D-pad ↓, A A, A / B, L3 | ok: wrist menu, then the pad's A A, A / B, L3 | keep |
 | spectator camera and back (#1002) | Shift+T / hold D-pad ↓ | ok: wrist menu "Spectator camera" | keep |
-| climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |
+| climb ladder; free climbing (#1225) | W / S on a ladder; on a face: push W into it (in the air, or 0.25 s on the ground), then WASD / L stick | ok: stick as on a pad (seated play); rock faces and walls hand over hand (`XrClimb`, #439), drawing from the stamina meter (1 /s, 9 a metre) where it counts | keep |
+| climb-jump / kick off / let go (#1225, on a face) | Space, S + Space, Ctrl / A, stick back + A, B | ok: the pad's A, stick back + A, B; by hand: a fast pull is the hand climb, push off with both hands and let go, open both hands | a fast pull > 2 m/s as the climb-jump's boost (not yet) |
 
 ## Items, building, inventory
 
