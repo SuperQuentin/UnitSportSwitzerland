@@ -15,11 +15,16 @@ tier 0.
 - `InTile(TileId)` (a `ReadOnlySpan`), `InCanton(code)`, `OfKind(kind)`, `Totals(code)` (tier 1/2 and land
   fog cells, from the file), static `InLake(lake, e, n, buffer)`.
 - `Empty` (generated world, an older server, a region without `--pois`), `Fixture(startE, startN)` /
-  `FixtureData` (ten POIs round the fixture start, canton VS: a crossed peak 72 m away, a pass, a tower,
+  `FixtureData` (ten POIs round the fixture start, canton VS, elevations above `FixtureGround` 500 m; the peak,
+pass, tower and station on the flat course's one tile: a crossed peak 72 m away, a pass, a tower,
   a chapel, a station, a village bus stop, a cable-car top, a castle, the lake course's landing and its
   ellipse as the lake).
 
 ## Loading: `PoiCatalogueHost`
+
+- Since part 2 the catalogue belongs to the places service's world but is still held here (`Current`); the
+  curated cards are applied before it is shared (`ApplyCards`: aliases, landmarks, `Cards` by POI).
+- `--pois <file>` loads a `pois.bin` of one's own instead of the source's (a region built with `--pois-file`).
 
 - `Current` is never null, replaced whole on the main thread, then `Changed`. A stand-in until the places
   service (plan 3, after #1223) owns the catalogue.

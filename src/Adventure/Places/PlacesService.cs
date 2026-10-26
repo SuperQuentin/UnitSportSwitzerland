@@ -140,6 +140,17 @@ public partial class PlacesService : Node
         if (Connected(peer)) RpcId(peer, MethodName.FogFull, s.Fog.ToBytes());
     }
 
+    /// <summary>
+    /// Server: a server-run bot (#837) finds places like a player from now on: progress for the session only
+    /// (<see cref="AdventureService.SessionFor"/>), never saved; its body comes from <see cref="BodyOf"/>.
+    /// </summary>
+    public void Enroll(long bot)
+    {
+        if (!Authority) return;
+        _adventure.SessionFor(bot);
+        StateOf(bot);
+    }
+
     /// <summary>Server: a peer left: its tracker goes (the service saves the progress, <see cref="FlushFog"/> first).</summary>
     public void PeerLeft(long peer) => _peers.Remove(peer);
 

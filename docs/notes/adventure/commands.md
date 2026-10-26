@@ -28,3 +28,18 @@
   back: still at step 2, hands the apple over, gets CHF 25, the chocolate and the title; in a
   Battle Royale lobby (`/br open here`, `/br join`) a start is refused, out of it it works; B (its own
   `user://`, A's name) gets fresh progress. RESULT line; logs `test_output/adventurenet_*.log`.
+
+## Places (#1224)
+
+- `--pois fixture`: the ten fixture POIs round the fixture start (the peak, pass, tower and station on the flat
+  course's one tile); `--pois <file>`: a `pois.bin` of one's own (its `atlas_facts.json` beside it) in place of
+  the chunk source's.
+- Quick: `--placescheck --world fixture --systems ui,physics,adventure --pois fixture` (offline, ~40 s): the
+  peak walked to and stamped (the event, the toast, the fog), a `"reveal"` reward, a jump onto the pass then
+  walked 300 m away and back, a car at the tower then on foot, E at the cross (sync, the 3 km disc, events, a
+  milestone), the Atlas and the map open, the save file read back.
+- Net: `tools/placesnetcheck.sh` (~3 min, port 7929): a server on the flat fixture with the fixture POIs; A walks
+  up the peak (stamped by the server: mirror and fog), drives to the tower (nothing) then walks (stamped), jumps
+  onto the station (nothing), syncs the cross by E (the 3 km disc in its fog); B, on at the same time with its
+  own `user://`, gets none of it; the server restarts and A keeps its stamps, view and fog. RESULT line; logs
+  `test_output/placesnet_*.log`.

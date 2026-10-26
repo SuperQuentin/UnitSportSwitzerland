@@ -3,7 +3,7 @@
 
 # Adventure places: POI catalogue, discovery, fog of war and the Swiss Atlas
 
-Status: **in progress**: parts 1 and 2 built (PR #1230); 3-7 wait for #1223's `AdventureService`. Tracking issue: #1224 (overview: #1228).
+Status: **built** (PR #1230): parts 1-8; the rest of the ~200 curated cards is a later content PR. Tracking issue: #1224 (overview: #1228).
 
 One of five Adventure plans (phases 1 and 2), written together: `adventure-objectives` (progress
 store, events, quests, `AdventureLog`), `adventure-navigation` (compass, pins, tracked marker, travel
@@ -28,12 +28,12 @@ into) and the phase-1 **interactable POI markers**.
 |---|---|---|
 | 1 POI stage and format | built (#1230) | `PoiStage` in the preprocessor: swissTLM3D names and objects, castles, ropeway ends -> `pois.bin` (`PoiFile` in `tools/TerrainFormat`) |
 | 2 Catalogue at runtime | built (#1230) | `PoiCatalogue`: loaded on server and clients, synced once (`AssetKind.Pois`), spatial queries, id and alias resolution |
-| 3 Discovery | planned | Server 1 Hz proximity check per kind, anti-cheat, `places` section, `PoiDiscovered`, the stamp toast |
-| 4 Fog of war | planned | 250 m cells, sparse per-tile masks in the `fog` section, own delta RPC, shader-drawn fog on the map |
-| 5 Viewpoints and markers | planned | Summit crosses, lookout towers, cable-car tops, passes: interact to sync, reveal fog; stamp posts; `Interacted` |
-| 6 Adventure map | planned | Free-roam map screen: relief + fog + POI icons, `IMapOverlay` for navigation's pins and travel points |
-| 7 Swiss Atlas | planned | `AdventureLog` tab: stamps and fact cards, completion per canton and per macro-region, `CantonMilestone` |
-| 8 Checks and notes | part (#1230: tier 0 for ids, file, `PoiPick`, catalogue; `--poischeck`; notes `adventure/poi-pipeline`, `poi-catalogue`) | Tier-0 tests, an offline quick probe on a fixture POI set, `tools/placesnetcheck.sh`, notes, map rows |
+| 3 Discovery | built (#1230) | Server 1 Hz proximity check per kind, anti-cheat, `places` section, `PoiDiscovered`, the stamp toast |
+| 4 Fog of war | built (#1230) | 250 m cells, sparse per-tile masks in the `fog` section, own delta RPC, shader-drawn fog on the map |
+| 5 Viewpoints and markers | built (#1230) | Summit crosses, lookout towers, cable-car tops, passes: interact to sync, reveal fog; stamp posts; `Interacted` |
+| 6 Adventure map | built (#1230) | Free-roam map screen: relief + fog + POI icons, `IMapOverlay` for navigation's pins and travel points |
+| 7 Swiss Atlas | built (#1230; 35 of ~200 curated cards) | `AdventureLog` tab: stamps and fact cards, completion per canton and per macro-region, `CantonMilestone` |
+| 8 Checks and notes | built (#1230: tier 0 `PoiTests`, `PlacesTests`; `--poischeck`, `--placescheck`, `tools/placesnetcheck.sh`; notes `adventure/poi-pipeline`, `poi-catalogue`, `places`, `fog`, `map`, `atlas`) | Tier-0 tests, an offline quick probe on a fixture POI set, `tools/placesnetcheck.sh`, notes, map rows |
 
 ## Goal
 
@@ -484,3 +484,29 @@ Parts 1 and 2 (#1230); the reasons are in `docs/notes/adventure/poi-pipeline.md`
   an older client never asks). The plan's one bump comes with the RPCs of 3-5.
 - **`PoiCatalogueHost`** (static) holds the catalogue until `PlacesService` (3) exists; `Fixture` takes the
   fixture start (`Fixture(startE, startN)`, `FixtureData` for a file).
+
+Parts 3-8 (#1230); the reasons are in `docs/notes/adventure/places.md`, `fog.md`, `map.md` and `atlas.md`.
+
+- **The travel rule** replaces the plan's per-kind "unmotorised" / "any ground mode" columns: one table,
+  `PlacesRules.Class(rideKind)` (on foot or a light aircraft), plus peaks, crosses and huts on foot only. A body
+  on a deck, a ski lift or in someone else's vehicle that is not a light aircraft is `Aboard` and reveals
+  nothing, so "a passenger in a train or cabin for peaks" needs no case of its own. A bridge is a point with a
+  30 m radius (the file has no midline).
+- **Fog never rides `SectionSync`**: `AdventureService` gained `SyncsItself`, `Loaded` (send `FogFull` then),
+  `Saving` (write the working mask first), `Peers`, `Withdraws`. `FogDelta` carries `int[]` masks (Godot has no
+  `ushort[]` variant).
+- **Quests reach a POI only by finding it** (`QuestEngine.PoisByDiscoveryOnly`, set by the places service):
+  otherwise the 2 Hz position check would complete a reach step from a car. Quests name canonical POI ids
+  (`QuestCatalog.Places`), since events carry canonical ids; aliases stay for rewards and cards.
+- **Tracking a place** is client-side for the session (`AdventureService.TrackPlace` / `UntrackPlace`), not a
+  server field: the quests section is unchanged, and navigation may persist pins in its own `pins` section.
+- **Landmarks** are tier 1 or any POI a curated card names (`PoiCatalogue.IsLandmark`), so the cards work on a
+  `pois.bin` built before them; completion counts the catalogue (tier 1, 2 and curated) instead of the file's
+  `Totals` (which agree once the region is rebuilt with the cards).
+- **The Map bar's canton** of a fog cell is the nearest POI's within 2 km (the file has no canton lattice).
+- **`atlas_facts.json` is synced** as `AssetKind.AtlasFacts = 18` (with the protocol bump to 51) and read lazily.
+- **Not built**: the "look out" camera turn (the sync shows a toast and the map's fog), the stamp toast's click to
+  the Atlas, the phone's Map button, party members on the map, the per-style marker variants, the viewshed. A
+  bot is enrolled by `PlacesService.Enroll`, which the bot director does not call yet.
+- **Fixture POIs** moved so the peak, pass, tower and station are on the flat course's one tile, with
+  elevations above its 500 m ground (`PoiCatalogue.FixtureGround`).
