@@ -66,7 +66,7 @@ pike 20-22) set the item values relative to each other. Lake centres are approxi
   **fish soup** (45); anything else → **grilled fish** (50). One cook row per fish, shown only while that
   fish is in the pack (`Recipe.OnlyWhenHeld`). Every dish is worth more than what goes in (`--invcheck`).
 - Groceries buy fish back (Food, 35 %) and sell perch and whitefish at the fish counter.
-- The field journal (`J`, the wrist menu in VR) has a **Fish** page; the rod in hand opens it there.
+- The Journal (`J`, the wrist menu in VR, `ui/adventure-log`) has a **Fish** tab; the rod in hand opens it there.
 
 ## Checks
 

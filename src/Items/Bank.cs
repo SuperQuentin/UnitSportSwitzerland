@@ -35,6 +35,9 @@ public partial class Bank : Node
 
     public static Bank? Instance { get; private set; }
 
+    /// <summary>A check's run (<c>--adventurecheck</c>): balances move, nothing is written, so the player's own account stays as it was.</summary>
+    public static bool Scratch { get; set; }
+
     /// <summary>Server: the display name of a peer, which keys its account.</summary>
     public Func<long, string>? NameOf { get; set; }
 
@@ -242,6 +245,29 @@ public partial class Bank : Node
         return true;
     }
 
+    /// <summary>
+    /// Pays <paramref name="amount"/> into the peer's account (a quest's reward, #1223): the account, not the
+    /// pocket, so a knock-out cannot lose it. On the server the owner is told its new balance; offline this
+    /// machine's account. Only the server (or an offline client) calls this. Returns the balance after.
+    /// </summary>
+    public long Credit(long peer, int amount, string why)
+    {
+        string who = _server ? Account(peer) : LocalName;
+        long had = _accounts.GetValueOrDefault(who);
+        if (amount <= 0) return had;
+        long balance = _accounts[who] = Math.Min(Net.AdminArgs.MaxBalance, had + amount);
+        SaveAccounts(_server ? ServerFile : LocalFile);
+        GD.Print($"[bank] {who} credited {amount} CHF ({why}), balance {balance}");
+        // never RpcId an id that is not a connected client's (a bot's: a negative id means "everyone but")
+        if (_server) { if (peer > 0 && Multiplayer.GetPeers().Contains((int)peer)) RpcId(peer, MethodName.Credited, amount, balance); }
+        else Report(balance);
+        return balance;
+    }
+
+    /// <summary>The server paid into this player's account (a reward): only the balance moves, never a pending claim.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Credited(int amount, long balance) => Report(balance);
+
     /// <summary>Client: the server says the account now holds this (after a card payment).</summary>
     public void Report(long balance)
     {
@@ -297,7 +323,10 @@ public partial class Bank : Node
     }
 
     // written in the background (json-store): a claim does not wait for the disk
-    private void SaveAccounts(string file) =>
+    private void SaveAccounts(string file)
+    {
+        if (Scratch) return;
         Core.JsonStore.SaveAsync(file, _accounts, Core.JsonStore.Indented,
             e => GD.PushWarning($"[bank] could not write {file}: {e.Message}"));
+    }
 }

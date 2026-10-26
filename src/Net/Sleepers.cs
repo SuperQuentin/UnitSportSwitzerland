@@ -40,6 +40,15 @@ public partial class Sleepers : Node
     private readonly Dictionary<long, byte[]> _nonces = new();
     private readonly Dictionary<long, string> _keyOf = new();
 
+    /// <summary>
+    /// Server: a peer proved its key (raised after it is that peer's identity, before a sleeper wakes). The
+    /// Adventure progress loads on it (#1223): progress is keyed by this, never by the requested name.
+    /// </summary>
+    public event Action<long, string>? Proven;
+
+    /// <summary>Server: the proven key (<see cref="PlayerKey.Fingerprint"/>) of a peer, or null (not proven, a bot).</summary>
+    public string? KeyOf(long peer) => _keyOf.GetValueOrDefault(peer);
+
     /// <summary>Server: the ground's altitude under an LV95 point, null while it is not loaded.</summary>
     public Func<double, double, double?>? GroundAt { get; set; }
 
@@ -118,6 +127,7 @@ public partial class Sleepers : Node
         }
         _keyOf[peer] = key;
         GD.Print($"[sleepers] peer {peer} is {key[..8]}");
+        Proven?.Invoke(peer, key);
 
         if (_book.Wake(key) is not { } s) return;
         Unshow(s.Id);

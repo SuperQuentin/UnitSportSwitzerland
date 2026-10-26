@@ -853,3 +853,14 @@ tools/TerrainFormat/PoiFile quick --poischeck --world fixture --pois fixture
 src/Terrain/IChunkSource  quick  --poischeck --world fixture --pois fixture
 src/Terrain/LocalChunkSource quick --poischeck --world fixture --pois fixture
 src/Net/ClientTerrainSync net    @netsmoke
+# #1223: the Adventure layer: progress store, quests, the Journal (offline quick probe; server + clients over loopback)
+src/Adventure/           quick  --adventurecheck --systems ui,physics,adventure
+src/Ui/AdventureLog      quick  --adventurecheck --systems ui,physics,adventure
+src/Ui/Quest             quick  --adventurecheck --systems ui,physics,adventure
+src/Birds/BirdJournal    quick  --adventurecheck --systems ui,physics,adventure
+src/Items/Bank           quick  --adventurecheck --systems ui,physics,adventure
+src/Adventure/           net    tools/adventurenetcheck.sh
+src/Net/Sleepers         net    tools/adventurenetcheck.sh
+src/Items/Bank           net    tools/adventurenetcheck.sh
+src/BattleRoyale/BrManager.cs net tools/adventurenetcheck.sh
+tools/adventurenetcheck.sh net  tools/adventurenetcheck.sh

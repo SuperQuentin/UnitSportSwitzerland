@@ -174,7 +174,7 @@ public partial class InviteProbe : ChatProbe
         await Until(() => GameClock.Now - held > 0.6, 10);
         var menu = QuickMenu.Instance;
         Expect(menu?.IsOpen == true, "a held F2 opens the quick menu");
-        Expect(menu?.Names.SequenceEqual(new[] { "Activities", "Invites", "Inventory", "Vehicles", "Map", "Phone", "Emotes", "Bird journal", "Controls" }) == true,
+        Expect(menu?.Names.SequenceEqual(new[] { "Activities", "Invites", "Inventory", "Vehicles", "Map", "Phone", "Emotes", "Journal", "Character", "Controls" }) == true,
             "its nine wedges, Activities at the top");
         if (Windowed) Shot("quickmenu");
         Press(Key.F2, false);
