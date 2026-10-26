@@ -439,8 +439,8 @@ acceptable once. Lookups by id go through `Resolve`, so a renamed slug matches t
 
 - ~~Flying and fog~~ **Decided** (3, "How you travel"): only on foot or in light aircraft.
 - ~~M in adventure mode~~ **Decided**: M opens the adventure map while the adventure is active (6).
-- **Bus stops**: 23 000 minor POIs, mostly city stops; keep them all for travel and stamps, or only
-  `VillageStop` ones outside towns?
+- ~~Bus stops~~ **Decided**: keep all ~23 000 for travel and stamps. They stay Tier 3, so they don't
+  count toward canton %. `VillageStop` only picks the stop shown when a map cluster is zoomed out.
 - **Hospices** (navigation's optional `PassHospice`): a building at a pass is not flagged in TLM;
   match GWR names (Hospiz, Hospice, Ospizio) within 300 m of a pass in a later pass?
 - **Viewshed reveal** (phase 2): worth the build time (~1 100 viewpoints x 180 rays on the coarse

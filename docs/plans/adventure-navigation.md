@@ -187,9 +187,9 @@ line), with a sound that comes from the way to go.
 
 From the places catalogue: kinds `RailStation`, `BusStop` (PostBus and others), `ShipLanding`,
 `CableCarStation` (top and bottom of a line) and, optionally, `PassHospice`. Only a subset is a
-travel point: every rail station, a bus stop only when it is the **named village stop** (one per
-locality, the places plan picks it) so the map is not a cloud of thousands, every ship landing on
-the big lakes, both ends of every cable car and gondola (not chairlifts or T-bars). The cable-car
+travel point: every rail station, **every bus stop** (decided: all ~23 000 are kept; the map and the
+board cluster them by locality when zoomed out, so the map is not a cloud of thousands), every ship
+landing on the big lakes, both ends of every cable car and gondola (not chairlifts or T-bars). The cable-car
 POIs should carry the `RopewayService` line `Key` (`world/ski-lifts`), so the station sign stands
 where the in-game gondola actually leaves.
 
@@ -240,9 +240,9 @@ glyph, the BLS/CGN landing board, a ropeway station board. One mesh per kind, bu
   *Generalabonnement*; 400-419 belong to the rewards plan) unlocks (b)-(d) from anywhere. It works
   while held anywhere in the inventory, is never lost on a knock-out (a key item like the phone), and is
   earned once:
-  - by the starter quest "All aboard" (unlock 5 travel points), or
+  - by the quest "Grand tour" (unlock 50 travel points in at least 5 cantons), or
   - bought at an SBB ticket office (a station `interact`, charged to the bank account with
-    `Bank.Charge`, price in `TravelRules.GaPrice`).
+    `Bank.Charge`) at the real price, CHF 3,995 (2nd class adult; 4,095 from 13 December 2026).
 
   The server checks it in `MayTravel`. The inventory is the client's, so the server trusts
   `TravelBook.HasGa`, written when the server grants or sells the card.
@@ -261,6 +261,31 @@ glyph, the BLS/CGN landing board, a ropeway station board. One mesh per kind, bu
 - **Refused** (the board greys the row with the reason, the server re-checks): not unlocked; in a BR
   match (`BrManager.Playing`); downed or in a fist fight; in a race; driving a vehicle (dismount
   first; a horse or bike you ride is left, equipment comes along); within 10 s of the last travel.
+
+### 5.7 Fares (decided: based on SBB prices)
+
+Every trip costs a ticket, paid from the bank account (`Bank.Charge`, no overdraft; the board shows
+the price on each row and greys rows the player cannot afford). Prices are real Swiss prices in
+in-game francs, kept as data in `TravelRules` (`res://assets/adventure/fares.json`) so they can be
+updated with each December timetable change:
+
+- **Rail and bus**: the SBB distance tariff. The distance is the straight line between the two
+  points times a 1.25 detour factor (there is no rail graph to route on), looked up in the tariff's
+  kilometre bands, 2nd class, with the minimum fare for short hops.
+- **Ships**: the lake operator's tariff by distance (CGN, SGV, BLS, URh...), same method.
+- **Cable cars**: the line's own one-way price, from its operator, per line `Key`. A small default
+  covers lines without a known price.
+- **Discounts**:
+  - The **half-fare travelcard** (`ItemId.HalfFare` = 421, CHF 190; 195 from 13 December 2026) halves
+    every fare, cable cars included, as in reality. It is the "All aboard" quest's reward.
+  - The **GA card** makes rail, bus and ship trips free, halves cable cars, and allows travel from
+    anywhere (5.3).
+- **Server trust**: the server prices and charges the trip in `MayTravel`; the client's numbers are
+  display only. Ownership of both cards is held in `TravelBook` (`HasGa`, `HasHalfFare`).
+- **Economy**: real prices are large next to today's quest rewards (60-150 francs), on purpose: the
+  half-fare card is reachable in an evening, the GA is a long-term goal. The objectives plan's reward
+  amounts and `econcheck` get balanced against this table in the navigation PR.
+- **Free modes**: `TravelMode.Free` (the default sandbox) charges nothing; admins never pay.
 
 ### 5.4 Travel modes: how `network` coexists with free travel
 
@@ -407,10 +432,8 @@ Server-run bots (#837) have no HUD: the compass, pins, marker and wind are n/a. 
 
 1. ~~Travel from anywhere or only at a sign~~ **Decided**: from a sign; from anywhere once the player
    holds the GA card (5.3). `NetworkStrict` is dropped.
-2. **A fare?** The economy (`econcheck`) could charge a ticket (half-fare card as a reward). Left to
-   the rewards plan; `MayTravel` takes a cost hook.
-3. **Bus stop density**: one named stop per locality (proposed) or every TLM stop within a small
-   radius of discovery? Places plan to say what its catalogue holds.
+2. ~~A fare?~~ **Decided**: yes, on SBB prices (5.7).
+3. ~~Bus stop density~~ **Decided**: every stop is a travel point.
 4. **Undiscovered POIs on the compass** as "?" marks within 3 km (curiosity, BotW towers) or nothing
    until discovered? Places plan's fog rules decide; the compass draws whatever `Near` returns.
 5. **Real rides**: later, the board could put the player on a real `traffic-trains` train or a

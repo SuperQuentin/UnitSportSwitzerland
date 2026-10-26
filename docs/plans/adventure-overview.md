@@ -90,6 +90,15 @@ its feature branch (`general/plans-on-main`).
 - **Atlas texts**: every POI gets a generated line plus Wikidata facts (CC0). Claude drafts the ~200
   curated cards, and the team reviews them in a PR. Player-suggested facts may come later
   (`adventure-places` 1).
+- **Fares** on real SBB prices, paid from the bank account (`adventure-navigation` 5.7). The
+  half-fare card (CHF 190) halves fares and is the reward of "All aboard" (5 points). The GA
+  (CHF 3,995) makes trips free and allows travel from anywhere; it is earned by "Grand tour" (50 points
+  in 5 cantons) or bought.
+- **Bus stops**: all ~23 000 are kept, as travel points and stamps.
+- **Luxurious chests** come back every 1 August.
+- **Accounts**: on `--accounts required` servers, progress is keyed by the Nakama account.
+- **Photo spots**: Claude drafts the ~30 with the Atlas cards, for the team to review.
+- **Stamina feel**: sprinting and gliding start free; playtests decide.
 
 ## Rules each PR checks
 
@@ -107,10 +116,5 @@ its feature branch (`general/plans-on-main`).
 
 The questions are collected from the five plans; each plan has the full list.
 
-- **Accounts**: on `--accounts required` servers, key progress by the Nakama account instead of the
-  install key?
-- **Travel**: a fare? One bus stop per locality or all 23 000? What does the GA card cost?
-- **Chests**: does a Luxurious chest come back every year?
-- **Stamina feel**: sprinting and gliding are free in this design. Playtests decide whether they cost
-  stamina. Climbing in a Battle Royale is off for now.
-- **Content**: the ~30 photo spots: Claude drafts them with the Atlas cards, for the team to review?
+- **Climbing in a Battle Royale**: off for now.
+- The other open points are listed in each plan's own "Open questions".

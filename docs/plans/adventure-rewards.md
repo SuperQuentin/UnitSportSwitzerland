@@ -204,7 +204,7 @@ single-entrant race of a new `RaceKind.Trial` with a **fixed course** made from 
 
 ## 7. Photo quests and the fauna page
 
-- **Photo spots** (`PhotoSpots.cs`): ~30 hand-written famous views (Matterhorn from the Riffelsee,
+- **Photo spots** (`PhotoSpots.cs`): ~30 famous views (drafted by Claude with the Atlas cards, reviewed by the team) (Matterhorn from the Riffelsee,
   the Oeschinensee from above, Lavaux over the Léman, the Chillon castle, the Kapellbrücke, the
   Aletsch glacier from the Eggishorn, the Rheinfall, ...) plus one per viewpoint POI. A spot is a
   standing area (centre, radius 150 m) and a target (LV95 point + height).
@@ -369,4 +369,5 @@ weight (ok, nothing to build). Sense for a future co-op bot: the same `RewardPla
    strings, if the objectives plan prefers.
 5. Ibex, chamois and marmots as wildlife (not only guides) are a system of their own: a new plan.
 6. ~~Leaderboards per server or global~~ **Decided**: per server.
-7. Does a Luxurious chest respawn yearly (an "edition", like occasion instances), or once ever?
+7. ~~Luxurious yearly or once~~ **Decided**: yearly. Each Luxurious chest gets a new edition every
+   1 August (Swiss National Day), keyed `ch:<id>#<year>`, so it can be opened once a year.

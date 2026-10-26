@@ -314,7 +314,11 @@ Q("aletsch-glide", "Over the ice", "Unlock Bettmerhorn's cable car, then glide t
 
 Q("all-aboard", "All aboard", "Unlock five stations, stops, landings or cable cars.",
   [Unlock(Count: 5)],
-  [Item(ItemId.GaCard, 1)]) { Start = Start.OnEvent };   // the GA card: travel from anywhere (navigation 5.3)
+  [Item(ItemId.HalfFare, 1)]) { Start = Start.OnEvent };  // half-fare card: fares halved (navigation 5.7)
+
+Q("grand-tour", "Grand tour", "Unlock 50 travel points in at least five cantons.",
+  [Unlock(Count: 50, Cantons: 5)],
+  [Item(ItemId.GaCard, 1)]) { Requires = ["all-aboard"] };  // the GA card: travel from anywhere (navigation 5.3)
 ```
 
 Exercises: places (Reach, Discover, reveal), navigation (tracker target, travel unlock), stamina
@@ -394,8 +398,10 @@ progress" (n/a: no identity, never saved).
 - **POI ids**: the places plan must give ids that survive a preprocessor rerun (swissTLM3D UUID, or
   `kind:slug` with a collision suffix). Quests reference them; a tier-0 test checks them against the
   catalogue.
-- **Accounts**: with `--accounts required`, key by the Nakama account instead of the install key so
-  progress follows a player across machines? The envelope's `key` would then be `acct:<id>`.
+- ~~Accounts~~ **Decided**: on a `--accounts required` server, progress is keyed by the Nakama account
+  (`AccountGate.Of(peer).UserId`), so it follows the player across machines. The envelope's `key` is
+  `acct:<userId>` and the file `user://adventure/players/acct_<userId>.json`. Other servers keep the
+  PlayerKey fingerprint. No merge between the two in phase 1.
 - Should a host's offline progress seed their hosted server's? (Here: no, separate.)
 - Does a title show on the name tag (a replicated field, a protocol bump), or only in the log?
 - Cash to the account (here) or to the pocket, where a knock-out can lose it?
