@@ -282,6 +282,10 @@ public static partial class HumanMeshBuilder
     public static void PoseFalling(SkinnedFigure f, float t, ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, Vector3 wind = default) =>
         PoseRig(f, ApplyArms(FallRig(t), arm, armBlend), wind);
 
+    /// <summary>Creative flight (#1219) between the hover and Superman (<see cref="FlyRig"/>).</summary>
+    public static void PoseFlying(SkinnedFigure f, float lean, float t, ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, Vector3 wind = default) =>
+        PoseRig(f, ApplyArms(FlyRig(lean, t), arm, armBlend), wind);
+
     /// <summary>A swimmer at <paramref name="phase"/> of its stroke (<see cref="BuildSwim"/>'s).</summary>
     public static void PoseSwim(SkinnedFigure f, SwimStyle style, float phase) => PoseRig(f, SwimRig(style, phase), Vector3.Zero);
 

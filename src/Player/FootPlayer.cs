@@ -294,7 +294,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         return ok && kept;
     }
 
-    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/>, <see cref="PoseFall"/> or <see cref="PoseTucked"/>.</summary>
+    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/>, <see cref="PoseFall"/>, <see cref="PoseFly"/> or <see cref="PoseTucked"/>.</summary>
     [Export] public int PoseKind { get; set; }
 
     /// <summary>
@@ -2079,6 +2079,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (CreativeFlying) { PublishFlyPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -2107,6 +2108,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
             new Vector3(0, Mathf.Abs(_downRot) * 0.12f, 0));
+        SettleFlyPose(dt);
     }
 
     /// <summary>
@@ -2320,9 +2322,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
                 (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
             : null;
-        // a fall's windmill runs on this peer's clock: nothing more is replicated than the pose kind
-        _flailClock = PoseKind == PoseFall ? _flailClock + dt : 0f;
-        float phase = PoseKind == PoseFall ? _flailClock : _stridePhase;
+        // a fall's windmill and a hover's paddle (#1219) run on this peer's clock: nothing more is replicated than the pose kind
+        _flailClock = PoseKind is PoseFall or PoseFly ? _flailClock + dt : 0f;
+        float phase = PoseKind is PoseFall or PoseFly ? _flailClock : _stridePhase;
         var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
@@ -2334,6 +2336,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
                 PoseFall => Avatar.HumanMeshBuilder.MountsForFall(_flailClock, arm, blend),
+                PoseFly => Avatar.HumanMeshBuilder.MountsForFly(Anim.X, _flailClock, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
                 PoseSit => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Standing, arm, blend),
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
@@ -2353,6 +2356,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 case PoseTucked: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Tucked, arm, blend, wind); break;
                 case PoseAir: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Running, arm, blend, wind); break;
                 case PoseFall: Avatar.HumanMeshBuilder.PoseFalling(_walker, _flailClock, arm, blend, wind); break;
+                case PoseFly: Avatar.HumanMeshBuilder.PoseFlying(_walker, Anim.X, _flailClock, arm, blend, wind); break;
                 case PoseHang or PoseClimb: Avatar.HumanMeshBuilder.PosePosed(_walker, CarriedFigure(), arm, blend, wind); break;
                 // seated on a stand (#885): the figure round its hip, which BodyPose lifts
                 case PoseSit: Avatar.SeatedFigure.Pose(_walker, new Avatar.SeatAnchor(0, new Vector3(0, Anim.X, 0), Anim.Y, 0f)); break;
