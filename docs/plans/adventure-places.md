@@ -132,6 +132,14 @@ written next to the chunks (`terrain_chunks/` is `.gdignore`d), region-wide, not
 - **Budget**: ~45 000 x 32 B + ~0.9 MB names + ~0.5 MB outlines = **~2.9 MB nationwide**
   (~1.2 MB deflated on the wire), ~65 B per tile on average; Western Valais ~150 KB.
 
+Card text comes in three layers:
+1. A **generated line** from the POI's own data: kind, height, canton, nearest town.
+2. **Wikidata facts**: the preprocessor matches each POI to a Wikidata item by name, kind and distance
+   (< 500 m) and stores a few structured facts (first ascent, year built, length, an image credit) in
+   `atlas_facts.json`. Wikidata is CC0, so no attribution is needed. A match below the confidence
+   score is dropped, never guessed.
+3. **Curated cards** for the ~200 famous landmarks, drafted by Claude from layer 2 and reviewed in a PR.
+
 Curated cards are **not** in the file: `res://assets/adventure/atlas_cards.json` (~200 entries,
 English: `{ "alias", "id", "title", "fact" }`), shipped with the game like
 `assets/account-server.json`, so a fact can be fixed without rebuilding tiles. A tier-0 test checks
@@ -189,6 +197,17 @@ instance plays the server part). The rules are pure: `DiscoveryRules` (unit-test
   | BusStop | 30 m | AGL < 20 m |
 
 - **Two consecutive hits** discover (as navigation's unlock): a jump-cut through a radius does not.
+- **How you travel (decided)**: discovery and fog count only when the player is **on foot** or flying a
+  **light aircraft**.
+  - On foot covers walking, running, climbing, swimming, skiing, the paraglider, the wingsuit and the
+    pigeon.
+  - Light aircraft are small planes, gliders and helicopters.
+  - Commercial aircraft (the airliners with cockpits) and every ground vehicle (cars, trucks, buses,
+    bikes, boats, trains) reveal nothing: you have to get out.
+
+  The check is one server-side table, `PlacesRules.Reveals(rideKind)`, keyed on the ride kind the
+  server already replicates, so changing the rule is a one-line edit. Mounts will count as on foot
+  once they exist.
 - **Earned by moving**: positions are client-authoritative (`src/Net/CLAUDE.md`), so the server
   flags a **jump** when a 1 s step exceeds what the replicated ride can do (foot/mount 40 m/s, car
   90, aircraft 320). After a jump, nothing within 300 m of the landing point is discovered and no fog
@@ -292,7 +311,7 @@ instance plays the server part). The rules are pure: `DiscoveryRules` (unit-test
 ### 7.1 Where
 
 A tab of `Ui/AdventureLog`: `AdventureLog.RegisterTab("atlas", "Atlas", 20, BuildAtlas)` (quests are
-the log's first tab; the log opens on Shift+J). Also reached from the adventure map's card ("Show in
+the log's first tab; the Journal opens on J). Also reached from the adventure map's card ("Show in
 Atlas") and from a **stamp toast** click. Built with `UiKit` / `UiTheme`, follows `ui/ux-guidelines`
 (self-review checklist before the PR) and `ui/style-guide`; rebuilt on `SectionChanged("places")`
 only, with a shape string, as `ActivitiesScreen` does.
@@ -334,7 +353,7 @@ only, with a shape string, as `ActivitiesScreen` does.
 |---|---|---|---|
 | sync a viewpoint / use a stamp post | `interact_mount` (E) at the marker | Y | reach out and **grip the cross, telescope or stamp box** (`TryInteract(byHand)`) |
 | open the adventure map | M (adventure active) | quick menu › Map | wrist menu › Map; the map on the `XrUi` panel, the ray clicks |
-| open the Atlas | Shift+J, then the Atlas tab (Q/E) | quick menu › Journal, LB/RB to Atlas | wrist menu › Journal |
+| open the Atlas | J, then the Atlas tab (Q/E) | quick menu › Journal, LB/RB to Atlas | wrist menu › Journal |
 | map: pan, zoom, select | drag, wheel, click | right stick, shoulders, A | ray drag (position difference, as `MapScreen`), the ray's trigger |
 | card: track / show on map / back | T or button / button / Esc | Y / X / B | ray + trigger; B |
 
@@ -418,10 +437,8 @@ acceptable once. Lookups by id go through `Resolve`, so a renamed slug matches t
 
 ## Open questions
 
-- **Flying and fog**: a plane at 300 m reveal radius clears a canton in minutes. Keep it (flying is a
-  core way to see Switzerland), reveal nothing above some AGL, or reveal at a lower rate in the air?
-- **M in adventure mode** opening the adventure map instead of the place search changes a long-held
-  key; or keep M as is and give the map its own entry (no free letter, see objectives' open question)?
+- ~~Flying and fog~~ **Decided** (3, "How you travel"): only on foot or in light aircraft.
+- ~~M in adventure mode~~ **Decided**: M opens the adventure map while the adventure is active (6).
 - **Bus stops**: 23 000 minor POIs, mostly city stops; keep them all for travel and stamps, or only
   `VillageStop` ones outside towns?
 - **Hospices** (navigation's optional `PassHospice`): a building at a pass is not flagged in TLM;
@@ -432,5 +449,7 @@ acceptable once. Lookups by id go through `Resolve`, so a renamed slug matches t
   join (ODbL, as castles)?
 - **Party**: should party members see each other's new stamps as a chat line, or the Atlas show
   "also stamped by"? (Here: nothing shared.)
-- **Card texts**: who writes the ~200 curated facts, and are cards ever translated (the repo is
-  English only; a player-facing translation would be a separate data file)?
+- ~~Card texts~~ **Decided** (1): every POI gets a generated line plus Wikidata facts. Claude drafts
+  the ~200 curated cards from those facts, and the team reviews them in a PR. Player-suggested facts
+  (moderated) may come later. Translation stays open: the repo is English only, so a player-facing
+  translation would be a separate data file.

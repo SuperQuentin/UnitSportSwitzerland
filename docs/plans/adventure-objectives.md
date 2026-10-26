@@ -311,6 +311,10 @@ Q("rigi-chest", "Queen of the mountains", "Reach Rigi Kulm and open the chest ne
 Q("aletsch-glide", "Over the ice", "Unlock Bettmerhorn's cable car, then glide the Aletsch rings under 3 minutes.",
   [Unlock(PointId: "cablecar:bettmerhorn"), Trial("trial:aletsch-rings", MaxSeconds: 180)],
   [Title("Glacier glider"), Item(ItemId.HotChocolate, 2)]) { Canton = "VS", Requires = ["uri-passes"] };
+
+Q("all-aboard", "All aboard", "Unlock five stations, stops, landings or cable cars.",
+  [Unlock(Count: 5)],
+  [Item(ItemId.GaCard, 1)]) { Start = Start.OnEvent };   // the GA card: travel from anywhere (navigation 5.3)
 ```
 
 Exercises: places (Reach, Discover, reveal), navigation (tracker target, travel unlock), stamina
@@ -320,7 +324,7 @@ Exercises: places (Reach, Discover, reveal), navigation (tracker target, travel 
 
 | Action | Keyboard | Pad | VR |
 |---|---|---|---|
-| open the adventure log (`adventure_log`) | Shift+J (J stays the bird journal) | quick menu (hold Back) › **Adventure** | wrist menu › Adventure; phone › Adventure app |
+| open the Journal (`journal`, the existing bird-journal action) | J | quick menu (hold Back) › **Adventure** | wrist menu › Adventure; phone › Adventure app |
 | tabs / list / buttons | Q E, arrows, Enter, mouse | LB RB, D-pad, A; B back | laser pointer + trigger; B back via `XrPad` |
 | track / start / abandon | buttons in the log | A on the button | trigger on the button |
 | hand over a delivery | `interact` (E) on the target marker | X / the `interact` button | grip the marker or trigger (R1: no reachable lever, so pad via `XrPad`) |
@@ -383,8 +387,10 @@ progress" (n/a: no identity, never saved).
 
 ## Open questions
 
-- **Key for the log**: Shift+J, or one **Journal** on J with tabs (Quests, Atlas, Birds, Fish), which
-  would fold the bird journal into `AdventureLog` tabs? Every letter is bound somewhere.
+- ~~Key for the log~~ **Decided**: one **Journal** on J with tabs. `AdventureLog` becomes the Journal,
+  and the bird journal (`BirdJournal`) moves into it as the Birds tab, beside Quests, Atlas,
+  Collection, Travel and Fish. Birds is always shown; the adventure tabs show only while the adventure
+  is active. Shift+J is not used.
 - **POI ids**: the places plan must give ids that survive a preprocessor rerun (swissTLM3D UUID, or
   `kind:slug` with a collision suffix). Quests reference them; a tier-0 test checks them against the
   catalogue.

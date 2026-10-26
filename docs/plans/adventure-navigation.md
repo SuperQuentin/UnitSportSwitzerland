@@ -234,9 +234,18 @@ glyph, the BLS/CGN landing board, a ropeway station board. One mesh per kind, bu
   **Travel tab of `Ui/AdventureLog`** (`AdventureLog.RegisterTab("travel", "Travel", 40, DepartureBoard.BuildTab)`):
   the same board, every unlocked point by canton and kind, with Travel and Track; (c) the adventure
   map: select an unlocked point → **Travel**; (d) the phone's Map app, which in `network`
-  mode lists unlocked points (nearest first, search by name) instead of every place. From the map and
-  the phone you may travel from anywhere (Genshin's convenience; the server option
-  `--adventure-travel network-strict` limits it to standing at an unlocked sign, see Open questions).
+  mode lists unlocked points (nearest first, search by name) instead of every place.
+- **Decided: from a sign by default; from anywhere with the GA card.** Without the item, a player
+  travels only from an unlocked sign (a). The **GA card** (`ItemId.GaCard` = 420, the Swiss
+  *Generalabonnement*; 400-419 belong to the rewards plan) unlocks (b)-(d) from anywhere. It works
+  while held anywhere in the inventory, is never lost on a knock-out (a key item like the phone), and is
+  earned once:
+  - by the starter quest "All aboard" (unlock 5 travel points), or
+  - bought at an SBB ticket office (a station `interact`, charged to the bank account with
+    `Bank.Charge`, price in `TravelRules.GaPrice`).
+
+  The server checks it in `MayTravel`. The inventory is the client's, so the server trusts
+  `TravelBook.HasGa`, written when the server grants or sells the card.
 - **The board** (`src/Adventure/DepartureBoard.cs`, one `Control` used both as the AdventureLog tab
   and, at a sign, alone in a screen panel in `UiTheme` glass, the SBB look
   in its own colours: dark blue rows, white text, amber for the selected row): destination, the
@@ -257,13 +266,12 @@ glyph, the BLS/CGN landing board, a ropeway station board. One mesh per kind, bu
 
 Today: `Arrival.Rules` carries `FreeTeleport` (`--no-teleport` turns it off; `Permissions.CanTeleport`
 greys the place search, the phone map, the VR hand map; the server refuses `/city`). This plan
-widens the bool into **`TravelMode { Free, Network, NetworkStrict, Off }`**:
+widens the bool into **`TravelMode { Free, Network, Off }`**:
 
 | Mode | Server flag | Place search (M), `/city`, phone free search, VR hand map, fly camera return | Adventure travel |
 |---|---|---|---|
 | Free (default) | none | as today | allowed too |
-| Network | `--adventure-travel network` | refused for non-admins | from anywhere to unlocked points |
-| NetworkStrict | `--adventure-travel network-strict` | refused for non-admins | only from an unlocked sign |
+| Network | `--adventure-travel network` | refused for non-admins | to unlocked points, from a sign, or from anywhere with the GA card |
 | Off | `--no-teleport` (kept as the alias) | refused | refused |
 
 - `Permissions.CanTeleport` stays (free jumps); a new `Permissions.Travel` exposes the mode. Admins
@@ -397,8 +405,8 @@ Server-run bots (#837) have no HUD: the compass, pins, marker and wind are n/a. 
 
 ## Open questions
 
-1. **Travel from anywhere or only at a sign** by default in `network` mode? This plan picks anywhere
-   (Genshin) with `network-strict` for servers that want the walk to the station.
+1. ~~Travel from anywhere or only at a sign~~ **Decided**: from a sign; from anywhere once the player
+   holds the GA card (5.3). `NetworkStrict` is dropped.
 2. **A fare?** The economy (`econcheck`) could charge a ticket (half-fare card as a reward). Left to
    the rewards plan; `MayTravel` takes a cost hook.
 3. **Bus stop density**: one named stop per locality (proposed) or every TLM stop within a small

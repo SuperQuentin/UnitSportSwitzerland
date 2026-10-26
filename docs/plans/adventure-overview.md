@@ -68,11 +68,28 @@ its feature branch (`general/plans-on-main`).
   at most (200). There are ~9 000 edelweiss nationwide, so the cap is reached in a few cantons.
 - **Items**: `ItemId` 400-419 is reserved for the rewards plan. Other plans take another block.
 - **Protocol**: each PR bumps `Net/Handshake.Protocol` once for its own RPCs (49 before the first).
-- **Keys proposed**:
-  - Shift+J opens the log. J stays the bird journal; merging the two is an open question.
+- **Keys**:
+  - J opens one **Journal** with tabs: Quests, Atlas, Collection, Travel, Birds, Fish. The bird journal
+    becomes its Birds tab.
+  - M opens the adventure map while adventuring (the place search otherwise, `BrMap` in a BR round).
   - N gives the guiding gust (the quick menu's Guide wedge on pad).
-  - M opens the adventure map while adventuring (open question).
   - Every action has its pad and VR form in its plan's Devices section.
+
+## Decisions taken (October 26, 2026)
+
+- **Journal**: one Journal on J with tabs, as above.
+- **Map**: M opens the adventure map.
+- **Travel**: from an unlocked sign by default. The **GA card** (`ItemId.GaCard` = 420, earned by the
+  "All aboard" quest or bought at an SBB ticket office) allows travel from anywhere. `NetworkStrict` is
+  dropped (`adventure-navigation` 5.3).
+- **Discovery and fog**: only on foot (including climbing, swimming, skiing, the paraglider, wingsuit
+  and pigeon) or in a light aircraft (small planes, gliders, helicopters). Airliners and every ground
+  vehicle reveal nothing (`adventure-places` 3).
+- **Chests**: an opened chest disappears for that player.
+- **Trial leaderboards**: per server.
+- **Atlas texts**: every POI gets a generated line plus Wikidata facts (CC0). Claude drafts the ~200
+  curated cards, and the team reviews them in a PR. Player-suggested facts may come later
+  (`adventure-places` 1).
 
 ## Rules each PR checks
 
@@ -90,17 +107,10 @@ its feature branch (`general/plans-on-main`).
 
 The questions are collected from the five plans; each plan has the full list.
 
-- **Log key**: Shift+J, or one Journal on J with tabs (Quests, Atlas, Birds, Fish)? Should M open the
-  adventure map?
 - **Accounts**: on `--accounts required` servers, key progress by the Nakama account instead of the
   install key?
-- **Travel**: from anywhere or only at a sign in `network` mode? A fare? One bus stop per locality or
-  all 23 000?
-- **Flying and fog**: should a plane clear the map from the air, or should only travel at ground level
-  reveal it?
-- **Chests**: does an opened chest disappear or stay open and empty? Does a Luxurious chest come back
-  every year?
-- **Leaderboards**: are trial leaderboards per server or global through Nakama?
+- **Travel**: a fare? One bus stop per locality or all 23 000? What does the GA card cost?
+- **Chests**: does a Luxurious chest come back every year?
 - **Stamina feel**: sprinting and gliding are free in this design. Playtests decide whether they cost
   stamina. Climbing in a Battle Royale is off for now.
-- **Content**: who writes the ~200 Atlas fact cards and the ~30 photo spots?
+- **Content**: the ~30 photo spots: Claude drafts them with the Atlas cards, for the team to review?

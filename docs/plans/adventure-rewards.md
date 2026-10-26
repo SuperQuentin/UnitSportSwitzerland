@@ -361,13 +361,12 @@ weight (ok, nothing to build). Sense for a future co-op bot: the same `RewardPla
 
 ## Open questions
 
-1. Should an opened chest disappear (Genshin) or stay open and empty for that player (more Swiss, a
-   landmark)? The plan says disappear after the reveal.
+1. ~~Disappear or stay open~~ **Decided**: an opened chest disappears for that player after the reveal.
 2. Party co-op on seals: the plan counts a party member's step within 60 m. Should it also count
    for strangers who help (public events feel)?
 3. Does the stamina curve want edelweiss per level of 5 (the plan) or Genshin's growing cost?
 4. The progress store's size: ~50 000 chest ids per completionist. Bitsets per tile instead of
    strings, if the objectives plan prefers.
 5. Ibex, chamois and marmots as wildlife (not only guides) are a system of their own: a new plan.
-6. Are trial leaderboards per server (the plan) or global through Nakama (`nakama-on-server`)?
+6. ~~Leaderboards per server or global~~ **Decided**: per server.
 7. Does a Luxurious chest respawn yearly (an "edition", like occasion instances), or once ever?
