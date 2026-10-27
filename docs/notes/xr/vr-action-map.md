@@ -194,7 +194,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
-| chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
+| chat | Enter, / | partly (#1277): the quick menu's Chat wedge opens it with the "/" picker, the commands and their words as buttons the ray presses; free text still no keyboard | laser key grid on the `XrUi` panel, for free text |
+| chat coordinates: Teleport, Track, Map, Copy (#1277) | click the buttons under a line with `@E,N` | ok: the ray on the open chat (`XrUi` draws it) | keep |
 | watch | — | ok: Swiss watch on the drawn left wrist (#439, #1097); read it and the radial menu opens over it | keep |
 | save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
 | movie studio timeline (#638, markers #656, camera keys #669, cameras #675) | Space J K L, ← →, S, Del, M, I, V, 1-9, C / Y, LT RT, D-pad, X (hold: cut to camera), R3, View, L3, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |

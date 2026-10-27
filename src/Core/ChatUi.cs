@@ -64,6 +64,7 @@ public partial class ChatUi : CanvasLayer
     private Button _slash = null!;
     private ScrollContainer _pickerScroll = null!;
     private HFlowContainer _picker = null!;
+    private Label _pickerUsage = null!;
     private bool _pickerOn;
 
     /// <summary>The chat on this screen, for the quick menu's Chat wedge.</summary>
@@ -124,9 +125,21 @@ public partial class ChatUi : CanvasLayer
         _chat.NamesReceived += () => Callable.From(() => { if (IsTyping) RefreshSuggestions(); }).CallDeferred();
 
         Append(Platform.IsTouch ? "CHAT (top right) to chat, / for commands." : "Press Enter to chat, / for commands.", ChatKind.System);
-        // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines
+        // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines;
+        // "--chatsend <line>" sends a line a few seconds before (a /locate answer to picture, #1277), and
+        // "--chatpicker [text]" opens it on the pad's picker instead, with that text in the box
         if (CmdArgs.Has("--chatopen"))
-            GetTree().CreateTimer(CmdArgs.Double("--chatopen") ?? 4).Timeout += () => OpenInput();
+        {
+            double at = CmdArgs.Double("--chatopen") ?? 4;
+            if (CmdArgs.Value("--chatsend", notFlag: true) is { } say)
+                GetTree().CreateTimer(Math.Max(0.5, at - 6)).Timeout += () => _chat.Send(say);
+            GetTree().CreateTimer(at).Timeout += () =>
+            {
+                if (!CmdArgs.Has("--chatpicker")) { OpenInput(); return; }
+                OpenForPad();
+                if (CmdArgs.Value("--chatpicker", notFlag: true) is { } typed) { SetText(typed); FocusPicker(); }
+            };
+        }
     }
 
     /// <summary>
@@ -209,6 +222,12 @@ public partial class ChatUi : CanvasLayer
         _picker.AddThemeConstantOverride("h_separation", 4);
         _picker.AddThemeConstantOverride("v_separation", 4);
         _pickerScroll.AddChild(_picker);
+        // with the picker open, the usage line sits over it rather than in the popup that would cover it
+        _pickerUsage = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _pickerUsage.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _pickerUsage.Visible = false;
+        column.AddChild(_pickerUsage);
+        column.MoveChild(_pickerUsage, _pickerScroll.GetIndex());
 
         var inputRow = UiKit.HBox(6);
         _slash = Chip("/", "The commands as buttons");
@@ -401,6 +420,7 @@ public partial class ChatUi : CanvasLayer
     {
         _pickerOn = on;
         _pickerScroll.Visible = on;
+        if (!on) _pickerUsage.Visible = false;
         _slash.SetPressedNoSignal(on);
         if (on && _input.Text.Length == 0) SetText("/");
         else ShowSuggestions();
@@ -418,7 +438,13 @@ public partial class ChatUi : CanvasLayer
     private void BuildPicker()
     {
         if (!_pickerOn) return;
-        foreach (Node b in _picker.GetChildren()) b.QueueFree();
+        foreach (Node b in _picker.GetChildren())
+        {
+            _picker.RemoveChild(b);
+            b.QueueFree();
+        }
+        _pickerUsage.Text = _completer.Usage(_input.Text) ?? "";
+        _pickerUsage.Visible = _pickerUsage.Text.Length > 0;
         foreach (var s in _suggestions)
         {
             var b = Chip(s.Label, s.Detail);
@@ -436,8 +462,18 @@ public partial class ChatUi : CanvasLayer
         var close = Chip("Close");
         close.Pressed += () => CloseInput();
         _picker.AddChild(close);
-        // the panel grows with the words, up to four rows, then the picker scrolls
-        _pickerScroll.CustomMinimumSize = new Vector2(0, Math.Min(4, 1 + _suggestions.Count / 5) * 34);
+        // the panel grows with the words, up to four rows, then the picker scrolls: measured once the flow
+        // has wrapped them at the panel's width
+        GetTree().ProcessFrame += FitPicker;
+    }
+
+    private const float PickerMaxHeight = 4 * 34;
+
+    private void FitPicker()
+    {
+        GetTree().ProcessFrame -= FitPicker;
+        if (!_pickerOn) return;
+        _pickerScroll.CustomMinimumSize = new Vector2(0, Math.Min(_picker.GetCombinedMinimumSize().Y, PickerMaxHeight));
     }
 
     /// <summary>"/locate church + spire" -> "/locate church + "; "/locate " -> "/"; "/" -> "".</summary>
@@ -491,6 +527,7 @@ public partial class ChatUi : CanvasLayer
         _feed.Visible = true;
         _pickerOn = false;
         _pickerScroll.Visible = false;
+        _pickerUsage.Visible = false;
         _slash.SetPressedNoSignal(false);
         _input.ReleaseFocus();
         UiFocus.Set(this, false);
@@ -581,7 +618,7 @@ public partial class ChatUi : CanvasLayer
         _usage.Visible = usage != null;
         _usage.Text = usage ?? "";
 
-        _popup.Visible = _panel.Visible && (_suggestions.Count > 0 && !_pickerOn || usage != null);
+        _popup.Visible = _panel.Visible && !_pickerOn && (_suggestions.Count > 0 || usage != null);
         if (_popup.Visible) PlacePopup();
 
         UpdateGhost();
