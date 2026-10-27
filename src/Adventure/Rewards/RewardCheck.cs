@@ -260,9 +260,16 @@ public partial class RewardCheck : ChatProbe
         }
         Expect(RewardWorld.PromptFor(Me!)?.Contains("Offer edelweiss") == true, $"the chapel's offering box ({RewardWorld.PromptFor(Me!)})");
         int before = Collect.Held;
+        int stepsBefore = Adv.Mine.Get(StaminaUpgrades.Section).Steps;
+        float maxBefore = Me!.StaminaMeter.Max;
         Svc.AskOffer(chapel.Id);
         Expect(await Until(() => Collect.Offered == 5 && Collect.Held == before - 5, 3), $"five offered ({Collect.Held} held, {Collect.Offered} offered)");
         Expect(_events.OfType<EdelweissOffered>().Any(e => e.ShrineId == chapel.Id && e.Offered == 5), "EdelweissOffered raised");
+        // five offered = one stamina step, through the stamina plan's "stamina" reward (#1225)
+        Expect(await Until(() => Adv.Mine.Get(StaminaUpgrades.Section).Steps == stepsBefore + 1, 3),
+            $"a stamina step bought ({stepsBefore} -> {Adv.Mine.Get(StaminaUpgrades.Section).Steps})");
+        Expect(_events.OfType<StaminaRaised>().Any(e => e.Steps == stepsBefore + 1), "StaminaRaised raised");
+        Expect(await Until(() => Me!.StaminaMeter.Max > maxBefore, 3), $"max stamina rises ({maxBefore:F0} -> {Me!.StaminaMeter.Max:F0})");
         await WalkTo(cairn.E, cairn.N - 0.6);
         Expect(await Until(() => gathering?.Target == Loot.Gathering.Resource.Cairn, 3), $"the gather hold offers the cairn ({gathering?.Target})");
         Svc.AskPick(cairn.Id);
@@ -337,9 +344,16 @@ public partial class RewardCheck : ChatProbe
         Expect(near < far, $"and faster near it ({far:F2} s -> {near:F2} s)");
         RewardHud.Instance?.Ping();
         await Seconds(0.4);
-        int gusts = GustFx.Count;
-        ItemEvents.Instance?.Send(ItemEventKind.Gust, Me!.GlobalPosition + new Vector3(0, 0, -5), Vector3.Forward);
+        int gusts = GustFx.Count, volumes = UnitSport.World.AirLift.Volumes.Count;
+        var gustAt = Me!.GlobalPosition + new Vector3(0, 0, -5);
+        ItemEvents.Instance?.Send(ItemEventKind.Gust, gustAt, Vector3.Forward);
         Expect(await Until(() => GustFx.Count == gusts + 1, 2), "a bottled gust lets out its updraft");
+        // the lift is the stamina plan's air (#1225): a volume that rises 20 m over where it landed
+        var air = ItemEvents.Instance!.Origin!.ToGlobal(gustAt + new Vector3(0, 20, 0));
+        float lift = UnitSport.World.AirLift.Volumes.LiftAt(air.E, air.N, (float)air.Alt, Net.ClockSync.SimNow);
+        Expect(UnitSport.World.AirLift.Volumes.Count == volumes + 1 && lift >= GustFx.Speed * 0.9f, $"and the air there rises ({lift:F1} m/s)");
+        float later = UnitSport.World.AirLift.Volumes.LiftAt(air.E, air.N, (float)air.Alt, Net.ClockSync.SimNow + GustFx.Seconds + 1);
+        Expect(later == 0, "for 20 seconds");
         Expect(Crafting.Recipes.All.Any(r => r.Out == ItemId.TreasureDetector && r.In.Any(i => i.Id == ItemId.Bergkristall && i.Count == 4)), "the detector's recipe: 4 Bergkristall, electronics, copper wire");
         _items.Inventory.Put(slot, ItemStack.Empty);
     }

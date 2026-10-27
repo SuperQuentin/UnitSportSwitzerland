@@ -6,7 +6,8 @@ namespace UnitSport.Adventure.Rewards;
 /// <summary>
 /// The bottled gust's updraft (#1227, rewards plan 8): where the bottle lands, on every peer (<c>ItemEventKind.Gust</c>,
 /// relayed like the smoke), a column of rising rings for <see cref="Seconds"/> and the wind's roar. The lift itself
-/// is a volume of the stamina plan's air (<c>World/AirLift.Volumes</c>, #1225) once that is on main.
+/// is a volume of the stamina plan's air (<c>World/AirLift.Volumes</c>, #1225), on the server's clock so every peer's
+/// runs out together; the flyer's own <c>AirLiftField.AirAt</c> reads it (none in a Battle Royale round: <c>LiftOn</c>).
 /// </summary>
 public static class GustFx
 {
@@ -18,6 +19,12 @@ public static class GustFx
     public static void OnGust(ItemEvents n, ItemEvent e)
     {
         Count++;
+        if (n.Origin is { } origin)
+        {
+            // the bottle lands on the ground: the column rises from a metre under it
+            var g = origin.ToGlobal(e.Position);
+            World.AirLift.Volumes.Add(g.E, g.N, g.Alt - 1.0, Radius, Seconds, Net.ClockSync.SimNow, Top, Speed);
+        }
         n.Sound3D(e.Position, RewardSounds.Gust, 1f, -2f, unitSize: 10f, maxDistance: 200f);
         var column = new Node3D { Name = "Gust" };
         n.AddChild(column);
