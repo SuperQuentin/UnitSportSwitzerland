@@ -441,6 +441,15 @@ public partial class ChatManager : Node
                 if (rest.Length > 0) Show($"* {Scrub(rest)}", ChatKind.System);
                 return;
 
+            case "travel" or "pin":
+                if (Adventure.Navigation.AdventureTravel.Instance is not { } travel) Show("The adventure is not running here.", ChatKind.Error);
+                else foreach (string line in travel.Command(Adventure.AdventureService.LocalPeer, verb, rest, admin: true)) Show(line, ChatKind.Private);
+                return;
+
+            case "city" when !Permissions.CanTeleport:
+                Show("You chose the travel network (Settings > Gameplay > Travel): travel from a station sign, or with the GA.", ChatKind.Error);
+                return;
+
             case "city":
                 if (rest.Length == 0) Show("Usage: /city <town>", ChatKind.Error);
                 else if (PlaceSearch is null || Teleporter is null) Show("No place index here.", ChatKind.Error);
@@ -567,6 +576,10 @@ public partial class ChatManager : Node
 
             case "concert":
                 Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
+                return;
+
+            case "trial":
+                Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
                 return;
 
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
@@ -869,6 +882,8 @@ public partial class ChatManager : Node
             case "who": SendWho(sender); return;
             case "name": if (RequiresAvatar(sender, verb)) CommandName(sender, rest); return;
             case "city": if (RequiresAvatar(sender, verb)) CommandCity(sender, rest); return;
+            // the adventure's travel network and pins (#1226)
+            case "travel" or "pin": if (RequiresAvatar(sender, verb)) TravelCommand(sender, verb, rest); return;
             // the venues (#994): anyone lists them; going to one is a teleport like /city
             case "stadium" or "venue": CommandStadium(sender, rest); return;
             case "login": if (RequiresAvatar(sender, verb)) CommandLogin(sender, rest); return;
@@ -915,6 +930,11 @@ public partial class ChatManager : Node
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
                     id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
+            // an adventure trial (#1227): leave the one you run
+            case "trial":
+                if (Adventure.Rewards.RewardService.Instance is not { } rewards) ReplyTo(sender, "Trials are not available here.", ChatKind.Error);
+                else ReplyTo(sender, rewards.Command(sender, rest), ChatKind.Private);
                 return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
@@ -1199,6 +1219,18 @@ public partial class ChatManager : Node
             return false;
         }
         return true;
+    }
+
+    /// <summary><c>/travel</c> and <c>/pin</c> (#1226): the travel network's reply lines, the admin forms for operators.</summary>
+    private void TravelCommand(long sender, string verb, string rest)
+    {
+        if (Adventure.Navigation.AdventureTravel.Instance is not { } travel)
+        {
+            ReplyTo(sender, "The adventure is not running here.", ChatKind.Error);
+            return;
+        }
+        foreach (string line in travel.Command(sender, verb, rest, IsAdmin(sender), PeerByName))
+            ReplyTo(sender, line, ChatKind.Private);
     }
 
     private void CommandCity(long sender, string query)

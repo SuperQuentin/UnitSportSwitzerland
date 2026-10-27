@@ -551,6 +551,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     [Export] public int DeviceKind { get; set; }
 
     private int _visualAppearance;
+    /// <summary>The figure the body on screen was built from (a probe checks the owner's own body follows the Character menu).</summary>
+    public int DrawnAppearance => _visualAppearance;
 
     /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
     private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
@@ -2286,6 +2288,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void ApplyFootPose()
     {
+        // the figure chosen in the Character menu reaches the owner after the body was built (PublishAppearance): draw it again
+        if (AppearanceBits != _visualAppearance) RefreshVisual();
         if (_walker == null) return;
         // clothes put on or taken off (#251) are a new look
         if (_poseOutfit != OutfitBits)
@@ -2779,6 +2783,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
+        // a chest, a seal's stack or cowbell, a guide's burrow, a trial's post, an offering box (#1227)
+        if (Adventure.Rewards.RewardWorld.TryInteract(this)) return true;
         // a summit cross, a telescope or a stamp post at hand (#1224): look out, or stamp
         if (Adventure.Places.PoiMarkers.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)

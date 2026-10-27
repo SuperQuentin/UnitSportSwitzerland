@@ -32,6 +32,8 @@ public enum PlacedKind
     HayHideout = 10,
     /// <summary>A self-service farm stand (#494): its crates and honesty box are <c>Farming.FarmStands</c>' state. Only its owner packs it up, empty.</summary>
     FarmStand = 11,
+    /// <summary>A planted travel flag (#1227): a waypoint of one's own; what travel to it means is the navigation plan's (#1226). Only its owner pulls it up.</summary>
+    TravelFlag = 12,
 }
 
 /// <summary>
@@ -103,6 +105,7 @@ public partial class PlacedObjects : Node
         [PlacedKind.CamoNet] = Build.GadgetMeshes.Visual,
         [PlacedKind.HayHideout] = Build.GadgetMeshes.Visual,
         [PlacedKind.FarmStand] = Farming.FarmStandVisual.Visual,
+        [PlacedKind.TravelFlag] = _ => FlagVisual(ItemDefs.PlantedTravelFlagMesh()),
     };
 
     /// <summary>
@@ -142,6 +145,12 @@ public partial class PlacedObjects : Node
     public WorldOrigin Origin => _origin;
     public event Action<PlacedObject>? Added;
     public event Action<long>? Removed;
+
+    /// <summary>
+    /// Server: a peer planted (true) or took up (false) something, after the checks: the peer behind it, which
+    /// <see cref="Added"/>/<see cref="Removed"/> do not know (the rewards' travel flag, #1227). Offline the peer is 1.
+    /// </summary>
+    public static event Action<long, PlacedObject, bool>? ServedByPeer;
 
     private bool _server;
 
@@ -337,8 +346,11 @@ public partial class PlacedObjects : Node
             !Enum.IsDefined((PlacedKind)kind) || kind == 0 ? "Unknown object."
             : payload.Length > MaxPayload ? "Too much data."
             : !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !rot.IsFinite() ? "Bad position."
-            : !InReach(peer, e, n, alt) ? "Too far away."
+            : !InReachOfEnd(peer, (PlacedKind)kind, e, n, alt, payload) ? "Too far away."
             : _objects.Values.Count(o => o.Owner == owner) >= MaxPerOwner ? $"You already placed {MaxPerOwner} things."
+            // one travel flag a player (#1227): it is that player's one portable travel point
+            : (PlacedKind)kind == PlacedKind.TravelFlag && _objects.Values.Any(o => o.Kind == PlacedKind.TravelFlag && o.Owner == owner)
+                ? "Your travel flag already stands: take it up first."
             // a kind's own rules (a zipline's length and slope): Build.Gadgets
             : Build.Gadgets.Check(new PlacedObject(0, (PlacedKind)kind, owner, e, n, alt, rot, payload), _origin);
         if (refused != null)
@@ -352,6 +364,7 @@ public partial class PlacedObjects : Node
         var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, e, n, alt, rot.Normalized(), payload);
         Spawned(Put(o));   // offline the client plays the server's part; a dedicated server has no visual, so it is a no-op there
         Save();
+        ServedByPeer?.Invoke(peer, o, true);
         GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {owner} at LV95 {e:F1}/{n:F1}"));
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
@@ -387,7 +400,7 @@ public partial class PlacedObjects : Node
     {
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
             : !AnyoneMayRemove(o) && o.Owner != OwnerName(peer) ? "That is not yours."
-            : !InReach(peer, o.E, o.N, o.Altitude) ? "Too far away."
+            : !InReachOfEnd(peer, o.Kind, o.E, o.N, o.Altitude, o.Payload) ? "Too far away."
             : Farming.FarmStands.RemoveProblem(o);
         if (refused != null)
         {
@@ -397,6 +410,7 @@ public partial class PlacedObjects : Node
 
         Drop(id);
         Save();
+        ServedByPeer?.Invoke(peer, o!, false);
         GD.Print($"[placed] {o!.Kind} #{id} removed by {OwnerName(peer)}");
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
@@ -410,6 +424,11 @@ public partial class PlacedObjects : Node
         if (Online && peer != 1) RpcId(peer, MethodName.Answer, req, id, refused);
         else Answer(req, id, refused);
     }
+
+    /// <summary>Within reach of the object; a zipline has two ends, standing by either one will do.</summary>
+    private bool InReachOfEnd(long peer, PlacedKind kind, double e, double n, double alt, string payload) =>
+        InReach(peer, e, n, alt)
+        || (kind == PlacedKind.Zipline && Build.Gadgets.ZipStart(payload) is { } s && InReach(peer, s.E, s.N, s.Alt));
 
     /// <summary>Within reach of the requester's body; offline there is nobody to doubt.</summary>
     private bool InReach(long peer, double e, double n, double alt, float reach = Reach)
@@ -517,11 +536,11 @@ public partial class PlacedObjects : Node
     // ---- built-in visuals -----------------------------------------------------------------------
 
     /// <summary>The planted Swiss flag: the item's planted mesh on a pole-thin collider.</summary>
-    public static Node3D FlagVisual()
+    public static Node3D FlagVisual(ArrayMesh? mesh = null)
     {
         var body = new StaticBody3D();
         body.AddToGroup(UnitSport.Player.FootPlayer.NoClimbGroup);   // placed things are never free-climbed (#1225)
-        body.AddChild(new MeshInstance3D { Mesh = ItemDefs.PlantedFlagMesh(), MaterialOverride = ItemDefs.Material });
+        body.AddChild(new MeshInstance3D { Mesh = mesh ?? ItemDefs.PlantedFlagMesh(), MaterialOverride = ItemDefs.Material });
         // pole-thin, so it is something to aim at for picking up rather than a wall to walk into
         body.AddChild(new CollisionShape3D
         {

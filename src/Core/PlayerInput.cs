@@ -90,6 +90,12 @@ public partial class PlayerInput : Node
     public const string Kneel = "kneel";
     /// <summary>The next destination on a bus's display.</summary>
     public const string Destination = "destination";
+    /// <summary>
+    /// The guiding gust (#1226, <c>Adventure.Navigation.GuidingWind</c>): N on foot and mounted (in a bus, a tipper or a
+    /// mixer N stays <see cref="Destination"/>'s). A pad has no free button on foot: the quick menu's Guide wedge; VR the
+    /// open left hand palm up, or the wrist menu.
+    /// </summary>
+    public const string Guide = "guide";
     /// <summary>Sequential shift up / down; in the H-pattern, the splitter high / low.</summary>
     public const string ShiftUp = "shift_up";
     public const string ShiftDown = "shift_down";
@@ -638,6 +644,7 @@ public partial class PlayerInput : Node
         // L3 means nothing in a cab: a bus kneels and a farm machine lowers its implement or header (#494)
         Bind(Kneel, Keys(Key.K), Button(JoyButton.LeftStick));
         Bind(Destination, Keys(Key.N));
+        Bind(Guide, Keys(Key.N));
         Bind(ShiftUp, Keys(Key.Shift), Button(JoyButton.RightShoulder));
         Bind(ShiftDown, Keys(Key.Ctrl), Button(JoyButton.LeftShoulder));
         Bind(Clutch, Keys(Key.C), Button(JoyButton.B));

@@ -34,6 +34,8 @@ public enum ItemEventKind
     FishCast = 9,
     /// <summary>A fishing line came in (#493). Position = the float; extra = "", "snap" or the item id landed.</summary>
     FishEnd = 10,
+    /// <summary>A bottled gust landed (#1227). Position = where; an updraft column for 20 s on every peer (<c>Adventure.Rewards.GustFx.OnGust</c>).</summary>
+    Gust = 11,
 }
 
 /// <summary>
@@ -88,6 +90,7 @@ public partial class ItemEvents : Node
         [ItemEventKind.Smoke] = SwissItems.OnSmoke,
         [ItemEventKind.FishCast] = Fishing.FishingVisuals.OnCast,
         [ItemEventKind.FishEnd] = Fishing.FishingVisuals.OnEnd,
+        [ItemEventKind.Gust] = Adventure.Rewards.GustFx.OnGust,
     };
 
     /// <summary>

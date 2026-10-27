@@ -42,14 +42,14 @@ public partial class PhoneController : Node
     /// <summary>After landing at a travel's end: this long on "Travelling…" so the place is built before it is seen.</summary>
     private const double SettleSeconds = 0.9;
     private const double TravelTimeout = 20.0;
+    /// <summary>Touch: the travel curtain waits this long before the jump runs, so Cancel can be tapped (#1253).</summary>
+    private const double TouchCancelSeconds = 1.2;
     /// <summary>The fingertip above the glass while it hovers, and on it while it touches (metres).</summary>
     private const float Hover = 0.016f, Touching = 0.002f;
     /// <summary>The main camera's field of view for a selfie, up the tall cover screen.</summary>
     private const float SelfieFov = 80f;
     /// <summary>In VR, a travel waits this long (game seconds, <see cref="GameClock"/>) for the phone raised to the eyes, then blinks.</summary>
     private const double VrRaiseSeconds = 1.5;
-    /// <summary>A mouse drag longer than this (window pixels) is a swipe, not a click.</summary>
-    private const float SwipePixels = 14f;
 
     public static PhoneController? Instance { get; private set; }
 
@@ -92,6 +92,10 @@ public partial class PhoneController : Node
     private bool _pressed, _dragging;
     private Vector2 _pressAt, _lastAt;
     private Vector2? _pressUv;
+    /// <summary>Canvas pixels in a millimetre (the finger's slop, swipe and targets are millimetres, #1253), measured each frame.</summary>
+    private float _pxPerMm = 10f;
+    /// <summary>The press waiting to be a click or a swipe came from a finger (touch), not a mouse.</summary>
+    private bool _pressFinger;
 
     /// <summary>The id of the last photo the camera app took, for the checks.</summary>
     public string? LastPhoto { get; private set; }
@@ -164,6 +168,7 @@ public partial class PhoneController : Node
         _screens.JournalPicked += () => AdventureLog.Open();
         _screens.ShutterPressed += () => _ = TakePhoto();
         _screens.SelfiePressed += () => SetSelfie(!_selfie);
+        _screens.ZoomPicked += () => Play(PhoneSounds.Tap);
         _screens.WallpaperPicked += SetWallpaper;
         _screens.PageShown += page =>
         {
@@ -344,7 +349,10 @@ public partial class PhoneController : Node
     }
 
     /// <summary>The map and the travelling page are seen square on, close, the world black behind; the rest in the hands.</summary>
-    private bool FullView => _screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Travel;
+    private bool FullView => _screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Travel || TouchSquare;
+
+    /// <summary>Touch (#1253): every app but the camera is seen square on, enlarged to fill the phone, so a finger can hit 7 mm targets.</summary>
+    private bool TouchSquare => Platform.IsTouch && !XR.XrSession.Active && _screens.Shown != PhoneScreens.Page.Camera;
 
     public override void _Process(double delta)
     {
@@ -414,6 +422,9 @@ public partial class PhoneController : Node
 
         _screens.SetActive(true);
         _screens.SetVr(XR.XrSession.Active);
+        var view = GetViewport().GetVisibleRect().Size;
+        _pxPerMm = TouchControls.MeasureScreen(GetViewport(), view).PxPerMm;
+        _screens.SetTouch(Platform.IsTouch && !XR.XrSession.Active, view.Y / Mathf.Max(_pxPerMm, 0.01f));
         _screens.Fit(GetWindow().Size);
         if (p.PhoneModel is { HasLiveScreens: false } model) model.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
         if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p, dt);
@@ -437,6 +448,7 @@ public partial class PhoneController : Node
     {
         string text = _stage is Stage.Folded or Stage.Drawing
             ? XR.XrSession.Active ? "X  open     swipe  choose     tap, or point and trigger  select     B  put away"
+            : Platform.IsTouch ? "tap  open     swipe  choose     swipe down, or tap outside  put away"
             : InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
                 : "W  open     A D  choose     Enter  select     S  put away     ·     mouse: click, swipe"
             : "";
@@ -723,7 +735,8 @@ public partial class PhoneController : Node
                 RunPendingJump();
             }
         }
-        else if (_pendingJump != null && _player() is { PhoneBackdropShown: >= 1f }) RunPendingJump();
+        // touch: Home is already square on and black, so the curtain waits a moment for Cancel to be hit (9 mm) before the jump runs
+        else if (_pendingJump != null && _player() is { PhoneBackdropShown: >= 1f } && (!Platform.IsTouch || RealClock.Now - _travelSince > TouchCancelSeconds)) RunPendingJump();
         if (_travelSince < 0 || _pendingJump != null) return;
         var p = _player();
         if (_arrived && _landedAt < 0 && p != null && p.IsOnFloor()) _landedAt = RealClock.Now;
@@ -844,6 +857,21 @@ public partial class PhoneController : Node
             _screens.FocusSearch();
             return;
         }
+        // LB / RB: page the Photos grid, previous / next in the viewer (the pad's page keys, #1253)
+        if (!typing && e is InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder or JoyButton.RightShoulder, Pressed: true } bumper
+            && _screens.Shown is PhoneScreens.Page.Photos or PhoneScreens.Page.Photo)
+        {
+            int way = bumper.ButtonIndex == JoyButton.RightShoulder ? 1 : -1;
+            if (_screens.Shown == PhoneScreens.Page.Photos) _screens.PageGrid(way);
+            else StepPhoto(way);
+            return;
+        }
+        // Left and Right are previous and next photo in the viewer; Up and Down reach its buttons
+        if (!typing && _screens.Shown == PhoneScreens.Page.Photo && e.IsPressed() && Direction(e) is { } side && side.Y == 0f)
+        {
+            if (!e.IsEcho()) StepPhoto(side.X < 0f ? -1 : 1);
+            return;
+        }
         if (!typing && Direction(e) is { } dir && e is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion or InputEventAction)
         {
             if (!e.IsPressed()) return;
@@ -881,6 +909,18 @@ public partial class PhoneController : Node
             else PutAway();
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    /// <summary>
+    /// A sideways swipe of <paramref name="side"/> (1 right, -1 left) from a mouse, a finger or the VR fingertip:
+    /// on the cover it picks, in the photo viewer it pages (left: next), on any other page a swipe right goes back.
+    /// </summary>
+    private void Swiped(int side, bool inner)
+    {
+        if (side == 0) return;
+        if (_stage == Stage.Folded) Pick(-side);
+        else if (inner && _screens.Shown == PhoneScreens.Page.Photo) StepPhoto(-side);
+        else if (inner && side > 0) Back();
     }
 
     private bool _vrDown, _vrDrag, _vrCover;
@@ -922,14 +962,6 @@ public partial class PhoneController : Node
     public void VrShutter()
     {
         if (CameraApp) _ = TakePhoto();
-    }
-
-    /// <summary>VR: the pointing hand's trigger, its ray off the phone, in the camera app: the next lens (1x, 2x, 5x, round again).</summary>
-    public void VrZoom()
-    {
-        if (!CameraApp) return;
-        _screens.StepZoom(1, wrap: true);
-        Play(PhoneSounds.Tap);
     }
 
     /// <summary>VR, phase 2: the phone's back turned to the face (or away again) in the camera app.</summary>
@@ -977,11 +1009,7 @@ public partial class PhoneController : Node
             var moved = at - _vrFrom;
             if (_vrDrag)
             {
-                if (Mathf.Abs(moved.X) > Mathf.Abs(moved.Y) * 1.5f && Mathf.Abs(moved.X) > 0.15f)
-                {
-                    if (_stage == Stage.Folded) Pick(moved.X < 0 ? 1 : -1);
-                    else if (!_vrCover && moved.X > 0) Back();
-                }
+                if (Mathf.Abs(moved.X) > Mathf.Abs(moved.Y) * 1.5f && Mathf.Abs(moved.X) > 0.15f) Swiped(moved.X > 0 ? 1 : -1, !_vrCover);
                 return;
             }
             if (_vrCover && _stage == Stage.Folded) CoverTap(_vrFrom);
@@ -1018,6 +1046,12 @@ public partial class PhoneController : Node
         _cursorUv = p.PhoneScreenPoint(m.Position, out _cursorOnCover);
         _keysLead = false;
         bool inner = _stage == Stage.Open && !_cursorOnCover;
+        // a finger (touch, or the mouse Godot emulates from one) counts in millimetres: 2 mm slop, a 10 mm swipe;
+        // a mouse in fractions of the window's height, so a small window is not harder to click
+        bool finger = Platform.IsTouch || m.Device == InputEvent.DeviceIdEmulation;
+        float height = GetViewport().GetVisibleRect().Size.Y;
+        float slop = finger ? TouchLayout.TapSlopMm * _pxPerMm : height * 0.02f;
+        float swipe = finger ? TouchLayout.BackSwipeMm * _pxPerMm : height * 0.057f;
 
         // right click is Back, whatever the cursor is over (the camera app keeps it for the selfie)
         if (m is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
@@ -1041,6 +1075,7 @@ public partial class PhoneController : Node
                 _dragging = false;
                 _pressAt = _lastAt = m.Position;
                 _pressUv = _cursorUv;
+                _pressFinger = finger;
                 return;
             }
             if (!_pressed) return;
@@ -1048,17 +1083,19 @@ public partial class PhoneController : Node
             var moved = m.Position - _pressAt;
             if (_dragging)
             {
-                // a sideways swipe: on the cover it picks, on an app's page a swipe right goes back
-                if (Mathf.Abs(moved.X) > Mathf.Abs(moved.Y) * 1.5f && Mathf.Abs(moved.X) > 40f)
-                {
-                    if (_stage == Stage.Folded) Pick(moved.X < 0 ? 1 : -1);
-                    else if (inner && moved.X > 0) Back();
-                }
+                // a sideways swipe: on the cover it picks, in the photo viewer it pages, elsewhere a swipe right goes back;
+                // folded, a swipe down puts the phone away
+                if (TouchLayout.SideSwipe(moved, swipe) is var side and not 0) Swiped(side, inner);
+                else if (_stage == Stage.Folded && TouchLayout.DownSwipe(moved, swipe) > 0) PutAway();
                 _dragging = false;
                 return;
             }
-            // a click: where it was pressed
-            if (_pressUv is not { } at || at.X is < 0f or > 1f || at.Y is < 0f or > 1f) return;
+            // a click: where it was pressed; a finger tapping beside the folded phone puts it away
+            if (_pressUv is not { } at || at.X is < 0f or > 1f || at.Y is < 0f or > 1f)
+            {
+                if (_pressFinger && _stage == Stage.Folded) PutAway();
+                return;
+            }
             if (_stage == Stage.Folded) { CoverTap(at); return; }
             if (_stage == Stage.Open && !_cursorOnCover)
             {
@@ -1071,7 +1108,7 @@ public partial class PhoneController : Node
         }
         if (m is InputEventMouseMotion)
         {
-            if (_pressed && !_dragging && m.Position.DistanceTo(_pressAt) > SwipePixels) _dragging = true;
+            if (_pressed && !_dragging && TouchLayout.Beyond(m.Position - _pressAt, slop)) _dragging = true;
             // a list follows the finger up and down
             if (_dragging && inner && _pressUv is { } from && _screens.ScrollAt(ToPixels(from)) is { } list)
             {
@@ -1113,12 +1150,19 @@ public partial class PhoneController : Node
         GetViewport().SetInputAsHandled();
         if (e is InputEventMouseMotion motion)
         {
-            if (MouseCapture.Mode == Input.MouseModeEnum.Captured && _player() is { } p)
+            // the captured mouse, or the touch overlay's look drag (never the mouse Godot emulates from a finger)
+            if (PlayerInput.IsLookMotion(motion) && _player() is { } p)
             {
                 float rate = 0.0022f / _screens.Zoom;
                 p.LookYaw -= motion.Relative.X * rate;
                 p.LookPitch -= motion.Relative.Y * rate;
             }
+            return;
+        }
+        // a finger on the glass presses the buttons there (chips, shutter, Selfie, Back); a tap on the picture does not shoot (#1253)
+        if (e is InputEventMouseButton touch && (Platform.IsTouch || touch.Device == InputEvent.DeviceIdEmulation))
+        {
+            if (touch.ButtonIndex == MouseButton.Left && touch.Pressed) CameraTouch(touch.Position);
             return;
         }
         if (!e.IsPressed() || e.IsEcho()) return;
@@ -1132,6 +1176,27 @@ public partial class PhoneController : Node
                  || e is InputEventKey { PhysicalKeycode: Key.Up }) Zoom(1);
         else if (e is InputEventMouseButton { ButtonIndex: MouseButton.WheelDown } || e is InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder }
                  || e is InputEventKey { PhysicalKeycode: Key.Down }) Zoom(-1);
+    }
+
+    /// <summary>A finger down at <paramref name="at"/> (canvas pixels) in the camera app: its buttons on the glass; turned round, the cover is the shutter.</summary>
+    private void CameraTouch(Vector2 at)
+    {
+        if (_player() is not { } p || p.PhoneScreenPoint(at, out bool cover) is not { } uv) return;
+        if (_selfie) { if (cover && uv.X is >= 0f and <= 1f && uv.Y is >= 0f and <= 1f) _ = TakePhoto(); return; }
+        if (!cover) CameraTap(uv);
+    }
+
+    /// <summary>A press and release at <paramref name="uv"/> on the inner screen while the camera app is up (0..1; what is not a button there does nothing).</summary>
+    internal void CameraTap(Vector2 uv)
+    {
+        if (uv.X is < 0f or > 1f || uv.Y is < 0f or > 1f) return;
+        foreach (bool down in new[] { true, false })
+            PushMouse(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down }, uv);
+    }
+
+    private void StepPhoto(int way)
+    {
+        if (_screens.StepPhoto(way)) Play(PhoneSounds.Tap);
     }
 
     private void Zoom(int step)

@@ -119,7 +119,7 @@ public partial class AdventureService : Node
             StaminaUpgrades.Attach(this);   // #1225: the owner's steps from the section sync
             return;
         }
-        if (AdventureCheck.Requested || Places.PlacesCheck.Requested) AdventureCheck.ClearScratch();
+        if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -286,7 +286,10 @@ public partial class AdventureService : Node
     /// <summary>Where a check keeps its progress instead of <c>user://adventure</c>, or null.</summary>
     public static string? ScratchDir => CmdArgs.Value("--adventure-dir") is { } dir ? ProjectSettings.GlobalizePath(dir)
         : AdventureCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/adventurecheck")
-        : Places.PlacesCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/placescheck") : null;
+        : Places.PlacesCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/placescheck")
+        : Rewards.RewardCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/rewardcheck")
+        : Navigation.NavCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/navcheck")
+        : Navigation.TravelCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/travelcheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));

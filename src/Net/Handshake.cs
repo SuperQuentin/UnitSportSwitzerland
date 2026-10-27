@@ -80,8 +80,12 @@ public partial class Handshake : Node
     /// 51: World/Adventure/Places (#1224: RequestInteract; Stamped, Synced, FogFull, FogDelta), AssetKind.AtlasFacts 18.
     /// 52: World/CinemaBooths (#1238: AskSet; Set): a cinema's house lights and screen.
     /// 53: World/Arrival Rules carries the stamina and lift switches; FootPlayer.PoseKind 8 (PoseWallClimb) (#1225).
-    /// 55: World/Invites Ended (kind, name, outcome): the sender of a direct invite learns accepted, declined or lapsed (#1253; 54 is main's, merged later).
-    public const int Protocol = 55;
+    /// 54: World/Adventure/Travel (#1226: RequestTravel/Buy/PinAdd/PinEdit/PinRemove; TellMode, TellUnlocked, TellRefused, Depart, PartyPinsState).
+    /// 55: World/Adventure/Rewards (#1227: RequestOpen/Pick/SealStep/Offer/Guide/Photo/Fauna/Trial/TrialGate/TrialLeave/Board/
+    /// Ghost/GhostPart; TellOpened/Picked/Seal/Refused/Offered/Photo/TrialStarted/TrialGate/TrialEnded/Board/Ghost, GuideLeg),
+    /// PlacedKind.TravelFlag 12, ItemEventKind.Gust 11.
+    /// 56: World/Invites Ended (kind, name, outcome): the sender of a direct invite learns accepted, declined or lapsed (#1253; 55 is main's).
+    public const int Protocol = 56;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

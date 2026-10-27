@@ -95,7 +95,8 @@ public partial class PhoneProbe : Node
         await Wait(1.0);
         Check(phone.IsCovering, "Up again opens it and the screen covers the view");
         Check(me.PhoneState == FootPlayer.PhoneOpenState, $"open on the wire (state {me.PhoneState})");
-        Check(me.PhoneCover == 0f, "home is seen in the hands, not square on");
+        if (Platform.IsTouch) Check(me.PhoneCover > 0f, $"touch: Home is seen square on, enlarged ({me.PhoneCover:F2})");
+        else Check(me.PhoneCover == 0f, "home is seen in the hands, not square on");
         // the cursor over the screen: the free hand's index finger comes to point at it
         var mid = me.CameraOrNull is { } eye && me.PhoneModel is { } pm
             ? eye.UnprojectPosition(pm.GlobalTransform * PhoneModel.InnerScreenCentre) : GetViewport().GetVisibleRect().Size / 2f;
@@ -103,9 +104,10 @@ public partial class PhoneProbe : Node
         var atWindow = GetViewport().GetScreenTransform() * mid;
         Input.ParseInputEvent(new InputEventMouseMotion { Position = atWindow, GlobalPosition = atWindow });
         await Wait(0.4);
-        Check(me.PhonePointTip != null, $"the cursor on the screen: the index finger points at it (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
+        Check(me.PhonePointTip != null || Platform.IsTouch, $"the cursor on the screen: the index finger points at it (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
         Log($"finger: tip {me.PhonePointTip}, built {me.DrawnPoint}, body {me.GlobalPosition}, phone {me.PhoneModel?.GlobalPosition}");
         Shot("phone_5_open.png");
+        Save(phone.Screens.Inner, "phone_5_open_screen.png");
         await Key(Godot.Key.S, 0.4);
         Shot("phone_5b_swipe.png");
 
@@ -114,6 +116,7 @@ public partial class PhoneProbe : Node
         await Wait(0.6);
         Check(phone.Screens.Shown == PhoneScreens.Page.Activities, "the Activities app opens on the phone");
         Shot("phone_5c_activities.png");
+        Save(phone.Screens.Inner, "phone_5c_activities_screen.png");
         await Key(Godot.Key.Escape, 0.4);
         Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Esc goes back from an app to home (#1253)");
         phone.Open(PhoneScreens.Page.Contacts);
@@ -144,6 +147,7 @@ public partial class PhoneProbe : Node
         await Wait(1.2);
         Check(me.PhoneCover >= 1f && me.PhoneBackdropShown >= 1f, $"the map square on, the world black behind ({me.PhoneCover:F2}, {me.PhoneBackdropShown:F2})");
         Shot("phone_5d_map.png");
+        Save(phone.Screens.Inner, "phone_5d_map_screen.png");
         Check(phone.Screens.MapRowCount > 0 || !phone.Screens.HasPlaces, $"the Map lists places without typing ({phone.Screens.MapRowCount} rows) (#1253)");
         await Key(Godot.Key.Escape, 1.0);
 
@@ -182,6 +186,28 @@ public partial class PhoneProbe : Node
         Save(phone.Screens.Cover, "phone_9_selfie_cover.png");
         await Key(Godot.Key.F, 0.8);
         Check(me.PhoneState == FootPlayer.PhoneCameraState, "F turns it back");
+
+        // the camera's own buttons (#1253): zoom chips with the current lens lit, a focusable shutter and Selfie
+        Check(phone.Screens.ShutterButton.FocusMode == Control.FocusModeEnum.All, "the shutter button can take focus");
+        Check(phone.Screens.LitChip == 0 && phone.Screens.Zoom == 1f, "the 1x chip is lit to start with");
+        phone.CameraTap(phone.Screens.ZoomChipUv(2));
+        await Wait(0.2);
+        Check(phone.Screens.Zoom == 5f && phone.Screens.LitChip == 2, $"a tap on the 5x chip zooms to 5x and lights it ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        await Key(Godot.Key.Down, 0.2);
+        Check(phone.Screens.Zoom == 2f && phone.Screens.LitChip == 1, $"Down steps the zoom and moves the lit chip ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        phone.CameraTap(phone.Screens.ZoomChipUv(0));
+        await Wait(0.2);
+        Check(phone.Screens.Zoom == 1f && phone.Screens.LitChip == 0, "the 1x chip puts it back");
+        // a finger on the picture itself does not shoot
+        string? beforeTap = phone.LastPhoto;
+        await FingerTap(me, new Vector2(0.3f, 0.5f), cover: false);
+        await Wait(1.0);
+        Check(phone.LastPhoto == beforeTap && !phone.Selfie, "a tap on the glass does not shoot (touch)");
+        phone.CameraTap(phone.Screens.SelfieUv());
+        await Wait(0.8);
+        Check(phone.Selfie, "the Selfie button turns the phone round");
+        await Key(Godot.Key.F, 0.8);
+        Check(!phone.Selfie, "and F turns it back");
         await Key(Godot.Key.Escape, 0.8);
         Check(me.PhoneState == FootPlayer.PhoneOpenState, "Esc goes back to the home screen");
 
@@ -190,12 +216,37 @@ public partial class PhoneProbe : Node
         await Wait(0.6);
         Check(phone.Screens.Shown == PhoneScreens.Page.Photos, "the Photos app opens");
         Shot("phone_10_photos.png");
+        Save(phone.Screens.Inner, "phone_10_photos_screen.png");
+        // the selfie key means nothing outside the camera app
+        await Key(Godot.Key.F, 0.3);
+        await Key(Godot.Key.Tab, 0.3);
+        Check(!phone.Selfie && phone.Screens.Shown == PhoneScreens.Page.Photos, "F and Tab are not a selfie outside the camera");
         if (Rendered)
         {
+            int count = phone.Screens.GridCount;
+            Check(count >= 2, $"the album has the shots ({count})");
+            Pad(JoyButton.RightShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.GridFocus == count - 1, $"RB pages the grid down ({phone.Screens.GridFocus} of {count})");
+            Pad(JoyButton.LeftShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.GridFocus == 0, $"LB pages it back up ({phone.Screens.GridFocus})");
             await Key(Godot.Key.Enter, 0.5);
             Check(phone.Screens.Shown == PhoneScreens.Page.Photo, "Enter opens the newest photo");
-            await Key(Godot.Key.D, 0.3);
+            string? newest = phone.Screens.PhotoShown;
+            await Key(Godot.Key.Right, 0.3);
+            Check(phone.Screens.PhotoShown != newest && phone.Screens.PhotoShown != null, "Right shows the next photo");
+            await Key(Godot.Key.Left, 0.3);
+            Check(phone.Screens.PhotoShown == newest, "Left shows the previous one");
+            Pad(JoyButton.RightShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.PhotoShown != newest, "RB is next in the viewer");
+            Pad(JoyButton.LeftShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.PhotoShown == newest && phone.Screens.Shown == PhoneScreens.Page.Photo, "LB is previous");
+            await Key(Godot.Key.S, 0.3);
             Shot("phone_11_photo.png");
+            Save(phone.Screens.Inner, "phone_11_photo_screen.png");
             await Key(Godot.Key.Enter, 0.5);
             Check(phone.Wallpapers.Home == phone.LastPhoto, $"set as the home screen ({phone.Wallpapers.Home})");
             await Key(Godot.Key.Escape, 0.4);
@@ -212,6 +263,8 @@ public partial class PhoneProbe : Node
         await Key(Godot.Key.Escape, 2.5);
         var stayed = me.Global;
         Check(Math.Abs(stayed.E - stay.E) < 2 && phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the curtain cancels the travel and stays on the phone (#1253)");
+
+        await FingerChecks(me, phone);
 
         // travel while open: behind the phone once the world is dark, and the phone folds away there
         var from = me.GlobalPosition;
@@ -248,6 +301,67 @@ public partial class PhoneProbe : Node
 
         Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
         GetTree().Quit(_failed == 0 ? 0 : 1);
+    }
+
+    /// <summary>The window pixels where uv (0..1) of the inner or cover screen is, as a parsed event wants them.</summary>
+    private Vector2 WindowAt(FootPlayer me, Vector2 uv, bool cover)
+    {
+        var world = me.PhoneScreenToWorld(uv, cover, 0f) ?? Vector3.Zero;
+        var canvas = me.CameraOrNull?.UnprojectPosition(world) ?? Vector2.Zero;
+        return GetViewport().GetScreenTransform() * canvas;
+    }
+
+    /// <summary>A finger (the mouse Godot emulates from a touch): down at uv, dragged <paramref name="move"/> millimetres, up.</summary>
+    private async Task FingerTap(FootPlayer me, Vector2 uv, bool cover, Vector2 move = default)
+    {
+        float s = GetViewport().GetScreenTransform().X.Length();
+        float mm = TouchControls.MeasureScreen(GetViewport(), GetViewport().GetVisibleRect().Size).PxPerMm * s;
+        var from = WindowAt(me, uv, cover);
+        void Send(InputEvent e) => Input.ParseInputEvent(e);
+        Send(new InputEventMouseMotion { Device = (int)InputEvent.DeviceIdEmulation, Position = from, GlobalPosition = from });
+        Send(new InputEventMouseButton { Device = (int)InputEvent.DeviceIdEmulation, ButtonIndex = MouseButton.Left, Pressed = true, Position = from, GlobalPosition = from });
+        await Wait(0.05);
+        foreach (float f in new[] { 0.5f, 1f })
+        {
+            var at = from + move * mm * f;
+            Send(new InputEventMouseMotion { Device = (int)InputEvent.DeviceIdEmulation, Position = at, GlobalPosition = at, ButtonMask = MouseButtonMask.Left });
+            await Wait(0.03);
+        }
+        var end = from + move * mm;
+        Send(new InputEventMouseButton { Device = (int)InputEvent.DeviceIdEmulation, ButtonIndex = MouseButton.Left, Pressed = false, Position = end, GlobalPosition = end });
+        await Wait(0.3);
+    }
+
+    private static void Pad(JoyButton button)
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventJoypadButton { ButtonIndex = button, Pressed = down });
+    }
+
+    /// <summary>A finger counts in millimetres (#1253): 2 mm of wobble is still a tap, 10 mm sideways is Back; Photo pages sideways.</summary>
+    private async Task FingerChecks(FootPlayer me, PhoneController phone)
+    {
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Wait(0.5);
+        if (phone.Screens.FocusUv() is not { } tile) { Log("skip (no focused tile to touch)"); return; }
+        await FingerTap(me, tile, cover: false, new Vector2(1.2f, 0.6f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Map, $"a finger that wobbles 1.3 mm still taps the tile ({phone.Screens.Shown})");
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(6f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Map, $"a 6 mm sideways stroke is not Back ({phone.Screens.Shown})");
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(12f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, $"a 12 mm swipe right is Back ({phone.Screens.Shown})");
+        if (!Rendered) return;
+        phone.Screens.ShowPage(PhoneScreens.Page.Photos);
+        await Wait(0.4);
+        if (phone.Screens.GridCount < 2) return;
+        await Key(Godot.Key.Enter, 0.4);
+        string? first = phone.Screens.PhotoShown;
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(-12f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Photo && phone.Screens.PhotoShown != first, "a swipe left in the viewer is the next photo, not Back");
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(12f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Photo && phone.Screens.PhotoShown == first, "a swipe right is the previous one");
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Wait(0.3);
     }
 
     /// <summary>Headless draws no frame, so the camera has nothing to shoot: its checks run windowed only (as the Polaroid's).</summary>

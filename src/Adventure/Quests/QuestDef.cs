@@ -148,6 +148,18 @@ public sealed record UnlockStep(string? PointKind = null, string? PointId = null
     public override string Describe() => PointId != null ? $"Unlock {PointId}" : $"Unlock {Count} travel point{(Count == 1 ? "" : "s")}";
 }
 
+/// <summary>
+/// A travel network of a size (navigation plan): at least <paramref name="Points"/> points in at least
+/// <paramref name="Cantons"/> cantons, read from the totals <see cref="TravelUnlocked"/> carries, so the points
+/// unlocked before the quest started count too.
+/// </summary>
+public sealed record NetworkStep(int Points, int Cantons) : Step
+{
+    public override string? Plan => "navigation";
+    public override bool Matches(AdventureEvent e) => e is TravelUnlocked t && t.Points >= Points && t.Cantons >= Cantons;
+    public override string Describe() => $"Unlock {Points} travel points in {Cantons} cantons";
+}
+
 /// <summary>Finish another quest (chains).</summary>
 public sealed record FinishStep(string QuestId) : Step
 {
@@ -185,7 +197,12 @@ public sealed record Unlock(string Kind, string Arg) : Reward
     public override string Describe() => Kind switch
     {
         "reveal" => $"The map round {Arg}",
-        "travel" => $"Travel to {Arg}",
+        "travel" => Arg switch
+        {
+            "card:halffare" => "The half-fare travelcard",
+            "card:ga" => "The GA travelcard",
+            _ => $"Travel to {Arg}",
+        },
         "stamina" => "More stamina",
         _ => $"{Kind} {Arg}",
     };

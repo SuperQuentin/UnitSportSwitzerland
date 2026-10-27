@@ -15,8 +15,9 @@ namespace UnitSport.Adventure;
 /// The starter quests of <c>docs/plans/adventure-objectives.md</c> §6 lean on the other Adventure plans
 /// (POIs, chests, trials, photos, travel points): each is offered only once the plans of its steps run
 /// (<see cref="QuestEngine.Playable"/>). Places are the catalogue's canonical POI ids (<see cref="Places"/>,
-/// the same as the curated Atlas cards', #1224): the events carry canonical ids. "All aboard" and "Grand tour" wait for the navigation plan's half-fare and GA
-/// items (<c>ItemId.HalfFare</c>, <c>ItemId.GaCard</c>), which do not exist yet.
+/// the same as the curated Atlas cards', #1224): the events carry canonical ids. "All aboard" and "Grand tour" (#1226) start by
+/// themselves on a travel point unlocked and give the half-fare and GA travelcards through the <c>"travel"</c> reward
+/// (<c>card:halffare</c>, <c>card:ga</c>), which sets the card in the <c>travel</c> section and puts it in the pack.
 /// </para>
 /// </summary>
 public sealed class QuestCatalog : IQuestSource
@@ -67,6 +68,15 @@ public sealed class QuestCatalog : IQuestSource
         Q("aletsch-glide", "Over the ice", "Unlock Bettmerhorn's cable car, then glide the Aletsch rings under 3 minutes.",
             [new UnlockStep(PointId: Places.BettmerhornTop), new TrialStep("trial:aletsch-rings", MaxSeconds: 180)],
             [new Title("Glacier glider"), new Item(ItemId.HotChocolate, 2)]) with { Canton = "VS", Requires = ["uri-passes"] },
+
+        // the travel network (#1226): both start on their own with the first travel point unlocked
+        Q("all-aboard", "All aboard", "Unlock five travel points: stations, bus stops, ship landings or cable cars. The half-fare travelcard halves every fare.",
+            [new UnlockStep { Count = 5 }],
+            [new Unlock("travel", "card:halffare")]) with { Start = QuestStart.OnEvent },
+
+        Q("grand-tour", "Grand tour", "Unlock 50 travel points in at least five cantons. The GA travelcard: trains, buses and ships free, and travel from anywhere.",
+            [new NetworkStep(50, 5)],
+            [new Unlock("travel", "card:ga"), new Title("Globetrotter")]) with { Start = QuestStart.OnEvent },
     };
 
     private static readonly Dictionary<string, QuestDef> ById = All.ToDictionary(q => q.Id);

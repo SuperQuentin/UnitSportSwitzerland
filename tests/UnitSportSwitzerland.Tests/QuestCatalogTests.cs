@@ -117,6 +117,14 @@ public class QuestCatalogTests
         Feed(new ItemDelivered(1, "k", ItemId.Cheese, 1, "area:Bern's market"));
         Assert.Contains("gruyere-for-bern", done);
 
+        // the travel network (#1226): "All aboard" counts five distinct points from its first; "Grand tour" reads the totals
+        for (int i = 1; i <= 4; i++) Feed(new TravelUnlocked(1, "k", $"busstop:stop-{i}.{i:0000000000}", "busstop", "VS", 1 + i, 1));
+        Assert.Contains("all-aboard", done);
+        Feed(new TravelUnlocked(1, "k", "station:far.0000000099", "station", "TI", 49, 5));
+        Assert.DoesNotContain("grand-tour", done);
+        Feed(new TravelUnlocked(1, "k", "station:far.0000000100", "station", "TI", 50, 5));
+        Assert.Contains("grand-tour", done);
+
         Assert.Equal(QuestCatalog.All.Length, p.Done.Count);
     }
 

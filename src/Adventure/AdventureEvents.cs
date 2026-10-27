@@ -25,8 +25,11 @@ public sealed record ChestOpened(long Peer, string Key, string ChestId, int Tier
 public sealed record TrialFinished(long Peer, string Key, string TrialId, double Seconds, int Medal) : AdventureEvent(Peer, Key);
 /// <summary>A photo target taken (rewards plan).</summary>
 public sealed record PhotoTaken(long Peer, string Key, string TargetId, string? PoiId) : AdventureEvent(Peer, Key);
-/// <summary>A travel point unlocked (navigation plan); <see cref="Kind"/> station, busstop, landing, cablecar.</summary>
-public sealed record TravelUnlocked(long Peer, string Key, string PointId, string Kind) : AdventureEvent(Peer, Key);
+/// <summary>
+/// A travel point unlocked (navigation plan); <see cref="Kind"/> station, busstop, landing, cablecar; <see cref="Canton"/>
+/// the point's; <see cref="Points"/> and <see cref="Cantons"/> the player's network after it (the "Grand tour").
+/// </summary>
+public sealed record TravelUnlocked(long Peer, string Key, string PointId, string Kind, string Canton = "", int Points = 0, int Cantons = 0) : AdventureEvent(Peer, Key);
 /// <summary>Items given to the player by a server-checked source (a quest, a chest).</summary>
 public sealed record ItemObtained(long Peer, string Key, ItemId Item, int Count, string Source) : AdventureEvent(Peer, Key);
 /// <summary>Items handed over at a delivery target (<c>AdventureService.Deliver</c>).</summary>

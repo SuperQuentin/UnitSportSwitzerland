@@ -70,7 +70,7 @@ section's sync, never polled).
   or a quest is tracked (`AskTrack` clears it) or its POI is stamped. Navigation may persist it later (its
   `pins` section).
 
-## Wire (protocol 50)
+## Wire (protocol 50; 51 places, 52 navigation: `travel`)
 
 Client -> server: `RequestStart(id)`, `RequestAbandon(id)`, `RequestTrack(id)` ("" untracks),
 `RequestDeliver(id, step)`. Server -> owner: `SectionSync`, `QuestNote(id, what, step, count)`,

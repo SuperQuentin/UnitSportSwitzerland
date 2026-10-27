@@ -66,6 +66,9 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 |---|---|---|---|---|---|
 | discover a place, clear fog (#1224) | the body's position and ride (`PlacesBodies`) | `PlacesService` tick, after `Enroll(bot)` (session-only progress, `SessionFor`) | `PoiCatalogue.Near` | — | gap: the bot director does not call `Enroll` yet |
 | sync a viewpoint / use a stamp post (#1224) | `TryInteract` at a marker | `PlacesService.ServerInteract(peer, poiId)` | `PoiCatalogue.Near` ("nearest summit cross") | — | gap: no brain uses it (a guide bot later) |
+| travel the network (#1226) | — | `AdventureTravel.TravelBot(bot, poiId, fromSignId)`: `TravelNetwork.MayTravel`, the fare, `FootPlayer.DebugLaunch` (no RPC) | memory of unlocked points: its session `travel` section | wander-travel (walk to a sign, travel) | gap: no brain step yet |
+| unlock a travel point (#1226) | the body's position | the `AdventureTravel` 1 Hz tick (session progress, `SessionFor`) | `PoiCatalogue.Near` | — | gap: the bot director does not enrol bots |
+| compass, pins, target marker, guiding gust (#1226) | — | — | the target directly | — | n/a: UI over a target a bot reads itself |
 | BR crates, supply drops, death boxes: take | — | `BrCrates.TryTake` (a player's request goes through it too) | a crate within 120 m in sight (a ray), or within 25 m | `BotSkills.TakeOne`, `Wants` | ok |
 | a bot's own death box | — | `BrManager.DeathBox` from `Bot.Inventory` | — | — | ok |
 | building loot (furniture) | — | `LootService.ServeTake` needs the bot in the interior's space | — | `Loot` | gap: interiors on the server (a follow-up) |
@@ -117,3 +120,13 @@ gives one progress for the session, never saved.
 | reach a quest's area | `WalkControls` | the server's 2 Hz reach check (`PositionOf` reads the body) | the step's `Target` (`QuestEngine.Locate`) | `MoveTo` | n/a phase 1 |
 | hand a delivery over | — | `AdventureService.Deliver(peer, id, step)` | the step's target | `MoveTo` + `Deliver` | gap: a co-op brain; a bot's pack is its own (`BotHands`), the client's `DeliverOk` take has no bot side |
 | adventure progress, rewards | — | `SessionFor(peer)`, `Grant` | — | — | n/a: no identity, never saved; cash goes to the bank by name (`Bank.Credit` skips the RPC for a bot id) |
+| open a chest (#1227) | — | `RewardService.ServeOpen(peer, id)` (checks the body, not the input) | `RewardService.Map` (the server's own placement) | `MoveTo` + open | n/a: a player's progression |
+| pick an edelweiss, add a cairn stone (#1227) | — | `ServePick(peer, id)` | the same placement | `MoveTo` + pick | n/a |
+| a seal's step: a stack, a bell, a ring, a plate (#1227) | — | `ServeSealStep(peer, chestId, step)` (body at the prop) | `Map.LayoutOf(chest)` | `MoveTo` | n/a; a bot's **body on a pressure plate** counts as a weight for a player (`Occupied`): ok, nothing to build |
+| follow a guide (#1227) | `WalkControls` | `ServeGuide(peer, chestId)`, then the server's 4 Hz follow (`GuideBook.Follow`) on the body | the layout's waypoints | `MoveTo` per leg | n/a |
+| offer edelweiss (#1227) | — | `ServeOffer(peer, shrineId)` | the catalogue's shrines | — | n/a |
+| run a trial (#1227) | `WalkControls` | `ServeTrialStart`, `ServeTrialGate` (body at the gate, pace) | `Trials.At`, the gates | `MoveTo` per gate | n/a |
+| photo spots, fauna (#1227) | — | `ServePhoto` (body in the disc, line of sight), `ServeFauna` | `PhotoSpots` | — | n/a |
+| treasure detector (#1227) | — | none (client readout) | — | — | n/a |
+| bottled gust (#1227) | `BotHands` | `ItemEvents` relay (`ItemEventKind.Gust`; any peer's event is relayed) | — | — | gap: `BotHands` throws nothing yet (no smoke either); a server-side `ItemEvents` send at the bot's aim is all it needs |
+| plant / take up the travel flag (#1227) | `BotHands` | `PlacedObjects` `ServePlace` / `ServeRemove` (private: a client's `AskPlace`/`AskRemove`); planted, `ServedByPeer` sets the planter's `TravelBook.Flag` (`AdventureTravel.SetPortable`) | — | — | gap: no server-side place for a bot (a public `ServePlace(peer, ...)` is all it needs); travel to the flag is navigation's, not built |

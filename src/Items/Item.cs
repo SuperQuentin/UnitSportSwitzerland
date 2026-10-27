@@ -152,6 +152,16 @@ public static class ItemDefs
         new(ItemId.TrafficTool, "Traffic tool", "An admin's (#971). Held, the traffic generators show; {use_item} on a road places one, on a placed one opens it: whether it makes cars and how many, whether it is a destination, where its cars go, which way it faces.",
             ItemUse.TrafficTool, 1, new Color(0.95f, 0.5f, 0.1f), "TG", 0, ItemCategory.Gear, 0f),
 
+        // the Adventure rewards (#1227, Adventure/Rewards): the chests' crystal and the three gadgets it makes
+        new(ItemId.Bergkristall, "Bergkristall", "Rock crystal from the mountains' chests. At a workbench it makes the adventure gadgets.",
+            ItemUse.Material, 99, new Color(0.80f, 0.90f, 0.98f), "RC", 0, ItemCategory.Mineral, 8f),
+        new(ItemId.TreasureDetector, "Treasure detector", "Held, it beeps faster the nearer an unopened chest or an unpicked edelweiss is, within 250 m. {use_item}: one strong ping that points the way for 3 seconds.",
+            ItemUse.Detector, 1, new Color(0.25f, 0.55f, 0.45f), "TD", 0, ItemCategory.Gear, 150f),
+        new(ItemId.TravelFlag, "Travel flag", "{use_item} plants it where you look: a waypoint of your own. {use_item} on a planted one picks it back up.",
+            ItemUse.Place, 3, new Color(0.98f, 0.80f, 0.10f), "TF", 0, ItemCategory.Gear, 60f),
+        new(ItemId.BottledGust, "Bottled gust", "{use_item} throws it ahead: where it lands, an updraft for 20 seconds that lifts a paraglider or a wingsuit.",
+            ItemUse.Gust, 5, new Color(0.70f, 0.88f, 1.0f), "BG", 0, ItemCategory.Gear, 40f),
+
         // gadgets (#275): set down with Use, taken back with Aim + Use
         Gadget(ItemId.Zipline, "Zipline", "{use_item} at the top sets its start, {use_item} again at the bottom (downhill, 8 to 150 m) strings the cable. {interact_mount} at the top post rides it; {jump} lets go.", "#8a8e94", "ZL", 30),
         Gadget(ItemId.RopeLadder, "Rope ladder", "{use_item} on the top of a wall or a ledge hangs it down, up to 8 m. {interact_mount} at its foot climbs it: forward up, back down, {jump} lets go.", "#c8b078", "LD", 15),
@@ -242,6 +252,11 @@ public static class ItemDefs
         Eat(ItemId.BeerBottle, "Beer", 6, "#7a4a1a", "BE", 10, ItemCategory.Water, 3),
         new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
             ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
+        // the travel network (#1226): the travelcards; the server keeps who holds one (TravelBook), the card is its picture
+        new(ItemId.GaCard, "GA travelcard", "The Generalabonnement: trains, buses and ships free, cable cars half price, and travel from anywhere: the map, the Journal, the phone.",
+            ItemUse.Material, 1, new Color("#c8102e"), "GA", 0, ItemCategory.Gear, 0f),
+        new(ItemId.HalfFare, "Half-fare travelcard", "Every fare of the travel network halved, cable cars included.",
+            ItemUse.Material, 1, new Color("#c8102e"), "HT", 0, ItemCategory.Gear, 0f),
     };
 
     private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>
@@ -334,6 +349,7 @@ public static class ItemDefs
             _ when g.Finish == Finish.Camo => " The army's TAZ 90 camouflage.",
             GarmentStyle.Workwear => " Building-site workwear.",
             GarmentStyle.Alien => " From another world.",
+            GarmentStyle.Alpine => " The Alpine set, from the mountains' chests.",
             _ => "",
         };
         string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";
@@ -558,6 +574,45 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.0f, -0.05f), new Vector3(0.025f, 0.02f, 0.14f), red);   // the handle
                 break;
             }
+            case ItemId.Bergkristall:
+            {
+                // a cluster of six-sided points, clear and a little blue
+                var clear = new Color(0.82f, 0.92f, 1.0f);
+                s.Tube(new Vector3(0, -0.02f, 0), new Vector3(0, 0.07f, 0.01f), 0.016f, 0.003f, clear, 6);
+                s.Tube(new Vector3(0.012f, -0.02f, 0), new Vector3(0.04f, 0.04f, 0.0f), 0.011f, 0.002f, clear, 6);
+                s.Tube(new Vector3(-0.012f, -0.02f, 0.004f), new Vector3(-0.035f, 0.035f, 0.012f), 0.01f, 0.002f, new Color(0.9f, 0.95f, 1f), 6);
+                s.Box(new Vector3(0, -0.025f, 0), new Vector3(0.05f, 0.012f, 0.04f), new Color(0.45f, 0.43f, 0.40f));
+                break;
+            }
+            case ItemId.TreasureDetector:
+            {
+                // a dowsing-rod-like probe: a handle, a box with its dial, a ring coil at the end
+                var green = new Color(0.25f, 0.55f, 0.45f);
+                var black = new Color(0.08f, 0.08f, 0.09f);
+                s.Tube(new Vector3(0, -0.04f, -0.06f), new Vector3(0, 0.0f, 0.06f), 0.014f, black, 8);
+                s.Box(new Vector3(0, 0.025f, 0.02f), new Vector3(0.06f, 0.035f, 0.08f), green);
+                s.Box(new Vector3(0, 0.0485f, 0.02f), new Vector3(0.035f, 0.012f, 0.03f), new Color(0.6f, 0.95f, 0.6f));
+                s.Tube(new Vector3(0, 0.01f, 0.06f), new Vector3(0, -0.12f, 0.36f), 0.008f, new Color(0.7f, 0.72f, 0.75f), 6);
+                s.Ring(new Vector3(0, -0.13f, 0.4f), Vector3.Up, 0.045f, 0.06f, 0.012f, black, 14);
+                break;
+            }
+            case ItemId.BottledGust:
+            {
+                // a corked glass bottle, a swirl of wind inside
+                var glass = new Color(0.70f, 0.88f, 1.0f);
+                s.Tube(new Vector3(0, -0.06f, 0.02f), new Vector3(0, 0.05f, 0.02f), 0.032f, glass, 10);
+                s.Tube(new Vector3(0, 0.05f, 0.02f), new Vector3(0, 0.09f, 0.02f), 0.032f, 0.012f, glass, 10);
+                s.Tube(new Vector3(0, 0.09f, 0.02f), new Vector3(0, 0.11f, 0.02f), 0.013f, new Color(0.62f, 0.45f, 0.28f), 8);
+                s.Ring(new Vector3(0, 0.0f, 0.02f), Vector3.Up, 0.012f, 0.022f, 0.004f, new Color(0.95f, 0.98f, 1f), 10);
+                break;
+            }
+            case ItemId.TravelFlag:
+            {
+                // held furled: the pole and the rolled yellow pennant
+                s.Tube(new Vector3(0, -0.2f, 0), new Vector3(0, 0.55f, 0), 0.01f, new Color(0.75f, 0.72f, 0.68f));
+                s.Tube(new Vector3(0, 0.25f, 0), new Vector3(0, 0.5f, 0), 0.025f, new Color(0.98f, 0.80f, 0.10f), 6);
+                break;
+            }
             case ItemId.SmokeCanister:
             {
                 var grey = new Color(0.62f, 0.64f, 0.62f);
@@ -691,6 +746,22 @@ public static class ItemDefs
         AppendFlag(s, pole: 1.9f, cloth: 0.55f, bottom: 0f);
         return _plantedFlag = s.Build();
     }
+
+    /// <summary>A planted travel flag (#1227): a waymark's yellow pennant with the red-white-red mountain band; origin at the foot of the pole.</summary>
+    [Showcase("Items", "Travel flag, planted")]
+    public static ArrayMesh PlantedTravelFlagMesh()
+    {
+        if (_plantedTravelFlag != null) return _plantedTravelFlag;
+        var s = new MeshScratch();
+        s.Tube(new Vector3(0, 0, 0), new Vector3(0, 1.9f, 0), 0.011f, new Color(0.75f, 0.72f, 0.68f));
+        var yellow = new Color(0.98f, 0.80f, 0.10f);
+        s.Box(new Vector3(-0.3f, 1.6f, 0), new Vector3(0.58f, 0.4f, 0.006f), yellow);
+        foreach (var (y, c) in new[] { (1.66f, new Color(0.85f, 0.08f, 0.10f)), (1.6f, new Color(0.97f, 0.97f, 0.97f)), (1.54f, new Color(0.85f, 0.08f, 0.10f)) })
+            s.Box(new Vector3(-0.3f, y, 0), new Vector3(0.4f, 0.06f, 0.03f), c);
+        return _plantedTravelFlag = s.Build();
+    }
+
+    private static ArrayMesh? _plantedTravelFlag;
 
     /// <summary>
     /// A pole with a square red cloth and a white cross — square, because the Swiss flag is one

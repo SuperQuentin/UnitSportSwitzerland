@@ -46,3 +46,46 @@
   onto the station (nothing), syncs the cross by E (the 3 km disc in its fog); B, on at the same time with its
   own `user://`, gets none of it; the server restarts and A keeps its stamps, view and fog. RESULT line; logs
   `test_output/placesnet_*.log`.
+
+## Rewards (#1227)
+
+- `--rewardspots fixture`: hand-placed reward spots round the fixture start (`RewardSpots.Fixture`: a Common chest
+  25 m east and another, one chest per seal, the fixture peak's Luxurious chest, seven edelweiss on the walk to the chapel,
+  the pass's cairn) and a photo spot of the fixture peak from the start; `--rewardspots <file>`: lines `kind tier seal dE
+  dN` from the start. Without it a fixture course places nothing.
+- Quick: `--rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture`
+  (`RewardCheck`, offline, ~2 min of game time): a Common chest opened (lid, reveal, pack, events), reopened and forged ids
+  refused, a chest 80 m off refused; every seal broken and its chest opened (Höhenfeuer, cowbells with a wrong bell, rings,
+  plates held by a dropped stone, the marmot's three legs), the Luxurious chest by its edition; seven edelweiss by the
+  gather hold's target, five offered at the chapel's box; a stone on the pass's cairn; the chapel's run to gold (the
+  board), a second run out for its pace; the fixture photo refused 90° off, then taken; the fauna page; the detector's beep
+  quickening; a gust and its air rising (`AirLift.Volumes`); the travel flag planted (`TravelBook.Flag` set), a second
+  refused, taken up (cleared); the offering's stamina step and the higher max; the Collection tab; the save file read back. Progress in `test_output/rewardcheck`; a scratch
+  inventory and bank. Windowed (add `sky` to `--systems` for a lit scene) it saves `test_output/reward_chest.png`,
+  `reward_guide.png`, `reward_collection.png`.
+- Net: `tools/rewardnetcheck.sh` (~2 min, port 7933): a server on the flat fixture with the fixture POIs and spots; A opens
+  the Common chest (gone for A only), is refused a second time and for two forged ids, picks an edelweiss, runs the
+  chapel's trial, lights the Höhenfeuer and, in a party with B, rings the cowbells' tune; B, at the same time with its own
+  `user://`, still sees the chest and opens it (its own roll), still sees the edelweiss and picks it, picks four more and
+  offers five at the chapel (the server's stamina step reaches B, its max rises), is not lit by A's fires (a stranger's)
+  but has the cowbells' seal broken by its party's tune and opens that chest, and is sent the server's board with A's run
+  (not in B's progress); A's travel flag becomes its portable travel point (`TravelBook.Flag`, synced), a second is
+  refused, taken up it is cleared; in a Battle Royale lobby A's chest and an edelweiss are refused. RESULT line; logs
+  `test_output/rewardnet_*.log`.
+- Tier 3: `--rewardstats [E,N[,km]] --chunks <dir> --systems terrain,adventure` (headless, ~1 min): places every tile of
+  the square round the point with the client's own placement and prints the spots per km² by kind, tier and seal, then
+  quits (RESULT line). Tiles without terrain are left out.
+
+## Navigation (#1226)
+
+- `--adventure-travel network|off` (a server; offline too, for checks): the travel mode. `/travel`, `/travel to <id>`,
+  admin `/travel unlock|lock <id|all> [player]`; `/pin list|add [1-6] [note]|clear`.
+- Quick: `--navcheck --world fixture --systems ui,physics,adventure --pois fixture` (compass, marker on and off screen,
+  gust and arrow, a pin on the map, the Travel tab, the save; windowed `test_output/nav_*.png`, `--style ps1|real+` for
+  the other styles) and `--travelcheck ... --adventure-travel network` (unlocks, the sign and its board, refusals, a
+  charged trip and its curtain, the 10 s rule, the half-fare reward, the GA at the ticket office; windowed
+  `test_output/travel_*.png`). Progress in `test_output/navcheck`, `test_output/travelcheck`.
+- Net: `tools/navnetcheck.sh` (~3 min, port 7931): server `--adventure-travel network`; A unlocks by walking, `/city`
+  refused, a shared pin reaches B in A's party, a locked point and the map without the GA refused, a trip from the
+  station's sign charged (B, an admin, funds it) and B sees A's remote body land, the GA bought and used from anywhere
+  for nothing, refused in a BR round, the pin gone from B when A leaves. RESULT line; logs `test_output/navnet_*.log`.
