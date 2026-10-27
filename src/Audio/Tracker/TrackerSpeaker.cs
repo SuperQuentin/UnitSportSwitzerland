@@ -21,6 +21,7 @@ public partial class TrackerSpeaker : AudioStreamPlayer3D, IMusicSpeaker
     private const float BaseDb = -8f;
     private const double Resync = 1.0;
 
+    private static readonly NodePath SelfPath = NodeName, RadioPath = WebRadio.SpeakerName;
     private static readonly HashSet<TrackerSpeaker> Allowed = new();
     private static readonly List<(float Dist, TrackerSpeaker S)> Ranking = new();
 
@@ -31,6 +32,8 @@ public partial class TrackerSpeaker : AudioStreamPlayer3D, IMusicSpeaker
     private readonly Hearing _hearing = new(6000f);
     private AudioStreamGeneratorPlayback? _playback;
     private TrackerPlayer? _player;
+    private VenueMusicSource? _source;
+    private WebRadioSpeaker? _radio;
     private string _file = "";
     private double _songEnds, _silent, _checkAt;
     private float[] _mix = Array.Empty<float>();
@@ -74,7 +77,7 @@ public partial class TrackerSpeaker : AudioStreamPlayer3D, IMusicSpeaker
         Ranking.Clear();
         foreach (var source in VenueMusicSource.All)
         {
-            if (!IsInstanceValid(source) || source.GetNodeOrNull<TrackerSpeaker>(NodeName) is not { } s) continue;
+            if (!IsInstanceValid(source) || source.GetNodeOrNull<TrackerSpeaker>(SelfPath) is not { } s) continue;
             if (s._silent < SilentFor) continue;
             float d = at.DistanceTo(source.GlobalPosition);
             if (d < Items.RadioLoudness.Radius(source.Volume)) Ranking.Add((d, s));
@@ -85,8 +88,10 @@ public partial class TrackerSpeaker : AudioStreamPlayer3D, IMusicSpeaker
 
     public override void _Process(double delta)
     {
-        var source = GetParent() as VenueMusicSource;
-        var radio = source?.GetNodeOrNull<WebRadioSpeaker>(WebRadio.SpeakerName);
+        var source = _source ??= GetParent() as VenueMusicSource;
+        // the radio beside it comes once the scan wakes the venue; held, not looked up every frame
+        if (_radio == null || !IsInstanceValid(_radio)) _radio = source?.GetNodeOrNull<WebRadioSpeaker>(RadioPath);
+        var radio = _radio;
         // the relay first: while it plays, this one waits
         _silent = radio != null && radio.HeardIndex >= 0 ? 0 : _silent + delta;
         if (_silent < SilentFor || !Allowed.Contains(this) || Mood == VenueMood.None)

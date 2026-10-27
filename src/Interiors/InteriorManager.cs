@@ -812,6 +812,24 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (pass != null) p.AddCollisionExceptionWith(pass);
     }
 
+    /// <summary>
+    /// Whether <paramref name="point"/> (a face a climbing ray hit) is on the facade inside an open or
+    /// opening doorway, jambs and lintel included. The facade has no hole: the climb grabbed the shell a
+    /// walker is let through (<see cref="BeforeMove"/> excepts the body for the move, not for rays).
+    /// </summary>
+    public bool InOpenDoorway(Vector3 point)
+    {
+        foreach (var link in _links.Values)
+        {
+            // swinging open counts too: the walker pushing into it waits for the leaf, not a climb
+            if (!link.Open && link.Swing <= 0f) continue;
+            var p = link.Outside.AffineInverse() * point;
+            if (Math.Abs(p.X) < link.HalfPass + 0.4f && p.Y > -0.5f && p.Y < link.PassHeight + 0.5f && p.Z > -1f && p.Z < 0.5f)
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>After the local player moved from <paramref name="before"/>: across a sill, into the other side.</summary>
     public void AfterMove(FootPlayer p, Vector3 before)
     {
