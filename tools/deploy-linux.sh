@@ -186,6 +186,7 @@ web_accounts() {
   rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/account.js")" < tools/deploy/web/account.js
   rq "cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
   rq "cat > $(qd "$WEB/admin.html")" < tools/deploy/web/admin.html
+  rq "cat > $(qd "$WEB/reset.html")" < tools/deploy/web/reset.html
 }
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
@@ -220,7 +221,11 @@ install_layouts() { # house layouts (#1186): the page, the settings (secrets: a 
   rq "cat > $(qd "$WEB/houses.html")" < tools/deploy/web/houses.html
   [ -z "${LAYOUTS_ADMINS:-}" ] && echo "  LAYOUTS_ADMINS is empty: nobody can approve a house layout (set it in tools/deploy.env)"
   [ -z "${SMTP_HOST:-}" ] && echo "  SMTP_HOST is empty: login links go to $LAYOUTS_DIR/layouts.log instead of an email"
+  # forgotten passwords (#1257): the service calls the host's Nakama with its http key (it exists once --nakama has run)
+  local hk; hk=$(rq "sed -n 's/^NAKAMA_HTTP_KEY=//p' $(qd "$NAKAMA_DIR/.env") 2>/dev/null || $SUDO -n sed -n 's/^NAKAMA_HTTP_KEY=//p' $(qd "$NAKAMA_DIR/.env") 2>/dev/null" | tr -d '\r\n' || true)
+  [ -z "$hk" ] && echo "  no Nakama http key yet: password reset mails stay off until --nakama has run and --setup runs again"
   { for v in LAYOUTS_DB SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM; do printf '%s=%q\n' "$v" "${!v:-}"; done
+    printf '%s=%q\n' NAKAMA_URL "http://127.0.0.1:$NAKAMA_PORT" NAKAMA_HTTP_KEY "$hk"
     printf '%s=%q\n' ADMIN_EMAILS "${LAYOUTS_ADMINS:-}" PUBLIC_URL "$LAYOUTS_PUBLIC_URL" LAYOUTS_URLS "http://127.0.0.1:$LAYOUTS_PORT" \
       LAYOUTS_DATA "$LAYOUTS_DIR" LAYOUTS_CHUNKS "$CHUNKS_DIR" LAYOUTS_EXPORT "$LAYOUTS_DIR/house-layouts.json"
   } | rq "mkdir -p $(qd "$LAYOUTS_DIR") && umask 077 && cat > $(qd "$LAYOUTS_DIR/layouts.env")"
@@ -356,7 +361,7 @@ if [ $S_NAKAMA = 1 ]; then
       printf '{"url":"/nakama","serverKey":"%s"}
 ' "$key" | rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/nakama.json")"
       web_accounts
-      echo "  website accounts: nakama.json, account.js and admin.html in $WEB; first admins: ${NAKAMA_ADMIN_EMAILS:-none}"
+      echo "  website accounts: nakama.json, account.js, admin.html and reset.html in $WEB; first admins: ${NAKAMA_ADMIN_EMAILS:-none}"
     fi
     echo "  official server of a build: put both in assets/account-server.json (url, serverKey) before releasing"
     echo "  admin console: ssh -L 7351:127.0.0.1:7351 -p $DEPLOY_PORT_SSH $DEPLOY_HOST, then http://127.0.0.1:7351 (login in $NAKAMA_DIR/.env)"

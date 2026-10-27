@@ -11,6 +11,7 @@
 //   COOKIE_SECURE    0 for a plain-http local run (default 1)
 //   LAYOUTS_WEB      a local run only: also serve this dir (tools/deploy/web) at /, so houses.html and /api share an origin
 //   LAYOUTS_URLS     where to listen (default http://127.0.0.1:5080); SMTP_*: see Mailer
+//   NAKAMA_URL, NAKAMA_HTTP_KEY   the account server and its server-to-server key: forgotten passwords (#1257); without them 503
 using System.Net.Mail;
 using System.Text.Json;
 using System.Threading.RateLimiting;
@@ -57,6 +58,7 @@ builder.Services.AddRateLimiter(o =>
 builder.Services.AddSingleton(new Store(Env("LAYOUTS_DB", Path.Combine(dataDir, "layouts.db"))));
 builder.Services.AddSingleton(new Buildings(Path.GetFullPath(Env("LAYOUTS_CHUNKS", "terrain_chunks"))));
 builder.Services.AddSingleton<Mailer>();
+builder.Services.AddSingleton(new PasswordReset(Env("NAKAMA_URL", ""), Env("NAKAMA_HTTP_KEY", "")));
 
 var app = builder.Build();
 app.UseForwardedHeaders();
@@ -147,7 +149,33 @@ api.MapPost("/login", async (LoginBody body, Mailer mail) =>
     return Results.Ok(new { ok = true }); // the same answer when throttled: it says nothing about the address
 }).RequireRateLimiting("login");
 
-api.MapPost("/login/verify", (TokenBody body, HttpContext ctx) =>
+// a forgotten account password (#1257, docs/notes/net/nakama.md): Nakama holds the single-use token, this service mails the link
+api.MapPost("/password/forgot", async (LoginBody body, PasswordReset reset, Mailer mail) =>
+{
+    if (!reset.Configured) return Bad("password reset is not set up on this server", 503);
+    string email;
+    try { email = new MailAddress(body.Email?.Trim() ?? "").Address.ToLowerInvariant(); }
+    catch (FormatException) { return Bad("not an email address"); }
+    if (email.Length > 254) return Bad("not an email address");
+    if (!reset.MayAsk(email)) return Results.Ok(new { ok = true });   // a minute between two mails to one address
+    try
+    {
+        // the same answer whether or not an account has this email: it says nothing about who is registered
+        if (await reset.Issue(email) is { } token) await mail.SendPasswordReset(email, $"{publicUrl}/reset.html#token={token}");
+    }
+    catch (Exception ex) { log.LogError(ex, "password reset for {Email} failed", email); return Bad("could not send the email", 502); }
+    return Results.Ok(new { ok = true });
+}).RequireRateLimiting("login");
+
+api.MapPost("/password/reset", async (ResetBody body, PasswordReset reset) =>
+{
+    if (!reset.Configured) return Bad("password reset is not set up on this server", 503);
+    if (body.Token is not { Length: 64 } || body.Password is not { Length: >= 8 and <= 128 }) return Bad("the password needs 8 to 128 characters");
+    try { return await reset.Apply(body.Token, body.Password) ? Results.Ok(new { ok = true }) : Bad("this link is used or expired: ask for a new one"); }
+    catch (Exception ex) { log.LogError(ex, "password reset apply failed"); return Bad("the account server does not answer", 502); }
+}).RequireRateLimiting("login");
+
+api.MapPost("/login/verify",(TokenBody body, HttpContext ctx) =>
 {
     var session = body.Token is { Length: > 10 and < 100 } t ? store.Redeem(t) : null;
     if (session == null) return Bad("this link is used or expired: ask for a new one", 401);
@@ -317,6 +345,7 @@ static string Trim(string? s, int max) => (s ?? "").Trim() is var t && t.Length 
 
 record LoginBody(string? Email);
 record TokenBody(string? Token);
+record ResetBody(string? Token, string? Password);
 record ClaimBody(uint Egid, double E, double N, string? Address, string? Note);
 record ReasonBody(string? Reason);
 record SaveBody(HouseLayout? Layout, JsonElement? Plan, string? Note);

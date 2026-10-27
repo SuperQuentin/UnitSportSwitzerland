@@ -54,6 +54,15 @@ public class AccountRulesTests
     public void An_account_server_has_one_spelling(string? url, string normal) =>
         Assert.Equal(normal, AccountRules.NormalizeUrl(url));
 
+    [Theory]
+    [InlineData("https://unitsport.infrack.ch/nakama", "https://unitsport.infrack.ch")]
+    [InlineData("https://unitsport.infrack.ch/nakama/", "https://unitsport.infrack.ch")]
+    [InlineData("http://host:7350", "")]
+    [InlineData("http:///nakama", "")]
+    [InlineData("", "")]
+    public void Only_a_server_behind_the_site_can_mail_a_password_reset(string url, string site) =>
+        Assert.Equal(site, AccountRules.SiteOf(url));
+
     [Fact]
     public void The_same_server_however_written_but_never_an_empty_one()
     {

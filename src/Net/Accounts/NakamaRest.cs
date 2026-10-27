@@ -33,6 +33,25 @@ public static class NakamaRest
         return Session(url, serverKey, "/v2/account/authenticate/email" + q, new { email, password });
     }
 
+    /// <summary>
+    /// Asks the site for a mail with a link to choose a new password (#1257); the answer is the same whether or not an
+    /// account has this email. Throws <see cref="NakamaException"/> with a sentence when the server has no reset.
+    /// </summary>
+    public static async Task ForgotPassword(string url, string email)
+    {
+        string site = AccountRules.SiteOf(url);
+        if (site.Length == 0) throw new NakamaException("This account server cannot reset passwords by email.");
+        using var req = new HttpRequestMessage(HttpMethod.Post, site + "/api/password/forgot")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new { email }), Encoding.UTF8, "application/json"),
+        };
+        req.Headers.Add("X-Requested-With", "houses"); // the layout service's CSRF header
+        using var res = await Send(req);
+        if (res.IsSuccessStatusCode) return;
+        throw new NakamaException(Message(await res.Content.ReadAsStringAsync(), res.StatusCode) is var m && m.StartsWith("The account server answered", StringComparison.Ordinal)
+            ? "The password reset is not available right now." : m);
+    }
+
     /// <summary>A new session from the refresh token, while it lasts.</summary>
     public static Task<NakamaSession> Refresh(string url, string serverKey, string refreshToken) =>
         Session(url, serverKey, "/v2/account/session/refresh", new { token = refreshToken });
@@ -99,6 +118,16 @@ public static class NakamaRest
         }
     }
 
+    private static string? JsonErrorOf(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.TryGetProperty("error", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
     /// <summary>Nakama's own sentence when it sent one ({"message": ...}), else the status.</summary>
     private static string Message(string body, HttpStatusCode status)
     {
@@ -108,6 +137,7 @@ public static class NakamaRest
             if (doc.RootElement.TryGetProperty("message", out var m) && m.GetString() is { Length: > 0 } s) return s;
         }
         catch (JsonException) { }
+        if (JsonErrorOf(body) is { Length: > 0 } e) return char.ToUpperInvariant(e[0]) + e[1..] + (e.EndsWith('.') ? "" : ".");
         return status == HttpStatusCode.Unauthorized ? "The account server's key is wrong." : $"The account server answered {(int)status}.";
     }
 }
