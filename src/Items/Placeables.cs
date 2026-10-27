@@ -24,6 +24,9 @@ public static class Placeables
             0.85f, Crafting.StationVisuals.WorkbenchMesh, false),
         new(ItemId.FarmStand, PlacedKind.FarmStand, "set up the stand", "Farm stand set up: stock it with E.", "Too steep for a stand.",
             0.85f, Farming.FarmStandVisual.StandMesh, false),
+        // the Adventure's travel flag (#1227): planted like the Swiss flag; travel to it is the navigation plan's (#1226)
+        new(ItemId.TravelFlag, PlacedKind.TravelFlag, "plant your travel flag", "Travel flag planted.", "Too steep to plant a flag.", 0.6f,
+            ItemDefs.PlantedTravelFlagMesh, true),
     };
 
     public static Placeable? ForItem(ItemId id) => All.FirstOrDefault(p => p.Item == id);

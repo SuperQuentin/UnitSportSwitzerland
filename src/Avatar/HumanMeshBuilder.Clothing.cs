@@ -79,7 +79,7 @@ public static partial class HumanMeshBuilder
         // head clothes replace an occasion hat; a helmet replaces both
         if (helmet || fullFace || headwear != null) hat = Headwear.None;
         var cover = fullFace || hat == Headwear.PumpkinHead ? HairCover.Head
-            : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape is GarmentShape.Beanie or GarmentShape.HardHat ? HairCover.Hat
+            : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape is GarmentShape.Beanie or GarmentShape.HardHat or GarmentShape.FeltHat ? HairCover.Hat
             : HairCover.None;
 
         var look = Dress(palette, o, top, bottom);
@@ -927,6 +927,16 @@ public static partial class HumanMeshBuilder
                 s.Tube(lo, hi, neck + 0.006f, c.A, 8);
                 AppendHeart(s, mid + f.Fwd * (neck + 0.014f) - f.Up * 0.025f, f, 0.030f, c.B);
                 break;
+            case GarmentShape.Bandana:
+            {
+                // #1227: a red bandana knotted round the neck, its point on the chest, a white cross on it
+                s.Tube(lo, hi, neck + 0.01f, c.A, 8);
+                var point = mid + f.Fwd * (neck + 0.02f) - f.Up * 0.05f;
+                s.Box(point, new Vector3(0.07f, 0.06f, 0.012f), c.C, f.Basis);
+                s.Box(point + f.Fwd * 0.007f, new Vector3(0.03f, 0.008f, 0.004f), c.B, f.Basis);
+                s.Box(point + f.Fwd * 0.007f, new Vector3(0.008f, 0.03f, 0.004f), c.B, f.Basis);
+                break;
+            }
             case GarmentShape.BellCollar:
             {
                 s.Tube(lo, hi, neck + 0.008f, c.A, 8);
@@ -1108,6 +1118,20 @@ public static partial class HumanMeshBuilder
                 s.Box(from + up * (height * 0.86f), new Vector3(0.024f, 0.022f, 2f * r * 0.62f), c.C, f.Basis);
                 // the harness band inside the shell, seen under the brim
                 s.Tube(from - up * 0.012f, from - up * 0.002f, hw + 0.012f, c.B, 10);
+                break;
+            }
+            case GarmentShape.FeltHat:
+            {
+                // #1227: the mountain guide's felt hat: a pinched crown, a brim turned down at the front, its band and the edelweiss pin
+                var from = head.Centre(0.14f);
+                float r = hw + 0.022f;
+                s.Tube(from + up * 0.005f, top + up * 0.055f, r, r * 0.78f, c.A, 10);
+                s.Tube(top + up * 0.05f, top + up * 0.062f, r * 0.78f, r * 0.55f, c.A, 10);
+                s.Tube(from - up * 0.004f, from + up * 0.006f, r + 0.05f, r + 0.045f, c.A, 12);
+                s.Box(from + fwd * (r + 0.03f) - up * 0.008f, new Vector3(0.12f, 0.008f, 0.04f), c.A, f.Basis);
+                s.Tube(from + up * 0.008f, from + up * 0.026f, r + 0.003f, r + 0.002f, c.B, 10);
+                var pin = from + up * 0.018f + side * (r + 0.004f);
+                s.Box(pin, new Vector3(0.006f, 0.022f, 0.022f), c.C, f.Basis);
                 break;
             }
             case GarmentShape.Beanie:

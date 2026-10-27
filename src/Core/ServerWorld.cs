@@ -355,6 +355,29 @@ public partial class ServerWorld : Node3D, IOriginContainer
             Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
             Adventure.Places.PlacesService.Create(adventure, server: true, networked: true).BodyOf = peer =>
                 PlayerOf(peer) is { } body ? Adventure.Places.PlacesBodies.Of(body, body.NetGlobal, PlayerOf, ground) : null;
+            // rewards (#1227): chests, edelweiss, seals, guides, trials and photos, checked against this server's own placement
+            var rewards = Adventure.Rewards.RewardService.Create(adventure, server: true, networked: true, () => source,
+                (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N));
+            var parties = _parties;
+            rewards.PartyOf = peer => parties?.Of(peer)?.Members;
+            var dropped = _dropped;
+            rewards.Occupied = (e, n, radius, except) =>
+            {
+                // a pressure plate's weight: another player's body, or something dropped on it
+                for (int i = 0; i < _players!.GetChildCount(); i++)
+                    if (_players.GetChild(i) is Player.FootPlayer p && p.GetMultiplayerAuthority() != except)
+                    {
+                        var g = p.NetGlobal;
+                        if ((g.E - e) * (g.E - e) + (g.N - n) * (g.N - n) <= radius * radius) return true;
+                    }
+                if (dropped != null)
+                    foreach (var item in dropped.Items)
+                    {
+                        var (ie, inn) = dropped.Origin.ToLv95(item.GlobalPosition);
+                        if ((ie - e) * (ie - e) + (inn - n) * (inn - n) <= radius * radius) return true;
+                    }
+                return false;
+            };
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
@@ -655,6 +678,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _adventure?.PeerLeft(id);
         Adventure.Places.PlacesService.Instance?.PeerLeft(id);
+        Adventure.Rewards.RewardService.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);

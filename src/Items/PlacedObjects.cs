@@ -32,6 +32,8 @@ public enum PlacedKind
     HayHideout = 10,
     /// <summary>A self-service farm stand (#494): its crates and honesty box are <c>Farming.FarmStands</c>' state. Only its owner packs it up, empty.</summary>
     FarmStand = 11,
+    /// <summary>A planted travel flag (#1227): a waypoint of one's own; what travel to it means is the navigation plan's (#1226). Only its owner pulls it up.</summary>
+    TravelFlag = 12,
 }
 
 /// <summary>
@@ -103,6 +105,7 @@ public partial class PlacedObjects : Node
         [PlacedKind.CamoNet] = Build.GadgetMeshes.Visual,
         [PlacedKind.HayHideout] = Build.GadgetMeshes.Visual,
         [PlacedKind.FarmStand] = Farming.FarmStandVisual.Visual,
+        [PlacedKind.TravelFlag] = _ => FlagVisual(ItemDefs.PlantedTravelFlagMesh()),
     };
 
     /// <summary>
@@ -517,10 +520,10 @@ public partial class PlacedObjects : Node
     // ---- built-in visuals -----------------------------------------------------------------------
 
     /// <summary>The planted Swiss flag: the item's planted mesh on a pole-thin collider.</summary>
-    public static Node3D FlagVisual()
+    public static Node3D FlagVisual(ArrayMesh? mesh = null)
     {
         var body = new StaticBody3D();
-        body.AddChild(new MeshInstance3D { Mesh = ItemDefs.PlantedFlagMesh(), MaterialOverride = ItemDefs.Material });
+        body.AddChild(new MeshInstance3D { Mesh = mesh ?? ItemDefs.PlantedFlagMesh(), MaterialOverride = ItemDefs.Material });
         // pole-thin, so it is something to aim at for picking up rather than a wall to walk into
         body.AddChild(new CollisionShape3D
         {

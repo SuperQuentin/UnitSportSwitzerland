@@ -96,10 +96,15 @@ public static class PhotoSpots
             : new PhotoSpot("ph:" + vp.Id, $"{best.Name} from {vp.Name}", vp.E, vp.N, StandRadius, best.E, best.N, best.Elevation, best.Name, vp.Id);
     }
 
+    /// <summary>Hand-placed spots of a check's world (<c>--rewardspots fixture</c>: the fixture peak from the start); empty for players.</summary>
+    public static List<PhotoSpot> Extra { get; } = new();
+
     /// <summary>A curated spot or a viewpoint's, by id; null for an id nobody has (a forged report).</summary>
     public static PhotoSpot? Resolve(string id, PoiCatalogue cat)
     {
         foreach (var s in Curated)
+            if (s.Id == id) return s;
+        foreach (var s in Extra)
             if (s.Id == id) return s;
         if (!id.StartsWith("ph:", StringComparison.Ordinal) || cat.Resolve(id[3..]) is not { } vp) return null;
         return OfViewpoint(vp, cat, new List<Poi>());
@@ -110,6 +115,8 @@ public static class PhotoSpots
     {
         var list = new List<PhotoSpot>();
         foreach (var s in Curated)
+            if (Inside(s, e, n)) list.Add(s);
+        foreach (var s in Extra)
             if (Inside(s, e, n)) list.Add(s);
         var near = new List<Poi>();
         cat.Near(e, n, 1000, near);

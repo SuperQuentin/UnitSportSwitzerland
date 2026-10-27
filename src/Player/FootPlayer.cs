@@ -2777,6 +2777,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
+        // a chest, a seal's stack or cowbell, a guide's burrow, a trial's post, an offering box (#1227)
+        if (Adventure.Rewards.RewardWorld.TryInteract(this)) return true;
         // a summit cross, a telescope or a stamp post at hand (#1224): look out, or stamp
         if (Adventure.Places.PoiMarkers.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
