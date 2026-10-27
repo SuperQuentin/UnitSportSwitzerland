@@ -80,10 +80,11 @@ public static class VsPropMeshes
         foreach (float x in new[] { -0.07f, 0.07f })
             s.RoundedBox(new Vector3(x, 0.04f, 0.02f), new Vector3(0.09f, 0.08f, 0.14f), Boot);
         s.Tube(new Vector3(0, 0.06f, 0), new Vector3(0, 0.3f, 0), 0.15f, 0.12f, Blue, 8);
-        s.Box(new Vector3(0, 0.12f, 0), new Vector3(0.31f, 0.04f, 0.31f), C("4a3020"));
+        // the belt round the coat's waist, standing proud of it
+        s.Tube(new Vector3(0, 0.19f, 0), new Vector3(0, 0.23f, 0), 0.152f, 0.146f, C("4a3020"), 8);
         s.RoundedBox(new Vector3(0, 0.36f, 0), new Vector3(0.18f, 0.14f, 0.16f), Skin);
-        s.Tube(new Vector3(0, 0.36f, 0.05f), new Vector3(0, 0.22f, 0.1f), 0.08f, 0.02f, Beard, 6);
-        s.RoundedBox(new Vector3(0, 0.37f, 0.09f), new Vector3(0.04f, 0.04f, 0.04f), C("d88a78"));
+        s.Tube(new Vector3(0, 0.34f, 0.05f), new Vector3(0, 0.22f, 0.1f), 0.08f, 0.02f, Beard, 6);
+        s.RoundedBox(new Vector3(0, 0.40f, 0.1f), new Vector3(0.04f, 0.04f, 0.04f), C("d88a78"));
         s.Tube(new Vector3(0, 0.42f, 0), new Vector3(0, 0.6f, -0.04f), 0.11f, 0.01f, Red, 8);
     });
 
@@ -94,7 +95,8 @@ public static class VsPropMeshes
         foreach (float x in new[] { -0.7f, 0.7f })
         {
             s.Box(new Vector3(x, 0.22f, 0.05f), new Vector3(0.06f, 0.44f, 0.5f), Iron);
-            s.Box(new Vector3(x, 0.62f, -0.2f), new Vector3(0.06f, 0.4f, 0.06f), Iron);
+            // the back's posts behind the slats and a hand higher (zfight: no face within 8 mm of a slat's)
+            s.Box(new Vector3(x, 0.64f, -0.28f), new Vector3(0.06f, 0.48f, 0.06f), Iron);
         }
         for (int k = 0; k < 3; k++)
             s.Box(new Vector3(0, 0.46f, -0.1f + k * 0.14f), new Vector3(1.6f, 0.04f, 0.11f), Slat);
