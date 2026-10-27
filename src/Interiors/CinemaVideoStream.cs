@@ -100,7 +100,7 @@ public sealed class CinemaVideoStream : IDisposable
         if (_disposed || Failed || Ended) return false;
         if (!_resolved)
         {
-            if (!_resolving) { _resolving = true; new Thread(Resolve) { IsBackground = true, Name = "cinema-resolve" }.Start(); }
+            if (!_resolving) { _resolving = true; new Thread(Resolve) { IsBackground = true, Name = "cinema-lookup" }.Start(); }
             return false;
         }
         if (_video == null) Begin(position, CinemaVideo.StartLead);
@@ -166,7 +166,7 @@ public sealed class CinemaVideoStream : IDisposable
     {
         try
         {
-            if (!CinemaVideo.IsSite(Link))
+            if (!CinemaVideo.NeedsLookup(Link))
             {
                 _videoUrl = _audioUrl = Link;
                 return;
@@ -224,7 +224,7 @@ public sealed class CinemaVideoStream : IDisposable
         Volatile.Write(ref _heard, 0);
         _lastIndex = -1;
         _videoDone = false;
-        if (CinemaVideo.IsSite(Link)) lead += CinemaVideo.SiteLead;
+        if (CinemaVideo.NeedsLookup(Link)) lead += CinemaVideo.SiteLead;
         double at = Live ? 0 : position + lead;
         // a live stream's frames are timed as they come (Pump); a video's from where it was started
         _start = Live ? double.NaN : at;
@@ -232,8 +232,8 @@ public sealed class CinemaVideoStream : IDisposable
         _restartAfter = position + lead + CinemaVideo.FallBehind;
         string size = $"scale={CinemaVideo.Width}:{CinemaVideo.Height}:force_original_aspect_ratio=decrease,"
             + $"pad={CinemaVideo.Width}:{CinemaVideo.Height}:(ow-iw)/2:(oh-ih)/2,fps={CinemaVideo.Fps}";
-        _video = Start("ffmpeg", Input(_videoUrl, at).Concat(new[] { "-an", "-sn", "-vf", size, "-f", "rawvideo", "-pix_fmt", "rgba", "-" }), info: true);
-        _audio = Start("ffmpeg", Input(_audioUrl, at).Concat(new[] { "-vn", "-sn", "-ac", "2", "-ar", CinemaVideo.AudioRate.ToString(), "-f", "s16le", "-" }));
+        _video = Start("ffmpeg", Input(_videoUrl, at, Live).Concat(new[] { "-an", "-sn", "-vf", size, "-f", "rawvideo", "-pix_fmt", "rgba", "-" }), info: true);
+        _audio = Start("ffmpeg", Input(_audioUrl, at, Live).Concat(new[] { "-vn", "-sn", "-ac", "2", "-ar", CinemaVideo.AudioRate.ToString(), "-f", "s16le", "-" }));
         if (_video == null) { Fail("ffmpeg is missing: the video cannot play here"); return; }
         var room = _room;
         var vout = _video.StandardOutput.BaseStream;
@@ -246,12 +246,14 @@ public sealed class CinemaVideoStream : IDisposable
     }
 
     /// <summary>ffmpeg's input arguments: the web only (or a check's file), reconnecting, seeked to <paramref name="at"/>.</summary>
-    private static IEnumerable<string> Input(string url, double at)
+    private static IEnumerable<string> Input(string url, double at, bool live)
     {
         var args = new List<string> { "-nostdin", "-hide_banner", "-nostats" };
         bool web = url.StartsWith("http", StringComparison.OrdinalIgnoreCase);
         args.AddRange(new[] { "-protocol_whitelist", web ? "http,https,tls,tcp,crypto,hls" : "file,crypto" });
         if (web) args.AddRange(new[] { "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5" });
+        // a live playlist from near its edge, not the start of its window: every client a segment or two behind live
+        if (live && url.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)) args.AddRange(new[] { "-live_start_index", "-2" });
         if (at > 0.01) args.AddRange(new[] { "-ss", at.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) });
         args.AddRange(new[] { "-i", url });
         return args;
@@ -295,7 +297,7 @@ public sealed class CinemaVideoStream : IDisposable
         {
             string value = line[(d + 10)..].Split(',')[0].Trim();
             if (TimeSpan.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var span)) Duration = Math.Max(Duration, span.TotalSeconds);
-            else if (value == "N/A" && Duration <= 0 && !Live && !CinemaVideo.IsSite(Link)) { Live = true; _start = double.NaN; _soundStart = double.NaN; }
+            else if (value == "N/A" && Duration <= 0 && !Live && !CinemaVideo.NeedsLookup(Link)) { Live = true; _start = double.NaN; _soundStart = double.NaN; }
             return;
         }
         if (!info || line.Contains("rror", StringComparison.Ordinal) || line.Contains("failed", StringComparison.Ordinal))

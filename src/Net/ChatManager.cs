@@ -185,6 +185,12 @@ public partial class ChatManager : Node
             if (located.Length > 0) LineReceived?.Invoke(located, locateFailed ? ChatKind.Error : ChatKind.Private);
             return;
         }
+        // a cinema hall's video (#1298): this client knows the hall it is in, and asks the server as the panel does
+        if (Interiors.CinemaBooths.RunLocal(text.Trim()) is { } cinema)
+        {
+            LineReceived?.Invoke(cinema, ChatKind.Private);
+            return;
+        }
         // the visual style is this screen's alone: never a server's business
         if (Styles.StyleCommand.Run(text.Trim()) is { } style)
         {

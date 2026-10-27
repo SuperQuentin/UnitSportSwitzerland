@@ -1,0 +1,281 @@
+using Godot;
+using UnitSport.Core;
+using UnitSport.Ui;
+
+namespace UnitSport.Interiors;
+
+/// <summary>
+/// A hall's projector panel (#1298): what its screen shows. E (pad interact, VR grip) at the screen's half of
+/// the booth's control panel opens it (<see cref="CinemaBooths.TryUse"/>); the lights stay on the other half.
+/// Screen off, the cat slides, or a video: a link pasted or typed (a YouTube, Twitch or Vimeo page, or a
+/// video's own URL: mp4, webm, an HLS .m3u8), played for the whole hall from now on the shared clock. The links
+/// this player played before are one press away (kept in <c>user://cinema_links.txt</c>): a pad or a VR laser
+/// picks one, Paste takes the clipboard, so nobody has to type a link without a keyboard.
+///
+/// <para>
+/// Nothing here plays or keeps state: it asks <see cref="CinemaBooths"/> (the server decides, every client plays)
+/// and shows what this client's decoder says (loading, the reason a link cannot play). Mouse, keyboard (Tab,
+/// Enter), pad (D-pad, A, B) and the VR laser on the UI panel. Closes on E away from the link box, Esc / B, a
+/// click outside, or walking away from the panel.
+/// </para>
+/// </summary>
+public partial class CinemaPanelUi : CanvasLayer
+{
+    private const float Width = 620, Gutter = 16;
+    private const int MaxRecent = 6;
+    private const string RecentFile = "user://cinema_links.txt";
+
+    public static CinemaPanelUi? Instance { get; private set; }
+
+    private PanelContainer _panel = null!;
+    private Label _title = null!, _now = null!, _status = null!;
+    private Button _off = null!, _slides = null!, _stop = null!, _play = null!;
+    private LineEdit _link = null!;
+    private VBoxContainer _recent = null!;
+    private UnitSport.Player.FootPlayer? _me;
+    private string _plan = "";
+    private int _hall = -1;
+    private double _since;
+    private string _shown = "\0";
+
+    public bool IsOpen => _panel != null && _panel.Visible;
+
+    /// <summary>Opens the panel of hall <paramref name="hall"/> of cinema <paramref name="plan"/>, making it the first time.</summary>
+    public static void Open(UnitSport.Player.FootPlayer me, string plan, int hall)
+    {
+        if (Instance == null || !IsInstanceValid(Instance))
+        {
+            Instance = new CinemaPanelUi { Name = "CinemaPanelUi" };
+            me.GetTree().Root.AddChild(Instance);
+        }
+        Instance._me = me;
+        Instance.OpenFor(plan, hall);
+    }
+
+    public override void _Ready()
+    {
+        Layer = 12;
+        _panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
+        _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.95f, 12, 18));
+        AddChild(_panel);
+        var box = UiKit.VBox(10);
+        _panel.AddChild(box);
+
+        var header = UiKit.HBox(10);
+        box.AddChild(header);
+        var titles = UiKit.VBox(0);
+        titles.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        header.AddChild(titles);
+        _title = UiKit.Text("Projector", UiTheme.FontHeading, UiTheme.Text, bold: true);
+        titles.AddChild(_title);
+        _now = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _now.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        titles.AddChild(_now);
+        var close = UiKit.IconButton(Icons.Close, InputHints.Format("Close ({menu})", InputDevice.KeyboardMouse));
+        close.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+        close.Pressed += Close;
+        header.AddChild(close);
+
+        // what the screen shows: off, the slides, or the video below
+        var shows = UiKit.HBox(10);
+        box.AddChild(shows);
+        _off = UiKit.Button("Screen off");
+        _off.Pressed += () => Ask(screen: false, link: "");
+        shows.AddChild(_off);
+        _slides = UiKit.Button("Cat slides");
+        _slides.Pressed += () => Ask(screen: true, link: "");
+        shows.AddChild(_slides);
+        _stop = UiKit.Button("Stop the video");
+        _stop.Pressed += () => Ask(screen: true, link: "");
+        shows.AddChild(_stop);
+
+        box.AddChild(UiKit.Line());
+        box.AddChild(UiKit.Section("Play a video"));
+        var row = UiKit.HBox(10);
+        box.AddChild(row);
+        _link = new LineEdit
+        {
+            PlaceholderText = "A YouTube or Twitch link, or a video's URL",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            MaxLength = CinemaVideo.MaxLink,
+        };
+        _link.TextSubmitted += _ => PlayTyped();
+        row.AddChild(_link);
+        var paste = UiKit.Button("Paste");
+        paste.TooltipText = "The link on your clipboard";
+        paste.Pressed += () =>
+        {
+            _link.Text = DisplayServer.ClipboardGet().Trim();
+            _link.CaretColumn = _link.Text.Length;
+        };
+        row.AddChild(paste);
+        _play = UiKit.Button("Play", primary: true);
+        _play.Pressed += PlayTyped;
+        row.AddChild(_play);
+        _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        box.AddChild(_status);
+
+        _recent = UiKit.VBox(4);
+        box.AddChild(_recent);
+    }
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    private void OpenFor(string plan, int hall)
+    {
+        _plan = plan;
+        _hall = hall;
+        _title.Text = $"Hall {hall + 1} projector";
+        _link.Text = "";
+        _shown = "\0";
+        Rebuild();
+        Refresh();
+        _panel.Visible = true;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
+        UiFocus.Set(this, true);
+        Callable.From(() => { Fit(); (_play.Visible ? _link : (Control)_slides).GrabFocus(); }).CallDeferred();
+        if (!CinemaVideoStream.CanDecode) _status.Text = "This device cannot play videos: the others in the hall see it, you see the slides.";
+    }
+
+    public void Close()
+    {
+        if (!IsOpen) return;
+        _panel.Visible = false;
+        _link.ReleaseFocus();
+        UiFocus.Set(this, false);
+        MouseCapture.Capture();
+    }
+
+    private void Fit()
+    {
+        var screen = GetViewport().GetVisibleRect().Size;
+        float w = Mathf.Min(Width, screen.X - 2 * Gutter), h = _panel.GetCombinedMinimumSize().Y;
+        _panel.SetAnchorsPreset(Control.LayoutPreset.Center);
+        _panel.OffsetLeft = -w / 2;
+        _panel.OffsetRight = w / 2;
+        _panel.OffsetTop = -h / 2;
+        _panel.OffsetBottom = h / 2;
+    }
+
+    // ---- asking ----------------------------------------------------------------------------------
+
+    private void PlayTyped()
+    {
+        string link = _link.Text.Trim();
+        if (!CinemaVideo.Allowed(link)) { _status.Text = "That is not a web link (https://…)."; return; }
+        Remember(link);
+        Ask(screen: true, link);
+        _link.Text = "";
+        Rebuild();
+    }
+
+    private void Ask(bool screen, string link)
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        var (lights, _) = booths.StateOf(_plan, _hall);
+        booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, screen));
+        booths.AskVideo(_plan, _hall, screen ? link : "");
+        _status.Text = link.Length > 0 ? "Starting…" : "";
+    }
+
+    // ---- what plays ------------------------------------------------------------------------------
+
+    public override void _Process(double delta)
+    {
+        if (!IsOpen) return;
+        if (CinemaBooths.Instance is not { } booths || InteriorManager.Instance?.Current?.Key != _plan
+            || _me is not { } me || !IsInstanceValid(me) || CinemaBooths.At(me) is not { } at || at.Plan != _plan || at.Hall != _hall)
+        {
+            Close();
+            return;
+        }
+        _since += delta;
+        if (_since < 0.2) return;
+        _since = 0;
+        Refresh();
+    }
+
+    /// <summary>The header and the buttons from the hall's state and this client's decoder, on change only.</summary>
+    private void Refresh()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        var (_, screen) = booths.StateOf(_plan, _hall);
+        var (link, _) = booths.VideoOf(_plan, _hall);
+        var stream = booths.StreamOf(_plan, _hall);
+        string now = !screen ? "The screen is off"
+            : link.Length == 0 ? "Showing the cat slides"
+            : $"Playing {CinemaVideo.Title(link)}" + (stream is { Status.Length: > 0 } s ? $"  ·  {s.Status}" : "");
+        if (now == _shown) return;
+        _shown = now;
+        _now.Text = now;
+        _off.Disabled = !screen;
+        _slides.Visible = link.Length == 0;
+        _slides.Disabled = screen;
+        _stop.Visible = link.Length > 0;
+        if (stream is { Failed: true }) _status.Text = stream.Status;
+        else if (_status.Text == "Starting…" && link.Length > 0) _status.Text = "";
+    }
+
+    // ---- the links played before -----------------------------------------------------------------
+
+    private static List<string> Recent()
+    {
+        try
+        {
+            if (!FileAccess.FileExists(RecentFile)) return new();
+            using var f = FileAccess.Open(RecentFile, FileAccess.ModeFlags.Read);
+            return f.GetAsText().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(CinemaVideo.Allowed).Take(MaxRecent).ToList();
+        }
+        catch (Exception) { return new(); }
+    }
+
+    private static void Remember(string link)
+    {
+        var all = Recent();
+        all.Remove(link);
+        all.Insert(0, link);
+        try
+        {
+            using var f = FileAccess.Open(RecentFile, FileAccess.ModeFlags.Write);
+            f?.StoreString(string.Join('\n', all.Take(MaxRecent)));
+        }
+        catch (Exception) { /* a read-only profile: no history */ }
+    }
+
+    private void Rebuild()
+    {
+        foreach (var c in _recent.GetChildren()) c.QueueFree();
+        var links = Recent();
+        if (links.Count == 0) return;
+        _recent.AddChild(UiKit.Text("Played before", UiTheme.FontSmall, UiTheme.TextDim));
+        foreach (string link in links)
+        {
+            var b = UiKit.Button(CinemaVideo.Title(link));
+            b.TooltipText = link;
+            b.Alignment = HorizontalAlignment.Left;
+            b.ClipText = true;
+            b.Pressed += () => { Remember(link); Ask(screen: true, link); Rebuild(); };
+            _recent.AddChild(b);
+        }
+        Callable.From(Fit).CallDeferred();
+    }
+
+    public override void _UnhandledInput(InputEvent e)
+    {
+        if (!IsOpen || !e.IsPressed() || e.IsEcho()) return;
+        bool typing = GetViewport().GuiGetFocusOwner() is LineEdit;
+        bool outside = e is InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } click
+                       && !_panel.GetGlobalRect().HasPoint(click.Position);
+        bool openingKey = e is InputEventKey && e.IsActionPressed(PlayerInput.InteractMount) && !typing;
+        if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu) || outside || openingKey)
+        {
+            Close();
+            GetViewport().SetInputAsHandled();
+        }
+    }
+}

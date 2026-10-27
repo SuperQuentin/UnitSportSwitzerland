@@ -67,6 +67,19 @@ public static class CinemaVideo
     }
 
     /// <summary>
+    /// Whether a link goes through yt-dlp first (on each client): a site's page, or a stream's playlist (HLS
+    /// <c>.m3u8</c>, DASH <c>.mpd</c>), whose renditions it picks the one near the screen's size from and says live or not.
+    /// A plain file (mp4, webm) goes to ffmpeg as it is.
+    /// </summary>
+    public static bool NeedsLookup(string link)
+    {
+        if (IsSite(link)) return true;
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return false;
+        string path = uri.AbsolutePath.ToLowerInvariant();
+        return path.EndsWith(".m3u8", StringComparison.Ordinal) || path.EndsWith(".mpd", StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// yt-dlp's choice for a screen 358 px high: H.264 at most 480p (cheap to decode) and the best sound, else
     /// any video at most 480p, else what there is (a live stream offers one muxed rendition at each size).
     /// </summary>
