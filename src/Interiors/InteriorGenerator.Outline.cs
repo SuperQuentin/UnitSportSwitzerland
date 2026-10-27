@@ -177,6 +177,27 @@ public static partial class InteriorGenerator
         return false;
     }
 
+    /// <summary>
+    /// How well a plan's ground floor follows the outline, on a 0.5 m grid: m² of the outline it
+    /// fills, less twice the m² it stands outside it (a room in the yard is worse than an empty corner).
+    /// </summary>
+    private static float OutlineScore(InteriorLayout l, Footprint fp, Building b)
+    {
+        if (l.Floors.Count == 0 || PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) is not { } grid) return 0;
+        var rings = RingsFor(l, grid);
+        var rooms = l.GroundFloor.Rooms;
+        float score = 0;
+        for (float x = -l.Width / 2 + 0.25f; x < l.Width / 2; x += 0.5f)
+            for (float z = -l.Depth / 2 + 0.25f; z < l.Depth / 2; z += 0.5f)
+            {
+                bool room = false;
+                foreach (var r in rooms)
+                    if (r.Holds(x, z)) { room = true; break; }
+                if (room) score += RoomShapes.Contains(rings, new Vector2(x, z)) ? 0.25f : -0.5f;
+            }
+        return score;
+    }
+
     /// <summary>Whether a rectangle, shrunk by <paramref name="by"/>, lies inside the rings.</summary>
     private static bool RectInside(List<Vector2[]> rings, float x0, float z0, float x1, float z1, float by)
     {

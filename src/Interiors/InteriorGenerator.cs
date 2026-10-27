@@ -56,12 +56,24 @@ public static partial class InteriorGenerator
             }
             HouseLayouts.Warn?.Invoke($"house layout {b.Egid} ({fp.Key}) not used, the generated interior stays: {why}");
         }
-        return Generate(fp, b, rural, type, null, venue, dining, out _);
+        var plan = Generate(fp, b, rural, type, null, venue, dining, out _)!;
+        // planned on the front rectangle and grown (#1290): planned on the box and cut may fill an
+        // irregular building better (a civic block whose front rectangle is a third of it); the better one
+        if (_onCore)
+        {
+            var boxed = Generate(fp, b, rural, type, null, venue, dining, out _, core: false)!;
+            if (OutlineScore(boxed, fp, b) > OutlineScore(plan, fp, b)) return boxed;
+        }
+        return plan;
     }
 
+    /// <summary>Whether the last plan on this thread was made on the front rectangle (<see cref="TryOnCore"/>).</summary>
+    [ThreadStatic] private static bool _onCore;
+
     private static InteriorLayout? Generate(Footprint fp, Building b, bool rural, BuildingType type, HouseLayout? house,
-        VenueRecord? venue, IReadOnlyList<VenueRecord>? dining, out string why)
+        VenueRecord? venue, IReadOnlyList<VenueRecord>? dining, out string why, bool core = true)
     {
+        _onCore = false;
         why = "";
         var rng = new Random(StableHash(fp.Key.ToString()));
         var (h, n) = Storeys(b);
@@ -151,7 +163,7 @@ public static partial class InteriorGenerator
             }
             // a shaped building is planned on its biggest rectangle behind the door, then grown out
             // to its outline (#1290)
-            onCore = outline != null && (single
+            onCore = core && outline != null && (single
                 ? TryOnCore(layout, fp, b, () => { Single(); return true; })
                 : TryOnCore(layout, fp, b, () => TryCored(layout, fp, b.Kind, n, below, bank, rng)
                                                  || below > 0 && TryCored(layout, fp, b.Kind, n, 0, bank, rng)));
@@ -169,6 +181,7 @@ public static partial class InteriorGenerator
         // every room out to the facade, or cut by it (#1290): after the dining venues carve their rooms
         // (a carved room keeps a rectangle), before the furniture stands in them
         if (outline != null) FitOutline(layout, outline);
+        _onCore = onCore;
 
         Furnish(layout, rng);
         return layout;

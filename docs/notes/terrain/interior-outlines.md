@@ -67,13 +67,23 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   or a courtyard: the far wings are reached only part of the way, the known limit). SVG plans with the
   outline dashed in `test_output/shaped/`. Measured: flats on a bent bar 55 % → 96 %; houses on an L
   or a bent bar ~100 %.
+- `--outlinesurvey[,out] --chunks D:/.../terrain_chunks [--tiles N] [--no-outlines]`: the real tiles round
+  Geneva, Lausanne, Sion and Fribourg (N a town), every building planned, per kind: shaped, fallbacks and why,
+  invalid plans, fill and outside, ms a plan; `--no-outlines` is the before. Measured (Oct 28, 4 tiles of
+  Geneva and Lausanne, 1222 plans, 883 not their box): 736 follow their outline, 22 fall back, 0 invalid
+  (as before); ground floor outside the outline 53 % → 29 % of its area, outline filled 95 % → 88 % (civic
+  60 %, houses 85 %: the front rectangle grown leaves parts empty); 212 → 243 ms a plan, worst 4.4 → 5.2 s.
+  It found dining venues carving shaped rooms (6 invalid plans) and a cubic growth pass (19 s a block).
+- A house, an office or a barn planned on its front rectangle is planned on the box and cut too; the
+  one whose ground floor fills more of the outline, less twice what stands outside, is kept (`OutlineScore`).
 - `--flattour,shot.png --block shaped:<shape>[:<kind>]` (windowed): photographs the most grown rooms.
 - `--houselayoutcheck`: the angled case is two shaped rooms with the door in the angled wall.
 - `RoomShapesTests` (unit): tracing, the angled edge, a courtyard, clipping, triangulation, inset, rays.
 
 ## Known limits
 
-- A house or an office round a U or a courtyard fills its far wings only part of the way: arm rooms make
+- A civic building (60 %) or a house (85 %) of an irregular old-town outline fills it only so far, and a
+  house or an office round a U or a courtyard fills its far wings only part of the way: arm rooms make
   no arms of their own.
 - A courtyard inside a box-planned single room keeps the box (no holed floors).
 - An upper floor set back from the ground floor's outline is planned to the roof's outline: the roof is
