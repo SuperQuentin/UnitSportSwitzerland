@@ -549,6 +549,11 @@ public partial class ItemController : Node
             case ItemUse.Readout:
                 break;
 
+            case ItemUse.Round:
+                // a Versteckis round tool (#1268): the game's server checks it all
+                Adventure.Versteckis.VersteckisManager.Instance?.UseTool(player, def.Id, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
             case ItemUse.Detector:
                 // the treasure detector (#1227): one strong ping, a direction for 3 s
                 Adventure.Rewards.RewardHud.Instance?.Ping();

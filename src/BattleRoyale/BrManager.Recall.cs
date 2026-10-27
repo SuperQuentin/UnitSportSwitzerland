@@ -143,7 +143,7 @@ public partial class BrManager
     {
         if (_server || LocalPlayer() is not { } me || Origin == null) return;
         StopSpectating();
-        _watching = 0;
+        _follow?.Prefer(0);
         var at = Origin.ToWorld(e, n, alt + 180);
         me.Respawn(at);
         me.Leap(at, -me.Camera.GlobalTransform.Basis.Z with { Y = 0 } * 20f, RideKind.Wingsuit);

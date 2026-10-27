@@ -26,7 +26,7 @@ public sealed class QuestCatalog : IQuestSource
     public static readonly string[] UnlockKinds = { "reveal", "travel", "stamina" };
 
     /// <summary>The plans a step may need (<see cref="Step.Plan"/>).</summary>
-    public static readonly string[] KnownPlans = { "places", "rewards", "navigation", "stamina" };
+    public static readonly string[] KnownPlans = { "places", "rewards", "navigation", "stamina", "versteckis" };
 
     /// <summary>
     /// The POIs the starter quests name, canonical (<c>&lt;tag&gt;:&lt;slug&gt;.&lt;hash&gt;</c>: the hash comes from the
@@ -77,6 +77,11 @@ public sealed class QuestCatalog : IQuestSource
         Q("grand-tour", "Grand tour", "Unlock 50 travel points in at least five cantons. The GA travelcard: trains, buses and ships free, and travel from anywhere.",
             [new NetworkStep(50, 5)],
             [new Unlock("travel", "card:ga"), new Title("Globetrotter")]) with { Start = QuestStart.OnEvent },
+
+        // Versteckis (#1268): the tutorial hook, starting by itself with the first game played anywhere
+        Q("versteckis-im-dorf", "Versteckis im Dorf", "Play a game of Versteckis in any village: hide as a hay bale, a gnome or a cow, or seek.",
+            [new Versteckis.VersteckisStep()],
+            [new Cash(30)]) with { Start = QuestStart.OnEvent },
     };
 
     private static readonly Dictionary<string, QuestDef> ById = All.ToDictionary(q => q.Id);

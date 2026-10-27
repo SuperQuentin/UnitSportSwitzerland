@@ -612,8 +612,9 @@ public partial class ChatManager : Node
                 return;
 
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
-                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
-                Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
+                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis":
+                // Versteckis has no offline game (#1268): its bots need a server; Host a game from the menu
+                Show(verb is "vs" or "versteckis" ? "Versteckis needs a multiplayer game: Host a game from the menu, and bots fill it." : $"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
             default:
@@ -668,6 +669,12 @@ public partial class ChatManager : Node
         text = text.Trim();
         if (text.Length == 0) return;
         if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        // a round's spectators talk among themselves while it runs (#1268, Core/Rounds): nobody calls out the spots
+        if (Core.Rounds.ChatScope(peer) is { } scope && Versteckis != null)
+        {
+            foreach (long member in Versteckis.ScopeMembers(scope)) ReplyTo(member, $"{NameOf(peer)} (spectating): {Scrub(text)}", ChatKind.Say);
+            return;
+        }
         Broadcast($"{NameOf(peer)}: {Scrub(text)}", ChatKind.Say);
         Rpc(MethodName.Said, peer, Scrub(text));
     }
@@ -828,6 +835,8 @@ public partial class ChatManager : Node
 
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
+    /// <summary>Versteckis (#1268): <c>/vs …</c>, and the spectators' chat scope.</summary>
+    public Adventure.Versteckis.VersteckisManager? Versteckis { get; set; }
 
     /// <summary>Server: the spawn and teleport rule (#799); <c>/city</c> asks it.</summary>
     public Arrival? Arrival { get; set; }
@@ -857,8 +866,10 @@ public partial class ChatManager : Node
     /// </summary>
     private bool RefusedInMatch(long sender, long peer)
     {
-        if (BattleRoyale?.Playing(peer) != true) return false;
-        ReplyTo(sender, peer == sender ? NotInMatch : $"{NameOf(peer)} is in a Battle Royale match: everyone plays it on equal terms.", ChatKind.Error);
+        // every round mode (#1268, Core/Rounds): the Battle Royale answers first, in its own words
+        if (Core.Rounds.PlayingIn(peer) is not { } mode) return false;
+        ReplyTo(sender, peer == sender ? (mode.Name == "br" ? NotInMatch : $"Not in {mode.Label}: everyone plays it on equal terms.")
+            : $"{NameOf(peer)} is in {mode.Label}: everyone plays it on equal terms.", ChatKind.Error);
         return true;
     }
 
@@ -956,6 +967,11 @@ public partial class ChatManager : Node
             case "br":
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
+            // Versteckis (#1268): anyone opens, joins, leaves; the opener starts; an admin closes any
+            case "vs" or "versteckis":
+                if (Versteckis == null) ReplyTo(sender, "Versteckis is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, Versteckis.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
             case "bot" or "bots":
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
@@ -1239,9 +1255,9 @@ public partial class ChatManager : Node
     /// <summary>Whether a player may teleport themselves (<c>/city</c>, <c>/stadium</c>); tells them why not.</summary>
     private bool MayTeleport(long sender)
     {
-        if (BattleRoyale?.Playing(sender) == true)
+        if (Core.Rounds.PlayingIn(sender) is { } mode)
         {
-            ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
+            ReplyTo(sender, mode.NoTeleport.Length > 0 ? mode.NoTeleport : $"No teleporting out of {mode.Label}.", ChatKind.Error);
             return false;
         }
         if (Arrival is { FreeTeleport: false } && !IsAdmin(sender))
@@ -1378,9 +1394,9 @@ public partial class ChatManager : Node
     {
         if (!TryFindPlace(sender, query, out var place)) return;
 
-        // a Battle Royale is left alone (#425): its entrants stay where the match has them
+        // a Battle Royale is left alone (#425), and every other round (#1268): its entrants stay where the game has them
         foreach (int peer in Multiplayer.GetPeers())
-            if (BattleRoyale?.Playing(peer) != true) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
+            if (!Core.Rounds.Playing(peer)) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
         Broadcast($"{NameOf(sender)} moved everyone to {place.Name}", ChatKind.Admin);
     }
 

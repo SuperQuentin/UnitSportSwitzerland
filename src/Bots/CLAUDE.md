@@ -14,3 +14,4 @@ interactable is decided for bots too: `docs/notes/general/new-feature-bots.md`.
 - `server-cost` — the server builds no figure mesh for its bodies (0.8 ms and 180 KB a bot a frame before); 20 bots 17.2 -> 2.5 ms busy; `--botprofile` per-block costs (#842)
 - `commands` — `/bot add|arm|fire|clear|list`, `--bots`/`--botsat`/`--botlog`/`--brbots`, `tools/botcheck.sh`, `tools/brbotcheck.sh`, unit tests
 - `bot-capability-map` — the living table: every action, item, mount, vehicle and interactable, its seam, server path, sense, skill and status (ok / gap / n/a)
+- `versteckis` — `VersteckisBrain` (#1268): hider spots by kind and cover, flee/moo/decoy/objective; a seeker on honest senses (`VsSuspicion`: moved, out of place, heard, puffs), ring sweep, `tools/versteckisbotcheck.sh`
