@@ -176,7 +176,8 @@ public sealed class ChatCompleter
         if (words.Length == 0 || (words.Length == 1 && !trailing))
         {
             string typed = words.Length == 0 ? "" : words[0];
-            return Match(VisibleCommands(), typed)
+            // a bare "/" lists every command, uncapped: the pad's picker (#1277) has no other way to reach them
+            return (typed.Length == 0 ? VisibleCommands().ToList() : Match(VisibleCommands(), typed))
                 .Select(c => new Suggestion($"/{c}", $"/{c} ", ArgsOf(c)))
                 .ToList();
         }

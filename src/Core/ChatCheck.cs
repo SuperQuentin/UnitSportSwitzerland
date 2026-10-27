@@ -109,6 +109,8 @@ public static class ChatCheck
 
         Venues(completer, host);
 
+        Locate(completer, host);
+
         History(host);
 
         GD.Print($"[chatcheck] RESULT {(_failures == 0 ? "PASS" : $"FAIL ({_failures})")}");
@@ -297,6 +299,59 @@ public static class ChatCheck
 
     private static bool Parses(string text, ItemId id, int count) =>
         ItemLookup.TryParse(text, out var def, out int n, out _) && def.Id == id && n == count;
+
+    /// <summary>
+    /// <c>/locate</c> and the chat's coordinates (#1277): the completion of nouns and selectors, the buttons under a
+    /// line carrying <c>@E,N</c>, and the pad's picker walked from "/" to a whole command by its buttons alone.
+    /// </summary>
+    private static void Locate(ChatCompleter completer, Node host)
+    {
+        ExpectTexts(completer, "/loc", ["/locate "], "/locate is offered offline");
+        ExpectTexts(completer, "/locate cas", ["/locate castle "], "a noun completes");
+        ExpectTexts(completer, "/locate church ", ["/locate church + spire ", "/locate church in "], "the selectors after a noun");
+        ExpectTexts(completer, "/locate church + par", ["/locate church + parking entrance "], "a selector completes");
+        ExpectTexts(completer, "/locate castle in La", ["/locate castle in La Chaux-de-Fonds"], "a town after in");
+        Expect(completer.Complete("/").Count > 14, $"a bare / lists every command ({completer.Complete("/").Count})");
+        Expect(ChatUi.BackOneWord("/locate church + spire") == "/locate church + ", "Back takes a word");
+        Expect(ChatUi.BackOneWord("/locate") == "/" && ChatUi.BackOneWord("/") == "", "Back down to nothing");
+
+        var chat = ChatManager.CreateClient();
+        var ui = ChatUi.Create(chat, completer);
+        host.AddChild(chat);
+        host.AddChild(ui);
+        var sent = new List<string>();
+        chat.LineReceived += (line, _) => sent.Add(line);
+
+        // a /locate answer's line: four buttons (Teleport only where this player may teleport)
+        ui.Append("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919", ChatKind.Private);
+        var buttons = ui.FindChildren("*", "Button", true, false).OfType<Button>().Select(b => b.Text).ToList();
+        Expect(buttons.Contains("Track") && buttons.Contains("Map") && buttons.Contains("Copy"), $"a coordinate gets its buttons [{string.Join(", ", buttons)}]");
+        Expect(buttons.Contains("Teleport") == Permissions.CanTeleport, "Teleport only where teleporting is allowed");
+        Expect(World.Locate.LocateCoords.LabelOf("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919",
+            World.Locate.LocateCoords.FindAll("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919")[0]) == "Château Saint-Maire",
+            "the button names the place");
+
+        // the picker: "/" then locate, castle, Send, by pressing its buttons
+        ui.OpenForPad();
+        Expect(ui.IsTyping && ui.PickerLabels.Contains("/locate"), $"the pad opens the chat on the commands [{string.Join(", ", ui.PickerLabels.Take(8))}...]");
+        void Press(string label)
+        {
+            var b = ui.FindChildren("*", "Button", true, false).OfType<Button>().FirstOrDefault(x => x.Text == label && x.IsVisibleInTree() && !x.IsQueuedForDeletion());
+            Expect(b != null, $"the picker has '{label}'");
+            b?.EmitSignal(BaseButton.SignalName.Pressed);
+        }
+        Press("/locate");
+        Expect(ui.PickerLabels.Contains("castle"), "after /locate the picker offers the nouns");
+        Press("castle");
+        Expect(ui.PickerLabels.Contains("+ spire") && ui.PickerLabels.Contains("Send"), "after a noun the selectors and Send");
+        Press("Back");
+        Expect(ui.PickerLabels.Contains("castle"), "Back returns to the nouns");
+        ui.CloseInput(recaptureMouse: false);
+        Expect(!ui.IsTyping, "Close shuts the chat");
+
+        ui.QueueFree();
+        chat.QueueFree();
+    }
 
     private static void ExpectTexts(ChatCompleter c, string input, string[] want, string what)
     {

@@ -39,6 +39,30 @@ public static partial class LocateCoords
         return found;
     }
 
+    /// <summary>Every in-range coordinate of a line passed through <paramref name="wrap"/> (the chat colours them).</summary>
+    public static string Highlight(string text, Func<string, string> wrap) =>
+        text.IndexOf('@') < 0 ? text : Pattern().Replace(text, m =>
+            InRange(double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture))
+                ? wrap(m.Value) : m.Value);
+
+    /// <summary>
+    /// What a coordinate in a line is called, for the tracked target and the map's pin: a <c>/locate</c> answer's
+    /// name ("Chateau Saint-Maire" of "  Chateau Saint-Maire (fortress, VD) · 580 m NE · @..."), a speaker's
+    /// point ("Anna's point" of "Anna: here @..."), else the coordinates.
+    /// </summary>
+    public static string LabelOf(string line, CoordMatch c, string? speaker = null)
+    {
+        if (speaker != null) return $"{speaker}'s point";
+        string before = line[..c.Start].Trim();
+        int dot = before.IndexOf(" · ", StringComparison.Ordinal);
+        if (dot > 0) before = before[..dot];
+        int paren = before.IndexOf(" (", StringComparison.Ordinal);
+        if (paren > 0) before = before[..paren];
+        before = before.Trim(' ', '·', ':', '-');
+        if (before.StartsWith("Teleported to", StringComparison.Ordinal) || before.Length == 0) return Format(c.E, c.N);
+        return before.Length > 40 ? before[..40] : before;
+    }
+
     /// <summary>
     /// A command's argument as a point: <c>@E,N</c>, <c>E,N</c> or <c>E N</c>. What the chat's buttons send
     /// (<c>/go</c>, <c>/track</c>) and what a player types.

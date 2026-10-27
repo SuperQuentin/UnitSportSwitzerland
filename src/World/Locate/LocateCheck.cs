@@ -6,8 +6,8 @@ namespace UnitSport.World.Locate;
 /// <summary>
 /// <c>--locatecheck [q1|q2|...]</c> (#1277): offline, the world's <see cref="LocateService"/> builds its building
 /// index, answers each query from the start point (<c>--at</c>, the fixture's start), and the index writes and
-/// reads back through the cache format; every answer is printed. On the fixture world (quick tier) it expects the
-/// fixture's castle, lake and buildings; on a real region (<c>--chunks</c>) it is the probe to read the answers off.
+/// reads back through the cache format; every answer is printed. On the garage course (quick tier,
+/// <c>--chunks fixture:garage --pois fixture</c>) it expects the fixture's castle and lake, its blocks and their garage doors; on a real region (<c>--chunks</c>) it is the probe to read the answers off.
 /// Prints <c>[locatecheck] RESULT: ok|FAILED</c> and quits.
 /// </summary>
 public partial class LocateCheck : Node
@@ -87,6 +87,9 @@ public partial class LocateCheck : Node
             var lake = await locate.FindAsync("lake", _from.E, _from.N, 1);
             Expect(lake.Count == 1, $"the fixture's lake is found ({lake.Count})");
             Expect(locate.Buildings.Count > 0, $"the fixture's buildings are indexed ({locate.Buildings.Count})");
+            // fixture:garage: blocks of flats whose garage doors always roll, checked on the real footprint
+            var garages = await locate.FindAsync("apartment building + parking entrance", _from.E, _from.N, 3);
+            Expect(garages.Count > 0 && garages.All(g => g.Detail.Contains("garage door")), $"the blocks' garage doors are found ({garages.Count})");
         }
         Finish();
     }
