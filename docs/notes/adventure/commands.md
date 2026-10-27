@@ -59,14 +59,18 @@
   plates held by a dropped stone, the marmot's three legs), the Luxurious chest by its edition; seven edelweiss by the
   gather hold's target, five offered at the chapel's box; a stone on the pass's cairn; the chapel's run to gold (the
   board), a second run out for its pace; the fixture photo refused 90° off, then taken; the fauna page; the detector's beep
-  quickening; a gust; the Collection tab; the save file read back. Progress in `test_output/rewardcheck`; a scratch
+  quickening; a gust and its air rising (`AirLift.Volumes`); the offering's stamina step and the higher max; the
+  Collection tab; the save file read back. Progress in `test_output/rewardcheck`; a scratch
   inventory and bank. Windowed (add `sky` to `--systems` for a lit scene) it saves `test_output/reward_chest.png`,
   `reward_guide.png`, `reward_collection.png`.
 - Net: `tools/rewardnetcheck.sh` (~2 min, port 7933): a server on the flat fixture with the fixture POIs and spots; A opens
   the Common chest (gone for A only), is refused a second time and for two forged ids, picks an edelweiss, runs the
-  chapel's trial; B, at the same time with its own `user://`, still sees the chest and opens it (its own roll), still sees
-  the edelweiss and picks it, and is sent the server's board with A's run (not in B's progress); in a Battle Royale lobby
-  A's chest is refused. RESULT line; logs `test_output/rewardnet_*.log`.
+  chapel's trial, lights the Höhenfeuer and, in a party with B, rings the cowbells' tune; B, at the same time with its own
+  `user://`, still sees the chest and opens it (its own roll), still sees the edelweiss and picks it, picks four more and
+  offers five at the chapel (the server's stamina step reaches B, its max rises), is not lit by A's fires (a stranger's)
+  but has the cowbells' seal broken by its party's tune and opens that chest, and is sent the server's board with A's run
+  (not in B's progress); in a Battle Royale lobby A's chest and an edelweiss are refused. RESULT line; logs
+  `test_output/rewardnet_*.log`.
 - Tier 3: `--rewardstats [E,N[,km]] --chunks <dir> --systems terrain,adventure` (headless, ~1 min): places every tile of
   the square round the point with the client's own placement and prints the spots per km² by kind, tier and seal, then
   quits (RESULT line). Tiles without terrain are left out.

@@ -14,11 +14,11 @@ Notes: `docs/notes/adventure/rewards.md`, `chests-and-seals.md`, `collectibles.m
 | 1 Placement | built (#1227) | `RewardPlacer`: chests, edelweiss and cairns per 1 km tile, the same on every peer, from a hash of the tile, the POIs and the coarse terrain; `--rewardstats` on real tiles |
 | 2 Tiered chests | built (#1227) | Common / Fine / Precious / Luxurious, opened once per player (Luxurious once a year), loot rolled by the server, a reveal ceremony |
 | 3 Seals | built (#1227) | Höhenfeuer stacks, a ring run, pressure plates, a cowbell tune, a guide: a small challenge before a chest opens |
-| 4 Edelweiss and cairns | built (#1227); the stamina it buys needs #1225's handler | Collectibles on ledges and summits; offered at a summit cross or a chapel they raise max stamina |
+| 4 Edelweiss and cairns | built (#1227), the stamina step through #1225's handler | Collectibles on ledges and summits; offered at a summit cross or a chapel they raise max stamina |
 | 5 Guide animals | built (#1227) | A marmot (on the ground) or a bearded vulture (along a cliff) that leads to a hidden chest |
 | 6 Trials | partly (#1227): run and glide | One-off timed runs at landmarks, personal best, a server leaderboard, a ghost; pass drive, downhill and ride are follow-ups |
 | 7 Photo quests and fauna | built (#1227), the Atlas tick not | Famous views judged by the server; a Fauna tab in the Journal |
-| 8 Gadgets | built (#1227); the gust's lift waits for #1225, the flag's travel for #1226 | Treasure detector, travel flag (the item; travel is navigation's), bottled gust |
+| 8 Gadgets | built (#1227), the gust lifts through #1225's `AirLift.Volumes`; the flag's travel waits for #1226 | Treasure detector, travel flag (the item; travel is navigation's), bottled gust |
 | 9 Shared album | not built (optional) | A group photo and an album a party shares |
 | 10 Checks and notes | built (#1227) | Tier 0 tests, `--rewardcheck`, `tools/rewardnetcheck.sh`, notes in `docs/notes/adventure/` |
 

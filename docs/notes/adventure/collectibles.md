@@ -17,8 +17,9 @@ and `Loot/Gathering` (`Resource.Edelweiss`, `Resource.Cairn`).
 - **Offering** (decided Oct 2026: 5 edelweiss = one stamina step, ten at most): E at the offering box beside a summit cross
   or a chapel (`Offering.IsShrine`: `cross`, a crossed `peak`, `chapel`) asks to offer every whole five held (a
   `Ui/Modal` confirmation: keyboard, pad, the VR ray). The server moves them from held to offered and grants
-  `Unlock("stamina", "+1")` per five while the steps are ten or fewer (**the stamina plan registers the handler**, #1225:
-  until it is on main the service logs "no system grants 'stamina'"), a Precious roll every fifth step, and raises
+  `Unlock("stamina", "+1")` per five while the steps are ten or fewer (the stamina plan's handler, #1225: `StaminaUpgrades`
+  writes the `stamina` section and the owner's `Stamina.Max` rises 10 a step; the steps are shared with quests' stamina
+  rewards, ten in all), a Precious roll every fifth step, and raises
   `EdelweissOffered(peer, key, shrine, offered)`. Offerings past the cap still count in `Offered`.
 - **Cairns** (Steinmänner, part 4b): twenty per canton (`Cairns.Of`: its passes, peaks, crosses and huts under 2500 m,
   ordered by hash), 12 m from the POI, `cn:<poiId>`. The gather hold adds this player's stone (drawn on top, for it
