@@ -71,8 +71,8 @@ public partial class GuidingWind : Node3D
             AngleMax = 180f,
             AngularVelocityMin = -160f,
             AngularVelocityMax = 160f,
-            ScaleMin = 0.12f,
-            ScaleMax = 0.22f,
+            ScaleMin = 0.07f,
+            ScaleMax = 0.14f,
             EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Box,
             EmissionBoxExtents = new Vector3(2.5f, 1.2f, 2.5f),
             TurbulenceEnabled = true,
@@ -186,7 +186,7 @@ public partial class GuidingWind : Node3D
             return;
         }
         _arrow.Visible = false;
-        _particles.GlobalPosition = origin - flat * 1.5f + flat * ahead * 0.5f;
+        _particles.GlobalPosition = origin + flat * ahead;
         _particles.AmountRatio = Blowing ? 1f : 0.35f;
         if (!_particles.Emitting) _particles.Emitting = true;
         // the gust is heard from the way to go

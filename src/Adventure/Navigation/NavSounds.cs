@@ -16,7 +16,7 @@ public static class NavSounds
     /// <summary>A warm Föhn gust: band-passed noise swelling over a second and dying in three.</summary>
     public static AudioStreamWav Gust => _gust ??= Dsp.OneShot(4.2f, 1226, (rng, n) =>
     {
-        var noise = Dsp.BandPass(Dsp.Noise(rng, n), 180f, 1400f);
+        var noise = Dsp.BandPass(Dsp.Noise(rng, n), Dsp.Coef(180f), Dsp.Coef(1400f));
         var s = new float[n];
         float wobble = (float)rng.NextDouble() * Mathf.Tau;
         for (int i = 0; i < n; i++)

@@ -115,9 +115,10 @@ public partial class TravelCheck : ChatProbe
         book().LastTravel = 0;
 
         // the half-fare card halves fares
+        int halfBefore = CountOf(ItemId.HalfFare), gaBefore = CountOf(ItemId.GaCard);
         svc.Grant(AdventureService.LocalPeer, new Unlock("travel", AdventureTravel.HalfFareArg), "check");
         Expect(book().HasHalfFare, "the half-fare reward sets the card");
-        Expect(await Until(() => CountOf(ItemId.HalfFare) == 1, 2), "and puts it in the pack");
+        Expect(await Until(() => CountOf(ItemId.HalfFare) == halfBefore + 1, 2), "and puts it in the pack");
         var full = travel.Rules.Price(TravelKind.Bus, 0, TravelKind.Rail, 0, 30000, false, false);
         var half = travel.Rules.Price(TravelKind.Bus, 0, TravelKind.Rail, 0, 30000, false, true);
         Expect(half.Chf < full.Chf && half.Chf >= full.Chf / 2, $"30 km: CHF {full.Chf} full, {half.Chf} half");
@@ -129,7 +130,7 @@ public partial class TravelCheck : ChatProbe
         Expect(travel.BuyCard(AdventureService.LocalPeer, true, station.Id) == null && book().HasGa, "bought at the station's ticket office");
         int ga = TravelRules.CardPrice(travel.Rules.GaCard, AdventureTravel.Today);
         Expect(bank.Balance == 5000 - ga, $"CHF {ga} charged ({bank.Balance} left)");
-        Expect(await Until(() => CountOf(ItemId.GaCard) == 1, 2), "the GA is in the pack");
+        Expect(await Until(() => CountOf(ItemId.GaCard) == gaBefore + 1, 2), "the GA is in the pack");
         await WalkTo(station.E + 60, station.N + 60);
         had = bank.Balance;
         Expect(travel.Travel(AdventureService.LocalPeer, stop.Id, "") == null, "with the GA, from anywhere");
@@ -145,6 +146,9 @@ public partial class TravelCheck : ChatProbe
             Expect(saved.Has(stop.Id) && saved.Has(station.Id) && saved.HasGa && saved.HasHalfFare && saved.Trips == 2, "the save file holds the network, the cards and the trips");
         }
         catch (Exception ex) { Expect(false, $"the save file reads back: {ex.Message}"); }
+        // the pack is the player's own user:// one: the cards go again
+        _items.Inventory.TakePlain(ItemId.HalfFare, CountOf(ItemId.HalfFare));
+        _items.Inventory.TakePlain(ItemId.GaCard, CountOf(ItemId.GaCard));
         await Finish(0);
     }
 
