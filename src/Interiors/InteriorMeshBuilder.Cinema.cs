@@ -163,7 +163,10 @@ public static partial class InteriorMeshBuilder
                 B(-w, 0, -d, w, 1.1f, -d + 0.45f, darkWood);
                 B(-w, 0, d - 0.8f, w, 1.05f, d, C(0.46f, 0.06f, 0.10f), true);
                 B(-w - 0.03f, 1.05f - sink, d - 0.84f, w + 0.03f, 1.1f, d + 0.04f, C(0.88f, 0.76f, 0.40f));
-                B(-w + 0.015f, 1.1f - sink, d - 0.42f, w - 0.015f, 1.95f, d - 0.4f, Lit(0.60f, 0.70f, 0.78f) with { A = 0.25f });
+                // the glass is see-through, a node of its own (InteriorNode.AddClearGlass, #1279): here its rail and posts
+                B(-w + 0.015f, 1.95f, d - 0.43f, w - 0.015f, 1.99f, d - 0.39f, chrome);
+                B(-w + 0.015f, 1.1f - sink, d - 0.43f, -w + 0.055f, 1.95f + sink, d - 0.39f, chrome);
+                B(w - 0.055f, 1.1f - sink, d - 0.43f, w - 0.015f, 1.95f + sink, d - 0.39f, chrome);
                 B(-0.3f, 1.1f - sink, d - 0.7f, 0.3f, 1.42f, d - 0.6f, dark);
                 B(-0.27f, 1.13f, d - 0.612f, 0.27f, 1.39f, d - 0.588f, Lit(0.30f, 0.50f, 0.90f));
                 // the TICKETS board over it

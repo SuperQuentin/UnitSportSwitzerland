@@ -44,6 +44,17 @@ lane frame and rules (`bowling-centres`).
   that left a hall black.
 - **Outside**: as bowling (blind box, double door, the name and CINEMA big over the door).
 - **Staff**: a cashier at the box office, a seller at the concession stand (`InteriorNode.Staff`).
+- **Hall height** (#1279): in a building of storeys the halls span as many as give them 6 m clear
+  (`HallMinClear`), two or three (`MaxHallStoreys`), the booth one storey up: Geneva's Grütli (28 m of
+  2.76 m storeys) had one-storey halls 2.56 m clear before. A building with no storey grid (`Storeys` count
+  under 2, Cinérama Empire: 32 m tagged a garage) takes a whole hall's heights. Every real cinema on the
+  Geneva/Vaud tiles now has its booth upstairs; the deck is for low halls (under 7 m) only.
+- **A way to the panel** (#1279): the walk grid (`InteriorGenerator.Walkable`) also covers a strip room up to
+  4 m wide and 400 m2, whatever its length (the booth is 2.6 m by up to 118 m), so the platter and the chair
+  no longer shut its far end; the panel's use spot is kept clear, and `--cinemacheck` walks to it
+  (`CanReach`, which grids any room).
+- **Box office glass** (#1279): a see-through pane of its own (`InteriorNode.AddClearGlass`), the mesh only its
+  rail and posts: the interior's one mesh is opaque, and vertex alpha marks lit faces or sky glass.
 - **Checks**: `--cinemacheck --systems ui` (`CinemaProbe`: a two-level town cinema, a small one, a
   4-hall multiplex, one under flats, one along X, one too small); `tools/cinemanetcheck.sh` (net: A
   inside a generated house is granted lights off and the cat on, B outside sees it and is refused, C

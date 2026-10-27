@@ -51,6 +51,7 @@ public partial class InteriorNode
         var layout = node.Layout;
         if (layout.Type != BuildingType.Cinema) return;
         AddViewGlass(node);
+        AddClearGlass(node);
         var ports = layout.Furniture.Where(f => f.Type == FurnitureType.Porthole).ToList();
         var projectors = layout.Furniture.Where(f => f.Type == FurnitureType.Projector).ToList();
         foreach (var p in layout.Furniture.Where(f => f.Type == FurnitureType.MovieScreen))
@@ -163,6 +164,48 @@ public partial class InteriorNode
             Name = "ViewGlass",
             Mesh = st.Commit(),
             MaterialOverride = _viewGlass,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        });
+    }
+
+    private static StandardMaterial3D? _clearGlass;
+
+    /// <summary>The box office's glass, in the counter's frame (x across, z out of its back): see-through, as the mesh's never is.</summary>
+    internal static (float X0, float X1, float Y0, float Y1, float Z) BoxOfficeGlass(FurniturePlan p) =>
+        (-p.W / 2 + 0.055f, p.W / 2 - 0.055f, 1.1f, 1.95f, p.D / 2 - 0.41f);
+
+    /// <summary>
+    /// Clear panes over counters (#1279): the box office's glass, which the interior's one opaque mesh drew as a
+    /// pale wall in front of the cashier. A faint tint and nothing else, so the cashier shows through it.
+    /// </summary>
+    private static void AddClearGlass(InteriorNode node)
+    {
+        var layout = node.Layout;
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        int panes = 0;
+        foreach (var p in layout.Furniture.Where(f => f.Type == FurnitureType.BoxOffice))
+        {
+            var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
+            var at = new Vector3(p.X, layout.FloorY(p.Floor) + p.Lift, p.Z);
+            var (x0, x1, y0, y1, z) = BoxOfficeGlass(p);
+            Vector3 P(float x, float y) => at + basis * new Vector3(x, y, z);
+            foreach (var v in new[] { P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y0), P(x1, y1), P(x0, y1) }) st.AddVertex(v);
+            panes++;
+        }
+        if (panes == 0) return;
+        _clearGlass ??= new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoColor = new Color(0.75f, 0.86f, 0.92f, 0.14f),
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        };
+        node.AddChild(new MeshInstance3D
+        {
+            Name = "ClearGlass",
+            Mesh = st.Commit(),
+            MaterialOverride = _clearGlass,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         });
     }

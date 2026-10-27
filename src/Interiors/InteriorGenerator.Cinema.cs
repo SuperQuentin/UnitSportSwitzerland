@@ -27,7 +27,11 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 9;
+    public const int CinemaRules = 10;
+
+    /// <summary>A hall's clear height in a building of storeys, at least where it has them, m [S: small halls 6-8 m]; and the most storeys it takes.</summary>
+    private const float HallMinClear = 6.0f;
+    private const int MaxHallStoreys = 3;
 
     private const float BoothDepth = 2.6f, LobbyMin = 4.6f, LobbyMax = 12f, AudMinLength = 8.5f, AudMaxLength = 32f;
     private const float AudMinWidth = 7f, AudTargetWidth = 13f, AudMaxWidth = 18f, StaffWidth = 1.6f;
@@ -89,24 +93,29 @@ public static partial class InteriorGenerator
     {
         bool whole = Venues.WholeBuilding(b);
         float wall = b.MaxY - b.MinY;
+        var (sh, n) = Storeys(b);
+        // no storeys to keep to: the hall's own heights, as in a building that is all hall (#1279: Cinérama Empire,
+        // 32 m tagged a garage, has no storey grid and made one 4 m storey)
+        bool free = whole || n < 2;
         float h;
         int levels;
-        if (whole)
+        if (free)
         {
             levels = wall >= 7.0f ? 2 : 1;
             h = levels == 2 ? Math.Clamp(wall * 0.88f / 2, 3.2f, 4.4f) : Math.Clamp(wall * 0.85f, 3.0f, 5.5f);
         }
         else
         {
-            var (sh, n) = Storeys(b);
+            // halls as many storeys high as give them HallMinClear (#1279: Grütli's 2.76 m storeys made one-storey
+            // halls, 2.56 m clear, in a building 28 m tall), the booth a storey up behind the top rows
             h = sh;
-            levels = n >= 2 && sh >= 2.8f ? 2 : 1;
+            levels = Math.Clamp((int)MathF.Ceiling((HallMinClear + Slab) / sh), 2, Math.Min(n, MaxHallStoreys));
         }
 
         var (storey, entryX, entryW, type, shop) = (l.StoreyHeight, l.EntryX, l.EntryWidth, l.Type, l.Shop);
         for (int lv = levels; lv >= 1; lv--)
         {
-            l.StoreyHeight = lv == levels ? h : whole ? Math.Clamp(wall * 0.85f, 3.0f, 5.5f) : h;
+            l.StoreyHeight = lv == levels ? h : free ? Math.Clamp(wall * 0.85f, 3.0f, 5.5f) : h;
             (l.EntryX, l.EntryWidth) = (entryX, entryW);
             if (PlanCinema(l, lv, doorHeight, whole) && InteriorValidator.Validate(l).Count == 0) return true;
         }
@@ -227,7 +236,7 @@ public static partial class InteriorGenerator
         float bU0 = staffAtL ? sU1 : uL, bU1 = staffAtL ? uR : sU0;
         var boothSide = staffAtL ? frame.UMinus : frame.UPlus;
         float boothDoorAt = frame.OnUWall((hallV1 + progV) / 2);
-        if (levels == 2)
+        if (levels >= 2)
         {
             int steps = (int)MathF.Ceiling(l.StoreyHeight / GarageRule.StairRiser);
             float run = steps * 0.28f;
@@ -473,6 +482,8 @@ public static partial class InteriorGenerator
         }
         int before = l.Furniture.Count;
         TryPlace(l, f, r, new Piece(FurnitureType.BoothPanel, 1.2f, 0.3f, 1.7f, true), placed, blocked, rng, new[] { fr.VPlus });
+        // where the projectionist stands at it, kept clear: the walk check keeps it joined to the door (#1279)
+        if (l.Furniture.Count > before) blocked.Add(UseSpot(l.Furniture[^1], 0.8f).Clip(r));
         TryPlace(l, f, r, new Piece(FurnitureType.ServerRack, 0.6f, 0.9f, 2.0f, true), placed, blocked, rng, new[] { fr.VPlus });
         TryPlace(l, f, r, new Piece(FurnitureType.FilmPlatter, 1.2f, 1.2f, 1.5f, false), placed, blocked, rng);
         TryPlace(l, f, r, new Piece(FurnitureType.Chair, 0.45f, 0.45f, 0.9f, false), placed, blocked, rng);

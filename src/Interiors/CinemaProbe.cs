@@ -22,7 +22,14 @@ public partial class CinemaProbe : Node
     }
 
     private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, bool Cinema, int MinHalls = 1,
-        bool Upstairs = false);
+        bool Upstairs = false, float MinClear = 0);
+
+    /// <summary>A piece's floor rectangle, turned as it stands.</summary>
+    private static RectPlan PieceRect(FurniturePlan f)
+    {
+        float hx = (f.Turns & 1) == 1 ? f.D / 2 : f.W / 2, hz = (f.Turns & 1) == 1 ? f.W / 2 : f.D / 2;
+        return new RectPlan(f.X - hx, f.Z - hz, f.X + hx, f.Z + hz);
+    }
 
     private static readonly Case[] Cases =
     {
@@ -34,6 +41,15 @@ public partial class CinemaProbe : Node
         new("multiplex", 72, 52, 12, BuildingKind.Commercial, true, MinHalls: 4, Upstairs: true),
         // in the bottom of a block of flats (Lausanne's Pathé Galeries): the facade's storeys stay
         new("under-flats", 26, 32, 20, BuildingKind.Apartment, true, Upstairs: true),
+        // a multiplex too low for an upstairs booth: a long floor-level booth on its deck, the panel at its far end
+        new("low-multiplex", 72, 40, 6, BuildingKind.Commercial, true, MinHalls: 4),
+        // Grütli's footprint too low for an upstairs booth: a 42 m booth whose platter and chair once shut off the panel (#1279)
+        new("low-three", 34, 43, 6, BuildingKind.Civic, true, MinHalls: 2),
+        new("low-three-x", 43, 34, 6, BuildingKind.Civic, true, MinHalls: 2),
+        // a tall civic building of low storeys (Geneva's Grütli, 28 m of 2.76 m storeys, #1279): halls three storeys high
+        new("tall-civic", 34, 43, 28, BuildingKind.Civic, true, MinHalls: 2, Upstairs: true, MinClear: 6f),
+        // tall, with no storey grid (Geneva's Cinérama Empire, 32 m tagged a garage, #1279): halls at their own height
+        new("tall-garage", 40, 60, 30, BuildingKind.Garage, true, MinHalls: 2, Upstairs: true, MinClear: 6f),
         // wider than deep: the halls run along X from the end nearer the door
         new("along-x", 44, 22, 8, BuildingKind.Commercial, true, Upstairs: true),
         // a kiosk: no hall fits, the ordinary rules furnish it
@@ -113,6 +129,20 @@ public partial class CinemaProbe : Node
         Check(upstairs == c.Upstairs, $"{what}: the booth {(c.Upstairs ? "upstairs" : "at floor level")} ({l.Floors.Count} floor(s))");
         var booth = l.Floors.SelectMany(f => f.Rooms).FirstOrDefault(r => r.Type == RoomType.ProjectionRoom);
         Check(booth != null, $"{what}: a projection room");
+        // the projectionist walks from the booth's door to the panel (#1279: a platter and a chair shut it off)
+        var panel = l.Furniture.FirstOrDefault(f => f.Type == FurnitureType.BoothPanel);
+        if (booth != null && panel != null)
+        {
+            int bf = l.Floors.FindIndex(fl => fl.Rooms.Contains(booth));
+            var pieces = l.Furniture.Where(f => f.Floor == bf && f.Type is not (FurnitureType.BoothDeck or FurnitureType.Porthole)
+                && f.X > booth.X0 && f.X < booth.X1 && f.Z > booth.Z0 && f.Z < booth.Z1).Select(PieceRect).ToList();
+            var spot = InteriorGenerator.UseSpot(panel, 0.5f);
+            Check(InteriorGenerator.CanReach(booth, pieces, (spot.X0 + spot.X1) / 2, (spot.Z0 + spot.Z1) / 2, 0.3f),
+                $"{what}: the booth's panel is reached from its door ({booth.Width:F1}x{booth.Depth:F1} m booth)");
+        }
+        // a hall is a hall's height (#1279): in a building of storeys, two or three of them, never one
+        if (c.MinClear > 0)
+            Check(halls.All(h => l.ClearOf(h) >= c.MinClear), $"{what}: halls {string.Join(", ", halls.Select(h => l.ClearOf(h).ToString("F1")))} m clear, at least {c.MinClear} m");
 
         // the screen leaves the hall's door clear, and the seats face it: the bank's front is toward the screen
         foreach (var screen in l.Furniture.Where(f => f.Type == FurnitureType.MovieScreen))
