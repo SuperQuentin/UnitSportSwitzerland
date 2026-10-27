@@ -78,3 +78,4 @@
   - Caddy proxies `/api/*` (body up to 12 MB) and serves `/houses.html`. Set `LAYOUTS_TRUSTED_PROXIES` to the edge proxy (195.48.14.221 for unitsport.infrack.ch) so rate limits see visitors. Without it, Caddy drops their X-Forwarded-For and everyone shares the proxy's limit.
   - A host set up before #1186 needs `tools/deploy-linux.sh --setup` once for the new Caddyfile.
   - **Not deployed yet:** set `LAYOUTS_ADMINS` and the SMTP account in `tools/deploy.env` first.
+  - **Check the mail settings:** `tools/deploy-linux.sh --smtp-check you@example.ch` runs `LayoutService --smtp-check` on the host with `layouts.env` loaded (connect, log in, send a test mail; prints the exact SMTP failure, never the password; exit 1 on failure).

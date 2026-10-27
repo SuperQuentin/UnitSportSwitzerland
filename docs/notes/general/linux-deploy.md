@@ -72,6 +72,7 @@
   Free space is checked first (new minus replaced bytes plus `SPACE_MARGIN_MB`). Copy is `rsync` when both ends have it,
   else a `tar | ssh tar` stream (keeps mtimes, so the next run is a no-op); `manifest.json` goes last. Server-only files are
   kept unless `--prune`. Lists land in `test_output/deploy/`. Listing 246k files from Git Bash takes minutes.
+- **SMTP check** (#1287, `net/house-layouts`): `tools/deploy-linux.sh --smtp-check you@example.ch` is a step of its own (no build, no other step): over SSH it loads `layouts/layouts.env` and runs `app/LayoutService --smtp-check`, which mails a test message and prints the exact failure; the password never leaves the host.
 - **Gotchas seen on the first real deploy (Debian 13):** the root partition was 19 GB, so the space check refused the tiles until
   `DEPLOY_CHUNKS_DIR` pointed at `/home` (check `df -h` on the host first). `/etc/os-release` defines `VERSION`, so the setup
   script reads it in a subshell or the mDNS TXT would advertise "13 (trixie)". A server started before the tiles arrive exits
