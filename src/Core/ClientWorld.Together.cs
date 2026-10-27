@@ -28,5 +28,6 @@ public partial class ClientWorld
         TogetherPage.Register();
         if (FondueCheck.Requested) AddChild(new FondueCheck(items, () => LocalPlayer));
         if (TogetherCheck.Requested) AddChild(new TogetherCheck(items, () => LocalPlayer));
+        if (TogetherNetProbe.Role != null) AddChild(new TogetherNetProbe(items));
     }
 }

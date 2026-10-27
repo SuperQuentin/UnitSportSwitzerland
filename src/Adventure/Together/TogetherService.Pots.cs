@@ -76,6 +76,10 @@ public partial class TogetherService
         Multiplayer.PeerDisconnected += id => { Pots.PeerLeft(id); _forfeitDue.Remove(id); };
     }
 
+    /// <summary>The placed objects of this world: the server's own (set by <c>ServerWorld</c>), else the client's.</summary>
+    public Func<PlacedObjects?>? PlacedSource { get; set; }
+    private PlacedObjects? Placed => PlacedSource?.Invoke() ?? PlacedObjects.Instance;
+
     // ---- authority ---------------------------------------------------------------------------------
 
     /// <summary>A pot spot near a peer: kind, id, where. Null when there is none.</summary>
@@ -83,7 +87,7 @@ public partial class TogetherService
     {
         if (PositionOf(peer) is not { } at) return null;
         // a burning campfire: the placed objects' (the server's, offline the client's)
-        if (PlacedObjects.Instance is { } placed)
+        if (Placed is { } placed)
         {
             double now = World.WorldClock.EnvNow;
             foreach (var o in placed.All.Values)
@@ -656,6 +660,9 @@ public partial class TogetherService
     private readonly Dictionary<int, (double E, double N, double Until)> _offers = new();
     private bool _spotHere;
     private double _nextSpotLook;
+
+    /// <summary>A pot is offered near the local player (checks).</summary>
+    public bool OfferedHere => OfferNear() != null;
 
     private int? OfferNear()
     {

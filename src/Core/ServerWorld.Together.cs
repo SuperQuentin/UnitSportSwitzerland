@@ -14,6 +14,7 @@ public partial class ServerWorld
         var parties = _parties;
         together.PartyOf = peer => parties?.Of(peer)?.Members;
         together.BodyOf = peer => _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
+        together.PlacedSource = () => _placed;
         if (_chat is { } chat) together.NameOf = chat.NameOfPeer;
         // the cover raster is kept near players: enough for the glacier under a roped pair
         together.GlacierAt = g => _chunks != null && _origin is { } o && _chunks.TryGetCover(o.ToWorld(g), out var cover)

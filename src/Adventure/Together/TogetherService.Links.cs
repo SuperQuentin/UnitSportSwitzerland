@@ -156,6 +156,7 @@ public partial class TogetherService
 
     private string Refuse(long peer, string why)
     {
+        if (_server) GD.Print($"[together] refused {Who(peer)}: {why}");
         Tell(peer, why);
         return why;
     }
@@ -374,6 +375,8 @@ public partial class TogetherService
             var chain = Links.Chain(peer);
             return $"[together] {(Links.ModeOf(peer) == LinkMode.Rope ? "On the rope" : "Holding hands")}: {string.Join(" - ", chain.Select(Who))}.";
         }
+        // the check's seam (tools/togethernetcheck.sh): a veteran, a milestone, with --together-test on the server only
+        if (words[0] == "test" && _server && CmdArgs.Has("--together-test") && words.Length > 1) return TestCommand(peer, words[1]);
         if (words[0].Equals("off", StringComparison.OrdinalIgnoreCase))
         {
             if (!Links.IsLinked(peer)) return "[together] You are tied to nobody.";
@@ -387,6 +390,22 @@ public partial class TogetherService
         if (other <= 0) return $"[together] No party member matching '{name}'.";
         if (ServeAsk(peer, other, mode) is { } why) return $"[together] {why}";
         return "";
+    }
+
+    /// <summary><c>/rope test veteran</c> (3 summits done) and <c>/rope test summit</c> (a first summit): the net check's seam.</summary>
+    private string TestCommand(long peer, string what)
+    {
+        GD.Print($"[together] test {what} for {Who(peer)}");
+        if (_adventure.Progress(peer) is not { } p) return "[together] no progress.";
+        if (what == "veteran")
+        {
+            var t = p.Get(TogetherProgress.Section);
+            for (int i = 0; i < MentorRules.VeteranTimes; i++) MentorRules.Did(t, MentorRules.Summit);
+            p.Touch(TogetherProgress.Section);
+            return "[together] test: a veteran of summits.";
+        }
+        Milestone(peer, what);
+        return "[together] test: " + what + ".";
     }
 
     private long PeerNamed(string name)
