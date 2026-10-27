@@ -63,6 +63,9 @@ public partial class PhoneController : Node
     private Stage _stage = Stage.Pocket;
     private float _look, _cover, _fold, _camApp;
     private int _quick;
+    /// <summary>The newest incoming call, shown as a banner on the cover (id, text); -1 when none rings.</summary>
+    private int _callId = -1;
+    private string? _callText;
     private readonly List<PhoneScreens.Quick> _quicks = new();
     private readonly List<Action> _quickActions = new();
     /// <summary>A teleport held back until the world is hidden.</summary>
@@ -220,6 +223,12 @@ public partial class PhoneController : Node
         if (_selfie)
         {
             SetSelfie(false);
+            return;
+        }
+        if (_screens.Shown == PhoneScreens.Page.Training)
+        {
+            _screens.ShowPage(PhoneScreens.Page.Activities);
+            Play(PhoneSounds.Tap);
             return;
         }
         // any page but Home and Travel goes up one level, so a new app can never fold the phone by accident
@@ -404,7 +413,7 @@ public partial class PhoneController : Node
         if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p, dt);
         _screens.Tick(ClockText(), DateText(), dt);
         RefreshQuick();
-        _screens.ShowCover(_quicks, _quick);
+        _screens.ShowCover(_quicks, _quick, _callText);
         StepTravel();
         ShowHint();
     }
@@ -579,18 +588,15 @@ public partial class PhoneController : Node
     {
         _quicks.Clear();
         _quickActions.Clear();
-        if (InviteService.Client?.Newest is { } call)
-        {
-            int id = call.Id;
-            Add(new("Answer", $"{call.PeerName}: {call.Title}", new Color(0.16f, 0.55f, 0.28f, 0.85f)), () => Answer(id, true));
-            Add(new("Decline", $"{call.PeerName}: {call.Title}", new Color(0.62f, 0.18f, 0.16f, 0.85f)), () => Answer(id, false));
-        }
-        Add(new("Camera"), () => Open(PhoneScreens.Page.Camera));
-        Add(new("Photos"), () => Open(PhoneScreens.Page.Photos));
-        Add(new("Map"), () => Open(PhoneScreens.Page.Map));
-        Add(new("Contacts"), () => Open(PhoneScreens.Page.Contacts));
-        Add(new("Activities"), () => Open(PhoneScreens.Page.Activities));
+        if (InviteService.Client?.Newest is { } call) { _callId = call.Id; _callText = $"{call.PeerName}: {call.Title}"; }
+        else { _callId = -1; _callText = null; }
+        // a fixed order, so the same key or place is always the same app
         Add(new("Open"), () => Open());
+        Add(new("Map"), () => Open(PhoneScreens.Page.Map));
+        Add(new("Camera"), () => Open(PhoneScreens.Page.Camera));
+        Add(new("Contacts"), () => Open(PhoneScreens.Page.Contacts));
+        Add(new("Photos"), () => Open(PhoneScreens.Page.Photos));
+        Add(new("Activities"), () => Open(PhoneScreens.Page.Activities));
         _quick = Mathf.Clamp(_quick, 0, _quicks.Count - 1);
 
         void Add(PhoneScreens.Quick q, Action run)
@@ -789,7 +795,17 @@ public partial class PhoneController : Node
     {
         if (!e.IsPressed() || e.IsEcho()) return;
         if (e.IsActionPressed(PlayerInput.Phone)) { Open(); return; }
+        // a ringing call has Enter / A and Esc / B; the tiles keep their places
+        if (_callId >= 0 && (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu))) { Answer(_callId, false); return; }
+        if (_callId >= 0 && IsSelect(e)) { Answer(_callId, true); return; }
         if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)) { PutAway(); return; }
+        if (e is InputEventKey { PhysicalKeycode: >= Key.Key1 and <= Key.Key9 } digit && digit.PhysicalKeycode - Key.Key1 < _quicks.Count)
+        {
+            _keysLead = true;
+            _quick = (int)(digit.PhysicalKeycode - Key.Key1);
+            RunQuick();
+            return;
+        }
         if (Direction(e) is { } dir)
         {
             if (dir == Vector2.Up) Open();
@@ -957,7 +973,7 @@ public partial class PhoneController : Node
                 }
                 return;
             }
-            if (_vrCover && _stage == Stage.Folded) RunQuick();
+            if (_vrCover && _stage == Stage.Folded) CoverTap(_vrFrom);
             else if (!_vrCover && _stage == Stage.Open && _vrFrom.X is >= 0f and <= 1f && _vrFrom.Y is >= 0f and <= 1f)
             {
                 foreach (bool press in new[] { true, false })
@@ -1032,7 +1048,7 @@ public partial class PhoneController : Node
             }
             // a click: where it was pressed
             if (_pressUv is not { } at || at.X is < 0f or > 1f || at.Y is < 0f or > 1f) return;
-            if (_stage == Stage.Folded) { RunQuick(); return; }
+            if (_stage == Stage.Folded) { CoverTap(at); return; }
             if (_stage == Stage.Open && !_cursorOnCover)
             {
                 var down = (InputEventMouseButton)b.Duplicate();
@@ -1119,6 +1135,24 @@ public partial class PhoneController : Node
         _quick = (_quick + step + _quicks.Count) % _quicks.Count;
         if (_keysLead) Tap();
         Play(PhoneSounds.Tap);
+    }
+
+    /// <summary>A tap on the cover at <paramref name="uv"/>: the call banner's left half answers, its right half declines; elsewhere, the selected tile.</summary>
+    private void CoverTap(Vector2 uv)
+    {
+        if (_callId >= 0 && _screens.CoverBannerUv() is { Size.X: > 0f } banner && banner.HasPoint(uv))
+        {
+            Answer(_callId, uv.X < banner.GetCenter().X);
+            return;
+        }
+        RunQuick();
+    }
+
+    /// <summary>Puts the cover's selection on the tile named <paramref name="label"/> (for the checks).</summary>
+    internal void SelectQuick(string label)
+    {
+        int i = _quicks.FindIndex(q => q.Label == label);
+        if (i >= 0) _quick = i;
     }
 
     private void RunQuick()

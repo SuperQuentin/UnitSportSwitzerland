@@ -176,3 +176,16 @@
   menu); the toggle is Esc/B held, Down folded. The persistent hint bar built from the focused control moves
   to a later stage with the Home/cover rework.
 - **Check**: `--phonecheck` asserts Esc and Backspace go back, Training does not fold the phone, a held Esc puts it away, and Esc on the travel curtain cancels the jump.
+
+## Home and cover, stage 2 (#1253)
+
+- **Fixed cover order**: Open, Map, Camera, Contacts, Photos, Activities (`RefreshQuick`); the first thing selected
+  is Open, and the digit keys 1 to 6 run a tile directly. A call no longer inserts Answer / Decline into the list.
+- **A call is a banner** above the tiles (`PhoneScreens.ShowCover`, `CoverBannerUv`): Enter / A answers, Esc / B
+  declines (while it rings, they are not "run the tile" and "put away"); a click or VR tap on the banner's left
+  half answers, the right half declines; the tiles are still picked with arrows, digits or a click elsewhere.
+- **Home has six apps** (Map, Contacts, Camera, Photos, Activities, Journal): the Menu tile (the full Activities
+  screen) became **Host…** and Training a **Training** button at the top of the Activities app; Back from
+  Training goes to Activities, then Home.
+- **Checks**: `--phonecheck` (six tiles, Training's way back); `--phonevrcheck` selects the Camera tile before its
+  tap (`PhoneController.SelectQuick`). The banner itself is not exercised headless (no invite service in the fixture).
