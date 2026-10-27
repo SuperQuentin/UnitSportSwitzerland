@@ -233,8 +233,10 @@ public partial class CinemaPanelUi : CanvasLayer
         _shown = now;
         _now.Text = now;
         _off.Disabled = !screen;
+        _off.TooltipText = screen ? "Dark screen, no sound" : "The screen is off already";
         _slides.Visible = link.Length == 0;
         _slides.Disabled = screen;
+        _slides.TooltipText = screen ? "The slides are showing already" : "The cat slides, with the hall's film music";
         _stop.Visible = link.Length > 0;
         if (stream is { Failed: true }) Status = stream.Status;
         else if (_status.Text == "Starting…" && link.Length > 0) Status = "";
