@@ -40,7 +40,7 @@ public partial class InteriorManager
     private static (Vector3 At, Vector3 Out) InnerDoorway(InteriorLayout l, InnerDoorPlan d)
     {
         var r = l.Floors[d.Floor].Rooms[d.Room];
-        float y = l.FloorY(d.Floor);
+        float y = l.FloorY(d.Floor) + d.Bottom;
         return d.Side switch
         {
             Side.Front => (new Vector3(d.Center, y, r.Z0), new Vector3(0, 0, -1)),

@@ -67,6 +67,16 @@ public static partial class InteriorGenerator
     /// <summary>Row pitch [S: 1.0-1.2 m]; the rise of each row [S: 0.10-0.45 m, here a steady one].</summary>
     public const float RowPitch = 1.1f, RowRise = 0.32f;
     private const float ExitClear = 0.7f;
+    /// <summary>
+    /// The seating bank's aisles' width, and the walkway along the back wall at the top row's height (#1279: the
+    /// stairs run up to the walls, no drop behind the top row), m.
+    /// </summary>
+    internal const float AisleWidth = 1.1f, TopWalk = 1.2f;
+    /// <summary>The bank's gap to a wall with no doorway in it: a hair off its face.</summary>
+    private const float BankInset = WallInset + 0.02f;
+    /// <summary>The service doorway from a hall's top walkway into the booth (#1279): its width, its height, the most steps up to it.</summary>
+    private const float ServiceW = 0.9f, ServiceH = 2.0f;
+    private const int ServiceMaxSteps = 4;
 
     private sealed class CinemaPlan
     {
@@ -84,6 +94,14 @@ public static partial class InteriorGenerator
         /// <summary>Whether the booth's door is at its low-u end (the staff corridor's side).</summary>
         public bool BoothDoorLow;
         public RectPlan? Flight;
+        /// <summary>
+        /// Each hall's service doorway into the booth (#1279), by the hall's room index: its u (the middle of the aisle
+        /// it tops), its sill over the hall's floor, and the two openings, taken out again if the aisle cannot reach it.
+        /// </summary>
+        public readonly Dictionary<int, (float U, float Sill, OpeningPlan Hall, OpeningPlan Booth, InnerDoorPlan Door)> Service = new();
+        public int BoothFloor, BoothRoom;
+        /// <summary>The booth's ends along u.</summary>
+        public float BoothU0, BoothU1;
     }
 
     private static readonly ConditionalWeakTable<InteriorLayout, CinemaPlan> CinemaPlans = new();
@@ -121,6 +139,7 @@ public static partial class InteriorGenerator
         }
         (l.StoreyHeight, l.EntryX, l.EntryWidth, l.Type, l.Shop) = (storey, entryX, entryW, type, shop);
         l.Floors.Clear();
+        l.InnerDoors.Clear();
         l.Below = 0;
         CinemaPlans.Remove(l);
         return false;
@@ -170,6 +189,7 @@ public static partial class InteriorGenerator
         l.Below = 0;
         l.Floors.Clear();
         l.Lifts.Clear();
+        l.InnerDoors.Clear();
         var ground = new FloorPlan();
         l.Floors.Add(ground);
         float clear = l.StoreyHeight - Slab, top = Math.Min(2.05f, clear - 0.2f);
@@ -359,6 +379,48 @@ public static partial class InteriorGenerator
             }
         }
 
+        // ---- a service doorway from each hall's top walkway into the booth (#1279), at the top of the aisle away from
+        // the booth's own door (a floor-level booth's steps and landing are at that end): a few steps up from the
+        // walkway to the booth's floor, or its deck; none where the rise is more than a short flight
+        plan.BoothFloor = plan.BoothUpstairs ? 1 : 0;
+        plan.BoothRoom = iBooth;
+        (plan.BoothU0, plan.BoothU1) = (bU0, bU1);
+        float sill = plan.BoothUpstairs ? l.StoreyHeight : plan.Deck;
+        for (int i = 0; i < halls; i++)
+        {
+            var aud = ground.Rooms[auds[i]];
+            float a0 = hU0 + hallW * i, a1 = a0 + hallW;
+            var (_, rows, rise) = Seating(plan, hallW, l.ClearOf(aud), Lens(l, plan));
+            if (rows == 0) continue;
+            float lift = sill - rows * rise;
+            if (lift < -0.01f || lift > ServiceMaxSteps * DeckRiser + 0.01f) continue;
+            float su = staffAtL ? a1 - BankInset - AisleWidth / 2 : a0 + BankInset + AisleWidth / 2;
+            float boothTop = Math.Min(sill - hallLift + ServiceH, l.ClearOf(boothFloor.Rooms[iBooth]) - 0.05f);
+            if (boothTop - (sill - hallLift) < 1.9f || sill + ServiceH > l.ClearOf(aud)) continue;
+            // the sill a centimetre over the floor it opens on: its face never on the deck's or the steps' top
+            var inHall = new OpeningPlan
+            {
+                Side = frame.VPlus, Center = su, Width = ServiceW, Bottom = sill + 0.01f, Top = hallLift + boothTop,
+                Kind = OpeningKind.Window, Other = iBooth, Open = true,
+            };
+            var inBooth = new OpeningPlan
+            {
+                Side = frame.VMinus, Center = su, Width = ServiceW, Bottom = sill - hallLift + 0.01f, Top = boothTop,
+                Kind = OpeningKind.Window, Other = auds[i], Open = true,
+            };
+            aud.Openings.Add(inHall);
+            boothFloor.Rooms[iBooth].Openings.Add(inBooth);
+            // a real door in it, hung on the booth's wall and swinging out over the walkway, opened and shut as a
+            // flat's front door is (InteriorManager.InnerDoors): open or shut for everyone, as the server says
+            var door = new InnerDoorPlan
+            {
+                Floor = plan.BoothFloor, Room = iBooth, Side = frame.VMinus, Center = su, Width = ServiceW,
+                Bottom = sill - hallLift + 0.01f, Top = boothTop, Unit = -1,
+            };
+            l.InnerDoors.Add(door);
+            plan.Service[auds[i]] = (su, sill, inHall, inBooth, door);
+        }
+
         CinemaPlans.AddOrUpdate(l, plan);
         return true;
     }
@@ -383,6 +445,32 @@ public static partial class InteriorGenerator
     /// from the front row's distance to the back wall; exit signs over the door; the porthole high in
     /// the back wall.
     /// </summary>
+    /// <summary>
+    /// A hall's seating: the front row's v, the rows and each row's rise (its top tread is rows x rise). The rows end
+    /// a <see cref="TopWalk"/> short of the back wall, the walkway at the top row's height filling the rest.
+    /// </summary>
+    private static (float Front, int Rows, float Rise) Seating(CinemaPlan p, float width, float clear, float lens)
+    {
+        // the front row 0.6 screen widths from the screen [S], at least 3 m
+        float screenW = Math.Clamp(width - 3.6f, 3f, 21f);
+        float front = p.LobbyV + 0.15f + ScreenDepth + Math.Max(3f, 0.6f * screenW * 0.7f);
+        float depth = p.HallV1 - BankInset - TopWalk - front;
+        if (depth < RowPitch * 2) return (front, 0, 0);
+        int rows = (int)(depth / RowPitch);
+        float rise = Math.Min(RowRise, Math.Max(0.12f, (clear - 2.8f) / Math.Max(1f, depth / RowPitch)));
+        // the back row under the projector's beam (#1250): its tread at least ProjectorClear under the lens, so
+        // the light passes over the heads and the seat backs, even of someone standing up there
+        rise = Math.Min(rise, Math.Max(0f, lens - ProjectorClear) / Math.Max(1, rows));
+        return (front, rows, rise);
+    }
+
+    private static float Lens(InteriorLayout l, CinemaPlan p) => (p.BoothUpstairs ? l.StoreyHeight : 0) + p.PortY + (PortFoot + PortHead) / 2;
+
+    /// <summary>Whether a facade doorway (#498) opens in this side wall of a hall beside its seats, from <paramref name="v0"/> to <paramref name="v1"/>.</summary>
+    private static bool SideDoor(RoomPlan r, BowlFrame fr, Side side, float v0, float v1) =>
+        r.Openings.Any(o => o.Side == side && o.Kind is OpeningKind.Door or OpeningKind.Entry or OpeningKind.Arch
+            && fr.FromUWall(o.Center) + o.Width / 2 + ExitClear > v0 && fr.FromUWall(o.Center) - o.Width / 2 - ExitClear < v1);
+
     private static void Auditorium(InteriorLayout l, int f, RoomPlan r, CinemaPlan p, List<RectPlan> placed, List<RectPlan> blocked)
     {
         var fr = p.Frame;
@@ -393,21 +481,51 @@ public static partial class InteriorGenerator
         float screenW = Math.Clamp(width - 3.6f, 3f, 21f);
         var (sx, sz) = fr.Point(uMid, p.LobbyV + 0.15f + ScreenDepth / 2);
         Put(l, f, FurnitureType.MovieScreen, sx, sz, fr.FaceVPlus, screenW, ScreenDepth, clear, placed);
-        // the seating: the front row 0.6 screen widths from the screen [S], at least 3 m
-        float front = p.LobbyV + 0.15f + ScreenDepth + Math.Max(3f, 0.6f * screenW * 0.7f);
-        // 0.7 m off the back and side walls: past the 0.6 m a fire exit's doorway keeps clear (#498 puts
-        // extra doors round long buildings, and in a hall they are its exits)
-        float back = p.HallV1 - ExitClear, depth = back - front;
-        if (depth >= RowPitch * 2)
+        // the seating, its aisles against the side walls and its top walkway against the back wall (#1279); off a
+        // side wall only where a facade doorway (#498, the hall's fire exit) opens in it beside the seats
+        var (front, rows, rise) = Seating(p, width, clear, Lens(l, p));
+        float back = p.HallV1 - BankInset, top = rows * rise;
+        int iHall = l.Floors[f].Rooms.IndexOf(r);
+        bool hasService = p.Service.TryGetValue(iHall, out var service);
+        if (rows > 0)
         {
-            var (bx, bz) = fr.Point(uMid, (front + back) / 2);
-            int rows = (int)(depth / RowPitch);
-            float rise = Math.Min(RowRise, Math.Max(0.12f, (clear - 2.8f) / Math.Max(1f, depth / RowPitch)));
-            // the back row under the projector's beam (#1250): its tread at least ProjectorClear under the lens, so
-            // the light passes over the heads and the seat backs, even of someone standing up there
-            float lens = (p.BoothUpstairs ? l.StoreyHeight : 0) + p.PortY + (PortFoot + PortHead) / 2;
-            rise = Math.Min(rise, Math.Max(0f, lens - ProjectorClear) / Math.Max(1, rows));
-            Put(l, f, FurnitureType.SeatingBank, bx, bz, fr.FaceVMinus, width - 2 * ExitClear, depth, rows * rise, placed);
+            float gap0 = SideDoor(r, fr, fr.UMinus, front, back) ? ExitClear : BankInset;
+            float gap1 = SideDoor(r, fr, fr.UPlus, front, back) ? ExitClear : BankInset;
+            float b0 = u0 + gap0, b1 = u1 - gap1;
+            var (bx, bz) = fr.Point((b0 + b1) / 2, (front + back) / 2);
+            Put(l, f, FurnitureType.SeatingBank, bx, bz, fr.FaceVMinus, b1 - b0, back - front, top, placed);
+            // the service doorway tops the aisle it was planned over, or the other one where a facade doorway kept the
+            // seats off that wall (moved, unless that end is a floor-level booth's landing and steps)
+            if (hasService && Math.Abs(service.U - (service.U < uMid ? b0 + AisleWidth / 2 : b1 - AisleWidth / 2)) > 0.05f)
+            {
+                float alt = service.U < uMid ? b1 - AisleWidth / 2 : b0 + AisleWidth / 2;
+                float stairs = DeckLanding + MathF.Ceiling(p.Deck / DeckRiser) * DeckTread + ServiceW;
+                bool onSteps = p.Deck > 0 && (p.BoothDoorLow ? alt < p.BoothU0 + stairs : alt > p.BoothU1 - stairs);
+                bool free = Math.Abs(alt - (service.U < uMid ? u1 - BankInset - AisleWidth / 2 : u0 + BankInset + AisleWidth / 2)) <= 0.05f;
+                if (!onSteps && free)
+                {
+                    service.Hall.Center = service.Booth.Center = service.Door.Center = alt;
+                    p.Service[iHall] = service = service with { U = alt };
+                }
+            }
+            if (hasService && Math.Abs(service.U - (service.U < uMid ? b0 + AisleWidth / 2 : b1 - AisleWidth / 2)) <= 0.05f)
+            {
+                int n = (int)MathF.Ceiling((service.Sill - top - 0.01f) / DeckRiser);
+                if (n > 0)
+                {
+                    var (tx, tz) = fr.Point(service.U, back - n * DeckTread / 2);
+                    Put(l, f, FurnitureType.ServiceSteps, tx, tz, fr.FaceVMinus, AisleWidth - 0.1f, n * DeckTread, service.Sill - top, placed, lift: top);
+                }
+                hasService = false;
+            }
+        }
+        // a doorway its aisle does not reach (a facade door kept the bank off that wall): none
+        if (hasService)
+        {
+            r.Openings.Remove(service.Hall);
+            l.Floors[p.BoothFloor].Rooms[p.BoothRoom].Openings.Remove(service.Booth);
+            l.InnerDoors.Remove(service.Door);
+            p.Service.Remove(iHall);
         }
         // the screen channels in tall stacks either side of the screen, the surrounds and wall lights along the
         // side walls in turn, clear of their doors (#1250)
@@ -425,10 +543,12 @@ public static partial class InteriorGenerator
                 float at = fr.OnUWall(v);
                 if (r.Openings.Any(o => o.Side == wallSide && Math.Abs(o.Center - at) < o.Width / 2 + 0.7f)) continue;
                 var (x, z) = fr.Point(wu, v);
+                // over the aisle's steps where they run along the wall (#1279)
+                float aisle = rows > 0 ? Math.Clamp(MathF.Floor((v - front) / ((back - TopWalk - front) / rows)) + 1, 0, rows) * rise : 0;
                 if (k % 2 == 0)
-                    Put(l, f, FurnitureType.Loudspeaker, x, z, turns, 0.45f, 0.32f, 0.65f, placed, lift: Math.Min(3.2f, clear - 0.9f));
+                    Put(l, f, FurnitureType.Loudspeaker, x, z, turns, 0.45f, 0.32f, 0.65f, placed, lift: Math.Min(3.2f + aisle, clear - 0.9f));
                 else
-                    Put(l, f, FurnitureType.WallSconce, x, z, turns, 0.36f, 0.16f, 0.5f, placed, lift: Math.Min(2.1f, clear - 1.6f));
+                    Put(l, f, FurnitureType.WallSconce, x, z, turns, 0.36f, 0.16f, 0.5f, placed, lift: Math.Min(2.1f + aisle, clear - 0.6f));
             }
         }
         // exit signs over the doors, green running men [S: CH/EU]
@@ -456,6 +576,9 @@ public static partial class InteriorGenerator
         float u0 = Math.Min(fr.U(r.X0, r.Z0), fr.U(r.X1, r.Z1)), u1 = Math.Max(fr.U(r.X0, r.Z0), fr.U(r.X1, r.Z1));
         float hallW = (u1 - u0) / p.Halls;
         float deck = p.Deck;
+        // the floor inside each hall's service doorway, kept clear (#1279)
+        foreach (var (su, _, _, _, _) in p.Service.Values)
+            blocked.Add(fr.Rect(su - ServiceW / 2 - 0.1f, p.HallV1, su + ServiceW / 2 + 0.1f, p.HallV1 + 1.0f).Clip(r));
         if (deck > 0)
         {
             // the deck from the steps to the far end, wall to wall across v; the landing and the steps kept clear

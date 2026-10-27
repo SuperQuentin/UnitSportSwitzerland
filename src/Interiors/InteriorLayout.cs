@@ -264,6 +264,8 @@ public enum FurnitureType
     CueRack, Loudspeaker, WallSconce,
     /// <summary>A floor-level booth's raised floor (#1250): its projectionist's eyes at the viewing windows, steps up from its door.</summary>
     BoothDeck,
+    /// <summary>The steps from a hall's top walkway up to its service doorway into the booth (#1279).</summary>
+    ServiceSteps,
 }
 
 public sealed class FurniturePlan
@@ -388,7 +390,9 @@ public sealed class InnerDoorPlan
     public float Center { get; set; }
     public float Width { get; set; }
     public float Top { get; set; }
-    /// <summary>The flat it closes (<see cref="RoomPlan.Unit"/>).</summary>
+    /// <summary>The sill over its floor, m: 0 for a flat's door; a cinema's service door is up a few steps (#1279).</summary>
+    public float Bottom { get; set; }
+    /// <summary>The flat it closes (<see cref="RoomPlan.Unit"/>), -1 for none.</summary>
     public int Unit { get; set; }
     public bool Locked { get; set; }
 }

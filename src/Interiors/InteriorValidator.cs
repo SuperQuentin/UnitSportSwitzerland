@@ -168,7 +168,9 @@ public static class InteriorValidator
         {
             if (d.Floor < 0 || d.Floor >= l.Floors.Count || d.Room < 0 || d.Room >= l.Floors[d.Floor].Rooms.Count)
             { errors.Add("inner door in a missing room"); continue; }
-            if (!l.Floors[d.Floor].Rooms[d.Room].Openings.Any(o => o.Kind == OpeningKind.Door && o.Side == d.Side && Math.Abs(o.Center - d.Center) < 0.01f))
+            // a doorway, or a cinema's service doorway: an open hole between floors with its sill up a few steps (#1279)
+            if (!l.Floors[d.Floor].Rooms[d.Room].Openings.Any(o => (o.Kind == OpeningKind.Door || o.Kind == OpeningKind.Window && o.Open
+                    && Math.Abs(o.Bottom - d.Bottom) < 0.01f) && o.Side == d.Side && Math.Abs(o.Center - d.Center) < 0.01f))
                 errors.Add($"floor {d.Floor} inner door at {d.Center:F1} has no doorway");
         }
 
@@ -216,7 +218,7 @@ public static class InteriorValidator
                 // overhead (a bell, a cross on the wall, a crane beam)
                 if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais
                         or FurnitureType.ShowroomPlinth or FurnitureType.FloorMarking or FurnitureType.Confetti
-                        or FurnitureType.CarLift or FurnitureType.BoothDeck)
+                        or FurnitureType.CarLift or FurnitureType.BoothDeck or FurnitureType.ServiceSteps)
                     && p.Lift < 1.5f)
                 {
                     foreach (var o in room.Openings.Where(o => o.Kind is OpeningKind.Door or OpeningKind.Entry or OpeningKind.Arch))

@@ -13,7 +13,7 @@ public static partial class InteriorMeshBuilder
         or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
         or FurnitureType.PosterFrame or FurnitureType.Standee or FurnitureType.Stanchions or FurnitureType.Projector
         or FurnitureType.ServerRack or FurnitureType.FilmPlatter or FurnitureType.BoothPanel
-        or FurnitureType.Loudspeaker or FurnitureType.WallSconce or FurnitureType.BoothDeck;
+        or FurnitureType.Loudspeaker or FurnitureType.WallSconce or FurnitureType.BoothDeck or FurnitureType.ServiceSteps;
 
     /// <summary>Velvet for the seats: the classic red, a modern dark blue, a burgundy.</summary>
     private static readonly Color[] Velvet = { C(0.62f, 0.06f, 0.10f), C(0.10f, 0.14f, 0.34f), C(0.42f, 0.06f, 0.14f) };
@@ -48,10 +48,11 @@ public static partial class InteriorMeshBuilder
             case FurnitureType.SeatingBank:
             {
                 // rows rising from the front (+Z, toward the screen) to the back, an aisle each side with
-                // half steps and step lights, a ramp of collision up each aisle so the steps are walked
-                const float aisle = 1.1f, seat = 0.58f;
-                int rows = Math.Max(1, (int)(p.D / InteriorGenerator.RowPitch));
-                float pitch = p.D / rows, rise = H / Math.Max(1, rows - 1 + 1e-3f);
+                // half steps and step lights, a ramp of collision up each aisle so the steps are walked; behind the
+                // top row a walkway at its height to the back wall (#1279)
+                const float aisle = InteriorGenerator.AisleWidth, seat = 0.58f, walk = InteriorGenerator.TopWalk;
+                int rows = Math.Max(1, (int)((p.D - walk) / InteriorGenerator.RowPitch));
+                float pitch = (p.D - walk) / rows, rise = H / Math.Max(1, rows - 1 + 1e-3f);
                 var velvet = Velvet[(int)(Hash(p, 1) * Velvet.Length) % Velvet.Length];
                 var back = (velvet * 0.85f) with { A = 1 };
                 var tier = C(0.12f, 0.10f, 0.14f);
@@ -85,13 +86,17 @@ public static partial class InteriorMeshBuilder
                         B(lx, y - sink, z1 - 0.07f, lx + 0.04f, y + 0.05f, z1 - 0.03f, Lit(1.0f, 0.62f, 0.20f));
                     }
                 }
+                // the walkway: the top row's height, wall to wall and to the back wall; a hair into the top row and a hair
+                // under its tread, inside the aisles' sides, so no face of it lies on theirs
+                float topY = (rows - 1) * rise;
+                if (topY > 0.01f) B(-w + sink, 0, -d, w - sink, topY - sink, -d + walk + sink, tier, true);
                 // walked up the aisles on a ramp, the front of each row a step
                 foreach (float ax in new[] { -w, w - aisle })
                 {
                     var p0 = at + basis * new Vector3(ax, 0, d);
                     var p1 = at + basis * new Vector3(ax + aisle, 0, d);
-                    var p2 = at + basis * new Vector3(ax + aisle, (rows - 1) * rise, -d);
-                    var p3 = at + basis * new Vector3(ax, (rows - 1) * rise, -d);
+                    var p2 = at + basis * new Vector3(ax + aisle, topY, -d + walk);
+                    var p3 = at + basis * new Vector3(ax, topY, -d + walk);
                     s.Col.Add(p0); s.Col.Add(p1); s.Col.Add(p2); s.Col.Add(p0); s.Col.Add(p2); s.Col.Add(p3);
                 }
                 break;
@@ -278,6 +283,28 @@ public static partial class InteriorMeshBuilder
                 var r2 = at + basis * new Vector3(w, H, edge);
                 var r3 = at + basis * new Vector3(-w, H, edge);
                 s.Col.Add(r0); s.Col.Add(r1); s.Col.Add(r2); s.Col.Add(r0); s.Col.Add(r2); s.Col.Add(r3);
+                break;
+            }
+            case FurnitureType.ServiceSteps:
+            {
+                // a short flight on the walkway (#1279): up toward the back wall (−Z) to the service doorway's sill,
+                // each step a box reaching back to the wall, a hair narrower than the one under it; a ramp through the nosings
+                int n = Math.Max(1, (int)MathF.Round(p.D / InteriorGenerator.DeckTread));
+                float tread = p.D / n, rise = H / n;
+                var stair = C(0.12f, 0.10f, 0.14f);
+                var nose = C(0.70f, 0.58f, 0.12f);
+                for (int k = 0; k < n; k++)
+                {
+                    // each step down into the one under it and back from the wall by its own hair: no shared planes
+                    float inset = k * sink;
+                    B(-w + inset, k * rise - 2 * sink, -d + (k + 1) * sink, w - inset, (k + 1) * rise, d - k * tread, stair);
+                    B(-w + inset + sink, (k + 1) * rise - sink, d - k * tread - 0.05f, w - inset - sink, (k + 1) * rise + sink, d - k * tread + sink, nose);
+                }
+                var q0 = at + basis * new Vector3(-w, 0, d + tread);
+                var q1 = at + basis * new Vector3(w, 0, d + tread);
+                var q2 = at + basis * new Vector3(w, H, -d + tread);
+                var q3 = at + basis * new Vector3(-w, H, -d + tread);
+                s.Col.Add(q0); s.Col.Add(q1); s.Col.Add(q2); s.Col.Add(q0); s.Col.Add(q2); s.Col.Add(q3);
                 break;
             }
             case FurnitureType.Projector:

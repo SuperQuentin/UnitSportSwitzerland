@@ -59,6 +59,17 @@ lane frame and rules (`bowling-centres`).
   room is walked at a player's width (`BodyRadius` 0.34 m, not the rooms' 0.24 m): a platter left two 0.6 m
   lanes the grid passed and the body did not. Each panel's use spot is kept clear, and `--cinemacheck` walks
   to every panel (`CanReach`, which grids any room).
+- **Stairs to the walls, a service door** (#1279): the seating bank runs wall to wall (its aisles against the side
+  walls, `AisleWidth`), off a side wall (`ExitClear`) only where a facade doorway (#498, the only way a hall gets a
+  fire exit: a hall's back wall is the booth's) opens beside the seats; behind the top row a walkway at its height
+  to the back wall (`TopWalk`). At the top of the aisle away from the booth's own door, `ServiceSteps` (up to 4)
+  climb to a service doorway into the booth (`CinemaPlan.Service`): an open `Window` between the floors (doors are
+  same-floor only) with a real leaf, an `InnerDoorPlan` with a sill (`Bottom`, worked as a flat's door), on the
+  booth's floor or deck, its sill 1 cm over it. Moved to the other aisle when a facade doorway keeps the seats off
+  its wall, dropped when the rise is more than a short flight (six rows under a 3.5 m booth) or the aisle cannot
+  reach it. The wall speakers and lights ride up the aisle. Each doorway's reveals, drawn by both rooms past the
+  shared line, add a door's usual z-fight (baseline lines for the two showcase cinemas moved, main was already
+  over them).
 - **Box office glass** (#1279): a see-through pane of its own (`InteriorNode.AddClearGlass`), the mesh only its
   rail and posts: the interior's one mesh is opaque, and vertex alpha marks lit faces or sky glass.
 - **Checks**: `--cinemacheck --systems ui` (`CinemaProbe`: a two-level town cinema, a small one, a
