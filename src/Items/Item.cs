@@ -30,7 +30,11 @@ public sealed record ItemDef(
     /// <summary>A lasting stamina effect eating it gives (#1225): hot chocolate warms, fondue feeds.</summary>
     Player.StaminaBuff Buff = Player.StaminaBuff.None,
     /// <summary>How long <see cref="Buff"/> lasts, s.</summary>
-    float BuffSeconds = 0f);
+    float BuffSeconds = 0f,
+    /// <summary>A drink's amount, ml (#1266: what the alcohol plan, #1271, counts its ethanol from), 0 for none.</summary>
+    float DrinkMl = 0f,
+    /// <summary>A drink's alcohol by volume, 0..1 (#1266, for #1271).</summary>
+    float Abv = 0f);
 
 public static class ItemDefs
 {
@@ -249,7 +253,12 @@ public static class ItemDefs
             ItemUse.Material, 4, new Color("#ece6d6"), "PC", 0, ItemCategory.Cosmetic, 4f),
         new(ItemId.PokerChips, "Poker chips", "A stack of chips in red, blue, green and white. Worth nothing but the bragging.",
             ItemUse.Material, 50, new Color("#c82a2a"), "PK", 0, ItemCategory.Cosmetic, 12f),
-        Eat(ItemId.BeerBottle, "Beer", 6, "#7a4a1a", "BE", 10, ItemCategory.Water, 3),
+        Eat(ItemId.BeerBottle, "Beer", 6, "#7a4a1a", "BE", 10, ItemCategory.Water, 3) with { DrinkMl = 330f, Abv = 0.05f },
+        // playing together (#1266): the shared pot's wine and kirsch; their alcohol is the alcohol plan's (#1271)
+        Eat(ItemId.WhiteWine, "Fendant", 4, "#e8d878", "WW", 5, ItemCategory.Water, 9) with
+            { Blurb = "A Valais white. {use_item} to drink a glass. At a shared pot, the fondue's wine: everyone at the table climbs warmer.", DrinkMl = 100f, Abv = 0.12f },
+        Eat(ItemId.Kirsch, "Kirsch", 4, "#f2f0ea", "KI", 2, ItemCategory.Water, 14) with
+            { Blurb = "Cherry spirit. {use_item} to drink a shot. At a shared pot, a dash in the fondue: everyone at the table gets their breath back faster.", DrinkMl = 20f, Abv = 0.40f },
         new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
             ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
         // the travel network (#1226): the travelcards; the server keeps who holds one (TravelBook), the card is its picture
