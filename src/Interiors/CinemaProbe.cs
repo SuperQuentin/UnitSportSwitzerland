@@ -79,7 +79,30 @@ public partial class CinemaProbe : Node
         int Count(FurnitureType t) => l.Furniture.Count(f => f.Type == t);
         Check(Count(FurnitureType.SeatingBank) == halls.Count, $"{what}: a seating bank in every hall ({Count(FurnitureType.SeatingBank)})");
         Check(Count(FurnitureType.MovieScreen) == halls.Count, $"{what}: a screen in every hall");
-        Check(Count(FurnitureType.Porthole) == halls.Count, $"{what}: a porthole in every hall");
+        // each porthole twice: on the hall's face of the wall and on the booth's (#1250)
+        Check(Count(FurnitureType.Porthole) == 2 * halls.Count, $"{what}: a porthole in every hall, seen from the booth too ({Count(FurnitureType.Porthole)})");
+        // real holes through the wall (#1250): each hall's open projection port and two dark viewing windows into the booth, matched on the booth's side
+        var projRoom = l.Floors.SelectMany(fl => fl.Rooms).FirstOrDefault(r => r.Type == RoomType.ProjectionRoom);
+        Check(halls.All(h => h.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0 && o.Open) == 1
+            && h.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0 && !o.Open) == 2), $"{what}: every hall has its projection port and viewing windows");
+        Check(projRoom != null && projRoom.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0) == 3 * halls.Count,
+            $"{what}: the booth has them all from its side ({projRoom?.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0)})");
+        // the beam over the back row's heads: every hall's porthole at least 2 m over its seating's top tread (#1250)
+        var banks = l.Furniture.Where(f => f.Type == FurnitureType.SeatingBank).ToList();
+        var hallPorts = l.Furniture.Where(f => f.Type == FurnitureType.Porthole && f.Floor == 0).ToList();
+        Check(banks.All(b => hallPorts.Any(p => p.Lift + p.H / 2 - b.H >= 1.99f)),
+            $"{what}: the projector's lens 2 m over the back row ({string.Join(", ", banks.Select(b => b.H.ToString("F2")))} m treads, {string.Join(", ", hallPorts.Select(p => (p.Lift + p.H / 2).ToString("F2")))} m lenses)");
+        // the projectionist sees through the windows standing up (#1250): on the floor upstairs, on a deck at floor level
+        var deck = l.Furniture.FirstOrDefault(f => f.Type == FurnitureType.BoothDeck);
+        var boothPorts = l.Furniture.Where(f => f.Type == FurnitureType.Porthole && f.Floor == l.Floors.Count - 1 && projRoom != null
+            && l.Floors[f.Floor].Rooms.Contains(projRoom)).ToList();
+        float eye = (deck?.H ?? 0) + InteriorGenerator.EyeHeight;
+        float window = boothPorts.Count > 0 ? boothPorts[0].Lift + (InteriorGenerator.PortFoot + InteriorGenerator.PortHead) / 2 : float.NaN;
+        Check(Math.Abs(eye - window) <= 0.35f, $"{what}: the booth's windows at a standing projectionist's eyes ({eye:F2} m eyes{(deck != null ? $" on a {deck.H:F2} m deck" : "")}, {window:F2} m windows)");
+        Check(c.Upstairs == (deck == null), $"{what}: a deck in a floor-level booth only");
+        if (deck != null)
+            Check(l.Furniture.Where(f => f.Type is FurnitureType.Projector or FurnitureType.BoothPanel).All(f => Math.Abs(f.Lift - deck.H) < 0.01f),
+                $"{what}: the projectors and the panel stand on the deck");
         Check(Count(FurnitureType.ExitSign) >= halls.Count, $"{what}: exit signs over the doors");
         Check(Count(FurnitureType.Projector) == halls.Count, $"{what}: a projector for every hall ({Count(FurnitureType.Projector)})");
         Check(Count(FurnitureType.BoothPanel) == 1, $"{what}: the booth's control panel");

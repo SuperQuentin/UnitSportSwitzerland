@@ -20,7 +20,13 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored arcades are planned again.</summary>
-    public const int ArcadeRules = 2;
+    public const int ArcadeRules = 5;
+
+    /// <summary>A billiard hall's longest side, m (#1250).</summary>
+    private const float BilliardMaxSide = 22f;
+
+    /// <summary>The most pool tables a billiard hall has.</summary>
+    private const int MaxPoolTables = 12;
 
     private const float ArcadeMinSide = 6f, ArcadeMaxSide = 32f, ArcadeService = 2.6f, ArcadeAisle = 1.8f;
     /// <summary>Machines in one arcade at most: an upright is ~400 vertices, a racer ~600.</summary>
@@ -35,14 +41,14 @@ public static partial class InteriorGenerator
     private static readonly ConditionalWeakTable<InteriorLayout, ArcadePlan> ArcadePlans = new();
 
     /// <summary>Plans an arcade into <paramref name="l"/>; false gives the layout back as it was.</summary>
-    internal static bool TryArcade(InteriorLayout l, Footprint fp, Building b, float doorHeight, Random rng)
+    internal static bool TryArcade(InteriorLayout l, Footprint fp, Building b, float doorHeight, Random rng, string name = "")
     {
         bool whole = Venues.WholeBuilding(b);
         float wall = b.MaxY - b.MinY;
         float h = whole ? Math.Clamp(wall * 0.85f, 3.0f, 5.0f) : Storeys(b).Height;
         var (storey, entryX, entryW, type, shop) = (l.StoreyHeight, l.EntryX, l.EntryWidth, l.Type, l.Shop);
         l.StoreyHeight = h;
-        if (PlanArcade(l, doorHeight, whole) && InteriorValidator.Validate(l).Count == 0) return true;
+        if (PlanArcade(l, doorHeight, whole, IsBilliard(name)) && InteriorValidator.Validate(l).Count == 0) return true;
         (l.StoreyHeight, l.EntryX, l.EntryWidth, l.Type, l.Shop) = (storey, entryX, entryW, type, shop);
         l.Floors.Clear();
         l.Below = 0;
@@ -50,19 +56,28 @@ public static partial class InteriorGenerator
         return false;
     }
 
-    private static bool PlanArcade(InteriorLayout l, float doorHeight, bool whole)
+    /// <summary>An arcade whose name says it is a billiard hall (#1250): OSM tags Geneva's Bluff Billard an amusement arcade.</summary>
+    public static bool IsBilliard(string name) =>
+        System.Text.RegularExpressions.Regex.IsMatch(name, @"billard|billiard|snooker|\bpool\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static bool PlanArcade(InteriorLayout l, float doorHeight, bool whole, bool billiard)
     {
         float W = l.Width, D = l.Depth;
         var frame = D >= W ? new BowlFrame(true, 1, W, D) : new BowlFrame(false, l.EntryX <= 0 ? 1 : -1, W, D);
+        // a billiard hall with its door far along a long wall keeps to its size from that wall (#1250)
+        if (billiard && !frame.AlongZ && frame.V(l.EntryX, -D / 2) + 4f > BilliardMaxSide && D >= ArcadeMinSide + 1f)
+            frame = new BowlFrame(true, 1, W, D);
         float along = frame.Along, across = frame.Across;
         if (along < ArcadeMinSide + 1f || across < ArcadeMinSide) return false;
         float doorU = frame.U(l.EntryX, -D / 2), doorV = frame.V(l.EntryX, -D / 2);
 
-        float progV = Math.Min(along, ArcadeMaxSide);
+        // a billiard hall is smaller than an arcade's hangar [S: Bluff Billard Geneva, 8 tables]; the rest a plain hall
+        float maxSide = billiard ? BilliardMaxSide : ArcadeMaxSide;
+        float progV = Math.Min(along, maxSide);
         // a door in a long wall past the programme along X: the programme reaches it
         if (!frame.AlongZ) progV = Math.Min(along, Math.Max(progV, doorV + 4f));
         if (along - progV < 3f) progV = along;
-        float progW = Math.Min(across, ArcadeMaxSide);
+        float progW = Math.Min(across, maxSide);
         if (across - progW < 3f) progW = across;
         float uL = frame.AlongZ ? Fit(doorU - progW / 2, -across / 2, across / 2 - progW) : -across / 2;
         float uR = uL + progW;
@@ -79,7 +94,7 @@ public static partial class InteriorGenerator
         // the service strip across the back: a WC, a store, an office, side by side, each off the hall
         bool service = progV >= 9f && progW >= 5.2f;
         float hallV1 = service ? progV - ArcadeService : progV;
-        var hall = new RoomPlan { Type = RoomType.ArcadeHall };
+        var hall = new RoomPlan { Type = billiard ? RoomType.BilliardHall : RoomType.ArcadeHall };
         SetRect(hall, frame.Rect(uL, 0, uR, hallV1));
         ground.Rooms.Add(hall);
         int storeRoom = -1;
@@ -151,6 +166,7 @@ public static partial class InteriorGenerator
     private static void ArcadeLayout(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
     {
         if (!ArcadePlans.TryGetValue(l, out var p)) return;
+        if (r.Type == RoomType.BilliardHall) { BilliardLayout(l, f, r, p, placed, blocked, rng); return; }
         var fr = p.Frame;
         Carpet(l, f, r, placed);
         var (dx, dz) = fr.Point(p.DoorU, p.DoorV);
@@ -196,6 +212,66 @@ public static partial class InteriorGenerator
         }
         for (int i = 0; i < hockey && Count() < budget; i++)
             TryPlace(l, f, r, new Piece(FurnitureType.AirHockey, 1.2f, 2.1f, 0.9f, false), placed, blocked, rng);
+        // a snack corner in a big hall: a counter, its stools (#1250)
+        if (r.Area >= 150f) SnackBar(l, f, r, near.Far, placed, blocked, rng, 4f);
+        // and what the islands left of the floor: game tables and high tables, so it is no empty hangar
+        FillFloor(l, f, r, placed, blocked, 3.6f, 3.6f, 1.6f, (i, k) => ((i * 7 + k * 3) % 4) switch
+        {
+            0 when Count() < budget => GameTable(hockey: true),
+            1 => HighTables,
+            2 => GameTable(hockey: false),
+            _ => null,
+        });
+    }
+
+    /// <summary>A bar counter <paramref name="length"/> m long (shorter where that does not fit) with its stools, against <paramref name="sides"/>.</summary>
+    private static void SnackBar(InteriorLayout l, int f, RoomPlan r, Side[] sides,
+        List<RectPlan> placed, List<RectPlan> blocked, Random rng, float length)
+    {
+        int before = l.Furniture.Count;
+        foreach (float len in new[] { length, length * 0.7f, 2.4f })
+        {
+            TryPlace(l, f, r, new Piece(FurnitureType.BarCounter, len, 2.0f, 1.1f, true), placed, blocked, rng, sides);
+            if (l.Furniture.Count > before) break;
+        }
+        if (l.Furniture.Count == before) return;
+        Stools(l, f, r, l.Furniture[^1], placed, blocked);
+    }
+
+    /// <summary>
+    /// A billiard hall [S: Bluff Billard Geneva, 8 pool tables]: pool tables in bays with the cue's swing
+    /// round them, each under its lamp; the bar with its stools; lounges of armchairs and high tables in
+    /// what the tables leave; darts, table football, a few machines and cue racks at the walls; plants.
+    /// </summary>
+    private static void BilliardLayout(InteriorLayout l, int f, RoomPlan r, ArcadePlan p, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
+    {
+        var fr = p.Frame;
+        var (dx, dz) = fr.Point(p.DoorU, p.DoorV);
+        blocked.Add(new RectPlan(dx - 1.6f, dz - 1.6f, dx + 1.6f, dz + 1.6f).Clip(r));
+        var near = Sides(fr, l, r);
+        SnackBar(l, f, r, near.Far, placed, blocked, rng, Math.Clamp(r.Width * 0.3f, 3f, 6f));
+        // the tables first, they are what the hall is for
+        // at most a dozen [S: Bluff has 8]; the floor past them takes lounges
+        int pools = 0;
+        if (FillFloor(l, f, r, placed, blocked, PoolBay.W + 0.2f, PoolBay.D + 0.2f, 0.4f, (_, _) => pools++ < MaxPoolTables ? PoolBay : null, gap: 0.05f) == 0)
+        {
+            pools = 0;
+            FillFloor(l, f, r, placed, blocked, PoolBay.W, PoolBay.D, 0.3f, (_, _) => pools++ < MaxPoolTables ? PoolBay : null, gap: 0f);
+        }
+        foreach (var piece in new[]
+                 {
+                     new Piece(FurnitureType.DartBoard, 0.7f, 0.15f, 2.0f, true), new Piece(FurnitureType.DartBoard, 0.7f, 0.15f, 2.0f, true),
+                     new Piece(FurnitureType.TableFootball, 0.75f, 1.4f, 0.9f, false),
+                     new Piece(FurnitureType.ArcadeCabinet, 0.78f, 0.9f, 1.85f, true), new Piece(FurnitureType.Pinball, 0.75f, 1.4f, 1.93f, true),
+                     new Piece(FurnitureType.Jukebox, 0.9f, 0.6f, 1.6f, true),
+                 })
+            TryPlace(l, f, r, piece, placed, blocked, rng);
+        // the lounges and high tables in what the tables leave
+        FillFloor(l, f, r, placed, blocked, 3.2f, 3.4f, 1.0f, (i, k) => (i + k) % 2 == 0 ? LoungeGroup : HighTables);
+        for (int i = 0; i < Math.Clamp((int)(r.Area / 40f), 2, 8); i++)
+            TryPlace(l, f, r, new Piece(FurnitureType.CueRack, 0.6f, 0.12f, 1.6f, true), placed, blocked, rng);
+        for (int i = 0; i < Math.Clamp((int)(r.Area / 60f), 2, 6); i++)
+            TryPlace(l, f, r, new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true), placed, blocked, rng);
     }
 
     /// <summary>
@@ -269,6 +345,7 @@ public static partial class InteriorGenerator
         new(FurnitureType.DrumGame, 1.2f, 1.4f, 1.9f, true),
         new(FurnitureType.BasketballGame, 1.2f, 3.0f, 2.6f, true),
         new(FurnitureType.AirHockey, 1.2f, 2.1f, 0.9f, false),
+        new(FurnitureType.CueRack, 0.6f, 0.12f, 1.6f, true),
     };
 
     /// <summary>A whole arcade in the model viewer.</summary>

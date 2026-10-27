@@ -33,6 +33,12 @@ public static partial class BuildingMeshBuilder
     public const float SignFlag = 1f, GarageWallFlag = 2f, BlankWallFlag = 3f;
 
     /// <summary>
+    /// UV2.y of a building whose ground storey is a hall venue's (#1250: a cinema or bowling centre in a
+    /// mall or under offices): plain everywhere, but no windows in its first storey.
+    /// </summary>
+    public const float BlindGroundFlag = 0.25f;
+
+    /// <summary>
     /// A castle's wall (#859): UV is (metres along, metres above the wall run's foot), UV2.x the
     /// run's height and CUSTOM0.z its length; UV2.y is <see cref="CastleWallFlag"/>, +1 when its head is
     /// level (not a gable: it gets the corbel table), +2 when its foot is on the ground (within
@@ -353,6 +359,7 @@ public static partial class BuildingMeshBuilder
             // a spire's faces are steep enough to count as wall; above the eave they are roof
             float spireFrom = part == BuildingPart.Tower ? (types.Boxes[bi]?.Eave ?? b.MaxY) + 0.3f : float.MaxValue;
             var uv2 = new Vector2(storeyCount, 0f);
+            if (storeyCount > 0 && part == BuildingPart.None && Venues.Planned(Venues.HallOf(types, bi))) uv2.Y = BlindGroundFlag;
             if (b.Kind == BuildingKind.Garage && !castle)
             {
                 // the painted stripe runs under the eave; a flat-roofed garage has its eave near

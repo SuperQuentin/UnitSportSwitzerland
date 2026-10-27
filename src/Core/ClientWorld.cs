@@ -219,6 +219,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.ArcadeProbe { Name = "ArcadeProbe" });
             return;
         }
+        // the cinema projection POC's cost in a real hall (#1250), windowed
+        if (Interiors.ProjectionPerfProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.ProjectionPerfProbe { Name = "ProjectionPerfProbe" });
+            return;
+        }
         // cinemas planned in hand-made buildings (#1238)
         if (Interiors.CinemaProbe.ParseArgs())
         {
