@@ -583,8 +583,9 @@ public partial class ChatManager : Node
                 return;
 
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
-                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
-                Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
+                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis":
+                // Versteckis has no offline game (#1268): its bots need a server; Host a game from the menu
+                Show(verb is "vs" or "versteckis" ? "Versteckis needs a multiplayer game: Host a game from the menu, and bots fill it." : $"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
             default:
@@ -639,6 +640,12 @@ public partial class ChatManager : Node
         text = text.Trim();
         if (text.Length == 0) return;
         if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        // a round's spectators talk among themselves while it runs (#1268, Core/Rounds): nobody calls out the spots
+        if (Core.Rounds.ChatScope(peer) is { } scope && Versteckis != null)
+        {
+            foreach (long member in Versteckis.ScopeMembers(scope)) ReplyTo(member, $"{NameOf(peer)} (spectating): {Scrub(text)}", ChatKind.Say);
+            return;
+        }
         Broadcast($"{NameOf(peer)}: {Scrub(text)}", ChatKind.Say);
         Rpc(MethodName.Said, peer, Scrub(text));
     }
@@ -799,6 +806,8 @@ public partial class ChatManager : Node
 
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
+    /// <summary>Versteckis (#1268): <c>/vs …</c>, and the spectators' chat scope.</summary>
+    public Adventure.Versteckis.VersteckisManager? Versteckis { get; set; }
 
     /// <summary>Server: the spawn and teleport rule (#799); <c>/city</c> asks it.</summary>
     public Arrival? Arrival { get; set; }
@@ -927,6 +936,11 @@ public partial class ChatManager : Node
             case "br":
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
+            // Versteckis (#1268): anyone opens, joins, leaves; the opener starts; an admin closes any
+            case "vs" or "versteckis":
+                if (Versteckis == null) ReplyTo(sender, "Versteckis is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, Versteckis.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
             case "bot" or "bots":
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);

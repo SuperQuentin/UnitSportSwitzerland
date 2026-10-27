@@ -43,6 +43,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private World.Snow.SnowService? _snow;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
+    private Adventure.Versteckis.VersteckisManager? _vs;
     private Combat.FightManager? _fight;
     private Combat.AuraManager? _aura;
     private InviteService? _invites;
@@ -303,7 +304,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
         {
             NoTeleport = "No teleporting out of a Battle Royale. /br leave to give up.",
         });
-        if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b) || br.Together(a, b);
+        // Versteckis (#1268): World/Versteckis, hide-and-seek as village props; its Rounds mode after the Battle Royale's
+        var vs = _vs = Adventure.Versteckis.VersteckisManager.CreateServer(_chat, _players, origin, () => source, places?.Places ?? new());
+        vs.GroundWorld = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+        AddChild(vs);
+        _chat.Versteckis = vs;
+        if (_interest != null)
+        {
+            _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b) || br.Together(a, b) || vs.Together(a, b);
+            // in a game's Hide every hider is despawned on its seeker (#1268)
+            _interest.Withheld = vs.Withheld;
+        }
 
         // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
@@ -349,6 +360,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         {
             var adventure = _adventure = Adventure.AdventureService.Create(this, server: true, networked: true);
             adventure.InMatch = Rounds.InRound;
+            adventure.Provides("versteckis");
             adventure.NameOf = _chat.NameOfPeer;
             adventure.PositionOf = peer => _players!.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is { } body ? body.NetGlobal : null;
             var gate = _accountGate;
@@ -679,6 +691,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
+        _vs?.SendTo(id);
         _brCrates?.SendTo(id);
         _invites?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
@@ -701,6 +714,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);
+        _vs?.PeerLeft(id);
         _fight?.PeerLeft(id);
         _aura?.PeerLeft(id);
         _invites?.PeerLeft(id);

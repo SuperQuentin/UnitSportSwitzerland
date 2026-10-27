@@ -1106,6 +1106,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
             AddNavigation(adventure, items, ground);
         }
+        // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
+        // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it
+        var versteckis = Adventure.Versteckis.VersteckisManager.CreateClient(origin);
+        versteckis.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+        versteckis.Inventory = () => _items?.Inventory;
+        versteckis.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
+        versteckis.AddAnchor = node => _chunks?.AddAnchor(node);
+        versteckis.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
+        versteckis.Source = () => _chunks?.Source;
+        versteckis.GroundAt = p => _chunks != null && _chunks.TryGetSurface(p, out float h) ? h : null;
+        AddChild(versteckis);
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
         {

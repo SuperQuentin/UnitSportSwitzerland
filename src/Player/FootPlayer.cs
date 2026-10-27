@@ -1055,6 +1055,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public static Func<FootPlayer, bool>? Regenerates;
 
+    /// <summary>
+    /// Asked every walk step: the top speed (m/s) of a body disguised as a prop (Versteckis, #1268), null when it is
+    /// itself. A prop walks only: no run, jump, slide or emote, and on a desktop its view is lent third person.
+    /// </summary>
+    public static Func<FootPlayer, float?>? PropWalk;
+
     /// <summary>Down for good, until <see cref="Respawn"/>: out of the match.</summary>
     public bool Eliminated { get; private set; }
 
@@ -2125,7 +2131,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId)));
 
     /// <summary>On foot and free to move the body: what an emote (#404), or any dance, needs.</summary>
-    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !InDuel;
+    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !InDuel
+        && PropWalk?.Invoke(this) == null;
 
     /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
     public bool RatBeatHere(bool heard) =>
@@ -2437,6 +2444,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera); not in VR (#920)
         float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f && !XR.XrSession.Active ? 1f : 0f);
+        // a prop (#1268) is seen from behind on a desktop; VR stays first person (comfort)
+        if (want == 0f && !XR.XrSession.Active && PropWalk?.Invoke(this) != null) want = 1f;
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
@@ -2783,6 +2792,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
+        // Versteckis (#1268): an objective's hold; a prop opens no door and drives nothing
+        if (Adventure.Versteckis.VersteckisManager.TryInteract(this)) return true;
         // a chest, a seal's stack or cowbell, a guide's burrow, a trial's post, an offering box (#1227)
         if (Adventure.Rewards.RewardWorld.TryInteract(this)) return true;
         // a summit cross, a telescope or a stamp post at hand (#1224): look out, or stamp
@@ -3535,8 +3546,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        // at a crane's controls the view switch is its hook camera (#618, WorkCrane)
-        if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho() && !CraneWorking)
+        // at a crane's controls the view switch is its hook camera (#618, WorkCrane); a prop keeps its lent view (#1268)
+        if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho() && !CraneWorking && PropWalk?.Invoke(this) == null)
         {
             ToggleView();
             GetViewport().SetInputAsHandled();
@@ -3875,6 +3886,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         bool running = sprintDown || _sprintLatch;
         bool crouchHeld = keys ? PlayerInput.Held(PlayerInput.CrouchSlide) : acts.Crouch;
+        // a prop (#1268): walks at its cap, never runs, jumps or slides (the Sprint key is its burst, PropWalk's answer)
+        float? propWalk = PropWalk?.Invoke(this);
+        if (propWalk != null) running = sprintDown = _sprintLatch = crouchHeld = false;
 
         // Wall jumps and slide entries need the *edge*, not the state: the ground jump below
         // polls, so holding Space bunny-hops, and a polled wall jump would rocket you up a
@@ -3884,7 +3898,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // ends at ~2 m/s, the walk accelerates you back over the entry threshold in about a
         // second, and a held key starts the next one — so holding Ctrl became a permanent
         // 7 m/s crouch-run. A slide is one move; you re-press to take another.
-        bool spaceDown = keys ? PlayerInput.Held(PlayerInput.Jump) : acts.Jump;
+        bool spaceDown = (keys ? PlayerInput.Held(PlayerInput.Jump) : acts.Jump) && propWalk == null;
         bool jumpPressed = spaceDown && !_jumpHeld;
         _jumpHeld = spaceDown;
         // downed (#475): a crawl, nothing more
@@ -4045,6 +4059,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!_sliding)
         {
             float speed = Downed ? CrawlSpeed * moveAmount
+                : propWalk is float cap ? cap * moveAmount
                 : (running ? RunSpeed : WalkSpeed) * moveAmount * WadePace(running);   // wading (#380)
 
             // climbing costs speed: scale by how much of the move is uphill

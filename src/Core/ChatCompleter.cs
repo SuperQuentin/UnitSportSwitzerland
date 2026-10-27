@@ -77,6 +77,7 @@ public sealed class ChatCompleter
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel", "Activities", "races"),
         ("trial", false, false, "leave", "Activities", "an adventure trial"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status", "Activities", "Battle Royale"),
+        ("vs", false, false, "open [here|nearest|random|<village>] [rounds] [bots off|n] [easy|normal|hard] | join [id] | leave | start | invite <player> | close <id> | list | stats [name]", "Activities", "Versteckis, hide-and-seek in a village"),
         ("fight", false, false, "<player> | accept | decline | leave", "Activities", "a fist fight"),
         ("aura", false, false, "<player> | accept | decline | leave", "Activities", "an aura battle"),
         ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
