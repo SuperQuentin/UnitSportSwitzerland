@@ -261,6 +261,9 @@ public partial class GadgetTool : Node
         {
             if (!kind(o.Kind)) continue;
             float d = o.WorldTransform(placed.Origin).Origin.DistanceTo(at);
+            // a zipline is taken back from either post
+            if (o.Kind == PlacedKind.Zipline && Gadgets.ZipStart(o.Payload) is { } s)
+                d = Mathf.Min(d, placed.Origin.ToWorld(s.E, s.N, s.Alt).DistanceTo(at));
             if (d < bestD) { bestD = d; best = o; }
         }
         return best;

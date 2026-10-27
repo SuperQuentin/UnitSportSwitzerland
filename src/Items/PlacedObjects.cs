@@ -337,7 +337,7 @@ public partial class PlacedObjects : Node
             !Enum.IsDefined((PlacedKind)kind) || kind == 0 ? "Unknown object."
             : payload.Length > MaxPayload ? "Too much data."
             : !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !rot.IsFinite() ? "Bad position."
-            : !InReach(peer, e, n, alt) ? "Too far away."
+            : !InReachOfEnd(peer, (PlacedKind)kind, e, n, alt, payload) ? "Too far away."
             : _objects.Values.Count(o => o.Owner == owner) >= MaxPerOwner ? $"You already placed {MaxPerOwner} things."
             // a kind's own rules (a zipline's length and slope): Build.Gadgets
             : Build.Gadgets.Check(new PlacedObject(0, (PlacedKind)kind, owner, e, n, alt, rot, payload), _origin);
@@ -387,7 +387,7 @@ public partial class PlacedObjects : Node
     {
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
             : !AnyoneMayRemove(o) && o.Owner != OwnerName(peer) ? "That is not yours."
-            : !InReach(peer, o.E, o.N, o.Altitude) ? "Too far away."
+            : !InReachOfEnd(peer, o.Kind, o.E, o.N, o.Altitude, o.Payload) ? "Too far away."
             : Farming.FarmStands.RemoveProblem(o);
         if (refused != null)
         {
@@ -410,6 +410,11 @@ public partial class PlacedObjects : Node
         if (Online && peer != 1) RpcId(peer, MethodName.Answer, req, id, refused);
         else Answer(req, id, refused);
     }
+
+    /// <summary>Within reach of the object; a zipline has two ends, standing by either one will do.</summary>
+    private bool InReachOfEnd(long peer, PlacedKind kind, double e, double n, double alt, string payload) =>
+        InReach(peer, e, n, alt)
+        || (kind == PlacedKind.Zipline && Build.Gadgets.ZipStart(payload) is { } s && InReach(peer, s.E, s.N, s.Alt));
 
     /// <summary>Within reach of the requester's body; offline there is nobody to doubt.</summary>
     private bool InReach(long peer, double e, double n, double alt, float reach = Reach)
