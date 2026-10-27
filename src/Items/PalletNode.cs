@@ -55,6 +55,7 @@ public partial class PalletNode : Node3D
         var node = new PalletNode { Name = "Pallet_" + id.Replace(':', '_').Replace('#', 'L'), Id = id, Load = load };
         node.AddChild(new MeshInstance3D { Name = "Mesh", Mesh = MeshOf(load), MaterialOverride = material });
         var body = new StaticBody3D { Name = "Body" };
+        body.AddToGroup(UnitSport.Player.FootPlayer.NoClimbGroup);   // placed things are never free-climbed (#1225)
         float depth = Pallets.Depth(load);
         node._shape = new CollisionShape3D
         {

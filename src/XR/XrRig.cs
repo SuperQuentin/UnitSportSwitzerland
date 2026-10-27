@@ -57,6 +57,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XrCabControls _cab = null!;
     private XrTeleport _teleport = null!;
     private XrWatch _watch = null!;
+    private XrStaminaRing _stamina = null!;   // #1225
     private XrMap _map = null!;
     private XrPhone _phone = null!;
     private XrClimb _climb = null!;
@@ -240,6 +241,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // on the drawn left hand's wrist, so it is where the hand is, the wheel's rim included (#1097)
         _watch = new XrWatch();
         _leftHand.AddChild(_watch);
+        _stamina = new XrStaminaRing();
+        _watch.AddChild(_stamina);
         _map = new XrMap(_right);
         _left.AddChild(_map);
         _climb = new XrClimb(_left, _right);
@@ -410,6 +413,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // the watch on the placed left hand, then the ring over it, aimed by the physical right hand
         _watch.Tick(player, _leftHand.Visible, _leftHand.WatchSpot, dt);
         PalmUp(player, dt);
+        _stamina.Tick(player, dt);
         // "--xrring <wedge>" with --xrsim: the ring held open before the eyes, that wedge lit, for a headset shot
         if (_ringShot is int lit) _ring.ShowForShot(_camera.GlobalTransform, lit);
         else _ring.Update(_camera.GlobalTransform, _watch.GlobalTransform, _watch.Visible, _leftHanded ? _left : _right, player, InWorld && !Ui.LoadingScreen.Active, dt);   // no wheel over a load

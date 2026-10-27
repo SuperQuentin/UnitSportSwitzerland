@@ -191,6 +191,48 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // venue terraces in front of a hand-made door (#1243)
+        if (Interiors.TerraceProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.TerraceProbe { Name = "TerraceProbe" });
+            return;
+        }
+        // the venues' tracker modules (#1244)
+        if (Audio.Tracker.TrackerProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Audio.Tracker.TrackerProbe { Name = "TrackerProbe" });
+            return;
+        }
+        // restaurants, cafés, bars and clubs in hand-made buildings (#1242)
+        if (Interiors.DiningProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.DiningProbe { Name = "DiningProbe" });
+            return;
+        }
+        // arcades planned in hand-made buildings (#1240)
+        if (Interiors.ArcadeProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.ArcadeProbe { Name = "ArcadeProbe" });
+            return;
+        }
+        // cinemas planned in hand-made buildings (#1238)
+        if (Interiors.CinemaProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.CinemaProbe { Name = "CinemaProbe" });
+            return;
+        }
+        // bowling centres planned in hand-made buildings (#1235)
+        if (Interiors.BowlingProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.BowlingProbe { Name = "BowlingProbe" });
+            return;
+        }
         // the venue list, its rules on a hand-made tile, and the real tiles when there are any (#1232)
         if (Interiors.VenueProbe.ParseArgs())
         {
@@ -460,6 +502,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Audio.Cd.CdUploadProbe.Requested) AddChild(new Audio.Cd.CdUploadProbe());
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
+        Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
@@ -549,6 +592,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(_chunks));   // neon over every venue (#1232)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(_chunks, _cache!));   // tables out front (#1243)
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
         // tonight's concert in each stadium (#885)
@@ -831,6 +875,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.TractorCheck.Role is { } tractorRole) AddChild(new Player.TractorCheck(tractorRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
+        if (Player.ClimbCheck.Requested) AddChild(new Player.ClimbCheck(() => LocalPlayer));   // #1225
         if (Items.Fishing.FishProbe.Requested) AddChild(new Items.Fishing.FishProbe(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
         if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));
@@ -851,9 +896,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -885,6 +930,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
+        if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
@@ -929,6 +975,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
+        if (Player.ClimbNetProbe.Role != null) AddChild(new Player.ClimbNetProbe(items));   // #1225
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
         if (Player.NameTagNetProbe.Role != null) AddChild(new Player.NameTagNetProbe(items));
         if (Player.EBikeNetProbe.Role != null) AddChild(new Player.EBikeNetProbe(items));
@@ -1122,6 +1169,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
         }
+        // the rising air made visible (#1225): specks in the thermals near the camera, a cumulus over strong ones
+        if (_chunks != null && DisplayServer.GetName() != "headless") AddChild(new World.ThermalCues(_chunks, origin));
 
         // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
         if (Systems.On(Systems.Occasions))
@@ -2208,6 +2257,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
             else if (p.Indoors)
             {
+                // a cinema's booth (#1238): the lights or the screen, by the half of its panel you stand at
+                if (Interiors.CinemaBooths.Prompt(p) is { } booth) yield return (PlayerInput.InteractMount, booth);
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))

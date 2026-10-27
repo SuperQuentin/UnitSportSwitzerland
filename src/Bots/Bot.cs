@@ -16,6 +16,8 @@ public struct BotIntent
     public bool Run;
     public bool Jump;
     public bool Crouch;
+    /// <summary>Grab the face it walks into and climb it (#1225): a body never climbs by pushing alone.</summary>
+    public bool Climb;
     /// <summary>Face this yaw whatever the feet do (aiming, looking round); null = face where it walks.</summary>
     public float? FaceYaw;
     /// <summary>The view's pitch when <see cref="FaceYaw"/> is set (radians, + up).</summary>

@@ -47,6 +47,7 @@ public static class Permissions
     {
         SetAdmin(false);
         SetServerTeleport(true);
+        SetServerBody(true, true);
     }
 
     /// <summary>The server lets players who are not admins teleport (<c>Net/Arrival</c>, #799). Meaningless offline.</summary>
@@ -71,6 +72,29 @@ public static class Permissions
         OfflineTravelNetwork = on;
         Changed?.Invoke();
     }
+
+    /// <summary>
+    /// The server counts stamina (#1225): <c>--stamina off</c> drops the meter while keeping the
+    /// Adventure layer (<c>Net/Arrival</c>). Meaningless offline (always on).
+    /// </summary>
+    public static bool ServerStamina { get; private set; } = true;
+
+    /// <summary>The server's air rises in thermals, ridge lift and updrafts (#1225); <c>--lift off</c> stills it.</summary>
+    public static bool ServerLift { get; private set; } = true;
+
+    internal static void SetServerBody(bool stamina, bool lift)
+    {
+        if (ServerStamina == stamina && ServerLift == lift) return;
+        ServerStamina = stamina;
+        ServerLift = lift;
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Thermals, ridge lift and updrafts carry this player's gliders (#1225): the server did not say
+    /// <c>--lift off</c>, and not in a Battle Royale match (a parachute hovering in a thermal would change the drop).
+    /// </summary>
+    public static bool LiftOn => ServerLift && !InMatch;
 
     /// <summary>The place search, the VR hand map and the fly camera may move the player somewhere else.</summary>
     public static bool CanTeleport => Online ? IsAdmin || ServerTeleport : !OfflineTravelNetwork;

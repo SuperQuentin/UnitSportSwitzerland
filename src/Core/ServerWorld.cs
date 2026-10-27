@@ -21,6 +21,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
     private Interiors.ChurchRadios? _churchRadios;
+    private Interiors.CinemaBooths? _cinemaBooths;
     private Items.DroppedItems? _dropped;
     private EntityInterest? _entityInterest;
     private PlayerRegistry? _registry;
@@ -179,6 +180,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Audio.Cd.CdUpload.Create(this, server: true);   // a player's own file, scanned on the server (#736)
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
+        _cinemaBooths = Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
@@ -358,6 +360,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
             travel.IsAdmin = _chat.IsAdminPeer;
             travel.Racing = peer => race.RaceOf(peer) != 0;
             travel.GroundAt = ground;
+            // climbs higher than the stamina rules allow, logged (#1225): no correction
+            AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
@@ -624,6 +628,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
+        _cinemaBooths?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _snow?.SendTo(id);

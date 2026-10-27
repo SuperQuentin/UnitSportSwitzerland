@@ -25,6 +25,9 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | creative mode: invincible, flying (#1002) | `WalkControls` steers the flight; the take-off reads the jump key | — (a client toggle on the owner's body) | — | — | n/a: a player's own mode, never a bot's |
 | mantle a ledge | jump at a wall (`FootActions`) | the body | knee and head rays | `MoveTo` | ok |
 | face / aim | `LookYaw`, `LookPitch`, `SquareToView` (`BotIntent.FaceYaw`) | the body | — | `Engage` | ok |
+| free climbing (#1225) | `FootActions` `Climb` (`BotIntent.Climb`): a bot grabs the face it walks into only when its brain asks (a `MoveTo` into a cliff never starts a climb); `WalkControls` climbs it (into the face = up), `FootActions` jump / crouch climb-jump and let go | the body, on the server's collision round a bot (ground and buildings); spends the same `Stamina` (infinite where the rules say off) | its own position; the cover is unknown on the server (counts as rock: a bot may climb a glacier wall) | — | gap: a `Climb` skill (`MoveTo` blocked by a cliff climbs it when the stamina estimate reaches a ledge); BR bots n/a (climbing is off in a match) |
+| stamina (#1225) | spent by the body's own paths (sprint in a fight, the sprint stroke, climbing) | the body; a bot's max is the base 100 (no `PlayerProgress`) | — | — | ok |
+| gliders in thermals, ridge lift, campfire updrafts (#1225) | — | — | — | — | n/a: bots do not fly gliders |
 | swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |
 | knocked out, down, revived, out | — | `TakeDamage`, `TryGoDown`, `ReviveInPlace`, `FinishDowned` on the server | — | — | ok |
 | run over by a vehicle | — | `KnockedByVehicle` | — | — | gap: skipped for an Npc (`FootPlayer.Crash`), and players' proxies have no physics body on the server: a knock from `PlayerSnapshot` positions, a follow-up (`vehicles`) |
@@ -54,6 +57,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | thrown items (bonk) | — | `ItemEvents.RelayBonk` (client sender) | — | — | gap: later |
 | radio, camera, GPS, fishing, farm tools | — | — | — | — | n/a for a fighting bot (an ambient brain may want them) |
 | a radio's voice/music mix (#1153) | `RadioBody.Mix` / `FootPlayer.RadioMix` set directly | `RadioManager.SetMix` (server: set `Mix`) | — | — | n/a for a fighting bot; an ambient bot DJ could set it server-side |
+| a cinema's booth: house lights and the screen (#1238) | none (a bot never stands at a panel to press it) | `CinemaBooths.Serve(peer, plan, code)` (server: the bot must be inside that cinema, as a player) | `CinemaBooths.StateOf(plan)` | — | n/a for a fighting bot; an usher bot could dim the lights for a show |
+| a venue terrace's tables, planters and menu board (#1243) | none (scenery) | none: built and solid on clients only, as trees (`VenueTerraces`) | none (no server collision: a bot walks through them, as through trees) | — | gap: server collision for terraces and trees together, if bots are ever to weave between tables |
 
 ## World, loot and vehicles
 

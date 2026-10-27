@@ -107,6 +107,9 @@ public partial class VenueProbe : Node
             var sign = NeonSign.Make(Venues.GenericName(t), t);
             Check(sign.GetChildren().OfType<Label3D>().Count() == 2, $"{t}'s sign is lettered on both faces");
             sign.Free();
+            // its music on the relay (#1244): a station every kind has, in every region
+            foreach (var region in Enum.GetValues<VenueMusic.Region>())
+                Check(Audio.Live.Stations.For(VenueMusic.StationFor(t, "", region)) != null, $"{t} plays a station in {region} Switzerland");
         }
         Check(NeonSign.IconMesh(VenueType.Restaurant, "pizza") is { } pizza && pizza.SurfaceGetArrayLen(0) != NeonSign.IconMesh(VenueType.Restaurant)!.SurfaceGetArrayLen(0),
             "a pizzeria's icon is a slice, not the fork and knife");
@@ -142,6 +145,8 @@ public partial class VenueProbe : Node
         // a hall's main door in LV95 and the way it faces, so you can go and stand at it
         var doorAt = new Dictionary<(TileId, int), string>();
         var doubled = new List<string>();
+        // --venuedoors <text>: also the door of every venue whose name holds it, any kind, to shoot it
+        string? named = CmdArgs.Value("--venuedoors");
         foreach (var t in tiles)
         {
             using var f = Godot.FileAccess.Open(dir.PathJoin(BuildingFormat.FileName(t)), Godot.FileAccess.ModeFlags.Read);
@@ -158,12 +163,26 @@ public partial class VenueProbe : Node
                 {
                     if (match[i] < 0) continue;
                     shown[(t, i)] = match[i];
-                    if (!Venues.IsHall(list[match[i]].Type)) continue;
-                    doors ??= BuildingFootprint.ComputeDoors(tile, null, null);
+                    bool asked = named != null && Venues.NameOf(list[match[i]]).Contains(named, StringComparison.OrdinalIgnoreCase);
+                    if (!Venues.IsHall(list[match[i]].Type) && !asked) continue;
+                    // with the tile's roads, as the game places doors: without them a door can land on another facade
+                    doors ??= BuildingFootprint.ComputeDoors(tile, Roads(dir, t), null);
                     var d = doors.FirstOrDefault(x => x.Index == i && x.Slot == 0);
                     doorAt[(t, i)] = d.Width > 0
                         ? $" door E {t.MinE + d.Position.X:F0} N {t.MaxN - d.Position.Z:F0} out {d.Outward.X:F2},{-d.Outward.Z:F2}"
                         : " NO DOOR";
+                    if (asked)
+                    {
+                        GD.Print($"[venues] {list[match[i]].Type} {Venues.NameOf(list[match[i]])} {t} #{i}{doorAt[(t, i)]}");
+                        // and where its rooms are (#1242): a shot's camera inside stands where it is told
+                        var fp = BuildingFootprint.Compute(tile, i, Roads(dir, t), null);
+                        if (fp != null && InteriorGenerator.Generate(tile, i, Roads(dir, t), null) is { } plan)
+                            foreach (var r in plan.GroundFloor.Rooms.Where(r => InteriorGenerator.DiningRoom(r.Type) || r.Type == RoomType.GastroKitchen))
+                            {
+                                var c = fp.Center + fp.AxisU * ((r.X0 + r.X1) / 2) + fp.AxisV * ((r.Z0 + r.Z1) / 2);
+                                GD.Print($"[venues]   {r.Type} {r.Width:F1}x{r.Depth:F1} m at E {t.MinE + c.X:F1} N {t.MaxN - c.Y:F1}");
+                            }
+                    }
                 }
             }
         }
@@ -197,6 +216,17 @@ public partial class VenueProbe : Node
             }
             else GD.Print($"[venues] MISS {where} no solid covers the point");
         }
+    }
+
+    private static RoadTile? Roads(string dir, TileId t)
+    {
+        string path = dir.PathJoin(RoadFormat.FileName(t));
+        if (!Godot.FileAccess.FileExists(path)) return null;
+        using var f = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+        if (f == null) return null;
+        using var ms = new MemoryStream(f.GetBuffer((long)f.GetLength()));
+        try { return RoadCodec.Decode(ms); }
+        catch (Exception) { return null; }
     }
 
     /// <summary>A flat-topped box: four walls and a roof, as the IKEA probe builds its store.</summary>

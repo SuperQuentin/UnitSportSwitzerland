@@ -17,7 +17,7 @@ namespace UnitSport.XR;
 internal sealed class XrClimb
 {
     /// <summary>A face steeper than this (its normal's y) can be climbed; the hand must touch it within <see cref="Touch"/> m.</summary>
-    private const float Steep = 0.6f, Touch = 0.12f;
+    private const float Steep = Climbable.SteepNormalY, Touch = 0.12f;
     private const float Stamina = 15f;
 
     private sealed class Grip
@@ -93,8 +93,15 @@ internal sealed class XrClimb
         _push = -(hand.Ctl.GlobalPosition - hand.Prev) / Mathf.Max(dt, 1e-3f);
         hand.Prev = hand.Ctl.GlobalPosition + move;
         if (move.Y > 0.25f) player.ClimbStep++;
-        _tired += dt;
-        if (_tired > Stamina)
+        // the stamina meter where the rules count it (#1225); elsewhere (a match) the arms' own 15 s
+        bool spent;
+        if (player.StaminaApplies) spent = !player.SpendXrClimb(dt, Mathf.Max(0f, move.Y));
+        else
+        {
+            _tired += dt;
+            spent = _tired > Stamina;
+        }
+        if (spent)
         {
             hand.Ctl.TriggerHapticPulse("haptic", 0.0, 0.8, 0.2, 0.0);
             LetGo(drop: true);

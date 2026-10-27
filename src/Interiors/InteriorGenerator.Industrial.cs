@@ -193,7 +193,11 @@ public static partial class InteriorGenerator
     private static bool LaysItselfOut(RoomType t) =>
         t is RoomType.WarehouseHall or RoomType.ProductionHall or RoomType.TruckBay
             or RoomType.ServiceBay or RoomType.Showroom
-            or RoomType.IkeaMarket;        // #501, laid out in InteriorGenerator.Ikea
+            or RoomType.IkeaMarket         // #501, laid out in InteriorGenerator.Ikea
+        || BowlingRoom(t)                   // #1235, laid out in InteriorGenerator.Bowling
+        || CinemaRoom(t)                    // #1238, laid out in InteriorGenerator.Cinema
+        || t == RoomType.ArcadeHall         // #1240, laid out in InteriorGenerator.Arcade
+        || DiningRoom(t) || t == RoomType.GastroKitchen;   // #1242, laid out in InteriorGenerator.Dining
 
     /// <summary>Lays out one site hall; the wall dressing is added afterwards by the generic placer.</summary>
     /// <param name="lanes">
@@ -205,6 +209,10 @@ public static partial class InteriorGenerator
     private static void HallLayout(InteriorLayout l, int f, RoomPlan r,
         List<RectPlan> placed, List<RectPlan> blocked, List<RectPlan> lanes, Random rng)
     {
+        if (BowlingRoom(r.Type)) { BowlingLayout(l, f, r, placed, blocked, rng); return; }
+        if (CinemaRoom(r.Type)) { CinemaLayout(l, f, r, placed, blocked, rng); return; }
+        if (r.Type == RoomType.ArcadeHall) { ArcadeLayout(l, f, r, placed, blocked, rng); return; }
+        if (DiningRoom(r.Type) || r.Type == RoomType.GastroKitchen) { DiningLayout(l, f, r, placed, blocked, rng); return; }
         switch (r.Type)
         {
             case RoomType.WarehouseHall: blocked.AddRange(lanes); Aisles(l, f, r, placed, blocked, rng); break;
@@ -234,7 +242,7 @@ public static partial class InteriorGenerator
         });
         // paint on the floor and a beam under the roof take no room: a lift stands on its marked-out
         // bay, and a rack row runs under the crane
-        if (type is FurnitureType.FloorMarking or FurnitureType.Gantry) return;
+        if (type is FurnitureType.FloorMarking or FurnitureType.Gantry or FurnitureType.Confetti) return;
         // the footprint a turned piece really takes, so the next row keeps off it
         float ew = turns % 2 == 0 ? w : d, ed = turns % 2 == 0 ? d : w;
         placed.Add(new RectPlan(x - ew / 2, z - ed / 2, x + ew / 2, z + ed / 2));

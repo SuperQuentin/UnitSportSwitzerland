@@ -17,6 +17,11 @@ public static partial class InteriorGenerator
         {
             foreach (var p in pieces ?? Array.Empty<Piece>()) sizes.TryAdd(p.Type, p);
         }
+        // pieces only code places, at the size it places them (#1235)
+        Take(BowlingPieces);
+        Take(CinemaPieces);
+        Take(ArcadePieces);
+        Take(DiningPieces);
         var room = new RoomPlan { X1 = 8, Z1 = 8 };
         foreach (var type in Enum.GetValues<RoomType>())
         {

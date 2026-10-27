@@ -26,6 +26,7 @@ public static class GadgetMeshes
     public static Node3D Visual(PlacedObject o)
     {
         var body = new StaticBody3D();
+        body.AddToGroup(UnitSport.Player.FootPlayer.NoClimbGroup);   // placed things are never free-climbed (#1225)
         var mesh = new MeshInstance3D { Mesh = MeshFor(o), MaterialOverride = ItemDefs.Material };
         body.AddChild(mesh);
         foreach (var (shape, at) in Colliders(o.Kind)) body.AddChild(new CollisionShape3D { Shape = shape, Transform = at });

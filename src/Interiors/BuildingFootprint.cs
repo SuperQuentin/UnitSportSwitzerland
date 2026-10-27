@@ -133,6 +133,8 @@ public static class BuildingFootprint
 
     /// <summary>A landmark store's entrance (#501): the glass front, as wide as a trolley crowd.</summary>
     public const float StoreDoorWidth = 7.0f, StoreDoorHeight = 3.4f;
+    /// <summary>A hall venue's double glass door (#1235).</summary>
+    public const float VenueDoorWidth = 2.4f;
 
     public static float DoorWidthFor(BuildingKind kind) => kind switch
     {
@@ -411,6 +413,9 @@ public static class BuildingFootprint
             doorW = Math.Min(StoreDoorWidth, w * 0.25f);
             doorH = Math.Min(StoreDoorHeight, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.15f);
         }
+        // a bowling centre's or a cinema's way in is a pair of glass doors (#1235, #1238), not a shop's single one
+        else if (Venues.Planned(Venues.HallOf(map, index)))
+            doorW = Math.Min(VenueDoorWidth, w * 0.3f);
         // a door's worth of height, for judging a wall and for the odd doors that are no barn gate
         float plainH = Math.Min(doorH, DoorHeightFor(kind));
         bool barn = DoorLeaf.SwingsOut(kind);

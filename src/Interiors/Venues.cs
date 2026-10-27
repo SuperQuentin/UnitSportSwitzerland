@@ -67,6 +67,20 @@ public static class Venues
     /// <summary>A venue that is a hall of its own (lanes, screens, rows of machines), not a room on a ground floor.</summary>
     public static bool IsHall(VenueType kind) => kind is VenueType.Bowling or VenueType.Cinema or VenueType.Arcade;
 
+    /// <summary>
+    /// Whether a hall venue takes its whole solid (#1235): a low building that is nothing else, which
+    /// loses its window grid outside and plans as one box inside. A taller one, or a block of flats,
+    /// keeps its facade and the venue plans into its bottom storeys. Shared by the facade and the planner.
+    /// </summary>
+    public static bool Planned(VenueType t) => t is VenueType.Bowling or VenueType.Cinema or VenueType.Arcade;
+
+    public static bool WholeBuilding(Building b) =>
+        b.MaxY - b.MinY <= 13f && b.Kind is not (BuildingKind.House or BuildingKind.Apartment);
+
+    /// <summary>The hall venue a solid is, if it is one, whatever the planner then made of it: the facade's and the door's question.</summary>
+    public static VenueType HallOf(BuildingTypeMap map, int index) =>
+        map.VenueOf(index) is int v and >= 0 && IsHall(At(v).Type) ? At(v).Type : VenueType.None;
+
     /// <summary>A place to eat or drink.</summary>
     public static bool IsDining(VenueType kind) => kind is VenueType.Restaurant or VenueType.Cafe or VenueType.FastFood
         or VenueType.Bar or VenueType.Pub or VenueType.Nightclub or VenueType.Biergarten;
@@ -76,17 +90,37 @@ public static class Venues
     /// Null when the tile holds none. A building holding several takes the highest <see cref="Rank"/>
     /// (then the first in the list); the rest are not shown.
     /// </summary>
-    public static int[]? Match(BuildingTile tile)
+    public static int[]? Match(BuildingTile tile) => Match(tile, Contained(tile));
+
+    /// <inheritdoc cref="Match(BuildingTile)"/>
+    public static int[]? Match(BuildingTile tile, List<(int Venue, int Building)> contained)
     {
         var index = Current;
         int[]? venue = null;
-        foreach (var (v, i) in Contained(tile))
+        foreach (var (v, i) in contained)
         {
             venue ??= Enumerable.Repeat(-1, tile.Buildings.Count).ToArray();
             // Contained is in list order, so on a tie the first venue in the list keeps the building
             if (venue[i] < 0 || Rank(index.Rows[v].Type) > Rank(index.Rows[venue[i]].Type)) venue[i] = v;
         }
         return venue;
+    }
+
+    /// <summary>
+    /// For each building of the tile, the dining venues (<see cref="IsDining"/>) its solid holds, in list
+    /// order, all of them (#1242: each takes a ground-floor room); null when the tile holds none.
+    /// </summary>
+    public static int[][]? Dining(BuildingTile tile, List<(int Venue, int Building)> contained)
+    {
+        var index = Current;
+        List<int>[]? lists = null;
+        foreach (var (v, i) in contained)
+        {
+            if (!IsDining(index.Rows[v].Type)) continue;
+            lists ??= new List<int>[tile.Buildings.Count];
+            (lists[i] ??= new List<int>()).Add(v);
+        }
+        return lists?.Select(x => x?.ToArray() ?? Array.Empty<int>()).ToArray();
     }
 
     /// <summary>

@@ -323,6 +323,9 @@ public sealed class GameSettings
     /// <summary>Radial streaks at the screen edge at speed.</summary>
     public bool SpeedLines { get; set; } = true;
 
+    /// <summary>The gliders' variometer: a beep that rises with the climb, a low tone in sink (#1225, <see cref="Audio.Variometer"/>).</summary>
+    public bool Variometer { get; set; } = true;
+
     /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
     public bool ChatBubbles { get; set; } = true;
 

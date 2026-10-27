@@ -34,6 +34,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | export or import a concert rig as MVR (#941) | the desk's MVR row (Export MVR, the file picker, Import, Own rig, Folder) or `/concert export`, `/concert import <file>` | ok: the desk is a CanvasLayer on the VR panel (`XrUi`), the ray clicks the picker and the buttons | keep |
 | run a concert camera (#885) | `/concert camera take <n>` or the desk's Operate row; WASD / left stick along the rails, fly up/down rises, mouse / right stick looks, = - wheel / shoulders zoom, Enter / X cuts to it, Esc leaves | ok: the sticks and shoulders through `XrPad`; the viewfinder is a CanvasLayer, on the VR panel (`XrUi`) | new: a hand-held steadicam, gripped and aimed by the hand |
 | a concert's light desk (#885) | E / Y at the front-of-house console | ok: Y, or reach out and grip (`TryInteract(byHand)`); the screen is a CanvasLayer, on the VR panel (`XrUi`), the ray clicks | keep |
+| a cinema's booth: house lights (full, dim, off) or the screen on and off (#1238) | E / Y at the half of the booth's panel you stand at (lights left, screen right) | ok: Y, or reach out and grip (`TryInteract(byHand)`): the same half rule | keep |
 | radio on / off (#725) | tap E (pointed) or tap Use (held) / tap Y or the Use button; hold either for the panel | ok: poke the radio's red key with a controller tip (`XrHands.PokeRadio`); grip still opens the panel | keep |
 | elevator call / floor list (#557) | E / Y at the call button or in the cabin | ok: Y, or grip the call button or the cabin's panel; the list is a pointable panel (`XrUi`) | keep |
 | flat door, its lock (#557) | E / Y at the door | ok: Y, or grip the door; the dial on the stick | keep |
@@ -55,7 +56,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | creative mode (#1002): toggle_mode, then jump twice to fly, jump / crouch up and down, boost | T, Space Space, Space / Shift, Ctrl / D-pad ↓, A A, A / B, L3 | ok: wrist menu, then the pad's A A, A / B, L3 | keep |
 | spectator camera and back (#1002) | Shift+T / hold D-pad ↓ | ok: wrist menu "Spectator camera" | keep |
-| climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |
+| climb ladder; free climbing (#1225) | W / S on a ladder; on a face: push W into it (in the air, or 0.25 s on the ground), then WASD / L stick | ok: stick as on a pad (seated play); rock faces and walls hand over hand (`XrClimb`, #439), drawing from the stamina meter (1 /s, 9 a metre) where it counts | keep |
+| climb-jump / kick off / let go (#1225, on a face) | Space, S + Space, Ctrl / A, stick back + A, B | ok: the pad's A, stick back + A, B; by hand: a fast pull is the hand climb, push off with both hands and let go, open both hands | a fast pull > 2 m/s as the climb-jump's boost (not yet) |
 
 ## Items, building, inventory
 

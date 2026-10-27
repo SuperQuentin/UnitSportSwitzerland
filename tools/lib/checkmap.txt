@@ -159,6 +159,37 @@ src/Interiors/BuildingTypes quick  --venuecheck --systems ui
 src/Interiors/BuildingFootprint quick --venuecheck --systems ui
 src/Interiors/venues.tsv.gz quick  --venuecheck --systems ui
 tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
+# #1235: bowling centres planned in hand-made buildings
+src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
+src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
+src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+# #1238: cinemas planned in hand-made buildings; the booth over the network
+src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
+src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
+src/Interiors/CinemaProbe   quick  --cinemacheck --systems ui
+src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
+src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1240: arcades planned in hand-made buildings
+src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
+src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
+src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
+# #1243: terraces in front of restaurants, cafés and bars
+src/Interiors/VenueTerraces quick  --terracecheck
+src/Interiors/TerraceProbe  quick  --terracecheck
+# #1242: restaurants, cafés, bars and clubs in hand-made buildings
+src/Interiors/InteriorGenerator.Dining quick --diningcheck --systems ui
+src/Interiors/InteriorMeshBuilder.Dining quick --diningcheck --systems ui
+src/Interiors/DiningProbe   quick  --diningcheck --systems ui
+src/Interiors/InteriorGenerator.Apartments quick --diningcheck --systems ui
+src/Interiors/Venues        quick  --diningcheck --systems ui
+# #1244: venue music on the radio relay
+src/Interiors/VenueMusic    quick  --venuecheck --systems ui
+src/Audio/Live/VenueMusicSource quick --venuecheck --systems ui
+src/Audio/Tracker/           quick  --trackercheck
+assets/music/                quick  --trackercheck
+src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
+src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
+shaders/body/interior      quick  --bowlingcheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
@@ -896,3 +927,25 @@ src/Net/Sleepers         net    tools/adventurenetcheck.sh
 src/Items/Bank           net    tools/adventurenetcheck.sh
 src/BattleRoyale/BrManager.cs net tools/adventurenetcheck.sh
 tools/adventurenetcheck.sh net  tools/adventurenetcheck.sh
+# #1225: stamina, free climbing, the crag; thermals, ridge lift and campfire updrafts
+src/Player/FootPlayer.Climb    quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Stamina  quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/ClimbCheck          quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/Stamina             quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/Climbable           quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/StaminaUpgrades  quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Terrain/Fixture/FixtureCrag quick --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/XR/XrClimb                 quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Ui/StaminaRing             quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Avatar/HumanMeshBuilder.WallClimb quick --skincheck
+src/World/AirLift              quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/World/AirLift              quick  --flycheck thermal --time 22 --chunks fixture:crag
+src/World/AirLift              quick  --flycheck campfire --chunks fixture:crag
+src/World/AirLift              quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+src/World/SunPath              quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/World/DayNight             quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/Player/FlightCheckProbe    quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/Player/Flight.cs           quick  --flycheck campfire --chunks fixture:crag
+src/Player/PigeonFlight        quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+src/Net/Arrival                net    tools/climbnetcheck.sh
+src/Player/FootPlayer.Climb    net    tools/climbnetcheck.sh

@@ -227,21 +227,10 @@ public partial class DayNight : Node
         var occasion = Occasions.OccasionManager.Instance?.Atmosphere;
         var atmo = occasion?.Atmosphere;
         float rise = atmo?.Sunrise ?? 6f, set = atmo?.Sunset ?? 18f, noon = atmo?.NoonElevation ?? NoonElevation;
-        float dayLength = set - rise;
 
-        // How far round the sun is: 0 at sunrise, 1 at sunset, 2 at the next sunrise. Day and
-        // night each take half the circle however long they last, so the default 6 / 18 reduces to
-        // the old (h - 6) / 12 exactly.
-        float h = (float)Hour;
-        float phase = h >= rise && h <= set
-            ? (h - rise) / dayLength
-            : 1f + Mathf.PosMod(h - set, 24f) / (24f - dayLength);
-
-        // azimuth measured clockwise from north; world +X is east and -Z is north
-        float az = Mathf.DegToRad(90f + phase * 180f);
-        SunElevationDeg = noon * Mathf.Sin(phase * Mathf.Pi);
-        float el = Mathf.DegToRad(SunElevationDeg);
-        var sun = new Vector3(Mathf.Sin(az) * Mathf.Cos(el), Mathf.Sin(el), -Mathf.Cos(az) * Mathf.Cos(el));
+        // the sun's place by the hour: World/SunPath, shared with the thermals (AirLift)
+        var sun = SunPath.Direction((float)Hour, out float elevationDeg, rise, set, noon);
+        SunElevationDeg = elevationDeg;
 
         // Below the horizon the shading follows the moon instead — opposite the sun and never
         // lower than ~25°, so a night-time mountain still has a lit side and a dark one rather

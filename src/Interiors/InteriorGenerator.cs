@@ -40,13 +40,14 @@ public static partial class InteriorGenerator
     /// seen in the footprint alone: an IKEA is recognised from where the tile is (#501), so the
     /// tile-aware <see cref="Generate(BuildingTile, int, RoadTile?, ChunkGrid?)"/> has to pass it in.
     /// </param>
+    /// <param name="dining">The restaurants, cafés and bars the solid holds (#1242): each takes a ground-floor room.</param>
     public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false,
-        BuildingType type = BuildingType.None)
+        BuildingType type = BuildingType.None, VenueRecord? venue = null, IReadOnlyList<VenueRecord>? dining = null)
     {
         // a house its owner drew on the web, approved (#1186): used when it plans into a valid interior
         if (type == BuildingType.None && HouseLayouts.For(b.Egid) is { } house)
         {
-            var drawn = Generate(fp, b, rural, type, house, out string why);
+            var drawn = Generate(fp, b, rural, type, house, null, dining, out string why);
             if (drawn != null)
             {
                 var problems = InteriorValidator.Validate(drawn);
@@ -55,10 +56,11 @@ public static partial class InteriorGenerator
             }
             HouseLayouts.Warn?.Invoke($"house layout {b.Egid} ({fp.Key}) not used, the generated interior stays: {why}");
         }
-        return Generate(fp, b, rural, type, null, out _);
+        return Generate(fp, b, rural, type, null, venue, dining, out _);
     }
 
-    private static InteriorLayout? Generate(Footprint fp, Building b, bool rural, BuildingType type, HouseLayout? house, out string why)
+    private static InteriorLayout? Generate(Footprint fp, Building b, bool rural, BuildingType type, HouseLayout? house,
+        VenueRecord? venue, IReadOnlyList<VenueRecord>? dining, out string why)
     {
         why = "";
         var rng = new Random(StableHash(fp.Key.ToString()));
@@ -90,7 +92,8 @@ public static partial class InteriorGenerator
             EntryWidth = BuildingFootprint.VehicleDoor(b.Kind) ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
         };
 
-        bool bank = BuildingFootprint.IsBank(fp);
+        // a building holding a restaurant or a bar (#1242) is that, not one of the banks the dice make up
+        bool bank = BuildingFootprint.IsBank(fp) && dining is not { Count: > 0 };
         if (bank) layout.Type = BuildingType.Bank;
         layout.Shop = BuildingFootprint.ShopOf(fp, rural);
 
@@ -105,17 +108,27 @@ public static partial class InteriorGenerator
             if (fp.Extra.Count > 0) Entrances(layout, fp);
             // a room cut into pieces is furnished once, in its biggest piece
             foreach (var (piece, _) in extra) piece.Type = RoomType.Corridor;
+            DiningUnits(layout, fp, dining);
             Furnish(layout, rng);
             foreach (var (piece, t) in extra) piece.Type = t;
             return layout;
         }
+        // a bowling centre at its OSM place (#1235) plans its own lanes and concourse
         bool planned = type == BuildingType.Ikea
             ? TryIkea(layout, fp.Door.Height)
-            : site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
+            : venue?.Type == VenueType.Bowling && type == BuildingType.None && TryBowling(layout, fp, b, fp.Door.Height, rng)
+              || venue?.Type == VenueType.Cinema && type == BuildingType.None && TryCinema(layout, fp, b, fp.Door.Height, rng)
+              || venue?.Type == VenueType.Arcade && type == BuildingType.None && TryArcade(layout, fp, b, fp.Door.Height, rng)
+              || site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
+        if (layout.Type is BuildingType.Bowling or BuildingType.Cinema or BuildingType.Arcade) site = BuildingType.None;
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
-        var flats = !planned && site == BuildingType.None && type == BuildingType.None
+        var flats = !planned && site == BuildingType.None && type == BuildingType.None && layout.Type is not (BuildingType.Bowling or BuildingType.Cinema or BuildingType.Arcade)
             ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
-        bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b, b.Kind, n, flats, rng);
+        // a block holding a restaurant or a bar has shop units on its ground floor for it to take (#1242)
+        DiningShops = dining is { Count: > 0 };
+        bool flatsPlanned;
+        try { flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b, b.Kind, n, flats, rng); }
+        finally { DiningShops = false; }
         planned |= flatsPlanned;
         if (!planned)
         {
@@ -138,6 +151,7 @@ public static partial class InteriorGenerator
         // of every opening by itself (Clearance)
         if (fp.Extra.Count > 0 && !flatsPlanned) Entrances(layout, fp);
 
+        DiningUnits(layout, fp, dining);
         Furnish(layout, rng);
         return layout;
     }

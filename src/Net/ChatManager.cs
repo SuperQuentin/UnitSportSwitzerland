@@ -173,6 +173,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(clock, ChatKind.Private);
             return;
         }
+        // the own stamina meter (#1225): the owner's, never replicated
+        if (Player.FootPlayer.StaminaCommand(text.Trim()) is { } stamina)
+        {
+            LineReceived?.Invoke(stamina, ChatKind.Private);
+            return;
+        }
         // the visual style is this screen's alone: never a server's business
         if (Styles.StyleCommand.Run(text.Trim()) is { } style)
         {
