@@ -7,7 +7,7 @@ using UnitSport.Ui;
 namespace UnitSport.Adventure.Rewards;
 
 /// <summary>
-/// The chest's reveal (#1227, rewards plan 2): a card at the top of the screen in the tier's colour, the francs, then
+/// The chest's reveal (#1227, rewards plan 2): a card at the left of the screen in the tier's colour, the francs, then
 /// the items fanned in one by one over 2.2 s with the tier's jingle; any key or button skips to the end, and it fades
 /// 3 s after. The odds are one line away: "Odds: Journal › Collection" (<see cref="CollectionPage"/>). Not a modal:
 /// the player keeps moving. Built once; the rows are rebuilt per reveal, never per frame.
@@ -46,7 +46,9 @@ public partial class ChestRevealUi : CanvasLayer
         var root = new Control { Theme = UiTheme.Get(), MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(root);
-        var top = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, AnchorRight = 1, OffsetTop = 96, OffsetBottom = 300 };
+        // the left of the screen, half way down: the top centre is the quest and stamp toasts', the bottom the hotbar's
+        var top = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, AnchorTop = 0.5f, AnchorBottom = 0.5f,
+            OffsetLeft = 24, OffsetRight = 24 + 470, OffsetTop = -150, OffsetBottom = 150 };
         root.AddChild(top);
         _panel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.82f, 12, 16));
