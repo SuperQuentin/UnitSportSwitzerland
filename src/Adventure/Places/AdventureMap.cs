@@ -46,6 +46,9 @@ public partial class AdventureMap : Screen
     /// <summary>The old place search (teleporting, where the server allows it), set by the client world.</summary>
     public static Action? PlaceSearch { get; set; }
 
+    /// <summary>Another plan adds to the side panel as the map opens (navigation's "Pin the centre"): the map and the panel.</summary>
+    public static event Action<AdventureMap, VBoxContainer>? Building;
+
     /// <summary>The map is on for this player now: M opens it.</summary>
     public static bool Available => PlacesService.Instance != null && AdventureLog.Adventuring;
 
@@ -113,6 +116,7 @@ public partial class AdventureMap : Screen
         var legend = UiKit.Text("Coloured: stamped · grey ?: seen, not reached · clouds: not explored yet", UiTheme.FontSmall, UiTheme.TextFaint);
         legend.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         side.AddChild(legend);
+        Building?.Invoke(this, side);
         if (PlaceSearch != null)
         {
             var places = UiKit.Button("Town search");
@@ -179,6 +183,24 @@ public partial class AdventureMap : Screen
         _canvas.Redraw();
     }
 
+    /// <summary>The map's view (an overlay's hit tests).</summary>
+    public MapView View => _canvas.View;
+
+    /// <summary>The point under the centre cross, LV95 (the pad's and VR's "Pin here").</summary>
+    public (double E, double N) Centre => _canvas.View.ToLv95(_canvas.Size / 2);
+
+    /// <summary>Shows another plan's card in the side panel (a travel point's, a pin's) in place of a place's.</summary>
+    public void ShowCard(Control card)
+    {
+        Selected = null;
+        foreach (var c in _cardBox.GetChildren()) c.QueueFree();
+        _cardBox.AddChild(card);
+        _canvas.Redraw();
+    }
+
+    /// <summary>Redraws the map's layers (an overlay's data changed).</summary>
+    public void Redraw() => _canvas.Redraw();
+
     private void ShowCard(Poi poi)
     {
         foreach (var c in _cardBox.GetChildren()) c.QueueFree();
@@ -209,7 +231,7 @@ public partial class AdventureMap : Screen
         private readonly Control _fog, _top;
         private static CountryData? _country;
         private Vector2 _last;
-        private Vector2? _press;
+        private Vector2? _press, _rightPress;
         private bool _dragging;
         private int _fogVersion = -1;
         private bool _reliefDrawn;
@@ -389,6 +411,16 @@ public partial class AdventureMap : Screen
                     _last = button.Position;
                     if (button.ButtonIndex == MouseButton.WheelUp && button.Pressed) { if (View.ZoomAt(button.Position, +1)) Redraw(); }
                     else if (button.ButtonIndex == MouseButton.WheelDown && button.Pressed) { if (View.ZoomAt(button.Position, -1)) Redraw(); }
+                    else if (button.ButtonIndex == MouseButton.Right)
+                    {
+                        // a right click (not a drag) goes to the overlays: navigation's pins (#1226)
+                        if (button.Pressed) _rightPress = button.Position;
+                        else
+                        {
+                            if (_rightPress is { } rdown && rdown.DistanceTo(button.Position) < 5) ClickAt(button.Position, MouseButton.Right);
+                            _rightPress = null;
+                        }
+                    }
                     else if (button.ButtonIndex == MouseButton.Left)
                     {
                         GrabFocus();
@@ -405,6 +437,11 @@ public partial class AdventureMap : Screen
                 case InputEventScreenDrag drag:
                     View.Pan(drag.Relative);
                     Redraw();
+                    AcceptEvent();
+                    break;
+                case InputEventJoypadButton { ButtonIndex: JoyButton.X, Pressed: true }:
+                    // pad X at the centre cross: a pin there (#1226), as a right click
+                    ClickAt(Size / 2, MouseButton.Right);
                     AcceptEvent();
                     break;
                 case InputEventMagnifyGesture pinch:

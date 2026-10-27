@@ -81,6 +81,7 @@ public partial class StampToast : CanvasLayer
 
     public override void _ExitTree()
     {
+        if (Instance == this) Instance = null;
         if (_places == null) return;
         _places.StampedPlace -= OnStamped;
         _places.SyncedView -= OnSynced;
@@ -106,6 +107,18 @@ public partial class StampToast : CanvasLayer
         }
         _queue.Enqueue(minor ? ("", $"Found {LineOf(poi)}", true)
             : ($"New stamp: {AtlasFacts.KindName(poi.Kind)}", LineOf(poi), false));
+        SetProcess(true);
+    }
+
+    /// <summary>The toast in the client's tree, for other plans' lines (navigation's "Travel point unlocked").</summary>
+    public static StampToast? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
+    /// <summary>Queues another plan's toast: a head line (amber) and a line, with the thump.</summary>
+    public void Post(string head, string line)
+    {
+        _queue.Enqueue((head, line, false));
         SetProcess(true);
     }
 
