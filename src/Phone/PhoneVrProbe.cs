@@ -174,12 +174,12 @@ public partial class PhoneVrProbe : Node
         AtEyes();
         for (int i = 0; i < 40 && Math.Abs(me.Global.E - (at.E + 250)) > 5; i++) await Wait(0.05);
         double took = GameClock.Now - asked;
-        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took < 2.5, $"raised to the eyes, the travel goes behind it ({took:F1} s, before the blink)");
+        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took < 1.4, $"raised to the eyes, the travel goes behind it ({took:F1} s, before the blink)");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
         Check(!phone.IsOut, "and back in the pocket there");
 
         await FromPocket();
-        BeforeEyes();
+        BeforeEyes(low: 0.7f);   // down at the hip, past the 40 cm reach
         await Wait(0.4);
         phone.Open(PhoneScreens.Page.Map);
         await Wait(0.8);
@@ -188,7 +188,7 @@ public partial class PhoneVrProbe : Node
         Teleporter.Instance?.TeleportTo(at.E + 250, at.N, "probe vr blink");
         for (int i = 0; i < 100 && Math.Abs(me.Global.E - (at.E + 250)) > 5; i++) await Wait(0.1);
         took = GameClock.Now - asked;
-        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took >= 2.5, $"not raised, it goes behind a blink after the wait ({took:F1} s)");
+        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took >= 1.2, $"not raised, it goes behind a blink after the wait ({took:F1} s)");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
 
         // ---- phase 3: a call answered at the ear ----
@@ -263,10 +263,10 @@ public partial class PhoneVrProbe : Node
     /// The phone 32 cm before the eyes, a little low and left, its screen to them; rolled by
     /// <paramref name="roll"/> degrees, or <paramref name="turned"/> round so its back faces them.
     /// </summary>
-    private void BeforeEyes(float roll = 0f, bool turned = false)
+    private void BeforeEyes(float roll = 0f, bool turned = false, float low = 0.16f)
     {
         var head = Head;
-        var at = head * new Vector3(-0.02f, -0.16f, -0.32f);
+        var at = head * new Vector3(-0.02f, -low, -0.32f);
         var z = (head.Origin - at).Normalized();
         var y = (Vector3.Up - z * z.Dot(Vector3.Up)).Normalized();
         var basis = new Basis(y.Cross(z), y, z);

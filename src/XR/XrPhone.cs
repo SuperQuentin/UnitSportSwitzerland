@@ -42,7 +42,7 @@ internal sealed class XrPhone
     /// <summary>The free hand's grip centre within this of the front half's loose edge takes the hinge, m.</summary>
     private const float EdgeReach = 0.06f;
     /// <summary>The screen this near the eyes covers them (a travel runs behind it); the cover this near an ear answers, m.</summary>
-    private const float EyesReach = 0.14f, EarReach = 0.10f;
+    private const float EyesReach = 0.40f, EyesFacing = 0.7f, EarReach = 0.10f;
     /// <summary>The phone's back this square to the face (cosine), this long, is a selfie; back past <see cref="SelfieOff"/>, it ends.</summary>
     private const float SelfieOn = 0.5f, SelfieOff = 0.2f, SelfieHold = 0.3f;
     /// <summary>The aim ray reaches the screen this far, m.</summary>
@@ -370,7 +370,8 @@ internal sealed class XrPhone
     private void Near(PhoneController phone, Transform3D frame, float fold, Transform3D head)
     {
         var screen = frame * (fold > 0.5f ? PhoneModel.InnerScreenCentre : PhoneModel.CoverScreenCentre);
-        AtEyesNow = screen.DistanceTo(head.Origin) < EyesReach;
+        // anywhere from arm's length in, as long as the glass faces the eyes (a travel's curtain; #1253)
+        AtEyesNow = screen.DistanceTo(head.Origin) < EyesReach && frame.Basis.Z.Dot((head.Origin - screen).Normalized()) > EyesFacing;
         phone.VrAtEyes = AtEyesNow;
         int call = phone.RingingId;
         if (call < 0 || call == _answered) return;

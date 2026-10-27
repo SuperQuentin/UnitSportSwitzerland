@@ -47,7 +47,7 @@ public partial class PhoneController : Node
     /// <summary>The main camera's field of view for a selfie, up the tall cover screen.</summary>
     private const float SelfieFov = 80f;
     /// <summary>In VR, a travel waits this long (game seconds, <see cref="GameClock"/>) for the phone raised to the eyes, then blinks.</summary>
-    private const double VrRaiseSeconds = 3.0;
+    private const double VrRaiseSeconds = 1.5;
     /// <summary>A mouse drag longer than this (window pixels) is a swipe, not a click.</summary>
     private const float SwipePixels = 14f;
 
@@ -149,6 +149,7 @@ public partial class PhoneController : Node
     public override void _Ready()
     {
         AddChild(_screens);
+        _screens.Here = () => _player() is { } pl ? (pl.Global.E, pl.Global.N) : null;
         _screens.BackPressed += () => { if (_stage is Stage.Open or Stage.Opening) Back(); };
         _screens.TravelPicked += place => Travel(place.E, place.N, place.Name);
         _screens.CommandPicked += cmd =>
@@ -831,6 +832,11 @@ public partial class PhoneController : Node
         if (e.IsPressed() && !e.IsEcho() && (e.IsActionPressed("ui_cancel") || e is InputEventKey { PhysicalKeycode: Key.Escape or Key.Backspace } && !typing))
         {
             Back();
+            return;
+        }
+        if (!typing && e.IsPressed() && !e.IsEcho() && _screens.Shown == PhoneScreens.Page.Map && e is InputEventKey { PhysicalKeycode: Key.Slash })
+        {
+            _screens.FocusSearch();
             return;
         }
         if (!typing && Direction(e) is { } dir && e is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion or InputEventAction)

@@ -467,11 +467,21 @@ public partial class PhoneScreens : Node
     {
         var col = UiKit.VBox(12);
         col.AddChild(Title("Map"));
-        _query = new LineEdit { PlaceholderText = "Search a town, a summit, a pass", CustomMinimumSize = new Vector2(0, 64) };
+        _query = new LineEdit { PlaceholderText = "Search (press /)", CustomMinimumSize = new Vector2(0, 64) };
         _query.AddThemeFontSizeOverride("font_size", 30);
         _query.TextChanged += _ => FillResults();
         _query.TextSubmitted += _ => { if (_results.GetChildCount() > 0 && _results.GetChild(0) is Button b) b.EmitSignal(BaseButton.SignalName.Pressed); };
         col.AddChild(_query);
+        var chips = UiKit.HBox(10);
+        foreach (var (name, kind) in new (string, PlaceKind?)[] { ("All", null), ("Towns", PlaceKind.Town), ("Summits", PlaceKind.Summit), ("Passes", PlaceKind.Pass) })
+        {
+            var chip = Small(name, new Color(0.30f, 0.32f, 0.38f), () => { _mapKind = kind; FillResults(); });
+            chip.CustomMinimumSize = new Vector2(150, 48);
+            chip.AddThemeFontSizeOverride("font_size", 22);
+            _chips.Add((chip, kind, name));
+            chips.AddChild(chip);
+        }
+        col.AddChild(chips);
         _mapHint = Big("", 22, InkDim);
         col.AddChild(_mapHint);
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
@@ -483,29 +493,97 @@ public partial class PhoneScreens : Node
         return col;
     }
 
+    /// <summary>The Map's place rows, for the checks.</summary>
+    internal bool HasPlaces => _places() != null;
+
+    internal int MapRowCount => _results.GetChildren().OfType<Button>().Count();
+
+    /// <summary>Puts the keys in the Map's search box ("/").</summary>
+    public void FocusSearch() => _query.GrabFocus();
+
+    /// <summary>Where the player stands (LV95), for "Near you"; set by the controller.</summary>
+    public Func<(double E, double N)?>? Here;
+
+    /// <summary>The last places travelled to from the phone, newest first (this session).</summary>
+    private static readonly List<Place> Recents = new();
+    private const int RecentsShown = 3, NearShown = 4, TownsShown = 8;
+
+    private PlaceKind? _mapKind;
+    private readonly List<(Button Chip, PlaceKind? Kind, string Name)> _chips = new();
+
+    /// <summary>
+    /// The Map's list is rows you can reach without typing (#1253): Recent, Near you with the distance,
+    /// then the biggest places; a category chip narrows them and the search box is optional.
+    /// </summary>
     private void FillResults()
     {
-        foreach (var child in _results.GetChildren()) child.QueueFree();
+        foreach (var child in _results.GetChildren())
+        {
+            _results.RemoveChild(child);
+            child.QueueFree();
+        }
         var places = _places();
         if (places == null)
         {
             SetText(_mapHint, "No map here.");
             return;
         }
+        foreach (var (chip, kind, name) in _chips) chip.Text = _mapKind == kind ? $"● {name}" : name;
         string q = _query.Text.Trim();
-        var shown = q.Length == 0
-            ? places.All.Where(p => p.Kind == PlaceKind.Town).OrderByDescending(p => p.Buildings).Take(10).ToList()
-            : places.Search(q, 10);
-        SetText(_mapHint, !Permissions.CanTeleport ? "This server does not allow travelling: ask a player in Contacts to bring you."
-            : q.Length == 0 ? "Popular places" : shown.Count == 0 ? "Nothing by that name" : "");
-        foreach (var place in shown)
+        SetText(_mapHint, !Permissions.CanTeleport ? "This server does not allow travelling: ask a player in Contacts to bring you." : "");
+        bool Fits(Place p) => _mapKind == null || p.Kind == _mapKind;
+        var here = Here?.Invoke();
+        string Dist(Place p) => here is { } h ? $"   ·  {Distance(h, p)}" : "";
+
+        if (q.Length > 0)
         {
-            var b = Row(PlaceSearchUi.Describe(place));
-            var p = place;
-            b.Pressed += () => TravelPicked?.Invoke(p);
+            var found = places.Search(q, 30).Where(Fits).Take(10).ToList();
+            if (found.Count == 0) AddHeading("Nothing by that name");
+            foreach (var place in found) AddPlace(place, Dist(place));
+            return;
+        }
+        var recent = Recents.Where(Fits).Take(RecentsShown).ToList();
+        if (recent.Count > 0)
+        {
+            AddHeading("Recent");
+            foreach (var place in recent) AddPlace(place, Dist(place));
+        }
+        if (here is { } me)
+        {
+            var near = places.All.Where(Fits).Where(p => !recent.Contains(p))
+                .Select(p => (Place: p, D: Math.Sqrt((p.E - me.E) * (p.E - me.E) + (p.N - me.N) * (p.N - me.N))))
+                .Where(x => x.D > 500).OrderBy(x => x.D).Take(NearShown).ToList();
+            if (near.Count > 0)
+            {
+                AddHeading("Near you");
+                foreach (var (place, _) in near) AddPlace(place, Dist(place));
+            }
+        }
+        var big = places.All.Where(Fits).OrderByDescending(p => p.Rank).Take(TownsShown + RecentsShown + NearShown)
+            .Where(p => !recent.Contains(p)).Take(TownsShown).ToList();
+        AddHeading(_mapKind switch { PlaceKind.Summit => "Summits", PlaceKind.Pass => "Passes", PlaceKind.Town => "Towns", _ => "Popular places" });
+        foreach (var place in big) AddPlace(place, Dist(place));
+
+        void AddHeading(string text) => _results.AddChild(Big(text, 22, InkDim));
+        void AddPlace(Place place, string distance)
+        {
+            var b = Row(PlaceSearchUi.Describe(place) + distance);
+            b.Pressed += () =>
+            {
+                Recents.Remove(place);
+                Recents.Insert(0, place);
+                TravelPicked?.Invoke(place);
+            };
             b.Disabled = !Permissions.CanTeleport;
             _results.AddChild(b);
         }
+    }
+
+    /// <summary>"850 m" or "12 km" from the player to a place.</summary>
+    internal static string Distance((double E, double N) from, Place to)
+    {
+        double d = Math.Sqrt((to.E - from.E) * (to.E - from.E) + (to.N - from.N) * (to.N - from.N));
+        return d < 1000 ? $"{Math.Round(d / 10) * 10:0} m" : d < 10000 ? $"{d / 1000:0.0} km" : $"{d / 1000:0} km";
     }
 
     private Control BuildContacts()
@@ -1017,7 +1095,8 @@ public partial class PhoneScreens : Node
             case Page.Map:
                 _query.Clear();
                 FillResults();
-                Callable.From(() => _query.GrabFocus()).CallDeferred();
+                // the rows have the keys; the search box is optional ("/" or a click)
+                Callable.From(() => FocusFirst(_results)).CallDeferred();
                 break;
             case Page.Contacts:
                 _chat()?.RequestPlayerNames();
