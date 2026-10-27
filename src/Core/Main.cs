@@ -165,7 +165,7 @@ public partial class Main : Node
 		// picked, the world beside it at /root/Main/World. A run that names a session or a tool on
 		// its command line skips the title and builds the world straight away (GameShell.UseTitle).
 		GameSettings.Load();
-		if (GameShell.UseTitle(CmdArgs.All))
+		if (GameShell.UseTitle(CmdArgs.All) || GameShell.PlayAt(CmdArgs.All))
 		{
 			AddChild(new GameShell { Name = "Shell" });
 			return;
