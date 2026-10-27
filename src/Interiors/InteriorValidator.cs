@@ -66,7 +66,7 @@ public static class InteriorValidator
                 foreach (var o in r.Openings.Where(o => o.Kind == OpeningKind.Door))
                 {
                     if (o.Other < 0 || o.Other >= rooms.Count
-                        || !rooms[o.Other].Openings.Any(q => q.Other == i && Math.Abs(q.Center - o.Center) < 0.01f))
+                        || !rooms[o.Other].Openings.Any(q => q.Other == i && Matches(r, o, rooms[o.Other], q)))
                         errors.Add($"floor {f} room {i}: doorway without a matching cut on the other side");
                 }
             }
@@ -303,20 +303,30 @@ public static class InteriorValidator
     /// <summary>Whether an opening's middle is at (x, z) on its room's wall line.</summary>
     private static bool OnWall(RoomPlan r, OpeningPlan o, float x, float z)
     {
-        var (px, pz) = o.Side switch
-        {
-            Side.Front => (o.Center, r.Z0),
-            Side.Back => (o.Center, r.Z1),
-            Side.Left => (r.X0, o.Center),
-            _ => (r.X1, o.Center),
-        };
-        return Math.Abs(px - x) < 0.05f && Math.Abs(pz - z) < 0.05f;
+        // on the rectangle's wall line, or on a shaped room's edge (#1197)
+        var p = r.WallFrame(o).At;
+        return Math.Abs(p.X - x) < 0.05f && Math.Abs(p.Y - z) < 0.05f;
     }
+
+    /// <summary>
+    /// Whether two rooms' cuts are the one doorway: the same coordinate along a shared wall line, or,
+    /// where either is on a shaped room's edge (#1197), the same point.
+    /// </summary>
+    private static bool Matches(RoomPlan r, OpeningPlan o, RoomPlan other, OpeningPlan q) =>
+        o.Edge == null && q.Edge == null
+            ? Math.Abs(q.Center - o.Center) < 0.01f
+            : r.WallFrame(o).At.DistanceTo(other.WallFrame(q).At) < 0.05f;
 
     /// <summary>The strip just inside a doorway, which must stay clear.</summary>
     private static RectPlan Doorway(RoomPlan r, OpeningPlan o)
     {
         float half = o.Width / 2, deep = 0.6f;
+        if (o.Edge != null)
+        {
+            var (at, outward, along) = r.WallFrame(o);
+            var p = new[] { at - along * half, at + along * half, at - along * half - outward * deep, at + along * half - outward * deep };
+            return new RectPlan(p.Min(q => q.X), p.Min(q => q.Y), p.Max(q => q.X), p.Max(q => q.Y));
+        }
         return o.Side switch
         {
             Side.Front => new RectPlan(o.Center - half, r.Z0, o.Center + half, r.Z0 + deep),

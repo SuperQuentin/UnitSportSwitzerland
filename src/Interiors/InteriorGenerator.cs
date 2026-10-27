@@ -104,8 +104,10 @@ public static partial class InteriorGenerator
         var site = BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY);
         if (house != null)
         {
-            if (!TryHouse(layout, fp, house, new TileId(fp.Key.TileE, fp.Key.TileN), out why, out var extra)) return null;
+            if (!TryHouse(layout, fp, house, new TileId(fp.Key.TileE, fp.Key.TileN), out why, out var extra, out var drawn)) return null;
             if (fp.Extra.Count > 0) Entrances(layout, fp);
+            // a room drawn with angled walls is one room again, its walls as drawn (#1197)
+            MergePieces(layout, drawn, extra);
             // a room cut into pieces is furnished once, in its biggest piece
             foreach (var (piece, _) in extra) piece.Type = RoomType.Corridor;
             DiningUnits(layout, fp, dining);
@@ -131,7 +133,7 @@ public static partial class InteriorGenerator
         finally { DiningShops = false; }
         planned |= flatsPlanned;
         // the building's real outline (#1290) as its roof on a grid, null when it is its box
-        var outline = OutlineOf(fp, b);
+        var outline = FollowOutlines ? OutlineOf(fp, b) : null;
         bool onCore = false;
         if (!planned)
         {

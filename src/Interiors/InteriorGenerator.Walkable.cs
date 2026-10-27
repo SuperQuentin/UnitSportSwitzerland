@@ -32,9 +32,15 @@ public static partial class InteriorGenerator
             if (!Usable) return;
             foreach (var o in r.Openings.Where(o => o.Kind != OpeningKind.Window))
             {
-                // a step inside the doorway, on the room's walkable floor
+                // a step inside the doorway, on the room's walkable floor (on a shaped room's edge,
+                // #1197, the cell of the core nearest it)
                 float x = o.Side switch { Side.Left => _x0, Side.Right => r.X1 - WallInset - WalkerRadius, _ => o.Center };
                 float z = o.Side switch { Side.Front => _z0, Side.Back => r.Z1 - WallInset - WalkerRadius, _ => o.Center };
+                if (o.Edge != null)
+                {
+                    var (at, outward, _) = r.WallFrame(o);
+                    (x, z) = (at.X - outward.X * (WallInset + WalkerRadius), at.Y - outward.Y * (WallInset + WalkerRadius));
+                }
                 int i = Math.Clamp((int)MathF.Round((x - _x0) / WalkCell), 0, _nx - 1);
                 int j = Math.Clamp((int)MathF.Round((z - _z0) / WalkCell), 0, _nz - 1);
                 Seeds.Add(j * _nx + i);

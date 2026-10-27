@@ -648,13 +648,7 @@ public sealed class InteriorLayout
             foreach (var o in r.Openings)
             {
                 if (o.Kind != OpeningKind.Entry) continue;
-                var p = o.Side switch
-                {
-                    Side.Front => new Godot.Vector2(o.Center, r.Z0),
-                    Side.Back => new Godot.Vector2(o.Center, r.Z1),
-                    Side.Left => new Godot.Vector2(r.X0, o.Center),
-                    _ => new Godot.Vector2(r.X1, o.Center),
-                };
+                var p = r.WallFrame(o).At;
                 float d = p.DistanceTo(at);
                 if (d < bestD) { bestD = d; best = (o.Width, o.Top - o.Bottom); }
             }

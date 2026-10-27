@@ -37,6 +37,9 @@ public static partial class InteriorGenerator
     /// <summary>How far past a wall a point is tested as "outside" it.</summary>
     private const float Step = 0.02f;
 
+    /// <summary>Off only for <c>--outlinesurvey --no-outlines</c>: plans as before #1290, to compare.</summary>
+    internal static bool FollowOutlines = true;
+
     /// <summary>The building's roof on the outline's grid in the plan frame, or null when it is its box.</summary>
     internal static bool[,]? OutlineOf(Footprint fp, Building b) =>
         PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
@@ -283,12 +286,11 @@ public static partial class InteriorGenerator
     {
         var floor = l.Floors[f];
         var r = floor.Rooms[index];
-        var others = Others(l, f, r);
-        others.AddRange(claims);
+        var allOthers = Others(l, f, r);
+        allOthers.AddRange(claims);
         // everything a ray from a wall can meet: the outline first, so its rings keep their indices
-        var walls = new List<IReadOnlyList<Vector2>>(rings);
-        walls.AddRange(others);
-        bool Blocked(Vector2 p) => !RoomShapes.Contains(rings, p) || others.Any(o => RoomShapes.Contains(o, p));
+        var allWalls = new List<IReadOnlyList<Vector2>>(rings);
+        allWalls.AddRange(allOthers);
 
         var lines = Lines(r);
         var reaches = new List<Reach>[4];
@@ -303,6 +305,17 @@ public static partial class InteriorGenerator
                 .ToList();
             var cuts = new List<float> { 0, w.Length };
             foreach (var (lo, hi) in keep) { cuts.Add(lo); cuts.Add(hi); }
+            // only what stands in front of this wall, out to the box's side, can be met (a big block has
+            // hundreds of rooms a floor); the far ones are left empty so every ring keeps its index
+            float reach = w.Out.X > 0.5f ? l.Width / 2 - w.Origin.X : w.Out.X < -0.5f ? w.Origin.X + l.Width / 2
+                : w.Out.Y > 0.5f ? l.Depth / 2 - w.Origin.Y : w.Origin.Y + l.Depth / 2;
+            var sweep = new[] { w.At(0), w.At(w.Length), w.At(0, reach), w.At(w.Length, reach) };
+            float sx0 = sweep.Min(p => p.X) - 0.05f, sx1 = sweep.Max(p => p.X) + 0.05f, sz0 = sweep.Min(p => p.Y) - 0.05f, sz1 = sweep.Max(p => p.Y) + 0.05f;
+            bool Near(IReadOnlyList<Vector2> ring) =>
+                ring.Max(p => p.X) >= sx0 && ring.Min(p => p.X) <= sx1 && ring.Max(p => p.Y) >= sz0 && ring.Min(p => p.Y) <= sz1;
+            var walls = allWalls.Select((ring, i) => i < rings.Count || Near(ring) ? ring : Array.Empty<Vector2>()).ToList();
+            var others = allOthers.Where(Near).ToList();
+            bool Blocked(Vector2 p) => !RoomShapes.Contains(rings, p) || others.Any(o => RoomShapes.Contains(o, p));
             // where anything could change: every corner seen from the wall, and every edge crossing its line
             foreach (var ring in walls)
                 for (int k = 0; k < ring.Count; k++)
@@ -389,7 +402,7 @@ public static partial class InteriorGenerator
             // where both walls grow and both met the same ring of the outline, follow it round
             List<Vector2>? fill = null;
             if (end.D1 >= MinReach && start.D0 >= MinReach && end.Ring >= 0 && end.Ring == start.Ring && end.Ring < rings.Count)
-                fill = Round(rings[end.Ring], end.Edge, start.Edge, corner, prevLine.Out, w.Out, others);
+                fill = Round(rings[end.Ring], end.Edge, start.Edge, corner, prevLine.Out, w.Out, allOthers);
             if (fill != null) pts.AddRange(fill);
             else pts.Add(corner);
             foreach (var x in list)
