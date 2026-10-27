@@ -104,10 +104,13 @@ public partial class RewardService : Node
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        PoiCatalogueHost.Changed -= Map.Clear;
     }
 
     public override void _Ready()
     {
+        // the places' chests stand at the catalogue's POIs: a new catalogue (the server's arriving) places again
+        PoiCatalogueHost.Changed += Map.Clear;
         if (!Authority) return;
         _adventure.Provides("rewards");
         _board = LoadBoard();
@@ -646,11 +649,7 @@ public partial class RewardService : Node
             if (_adventure.Progress(peer) is not { } p || !_guides.Following(p.Key, out _, out _, out _)) continue;
             if (_adventure.PositionOf?.Invoke(peer) is not { } at || _guides.Follow(p.Key, at.E, at.N, now) is not { } move) continue;
             SendGuide(peer, move);
-            if (Map.TryTile(TileOf(move.ChestId)) is not { } spots || spots.FirstOrDefault(s => s.Id == move.ChestId) is not { } chest) continue;
-            var layout = Map.LayoutOf(chest);
-            // a leg reached is a step; the last one unseals
-            int leg = move.Done ? layout.Steps : move.Leg - 1;
-            if (leg > 0) StepForParty(peer, p, chest, layout, leg);
+            GuideStep(peer, p, move);
         }
         if (now >= _nextPrune)
         {
@@ -660,8 +659,15 @@ public partial class RewardService : Node
         }
     }
 
-    private static TileId TileOf(string id) =>
-        RewardRules.TryTile(id, p => PoiCatalogueHost.Current.Resolve(p) is { } poi ? (poi.E, poi.N) : null, out var t) ? new TileId(t.E, t.N) : default;
+    /// <summary>A guide's leg reached is a seal step, the last one unseals (the chest's tile placed again if the cache dropped it).</summary>
+    private async void GuideStep(long peer, PlayerProgress p, GuideMove move)
+    {
+        if (await Map.FindAsync(move.ChestId) is not { } chest) return;
+        var layout = await Map.LayoutAsync(chest);
+        if (!IsInstanceValid(this) || _adventure.Progress(peer) != p) return;
+        int leg = move.Done ? layout.Steps : move.Leg - 1;
+        if (leg > 0) StepForParty(peer, p, chest, layout, leg);
+    }
 
     /// <summary>Server: a peer left: its seals, guide, trial and uploads go (its sections were saved by the adventure service).</summary>
     public void PeerLeft(long peer)

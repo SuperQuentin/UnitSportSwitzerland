@@ -58,6 +58,8 @@ public partial class RewardWorld : Node3D
         public readonly List<Node3D> Parts = new();
         public readonly List<Node3D> Lit = new();
         public readonly List<Vector3> At = new();
+        /// <summary>The plates' keys in the stood-on set, made once (the 10 Hz sense allocates nothing).</summary>
+        public readonly List<string> PlateKeys = new();
         public int Mask = -1;
     }
 
@@ -365,6 +367,7 @@ public partial class RewardWorld : Node3D
             if (lit != null) part.AddChild(lit);
             p.Lit.Add(lit!);
             p.At.Add(Vector3.Zero);
+            p.PlateKeys.Add(chest.Id + "#" + i);
         }
         PlaceProps(origin, p);
         ShowMask(p, Svc?.SealMasks.GetValueOrDefault(chest.Id) ?? 0);
@@ -427,7 +430,7 @@ public partial class RewardWorld : Node3D
                 {
                     var d = p.At[i] - feet;
                     bool on = d.X * d.X + d.Z * d.Z <= p.Layout.Props[i].Radius * p.Layout.Props[i].Radius && Mathf.Abs(d.Y) < 1.5f;
-                    string key = id + "#" + i;
+                    string key = p.PlateKeys[i];
                     if (on && _onPlate.Add(key)) svc.AskSealStep(id, i);
                     else if (!on) _onPlate.Remove(key);
                 }
@@ -547,15 +550,17 @@ public partial class RewardWorld : Node3D
         RewardSpot? best = null;
         float bd = 1.6f * 1.6f;
         var taken = AdventureService.Instance?.Mine.Get(CollectProgress.Section).Taken;
+        void From(RewardSpot s, Vector3 at, Vector3 from)
+        {
+            var d = at - from;
+            if (Mathf.Abs(d.Y) > 2.5f) return;
+            float h = d.X * d.X + d.Z * d.Z;
+            if (h < bd) { bd = h; best = s; }
+        }
         void Try(RewardSpot s, Vector3 at)
         {
-            foreach (var from in new[] { f, a })
-            {
-                var d = at - from;
-                if (Mathf.Abs(d.Y) > 2.5f) continue;
-                float h = d.X * d.X + d.Z * d.Z;
-                if (h < bd) { bd = h; best = s; }
-            }
+            From(s, at, f);
+            From(s, at, a);
         }
         foreach (var (s, at) in _flowers) Try(s, at);
         foreach (var (s, at) in _cairns)

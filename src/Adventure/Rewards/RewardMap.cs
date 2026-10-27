@@ -145,6 +145,12 @@ public sealed class RewardMap
         foreach (var k in oldest) _tiles.Remove(k);
     }
 
+    /// <summary>Drops every placed tile: the catalogue was replaced (the server's <c>pois.bin</c> arrived), so the POIs' chests move in.</summary>
+    public void Clear()
+    {
+        foreach (var k in _tiles.Where(kv => kv.Value.Loading == null).Select(kv => kv.Key).ToList()) _tiles.Remove(k);
+    }
+
     /// <summary>Drops a tile's spots (a client's tile went out of range).</summary>
     public void Forget(TileId id) => _tiles.Remove(id);
 
