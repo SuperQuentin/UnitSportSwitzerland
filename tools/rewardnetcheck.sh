@@ -4,7 +4,8 @@
 # the Common chest (the server's roll; gone for A only), cannot open it again, sends two forged chest ids (refused), picks
 # an edelweiss and runs the chapel's trial; B, on at the same time with its own user://, still sees the chest closed after A
 # opened it and opens it too (its own roll), still sees the edelweiss after A picked it and picks it, and is sent the
-# server's trial board holding A's run; in a Battle Royale lobby A's chest is refused.
+# server's trial board holding A's run; B picks four more and offers five at the chapel (its max stamina rises a step); in a
+# Battle Royale lobby A's chest and an edelweiss are refused.
 #   GODOT=<exe> [PORT=] tools/rewardnetcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" rewardnet
 PORT=${PORT:-7933}

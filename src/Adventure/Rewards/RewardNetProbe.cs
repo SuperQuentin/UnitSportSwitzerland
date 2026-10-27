@@ -15,9 +15,10 @@ namespace UnitSport.Adventure.Rewards;
 /// <list type="bullet">
 /// <item><c>open</c> (A): opens the Common chest (the server's roll arrives; it is gone for A), cannot open it again, a
 /// forged chest id is refused; picks an edelweiss; runs the chapel's trial (the server's board has it); in a Battle
-/// Royale lobby a chest is refused.</item>
+/// Royale lobby a chest and an edelweiss are refused.</item>
 /// <item><c>watch</c> (B): after A opened it, the chest still stands for B, and B opens it too (its own roll); after A
-/// picked the edelweiss, it is still there for B, who picks it; the trial's board B is sent holds A's run.</item>
+/// picked the edelweiss, it is still there for B, who picks it and four more and offers them at the chapel (its max
+/// stamina rises a step); the trial's board B is sent holds A's run.</item>
 /// </list>
 /// </summary>
 public partial class RewardNetProbe : ChatProbe
@@ -136,6 +137,13 @@ public partial class RewardNetProbe : ChatProbe
         _refused.Clear();
         Svc.AskOpen(other.Id);
         Expect(await Until(() => _refused.Contains("No adventuring now."), 10) && !Chests.Opened.Contains(other.Id), $"in the round a chest is refused ({string.Join("; ", _refused)})");
+        var flower = Svc.Map.Fixed!.Where(s => s.Kind == SpotKind.Edelweiss).Last();
+        await WalkTo(flower.E, flower.N - 0.6);
+        _refused.Clear();
+        int heldBr = Collect.Held;
+        Svc.AskPick(flower.Id);
+        Expect(await Until(() => _refused.Contains("No adventuring now."), 10) && Collect.Held == heldBr && !Collect.Taken.Contains(flower.Id),
+            $"and an edelweiss ({string.Join("; ", _refused)})");
         Chat.Send("/br leave");
         await Until(() => BattleRoyale.BrManager.Instance?.MyEntry == null, 15);
         Chat.Send("/br cancel");
@@ -161,6 +169,23 @@ public partial class RewardNetProbe : ChatProbe
         Expect(await Until(() => World.Shows(f.Id), 5), "B still sees it");
         Svc.AskPick(f.Id);
         Expect(await Until(() => Collect.Held == 1 && Collect.Taken.Contains(f.Id), 5), "and picks it");
+
+        // four more, offered at the chapel: five edelweiss = one stamina step, granted by the server (#1225's handler)
+        foreach (var more in Svc.Map.Fixed!.Where(s => s.Kind == SpotKind.Edelweiss && s.Id != f.Id).Take(4))
+        {
+            await WalkTo(more.E, more.N - 0.6);
+            int held = Collect.Held;
+            Svc.AskPick(more.Id);
+            Expect(await Until(() => Collect.Held == held + 1, 5), $"B picked {more.Id} ({Collect.Held} held)");
+        }
+        var chapel = PoiCatalogueHost.Current.OfKind(PoiKind.Chapel)[0];
+        await WalkTo(chapel.E, chapel.N - 3);
+        float maxBefore = Me!.StaminaMeter.Max;
+        int stepsBefore = StaminaUpgrades.MySteps ?? 0;
+        Svc.AskOffer(chapel.Id);
+        Expect(await Until(() => Collect.Offered == 5 && Collect.Held == 0, 10), $"B offered five ({Collect.Held} held, {Collect.Offered} offered)");
+        Expect(await Until(() => StaminaUpgrades.MySteps == stepsBefore + 1, 10), $"the server's stamina step reached B ({stepsBefore} -> {StaminaUpgrades.MySteps})");
+        Expect(await Until(() => Me!.StaminaMeter.Max > maxBefore, 10), $"B's max stamina rose ({maxBefore:F0} -> {Me!.StaminaMeter.Max:F0})");
 
         // A's fires are A's own; in a party, A's tune breaks B's seal too
         var fire = Sealed(SealKind.Bonfire);
@@ -191,7 +216,7 @@ public partial class RewardNetProbe : ChatProbe
             Expect(!Adv.Mine.Get(TrialsProgress.Section).Best.ContainsKey(trial), "but not in B's progress");
         }
         Expect(await Heard("OPEN", "br", 120), "A's Battle Royale part is done");
-        Expect(Collect.Held == 1 && Chests.Opened.Count == 2, $"B's progress is B's own ({Chests.Opened.Count} chests)");
+        Expect(Collect.Offered == 5 && Chests.Opened.Count == 2, $"B's progress is B's own ({Chests.Opened.Count} chests)");
     }
 
     /// <summary>Walks the body in <paramref name="step"/> m steps (10 m/s at 5 m: under every pace check).</summary>
