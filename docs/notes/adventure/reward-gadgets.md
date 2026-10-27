@@ -9,7 +9,7 @@
 |---|---|---|---|
 | Bergkristall | 400 | material (`ItemCategory.Mineral`, CHF 8) | from chests, offerings and duplicates; never crafted |
 | Treasure detector | 401 | `ItemUse.Detector` | held: beeps every 0.12-1.6 s by the distance to the nearest unopened chest or unpicked edelweiss within 250 m of this client's own placement (nothing secret, nothing sent; worked out at 4 Hz, `RewardHud`); Use: one ping, an arrow and the distance for 3 s, 10 s to recharge |
-| Travel flag | 402 | `ItemUse.Place`, `PlacedKind.TravelFlag` = 12 | planted like the Swiss flag (a yellow pennant with the mountain band), only its owner pulls it up; what travel to it means is navigation's (`AdventureTravel.SetPortable`, #1226) |
+| Travel flag | 402 | `ItemUse.Place`, `PlacedKind.TravelFlag` = 12 | planted like the Swiss flag (a yellow pennant with the mountain band), only its owner pulls it up, one a player (a second is refused). Planted, the server sets it as the player's portable travel point (`PlacedObjects.ServedByPeer` → `AdventureTravel.SetPortable`, `TravelBook.Flag`); taken up, `ClearPortable`. Travel to it (the board's "Your flag" row) is navigation's, not drawn yet |
 | Bottled gust | 403 | `ItemUse.Gust`, `ItemEventKind.Gust` = 11 | thrown ahead like the smoke canister; on every peer a column of rising rings for 20 s (`GustFx`) and the wind; the lift is `AirLift.Volumes.Add` there on every client (radius 6 m, 40 m high, 6 m/s, 20 s on `ClockSync.SimNow`), read by the own glider's `AirLiftField.AirAt`; none in a Battle Royale round (`Permissions.LiftOn`) |
 | The Alpine set | 404-410 | `ItemUse.Wear` | Sennenkäppi, edelweiss shirt, mountain guide's hat, Bergführer breeches, Swiss-cross bandana, Alpine knee socks and gloves (`GarmentStyle.Alpine`, chests only) |
 

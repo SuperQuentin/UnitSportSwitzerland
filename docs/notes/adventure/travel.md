@@ -38,7 +38,9 @@
 - **Board**: unlocked destinations nearest first (40 rows, search), line glyph, canton, distance, the fare or the
   reason; the Journal's Travel tab is the same control, from anywhere.
 - **Bots**: `TravelBot(bot, id)`; the 1 Hz tick unlocks for any peer with progress.
-- **Portable flag** (rewards plan): `SetPortable` / `ClearPortable` write `TravelBook.Flag`; nothing draws it yet.
+- **Portable flag** (rewards plan): `SetPortable` / `ClearPortable` write `TravelBook.Flag`, called by the server when
+  the rewards' travel flag (402) is planted or taken up (`RewardService.OnServedPlaced`); the board and map draw nothing
+  for it yet.
 
 ## Wire (protocol 52)
 

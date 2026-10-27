@@ -18,7 +18,7 @@ Notes: `docs/notes/adventure/rewards.md`, `chests-and-seals.md`, `collectibles.m
 | 5 Guide animals | built (#1227) | A marmot (on the ground) or a bearded vulture (along a cliff) that leads to a hidden chest |
 | 6 Trials | partly (#1227): run and glide | One-off timed runs at landmarks, personal best, a server leaderboard, a ghost; pass drive, downhill and ride are follow-ups |
 | 7 Photo quests and fauna | built (#1227), the Atlas tick not | Famous views judged by the server; a Fauna tab in the Journal |
-| 8 Gadgets | built (#1227), the gust lifts through #1225's `AirLift.Volumes`; the flag's travel waits for #1226 | Treasure detector, travel flag (the item; travel is navigation's), bottled gust |
+| 8 Gadgets | built (#1227), the gust lifts through #1225's `AirLift.Volumes`, the flag sets #1226's `TravelBook.Flag` | Treasure detector, travel flag (the item; travel is navigation's), bottled gust |
 | 9 Shared album | not built (optional) | A group photo and an album a party shares |
 | 10 Checks and notes | built (#1227) | Tier 0 tests, `--rewardcheck`, `tools/rewardnetcheck.sh`, notes in `docs/notes/adventure/` |
 
@@ -387,6 +387,13 @@ weight (ok, nothing to build). Sense for a future co-op bot: the same `RewardPla
   garment shapes (`FeltHat`, `Bandana`). It is not made at a workbench (the game never crafts clothes): chests only.
 - **The generated world places nothing** (it has no coarse tiles to place from), rather than peaks found on it.
 - **The gust** is `ItemUse.Gust` (thrown like the smoke canister), not `ItemUse.Throw` (the radio's world-object throw).
+  Its lift is an `AirLift.Volumes.Add` column (6 m, 40 m high, 6 m/s, 20 s on the server's clock) added on every client
+  where it lands; only the own glider reads it, and none rises in a Battle Royale round (`Permissions.LiftOn`).
+- **The travel flag** is one a player (`PlacedObjects` refuses a second, so no flag is lost by a replace); the server's
+  `PlacedObjects.ServedByPeer` hands the planter to `AdventureTravel.SetPortable` / `ClearPortable`. Travelling to it
+  (a "Your flag" row on the board) is navigation's and not drawn yet.
+- **The offering's stamina steps** share the stamina section's ten with quests' `"stamina"` rewards (one cap, the
+  stamina plan's), so edelweiss may buy fewer than ten when quests gave some.
 - **The edelweiss is drawn 2.5 times life size**, so it is seen from the path.
 - **The chest's seal band** is a mesh shown or hidden on a change, not a shader parameter; the light shaft is a tweened
   mesh's `Transparency`.
