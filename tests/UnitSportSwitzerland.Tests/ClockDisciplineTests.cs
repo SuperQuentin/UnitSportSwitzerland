@@ -124,6 +124,7 @@ public class ClockDisciplineTests
         ["src/Player/FootPlayer.Back.cs"] = "presentation: the backpack radio's sparkles on the beat",
         ["src/Audio/Live/WebRadioSpeaker.cs"] = "presentation: where a live stream should be playing now",
         ["src/Audio/Live/StationTap.cs"] = "presentation: the tap on a live stream's samples",
+        ["src/Audio/Tracker/TrackerSpeaker.cs"] = "presentation: where a venue's tracker playlist should be playing now, on the shared clock (#1244)",
         ["src/Audio/Ambience.cs"] = "presentation: church bells strike on the machine's local hour (docs/notes/audio/audio.md)",
         ["src/Audio/Cd/CdLibrary.cs"] = "presentation: the library's burn progress readout",
         ["src/Audio/Surfaces.cs"] = "presentation: footstep surface sampling",
