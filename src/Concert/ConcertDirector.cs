@@ -55,6 +55,8 @@ public partial class ConcertDirector : Node
         if (_chunks == null) return;
         _chunks.TileFurnished += OnFurnished;
         _chunks.TileUnfurnished += OnUnfurnished;
+        // the crowd's loops are 0.7 s of DSP: made now off the main thread, not in the frame the first stage is hung
+        if (DisplayServer.GetName() != "headless") System.Threading.Tasks.Task.Run(ConcertSound.Prewarm);
     }
 
     public override void _ExitTree()
