@@ -203,7 +203,11 @@ public partial class TogetherService : Node
         if (Authority) ProcessProgress(delta, now);
     }
 
-    public override void _PhysicsProcess(double delta) => PhysicsLinks((float)delta);
+    public override void _PhysicsProcess(double delta)
+    {
+        PhysicsLinks((float)delta);
+        if (!_server) StepCrevasses((float)delta);
+    }
 
     // the parts, each in its own file (partial methods: a part not built yet costs nothing)
     partial void ReadyLinks();

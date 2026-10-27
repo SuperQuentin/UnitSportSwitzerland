@@ -85,6 +85,8 @@ public class ClockDisciplineTests
         ["src/Net/ServerBook.cs"] = "plumbing: when a saved server was last played",
         ["src/Adventure/AdventureService.cs"] = "calendar: a quest's start and done dates, and a player's first and last visit, are real dates saved with its progress (#1223)",
         ["src/Adventure/Rewards/RewardService.cs"] = "presentation: seals' windows, a guide's legs and a trial's time are judged on the shared clock the player's client shows them on (#1227); calendar: a Luxurious chest's edition is the real year",
+        ["src/Adventure/Together/TogetherService.Pots.cs"] = "presentation: the raclette cheese bubbles on the shared clock the server stamps the pot with; the scrape window is judged on it (#1266)",
+        ["src/Adventure/Together/TogetherService.Progress.cs"] = "calendar: the day and the ISO week of the punch card and the weekly chest are real dates, Europe/Zurich (#1266)",
         ["src/Adventure/Rewards/GuideNode.cs"] = "presentation: a guide's leg is played from its start on the shared clock the server stamped it with (#1227)",
         ["src/Adventure/Rewards/TrialRunner.cs"] = "presentation: a trial's ghost and its 4 Hz samples run on the shared clock the server times the trial on (#1227)",
         ["src/Adventure/Rewards/RewardHud.cs"] = "presentation: a trial's clock on the HUD counts from the server's start stamp (#1227); calendar: the detector skips the Luxurious chests of this real year's edition already opened",

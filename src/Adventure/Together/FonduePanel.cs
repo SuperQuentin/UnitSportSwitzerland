@@ -228,7 +228,7 @@ public sealed partial class FonduePanel : CanvasLayer
             {
                 _focused = show;
                 UiFocus.Set(this, show);
-                Input.MouseMode = show ? Input.MouseModeEnum.Visible : Input.MouseMode;
+                if (show) MouseCapture.Mode = Input.MouseModeEnum.Visible;
                 if (!show) MouseCapture.Capture();
                 if (show) _action.GrabFocus();
             }
