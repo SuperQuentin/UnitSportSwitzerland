@@ -57,7 +57,8 @@
   gather hold's target, five offered at the chapel's box; a stone on the pass's cairn; the chapel's run to gold (the
   board), a second run out for its pace; the fixture photo refused 90° off, then taken; the fauna page; the detector's beep
   quickening; a gust; the Collection tab; the save file read back. Progress in `test_output/rewardcheck`; a scratch
-  inventory and bank. Windowed it saves `test_output/reward_chest.png`, `reward_guide.png`, `reward_collection.png`.
+  inventory and bank. Windowed (add `sky` to `--systems` for a lit scene) it saves `test_output/reward_chest.png`,
+  `reward_guide.png`, `reward_collection.png`.
 - Net: `tools/rewardnetcheck.sh` (~2 min, port 7933): a server on the flat fixture with the fixture POIs and spots; A opens
   the Common chest (gone for A only), is refused a second time and for two forged ids, picks an edelweiss, runs the
   chapel's trial; B, at the same time with its own `user://`, still sees the chest and opens it (its own roll), still sees

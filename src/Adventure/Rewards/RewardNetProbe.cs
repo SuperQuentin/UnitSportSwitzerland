@@ -55,6 +55,7 @@ public partial class RewardNetProbe : ChatProbe
 
     private static RewardSpot Common => Svc.Map.Fixed!.First(s => s.Kind == SpotKind.Chest && s.Tier == ChestTier.Common && s.Seal == SealKind.None);
     private static RewardSpot Other => Svc.Map.Fixed!.Where(s => s.Kind == SpotKind.Chest && s.Tier == ChestTier.Common && s.Seal == SealKind.None).Skip(1).First();
+    private static RewardSpot Sealed(SealKind k) => Svc.Map.Fixed!.First(s => s.Kind == SpotKind.Chest && s.Seal == k);
     private static RewardSpot Flower => Svc.Map.Fixed!.First(s => s.Kind == SpotKind.Edelweiss);
 
     private async Task Open()
@@ -84,6 +85,33 @@ public partial class RewardNetProbe : ChatProbe
         Svc.AskPick(f.Id);
         Expect(await Until(() => Collect.Held == 1 && Collect.Taken.Contains(f.Id), 5), "A picked the edelweiss");
         Say("picked");
+
+        // seals: a stranger's fires are its own; a party's steps count for every member within 60 m
+        var fire = Sealed(SealKind.Bonfire);
+        var fireLayout = Svc.Map.LayoutOf(fire);
+        for (int i = 0; i < fireLayout.Props.Length; i++)
+        {
+            await WalkTo(fireLayout.Props[i].E, fireLayout.Props[i].N - 1.2);
+            Svc.AskSealStep(fire.Id, i);
+            int bit = 1 << i;
+            Expect(await Until(() => (Svc.SealMasks.GetValueOrDefault(fire.Id) & bit) != 0, 5), $"A lit stack {i + 1}");
+        }
+        Expect((Svc.SealMasks.GetValueOrDefault(fire.Id) & Seals.DoneBit) != 0, "A broke the Höhenfeuer seal");
+        Say("fires");
+        Expect(await Heard("WATCH", "at-bells", 90), "B waits at the cowbells");
+        Chat!.Send("/party invite Tom");
+        Expect(await Until(() => Net.Parties.Client is { Members.Count: 2 }, 30), "A and B are a party");
+        var bells = Sealed(SealKind.Bells);
+        var bellLayout = Svc.Map.LayoutOf(bells);
+        foreach (int b in bellLayout.Tune)
+        {
+            await WalkTo(bellLayout.Props[b].E, bellLayout.Props[b].N - 0.4, 4);
+            Svc.AskSealStep(bells.Id, b);
+            await Seconds(0.4);
+        }
+        Expect(await Until(() => (Svc.SealMasks.GetValueOrDefault(bells.Id) & Seals.DoneBit) != 0, 5), "A rang the tune: the seal is broken for A");
+        Say("tune");
+        Expect(await Heard("WATCH", "opened-sealed", 60), "B opened the cowbells' chest on the party's tune");
 
         // the chapel's trial: its board lives on the server
         var cat = PoiCatalogueHost.Current;
@@ -134,6 +162,25 @@ public partial class RewardNetProbe : ChatProbe
         Svc.AskPick(f.Id);
         Expect(await Until(() => Collect.Held == 1 && Collect.Taken.Contains(f.Id), 5), "and picks it");
 
+        // A's fires are A's own; in a party, A's tune breaks B's seal too
+        var fire = Sealed(SealKind.Bonfire);
+        var bells = Sealed(SealKind.Bells);
+        Expect(await Heard("OPEN", "fires", 180), "A lit the Höhenfeuer");
+        await Seconds(1.0);
+        Expect(!Svc.SealMasks.ContainsKey(fire.Id), "a stranger's fires do not light B's seal");
+        await WalkTo(bells.E, bells.N - 1.5);
+        Say("at-bells");
+        Expect(await Until(() => Net.InviteService.Client?.Incoming.Any(v => v.Kind == Net.Parties.Kind) == true, 30), "A invites B to its party");
+        if (Net.InviteService.Client?.Incoming.FirstOrDefault(v => v.Kind == Net.Parties.Kind) is { } party)
+            Net.InviteService.Client.Accept(party.Id);
+        Expect(await Until(() => Net.Parties.Client is { Members.Count: 2 }, 30), "B joined A's party");
+        Expect(await Heard("OPEN", "tune", 120), "A rang the tune");
+        Expect(await Until(() => (Svc.SealMasks.GetValueOrDefault(bells.Id) & Seals.DoneBit) != 0, 10),
+            $"A's tune, within 60 m, broke B's seal too ({Svc.SealMasks.GetValueOrDefault(bells.Id)})");
+        Expect(Me!.TryInteract(), "E at the chest");
+        Expect(await Until(() => _opened.Contains(bells.Id), 10), "B opened the chest it never rang for");
+        Say("opened-sealed");
+
         var trial = (await HeardStarting("OPEN", "trial ", 180))?["trial ".Length..].Trim();
         Expect(trial != null, "A finished the trial");
         if (trial != null)
@@ -144,7 +191,7 @@ public partial class RewardNetProbe : ChatProbe
             Expect(!Adv.Mine.Get(TrialsProgress.Section).Best.ContainsKey(trial), "but not in B's progress");
         }
         Expect(await Heard("OPEN", "br", 120), "A's Battle Royale part is done");
-        Expect(Collect.Held == 1 && Chests.Opened.Count == 1, "B's progress is B's own");
+        Expect(Collect.Held == 1 && Chests.Opened.Count == 2, $"B's progress is B's own ({Chests.Opened.Count} chests)");
     }
 
     /// <summary>Walks the body in <paramref name="step"/> m steps (10 m/s at 5 m: under every pace check).</summary>
