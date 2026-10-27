@@ -56,43 +56,49 @@ public static class RewardMeshes
         _ => (Gold, GoldDark),
     };
 
+    // every face that lies on another stands at least 1.2 cm proud of it (general/zfight: 8 mm is a fight)
+    private const float Proud = 0.012f;
+
     private static ArrayMesh BuildBody(ChestTier t)
     {
         var s = new MeshScratch();
         var (wood, trim) = Woods(t);
-        s.Box(new Vector3(0, ChestH / 2, 0), new Vector3(ChestW, ChestH, ChestD), wood);
-        // the feet, and the planks' seams as thin dark strips
+        const float foot = 0.04f;
+        // the body stands on four feet
+        s.Box(new Vector3(0, (ChestH + foot) / 2, 0), new Vector3(ChestW, ChestH - foot, ChestD), wood);
         foreach (float x in new[] { -ChestW / 2 + 0.06f, ChestW / 2 - 0.06f })
             foreach (float z in new[] { -ChestD / 2 + 0.06f, ChestD / 2 - 0.06f })
-                s.Box(new Vector3(x, 0.02f, z), new Vector3(0.1f, 0.04f, 0.1f), trim);
+                s.Box(new Vector3(x, foot / 2, z), new Vector3(0.1f, foot, 0.1f), trim);
+        float front = -ChestD / 2;
         if (t == ChestTier.Common)
-            for (int i = 1; i < 3; i++) s.Box(new Vector3(0, ChestH * i / 3, -ChestD / 2 - 0.004f), new Vector3(ChestW, 0.012f, 0.01f), trim);
+            // the planks' seams as thin dark strips
+            for (int i = 1; i < 3; i++) s.Box(new Vector3(0, ChestH * i / 3, front - Proud), new Vector3(ChestW, 0.012f, 0.01f), trim);
         else
         {
             // bands round the body (iron, gilt) and the lock plate on the front
             foreach (float x in new[] { -ChestW * 0.32f, ChestW * 0.32f })
-                s.Box(new Vector3(x, ChestH / 2, 0), new Vector3(0.05f, ChestH + 0.01f, ChestD + 0.012f), trim);
-            s.Box(new Vector3(0, ChestH - 0.08f, -ChestD / 2 - 0.01f), new Vector3(0.12f, 0.14f, 0.02f), t == ChestTier.Fine ? Iron : Gold);
+                s.Box(new Vector3(x, (ChestH + foot) / 2 - 0.006f, 0), new Vector3(0.05f, ChestH - foot - 0.012f + 2 * Proud, ChestD + 2 * Proud), trim);
+            s.Box(new Vector3(0, ChestH - 0.08f, front - Proud), new Vector3(0.12f, 0.14f, 0.012f), t == ChestTier.Fine ? Iron : Gold);
         }
         if (t == ChestTier.Precious)
         {
             // Bauernmalerei: a red and white flower each side of the lock, on green stems
             foreach (float x in new[] { -0.2f, 0.2f })
             {
-                var at = new Vector3(x, ChestH * 0.45f, -ChestD / 2 - 0.006f);
-                s.Box(at + new Vector3(0, -0.06f, 0), new Vector3(0.012f, 0.1f, 0.006f), Green);
+                var at = new Vector3(x, ChestH * 0.45f, front);
+                s.Box(at + new Vector3(0, -0.06f, -0.009f), new Vector3(0.012f, 0.1f, 0.006f), Green);
                 foreach (var (dx, dy) in new[] { (0.03f, 0f), (-0.03f, 0f), (0f, 0.03f), (0f, -0.03f) })
-                    s.Box(at + new Vector3(dx, dy, 0), new Vector3(0.03f, 0.03f, 0.008f), x < 0 ? Red : White);
-                s.Box(at, new Vector3(0.025f, 0.025f, 0.012f), Yellow);
+                    s.Box(at + new Vector3(dx, dy, -0.02f), new Vector3(0.03f, 0.03f, 0.008f), x < 0 ? Red : White);
+                s.Box(at + new Vector3(0, 0, -0.03f), new Vector3(0.025f, 0.025f, 0.012f), Yellow);
             }
         }
         if (t == ChestTier.Luxurious)
         {
-            // the red front panel and its white cross, standing proud of each other (no z-fight)
-            var c = new Vector3(0, ChestH * 0.42f, -ChestD / 2 - 0.008f);
+            // the red front panel and its white cross, standing proud of each other
+            var c = new Vector3(0, ChestH * 0.42f, front - Proud);
             s.Box(c, new Vector3(0.3f, 0.22f, 0.012f), Red);
-            s.Box(c + new Vector3(0, 0, -0.008f), new Vector3(0.16f, 0.05f, 0.008f), White);
-            s.Box(c + new Vector3(0, 0, -0.008f), new Vector3(0.05f, 0.16f, 0.008f), White);
+            s.Box(c + new Vector3(0, 0, -0.02f), new Vector3(0.16f, 0.05f, 0.008f), White);
+            s.Box(c + new Vector3(0, 0, -0.02f), new Vector3(0.05f, 0.16f, 0.008f), White);
         }
         return s.Build();
     }
@@ -106,8 +112,8 @@ public static class RewardMeshes
         s.Box(new Vector3(0, ChestH + 0.17f, 0), new Vector3(ChestW + 0.02f, 0.06f, ChestD * 0.7f), wood);
         if (t != ChestTier.Common)
             foreach (float x in new[] { -ChestW * 0.32f, ChestW * 0.32f })
-                s.Box(new Vector3(x, ChestH + 0.1f, 0), new Vector3(0.05f, 0.21f, ChestD + 0.03f), trim);
-        s.Box(new Vector3(0, ChestH + 0.03f, -ChestD / 2 - 0.02f), new Vector3(0.08f, 0.07f, 0.03f), t == ChestTier.Common ? LarchDark : Gold);
+                s.Box(new Vector3(x, ChestH + 0.116f, 0), new Vector3(0.05f, 0.208f, ChestD + 0.02f + 2 * Proud + 0.006f), trim);
+        s.Box(new Vector3(0, ChestH + 0.03f, -ChestD / 2 - 0.025f), new Vector3(0.08f, 0.07f, 0.03f), t == ChestTier.Common ? LarchDark : Gold);
         return s.Build(new Vector3(0, LidHinge.Y, -LidHinge.Z));
     }
 
@@ -225,7 +231,7 @@ public static class RewardMeshes
     public static ArrayMesh Mound() => _mound ??= Build(s =>
     {
         s.RoundedBox(new Vector3(0, 0.15f, 0), new Vector3(1.4f, 0.3f, 1.2f), Soil);
-        s.RoundedBox(new Vector3(0.1f, 0.12f, 0.45f), new Vector3(0.36f, 0.24f, 0.2f), C("2a2018"));
+        s.RoundedBox(new Vector3(0.1f, 0.132f, 0.45f), new Vector3(0.36f, 0.24f, 0.2f), C("2a2018"));
         s.RoundedBox(new Vector3(-0.4f, 0.32f, -0.2f), new Vector3(0.3f, 0.12f, 0.3f), Grass);
     });
 
@@ -244,19 +250,19 @@ public static class RewardMeshes
         s.Box(new Vector3(0, 1.1f, 0), new Vector3(0.4f, 0.26f, 0.28f), LarchDark);
         s.Box(new Vector3(0, 1.27f, 0), new Vector3(0.46f, 0.06f, 0.34f), Wood);
         // the edelweiss carved on its front
-        s.Box(new Vector3(0, 1.1f, -0.145f), new Vector3(0.12f, 0.12f, 0.01f), Petal);
-        s.Box(new Vector3(0, 1.1f, -0.152f), new Vector3(0.04f, 0.04f, 0.01f), Yellow);
+        s.Box(new Vector3(0, 1.1f, -0.157f), new Vector3(0.12f, 0.12f, 0.01f), Petal);
+        s.Box(new Vector3(0, 1.1f, -0.172f), new Vector3(0.04f, 0.04f, 0.01f), Yellow);
     });
 
     [Showcase("Adventure", "Trial start post")]
     public static ArrayMesh StartPost() => _post ??= Build(s =>
     {
-        s.Box(new Vector3(0, 0.75f, 0), new Vector3(0.14f, 1.5f, 0.14f), Wood);
+        s.Box(new Vector3(0, 0.8f, 0), new Vector3(0.14f, 1.4f, 0.14f), Wood);
         // the waymark: a yellow diamond, and a red-white-red band for the mountain path
-        s.Box(new Vector3(0, 1.35f, -0.075f), new Vector3(0.24f, 0.24f, 0.01f), Yellow, new Basis(Vector3.Forward, Mathf.Pi / 4));
-        s.Box(new Vector3(0, 1.0f, -0.075f), new Vector3(0.15f, 0.05f, 0.012f), Red);
-        s.Box(new Vector3(0, 0.95f, -0.075f), new Vector3(0.15f, 0.05f, 0.012f), White);
-        s.Box(new Vector3(0, 0.9f, -0.075f), new Vector3(0.15f, 0.05f, 0.012f), Red);
+        s.Box(new Vector3(0, 1.35f, -0.082f), new Vector3(0.24f, 0.24f, 0.01f), Yellow, new Basis(Vector3.Forward, Mathf.Pi / 4));
+        s.Box(new Vector3(0, 1.0f, -0.083f), new Vector3(0.15f, 0.05f, 0.012f), Red);
+        s.Box(new Vector3(0, 0.95f, -0.083f), new Vector3(0.15f, 0.05f, 0.012f), White);
+        s.Box(new Vector3(0, 0.9f, -0.083f), new Vector3(0.15f, 0.05f, 0.012f), Red);
         s.Box(new Vector3(0, 0.05f, 0), new Vector3(0.5f, 0.1f, 0.5f), Rock);
     });
 
