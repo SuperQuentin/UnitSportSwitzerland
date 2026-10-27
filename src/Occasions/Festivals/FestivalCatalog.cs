@@ -7,7 +7,7 @@ namespace UnitSport.Occasions.Festivals;
 /// and the calendar festivals register theirs in the PRs that build their games. The one entry that exists is the
 /// <see cref="TestId"/> festival, which <c>--festival test</c> adds for the checks and which is never part of the game.
 /// </summary>
-public static class FestivalCatalog
+public static partial class FestivalCatalog
 {
     public const string TestId = "test";
 

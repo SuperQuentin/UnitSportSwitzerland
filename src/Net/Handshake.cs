@@ -87,7 +87,9 @@ public partial class Handshake : Node
     /// 56: World/Invites Ended (kind, name, outcome): the sender of a direct invite learns accepted, declined or lapsed (#1253; 55 is main's).
     /// 57: World/Versteckis (#1268: RequestDisguise/Tag/Sniff/Decoy/Sprint/Moo/Objective; SetGames, Enter, Kit, PutAt, Release, Caught,
     /// Missed, Sniffed, Sounded), the <c>versteckis</c> invite kind, <c>InterestService.Withheld</c>, ItemId 460-467, ItemUse.Round.
-    public const int Protocol = 57;
+    /// 58: World/Adventure/Festivals (#1269 part 1: RequestRing/TestDate; TellFestivals, TellBoard, TellConverted, TellRang, TellRefused),
+    /// the <c>festivals</c> section, <c>OccasionFacets.Games</c> (1 &lt;&lt; 6) on the occasions wire.
+    public const int Protocol = 58;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

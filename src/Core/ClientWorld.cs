@@ -1122,6 +1122,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Adventure.Rewards.RewardCheck.Requested) AddChild(new Adventure.Rewards.RewardCheck(items, () => LocalPlayer));
             if (Adventure.Rewards.RewardNetProbe.Role != null) AddChild(new Adventure.Rewards.RewardNetProbe(items));
             if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
+            // festivals (#1269): the running list from the server (offline: this client's own), the Journal's Festival tab
+            var festivals = Occasions.Festivals.FestivalService.Create(adventure, server: false, networked: Launch.Networked);
+            festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
+            festivals.Start = () => _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+            Occasions.Festivals.FestivalPage.Register();
+            if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
             AddNavigation(adventure, items, ground);
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies

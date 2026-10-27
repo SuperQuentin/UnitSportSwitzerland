@@ -105,7 +105,7 @@ public static class FestivalRules
         {
             if (inst.Converted || !ended(key)) continue;
             inst.Converted = true;
-            inst.ConvertedChf = inst.Batzen;
+            inst.ConvertedChf += inst.Batzen;   // a milestone paid late converts again: the record adds up
             paid.Add((key, inst.Festival, inst.Batzen));
             inst.Batzen = 0;
         }
