@@ -46,15 +46,10 @@ public partial class InteriorNode
             {
                 Name = "ProjectorBeam",
                 Mesh = Beam(from, centre, right, up),
-                MaterialOverride = BeamMaterial(),
+                MaterialOverride = BeamFor(from, centre, right, up),
                 Visible = false,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             };
-            // the cone in the shader's terms (projector_beam): the lens, the picture's centre and half extents
-            beam.SetInstanceShaderParameter("apex", from);
-            beam.SetInstanceShaderParameter("centre", centre);
-            beam.SetInstanceShaderParameter("half_right", right);
-            beam.SetInstanceShaderParameter("half_up", up);
             node.AddChild(beam);
             node._cinemaShow.Add(beam);
         }
@@ -101,6 +96,23 @@ public partial class InteriorNode
         AlbedoTexture = Slide(0),
         TextureFilter = BaseMaterial3D.TextureFilterEnum.Linear,
     };
+
+    /// <summary>Every beam's material alive, to give each the new picture: one per beam, its cone in its uniforms.</summary>
+    private static readonly List<WeakReference<ShaderMaterial>> Beams = new();
+
+    /// <summary>A beam's material: the cone in the shader's terms (projector_beam), the lens, the picture's centre and half extents.</summary>
+    private static ShaderMaterial BeamFor(Vector3 apex, Vector3 centre, Vector3 right, Vector3 up)
+    {
+        var m = (ShaderMaterial)BeamMaterial().Duplicate();
+        m.SetShaderParameter("apex", apex);
+        m.SetShaderParameter("centre", centre);
+        m.SetShaderParameter("half_right", right);
+        m.SetShaderParameter("half_up", up);
+        m.SetShaderParameter(GPicture, Slide(_slide));
+        Beams.RemoveAll(w => !w.TryGetTarget(out _));
+        Beams.Add(new WeakReference<ShaderMaterial>(m));
+        return m;
+    }
 
     private static ShaderMaterial BeamMaterial() => _beamMaterial ??= new ShaderMaterial
     {
@@ -156,7 +168,8 @@ public partial class InteriorNode
         _slide = i;
         CatMaterial().AlbedoTexture = Slide(i);
         // the beams carry the picture itself, blurred: what each part of the haze lights (projector_beam)
-        BeamMaterial().SetShaderParameter(GPicture, Slide(i));
+        foreach (var w in Beams)
+            if (w.TryGetTarget(out var m)) m.SetShaderParameter(GPicture, Slide(i));
     }
 
     /// <summary>This hall's wash of the screen's colour: the current slide's while the screen is on, none off.</summary>

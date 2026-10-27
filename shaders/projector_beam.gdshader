@@ -1,22 +1,23 @@
 // A cinema projector's beam (#1238, Interiors/InteriorNode.Cinema): the dust in the light between the lens
 // and the screen, in the picture's colours (#1250). Drawn on the cone's far faces only (one fragment a
-// pixel, inside the cone too): the view ray is marched back from there toward the camera, each sample
+// pixel, inside the cone too; a face is far when the cone lies between it and the camera, whatever its
+// winding): the view ray is marched back from there toward the camera, each sample
 // projected from the lens onto the screen and the picture read there, blurred (a high mip: the beam is
 // haze, not a second image). So looking back at the lens from the seats the colours converge on it as the
 // picture's do, and from the side each part of the beam carries the part of the picture it lights.
-// All in the interior node's space: apex, the screen's centre and half extents are per-beam instance
-// uniforms (InteriorNode.AddScreens); the picture is the shared material's (InteriorNode.ShowSlide).
+// All in the interior node's space: apex, the screen's centre and half extents are per-beam material
+// uniforms (InteriorNode.AddScreens), the picture set on every beam at each slide (InteriorNode.ShowSlide).
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_front, shadows_disabled;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
 
 uniform sampler2D picture : source_color, filter_linear_mipmap, repeat_disable;
-uniform float density = 0.045;
+uniform float density = 0.07;
 uniform float haze_mip = 3.5;
 
-instance uniform vec3 apex;
-instance uniform vec3 centre;
-instance uniform vec3 half_right;
-instance uniform vec3 half_up;
+uniform vec3 apex;
+uniform vec3 centre;
+uniform vec3 half_right;
+uniform vec3 half_up;
 
 varying vec3 local_pos;
 varying vec3 local_cam;
@@ -57,6 +58,10 @@ void fragment() {
 	vec3 to_cam = local_cam - local_pos;
 	float len = length(to_cam);
 	vec3 dir = to_cam / max(len, 1e-4);
+	// the near faces give way to the far ones: just toward the camera from here must be inside the cone
+	if (lit_by(local_pos + dir * 0.03, n, plane).a <= 0.0) {
+		discard;
+	}
 	// as far back as the camera, never past the throw's length
 	float reach = min(len, length(centre - apex) * 1.2);
 	const int STEPS = 14;
