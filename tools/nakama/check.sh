@@ -65,4 +65,19 @@ r=$(signin player@check.example check-pass-1 false); echo "banned sign-in: ${r:0
 r=$(srpc "$AT" admin_ban "{\"id\":\"$PID\",\"ban\":false}"); [[ $r == 200* ]] || fail "unban: $r"
 r=$(signin player@check.example check-pass-1 false); [[ $r == 200* ]] || fail "an unbanned player cannot sign in: $r"
 
+# ---- forgotten passwords (#1257) ----
+r=$(signin player@check.example check-pass-1 false); PT=$(token)   # the ban ended the old session
+r=$(srpc "$PT" password_reset_issue '{"email":"player@check.example"}'); echo "client issue: ${r:0:50}"; [[ $r == 403* ]] || fail "a player's session issued a reset token: $r"
+r=$(rpc password_reset_issue '{"email":"nobody@check.example"}'); [[ $r == 200*'{}'* && $r != *token* ]] || fail "an unknown email got a token: $r"
+r=$(rpc password_reset_issue '{"email":"Player@Check.example"}'); [[ $r == 200*'"token":"'* ]] || fail "no reset token for a known email: $r"
+OLD=$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$OUT/body")
+r=$(rpc password_reset_issue '{"email":"player@check.example"}'); RT=$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$OUT/body"); [ -n "$RT" ] || fail "second issue: $r"
+r=$(rpc password_reset_apply "{\"token\":\"$OLD\",\"password\":\"brand-new-pass\"}"); echo "replaced token: ${r:0:60}"; [[ $r == 400* ]] || fail "a replaced token still worked: $r"
+r=$(rpc password_reset_apply "{\"token\":\"$RT\",\"password\":\"short\"}"); [[ $r == 400* ]] || fail "a short password was accepted: $r"
+r=$(rpc password_reset_apply "{\"token\":\"$RT\",\"password\":\"brand-new-pass\"}"); echo "apply: $r"; [[ $r == 200*'"ok":true'* ]] || fail "reset: $r"
+r=$(signin player@check.example check-pass-1 false); [[ $r != 200* ]] || fail "the old password still signs in: $r"
+r=$(signin player@check.example brand-new-pass false); [[ $r == 200* ]] || fail "the new password does not sign in: $r"
+r=$(rpc password_reset_apply "{\"token\":\"$RT\",\"password\":\"another-pass-1\"}"); [[ $r == 400* ]] || fail "a token worked twice: $r"
+r=$(rpc password_reset_apply '{"token":"nope","password":"another-pass-1"}'); [[ $r == 400* ]] || fail "a bad token worked: $r"
+
 echo "RESULT: PASS"
