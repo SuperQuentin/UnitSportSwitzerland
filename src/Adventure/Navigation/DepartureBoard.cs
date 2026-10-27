@@ -129,11 +129,11 @@ public partial class DepartureBoard : VBoxContainer
             var buyHalf = UiKit.Button(book.HasHalfFare ? "Half-fare: yours" : $"Half-fare card · CHF {half}");
             buyHalf.Name = "BuyHalfFare";
             buyHalf.Disabled = book.HasHalfFare || balance < half;
-            buyHalf.Pressed += () => travel.AskBuy(false, station.Id);
+            buyHalf.Pressed += () => Modal.Confirm(this, "Half-fare travelcard", $"Buy the half-fare travelcard for CHF {half} from your account? Every fare halved.", "Buy", () => travel.AskBuy(false, station.Id));
             var buyGa = UiKit.Button(book.HasGa ? "GA: yours" : $"GA travelcard · CHF {ga}");
             buyGa.Name = "BuyGa";
             buyGa.Disabled = book.HasGa || balance < ga;
-            buyGa.Pressed += () => travel.AskBuy(true, station.Id);
+            buyGa.Pressed += () => Modal.Confirm(this, "GA travelcard", $"Buy the GA travelcard for CHF {ga} from your account? Trains, buses and ships free, cable cars half, travel from anywhere.", "Buy", () => travel.AskBuy(true, station.Id));
             _office.AddChild(buyHalf);
             _office.AddChild(buyGa);
         }
