@@ -165,7 +165,7 @@ public static class TogetherSounds
         {
             float t = (i - from) / (float)Dsp.Rate;
             float env = Mathf.Exp(-t * decay) * Mathf.Min(1, t * 2000);
-            if (env < 1e-4f) break;
+            if (t > 0.01f && env < 1e-4f) break;
             s[i] += (Mathf.Sin(Mathf.Tau * f * t) + 0.4f * Mathf.Sin(Mathf.Tau * f * 2.7f * t)) * env * amp;
         }
     }
