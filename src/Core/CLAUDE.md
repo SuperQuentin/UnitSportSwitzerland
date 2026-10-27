@@ -35,6 +35,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `perf-saves-background` — Gameplay saves (plant, deposit, loot, claim) via `JsonStore.SaveAsync` (one ordered background writer, `SaveQueue`, flushed on quit); never `JsonStore.Save` in an RPC handler
 - `collision-matrix` (general) — `Core/Collision`: `CollisionTargets` (every collidable thing from the registries, the known gaps), `--collidecheck` (car + walker vs every target, drawn vs solid: ghost / invisible wall), `--collidesandbox` (#699)
 - `mathx` — `MathX.Flat/FlatLength/FlatDistance/Damp/WrapAngle` and `Mathf.SmoothStep`, never a private copy; only where floats stay identical (`-dt / tau` is not `Damp`); tier-0 tested (#221)
+- `rounds` — `Core/Rounds` (#1268): one "in a round" registry for BR and Versteckis behind the adventure gate, chat refusals, teleports, structures and parking; BR registered first keeps its words
 
 ## Commands
 

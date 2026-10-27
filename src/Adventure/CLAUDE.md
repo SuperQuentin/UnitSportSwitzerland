@@ -22,6 +22,7 @@ touches its topic; search with `grep -ril <word> docs/notes/adventure`.
 - `fares` — `assets/adventure/fares.json`: SBB distance tariff × 1.25, ship tariff, cable-car lines, card discounts and prices, the "verify" values
 - `pins` — `PinBook` (30, notes, icons), placed on the map (right click, pad X, "Pin the centre"), server-checked, shared with the party (`PartyPinsState`, `Parties.StateSent`)
 - `compass` — `Ui/CompassStrip` + `ICompassSource` (BR and free roam), redraw on change only, the VR watch bezel; the target marker (edge ellipse, a target behind points down); the guiding gust (N, palm up, shader, settings)
+- `versteckis` — hide-and-seek as village props (#1268): `VersteckisManager` (lobby, rounds, rotation, Serve* paths, 4 Hz checks with a 1 s speed window, `InterestService.Withheld` in Hide, equal pay), `VsGround`/`HidePlan` decor and objectives from the tiles, `VsDisguise` mesh swap, `VsHud`, protocol 57, `--versteckischeck`, `tools/versteckisnetcheck.sh`, `tools/versteckisbotcheck.sh`
 
 ## Commands
 

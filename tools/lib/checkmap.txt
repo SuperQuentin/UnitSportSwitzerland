@@ -955,3 +955,15 @@ src/Player/Flight.cs           quick  --flycheck campfire --chunks fixture:crag
 src/Player/PigeonFlight        quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
 src/Net/Arrival                net    tools/climbnetcheck.sh
 src/Player/FootPlayer.Climb    net    tools/climbnetcheck.sh
+
+# #1268 Versteckis: the offline check on the hamlet, the two-client game, the bot game; Rounds and FollowCam keep BR whole
+src/Adventure/Versteckis/ quick  --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Terrain/Fixture/FixtureCourse quick --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Adventure/Versteckis/VersteckisManager net tools/versteckisnetcheck.sh
+src/Net/InterestService   net    tools/versteckisnetcheck.sh
+src/Bots/VersteckisBrain  net    tools/versteckisbotcheck.sh
+src/Adventure/Versteckis/VsTactics net tools/versteckisbotcheck.sh
+src/Core/Rounds           quick  --brcheck
+src/Ui/FollowCam          quick  --brcheck
+src/Core/Rounds           net    tools/brbotcheck.sh
+src/Ui/FollowCam          net    tools/brbotcheck.sh
