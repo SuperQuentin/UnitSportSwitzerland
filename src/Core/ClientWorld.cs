@@ -198,6 +198,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.TerraceProbe { Name = "TerraceProbe" });
             return;
         }
+        // the venues' tracker modules (#1244)
+        if (Audio.Tracker.TrackerProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Audio.Tracker.TrackerProbe { Name = "TrackerProbe" });
+            return;
+        }
         // restaurants, cafés, bars and clubs in hand-made buildings (#1242)
         if (Interiors.DiningProbe.ParseArgs())
         {

@@ -92,7 +92,7 @@ ensure_preset() { # name, platform, extra option lines: appended to the (gitigno
   grep -q "^name=\"$1\"" "$f" && return
   n=$(grep -c '^\[preset\.[0-9]*\]$' "$f"); excl=$(sed -n 's/^exclude_filter="\(.*\)"$/\1/p' "$f" | head -1)
   echo "Adding preset.$n \"$1\" to export_presets.cfg"
-  printf '\n[preset.%s]\n\nname="%s"\nplatform="%s"\nrunnable=false\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter="%s"\nexport_path=""\npatches=PackedStringArray()\nencryption_include_filters=""\nencryption_exclude_filters=""\nseed=0\nencrypt_pck=false\nencrypt_directory=false\nscript_export_mode=2\n\n[preset.%s.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ndotnet/include_scripts_content=false\ndotnet/include_debug_symbols=false\ndotnet/embed_build_outputs=false\n%s\n' \
+  printf '\n[preset.%s]\n\nname="%s"\nplatform="%s"\nrunnable=false\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter="assets/music/*"\nexclude_filter="%s"\nexport_path=""\npatches=PackedStringArray()\nencryption_include_filters=""\nencryption_exclude_filters=""\nseed=0\nencrypt_pck=false\nencrypt_directory=false\nscript_export_mode=2\n\n[preset.%s.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ndotnet/include_scripts_content=false\ndotnet/include_debug_symbols=false\ndotnet/embed_build_outputs=false\n%s\n' \
     "$n" "$1" "$2" "$excl" "$n" "$3" >> "$f"
 }
 ensure_preset "Linux" "Linux" 'binary_format/embed_pck=false
@@ -127,6 +127,8 @@ permissions/change_wifi_multicast_state=true
 permissions/internet=true
 permissions/vibrate=true'
 cp "$REPO/export_presets.cfg" .
+# the venues' tracker modules are no Godot resources: every preset packs them by name (#1244)
+sed -i 's|^include_filter=""$|include_filter="assets/music/*"|' export_presets.cfg
 # Android installs an update only over a lower version code, so it follows the semver
 sed -i -E "s|^version/code=.*|version/code=$((MA*10000+MI*100+PA))|; s|^version/name=.*|version/name=\"$V\"|" export_presets.cfg
 # a preset made before #1029 still says no Gradle; only the Android preset has this key

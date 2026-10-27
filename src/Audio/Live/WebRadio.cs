@@ -133,6 +133,8 @@ public partial class WebRadio : Node
             foreach (var (node, cd) in discs) UpdateCd(node, cd);
 
         var ear = Listener?.Invoke();
+        // a venue the relay leaves silent plays its tracker modules, the nearest few (#1244)
+        Tracker.TrackerSpeaker.Rank(ear);
         var near = new List<(float Dist, int Station)>();
         foreach (var (node, station) in sources)
         {

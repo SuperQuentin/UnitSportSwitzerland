@@ -6,7 +6,7 @@
 Imported art for the visual styles (`docs/plans/visual-styles.md`): one row per file or set,
 with its source and licence. Binaries live in **Git LFS** (`.gitattributes`): run
 `git lfs install` once, and `git lfs pull` if a checkout shows small text pointers instead of
-pictures. Only CC0, MIT-style and Swiss open government data so far; nothing AI-generated.
+pictures. Only CC0, public domain, MIT-style and Swiss open government data so far; nothing AI-generated.
 
 ## `realistic/textures/` (Realistic−, Realistic+)
 
@@ -39,6 +39,42 @@ pictures. Only CC0, MIT-style and Swiss open government data so far; nothing AI-
 |---|---|---|
 | `chess_type_beat.ogg` | "Chess Type Beat" by The Vibe Guide ([YouTube](https://www.youtube.com/watch?v=EK2w6qA5zz8)), audio only, Vorbis q4; the church radio's track and the rat dance (#370) | **not an open licence**: all rights with the artist; added by the project owner; dev runs and checks only: excluded from every export (#718), a release burns it from its link |
 | `yaris_bounce.ogg` (optional, not yet added) | the clip the Yaris loops while its hydraulics bounce (#464); played only if the file is there, else just the synthesized thuds | record its source and licence here when it is added |
+
+## `music/venues/` (the venues' music when the radio relay is silent, #1244)
+
+Tracker modules (FastTracker 2 `.xm`, ProTracker `.mod`) from [The Mod Archive](https://modarchive.org),
+chosen among the ones its uploaders licensed **Public Domain** or **CC0**, read and played by the game's own
+player (`src/Audio/Tracker/`). Outside `audio/` on purpose: no export packs `audio/` (#718); every
+export preset packs `music/` by its `include_filter`. The playlists: `TrackerLibrary.Playlists`.
+
+| File | Venue | Song, author, source | Licence |
+|---|---|---|---|
+| `drozerix_-_mecanum_overdrive.xm` | arcade | "Mecanum Overdrive" by Drozerix (Video Game), [The Mod Archive #175349](https://modarchive.org/index.php?request=view_by_moduleid&query=175349) | Public Domain |
+| `drozerix_-_digital_rendezvous.xm` | arcade | "Digital Rendezvous" by Drozerix (Chiptune), [The Mod Archive #180821](https://modarchive.org/index.php?request=view_by_moduleid&query=180821) | Public Domain |
+| `cabin_fever.xm` | arcade | "Cabin Fever!" by Drozerix (Chiptune), [The Mod Archive #174833](https://modarchive.org/index.php?request=view_by_moduleid&query=174833) | Public Domain |
+| `drozerix_-_poppy_flower_girls.xm` | bowling | "Poppy Flower Girls" by Drozerix (Demo Style), [The Mod Archive #175325](https://modarchive.org/index.php?request=view_by_moduleid&query=175325) | Public Domain |
+| `drozerix_-_bubble_machine.xm` | bowling | "Bubble Machine" by Drozerix (Chiptune), [The Mod Archive #176020](https://modarchive.org/index.php?request=view_by_moduleid&query=176020) | Public Domain |
+| `drozerix_-_dream_candy.xm` | bowling | "Dream Candy" by Drozerix (Chiptune), [The Mod Archive #178565](https://modarchive.org/index.php?request=view_by_moduleid&query=178565) | Public Domain |
+| `kc-basslinetech.xm` | club | "Bassline Techno" by Katie Cadet (Electronic - Techno), [The Mod Archive #175335](https://modarchive.org/index.php?request=view_by_moduleid&query=175335) | Public Domain |
+| `musix-wild-perspective.mod` | club | "wild perspective" by m0d (Trance - Dream), [The Mod Archive #53329](https://modarchive.org/index.php?request=view_by_moduleid&query=53329) | Public Domain |
+| `absolu.mod` | club | "absolute xtc" by m0d (Electronic - Techno), [The Mod Archive #32703](https://modarchive.org/index.php?request=view_by_moduleid&query=32703) | Public Domain |
+| `blue_intermission.xm` | bar | "Blue Intermission" by congusbongus (Jazz (general)), [The Mod Archive #192931](https://modarchive.org/index.php?request=view_by_moduleid&query=192931) | CC0 1.0 |
+| `midnight_drive.xm` | bar | "Midnight Drive" by congusbongus (Electronic (general)), [The Mod Archive #190763](https://modarchive.org/index.php?request=view_by_moduleid&query=190763) | CC0 1.0 |
+| `liftyver20.xm` | bar | "Lift your Soul" by JAM (R & B), [The Mod Archive #168705](https://modarchive.org/index.php?request=view_by_moduleid&query=168705) | Public Domain |
+| `which_brand_of_mustard_shall_i_buy.xm` | cafe | "Mustard brandwqerase" by congusbongus (Jazz (general)), [The Mod Archive #190762](https://modarchive.org/index.php?request=view_by_moduleid&query=190762) | CC0 1.0 |
+| `takeawalk.xm` | cafe | "Take a Walk" by JAM (Easy Listening), [The Mod Archive #168723](https://modarchive.org/index.php?request=view_by_moduleid&query=168723) | Public Domain |
+| `napping_on_a_cloud.xm` | cafe | "Napping on a cloud" by congusbongus (Chiptune), [The Mod Archive #192197](https://modarchive.org/index.php?request=view_by_moduleid&query=192197) | CC0 1.0 |
+| `rumpus.xm` | pub | "Rumpus" by congusbongus (Funk), [The Mod Archive #191386](https://modarchive.org/index.php?request=view_by_moduleid&query=191386) | CC0 1.0 |
+| `mega_destruction.xm` | pub | "Mega Destruction" by Zilly Mike (Rock - Hard), [The Mod Archive #50252](https://modarchive.org/index.php?request=view_by_moduleid&query=50252) | Public Domain |
+| `jam_-_blue.xm` | pub | "Blue_Sunset" by JAM (Reggae), [The Mod Archive #178276](https://modarchive.org/index.php?request=view_by_moduleid&query=178276) | Public Domain |
+| `loituma.mod` | beiz | "Ievan Polkka" by JAM (Chiptune), [The Mod Archive #195783](https://modarchive.org/index.php?request=view_by_moduleid&query=195783) | Public Domain |
+| `cancan.mod` | beiz | "Can Can" by SoDa7 (Ballad), [The Mod Archive #35056](https://modarchive.org/index.php?request=view_by_moduleid&query=35056) | Public Domain |
+| `jam_-_saltarello.xm` | pizzeria | "Saltarello" by JAM (Electronic - Other), [The Mod Archive #176494](https://modarchive.org/index.php?request=view_by_moduleid&query=176494) | Public Domain |
+| `drozerix_-_bakin_blueberry_pie.xm` | pizzeria | "Bakin' Blueberry Pie" by Drozerix (Chiptune), [The Mod Archive #200041](https://modarchive.org/index.php?request=view_by_moduleid&query=200041) | Public Domain |
+| `headspin.xm` | fastfood | "Headspin" by congusbongus (Hip-Hop), [The Mod Archive #191620](https://modarchive.org/index.php?request=view_by_moduleid&query=191620) | CC0 1.0 |
+| `girl_from_mars.xm` | fastfood | "Girl From Mars" by Drozerix (Chiptune), [The Mod Archive #173935](https://modarchive.org/index.php?request=view_by_moduleid&query=173935) | Public Domain |
+| `drozerix_-_leisurely_voice.xm` | cinema | "Leisurely Voice" by Drozerix (Chiptune), [The Mod Archive #183837](https://modarchive.org/index.php?request=view_by_moduleid&query=183837) | Public Domain |
+| `ambient_starfield.xm` | cinema | "Ambient Starfield" by Drozerix (Electronic - Ambient), [The Mod Archive #174160](https://modarchive.org/index.php?request=view_by_moduleid&query=174160) | Public Domain |
 
 ## `fonts/` (the menus, #1135)
 
