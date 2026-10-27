@@ -72,6 +72,10 @@ public partial class ShotRunner : Node
 
     private readonly Camera3D _camera;
 
+    /// <summary>The near plane inside, m, and the camera's own, given back on the way out.</summary>
+    private const float InsideNear = 0.05f;
+    private float _outsideNear = 1f;
+
     /// <summary>
     /// Shot positions are world space as the game started (the manifest's origin), as they always
     /// were; the origin moves since (#185), so each is mapped from that first frame when it is aimed.
@@ -245,7 +249,11 @@ public partial class ShotRunner : Node
 
         bool ok = Save(_shot.Value.OutPath);
         _failed |= !ok;
-        if (_through) Interiors.InteriorManager.Instance?.CameraInside(null);
+        if (_through)
+        {
+            Interiors.InteriorManager.Instance?.CameraInside(null);
+            _camera.Near = _outsideNear;
+        }
         _through = false;
         _door = null;
         _shot = null;
@@ -480,6 +488,9 @@ public partial class ShotRunner : Node
         var behind = link.Outside * new Vector3(local.X, height, -local.Z);
         _camera.GlobalTransform = link.ToInside * (_camera.GlobalTransform with { Origin = behind });
         interiors.CameraInside(link.Plan);
+        // indoors a cabinet stands a metre off: the spectator's 1 m near plane would cut it (#1250)
+        _outsideNear = _camera.Near;
+        _camera.Near = InsideNear;
         GD.Print($"[shot] inside through door {_door}: door at {link.Outside.Origin}, facing {link.Outside.Basis.Z}");
         _through = true;
         _waited = 0;

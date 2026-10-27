@@ -391,6 +391,15 @@ public static partial class InteriorGenerator
                 TryPlace(l, f, r, new Piece(FurnitureType.ArcadeCabinet, 0.75f, 0.9f, 1.85f, true), placed, blocked, rng, near.Far);
         for (int i = 0; i < Math.Clamp((int)(area / 80f), 1, 6); i++)
             TryPlace(l, f, r, new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true), placed, blocked, rng);
+        // the middle of a big foyer (#1250): high tables by the bar's side, sofas, standees of the coming
+        // films, a table or two [S: Cineplexx, Kino Svetozor, CinemaxX foyers]
+        FillFloor(l, f, r, placed, blocked, 3.6f, 3.6f, 1.4f, (i, k) => ((i * 5 + k * 3) % 5) switch
+        {
+            0 or 3 => HighTables,
+            1 => LoungeGroup,
+            2 => Standees,
+            _ => TableForFour,
+        });
     }
 
     /// <summary>Whole cinemas in the model viewer: a town cinema on two levels, and a small one on one.</summary>

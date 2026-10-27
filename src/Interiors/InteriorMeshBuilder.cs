@@ -151,6 +151,8 @@ public static partial class InteriorMeshBuilder
         RoomType.ProjectionRoom => (C(0.30f, 0.30f, 0.32f), C(0.20f, 0.20f, 0.22f), C(0.14f, 0.14f, 0.15f)),
         // #1240: an arcade's black carpet, dark violet walls, black ceiling
         RoomType.ArcadeHall => (C(0.08f, 0.06f, 0.14f), C(0.12f, 0.08f, 0.22f), C(0.05f, 0.04f, 0.07f)),
+        // #1250: a billiard hall's wood floor, cream walls, a pale tiled ceiling [S: Bluff Billard Geneva]
+        RoomType.BilliardHall => (C(0.46f, 0.30f, 0.18f), C(0.88f, 0.85f, 0.76f), C(0.90f, 0.90f, 0.88f)),
         // #1242: a Beiz's dark parquet, cream walls and wood ceiling; a pizzeria's terracotta; a café's pale
         // tiles; a fast food's yellow; a kebab's white; a bar's dark violet; a pub's oxblood; a club's black;
         // a kitchen's white tiles

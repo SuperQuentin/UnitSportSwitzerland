@@ -50,6 +50,7 @@ public static class VenueMusic
     {
         RoomType.BowlingLanes or RoomType.Concourse or RoomType.Mezzanine => StationFor(VenueType.Bowling, "", region),
         RoomType.ArcadeHall => StationFor(VenueType.Arcade, "", region),
+        RoomType.BilliardHall => StationFor(VenueType.Bar, "", region),
         RoomType.CinemaLobby => StationFor(VenueType.Cinema, "", region),
         RoomType.Gaststube => StationFor(VenueType.Restaurant, "", region),
         RoomType.Pizzeria => StationFor(VenueType.Restaurant, "pizza", region),
@@ -86,6 +87,7 @@ public static class VenueMusic
     {
         RoomType.BowlingLanes or RoomType.Concourse or RoomType.Mezzanine => Audio.Tracker.VenueMood.Bowling,
         RoomType.ArcadeHall => Audio.Tracker.VenueMood.Arcade,
+        RoomType.BilliardHall => Audio.Tracker.VenueMood.Bar,
         RoomType.CinemaLobby => Audio.Tracker.VenueMood.Cinema,
         RoomType.Gaststube => Audio.Tracker.VenueMood.Beiz,
         RoomType.Pizzeria => Audio.Tracker.VenueMood.Pizzeria,
