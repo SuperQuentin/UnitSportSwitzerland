@@ -238,3 +238,8 @@
 - **Checks**: `--phonecheck` (`ContactsChecks`: rows, sheet, Cancel default, nothing sent until Confirm, result
   lines; the fixture has no server, so `TestPeople` stands in and `OnResolved` plays the server's word);
   `tools/invitecheck.sh` asserts the sender is told accepted (`/tpa`, party) and declined (race duel).
+
+## Hint line and recents (#1253 follow-up)
+
+- **The page hint follows the focus** (`PhoneScreens.FollowFocusHint`, `AcceptVerb`): Enter / A / a tap is named for the control that has the keys ("travel to Leytron", "open Map", "search", a button's own label); the back half of the line is unchanged.
+- **Map recents are saved** in `user://phone_recents.json` (LV95 coordinates of the last three, matched back to the index on load).
