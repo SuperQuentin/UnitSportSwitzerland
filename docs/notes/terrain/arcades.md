@@ -7,8 +7,9 @@ The generator for OSM's `leisure=amusement_arcade` solids (`entertainment-venues
   bottom storey under flats, a 3-5 m blind box when the arcade is its whole building), keeping only a
   plan the validator passes, else the layout back untouched. `ArcadeRules` re-plans arcades only.
 - **Rooms**: one `ArcadeHall` from the door's end, at most 32 m a side (a mall's remainder is a plain
-  `Hall` behind, through the store, and one beside); a 2.6 m strip across its back of `WC`, `Storage`,
-  `Office`, each off the hall. The hall has no windows, whatever the facade: arcades are dark rooms.
+  `Hall` behind, through the store, and one beside); a 3 m strip across its back of public toilets (`public-toilets`,
+  #1285: by gender from 30 players, one WC for a booth of a few machines), `Storage`, `Office`, each off the
+  hall; the store kept at the door's end when a mall's hall is reached through it. The hall has no windows, whatever the facade: arcades are dark rooms.
 - **Hall** (`ArcadeLayout`): the bowling carpet print; by the door the `PrizeCounter` (shelves of plush,
   a clerk, a lit glass case), the `ChangeMachine` and 2-5 `ClawMachine`s; the big machines on the side
   walls, one wall then the other (`Racer` twins, `SimPod`, `DanceMachine`, `BasketballGame`,

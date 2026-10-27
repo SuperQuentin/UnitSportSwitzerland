@@ -22,7 +22,8 @@ public partial class CinemaProbe : Node
     }
 
     private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, bool Cinema, int MinHalls = 1,
-        bool Upstairs = false);
+        bool Upstairs = false,
+        ToiletSet Toilets = ToiletSet.Shared, bool Accessible = false);
 
     private static readonly Case[] Cases =
     {
@@ -31,11 +32,13 @@ public partial class CinemaProbe : Node
         // a small one on one level: the booth behind the top rows at floor level
         new("small", 14, 26, 5, BuildingKind.Commercial, true),
         // a multiplex: halls side by side
-        new("multiplex", 72, 52, 12, BuildingKind.Commercial, true, MinHalls: 4, Upstairs: true),
+        new("multiplex", 72, 52, 12, BuildingKind.Commercial, true, MinHalls: 4, Upstairs: true, Toilets: ToiletSet.Gendered, Accessible: true),
         // in the bottom of a block of flats (Lausanne's Pathé Galeries): the facade's storeys stay
         new("under-flats", 26, 32, 20, BuildingKind.Apartment, true, Upstairs: true),
         // wider than deep: the halls run along X from the end nearer the door
         new("along-x", 44, 22, 8, BuildingKind.Commercial, true, Upstairs: true),
+        // a narrow town cinema: one hall, the toilets a single WC beside the lobby (#1285)
+        new("narrow", 9.8f, 26, 5, BuildingKind.Commercial, true, Toilets: ToiletSet.Single),
         // a kiosk: no hall fits, the ordinary rules furnish it
         new("too-small", 8, 10, 4, BuildingKind.Commercial, false),
     };
@@ -108,7 +111,9 @@ public partial class CinemaProbe : Node
         Check(Count(FurnitureType.BoothPanel) == 1, $"{what}: the booth's control panel");
         Check(Count(FurnitureType.BoxOffice) == 1, $"{what}: a box office");
         Check(Count(FurnitureType.ConcessionStand) == 1, $"{what}: a concession stand");
-        Check(l.Floors[0].Rooms.Any(r => r.Type == RoomType.WC), $"{what}: a WC");
+        // the public toilets the footprint has room for (#1285)
+        var loo = ToiletCheck.Problems(l, c.Toilets, c.Accessible);
+        Check(loo.Count == 0, $"{what}: toilets {ToiletCheck.Describe(l)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
         bool upstairs = l.Floors.Count > 1 && l.Floors[1].Rooms.Any(r => r.Type == RoomType.ProjectionRoom);
         Check(upstairs == c.Upstairs, $"{what}: the booth {(c.Upstairs ? "upstairs" : "at floor level")} ({l.Floors.Count} floor(s))");
         var booth = l.Floors.SelectMany(f => f.Rooms).FirstOrDefault(r => r.Type == RoomType.ProjectionRoom);

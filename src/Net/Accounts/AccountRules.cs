@@ -60,6 +60,19 @@ public static class AccountRules
         return u.Contains("://", StringComparison.Ordinal) ? u : "http://" + u;
     }
 
+    /// <summary>
+    /// The site that mails password resets (#1257) for an account server: the official one sits behind the site's
+    /// Caddy at <c>/nakama</c>, so the site is that address without it. "" for any other server, which has no reset.
+    /// </summary>
+    public static string SiteOf(string? accountUrl)
+    {
+        string u = NormalizeUrl(accountUrl);
+        const string Suffix = "/nakama";
+        if (!u.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase)) return "";
+        string site = u[..^Suffix.Length];
+        return site.IndexOf("://", StringComparison.Ordinal) + 3 < site.Length ? site : "";
+    }
+
     /// <summary>True when both addresses name the same account server.</summary>
     public static bool SameServer(string? a, string? b) =>
         NormalizeUrl(a).Length > 0 && string.Equals(NormalizeUrl(a), NormalizeUrl(b), StringComparison.OrdinalIgnoreCase);
