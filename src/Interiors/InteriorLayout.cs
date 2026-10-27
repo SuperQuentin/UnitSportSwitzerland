@@ -262,6 +262,8 @@ public enum FurnitureType
     Jukebox, Stage, DjBooth, DanceFloor, CookLine,
     // #1250: a billiard hall's cues in their wall rack; an auditorium's loudspeakers and wall lights
     CueRack, Loudspeaker, WallSconce,
+    /// <summary>A floor-level booth's raised floor (#1250): its projectionist's eyes at the viewing windows, steps up from its door.</summary>
+    BoothDeck,
 }
 
 public sealed class FurniturePlan

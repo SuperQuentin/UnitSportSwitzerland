@@ -925,6 +925,8 @@ public static partial class InteriorMeshBuilder
             or FurnitureType.LanePair or FurnitureType.DartBoard or FurnitureType.Confetti
             // #1238: a seating bank collides as tiers and aisle ramps; signs, ports and posters are on the wall
             or FurnitureType.SeatingBank or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.PosterFrame
+            // #1250: a booth's deck collides as its slab and the ramp up its steps
+            or FurnitureType.BoothDeck
             // #1242: a dance floor is danced on
             or FurnitureType.DanceFloor);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));

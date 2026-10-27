@@ -92,6 +92,17 @@ public partial class CinemaProbe : Node
         var hallPorts = l.Furniture.Where(f => f.Type == FurnitureType.Porthole && f.Floor == 0).ToList();
         Check(banks.All(b => hallPorts.Any(p => p.Lift + p.H / 2 - b.H >= 1.99f)),
             $"{what}: the projector's lens 2 m over the back row ({string.Join(", ", banks.Select(b => b.H.ToString("F2")))} m treads, {string.Join(", ", hallPorts.Select(p => (p.Lift + p.H / 2).ToString("F2")))} m lenses)");
+        // the projectionist sees through the windows standing up (#1250): on the floor upstairs, on a deck at floor level
+        var deck = l.Furniture.FirstOrDefault(f => f.Type == FurnitureType.BoothDeck);
+        var boothPorts = l.Furniture.Where(f => f.Type == FurnitureType.Porthole && f.Floor == l.Floors.Count - 1 && projRoom != null
+            && l.Floors[f.Floor].Rooms.Contains(projRoom)).ToList();
+        float eye = (deck?.H ?? 0) + InteriorGenerator.EyeHeight;
+        float window = boothPorts.Count > 0 ? boothPorts[0].Lift + (InteriorGenerator.PortFoot + InteriorGenerator.PortHead) / 2 : float.NaN;
+        Check(Math.Abs(eye - window) <= 0.35f, $"{what}: the booth's windows at a standing projectionist's eyes ({eye:F2} m eyes{(deck != null ? $" on a {deck.H:F2} m deck" : "")}, {window:F2} m windows)");
+        Check(c.Upstairs == (deck == null), $"{what}: a deck in a floor-level booth only");
+        if (deck != null)
+            Check(l.Furniture.Where(f => f.Type is FurnitureType.Projector or FurnitureType.BoothPanel).All(f => Math.Abs(f.Lift - deck.H) < 0.01f),
+                $"{what}: the projectors and the panel stand on the deck");
         Check(Count(FurnitureType.ExitSign) >= halls.Count, $"{what}: exit signs over the doors");
         Check(Count(FurnitureType.Projector) == halls.Count, $"{what}: a projector for every hall ({Count(FurnitureType.Projector)})");
         Check(Count(FurnitureType.BoothPanel) == 1, $"{what}: the booth's control panel");

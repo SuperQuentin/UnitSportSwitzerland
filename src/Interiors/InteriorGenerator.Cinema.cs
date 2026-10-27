@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 8;
+    public const int CinemaRules = 9;
 
     private const float BoothDepth = 2.6f, LobbyMin = 4.6f, LobbyMax = 12f, AudMinLength = 8.5f, AudMaxLength = 32f;
     private const float AudMinWidth = 7f, AudTargetWidth = 13f, AudMaxWidth = 18f, StaffWidth = 1.6f;
@@ -51,6 +51,15 @@ public static partial class InteriorGenerator
 
     /// <summary>The casing's width, m: the viewing windows clear of the projector's 0.8 m body, so the projectionist sees past it.</summary>
     internal const float PortCasingW = 2 * ViewOut + 0.1f;
+
+    /// <summary>A standing projectionist's eyes over what they stand on, m: the viewing windows' middle is put there.</summary>
+    internal const float EyeHeight = 1.6f;
+
+    /// <summary>
+    /// A floor-level booth's deck (#1250): the steps' greatest rise and their tread, and the floor kept at the
+    /// door's level before them, m.
+    /// </summary>
+    internal const float DeckRiser = 0.18f, DeckTread = 0.28f, DeckLanding = 1.0f;
     /// <summary>Row pitch [S: 1.0-1.2 m]; the rise of each row [S: 0.10-0.45 m, here a steady one].</summary>
     public const float RowPitch = 1.1f, RowRise = 0.32f;
     private const float ExitClear = 0.7f;
@@ -63,6 +72,13 @@ public static partial class InteriorGenerator
         public bool BoothUpstairs;
         /// <summary>The ports' casing's foot over the booth's floor, m (over the hall's: plus a storey when the booth is upstairs).</summary>
         public float PortY;
+        /// <summary>
+        /// A floor-level booth's raised floor over its own, m (0: none). The ports stay high enough for the beam
+        /// to pass over the back row, so the projectionist stands on a deck to see through the windows (#1250).
+        /// </summary>
+        public float Deck;
+        /// <summary>Whether the booth's door is at its low-u end (the staff corridor's side).</summary>
+        public bool BoothDoorLow;
         public RectPlan? Flight;
     }
 
@@ -309,6 +325,11 @@ public static partial class InteriorGenerator
         var boothFloor = l.Floors[plan.BoothUpstairs ? 1 : 0];
         int iBooth = boothFloor.Rooms.FindIndex(r => r.Type == RoomType.ProjectionRoom);
         if (iBooth < 0) return false;
+        // at floor level the ports are over a standing person's eyes: a deck lifts the projectionist to the
+        // windows, keeping 2.05 m of headroom over it
+        float eyes = plan.PortY + (PortFoot + PortHead) / 2 - EyeHeight;
+        plan.Deck = eyes < 0.25f ? 0 : Math.Max(0, Math.Min(eyes, l.ClearOf(boothFloor.Rooms[iBooth]) - 2.05f));
+        plan.BoothDoorLow = staffAtL;
         float hallLift = plan.BoothUpstairs ? l.StoreyHeight : 0;
         float viewW = ViewOut - ViewIn, viewAt = (ViewIn + ViewOut) / 2;
         for (int i = 0; i < halls; i++)
@@ -418,24 +439,45 @@ public static partial class InteriorGenerator
         var fr = p.Frame;
         float u0 = Math.Min(fr.U(r.X0, r.Z0), fr.U(r.X1, r.Z1)), u1 = Math.Max(fr.U(r.X0, r.Z0), fr.U(r.X1, r.Z1));
         float hallW = (u1 - u0) / p.Halls;
+        float deck = p.Deck;
+        if (deck > 0)
+        {
+            // the deck from the steps to the far end, wall to wall across v; the landing and the steps kept clear
+            float v0 = Math.Min(fr.V(r.X0, r.Z0), fr.V(r.X1, r.Z1)), v1 = Math.Max(fr.V(r.X0, r.Z0), fr.V(r.X1, r.Z1));
+            float run = MathF.Ceiling(deck / DeckRiser) * DeckTread;
+            // 2 cm off the walls' faces, so its sides never lie on them
+            const float off = WallInset + 0.02f;
+            float a = p.BoothDoorLow ? u0 + DeckLanding : u0 + off, b = p.BoothDoorLow ? u1 - off : u1 - DeckLanding;
+            var (dx, dz) = fr.Point((a + b) / 2, (v0 + v1) / 2);
+            l.Furniture.Add(new FurniturePlan
+            {
+                Type = FurnitureType.BoothDeck, Floor = f, X = dx, Z = dz, Turns = p.BoothDoorLow ? fr.FaceUMinus : fr.FaceUPlus,
+                W = v1 - v0 - 2 * off, D = b - a, H = deck,
+            });
+            var stairs = p.BoothDoorLow ? fr.Rect(u0, v0, a + run, v1) : fr.Rect(b - run, v0, u1, v1);
+            blocked.Add(stairs);
+        }
         for (int i = 0; i < p.Halls; i++)
         {
             float u = u0 + hallW * (i + 0.5f);
             var (x, z) = fr.Point(u, p.HallV1 + 0.8f);
             var rect = new RectPlan(x - 0.6f, z - 0.6f, x + 0.6f, z + 0.6f);
             if (!Free(r, rect, placed, blocked, 0.05f)) continue;
-            // as tall as puts its lens in the middle of the port (#1250)
+            // as tall as puts its lens in the middle of the port (#1250), standing on the deck if there is one
             float lens = p.PortY + (PortFoot + PortHead) / 2;
-            Put(l, f, FurnitureType.Projector, x, z, fr.FaceVMinus, 0.8f, 1.2f, lens + ProjectorLensDrop, placed);
+            Put(l, f, FurnitureType.Projector, x, z, fr.FaceVMinus, 0.8f, 1.2f, lens + ProjectorLensDrop - deck, placed, lift: deck);
             // the porthole it shines through, from the booth's side (#1250): the hall's is on the other face of
             // the wall, at the same height over the hall's floor
             var (wx, wz) = fr.Point(u, p.HallV1 + 0.1f);
             Put(l, f, FurnitureType.Porthole, wx, wz, fr.FaceVPlus, PortCasingW, 0.1f, 0.45f, placed, lift: p.PortY);
         }
+        int before = l.Furniture.Count;
         TryPlace(l, f, r, new Piece(FurnitureType.BoothPanel, 1.2f, 0.3f, 1.7f, true), placed, blocked, rng, new[] { fr.VPlus });
         TryPlace(l, f, r, new Piece(FurnitureType.ServerRack, 0.6f, 0.9f, 2.0f, true), placed, blocked, rng, new[] { fr.VPlus });
         TryPlace(l, f, r, new Piece(FurnitureType.FilmPlatter, 1.2f, 1.2f, 1.5f, false), placed, blocked, rng);
         TryPlace(l, f, r, new Piece(FurnitureType.Chair, 0.45f, 0.45f, 0.9f, false), placed, blocked, rng);
+        // all of it on the deck, off the landing and the steps (blocked above)
+        for (int k = before; k < l.Furniture.Count; k++) l.Furniture[k].Lift = deck;
     }
 
     /// <summary>The lobby: carpet, box office by the door, the concession stand, posters, standees, stanchions, benches.</summary>
@@ -538,8 +580,7 @@ public static partial class InteriorGenerator
                     node.AddChild(lane);
                     lane.AddChild(new ProjectionWalker(new Godot.StandardMaterial3D { AlbedoColor = new Godot.Color(0.85f, 0.85f, 0.85f) }) { Name = "Walker" });
                 }
-                Godot.GD.Print($"[cinema] {name}: screen at {screen.X:F1}, {screen.Z:F1}, {screen.W:F1} m wide, turns {screen.Turns}");
-                return node;
+                Godot.GD.Print($"[cinema] {name}: screen at {screen.X:F1}, {screen.Z:F1}, {screen.W:F1} m wide, turns {screen.Turns}");                return node;
             });
     }
 

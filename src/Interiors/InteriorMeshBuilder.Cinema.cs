@@ -13,7 +13,7 @@ public static partial class InteriorMeshBuilder
         or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
         or FurnitureType.PosterFrame or FurnitureType.Standee or FurnitureType.Stanchions or FurnitureType.Projector
         or FurnitureType.ServerRack or FurnitureType.FilmPlatter or FurnitureType.BoothPanel
-        or FurnitureType.Loudspeaker or FurnitureType.WallSconce;
+        or FurnitureType.Loudspeaker or FurnitureType.WallSconce or FurnitureType.BoothDeck;
 
     /// <summary>Velvet for the seats: the classic red, a modern dark blue, a burgundy.</summary>
     private static readonly Color[] Velvet = { C(0.62f, 0.06f, 0.10f), C(0.10f, 0.14f, 0.34f), C(0.42f, 0.06f, 0.14f) };
@@ -250,6 +250,31 @@ public static partial class InteriorMeshBuilder
                     B(x - 0.03f, 0.03f - sink, -0.03f, x + 0.03f, 0.98f, 0.03f, chrome);
                 }
                 B(-w, 0.86f, -0.02f, w, 0.9f, 0.02f, C(0.62f, 0.06f, 0.10f));
+                break;
+            }
+            case FurnitureType.BoothDeck:
+            {
+                // a floor-level booth's raised floor (#1250): its slab from the back (−Z) to the top step, the
+                // steps down to the landing at the door (+Z), each a box reaching back into the slab and a hair
+                // narrower than the one above, so no two faces share a plane; walked up a ramp through the nosings
+                int n = Math.Max(1, (int)MathF.Ceiling(H / InteriorGenerator.DeckRiser));
+                float tread = InteriorGenerator.DeckTread, rise = H / n, edge = d - (n - 1) * tread;
+                var slab = C(0.17f, 0.17f, 0.19f);
+                var nose = C(0.70f, 0.58f, 0.12f);
+                B(-w, 0, -d, w, H, edge, slab, true);
+                for (int k = 0; k < n - 1; k++)
+                {
+                    float inset = (n - 1 - k) * sink;
+                    B(-w + inset, 0, edge - sink, w - inset, (k + 1) * rise, d - k * tread, slab);
+                    // a yellow strip on each nosing, as booths' and back-of-house steps have
+                    B(-w + inset + sink, (k + 1) * rise - sink, d - k * tread - 0.05f, w - inset - sink, (k + 1) * rise + sink, d - k * tread + sink, nose);
+                }
+                B(-w + sink, H - sink, edge - 0.05f, w - sink, H + sink, edge + sink, nose);
+                var r0 = at + basis * new Vector3(-w, 0, d + tread);
+                var r1 = at + basis * new Vector3(w, 0, d + tread);
+                var r2 = at + basis * new Vector3(w, H, edge);
+                var r3 = at + basis * new Vector3(-w, H, edge);
+                s.Col.Add(r0); s.Col.Add(r1); s.Col.Add(r2); s.Col.Add(r0); s.Col.Add(r2); s.Col.Add(r3);
                 break;
             }
             case FurnitureType.Projector:

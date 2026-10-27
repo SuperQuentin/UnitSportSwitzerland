@@ -24,7 +24,11 @@ at, not shipped.
   and wall lights (`Loudspeaker`, `WallSconce`). The porthole is a casing round real holes in the wall
   (`OpeningKind.Window` with `Other` set: an inner window; `Open` = the projection port, unglazed; the two
   viewing windows beside it, out past the projector's body (`PortCasingW`), get dark see-through glass, `InteriorNode.AddViewGlass`, as the interior's own
-  glass is opaque sky), at 1.3-1.7 m over an upstairs booth's floor; the seating's rise is capped so the
+  glass is opaque sky), at 1.3-1.7 m over an upstairs booth's floor. A floor-level booth's ports stay
+  high for the beam, so the booth gets a `BoothDeck` (`CinemaPlan.Deck`): the windows' middle at
+  `EyeHeight` over it, 2.05 m headroom kept, steps up from a landing at the door (`DeckRiser`,
+  `DeckTread`, `DeckLanding`, a collision ramp through the nosings), projectors and booth pieces lifted
+  onto it, stood on in the validator as a dais is; the seating's rise is capped so the
   back row's tread is 2 m under the lens (`ProjectorClear`, checked by `--cinemacheck`). The beam samples the picture along each view ray (`projector_beam.gdshader`) and the house lamps carry a
   wash of the slide's mean colour (`screen_glow`).
 - **Arcades**: a snack bar and game tables in what the islands leave. One whose name says billard,
