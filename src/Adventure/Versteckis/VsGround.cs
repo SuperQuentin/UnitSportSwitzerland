@@ -62,7 +62,7 @@ public sealed class VsGround
     public bool InBuilding(double e, double n)
     {
         foreach (var b in Buildings)
-            if (b.Contains(e, n)) return true;
+            if (b.Contains(e, n, -0.5f)) return true;   // half a metre in: a body against a wall is outside
         return false;
     }
 

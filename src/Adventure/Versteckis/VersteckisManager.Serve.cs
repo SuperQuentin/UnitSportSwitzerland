@@ -157,14 +157,15 @@ public partial class VersteckisManager
         if (s.Phase != VsPhase.Seek) return "Count to the end first.";
         var run = g.RunOf(peer);
         double now = Now;
-        if (now < run.TagReadyAt) return null;
         if (PositionOf(peer) is not { } me) return null;
-        if (!VsRules.Inside(s.E, s.N, s.Radius, me.E, me.N)) return "Outside the line you cannot tag.";
+        // a tag out of reach is refused whatever the cooldown (a forged one, or a client that drew a prop elsewhere)
         if (!VsRules.InReach(me.E, me.N, e, n))
         {
             GD.Print(FormattableString.Invariant($"[vs] {seeker!.Name}'s tag refused: {Math.Sqrt((e - me.E) * (e - me.E) + (n - me.N) * (n - me.N)):F1} m away"));
             return "Too far to tag.";
         }
+        if (now < run.TagReadyAt) return null;
+        if (!VsRules.Inside(s.E, s.N, s.Radius, me.E, me.N)) return "Outside the line you cannot tag.";
         // a hider's body first (nearest the point), then the decoys
         VsEntrant? hit = null;
         double best = double.MaxValue;
@@ -406,21 +407,24 @@ public partial class VersteckisManager
             if (!e.Hiding) continue;
             bool ok = true;
             string? fault = null;
-            if (run.Last is { } last && now - run.LastAt < 1.0)
+            // the speed over a second's window: positions arrive in bursts (the owner's sync, /speed), a step is no speed
+            if (run.Last is not { } last || now - run.LastAt > 3) { run.Last = at; run.LastAt = now; }
+            else if (now - run.LastAt >= 1.0)
             {
                 float cap = e.Disguised ? VsProps.Of(e.Prop).WalkCap : 6.5f;
-                bool sprinting = now < run.SprintUntil;
-                if (!VsRules.SpeedOk(last.E, last.N, at.E, at.N, now - run.LastAt, cap, sprinting)) { ok = false; fault = "speed"; }
+                bool sprinting = now < run.SprintUntil + 1.0;
+                if (!VsRules.SpeedOk(last.E, last.N, at.E, at.N, now - run.LastAt, cap, sprinting)) run.SpeedBadUntil = now + 1.0;
                 if (run.HoldSite >= 0 && s.Objectives[run.HoldSite].Carrier == e.Peer)
                     run.CarryMetres += Math.Sqrt((at.E - last.E) * (at.E - last.E) + (at.N - last.N) * (at.N - last.N));
+                run.Last = at;
+                run.LastAt = now;
             }
+            if (now < run.SpeedBadUntil) { ok = false; fault = "speed"; }
             if (!VsRules.Inside(s.E, s.N, s.Radius, at.E, at.N)) { ok = false; fault ??= "bounds"; }
             // inside a building: through a door (an interior is far under the world) or through a wall
             bool indoors = Interiors.InteriorManager.SurfacePoint(at) != at;
             if (indoors || g.Site?.InBuilding(at.E, at.N) == true) { ok = false; fault ??= "building"; }
             else if (!VsRules.GroundOk((float)at.Alt, g.Site?.GroundAt(at.E, at.N))) { ok = false; fault ??= "ground"; }
-            run.Last = at;
-            run.LastAt = now;
             if (ok)
             {
                 run.OutSince = -1;

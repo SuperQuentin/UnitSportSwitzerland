@@ -96,6 +96,8 @@ public partial class VersteckisManager
 
     private FootPlayer? Body(long peer)
     {
+        // our own body (offline it is not named after a peer)
+        if (peer == Me && LocalPlayer() is { } own) return _bodies[peer] = own;
         if (_bodies.TryGetValue(peer, out var b) && IsInstanceValid(b) && b.IsInsideTree()) return b;
         b = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(peer));
         if (b != null) _bodies[peer] = b;
@@ -535,6 +537,15 @@ public partial class VersteckisManager
             _holding = -1;
         }
     }
+
+    /// <summary>For probes: a tag at an LV95 point, as the Tag tool sends it (a forged far one too).</summary>
+    public void ProbeTag(double e, double n, float alt) => RpcId(1, MethodName.RequestTag, e, n, alt);
+
+    /// <summary>For the offline check (<c>--versteckischeck</c>): lent the round as the server's <c>Enter</c> would.</summary>
+    public void ProbeEnter() => Enter(0);
+
+    /// <summary>For the offline check: released as the server's <c>Release</c> would.</summary>
+    public void ProbeRelease() => Release();
 
     /// <summary>For probes: a hold started at a site without the key.</summary>
     public void ProbeHold(int site)

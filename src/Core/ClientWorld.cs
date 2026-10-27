@@ -1117,6 +1117,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         versteckis.Source = () => _chunks?.Source;
         versteckis.GroundAt = p => _chunks != null && _chunks.TryGetSurface(p, out float h) ? h : null;
         AddChild(versteckis);
+        if (Adventure.Versteckis.VersteckisCheck.Requested && _items != null) AddChild(new Adventure.Versteckis.VersteckisCheck(_items, () => LocalPlayer));
+        if (Adventure.Versteckis.VersteckisNetProbe.Role != null && _items != null) AddChild(new Adventure.Versteckis.VersteckisNetProbe(_items));
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
         {

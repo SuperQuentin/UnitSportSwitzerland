@@ -65,6 +65,7 @@ public partial class VersteckisManager : Node
     {
         public GlobalPos? Last;
         public double LastAt;
+        public double SpeedBadUntil;
         public double OutSince = -1;
         public double HoldFrom = -1;
         public int HoldSite = -1;
@@ -122,6 +123,9 @@ public partial class VersteckisManager : Node
         if (Server == null && Instance == null) FootPlayer.PropWalk = null;
         ClientExit();
     }
+
+    /// <summary>Players a game without bots needs to start: four, or <c>--vsmin n</c> on the server (the two-client check).</summary>
+    private static readonly int MinNoBots = CmdArgs.Int("--vsmin") is int m && m >= VsRules.MinPlayers ? m : VsRules.MinPlayersNoBots;
 
     /// <summary>Game time: <see cref="ClockSync.SimNow"/>, so <c>/speed</c> and <c>--checkspeed</c> pace a game.</summary>
     private static double Now => ClockSync.SimNow;
@@ -392,8 +396,8 @@ public partial class VersteckisManager : Node
         if (g.S.Phase != VsPhase.Lobby) return "It has started.";
         if (g.Site == null) return "The village is still being read; a moment.";
         int humans = g.S.Humans;
-        if (g.S.Bots > 0 ? humans + Math.Max(0, g.S.Bots - humans) < VsRules.MinPlayers : humans < VsRules.MinPlayersNoBots)
-            return g.S.Bots > 0 ? $"At least {VsRules.MinPlayers} players." : $"At least {VsRules.MinPlayersNoBots} players without bots.";
+        if (g.S.Bots > 0 ? humans + Math.Max(0, g.S.Bots - humans) < VsRules.MinPlayers : humans < MinNoBots)
+            return g.S.Bots > 0 ? $"At least {VsRules.MinPlayers} players." : $"At least {MinNoBots} players without bots.";
         Gather(g);
         return "Starting.";
     }

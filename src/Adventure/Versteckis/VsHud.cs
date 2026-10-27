@@ -248,7 +248,7 @@ public partial class VsHud : CanvasLayer
             double miss = _vs.MissedAt + VsRules.MissCooldown - GameClock.Now;
             return InputHints.Format("{use_item} Tag") + (miss > 0 ? $" (in {miss:F0} s)" : "") + $" · Sniff {e.Sniffs}/{VsRules.SniffCharges}";
         }
-        string prop = e.Disguised ? VsProps.Of(e.Prop).Name : e.Holding >= 0 ? "yourself (holding)" : e.DisguiseBackAt > 0 ? "yourself for a moment" : VsProps.Of(e.Prop).Name;
+        string prop = e.Holding >= 0 ? "yourself (holding)" : e.DisguiseBackAt > 0 ? "yourself for a moment" : VsProps.A(e.Prop);
         double sprint = e.SprintReadyAt - now, change = e.ChangeReadyAt - now;
         return $"You are {prop}" + (s.Phase == VsPhase.Seek && change > 0 ? $" (change in {change:F0} s)" : "")
             + (e.DecoyUsed ? " · Decoy used" : " · Decoy ready")

@@ -2444,13 +2444,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera); not in VR (#920)
         float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f && !XR.XrSession.Active ? 1f : 0f);
-        // a prop (#1268) is seen from behind on a desktop; VR stays first person (comfort)
-        if (want == 0f && !XR.XrSession.Active && PropWalk?.Invoke(this) != null) want = 1f;
+        // a prop (#1268) is seen from behind, from the ordinary third-person camera, on a desktop; VR stays first person (comfort)
+        bool prop = !XR.XrSession.Active && PropWalk?.Invoke(this) != null;
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
         if (want == 0f && _throwBlend < 0.01f) _throwBlend = 0f;
-        if (!_thirdPerson && want > 0f)
+        if (!_thirdPerson && (want > 0f || prop))
         {
             _borrowedThird = true;
             _thirdPerson = true;
@@ -2458,7 +2458,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _armBlend = 1f;
             RefreshVisual(force: true);
         }
-        else if (_borrowedThird && want == 0f && _throwBlend == 0f)
+        else if (_borrowedThird && want == 0f && _throwBlend == 0f && !prop)
         {
             _borrowedThird = false;
             _thirdPerson = false;

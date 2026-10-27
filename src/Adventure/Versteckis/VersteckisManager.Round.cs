@@ -281,6 +281,6 @@ public partial class VersteckisManager
             _chat?.Tell(e.Peer, $"Versteckis: {e.Played} rounds, {e.Score} points" + (francs > 0 ? $", CHF {francs} to your account" : ", no francs (five paid games a day)")
                 + (titles.Count > 0 ? $". Title: {string.Join(", ", titles)}" : "") + (items.Count > 0 ? $". Earned: {string.Join(", ", items.Select(i => Items.ItemDefs.Get(i)?.Name ?? i.ToString()))}" : "") + ".",
                 ChatKind.System);
-        GD.Print(FormattableString.Invariant($"[vs] paid {e.Name} {francs} CHF ({e.Played} rounds, {e.Score} points, top {top}, progress {(progress != null ? "saved" : "session")})"));
+        GD.Print(FormattableString.Invariant($"[vs] paid {e.Name} {francs} CHF, base {francs - (top && francs > 0 ? VsRules.PayTop : 0)} ({e.Played} rounds, {e.Score} points, top {top}, progress {(progress != null ? "saved" : "session")})"));
     }
 }
