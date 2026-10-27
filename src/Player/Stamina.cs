@@ -31,6 +31,18 @@ public enum StaminaBuff : byte
     Warm = 1,
     /// <summary>Fondue: +<see cref="Stamina.FedBonus"/> to the max, full at once.</summary>
     Fed = 2,
+    /// <summary>Kirsch in the shared pot (#1266): regen x<see cref="Stamina.HeartyFactor"/>.</summary>
+    Hearty = 3,
+}
+
+/// <summary>Who the body is with, for the regen (#1266 part 3.3): set by the owner from its link and the partner's pose.</summary>
+public enum StaminaCompany
+{
+    None,
+    /// <summary>Holding hands or roped: regen x<see cref="Stamina.CompanyFactor"/> on the floor or seated.</summary>
+    Linked,
+    /// <summary>Climbing, holding still, roped to a partner who stands or holds still: the rope takes the weight.</summary>
+    Belayed,
 }
 
 /// <summary>Where the body is resting, for the regen rate.</summary>
@@ -76,6 +88,12 @@ public struct Stamina
 
     /// <summary>Regen per second by where the body rests.</summary>
     public const float RegenFloor = 25f, RegenSeated = 35f, RegenRiding = 15f, RegenPerched = 25f;
+    /// <summary>Regen per second hanging in the rope, belayed (#1266): holding still on a face costs nothing then.</summary>
+    public const float RegenBelayed = 6f;
+    /// <summary>Linked on the floor or seated (#1266): regen this much faster.</summary>
+    public const float CompanyFactor = 1.2f;
+    /// <summary>The kirsch's <see cref="StaminaBuff.Hearty"/> (#1266): regen this much faster.</summary>
+    public const float HeartyFactor = 1.25f;
 
     /// <summary>Points per second of a rate (at a full stick).</summary>
     public static float Rate(StaminaKind kind) => kind switch
@@ -108,7 +126,9 @@ public struct Stamina
     public bool Infinite;
 
     private float _sinceSpend;
-    private float _warm, _fed;
+    private float _warm, _fed, _hearty;
+    /// <summary>Who the body was with at the last <see cref="Step"/> (a belay makes holding still free).</summary>
+    public StaminaCompany Company;
 
     /// <summary>A full meter with <paramref name="steps"/> upgrades.</summary>
     public static Stamina Full(int steps = 0)
@@ -132,6 +152,7 @@ public struct Stamina
     {
         StaminaBuff.Warm => _warm,
         StaminaBuff.Fed => _fed,
+        StaminaBuff.Hearty => _hearty,
         _ => 0f,
     };
 
@@ -155,6 +176,8 @@ public struct Stamina
     public bool Spend(StaminaKind kind, float dt, float scale = 1f, bool loose = false)
     {
         if (Infinite) return true;
+        // belayed (#1266): the rope holds the body still on the face, for nothing
+        if (kind == StaminaKind.ClimbHold && Company == StaminaCompany.Belayed) return true;
         if (Winded || Points <= 0f) return false;
         float cost = Rate(kind) * Factor(kind, loose) * Math.Max(0f, scale) * dt;
         if (cost <= 0f) return true;
@@ -188,9 +211,11 @@ public struct Stamina
     /// One step: buffs run down, and after <see cref="RegenDelay"/> without a spend the meter refills
     /// at the rate of <paramref name="rest"/>. Winded ends at <see cref="WindedUntil"/> of the max.
     /// </summary>
-    public void Step(float dt, StaminaRest rest)
+    public void Step(float dt, StaminaRest rest, StaminaCompany company = StaminaCompany.None)
     {
+        Company = company;
         if (_warm > 0f) _warm = Math.Max(0f, _warm - dt);
+        if (_hearty > 0f) _hearty = Math.Max(0f, _hearty - dt);
         if (_fed > 0f)
         {
             _fed = Math.Max(0f, _fed - dt);
@@ -205,7 +230,8 @@ public struct Stamina
         _sinceSpend += dt;
         if (_sinceSpend >= RegenDelay)
         {
-            float rate = RegenRate(rest);
+            float rate = RegenRate(rest, company);
+            if (_hearty > 0f) rate *= HeartyFactor;
             if (rate > 0f) Points = Math.Min(Max, Points + rate * dt);
         }
         if (Winded && Points >= Max * WindedUntil) Winded = false;
@@ -219,6 +245,14 @@ public struct Stamina
         StaminaRest.Riding => RegenRiding,
         StaminaRest.Perched => RegenPerched,
         _ => 0f,
+    };
+
+    /// <summary>Regen per second resting so, in that company (#1266): linked on the floor or seated faster, belayed on a face 6 /s.</summary>
+    public static float RegenRate(StaminaRest rest, StaminaCompany company) => company switch
+    {
+        StaminaCompany.Linked when rest is StaminaRest.Floor or StaminaRest.Seated => RegenRate(rest) * CompanyFactor,
+        StaminaCompany.Belayed when rest == StaminaRest.None => RegenBelayed,
+        _ => RegenRate(rest),
     };
 
     /// <summary>Food: points back at once (clamped to the max). Returns the points actually added.</summary>
@@ -246,6 +280,9 @@ public struct Stamina
                 _fed = Math.Max(0f, seconds);
                 Points = Max;
                 Winded = false;
+                break;
+            case StaminaBuff.Hearty:
+                _hearty = Math.Max(0f, seconds);
                 break;
         }
     }
