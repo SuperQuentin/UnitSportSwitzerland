@@ -12,7 +12,7 @@
   | folded: pick / run | ← → or the wheel / Enter, Space, click | D-pad, stick / A | swipe the fingertip across the cover / tap it, or point the right hand's ray and pull its trigger |
   | open | Up | D-pad ↑ | the free hand swings the front half open by its loose edge; X (fold again: X) |
   | back / put away | Esc (open: back, then fold), ↓ folded | B | B, or a swipe right; let go at the pocket (anywhere else it flies home) |
-  | camera app: shoot / selfie / zoom | click, Enter / F / wheel | RT / Y / LB RB | the holding hand's trigger / turn the phone's back to your face / the right trigger with its ray off the phone (1×, 2×, 5×, round) |
+  | camera app: shoot / selfie / zoom | click, Enter / F / wheel | RT / Y / LB RB | the holding hand's trigger / turn the phone's back to your face / the zoom chips on the glass (1×, 2×, 5×) |
   | travel / answer a call | automatic / cover › Answer | same | raise the phone to your eyes (a blink after 3 s) / to your ear |
 
   No pad button is free on foot (D-pad ↑ is the emote wheel), so the pad takes it out from the quick
@@ -28,8 +28,8 @@
   within 10 cm of an ear answers. Let go away from the pocket it hangs 0.5 s and flies home. The
   inner screen is laid out for 640 units (3 × 2 home tiles). No camera moves in VR (#186: `PhoneLook`
   must not raise the throw view there). Away from the glass, the right hand's aim ray (the menus'
-  faint beam, the screen's ring as its reticle) with its trigger is the pointer; off the phone, in
-  the camera app, that trigger steps the zoom (items are off while the phone is out, so it is free). Check: `--phonevrcheck --xrsim --world fixture` (scripted
+  faint beam, the screen's ring as its reticle) with its trigger is the pointer; off the phone it does nothing
+  (since #1253 the camera zoom is the chips). Check: `--phonevrcheck --xrsim --world fixture` (scripted
   hands: `XrPhone.Sim*`, a ringing call: `PhoneController.SimCall`).
 - **Wire**: one byte, `FootPlayer.PhoneState` (0 pocket, 1 folded, 2 open), on change, in
   `OnChangeProperties` and the movie recorder (`ActorIo`, index 23). Every peer derives the arm pose
@@ -201,3 +201,20 @@
   (`XrPhone.EyesReach` / `EyesFacing`, was 14 cm), else the blink comes after 1.5 s (`VrRaiseSeconds`, was 3 s).
 - **Check**: `--phonecheck` counts the Map's rows; `--phonevrcheck` raises the phone for a travel under 1.4 s and
   holds it at the hip (`BeforeEyes(low:)`) for the blink. Recents are not saved between sessions.
+
+## Camera, touch, stage 5 (#1253)
+
+- **Camera app buttons**: zoom chips 1x 2x 5x with the current lens lit (`PhoneScreens.SetZoom`, gold chip), a focusable
+  shutter and Selfie button. In VR the zoom is the chips only: a right trigger pulled off the phone no longer steps it
+  (`VrZoom` is gone). The selfie key (F, Tab, right click, pad Y) lives in `CameraInput`, so it means nothing on any other
+  page (right click is Back there).
+- **Photos**: Left / Right and LB / RB are previous / next in the viewer (Down / Up reach its two wallpaper buttons;
+  `PhoneScreens.StepPhoto`, `‹ ›` buttons and a "n / m" caption); LB / RB page the grid by a screenful of rows
+  (`PageGrid`). A sideways swipe in the viewer is previous / next (mouse, finger, VR fingertip), never Back (`Swiped`).
+- **Touch** (`Platform.IsTouch`, also `--mobile`): see `core/touch-controls` (millimetre slop and swipes, the square-on
+  enlarged screen, camera taps). Mouse thresholds now scale with the window's height (2 % slop, 5.7 % swipe).
+- **Not done**: pad A shoots when standing still (needs a definition of "still"), VR face-button handedness, the on-screen
+  keyboard, tapping the glass of a *raised* phone from a real device (only the emulated mouse is checked).
+- **Check**: `--phonecheck` (chips, Selfie button, F / Tab off the camera, finger tap / swipe thresholds; windowed also the
+  photo pager and LB / RB), also run with `--mobile` (touch layout; windowed screenshots `test_output/phone_*_screen.png`);
+  `--phonevrcheck` (stray trigger does not zoom, fingertip on the chips); `TouchLayoutTests`.

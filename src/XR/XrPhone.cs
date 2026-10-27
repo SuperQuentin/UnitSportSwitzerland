@@ -291,7 +291,6 @@ internal sealed class XrPhone
             // a press that slides off the screen lets go
             _rayDown = false;
             phone.VrPointer(null, cover, false);
-            if (pull && phone.CameraApp) phone.VrZoom();
             return;
         }
         bool down = _rayDown ? pulled : pull;
