@@ -42,12 +42,12 @@ public partial class ProjectionPerfProbe : Node3D
             Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
         AddChild(node);
         InteriorNode.ShowSlide(0);
-        node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), screen: true);
+        node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), screen: true, real: false);
 
         var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
         var target = new Vector3(screen.X, layout.FloorY(screen.Floor) + 2.6f, screen.Z);
         // the shaded screen the projector lights, a hand in front of the pasted picture
-        var shader = GD.Load<Shader>("res://shaders/projection_poc.gdshader");
+        var shader = GD.Load<Shader>("res://shaders/projection_screen.gdshader");
         var lit = new ShaderMaterial { Shader = shader };
         AddChild(new MeshInstance3D { Mesh = new QuadMesh { Size = new Vector2(screen.W - 3f, (screen.W - 3f) / 2.39f) }, MaterialOverride = lit, Position = target + new Vector3(0, 0, 0.6f) });
 

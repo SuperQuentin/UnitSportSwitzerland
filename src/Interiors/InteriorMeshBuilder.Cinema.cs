@@ -145,11 +145,18 @@ public static partial class InteriorMeshBuilder
                 B(-w, H * 0.35f, -d + 0.03f - sink, w, H * 0.75f, d, Lit(1.0f, 0.74f, 0.42f));
                 break;
             case FurnitureType.Porthole:
-                // the projection port and the viewing port beside it, lit from the booth behind
-                B(-w, 0, -d, w, H, d, dark);
-                B(-w + 0.08f, 0.08f, d - sink, -0.05f, H - 0.08f, d + sink, Lit(0.55f, 0.62f, 0.75f));
-                B(0.1f, 0.12f, d - sink, w - 0.1f, H - 0.15f, d + sink, Lit(0.30f, 0.30f, 0.38f));
+            {
+                // the casing round the real holes in the wall (#1250, InteriorGenerator.PortHalf): a dark frame,
+                // its openings a hair inside the wall's, so its sides never lie on the wall's reveals
+                const float ph = InteriorGenerator.PortHalf, vi = InteriorGenerator.ViewIn, vo = InteriorGenerator.ViewOut;
+                float foot = InteriorGenerator.PortFoot + sink, head = InteriorGenerator.PortHead - sink;
+                B(-w, 0, -d, w, foot, d, dark);
+                B(-w, head, -d, w, H, d, dark);
+                // the uprights sunk into the rails and set back from their faces: no two faces in one plane
+                foreach (var (x0, x1) in new[] { (-w + sink, -vo + sink), (-vi - sink, -ph + sink), (ph - sink, vi + sink), (vo - sink, w - sink) })
+                    B(x0, foot - sink, -d + sink, x1, head + sink, d - sink, dark);
                 break;
+            }
             case FurnitureType.BoxOffice:
             {
                 // the back wall cabinet, a gap for the cashier, the counter with its glass and its screen
@@ -247,12 +254,14 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.Projector:
             {
-                // the pedestal, the digital projector on it, its lens to the porthole (+Z)
-                B(-0.3f, 0, -0.4f, 0.3f, 0.9f, 0.4f, dark);
-                B(-w, 0.9f - sink, -d, w, 1.45f, d - 0.15f, C(0.20f, 0.20f, 0.22f));
-                B(-0.12f, 1.05f, d - 0.165f, 0.12f, 1.29f, d, dark);
-                B(-0.09f, 1.08f, d - sink, 0.09f, 1.26f, d + sink, Lit(0.70f, 0.80f, 1.00f));
-                B(w - 0.2f, 1.45f - sink, -d + 0.1f, w - 0.05f, 1.5f, -d + 0.3f, Lit(0.20f, 0.90f, 0.30f));
+                // the pedestal, the digital projector on it, its lens to the porthole (+Z), its middle
+                // InteriorGenerator.ProjectorLensDrop under the piece's height: the pedestal is as tall as the port asks
+                float t = H - InteriorGenerator.ProjectorLensDrop - 0.27f;
+                B(-0.3f, 0, -0.4f, 0.3f, t, 0.4f, dark);
+                B(-w, t - sink, -d, w, t + 0.55f, d - 0.15f, C(0.20f, 0.20f, 0.22f));
+                B(-0.12f, t + 0.15f, d - 0.165f, 0.12f, t + 0.39f, d, dark);
+                B(-0.09f, t + 0.18f, d - sink, 0.09f, t + 0.36f, d + sink, Lit(0.70f, 0.80f, 1.00f));
+                B(w - 0.2f, t + 0.55f - sink, -d + 0.1f, w - 0.05f, t + 0.6f, -d + 0.3f, Lit(0.20f, 0.90f, 0.30f));
                 break;
             }
             case FurnitureType.ServerRack:

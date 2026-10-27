@@ -21,8 +21,11 @@ at, not shipped.
   every other cell (`InteriorGenerator.Fill`: high tables, sofas, two pairs of standees, tables); the
   screen shows six CC0 cat photos (`assets/cinema/`, `ASSETS.md`), one every 8 s on the shared clock
   (`CinemaBooths`, `InteriorNode.SlideAt`); the hall has its screen speaker stacks, surround speakers
-  and wall lights (`Loudspeaker`, `WallSconce`); the booth has its own face of each porthole; the
-  beam samples the picture along each view ray (`projector_beam.gdshader`) and the house lamps carry a
+  and wall lights (`Loudspeaker`, `WallSconce`). The porthole is a casing round real holes in the wall
+  (`OpeningKind.Window` with `Other` set: an inner window; `Open` = the projection port, unglazed; the two
+  viewing windows beside it get dark see-through glass, `InteriorNode.AddViewGlass`, as the interior's own
+  glass is opaque sky), at 1.3-1.7 m over an upstairs booth's floor; the seating's rise is capped so the
+  back row's tread is 2 m under the lens (`ProjectorClear`, checked by `--cinemacheck`). The beam samples the picture along each view ray (`projector_beam.gdshader`) and the house lamps carry a
   wash of the slide's mean colour (`screen_glow`).
 - **Arcades**: a snack bar and game tables in what the islands leave. One whose name says billard,
   billiard, snooker or pool is a `BilliardHall` (Bluff Billard is tagged an amusement arcade): at most
@@ -35,6 +38,12 @@ at, not shipped.
   walker's height within 50 m, so a camera high over an auditorium's back rows or on a booth upstairs
   works. `--venuecheck --chunks <dir> --venuedoors <name>` prints every room with its furniture and
   writes the plan to `test_output/venues/<tile>_<index>.svg`.
-- **Projection POC** (`CinemaProjectionPoc`, model viewer `Interiors / Cinema projection (POC)`): the
-  picture as a shadowed spot light's projector texture, so a figure in the beam wears it and shadows
-  the screen. `--projectionperf` (windowed) measures its cost in the Town cinema. Not in the game.
+- **Real projection** (`InteriorNode.RealProjection`: High detail, desktop, no headset): in the hall the
+  camera is in (`ProjectFor`, from `CinemaBooths`), a shadowed spot light 0.5 m out of the port carries the
+  letterboxed slide as its projector texture onto a lit white screen (`projection_screen.gdshader`), so a
+  player in the beam wears the picture and shadows the screen; the other halls keep the pasted picture.
+  Its range is 3x the throw: a spot fades out over the end of its range (70 % dimmer at range = throw + 4).
+  Below High, in VR and on phones: the pasted picture and a plain beam of the slide's mean colour
+  (`PlainBeam`, no march). `--cinemaprojection real|plain` forces one (the Town cinema showcase adds a
+  walker in real mode). About 0.23 ms GPU (`--projectionperf`, windowed); the POC stays in the model
+  viewer (`Interiors / Cinema projection (POC)`).

@@ -366,7 +366,9 @@ public static partial class InteriorMeshBuilder
             // deeper for an exterior opening so it reads as a real wall's thickness
             // (a doorway's reveal runs a hair past that line, into the neighbour's, so the two meet
             // without a crack)
-            float depth = o.Kind is OpeningKind.Door or OpeningKind.Arch ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
+            // (an inner window, a cinema's ports: to the shared line too, its glass a node of its own, InteriorNode)
+            bool shared = o.Kind is OpeningKind.Door or OpeningKind.Arch || o.Kind == OpeningKind.Window && o.Other >= 0;
+            float depth = shared ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
             var reveal = col * 0.9f;
             reveal.A = 1;
             Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
@@ -381,7 +383,7 @@ public static partial class InteriorMeshBuilder
                 // threshold: floors stop at the wall face, so the doorway needs its own
                 s.Quad(R(s0, y0, 0), R(s0, y0, depth), R(s1, y0, depth), R(s1, y0, 0), Palette(r.Type).Floor);
 
-            if (o.Kind == OpeningKind.Window)
+            if (o.Kind == OpeningKind.Window && o.Other < 0)
             {
                 s.Quad(R(s0, ob, depth), R(s1, ob, depth), R(s1, ot, depth), R(s0, ot, depth), Glass);
                 // a mullion and a transom, so it reads as a window and not a hole

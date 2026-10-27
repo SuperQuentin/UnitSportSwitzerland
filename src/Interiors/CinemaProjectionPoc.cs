@@ -6,7 +6,7 @@ namespace UnitSport.Interiors;
 /// A proof of concept (#1250), in the model viewer only: the picture thrown by a light instead of pasted
 /// on the screen. A spot light at the porthole carries the slide as its projector texture (letterboxed to
 /// a square, the cone's frame, so 2.39:1 stays 2.39:1) and casts shadows; the screen, the room and a
-/// figure walking across the beam are shaded by it alone (<c>shaders/projection_poc.gdshader</c>). The
+/// figure walking across the beam are shaded by it alone (<c>shaders/projection_screen.gdshader</c>). The
 /// figure wears the picture and leaves its shadow on the screen, as Source games do. Cost: one shadowed
 /// spot light per screen showing (a shadow map pass over what it sees), against today's one unshaded quad;
 /// the game's cinemas keep the quad until that is weighed.
@@ -20,7 +20,7 @@ public static class CinemaProjectionPoc
     {
         var root = new Node3D { Name = "ProjectionPoc" };
         float screenH = ScreenW / 2.39f, mid = 0.9f + screenH / 2;
-        var shader = GD.Load<Shader>("res://shaders/projection_poc.gdshader");
+        var shader = GD.Load<Shader>("res://shaders/projection_screen.gdshader");
         ShaderMaterial Mat(Color c) { var m = new ShaderMaterial { Shader = shader }; m.SetShaderParameter("albedo", c); return m; }
 
         // the screen, the floor, the side walls: a box of a room, open toward the viewer

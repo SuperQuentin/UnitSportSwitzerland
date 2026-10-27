@@ -62,6 +62,13 @@ public sealed class OpeningPlan
     public OpeningKind Kind { get; set; }
     /// <summary>Index of the room on the other side, −1 for the outside.</summary>
     public int Other { get; set; } = -1;
+    /// <summary>
+    /// A window between two rooms left unglazed: a cinema's projection port (#1250). An inner window
+    /// (<see cref="Other"/> ≥ 0) without it is glazed dark, see-through (the booth's viewing windows).
+    /// Left out of the JSON when false.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Open { get; set; }
 }
 
 public sealed class RoomPlan

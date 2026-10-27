@@ -1,5 +1,6 @@
-// The cinema projection POC (#1250, Interiors/CinemaProjectionPoc): a surface lit only by the projector,
-// a spot light whose projector texture is the picture. No ambient, no sun: what the beam does not reach
+// A cinema screen lit by its projector (#1250, InteriorNode.Cinema at High detail; first the POC,
+// Interiors/CinemaProjectionPoc): a surface lit only by positional lights, the projector a spot light whose
+// projector texture is the picture. No ambient, no sun: what the beam does not reach
 // stays dark, so a figure in it wears the picture and leaves its shadow on the screen.
 shader_type spatial;
 render_mode ambient_light_disabled, specular_disabled;

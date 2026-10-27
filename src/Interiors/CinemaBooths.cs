@@ -19,7 +19,8 @@ namespace UnitSport.Interiors;
 /// <para>
 /// Client: what is applied goes on the cinema the player is in, on change only: the interior material's
 /// <c>house_lights</c> (tint-2 lamps, <see cref="RoomLights.Tint"/>), the cat slides on every screen and the
-/// projector's beam to it (built hidden with the interior: <see cref="InteriorNode"/>'s screens).
+/// projector's beam to it (built hidden with the interior: <see cref="InteriorNode"/>'s screens); at High
+/// detail the picture thrown by a light in the hall the camera is in (<see cref="InteriorNode.RealProjection"/>).
 /// </para>
 /// </summary>
 public partial class CinemaBooths : Node
@@ -45,6 +46,7 @@ public partial class CinemaBooths : Node
     private int _applied = -1;
     private InteriorNode? _appliedNode;
     private int _slide = -1;
+    private bool _real;
 
     public static CinemaBooths Create(Node world)
     {
@@ -167,11 +169,17 @@ public partial class CinemaBooths : Node
                 if (node == _appliedNode) node.ShowGlow(true);
             }
         }
-        if (node == _appliedNode && code == _applied && node.Layout.Key == _appliedPlan) return;
-        _appliedNode = node;
-        _applied = code;
-        _appliedPlan = node.Layout.Key;
-        var (lights, screen) = Unpack(code);
-        node.ShowCinema(Level(lights), screen);
+        // High detail throws the picture with a light in the hall the camera is in (InteriorNode's screens)
+        bool real = InteriorNode.RealProjection;
+        if (node != _appliedNode || code != _applied || node.Layout.Key != _appliedPlan || real != _real)
+        {
+            _appliedNode = node;
+            _applied = code;
+            _appliedPlan = node.Layout.Key;
+            _real = real;
+            var (lights, screen) = Unpack(code);
+            node.ShowCinema(Level(lights), screen, real);
+        }
+        if (real && GetViewport().GetCamera3D() is { } cam) node.ProjectFor(node.ToLocal(cam.GlobalPosition));
     }
 }
