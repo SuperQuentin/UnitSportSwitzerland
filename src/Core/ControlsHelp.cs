@@ -66,7 +66,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
-            new("Phone: take it out, again to open it; out, WASD and the mouse work it (click, swipe), Enter selects, S / Esc puts it away", PlayerInput.Phone, Pad: "{quick_menu} (hold) › Phone"),
+            new("Phone: take it out, again to open it; out, WASD and the mouse work it (click, swipe), Enter selects, Esc / Backspace / right click goes back, hold Esc puts it away", PlayerInput.Phone, Pad: "{quick_menu} (hold) › Phone"),
             new("Accept the invite on screen", PlayerInput.QuickMenu, Keys: "{quick_menu} (tap)", Pad: "{menu}, then A"),
             new("Decline the invite on screen", PlayerInput.InviteDecline, Pad: "{quick_menu} (hold) › Invites"),
         }),

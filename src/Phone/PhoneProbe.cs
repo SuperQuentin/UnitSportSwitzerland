@@ -115,6 +115,23 @@ public partial class PhoneProbe : Node
         Check(phone.Screens.Shown == PhoneScreens.Page.Activities, "the Activities app opens on the phone");
         Shot("phone_5c_activities.png");
         await Key(Godot.Key.Escape, 0.4);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Esc goes back from an app to home (#1253)");
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        await Key(Godot.Key.Backspace, 0.4);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Backspace goes back too (#1253)");
+        phone.Open(PhoneScreens.Page.Training);
+        await Wait(0.4);
+        await Key(Godot.Key.Escape, 0.4);
+        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc from Training goes up one level, it does not fold the phone (#1253)");
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        await Hold(Godot.Key.Escape, PhoneController.StowHoldSeconds + 0.6);
+        for (int i = 0; i < 30 && phone.IsOut; i++) await Wait(0.1);
+        Check(!phone.IsOut, "holding Esc puts the phone away from any page (#1253)");
+        await Press(PlayerInput.Phone, 1.0);
+        phone.Open(PhoneScreens.Page.Home);
+        await Wait(0.6);
 
         // the map: closer first, then the world fades to black behind the phone
         phone.Open(PhoneScreens.Page.Map);

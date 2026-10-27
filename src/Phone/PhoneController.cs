@@ -146,6 +146,7 @@ public partial class PhoneController : Node
     public override void _Ready()
     {
         AddChild(_screens);
+        _screens.BackPressed += () => { if (_stage is Stage.Open) Back(); };
         _screens.TravelPicked += place => Travel(place.E, place.N, place.Name);
         _screens.CommandPicked += cmd =>
         {
@@ -221,8 +222,8 @@ public partial class PhoneController : Node
             SetSelfie(false);
             return;
         }
-        if (_screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Contacts or PhoneScreens.Page.Camera or PhoneScreens.Page.Activities
-            or PhoneScreens.Page.Photos)
+        // any page but Home and Travel goes up one level, so a new app can never fold the phone by accident
+        if (_screens.Shown is not (PhoneScreens.Page.Home or PhoneScreens.Page.Travel))
         {
             _screens.ShowPage(PhoneScreens.Page.Home);
             Play(PhoneSounds.Tap);
@@ -230,6 +231,21 @@ public partial class PhoneController : Node
         }
         if (_screens.Shown == PhoneScreens.Page.Travel) return;   // travelling: it folds by itself once there
         Fold();
+    }
+
+    /// <summary>Seconds Esc / B is held to put the phone away from any page (a tap is one step back).</summary>
+    public const float StowHoldSeconds = 0.4f;
+    private float _backHeld;
+
+    /// <summary>Esc or the pad's B held for <see cref="StowHoldSeconds"/> puts the phone away from wherever it is (#1253).</summary>
+    private void HoldBackToStow(float dt)
+    {
+        bool held = _stage is Stage.Folded or Stage.Open && !_blocked() && !XR.XrSession.Active && _screens.Inner.GuiGetFocusOwner() is not LineEdit
+            && _screens.Shown != PhoneScreens.Page.Travel && (Input.IsActionPressed("ui_cancel") || Input.IsActionPressed(PlayerInput.Menu));
+        _backHeld = held ? _backHeld + dt : 0f;
+        if (_backHeld < StowHoldSeconds) return;
+        _backHeld = 0f;
+        PutAway();
     }
 
     /// <summary>Folds the open phone back to its cover screen.</summary>
@@ -322,6 +338,7 @@ public partial class PhoneController : Node
             if (_invites != null) _invites.Arrived += OnCall;
         }
         var p = _player();
+        HoldBackToStow(dt);
         if (_stage != Stage.Pocket && (p == null || !CanUse(out _) && !_blocked()))
         {
             if (p != null) Release(p);
@@ -778,7 +795,7 @@ public partial class PhoneController : Node
     private void OpenKey(InputEvent e)
     {
         bool typing = _screens.Inner.GuiGetFocusOwner() is LineEdit;
-        if (e.IsPressed() && !e.IsEcho() && (e.IsActionPressed("ui_cancel") || e is InputEventKey { PhysicalKeycode: Key.Escape }))
+        if (e.IsPressed() && !e.IsEcho() && (e.IsActionPressed("ui_cancel") || e is InputEventKey { PhysicalKeycode: Key.Escape or Key.Backspace } && !typing))
         {
             Back();
             return;
@@ -957,6 +974,14 @@ public partial class PhoneController : Node
         _cursorUv = p.PhoneScreenPoint(m.Position, out _cursorOnCover);
         _keysLead = false;
         bool inner = _stage == Stage.Open && !_cursorOnCover;
+
+        // right click is Back, whatever the cursor is over (the camera app keeps it for the selfie)
+        if (m is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
+        {
+            if (_stage == Stage.Open) Back();
+            else if (_stage == Stage.Folded) PutAway();
+            return;
+        }
 
         if (m is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel)
         {

@@ -158,3 +158,16 @@
   otherwise), the same height of view: the saved photo is exactly the preview (`--phonecheck` checks the
   selfie's shape).
 
+
+## Five verbs, stage 1 (#1253, plan `docs/plans/phone-redesign.md`)
+
+- **Back is generic**: `PhoneController.Back` sends any page but Home and Travel up one level (Photo to Photos,
+  the rest to Home); only Home folds. A new app can never fold the phone by accident.
+- **Back is visible and has more ways in**: every app page has a `‹` chevron (`PhoneScreens.BackChevron`,
+  pointer-only, `BackPressed`); Backspace and a right click also go back (the camera app keeps the right click
+  for the selfie).
+- **Put away from any page**: hold Esc / the pad's B for `StowHoldSeconds` (0.4 s); a tap is still one step back.
+  The page hints say so. Not while a text box has the keys, in VR (its own buttons) or on Travel.
+- **Not yet** (later stages in the plan): the Phone key as a toggle and the pad's D-pad Up hold, the touch Phone
+  button, the persistent hint bar built from the focused control, Travel's Cancel.
+- **Check**: `--phonecheck` asserts Esc and Backspace go back, Training does not fold the phone, and a held Esc puts it away.

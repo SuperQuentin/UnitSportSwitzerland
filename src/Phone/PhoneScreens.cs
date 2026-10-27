@@ -60,6 +60,8 @@ public partial class PhoneScreens : Node
     public event Action<string, bool>? WallpaperPicked;
     /// <summary>A page changed (the controller hands the mouse over for the camera).</summary>
     public event Action<Page>? PageShown;
+    /// <summary>The back chevron on an app's page was pressed (the controller goes up one level).</summary>
+    public event Action? BackPressed;
 
     private readonly Func<PlaceSearchUi?> _places;
     private readonly Func<ChatManager?> _chat;
@@ -822,6 +824,9 @@ public partial class PhoneScreens : Node
     private Control BuildPhoto()
     {
         var col = UiKit.VBox(10);
+        var top = UiKit.HBox(16);
+        top.AddChild(BackChevron());
+        col.AddChild(top);
         _photoView = new TextureRect
         {
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
@@ -861,6 +866,10 @@ public partial class PhoneScreens : Node
         };
         finder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         page.AddChild(finder);
+
+        var back = BackChevron();
+        back.Position = new Vector2(40, 64);
+        page.AddChild(back);
 
         var side = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         side.AddThemeConstantOverride("separation", 26);
@@ -1036,7 +1045,25 @@ public partial class PhoneScreens : Node
         return l;
     }
 
-    private static Label Title(string text) => Big(text, 54);
+    /// <summary>An app's heading with its back chevron: every page has a visible way up one level (#1253).</summary>
+    private Control Title(string text)
+    {
+        var row = UiKit.HBox(16);
+        row.AddChild(BackChevron());
+        row.AddChild(Big(text, 54));
+        return row;
+    }
+
+    /// <summary>The round "‹" that goes back one step; pointer-only, so the keys' selection stays where it is.</summary>
+    private Button BackChevron()
+    {
+        var b = Small("‹", new Color(0.30f, 0.32f, 0.38f), () => BackPressed?.Invoke());
+        b.CustomMinimumSize = new Vector2(64, 64);
+        b.FocusMode = Control.FocusModeEnum.None;
+        b.TooltipText = "Back";
+        b.AddThemeFontSizeOverride("font_size", 40);
+        return b;
+    }
 
     /// <summary>The page's two keys, named for the device in hand (a menu's accept and back, not the game's actions).</summary>
     private Label Hint(string accept, string back)
@@ -1049,7 +1076,7 @@ public partial class PhoneScreens : Node
 
     private string HintText(string accept, string back) =>
         _vr ? $"tap  {accept}      swipe right or B  {back}"
-        : InputHints.Pad ? $"A  {accept}      B  {back}" : $"Enter  {accept}      Esc  {back}";
+        : InputHints.Pad ? $"A  {accept}      B  {back}  (hold: put away)" : $"Enter  {accept}      Esc  {back}  (hold: put away)";
 
     private static Button Row(string text)
     {
@@ -1081,7 +1108,7 @@ public partial class PhoneScreens : Node
     {
         foreach (var child in under.GetChildren())
         {
-            if (child is Button { Visible: true, Disabled: false } b) { b.GrabFocus(); return; }
+            if (child is Button { Visible: true, Disabled: false, FocusMode: not Control.FocusModeEnum.None } b) { b.GrabFocus(); return; }
             FocusFirst(child);
             if (under.GetViewport()?.GuiGetFocusOwner() is { } owner && under.IsAncestorOf(owner)) return;
         }
