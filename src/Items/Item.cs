@@ -586,7 +586,7 @@ public static class ItemDefs
                 var black = new Color(0.08f, 0.08f, 0.09f);
                 s.Tube(new Vector3(0, -0.04f, -0.06f), new Vector3(0, 0.0f, 0.06f), 0.014f, black, 8);
                 s.Box(new Vector3(0, 0.025f, 0.02f), new Vector3(0.06f, 0.035f, 0.08f), green);
-                s.Box(new Vector3(0, 0.044f, 0.02f), new Vector3(0.035f, 0.004f, 0.03f), new Color(0.6f, 0.95f, 0.6f));
+                s.Box(new Vector3(0, 0.0485f, 0.02f), new Vector3(0.035f, 0.012f, 0.03f), new Color(0.6f, 0.95f, 0.6f));
                 s.Tube(new Vector3(0, 0.01f, 0.06f), new Vector3(0, -0.12f, 0.36f), 0.008f, new Color(0.7f, 0.72f, 0.75f), 6);
                 s.Ring(new Vector3(0, -0.13f, 0.4f), Vector3.Up, 0.045f, 0.06f, 0.012f, black, 14);
                 break;

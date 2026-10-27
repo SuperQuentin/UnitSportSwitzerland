@@ -30,7 +30,8 @@ public static class MarmotMeshBuilder
             // a plump, low barrel: the rump the widest, the shoulders narrower
             s.RoundedBox(new Vector3(0, 0.15f, -0.06f), new Vector3(0.3f, 0.2f, 0.26f), Fur, null, 5, 8);
             s.RoundedBox(new Vector3(0, 0.16f, 0.1f), new Vector3(0.24f, 0.19f, 0.22f), Fur, null, 5, 8);
-            s.RoundedBox(new Vector3(0, 0.09f, 0.0f), new Vector3(0.22f, 0.07f, 0.36f), Belly, null, 5, 8);
+            // the belly hangs 1.5 cm under the barrel (a shared bottom fights, general/zfight)
+            s.RoundedBox(new Vector3(0, 0.075f, 0.0f), new Vector3(0.22f, 0.08f, 0.36f), Belly, null, 5, 8);
         }
     }, Vector3.Zero);
 
@@ -40,11 +41,11 @@ public static class MarmotMeshBuilder
     {
         var n = new Vector3(0, Neck.Y, -Neck.Z);   // authored (+Z forward)
         s.RoundedBox(n + new Vector3(0, 0.03f, 0.06f), new Vector3(0.14f, 0.12f, 0.14f), Fur, null, 4, 6);
-        s.RoundedBox(n + new Vector3(0, 0.0f, 0.13f), new Vector3(0.08f, 0.06f, 0.05f), Muzzle, null, 3, 4);
-        s.Box(n + new Vector3(0, 0.02f, 0.158f), new Vector3(0.03f, 0.02f, 0.012f), Nose);
+        s.RoundedBox(n + new Vector3(0, -0.012f, 0.13f), new Vector3(0.08f, 0.06f, 0.05f), Muzzle, null, 3, 4);
+        s.Box(n + new Vector3(0, 0.005f, 0.158f), new Vector3(0.03f, 0.02f, 0.012f), Nose);
         foreach (float x in new[] { -0.04f, 0.04f })
         {
-            s.Box(n + new Vector3(x, 0.06f, 0.12f), new Vector3(0.016f, 0.016f, 0.01f), Eye);
+            s.Box(n + new Vector3(x, 0.06f, 0.137f), new Vector3(0.016f, 0.016f, 0.01f), Eye);
             s.Box(n + new Vector3(x * 1.4f, 0.1f, 0.04f), new Vector3(0.03f, 0.025f, 0.015f), FurDark);
         }
     }, new Vector3(0, Neck.Y, -Neck.Z));

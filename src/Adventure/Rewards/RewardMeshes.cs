@@ -77,7 +77,8 @@ public static class RewardMeshes
         {
             // bands round the body (iron, gilt) and the lock plate on the front
             foreach (float x in new[] { -ChestW * 0.32f, ChestW * 0.32f })
-                s.Box(new Vector3(x, (ChestH + foot) / 2 - 0.006f, 0), new Vector3(0.05f, ChestH - foot - 0.012f + 2 * Proud, ChestD + 2 * Proud), trim);
+                // over the top edge too: open, the body's top shows (lid closed, the lid hides it)
+                s.Box(new Vector3(x, (ChestH + foot) / 2 - 0.006f + Proud / 2, 0), new Vector3(0.05f, ChestH - foot - 0.012f + 3 * Proud, ChestD + 2 * Proud), trim);
             s.Box(new Vector3(0, ChestH - 0.08f, front - Proud), new Vector3(0.12f, 0.14f, 0.012f), t == ChestTier.Fine ? Iron : Gold);
         }
         if (t == ChestTier.Precious)
@@ -96,7 +97,7 @@ public static class RewardMeshes
         {
             // the red front panel and its white cross, standing proud of each other
             var c = new Vector3(0, ChestH * 0.42f, front - Proud);
-            s.Box(c, new Vector3(0.3f, 0.22f, 0.012f), Red);
+            s.Box(c, new Vector3(0.3f, 0.2f, 0.012f), Red);   // short of the lock plate above it
             s.Box(c + new Vector3(0, 0, -0.02f), new Vector3(0.16f, 0.05f, 0.008f), White);
             s.Box(c + new Vector3(0, 0, -0.02f), new Vector3(0.05f, 0.16f, 0.008f), White);
         }
@@ -122,10 +123,11 @@ public static class RewardMeshes
     public static ArrayMesh SealBand() => _band ??= Build(s =>
     {
         float y = ChestH * 0.55f;
-        s.Box(new Vector3(0, y, -ChestD / 2 - 0.03f), new Vector3(ChestW + 0.06f, 0.05f, 0.01f), White);
-        s.Box(new Vector3(0, y, ChestD / 2 + 0.03f), new Vector3(ChestW + 0.06f, 0.05f, 0.01f), White);
-        s.Box(new Vector3(-ChestW / 2 - 0.03f, y, 0), new Vector3(0.01f, 0.05f, ChestD + 0.06f), White);
-        s.Box(new Vector3(ChestW / 2 + 0.03f, y, 0), new Vector3(0.01f, 0.05f, ChestD + 0.06f), White);
+        // 5.5 cm off the front and back: clear of the Luxurious chest's panel and cross (3.6 cm proud)
+        s.Box(new Vector3(0, y, -ChestD / 2 - 0.055f), new Vector3(ChestW + 0.06f, 0.05f, 0.01f), White);
+        s.Box(new Vector3(0, y, ChestD / 2 + 0.055f), new Vector3(ChestW + 0.06f, 0.05f, 0.01f), White);
+        s.Box(new Vector3(-ChestW / 2 - 0.03f, y, 0), new Vector3(0.01f, 0.05f, ChestD + 0.11f), White);
+        s.Box(new Vector3(ChestW / 2 + 0.03f, y, 0), new Vector3(0.01f, 0.05f, ChestD + 0.11f), White);
     });
 
     /// <summary>The light shaft a chest sends up when it opens (an open tube, scaled and faded by a tween).</summary>
