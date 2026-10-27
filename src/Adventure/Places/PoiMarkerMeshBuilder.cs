@@ -60,7 +60,7 @@ public static class PoiMarkerMeshBuilder
     /// <summary>Vertex colour as the albedo, as the other markers.</summary>
     public static StandardMaterial3D Material() => new() { VertexColorUseAsAlbedo = true, Roughness = 0.8f, CullMode = BaseMaterial3D.CullModeEnum.Disabled };
 
-    private static ArrayMesh Build(Action<SurfaceTool> parts)
+    internal static ArrayMesh Build(Action<SurfaceTool> parts)
     {
         ShowcaseTrace.Mark();
         var st = new SurfaceTool();
@@ -69,7 +69,7 @@ public static class PoiMarkerMeshBuilder
         return st.Commit();
     }
 
-    private static void Box(SurfaceTool st, Vector3 centre, Vector3 size, Color color)
+    internal static void Box(SurfaceTool st, Vector3 centre, Vector3 size, Color color)
     {
         var h = size / 2;
         // +X, -X, +Y, -Y, +Z, -Z faces, counter-clockwise seen from outside

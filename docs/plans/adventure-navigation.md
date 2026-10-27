@@ -3,7 +3,7 @@
 
 # Adventure navigation: compass, pins, quest marker, guiding wind, travel network
 
-Status: **planned**. Tracking issue: #1226 (overview: #1228).
+Status: **built** (PR #1236). Tracking issue: #1226 (overview: #1228).
 
 One of five Adventure plans (phases 1 and 2), written together: `adventure-objectives` (progress
 store, quests, tracker), `adventure-places` (POI catalogue, discovery, fog, Swiss Atlas),
@@ -23,12 +23,12 @@ client); server events through `AdventureService.Events.Raise(...)`; the tracked
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Compass strip | planned | `BrCompass` generalised into `Ui/CompassStrip`; free roam shows cardinals, nearby discovered POIs, pins, the tracked target and party members |
-| 2 Map pins | planned | Up to 30 player pins with 6 icons on the adventure map, optionally shared with the party |
-| 3 Target marker | planned | The tracked objective drawn in the world, an off-screen arrow, distance and climb readout |
-| 4 Guiding wind | planned | On-demand Föhn gust: leaves and streaks toward the target, a spatial gust, an accessible arrow fallback |
-| 5 Travel network | planned | SBB stations, PostBus stops, ship landings, cable-car stations unlock on a visit; departure board and fade; server setting `free | network | off` |
-| 6 Checks and notes | planned | Unit tests, `--navcheck` / `--travelcheck` screenshots, a two-client net check, notes and index lines |
+| 1 Compass strip | built | `BrCompass` generalised into `Ui/CompassStrip`; free roam shows cardinals, nearby discovered POIs, pins, the tracked target and party members |
+| 2 Map pins | built | Up to 30 player pins with 6 icons on the adventure map, optionally shared with the party |
+| 3 Target marker | built | The tracked objective drawn in the world, an off-screen arrow, distance and climb readout |
+| 4 Guiding wind | built | On-demand Föhn gust: leaves and streaks toward the target, a spatial gust, an accessible arrow fallback |
+| 5 Travel network | built | SBB stations, PostBus stops, ship landings, cable-car stations unlock on a visit; departure board and fade; server setting `free | network | off` |
+| 6 Checks and notes | built | Unit tests, `--navcheck` / `--travelcheck` screenshots, a two-client net check, notes and index lines |
 
 ## Goal
 
@@ -442,3 +442,29 @@ Server-run bots (#837) have no HUD: the compass, pins, marker and wind are n/a. 
    (as some VR games do) is the next try; needs a headset playtest.
 7. **#772**: if F3's facing lands first, `CompassStrip.Bearing` moves there instead; either way one
    function.
+
+## Built differently (#1226)
+
+- **The travel mode does not ride `Arrival.Rules`**: to stay clear of the stamina PR's change to that RPC, the server
+  sends it with `AdventureTravel.TellMode` on load, and a Network server sets `Arrival.FreeTeleport` false (so `/city`,
+  the place search, the phone and the VR hand map refuse as with `--no-teleport`). `Permissions.Travel` was not needed;
+  offline, `Permissions.OfflineTravelNetwork` greys the free jumps. The Host dialog has no new control: a hosted server
+  follows the host's own `Settings > Gameplay > Travel`.
+- **`NavTracking` was not needed**: places (#1224) added `AdventureService.TrackPlace`, which pins, travel points and
+  places use; `NavTarget` adds the altitude.
+- **A trip's jump is `AdventureTravel.Depart`**, not `ChatManager.ForceTeleport`: the owner needs the kind for the
+  curtain's chime and card; it calls the same `Teleporter.TeleportTo` the forced teleport does. No
+  `ChatManager.TeleportPeer`.
+- **Arrival**: 5 m east of the point, not snapped to the nearest road or path (the fixture has none to test it on); a
+  cable-car top lands at its POI.
+- **Fares**: the whole trip is rounded up to whole francs (the bank keeps whole francs); a GA or half-fare card is the
+  `travel` section's flag, the items are its picture and are worth 0 (no shop buys them back).
+- **Quests**: "All aboard" and "Grand tour" start by themselves on the first unlock (`QuestStart.OnEvent`); Grand tour is
+  one `NetworkStep(50, 5)` reading the totals `TravelUnlocked` now carries (`Canton`, `Points`, `Cantons`), so points
+  unlocked before it started count.
+- **Pins are placed** by right click, pad X at the centre cross, or the side panel's "Pin the centre" (the VR way: no
+  separate popup, the card sits in the map's side panel).
+- **Snow contrast** follows altitude (above 2 000 m) only, not the ground's `Snow` material.
+- **Not done here**: the phone's Map app listing network points (it greys free travel as before), pins on the VR hand
+  map (`XrMap`), grass bending with the gust, `--serverstats` at 32 swarm bots and the `--perf` budget, the econcheck
+  rebalance of quest rewards against fares, a bot brain step that travels.

@@ -102,6 +102,8 @@ public partial class XrWristMenu : CanvasLayer
         // the phone (#920): into the holding hand, as from the front pocket
         if (onFoot) Entry("Phone", PlayerInput.Phone);
         Entry("Journal: quests, birds, fish", PlayerInput.BirdJournal);
+        // the guiding gust (#1226): the palm held up is the fast way
+        if (Adventure.Navigation.GuidingWind.Can) Entry("Guide: the wind toward your target", PlayerInput.Guide);
         if (onFoot) Entry("Drop the item in hand", PlayerInput.DropItem);
         Entry(player == null ? "Walk" : player.Creative ? "Survival mode" : "Creative mode", PlayerInput.ToggleMode);
         if (player != null) Entry("Spectator camera", PlayerInput.Spectator);

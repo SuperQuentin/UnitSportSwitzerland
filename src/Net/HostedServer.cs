@@ -55,6 +55,8 @@ public sealed class HostedServer
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         if (spawn is { } at) { args.Add("--spawn"); args.Add(string.Create(inv, $"{at.E:F0},{at.N:F0}")); }
         if (!teleport) args.Add("--no-teleport");
+        // the adventure's travel network (#1226): a host who chose it (Settings > Gameplay > Travel) serves it too
+        else if (Core.GameSettings.Current.AdventureTravelNetwork) { args.Add("--adventure-travel"); args.Add("network"); }
         // the same terrain this client reads; a copy without any gets the generated world
         string chunks = TerrainPaths.FindChunkDir();
         args.AddRange(new[] { "--chunks", chunks });

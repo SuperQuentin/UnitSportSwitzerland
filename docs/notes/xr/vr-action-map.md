@@ -78,6 +78,13 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | place: look out from a viewpoint / use a stamp post (#1224) | `interact_mount` E / Y within 3 m of the cross, telescope or stamp post (`PoiMarkers`) | ok: reach out and grip it (`TryInteract(byHand)`) | keep |
 | adventure map (#1224) | M (`teleport`) while adventuring / quick menu › Map; drag, wheel, click; left stick, LB / RB, A | ok: wrist menu › Map on the `XrUi` panel, ray drag and trigger (the shoulders do not zoom in VR) | keep |
 | Atlas (#1224) | J then Q / E, LB / RB to the Atlas tab; buttons | ok: wrist menu › Journal, laser + trigger | keep |
+| guide: the guiding gust (#1226) | N on foot / mounted (not in a bus, tipper, mixer, mini dumper: N is theirs) / quick menu › Guide | new: the open left hand held palm up 0.5 s (`XrRig.PalmUp`); wrist menu › Guide; a buzz on start | keep (headset check of the palm's sign) |
+| departure board at a travel sign (#1226) | E / Y within 4 m (`interact_mount`) | ok: a grip at the sign (`PoiMarkers.TryInteract` → `TravelSigns`), Y | keep |
+| pick and confirm a departure, buy a travelcard (#1226) | ↑ ↓ / type, Enter, Esc / D-pad, A, B | ok: laser + trigger on the row or button | keep |
+| place / edit a map pin (#1226) | RMB on the map (1-6 icon, Enter) / X at the centre cross | ok: laser on the map + the side panel's "Pin the centre", ray picks the icon | keep |
+| track a place, pin, travel point (#1226) | the card's Track / A on it | ok: laser + trigger on Track | keep |
+| travel from the map or the Journal (#1226) | the card's / board's Travel / A | ok: laser + trigger | keep; the phone's map app does not list network points yet |
+| compass (#1226) | the HUD strip (free roam) | new: the watch's bezel turns its N north, an amber notch toward the target, the distance on the dial; the target as a billboard, a tick within 100 m | keep (headset playtest: open question 6) |
 | place card: Track / Show on map / Show in Atlas (#1224) | the card's buttons / A on them | ok: laser + trigger | keep |
 | character_menu (the figure editor, #1127) | P on foot / quick menu › Character, Start › Character | ok: the quick menu ring aimed by the hand, the pause menu; the page by pointer | keep |
 | server console (#1088): Multiplayer › a server's console button, or the refusal banner | click / A on the focused button; commands and messages are typed | ok: the menu panel and the laser; typing needs a keyboard (an admin tool, no pad or VR way to type) | keep |

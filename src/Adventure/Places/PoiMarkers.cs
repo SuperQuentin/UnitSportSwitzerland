@@ -176,6 +176,8 @@ public partial class PoiMarkers : Node3D
     /// <summary>E / Y / a VR hand at a marker: uses it. False when none is in reach.</summary>
     public static bool TryInteract(FootPlayer p)
     {
+        // a travel sign (#1226) first: its board
+        if (Navigation.TravelSigns.TryInteract(p)) return true;
         if (Instance?.InReach(p) is not { } poi || PlacesService.Instance is not { } places) return false;
         places.AskInteract(poi.Id);
         return true;
@@ -187,6 +189,7 @@ public partial class PoiMarkers : Node3D
     /// <summary>"[E] Look out" at a viewpoint, "[E] Stamp" at a stamp post; null away from one. Built only when it changes.</summary>
     public static string? PromptFor(FootPlayer p)
     {
+        if (Navigation.TravelSigns.PromptFor(p) is { } sign) return sign;
         if (Instance is not { } m || m.InReach(p) is not { } poi) return null;
         var key = (poi, PlayerInput.HintDevice);
         if (m._prompt != null && key == m._promptKey) return m._prompt;

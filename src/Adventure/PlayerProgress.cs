@@ -126,6 +126,9 @@ public sealed class PlayerProgress
     }
 
     /// <summary>Every section id the progress holds, decoded or raw.</summary>
+    /// <summary>Whether a section exists here (a client's mirror reads without making an empty one, #1226).</summary>
+    public bool Has(string id) => _slots.ContainsKey(id);
+
     public IEnumerable<string> Ids => _slots.Keys.OrderBy(k => k, StringComparer.Ordinal);
 
     /// <summary>A section's saved version: the code's for a decoded one, the file's for a raw or read-only one.</summary>

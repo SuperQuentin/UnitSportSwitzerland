@@ -80,7 +80,8 @@ public partial class Handshake : Node
     /// 51: World/Adventure/Places (#1224: RequestInteract; Stamped, Synced, FogFull, FogDelta), AssetKind.AtlasFacts 18.
     /// 52: World/CinemaBooths (#1238: AskSet; Set): a cinema's house lights and screen.
     /// 53: World/Arrival Rules carries the stamina and lift switches; FootPlayer.PoseKind 8 (PoseWallClimb) (#1225).
-    public const int Protocol = 53;
+    /// 54: World/Adventure/Travel (#1226: RequestTravel/Buy/PinAdd/PinEdit/PinRemove; TellMode, TellUnlocked, TellRefused, Depart, PartyPinsState).
+    public const int Protocol = 54;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

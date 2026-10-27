@@ -1088,6 +1088,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Adventure.Places.AdventureMap.PlaceSearch = () => _places?.SetOpen(true);
             if (Adventure.Places.PlacesCheck.Requested) AddChild(new Adventure.Places.PlacesCheck(items, () => LocalPlayer));
             if (Adventure.Places.PlacesNetProbe.Role != null) AddChild(new Adventure.Places.PlacesNetProbe(items));
+            AddNavigation(adventure, items, ground);
         }
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
@@ -1553,6 +1554,38 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     private void Toast(string message) => _items?.Ui.Toast(message);
 
+    /// <summary>
+    /// The adventure's navigation (#1226): the travel network and pins (the server's, offline this client's), the
+    /// compass, the target marker, the guiding gust, the travel signs, the departure board, the map's pins and points.
+    /// </summary>
+    private void AddNavigation(Adventure.AdventureService adventure, Items.ItemController items, Func<double, double, float?> ground)
+    {
+        var travel = Adventure.Navigation.AdventureTravel.Create(adventure, server: false, networked: Launch.Networked);
+        travel.GroundAt = ground;
+        travel.UnlockedPoint += poi => Adventure.Places.StampToast.Instance?.Post("Travel point unlocked",
+            $"{poi.Name} · {Adventure.Navigation.TravelNetwork.LineName(Adventure.Navigation.TravelNetwork.KindOf(poi.Kind))}");
+        travel.Refused += why => Toast(why);
+        Adventure.Navigation.NavTarget.GroundAt = ground;
+        Adventure.Navigation.AdventureCompass.Me = () => _onFoot && LocalPlayer is { } me ? me.Global : null;
+        Adventure.Navigation.AdventureCompass.PeerAt = peer => _players?.GetNodeOrNull<FootPlayer>(peer.ToString()) is { } body ? body.Global : null;
+        Adventure.Navigation.TargetMarker.Origin = () => _worldOrigin;
+        Adventure.Navigation.GuidingWind.Body = () => _onFoot ? LocalPlayer : null;
+        Adventure.Navigation.GuidingWind.Hint = Toast;
+        Adventure.Navigation.DepartureBoard.BodyState = () => LocalPlayer is { } me
+            ? (me.Down != 0 || me.KnockedOut, me.RidingWith != 0 || !Adventure.Navigation.TravelNetwork.MayTravelAs(me.RideKindId)) : (false, false);
+        AddChild(new Adventure.Navigation.AdventureCompass());
+        AddChild(new Adventure.Navigation.TargetMarker());
+        AddChild(new Adventure.Navigation.GuidingWind());
+        AddChild(new Adventure.Navigation.TravelCurtain());
+        AddChild(new Adventure.Navigation.TravelSigns(() => _onFoot ? LocalPlayer : null, () => _worldOrigin,
+            p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
+        Adventure.Navigation.DepartureBoard.Register();
+        Adventure.Navigation.NavMapOverlay.Register();
+        if (Adventure.Navigation.NavCheck.Requested) AddChild(new Adventure.Navigation.NavCheck(items, () => LocalPlayer));
+        if (Adventure.Navigation.TravelCheck.Requested) AddChild(new Adventure.Navigation.TravelCheck(items, () => LocalPlayer));
+        if (Adventure.Navigation.NavNetProbe.Role != null) AddChild(new Adventure.Navigation.NavNetProbe(items));
+    }
+
     /// <summary>Boarding a Battle Royale on the fly camera (#425): back into the body, where it stands; out of creative mode.</summary>
     private void OnPermissionsChanged()
     {
@@ -1933,6 +1966,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             GetViewport().SetInputAsHandled();
             Ui.AdventureLog.Toggle();
+            return;
+        }
+
+        // the guiding gust (#1226): N on foot and mounted; in a bus, a tipper, a mixer or the mini dumper N stays theirs
+        if (@event.IsActionPressed(PlayerInput.Guide) && !@event.IsEcho() && !UiFocus.TextEntryActive && _onFoot
+            && LocalPlayer is { } guided && guided.RideKindId is not (>= Player.HeavyCatalog.First and <= Player.HeavyCatalog.Last or (int)Player.RideKind.MiniDumper)
+            && Adventure.Navigation.GuidingWind.Instance is { } wind)
+        {
+            GetViewport().SetInputAsHandled();
+            wind.Summon();
             return;
         }
 

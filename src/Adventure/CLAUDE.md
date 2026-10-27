@@ -13,6 +13,11 @@ touches its topic; search with `grep -ril <word> docs/notes/adventure`.
 - `adventure-events` — raise on the server only, after writing your section; new events are records in the raising plan's file; the shared set; the bus drops inactive peers'
 - `quests` — quests are catalog data; step kinds and their plans (offered only when those run), `QuestEngine` rules, rewards applied once (cash to the account), hand-overs checked by place, sources, the checks' `ProbeQuests`; places are canonical POI ids, reached by finding them
 
+- `travel` — the travel network (#1226): points, two-tick unlocks, Free / Network / Off, `MayTravel` and its refusals, trips (charge, `Arrived`, curtain), GA and half-fare cards, signs, the board, bots, protocol 52
+- `fares` — `assets/adventure/fares.json`: SBB distance tariff × 1.25, ship tariff, cable-car lines, card discounts and prices, the "verify" values
+- `pins` — `PinBook` (30, notes, icons), placed on the map (right click, pad X, "Pin the centre"), server-checked, shared with the party (`PartyPinsState`, `Parties.StateSent`)
+- `compass` — `Ui/CompassStrip` + `ICompassSource` (BR and free roam), redraw on change only, the VR watch bezel; the target marker (edge ellipse, a target behind points down); the guiding gust (N, palm up, shader, settings)
+
 ## Commands
 
-- `commands` — `--systems ...,adventure`, `--adventure-test`, `--adventure-dir`, `--journal`; `--adventurecheck` (quick) and `tools/adventurenetcheck.sh` (net); `--pois fixture|<file>`, `--placescheck` (quick) and `tools/placesnetcheck.sh` (net)
+- `commands` — `--systems ...,adventure`, `--adventure-test`, `--adventure-dir`, `--journal`; `--adventurecheck` (quick) and `tools/adventurenetcheck.sh` (net); `--pois fixture|<file>`, `--placescheck` (quick) and `tools/placesnetcheck.sh` (net); `--adventure-travel`, `/travel`, `/pin`, `--navcheck` and `--travelcheck` (quick), `tools/navnetcheck.sh` (net)
