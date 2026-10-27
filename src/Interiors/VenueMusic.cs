@@ -128,6 +128,8 @@ public static class VenueMusic
                     Mood = MoodFor(r.Type),
                     Salt = (uint)Core.Fnv.Hash(l.Key),
                     Position = new Vector3((r.X0 + r.X1) / 2, l.FloorY(f) + Math.Min(2.3f, l.ClearOf(r) - 0.3f), (r.Z0 + r.Z1) / 2),
+                    // the whole room at full level, not only its middle (#1279)
+                    Spread = Math.Max(3f, new Vector2(r.Width, r.Depth).Length() / 2),
                 });
             }
     }

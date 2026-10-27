@@ -19,6 +19,35 @@ public static partial class InteriorMeshBuilder
     private static readonly Color[] Velvet = { C(0.62f, 0.06f, 0.10f), C(0.10f, 0.14f, 0.34f), C(0.42f, 0.06f, 0.14f) };
 
     /// <summary>
+    /// A seating bank's cushions (#1279), in the interior's own frame (the room lights are looked up by it): each
+    /// folded up against its back, or let down where someone sits (<paramref name="down"/>: seat ids, row by row
+    /// from the front, <see cref="CinemaSeats.SeatId"/>). Built when that changes, never per frame.
+    /// </summary>
+    public static MeshData Cushions(FurniturePlan p, float y0, HashSet<int> down)
+    {
+        var s = new Scratch();
+        var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
+        var at = new Vector3(p.X, y0, p.Z);
+        var velvet = Velvet[(int)(Hash(p, 1) * Velvet.Length) % Velvet.Length];
+        var rows = InteriorGenerator.RowsOf(p);
+        const float deep = InteriorGenerator.SeatDepth;
+        int id = 0;
+        for (int k = 0; k < rows.Rows; k++)
+        {
+            var (z0, _, y) = rows.Row(k);
+            for (int i = 0; i < rows.SeatsIn(k); i++, id++)
+            {
+                float x = rows.SeatX(k, i), half = rows.SeatW / 2 - 0.04f;
+                var (min, max) = down.Contains(id)
+                    ? (new Vector3(x - half, y + 0.35f, z0 + 0.14f), new Vector3(x + half, y + 0.47f, z0 + 0.62f))
+                    : (new Vector3(x - half, y + 0.40f, z0 + 0.15f), new Vector3(x + half, y + 0.86f, z0 + deep));
+                s.Box(at + min, at + max, velvet, false, basis, at);
+            }
+        }
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
+    }
+
+    /// <summary>
     /// A screen's picture in its piece's frame (front +Z): centre and half extents. Scope, 2.39:1 [S],
     /// its bottom 0.9 m up, as wide as the curtains leave and as tall as the room lets it be. Shared with
     /// the booth's picture on it (<see cref="CinemaBooths"/>), so the cat lands on the screen exactly.
@@ -69,7 +98,8 @@ public static partial class InteriorMeshBuilder
                     int n = bank.SeatsIn(k);
                     float xa = bank.SeatX(k, 0) - sw / 2, xb = bank.SeatX(k, n - 1) + sw / 2;
                     B(xa + 0.015f, y + 0.33f, z0 + 0.02f, xb - 0.015f, y + 0.95f, z0 + 0.15f, back, true);
-                    B(xa + 0.04f, y + 0.40f, z0 + 0.15f - sink, xb - 0.04f, y + 0.86f, z0 + deep, velvet, true);
+                    // the cushions are their own mesh, folded or let down under a sitter (Cushions); here only their solid
+                    CollisionBox(s, at, basis, new Vector3(xa + 0.04f, y, z0 + 0.15f), new Vector3(xb - 0.04f, y + 0.86f, z0 + deep));
                     for (int i = 0; i <= n; i++)
                     {
                         float x = xa + i * sw;

@@ -257,5 +257,7 @@ public partial class CinemaBooths : Node
             node.ShowCinema(Level(lights), mask, halls, screen, real);
         }
         if (real && cam != null) node.ProjectFor(node.ToLocal(cam.GlobalPosition));
+        // the seats let down under whoever sits (#1279)
+        node.UpdateSeats();
     }
 }

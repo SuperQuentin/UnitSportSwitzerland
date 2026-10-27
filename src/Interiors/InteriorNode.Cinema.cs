@@ -26,7 +26,7 @@ public partial class InteriorNode
     /// and its number (<see cref="CinemaBooths.HallAt"/>), whose panel switches it (#1279).
     /// </summary>
     private sealed record CinemaScreen(MeshInstance3D Picture, MeshInstance3D? Lit, SpotLight3D? Projector,
-        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall, int No);
+        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall, int No, MeshInstance3D? Lens = null);
 
     private readonly List<CinemaScreen> _screens = new();
     /// <summary>The halls whose screens are on, a bit each.</summary>
@@ -48,6 +48,9 @@ public partial class InteriorNode
 
     /// <summary>The bodies that shadow a beam (#1279): every player's, registered while in the tree, read on the main thread.</summary>
     public static readonly HashSet<Node3D> BeamBodies = new();
+
+    /// <summary>Each seating bank's cushions (#1279): the piece, its mesh, the seats let down now (and a spare set to fill).</summary>
+    private readonly List<(FurniturePlan Bank, MeshInstance3D Mesh, HashSet<int> Down, HashSet<int> Next)> _cushions = new();
 
     /// <summary>A body's height over its feet, m, for the beam's capsules.</summary>
     private const float BodyHeight = 1.8f;
@@ -75,6 +78,7 @@ public partial class InteriorNode
         if (layout.Type != BuildingType.Cinema) return;
         AddViewGlass(node);
         AddClearGlass(node);
+        AddCushions(node);
         var ports = layout.Furniture.Where(f => f.Type == FurnitureType.Porthole).ToList();
         var projectors = layout.Furniture.Where(f => f.Type == FurnitureType.Projector).ToList();
         foreach (var p in layout.Furniture.Where(f => f.Type == FurnitureType.MovieScreen))
@@ -107,12 +111,25 @@ public partial class InteriorNode
             // the beam's apex at the projector's lens in the booth, behind the hole in the wall; the port's middle
             // if the booth had no room for that projector
             var from = new Vector3(port.X, layout.FloorY(port.Floor) + port.Lift + port.H / 2, port.Z);
+            MeshInstance3D? lensPicture = null;
             var proj = projectors.MinBy(q => (q.X - port.X) * (q.X - port.X) + (q.Z - port.Z) * (q.Z - port.Z));
             if (proj != null && (proj.X - port.X) * (proj.X - port.X) + (proj.Z - port.Z) * (proj.Z - port.Z) < 1.5f * 1.5f)
             {
                 from = new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift + proj.H - InteriorGenerator.ProjectorLensDrop, proj.Z)
                     + new Basis(Vector3.Up, proj.Turns * Mathf.Pi / 2) * new Vector3(0, 0, proj.D / 2);
-                from -= (centre - from).Normalized() * ApexBehindLens;
+                // the picture on the lens's glass, small and bright, as one sees it looking into a projector (#1279)
+                var toward = (centre - from).Normalized();
+                lensPicture = new MeshInstance3D
+                {
+                    Name = "LensPicture",
+                    Mesh = new QuadMesh { Size = new Vector2(0.15f, 0.15f / 2.39f) },
+                    MaterialOverride = CatMaterial(),
+                    Transform = new Transform3D(Basis.LookingAt(-toward, Vector3.Up), from + toward * 0.012f),
+                    Visible = false,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                };
+                node.AddChild(lensPicture);
+                from -= toward * ApexBehindLens;
             }
             var right = basis * new Vector3(half.X, 0, 0);
             var up = new Vector3(0, half.Y, 0);
@@ -149,7 +166,7 @@ public partial class InteriorNode
             spot.LookAtFromPosition(lens, centre, Vector3.Up);
             Projectors.RemoveAll(w => !w.TryGetTarget(out var s) || !IsInstanceValid(s));
             Projectors.Add(new WeakReference<SpotLight3D>(spot));
-            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall, no));
+            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall, no, lensPicture));
         }
     }
 
@@ -193,6 +210,50 @@ public partial class InteriorNode
             MaterialOverride = _viewGlass,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         });
+    }
+
+    /// <summary>Every seating bank's cushions, all folded (nobody sits yet).</summary>
+    private static void AddCushions(InteriorNode node)
+    {
+        var l = node.Layout;
+        foreach (var bank in l.Furniture)
+        {
+            if (bank.Type != FurnitureType.SeatingBank) continue;
+            var down = new HashSet<int>();
+            var mi = new MeshInstance3D { Name = "Cushions", Mesh = CushionMesh(node, bank, down) };
+            node.AddChild(mi);
+            node._cushions.Add((bank, mi, down, new HashSet<int>()));
+        }
+    }
+
+    private static ArrayMesh CushionMesh(InteriorNode node, FurniturePlan bank, HashSet<int> down) =>
+        BuildMesh(InteriorMeshBuilder.Cushions(bank, node.Layout.FloorY(bank.Floor) + bank.Lift, down), node._lit!);
+
+    /// <summary>
+    /// The seats let down under whoever sits in this cinema (#1279), anyone's body in the sit pose over a seat; a bank's
+    /// cushions are built again only when its set changes. Per frame from <see cref="CinemaBooths"/>, without allocating.
+    /// </summary>
+    public void UpdateSeats()
+    {
+        for (int b = 0; b < _cushions.Count; b++)
+        {
+            var (bank, mesh, down, next) = _cushions[b];
+            next.Clear();
+            var basis = new Basis(Vector3.Up, bank.Turns * Mathf.Pi / 2);
+            var origin = new Vector3(bank.X, Layout.FloorY(bank.Floor) + bank.Lift, bank.Z);
+            var rows = InteriorGenerator.RowsOf(bank);
+            foreach (var body in BeamBodies)
+            {
+                if (body is not Player.FootPlayer { PoseKind: Player.FootPlayer.PoseSit } p || !IsInstanceValid(p) || !p.IsInsideTree()) continue;
+                var local = basis.Inverse() * (ToLocal(p.GlobalPosition) - origin);
+                if (Math.Abs(local.Z) > bank.D / 2 || Math.Abs(local.X) > bank.W / 2) continue;
+                int id = CinemaSeats.SeatId(rows, local);
+                if (id >= 0) next.Add(id);
+            }
+            if (next.SetEquals(down)) continue;
+            _cushions[b] = (bank, mesh, next, down);
+            mesh.Mesh = CushionMesh(this, bank, next);
+        }
     }
 
     private static StandardMaterial3D? _clearGlass;
@@ -335,6 +396,7 @@ public partial class InteriorNode
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;
             HallMusic(s, on);
+            if (s.Lens != null) s.Lens.Visible = on;
             if (s.Beam == null) continue;
             s.Beam.Visible = on;
             s.Beam.MaterialOverride = _realShow ? s.Marched : PlainBeam();

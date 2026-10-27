@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 12;
+    public const int CinemaRules = 13;
 
     /// <summary>A hall's clear height in a building of storeys, at least where it has them, m [S: small halls 6-8 m]; and the most storeys it takes.</summary>
     private const float HallMinClear = 6.0f;
@@ -625,6 +625,7 @@ public static partial class InteriorGenerator
             var stairs = p.BoothDoorLow ? fr.Rect(u0, v0, a + run, v1) : fr.Rect(b - run, v0, u1, v1);
             blocked.Add(stairs);
         }
+        bool chair = false;
         for (int i = 0; i < p.Halls; i++)
         {
             float u = u0 + hallW * (i + 0.5f);
@@ -649,13 +650,26 @@ public static partial class InteriorGenerator
                 if (!Free(r, at, placed, blocked, 0.05f)) continue;
                 Put(l, f, FurnitureType.BoothPanel, cx, cz, fr.FaceVPlus, 1.2f, 0.3f, 1.7f, placed, lift: deck);
                 blocked.Add(UseSpot(l.Furniture[^1], 0.8f).Clip(r));
+                // the projectionist's chair (the first hall's), between the projector and the panel, facing the hall's
+                // window (#1279: it stood anywhere, facing the platter)
+                if (!chair)
+                {
+                    float su = u + side * (0.4f + 0.05f + (PortCasingW / 2 + 0.1f - 0.4f) / 2);
+                    var (hx, hz) = fr.Point(su, p.HallV1 + 0.75f);
+                    var seat = new RectPlan(hx - 0.23f, hz - 0.23f, hx + 0.23f, hz + 0.23f);
+                    if (Free(r, seat, placed, blocked, 0.02f) && KeepsWay(r, placed, seat))
+                    {
+                        Put(l, f, FurnitureType.Chair, hx, hz, fr.FaceVMinus, 0.45f, 0.45f, 0.9f, placed, lift: deck);
+                        chair = true;
+                    }
+                }
                 break;
             }
         }
         int before = l.Furniture.Count;
         TryPlace(l, f, r, new Piece(FurnitureType.ServerRack, 0.6f, 0.9f, 2.0f, true), placed, blocked, rng, new[] { fr.VPlus });
         TryPlace(l, f, r, new Piece(FurnitureType.FilmPlatter, 1.2f, 1.2f, 1.5f, false), placed, blocked, rng);
-        TryPlace(l, f, r, new Piece(FurnitureType.Chair, 0.45f, 0.45f, 0.9f, false), placed, blocked, rng);
+        if (!chair) TryPlace(l, f, r, new Piece(FurnitureType.Chair, 0.45f, 0.45f, 0.9f, false), placed, blocked, rng);
         // all of it on the deck, off the landing and the steps (blocked above)
         for (int k = before; k < l.Furniture.Count; k++) l.Furniture[k].Lift = deck;
     }

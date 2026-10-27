@@ -15,6 +15,26 @@ public static class CinemaSeats
     /// <summary>The seated hip over the row's tread, and its depth from the row's back edge (the cushion let down), m.</summary>
     private const float HipOverTread = 0.45f, HipFromBack = 0.42f;
 
+    /// <summary>
+    /// The seat a point of a seating bank's own frame is over (its row by depth, the nearest place along it), numbered
+    /// row by row from the front as <see cref="InteriorMeshBuilder.Cushions"/> draws them; -1 off the seats.
+    /// </summary>
+    internal static int SeatId(in InteriorGenerator.BankRows rows, Vector3 local)
+    {
+        int k = (int)((rows.D - local.Z) / rows.Pitch);
+        if (k < 0 || k >= rows.Rows || Math.Abs(local.X) > rows.X1 + 0.3f) return -1;
+        int id = 0;
+        for (int r = 0; r < k; r++) id += rows.SeatsIn(r);
+        int best = 0;
+        float bestD = float.MaxValue;
+        for (int i = 0; i < rows.SeatsIn(k); i++)
+        {
+            float dx = Math.Abs(rows.SeatX(k, i) - local.X);
+            if (dx < bestD) (best, bestD) = (i, dx);
+        }
+        return bestD < rows.SeatW ? id + best : -1;
+    }
+
     /// <summary>The seat <paramref name="p"/> stands in front of in the interior they are in, or null.</summary>
     public static FootPlayer.SitSpot? At(FootPlayer p)
     {

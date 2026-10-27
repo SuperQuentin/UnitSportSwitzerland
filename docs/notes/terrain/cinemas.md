@@ -84,6 +84,13 @@ lane frame and rules (`bowling-centres`).
   and up to eight capsules (`InteriorNode.BeamBodies`: players, the viewer's walker) shadowing it, written per frame
   only as they move. Its lines meet 0.2 m behind the lens's glass (`ApexBehindLens`). The plain beam fades to
   nothing at the screen. The spot's own shadow still does the screen.
+- **Cushions** (#1279): their own mesh per seating bank in the interior's frame (`InteriorMeshBuilder.Cushions`, the
+  room lights are looked up by it), folded, or let down under a body in the sit pose (`InteriorNode.UpdateSeats`,
+  per frame from `CinemaBooths` without allocating, the mesh built again only when a bank's seated set changes).
+  The bank keeps their collision. The projectionist's chair stands between the first projector and its panel,
+  facing the hall's window; the lens shows the picture small while the screen is on (`LensPicture`).
+- **House lights off is dark** (#1279): in a room lit by tint-2 lamps the ambient (`world_tint * ambient_day`)
+  scales with `house_lights` too (floor 3 %), so only the screen's wash lights a hall with its lights off.
 - **New music each showing**: bits 3-6 of a hall's code count its showings (`CinemaBooths.ReelOf`), the server
   counting up as the screen comes on; the hall's music draws again from it.
 - **Box office glass** (#1279): a see-through pane of its own (`InteriorNode.AddClearGlass`), the mesh only its
