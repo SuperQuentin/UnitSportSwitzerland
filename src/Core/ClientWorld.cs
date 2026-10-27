@@ -196,6 +196,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.TerraceProbe { Name = "TerraceProbe" });
+        // restaurants, cafés, bars and clubs in hand-made buildings (#1242)
+        if (Interiors.DiningProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.DiningProbe { Name = "DiningProbe" });
             return;
         }
         // arcades planned in hand-made buildings (#1240)

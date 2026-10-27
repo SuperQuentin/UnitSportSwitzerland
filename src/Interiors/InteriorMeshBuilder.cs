@@ -151,6 +151,18 @@ public static partial class InteriorMeshBuilder
         RoomType.ProjectionRoom => (C(0.30f, 0.30f, 0.32f), C(0.20f, 0.20f, 0.22f), C(0.14f, 0.14f, 0.15f)),
         // #1240: an arcade's black carpet, dark violet walls, black ceiling
         RoomType.ArcadeHall => (C(0.08f, 0.06f, 0.14f), C(0.12f, 0.08f, 0.22f), C(0.05f, 0.04f, 0.07f)),
+        // #1242: a Beiz's dark parquet, cream walls and wood ceiling; a pizzeria's terracotta; a café's pale
+        // tiles; a fast food's yellow; a kebab's white; a bar's dark violet; a pub's oxblood; a club's black;
+        // a kitchen's white tiles
+        RoomType.Gaststube => (C(0.42f, 0.28f, 0.17f), C(0.86f, 0.80f, 0.66f), C(0.50f, 0.34f, 0.20f)),
+        RoomType.Pizzeria => (C(0.66f, 0.36f, 0.24f), C(0.92f, 0.84f, 0.66f), C(0.95f, 0.92f, 0.86f)),
+        RoomType.CafeRoom => (C(0.80f, 0.78f, 0.74f), C(0.90f, 0.86f, 0.76f), C(0.96f, 0.95f, 0.92f)),
+        RoomType.FastFoodRoom => (C(0.74f, 0.72f, 0.70f), C(0.95f, 0.88f, 0.62f), C(0.96f, 0.96f, 0.96f)),
+        RoomType.KebabRoom => (C(0.70f, 0.70f, 0.68f), C(0.92f, 0.92f, 0.90f), C(0.96f, 0.96f, 0.96f)),
+        RoomType.BarRoom => (C(0.20f, 0.14f, 0.10f), C(0.18f, 0.16f, 0.24f), C(0.10f, 0.10f, 0.12f)),
+        RoomType.PubRoom => (C(0.36f, 0.22f, 0.12f), C(0.40f, 0.12f, 0.10f), C(0.30f, 0.20f, 0.12f)),
+        RoomType.ClubRoom => (C(0.06f, 0.06f, 0.08f), C(0.07f, 0.06f, 0.10f), C(0.04f, 0.04f, 0.05f)),
+        RoomType.GastroKitchen => (C(0.62f, 0.60f, 0.56f), C(0.90f, 0.92f, 0.92f), C(0.95f, 0.95f, 0.95f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -213,6 +225,8 @@ public static partial class InteriorMeshBuilder
             // parked forklift one to be woken and driven (#630): InteriorManager.AddPallets and
             // AddForklifts draw them
             if (IsCarvedOut(l, p)) continue;
+            // a dining piece takes its woods and cloths from the room it stands in (#1242)
+            _room = IsDiningPiece(p.Type) ? RoomOf(l, p) : RoomType.Hall;
             Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
         }
 
@@ -906,7 +920,9 @@ public static partial class InteriorMeshBuilder
             // #1235: lanes are walked on (their machine end collides by itself); a dart board hangs on the wall
             or FurnitureType.LanePair or FurnitureType.DartBoard or FurnitureType.Confetti
             // #1238: a seating bank collides as tiers and aisle ramps; signs, ports and posters are on the wall
-            or FurnitureType.SeatingBank or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.PosterFrame);
+            or FurnitureType.SeatingBank or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.PosterFrame
+            // #1242: a dance floor is danced on
+            or FurnitureType.DanceFloor);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
         if (IsVenuePiece(p.Type))
         {
@@ -921,6 +937,11 @@ public static partial class InteriorMeshBuilder
         if (IsArcadePiece(p.Type))
         {
             ArcadePiece(s, p, at, basis);
+            return;
+        }
+        if (IsDiningPiece(p.Type))
+        {
+            DiningPiece(s, p, at, basis);
             return;
         }
 

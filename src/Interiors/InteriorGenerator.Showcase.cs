@@ -21,6 +21,7 @@ public static partial class InteriorGenerator
         Take(BowlingPieces);
         Take(CinemaPieces);
         Take(ArcadePieces);
+        Take(DiningPieces);
         var room = new RoomPlan { X1 = 8, Z1 = 8 };
         foreach (var type in Enum.GetValues<RoomType>())
         {

@@ -176,6 +176,12 @@ src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
+# #1242: restaurants, cafés, bars and clubs in hand-made buildings
+src/Interiors/InteriorGenerator.Dining quick --diningcheck --systems ui
+src/Interiors/InteriorMeshBuilder.Dining quick --diningcheck --systems ui
+src/Interiors/DiningProbe   quick  --diningcheck --systems ui
+src/Interiors/InteriorGenerator.Apartments quick --diningcheck --systems ui
+src/Interiors/Venues        quick  --diningcheck --systems ui
 src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
 src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
 shaders/body/interior      quick  --bowlingcheck --systems ui

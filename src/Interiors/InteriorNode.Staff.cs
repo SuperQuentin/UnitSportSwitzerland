@@ -18,6 +18,10 @@ public partial class InteriorNode
         FurnitureType.ShoeCounter or FurnitureType.BarCounter or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
             or FurnitureType.PrizeCounter
             => -p.D / 2 + 0.45f + (p.D - 0.45f - 0.8f) / 2,
+        // #1242: behind a fast food's or a kebab's counter, a café's pastry case, at the DJ's decks
+        FurnitureType.OrderCounter or FurnitureType.KebabCounter => -p.D / 2 + 0.6f + (p.D - 0.6f - 0.8f) / 2,
+        FurnitureType.PastryCase => -p.D / 2 + 0.5f + (p.D - 0.5f - 0.8f) / 2,
+        FurnitureType.DjBooth => -p.D / 2 + 0.3f,
         _ => null,
     };
 
