@@ -161,7 +161,7 @@ public partial class PhoneController : Node
             GD.Print($"[phone] {cmd}");
             GameShell.Instance?.World?.GetNodeOrNull<ChatManager>(ChatManager.NodeName)?.Send(cmd);
             if (cmd.StartsWith("/tp", StringComparison.Ordinal) || cmd.StartsWith("/party", StringComparison.Ordinal) || cmd.StartsWith("/fight", StringComparison.Ordinal))
-                InviteToasts.Instance?.Flash("Calling…");
+                InviteToasts.Instance?.Flash("Asking…");
         };
         _screens.CallAnswered += Answer;
         _screens.ActivitiesPicked += () => ActivitiesScreen.Open(ActivitiesScreen.Tab.BattleRoyale);
@@ -220,6 +220,11 @@ public partial class PhoneController : Node
     /// <summary>Back from an app to home; from home, folds the phone.</summary>
     private void Back()
     {
+        if (_screens.Shown == PhoneScreens.Page.Contacts && _screens.CloseContactsSheet())
+        {
+            Play(PhoneSounds.Tap);
+            return;
+        }
         if (_screens.Shown == PhoneScreens.Page.Photo)
         {
             _screens.ShowPage(PhoneScreens.Page.Photos);
