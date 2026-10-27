@@ -202,6 +202,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         if (Instance == this) Instance = null;
         DoorIndex.Clear();
+        // a box in world space hangs off the scene root: it must not outlive the world (#1286)
+        PointOutline(null, Items.Outranking.None);
     }
 
     /// <summary>The interior the local player is in, and its node — for probes and tools.</summary>
@@ -934,8 +936,11 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// The door E works for <paramref name="player"/> outside, if any: of the doors in reach, the
     /// one they look at the facade of before a nearer one at their back.
     /// </summary>
-    public string? OutsideDoorInReach(FootPlayer player) =>
-        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside)?.Key.ToString();
+    public string? OutsideDoorInReach(FootPlayer player) => OutsideEntry(player)?.Key.ToString();
+
+    /// <summary>The door <see cref="OutsideDoorInReach(FootPlayer)"/> names, as the index has it (its outline, #1286).</summary>
+    private DoorIndex.Entry? OutsideEntry(FootPlayer player) =>
+        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside);
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
@@ -1138,34 +1143,23 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private void UpdatePrompt(double delta)
     {
         if (_prompt == null) return;
-        if (_hintTimer > 0) { _hintTimer -= delta; return; }
+        // a hint holds the line a moment; the outline still follows what E would act on
+        bool hint = _hintTimer > 0;
+        if (hint) _hintTimer -= delta;
         _promptTimer -= delta;
         if (_promptTimer > 0) return;
         _promptTimer = 0.15;
 
         var p = LocalPlayer?.Invoke();
-        string? text = null;
+        Items.Interaction? hit = null;
+        var outranks = Items.Outranking.None;
+        // what E would act on, its words and its outline from one rule (#1286, InteriorManager.Interact)
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
-        {
-            string? door = null;
-            if (p.Indoors && _current != null)
-            {
-                door = ExitAt(p)?.Door;
-                if (door == null) text = InsidePrompt(p) ?? ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
-            }
-            else if (!p.Indoors) door = OutsideDoorInReach(p);
-            // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
-            if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p) ?? Adventure.Rewards.RewardWorld.PromptFor(p) ?? Adventure.Places.PoiMarkers.PromptFor(p);
-            if (door != null)
-                text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
-            // a building site's skip or materials faced outdoors (#627): E searches it before a door
-            if (!p.Indoors && Loot.LootService.Instance?.YardPromptFor(p) is { } yard) text = yard;
-            // a building site crane's ladder, its remote's box, or the climb itself (#618): E takes
-            // them before a skip's search, as TryInteract does
-            if (!p.Indoors && p.CranePrompt() is { } crane) text = crane;
-            // a Battle Royale crate at your feet comes first, as E opens it first (#194)
-            if (BattleRoyale.BrCrates.Instance?.PromptFor(p) is { } crate) text = crate;
-        }
+            hit = Interacting(p, out outranks);
+        PointOutline(hit, outranks);
+        if (hint) return;
+        // a bar row's words are in the prompt bar (ClientWorld.Prompts), from the same call
+        string? text = hit is { InBar: false } floating ? floating.Text : null;
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;
     }
@@ -1426,10 +1420,14 @@ public partial class InteriorNode : Node3D
         return mesh;
     }
 
+    /// <summary>A bare interior node for a plan, nothing built in it: the outline check's (#1286) stand-in.</summary>
+    internal static InteriorNode ForCheck(InteriorLayout layout) => new() { Name = "Interior_" + layout.Key, Layout = layout };
+
     /// <summary>
     /// Builds the node. Given a prebuilt <paramref name="mesh"/>, the caller adds the collision
     /// itself (<see cref="AddBody"/>); without one, both are built here.
     /// </summary>
+
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement,
         ArrayMesh? mesh = null, WorldOrigin? origin = null)
     {

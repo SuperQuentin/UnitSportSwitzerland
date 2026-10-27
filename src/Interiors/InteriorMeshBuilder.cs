@@ -638,6 +638,29 @@ public static partial class InteriorMeshBuilder
     private static readonly Color LiftSteel = C(0.66f, 0.68f, 0.70f);
     private static readonly Color LiftButton = C(0.95f, 0.78f, 0.30f);
 
+    /// <summary>The landing's call button plate of the floor at <paramref name="y0"/>, interior-local min and max (#1286: its outline too).</summary>
+    public static (Vector3 Min, Vector3 Max) LiftCallPlate(LiftPlan lift, float y0)
+    {
+        const float wall = InteriorGenerator.WallInset;
+        float ca = lift.CallAlong, cy = y0 + LiftPlan.ButtonHeight;
+        var p = lift.WallPoint(ca - 0.06f, cy - 0.11f, wall);
+        var q = lift.WallPoint(ca + 0.06f, cy + 0.11f, wall + 0.02f);
+        return (new Vector3(Math.Min(p.X, q.X), cy - 0.11f, Math.Min(p.Z, q.Z)), new Vector3(Math.Max(p.X, q.X), cy + 0.11f, Math.Max(p.Z, q.Z)));
+    }
+
+    /// <summary>The cabin's button panel on the floor at <paramref name="y0"/>, interior-local min and max (#1286: its outline too).</summary>
+    public static (Vector3 Min, Vector3 Max) LiftPanel(LiftPlan lift, float y0)
+    {
+        var pc = lift.PanelPoint(y0 + LiftPlan.ButtonHeight);
+        var (nx, nz) = lift.PanelNormal;
+        var normal = new Vector3(nx, 0, nz);
+        var across = new Vector3(-nz, 0, nx);
+        float panelH = LiftPlan.PanelHeight(lift.Top - lift.Bottom + 1);
+        var pmin = pc - across * 0.13f - new Vector3(0, panelH / 2, 0);
+        var pmax = pc + across * 0.13f + new Vector3(0, panelH / 2, 0) + normal * 0.02f;
+        return (pmin.Min(pmax), pmin.Max(pmax));
+    }
+
     /// <summary>
     /// What an elevator has on one floor besides its cabin room: the steel frame round the doors
     /// and the call button on the landing, and in the cabin the button panel and a handrail. The
@@ -660,19 +683,17 @@ public static partial class InteriorMeshBuilder
         Slab(-0.15f, 0.15f, top + 0.16f, top + 0.28f, wall, wall + 0.03f, C(0.08f, 0.08f, 0.09f));
         Slab(-0.05f, 0.05f, top + 0.19f, top + 0.25f, wall + 0.03f, wall + 0.035f, C(0.95f, 0.30f, 0.12f));
         float ca = lift.CallAlong, cy = y0 + LiftPlan.ButtonHeight;
-        Slab(ca - 0.06f, ca + 0.06f, cy - 0.11f, cy + 0.11f, wall, wall + 0.02f, LiftSteel * 0.9f);
+        var (plateMin, plateMax) = LiftCallPlate(lift, y0);
+        s.Box(plateMin, plateMax, LiftSteel * 0.9f);
         Slab(ca - 0.025f, ca + 0.025f, cy - 0.025f, cy + 0.025f, wall + 0.02f, wall + 0.035f, LiftButton);
 
         // inside: the panel on the wall beside the doors, a button a floor, the bottom one lowest
-        var pc = lift.PanelPoint(y0 + LiftPlan.ButtonHeight);
         var (nx, nz) = lift.PanelNormal;
         var normal = new Vector3(nx, 0, nz);
         var across = new Vector3(-nz, 0, nx);
         int buttons = lift.Top - lift.Bottom + 1;
-        float panelH = LiftPlan.PanelHeight(buttons);
-        var pmin = pc - across * 0.13f - new Vector3(0, panelH / 2, 0);
-        var pmax = pc + across * 0.13f + new Vector3(0, panelH / 2, 0) + normal * 0.02f;
-        s.Box(pmin.Min(pmax), pmin.Max(pmax), LiftSteel * 0.85f, false);
+        var (pmin, pmax) = LiftPanel(lift, y0);
+        s.Box(pmin, pmax, LiftSteel * 0.85f, false);
         for (int b = 0; b < buttons; b++)
         {
             var at = lift.ButtonPoint(y0, b);
@@ -768,6 +789,59 @@ public static partial class InteriorMeshBuilder
         var colors = s.C.ToArray();
         for (int i = 0; i < colors.Length; i++) colors[i].A = 1f;
         return new MeshData(s.V.ToArray(), colors, Array.Empty<Vector3>());
+    }
+
+    /// <summary>
+    /// One piece of a plan alone, as <see cref="Build"/> bakes it, interior-local: the outline over the
+    /// piece E would act on (#1286, <see cref="Items.InteractOutline"/>). <paramref name="half"/> keeps one
+    /// side of it, in its own frame: -1 its left (-X), +1 its right, 0 all of it (a booth panel's lights
+    /// and screen halves). Built when the target changes, never per frame.
+    /// </summary>
+    public static Vector3[] Piece(InteriorLayout l, int index, int half = 0)
+    {
+        var p = l.Furniture[index];
+        var s = new Scratch();
+        _room = IsDiningPiece(p.Type) ? RoomOf(l, p) : RoomType.Hall;
+        // where it stands (its rolls are seeded by it) but unturned: a half is cut in the piece's own frame
+        var unturned = new FurniturePlan { Type = p.Type, Floor = p.Floor, X = p.X, Z = p.Z, W = p.W, D = p.D, H = p.H, Lift = p.Lift };
+        Furniture(s, unturned, l.FloorY(p.Floor) + p.Lift, new List<Figure>());
+        var turn = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
+        var pivot = new Vector3(p.X, 0, p.Z);
+        var kept = new List<Vector3>(s.V.Count);
+        Span<Vector3> poly = stackalloc Vector3[4];
+        for (int i = 0; i + 2 < s.V.Count; i += 3)
+        {
+            // a half: the triangle cut at the piece's middle (a box spanning both halves keeps its own side)
+            int n = half == 0 ? Copy(s.V, i, poly) : ClipHalf(s.V, i, p.X, half, poly);
+            for (int k = 1; k + 1 < n; k++)
+            {
+                kept.Add(pivot + turn * (poly[0] - pivot));
+                kept.Add(pivot + turn * (poly[k] - pivot));
+                kept.Add(pivot + turn * (poly[k + 1] - pivot));
+            }
+        }
+        return kept.ToArray();
+    }
+
+    private static int Copy(List<Vector3> v, int i, Span<Vector3> into)
+    {
+        into[0] = v[i]; into[1] = v[i + 1]; into[2] = v[i + 2];
+        return 3;
+    }
+
+    /// <summary>Triangle <paramref name="i"/> clipped to the side <paramref name="half"/> of x = <paramref name="middle"/>: 0, 3 or 4 corners.</summary>
+    private static int ClipHalf(List<Vector3> v, int i, float middle, int half, Span<Vector3> into)
+    {
+        int n = 0;
+        for (int k = 0; k < 3; k++)
+        {
+            var a = v[i + k];
+            var b = v[i + (k + 1) % 3];
+            float da = half * (a.X - middle), db = half * (b.X - middle);
+            if (da >= 0) into[n++] = a;
+            if (da >= 0 != db >= 0) into[n++] = a.Lerp(b, da / (da - db));
+        }
+        return n;
     }
 
     /// <summary>PAUSA's block letters, 3x5, top row first.</summary>

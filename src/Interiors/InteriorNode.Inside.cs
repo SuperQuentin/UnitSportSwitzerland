@@ -40,6 +40,9 @@ public partial class InteriorNode
 
     public float InnerSwing(int door) => _innerSwing.GetValueOrDefault(door);
 
+    /// <summary>A flat's front door's leaf, what E at it outlines (#1286).</summary>
+    public DoorLeaf? InnerLeaf(int door) => _innerLeaves.GetValueOrDefault(door);
+
     private static void AddLiftDoors(InteriorNode node, Material material)
     {
         var l = node.Layout;
