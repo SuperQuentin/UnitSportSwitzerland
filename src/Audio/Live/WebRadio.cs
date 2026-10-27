@@ -123,6 +123,9 @@ public partial class WebRadio : Node
                     sources.Add((v, v.Wrecked ? 0 : v.Radio));
                     discs.Add((v, v.Wrecked ? null : RadioPlay.Decode(v.Cd)));
                 }
+        // a venue's music (#1244): its rooms, and the quiet speaker behind its door for the street
+        foreach (var source in VenueMusicSource.All.ToList())
+            if (IsInstanceValid(source)) sources.Add((source, source.Station));
         // a CD in a car stereo (#211) is the boombox's clock-driven speaker, no relay: every
         // client fetches the Ogg once and plays it from ServerNow − StartedAt. Not headless, like
         // a radio in the world (no speaker to drive, no file worth downloading).
@@ -145,7 +148,12 @@ public partial class WebRadio : Node
                 node.AddChild(speaker);
             }
             speaker.Station = station;
-            speaker.Volume = node is FootPlayer driver ? driver.RadioVolume : Items.RadioLoudness.Default;
+            speaker.Volume = node switch
+            {
+                FootPlayer driver => driver.RadioVolume,
+                VenueMusicSource venue => venue.Volume,
+                _ => Items.RadioLoudness.Default,
+            };
             float d = ear is { } at ? at.DistanceTo(node.GlobalPosition) : 0f;
             if (d < HearRadius) near.Add((d, station));
         }

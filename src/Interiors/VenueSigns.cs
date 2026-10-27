@@ -56,6 +56,8 @@ public partial class VenueSigns : Node
             sign.Transform = at;
             root ??= new Node3D { Name = NodeName };
             root.AddChild(sign);
+            // its music, quiet, as the street hears it through the door (#1244)
+            if (VenueMusic.AtDoor(d, v) is { } music) root.AddChild(music);
             // a hall's own word, big, high over its door (#1235): what tells a bowling centre from a
             // warehouse across the car park, the name smaller underneath
             if (!Venues.IsHall(v.Type)) continue;

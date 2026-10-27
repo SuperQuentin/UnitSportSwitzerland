@@ -182,6 +182,9 @@ src/Interiors/InteriorMeshBuilder.Dining quick --diningcheck --systems ui
 src/Interiors/DiningProbe   quick  --diningcheck --systems ui
 src/Interiors/InteriorGenerator.Apartments quick --diningcheck --systems ui
 src/Interiors/Venues        quick  --diningcheck --systems ui
+# #1244: venue music on the radio relay
+src/Interiors/VenueMusic    quick  --venuecheck --systems ui
+src/Audio/Live/VenueMusicSource quick --venuecheck --systems ui
 src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
 src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
 shaders/body/interior      quick  --bowlingcheck --systems ui

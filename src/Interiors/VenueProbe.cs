@@ -107,6 +107,9 @@ public partial class VenueProbe : Node
             var sign = NeonSign.Make(Venues.GenericName(t), t);
             Check(sign.GetChildren().OfType<Label3D>().Count() == 2, $"{t}'s sign is lettered on both faces");
             sign.Free();
+            // its music on the relay (#1244): a station every kind has, in every region
+            foreach (var region in Enum.GetValues<VenueMusic.Region>())
+                Check(Audio.Live.Stations.For(VenueMusic.StationFor(t, "", region)) != null, $"{t} plays a station in {region} Switzerland");
         }
         Check(NeonSign.IconMesh(VenueType.Restaurant, "pizza") is { } pizza && pizza.SurfaceGetArrayLen(0) != NeonSign.IconMesh(VenueType.Restaurant)!.SurfaceGetArrayLen(0),
             "a pizzeria's icon is a slice, not the fork and knife");
