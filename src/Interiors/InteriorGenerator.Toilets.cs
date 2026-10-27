@@ -13,17 +13,17 @@ namespace UnitSport.Interiors;
 /// <list type="bullet">
 /// <item><b>Gendered</b>: along the host wall the women's anteroom (the basins, a mirror over each, the
 /// hand dryer) and the washroom behind it, the men's the same with the urinals and their screens, then
-/// the accessible WC (SIA 500) in a big building. The doorway from the host is in the anteroom's host
+/// the accessible WC (SIA 500) in a big building. The door from the host is in the anteroom's host
 /// wall, the one into the washroom in its side wall at the far end, square to it: nothing in the room is
-/// seen from the host. The stalls are a row along the washroom's far side wall.</item>
+/// seen from the host, even with both open. The stalls are a row along the washroom's far side wall.</item>
 /// <item><b>Shared</b>: one anteroom with the basin, a women's and a men's stall off its back wall.</item>
 /// <item><b>Single</b>: one WC with its own door.</item>
 /// </list>
 ///
 /// <para>
-/// Stalls are rooms walled to the ceiling, each closed by a leaf (<see cref="InnerDoorPlan"/>, a flat
-/// door's: E / Y or a VR grip, server state) hanging in the room before it and swinging into the stall;
-/// so are the WC's and the accessible WC's doors. The pieces are planned with the rooms and stood when
+/// Every way into a toilet room is closed by a leaf (<see cref="InnerDoorPlan"/>, a flat door's: E / Y or a
+/// VR grip, server state) hanging in the room before it and swinging into the toilet: the anterooms', the
+/// washrooms', the stalls' (rooms walled to the ceiling), the WC's and the accessible WC's. The pieces are planned with the rooms and stood when
 /// the floor is furnished (<see cref="PlaceToiletPieces"/>). Numbers in <c>docs/notes/terrain/public-toilets.md</c>.
 /// </para>
 /// </summary>
@@ -256,10 +256,11 @@ public static partial class InteriorGenerator
             float a1 = a + AnteW, wash1 = a1 + (women ? WomenWashW : MenWashW(urinals)) + extra, row0 = wash1 - StallD;
             int ante = Room(RoomType.ToiletLobby, a, 0, a1, D);
             int wash = Room(women ? RoomType.WomensToilet : RoomType.MensToilet, a1, 0, row0, D);
-            // in at the anteroom's host wall, toward its far side; on into the washroom by its side wall at the back
-            HostDoor(ante, a1 - 0.1f - ToiletSizing.Door / 2, ToiletSizing.Door, false, women ? FurnitureType.WcSignWomen : FurnitureType.WcSignMen);
+            // in at the anteroom's host wall, toward its far side; on into the washroom by its side wall at the back:
+            // a door on each, as Swiss toilets have them, swinging away from the corridor
+            HostDoor(ante, a1 - 0.1f - ToiletSizing.Door / 2, ToiletSizing.Door, true, women ? FurnitureType.WcSignWomen : FurnitureType.WcSignMen);
             float innerB = D - 0.15f - ToiletSizing.Door / 2;
-            Link(ante, StripWall.End, wash, a1, innerB, ToiletSizing.Door, false);
+            Link(ante, StripWall.End, wash, a1, innerB, ToiletSizing.Door, true);
 
             // the basins along the anteroom's outer wall, a mirror over each, the dryer after them
             int fixtures = stalls + urinals;
@@ -325,7 +326,7 @@ public static partial class InteriorGenerator
         {
             float a1 = a + SharedW + _extra, b1 = D - StallD, half = (a1 - a) / 2;
             int ante = Room(RoomType.ToiletLobby, a, 0, a1, b1);
-            HostDoor(ante, a1 - 0.1f - ToiletSizing.Door / 2, ToiletSizing.Door, false, FurnitureType.WcSignAll);
+            HostDoor(ante, a1 - 0.1f - ToiletSizing.Door / 2, ToiletSizing.Door, true, FurnitureType.WcSignAll);
             foreach (var (i, sign) in new[] { (0, FurnitureType.WcSignWomen), (1, FurnitureType.WcSignMen) })
             {
                 float s0 = a + i * half, s1 = s0 + half, mid = (s0 + s1) / 2;

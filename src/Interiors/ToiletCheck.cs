@@ -59,6 +59,8 @@ public static class ToiletCheck
                             && rooms[o.Other].Type is RoomType.WomensToilet or RoomType.MensToilet);
                         var host = r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Door && o.Other >= 0 && !InteriorGenerator.ToiletRoom(rooms[o.Other].Type));
                         if (host == null) bad.Add("an anteroom with no way in");
+                        else if (!Leaf(ri, host)) bad.Add("an anteroom with no door");
+                        if (wash != null && !Leaf(ri, wash)) bad.Add("a washroom with no door");
                         else if (wash != null && (wash.Side == host.Side || wash.Side == Opposite(host.Side)))
                             bad.Add("an anteroom whose two doorways face each other: the washroom is seen from outside");
                         break;

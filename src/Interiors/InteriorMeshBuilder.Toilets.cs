@@ -38,7 +38,7 @@ public static partial class InteriorMeshBuilder
                     float cx = -w + pitch * (i + 0.5f);
                     B(cx - 0.2f, H - 0.16f, -d + 0.1f, cx + 0.2f, H + 0.012f, d - 0.06f, porcelain);
                     B(cx - 0.16f, H - 0.012f, -d + 0.14f, cx + 0.16f, H + 0.024f, d - 0.1f, C(0.80f, 0.84f, 0.86f));
-                    B(cx - 0.02f, H, -d + 0.02f, cx + 0.02f, H + 0.2f, -d + 0.06f, steel);
+                    B(cx - 0.02f, H - sink, -d + 0.02f, cx + 0.02f, H + 0.2f, -d + 0.06f, steel);
                     B(cx - 0.02f, H + 0.16f, -d + 0.06f, cx + 0.02f, H + 0.2f, -d + 0.16f, steel);
                 }
                 break;
@@ -55,7 +55,7 @@ public static partial class InteriorMeshBuilder
             {
                 // a frosted panel 0.3-1.5 m up, out from the wall between two urinals, on a steel bracket
                 B(-w, 0.3f, -d, w, H, d, C(0.80f, 0.84f, 0.86f));
-                B(-w - sink, 0.3f, -d, w + sink, 0.36f, -d + 0.06f, steel);
+                B(-w - sink, 0.3f + sink, -d - sink, w + sink, 0.36f, -d + 0.06f, steel);
                 break;
             }
             case FurnitureType.GrabRail:
@@ -64,12 +64,12 @@ public static partial class InteriorMeshBuilder
                 bool outward = p.D >= p.W;
                 if (outward)
                 {
-                    B(-0.02f, H - 0.05f, -d, 0.02f, H, d, steel);
+                    B(-0.02f, H - 0.05f, -d + sink, 0.02f, H, d, steel);
                     B(-0.05f, H - 0.12f, -d, 0.05f, H + 0.06f, -d + 0.02f, steel * 0.9f);
                 }
                 else
                 {
-                    B(-w, H - 0.05f, -d + 0.02f, w, H, d, steel);
+                    B(-w + sink, H - 0.05f, -d + 0.02f - sink, w - sink, H, d, steel);
                     foreach (float x in new[] { -w, w - 0.06f })
                         B(x, H - 0.08f, -d, x + 0.06f, H + 0.03f, -d + 0.02f, steel * 0.9f);
                 }
@@ -93,16 +93,16 @@ public static partial class InteriorMeshBuilder
         {
             Part(ox - 0.022f, 0.21f, ox + 0.022f, 0.255f);
             Part(ox - 0.04f, 0.12f, ox + 0.04f, 0.2f);
-            Part(ox - 0.035f, 0.04f, ox - 0.006f, 0.12f);
-            Part(ox + 0.006f, 0.04f, ox + 0.035f, 0.12f);
+            Part(ox - 0.035f, 0.04f, ox - 0.006f, 0.13f);
+            Part(ox + 0.006f, 0.04f, ox + 0.035f, 0.13f);
         }
         void Woman(float ox)
         {
             Part(ox - 0.022f, 0.21f, ox + 0.022f, 0.255f);
-            Part(ox - 0.03f, 0.16f, ox + 0.03f, 0.2f);
+            Part(ox - 0.03f, 0.15f, ox + 0.03f, 0.2f);
             Part(ox - 0.055f, 0.1f, ox + 0.055f, 0.16f);
-            Part(ox - 0.03f, 0.04f, ox - 0.008f, 0.1f);
-            Part(ox + 0.008f, 0.04f, ox + 0.03f, 0.1f);
+            Part(ox - 0.03f, 0.04f, ox - 0.008f, 0.11f);
+            Part(ox + 0.008f, 0.04f, ox + 0.03f, 0.11f);
         }
         switch (type)
         {

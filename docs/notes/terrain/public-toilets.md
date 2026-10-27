@@ -32,7 +32,8 @@ tested).
   Here: each gendered room is entered through its own **anteroom 1.6 m wide** (`ToiletLobby`), the
   basins along its outer wall; the doorway into the washroom is on the anteroom's side wall at its
   far end, square to the doorway from the corridor, so no straight line runs from the corridor
-  through both into the room. The doorways are open holes (no leaf to push, as the guide prefers).
+  through both into the room. Each doorway has a door all the same (the owner's call: Swiss toilets have
+  them; the offset keeps the washroom out of sight while both stand open).
 - **Accessible WC** (SIA 500): at least **1.80 x 1.65 m** with the door opening out, **1.65 x 2.30 m** with
   it opening in; the bowl's axis **0.45 m** from the corner; usable door at least 0.80 m; the figures are
   binding, mirrored allowed [S: hindernisfreie-architektur.ch, Procap M105, SIA 500-C2]. Here: 1.8 m
@@ -91,7 +92,8 @@ for the caller's store. Bump a generator's rules constant when its toilets chang
 
 ## Doors
 
-- Stall doors, the accessible WC's and the single WC's are real leaves (`InnerDoorPlan`, as a flat's
+- Every way into a toilet room is a real leaf: the anterooms' (gendered and shared), the washrooms', the
+  stalls', the accessible WC's and the single WC's (`InnerDoorPlan`, as a flat's
   front door, #557): server state, open or shut for everyone. The leaf hangs in the outer room and swings
   into the toilet (`Room` is the outer room). Not lockable.
 - **Keyboard / pad / VR**: the flat doors' existing action, nothing new: E / Y at the door opens or shuts it,
@@ -100,7 +102,6 @@ for the caller's store. Bump a generator's rules constant when its toilets chang
 - **Bots**: the server path is `ServeInnerDoor` (a bot's peer at the door); a bot walks through an open
   doorway by `MoveTo`. Same gap as every interior door (`bots/bot-capability-map`): no interior collision on
   the server yet.
-- Anteroom doorways are open holes: the maze replaces the door.
 
 ## Light and perf
 
