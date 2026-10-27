@@ -263,22 +263,30 @@ public partial class LocateService : Node
     /// </summary>
     private async Task<List<LocateHit>> GaragesAsync(List<LocateHit> candidates, int max)
     {
-        var tiles = new Dictionary<TileId, (BuildingTile? B, RoadTile? R, ChunkGrid? G)>();
+        // a tile's candidates are worked out together, the first time one of them comes up, so its roads are
+        // indexed once; the tiles of candidates past the first few that pass are never read
+        var doors = new Dictionary<(int E, int N, int Index), DoorSpot?>();
+        var read = new HashSet<TileId>();
         var kept = new List<LocateHit>();
         foreach (var hit in candidates)
         {
             if (hit.Building is not { } b) continue;
             var id = new TileId(b.TileE, b.TileN);
-            if (!tiles.TryGetValue(id, out var t))
+            if (read.Add(id))
             {
-                t = (await _source.LoadBuildingsAsync(id, _cancel.Token), await _source.LoadRoadsAsync(id, _cancel.Token),
-                    await _source.LoadChunkAsync(id, _cancel.Token));
-                tiles[id] = t;
+                var tile = await _source.LoadBuildingsAsync(id, _cancel.Token);
+                if (tile == null) continue;
+                var roads = await _source.LoadRoadsAsync(id, _cancel.Token);
+                var grid = await _source.LoadChunkAsync(id, _cancel.Token);
+                var mine = candidates.Where(h => h.Building is { } o && o.TileE == b.TileE && o.TileN == b.TileN && o.Index < tile.Buildings.Count)
+                    .Select(h => h.Building!.Value.Index).ToList();
+                var fps = await Task.Run(() => BuildingFootprint.Compute(tile, mine, roads, grid));
+                for (int i = 0; i < mine.Count; i++)
+                    doors[(b.TileE, b.TileN, mine[i])] = fps[i]?.Extra.FirstOrDefault(d => d.Ramp != GarageRule.RampKind.None) is { Width: > 0 } g ? g : null;
             }
-            if (t.B is not { } tile || b.Index >= tile.Buildings.Count) continue;
-            var fp = await Task.Run(() => BuildingFootprint.Compute(tile, b.Index, t.R, t.G));
-            if (fp?.Extra.FirstOrDefault(d => d.Ramp != GarageRule.RampKind.None) is not { Width: > 0 } door) continue;
-            double de = tile.Id.MinE + door.Position.X, dn = tile.Id.MaxN - door.Position.Z;
+            if (!doors.TryGetValue((b.TileE, b.TileN, b.Index), out var found) || found is not { } door) continue;
+            // the door is tile-local (X east, Z south from the tile's north-west corner)
+            double de = id.MinE + door.Position.X, dn = id.MaxN - door.Position.Z;
             kept.Add(hit with { E = de, N = dn, Detail = hit.Detail.Length > 0 ? hit.Detail + ", garage door" : "garage door" });
             if (kept.Count >= max) break;
         }

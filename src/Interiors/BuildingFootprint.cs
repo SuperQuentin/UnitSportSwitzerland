@@ -323,6 +323,15 @@ public static class BuildingFootprint
     public static Footprint? Compute(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid) =>
         Compute(tile, index, (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true)), grid);
 
+    /// <summary>Several buildings of one tile, its road index built once (#1277: <c>/locate</c> checks its garage candidates).</summary>
+    public static Footprint?[] Compute(BuildingTile tile, IReadOnlyList<int> indices, RoadTile? roads, ChunkGrid? grid)
+    {
+        var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
+        var fps = new Footprint?[indices.Count];
+        for (int i = 0; i < indices.Count; i++) fps[i] = Compute(tile, indices[i], roadIndex, grid);
+        return fps;
+    }
+
     /// <summary>A tile's street centrelines as a garage door's road link reads them (#694 probe).</summary>
     internal static List<GarageLink.Road> StreetRoads(RoadTile? roads) => RoadPoints.Build(roads).Roads;
 

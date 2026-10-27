@@ -328,6 +328,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the region's points of interest (#1224): this client's own pois.bin, again once a server sent its own
         Adventure.Places.PoiCatalogueHost.Load(source, _fixtureStart);
         if (Adventure.Places.PoiCheck.Requested) AddChild(new Adventure.Places.PoiCheck(_fixtureStart) { Name = "PoiCheck" });
+        if (World.Locate.LocateCheck.Requested) AddChild(new World.Locate.LocateCheck(SpawnPoint.ParseTarget(Launch)) { Name = "LocateCheck" });
         var manifest = await source.LoadManifestAsync();
         if (!IsInsideTree()) return;   // left during the load
         _localSource = source;

@@ -73,6 +73,8 @@ public sealed class LocateEngine
             return new LocateResult(hits);
         }
 
+        if (q.Target != LocateTarget.Steamer && CountOf(q.Target) == 0 && FromPoisOnly(q.Target))
+            return LocateResult.Refused($"This map has no list of {LocateEngine.Plural(LocateVocabulary.Label(q.Target))}: its points of interest (pois.bin, the preprocessor's --pois) are not there.");
         IEnumerable<LocatePoint> pool = q.Target == LocateTarget.Steamer ? Live().Where(p => p.Target == LocateTarget.Steamer)
             : _points.TryGetValue(q.Target, out var list) ? list : [];
         var ranked = pool.Select(p => (p, d: Dist(e, n, p.E, p.N))).OrderBy(x => x.d);
@@ -85,6 +87,11 @@ public sealed class LocateEngine
         }
         return new LocateResult(kept);
     }
+
+    /// <summary>The nouns only the survey's points of interest (<c>pois.bin</c>) answer.</summary>
+    public static bool FromPoisOnly(LocateTarget t) => t is LocateTarget.SummitCross or LocateTarget.Waterfall or LocateTarget.Lake
+        or LocateTarget.Tower or LocateTarget.Chapel or LocateTarget.Bridge or LocateTarget.Dam or LocateTarget.Station
+        or LocateTarget.BusStop or LocateTarget.CableCar or LocateTarget.Hut;
 
     /// <summary>Whether a building is what the query asks for, selectors and all (the garage only as a candidate).</summary>
     public static bool Matches(LocateQuery q, IndexedBuilding b)
@@ -152,7 +159,6 @@ public sealed class LocateEngine
         if (b.Floors > 0) parts.Add(b.Floors == 1 ? "1 floor" : $"{b.Floors} floors");
         if (b.Height > 0) parts.Add(b.Height.ToString("0", CultureInfo.InvariantCulture) + " m");
         if (b.Year > 0) parts.Add($"built {b.Year}");
-        if (b.Is(IndexedFlags.Spire)) parts.Add("spire");
         return string.Join(", ", parts);
     }
 

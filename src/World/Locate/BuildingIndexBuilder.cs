@@ -33,7 +33,7 @@ public static class BuildingIndexBuilder
     }
 
     /// <summary>Bump when a rule the flags read changes (the church grouping, the garage roll): the cached indexes go stale.</summary>
-    public const int BuildingRules = 1;
+    public const int BuildingRules = 2;
 
     /// <summary>The cached index for this key, or null.</summary>
     public static BuildingIndex? ReadCache(string key)
@@ -91,24 +91,46 @@ public static class BuildingIndexBuilder
         return new BuildingIndex(parts.SelectMany(p => p).ToList());
     }
 
-    /// <summary>One tile's buildings as the index keeps them.</summary>
+    /// <summary>A spire inside the hall's own solid: this much higher than the eave at least, m...</summary>
+    public const float SpireMinRise = 12f;
+    /// <summary>...and than this share of the hall's narrow side (a roof's ridge at 60° is 0.87 of it)...</summary>
+    public const float SpireRiseToWidth = 0.9f;
+    /// <summary>...with its top this narrow, m: a ridge's top is a line the length of the nave, a spire's a point.</summary>
+    public const float SpireTopWidth = 8f, SpireTopDrop = 3f;
+
+    /// <summary>
+    /// One tile's buildings as the index keeps them. A plan box is worked out only for the kinds that need
+    /// one (a church's hall or tower, a block that may roll a garage, a bank): the houses, farms and works that
+    /// are most of a region never do, and the box is most of the cost.
+    /// </summary>
     public static List<IndexedBuilding> Entries(BuildingTile tile)
     {
-        // not BuildingTypes.For: its cache would keep every tile of the region alive while the pass runs
-        var types = BuildingTypes.Detect(tile);
-        var list = new List<IndexedBuilding>(tile.Buildings.Count);
-        for (int i = 0; i < tile.Buildings.Count; i++)
+        int count = tile.Buildings.Count;
+        var boxes = new PlanBox?[count];
+        bool sacral = false;
+        for (int i = 0; i < count; i++)
+        {
+            var kind = tile.Buildings[i].Kind;
+            sacral |= kind == BuildingKind.Sacral;
+            if (BuildingTypes.ChurchPart(kind) || kind is BuildingKind.Apartment or BuildingKind.Commercial)
+                boxes[i] = PlanBox.Of(tile.Buildings[i]);
+        }
+        // every church has a Sacral solid (its hall, or its tower when the GWR point landed there)
+        var churches = sacral ? BuildingTypes.Churches(tile, boxes) : [];
+
+        var list = new List<IndexedBuilding>(count);
+        for (int i = 0; i < count; i++)
         {
             var b = tile.Buildings[i];
-            var box = types.Boxes[i];
+            var box = boxes[i];
             Vector2 c = box?.Center ?? Centre(b);
             var flags = IndexedFlags.None;
-            if (types.GroupOf(i) is { Type: BuildingType.Church } church && church.Primary == i)
+            if (churches.Find(g => g.Primary == i) is { } church)
             {
                 flags |= IndexedFlags.Church;
-                if (church.Parts.Contains(BuildingPart.Tower)) flags |= IndexedFlags.Spire;
+                if (church.Parts.Contains(BuildingPart.Tower) || box is { } hall && Steeple(b, hall)) flags |= IndexedFlags.Spire;
             }
-            if (box is { } pb)
+            if (box is { } pb && b.Kind is BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Other)
             {
                 string key = new BuildingKey(tile.Id.E, tile.Id.N, i).ToString();
                 if (BuildingFootprint.IsBank(key, b.Kind, pb.Width, pb.Depth)) flags |= IndexedFlags.Bank;
@@ -126,6 +148,25 @@ public static class BuildingIndexBuilder
                 b.Floors, b.YearBuilt, b.MaxY - b.MinY, flags));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Whether a hall carries its steeple in its own solid (the survey models Lausanne's cathedral, 75 m to the
+    /// cross over a 36 m eave, as one): far higher than its eave, and narrow at the top.
+    /// </summary>
+    public static bool Steeple(Building b, PlanBox hall)
+    {
+        float rise = b.MaxY - hall.Eave;
+        if (rise < Math.Max(SpireMinRise, SpireRiseToWidth * hall.Short)) return false;
+        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+        var t = b.Triangles;
+        for (int v = 0; v + 2 < t.Length; v += 3)
+        {
+            if (t[v + 1] < b.MaxY - SpireTopDrop) continue;
+            minX = Math.Min(minX, t[v]); maxX = Math.Max(maxX, t[v]);
+            minZ = Math.Min(minZ, t[v + 2]); maxZ = Math.Max(maxZ, t[v + 2]);
+        }
+        return maxX - minX <= SpireTopWidth && maxZ - minZ <= SpireTopWidth;
     }
 
     /// <summary>The middle of a solid's vertices in plan (tile-local X east, Z south), for one with no plan box.</summary>
