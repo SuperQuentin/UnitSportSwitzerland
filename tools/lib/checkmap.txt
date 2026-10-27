@@ -152,6 +152,13 @@ src/Interiors/Church     quick  --churchstagecheck
 src/Interiors/Landmarks  quick  --ikeacheck --systems ui
 src/Interiors/Ikea       quick  --ikeacheck --systems ui
 src/Interiors/BuildingTypes quick  --ikeacheck --systems ui
+# #1233: entertainment venues from OSM, matched by footprint; neon signs
+src/Interiors/Venue        quick  --venuecheck --systems ui
+src/Interiors/NeonSign     quick  --venuecheck --systems ui
+src/Interiors/BuildingTypes quick  --venuecheck --systems ui
+src/Interiors/BuildingFootprint quick --venuecheck --systems ui
+src/Interiors/venues.tsv.gz quick  --venuecheck --systems ui
+tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck

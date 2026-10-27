@@ -98,7 +98,7 @@ public static partial class Preprocessor
                 case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
                     or "--dem-check" or "--rgealti-check" or "--dem-probe"
                     or "--osm-overlay" or "--landings-file" or "--airports-file" or "--sitg-signs"
-                    or "--pois" or "--pois-file" or "--poisstats" or "--wikidata":
+                    or "--pois" or "--pois-file" or "--poisstats" or "--wikidata" or "--venues":
                     return false;
             }
         }
@@ -145,6 +145,8 @@ public static partial class Preprocessor
         string? airportsFile = null, airportsOsm = null;
         // castles (#859): which solids of the built tiles are castles, into a C# list the game compiles in
         string? castlesFile = null;
+        // venues (#1232): bowling centres, cinemas, arcades, restaurants and bars from OSM, into venues.tsv.gz the game embeds
+        string? venuesFile = null;
         // points of interest (#1224): standalone with --pois (needs --out, --tlm), and after every --places pass
         // given --tlm; --boundaries <swissBOUNDARIES3D gpkg> for the cantons, --osm-pbf for castles
         bool poisOnly = false, poisStats = false, wikidata = false;
@@ -207,6 +209,7 @@ public static partial class Preprocessor
                 case "--airports": airportsOnly = true; break;
                 case "--airports-file": airportsFile = args[++i]; break;
                 case "--castles": castlesFile = args[++i]; break;
+                case "--venues": venuesFile = args[++i]; break;
                 case "--pois": poisOnly = true; break;
                 case "--pois-file": poisFile = args[++i]; break;
                 case "--poisstats": poisStats = true; break;
@@ -309,6 +312,17 @@ public static partial class Preprocessor
                 : new HashSet<TileId>();
             SetStage("fields");
             return FieldStage.Run(fieldsDir, osmFieldsPbf, gwrPath, outDir, region, jobs);
+        }
+
+        // ---- venues (#1232): OSM bowling centres, cinemas, arcades, restaurants, bars; snapped to solids where tiles are built
+        if (venuesFile != null)
+        {
+            if (airportsOsm == null)
+            {
+                Console.Error.WriteLine("--venues <venues.tsv.gz> requires --osm <switzerland .osm.pbf> (and --out <chunk dir> to snap points onto built solids)");
+                return 2;
+            }
+            return VenueStage.Run(outDir, airportsOsm, venuesFile, jobs);
         }
 
         // ---- castles (#859): OSM historic=castle and GWR names resolved to solids --------------------

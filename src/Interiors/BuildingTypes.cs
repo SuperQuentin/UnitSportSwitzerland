@@ -47,15 +47,17 @@ public sealed class BuildingTypeMap
     private readonly int[] _group;
     private readonly BuildingPart[] _part;
     private readonly int[]? _castle;
+    private readonly int[]? _venue;
 
     public PlanBox?[] Boxes { get; }
     public IReadOnlyList<BuildingGroup> Groups { get; }
 
-    internal BuildingTypeMap(PlanBox?[] boxes, List<BuildingGroup> groups, int[]? castles = null)
+    internal BuildingTypeMap(PlanBox?[] boxes, List<BuildingGroup> groups, int[]? castles = null, int[]? venues = null)
     {
         Boxes = boxes;
         Groups = groups;
         _castle = castles;
+        _venue = venues;
         _group = Enumerable.Repeat(-1, boxes.Length).ToArray();
         _part = new BuildingPart[boxes.Length];
         for (int g = 0; g < groups.Count; g++)
@@ -84,6 +86,16 @@ public sealed class BuildingTypeMap
 
     /// <summary>Whether any solid of the tile is a castle's.</summary>
     public bool HasCastles => _castle != null;
+
+    /// <summary>
+    /// The entertainment venue a solid is (#1232), an index for <see cref="Venues.At"/>, or -1. Only
+    /// what it is: how each kind is planned and dressed is that kind's own (a venue is not a
+    /// <see cref="BuildingGroup"/>, so churches, landmarks and stored plans are what they were).
+    /// </summary>
+    public int VenueOf(int index) => _venue != null && index >= 0 && index < _venue.Length ? _venue[index] : -1;
+
+    /// <summary>Whether any solid of the tile is a venue.</summary>
+    public bool HasVenues => _venue != null;
 }
 
 /// <summary>
@@ -250,7 +262,7 @@ public static class BuildingTypes
         if (Landmarks.Match(tile, boxes) is { } hit && groups.All(g => !g.Members.Contains(hit.Index)))
             groups.Add(new BuildingGroup(hit.Store.Type, new[] { hit.Index }, new[] { BuildingPart.Store }));
 
-        return new BuildingTypeMap(boxes, groups, Castles.Match(tile));
+        return new BuildingTypeMap(boxes, groups, Castles.Match(tile), Venues.Match(tile));
     }
 
     private static bool IsTower(Building b, PlanBox box)

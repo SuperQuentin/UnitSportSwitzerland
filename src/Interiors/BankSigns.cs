@@ -81,11 +81,12 @@ public partial class BankSigns : Node
     private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
     {
         node.GetNodeOrNull(NodeName)?.QueueFree();
-        if (!doors.Any(d => (d.Bank || d.Shop != Loot.ShopType.None) && d.Width > 0)) return;
+        // a venue's door carries its neon sign instead (#1232, VenueSigns)
+        if (!doors.Any(d => (d.Bank || d.Shop != Loot.ShopType.None) && d.Width > 0 && d.Venue == 0)) return;
         var root = new Node3D { Name = NodeName };
         foreach (var d in doors)
         {
-            if (!(d.Bank || d.Shop != Loot.ShopType.None) || d.Width <= 0) continue;
+            if (!(d.Bank || d.Shop != Loot.ShopType.None) || d.Width <= 0 || d.Venue > 0) continue;
             string text = d.Bank ? "BANK" : Loot.ShopTables.Name(d.Shop).ToUpperInvariant();
             var ink = d.Bank ? BankInk : ShopColors(d.Shop).Text;
             var outward = d.Outward with { Y = 0 };
