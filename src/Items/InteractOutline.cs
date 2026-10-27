@@ -89,6 +89,14 @@ public static class InteractOutline
     {
         if (target.Node != null && !GodotObject.IsInstanceValid(target.Node)) target = default;
         if (target == Current && Live()) return;
+        // the same box moved (a bus's button riding along): the proxy moves, nothing is built
+        if (target.Kind == OutlineKind.Box && Current.Kind == OutlineKind.Box && target.Node == Current.Node
+            && target.Size == Current.Size && Live())
+        {
+            Current = target;
+            Proxy!.Transform = target.At;
+            return;
+        }
         Clear();
         Current = target;
         switch (target.Kind)

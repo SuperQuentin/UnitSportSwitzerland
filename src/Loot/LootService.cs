@@ -274,9 +274,9 @@ public partial class LootService : Node
         if (Vehicles.VehicleReach.Current != null || !NearestYard(p, out var c)) return null;
         string what = SiteLoot.Describe(c.Kind);
         bool empty = _seenEmpty.TryGetValue((c.Building, c.Index), out long ep) && ep == LootTables.Epoch(c.Building, Now);
-        // from the player: the world's x is east and its z south, as the stock's axes
-        var me = p.Global;
-        var middle = p.GlobalPosition + new Vector3((float)(c.E - me.E), (c.Bottom + c.Top) / 2 - (float)me.Alt, (float)(me.N - c.N));
+        // the world's x is east and its z south, as the stock's axes
+        if (p.Origin is not { } origin) return new(InputHints.Prompt(PlayerInput.InteractMount, empty ? $"Search the {what} (empty)" : $"Search the {what}"), default);
+        var middle = origin.ToWorld(c.E, c.N, (c.Bottom + c.Top) / 2);
         var basis = new Basis(new Vector3(c.AxisU.X, 0, c.AxisU.Y), Vector3.Up, new Vector3(c.AxisV.X, 0, c.AxisV.Y));
         return new(InputHints.Prompt(PlayerInput.InteractMount, empty ? $"Search the {what} (empty)" : $"Search the {what}"),
             Outline.Box(null, new Transform3D(basis, middle), new Vector3(2 * c.HalfU, c.Top - c.Bottom, 2 * c.HalfV)));

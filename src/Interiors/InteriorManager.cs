@@ -202,6 +202,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         if (Instance == this) Instance = null;
         DoorIndex.Clear();
+        // a box in world space hangs off the scene root: it must not outlive the world (#1286)
+        PointOutline(null, Items.Outranking.None);
     }
 
     /// <summary>The interior the local player is in, and its node — for probes and tools.</summary>
@@ -1141,7 +1143,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private void UpdatePrompt(double delta)
     {
         if (_prompt == null) return;
-        if (_hintTimer > 0) { _hintTimer -= delta; return; }
+        // a hint holds the line a moment; the outline still follows what E would act on
+        bool hint = _hintTimer > 0;
+        if (hint) _hintTimer -= delta;
         _promptTimer -= delta;
         if (_promptTimer > 0) return;
         _promptTimer = 0.15;
@@ -1153,6 +1157,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
             hit = Interacting(p, out outranks);
         PointOutline(hit, outranks);
+        if (hint) return;
         // a bar row's words are in the prompt bar (ClientWorld.Prompts), from the same call
         string? text = hit is { InBar: false } floating ? floating.Text : null;
         _prompt.Visible = text != null;
@@ -1415,12 +1420,13 @@ public partial class InteriorNode : Node3D
         return mesh;
     }
 
+    /// <summary>A bare interior node for a plan, nothing built in it: the outline check's (#1286) stand-in.</summary>
+    internal static InteriorNode ForCheck(InteriorLayout layout) => new() { Name = "Interior_" + layout.Key, Layout = layout };
+
     /// <summary>
     /// Builds the node. Given a prebuilt <paramref name="mesh"/>, the caller adds the collision
     /// itself (<see cref="AddBody"/>); without one, both are built here.
     /// </summary>
-    /// <summary>A bare interior node for a plan, nothing built in it: the outline check's (#1286) stand-in.</summary>
-    internal static InteriorNode ForCheck(InteriorLayout layout) => new() { Name = "Interior_" + layout.Key, Layout = layout };
 
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement,
         ArrayMesh? mesh = null, WorldOrigin? origin = null)

@@ -65,7 +65,8 @@ public partial class FootPlayer
     public Interaction? SeatInteraction()
     {
         if (SeatInReach() is not { } seat || Origin is not { } origin) return null;
-        var at = origin.ToWorld(seat.E, seat.N, 0) with { Y = GlobalPosition.Y + seat.Hip - 0.2f };
+        // the hip's height is the body's own (seat.Hip over the floor under it): snapped, so a step's bob builds nothing
+        var at = origin.ToWorld(seat.E, seat.N, 0) with { Y = Mathf.Snapped(GlobalPosition.Y + seat.Hip - 0.2f, 0.1f) };
         return new("Sit down", Outline.Box(null, new Transform3D(new Basis(Vector3.Up, seat.Yaw), at), new Vector3(0.5f, 0.4f, 0.45f)), InBar: true);
     }
 }
