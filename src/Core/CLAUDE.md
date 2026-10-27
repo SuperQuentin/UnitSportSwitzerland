@@ -35,6 +35,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `perf-saves-background` — Gameplay saves (plant, deposit, loot, claim) via `JsonStore.SaveAsync` (one ordered background writer, `SaveQueue`, flushed on quit); never `JsonStore.Save` in an RPC handler
 - `collision-matrix` (general) — `Core/Collision`: `CollisionTargets` (every collidable thing from the registries, the known gaps), `--collidecheck` (car + walker vs every target, drawn vs solid: ghost / invisible wall), `--collidesandbox` (#699)
 - `mathx` — `MathX.Flat/FlatLength/FlatDistance/Damp/WrapAngle` and `Mathf.SmoothStep`, never a private copy; only where floats stay identical (`-dt / tau` is not `Damp`); tier-0 tested (#221)
+- `rounds` — `Core/Rounds` (#1268): one "in a round" registry for BR and Versteckis behind the adventure gate, chat refusals, teleports, structures and parking; BR registered first keeps its words
 
 ## Commands
 
@@ -44,7 +45,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 - `never-capture-thing-player-controls` — Never capture "the thing the player controls" at startup
 - `footplayer-spectatorcamera-read-physical-keys` — `FootPlayer` and `SpectatorCamera` read PHYSICAL keys every frame
-- `held-keys` — `PlayerInput.HoldOff()` at a switch (Shift of Shift+T no longer sinks the spectator camera); Windows stuck keys released against `GetAsyncKeyState` by scan code (#1002)
+- `held-keys` — `PlayerInput.HoldOff()` at a switch (Shift of Shift+T no longer sinks the spectator camera); Windows stuck keys released against `GetAsyncKeyState` by scan code (#1002), the key-up on the key-down's device and keycode (#1283)
 - `mode-owns-screen-drop-anchors` — A mode that owns the screen must drop the anchors of the mode it replaced
 - `never-default-world-origin-lv95` — Never default the world origin to LV95 0/0: Switzerland is 2.6 million metres from there, so float precision...
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key

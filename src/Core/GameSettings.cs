@@ -109,6 +109,9 @@ public sealed class GameSettings
     // ---- the adventure's navigation (#1226, docs/notes/adventure/compass.md, guide.md, travel.md) ----
     /// <summary>The free-roam compass strip at the top of the screen.</summary>
     public bool AdventureCompass { get; set; } = true;
+
+    /// <summary>Versteckis (#1268): the blind seeker hears the count, a tick a second.</summary>
+    public bool VersteckisCounting { get; set; } = true;
     /// <summary>The guiding gust: 0 on demand (N), 1 always while a target is tracked, 2 arrow only, 3 off.</summary>
     public int GuideWind { get; set; }
     /// <summary>The guide as a high-contrast arrow on the ground instead of leaves (accessibility).</summary>

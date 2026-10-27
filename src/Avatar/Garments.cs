@@ -307,6 +307,10 @@ public static class Garments
         new(ItemId.PolierHat, "Polier hat", WearSlot.Head, 43, GarmentShape.FeltHat, GarmentStyle.Together, new("f4f2ea"), new("2a2018"), new("c8202a")),
         // the tenth punch card's: the regular's felt hat with its little Swiss-cross pin
         new(ItemId.StammgastHat, "Stammgast felt hat", WearSlot.Head, 44, GarmentShape.FeltHat, GarmentStyle.Together, new("6a2a2a"), new("1c1a1a"), new("f4f2ea")),
+        // ---- #1268: Versteckis, earned by playing (Adventure/Versteckis/VersteckisRewards) ----
+        // the gnome's red Zipfelmütze (10 games); the Treichel, a big cowbell on its embroidered strap (30 rounds survived)
+        new(ItemId.Zipfelmuetze, "Zipfelmütze", WearSlot.Head, 18, GarmentShape.Beanie, GarmentStyle.Alpine, new("c8202a"), new("a01820"), new("f2efe6")),
+        new(ItemId.Treichel, "Treichel", WearSlot.Neck, 6, GarmentShape.BellCollar, GarmentStyle.Alpine, new("3a2418"), new("c99a3a"), new("c8202a")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

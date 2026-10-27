@@ -231,6 +231,14 @@ public enum ItemId
     GaCard = 420,
     /// <summary>The half-fare travelcard: every fare halved (<c>TravelBook.HasHalfFare</c>).</summary>
     HalfFare = 421,
+
+    // ---- Versteckis (#1268, docs/notes/adventure/versteckis.md); 460-479 are this plan's (adventure-phase3) ----
+    /// <summary>The round kit (<see cref="ItemUse.Round"/>), lent for a game only: the seeker's tag ("Gfunde!") and sniff ("Schnüffle").</summary>
+    VsTag = 460, VsSniff = 461,
+    /// <summary>The hiders' kit: a decoy ("Lockvogel"), the sprint burst ("Gump"), the prop's voice ("Muuh"), and the Disguise radial.</summary>
+    VsDecoy = 462, VsSprint = 463, VsMoo = 464, VsDisguise = 465,
+    /// <summary>Garments (Avatar.Garments), earned by playing: the gnome's Zipfelmütze (10 games) and the Treichel cowbell (30 rounds survived).</summary>
+    Zipfelmuetze = 466, Treichel = 467,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -290,4 +298,6 @@ public enum ItemUse
     Detector,
     /// <summary>Use throws it ahead: an updraft where it lands (<see cref="ItemId.BottledGust"/>, #1227).</summary>
     Gust,
+    /// <summary>A Versteckis round tool (#1268): Use asks the game's server for it (tag, sniff, decoy, sprint, moo, the Disguise radial).</summary>
+    Round,
 }

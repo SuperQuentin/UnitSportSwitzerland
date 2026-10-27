@@ -964,6 +964,18 @@ src/Adventure/Together/Pot  quick  --fonduecheck --world fixture --systems ui,te
 src/Adventure/Together/TogetherService.Pots quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/Stir quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Rewards/Seals.cs quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+
+# #1268 Versteckis: the offline check on the hamlet, the two-client game, the bot game; Rounds and FollowCam keep BR whole
+src/Adventure/Versteckis/ quick  --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Terrain/Fixture/FixtureCourse quick --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Adventure/Versteckis/VersteckisManager net tools/versteckisnetcheck.sh
+src/Net/InterestService   net    tools/versteckisnetcheck.sh
+src/Bots/VersteckisBrain  net    tools/versteckisbotcheck.sh
+src/Adventure/Versteckis/VsTactics net tools/versteckisbotcheck.sh
+src/Core/Rounds           quick  --brcheck
+src/Ui/FollowCam          quick  --brcheck
+src/Core/Rounds           net    tools/brbotcheck.sh
+src/Ui/FollowCam          net    tools/brbotcheck.sh
 # /locate (#1277): the index, the lists and the garage doors offline on the garage course; the server's answers and /go
 src/World/Locate/          quick  --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
 src/Interiors/BuildingTypes quick --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
