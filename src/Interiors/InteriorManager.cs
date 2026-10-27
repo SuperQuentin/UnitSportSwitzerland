@@ -1153,7 +1153,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
             hit = Interacting(p, out outranks);
         PointOutline(hit, outranks);
-        string? text = hit?.Text;
+        // a bar row's words are in the prompt bar (ClientWorld.Prompts), from the same call
+        string? text = hit is { InBar: false } floating ? floating.Text : null;
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;
     }
@@ -1418,6 +1419,9 @@ public partial class InteriorNode : Node3D
     /// Builds the node. Given a prebuilt <paramref name="mesh"/>, the caller adds the collision
     /// itself (<see cref="AddBody"/>); without one, both are built here.
     /// </summary>
+    /// <summary>A bare interior node for a plan, nothing built in it: the outline check's (#1286) stand-in.</summary>
+    internal static InteriorNode ForCheck(InteriorLayout layout) => new() { Name = "Interior_" + layout.Key, Layout = layout };
+
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement,
         ArrayMesh? mesh = null, WorldOrigin? origin = null)
     {

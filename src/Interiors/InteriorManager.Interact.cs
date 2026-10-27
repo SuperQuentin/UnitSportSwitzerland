@@ -19,11 +19,18 @@ public partial class InteriorManager
     public Interaction? Interacting(FootPlayer p, out Outranking outranks)
     {
         outranks = Outranking.ItemAndVehicle;
-        // a Battle Royale crate at your feet comes first, as E opens it first (#194)
+        // a ski lift's bottom station (#912), then a Battle Royale crate at your feet (#194), as E takes them first
+        if (p.LiftStationInteraction() is { } lift) return lift;
         if (BattleRoyale.BrCrates.Instance?.InteractionFor(p) is { } crate) return crate;
         outranks = Outranking.None;
         // a world item pointed at (outdoors a radio too: indoors E leaves a radio alone)
         if (Highlight.Pointed is DroppedItem || !p.Indoors && Highlight.Pointed != null) return null;
+        // a bus's door button in reach, inside or out (#162)
+        if (!p.Indoors && p.DoorButtonInteraction() is { } button)
+        {
+            outranks = Outranking.Vehicle;
+            return button;
+        }
         if (p.Indoors)
         {
             if (Vehicles.VehicleReach.Current != null || _current == null) return null;
@@ -40,8 +47,10 @@ public partial class InteriorManager
             ?? Adventure.Places.PoiMarkers.InteractionFor(p)) is { } outdoors) return outdoors;
         outranks = Outranking.None;
         if (Vehicles.VehicleReach.Current != null) return null;
-        // a building site's skip or materials faced (#627), then a building's door
-        return Loot.LootService.Instance?.YardInteractionFor(p) ?? OutsideDoorInteraction(p);
+        // a building site's skip or materials faced (#627), a building's door; then another player looked
+        // at (#495), a concert's light desk, a stand's seat (#885)
+        return Loot.LootService.Instance?.YardInteractionFor(p) ?? OutsideDoorInteraction(p)
+            ?? p.FighterInteraction() ?? p.LightDeskInteraction() ?? p.SeatInteraction();
     }
 
     /// <summary>The way out the player stands at: its leaf (or a barn pair's shutter) to outline.</summary>

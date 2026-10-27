@@ -48,9 +48,10 @@ public readonly record struct Outline(OutlineKind Kind, Node3D? Node, int Index 
 
 /// <summary>
 /// What E would do and to what (#1286): the prompt's words and the outline, picked by one call so the
-/// two never disagree. Every prompt source of a thing returns one (<c>InteractionTests</c> checks it).
+/// two never disagree. Every prompt source of a thing returns one (<c>InteractOutlineTests</c> checks it).
+/// <see cref="InBar"/>: the words are a prompt bar row (no key tag), not the floating prompt's line.
 /// </summary>
-public readonly record struct Interaction(string Text, Outline Target);
+public readonly record struct Interaction(string Text, Outline Target, bool InBar = false);
 
 /// <summary>
 /// The outline over what E would act on, for everything that is not a world item

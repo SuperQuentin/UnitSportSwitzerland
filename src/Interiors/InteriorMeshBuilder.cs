@@ -808,12 +808,40 @@ public static partial class InteriorMeshBuilder
         var turn = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
         var pivot = new Vector3(p.X, 0, p.Z);
         var kept = new List<Vector3>(s.V.Count);
+        Span<Vector3> poly = stackalloc Vector3[4];
         for (int i = 0; i + 2 < s.V.Count; i += 3)
         {
-            if (half != 0 && Mathf.Sign(s.V[i].X + s.V[i + 1].X + s.V[i + 2].X - 3 * p.X) != half) continue;
-            for (int k = 0; k < 3; k++) kept.Add(pivot + turn * (s.V[i + k] - pivot));
+            // a half: the triangle cut at the piece's middle (a box spanning both halves keeps its own side)
+            int n = half == 0 ? Copy(s.V, i, poly) : ClipHalf(s.V, i, p.X, half, poly);
+            for (int k = 1; k + 1 < n; k++)
+            {
+                kept.Add(pivot + turn * (poly[0] - pivot));
+                kept.Add(pivot + turn * (poly[k] - pivot));
+                kept.Add(pivot + turn * (poly[k + 1] - pivot));
+            }
         }
         return kept.ToArray();
+    }
+
+    private static int Copy(List<Vector3> v, int i, Span<Vector3> into)
+    {
+        into[0] = v[i]; into[1] = v[i + 1]; into[2] = v[i + 2];
+        return 3;
+    }
+
+    /// <summary>Triangle <paramref name="i"/> clipped to the side <paramref name="half"/> of x = <paramref name="middle"/>: 0, 3 or 4 corners.</summary>
+    private static int ClipHalf(List<Vector3> v, int i, float middle, int half, Span<Vector3> into)
+    {
+        int n = 0;
+        for (int k = 0; k < 3; k++)
+        {
+            var a = v[i + k];
+            var b = v[i + (k + 1) % 3];
+            float da = half * (a.X - middle), db = half * (b.X - middle);
+            if (da >= 0) into[n++] = a;
+            if (da >= 0 != db >= 0) into[n++] = a.Lerp(b, da / (da - db));
+        }
+        return n;
     }
 
     /// <summary>PAUSA's block letters, 3x5, top row first.</summary>

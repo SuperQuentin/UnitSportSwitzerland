@@ -13,7 +13,8 @@ namespace UnitSport.Tests;
 /// So under <c>src/</c> every interact prompt (<c>InputHints.Prompt(PlayerInput.InteractMount, …)</c>, a
 /// line built on <c>InputHints.Tag(PlayerInput.InteractMount)</c>, a prompt bar row
 /// <c>yield return (PlayerInput.InteractMount, …)</c>) is made in a method that returns an
-/// <c>Interaction</c> (or in a helper building only the words, called only from such methods), or is listed below (<c>file:Method</c>, how many, why): a row for something
+/// <c>Interaction</c> (or in a helper building only the words, called only from such methods; or a bar row
+/// taking an <c>Interaction</c>'s <c>.Text</c>), or is listed below (<c>file:Method</c>, how many, why): a row for something
 /// outlined by its own pointer (a world item, a vehicle's door), or an act with no thing to outline (the
 /// dance, letting go). A new prompt fails here until it names its target or is listed. Pure source scan, no Godot.
 /// </para>
@@ -24,6 +25,10 @@ public class InteractOutlineTests
         @"InputHints\.Prompt\(\s*(Core\.)?PlayerInput\.InteractMount\b|InputHints\.Tag\(\s*(Core\.)?PlayerInput\.InteractMount\s*\)"
         + @"|yield\s+return\s*\(\s*(Core\.)?PlayerInput\.InteractMount\b",
         RegexOptions.Compiled);
+
+    /// <summary>A prompt bar row whose words are an <c>Interaction</c>'s: its target was named with them.</summary>
+    private static readonly Regex RowOfInteraction = new(
+        @"\Gyield\s+return\s*\(\s*(Core\.)?PlayerInput\.InteractMount\s*,\s*\w+\.Text\s*\)", RegexOptions.Compiled);
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);
 
@@ -37,11 +42,10 @@ public class InteractOutlineTests
     /// <summary>The prompts made outside an <c>Interaction</c> on purpose: how many in the method, and why.</summary>
     private static readonly Dictionary<string, (int Count, string Why)> Allowed = new()
     {
-        ["src/Core/ClientWorld.cs:Prompts"] = (16,
+        ["src/Core/ClientWorld.cs:Prompts"] = (11,
             "the prompt bar: a world item and a radio (Highlight.Pointed outlines them), a vehicle's door (VehicleReach); "
-            + "acts with no thing (the ski lift's wait and letting go, the crane's controls let go, standing up, getting out, "
-            + "the dance); the bus door's button, the ski lift station, a stand's seat, the light desk and another player "
-            + "are in reach rather than pointed at, and keep the bar's row (follow-up)"),
+            + "acts with no thing: the ski lift's wait and letting go, the crane's controls let go, a deck's hint, "
+            + "standing up (twice), getting out, the dance (twice)"),
         ["src/BattleRoyale/BrHud.cs:_Draw"] = (1, "the drop's jump from the plane: no thing"),
     };
 
@@ -127,6 +131,7 @@ public class InteractOutlineTests
             var methods = Methods(text);
             foreach (Match prompt in prompts)
             {
+                if (RowOfInteraction.IsMatch(text, prompt.Index)) continue;
                 var inner = Inner(methods, prompt.Index);
                 if (inner is { } method && (Targeted(method) || OnlyCalledByTargeted(text, methods, method))) continue;
                 string key = $"{relative}:{inner?.Name ?? "?"}";

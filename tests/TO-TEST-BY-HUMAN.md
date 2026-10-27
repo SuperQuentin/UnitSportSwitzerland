@@ -7,6 +7,18 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## What E acts on is outlined ([#1291](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1291))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7` (Cinémas du Grütli, Geneva), then walk in.
+
+- [ ] At the booth's control panel, stand at its left half, then its right → the outline covers only that half, and the floating prompt says what it does (lights / screen). E does what the prompt says.
+- [ ] Indoors: a cupboard, a fridge, a locker, a shop counter, a vending machine, a bank counter → each outlined alone (not the whole room), and the outline moves when you turn to the next one.
+- [ ] A flat's front door, the street door from inside, an elevator's call button and its cabin panel → the leaf or the button plate is outlined; E works that one.
+- [ ] Outside: a building's door (plain, a barn's pair, a garage's roll-up door), a building site's skip and crane ladder, a farm stand, a summit cross or stamp post, a reward chest → outlined while the prompt shows.
+- [ ] Look: is the border readable over a dark cupboard, at night, through the Cartoon, PS1 and Realistic styles? Is a whole ski lift shed or another player outlined too much?
+- [ ] Pad (Y) and VR (grip near the thing) → the same thing outlined as with the keyboard.
+- [ ] A dropped item on the floor next to a cupboard: point at the item → only the item is outlined and the floating prompt is gone (the bar says Pick up).
+
 ## /locate and chat coordinates ([#1278](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1278))
 
 Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538000,1152500` (Lausanne), then `/locate castle`.
