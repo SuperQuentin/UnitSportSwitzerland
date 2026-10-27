@@ -12,7 +12,8 @@ public static partial class InteriorMeshBuilder
     private static bool IsCinemaPiece(FurnitureType t) => t is FurnitureType.SeatingBank or FurnitureType.MovieScreen
         or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
         or FurnitureType.PosterFrame or FurnitureType.Standee or FurnitureType.Stanchions or FurnitureType.Projector
-        or FurnitureType.ServerRack or FurnitureType.FilmPlatter or FurnitureType.BoothPanel;
+        or FurnitureType.ServerRack or FurnitureType.FilmPlatter or FurnitureType.BoothPanel
+        or FurnitureType.Loudspeaker or FurnitureType.WallSconce or FurnitureType.BoothDeck;
 
     /// <summary>Velvet for the seats: the classic red, a modern dark blue, a burgundy.</summary>
     private static readonly Color[] Velvet = { C(0.62f, 0.06f, 0.10f), C(0.10f, 0.14f, 0.34f), C(0.42f, 0.06f, 0.14f) };
@@ -125,12 +126,37 @@ public static partial class InteriorMeshBuilder
                 B(-0.02f, 0.15f, d - sink, 0.02f, 0.19f, d + sink, white);
                 break;
             }
-            case FurnitureType.Porthole:
-                // the projection port and the viewing port beside it, lit from the booth behind
+            case FurnitureType.Loudspeaker:
+            {
+                // a black cabinet, its grille a hand proud, a woofer under a horn [S: surround speakers on the
+                // side walls, 2.5-3.5 m up, every 3-4 m; the screen channels in tall stacks either side]
                 B(-w, 0, -d, w, H, d, dark);
-                B(-w + 0.08f, 0.08f, d - sink, -0.05f, H - 0.08f, d + sink, Lit(0.55f, 0.62f, 0.75f));
-                B(0.1f, 0.12f, d - sink, w - 0.1f, H - 0.15f, d + sink, Lit(0.30f, 0.30f, 0.38f));
+                var grille = C(0.16f, 0.16f, 0.17f);
+                B(-w + 0.03f, 0.03f, d - sink, w - 0.03f, H - 0.03f, d + sink, grille);
+                var cone = C(0.30f, 0.30f, 0.32f);
+                float c = Math.Min(w, H / 4) * 0.7f;
+                B(-c, H * 0.3f - c, d, c, H * 0.3f + c, d + 2 * sink, cone);
+                B(-c * 0.8f, H * 0.72f - c * 0.45f, d, c * 0.8f, H * 0.72f + c * 0.45f, d + 2 * sink, cone);
                 break;
+            }
+            case FurnitureType.WallSconce:
+                // a dark plate on the wall, an uplight shell glowing warm over it
+                B(-w * 0.4f, 0, -d, w * 0.4f, H, -d + 0.03f, darkWood);
+                B(-w, H * 0.35f, -d + 0.03f - sink, w, H * 0.75f, d, Lit(1.0f, 0.74f, 0.42f));
+                break;
+            case FurnitureType.Porthole:
+            {
+                // the casing round the real holes in the wall (#1250, InteriorGenerator.PortHalf): a dark frame,
+                // its openings a hair inside the wall's, so its sides never lie on the wall's reveals
+                const float ph = InteriorGenerator.PortHalf, vi = InteriorGenerator.ViewIn, vo = InteriorGenerator.ViewOut;
+                float foot = InteriorGenerator.PortFoot + sink, head = InteriorGenerator.PortHead - sink;
+                B(-w, 0, -d, w, foot, d, dark);
+                B(-w, head, -d, w, H, d, dark);
+                // the uprights sunk into the rails and set back from their faces: no two faces in one plane
+                foreach (var (x0, x1) in new[] { (-w + sink, -vo + sink), (-vi - sink, -ph + sink), (ph - sink, vi + sink), (vo - sink, w - sink) })
+                    B(x0, foot - sink, -d + sink, x1, head + sink, d - sink, dark);
+                break;
+            }
             case FurnitureType.BoxOffice:
             {
                 // the back wall cabinet, a gap for the cashier, the counter with its glass and its screen
@@ -181,14 +207,37 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.Standee:
             {
-                // a cardboard cut-out on its foot: a hero, cape and all, the title over it
-                var cape = C(0.20f + 0.7f * Hash(p, 1), 0.10f, 0.60f * Hash(p, 2));
-                B(-w, 0, -d, w, 0.04f, d, darkWood);
-                B(-0.18f, 0.04f - sink, -0.02f, 0.18f, 0.9f, 0.02f, C(0.20f, 0.24f, 0.50f));
-                B(-0.2f, 0.9f - sink, -0.035f, 0.2f, 1.5f, 0.035f, cape);
-                B(-0.12f, 1.5f - sink, -0.02f, 0.12f, 1.78f, 0.02f, C(0.86f, 0.70f, 0.56f));
-                B(-w, 0.3f, -0.03f, -0.215f, 1.6f, -0.01f, (cape * 0.8f) with { A = 1 });
-                B(-w + 0.05f, 1.8f, -0.02f, w - 0.05f, H, 0.02f, C(0.96f, 0.80f, 0.20f));
+                // a cardboard promo board for a coming film (#1250: the cut-out hero read as a stiff person): a
+                // printed panel on its easel, the key art (a sky in two bands, a sun, hills, the hero small in
+                // front of them), the title band with its lettering, a logo block standing proud on top
+                float t = 0.03f, f = t / 2;
+                var sky = C(0.15f + 0.7f * Hash(p, 1), 0.15f + 0.5f * Hash(p, 2), 0.30f + 0.6f * Hash(p, 3));
+                var deep = (sky * 0.55f) with { A = sky.A };
+                var sun = C(1.0f, 0.80f + 0.15f * Hash(p, 4), 0.35f);
+                var hills = C(0.08f, 0.10f + 0.2f * Hash(p, 5), 0.12f);
+                var cardboard = C(0.66f, 0.52f, 0.34f);
+                float top = H - 0.2f, bottom = 0.08f;
+                // the easel: a foot and a strut behind the board
+                B(-w * 0.6f, 0, -d, w * 0.6f, 0.03f, d, cardboard);
+                B(-0.06f, 0.03f - sink, -d + 0.02f, 0.06f, 1.3f, -f - 0.01f, cardboard);
+                // the board and its print, each layer 1.2 cm proud of the one under it
+                B(-w, bottom, -f, w, top, f, deep);
+                B(-w + 0.04f, (bottom + top) / 2, f - sink, w - 0.04f, top - 0.04f, f + sink, sky);
+                B(-0.18f, top - 0.6f, f, 0.18f, top - 0.24f, f + 2 * sink, sun);
+                B(-w + 0.055f, 0.62f, f, w - 0.055f, 0.98f, f + 2 * sink, hills);
+                B(-w * 0.55f, 0.98f - sink, f, w * 0.1f, 1.09f, f + 2 * sink, hills);
+                B(-0.07f, 0.6f, f, 0.07f, 1.05f, f + 3 * sink, C(0.05f, 0.05f, 0.06f));
+                B(-0.05f, 1.05f - sink, f, 0.05f, 1.16f, f + 3 * sink, C(0.05f, 0.05f, 0.06f));
+                // the title band and its lettering
+                var band = C(0.96f, 0.90f, 0.70f);
+                B(-w + 0.04f, 0.3f, f, w - 0.04f, 0.56f, f + sink, band);
+                for (int k = 0; k < 5; k++)
+                {
+                    float x0 = -w + 0.1f + k * (p.W - 0.2f) / 5;
+                    B(x0, 0.37f, f, x0 + (p.W - 0.2f) / 5 - 0.05f, 0.49f, f + 2 * sink, C(0.12f, 0.06f, 0.08f));
+                }
+                // the logo block, the film's own colour, standing proud of the top edge
+                B(-w * 0.55f, top - sink, -f - 0.04f, w * 0.55f, H, f + 0.04f, (sun * 0.9f) with { A = sun.A });
                 break;
             }
             case FurnitureType.Stanchions:
@@ -203,14 +252,41 @@ public static partial class InteriorMeshBuilder
                 B(-w, 0.86f, -0.02f, w, 0.9f, 0.02f, C(0.62f, 0.06f, 0.10f));
                 break;
             }
+            case FurnitureType.BoothDeck:
+            {
+                // a floor-level booth's raised floor (#1250): its slab from the back (−Z) to the top step, the
+                // steps down to the landing at the door (+Z), each a box reaching back into the slab and a hair
+                // narrower than the one above, so no two faces share a plane; walked up a ramp through the nosings
+                int n = Math.Max(1, (int)MathF.Ceiling(H / InteriorGenerator.DeckRiser));
+                float tread = InteriorGenerator.DeckTread, rise = H / n, edge = d - (n - 1) * tread;
+                var slab = C(0.17f, 0.17f, 0.19f);
+                var nose = C(0.70f, 0.58f, 0.12f);
+                B(-w, 0, -d, w, H, edge, slab, true);
+                for (int k = 0; k < n - 1; k++)
+                {
+                    float inset = (n - 1 - k) * sink;
+                    B(-w + inset, 0, edge - sink, w - inset, (k + 1) * rise, d - k * tread, slab);
+                    // a yellow strip on each nosing, as booths' and back-of-house steps have
+                    B(-w + inset + sink, (k + 1) * rise - sink, d - k * tread - 0.05f, w - inset - sink, (k + 1) * rise + sink, d - k * tread + sink, nose);
+                }
+                B(-w + sink, H - sink, edge - 0.05f, w - sink, H + sink, edge + sink, nose);
+                var r0 = at + basis * new Vector3(-w, 0, d + tread);
+                var r1 = at + basis * new Vector3(w, 0, d + tread);
+                var r2 = at + basis * new Vector3(w, H, edge);
+                var r3 = at + basis * new Vector3(-w, H, edge);
+                s.Col.Add(r0); s.Col.Add(r1); s.Col.Add(r2); s.Col.Add(r0); s.Col.Add(r2); s.Col.Add(r3);
+                break;
+            }
             case FurnitureType.Projector:
             {
-                // the pedestal, the digital projector on it, its lens to the porthole (+Z)
-                B(-0.3f, 0, -0.4f, 0.3f, 0.9f, 0.4f, dark);
-                B(-w, 0.9f - sink, -d, w, 1.45f, d - 0.15f, C(0.20f, 0.20f, 0.22f));
-                B(-0.12f, 1.05f, d - 0.165f, 0.12f, 1.29f, d, dark);
-                B(-0.09f, 1.08f, d - sink, 0.09f, 1.26f, d + sink, Lit(0.70f, 0.80f, 1.00f));
-                B(w - 0.2f, 1.45f - sink, -d + 0.1f, w - 0.05f, 1.5f, -d + 0.3f, Lit(0.20f, 0.90f, 0.30f));
+                // the pedestal, the digital projector on it, its lens to the porthole (+Z), its middle
+                // InteriorGenerator.ProjectorLensDrop under the piece's height: the pedestal is as tall as the port asks
+                float t = H - InteriorGenerator.ProjectorLensDrop - 0.27f;
+                B(-0.3f, 0, -0.4f, 0.3f, t, 0.4f, dark);
+                B(-w, t - sink, -d, w, t + 0.55f, d - 0.15f, C(0.20f, 0.20f, 0.22f));
+                B(-0.12f, t + 0.15f, d - 0.165f, 0.12f, t + 0.39f, d, dark);
+                B(-0.09f, t + 0.18f, d - sink, 0.09f, t + 0.36f, d + sink, Lit(0.70f, 0.80f, 1.00f));
+                B(w - 0.2f, t + 0.55f - sink, -d + 0.1f, w - 0.05f, t + 0.6f, -d + 0.3f, Lit(0.20f, 0.90f, 0.30f));
                 break;
             }
             case FurnitureType.ServerRack:

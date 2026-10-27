@@ -118,7 +118,7 @@ public static partial class InteriorGenerator
             ? TryIkea(layout, fp.Door.Height)
             : venue?.Type == VenueType.Bowling && type == BuildingType.None && TryBowling(layout, fp, b, fp.Door.Height, rng)
               || venue?.Type == VenueType.Cinema && type == BuildingType.None && TryCinema(layout, fp, b, fp.Door.Height, rng)
-              || venue?.Type == VenueType.Arcade && type == BuildingType.None && TryArcade(layout, fp, b, fp.Door.Height, rng)
+              || venue?.Type == VenueType.Arcade && type == BuildingType.None && TryArcade(layout, fp, b, fp.Door.Height, rng, Venues.NameOf(venue))
               || site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
         if (layout.Type is BuildingType.Bowling or BuildingType.Cinema or BuildingType.Arcade) site = BuildingType.None;
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them

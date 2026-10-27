@@ -1,0 +1,53 @@
+# Venue looks: fronts, signs, fuller rooms (#1250, epic #1232)
+
+The owner's review of the venues, decided with them. References (Cine Rex Bern, Plaza Zürich,
+Cineplexx Innsbruck, Bluff Billard Geneva, foyers of Cineplexx, Kino Svetozor, CinemaxX) were looked
+at, not shipped.
+
+- **Signs by kind** (`VenueSigns.Dress`): neon for bowling, cinemas, arcades, bars, clubs
+  (`VenueSigns.Neon`); a painted wooden board (`PlankSign`: five paints, a frame, iron brackets, two
+  lamps lit at night, the name in Saira) for restaurants, cafés, pubs, fast food, beer gardens; every
+  café and the restaurants whose dice say so (`VenueTerraces.HasAwning`) have their name on the
+  awning's valance instead, with an awning alone over the door when no terrace fits.
+- **Whole halls up to 20 m** (`Venues.HallMaxHeight`, was 13): a bowling centre, cinema or arcade
+  that is its building has no window grid; a taller one loses only its ground storey's windows
+  (`BuildingMeshBuilder.BlindGroundFlag`, UV2.y 0.25, read by `building.gdshaderinc`). Its main door
+  (`DoorSpot.WholeHall`, `Top`, `Run`) gets `HallFront`: a glazed front of 1.1 m bays round the door,
+  a canopy with downlights, at a cinema the film titles on the fascia and lit poster cases (made-up
+  films, posters drawn by code), the name over the canopy and the big word half a metre under the roof
+  (`VenueSigns.BigY`). Model viewer: `Interiors / Hall front`, `Interiors / Plank sign`.
+- **Cinemas**: a door far along a long wall turns the plan (halls across, the lobby along the door's
+  wall: CinéVersoix's lobby was 36 x 57 m); the foyer's middle gets columns every 8 m and groups on
+  every other cell (`InteriorGenerator.Fill`: high tables, sofas, two pairs of standees, tables); the
+  screen shows six CC0 cat photos (`assets/cinema/`, `ASSETS.md`), one every 8 s on the shared clock
+  (`CinemaBooths`, `InteriorNode.SlideAt`); the hall has its screen speaker stacks, surround speakers
+  and wall lights (`Loudspeaker`, `WallSconce`). The porthole is a casing round real holes in the wall
+  (`OpeningKind.Window` with `Other` set: an inner window; `Open` = the projection port, unglazed; the two
+  viewing windows beside it, out past the projector's body (`PortCasingW`), get dark see-through glass, `InteriorNode.AddViewGlass`, as the interior's own
+  glass is opaque sky), at 1.3-1.7 m over an upstairs booth's floor. A floor-level booth's ports stay
+  high for the beam, so the booth gets a `BoothDeck` (`CinemaPlan.Deck`): the windows' middle at
+  `EyeHeight` over it, 2.05 m headroom kept, steps up from a landing at the door (`DeckRiser`,
+  `DeckTread`, `DeckLanding`, a collision ramp through the nosings), projectors and booth pieces lifted
+  onto it, stood on in the validator as a dais is; the seating's rise is capped so the
+  back row's tread is 2 m under the lens (`ProjectorClear`, checked by `--cinemacheck`). The beam samples the picture along each view ray (`projector_beam.gdshader`) and the house lamps carry a
+  wash of the slide's mean colour (`screen_glow`).
+- **Arcades**: a snack bar and game tables in what the islands leave. One whose name says billard,
+  billiard, snooker or pool is a `BilliardHall` (Bluff Billard is tagged an amusement arcade): at most
+  22 m a side, up to 12 pool tables in bays with the cue's swing clear, the bar, lounges, cue racks.
+- **Dining**: a venue that cooks and has 24 m2 or more gets a kitchen walled off the back of its room
+  when none is next door (`BackOfHouse`, `Carve`), and a WC at the strip's end; a room over 85 m2 is
+  cut: the first part a Säli through an arch (no bar of its own), what is still too big goes back to the
+  kind of room it was before the venue took it, behind a door; rooms kept near square. Tables vary (fours, twos either way, sixes, a hand off the grid).
+- **Shots**: indoors the shot camera's near plane is 5 cm; an "i" shot's door is looked for at a
+  walker's height within 50 m, so a camera high over an auditorium's back rows or on a booth upstairs
+  works. `--venuecheck --chunks <dir> --venuedoors <name>` prints every room with its furniture and
+  writes the plan to `test_output/venues/<tile>_<index>.svg`.
+- **Real projection** (`InteriorNode.RealProjection`: High detail, desktop, no headset): in the hall the
+  camera is in (`ProjectFor`, from `CinemaBooths`), a shadowed spot light 0.5 m out of the port carries the
+  letterboxed slide as its projector texture onto a lit white screen (`projection_screen.gdshader`), so a
+  player in the beam wears the picture and shadows the screen; the other halls keep the pasted picture.
+  Its range is 3x the throw: a spot fades out over the end of its range (70 % dimmer at range = throw + 4).
+  Below High, in VR and on phones: the pasted picture and a plain beam of the slide's mean colour
+  (`PlainBeam`, no march). `--cinemaprojection real|plain` forces one (the Town cinema showcase adds a
+  walker in real mode). About 0.23 ms GPU (`--projectionperf`, windowed); the POC stays in the model
+  viewer (`Interiors / Cinema projection (POC)`).

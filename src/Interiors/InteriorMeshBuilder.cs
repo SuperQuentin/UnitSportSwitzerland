@@ -151,6 +151,8 @@ public static partial class InteriorMeshBuilder
         RoomType.ProjectionRoom => (C(0.30f, 0.30f, 0.32f), C(0.20f, 0.20f, 0.22f), C(0.14f, 0.14f, 0.15f)),
         // #1240: an arcade's black carpet, dark violet walls, black ceiling
         RoomType.ArcadeHall => (C(0.08f, 0.06f, 0.14f), C(0.12f, 0.08f, 0.22f), C(0.05f, 0.04f, 0.07f)),
+        // #1250: a billiard hall's wood floor, cream walls, a pale tiled ceiling [S: Bluff Billard Geneva]
+        RoomType.BilliardHall => (C(0.46f, 0.30f, 0.18f), C(0.88f, 0.85f, 0.76f), C(0.90f, 0.90f, 0.88f)),
         // #1242: a Beiz's dark parquet, cream walls and wood ceiling; a pizzeria's terracotta; a café's pale
         // tiles; a fast food's yellow; a kebab's white; a bar's dark violet; a pub's oxblood; a club's black;
         // a kitchen's white tiles
@@ -364,7 +366,9 @@ public static partial class InteriorMeshBuilder
             // deeper for an exterior opening so it reads as a real wall's thickness
             // (a doorway's reveal runs a hair past that line, into the neighbour's, so the two meet
             // without a crack)
-            float depth = o.Kind is OpeningKind.Door or OpeningKind.Arch ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
+            // (an inner window, a cinema's ports: to the shared line too, its glass a node of its own, InteriorNode)
+            bool shared = o.Kind is OpeningKind.Door or OpeningKind.Arch || o.Kind == OpeningKind.Window && o.Other >= 0;
+            float depth = shared ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
             var reveal = col * 0.9f;
             reveal.A = 1;
             Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
@@ -379,7 +383,7 @@ public static partial class InteriorMeshBuilder
                 // threshold: floors stop at the wall face, so the doorway needs its own
                 s.Quad(R(s0, y0, 0), R(s0, y0, depth), R(s1, y0, depth), R(s1, y0, 0), Palette(r.Type).Floor);
 
-            if (o.Kind == OpeningKind.Window)
+            if (o.Kind == OpeningKind.Window && o.Other < 0)
             {
                 s.Quad(R(s0, ob, depth), R(s1, ob, depth), R(s1, ot, depth), R(s0, ot, depth), Glass);
                 // a mullion and a transom, so it reads as a window and not a hole
@@ -921,6 +925,8 @@ public static partial class InteriorMeshBuilder
             or FurnitureType.LanePair or FurnitureType.DartBoard or FurnitureType.Confetti
             // #1238: a seating bank collides as tiers and aisle ramps; signs, ports and posters are on the wall
             or FurnitureType.SeatingBank or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.PosterFrame
+            // #1250: a booth's deck collides as its slab and the ramp up its steps
+            or FurnitureType.BoothDeck
             // #1242: a dance floor is danced on
             or FurnitureType.DanceFloor);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));

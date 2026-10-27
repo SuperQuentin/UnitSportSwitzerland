@@ -125,6 +125,10 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private InteriorLayout? _current;
     private readonly Dictionary<string, InteriorNode> _built = new();
     private readonly HashSet<string> _building = new();
+    /// <summary>Plans whose interior threw while being built: not retried until a door to them opens again.</summary>
+    private readonly HashSet<string> _failed = new();
+    /// <summary>The door this client last asked open: the one to shut again when its interior cannot be built.</summary>
+    private string? _openedHere;
     /// <summary>Doors whose plan has been asked of the server and not yet received.</summary>
     private readonly HashSet<string> _asked = new();
     private readonly Dictionary<string, DoorLink> _links = new();
@@ -214,6 +218,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// is harmless), and returns its key; null while no door within <paramref name="reach"/> has
     /// streamed in. Offline only: online a door is the server's, for a player standing at it.
     /// </summary>
+    /// <summary>As <see cref="OpenDoorForCamera(Vector3, float)"/>, through the door <paramref name="key"/> names (a shot's 8th field, #1250).</summary>
+    public string? OpenDoorForCamera(string key)
+    {
+        if (Online) return null;
+        var p = key.Split('_');
+        if (p.Length is < 3 or > 4 || !int.TryParse(p[0], out int e) || !int.TryParse(p[1], out int n) || !int.TryParse(p[2], out int i))
+            return null;
+        var door = new DoorKey(e, n, i, p.Length == 4 && int.TryParse(p[3], out int s) ? s : 0);
+        if (DoorIndex.Find(door) is null) return null;
+        string k = door.ToString();
+        if (!_doors.ContainsKey(k) && _requestingDoor == null) AskDoor(k, true);
+        return k;
+    }
+
     public string? OpenDoorForCamera(Vector3 at, float reach)
     {
         if (Online) return null;
@@ -337,6 +355,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         bool was = _doors.ContainsKey(door);
         if (open) _doors[door] = plan; else _doors.Remove(door);
+        // a door opening again gives an interior that failed to build another try
+        if (open && !was) _failed.Remove(plan);
         _quiet.Remove(door);
         _planKeys[door] = plan;
         if (_requestingDoor == door) _requestingDoor = null;
@@ -406,6 +426,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         _requestingDoor = door;
         _requestTimer = 3;
+        if (open) _openedHere = door;
         if (Online) RpcId(1, MethodName.RequestDoor, door, open);
         else _ = ServeDoor(MyId, door, open);
     }
@@ -674,7 +695,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         }
         if (!_built.TryGetValue(plan, out var node))
         {
-            BuildInterior(layout);
+            if (!_failed.Contains(plan)) BuildInterior(layout);
             return;
         }
         var e = layout.EntranceFor(door);
@@ -736,8 +757,29 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (IsInstanceValid(node)) node.AddBody(data.Collision);
         }
+        catch (Exception e)
+        {
+            GD.PushError($"[interior] building {layout.Key} failed: {e}");
+            BuildFailed(layout.Key);
+        }
         finally { _building.Remove(layout.Key); }
         Maintain();
+    }
+
+    /// <summary>
+    /// An interior that threw while being built: never a door left open onto nothing. What was made of it
+    /// goes, the door this client opened to it shuts, and the player is told.
+    /// </summary>
+    private void BuildFailed(string plan)
+    {
+        _failed.Add(plan);
+        if (_built.Remove(plan, out var half) && IsInstanceValid(half)) half.QueueFree();
+        Hint("This building's inside could not be made: the door shuts.");
+        if (_openedHere is { } door && _doors.GetValueOrDefault(door) == plan)
+        {
+            GD.Print($"[interior] shutting {door}: its inside could not be made");
+            AskDoor(door, false);
+        }
     }
 
     /// <summary>The built interior a point far underground is in (nearest by plan position), if any.</summary>
