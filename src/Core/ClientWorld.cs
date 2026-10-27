@@ -779,12 +779,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
             }),
+#if TRAILER
             // the trailer (#706): stages and films its shots, moving the spectator camera from place to place
             new(() => Trailer.TrailerDirector.Requested, ToolAnchor.Own, _ =>
             {
                 FreeSpectator();
                 return new Trailer.TrailerDirector(_spectator!, chunks, origin) { RunCommand = line => _chat?.Send(line) };
             }),
+#endif
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var shot = ShotRunner.ParseArgs()!;

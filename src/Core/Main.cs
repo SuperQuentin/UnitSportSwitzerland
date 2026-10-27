@@ -71,12 +71,14 @@ public partial class Main : Node
 			return;
 		}
 
+#if TRAILER
 		// the films' subtitle files (#862): no world, a file job for tools/trailer.sh
 		if (UnitSport.Trailer.SubtitleCut.Requested)
 		{
 			AddChild(new UnitSport.Trailer.SubtitleCut { Name = "SubtitleCut" });
 			return;
 		}
+#endif
 
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.
