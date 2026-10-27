@@ -50,3 +50,13 @@ Host a game: main menu › Host, then Activities › **Versteckis** › Open (bo
 - [ ] Phone or touch: the Versteckis tab and the hotbar tools are usable.
 - [ ] Windowed `tools/brcheck.sh` → the Battle Royale still looks and plays as before (its spectator camera now lives in `Ui/FollowCam`).
 - [ ] A game with 8 players (or 1 + 7 bots) → frames stay steady (F4), the server's `--serverstats` line shows no spike.
+
+## Festival framework, part 1 of the festivals ([#1295](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1295))
+
+Nothing is player-facing yet but the Journal tab and the poles: the check-only festival stands in for the real ones. Offline: `<godot> --path . -- --festival test --date 2027-03-11 --systems ui,physics,occasions,adventure --world fixture` (add `--chunks D:/UnitSportSwitzerland/terrain_chunks` for the real map, where the test festival is held at the Riddes spawn).
+
+- [ ] Press J → the **Festival** tab (between Collection and Travel) lists "Test festival at the test field", day 2 of 5, the bell open, the gong tomorrow, the closing show, the score bar and the Batzen. Judge the layout at 1080p and on a phone-sized window (`--mobile`): readable, nothing cut off but the scroll.
+- [ ] Pad: the tab opens with LB / RB; the stick or D-pad scrolls the page (it has no buttons yet) → it scrolls, focus stays visible.
+- [ ] Walk round the spawn → a ring of 16 red Swiss-flag poles stands about 60 m out. Settings › Occasions › the test festival › Off → the poles go, while the Journal's Festival tab and the score stay.
+- [ ] Real map, dev region, a dedicated server with the same flags → the log says `[festival] running: test day 2/5 at the test field`; join with a client and open the Journal → the same tab, with the same day.
+- [ ] Real map: a real festival site outside the region relocates to the largest town ("held this year in Bulle"): needs a real festival, so this waits for part 3 (Älplerfest); the rule is unit-tested only.

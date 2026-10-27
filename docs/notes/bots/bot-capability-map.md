@@ -137,6 +137,8 @@ gives one progress for the session, never saved.
 | Versteckis: tag (#1268) | — | `ServeTag(peer, e, n, alt)` (server positions) | `VsSuspicion` from sight (decor in the cone, bodies `Looks` as their prop), hearing, puffs | `MoveTo` + tag in reach | ok |
 | Versteckis: sniff (#1268) | — | `ServeSniff(peer)` (puffs handed to the brain, never `RpcId` a bot) | `VersteckisBrain.Puff` | when nothing is suspicious | ok |
 | Versteckis: decoy (#1268) | — | `ServeDecoy(peer)` | — | once a round, then a new spot | ok |
+| Festivals (#1269 part 1): the running list, the Journal tab, a festival's Batzen and board | — | `FestivalService.Award(peer, ...)` refuses a negative peer id: a bot earns no Batzen and no board points (it makes up the field, the plan's rule); `ConvertFor` and the party board skip it | — | — | n/a (the games' own rows come with their parts) |
+| Festivals: the check-only bell and gong (`--festival test`) | — | `FestivalService.ServeRing(peer, game)` (a check's, never a player's) | the site (`RunningOf`) | — | n/a |
 | Versteckis: sprint burst (#1268) | `WalkControls` (6.5 m/s through `PropWalk`) | `ServeSprint(peer)` | the seeker seen within 7 m facing it | flee | ok |
 | Versteckis: moo (#1268) | — | `ServeMoo(peer)` | the seeker far and looking away | by boldness | ok |
 | Versteckis: the bell, the Höhenfeuer, the milk can (#1268) | `WalkControls` | `ServeObjective(peer, site, step)` (body within 2.5 m, the hold on the game clock) | the seeker far from the site; one bot at a time (`ClaimObjective`) | `MoveTo` + hold | ok |

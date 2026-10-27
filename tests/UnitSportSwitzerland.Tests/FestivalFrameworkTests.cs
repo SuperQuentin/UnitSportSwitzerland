@@ -208,6 +208,21 @@ public class FestivalFrameworkTests
     }
 
     [Fact]
+    public void A_milestone_paid_after_the_conversion_converts_again_and_the_record_adds_up()
+    {
+        var book = new FestivalBook();
+        var inst = book.Of("test-2027", "test");
+        inst.Batzen = 100;
+        Assert.Single(FestivalRules.Convert(book, _ => true));
+        // owed to a member who was away (the service puts it back as unconverted)
+        inst.Batzen += 40;
+        inst.Converted = false;
+        Assert.Equal([("test-2027", "test", 40)], FestivalRules.Convert(book, _ => true));
+        Assert.Equal(140, inst.ConvertedChf);
+        Assert.Empty(FestivalRules.Convert(book, _ => true));
+    }
+
+    [Fact]
     public void The_book_round_trips_through_the_progress_store()
     {
         var p = new PlayerProgress("k");

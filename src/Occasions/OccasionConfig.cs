@@ -180,7 +180,8 @@ public static class OccasionConfig
     {
         try
         {
-            Core.JsonStore.Save(File, new OccasionConfigFile { Occasions = entries }, JsonOptions);
+            // the check-only festival (--festival test) never lands in a player's file
+            Core.JsonStore.Save(File, new OccasionConfigFile { Occasions = entries.Where(e => e.Id != Festivals.FestivalCatalog.TestId).ToList() }, JsonOptions);
         }
         catch (Exception e)
         {

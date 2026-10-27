@@ -33,7 +33,8 @@
   `ProceduralWorld.VillageCentres()` for the generated world. The hunt is taken with the
   **gather hold** (G), not E — the spots stand beside doors, where E means "go in" — and claims
   are local (`user://occasions/claims.json`, per instance), like `Gathering` and the inventory.
-  `ItemId` 37/38 are reserved by the bird-hunting PR (#7); occasions own 39-49.
+  `ItemId` 37/38 are reserved by the bird-hunting PR (#7); occasions own 39-49. Festivals (#1269) are occasions with the gameplay
+  `Games` facet, two more schedule tokens (`04-mon#3`, `easter-46`) and their own service: `festival-framework`.
   **Christmas** is almost entirely shader-side: `world_snow` whitens up-facing terrain, roofs,
   crowns and road *edges* (carriageways are ploughed), `world_lights` draws coloured bulbs along
   the eaves in `ps1_building` (no geometry) and lights more windows; falling snow is one static

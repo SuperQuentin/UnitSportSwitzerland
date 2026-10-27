@@ -105,6 +105,11 @@ public partial class FestivalCheck : ChatProbe
             await Seconds(1.5);
             GD.Print($"[festivalcheck] shot {Shot("journal")}");
             GameShell.Instance?.Back();
+            // the flag poles round the site: 40 m in from the ring, looking across it
+            Me!.GlobalPosition += new Vector3(-40f, 0.3f, 0f);
+            Me.Velocity = Vector3.Zero;
+            await Seconds(2);
+            GD.Print($"[festivalcheck] shot {Shot("site")}");
         }
 
         // ---- the next day: the gong ----------------------------------------------------------------
@@ -148,6 +153,17 @@ public partial class FestivalCheck : ChatProbe
         occasions.OverrideDate(new DateOnly(2028, 3, 10));
         Expect(await Until(() => svc.RunningOf(FestivalCatalog.TestId) is { Instance: "test-2028", Day: 1 }, 15), "next year is a new instance on its day 1");
         Expect(Inst("test-2028").Batzen == 0 && Inst("test-2027").ConvertedChf == 220, "it starts with nothing and last year stays a record");
+
+        // a player's Off hides the bunting, never the score
+        Expect(occasions.IsActive(FestivalCatalog.TestId, OccasionFacets.Decorations), "the poles are on by default");
+        GameSettings.Current.OccasionPreferences[FestivalCatalog.TestId] = OccasionPreference.Off;
+        GameSettings.NotifyChanged();
+        Expect(!occasions.IsActive(FestivalCatalog.TestId, OccasionFacets.Decorations) && occasions.IsActive(FestivalCatalog.TestId, OccasionFacets.Games),
+            "Off takes the decorations away and keeps the games");
+        Expect(svc.Award(AdventureService.LocalPeer, FestivalCatalog.TestId, 10, "off check", "bell", 20) == 10 && Inst("test-2028").Points == 20,
+            "and the score still counts");
+        GameSettings.Current.OccasionPreferences.Remove(FestivalCatalog.TestId);
+        GameSettings.NotifyChanged();
         AdventureService.Instance!.SaveAll();
         SaveQueue.Flush();
         await Finish(0);
