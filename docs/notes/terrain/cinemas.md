@@ -112,4 +112,4 @@ lane frame and rules (`bowling-centres`).
 - **Real**: the venue check computes doors with the tile's roads now (`--venuecheck`): without them a
   door can land on another facade, and a shot aimed at it enters the neighbour. CinéVersoix (60 x 69 m,
   13 m, halls along X): the foyer `703.45,i1.6,-103.8,-4,163.2,6,<png>` from origin 2501000,1126000.
-- **Next** (a follow-up of the epic): the screen shows a shared screen, a YouTube video or a file.
+- **Video** (#1298): the panel's screen half opens the hall's projector panel: a link played for the hall on the shared clock (`cinema-video`).

@@ -32,7 +32,7 @@ public partial class InteriorNode
     public void ShowVideo(int hall, byte[]? rgba, Color tint, CinemaVideoStream? stream)
     {
         if (rgba == null || hall < 0) { StopVideo(); return; }
-        var s = _screens.Find(x => x.No == hall);
+        var s = ScreenOf(hall);
         if (s == null) return;
         if (_videoHall != hall) { StopVideo(); StartVideo(s); }
         _videoImage!.SetData(CinemaVideo.Width, CinemaVideo.Height, false, Image.Format.Rgba8, rgba);
@@ -49,6 +49,14 @@ public partial class InteriorNode
         _videoPlain!.AlbedoColor = full;
         _lit?.SetShaderParameter(GGlow, new Vector3(tint.R, tint.G, tint.B) * GlowGain);
         if (_videoSpeaker != null) _videoSpeaker.Video = stream;
+    }
+
+    /// <summary>Hall <paramref name="hall"/>'s screen, or null: a loop, no closure, as it runs every frame.</summary>
+    private CinemaScreen? ScreenOf(int hall)
+    {
+        foreach (var s in _screens)
+            if (s.No == hall) return s;
+        return null;
     }
 
     private void StartVideo(CinemaScreen s)
@@ -95,7 +103,7 @@ public partial class InteriorNode
     private void StopVideo()
     {
         if (_videoHall < 0) return;
-        var s = _screens.Find(x => x.No == _videoHall);
+        var s = ScreenOf(_videoHall);
         _videoHall = -1;
         if (_videoSpeaker != null && IsInstanceValid(_videoSpeaker)) _videoSpeaker.QueueFree();
         _videoSpeaker = null;

@@ -173,6 +173,9 @@ src/Interiors/InteriorMeshBuilder quick  --outlinecheck --systems ui
 src/Interiors/InteriorManager.Interact quick  --outlinecheck --systems ui
 src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
 src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1298: a hall's video (link + T0 on the server, every client decodes it on the shared clock)
+src/Interiors/CinemaVideo   net    tools/cinemanetcheck.sh
+src/Interiors/InteriorNode.CinemaVideo net tools/cinemanetcheck.sh
 # #1285: public toilets, planned by every public building's generator
 src/Interiors/InteriorGenerator.Toilets quick --cinemacheck --systems ui
 src/Interiors/InteriorGenerator.Toilets quick --bowlingcheck --systems ui
