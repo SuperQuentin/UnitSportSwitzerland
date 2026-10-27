@@ -53,6 +53,8 @@
     <!-- the coarse heightmap the generated terrain is shaped on (tools/swiss_relief.py); LogicalName
          and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
     <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
+    <!-- every OSM venue (#1232, the preprocessor venue stage, docs/notes/terrain/entertainment-venues.md): ODbL, like Castles.List.cs -->
+    <EmbeddedResource Include="src/Interiors/venues.tsv.gz" LogicalName="venues.tsv.gz" WithCulture="false" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
   </ItemGroup>

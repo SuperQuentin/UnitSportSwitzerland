@@ -587,6 +587,7 @@
 90.4	Furniture / Amplifier
 4000	Furniture / Armchair
 2047.9	Furniture / Banner
+93.4	Furniture / BarCounter
 7056	Furniture / BarrelStack
 29862	Furniture / Bathtub
 35448	Furniture / Bed
@@ -594,15 +595,18 @@
 1931.3	Furniture / BikeRack
 210.8	Furniture / BlahajBin
 2517.9	Furniture / Bookcase
+2.8	Furniture / BoxOffice
 7100	Furniture / CarLift
 72	Furniture / ChurchRadio
 99.5	Furniture / CoffeeTable
 4050	Furniture / Compressor
+115.4	Furniture / ConcessionStand
 400	Furniture / Conveyor
 18000	Furniture / Counter
 5000	Furniture / Dais
 100	Furniture / Desk
 17280	Furniture / DeskCounter
+57	Furniture / DjBooth
 3185.2	Furniture / DrumKit
 20	Furniture / Dryer
 1909.6	Furniture / FrontPew
@@ -610,18 +614,23 @@
 3421.7	Furniture / GunLocker
 24	Furniture / IroningBoard
 99	Furniture / JerryCan
+469.1	Furniture / KebabCounter
 48	Furniture / Keyboard
 1060.8	Furniture / Locker
 8028	Furniture / Machine
+12	Furniture / OrderCounter
 5040	Furniture / Pallet
 1365.7	Furniture / PalletRack
+549	Furniture / PastryCase
 1175.6	Furniture / Pew
 9788.6	Furniture / Pillar
 900	Furniture / Plant
 5142.5	Furniture / Rack
 4397.2	Furniture / Safe
 441	Furniture / SafetySign
+1172.3	Furniture / SeatingBank
 1284.9	Furniture / Shelf
+50.4	Furniture / ShoeCounter
 12000	Furniture / ShopCounter
 7744	Furniture / ShowroomPlinth
 12048	Furniture / SingleBed
@@ -639,6 +648,18 @@
 20	Furniture / WashingMachine
 144	Furniture / WaterTank
 100	Furniture / Workbench
+2500	Interiors / Arcade
+5097.8	Interiors / Bowling centre - Bowl bar
+9294.1	Interiors / Bowling centre - Two levels
+4652.5	Interiors / Cinema - Small
+7830.2	Interiors / Cinema - Town
+7294	Interiors / Dining - Bar
+8279.3	Interiors / Dining - Café
+7711.2	Interiors / Dining - Club
+8279.3	Interiors / Dining - Gaststube
+8279.3	Interiors / Dining - Kebab
+8279.3	Interiors / Dining - Pizzeria
+7585.6	Interiors / Dining - Pub
 2.3	Items / Agone
 3	Items / AlienAntennae
 44.9	Items / Alphorn

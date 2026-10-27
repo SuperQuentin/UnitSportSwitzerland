@@ -2745,6 +2745,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an elevator's call button or cabin, a flat's front door (#557)
             if (_ride == null && interiors?.TryInside(this) == true) return true;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
+            if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
             if (!byHand && interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))

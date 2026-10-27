@@ -21,6 +21,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
     private Interiors.ChurchRadios? _churchRadios;
+    private Interiors.CinemaBooths? _cinemaBooths;
     private Items.DroppedItems? _dropped;
     private EntityInterest? _entityInterest;
     private PlayerRegistry? _registry;
@@ -179,6 +180,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Audio.Cd.CdUpload.Create(this, server: true);   // a player's own file, scanned on the server (#736)
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
+        _cinemaBooths = Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
@@ -621,6 +623,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
+        _cinemaBooths?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _snow?.SendTo(id);

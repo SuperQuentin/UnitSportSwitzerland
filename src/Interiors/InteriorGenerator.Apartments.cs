@@ -293,7 +293,7 @@ public static partial class InteriorGenerator
         for (int f = 0; f < floors; f++)
         {
             int level = f - below;
-            var what = level < 0 ? AptFloor.Basement : level == 0 && mixed ? AptFloor.Shops : AptFloor.Flats;
+            var what = level < 0 ? AptFloor.Basement : level == 0 && (mixed || DiningShops) ? AptFloor.Shops : AptFloor.Flats;
             // every floor of flats from the same seed, so the plan stacks: the same flats one over the other
             var frng = new Random(StableHash(l.Key + (what == AptFloor.Flats ? "|flats" : "|floor" + f)));
             l.Floors.Add(AptFloorPlan(a, f, level, what, frng));

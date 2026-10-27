@@ -215,14 +215,15 @@ public class DiscoveryRulesTests
     }
 
     [Fact]
-    public void Nothing_counts_from_a_vehicle()
+    public void A_vehicle_finds_no_place_but_clears_fog()
     {
         var peak = Of(PoiKind.Peak);
         var t = new DiscoveryTracker();
         var got = new List<Poi>();
         var near = new List<Poi> { peak };
-        Assert.False(DiscoveryRules.Step(t, At(peak, ride: (RideKind)8), 1, near, _ => false, got));
-        Assert.False(DiscoveryRules.Step(t, At(peak, ride: (RideKind)8), 1, near, _ => false, got));
+        // Step's result is "clears fog" (PlacesRules.ClearsFog): true in a car; finding places stays off
+        Assert.True(DiscoveryRules.Step(t, At(peak, ride: (RideKind)8), 1, near, _ => false, got));
+        Assert.True(DiscoveryRules.Step(t, At(peak, ride: (RideKind)8), 1, near, _ => false, got));
         Assert.Empty(got);
     }
 }

@@ -44,6 +44,12 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     public Loot.ShopType Shop { get; init; }
 
     /// <summary>
+    /// The entertainment venue the building is (#1232): one more than its index for <see cref="Venues.At"/>,
+    /// 0 for none (so a default spot is none). On the main door only, like <see cref="Shop"/>: its neon sign hangs there.
+    /// </summary>
+    public int Venue { get; init; }
+
+    /// <summary>
     /// Storeys above its building's ground floor the door opens onto (#827): a site office's upper
     /// container, off its walkway. 0, the ground floor, on every other door. Not part of its key.
     /// </summary>
@@ -127,6 +133,8 @@ public static class BuildingFootprint
 
     /// <summary>A landmark store's entrance (#501): the glass front, as wide as a trolley crowd.</summary>
     public const float StoreDoorWidth = 7.0f, StoreDoorHeight = 3.4f;
+    /// <summary>A hall venue's double glass door (#1235).</summary>
+    public const float VenueDoorWidth = 2.4f;
 
     public static float DoorWidthFor(BuildingKind kind) => kind switch
     {
@@ -268,7 +276,7 @@ public static class BuildingFootprint
             // its main door only, or a long shop front would grow a sign per entrance
             doors.Add((fp?.Door ?? new DoorSpot(i, Vector3.Zero, Vector3.Forward, 0f, 0f)) with
             {
-                Kind = kind, Bank = fp != null && IsBank(fp), Shop = shop,
+                Kind = kind, Bank = fp != null && IsBank(fp), Shop = shop, Venue = types.VenueOf(i) + 1,
             });
             if (fp == null) continue;
             foreach (var extra in fp.Extra) doors.Add(extra with { Kind = kind });
@@ -405,6 +413,9 @@ public static class BuildingFootprint
             doorW = Math.Min(StoreDoorWidth, w * 0.25f);
             doorH = Math.Min(StoreDoorHeight, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.15f);
         }
+        // a bowling centre's or a cinema's way in is a pair of glass doors (#1235, #1238), not a shop's single one
+        else if (Venues.Planned(Venues.HallOf(map, index)))
+            doorW = Math.Min(VenueDoorWidth, w * 0.3f);
         // a door's worth of height, for judging a wall and for the odd doors that are no barn gate
         float plainH = Math.Min(doorH, DoorHeightFor(kind));
         bool barn = DoorLeaf.SwingsOut(kind);
