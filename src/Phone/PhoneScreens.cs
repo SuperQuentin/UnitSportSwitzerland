@@ -106,6 +106,7 @@ public partial class PhoneScreens : Node
     private LineEdit _query = null!;
     private VBoxContainer _results = null!, _people = null!, _calls = null!;
     private Label _mapHint = null!;
+    private Button _travelCancel = null!;
     private TextureRect _lastShot = null!;
     private ColorRect _flash = null!;
     private readonly List<Button> _homeTiles = new();
@@ -941,6 +942,10 @@ public partial class PhoneScreens : Node
         _travelNote.HorizontalAlignment = HorizontalAlignment.Center;
         _travelNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         col.AddChild(_travelNote);
+        // until the jump runs, the player can still change their mind
+        _travelCancel = Small("Cancel", new Color(0.30f, 0.32f, 0.38f), () => BackPressed?.Invoke());
+        _travelCancel.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        col.AddChild(_travelCancel);
         col.AddChild(UiKit.Spacer(expand: true));
         return col;
     }
@@ -948,10 +953,14 @@ public partial class PhoneScreens : Node
     /// <summary>The travelling page: where to, and dots that go round while the ground there streams in.</summary>
     public void ShowTravel(string where, string note = "")
     {
+        _travelCancel.Visible = true;
         SetText(_travelTitle, $"Travelling to {where}");
         SetText(_travelNote, note);
         ShowPage(Page.Travel);
     }
+
+    /// <summary>The jump has run: there is nothing left to cancel.</summary>
+    public void HideTravelCancel() => _travelCancel.Visible = false;
 
     public void ShowPage(Page page)
     {

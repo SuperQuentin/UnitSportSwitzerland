@@ -146,7 +146,7 @@ public partial class PhoneController : Node
     public override void _Ready()
     {
         AddChild(_screens);
-        _screens.BackPressed += () => { if (_stage is Stage.Open) Back(); };
+        _screens.BackPressed += () => { if (_stage is Stage.Open or Stage.Opening) Back(); };
         _screens.TravelPicked += place => Travel(place.E, place.N, place.Name);
         _screens.CommandPicked += cmd =>
         {
@@ -229,7 +229,11 @@ public partial class PhoneController : Node
             Play(PhoneSounds.Tap);
             return;
         }
-        if (_screens.Shown == PhoneScreens.Page.Travel) return;   // travelling: it folds by itself once there
+        if (_screens.Shown == PhoneScreens.Page.Travel)
+        {
+            CancelTravel();   // before the jump runs; once there, the phone folds by itself
+            return;
+        }
         Fold();
     }
 
@@ -663,8 +667,21 @@ public partial class PhoneController : Node
         return true;
     }
 
+    /// <summary>Back on the curtain before the jump has run: stay where we are, the phone goes back to its home screen.</summary>
+    private void CancelTravel()
+    {
+        if (_pendingJump == null) return;
+        GD.Print("[phone] travel cancelled");
+        _pendingJump = null;
+        _travelSince = -1;
+        _stowWhenFolded = false;
+        _screens.ShowPage(PhoneScreens.Page.Home);
+        Play(PhoneSounds.Tap);
+    }
+
     private void RunPendingJump()
     {
+        _screens.HideTravelCancel();
         var jump = _pendingJump;
         _pendingJump = null;
         jump?.Invoke();

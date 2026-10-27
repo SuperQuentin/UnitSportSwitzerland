@@ -168,6 +168,11 @@
   for the selfie).
 - **Put away from any page**: hold Esc / the pad's B for `StowHoldSeconds` (0.4 s); a tap is still one step back.
   The page hints say so. Not while a text box has the keys, in VR (its own buttons) or on Travel.
-- **Not yet** (later stages in the plan): the Phone key as a toggle and the pad's D-pad Up hold, the touch Phone
-  button, the persistent hint bar built from the focused control, Travel's Cancel.
-- **Check**: `--phonecheck` asserts Esc and Backspace go back, Training does not fold the phone, and a held Esc puts it away.
+- **Travel can be cancelled** until the jump has run: Esc / B / the Cancel button on the curtain
+  (`PhoneController.CancelTravel`) drops the pending jump and shows Home; once the jump ran, the button goes.
+- **Touch**: a PHONE pill in the on-foot top bar (`TouchLayout`, 9 mm, sends the `phone` action); it was only in More.
+- **Not done, and why**: a hold on D-pad Up cannot take the phone out, the hold is already the emote wheel
+  (`EmoteWheel`), so the pad keeps quick menu › Phone. The Phone key stays Up (P is the radio and the character
+  menu); the toggle is Esc/B held, Down folded. The persistent hint bar built from the focused control moves
+  to a later stage with the Home/cover rework.
+- **Check**: `--phonecheck` asserts Esc and Backspace go back, Training does not fold the phone, a held Esc puts it away, and Esc on the travel curtain cancels the jump.

@@ -199,6 +199,15 @@ public partial class PhoneProbe : Node
         await Key(Godot.Key.Escape, 0.6);
         Shot("phone_12_home_wallpaper.png");
 
+        // Esc on the curtain cancels a travel that has not jumped yet
+        var stay = me.Global;
+        Teleporter.Instance?.TeleportTo(stay.E + 500, stay.N, "probe cancelled");
+        await Wait(0.1);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Travel, "the curtain is up while the jump waits (#1253)");
+        await Key(Godot.Key.Escape, 2.5);
+        var stayed = me.Global;
+        Check(Math.Abs(stayed.E - stay.E) < 2 && phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the curtain cancels the travel and stays on the phone (#1253)");
+
         // travel while open: behind the phone once the world is dark, and the phone folds away there
         var from = me.GlobalPosition;
         var at = me.Global;
