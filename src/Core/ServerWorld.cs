@@ -353,6 +353,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
             Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
             Adventure.Places.PlacesService.Create(adventure, server: true, networked: true).BodyOf = peer =>
                 PlayerOf(peer) is { } body ? Adventure.Places.PlacesBodies.Of(body, body.NetGlobal, PlayerOf, ground) : null;
+            // navigation (#1226): the travel network (unlocks, trips, fares, the travelcards) and the pins, shared with the party
+            var travel = Adventure.Navigation.AdventureTravel.Create(adventure, server: true, networked: true);
+            travel.IsAdmin = _chat.IsAdminPeer;
+            travel.Racing = peer => race.RaceOf(peer) != 0;
+            travel.GroundAt = ground;
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
@@ -652,6 +657,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _adventure?.PeerLeft(id);
         Adventure.Places.PlacesService.Instance?.PeerLeft(id);
+        Adventure.Navigation.AdventureTravel.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);

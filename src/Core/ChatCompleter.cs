@@ -60,6 +60,8 @@ public sealed class ChatCompleter
 #endif
         ("city", false, true, "<town>", "Travel", "teleport to a town"),
         ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]", "Travel", "the venues: what plays there, go to one"),
+        ("travel", false, true, "[list] | to <point id> | unlock <id | all> [player] | lock <id | all> [player]", "Travel", "the adventure's travel network (unlock and lock: admins)"),
+        ("pin", false, true, "list | add [1-6] [note] | clear", "Travel", "your map pins"),
         ("tpa", false, false, "<player>", "Travel", "ask to go to a player"),
         ("tphere", false, false, "<player>", "Travel", "ask a player over"),
         ("tp", true, true, "<player> | <E> <N>", "Travel", "go to a player or an LV95 point"),

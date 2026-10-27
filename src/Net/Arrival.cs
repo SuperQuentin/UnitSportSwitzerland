@@ -46,7 +46,8 @@ public partial class Arrival : Node
         var a = new Arrival { Name = NodeName, _server = true };
         // a test world starts at its own start unless told otherwise (#999)
         if ((SpawnPoint.ParseLv95("--spawn") ?? WorldChoice.Active?.Start) is { } spawn) a.Spawn = spawn;
-        a.FreeTeleport = !CmdArgs.Has("--no-teleport");
+        // a travel-network server (#1226, --adventure-travel network): players travel the network they unlocked, not freely
+        a.FreeTeleport = !CmdArgs.Has("--no-teleport") && CmdArgs.Value("--adventure-travel")?.ToLowerInvariant() != "network";
         GD.Print($"[arrival] players start at {a.Spawn.E:F0}/{a.Spawn.N:F0}, teleporting {(a.FreeTeleport ? "allowed" : "admins only")}");
         world.AddChild(a);
         return a;

@@ -59,8 +59,21 @@ public static class Permissions
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Offline, the player chose the adventure's travel network (<c>Settings > Gameplay > Travel</c>, #1226): free jumps
+    /// are off for it as on a <c>--adventure-travel network</c> server.
+    /// </summary>
+    public static bool OfflineTravelNetwork { get; private set; }
+
+    public static void SetOfflineTravelNetwork(bool on)
+    {
+        if (OfflineTravelNetwork == on) return;
+        OfflineTravelNetwork = on;
+        Changed?.Invoke();
+    }
+
     /// <summary>The place search, the VR hand map and the fly camera may move the player somewhere else.</summary>
-    public static bool CanTeleport => !Online || IsAdmin || ServerTeleport;
+    public static bool CanTeleport => Online ? IsAdmin || ServerTeleport : !OfflineTravelNetwork;
 
     /// <summary>Connected to a server, i.e. not the world of your own.</summary>
     public static bool Online

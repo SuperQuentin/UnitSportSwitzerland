@@ -264,6 +264,19 @@ public partial class Bank : Node
         return balance;
     }
 
+    /// <summary>A peer's account balance (the server's, offline this machine's): what a fare is checked against (#1226).</summary>
+    public long BalanceOf(long peer) => _accounts.GetValueOrDefault(_server ? Account(peer) : LocalName);
+
+    /// <summary>
+    /// Server: tells a peer its balance after a charge it did not ask the bank for (a travel fare, #1226), the way a
+    /// reward is told: only the balance moves, never a pending deposit. Offline <see cref="Charge"/> reports it already.
+    /// </summary>
+    public void Tell(long peer)
+    {
+        if (_server && peer > 0 && Multiplayer.GetPeers().Contains((int)peer))
+            RpcId(peer, MethodName.Credited, 0, _accounts.GetValueOrDefault(Account(peer)));
+    }
+
     /// <summary>The server paid into this player's account (a reward): only the balance moves, never a pending claim.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Credited(int amount, long balance) => Report(balance);

@@ -78,7 +78,8 @@ public partial class Handshake : Node
     /// 49: World/Accounts (Ask, Present, Welcome, Refuse): the account step after this check (#1123).
     /// 50: World/Adventure (#1223: RequestStart/Abandon/Track/Deliver; SectionSync, QuestNote, Granted, DeliverOk, Refused, Unsaved), World/Bank Credited.
     /// 51: World/Adventure/Places (#1224: RequestInteract; Stamped, Synced, FogFull, FogDelta), AssetKind.AtlasFacts 18.
-    public const int Protocol = 51;
+    /// 52: World/Adventure/Travel (#1226: RequestTravel/Buy/PinAdd/PinEdit/PinRemove; TellMode, TellUnlocked, TellRefused, Depart, PartyPinsState).
+    public const int Protocol = 52;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

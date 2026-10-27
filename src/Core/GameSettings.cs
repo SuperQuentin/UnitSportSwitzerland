@@ -106,6 +106,16 @@ public sealed class GameSettings
     public string MenuSkinDay { get; set; } = Ui.Skins.MenuSkin.DayDefault;
     public string MenuSkinNight { get; set; } = Ui.Skins.MenuSkin.NightDefault;
 
+    // ---- the adventure's navigation (#1226, docs/notes/adventure/compass.md, guide.md, travel.md) ----
+    /// <summary>The free-roam compass strip at the top of the screen.</summary>
+    public bool AdventureCompass { get; set; } = true;
+    /// <summary>The guiding gust: 0 on demand (N), 1 always while a target is tracked, 2 arrow only, 3 off.</summary>
+    public int GuideWind { get; set; }
+    /// <summary>The guide as a high-contrast arrow on the ground instead of leaves (accessibility).</summary>
+    public bool GuideHighContrast { get; set; }
+    /// <summary>Offline: travel only through the unlocked network (no free jumps), as on a network server.</summary>
+    public bool AdventureTravelNetwork { get; set; }
+
     /// <summary>No hover tilts, pops or ambient animation in the menus (#1135): plain fades only.</summary>
     public bool ReduceMotion { get; set; }
 

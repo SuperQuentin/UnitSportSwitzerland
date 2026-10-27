@@ -113,7 +113,7 @@ public partial class AdventureService : Node
         // the checks' own quests, a few tens of metres from the default spawn (never offered to players)
         if (CmdArgs.Has("--adventure-test") || AdventureCheck.Requested) Quests.AddSource(new ProbeQuests(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N));
         if (!Authority) return;
-        if (AdventureCheck.Requested || Places.PlacesCheck.Requested) AdventureCheck.ClearScratch();
+        if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -279,7 +279,9 @@ public partial class AdventureService : Node
     /// <summary>Where a check keeps its progress instead of <c>user://adventure</c>, or null.</summary>
     public static string? ScratchDir => CmdArgs.Value("--adventure-dir") is { } dir ? ProjectSettings.GlobalizePath(dir)
         : AdventureCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/adventurecheck")
-        : Places.PlacesCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/placescheck") : null;
+        : Places.PlacesCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/placescheck")
+        : Navigation.NavCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/navcheck")
+        : Navigation.TravelCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/travelcheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));
