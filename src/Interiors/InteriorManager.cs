@@ -934,8 +934,11 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// The door E works for <paramref name="player"/> outside, if any: of the doors in reach, the
     /// one they look at the facade of before a nearer one at their back.
     /// </summary>
-    public string? OutsideDoorInReach(FootPlayer player) =>
-        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside)?.Key.ToString();
+    public string? OutsideDoorInReach(FootPlayer player) => OutsideEntry(player)?.Key.ToString();
+
+    /// <summary>The door <see cref="OutsideDoorInReach(FootPlayer)"/> names, as the index has it (its outline, #1286).</summary>
+    private DoorIndex.Entry? OutsideEntry(FootPlayer player) =>
+        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside);
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
@@ -1144,28 +1147,13 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         _promptTimer = 0.15;
 
         var p = LocalPlayer?.Invoke();
-        string? text = null;
+        Items.Interaction? hit = null;
+        var outranks = Items.Outranking.None;
+        // what E would act on, its words and its outline from one rule (#1286, InteriorManager.Interact)
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
-        {
-            string? door = null;
-            if (p.Indoors && _current != null)
-            {
-                door = ExitAt(p)?.Door;
-                if (door == null) text = InsidePrompt(p) ?? ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
-            }
-            else if (!p.Indoors) door = OutsideDoorInReach(p);
-            // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
-            if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p) ?? Adventure.Rewards.RewardWorld.PromptFor(p) ?? Adventure.Places.PoiMarkers.PromptFor(p);
-            if (door != null)
-                text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
-            // a building site's skip or materials faced outdoors (#627): E searches it before a door
-            if (!p.Indoors && Loot.LootService.Instance?.YardPromptFor(p) is { } yard) text = yard;
-            // a building site crane's ladder, its remote's box, or the climb itself (#618): E takes
-            // them before a skip's search, as TryInteract does
-            if (!p.Indoors && p.CranePrompt() is { } crane) text = crane;
-            // a Battle Royale crate at your feet comes first, as E opens it first (#194)
-            if (BattleRoyale.BrCrates.Instance?.PromptFor(p) is { } crate) text = crate;
-        }
+            hit = Interacting(p, out outranks);
+        PointOutline(hit, outranks);
+        string? text = hit?.Text;
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;
     }

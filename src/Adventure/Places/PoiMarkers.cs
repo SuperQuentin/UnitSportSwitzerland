@@ -187,14 +187,32 @@ public partial class PoiMarkers : Node3D
     private string? _prompt;
 
     /// <summary>"[E] Look out" at a viewpoint, "[E] Stamp" at a stamp post; null away from one. Built only when it changes.</summary>
-    public static string? PromptFor(FootPlayer p)
+    public static string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt at a marker (a travel sign first) and the marker to outline (#1286); null away from one.</summary>
+    public static Items.Interaction? InteractionFor(FootPlayer p)
     {
-        if (Navigation.TravelSigns.PromptFor(p) is { } sign) return sign;
+        if (Navigation.TravelSigns.InteractionFor(p) is { } sign) return sign;
         if (Instance is not { } m || m.InReach(p) is not { } poi) return null;
+        return new(m.PromptText(poi), m.OutlineOf(poi));
+    }
+
+    private string PromptText(Poi poi)
+    {
         var key = (poi, PlayerInput.HintDevice);
-        if (m._prompt != null && key == m._promptKey) return m._prompt;
-        m._promptKey = key;
+        if (_prompt != null && key == _promptKey) return _prompt;
+        _promptKey = key;
         string what = poi.Is(PoiFlags.Viewpoint) ? $"Look out from {poi.Name}" : $"Stamp: {poi.Name}";
-        return m._prompt = InputHints.Prompt(PlayerInput.InteractMount, what);
+        return _prompt = InputHints.Prompt(PlayerInput.InteractMount, what);
+    }
+
+    /// <summary>The box round a placed marker's MultiMesh instance, turned as <see cref="Place"/> turns it.</summary>
+    private Items.Outline OutlineOf(Poi poi)
+    {
+        foreach (var (placed, local) in _placed)
+            if (placed.Id == poi.Id)
+                return Items.Outline.Around(this, _layers[(int)KindOf(poi)].Multimesh.Mesh,
+                    new Transform3D(new Basis(Vector3.Up, (float)(poi.Hash % 360) * Mathf.Pi / 180f), local));
+        return default;
     }
 }

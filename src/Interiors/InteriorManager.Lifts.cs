@@ -126,19 +126,27 @@ public partial class InteriorManager
         return TryInnerDoorByHand(p, local);
     }
 
-    /// <summary>The prompt for what <see cref="TryInside"/> would do here, or null.</summary>
-    private string? InsidePrompt(FootPlayer p)
+    /// <summary>What <see cref="TryInside"/> would do here and to what (#1286): a lift's panel or call button, a flat's door; or null.</summary>
+    private Items.Interaction? InsideInteraction(FootPlayer p)
     {
         if (_current == null || CurrentNode is not { } node) return null;
         var local = node.ToLocal(p.GlobalPosition);
         if (_current.Lifts.Count > 0 && LiftAt(_current, local, CallReach) is { } at && !DoorNearer(_current, local, at))
         {
             var ride = LiftOf(_current, at.Lift);
+            var lift = _current.Lifts[at.Lift];
+            float y0 = _current.FloorY(at.Floor);
             if (at.InCabin)
-                return ride.Busy(Clock) ? "The elevator is moving" : InputHints.Prompt(PlayerInput.InteractMount, "Choose a floor");
-            return ride.At(Clock) == at.Floor && !ride.Busy(Clock) ? null : InputHints.Prompt(PlayerInput.InteractMount, "Call the elevator");
+            {
+                var (pmin, pmax) = InteriorMeshBuilder.LiftPanel(lift, y0);
+                return new(ride.Busy(Clock) ? "The elevator is moving" : InputHints.Prompt(PlayerInput.InteractMount, "Choose a floor"),
+                    Items.Outline.Box(node, pmin, pmax));
+            }
+            if (ride.At(Clock) == at.Floor && !ride.Busy(Clock)) return null;
+            var (cmin, cmax) = InteriorMeshBuilder.LiftCallPlate(lift, y0);
+            return new(InputHints.Prompt(PlayerInput.InteractMount, "Call the elevator"), Items.Outline.Box(node, cmin, cmax));
         }
-        return InnerDoorPrompt(local);
+        return InnerDoorInteraction(node, local);
     }
 
     private void UseLift(int lift, int floor, bool inCabin)

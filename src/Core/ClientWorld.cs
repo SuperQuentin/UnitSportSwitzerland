@@ -2293,8 +2293,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
             else if (p.Indoors)
             {
-                // a cinema's booth (#1238): the lights or the screen, by the half of its panel you stand at
-                if (Interiors.CinemaBooths.Prompt(p) is { } booth) yield return (PlayerInput.InteractMount, booth);
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))

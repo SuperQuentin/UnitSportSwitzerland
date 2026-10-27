@@ -177,22 +177,27 @@ public partial class LootService : Node
     }
 
     /// <summary>The prompt line for the furniture the player faces, or null.</summary>
-    public string? PromptFor(FootPlayer p)
+    public string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt line for the furniture the player faces and that piece to outline (#1286), or null.</summary>
+    public Interaction? InteractionFor(FootPlayer p)
     {
         if (_ui?.IsOpen == true || _simonUi?.IsOpen == true || _counterUi?.IsOpen == true || ShopService.Instance?.IsOpen == true) return null;
         if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
         string key = InputHints.Tag(PlayerInput.InteractMount);
-        if (NearestCounter(p, layout, node) >= 0) return $"{key} Bank counter: deposit or withdraw";
-        if (ShopService.Instance?.PromptFor(p) is { } shop) return shop;
+        if (NearestCounter(p, layout, node) is var counter and >= 0)
+            return new($"{key} Bank counter: deposit or withdraw", Outline.Piece(node, counter));
+        if (ShopService.Instance?.InteractionFor(p) is { } shop) return shop;
         int i = NearestContainer(p, layout, node);
         if (i < 0) return null;
         if (_lockUi?.IsOpen == true) return null;
+        var piece = Outline.Piece(node, i);
         string what = LootTables.Describe(layout.Furniture[i].Type);
         if (LootTables.IsLocked(layout.Furniture[i].Type) && !IsUnlocked(layout.Key, i))
-            return $"{key} Crack the {what}";
+            return new($"{key} Crack the {what}", piece);
         bool empty = _seenEmpty.TryGetValue((layout.Key, i), out long ep)
             && ep == LootTables.Epoch(layout.Key, Now);
-        return empty ? $"{key} Search the {what} (empty)" : $"{key} Search the {what}";
+        return new(empty ? $"{key} Search the {what} (empty)" : $"{key} Search the {what}", piece);
     }
 
     /// <summary>E indoors. Toggles the panel on the facing container; false when there is nothing to search.</summary>
@@ -256,14 +261,25 @@ public partial class LootService : Node
     }
 
     /// <summary>The prompt line for the yard container the player faces outdoors (#627), or null.</summary>
-    public string? YardPromptFor(FootPlayer p)
+    public string? YardPromptFor(FootPlayer p) => YardInteractionFor(p)?.Text;
+
+    /// <summary>
+    /// The prompt for the yard container the player faces outdoors and its box to outline (#1286, it is
+    /// baked into the site's mesh): the stock's footprint and height, round its middle; or null.
+    /// </summary>
+    public Interaction? YardInteractionFor(FootPlayer p)
     {
         if (_ui?.IsOpen == true || _lockUi?.IsOpen == true || _simonUi?.IsOpen == true || _counterUi?.IsOpen == true) return null;
         // a machine aimed at wins, as E gets into it first
         if (Vehicles.VehicleReach.Current != null || !NearestYard(p, out var c)) return null;
         string what = SiteLoot.Describe(c.Kind);
         bool empty = _seenEmpty.TryGetValue((c.Building, c.Index), out long ep) && ep == LootTables.Epoch(c.Building, Now);
-        return InputHints.Prompt(PlayerInput.InteractMount, empty ? $"Search the {what} (empty)" : $"Search the {what}");
+        // from the player: the world's x is east and its z south, as the stock's axes
+        var me = p.Global;
+        var middle = p.GlobalPosition + new Vector3((float)(c.E - me.E), (c.Bottom + c.Top) / 2 - (float)me.Alt, (float)(me.N - c.N));
+        var basis = new Basis(new Vector3(c.AxisU.X, 0, c.AxisU.Y), Vector3.Up, new Vector3(c.AxisV.X, 0, c.AxisV.Y));
+        return new(InputHints.Prompt(PlayerInput.InteractMount, empty ? $"Search the {what} (empty)" : $"Search the {what}"),
+            Outline.Box(null, new Transform3D(basis, middle), new Vector3(2 * c.HalfU, c.Top - c.Bottom, 2 * c.HalfV)));
     }
 
     /// <summary>
