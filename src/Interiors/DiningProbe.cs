@@ -48,6 +48,8 @@ public partial class DiningProbe : Node
             new[] { new Spot(VenueType.Restaurant, "regional", -9, 0), new Spot(VenueType.Bar, "", 9, 0) },
             new[] { RoomType.Gaststube, RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true),
         // a kiosk: no room big enough, the ordinary rules furnish it
+        new("hall", 18, 24, 4.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "regional") },
+            new[] { RoomType.Gaststube, RoomType.GastroKitchen }, new[] { FurnitureType.CookLine }),
         new("too-small", 3f, 3.5f, 3, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "") },
             Array.Empty<RoomType>(), Array.Empty<FurnitureType>()),
     };
@@ -94,6 +96,11 @@ public partial class DiningProbe : Node
             $"{what}: no shop counter in a restaurant");
         if (ground.Any(r => r.Type == RoomType.GastroKitchen))
             Check(l.Furniture.Any(p => p.Type == FurnitureType.CookLine), $"{what}: the kitchen's cook line");
+        // #1250: every venue that cooks has its kitchen, and no guest room is a hall
+        if (dining.Any(r => r.Type is not (RoomType.BarRoom or RoomType.ClubRoom) && r.Area >= 24f))
+            Check(ground.Any(r => r.Type == RoomType.GastroKitchen), $"{what}: a kitchen for a venue that cooks ({string.Join(", ", ground.Select(r => r.Type))})");
+        Check(dining.Where(r => r.Type != RoomType.ClubRoom).All(r => r.Area <= 85.5f),
+            $"{what}: no guest room over 85 m2 ({string.Join(", ", dining.Select(r => $"{r.Area:F0}"))})");
 
         // every doorway of a guest room is reached from its first among what stands there
         foreach (var r in dining)

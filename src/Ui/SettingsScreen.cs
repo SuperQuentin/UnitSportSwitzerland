@@ -111,6 +111,8 @@ public partial class SettingsScreen : Screen
                 i => GameSettings.Current.EngineVoice = (UnitSport.Audio.EngineVoice)i, "Which sound chip the engines are rendered as");
             UiKit.ToggleRow(rows, "Variometer", s.Variometer, on => GameSettings.Current.Variometer = on,
                 "On a paraglider, parachute, wingsuit or pigeon: a beep that rises with the climb, a low tone in sink");
+            UiKit.ToggleRow(rows, "Sound occlusion", s.SoundOcclusion, on => GameSettings.Current.SoundOcclusion = on,
+                "Music muffled behind walls, traced with rays; off saves CPU in busy towns");
         });
 
         Tab("Gameplay", rows =>

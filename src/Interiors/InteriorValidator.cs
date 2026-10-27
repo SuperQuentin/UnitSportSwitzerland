@@ -216,7 +216,7 @@ public static class InteriorValidator
                 // overhead (a bell, a cross on the wall, a crane beam)
                 if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais
                         or FurnitureType.ShowroomPlinth or FurnitureType.FloorMarking or FurnitureType.Confetti
-                        or FurnitureType.CarLift)
+                        or FurnitureType.CarLift or FurnitureType.BoothDeck)
                     && p.Lift < 1.5f)
                 {
                     foreach (var o in room.Openings.Where(o => o.Kind is OpeningKind.Door or OpeningKind.Entry or OpeningKind.Arch))

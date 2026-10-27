@@ -155,6 +155,8 @@ public partial class FootPlayer
             _climbPush = 0f;
             return false;
         }
+        // an open doorway is walked through, never climbed: the facade behind it has no hole
+        if (Interiors.InteriorManager.Instance?.InOpenDoorway(point) == true) { _climbPush = 0f; return false; }
         var flat = new Vector3(normal.X, 0, normal.Z);
         if (flat.LengthSquared() < 1e-4f || direction.Dot(-flat.Normalized()) < ClimbPushDot) { _climbPush = 0f; return false; }
         if (onFloor && !botClimb)

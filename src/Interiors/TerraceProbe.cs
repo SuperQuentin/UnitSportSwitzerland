@@ -43,7 +43,10 @@ public partial class TerraceProbe : Node
             "the way in stays clear");
         Check(Count(wide, TerraceKind.MenuBoard) == 1, "a menu board by the door");
 
-        Check(Plan(Venue(VenueType.Cafe), 2.5f).Count == 0, "a pavement 2.5 m deep: no room, no terrace");
+        var narrow = Plan(Venue(VenueType.Cafe), 2.5f);
+        Check(narrow.All(i => i.Kind == TerraceKind.Awning) && Count(narrow, TerraceKind.Awning) == 1,
+            "a pavement 2.5 m deep: no room for tables, a café keeps its awning with its name (#1250)");
+        Check(Plan(Venue(VenueType.Pub), 2.5f).Count == 0, "a pub there: nothing");
         Check(Plan(Venue(VenueType.Bar, VenueFlags.NoOutdoor), 6f).Count == 0, "outdoor_seating=no: none");
         Check(Plan(Venue(VenueType.Nightclub), 6f).Count == 0, "a club: none");
 

@@ -50,6 +50,9 @@ uniform vec3 lamp_color = vec3(1.0, 0.70, 0.40);
 uniform float light_gain = 1.0;
 // a cinema's house lights (#1238, Interiors/CinemaBooths): 1 full, dim, 0 off; scales tint-2 lamps
 uniform float house_lights = 1.0;
+// the light the picture on a cinema's screen throws back into its hall (#1250): the slide's mean colour,
+// faint, on the house-light lamps' falloff; black with the screen off
+uniform vec3 screen_glow = vec3(0.0);
 
 // A church turned night club while the chess type beat plays (#370, src/Interiors/ChurchDisco):
 // per instance, so only that church's meshes; the room goes dark and the mirror ball's beams and
@@ -137,7 +140,7 @@ vec3 room_light(vec3 p, vec3 n) {
             float fall = 1.0 - clamp(d / a.x, 0.0, 1.0);
             float facing = clamp(dot(n, dir) * 0.5 + 0.5, 0.0, 1.0);
             vec3 lamp = a.z > 2.5 ? vec3(0.34, 0.18, 0.62)
-                : a.z > 1.5 ? lamp_color * house_lights
+                : a.z > 1.5 ? lamp_color * house_lights + screen_glow
                 : a.z > 0.5 ? mix(lamp_color, vec3(0.30, 0.10, 0.80), world_night) : lamp_color;
             total += lamp * lamp_gain * on * (0.12 + 0.88 * fall * fall) * (0.4 + 0.6 * facing);
         }

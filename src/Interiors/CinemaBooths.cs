@@ -5,7 +5,7 @@ using UnitSport.Player;
 namespace UnitSport.Interiors;
 
 /// <summary>
-/// A cinema's projection booth (#1238): the house lights (full, dim, off) and the screen (a cat, on or
+/// A cinema's projection booth (#1238): the house lights (full, dim, off) and the screen (cat photos, on or
 /// off), worked at the booth's control panel (<see cref="FurnitureType.BoothPanel"/>) and the same for
 /// everyone. At <c>World/CinemaBooths</c> on the server and on every client, as <see cref="ChurchRadios"/>
 /// is: a player inside asks, the server checks they are in that cinema and broadcasts, a joining client
@@ -18,8 +18,9 @@ namespace UnitSport.Interiors;
 /// </para>
 /// <para>
 /// Client: what is applied goes on the cinema the player is in, on change only: the interior material's
-/// <c>house_lights</c> (tint-2 lamps, <see cref="RoomLights.Tint"/>), the cat on every screen and the
-/// projector's beam to it (built hidden with the interior: <see cref="InteriorNode"/>'s screens).
+/// <c>house_lights</c> (tint-2 lamps, <see cref="RoomLights.Tint"/>), the cat slides on every screen and the
+/// projector's beam to it (built hidden with the interior: <see cref="InteriorNode"/>'s screens); at High
+/// detail the picture thrown by a light in the hall the camera is in (<see cref="InteriorNode.RealProjection"/>).
 /// </para>
 /// </summary>
 public partial class CinemaBooths : Node
@@ -44,6 +45,8 @@ public partial class CinemaBooths : Node
     private string _appliedPlan = "";
     private int _applied = -1;
     private InteriorNode? _appliedNode;
+    private int _slide = -1;
+    private bool _real;
 
     public static CinemaBooths Create(Node world)
     {
@@ -156,11 +159,27 @@ public partial class CinemaBooths : Node
         if (im?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) { _appliedNode = null; return; }
         // --cinemashow: every cinema dimmed with the cat on, for a shot (no panel to press in one)
         int code = ShowAll ? Pack(Lights.Dim, true) : _states.GetValueOrDefault(node.Layout.Key);
-        if (node == _appliedNode && code == _applied && node.Layout.Key == _appliedPlan) return;
-        _appliedNode = node;
-        _applied = code;
-        _appliedPlan = node.Layout.Key;
-        var (lights, screen) = Unpack(code);
-        node.ShowCinema(Level(lights), screen);
+        // the slide on the screens, from the shared clock: a texture swap every few seconds, on change only
+        if (Unpack(code).Screen)
+        {
+            int slide = InteriorNode.SlideAt(ClockSync.ServerNow);
+            if (slide != _slide)
+            {
+                InteriorNode.ShowSlide(_slide = slide);
+                if (node == _appliedNode) node.ShowGlow(true);
+            }
+        }
+        // High detail throws the picture with a light in the hall the camera is in (InteriorNode's screens)
+        bool real = InteriorNode.RealProjection;
+        if (node != _appliedNode || code != _applied || node.Layout.Key != _appliedPlan || real != _real)
+        {
+            _appliedNode = node;
+            _applied = code;
+            _appliedPlan = node.Layout.Key;
+            _real = real;
+            var (lights, screen) = Unpack(code);
+            node.ShowCinema(Level(lights), screen, real);
+        }
+        if (real && GetViewport().GetCamera3D() is { } cam) node.ProjectFor(node.ToLocal(cam.GlobalPosition));
     }
 }

@@ -28,7 +28,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored bowling centres are planned again.</summary>
-    public const int BowlingRules = 3;
+    public const int BowlingRules = 4;
 
     /// <summary>One pair of lanes across, capping boards included [S: 11 ft 6 in].</summary>
     public const float PairPitch = 3.50f;

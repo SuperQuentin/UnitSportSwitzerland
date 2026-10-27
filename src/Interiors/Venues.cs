@@ -68,14 +68,19 @@ public static class Venues
     public static bool IsHall(VenueType kind) => kind is VenueType.Bowling or VenueType.Cinema or VenueType.Arcade;
 
     /// <summary>
-    /// Whether a hall venue takes its whole solid (#1235): a low building that is nothing else, which
-    /// loses its window grid outside and plans as one box inside. A taller one, or a block of flats,
-    /// keeps its facade and the venue plans into its bottom storeys. Shared by the facade and the planner.
+    /// Whether a hall venue takes its whole solid (#1235): a building up to <see cref="HallMaxHeight"/>
+    /// that is nothing else, which loses its window grid outside (a blind hall with a glazed entrance,
+    /// #1250) and plans as one box inside. A taller one, or a block of flats, keeps its facade above the
+    /// ground floor (whose windows go) and the venue plans into its bottom storeys. Shared by the facade
+    /// and the planner.
     /// </summary>
     public static bool Planned(VenueType t) => t is VenueType.Bowling or VenueType.Cinema or VenueType.Arcade;
 
     public static bool WholeBuilding(Building b) =>
-        b.MaxY - b.MinY <= 13f && b.Kind is not (BuildingKind.House or BuildingKind.Apartment);
+        b.MaxY - b.MinY <= HallMaxHeight && b.Kind is not (BuildingKind.House or BuildingKind.Apartment);
+
+    /// <summary>The tallest building a hall venue takes whole, m (#1250: a cinema or bowling centre of 15-20 m is still a box).</summary>
+    public const float HallMaxHeight = 20f;
 
     /// <summary>The hall venue a solid is, if it is one, whatever the planner then made of it: the facade's and the door's question.</summary>
     public static VenueType HallOf(BuildingTypeMap map, int index) =>

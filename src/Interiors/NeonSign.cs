@@ -118,7 +118,7 @@ public static class NeonSign
             sign.AddChild(new Label3D
             {
                 Text = text,
-                Font = Font(),
+                Font = SignFont(),
                 FontSize = fontSize,
                 PixelSize = em / fontSize,
                 // a tube is the letter in its gas colour with a whiter core, haloed by a thin translucent
@@ -139,7 +139,7 @@ public static class NeonSign
     }
 
     /// <summary>Saira at a medium weight: the variable font's default is a hairline, too thin to read from the street.</summary>
-    private static Font? Font()
+    public static Font? SignFont()
     {
         if (_font != null) return _font;
         var file = ResourceLoader.Load<FontFile>("res://assets/fonts/Saira-Variable.ttf");

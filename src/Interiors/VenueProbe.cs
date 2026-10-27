@@ -177,11 +177,24 @@ public partial class VenueProbe : Node
                         // and where its rooms are (#1242): a shot's camera inside stands where it is told
                         var fp = BuildingFootprint.Compute(tile, i, Roads(dir, t), null);
                         if (fp != null && InteriorGenerator.Generate(tile, i, Roads(dir, t), null) is { } plan)
-                            foreach (var r in plan.GroundFloor.Rooms.Where(r => InteriorGenerator.DiningRoom(r.Type) || r.Type == RoomType.GastroKitchen))
+                        {
+                            // every room (#1250: a hall's auditoriums and booth too), and the plan beside the shots
+                            for (int fl = 0; fl < plan.Floors.Count; fl++)
+                                foreach (var r in plan.Floors[fl].Rooms.Where(r => r.Type is not (RoomType.Corridor or RoomType.Hall) || r.Area >= 20f))
+                                {
+                                    var c = fp.Center + fp.AxisU * ((r.X0 + r.X1) / 2) + fp.AxisV * ((r.Z0 + r.Z1) / 2);
+                                    var inside = plan.Furniture.Where(p => p.Floor == fl && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1)
+                                        .GroupBy(p => p.Type).Select(g => $"{g.Key} {g.Count()}");
+                                    GD.Print($"[venues]   floor {fl - plan.Below} {r.Type} {r.Width:F1}x{r.Depth:F1} m at E {t.MinE + c.X:F1} N {t.MaxN - c.Y:F1}: {string.Join(", ", inside)}");
+                                }
+                            try
                             {
-                                var c = fp.Center + fp.AxisU * ((r.X0 + r.X1) / 2) + fp.AxisV * ((r.Z0 + r.Z1) / 2);
-                                GD.Print($"[venues]   {r.Type} {r.Width:F1}x{r.Depth:F1} m at E {t.MinE + c.X:F1} N {t.MaxN - c.Y:F1}");
+                                string outDir = ProjectSettings.GlobalizePath("res://test_output/venues");
+                                System.IO.Directory.CreateDirectory(outDir);
+                                System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, $"{t}_{i}.svg"), InteriorValidator.ToSvg(plan));
                             }
+                            catch (System.IO.IOException) { }
+                        }
                     }
                 }
             }

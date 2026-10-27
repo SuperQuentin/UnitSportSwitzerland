@@ -36,3 +36,5 @@
   listener for one frame, a dropout heard as a click walking through a door with a radio playing
   inside. `Hearing.Attach` sets the speaker's `ProcessPriority` to `Ears.Priority + 1`. The street
   heard through an interior's front door (`BuildingSounds`) eases in and out rather than Play/Stop.
+- **Settings › Audio › Sound occlusion** (`GameSettings.SoundOcclusion`, default on, #1281): off, `Hearing.Step` casts no
+  occlusion rays and every source in the ears' space is heard as in the open (doors and closed cars still apply).

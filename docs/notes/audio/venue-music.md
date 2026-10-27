@@ -8,6 +8,9 @@ ffmpeg or internet), they play tracker modules on our own player, also the same 
   with a station and a volume. `WebRadio.Scan` adds every one to the players and parked cars it
   already hangs `WebRadioSpeaker`s on, and wants their stations like any other (nearest first, three
   at most, `KeepFor`): no new message, the server taps what is wanted.
+- **Out of earshot they sleep** (#1281): `WebRadio.Scan` sets a source beyond `RadioLoudness.Radius(volume)` + 15 m
+  (`VenueWakeMargin`) to `ProcessMode.Disabled` (its radio and tracker speakers inherit it) and hangs no speaker on it.
+  Every source processing each frame cost Geneva half its main thread (52 ms frames, dotnet-trace).
 - **Where** (`Interiors/VenueMusic`): one in each venue room of a built interior (`AddTo`, beside the
   staff in `InteriorManager.Create`), at its centre under the ceiling, volume 0.5; one just inside each
   venue's door (`AtDoor`, beside its neon sign in `VenueSigns`), volume 0.12: the street hears it
