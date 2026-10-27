@@ -36,8 +36,8 @@ public static class ToiletSizing
     public const float BasinPitch = 0.65f;
     /// <summary>The accessible WC (SIA 500): 1.65 x 2.30 m with its door swinging in, here 1.8 m wide.</summary>
     public const float AccessW = 1.8f, AccessD = 2.3f;
-    /// <summary>The single WC: a bowl, a basin beside it, a 0.8 m leaf swinging in.</summary>
-    public const float SingleW = 1.4f, SingleD = 1.9f;
+    /// <summary>The single WC: a bowl, a basin beside it, a 0.8 m leaf swinging in clear of the bowl.</summary>
+    public const float SingleW = 1.4f, SingleD = 1.7f;
     /// <summary>The shared set: two stalls of 1.2 m off an anteroom at least 1.3 m deep.</summary>
     public const float SharedW = 2.4f, SharedD = StallD + 1.3f;
     /// <summary>The gendered set needs this depth: two stalls along a side wall, the anteroom's turn.</summary>

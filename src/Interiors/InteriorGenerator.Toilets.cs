@@ -98,8 +98,9 @@ public static partial class InteriorGenerator
     /// Returns the set planned and what of the strip it left, from the far end: null when nothing is left, else at
     /// least <see cref="ToiletRest"/> long (a shorter sliver widens the set's last room).
     /// </summary>
+    /// <param name="reuse">A room of the floor whose slot the set's first room takes (a store the toilets replace), −1 for none.</param>
     internal static (ToiletSizing.Plan Plan, RectPlan? Left) PublicToilets(InteriorLayout l, FloorPlan floor, int host, RectPlan strip,
-        Side hostSide, (float X, float Z) startNear, int people, float clear = 0)
+        Side hostSide, (float X, float Z) startNear, int people, float clear = 0, int reuse = -1)
     {
         var fr = new ToiletFrame(strip, hostSide, false);
         var (sx, sz) = fr.Point(0, 0);
@@ -110,7 +111,7 @@ public static partial class InteriorGenerator
         float extra = fr.Length - plan.Length;
         if (extra < ToiletRest) plan = plan with { Length = fr.Length };
         else extra = 0;
-        new ToiletPlanner(l, floor, host, fr, clear, extra).Lay(plan);
+        new ToiletPlanner(l, floor, host, fr, clear, extra, reuse).Lay(plan);
         return (plan, fr.Length - plan.Length >= 0.01f ? fr.Rect(plan.Length, 0, fr.Length, fr.Depth) : null);
     }
 
@@ -127,6 +128,7 @@ public static partial class InteriorGenerator
         private readonly int _host, _f;
         private readonly ToiletFrame _fr;
         private readonly float _clear, _top, _extra;
+        private int _reuse;
         private readonly List<FurniturePlan> _pieces;
         /// <summary>What stands in the set so far, and the doorways' clear strips, in the frame: a piece placed later keeps off them.</summary>
         private readonly List<(float A0, float B0, float A1, float B1)> _taken = new();
@@ -135,9 +137,9 @@ public static partial class InteriorGenerator
         private const float Off = WallInset + 0.01f;
 
         /// <param name="extra">The sliver past the set its last room takes too: the accessible WC, the men's washroom, the shared stalls, the WC.</param>
-        public ToiletPlanner(InteriorLayout l, FloorPlan floor, int host, ToiletFrame fr, float clear, float extra)
+        public ToiletPlanner(InteriorLayout l, FloorPlan floor, int host, ToiletFrame fr, float clear, float extra, int reuse)
         {
-            (_l, _floor, _host, _fr, _clear, _extra) = (l, floor, host, fr, clear, extra);
+            (_l, _floor, _host, _fr, _clear, _extra, _reuse) = (l, floor, host, fr, clear, extra, reuse);
             _f = Math.Max(0, l.Floors.IndexOf(floor));
             float headroom = clear > 0 ? clear : l.StoreyHeight - Slab;
             _top = Math.Min(2.05f, headroom - 0.2f);
@@ -166,6 +168,13 @@ public static partial class InteriorGenerator
         {
             var r = new RoomPlan { Type = t, Clear = _clear };
             SetRect(r, _fr.Rect(a0, b0, a1, b1));
+            if (_reuse >= 0)
+            {
+                int at = _reuse;
+                _reuse = -1;
+                _floor.Rooms[at] = r;
+                return at;
+            }
             _floor.Rooms.Add(r);
             return _floor.Rooms.Count - 1;
         }
@@ -367,6 +376,32 @@ public static partial class InteriorGenerator
             any = true;
         }
         return ToiletRoom(r.Type) || any && r.Type == RoomType.WC;
+    }
+
+    /// <summary>
+    /// An existing WC made the public one (#1285), the single set: a leaf in its doorway from room
+    /// <see cref="OpeningPlan.Other"/> swinging into it, and the sign over that doorway. Its bowl and basin
+    /// are the WC's own (<see cref="Pieces"/>).
+    /// </summary>
+    internal static void AdoptWC(InteriorLayout l, int f, int wc, OpeningPlan door)
+    {
+        var r = l.Floors[f].Rooms[wc];
+        var hostSide = Opposite(door.Side);
+        if (!l.InnerDoors.Any(d => d.Floor == f && Math.Abs(d.Center - door.Center) < 0.01f && (d.Room == wc || d.Room == door.Other)))
+            l.InnerDoors.Add(new InnerDoorPlan { Floor = f, Room = door.Other, Side = hostSide, Center = door.Center, Width = door.Width, Top = door.Top, Unit = -1 });
+        const float w = 0.3f, d = 0.03f, h = 0.3f, off = WallInset + 0.01f + d / 2;
+        var (x, z) = door.Side switch
+        {
+            Side.Front => (door.Center, r.Z0 - off),
+            Side.Back => (door.Center, r.Z1 + off),
+            Side.Left => (r.X0 - off, door.Center),
+            _ => (r.X1 + off, door.Center),
+        };
+        float lift = Math.Min(door.Top + 0.1f, l.ClearOf(r) - h - 0.05f);
+        ToiletPieceTable.GetValue(l.Floors[f], _ => new List<FurniturePlan>()).Add(new FurniturePlan
+        {
+            Type = FurnitureType.WcSignAll, Floor = f, X = x, Z = z, Turns = TurnsAgainst(hostSide), W = w, D = d, H = h, Lift = lift,
+        });
     }
 
     /// <summary>The toilet set a finished plan holds (#1285), read off its rooms: what the probes check.</summary>
