@@ -20,6 +20,7 @@ public static partial class InteriorGenerator
         // pieces only code places, at the size it places them (#1235)
         Take(BowlingPieces);
         Take(CinemaPieces);
+        Take(ArcadePieces);
         var room = new RoomPlan { X1 = 8, Z1 = 8 };
         foreach (var type in Enum.GetValues<RoomType>())
         {

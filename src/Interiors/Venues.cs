@@ -72,7 +72,7 @@ public static class Venues
     /// loses its window grid outside and plans as one box inside. A taller one, or a block of flats,
     /// keeps its facade and the venue plans into its bottom storeys. Shared by the facade and the planner.
     /// </summary>
-    public static bool Planned(VenueType t) => t is VenueType.Bowling or VenueType.Cinema;
+    public static bool Planned(VenueType t) => t is VenueType.Bowling or VenueType.Cinema or VenueType.Arcade;
 
     public static bool WholeBuilding(Building b) =>
         b.MaxY - b.MinY <= 13f && b.Kind is not (BuildingKind.House or BuildingKind.Apartment);

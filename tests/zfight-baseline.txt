@@ -642,6 +642,7 @@
 20	Furniture / WashingMachine
 144	Furniture / WaterTank
 100	Furniture / Workbench
+2500	Interiors / Arcade
 5097.8	Interiors / Bowling centre - Bowl bar
 9294.1	Interiors / Bowling centre - Two levels
 4652.5	Interiors / Cinema - Small

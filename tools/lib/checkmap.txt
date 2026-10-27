@@ -169,6 +169,10 @@ src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
 src/Interiors/CinemaProbe   quick  --cinemacheck --systems ui
 src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
 src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1240: arcades planned in hand-made buildings
+src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
+src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
+src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
 src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
 src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
 shaders/body/interior      quick  --bowlingcheck --systems ui
