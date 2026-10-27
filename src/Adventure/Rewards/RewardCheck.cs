@@ -355,6 +355,21 @@ public partial class RewardCheck : ChatProbe
         float later = UnitSport.World.AirLift.Volumes.LiftAt(air.E, air.N, (float)air.Alt, Net.ClockSync.SimNow + GustFx.Seconds + 1);
         Expect(later == 0, "for 20 seconds");
         Expect(Crafting.Recipes.All.Any(r => r.Out == ItemId.TreasureDetector && r.In.Any(i => i.Id == ItemId.Bergkristall && i.Count == 4)), "the detector's recipe: 4 Bergkristall, electronics, copper wire");
+        // the travel flag: planted, it is this player's portable travel point (navigation's TravelBook.Flag, #1226)
+        var placed = PlacedObjects.Instance!;
+        var at = new Transform3D(Basis.Identity, Me!.GlobalPosition + new Vector3(2, 0, 0));
+        PlacedResult? first = null, second = null;
+        placed.RequestPlace(PlacedKind.TravelFlag, at, "", r => first = r);
+        Expect(await Until(() => first != null, 3) && first!.Value.Object is { } flag, $"the travel flag is planted ({first?.Refused})");
+        var book = Adv.Mine.Get(Navigation.TravelBook.Section);
+        var fg = placed.Origin.ToGlobal(at.Origin);
+        Expect(await Until(() => book.Flag is { } f && Math.Abs(f.E - fg.E) < 0.5 && Math.Abs(f.N - fg.N) < 0.5, 3),
+            $"and it is the player's portable travel point ({book.Flag})");
+        placed.RequestPlace(PlacedKind.TravelFlag, at with { Origin = at.Origin + new Vector3(3, 0, 0) }, "", r => second = r);
+        Expect(await Until(() => second != null, 3) && second!.Value.Refused?.Contains("already stands") == true, $"a second flag is refused ({second?.Refused})");
+        PlacedResult? up = null;
+        if (first?.Object is { } planted) placed.RequestRemove(planted.Id, r => up = r);
+        Expect(await Until(() => up != null && book.Flag == null, 3), "taken up, the travel point goes");
         _items.Inventory.Put(slot, ItemStack.Empty);
     }
 

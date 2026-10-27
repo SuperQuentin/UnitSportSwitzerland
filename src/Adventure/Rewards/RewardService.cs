@@ -105,6 +105,7 @@ public partial class RewardService : Node
     {
         if (Instance == this) Instance = null;
         PoiCatalogueHost.Changed -= Map.Clear;
+        Items.PlacedObjects.ServedByPeer -= OnServedPlaced;
     }
 
     public override void _Ready()
@@ -114,10 +115,23 @@ public partial class RewardService : Node
         if (!Authority) return;
         _adventure.Provides("rewards");
         _board = LoadBoard();
+        Items.PlacedObjects.ServedByPeer += OnServedPlaced;
         GD.Print($"[rewards] {(_server ? "server" : "offline")}: placement v{RewardPlacer.Version}{(Map.Enabled ? "" : ", none on this course")}");
     }
 
     private static string Short(string key) => key.Length > 13 ? key[..13] : key;
+
+    /// <summary>
+    /// Server: the travel flag (rewards plan 8) is its planter's portable travel point (navigation 5.6): planted, it is
+    /// set where it stands; taken up, cleared. One flag a player (<c>PlacedObjects</c> refuses a second).
+    /// </summary>
+    private static void OnServedPlaced(long peer, Items.PlacedObject o, bool planted)
+    {
+        if (o.Kind != Items.PlacedKind.TravelFlag || Navigation.AdventureTravel.Instance is not { } travel) return;
+        if (planted) travel.SetPortable(peer, o.E, o.N, (float)o.Altitude);
+        else travel.ClearPortable(peer);
+        GD.Print($"[rewards] peer {peer}'s travel flag {(planted ? "planted: its portable travel point" : "taken up")}");
+    }
 
     private bool Connected(long peer) => _networked && peer > 0 && Multiplayer.MultiplayerPeer != null && Multiplayer.GetPeers().Contains((int)peer);
 
