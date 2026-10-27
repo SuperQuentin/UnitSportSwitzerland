@@ -98,7 +98,7 @@ public static class RoomLights
         // #1238: an auditorium's house lights, which the booth dims (the material's `house_lights`)
         RoomType.Auditorium => 2,
         // #1240: an arcade's lamps, dim and violet whatever the hour
-        RoomType.ArcadeHall => 3,
+        RoomType.ArcadeHall or RoomType.ClubRoom => 3,
         _ => 0,
     };
 
