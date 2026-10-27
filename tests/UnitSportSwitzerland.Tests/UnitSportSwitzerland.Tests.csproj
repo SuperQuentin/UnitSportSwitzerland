@@ -124,6 +124,8 @@
     <Compile Include="..\..\src\Combat\AuraMatch.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\AuraBody.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- one "in a round" registry for the Battle Royale and Versteckis (#1268) -->
+    <Compile Include="..\..\src\Core\Rounds.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />

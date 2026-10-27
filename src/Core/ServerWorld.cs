@@ -298,6 +298,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         br.Origin = origin;
         AddChild(br);
         _chat.BattleRoyale = br;
+        // one "in a round" registry (#1268, Core/Rounds): the Battle Royale first, so it keeps its own answers
+        Rounds.Register(new Rounds.Mode("br", "a Battle Royale match", br.InRound, br.Playing)
+        {
+            NoTeleport = "No teleporting out of a Battle Royale. /br leave to give up.",
+        });
         if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b) || br.Together(a, b);
 
         // deposited cash, kept per player name on this server
@@ -343,7 +348,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Adventure))
         {
             var adventure = _adventure = Adventure.AdventureService.Create(this, server: true, networked: true);
-            adventure.InMatch = br.InRound;
+            adventure.InMatch = Rounds.InRound;
             adventure.NameOf = _chat.NameOfPeer;
             adventure.PositionOf = peer => _players!.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is { } body ? body.NetGlobal : null;
             var gate = _accountGate;
@@ -410,7 +415,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         {
             _structures = Build.Structures.Create(this, origin, server: true);
             _structures.NameOf = _chat.NameOfPeer;
-            _structures.InMatch = br.Playing;
+            _structures.InMatch = Rounds.Playing;
             _structures.MatchRunning = () => br.State.Running;
             _structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
             // a match piece that comes down leaves a pile of some of its materials (#276)
@@ -430,7 +435,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
         // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through
         // the ordinary client simulating them); never in a Battle Royale match, admin or not (#425)
-        _vehicles.MayPark = (peer, state) => state.Wrecked || (_chat.IsAdminPeer(peer) && !br.Playing(peer)) || race.TakeIssued(peer);
+        _vehicles.MayPark = (peer, state) => state.Wrecked || (_chat.IsAdminPeer(peer) && !Rounds.Playing(peer)) || race.TakeIssued(peer);
 
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
@@ -574,7 +579,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
     private double _sinceClockSave;
 
-    public override void _ExitTree() => World.WorldClock.Save();
+    public override void _ExitTree()
+    {
+        World.WorldClock.Save();
+        // the modes registered by this world go with it (#1268)
+        Rounds.Clear();
+    }
 
     public override void _Process(double delta)
     {

@@ -828,8 +828,10 @@ public partial class ChatManager : Node
     /// </summary>
     private bool RefusedInMatch(long sender, long peer)
     {
-        if (BattleRoyale?.Playing(peer) != true) return false;
-        ReplyTo(sender, peer == sender ? NotInMatch : $"{NameOf(peer)} is in a Battle Royale match: everyone plays it on equal terms.", ChatKind.Error);
+        // every round mode (#1268, Core/Rounds): the Battle Royale answers first, in its own words
+        if (Core.Rounds.PlayingIn(peer) is not { } mode) return false;
+        ReplyTo(sender, peer == sender ? (mode.Name == "br" ? NotInMatch : $"Not in {mode.Label}: everyone plays it on equal terms.")
+            : $"{NameOf(peer)} is in {mode.Label}: everyone plays it on equal terms.", ChatKind.Error);
         return true;
     }
 
@@ -1208,9 +1210,9 @@ public partial class ChatManager : Node
     /// <summary>Whether a player may teleport themselves (<c>/city</c>, <c>/stadium</c>); tells them why not.</summary>
     private bool MayTeleport(long sender)
     {
-        if (BattleRoyale?.Playing(sender) == true)
+        if (Core.Rounds.PlayingIn(sender) is { } mode)
         {
-            ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
+            ReplyTo(sender, mode.NoTeleport.Length > 0 ? mode.NoTeleport : $"No teleporting out of {mode.Label}.", ChatKind.Error);
             return false;
         }
         if (Arrival is { FreeTeleport: false } && !IsAdmin(sender))
@@ -1316,9 +1318,9 @@ public partial class ChatManager : Node
     {
         if (!TryFindPlace(sender, query, out var place)) return;
 
-        // a Battle Royale is left alone (#425): its entrants stay where the match has them
+        // a Battle Royale is left alone (#425), and every other round (#1268): its entrants stay where the game has them
         foreach (int peer in Multiplayer.GetPeers())
-            if (BattleRoyale?.Playing(peer) != true) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
+            if (!Core.Rounds.Playing(peer)) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
         Broadcast($"{NameOf(sender)} moved everyone to {place.Name}", ChatKind.Admin);
     }
 
