@@ -167,8 +167,23 @@ src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
 src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
 src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
 src/Interiors/CinemaProbe   quick  --cinemacheck --systems ui
+# #1286: what E's outline draws (pieces alone, booth panel halves, lift buttons, the outline on and off)
+src/Items/InteractOutline   quick  --outlinecheck --systems ui
+src/Interiors/InteriorMeshBuilder quick  --outlinecheck --systems ui
+src/Interiors/InteriorManager.Interact quick  --outlinecheck --systems ui
 src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
 src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1285: public toilets, planned by every public building's generator
+src/Interiors/InteriorGenerator.Toilets quick --cinemacheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --bowlingcheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --arcadecheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --diningcheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --ikeacheck --systems ui
+src/Interiors/ToiletCheck   quick  --cinemacheck --systems ui
+src/Interiors/ToiletCheck   quick  --diningcheck --systems ui
+src/Interiors/ToiletSizing  quick  --cinemacheck --systems ui
+src/Interiors/InteriorMeshBuilder.Toilets quick --cinemacheck --systems ui
+src/Interiors/RoomLights    quick  --cinemacheck --systems ui
 # #1240: arcades planned in hand-made buildings
 src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
 src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui

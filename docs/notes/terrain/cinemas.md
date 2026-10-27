@@ -11,8 +11,9 @@ lane frame and rules (`bowling-centres`).
 - **Along v** (from the door's end): the lobby, 25 % of the length, 4.6-12 m (along X it reaches past
   the door); the auditoriums, 8.5-32 m; the booth, 2.6 m; past that a plain `Hall`.
 - **Across u**: the staff corridor (1.6 m) on the door's side, then the halls side by side at about
-  13 m each (7-18 m, up to 10: a multiplex); a WC column (one or two `WC`, a `Storage`) at the lobby's
-  end away from the corridor; a mall's remainder a plain `Hall`.
+  13 m each (7-18 m, up to 10: a multiplex); a column of public toilets (by gender in a deep lobby, else a
+  shared anteroom, a narrow cinema one WC: `public-toilets`, #1285) and a `Storage` at the lobby's end
+  away from the corridor; a mall's remainder a plain `Hall`.
 - **The screen faces the lobby**: an auditorium's screen is on its lobby wall and its seats rise
   away from it, so the door from the lobby is beside the screen at floor level and you climb the aisle
   steps, as in many real halls. The booth is behind the top rows: upstairs on two levels (a straight

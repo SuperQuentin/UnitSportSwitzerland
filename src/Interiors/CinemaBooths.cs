@@ -129,18 +129,13 @@ public partial class CinemaBooths : Node
 
     // ---- the player at the panel -----------------------------------------------------------------
 
-    /// <summary>Which control of which hall's panel <paramref name="p"/> stands at: the plan key, the hall, and whether it is the screen's half.</summary>
+    /// <summary>Which control of which hall's panel <paramref name="p"/> stands at: the plan key, the hall (#1279), and whether it is the screen's half.</summary>
     public static (string Plan, int Hall, bool Screen)? At(FootPlayer p)
     {
-        if (!p.Indoors || InteriorManager.Instance is not { Current: { Type: BuildingType.Cinema } layout, CurrentNode: { } node }) return null;
-        int i = Loot.LootService.NearestOf(p, layout, node, t => t == FurnitureType.BoothPanel, Reach);
-        if (i < 0) return null;
-        var panel = layout.Furniture[i];
-        // the player in the panel's own frame: its left half (local -X) the lights, its right the screen
-        var local = node.ToLocal(p.GlobalPosition) - new Vector3(panel.X, 0, panel.Z);
-        float across = local.Rotated(Vector3.Up, -panel.Turns * Mathf.Pi / 2).X;
-        int hall = HallAt(layout, panel.X, panel.Z);
-        return hall < 0 ? null : (layout.Key, hall, across > 0);
+        if (PanelAt(p) is not { } at) return null;
+        var panel = at.Node.Layout.Furniture[at.Panel];
+        int hall = HallAt(at.Node.Layout, panel.X, panel.Z);
+        return hall < 0 ? null : (at.Node.Layout.Key, hall, at.Screen);
     }
 
     /// <summary>The prompt at the panel, or null: what E would do there.</summary>

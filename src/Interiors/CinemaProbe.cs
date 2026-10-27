@@ -22,7 +22,8 @@ public partial class CinemaProbe : Node
     }
 
     private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, bool Cinema, int MinHalls = 1,
-        bool Upstairs = false, float MinClear = 0, int MinService = 1);
+        bool Upstairs = false, float MinClear = 0, int MinService = 1,
+        ToiletSet Toilets = ToiletSet.Shared, bool Accessible = false);
 
     /// <summary>A piece's floor rectangle, turned as it stands.</summary>
     private static RectPlan PieceRect(FurniturePlan f)
@@ -38,21 +39,23 @@ public partial class CinemaProbe : Node
         // a small one on one level: the booth behind the top rows at floor level
         new("small", 14, 26, 5, BuildingKind.Commercial, true),
         // a multiplex: halls side by side
-        new("multiplex", 72, 52, 12, BuildingKind.Commercial, true, MinHalls: 4, Upstairs: true),
+        new("multiplex", 72, 52, 12, BuildingKind.Commercial, true, MinHalls: 4, Upstairs: true, Toilets: ToiletSet.Gendered, Accessible: true),
         // in the bottom of a block of flats (Lausanne's Pathé Galeries): the facade's storeys stay
         new("under-flats", 26, 32, 20, BuildingKind.Apartment, true, Upstairs: true),
         // a multiplex too low for an upstairs booth: a long floor-level booth on its deck, the panel at its far end
-        new("low-multiplex", 72, 40, 6, BuildingKind.Commercial, true, MinHalls: 4),
+        new("low-multiplex", 72, 40, 6, BuildingKind.Commercial, true, MinHalls: 4, Toilets: ToiletSet.Gendered),
         // Grütli's footprint too low for an upstairs booth: a 42 m booth whose platter and chair once shut off the panel (#1279)
-        new("low-three", 34, 43, 6, BuildingKind.Civic, true, MinHalls: 2),
+        new("low-three", 34, 43, 6, BuildingKind.Civic, true, MinHalls: 2, Toilets: ToiletSet.Gendered),
         new("low-three-x", 43, 34, 6, BuildingKind.Civic, true, MinHalls: 2),
         // a tall civic building of low storeys (Geneva's Grütli, 28 m of 2.76 m storeys, #1279): halls three storeys high
-        new("tall-civic", 34, 43, 28, BuildingKind.Civic, true, MinHalls: 2, Upstairs: true, MinClear: 6f),
+        new("tall-civic", 34, 43, 28, BuildingKind.Civic, true, MinHalls: 2, Upstairs: true, MinClear: 6f, Toilets: ToiletSet.Gendered),
         // tall, with no storey grid (Geneva's Cinérama Empire, 32 m tagged a garage, #1279): halls at their own height
-        new("tall-garage", 40, 60, 30, BuildingKind.Garage, true, MinHalls: 2, Upstairs: true, MinClear: 6f),
+        new("tall-garage", 40, 60, 30, BuildingKind.Garage, true, MinHalls: 2, Upstairs: true, MinClear: 6f, Toilets: ToiletSet.Gendered, Accessible: true),
         // wider than deep: the halls run along X from the end nearer the door
         // (six rows only: the booth's floor 1.6 m over the top one, more than a short flight, so no service door)
         new("along-x", 44, 22, 8, BuildingKind.Commercial, true, Upstairs: true, MinService: 0),
+        // a narrow town cinema: one hall, the toilets a single WC beside the lobby (#1285)
+        new("narrow", 9.8f, 26, 5, BuildingKind.Commercial, true, Toilets: ToiletSet.Single),
         // a kiosk: no hall fits, the ordinary rules furnish it
         new("too-small", 8, 10, 4, BuildingKind.Commercial, false),
     };
@@ -149,7 +152,9 @@ public partial class CinemaProbe : Node
             $"{what}: each panel works a hall of its own ({string.Join(", ", panels.Select(f => CinemaBooths.HallAt(l, f.X, f.Z)))})");
         Check(Count(FurnitureType.BoxOffice) == 1, $"{what}: a box office");
         Check(Count(FurnitureType.ConcessionStand) == 1, $"{what}: a concession stand");
-        Check(l.Floors[0].Rooms.Any(r => r.Type == RoomType.WC), $"{what}: a WC");
+        // the public toilets the footprint has room for (#1285)
+        var loo = ToiletCheck.Problems(l, c.Toilets, c.Accessible);
+        Check(loo.Count == 0, $"{what}: toilets {ToiletCheck.Describe(l)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
         bool upstairs = l.Floors.Count > 1 && l.Floors[1].Rooms.Any(r => r.Type == RoomType.ProjectionRoom);
         Check(upstairs == c.Upstairs, $"{what}: the booth {(c.Upstairs ? "upstairs" : "at floor level")} ({l.Floors.Count} floor(s))");
         var booth = l.Floors.SelectMany(f => f.Rooms).FirstOrDefault(r => r.Type == RoomType.ProjectionRoom);

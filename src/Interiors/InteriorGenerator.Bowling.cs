@@ -28,7 +28,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored bowling centres are planned again.</summary>
-    public const int BowlingRules = 4;
+    public const int BowlingRules = 5;
 
     /// <summary>One pair of lanes across, capping boards included [S: 11 ft 6 in].</summary>
     public const float PairPitch = 3.50f;
@@ -147,6 +147,7 @@ public static partial class InteriorGenerator
         }
         (l.StoreyHeight, l.EntryX, l.EntryWidth, l.Type, l.Shop) = (storey, entryX, entryW, type, shop);
         l.Floors.Clear();
+        l.InnerDoors.Clear();
         l.Below = 0;
         BowlPlans.Remove(l);
         return false;
@@ -188,13 +189,16 @@ public static partial class InteriorGenerator
         l.Below = 0;
         l.Floors.Clear();
         l.Lifts.Clear();
+        l.InnerDoors.Clear();
         var ground = new FloorPlan();
         l.Floors.Add(ground);
         float clear = l.StoreyHeight - Slab;
 
-        // ---- the service column at the concourse's end away from the door: WCs, then a store ---------
+        // ---- the service column at the concourse's end away from the door: the public toilets, by gender in a
+        // deep concourse (#1285), then a store -------------------------------------------------------------
         bool svcAtR = !frame.AlongZ || doorU < (uL + uR) / 2;
-        const float svcW = 2.6f;
+        // a narrow one keeps a column for one WC
+        float svcW = concourse >= 9f && progW >= 9.4f ? 3.4f : progW >= 9f ? 3.0f : 2.0f;
         bool svc = progW >= svcW + 6f && concourse >= 2.4f
                    && !(frame.AlongZ && (svcAtR ? doorU > uR - svcW - 1.5f : doorU < uL + svcW + 1.5f));
         float cU0 = svc && !svcAtR ? uL + svcW : uL, cU1 = svc && svcAtR ? uR - svcW : uR;
@@ -210,21 +214,16 @@ public static partial class InteriorGenerator
         if (svc)
         {
             float su0 = svcAtR ? uR - svcW : uL, su1 = su0 + svcW;
-            var program = new List<RoomType> { RoomType.WC };
-            if (concourse >= 5.4f) program.Add(RoomType.WC);
-            if (concourse - 2.6f * program.Count >= 1.8f) program.Add(RoomType.Storage);
-            float step = concourse / program.Count;
-            for (int i = 0; i < program.Count; i++)
+            var side = svcAtR ? frame.UMinus : frame.UPlus;
+            // players: six a lane, and as many again on the concourse and at the bar
+            int people = pairs * 2 * 6 * 2;
+            var (_, left) = PublicToilets(l, ground, iHall, frame.Rect(su0, 0, su1, concourse), side, frame.Point((su0 + su1) / 2, concourse), people);
+            if (left != null)
             {
-                var room = new RoomPlan { Type = program[i] };
-                SetRect(room, frame.Rect(su0, step * i, su1, i == program.Count - 1 ? concourse : step * (i + 1)));
-                ground.Rooms.Add(room);
-                int ri = ground.Rooms.Count - 1;
-                float c = frame.OnUWall(step * (i + 0.5f));
-                float top = Math.Min(2.05f, clear - 0.2f);
-                var side = svcAtR ? frame.UMinus : frame.UPlus;
-                room.Openings.Add(new OpeningPlan { Side = side, Center = c, Width = InnerDoor, Top = top, Kind = OpeningKind.Door, Other = iHall });
-                hall.Openings.Add(new OpeningPlan { Side = Opposite(side), Center = c, Width = InnerDoor, Top = top, Kind = OpeningKind.Door, Other = ri });
+                var store = new RoomPlan { Type = RoomType.Storage };
+                SetRect(store, left);
+                ground.Rooms.Add(store);
+                Opening(ground.Rooms, ground.Rooms.Count - 1, side, iHall, Mid(store, side), InnerDoor, Math.Min(2.05f, clear - 0.2f), OpeningKind.Door);
             }
         }
 
@@ -272,7 +271,7 @@ public static partial class InteriorGenerator
         l.EntryWidth = Math.Min(Math.Max(l.DoorWidth, 1.8f), W - 1.2f);
         l.EntryX = Fit(l.EntryX, -W / 2 + l.EntryWidth / 2 + 0.3f, W / 2 - l.EntryWidth / 2 - 0.3f);
         int entryRoom = RoomAt(ground, l.EntryX, -D / 2 + 0.1f);
-        if (entryRoom < 0 || ground.Rooms[entryRoom].Type is RoomType.WC or RoomType.Storage) return false;
+        if (entryRoom < 0 || ground.Rooms[entryRoom].Type is RoomType.WC or RoomType.Storage || ToiletRoom(ground.Rooms[entryRoom].Type)) return false;
         var into = ground.Rooms[entryRoom];
         into.Openings.Add(new OpeningPlan
         {

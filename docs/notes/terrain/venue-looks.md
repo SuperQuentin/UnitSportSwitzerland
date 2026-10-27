@@ -35,7 +35,7 @@ at, not shipped.
   billiard, snooker or pool is a `BilliardHall` (Bluff Billard is tagged an amusement arcade): at most
   22 m a side, up to 12 pool tables in bays with the cue's swing clear, the bar, lounges, cue racks.
 - **Dining**: a venue that cooks and has 24 m2 or more gets a kitchen walled off the back of its room
-  when none is next door (`BackOfHouse`, `Carve`), and a WC at the strip's end; a room over 85 m2 is
+  when none is next door (`BackOfHouse`, `Carve`), and its public toilets at the strip's end (`public-toilets`, #1285); a room over 85 m2 is
   cut: the first part a Säli through an arch (no bar of its own), what is still too big goes back to the
   kind of room it was before the venue took it, behind a door; rooms kept near square. Tables vary (fours, twos either way, sixes, a hand off the grid).
 - **Shots**: indoors the shot camera's near plane is 5 cm; an "i" shot's door is looked for at a

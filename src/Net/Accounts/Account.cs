@@ -114,6 +114,15 @@ public static class Account
         }
     }
 
+    /// <summary>Asks for the reset mail (#1257); null on success, else what went wrong.</summary>
+    public static async Task<string?> ForgotPassword(string email)
+    {
+        if (Url.Length == 0) return "This build names no account server: set one under Advanced.";
+        if (!email.Contains('@')) return "Type the email of your account.";
+        try { await NakamaRest.ForgotPassword(Url, email.Trim()); return null; }
+        catch (NakamaException e) { return e.Message; }
+    }
+
     public static void SignOut()
     {
         ForgetSession();
