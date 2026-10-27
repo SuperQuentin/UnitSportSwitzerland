@@ -77,8 +77,8 @@ public static class RewardMeshes
         {
             // bands round the body (iron, gilt) and the lock plate on the front
             foreach (float x in new[] { -ChestW * 0.32f, ChestW * 0.32f })
-                // over the top edge too: open, the body's top shows (lid closed, the lid hides it)
-                s.Box(new Vector3(x, (ChestH + foot) / 2 - 0.006f + Proud / 2, 0), new Vector3(0.05f, ChestH - foot - 0.012f + 3 * Proud, ChestD + 2 * Proud), trim);
+                // over the top edge too (open, the body's top shows), and as deep as the lid's bands, clear of the lid's ends
+                s.Box(new Vector3(x, (ChestH + foot) / 2 - 0.006f + Proud / 2, 0), new Vector3(0.05f, ChestH - foot - 0.012f + 3 * Proud, ChestD + 0.05f), trim);
             s.Box(new Vector3(0, ChestH - 0.08f, front - Proud), new Vector3(0.12f, 0.14f, 0.012f), t == ChestTier.Fine ? Iron : Gold);
         }
         if (t == ChestTier.Precious)
