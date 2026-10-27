@@ -300,7 +300,7 @@ public partial class PhoneController : Node
         why = null;
         var p = _player();
         if (p == null || _blocked()) { why = "Not now"; return false; }
-        if (p is not { Ride: RideKind.OnFoot, RidingAlong: false, IsSwimming: false, Ragdolled: false, Downed: false, Fighting: false })
+        if (p is not { Ride: RideKind.OnFoot, RidingAlong: false, IsSwimming: false, IsClimbing: false, Ragdolled: false, Downed: false, Fighting: false })
         {
             why = "On foot only";
             return false;

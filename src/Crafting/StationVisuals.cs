@@ -90,6 +90,7 @@ public static class StationVisuals
     public static Node3D Workbench(PlacedObject o)
     {
         var body = new StaticBody3D();
+        body.AddToGroup(UnitSport.Player.FootPlayer.NoClimbGroup);   // placed things are never free-climbed (#1225)
         body.AddChild(new MeshInstance3D { Mesh = WorkbenchMesh(), MaterialOverride = ItemDefs.Material });
         body.AddChild(new CollisionShape3D
         {

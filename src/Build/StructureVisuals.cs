@@ -50,6 +50,7 @@ public partial class StructureVisuals : Node3D, Core.IOriginContainer
         if (_pieces.Remove(key, out var old)) old.QueueFree();
 
         var body = new StaticBody3D { Name = $"{p.Piece.Kind}_{p.Piece.Slot.X}_{p.Piece.Slot.Y}_{p.Piece.Slot.Z}_{p.Piece.Slot.Side}" };
+        body.AddToGroup(UnitSport.Player.FootPlayer.NoClimbGroup);   // placed things are never free-climbed (#1225)
         body.SetMeta(Structures.StructureMeta, s.Id);
         body.SetMeta(Structures.SlotMeta, new[] { p.Piece.Slot.X, p.Piece.Slot.Y, p.Piece.Slot.Z, (int)p.Piece.Slot.Class, p.Piece.Slot.Side });
         body.Transform = Structures.LocalTransform(p.Piece);

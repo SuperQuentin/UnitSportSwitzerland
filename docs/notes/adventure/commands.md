@@ -14,6 +14,9 @@
 
 ## Checks
 
+- **Stamina and climbing (#1225)**: `--climbcheck --chunks fixture:crag --systems ui,physics,adventure` (quick),
+  `tools/climbnetcheck.sh` (net, port 7929); `/stamina [infinite | on | full]`; server `--stamina off`, `--lift off`.
+
 - **Tier 0**: `tools/test.sh unit` runs `AdventureBookTests`, `QuestEngineTests`, `QuestCatalogTests`.
 - **Quick**: `--adventurecheck --systems ui,physics,adventure` (offline, ~10 s): starts the probe errand,
   the body is put at area A (the reach check moves it on), a hand-over is refused without the apple and

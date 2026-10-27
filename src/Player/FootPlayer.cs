@@ -1133,7 +1133,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// read with <see cref="WalkControls"/>: held, as the keys would be (a jump is a press = false then
     /// true). Null: neither.
     /// </summary>
-    public Func<(bool Jump, bool Crouch)>? FootActions { get; set; }
+    public Func<(bool Jump, bool Crouch, bool Climb)>? FootActions { get; set; }
 
     /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
     public bool JumpTaken { get; set; }
@@ -2079,6 +2079,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (_climbing) { PublishClimbPose(dt); return; }   // #1225
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -2295,6 +2296,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float dt = (float)GetProcessDeltaTime();
         // a swimmer's face lives too (#802): blinks, glances, a blow's grimace
         if (PoseKind == PoseSwim) { ApplySwimFigure(); StepFace(dt); return; }
+        if (PoseKind == PoseWallClimb) { ApplyClimbFigure(); StepFace(dt); return; }   // #1225
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
@@ -3417,6 +3419,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // into the sky by the solver
         if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
+        EndClimb();   // #1225: no climbing on any ride
         DropPhoneBackdrop();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
@@ -3791,6 +3794,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Health, Bot))
         {
             TickHealth(dt, onFloor);
+            TickStamina(dt, onFloor);   // #1225, FootPlayer.Stamina.cs
             TickFarmFoot(dt);
         }
         using var walkTime = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Walk, Bot);
@@ -3824,6 +3828,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // on a face (#1225, FootPlayer.Climb.cs)
+        if (ClimbPhysics(dt, onFloor)) return;
         // in the water (#301, FootPlayer.Swim.cs)
         if (SwimPhysics(dt, onFloor)) return;
         // in a fist fight (#495, FootPlayer.Fight.cs)
@@ -3896,6 +3902,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             running = walk.Run;
         }
         if (_slideCooldown > 0) _slideCooldown -= dt;
+        // sprinting in a fight costs stamina (#1225); out of one it is free. Empty or winded: a run is a walk
+        if (running && moveAmount > 0.1f && onFloor && InCombat && !SpendStamina(StaminaKind.SprintCombat, dt)) running = false;
 
         // Remember the last usable wall, and the last jump press, for a moment each. Contact
         // and input almost never line up on the same physics frame otherwise.
@@ -3924,6 +3932,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _jumpBuffer = 0;
             return;
         }
+
+        // --- free climbing (#1225, FootPlayer.Climb.cs) ----------------------------------------
+        // pushing into a climbable face grabs it (a low ledge still vaults, above); Space then climb-jumps
+        if (TryBeginClimb(dt, direction, onFloor, acts.Climb)) { _jumpBuffer = 0; return; }
 
         // --- enter / leave the slide -------------------------------------------------
         float flatSpeed = MathX.FlatLength(velocity);
@@ -4152,7 +4164,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="MantleMin"/> and <see cref="MantleMax"/> above the feet, and room to stand on
     /// it. Starts the pull-up when all three hold.
     /// </summary>
-    private bool TryBeginMantle(Vector3 forward, float speed)
+    private bool TryBeginMantle(Vector3 forward, float speed, float beyond = 0.45f)
     {
         var space = GetWorld3D().DirectSpaceState;
         var exclude = new Godot.Collections.Array<Rid> { GetRid() };
@@ -4161,7 +4173,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // nothing in the way at the height the hands reach over, or it is a wall, not a ledge
         var high = feet + Vector3.Up * reach;
-        var over = high + forward * (BodyRadius + 0.45f);
+        var over = high + forward * (BodyRadius + beyond);
         if (space.IntersectRay(PhysicsRayQueryParameters3D.Create(high, over, CollisionMask, exclude)).Count > 0)
             return false;
 
@@ -4423,7 +4435,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
-        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
+        // the air itself (#1225, World/AirLiftField): thermals, ridge lift, a campfire's updraft; the own flyer only
+        var air = Vector3.Zero;
+        if (!Npc && !flyer.IsVehicle && flyer is Canopy or Wingsuit or Pigeon)
+        {
+            World.AirLiftField.Use(Terrain, Origin);
+            air = World.AirLiftField.AirAt(GlobalPosition);
+        }
+        AirNow = air;
+        // a pigeon's wings are muscles: flapping spends stamina, empty it glides (#1225)
+        if (flyer is Pigeon bird)
+        {
+            bool flapping = input.Up > 0.5f && Pigeon.ModeOf(_flight) == PigeonFlight.Mode.Air;
+            bird.MayFlap = !flapping || SpendStamina(input.Effort ? StaminaKind.PigeonFlapBoost : StaminaKind.PigeonFlap, dt);
+        }
+        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude, air), dt, ref _flight);
         // a game mode's fence (#485: a Battle Royale's zone, while gliding): no flying out of it
         if (ev == FlightEvent.None && FlightFence?.Invoke(this, _flight.Velocity) is { } fenced) _flight.Velocity = fenced;
         // an airliner's hard landing or belly scrape: the airframe pays for it (#414)

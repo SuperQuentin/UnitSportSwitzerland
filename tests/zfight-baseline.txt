@@ -559,6 +559,8 @@
 2.8	Figures / Pose - Standing
 382.9	Figures / Running
 96.1	Figures / Seated passenger
+359.4	Figures / Skinned - Climb-jump
+378	Figures / Skinned - Wall climbing
 408	Figures / Skinned - Aiming
 382.9	Figures / Skinned - Dancing
 1277	Figures / Skinned - Dress, seated

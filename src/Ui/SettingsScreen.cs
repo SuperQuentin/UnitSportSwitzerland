@@ -109,6 +109,8 @@ public partial class SettingsScreen : Screen
                 v => GameSettings.Current.MusicVolume = (float)v, Percent);
             UiKit.OptionRow(rows, "Engine voice", new[] { "Realistic", "PS1 SPU", "NES 2A03", "C64 SID", "Genesis FM" }, (int)s.EngineVoice,
                 i => GameSettings.Current.EngineVoice = (UnitSport.Audio.EngineVoice)i, "Which sound chip the engines are rendered as");
+            UiKit.ToggleRow(rows, "Variometer", s.Variometer, on => GameSettings.Current.Variometer = on,
+                "On a paraglider, parachute, wingsuit or pigeon: a beep that rises with the climb, a low tone in sink");
         });
 
         Tab("Gameplay", rows =>
