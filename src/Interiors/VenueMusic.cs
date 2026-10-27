@@ -61,6 +61,42 @@ public static class VenueMusic
         _ => 0,
     };
 
+    /// <summary>What a venue plays when the relay is silent (#1244), by its kind.</summary>
+    public static Audio.Tracker.VenueMood MoodFor(VenueType type, string cuisine)
+    {
+        string c = cuisine.ToLowerInvariant();
+        return type switch
+        {
+            VenueType.Bowling => Audio.Tracker.VenueMood.Bowling,
+            VenueType.Arcade => Audio.Tracker.VenueMood.Arcade,
+            VenueType.Cinema => Audio.Tracker.VenueMood.Cinema,
+            VenueType.Restaurant when c.Contains("pizz") || c.Contains("italian") => Audio.Tracker.VenueMood.Pizzeria,
+            VenueType.Restaurant => Audio.Tracker.VenueMood.Beiz,
+            VenueType.Cafe => Audio.Tracker.VenueMood.Cafe,
+            VenueType.FastFood => Audio.Tracker.VenueMood.FastFood,
+            VenueType.Bar => Audio.Tracker.VenueMood.Bar,
+            VenueType.Pub or VenueType.Biergarten => Audio.Tracker.VenueMood.Pub,
+            VenueType.Nightclub => Audio.Tracker.VenueMood.Club,
+            _ => Audio.Tracker.VenueMood.None,
+        };
+    }
+
+    /// <summary>A room's mood by its kind.</summary>
+    public static Audio.Tracker.VenueMood MoodFor(RoomType room) => room switch
+    {
+        RoomType.BowlingLanes or RoomType.Concourse or RoomType.Mezzanine => Audio.Tracker.VenueMood.Bowling,
+        RoomType.ArcadeHall => Audio.Tracker.VenueMood.Arcade,
+        RoomType.CinemaLobby => Audio.Tracker.VenueMood.Cinema,
+        RoomType.Gaststube => Audio.Tracker.VenueMood.Beiz,
+        RoomType.Pizzeria => Audio.Tracker.VenueMood.Pizzeria,
+        RoomType.CafeRoom => Audio.Tracker.VenueMood.Cafe,
+        RoomType.FastFoodRoom or RoomType.KebabRoom => Audio.Tracker.VenueMood.FastFood,
+        RoomType.BarRoom => Audio.Tracker.VenueMood.Bar,
+        RoomType.PubRoom => Audio.Tracker.VenueMood.Pub,
+        RoomType.ClubRoom => Audio.Tracker.VenueMood.Club,
+        _ => Audio.Tracker.VenueMood.None,
+    };
+
     /// <summary>The region of a plan, from its key's tile (<c>E_N_index</c>, kilometres).</summary>
     public static Region RegionOf(InteriorLayout l)
     {
@@ -84,13 +120,16 @@ public static class VenueMusic
                     Name = $"Music_{r.Type}_{f}",
                     Station = station,
                     Volume = RoomVolume,
+                    Mood = MoodFor(r.Type),
+                    Salt = (uint)Core.Fnv.Hash(l.Key),
                     Position = new Vector3((r.X0 + r.X1) / 2, l.FloorY(f) + Math.Min(2.3f, l.ClearOf(r) - 0.3f), (r.Z0 + r.Z1) / 2),
                 });
             }
     }
 
     /// <summary>The quiet source just inside a venue's door, for the street; null for a venue that plays nothing.</summary>
-    public static VenueMusicSource? AtDoor(DoorSpot d, VenueRecord v)
+    /// <param name="building">The building's key (<see cref="BuildingKey"/>), the same salt as its rooms' sources, so the street hears the bar the room plays.</param>
+    public static VenueMusicSource? AtDoor(DoorSpot d, VenueRecord v, BuildingKey building)
     {
         var outward = d.Outward with { Y = 0 };
         int station = StationFor(v.Type, v.Cuisine, RegionOf(v.E, v.N));
@@ -100,6 +139,8 @@ public static class VenueMusic
             Name = "Music",
             Station = station,
             Volume = DoorVolume,
+            Mood = MoodFor(v.Type, v.Cuisine),
+            Salt = (uint)Core.Fnv.Hash(building.ToString()),
             Position = d.Position - outward.Normalized() * 0.5f + Vector3.Up * 1.6f,
         };
     }

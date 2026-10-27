@@ -185,6 +185,8 @@ src/Interiors/Venues        quick  --diningcheck --systems ui
 # #1244: venue music on the radio relay
 src/Interiors/VenueMusic    quick  --venuecheck --systems ui
 src/Audio/Live/VenueMusicSource quick --venuecheck --systems ui
+src/Audio/Tracker/           quick  --trackercheck
+assets/music/                quick  --trackercheck
 src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
 src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
 shaders/body/interior      quick  --bowlingcheck --systems ui
