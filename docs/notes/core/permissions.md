@@ -2,10 +2,10 @@
 
 - **Permissions** (`Core/Permissions`, issue #32): what the menus may offer. Offline everything;
   online, spawning a vehicle from the travel menu is an admin's (it is left in the shared world),
-  while equipment, getting into a vehicle already there, the place-search teleport (`/city` is a
-  non-admin command anyway) and the fly camera stay free, unless the server runs `--no-teleport`
+  while equipment, getting into a vehicle already there, the place-search teleport (`/city`, and `/go @E,N` from the chat's coordinates, #1277, are
+  non-admin commands anyway) and the fly camera stay free, unless the server runs `--no-teleport`
   (#799, `Permissions.CanTeleport`, from `Net/Arrival`): then the place search and the VR hand map
-  refuse, the server refuses `/city`, and leaving the fly camera returns to the body in place
+  refuse, the server refuses `/city` and `/go`, and leaving the fly camera returns to the body in place
   (`RequestReplacement` settles it). Admins keep teleporting; `Reset` restores it on leaving. The admin flag comes from the server
   (`ChatManager.AdminStatus`); the server re-checks for itself (`VehicleManager.MayPark`, the
   vehicles `admin-only-spawning` note).

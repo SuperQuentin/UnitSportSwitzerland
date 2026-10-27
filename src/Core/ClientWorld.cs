@@ -25,6 +25,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private Node3D? _players;
     private GpxSession? _gpx;
     private PlaceSearchUi? _places;
+    /// <summary>This machine's own terrain source and manifest, for /locate offline (#1277).</summary>
+    private IChunkSource? _localSource;
+    private Terrain.Format.TerrainManifest? _localManifest;
     private RideUi? _rides;
     private Vehicles.GarageUi? _garage;
     private Items.ItemController? _items;
@@ -325,8 +328,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the region's points of interest (#1224): this client's own pois.bin, again once a server sent its own
         Adventure.Places.PoiCatalogueHost.Load(source, _fixtureStart);
         if (Adventure.Places.PoiCheck.Requested) AddChild(new Adventure.Places.PoiCheck(_fixtureStart) { Name = "PoiCheck" });
+        if (World.Locate.LocateCheck.Requested) AddChild(new World.Locate.LocateCheck(SpawnPoint.ParseTarget(Launch)) { Name = "LocateCheck" });
         var manifest = await source.LoadManifestAsync();
         if (!IsInsideTree()) return;   // left during the load
+        _localSource = source;
+        _localManifest = manifest;
         Report(LoadStage.BuildingWorld, 0.06f);
 
         // Wherever there is no terrain data, it is generated (FallbackChunkSource) and blended
@@ -905,7 +911,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
-            || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null
+            || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
@@ -956,6 +962,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ExcavatorNetProbe.Role != null) AddChild(new Player.ExcavatorNetProbe(items));
         if (Items.SitePalletNetProbe.Role != null) AddChild(new Items.SitePalletNetProbe(items));
         if (Terrain.Construction.CraneNetProbe.Role != null) AddChild(new Terrain.Construction.CraneNetProbe(items));
+        if (World.Locate.LocateNetProbe.Role != null) AddChild(new World.Locate.LocateNetProbe(items));
         if (Loot.YardLootNetProbe.Role != null) AddChild(new Loot.YardLootNetProbe(items));
         if (Items.BedNetProbe.Role != null) AddChild(new Items.BedNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
@@ -1022,6 +1029,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat.PlaceSearch = _places;
         _chat.Here = () => _teleporter?.ActiveTarget() is { } body && _worldOrigin != null ? _worldOrigin.ToGlobal(body.GlobalPosition) : null;
         AddChild(_chat);
+        // /locate offline (#1277): this machine owns the world and searches its own tiles, indexed on first use
+        if (_localSource != null && _localManifest != null && _worldOrigin != null)
+            AddChild(new World.Locate.LocateService(_localSource, _localManifest, () => _places?.Index, _worldOrigin,
+                () => LocalPlayer is { } me ? [me.Global] : []) { OnDemand = true });
         _chatUi = ChatUi.Create(_chat, new ChatCompleter
         {
             Places = (query, limit) => _places!.Search(query, limit).Select(p => p.Name),
@@ -1604,6 +1615,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
         Adventure.Navigation.DepartureBoard.Register();
         Adventure.Navigation.NavMapOverlay.Register();
+        // the point the chat's Map button shows (#1277)
+        World.Locate.LocateMapPin.Register();
         if (Adventure.Navigation.NavCheck.Requested) AddChild(new Adventure.Navigation.NavCheck(items, () => LocalPlayer));
         if (Adventure.Navigation.TravelCheck.Requested) AddChild(new Adventure.Navigation.TravelCheck(items, () => LocalPlayer));
         if (Adventure.Navigation.NavNetProbe.Role != null) AddChild(new Adventure.Navigation.NavNetProbe(items));

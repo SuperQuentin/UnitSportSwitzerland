@@ -1,4 +1,5 @@
 using UnitSport.Items;
+using UnitSport.Terrain.Format;
 using UnitSport.Terrain.Stadiums;
 
 namespace UnitSport.Core;
@@ -59,6 +60,10 @@ public sealed class ChatCompleter
         ("note", false, true, "<what's wrong>", "General", "a playtest note with a screenshot"),
 #endif
         ("city", false, true, "<town>", "Travel", "teleport to a town"),
+        ("locate", false, true, "<thing> [+ spire | parking entrance | tall | old | new | <n> floors ...] [in <town>]", "Travel", "the nearest castle, lake, cinema, church + spire..."),
+        ("go", false, true, "@E,N", "Travel", "teleport to coordinates (as /city)"),
+        ("track", false, true, "@E,N [name] | off", "Travel", "point the way to coordinates"),
+        ("map", false, true, "@E,N", "Travel", "show coordinates on the map"),
         ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]", "Travel", "the venues: what plays there, go to one"),
         ("tpa", false, false, "<player>", "Travel", "ask to go to a player"),
         ("tphere", false, false, "<player>", "Travel", "ask a player over"),
@@ -171,7 +176,8 @@ public sealed class ChatCompleter
         if (words.Length == 0 || (words.Length == 1 && !trailing))
         {
             string typed = words.Length == 0 ? "" : words[0];
-            return Match(VisibleCommands(), typed)
+            // a bare "/" lists every command, uncapped: the pad's picker (#1277) has no other way to reach them
+            return (typed.Length == 0 ? VisibleCommands().ToList() : Match(VisibleCommands(), typed))
                 .Select(c => new Suggestion($"/{c}", $"/{c} ", ArgsOf(c)))
                 .ToList();
         }
@@ -196,6 +202,9 @@ public sealed class ChatCompleter
                     .Select(p => new Suggestion(p, head + p))
                     .ToList();
             }
+
+            case "locate" or "find":
+                return LocateWords(text, words[0]);
 
             case "stadium":
             {
@@ -445,6 +454,50 @@ public sealed class ChatCompleter
     }
 
     /// <summary>Options that start with what was typed, then ones that merely contain it.</summary>
+    /// <summary>
+    /// <c>/locate</c>'s arguments (#1277): a noun first, then <c>+ selector</c>s, then a town after <c>in</c>. Not
+    /// capped at <see cref="MaxSuggestions"/>: the pad's buttons offer every noun.
+    /// </summary>
+    private List<Suggestion> LocateWords(string text, string verb)
+    {
+        string args = text[(1 + verb.Length)..].TrimStart();
+        string head = text[..(text.Length - args.Length)];
+        int inAt = (" " + args).LastIndexOf(" in ", StringComparison.OrdinalIgnoreCase);
+        if (inAt >= 0)
+        {
+            // a town's name has spaces in it: everything after "in" is one query
+            string town = args[(inAt + 3)..].TrimStart();
+            string before = text[..(text.Length - town.Length)];
+            return Places(town.TrimEnd(), MaxSuggestions).Distinct().Select(p => new Suggestion(p, before + p)).ToList();
+        }
+        int plus = args.LastIndexOf('+');
+        if (plus < 0 && !args.EndsWith(' '))
+        {
+            // the noun, as it is being typed
+            string typed = PlaceIndex.Normalize(args);
+            return World.Locate.LocateVocabulary.Nouns
+                .Where(w => w.StartsWith(typed, StringComparison.Ordinal) || typed.Length > 2 && w.Contains(typed, StringComparison.Ordinal))
+                .Select(w => new Suggestion(w, head + w + " "))
+                .ToList();
+        }
+        if (plus < 0)
+        {
+            // a noun and a space: the selectors that may follow it, and a town
+            return World.Locate.LocateVocabulary.ModifierWords
+                .Select(m => m == "in" ? new Suggestion("in <town>", text + "in ", "search round a town") : new Suggestion("+ " + m, text + "+ " + m + " "))
+                .ToList();
+        }
+        string sel = PlaceIndex.Normalize(args[(plus + 1)..].TrimStart());
+        string selHead = text[..(text.Length - args[(plus + 1)..].TrimStart().Length)];
+        if (args.EndsWith(' ') && sel.Length > 0)
+            return World.Locate.LocateVocabulary.ModifierWords
+                .Select(m => m == "in" ? new Suggestion("in <town>", text + "in ", "search round a town") : new Suggestion("+ " + m, text + "+ " + m + " "))
+                .ToList();
+        return World.Locate.LocateVocabulary.ModifierWords.Where(m => m != "in" && m.StartsWith(sel, StringComparison.Ordinal))
+            .Select(m => new Suggestion(m, selHead + m + " "))
+            .ToList();
+    }
+
     private static List<string> Match(IEnumerable<string> options, string typed)
     {
         var all = options.Distinct().ToList();
