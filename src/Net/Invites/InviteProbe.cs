@@ -54,16 +54,22 @@ public partial class InviteProbe : ChatProbe
         }
         if (!ready) { Fail("B never got ready"); return; }
 
+        // how each invite ended, as the phone's Contacts shows it (#1253)
+        var ended = new List<string>();
+        Invites!.Resolved += (kind, who, outcome) => ended.Add($"{kind}:{who}:{outcome}");
+
         // teleport request
         Chat!.Send("/tpa InviterB");
         Expect(await Until(() => Invites!.Sent.Any(v => v.Kind == ChatManager.TpKind), 10), "A sees its teleport request as sent");
         Expect(await Until(() => _heard.Any(l => l.StartsWith("Teleported to InviterB")), 20), "A is teleported to B once B taps F2");
         Expect(await Until(() => !Invites!.Sent.Any(), 10), "the request is gone from A's sent list");
+        Expect(ended.Contains("tp:InviterB:accepted"), $"the sender is told the request was accepted ({string.Join(", ", ended)})");
 
         // party
         Chat.Send("/party invite InviterB");
         Expect(await Until(() => Parties.Client is { Members.Count: 2 }, 20), "A's party holds A and B");
         Expect(Parties.Client?.IsLeader == true, "A leads the party");
+        Expect(await Until(() => ended.Contains("party:InviterB:accepted"), 10), $"the sender is told the party invite was accepted ({string.Join(", ", ended)})");
         Say("party");
 
         // Battle Royale from the Activities screen
@@ -106,6 +112,7 @@ public partial class InviteProbe : ChatProbe
         if (!await Until(() => Invites!.Sent.Any(v => v.Kind == World.RaceManager.InviteId), 40))
             Fail("no duel invite: " + string.Join(" / ", _heard.Where(l => l.Contains("[race]"))));
         else Expect(await Until(() => _heard.Any(l => l.Contains("declined the duel")), 30), "B's Shift+F2 ended the duel");
+        Expect(await Until(() => ended.Contains("race:InviterB:declined"), 10), $"the sender is told the duel was declined ({string.Join(", ", ended)})");
         Say("done");
     }
 

@@ -127,6 +127,7 @@ public partial class PhoneProbe : Node
         await Key(Godot.Key.Escape, 0.4);
         Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "and once more to the home screen (#1253)");
         Check(phone.Screens.HomeTileCount == 6, $"the home screen has six apps ({phone.Screens.HomeTileCount}); Menu and Training live in Activities (#1253)");
+        await ContactsChecks(phone);
         phone.Open(PhoneScreens.Page.Contacts);
         await Wait(0.4);
         await Hold(Godot.Key.Escape, PhoneController.StowHoldSeconds + 0.6);
@@ -256,6 +257,52 @@ public partial class PhoneProbe : Node
     {
         if (Rendered) Check(ok, what);
         else Log($"skip (headless: no frame to shoot): {what}");
+    }
+
+    /// <summary>Contacts (#1253): one row per player, a sheet of four asks, Cancel first in a confirm, a result line that stays.</summary>
+    private async Task ContactsChecks(PhoneController phone)
+    {
+        var screens = phone.Screens;
+        var sent = new List<string>();
+        void Sent(string c) => sent.Add(c);
+        screens.CommandPicked += Sent;
+        screens.TestPeople = new List<string> { "Anna", "Ben" };
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        Check(screens.ContactRowCount == 2, $"Contacts has one row per player ({screens.ContactRowCount})");
+        Check(screens.ContactsFocus?.StartsWith("Anna") == true && screens.ContactsFocus.Contains("Online"), $"a row shows name and status ({screens.ContactsFocus})");
+        await Key(Godot.Key.Enter, 0.3);
+        Check(screens.ContactsSheetOpen && screens.ContactsFocus == "Go to", $"Enter opens the sheet on Go to ({screens.ContactsFocus})");
+        await Key(Godot.Key.Down, 0.2); await Key(Godot.Key.Down, 0.2); await Key(Godot.Key.Down, 0.2);
+        Check(screens.ContactsFocus == "Fight", $"the sheet has Go to, Bring here, Party invite, Fight ({screens.ContactsFocus})");
+        await Key(Godot.Key.Enter, 0.3);
+        Check(screens.ContactsConfirmOpen && screens.ContactsFocus == "Cancel" && sent.Count == 0, $"Fight asks first, Cancel focused, nothing sent ({screens.ContactsFocus}, {sent.Count} sent)");
+        await Key(Godot.Key.Enter, 0.3);
+        Check(screens.ContactsSheetOpen && !screens.ContactsConfirmOpen && sent.Count == 0, "Cancel goes back to the sheet, nothing sent");
+        await Key(Godot.Key.Escape, 0.3);
+        Check(!screens.ContactsSheetOpen && phone.Screens.Shown == PhoneScreens.Page.Contacts, "Esc closes the sheet, the list stays");
+        await Key(Godot.Key.Enter, 0.3);
+        await Key(Godot.Key.Down, 0.2); await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        Check(sent.Count == 1 && sent[0] == "/party invite Anna", $"Party invite sends the party command ({string.Join("|", sent)})");
+        Check(screens.ContactsResult.StartsWith("Party invite · Anna"), $"the result line stays after the action ({screens.ContactsResult})");
+        screens.OnResolved("party", "Anna", "declined");
+        Check(screens.ContactsResult == "Party invite · Anna: Declined", $"Declined shows ({screens.ContactsResult})");
+        screens.OnResolved("party", "Anna", "lapsed");
+        Check(screens.ContactsResult.EndsWith("Timed out"), $"Timed out shows ({screens.ContactsResult})");
+        screens.OnResolved("party", "Anna", "accepted");
+        Check(screens.ContactsResult.EndsWith("Accepted"), $"Accepted shows ({screens.ContactsResult})");
+        await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        Check(sent.Count == 2 && sent[1] == "/tphere Ben", $"Bring here confirmed sends /tphere ({string.Join("|", sent)})");
+        await Key(Godot.Key.Escape, 0.3);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the list still goes home");
+        screens.CommandPicked -= Sent;
+        screens.TestPeople = null;
     }
 
     private async Task Press(string action, double after)

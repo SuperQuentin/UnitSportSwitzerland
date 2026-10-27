@@ -201,3 +201,23 @@
   (`XrPhone.EyesReach` / `EyesFacing`, was 14 cm), else the blink comes after 1.5 s (`VrRaiseSeconds`, was 3 s).
 - **Check**: `--phonecheck` counts the Map's rows; `--phonevrcheck` raises the phone for a travel under 1.4 s and
   holds it at the hip (`BeforeEyes(low:)`) for the blink. Recents are not saved between sessions.
+
+## Contacts, stage 4 (#1253)
+
+- **One row per online player** (`PhoneScreens.FillContacts`): name and status (Online, In your party); Enter, A or a
+  tap opens a sheet (`OpenSheet`) with Go to, Bring here, Party invite and Fight. Offline the page says so and
+  offers Open Activities. "Call" is gone from the UI: the heading is Invites, the home tile says "Invite people".
+- **Bring here and Fight confirm first** (`Confirm`): Cancel is the first and focused button, so a stray Enter sends
+  nothing. Back (`PhoneScreens.CloseContactsSheet`, called first by `PhoneController.Back`) goes confirm, sheet, list,
+  Home, in that order.
+- **The phone sends the same chat commands as before** (`/tpa`, `/tphere`, `/party invite`, `/fight`), which is the
+  path a bot uses; no new key, so pad (A / B), VR and touch (taps on rows and buttons) work as in every app.
+- **A result line** under the heading stays after the action: `Fight · Anna: asking…`, then `Sent` once the
+  server's Outgoing invite shows in `InviteService.Sent`, then `Accepted`, `Declined` or `Timed out`. A private
+  chat line while still asking (a cooldown, a match in the way, no such player) replaces it as the reason.
+- **Server feedback** (protocol 55): `InviteService.Ended` (RPC to the sender of a direct invite, from `Answer`
+  and from the expiry sweep) raises the client's `Resolved(kind, name, outcome)`; the chat's "accepts / declines"
+  lines are unchanged. Bots get no RPC (never a screen).
+- **Checks**: `--phonecheck` (`ContactsChecks`: rows, sheet, Cancel default, nothing sent until Confirm, result
+  lines; the fixture has no server, so `TestPeople` stands in and `OnResolved` plays the server's word);
+  `tools/invitecheck.sh` asserts the sender is told accepted (`/tpa`, party) and declined (race duel).

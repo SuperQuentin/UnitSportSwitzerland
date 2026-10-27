@@ -433,7 +433,7 @@ public partial class PhoneScreens : Node
         row.AddThemeConstantOverride("h_separation", 16);
         row.AddThemeConstantOverride("v_separation", 16);
         row.AddChild(Tile("Map", "Find a place, go there", new Color(0.18f, 0.55f, 0.36f), () => ShowPage(Page.Map)));
-        row.AddChild(Tile("Contacts", "Call people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
+        row.AddChild(Tile("Contacts", "Invite people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
         row.AddChild(Tile("Camera", "Take photos and selfies into your album", new Color(0.22f, 0.24f, 0.28f), () => ShowPage(Page.Camera)));
         row.AddChild(Tile("Photos", "Your album; set a photo as a wallpaper", new Color(0.86f, 0.30f, 0.45f), () => ShowPage(Page.Photos)));
         row.AddChild(Tile("Activities", "Join a Battle Royale or a race, host one, train on your home trainer", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
@@ -586,10 +586,39 @@ public partial class PhoneScreens : Node
         return d < 1000 ? $"{Math.Round(d / 10) * 10:0} m" : d < 10000 ? $"{d / 1000:0.0} km" : $"{d / 1000:0} km";
     }
 
+    // ---------------------------------------------------------------- contacts (#1253)
+
+    private enum Sheet { None, Actions, Confirm }
+    private Label _conResult = null!;
+    private Control _conList = null!;
+    private VBoxContainer _conSheet = null!;
+    private Sheet _sheet;
+    private string _sheetFor = "";
+    private string _confirmKind = "";
+    /// <summary>The invite just sent from here, until the server says how it went: kind, who, and whether the server confirmed it ("Sent").</summary>
+    private (string Kind, string Who, bool Sent)? _pending;
+    private InviteService? _followedInvites;
+    private ChatManager? _followedChat;
+
+    /// <summary>Checks: players to list instead of the server's (an offline phone has nobody to ask).</summary>
+    internal List<string>? TestPeople;
+    internal int ContactRowCount => _people.GetChildren().OfType<Button>().Count(b => !b.IsQueuedForDeletion());
+    internal bool ContactsSheetOpen => _sheet != Sheet.None;
+    internal bool ContactsConfirmOpen => _sheet == Sheet.Confirm;
+    internal string ContactsResult => _conResult.Text;
+    internal string? ContactsFocus => Inner.GuiGetFocusOwner() is Button b ? b.Text : null;
+
+    private static string Verb(string kind) => kind switch { "tp" => "Go to", "tphere" => "Bring here", "party" => "Party invite", _ => "Fight" };
+
     private Control BuildContacts()
     {
         var col = UiKit.VBox(12);
         col.AddChild(Title("Contacts"));
+        // the result of the last action stays here, above the list and the sheet alike
+        _conResult = Big("", 26, new Color(0.70f, 0.85f, 1f));
+        _conResult.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _conResult.Visible = false;
+        col.AddChild(_conResult);
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         var list = UiKit.VBox(10);
         list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -598,19 +627,30 @@ public partial class PhoneScreens : Node
         _people = UiKit.VBox(6);
         list.AddChild(_people);
         scroll.AddChild(list);
+        _conList = scroll;
         col.AddChild(scroll);
-        col.AddChild(Hint("call", "back"));
+        _conSheet = UiKit.VBox(12);
+        _conSheet.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _conSheet.Visible = false;
+        col.AddChild(_conSheet);
+        col.AddChild(Hint("open", "back"));
         return col;
     }
 
-    /// <summary>Lists the incoming calls (invites) and everyone online, each with what you can ask them.</summary>
+    private void SetResult(string text)
+    {
+        _conResult.Text = text;
+        _conResult.Visible = text.Length > 0;
+    }
+
+    /// <summary>Lists the incoming invites and everyone online, one row each; Enter on a row opens what you can ask them.</summary>
     public void FillContacts()
     {
-        foreach (var child in _calls.GetChildren()) child.QueueFree();
-        foreach (var child in _people.GetChildren()) child.QueueFree();
+        foreach (var child in _calls.GetChildren()) { _calls.RemoveChild(child); child.QueueFree(); }
+        foreach (var child in _people.GetChildren()) { _people.RemoveChild(child); child.QueueFree(); }
         if (InviteService.Client is { } invites && invites.Incoming.Any())
         {
-            _calls.AddChild(Big("Calls", 26, InkDim));
+            _calls.AddChild(Big("Invites", 26, InkDim));
             foreach (var call in invites.Incoming)
             {
                 var row = UiKit.HBox(10);
@@ -626,27 +666,149 @@ public partial class PhoneScreens : Node
         }
         _people.AddChild(Big("People", 26, InkDim));
         var chat = _chat();
-        if (!Permissions.Online || chat == null)
+        if (TestPeople == null && (!Permissions.Online || chat == null))
         {
-            _people.AddChild(Big("Nobody to call: play online to reach other players.", 26, InkDim));
+            _people.AddChild(Big("Nobody to invite: play online to reach other players.", 26, InkDim));
+            var more = Small("Open Activities", new Color(0.50f, 0.30f, 0.62f), () => ShowPage(Page.Activities));
+            more.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+            _people.AddChild(more);
             return;
         }
         string me = GameShell.Instance?.PlayerName ?? "";
-        var names = chat.PlayerNames.Where(n => !n.Equals(me, StringComparison.OrdinalIgnoreCase)).ToList();
+        var names = TestPeople ?? chat!.PlayerNames.Where(n => !n.Equals(me, StringComparison.OrdinalIgnoreCase)).ToList();
         if (names.Count == 0) _people.AddChild(Big("Nobody else is online.", 26, InkDim));
         foreach (var name in names)
         {
-            var row = UiKit.HBox(10);
-            var who = Big(name, 30);
-            who.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-            row.AddChild(who);
             string n = name;
-            row.AddChild(Small("Go to", new Color(0.20f, 0.42f, 0.80f), () => CommandPicked?.Invoke($"/tpa {n}")));
-            row.AddChild(Small("Bring here", new Color(0.20f, 0.42f, 0.80f), () => CommandPicked?.Invoke($"/tphere {n}")));
-            row.AddChild(Small("Party", new Color(0.45f, 0.30f, 0.70f), () => CommandPicked?.Invoke($"/party invite {n}")));
-            row.AddChild(Small("Fight", new Color(0.70f, 0.22f, 0.20f), () => CommandPicked?.Invoke($"/fight {n}")));
+            var row = Row($"{n}   ·   {StatusOf(n)}");
+            row.Pressed += () => OpenSheet(n);
             _people.AddChild(row);
         }
+    }
+
+    private static string StatusOf(string name) =>
+        Parties.Client is { InParty: true } p && p.Members.Any(m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ? "In your party" : "Online";
+
+    /// <summary>The sheet of what you can ask <paramref name="name"/>.</summary>
+    internal void OpenSheet(string name)
+    {
+        _sheet = Sheet.Actions;
+        _sheetFor = name;
+        _conList.Visible = false;
+        _conSheet.Visible = true;
+        Clear(_conSheet);
+        _conSheet.AddChild(Big(name, 44));
+        _conSheet.AddChild(Big(StatusOf(name), 24, InkDim));
+        var blue = new Color(0.20f, 0.42f, 0.80f);
+        AddSheetButton("Go to", blue, () => Ask("tp", $"/tpa {name}"));
+        AddSheetButton("Bring here", blue, () => Confirm("tphere"));
+        AddSheetButton("Party invite", new Color(0.45f, 0.30f, 0.70f), () => Ask("party", $"/party invite {name}"));
+        AddSheetButton("Fight", new Color(0.70f, 0.22f, 0.20f), () => Confirm("fight"));
+        FocusSheet();
+    }
+
+    private Button AddSheetButton(string text, Color colour, Action pressed)
+    {
+        var b = Small(text, colour, pressed);
+        b.CustomMinimumSize = new Vector2(0, 64);
+        _conSheet.AddChild(b);
+        return b;
+    }
+
+    private void FocusSheet() => Callable.From(() => FocusFirst(_conSheet)).CallDeferred();
+
+    /// <summary>Bring here and Fight ask first, Cancel focused: a stray Enter changes nothing.</summary>
+    internal void Confirm(string kind)
+    {
+        _sheet = Sheet.Confirm;
+        _confirmKind = kind;
+        Clear(_conSheet);
+        _conSheet.AddChild(Big(kind == "fight" ? $"Fight {_sheetFor}?" : $"Bring {_sheetFor} here?", 40));
+        var note = Big(kind == "fight" ? "They can accept or decline. A fight starts only if they accept." : "They are asked to come to you. It happens only if they accept.", 26, InkDim);
+        note.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _conSheet.AddChild(note);
+        AddSheetButton("Cancel", new Color(0.30f, 0.32f, 0.38f), () => CloseContactsSheet());
+        AddSheetButton(kind == "fight" ? "Fight" : "Bring here", kind == "fight" ? new Color(0.70f, 0.22f, 0.20f) : new Color(0.20f, 0.42f, 0.80f),
+            () => Ask(kind, kind == "fight" ? $"/fight {_sheetFor}" : $"/tphere {_sheetFor}"));
+        FocusSheet();
+    }
+
+    /// <summary>Sends the request through the chat command (the server path a bot uses too) and starts the result line.</summary>
+    private void Ask(string kind, string command)
+    {
+        _pending = (kind, _sheetFor, false);
+        SetResult($"{Verb(kind)} · {_sheetFor}: asking…");
+        CloseSheet();
+        CommandPicked?.Invoke(command);
+    }
+
+    private void CloseSheet()
+    {
+        _sheet = Sheet.None;
+        _conSheet.Visible = false;
+        _conList.Visible = true;
+        string back = _sheetFor;
+        Callable.From(() =>
+        {
+            foreach (var b in _people.GetChildren().OfType<Button>())
+                if (b.Text.StartsWith(back, StringComparison.Ordinal)) { b.GrabFocus(); return; }
+            FocusFirst(_contacts);
+        }).CallDeferred();
+    }
+
+    /// <summary>Back inside Contacts: a confirm goes up to the sheet, the sheet to the list. False when it was already the list.</summary>
+    public bool CloseContactsSheet()
+    {
+        switch (_sheet)
+        {
+            case Sheet.Confirm: OpenSheet(_sheetFor); return true;
+            case Sheet.Actions: CloseSheet(); return true;
+            default: return false;
+        }
+    }
+
+    /// <summary>The invite service's and the chat's events, followed as they come and go with the connection.</summary>
+    private void FollowInvites()
+    {
+        if (InviteService.Client != _followedInvites)
+        {
+            if (_followedInvites != null) { _followedInvites.Resolved -= OnResolved; _followedInvites.Changed -= OnInvitesChanged; }
+            _followedInvites = InviteService.Client;
+            if (_followedInvites != null) { _followedInvites.Resolved += OnResolved; _followedInvites.Changed += OnInvitesChanged; }
+        }
+        var chat = _chat();
+        if (chat != _followedChat)
+        {
+            if (_followedChat != null) _followedChat.LineReceived -= OnChatLine;
+            _followedChat = chat;
+            if (chat != null) chat.LineReceived += OnChatLine;
+        }
+    }
+
+    /// <summary>The server's word on an invite sent from here: Accepted, Declined or Timed out.</summary>
+    internal void OnResolved(string kind, string who, string outcome)
+    {
+        SetResult($"{Verb(kind)} · {who}: {outcome switch { "accepted" => "Accepted", "declined" => "Declined", _ => "Timed out" }}");
+        if (_pending is { } p && p.Kind == kind) _pending = null;
+    }
+
+    /// <summary>The server took the request: the invite shows among those sent.</summary>
+    private void OnInvitesChanged()
+    {
+        if (_pending is { Sent: false } p && InviteService.Client is { } invites
+            && invites.Sent.Any(v => v.Kind == p.Kind && v.PeerName.Equals(p.Who, StringComparison.OrdinalIgnoreCase)))
+        {
+            _pending = (p.Kind, p.Who, true);
+            SetResult($"{Verb(p.Kind)} · {p.Who}: Sent");
+        }
+    }
+
+    /// <summary>A private reply while the server has not taken the request is why it was not (a cooldown, a match, no such player).</summary>
+    private void OnChatLine(string text, ChatKind kind)
+    {
+        if (_pending is not { Sent: false } p || kind != ChatKind.Private) return;
+        SetResult($"{Verb(p.Kind)} · {p.Who}: {text}");
+        _pending = null;
     }
 
     /// <summary>The Activities app: the Battle Royale lobby and the races on the server, joined from the phone.</summary>
@@ -1138,6 +1300,7 @@ public partial class PhoneScreens : Node
             _coverDate.Text = date;
             _homeDate.Text = date;
         }
+        FollowInvites();
         if (Shown == Page.Activities) RefreshActivities(force: false);
         if (Shown == Page.Training) RefreshTraining(force: false);
         if (Shown == Page.Travel) SetText(_travelDots, ((int)(RealClock.Now * 3) % 3) switch { 0 => "●  ○  ○", 1 => "○  ●  ○", _ => "○  ○  ●" });
