@@ -22,6 +22,8 @@
   the mantle had its chance), on the ground after 0.25 s and only where the face rises past `MantleMax`
   over the feet (a garden wall still needs Jump to mantle). Not winded, not sliding, not downed. An NPC or
   a bot needs `FootActions`' `Climb` (`BotIntent.Climb`). A let-go or a kick-off cannot re-grab for 0.6 s.
+  Never a face in an open or opening doorway (`InteriorManager.InOpenDoorway`, #1281): the facade has no hole there and
+  the walker's collision exception does not reach rays, so walking into a door climbed the facade (`--interiorcheck` failed `walked in`).
 - **On the face** (`ClimbPhysics`, after the mantle, before the swim): one chest ray (1.25 m up) along
   `-normal` a step (`Core.RayQuery`); the body is held off the face by a spring, `StandOffFor(n)`: the
   capsule's foot 5 cm off the rock, so on a slab the chest is about a metre out (a fixed 0.37 m made the

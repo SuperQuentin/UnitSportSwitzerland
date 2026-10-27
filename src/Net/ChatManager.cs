@@ -179,6 +179,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(stamina, ChatKind.Private);
             return;
         }
+        // tracking a point and showing it on the map are this screen's alone (#1277)
+        if (World.Locate.LocateClient.Run(text) is var (located, locateFailed))
+        {
+            if (located.Length > 0) LineReceived?.Invoke(located, locateFailed ? ChatKind.Error : ChatKind.Private);
+            return;
+        }
         // the visual style is this screen's alone: never a server's business
         if (Styles.StyleCommand.Run(text.Trim()) is { } style)
         {
@@ -400,6 +406,19 @@ public partial class ChatManager : Node
                 : $"Spawned {count - left} x {def.Name}; {left} did not fit.";
     }
 
+    /// <summary><c>/locate</c> offline (#1277): this machine's own <see cref="World.Locate.LocateService"/>.</summary>
+    private async void LocateLocal(string rest)
+    {
+        if (World.Locate.LocateService.Instance is not { } locate)
+        {
+            LineReceived?.Invoke("No map data to search here.", ChatKind.Error);
+            return;
+        }
+        var (lines, failed) = await locate.Answer(rest, Here?.Invoke());
+        if (!IsInsideTree()) return;
+        foreach (string line in lines) LineReceived?.Invoke(line, failed ? ChatKind.Error : ChatKind.Private);
+    }
+
     /// <summary>
     /// A line typed with no server to send it to: commands run here. Only what makes sense alone
     /// works; the rest says it needs a server rather than silently doing nothing.
@@ -459,6 +478,16 @@ public partial class ChatManager : Node
                     Teleporter.TeleportTo(place.E, place.N, place.Name);
                     Show($"Teleported to {place.Name}", ChatKind.System);
                 }
+                return;
+
+            case "locate" or "find":
+                LocateLocal(rest);
+                return;
+
+            case "go":
+                if (!World.Locate.LocateCoords.TryParse(rest, out double goE, out double goN)) Show("Usage: /go @E,N (LV95 metres, e.g. /go @2533450,1152300)", ChatKind.Error);
+                else if (Teleporter?.TeleportTo(goE, goN, World.Locate.LocateCoords.Format(goE, goN)) == true) Show($"Teleported to {World.Locate.LocateCoords.Format(goE, goN)}", ChatKind.System);
+                else Show("Nothing to teleport here.", ChatKind.Error);
                 return;
 
             case "stadium" or "venue":
@@ -886,6 +915,8 @@ public partial class ChatManager : Node
             case "travel" or "pin": if (RequiresAvatar(sender, verb)) TravelCommand(sender, verb, rest); return;
             // the venues (#994): anyone lists them; going to one is a teleport like /city
             case "stadium" or "venue": CommandStadium(sender, rest); return;
+            case "locate" or "find": CommandLocate(sender, rest); return;
+            case "go": if (RequiresAvatar(sender, verb)) CommandGo(sender, rest); return;
             case "login": if (RequiresAvatar(sender, verb)) CommandLogin(sender, rest); return;
             case "me":
                 if (rest.Length > 0) Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
@@ -1245,6 +1276,37 @@ public partial class ChatManager : Node
         if (!TryFindPlace(sender, query, out var place)) return;
 
         RpcId(sender, MethodName.ForceTeleport, place.E, place.N, place.Name);
+    }
+
+    /// <summary>
+    /// <c>/locate &lt;thing&gt; [+ selector ...] [in &lt;town&gt;]</c> (#1277): the nearest things the server's map data
+    /// knows, from where the asker stands; each line ends in its <c>@E,N</c>, which the chat turns into buttons.
+    /// </summary>
+    private async void CommandLocate(long sender, string rest)
+    {
+        if (World.Locate.LocateService.Instance is not { } locate)
+        {
+            ReplyTo(sender, "This server has no map data to search.", ChatKind.Error);
+            return;
+        }
+        var (lines, failed) = await locate.Answer(rest, _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global);
+        if (!IsInsideTree()) return;
+        foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
+    }
+
+    /// <summary>
+    /// <c>/go @E,N</c> (#1277): a teleport to a point, what the chat's Teleport button sends, on the same
+    /// terms as <c>/city</c> (<see cref="MayTeleport"/>), where <c>/tp E N</c> stays an admin's.
+    /// </summary>
+    private void CommandGo(long sender, string rest)
+    {
+        if (!World.Locate.LocateCoords.TryParse(rest, out double e, out double n))
+        {
+            ReplyTo(sender, "Usage: /go @E,N (LV95 metres, e.g. /go @2533450,1152300)", ChatKind.Error);
+            return;
+        }
+        if (!MayTeleport(sender)) return;
+        RpcId(sender, MethodName.ForceTeleport, e, n, World.Locate.LocateCoords.Format(e, n));
     }
 
     /// <summary>
