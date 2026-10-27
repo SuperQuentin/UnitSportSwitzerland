@@ -24,12 +24,18 @@ public sealed record ItemDef(
     /// <summary>A bag's extra pack slots while it is worn (<see cref="ItemUse.Bag"/>).</summary>
     int PackSlots = 0,
     /// <summary>The body slot a <see cref="ItemUse.Wear"/> item goes in (hats: the head).</summary>
-    WearSlot Slot = WearSlot.None);
+    WearSlot Slot = WearSlot.None,
+    /// <summary>Stamina points eating it restores (#1225).</summary>
+    float Stamina = 0f,
+    /// <summary>A lasting stamina effect eating it gives (#1225): hot chocolate warms, fondue feeds.</summary>
+    Player.StaminaBuff Buff = Player.StaminaBuff.None,
+    /// <summary>How long <see cref="Buff"/> lasts, s.</summary>
+    float BuffSeconds = 0f);
 
 public static class ItemDefs
 {
     /// <summary>Every item: the authored rows, then one per look in the wardrobe (<see cref="Garments.All"/>).</summary>
-    public static readonly ItemDef[] All = Authored().Concat(Fishing.FishCatalog.All.Where(f => f.Item != ItemId.None).Select(Fish))
+    public static readonly ItemDef[] All = Authored().Select(StaminaFood).Concat(Fishing.FishCatalog.All.Where(f => f.Item != ItemId.None).Select(Fish))
         .Concat(Garments.All.Select(Cloth)).ToArray();
 
     private static ItemDef[] Authored() => new[]
@@ -307,6 +313,16 @@ public static class ItemDefs
     private static ItemDef Bag(ItemId id, string name, string tint, string glyph, int slots, float value) =>
         new(id, name, $"Wear it in the bag slot for {slots} more pack slots. {{use_item}} or a click on the bag slot puts it on.",
             ItemUse.Bag, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value, slots);
+
+    /// <summary>The food that feeds the stamina meter (#1225, <c>docs/notes/player/stamina.md</c>).</summary>
+    private static ItemDef StaminaFood(ItemDef d) => d.Id switch
+    {
+        ItemId.EnergyBar => d with { Stamina = 50f, Blurb = "{use_item} to eat. Restores 35 health and 50 stamina." },
+        ItemId.Chocolate => d with { Stamina = 30f, Blurb = d.Blurb + " And 30 stamina." },
+        ItemId.HotChocolate => d with { Buff = Player.StaminaBuff.Warm, BuffSeconds = 240f, Blurb = d.Blurb + " Warm for 4 min: climbing costs a quarter less." },
+        ItemId.Fondue => d with { Buff = Player.StaminaBuff.Fed, BuffSeconds = 300f, Blurb = d.Blurb + " Fed for 5 min: +25 max stamina, full at once." },
+        _ => d,
+    };
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
         ItemCategory category, float value) =>

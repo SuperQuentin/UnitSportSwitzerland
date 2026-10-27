@@ -27,6 +27,7 @@ touches its topic; search with `grep -ril <word> docs/notes/ui`.
 - `phone` — Foldable phone (#889, `src/Phone/`): Up / quick menu › Phone; cover quick actions, open = camera onto the inner screen then the same `SubViewport` full screen; Map / Contacts / Activities; `Teleporter.Curtain` holds a jump until the screen covers the view, `Teleporter.Arrived` folds it away there; one replicated byte `PhoneState`; the camera app walks once open (#1149); `--phonecheck`
   - Training app (#901): see `player/home-trainer-training`
 - `travel-menu` — R travel menu (tabs, card grid, brand/model folders (#410), pre-rendered thumbnails cached in user://thumbs, live stage: doors open + lamps on while pointed) and the F1 controls screen, both sized to the window (#210)
+- `stamina-ring` — The stamina ring (#1225): beside the shoulder or the crosshair, only while not full, one shader (outer segments past 100, the next climb-jump's band, winded orange + blink + panting), VR wrist copy, `--stamina-shot`
 
 ## Gotchas
 

@@ -17,7 +17,10 @@ public static class PigeonFlight
     /// <param name="Flap">Jump / A held: flap (climb in the air, take off from the ground or a perch).</param>
     /// <param name="Dive">Crouch / B held: fold the wings and drop.</param>
     /// <param name="Effort">Shift / L3: flap harder, walk faster.</param>
-    public readonly record struct Controls(Vector2 Stick, bool Flap, bool Dive, bool Effort);
+    /// <param name="Air">The air's own velocity here, m/s (<c>World/AirLift</c>, #1225): a gliding bird is carried by it.</param>
+    /// <param name="MayFlap">False (no stamina left): the flap input acts like a glide.</param>
+    public readonly record struct Controls(Vector2 Stick, bool Flap, bool Dive, bool Effort,
+        Vector3 Air = default, bool MayFlap = true);
 
     public struct State
     {
@@ -37,8 +40,9 @@ public static class PigeonFlight
 
     public static Vector3 Heading(float yaw) => new(-Mathf.Sin(yaw), 0, -Mathf.Cos(yaw));
 
-    public static State Step(State s, in Controls c, bool onFloor, float dt)
+    public static State Step(State s, in Controls controls, bool onFloor, float dt)
     {
+        var c = controls.MayFlap || !controls.Flap ? controls : controls with { Flap = false };
         var h = Heading(s.Yaw);
         switch (s.Mode)
         {
@@ -74,7 +78,7 @@ public static class PigeonFlight
             // forward trades a little climb for speed, never all of it: W + flap still gains height (#519)
             : c.Flap ? (c.Effort ? FastClimb : ClimbRate) - fwd * 1.5f + back * 1.5f
             : -GlideSink - fwd * 6f + back * 0.8f;
-        var target = h * Mathf.Max(speed, 5f) + Vector3.Up * vy;
+        var target = h * Mathf.Max(speed, 5f) + Vector3.Up * vy + c.Air;
         s.Velocity = s.Velocity.Lerp(target, MathX.Damp(c.Dive ? 1.2f : 1.8f, dt));
         s.Bank = Approach(s.Bank, c.Stick.X * 0.7f, 4f, dt);
         s.Flap = Approach(s.Flap, c.Flap ? 1f : 0f, 5f, dt);

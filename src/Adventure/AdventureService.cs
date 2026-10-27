@@ -43,6 +43,8 @@ public partial class AdventureService : Node
     private bool _server, _networked;
     /// <summary>This copy keeps progress: the server, or an offline client.</summary>
     public bool Authority => _server || !_networked;
+    /// <summary>A server or a client of one (false offline).</summary>
+    public bool Networked => _networked;
 
     public AdventureEvents Events { get; } = new();
     public QuestEngine Quests { get; } = new(new QuestCatalog());
@@ -112,7 +114,11 @@ public partial class AdventureService : Node
         Events.Raised += OnEvent;
         // the checks' own quests, a few tens of metres from the default spawn (never offered to players)
         if (CmdArgs.Has("--adventure-test") || AdventureCheck.Requested) Quests.AddSource(new ProbeQuests(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N));
-        if (!Authority) return;
+        if (!Authority)
+        {
+            StaminaUpgrades.Attach(this);   // #1225: the owner's steps from the section sync
+            return;
+        }
         if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Rewards.RewardCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
@@ -120,6 +126,7 @@ public partial class AdventureService : Node
             Load(LocalPeer, LocalKey, saved: true);
             Mine = _book.For(LocalKey);
         }
+        StaminaUpgrades.Attach(this);   // #1225: the "stamina" reward kind and section
         GD.Print($"[adventure] {(_server ? "server" : "offline")}: {Quests.Sources.Sum(s => s.For(new QuestContext(new QuestsProgress())).Count())} quests");
     }
 

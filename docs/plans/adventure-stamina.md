@@ -3,19 +3,19 @@
 
 # Adventure: stamina, climbing and lift
 
-Status: **planned**. Tracking issue: #1225 (overview: #1228). Part of the Adventure layer, beside
+Status: **built** (PR #1231; see "Built differently" at the end). Tracking issue: #1225 (overview: #1228). Part of the Adventure layer, beside
 `adventure-objectives`, `adventure-places`, `adventure-navigation` and `adventure-rewards`.
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Stamina rules | planned | `Player/Stamina.cs`, plain C# like `AirReserve`: costs, regen, winded state, max from upgrades, food buffs |
-| 2 Meter on the body | planned | `FootPlayer.Stamina.cs` spends and refills it; the ring HUD near the character, only while not full |
-| 3 Food | planned | Energy bar, chocolate, hot chocolate and fondue restore or buff it |
-| 4 Max upgrades | planned | The `"stamina"` progress section and the `"stamina"` reward handler (`"+1"` = one step, +10 max), granted by the rewards plan's edelweiss offerings |
-| 5 Free climbing | planned | Desktop and pad climbing on steep terrain and walls: `FootPlayer.Climb.cs`, climb-jump, top-out by the mantle, a new replicated pose |
-| 6 Lift | planned | `World/AirLift.cs`: thermals by sun and slope, ridge lift, updraft volumes (campfires), fed to gliders through `FlightEnv` |
-| 7 Lift cues | planned | Circling soaring birds, rising specks, a cumulus puff, a variometer beep |
-| 8 Checks and notes | planned | Unit tests, a `crag` fixture, `--climbcheck`, thermal flychecks, `tools/climbnetcheck.sh`, notes |
+| 1 Stamina rules | built | `Player/Stamina.cs`, plain C# like `AirReserve`: costs, regen, winded state, max from upgrades, food buffs |
+| 2 Meter on the body | built | `FootPlayer.Stamina.cs` spends and refills it; the ring HUD near the character, only while not full |
+| 3 Food | built | Energy bar, chocolate, hot chocolate and fondue restore or buff it |
+| 4 Max upgrades | built | The `"stamina"` progress section and the `"stamina"` reward handler (`"+1"` = one step, +10 max), granted by the rewards plan's edelweiss offerings |
+| 5 Free climbing | built | Desktop and pad climbing on steep terrain and walls: `FootPlayer.Climb.cs`, climb-jump, top-out by the mantle, a new replicated pose |
+| 6 Lift | built | `World/AirLift.cs`: thermals by sun and slope, ridge lift, updraft volumes (campfires), fed to gliders through `FlightEnv` |
+| 7 Lift cues | partly: specks, cumulus, variometer; no circling birds, no campfire shimmer | Circling soaring birds, rising specks, a cumulus puff, a variometer beep |
+| 8 Checks and notes | built | Unit tests, a `crag` fixture, `--climbcheck`, thermal flychecks, `tools/climbnetcheck.sh`, notes |
 
 ## Goal
 
@@ -384,3 +384,30 @@ peer and the server compute the same (`clock-sync`), nothing is summed per frame
    must the player read birds and specks?
 7. **XR climbing pose**: `XrClimb` still shows the ladder's `PoseClimb`; switching it to
    `PoseWallClimb` needs the face normal, which its grip point already has.
+
+## Built differently
+
+- **Lift numbers**: the thermal core's falloff is `exp(-(d/r)^2)`, not a narrow Gaussian (`exp(-2x^2)` left a
+  circling canopy outside it). A canopy circling at 0.7 of the stick sinks ~2.3 m/s, so a 3.5 m/s core nets ~1
+  m/s: `--flycheck thermal` gains 96 m in 90 s and checks > 80 (not 150). `--flycheck campfire` checks a climb
+  over 2 m/s while crossing the fire (3.5 measured, 2 m gained), not 15 m: a canopy crossing a 4 m column at 9
+  m/s cannot hover in it.
+- **Cues**: rising specks and a cumulus puff (`World/ThermalCues`, client only, all styles with their own
+  speck colour) and the variometer are built; soaring birds circling thermals and the campfire's taller smoke
+  and shimmer are not (follow-ups).
+- **Climbing**: the stand-off grows with the face's lean (`StandOffFor`: the capsule's foot 5 cm off the
+  rock; a fixed 0.37 m let the feet scrape and halved the speed); the top-out tries the mantle reaching 0.45,
+  0.8 and 1.2 m over the lip (the 1 m height grid rounds a ledge's edge into a slope); a let-go or kick-off
+  cannot re-grab for 0.6 s. The camera's 30° swing off the face is not built. The crag's ledge is 3 m deep
+  (2 m on a 1 m grid left 1 m of flat).
+- **The client's gate**: a client knows `Active` as "the service exists and not `Permissions.InMatch`"; no
+  extra field rides the section sync (a BR lobby counts the meter until the match starts; the server drops
+  the lobby's events anyway).
+- **In combat** is `InDuel` or hurt by a player in the last 6 s (`LastAttackedAt`); hurting one does not
+  count yet.
+- **StaminaWatch** logs climbs only (`[stamina] implausible climb`), not gliders (`[lift]`); it is not
+  counted in `--serverstats` beyond its timing, and the net check does not force one (the crag's 30 m wall
+  is under the 44 m limit).
+- **`/stamina`** is client-side (`ChatManager` before sending): `infinite | on | full`, an admin's online.
+- **VR**: `XrClimb` still draws the ladder pose (open question 7); a fast pull as a climb-jump is not built.
+

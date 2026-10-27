@@ -37,6 +37,8 @@ public static partial class HumanMeshBuilder
         yield return ("Aiming", () => Skinned(plain, f => PoseStride(f, 1.6f, 0.7f, ItemArmPose.ShoulderAim, 1f)));
         yield return ("Driving", () => Skinned(plain, f => PoseDriver(f, kart, 1.2f, 0.5f, 0f)));
         yield return ("Swimming", () => Skinned(plain, f => PoseSwim(f, SwimStyle.Crawl, 0.3f)));
+        yield return ("Wall climbing", () => Skinned(plain, f => PoseWallClimb(f, 0.05f, 0f)));
+        yield return ("Climb-jump", () => Skinned(plain, f => PoseWallClimb(f, 0.3f, 1f)));
         yield return ("Robe, running", () => Skinned(Wearing(GarmentShape.Robe, 4), f => PoseStride(f, 4.6f, 0.3f)));
         yield return ("Dress, seated", () => Skinned(Wearing(GarmentShape.Dress, 5), f => PoseDriver(f, kart, 0f, 0.3f, 0f)));
         yield return ("Ruffle, running", () => Skinned(Wearing(GarmentShape.RuffleMini, 6), f => PoseStride(f, 4.6f, 0.6f)));

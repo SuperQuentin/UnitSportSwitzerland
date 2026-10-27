@@ -523,6 +523,7 @@ public partial class PlacedObjects : Node
     public static Node3D FlagVisual(ArrayMesh? mesh = null)
     {
         var body = new StaticBody3D();
+        body.AddToGroup(UnitSport.Player.FootPlayer.NoClimbGroup);   // placed things are never free-climbed (#1225)
         body.AddChild(new MeshInstance3D { Mesh = mesh ?? ItemDefs.PlantedFlagMesh(), MaterialOverride = ItemDefs.Material });
         // pole-thin, so it is something to aim at for picking up rather than a wall to walk into
         body.AddChild(new CollisionShape3D

@@ -200,7 +200,7 @@ public partial class ItemController : Node
             var p = CurrentPlayer();
             // downed (#475): no items until a team-mate picks you up; in a fist fight (#495) the hands are fists
             // the phone out (#889): both hands are on it
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, InDuel: false, PhoneState: 0 } && p.Ride == RideKind.OnFoot ? p : null;
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, IsClimbing: false, Downed: false, InDuel: false, PhoneState: 0 } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -504,12 +504,18 @@ public partial class ItemController : Node
                 }
                 StartUse(player, slot, def, ViewPose.Mouth, 0.35f, apply > 0f ? apply : 0.6f, 0.3f, () =>
                 {
-                    if (!player.Heal(def.Heal)) return;
+                    // refused only when neither health nor stamina would change (#1225)
+                    bool feeds = player.StaminaWouldTake(def.Stamina, def.Buff);
+                    if (!player.Heal(def.Heal) && !feeds) return;
+                    float gained = feeds ? player.RestoreStamina(def.Stamina) : 0f;
+                    if (feeds && def.Buff != StaminaBuff.None) player.BuffStamina(def.Buff, def.BuffSeconds);
                     _inventory.TakeOne(slot);
                     Kick(player);
                     var bank = drink ? SfxSynth.GulpBank : SfxSynth.CrunchBank;
                     Play(bank.Variants[SfxRng.Next(bank.Variants.Length)]);
-                    _ui.Toast($"{def.Name}: +{def.Heal:F0} health");
+                    _ui.Toast(def.Name + ": +" + def.Heal.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) + " health"
+                        + (gained >= 1f ? ", +" + gained.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) + " stamina" : "")
+                        + (feeds && def.Buff == StaminaBuff.Warm ? ", warm" : feeds && def.Buff == StaminaBuff.Fed ? ", fed" : ""));
                 });
                 break;
 
