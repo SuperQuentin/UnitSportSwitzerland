@@ -97,6 +97,20 @@ public partial class SiteCranes : Node3D
         public Vector3 RemoteBox => ToWorld(new Vector3(Data.Job.Base.X, Data.Ground + CranePlans.RemoteHeight, Data.Job.Base.Y)
                                             + RemoteSide * (CranePlans.MastHalf(Data.Spot) + 0.12f));
 
+        /// <summary>The remote's box as a box in the world, square to the tile as <c>CranePlans</c> draws it (its outline, #1286).</summary>
+        public Transform3D RemoteFrame => new(Owner.GlobalBasis, RemoteBox);
+
+        /// <summary>
+        /// The ladder's lowest <paramref name="height"/> metres, the stiles' box in the world, x across them
+        /// (its outline, #1286): the part a hand reaches from the ground, not all the way to the cab.
+        /// </summary>
+        public Transform3D LadderFrame(float height)
+        {
+            var centre = new Vector3(Data.Job.Base.X, Data.Ground + CranePlans.FootHeight(Data.Spot) + height / 2, Data.Job.Base.Y)
+                         + Face * (CranePlans.MastHalf(Data.Spot) + 0.12f);
+            return new Transform3D(Owner.GlobalBasis * new Basis(Vector3.Up, Mathf.Atan2(Face.X, Face.Z)), ToWorld(centre));
+        }
+
         /// <summary>The operator's place in the cab for a pose, in the world, and its heading (along the jib).</summary>
         public (Vector3 At, float Yaw) InCab(CranePose pose) =>
             (ToWorld(Data.Pivot + new Basis(Vector3.Up, pose.Yaw) * CranePlans.CabSeat), pose.Yaw);

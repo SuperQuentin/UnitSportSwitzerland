@@ -590,7 +590,7 @@ declared in `TogetherProgress.cs`:
 - **Test seams**: `--together-glacier E,N,R` (a pretend glacier), `--together-test` (server: `/rope test veteran|<milestone>`), `--together-day-seconds`, `--fondueseed`, `--forfeits`.
 - **Pending save**: the batched once-a-minute `Touch` of the seconds together is flushed in `AdventureService.Saving`, so a save never finds an untouched section.
 - **Net check**: `tools/togethernetcheck.sh` runs on `--systems network,adventure,sky`. The Battle Royale part checks the link, not the client's `NearHere` (a lobby is not `Permissions.InMatch` on the client, the server's `Active` is what ends it).
-- **Protocol**: 58.
+- **Protocol**: 59 (58 is the cinema halls, #1279).
 - **Pings fixed**: the synthesised ping's envelope broke at t = 0, which silenced the clink and the Prost sound; fixed after `--sounds,check` found it.
 - Not verified: a real glacier, hut or castle gate, a headset and a pad (see `tests/TO-TEST-BY-HUMAN.md`).
 

@@ -75,6 +75,11 @@ export preset packs `music/` by its `include_filter`. The playlists: `TrackerLib
 | `girl_from_mars.xm` | fastfood | "Girl From Mars" by Drozerix (Chiptune), [The Mod Archive #173935](https://modarchive.org/index.php?request=view_by_moduleid&query=173935) | Public Domain |
 | `drozerix_-_leisurely_voice.xm` | cinema | "Leisurely Voice" by Drozerix (Chiptune), [The Mod Archive #183837](https://modarchive.org/index.php?request=view_by_moduleid&query=183837) | Public Domain |
 | `ambient_starfield.xm` | cinema | "Ambient Starfield" by Drozerix (Electronic - Ambient), [The Mod Archive #174160](https://modarchive.org/index.php?request=view_by_moduleid&query=174160) | Public Domain |
+| `thrones.mod` | cinema hall (film, #1279) | "Thrones" by Ekorren (32-channel), [The Mod Archive #172293](https://modarchive.org/index.php?request=view_by_moduleid&query=172293) | Public Domain |
+| `crusaders.xm` | cinema hall (film) | "Crusaders" by JAM (Orchestral), [The Mod Archive #177809](https://modarchive.org/index.php?request=view_by_moduleid&query=177809) | Public Domain |
+| `hom.xm` | cinema hall (film) | "Haunted Occult Mansion" by JAM, [The Mod Archive #177399](https://modarchive.org/index.php?request=view_by_moduleid&query=177399) | Public Domain |
+| `jttt.xm` | cinema hall (film) | "Journey through time" by JAM, [The Mod Archive #177402](https://modarchive.org/index.php?request=view_by_moduleid&query=177402) | Public Domain |
+| `jam_-_vocatio_spirituum.xm` | cinema hall (film) | "Vocatio Spirituum" by JAM, [The Mod Archive #206534](https://modarchive.org/index.php?request=view_by_moduleid&query=206534) | Public Domain |
 
 ## `cinema/` (the cinema screens' slideshow, #1250)
 

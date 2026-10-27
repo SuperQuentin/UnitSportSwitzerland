@@ -26,30 +26,31 @@ public partial class DiningProbe : Node
     private sealed record Spot(VenueType Type, string Cuisine, float Dx = 0, float Dz = 0);
 
     private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, Spot[] Venues, RoomType[] Rooms,
-        FurnitureType[] Pieces, bool FlatsAbove = false);
+        FurnitureType[] Pieces, bool FlatsAbove = false, ToiletSet Toilets = ToiletSet.None, bool Accessible = false);
 
     private static readonly Case[] Cases =
     {
         // a village Beiz: the house's living room is the Gaststube, its kitchen the kitchen, the family upstairs
         new("beiz", 10, 12, 7, BuildingKind.House, new[] { new Spot(VenueType.Restaurant, "regional") },
-            new[] { RoomType.Gaststube }, new[] { FurnitureType.BarCounter }),
+            new[] { RoomType.Gaststube }, new[] { FurnitureType.BarCounter }, Toilets: ToiletSet.Single),
         new("cafe", 8, 11, 4, BuildingKind.Commercial, new[] { new Spot(VenueType.Cafe, "") },
-            new[] { RoomType.CafeRoom }, new[] { FurnitureType.PastryCase }),
+            new[] { RoomType.CafeRoom }, new[] { FurnitureType.PastryCase }, Toilets: ToiletSet.Single),
         new("pizzeria", 12, 16, 4, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "pizza") },
-            new[] { RoomType.Pizzeria }, new[] { FurnitureType.PizzaOven }),
+            new[] { RoomType.Pizzeria }, new[] { FurnitureType.PizzaOven }, Toilets: ToiletSet.Single),
         new("bar", 14, 18, 4.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.Bar, "") },
-            new[] { RoomType.BarRoom }, new[] { FurnitureType.BarCounter, FurnitureType.BarStool }),
+            new[] { RoomType.BarRoom }, new[] { FurnitureType.BarCounter, FurnitureType.BarStool }, Toilets: ToiletSet.Single),
         new("club", 20, 24, 5, BuildingKind.Commercial, new[] { new Spot(VenueType.Nightclub, "") },
-            new[] { RoomType.ClubRoom }, new[] { FurnitureType.DanceFloor, FurnitureType.DjBooth, FurnitureType.BarCounter }),
+            new[] { RoomType.ClubRoom }, new[] { FurnitureType.DanceFloor, FurnitureType.DjBooth, FurnitureType.BarCounter }, Toilets: ToiletSet.Gendered),
         new("kebab", 7, 9, 3.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.FastFood, "kebab") },
-            new[] { RoomType.KebabRoom }, new[] { FurnitureType.KebabCounter }),
+            new[] { RoomType.KebabRoom }, new[] { FurnitureType.KebabCounter }, Toilets: ToiletSet.Shared),
         // a block of flats with a restaurant and a bar on its ground floor: shop units for them, flats above
         new("block", 26, 14, 16, BuildingKind.Apartment,
             new[] { new Spot(VenueType.Restaurant, "regional", -9, 0), new Spot(VenueType.Bar, "", 9, 0) },
-            new[] { RoomType.Gaststube, RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true),
-        // a kiosk: no room big enough, the ordinary rules furnish it
+            new[] { RoomType.Gaststube, RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true, Toilets: ToiletSet.Gendered),
+        // a restaurant hall: big enough for toilets by gender (#1285)
         new("hall", 18, 24, 4.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "regional") },
-            new[] { RoomType.Gaststube, RoomType.GastroKitchen }, new[] { FurnitureType.CookLine }),
+            new[] { RoomType.Gaststube, RoomType.GastroKitchen }, new[] { FurnitureType.CookLine }, Toilets: ToiletSet.Gendered),
+        // a kiosk: no room big enough, the ordinary rules furnish it
         new("too-small", 3f, 3.5f, 3, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "") },
             Array.Empty<RoomType>(), Array.Empty<FurnitureType>()),
     };
@@ -90,6 +91,9 @@ public partial class DiningProbe : Node
             Check(ground.Any(r => r.Type == t), $"{what}: a {t} on the ground floor ({string.Join(", ", ground.Select(r => r.Type))})");
         foreach (var t in c.Pieces)
             Check(l.Furniture.Any(p => p.Type == t), $"{what}: a {t}");
+        // the public toilets the venue has room for (#1285)
+        var loo = ToiletCheck.Problems(l, c.Toilets, c.Accessible);
+        Check(loo.Count == 0, $"{what}: toilets {ToiletCheck.Describe(l)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
         int tables = l.Furniture.Count(p => p.Type is FurnitureType.TableSet or FurnitureType.BanquetteSet or FurnitureType.HighTable);
         Check(tables >= 1 || dining.All(r => r.Type == RoomType.ClubRoom), $"{what}: {tables} table(s)");
         Check(l.Furniture.All(p => p.Type != FurnitureType.ShopCounter || ground.Any(r => r.Type == RoomType.Shop)),

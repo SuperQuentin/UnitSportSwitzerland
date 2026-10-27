@@ -34,8 +34,8 @@ public partial class WebRadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
     {
         SfxBus.Ensure();
         Bus = SfxBus.Music;
-        // a car stereo: loud in the cabin, heard across a car park, gone down the road
-        UnitSize = 3f;
+        // a car stereo: loud in the cabin, heard across a car park, gone down the road; a venue's as its source says
+        UnitSize = GetParent() is VenueMusicSource { } src ? src.Spread : 3f;
         MaxDistance = 45f;
         AttenuationModel = AttenuationModelEnum.InverseDistance;
         AttenuationFilterCutoffHz = 6000f;

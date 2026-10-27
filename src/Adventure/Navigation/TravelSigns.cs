@@ -166,13 +166,27 @@ public partial class TravelSigns : Node3D
     private string? _prompt;
 
     /// <summary>"[E] Departures: Brig" at a sign; null away from one. Built only when it changes.</summary>
-    public static string? PromptFor(FootPlayer p)
+    public static string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt at a sign and the box round its board to outline (#1286); null away from one.</summary>
+    public static Items.Interaction? InteractionFor(FootPlayer p)
     {
         if (Instance is not { } s || s.InReach(p) is not { } poi) return null;
-        bool lit = AdventureTravel.Instance?.MyBook.Has(poi.Id) == true;
+        var book = AdventureTravel.Instance?.MyBook;
+        bool lit = book?.Has(poi.Id) == true;
+        Items.Outline target = default;
+        foreach (var (placed, local) in s._placed)
+            if (placed.Id == poi.Id && s._layers[Layer(poi, book)] is { } layer)
+                target = Items.Outline.Around(s, layer.Multimesh.Mesh,
+                    new Transform3D(new Basis(Vector3.Up, (float)(poi.Hash % 360) * Mathf.Pi / 180f), local));
+        return new(s.PromptText(poi, lit), target);
+    }
+
+    private string PromptText(Poi poi, bool lit)
+    {
         var key = (poi, PlayerInput.HintDevice, lit);
-        if (s._prompt != null && key == s._promptKey) return s._prompt;
-        s._promptKey = key;
-        return s._prompt = InputHints.Prompt(PlayerInput.InteractMount, lit ? $"Departures: {poi.Name}" : $"{poi.Name} (unlocking…)");
+        if (_prompt != null && key == _promptKey) return _prompt;
+        _promptKey = key;
+        return _prompt = InputHints.Prompt(PlayerInput.InteractMount, lit ? $"Departures: {poi.Name}" : $"{poi.Name} (unlocking…)");
     }
 }

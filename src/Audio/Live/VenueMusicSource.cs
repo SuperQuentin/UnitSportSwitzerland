@@ -25,6 +25,12 @@ public partial class VenueMusicSource : Node3D
     /// <summary>The venue's own shift of its playlist on the clock.</summary>
     public uint Salt { get; set; }
 
+    /// <summary>
+    /// How far from it the music keeps its full level, m (its speakers' <c>UnitSize</c>): a car stereo's 3 m, a cinema
+    /// hall's half-diagonal (#1279), so the whole room hears it and not only its middle.
+    /// </summary>
+    public float Spread { get; set; } = 3f;
+
     public override void _Ready()
     {
         // the fallback beside the radio; a headless peer hears nothing, so mixes nothing

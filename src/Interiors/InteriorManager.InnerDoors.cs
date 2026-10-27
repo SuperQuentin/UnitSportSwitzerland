@@ -40,7 +40,7 @@ public partial class InteriorManager
     private static (Vector3 At, Vector3 Out) InnerDoorway(InteriorLayout l, InnerDoorPlan d)
     {
         var r = l.Floors[d.Floor].Rooms[d.Room];
-        float y = l.FloorY(d.Floor);
+        float y = l.FloorY(d.Floor) + d.Bottom;
         return d.Side switch
         {
             Side.Front => (new Vector3(d.Center, y, r.Z0), new Vector3(0, 0, -1)),
@@ -92,12 +92,14 @@ public partial class InteriorManager
         return true;
     }
 
-    private string? InnerDoorPrompt(Vector3 local)
+    /// <summary>The flat door E works from <paramref name="local"/>, and its leaf to outline (#1286).</summary>
+    private Items.Interaction? InnerDoorInteraction(InteriorNode node, Vector3 local)
     {
         int door = InnerDoorAt(_current!, local, InnerDoorReach);
         if (door < 0) return null;
-        if (InnerDoorLocked(_current!, door)) return InputHints.Prompt(PlayerInput.InteractMount, "Pick the lock");
-        return InputHints.Prompt(PlayerInput.InteractMount, InnerDoorOpen(_current!.Key, door) ? "Close the door" : "Open the door");
+        var leaf = Items.Outline.Of(node.InnerLeaf(door));
+        if (InnerDoorLocked(_current!, door)) return new(InputHints.Prompt(PlayerInput.InteractMount, "Pick the lock"), leaf);
+        return new(InputHints.Prompt(PlayerInput.InteractMount, InnerDoorOpen(_current!.Key, door) ? "Close the door" : "Open the door"), leaf);
     }
 
     private void AskInnerDoor(string key, int door, bool open)

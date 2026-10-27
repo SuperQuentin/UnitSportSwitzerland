@@ -570,11 +570,31 @@ public partial class RewardWorld : Node3D
     private string? _prompt;
 
     /// <summary>The prompt at a reward thing ("[E] Open the Fine chest"), built only when it changes; null away from one.</summary>
-    public static string? PromptFor(FootPlayer p)
+    public static string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt at a reward thing and the thing to outline (#1286); null away from one.</summary>
+    public static Items.Interaction? InteractionFor(FootPlayer p)
     {
         if (Instance is not { } w) return null;
         var (kind, id, index, at) = w.InReach(p);
         if (kind == Thing.None) return null;
+        // a chest and a seal's props are nodes; a trial's post and an offering box are MultiMesh instances
+        var target = kind switch
+        {
+            Thing.Chest => Items.Outline.Of(w._chests.GetValueOrDefault(id)),
+            Thing.Stack or Thing.Bell or Thing.TuneBell or Thing.Burrow when w._props.TryGetValue(id, out var props) && index < props.Parts.Count
+                => Items.Outline.Of(props.Parts[index]),
+            Thing.Post => Items.Outline.Around(w, w._postMesh.Multimesh.Mesh, new Transform3D(Basis.Identity, at)),
+            Thing.Box => Items.Outline.Around(w, w._boxMesh.Multimesh.Mesh,
+                new Transform3D(new Basis(Vector3.Up, (float)(w._boxes[index].Shrine.Hash % 628) / 100f), at)),
+            _ => default,
+        };
+        return new(w.PromptText(kind, id, index, at), target);
+    }
+
+    private string PromptText(Thing kind, string id, int index, Vector3 at)
+    {
+        var w = this;
         var key = (kind, id, index, at, PlayerInput.HintDevice);
         if (w._prompt != null && key == w._promptKey) return w._prompt;
         w._promptKey = key;
