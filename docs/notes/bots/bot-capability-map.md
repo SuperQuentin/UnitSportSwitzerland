@@ -128,3 +128,4 @@ gives one progress for the session, never saved.
 | photo spots, fauna (#1227) | — | `ServePhoto` (body in the disc, line of sight), `ServeFauna` | `PhotoSpots` | — | n/a |
 | treasure detector (#1227) | — | none (client readout) | — | — | n/a |
 | bottled gust (#1227) | `BotHands` | `ItemEvents` relay (`ItemEventKind.Gust`; any peer's event is relayed) | — | — | gap: `BotHands` throws nothing yet (no smoke either); a server-side `ItemEvents` send at the bot's aim is all it needs |
+| plant / take up the travel flag (#1227) | `BotHands` | `PlacedObjects` `ServePlace` / `ServeRemove` (private: a client's `AskPlace`/`AskRemove`); planted, `ServedByPeer` sets the planter's `TravelBook.Flag` (`AdventureTravel.SetPortable`) | — | — | gap: no server-side place for a bot (a public `ServePlace(peer, ...)` is all it needs); travel to the flag is navigation's, not built |
