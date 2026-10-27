@@ -115,7 +115,17 @@ public partial class GadgetTool : Node
             }
             case PlacedKind.Zipline when _zipStart is { } startGlobal:
             {
-                var start = PlacedObjects.Instance!.Origin.ToWorld(startGlobal);
+                var placed = PlacedObjects.Instance!;
+                var start = placed.Origin.ToWorld(startGlobal);
+                if (point.Y > start.Y)
+                {
+                    // the first post went in at the bottom and this one is higher: the server wants the
+                    // low end placed and the high end in the payload, so swap the two
+                    var low = new Transform3D(at.Basis, start);
+                    var pointGlobal = placed.Origin.ToGlobal(point);
+                    string? swapped = Gadgets.ZipProblem(point, start);
+                    return new Spot(swapped == null, swapped ?? "", low, Gadgets.ZipPayload(pointGlobal.E, pointGlobal.N, pointGlobal.Alt), GadgetMeshes.ZipPost(), low.AffineInverse() * point);
+                }
                 string? problem = Gadgets.ZipProblem(start, point);
                 var local = at.AffineInverse() * start;
                 return new Spot(problem == null, problem ?? "", at, Gadgets.ZipPayload(startGlobal.E, startGlobal.N, startGlobal.Alt), GadgetMeshes.ZipPost(), local);
@@ -156,7 +166,7 @@ public partial class GadgetTool : Node
         }
         _material.AlbedoColor = spot.Valid ? new Color(0.3f, 1f, 0.4f, 0.35f) : new Color(1f, 0.25f, 0.2f, 0.35f);
         ShowCable(spot);
-        string action = kind == PlacedKind.Zipline ? (_zipStart == null ? "set the top post" : "set the bottom post and string the cable") : "set it down";
+        string action = kind == PlacedKind.Zipline ? (_zipStart == null ? "set the first post" : "set the second post and string the cable") : "set it down";
         _hint.Text = $"{name}\n" + (spot.Valid ? InputHints.Format($"{{use_item}}: {action}") + (spot.Reason.Length > 0 ? $" ({spot.Reason})" : "") : spot.Reason);
         _hint.Visible = true;
     }
@@ -203,7 +213,7 @@ public partial class GadgetTool : Node
         {
             if (spot.Mesh == null || (!spot.Valid && spot.Reason.Length > 0)) { _items.Toast(spot.Reason); return; }
             _zipStart = placed.Origin.ToGlobal(spot.At.Origin);
-            _items.Toast("Top post set. Now walk down to where it ends and Use again.");
+            _items.Toast("First post set. Now walk to the other end (up or down) and Use again.");
             return;
         }
         if (!spot.Valid) { _items.Toast(spot.Reason); return; }
