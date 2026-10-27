@@ -1412,6 +1412,7 @@ public partial class InteriorNode : Node3D
         AddForklifts(node, origin);
         AddBayCars(node, origin);
         AddStaff(node);   // a venue's clerk and bartender (#1235)
+        AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
         // an apartment block's elevator doors and flats' front doors (#557)
         AddLiftDoors(node, material);
         AddInnerDoors(node, material);

@@ -413,8 +413,8 @@ public static class BuildingFootprint
             doorW = Math.Min(StoreDoorWidth, w * 0.25f);
             doorH = Math.Min(StoreDoorHeight, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.15f);
         }
-        // a bowling centre's way in is a pair of glass doors (#1235), not a shop's single one
-        else if (Venues.HallOf(map, index) == VenueType.Bowling)
+        // a bowling centre's or a cinema's way in is a pair of glass doors (#1235, #1238), not a shop's single one
+        else if (Venues.Planned(Venues.HallOf(map, index)))
             doorW = Math.Min(VenueDoorWidth, w * 0.3f);
         // a door's worth of height, for judging a wall and for the odd doors that are no barn gate
         float plainH = Math.Min(doorH, DoorHeightFor(kind));

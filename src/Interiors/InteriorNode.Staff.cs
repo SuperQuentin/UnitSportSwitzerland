@@ -15,7 +15,8 @@ public partial class InteriorNode
     /// <summary>Where a piece's staff stand, in its own frame (front +Z): the aisle behind the counter.</summary>
     private static float? StaffAt(FurniturePlan p) => p.Type switch
     {
-        FurnitureType.ShoeCounter or FurnitureType.BarCounter => -p.D / 2 + 0.45f + (p.D - 0.45f - 0.8f) / 2,
+        FurnitureType.ShoeCounter or FurnitureType.BarCounter or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
+            => -p.D / 2 + 0.45f + (p.D - 0.45f - 0.8f) / 2,
         _ => null,
     };
 

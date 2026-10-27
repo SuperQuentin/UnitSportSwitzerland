@@ -57,6 +57,7 @@ public static partial class InteriorGenerator
             { Type: BuildingType.Ikea } g => g.Fingerprint(tile, IkeaRules),
             // a bowling centre (#1235) is no group, but its rules move on their own
             null when Venues.HallOf(BuildingTypes.For(tile), index) == VenueType.Bowling => $"Bowling{BowlingRules}",
+            null when Venues.HallOf(BuildingTypes.For(tile), index) == VenueType.Cinema => $"Cinema{CinemaRules}",
             _ => "",
         };
 

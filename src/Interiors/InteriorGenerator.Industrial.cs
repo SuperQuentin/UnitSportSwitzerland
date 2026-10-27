@@ -194,7 +194,8 @@ public static partial class InteriorGenerator
         t is RoomType.WarehouseHall or RoomType.ProductionHall or RoomType.TruckBay
             or RoomType.ServiceBay or RoomType.Showroom
             or RoomType.IkeaMarket         // #501, laid out in InteriorGenerator.Ikea
-        || BowlingRoom(t);                  // #1235, laid out in InteriorGenerator.Bowling
+        || BowlingRoom(t)                   // #1235, laid out in InteriorGenerator.Bowling
+        || CinemaRoom(t);                   // #1238, laid out in InteriorGenerator.Cinema
 
     /// <summary>Lays out one site hall; the wall dressing is added afterwards by the generic placer.</summary>
     /// <param name="lanes">
@@ -207,6 +208,7 @@ public static partial class InteriorGenerator
         List<RectPlan> placed, List<RectPlan> blocked, List<RectPlan> lanes, Random rng)
     {
         if (BowlingRoom(r.Type)) { BowlingLayout(l, f, r, placed, blocked, rng); return; }
+        if (CinemaRoom(r.Type)) { CinemaLayout(l, f, r, placed, blocked, rng); return; }
         switch (r.Type)
         {
             case RoomType.WarehouseHall: blocked.AddRange(lanes); Aisles(l, f, r, placed, blocked, rng); break;
