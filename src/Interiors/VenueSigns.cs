@@ -14,6 +14,9 @@ public partial class VenueSigns : Node
 {
     private const string NodeName = "VenueSigns";
 
+    /// <summary>A hall's big sign: its letters, and how far over the name sign it hangs (clear of the name's icon).</summary>
+    private const float BigLetters = 1.2f, BigAbove = 2.4f;
+
     private readonly ChunkManager _chunks;
 
     public VenueSigns(ChunkManager chunks)
@@ -53,6 +56,13 @@ public partial class VenueSigns : Node
             sign.Transform = at;
             root ??= new Node3D { Name = NodeName };
             root.AddChild(sign);
+            // a hall's own word, big, high over its door (#1235): what tells a bowling centre from a
+            // warehouse across the car park, the name smaller underneath
+            if (!Venues.IsHall(v.Type)) continue;
+            var big = NeonSign.Make(Venues.GenericName(v.Type).ToUpperInvariant(), v.Type, v.Cuisine,
+                letterHeight: BigLetters, maxWidth: 14f, flicker: false);
+            big.Transform = at.Translated(Vector3.Up * BigAbove);
+            root.AddChild(big);
         }
         if (root != null) node.AddChild(root);
     }

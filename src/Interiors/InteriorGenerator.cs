@@ -41,12 +41,12 @@ public static partial class InteriorGenerator
     /// tile-aware <see cref="Generate(BuildingTile, int, RoadTile?, ChunkGrid?)"/> has to pass it in.
     /// </param>
     public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false,
-        BuildingType type = BuildingType.None)
+        BuildingType type = BuildingType.None, VenueRecord? venue = null)
     {
         // a house its owner drew on the web, approved (#1186): used when it plans into a valid interior
         if (type == BuildingType.None && HouseLayouts.For(b.Egid) is { } house)
         {
-            var drawn = Generate(fp, b, rural, type, house, out string why);
+            var drawn = Generate(fp, b, rural, type, house, null, out string why);
             if (drawn != null)
             {
                 var problems = InteriorValidator.Validate(drawn);
@@ -55,10 +55,11 @@ public static partial class InteriorGenerator
             }
             HouseLayouts.Warn?.Invoke($"house layout {b.Egid} ({fp.Key}) not used, the generated interior stays: {why}");
         }
-        return Generate(fp, b, rural, type, null, out _);
+        return Generate(fp, b, rural, type, null, venue, out _);
     }
 
-    private static InteriorLayout? Generate(Footprint fp, Building b, bool rural, BuildingType type, HouseLayout? house, out string why)
+    private static InteriorLayout? Generate(Footprint fp, Building b, bool rural, BuildingType type, HouseLayout? house,
+        VenueRecord? venue, out string why)
     {
         why = "";
         var rng = new Random(StableHash(fp.Key.ToString()));
@@ -109,11 +110,14 @@ public static partial class InteriorGenerator
             foreach (var (piece, t) in extra) piece.Type = t;
             return layout;
         }
+        // a bowling centre at its OSM place (#1235) plans its own lanes and concourse
         bool planned = type == BuildingType.Ikea
             ? TryIkea(layout, fp.Door.Height)
-            : site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
+            : venue?.Type == VenueType.Bowling && type == BuildingType.None && TryBowling(layout, fp, b, fp.Door.Height, rng)
+              || site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
+        if (layout.Type == BuildingType.Bowling) site = BuildingType.None;
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
-        var flats = !planned && site == BuildingType.None && type == BuildingType.None
+        var flats = !planned && site == BuildingType.None && type == BuildingType.None && layout.Type != BuildingType.Bowling
             ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
         bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b, b.Kind, n, flats, rng);
         planned |= flatsPlanned;

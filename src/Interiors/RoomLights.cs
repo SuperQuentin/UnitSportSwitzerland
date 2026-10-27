@@ -11,7 +11,7 @@ namespace UnitSport.Interiors;
 /// Row 0 is a table by floor: texel <c>f</c> = (first light, count) of floor <c>f</c>'s list in
 /// row 1, so a fragment only walks its own floor's lights. Row 1 holds the lights, four texels
 /// each: (centre xyz, kind 0 window / 1 lamp), (window: inward normal x z, half width, half
-/// height; lamp: reach, always on, 0, 0), (the room's rectangle x0 z0 x1 z1), (its floor y, its
+/// height; lamp: reach, always on, tint (<see cref="Tint"/>), 0), (the room's rectangle x0 z0 x1 z1), (its floor y, its
 /// ceiling y, 0, 0). A light only reaches inside its own room's box, so a window never lights
 /// the room behind its wall. A room rising through several storeys (a nave) is listed on each.
 /// </para>
@@ -62,7 +62,7 @@ public static class RoomLights
                         var lamp = new Vector3(
                             r.X0 + r.Width * (cx + 0.5f) / cols, top - 0.3f,
                             r.Z0 + r.Depth * (cz + 0.5f) / rows);
-                        lights.Add(Light(lamp, 1, reach, windows ? 0 : 1, 0, 0, r, y0, top));
+                        lights.Add(Light(lamp, 1, reach, windows ? 0 : 1, Tint(r.Type), 0, r, y0, top));
                     }
                 for (int s = 0; s < Math.Max(1, r.Span) && f + s < floors; s++)
                     byFloor[f + s].AddRange(lights);
@@ -85,6 +85,13 @@ public static class RoomLights
         }
         return new Table(ImageTexture.CreateFromImage(image), l.FloorY(0), l.StoreyHeight, floors);
     }
+
+    /// <summary>
+    /// A lamp's tint code: 0 the interior's lamp colour; 1 cosmic bowling (#1235), the lane hall's
+    /// lamps going blacklight purple as night falls, which leaves its self-lit paint, numbers and
+    /// screens glowing.
+    /// </summary>
+    public static float Tint(RoomType t) => t == RoomType.BowlingLanes ? 1 : 0;
 
     private static float[] Light(Vector3 c, float kind, float a, float b, float d, float e, RoomPlan r, float y0, float top) =>
     [

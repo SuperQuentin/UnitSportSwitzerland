@@ -15,6 +15,8 @@ public enum BuildingType : byte
     Ikea = 8,
     // #557: a block of flats, and a city block with shops under its flats
     Apartments = 9, MixedUse = 10,
+    // #1232: entertainment venues at their OSM places (Venues); a plan's type, never a group's
+    Bowling = 11, Cinema = 12, Arcade = 13,
 }
 
 /// <summary>The role one solid plays in its group.</summary>

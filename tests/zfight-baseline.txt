@@ -585,6 +585,7 @@
 90.4	Furniture / Amplifier
 4000	Furniture / Armchair
 2047.9	Furniture / Banner
+93.4	Furniture / BarCounter
 7056	Furniture / BarrelStack
 29862	Furniture / Bathtub
 35448	Furniture / Bed
@@ -620,6 +621,7 @@
 4397.2	Furniture / Safe
 441	Furniture / SafetySign
 1284.9	Furniture / Shelf
+50.4	Furniture / ShoeCounter
 12000	Furniture / ShopCounter
 7744	Furniture / ShowroomPlinth
 12048	Furniture / SingleBed
@@ -637,6 +639,8 @@
 20	Furniture / WashingMachine
 144	Furniture / WaterTank
 100	Furniture / Workbench
+5097.8	Interiors / Bowling centre - Bowl bar
+9294.1	Interiors / Bowling centre - Two levels
 2.3	Items / Agone
 3	Items / AlienAntennae
 44.9	Items / Alphorn

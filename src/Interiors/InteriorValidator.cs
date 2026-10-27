@@ -187,7 +187,7 @@ public static class InteriorValidator
             var lane = ramp.Area();
             var mouth = ramp.FootZone(0, GarageRule.RampTurn, 0);
             foreach (var p in l.Furniture.Where(p => p.Floor == fi
-                && p.Type is not (FurnitureType.FloorMarking or FurnitureType.Rug)))
+                && p.Type is not (FurnitureType.FloorMarking or FurnitureType.Rug or FurnitureType.Confetti)))
             {
                 bool odd = p.Turns % 2 == 1;
                 float w = (odd ? p.D : p.W) / 2, d = (odd ? p.W : p.D) / 2;
@@ -215,7 +215,7 @@ public static class InteriorValidator
                 // stood on (a rug, the chancel step, a showroom plinth, paint on the floor) or
                 // overhead (a bell, a cross on the wall, a crane beam)
                 if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais
-                        or FurnitureType.ShowroomPlinth or FurnitureType.FloorMarking
+                        or FurnitureType.ShowroomPlinth or FurnitureType.FloorMarking or FurnitureType.Confetti
                         or FurnitureType.CarLift)
                     && p.Lift < 1.5f)
                 {
