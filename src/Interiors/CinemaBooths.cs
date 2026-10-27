@@ -43,8 +43,31 @@ public partial class CinemaBooths : Node
     /// <summary>The most halls a cinema has (the generator's MaxHalls).</summary>
     public const int MaxHalls = 10;
 
-    /// <summary>Server and client: each cinema's halls' states, packed (<see cref="Pack"/>); a cinema nobody touched is absent.</summary>
+    /// <summary>
+    /// Server and client: each cinema's halls' states, packed (<see cref="Pack"/>), from their <see cref="Default"/>s
+    /// on first need; what players set is written over them and sent. A cinema nobody looked at is absent.
+    /// </summary>
     private readonly Dictionary<string, int[]> _states = new();
+
+    /// <summary>The share of halls already showing a film when a cinema is first seen (#1279): lights off, the cat on.</summary>
+    public const double ShowingShare = 0.4;
+
+    /// <summary>
+    /// A hall's state before anyone works its panel (#1279): some halls are mid-film, lights off and the screen on,
+    /// the rest lit and dark. From the hall's own seed, so every peer starts the same with nothing sent.
+    /// </summary>
+    public static int Default(string plan, int hall) =>
+        Core.Fnv.Unit($"{plan}#{hall}#showing") < ShowingShare ? Pack(Lights.Off, true) : Pack(Lights.Full, false);
+
+    /// <summary>A cinema's halls' states, its defaults filled in the first time (once per cinema: no string per frame).</summary>
+    private int[] HallsOf(string plan)
+    {
+        if (_states.TryGetValue(plan, out var halls)) return halls;
+        halls = new int[MaxHalls];
+        for (int h = 0; h < MaxHalls; h++) halls[h] = Default(plan, h);
+        _states[plan] = halls;
+        return halls;
+    }
 
     private string _appliedPlan = "";
     private int _applied = -1, _appliedMask = -1;
@@ -74,7 +97,7 @@ public partial class CinemaBooths : Node
 
     /// <summary>A hall's lights and screen: full and off until someone works its panel.</summary>
     public (Lights Lights, bool Screen) StateOf(string plan, int hall) =>
-        Unpack(hall >= 0 && hall < MaxHalls && _states.TryGetValue(plan, out var halls) ? halls[hall] : 0);
+        Unpack(hall >= 0 && hall < MaxHalls && plan.Length > 0 ? HallsOf(plan)[hall] : 0);
 
     /// <summary>
     /// The hall a point of a cinema's plan belongs to: the auditorium whose middle is nearest, numbered as the
@@ -167,13 +190,7 @@ public partial class CinemaBooths : Node
     private void Set(string plan, int hall, int code)
     {
         if (hall < 0 || hall >= MaxHalls) return;
-        if (!_states.TryGetValue(plan, out var halls))
-        {
-            if (code == 0) return;
-            _states[plan] = halls = new int[MaxHalls];
-        }
-        halls[hall] = code;
-        if (Array.TrueForAll(halls, c => c == 0)) _states.Remove(plan);
+        HallsOf(plan)[hall] = code;
     }
 
     /// <summary>Server: a newly joined client gets every hall's lights and screen.</summary>
@@ -181,7 +198,7 @@ public partial class CinemaBooths : Node
     {
         foreach (var (plan, halls) in _states)
             for (int h = 0; h < halls.Length; h++)
-                if (halls[h] != 0) RpcId(peer, MethodName.Set, plan, h, halls[h]);
+                if (halls[h] != Default(plan, h)) RpcId(peer, MethodName.Set, plan, h, halls[h]);
     }
 
     // ---- client: showing it ----------------------------------------------------------------------
@@ -192,7 +209,7 @@ public partial class CinemaBooths : Node
         var im = InteriorManager.Instance;
         if (im?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) { _appliedNode = null; return; }
         // --cinemashow: every cinema dimmed with the cat on, for a shot (no panel to press in one)
-        var halls = ShowAll ? null : _states.GetValueOrDefault(node.Layout.Key);
+        var halls = ShowAll ? null : HallsOf(node.Layout.Key);
         // the halls whose screens are on, a bit each; the house lights of the hall the camera is in or nearest
         int mask = 0;
         for (int h = 0; h < MaxHalls; h++)

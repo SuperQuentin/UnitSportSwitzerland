@@ -287,9 +287,11 @@ public partial class InteriorNode
     }
 
     /// <summary>
-    /// A hall's film music while its screen is on (#1279): Radio Swiss Classic on the relay, the film playlist when
-    /// the relay is silent (<see cref="Audio.Tracker.VenueMood.Film"/>), each hall its own bar of it, the same on
-    /// every client (the playlist runs on the shared clock). Under the hall's ceiling, in its middle.
+    /// A hall's film music while its screen is on (#1279), drawn per hall from the hall's own seed so a multiplex's
+    /// halls do not all play one thing: Radio Swiss Classic on the relay (its modules when the relay is silent) as
+    /// one draw among the film playlist's modules (<see cref="Audio.Tracker.VenueMood.Film"/>), which play at once,
+    /// each hall its own bar of them, the same on every client (the playlist runs on the shared clock). Under the
+    /// hall's ceiling, in its middle.
     /// </summary>
     private void HallMusic(CinemaScreen s, bool on)
     {
@@ -300,13 +302,16 @@ public partial class InteriorNode
             return;
         }
         var c = s.Hall.GetCenter();
+        uint seed = (uint)Core.Fnv.Hash($"{Layout.Key}#{s.No}");
+        int modules = Audio.Tracker.TrackerLibrary.Playlists[Audio.Tracker.VenueMood.Film].Length;
         var music = new Audio.Live.VenueMusicSource
         {
             Name = $"FilmMusic{s.No}",
-            Station = VenueMusic.FilmStation,
+            Station = seed % (uint)(modules + 1) == 0 ? VenueMusic.FilmStation : 0,
             Volume = VenueMusic.RoomVolume,
             Mood = Audio.Tracker.VenueMood.Film,
-            Salt = (uint)Core.Fnv.Hash(Layout.Key) + (uint)s.No * 7919u,
+            // the halls spread evenly round the playlist, so the next hall is a song or two on
+            Salt = (uint)(seed % 997 + s.No * Audio.Tracker.TrackerLibrary.Cycle(Audio.Tracker.VenueMood.Film) / Math.Max(1, _screens.Count)),
             Position = new Vector3(c.X, s.Hall.Position.Y + Math.Max(2.3f, s.Hall.Size.Y - 1.0f), c.Z),
         };
         AddChild(music);

@@ -62,5 +62,8 @@ ffmpeg or internet), they play tracker modules on our own player, also the same 
   playlist when the relay is silent. Of the archive's 239 public-domain/CC0 XM and MOD modules only "Crusaders"
   is tagged orchestral; the others by mood: Thrones (a 32-channel MOD, quiet: rms 0.015), Haunted Occult
   Mansion, Journey through time, Vocatio Spirituum.
+- **A draw per hall** (#1279): each hall's seed picks the radio (one draw among the Film modules plus one) or
+  the modules alone, which then start at once (`TrackerSpeaker`: a source with station 0 waits for no relay);
+  the halls are spread evenly round the playlist's cycle (`TrackerLibrary.Cycle`), so the next hall is a song on.
 - **Next**: venue ambience (chatter, cutlery, balls and pins, coin drops) in the sound player, quiet hours
   for terraces, IT modules (most of the archive's free ones) if a playlist wants them.

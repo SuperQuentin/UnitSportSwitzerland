@@ -93,7 +93,8 @@ public partial class TrackerSpeaker : AudioStreamPlayer3D, IMusicSpeaker
         if (_radio == null || !IsInstanceValid(_radio)) _radio = source?.GetNodeOrNull<WebRadioSpeaker>(RadioPath);
         var radio = _radio;
         // the relay first: while it plays, this one waits
-        _silent = radio != null && radio.HeardIndex >= 0 ? 0 : _silent + delta;
+        // a source with no station (a cinema hall on its modules, #1279) plays them at once, not after the wait
+        _silent = radio != null && radio.HeardIndex >= 0 ? 0 : source is { Station: 0 } ? SilentFor : _silent + delta;
         if (_silent < SilentFor || !Allowed.Contains(this) || Mood == VenueMood.None)
         {
             if (Playing) Stop();

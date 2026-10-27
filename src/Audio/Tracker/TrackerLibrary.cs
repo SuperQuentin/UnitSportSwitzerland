@@ -79,6 +79,10 @@ public static class TrackerLibrary
     /// What <paramref name="mood"/> plays at <paramref name="time"/> on the shared clock for a venue whose
     /// salt is <paramref name="salt"/>: the file, how far into it, and how long until the next one.
     /// </summary>
+    /// <summary>How long <paramref name="mood"/>'s playlist runs round, s (0 for none).</summary>
+    public static double Cycle(VenueMood mood) =>
+        Playlists.TryGetValue(mood, out var list) ? list.Sum(f => Math.Max(0, Get(f).Length)) : 0;
+
     public static (string File, double Into, double Left)? At(VenueMood mood, double time, uint salt)
     {
         if (!Playlists.TryGetValue(mood, out var list)) return null;

@@ -60,6 +60,10 @@ public partial class CinemaProbe : Node
     public override void _Ready()
     {
         foreach (var c in Cases) Plan(c);
+        // some halls are mid-film when a cinema is first seen (#1279), from each hall's seed
+        int showing = Enumerable.Range(0, 400).Count(i => CinemaBooths.Unpack(CinemaBooths.Default($"{2500 + i}_1117_{i % 37}", i % 7)).Screen);
+        Check(showing > 400 * (CinemaBooths.ShowingShare - 0.08) && showing < 400 * (CinemaBooths.ShowingShare + 0.08),
+            $"{showing} of 400 halls start mid-film, lights off ({CinemaBooths.ShowingShare:P0} asked)");
         Venues.Override = null;
         GD.Print($"[cinema] RESULT: {(_ok ? "ok" : "FAILED")}");
         GetTree().Quit(_ok ? 0 : 1);
@@ -160,6 +164,10 @@ public partial class CinemaProbe : Node
                 && InteriorGenerator.CanReach(booth, pieces, (spot.X0 + spot.X1) / 2, (spot.Z0 + spot.Z1) / 2, 0.3f));
             Check(reached == Count(FurnitureType.BoothPanel), $"{what}: every panel is reached from the booth's door ({reached} of {Count(FurnitureType.BoothPanel)}, {booth.Width:F1}x{booth.Depth:F1} m booth)");
         }
+        // every hall's door from the lobby a real leaf, shut until someone opens it (#1279)
+        Check(halls.All(h => l.InnerDoors.Any(d => d.Floor == 0 && l.Floors[0].Rooms[d.Room] == h && d.Bottom == 0
+                && h.Openings.Any(o => o.Kind == OpeningKind.Door && o.Side == d.Side && Math.Abs(o.Center - d.Center) < 0.01f))),
+            $"{what}: every hall's door from the lobby has a leaf");
         // a hall is a hall's height (#1279): in a building of storeys, two or three of them, never one
         if (c.MinClear > 0)
             Check(halls.All(h => l.ClearOf(h) >= c.MinClear), $"{what}: halls {string.Join(", ", halls.Select(h => l.ClearOf(h).ToString("F1")))} m clear, at least {c.MinClear} m");

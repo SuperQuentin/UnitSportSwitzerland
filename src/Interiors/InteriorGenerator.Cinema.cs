@@ -239,6 +239,8 @@ public static partial class InteriorGenerator
             c = Math.Clamp(c, a + 0.9f, bb - 0.9f);
             aud.Openings.Add(new OpeningPlan { Side = frame.VMinus, Center = c, Width = 1.2f, Top = top, Kind = OpeningKind.Door, Other = iLobby });
             hall.Openings.Add(new OpeningPlan { Side = frame.VPlus, Center = c, Width = 1.2f, Top = top, Kind = OpeningKind.Door, Other = ai });
+            // a real door, shut (#1279): a hall mid-film keeps the lobby out, and every hall's is worked as a flat's door
+            l.InnerDoors.Add(new InnerDoorPlan { Floor = 0, Room = ai, Side = frame.VMinus, Center = c, Width = 1.2f, Top = top, Unit = -1 });
         }
 
         // ---- the staff corridor to the booth -------------------------------------------------------------

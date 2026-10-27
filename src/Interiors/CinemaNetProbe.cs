@@ -29,6 +29,10 @@ public partial class CinemaNetProbe : ChatProbe
 
     private static readonly int Show = CinemaBooths.Pack(CinemaBooths.Lights.Off, true);
 
+    /// <summary>What A sets on hall 0: the show, or, where the hall starts mid-film (#1279), the lights dimmed and the screen off.</summary>
+    private static int Target(string plan) =>
+        CinemaBooths.Unpack(CinemaBooths.Default(plan, 0)).Screen ? CinemaBooths.Pack(CinemaBooths.Lights.Dim, false) : Show;
+
     public override async void _Ready()
     {
         _role = Role ?? "A";
@@ -55,10 +59,10 @@ public partial class CinemaNetProbe : ChatProbe
         {
             if (!await WalkIn(me, interiors, door)) return;
             string plan = interiors.Current!.Key;
-            Expect(booths.StateOf(plan, 0) == (CinemaBooths.Lights.Full, false), "the house starts with its lights full and no picture");
-            booths.Ask(plan, 0, Show);
-            Expect(await Until(() => booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), 10),
-                "the server granted A, inside, the lights off and the cat on");
+            Expect(booths.StateOf(plan, 0) == CinemaBooths.Unpack(CinemaBooths.Default(plan, 0)), $"the hall starts as its seed says ({booths.StateOf(plan, 0)})");
+            booths.Ask(plan, 0, Target(plan));
+            Expect(await Until(() => booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), 10),
+                $"the server granted A, inside, {CinemaBooths.Unpack(Target(plan))}");
             // said over and over: C has not joined yet
             bool b = false, c = false;
             for (int t = 0; t < 150 && !(b && c); t++)
@@ -71,22 +75,22 @@ public partial class CinemaNetProbe : ChatProbe
             }
             Expect(b, "B saw it, and was refused");
             Expect(c, "C, joining late, found it");
-            Expect(booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), "B's refused ask changed nothing for A");
+            Expect(booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), "B's refused ask changed nothing for A");
         }
         else
         {
             if (!await Heard("A", "set", 240)) { Fail("A never set anything"); return; }
             string line = _heard.Last(l => l.Contains("CN A set"));
             string plan = line[(line.IndexOf("CN A set", StringComparison.Ordinal) + "CN A set".Length)..].Trim();
-            Expect(await Until(() => booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), 10),
-                $"{_role} sees {plan}'s lights off and the cat on");
+            Expect(await Until(() => booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), 10),
+                $"{_role} sees {plan}'s hall as A set it, {CinemaBooths.Unpack(Target(plan))}");
             if (_role == "B")
             {
                 // outside: the server must refuse, and nothing changes
                 Expect(!me.Indoors, "B is outside");
-                booths.Ask(plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Full, false));
+                booths.Ask(plan, 0, CinemaBooths.Default(plan, 0));
                 await Seconds(3);
-                Expect(booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), "the server refused B, who is not inside");
+                Expect(booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), "the server refused B, who is not inside");
             }
             Say("done");
         }

@@ -70,6 +70,10 @@ lane frame and rules (`bowling-centres`).
   reach it. The wall speakers and lights ride up the aisle. Each doorway's reveals, drawn by both rooms past the
   shared line, add a door's usual z-fight (baseline lines for the two showcase cinemas moved, main was already
   over them).
+- **Halls mid-film, doors shut** (#1279): `CinemaBooths.Default(plan, hall)`: 40 % of halls (`ShowingShare`, from
+  the hall's seed) start lights off with the screen on, the rest lit and dark; every peer starts the same and only
+  what players set is sent (`SendTo` skips a hall at its default). Every hall's door from the lobby is an
+  `InnerDoorPlan`, a leaf shut until someone opens it.
 - **Box office glass** (#1279): a see-through pane of its own (`InteriorNode.AddClearGlass`), the mesh only its
   rail and posts: the interior's one mesh is opaque, and vertex alpha marks lit faces or sky glass.
 - **Checks**: `--cinemacheck --systems ui` (`CinemaProbe`: a two-level town cinema, a small one, a
