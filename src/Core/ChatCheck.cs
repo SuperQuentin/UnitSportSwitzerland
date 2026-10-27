@@ -322,14 +322,23 @@ public static class ChatCheck
         var sent = new List<string>();
         chat.LineReceived += (line, _) => sent.Add(line);
 
-        // a /locate answer's line: four buttons (Teleport only where this player may teleport)
+        // a /locate answer's line: no buttons under it; its pin and coordinates are a link that opens the choices
+        ui.OpenInput();
         ui.Append("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919", ChatKind.Private);
-        var buttons = ui.FindChildren("*", "Button", true, false).OfType<Button>().Select(b => b.Text).ToList();
-        Expect(buttons.Contains("Track") && buttons.Contains("Map") && buttons.Contains("Copy"), $"a coordinate gets its buttons [{string.Join(", ", buttons)}]");
-        Expect(buttons.Contains("Teleport") == Permissions.CanTeleport, "Teleport only where teleporting is allowed");
+        var labels = ui.FindChildren("*", "RichTextLabel", true, false).OfType<RichTextLabel>().ToList();
+        var located = labels.LastOrDefault(l => l.FocusMode == Control.FocusModeEnum.All);
+        Expect(located != null && located.GetParsedText().Replace("⁠", "").Contains("@2538395,1152919"), "the coordinates stay in the line, which a pad can focus");
+        Expect(!ui.FindChildren("*", "Button", true, false).OfType<Button>().Any(b => b.Text == "Track" && b.IsVisibleInTree()), "no buttons until the link is clicked");
+        located?.EmitSignal(RichTextLabel.SignalName.MetaClicked, "2538395,1152919|Château Saint-Maire");
+        var choices = ui.ChoiceLabels.ToList();
+        Expect(choices.Contains("Track") && choices.Contains("Show on map") && choices.Contains("Copy"), $"the link opens the choices [{string.Join(", ", choices)}]");
+        Expect(choices.Contains("Teleport") == Permissions.CanTeleport, "Teleport only where teleporting is allowed");
+        host.GetViewport().PushInput(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+        Expect(!ui.ChoiceLabels.Any() && ui.IsTyping, "Esc closes the choices first, the chat stays open");
+        ui.CloseInput(recaptureMouse: false);
         Expect(World.Locate.LocateCoords.LabelOf("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919",
             World.Locate.LocateCoords.FindAll("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919")[0]) == "Château Saint-Maire",
-            "the button names the place");
+            "the choices name the place");
 
         // the picker: "/" then locate, castle, Send, by pressing its buttons
         ui.OpenForPad();

@@ -168,6 +168,15 @@ public class LocateTests
     }
 
     [Fact]
+    public void The_indexing_message_gives_the_share_done_and_the_time_left()
+    {
+        Assert.Contains("working out", LocateEngine.Indexing(0, 800, 0.5));
+        Assert.Equal("Still indexing the buildings: 40 %, about 15 s left.", LocateEngine.Indexing(400, 1000, 10));
+        Assert.Equal("Still indexing the buildings: 7 %, about 2 min left.", LocateEngine.Indexing(500, 6699, 10));
+        Assert.Contains("a few seconds left", LocateEngine.Indexing(990, 1000, 10));
+    }
+
+    [Fact]
     public void Parking_entrances_come_back_as_candidates_for_the_footprint_to_decide()
     {
         var engine = new LocateEngine([]) { Buildings = new BuildingIndex(

@@ -65,6 +65,15 @@ public partial class ChatUi : CanvasLayer
     private ScrollContainer _pickerScroll = null!;
     private HFlowContainer _picker = null!;
     private Label _pickerUsage = null!;
+    /// <summary>The choices a coordinate opens (#1277): Teleport, Track, Show on map, Copy.</summary>
+    private Control _choicesLayer = null!;
+    private PanelContainer _choices = null!;
+    private VBoxContainer _choiceList = null!;
+    private Label _choiceTitle = null!;
+
+    /// <summary>The choices shown (checks), empty when closed.</summary>
+    public IEnumerable<string> ChoiceLabels => _choicesLayer.Visible
+        ? _choiceList.GetChildren().OfType<Button>().Where(b => !b.IsQueuedForDeletion()).Select(b => b.Text) : [];
     private bool _pickerOn;
 
     /// <summary>The chat on this screen, for the quick menu's Chat wedge.</summary>
@@ -115,6 +124,7 @@ public partial class ChatUi : CanvasLayer
         AddChild(_feed);
 
         BuildPanel();
+        BuildChoices();
         // once the input has a height, the floating lines line up with the scrollback's
         Callable.From(AlignFeed).CallDeferred();
 
@@ -135,7 +145,14 @@ public partial class ChatUi : CanvasLayer
                 GetTree().CreateTimer(Math.Max(0.5, at - 6)).Timeout += () => _chat.Send(say);
             GetTree().CreateTimer(at).Timeout += () =>
             {
-                if (!CmdArgs.Has("--chatpicker")) { OpenInput(); return; }
+                if (!CmdArgs.Has("--chatpicker"))
+                {
+                    OpenInput();
+                    // "--chatchoices": the choices of the newest line with a point, as a pad's A opens them
+                    if (CmdArgs.Has("--chatchoices") && _log.GetChildren().OfType<RichTextLabel>().LastOrDefault(l => l.HasMeta(FirstPoint)) is { } last)
+                        Callable.From(() => OpenChoicesOn(last)).CallDeferred();
+                    return;
+                }
                 OpenForPad();
                 if (CmdArgs.Value("--chatpicker", notFlag: true) is { } typed) { SetText(typed); FocusPicker(); }
             };
@@ -274,9 +291,8 @@ public partial class ChatUi : CanvasLayer
 
     public void Append(string line, ChatKind kind)
     {
-        Control logged = Line(line, kind, floating: false);
-        var coords = World.Locate.LocateCoords.FindAll(line);
-        if (coords.Count > 0) logged = WithCoordButtons(logged, line, kind, coords);
+        var logged = Line(line, kind, floating: false);
+        if (World.Locate.LocateCoords.FindAll(line).Count > 0) MakeClickable(logged, line, kind);
         _log.AddChild(logged);
         // out of the tree first: QueueFree only frees at the end of the frame, so the count never fell and
         // this loop spun forever on line 81, queueing it again and again (a frozen client growing ~100 MB/s:
@@ -314,8 +330,8 @@ public partial class ChatUi : CanvasLayer
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             MouseFilter = Control.MouseFilterEnum.Ignore,
-            Text = Markup(line, kind),
         };
+        Fill(label, line, kind);
         label.AddThemeFontOverride("normal_font", UiTheme.Font);
         label.AddThemeFontOverride("bold_font", UiTheme.Bold);
         // one size in both lists, so a line does not jump when the panel opens over it
@@ -348,8 +364,48 @@ public partial class ChatUi : CanvasLayer
         return $"[color=#{ColorFor(kind).ToHtml(false)}]{Escape(line)}[/color]";
     }
 
-    private static string Escape(string text) => World.Locate.LocateCoords.Highlight(text.Replace("[", "[lb]"),
-        c => $"[b][color=#{UiTheme.Amber.ToHtml(false)}]{c}[/color][/b]");
+    private static string Escape(string text) => World.Locate.LocateCoords.Highlight(text.Replace("[", "[lb]"), c => Mark + c + Mark);
+
+    /// <summary>Wraps each coordinate in the markup, for <see cref="Fill"/> to cut at: a character no chat line carries.</summary>
+    private const string Mark = "\u0001";
+
+    /// <summary>
+    /// The line's rich text; each <c>@E,N</c> in it (#1277) drawn as a pin and the coordinates in amber, the two one
+    /// link whose meta is "E,N|name" (<see cref="ShowChoices"/>).
+    /// </summary>
+    private static void Fill(RichTextLabel label, string line, ChatKind kind)
+    {
+        string markup = Markup(line, kind);
+        if (!markup.Contains(Mark))
+        {
+            label.Text = markup;
+            return;
+        }
+        string? speaker = kind == ChatKind.Say && line.IndexOf(": ", StringComparison.Ordinal) is > 0 and var colon ? line[..colon] : null;
+        var coords = World.Locate.LocateCoords.FindAll(line);
+        string[] parts = markup.Split(Mark);
+        // even parts are text, odd ones a coordinate, in the order FindAll gives them
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (i % 2 == 0)
+            {
+                label.AppendText(parts[i]);
+                continue;
+            }
+            int k = i / 2;
+            if (k >= coords.Count) { label.AppendText(parts[i]); continue; }
+            var c = coords[k];
+            label.PushMeta(MetaOf(c, World.Locate.LocateCoords.LabelOf(line, c, speaker)), RichTextLabel.MetaUnderline.OnHover);
+            label.AddImage(Icons.Pin, 15, 15, UiTheme.Amber, InlineAlignment.Center);
+            label.PushBold();
+            label.PushColor(UiTheme.Amber);
+            // a no-break space, and a word joiner after the comma: the pin and its coordinates wrap as one word
+            label.AddText(" " + parts[i].Replace(",", ",⁠"));
+            label.Pop();
+            label.Pop();
+            label.Pop();
+        }
+    }
 
     // ---- coordinates (#1277) ---------------------------------------------------------------
 
@@ -362,46 +418,109 @@ public partial class ChatUi : CanvasLayer
     }
 
     /// <summary>
-    /// A scrollback line carrying <c>@E,N</c>, with Teleport / Track / Map / Copy under it for each point (two at most).
-    /// The buttons send the same lines a player could type (<c>/go</c>, <c>/track</c>, <c>/map</c>), so the server's
-    /// rules apply as they would to a typed one.
+    /// A scrollback line carrying <c>@E,N</c> (#1277): its pin and coordinates are a link (a click, a VR ray), and the
+    /// line takes focus so a pad reaches it (A opens its first point). Either opens <see cref="ShowChoices"/>.
     /// </summary>
-    private Control WithCoordButtons(Control label, string line, ChatKind kind, List<World.Locate.CoordMatch> coords)
+    private void MakeClickable(RichTextLabel label, string line, ChatKind kind)
     {
-        var box = UiKit.VBox(2);
-        box.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        box.AddChild(label);
-        string? speaker = null;
-        if (kind == ChatKind.Say && line.IndexOf(": ", StringComparison.Ordinal) is > 0 and var colon) speaker = line[..colon];
-        foreach (var c in coords.Take(2))
+        label.MouseFilter = Control.MouseFilterEnum.Pass;
+        label.FocusMode = Control.FocusModeEnum.All;
+        label.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(UiTheme.Amber, 0.14f), 6, 2, 2));
+        label.MetaClicked += meta => ShowChoices(meta.AsString(), GetViewport().GetMousePosition());
+        var c = World.Locate.LocateCoords.FindAll(line)[0];
+        string? speaker = kind == ChatKind.Say && line.IndexOf(": ", StringComparison.Ordinal) is > 0 and var colon ? line[..colon] : null;
+        label.SetMeta(FirstPoint, MetaOf(c, World.Locate.LocateCoords.LabelOf(line, c, speaker)));
+        label.GuiInput += e =>
         {
-            string at = World.Locate.LocateCoords.Format(c.E, c.N);
-            string name = World.Locate.LocateCoords.LabelOf(line, c, speaker);
-            var row = UiKit.HBox(4);
-            if (coords.Count > 1) row.AddChild(UiKit.Text(at, UiTheme.FontSmall, UiTheme.TextDim));
-            if (Permissions.CanTeleport)
-            {
-                var go = Chip("Teleport", $"Go to {name}");
-                go.Pressed += () => { CloseInput(); _chat.Send($"/go {at}"); };
-                row.AddChild(go);
-            }
-            var track = Chip("Track", "Point the way: the marker and the compass");
-            track.Pressed += () => { CloseInput(); _chat.Send($"/track {at} {name}"); };
-            row.AddChild(track);
-            var map = Chip("Map", "Show it on the map");
-            map.Pressed += () => { CloseInput(recaptureMouse: false); _chat.Send($"/map {at} {name}"); };
-            row.AddChild(map);
-            var copy = Chip("Copy", "Copy the coordinates, to paste in a message");
-            copy.Pressed += () =>
-            {
-                DisplayServer.ClipboardSet(at);
-                copy.Text = "Copied";
-                GetTree().CreateTimer(1.5).Timeout += () => { if (IsInstanceValid(copy)) copy.Text = "Copy"; };
-            };
-            row.AddChild(copy);
-            box.AddChild(row);
+            if (!e.IsActionPressed("ui_accept")) return;
+            OpenChoicesOn(label);
+            label.AcceptEvent();
+        };
+    }
+
+    private static readonly StringName FirstPoint = "locate_first";
+
+    private static string MetaOf(World.Locate.CoordMatch c, string name) =>
+        $"{c.E.ToString(System.Globalization.CultureInfo.InvariantCulture)},{c.N.ToString(System.Globalization.CultureInfo.InvariantCulture)}|{name}";
+
+    /// <summary>A pad's A on a focused line: the choices of its first point, under it.</summary>
+    private void OpenChoicesOn(RichTextLabel label) =>
+        ShowChoices(label.GetMeta(FirstPoint).AsString(), label.GlobalPosition + new Vector2(24, label.Size.Y));
+
+    private void BuildChoices()
+    {
+        // a full-screen catcher: a click beside the list closes it
+        _choicesLayer = new Control { Visible = false, MouseFilter = Control.MouseFilterEnum.Stop, Theme = UiTheme.Get() };
+        _choicesLayer.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _choicesLayer.GuiInput += e =>
+        {
+            if (e is InputEventMouseButton { Pressed: true }) HideChoices();
+        };
+        AddChild(_choicesLayer);
+        _choices = new PanelContainer();
+        var style = UiTheme.GlassPanel(0.97f, 8, 6);
+        style.ShadowSize = 12;
+        _choices.AddThemeStyleboxOverride("panel", style);
+        _choicesLayer.AddChild(_choices);
+        var col = UiKit.VBox(2);
+        _choices.AddChild(col);
+        _choiceTitle = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        col.AddChild(UiKit.Margin(_choiceTitle, 6, 2, 6, 2));
+        _choiceList = UiKit.VBox(2);
+        col.AddChild(_choiceList);
+    }
+
+    /// <summary>
+    /// The choices for one point, beside <paramref name="at"/>: Teleport (where allowed), Track, Show on map, Copy.
+    /// They send the lines a player could type (<c>/go</c>, <c>/track</c>, <c>/map</c>), so the server's rules apply.
+    /// Esc / B or a click beside it closes it.
+    /// </summary>
+    public void ShowChoices(string meta, Vector2 at)
+    {
+        int bar = meta.IndexOf('|');
+        if (!World.Locate.LocateCoords.TryParse(bar < 0 ? meta : meta[..bar], out double e, out double n)) return;
+        string where = World.Locate.LocateCoords.Format(e, n);
+        string name = bar < 0 ? where : meta[(bar + 1)..];
+        _choiceTitle.Text = name == where ? where : $"{name}  {where}";
+        foreach (Node b in _choiceList.GetChildren())
+        {
+            _choiceList.RemoveChild(b);
+            b.QueueFree();
         }
-        return box;
+        void Add(string text, string tip, Action pick)
+        {
+            var b = Chip(text, tip);
+            b.Alignment = HorizontalAlignment.Left;
+            b.Pressed += pick;
+            _choiceList.AddChild(b);
+        }
+        if (Permissions.CanTeleport) Add("Teleport", $"Go to {name}", () => { HideChoices(); CloseInput(); _chat.Send($"/go {where}"); });
+        Add("Track", "Point the way: the marker and the compass", () => { HideChoices(); CloseInput(); _chat.Send($"/track {where} {name}"); });
+        Add("Show on map", "Open the map on it", () => { HideChoices(); CloseInput(recaptureMouse: false); _chat.Send($"/map {where} {name}"); });
+        Add("Copy", "Copy the coordinates, to paste in a message", () =>
+        {
+            DisplayServer.ClipboardSet(where);
+            HideChoices();
+            Append($"Copied {where}.", ChatKind.Private);
+        });
+        _choicesLayer.Visible = true;
+        // beside the point, kept on screen once it has a size
+        _choices.Position = at;
+        Callable.From(() =>
+        {
+            var view = GetViewport().GetVisibleRect().Size;
+            var size = _choices.GetCombinedMinimumSize();
+            _choices.Size = size;
+            _choices.Position = new Vector2(Math.Clamp(at.X, 8, view.X - size.X - 8), Math.Clamp(at.Y, 8, view.Y - size.Y - 8));
+            if (_choiceList.GetChildren().OfType<Button>().FirstOrDefault() is { } first) first.GrabFocus();
+        }).CallDeferred();
+    }
+
+    private void HideChoices()
+    {
+        if (!_choicesLayer.Visible) return;
+        _choicesLayer.Visible = false;
+        if (_panel.Visible && !_pickerOn) _input.GrabFocus();
     }
 
     // ---- the picker (#1277) ----------------------------------------------------------------
@@ -525,6 +644,7 @@ public partial class ChatUi : CanvasLayer
         _panel.Visible = false;
         _popup.Visible = false;
         _feed.Visible = true;
+        _choicesLayer.Visible = false;
         _pickerOn = false;
         _pickerScroll.Visible = false;
         _pickerUsage.Visible = false;
@@ -717,6 +837,12 @@ public partial class ChatUi : CanvasLayer
     /// <summary>Pad B (and a VR hand's, through <c>XrPad</c>) closes the open chat, as Esc does.</summary>
     public override void _Input(InputEvent @event)
     {
+        if (_choicesLayer.Visible && (@event.IsActionPressed("ui_cancel") || @event is InputEventKey { Pressed: true, PhysicalKeycode: Key.Escape }))
+        {
+            HideChoices();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (!_panel.Visible || @event is InputEventKey || !@event.IsActionPressed("ui_cancel")) return;
         CloseInput();
         GetViewport().SetInputAsHandled();

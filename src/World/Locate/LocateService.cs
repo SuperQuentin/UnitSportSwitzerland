@@ -37,6 +37,8 @@ public partial class LocateService : Node
     private Task<LocateEngine>? _engineBuild;
     private BuildingIndex? _buildings;
     private int _tilesDone;
+    /// <summary>Runs from the first tile read, for the time left in <see cref="Pending"/>.</summary>
+    private readonly System.Diagnostics.Stopwatch _indexClock = new();
     private bool _indexing;
 
     /// <summary>Raised on the main thread once the building index is ready (checks wait on it).</summary>
@@ -100,6 +102,7 @@ public partial class LocateService : Node
                 // a quarter of the cores: the server keeps running its world while this goes on
                 int workers = Math.Max(1, System.Environment.ProcessorCount / 4);
                 var tiles = _manifest.Tiles.Select(t => t.Id).ToList();
+                _indexClock.Restart();
                 index = await Task.Run(() => BuildingIndexBuilder.BuildAsync(_source, tiles, workers, d => _tilesDone = d, _cancel.Token));
                 if (key != null) await Task.Run(() => BuildingIndexBuilder.WriteCache(key, index));
             }
@@ -119,7 +122,7 @@ public partial class LocateService : Node
     }
 
     private string? Pending() => _buildings != null ? null
-        : _indexing ? $"Still indexing the buildings ({100 * _tilesDone / Math.Max(1, _manifest.Tiles.Count)} %). Try again in a few seconds."
+        : _indexing ? LocateEngine.Indexing(_tilesDone, _manifest.Tiles.Count, _indexClock.Elapsed.TotalSeconds)
         : "The building index is not ready.";
 
     /// <summary>The engine over the lists as they are now; rebuilt when the POI catalogue arrives or changes.</summary>

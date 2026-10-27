@@ -193,6 +193,19 @@ public sealed class LocateEngine
         return lines;
     }
 
+    /// <summary>
+    /// "Still indexing the buildings: 40 %, about 25 s left." The time left is the pace so far carried over the tiles
+    /// still to read; before a tenth of a second's worth of tiles there is no pace yet.
+    /// </summary>
+    public static string Indexing(int done, int total, double elapsedSeconds)
+    {
+        int pct = total <= 0 ? 0 : Math.Clamp(100 * done / total, 0, 99);
+        if (done <= 0 || elapsedSeconds < 0.1) return $"Still indexing the buildings: {pct} %, working out how long it takes. Try again in a few seconds.";
+        double left = elapsedSeconds / done * Math.Max(0, total - done);
+        string eta = left < 5 ? "a few seconds" : left < 90 ? $"about {Math.Ceiling(left / 5) * 5:0} s" : $"about {Math.Round(left / 60):0} min";
+        return $"Still indexing the buildings: {pct} %, {eta} left.";
+    }
+
     public static string Plural(string noun) =>
         noun.EndsWith("IKEA", StringComparison.Ordinal) ? noun + " stores"
         : noun.EndsWith("ss") || noun.EndsWith("ch") || noun.EndsWith("sh") || noun.EndsWith('x') ? noun + "es"
