@@ -69,6 +69,8 @@ public partial class AdventureService : Node
     public Func<long, string>? NameOf { get; set; }
     /// <summary>Server: <c>acct:&lt;user id&gt;</c> on a <c>--accounts required</c> server, else null (the key is then the proven PlayerKey).</summary>
     public Func<long, string?>? AccountKey { get; set; }
+    /// <summary>Friends counted round a peer by the together rule (#1266, <c>TogetherService.Near</c>), set by that service.</summary>
+    public Func<long, int>? TogetherNear { get; set; }
 
     // ---- the owner's side -------------------------------------------------------------------------
 
@@ -392,7 +394,11 @@ public partial class AdventureService : Node
         switch (reward)
         {
             case Cash cash:
-                Bank.Instance?.Credit(peer, cash.Chf, why);
+                // a catalog quest's cash with friends near (#1266): +10 % a friend; Postkarte cards pay their own
+                int bonus = Together.TogetherRules.PaysTogetherCash(why) && TogetherNear?.Invoke(peer) is int n and > 0
+                    ? Together.TogetherRules.CashBonus(cash.Chf, n) : 0;
+                if (bonus > 0) GD.Print($"[together] {Short(p.Key)} quest cash +{bonus} ({why})");
+                Bank.Instance?.Credit(peer, cash.Chf + bonus, why);
                 break;
             case Item item:
                 if (Connected(peer)) RpcId(peer, MethodName.Granted, (int)item.Id, item.Count, why);

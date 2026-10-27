@@ -1105,6 +1105,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Adventure.Rewards.RewardNetProbe.Role != null) AddChild(new Adventure.Rewards.RewardNetProbe(items));
             if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
             AddNavigation(adventure, items, ground);
+            AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
         }
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)

@@ -191,6 +191,8 @@
     <Compile Include="..\..\src\Adventure\Rewards\Trials.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Rewards\PhotoSpots.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Rewards\Gadgets.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- playing together (#1266): the together rule, links, the tether, the shared pot, mentors, the punch card -->
+    <Compile Include="..\..\src\Adventure\Together\TogetherRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />

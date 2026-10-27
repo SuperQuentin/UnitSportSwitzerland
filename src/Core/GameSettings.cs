@@ -115,6 +115,13 @@ public sealed class GameSettings
     public bool GuideHighContrast { get; set; }
     /// <summary>Offline: travel only through the unlocked network (no free jumps), as on a network server.</summary>
     public bool AdventureTravelNetwork { get; set; }
+    // ---- playing together (#1266, docs/notes/adventure/together.md) ----
+    /// <summary>The "Together ×n" chip beside the stamina ring while friends are near.</summary>
+    public bool TogetherChip { get; set; } = true;
+    /// <summary>The fondue panel's figure-eight guide (the faint lemniscate behind your stirring trace).</summary>
+    public bool StirGuide { get; set; } = true;
+    /// <summary>Hidden crevasses on glacier cover: a snow bridge may break under an unroped player.</summary>
+    public bool Crevasses { get; set; } = true;
 
     /// <summary>No hover tilts, pops or ambient animation in the menus (#1135): plain fades only.</summary>
     public bool ReduceMotion { get; set; }

@@ -262,11 +262,20 @@ public partial class HandFarming : Node
         if (stroke.Cells <= 0) return (ItemId.None, 0);
         var id = FarmTables.YieldOf(view.Crop);
         int count = FarmRules.HandYield(view.Crop);
+        // friends near (#1266): +25 % each, this harvester's own roll
+        int together = Adventure.Together.TogetherService.LocalNear, bonus = 0;
+        if (together > 0)
+        {
+            int more = Adventure.Together.TogetherRules.Yield(count, together, Random.Shared.NextDouble());
+            bonus = more - count;
+            count = more;
+            GD.Print($"[together] yield n={together} {id} {count - bonus}+{bonus}");
+        }
         LastHarvest = (id, count);
         if (_items != null && id != ItemId.None)
         {
             _items.Give(new ItemStack(id, count));
-            _items.Ui.Toast($"+{count} {ItemDefs.Get(id)?.Name ?? id.ToString()}");
+            _items.Ui.Toast($"+{count} {ItemDefs.Get(id)?.Name ?? id.ToString()}{Adventure.Together.TogetherRules.BonusText(bonus)}");
         }
         return LastHarvest;
     }
