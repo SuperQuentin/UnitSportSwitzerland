@@ -69,7 +69,8 @@
   `user://`, still sees the chest and opens it (its own roll), still sees the edelweiss and picks it, picks four more and
   offers five at the chapel (the server's stamina step reaches B, its max rises), is not lit by A's fires (a stranger's)
   but has the cowbells' seal broken by its party's tune and opens that chest, and is sent the server's board with A's run
-  (not in B's progress); in a Battle Royale lobby A's chest and an edelweiss are refused. RESULT line; logs
+  (not in B's progress); A's travel flag becomes its portable travel point (`TravelBook.Flag`, synced), a second is
+  refused, taken up it is cleared; in a Battle Royale lobby A's chest and an edelweiss are refused. RESULT line; logs
   `test_output/rewardnet_*.log`.
 - Tier 3: `--rewardstats [E,N[,km]] --chunks <dir> --systems terrain,adventure` (headless, ~1 min): places every tile of
   the square round the point with the client's own placement and prints the spots per km² by kind, tier and seal, then

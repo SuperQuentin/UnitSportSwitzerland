@@ -15,7 +15,8 @@ namespace UnitSport.Adventure.Rewards;
 /// <list type="bullet">
 /// <item><c>open</c> (A): opens the Common chest (the server's roll arrives; it is gone for A), cannot open it again, a
 /// forged chest id is refused; picks an edelweiss; runs the chapel's trial (the server's board has it); in a Battle
-/// Royale lobby a chest and an edelweiss are refused.</item>
+/// Royale lobby a chest and an edelweiss are refused. Before that, A plants its travel flag: the server makes it A's
+/// portable travel point (navigation's synced <c>TravelBook.Flag</c>), refuses a second, clears it when taken up.</item>
 /// <item><c>watch</c> (B): after A opened it, the chest still stands for B, and B opens it too (its own roll); after A
 /// picked the edelweiss, it is still there for B, who picks it and four more and offers them at the chapel (its max
 /// stamina rises a step); the trial's board B is sent holds A's run.</item>
@@ -125,6 +126,20 @@ public partial class RewardNetProbe : ChatProbe
         Expect(await Until(() => Adv.Mine.Get(TrialsProgress.Section).Best.ContainsKey(def.Id), 10), "A finished: the server kept A's best");
         Expect(await Until(() => Svc.Boards.GetValueOrDefault(def.Id) is { Count: > 0 } rows && rows[0].Name == "Lea", 10), "the board names A");
         Say("trial " + def.Id);
+
+        // the travel flag: planted, the server sets it as A's portable travel point (navigation's TravelBook.Flag, synced back)
+        var placed = PlacedObjects.Instance!;
+        var at = new Transform3D(Basis.Identity, Me!.GlobalPosition + new Vector3(2, 0, 0));
+        PlacedResult? planted = null, second = null, up = null;
+        placed.RequestPlace(PlacedKind.TravelFlag, at, "", r => planted = r);
+        Expect(await Until(() => planted != null, 10) && planted!.Value.Object != null, $"A planted the travel flag ({planted?.Refused})");
+        var fg = placed.Origin.ToGlobal(at.Origin);
+        Expect(await Until(() => Adv.Mine.Get(Navigation.TravelBook.Section).Flag is { } f && Math.Abs(f.E - fg.E) < 1 && Math.Abs(f.N - fg.N) < 1, 10),
+            $"the server made it A's portable travel point ({Adv.Mine.Get(Navigation.TravelBook.Section).Flag})");
+        placed.RequestPlace(PlacedKind.TravelFlag, at with { Origin = at.Origin + new Vector3(3, 0, 0) }, "", r => second = r);
+        Expect(await Until(() => second != null, 10) && second!.Value.Refused?.Contains("already stands") == true, $"a second flag is refused ({second?.Refused})");
+        if (planted?.Object is { } flag) placed.RequestRemove(flag.Id, r => up = r);
+        Expect(await Until(() => up != null && Adv.Mine.Get(Navigation.TravelBook.Section).Flag == null, 10), "taken up, the travel point is cleared");
 
         // a Battle Royale round: nothing to claim
         if (!await LogIn(Password)) return;
