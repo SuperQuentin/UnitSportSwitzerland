@@ -12,6 +12,10 @@ public partial class ProjectionWalker : Node3D
     public ProjectionWalker(Material mat) => _mat = mat;
     public ProjectionWalker() : this(null!) { }
 
+    // it shadows the beam as a player does (#1279)
+    public override void _EnterTree() => InteriorNode.BeamBodies.Add(this);
+    public override void _ExitTree() => InteriorNode.BeamBodies.Remove(this);
+
     public override void _Ready()
     {
         MeshInstance3D Part(Mesh m, Vector3 p, Node parent)
@@ -34,6 +38,7 @@ public partial class ProjectionWalker : Node3D
     public override void _Process(double delta)
     {
         _t += (float)delta;
+        (GetParent()?.GetParent() as InteriorNode)?.ShadowProjected();
         // across the beam and back in 8 s, a stride a second and a half
         float x = 4.5f * Mathf.Sin(_t * Mathf.Tau / 8f);
         float dir = Mathf.Cos(_t * Mathf.Tau / 8f) >= 0 ? 1 : -1;

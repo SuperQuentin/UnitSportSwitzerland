@@ -22,8 +22,15 @@ public partial class CinemaProbe : Node
     }
 
     private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, bool Cinema, int MinHalls = 1,
-        bool Upstairs = false,
+        bool Upstairs = false, float MinClear = 0, int MinService = 1,
         ToiletSet Toilets = ToiletSet.Shared, bool Accessible = false);
+
+    /// <summary>A piece's floor rectangle, turned as it stands.</summary>
+    private static RectPlan PieceRect(FurniturePlan f)
+    {
+        float hx = (f.Turns & 1) == 1 ? f.D / 2 : f.W / 2, hz = (f.Turns & 1) == 1 ? f.W / 2 : f.D / 2;
+        return new RectPlan(f.X - hx, f.Z - hz, f.X + hx, f.Z + hz);
+    }
 
     private static readonly Case[] Cases =
     {
@@ -35,8 +42,18 @@ public partial class CinemaProbe : Node
         new("multiplex", 72, 52, 12, BuildingKind.Commercial, true, MinHalls: 4, Upstairs: true, Toilets: ToiletSet.Gendered, Accessible: true),
         // in the bottom of a block of flats (Lausanne's Pathé Galeries): the facade's storeys stay
         new("under-flats", 26, 32, 20, BuildingKind.Apartment, true, Upstairs: true),
+        // a multiplex too low for an upstairs booth: a long floor-level booth on its deck, the panel at its far end
+        new("low-multiplex", 72, 40, 6, BuildingKind.Commercial, true, MinHalls: 4, Toilets: ToiletSet.Gendered),
+        // Grütli's footprint too low for an upstairs booth: a 42 m booth whose platter and chair once shut off the panel (#1279)
+        new("low-three", 34, 43, 6, BuildingKind.Civic, true, MinHalls: 2, Toilets: ToiletSet.Gendered),
+        new("low-three-x", 43, 34, 6, BuildingKind.Civic, true, MinHalls: 2),
+        // a tall civic building of low storeys (Geneva's Grütli, 28 m of 2.76 m storeys, #1279): halls three storeys high
+        new("tall-civic", 34, 43, 28, BuildingKind.Civic, true, MinHalls: 2, Upstairs: true, MinClear: 6f, Toilets: ToiletSet.Gendered),
+        // tall, with no storey grid (Geneva's Cinérama Empire, 32 m tagged a garage, #1279): halls at their own height
+        new("tall-garage", 40, 60, 30, BuildingKind.Garage, true, MinHalls: 2, Upstairs: true, MinClear: 6f, Toilets: ToiletSet.Gendered, Accessible: true),
         // wider than deep: the halls run along X from the end nearer the door
-        new("along-x", 44, 22, 8, BuildingKind.Commercial, true, Upstairs: true),
+        // (six rows only: the booth's floor 1.6 m over the top one, more than a short flight, so no service door)
+        new("along-x", 44, 22, 8, BuildingKind.Commercial, true, Upstairs: true, MinService: 0),
         // a narrow town cinema: one hall, the toilets a single WC beside the lobby (#1285)
         new("narrow", 9.8f, 26, 5, BuildingKind.Commercial, true, Toilets: ToiletSet.Single),
         // a kiosk: no hall fits, the ordinary rules furnish it
@@ -46,6 +63,10 @@ public partial class CinemaProbe : Node
     public override void _Ready()
     {
         foreach (var c in Cases) Plan(c);
+        // some halls are mid-film when a cinema is first seen (#1279), from each hall's seed
+        int showing = Enumerable.Range(0, 400).Count(i => CinemaBooths.Unpack(CinemaBooths.Default($"{2500 + i}_1117_{i % 37}", i % 7)).Screen);
+        Check(showing > 400 * (CinemaBooths.ShowingShare - 0.08) && showing < 400 * (CinemaBooths.ShowingShare + 0.08),
+            $"{showing} of 400 halls start mid-film, lights off ({CinemaBooths.ShowingShare:P0} asked)");
         Venues.Override = null;
         GD.Print($"[cinema] RESULT: {(_ok ? "ok" : "FAILED")}");
         GetTree().Quit(_ok ? 0 : 1);
@@ -86,10 +107,26 @@ public partial class CinemaProbe : Node
         Check(Count(FurnitureType.Porthole) == 2 * halls.Count, $"{what}: a porthole in every hall, seen from the booth too ({Count(FurnitureType.Porthole)})");
         // real holes through the wall (#1250): each hall's open projection port and two dark viewing windows into the booth, matched on the booth's side
         var projRoom = l.Floors.SelectMany(fl => fl.Rooms).FirstOrDefault(r => r.Type == RoomType.ProjectionRoom);
-        Check(halls.All(h => h.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0 && o.Open) == 1
-            && h.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0 && !o.Open) == 2), $"{what}: every hall has its projection port and viewing windows");
-        Check(projRoom != null && projRoom.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0) == 3 * halls.Count,
-            $"{what}: the booth has them all from its side ({projRoom?.Openings.Count(o => o.Kind == OpeningKind.Window && o.Other >= 0)})");
+        // (a door-tall open one is a service doorway, #1279, counted below)
+        static bool Port(OpeningPlan o) => o.Kind == OpeningKind.Window && o.Other >= 0 && o.Top - o.Bottom < 1f;
+        static bool Service(OpeningPlan o) => o.Kind == OpeningKind.Window && o.Other >= 0 && o.Open && o.Top - o.Bottom >= 1.9f;
+        Check(halls.All(h => h.Openings.Count(o => Port(o) && o.Open) == 1
+            && h.Openings.Count(o => Port(o) && !o.Open) == 2), $"{what}: every hall has its projection port and viewing windows");
+        Check(projRoom != null && projRoom.Openings.Count(Port) == 3 * halls.Count,
+            $"{what}: the booth has them all from its side ({projRoom?.Openings.Count(Port)})");
+        // a service doorway from each hall's top walkway into the booth, matched on the booth's side, the steps up to it
+        // ending at its sill (#1279)
+        int services = halls.Count(h => h.Openings.Any(Service));
+        Check(services >= c.MinService, $"{what}: {services} of {halls.Count} halls have a service doorway into the booth (at least {c.MinService})");
+        Check(projRoom != null && projRoom.Openings.Count(Service) == services, $"{what}: the booth has every service doorway from its side");
+        foreach (var steps in l.Furniture.Where(f => f.Type == FurnitureType.ServiceSteps))
+            Check(halls.SelectMany(h => h.Openings.Where(Service)).Any(o => Math.Abs(o.Bottom - (steps.Lift + steps.H)) < 0.02f),
+                $"{what}: the service steps end at a doorway's sill ({steps.Lift + steps.H:F2} m)");
+        var walkBanks = l.Furniture.Where(f => f.Type == FurnitureType.SeatingBank).ToList();
+        Check(walkBanks.All(b => halls.Any(h => Math.Abs(Math.Max(Math.Abs(b.X - (h.X1 + h.X0) / 2), Math.Abs(b.Z - (h.Z1 + h.Z0) / 2))) < 50f
+            && (Math.Abs(PieceRect(b).X1 - (h.X1 - InteriorGenerator.WallInset)) < 0.05f || Math.Abs(PieceRect(b).Z1 - (h.Z1 - InteriorGenerator.WallInset)) < 0.05f
+                || Math.Abs(PieceRect(b).X0 - (h.X0 + InteriorGenerator.WallInset)) < 0.05f || Math.Abs(PieceRect(b).Z0 - (h.Z0 + InteriorGenerator.WallInset)) < 0.05f))),
+            $"{what}: the seats' stairs run up to the walls");
         // the beam over the back row's heads: every hall's porthole at least 2 m over its seating's top tread (#1250)
         var banks = l.Furniture.Where(f => f.Type == FurnitureType.SeatingBank).ToList();
         var hallPorts = l.Furniture.Where(f => f.Type == FurnitureType.Porthole && f.Floor == 0).ToList();
@@ -105,10 +142,14 @@ public partial class CinemaProbe : Node
         Check(c.Upstairs == (deck == null), $"{what}: a deck in a floor-level booth only");
         if (deck != null)
             Check(l.Furniture.Where(f => f.Type is FurnitureType.Projector or FurnitureType.BoothPanel).All(f => Math.Abs(f.Lift - deck.H) < 0.01f),
-                $"{what}: the projectors and the panel stand on the deck");
+                $"{what}: the projectors and the panels stand on the deck");
         Check(Count(FurnitureType.ExitSign) >= halls.Count, $"{what}: exit signs over the doors");
         Check(Count(FurnitureType.Projector) == halls.Count, $"{what}: a projector for every hall ({Count(FurnitureType.Projector)})");
-        Check(Count(FurnitureType.BoothPanel) == 1, $"{what}: the booth's control panel");
+        // a panel per hall, beside its projector (#1279), each its own hall's
+        var panels = l.Furniture.Where(f => f.Type == FurnitureType.BoothPanel).ToList();
+        Check(panels.Count == halls.Count, $"{what}: a control panel for every hall ({panels.Count})");
+        Check(panels.Select(f => CinemaBooths.HallAt(l, f.X, f.Z)).Distinct().Count() == panels.Count && panels.All(f => CinemaBooths.HallAt(l, f.X, f.Z) >= 0),
+            $"{what}: each panel works a hall of its own ({string.Join(", ", panels.Select(f => CinemaBooths.HallAt(l, f.X, f.Z)))})");
         Check(Count(FurnitureType.BoxOffice) == 1, $"{what}: a box office");
         Check(Count(FurnitureType.ConcessionStand) == 1, $"{what}: a concession stand");
         // the public toilets the footprint has room for (#1285)
@@ -118,6 +159,32 @@ public partial class CinemaProbe : Node
         Check(upstairs == c.Upstairs, $"{what}: the booth {(c.Upstairs ? "upstairs" : "at floor level")} ({l.Floors.Count} floor(s))");
         var booth = l.Floors.SelectMany(f => f.Rooms).FirstOrDefault(r => r.Type == RoomType.ProjectionRoom);
         Check(booth != null, $"{what}: a projection room");
+        // the projectionist walks from the booth's door to every panel, a player's width (#1279: a platter and a chair shut them off)
+        if (booth != null)
+        {
+            int bf = l.Floors.FindIndex(fl => fl.Rooms.Contains(booth));
+            var pieces = l.Furniture.Where(f => f.Floor == bf && f.Type is not (FurnitureType.BoothDeck or FurnitureType.Porthole)
+                && f.X > booth.X0 && f.X < booth.X1 && f.Z > booth.Z0 && f.Z < booth.Z1).Select(PieceRect).ToList();
+            int reached = l.Furniture.Count(f => f.Type == FurnitureType.BoothPanel && InteriorGenerator.UseSpot(f, 0.5f) is var spot
+                && InteriorGenerator.CanReach(booth, pieces, (spot.X0 + spot.X1) / 2, (spot.Z0 + spot.Z1) / 2, 0.3f));
+            Check(reached == Count(FurnitureType.BoothPanel), $"{what}: every panel is reached from the booth's door ({reached} of {Count(FurnitureType.BoothPanel)}, {booth.Width:F1}x{booth.Depth:F1} m booth)");
+        }
+        // the seats folded at each row's back, a lane a player's width in front of them, every other row staggered (#1279)
+        foreach (var b in l.Furniture.Where(f => f.Type == FurnitureType.SeatingBank))
+        {
+            var rows = InteriorGenerator.RowsOf(b);
+            Check(rows.Pitch - InteriorGenerator.SeatDepth >= 0.66f, $"{what}: a {rows.Pitch - InteriorGenerator.SeatDepth:F2} m lane in front of the seats, a player's width");
+            Check(rows.Rows < 2 || Math.Abs(rows.SeatX(1, 0) - rows.SeatX(0, 0) - rows.SeatW / 2) < 0.01f, $"{what}: every other row staggered half a seat");
+        }
+        // one way in (#1279): the extra doors of #498 landed in the halls' side walls
+        Check(BuildingFootprint.ComputeDoors(tile, null, null).Count(d => d.Index == 0) == 1, $"{what}: one door, the entrance");
+        // every hall's door from the lobby a real leaf, shut until someone opens it (#1279)
+        Check(halls.All(h => l.InnerDoors.Any(d => d.Floor == 0 && l.Floors[0].Rooms[d.Room] == h && d.Bottom == 0
+                && h.Openings.Any(o => o.Kind == OpeningKind.Door && o.Side == d.Side && Math.Abs(o.Center - d.Center) < 0.01f))),
+            $"{what}: every hall's door from the lobby has a leaf");
+        // a hall is a hall's height (#1279): in a building of storeys, two or three of them, never one
+        if (c.MinClear > 0)
+            Check(halls.All(h => l.ClearOf(h) >= c.MinClear), $"{what}: halls {string.Join(", ", halls.Select(h => l.ClearOf(h).ToString("F1")))} m clear, at least {c.MinClear} m");
 
         // the screen leaves the hall's door clear, and the seats face it: the bank's front is toward the screen
         foreach (var screen in l.Furniture.Where(f => f.Type == FurnitureType.MovieScreen))

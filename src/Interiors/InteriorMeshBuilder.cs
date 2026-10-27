@@ -1004,7 +1004,7 @@ public static partial class InteriorMeshBuilder
             // #1238: a seating bank collides as tiers and aisle ramps; signs, ports and posters are on the wall
             or FurnitureType.SeatingBank or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.PosterFrame
             // #1250: a booth's deck collides as its slab and the ramp up its steps
-            or FurnitureType.BoothDeck
+            or FurnitureType.BoothDeck or FurnitureType.ServiceSteps
             // #1242: a dance floor is danced on
             or FurnitureType.DanceFloor
             // #1285: what hangs on a toilet's walls, and the signs over its doorways

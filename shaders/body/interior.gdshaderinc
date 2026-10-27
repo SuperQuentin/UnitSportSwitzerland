@@ -85,11 +85,14 @@ float room_hash(vec2 p) {
 // The light falling on local point p with local normal n, linear, before the style's gain.
 vec3 room_light(vec3 p, vec3 n) {
     float day = 1.0 - world_night;
-    vec3 total = world_tint * ambient_day;
+    vec3 base = world_tint * ambient_day;
     if (floor_count <= 0) {
         // no table (a probe's or demo's room): a plain lit room
-        return total + lamp_color * lamp_gain * 0.6 * world_night;
+        return base + lamp_color * lamp_gain * 0.6 * world_night;
     }
+    vec3 total = vec3(0.0);
+    // a cinema hall's (its lamps tint 2): its ambient goes with the house lights too, so off is dark (#1279)
+    bool house = false;
     int f = clamp(int(floor((p.y - floor_base + 0.1) / storey_height)), 0, floor_count - 1);
     vec4 range = texelFetch(room_lights, ivec2(f, 0), 0);
     int first = int(range.x + 0.5);
@@ -143,9 +146,10 @@ vec3 room_light(vec3 p, vec3 n) {
                 : a.z > 1.5 ? lamp_color * house_lights + screen_glow
                 : a.z > 0.5 ? mix(lamp_color, vec3(0.30, 0.10, 0.80), world_night) : lamp_color;
             total += lamp * lamp_gain * on * (0.12 + 0.88 * fall * fall) * (0.4 + 0.6 * facing);
+            house = house || (a.z > 1.5 && a.z < 2.5);
         }
     }
-    return total;
+    return total + base * (house ? max(house_lights, 0.03) : 1.0);
 }
 
 void vertex() {

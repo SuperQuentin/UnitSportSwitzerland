@@ -13,10 +13,39 @@ public static partial class InteriorMeshBuilder
         or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
         or FurnitureType.PosterFrame or FurnitureType.Standee or FurnitureType.Stanchions or FurnitureType.Projector
         or FurnitureType.ServerRack or FurnitureType.FilmPlatter or FurnitureType.BoothPanel
-        or FurnitureType.Loudspeaker or FurnitureType.WallSconce or FurnitureType.BoothDeck;
+        or FurnitureType.Loudspeaker or FurnitureType.WallSconce or FurnitureType.BoothDeck or FurnitureType.ServiceSteps;
 
     /// <summary>Velvet for the seats: the classic red, a modern dark blue, a burgundy.</summary>
     private static readonly Color[] Velvet = { C(0.62f, 0.06f, 0.10f), C(0.10f, 0.14f, 0.34f), C(0.42f, 0.06f, 0.14f) };
+
+    /// <summary>
+    /// A seating bank's cushions (#1279), in the interior's own frame (the room lights are looked up by it): each
+    /// folded up against its back, or let down where someone sits (<paramref name="down"/>: seat ids, row by row
+    /// from the front, <see cref="CinemaSeats.SeatId"/>). Built when that changes, never per frame.
+    /// </summary>
+    public static MeshData Cushions(FurniturePlan p, float y0, HashSet<int> down)
+    {
+        var s = new Scratch();
+        var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
+        var at = new Vector3(p.X, y0, p.Z);
+        var velvet = Velvet[(int)(Hash(p, 1) * Velvet.Length) % Velvet.Length];
+        var rows = InteriorGenerator.RowsOf(p);
+        const float deep = InteriorGenerator.SeatDepth;
+        int id = 0;
+        for (int k = 0; k < rows.Rows; k++)
+        {
+            var (z0, _, y) = rows.Row(k);
+            for (int i = 0; i < rows.SeatsIn(k); i++, id++)
+            {
+                float x = rows.SeatX(k, i), half = rows.SeatW / 2 - 0.04f;
+                var (min, max) = down.Contains(id)
+                    ? (new Vector3(x - half, y + 0.35f, z0 + 0.14f), new Vector3(x + half, y + 0.47f, z0 + 0.62f))
+                    : (new Vector3(x - half, y + 0.40f, z0 + 0.15f), new Vector3(x + half, y + 0.86f, z0 + deep));
+                s.Box(at + min, at + max, velvet, false, basis, at);
+            }
+        }
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
+    }
 
     /// <summary>
     /// A screen's picture in its piece's frame (front +Z): centre and half extents. Scope, 2.39:1 [S],
@@ -47,31 +76,34 @@ public static partial class InteriorMeshBuilder
         {
             case FurnitureType.SeatingBank:
             {
-                // rows rising from the front (+Z, toward the screen) to the back, an aisle each side with
-                // half steps and step lights, a ramp of collision up each aisle so the steps are walked
-                const float aisle = 1.1f, seat = 0.58f;
-                int rows = Math.Max(1, (int)(p.D / InteriorGenerator.RowPitch));
-                float pitch = p.D / rows, rise = H / Math.Max(1, rows - 1 + 1e-3f);
+                // rows rising from the front (+Z, toward the screen) to the back wall, an aisle each side with half
+                // steps and step lights, a ramp of collision up each aisle so the steps are walked (#1279: the seats
+                // folded at each row's back, solid, the lane in front of them walked; every other row staggered)
+                const float aisle = InteriorGenerator.AisleWidth, deep = InteriorGenerator.SeatDepth;
+                var bank = InteriorGenerator.RowsOf(p);
+                int rows = bank.Rows;
+                float pitch = bank.Pitch, rise = bank.Rise;
                 var velvet = Velvet[(int)(Hash(p, 1) * Velvet.Length) % Velvet.Length];
                 var back = (velvet * 0.85f) with { A = 1 };
                 var tier = C(0.12f, 0.10f, 0.14f);
                 var step = (tier * 0.9f) with { A = 1 };
-                float sx0 = -w + aisle, sx1 = w - aisle;
-                int seats = Math.Max(1, (int)((sx1 - sx0) / seat));
-                float sw = (sx1 - sx0) / seats;
+                float sx0 = bank.X0, sx1 = bank.X1, sw = bank.SeatW;
                 for (int k = 0; k < rows; k++)
                 {
-                    float z1 = d - k * pitch, z0 = z1 - pitch, y = k * rise;
+                    var (z0, z1, y) = bank.Row(k);
                     // the tier reaches 1.5 cm into each aisle, so its side and the aisle's never share a plane
                     if (y > 0.01f) B(sx0 - 0.015f, 0, z0, sx1 + 0.015f, y, z1, tier, true);
-                    // the seats of the row: a cushion, a back behind it, armrests between them
-                    float cz = z0 + pitch * 0.45f;
-                    B(sx0, y + 0.35f, cz - 0.05f, sx1, y + 0.47f, cz + 0.42f, velvet);
-                    B(sx0 + 0.015f, y + 0.33f, cz - 0.17f, sx1 - 0.015f, y + 0.95f, cz - 0.035f, back);
-                    for (int i = 0; i <= seats; i++)
+                    // the row's seats, folded: the backs at the row's back edge, the cushions tipped up in front of them,
+                    // solid together; armrests between them, reaching over the lane's edge
+                    int n = bank.SeatsIn(k);
+                    float xa = bank.SeatX(k, 0) - sw / 2, xb = bank.SeatX(k, n - 1) + sw / 2;
+                    B(xa + 0.015f, y + 0.33f, z0 + 0.02f, xb - 0.015f, y + 0.95f, z0 + 0.15f, back, true);
+                    // the cushions are their own mesh, folded or let down under a sitter (Cushions); here only their solid
+                    CollisionBox(s, at, basis, new Vector3(xa + 0.04f, y, z0 + 0.15f), new Vector3(xb - 0.04f, y + 0.86f, z0 + deep));
+                    for (int i = 0; i <= n; i++)
                     {
-                        float x = sx0 + i * sw;
-                        B(x - 0.03f, y - sink, cz - 0.15f, x + 0.03f, y + 0.62f, cz + 0.4f, dark);
+                        float x = xa + i * sw;
+                        B(x - 0.03f, y - sink, z0 + 0.04f, x + 0.03f, y + 0.62f, z0 + deep + 0.2f, dark);
                     }
                     // the aisles: two half steps a row, a step light at each
                     foreach (float ax in new[] { -w, w - aisle })
@@ -85,13 +117,14 @@ public static partial class InteriorMeshBuilder
                         B(lx, y - sink, z1 - 0.07f, lx + 0.04f, y + 0.05f, z1 - 0.03f, Lit(1.0f, 0.62f, 0.20f));
                     }
                 }
+                float topY = (rows - 1) * rise;
                 // walked up the aisles on a ramp, the front of each row a step
                 foreach (float ax in new[] { -w, w - aisle })
                 {
                     var p0 = at + basis * new Vector3(ax, 0, d);
                     var p1 = at + basis * new Vector3(ax + aisle, 0, d);
-                    var p2 = at + basis * new Vector3(ax + aisle, (rows - 1) * rise, -d);
-                    var p3 = at + basis * new Vector3(ax, (rows - 1) * rise, -d);
+                    var p2 = at + basis * new Vector3(ax + aisle, topY, -d);
+                    var p3 = at + basis * new Vector3(ax, topY, -d);
                     s.Col.Add(p0); s.Col.Add(p1); s.Col.Add(p2); s.Col.Add(p0); s.Col.Add(p2); s.Col.Add(p3);
                 }
                 break;
@@ -163,7 +196,10 @@ public static partial class InteriorMeshBuilder
                 B(-w, 0, -d, w, 1.1f, -d + 0.45f, darkWood);
                 B(-w, 0, d - 0.8f, w, 1.05f, d, C(0.46f, 0.06f, 0.10f), true);
                 B(-w - 0.03f, 1.05f - sink, d - 0.84f, w + 0.03f, 1.1f, d + 0.04f, C(0.88f, 0.76f, 0.40f));
-                B(-w + 0.015f, 1.1f - sink, d - 0.42f, w - 0.015f, 1.95f, d - 0.4f, Lit(0.60f, 0.70f, 0.78f) with { A = 0.25f });
+                // the glass is see-through, a node of its own (InteriorNode.AddClearGlass, #1279): here its rail and posts
+                B(-w + 0.015f, 1.95f, d - 0.43f, w - 0.015f, 1.99f, d - 0.39f, chrome);
+                B(-w + 0.015f, 1.1f - sink, d - 0.43f, -w + 0.055f, 1.95f + sink, d - 0.39f, chrome);
+                B(w - 0.055f, 1.1f - sink, d - 0.43f, w - 0.015f, 1.95f + sink, d - 0.39f, chrome);
                 B(-0.3f, 1.1f - sink, d - 0.7f, 0.3f, 1.42f, d - 0.6f, dark);
                 B(-0.27f, 1.13f, d - 0.612f, 0.27f, 1.39f, d - 0.588f, Lit(0.30f, 0.50f, 0.90f));
                 // the TICKETS board over it
@@ -277,6 +313,28 @@ public static partial class InteriorMeshBuilder
                 s.Col.Add(r0); s.Col.Add(r1); s.Col.Add(r2); s.Col.Add(r0); s.Col.Add(r2); s.Col.Add(r3);
                 break;
             }
+            case FurnitureType.ServiceSteps:
+            {
+                // a short flight on the walkway (#1279): up toward the back wall (−Z) to the service doorway's sill,
+                // each step a box reaching back to the wall, a hair narrower than the one under it; a ramp through the nosings
+                int n = Math.Max(1, (int)MathF.Round(p.D / InteriorGenerator.ServiceTread));
+                float tread = p.D / n, rise = H / n;
+                var stair = C(0.12f, 0.10f, 0.14f);
+                var nose = C(0.70f, 0.58f, 0.12f);
+                for (int k = 0; k < n; k++)
+                {
+                    // each step down into the one under it and back from the wall by its own hair: no shared planes
+                    float inset = k * sink;
+                    B(-w + inset, k * rise - 2 * sink, -d + (k + 1) * sink, w - inset, (k + 1) * rise, d - k * tread, stair);
+                    B(-w + inset + sink, (k + 1) * rise - sink, d - k * tread - 0.05f, w - inset - sink, (k + 1) * rise + sink, d - k * tread + sink, nose);
+                }
+                var q0 = at + basis * new Vector3(-w, 0, d + tread);
+                var q1 = at + basis * new Vector3(w, 0, d + tread);
+                var q2 = at + basis * new Vector3(w, H, -d + tread);
+                var q3 = at + basis * new Vector3(-w, H, -d + tread);
+                s.Col.Add(q0); s.Col.Add(q1); s.Col.Add(q2); s.Col.Add(q0); s.Col.Add(q2); s.Col.Add(q3);
+                break;
+            }
             case FurnitureType.Projector:
             {
                 // the pedestal, the digital projector on it, its lens to the porthole (+Z), its middle
@@ -285,7 +343,8 @@ public static partial class InteriorMeshBuilder
                 B(-0.3f, 0, -0.4f, 0.3f, t, 0.4f, dark);
                 B(-w, t - sink, -d, w, t + 0.55f, d - 0.15f, C(0.20f, 0.20f, 0.22f));
                 B(-0.12f, t + 0.15f, d - 0.165f, 0.12f, t + 0.39f, d, dark);
-                B(-0.09f, t + 0.18f, d - sink, 0.09f, t + 0.36f, d + sink, Lit(0.70f, 0.80f, 1.00f));
+                // the lens's glass, dark: its light is the glow beside it while the film runs (InteriorNode.LensGlow, #1279)
+                B(-0.09f, t + 0.18f, d - sink, 0.09f, t + 0.36f, d + sink, C(0.04f, 0.05f, 0.07f));
                 B(w - 0.2f, t + 0.55f - sink, -d + 0.1f, w - 0.05f, t + 0.6f, -d + 0.3f, Lit(0.20f, 0.90f, 0.30f));
                 break;
             }
