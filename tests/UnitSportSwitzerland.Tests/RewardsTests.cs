@@ -169,6 +169,16 @@ public class RewardPlacerTests
     }
 
     [Fact]
+    public void The_rewards_items_keep_to_ids_400_to_419()
+    {
+        // ItemId 400-419 belong to the rewards plan (adventure-overview): crystal, gadgets, the Alpine set
+        var ours = ChestLoot.Cosmetics.Concat(ChestLoot.Gadgets).Append(ItemId.Bergkristall).Distinct().ToList();
+        Assert.Equal(11, ours.Count);
+        Assert.All(ours, id => Assert.InRange((int)id, 400, 419));
+        Assert.All(Enum.GetValues<ItemId>().Where(id => (int)id is >= 400 and <= 419), id => Assert.Contains(id, ours));
+    }
+
+    [Fact]
     public void Forged_ids_name_no_tile()
     {
         Assert.False(RewardRules.TryTile("xx:1_2", _ => null, out _));
