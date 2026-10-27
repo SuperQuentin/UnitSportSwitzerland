@@ -189,3 +189,15 @@
   Training goes to Activities, then Home.
 - **Checks**: `--phonecheck` (six tiles, Training's way back); `--phonevrcheck` selects the Camera tile before its
   tap (`PhoneController.SelectQuick`). The banner itself is not exercised headless (no invite service in the fixture).
+
+## Map and Travel, stage 3 (#1253)
+
+- **The Map lists places without typing** (`PhoneScreens.FillResults`): Recent (the last three travelled to this
+  session, `PhoneScreens.Recents`), Near you (the four nearest places over 500 m away, `Here` from the controller),
+  then the biggest places; each row shows its distance. Chips (All, Towns, Summits, Passes) narrow every section.
+  The rows have the keys on open; the search box is optional (`/` or a click, `FocusSearch`) and, typed into,
+  lists matches with the same chips.
+- **Travel in VR is easier to start**: the curtain runs when the glass is within 40 cm of the eyes and faces them
+  (`XrPhone.EyesReach` / `EyesFacing`, was 14 cm), else the blink comes after 1.5 s (`VrRaiseSeconds`, was 3 s).
+- **Check**: `--phonecheck` counts the Map's rows; `--phonevrcheck` raises the phone for a travel under 1.4 s and
+  holds it at the hip (`BeforeEyes(low:)`) for the blink. Recents are not saved between sessions.

@@ -143,6 +143,7 @@ public partial class PhoneProbe : Node
         await Wait(1.2);
         Check(me.PhoneCover >= 1f && me.PhoneBackdropShown >= 1f, $"the map square on, the world black behind ({me.PhoneCover:F2}, {me.PhoneBackdropShown:F2})");
         Shot("phone_5d_map.png");
+        Check(phone.Screens.MapRowCount > 0 || !phone.Screens.HasPlaces, $"the Map lists places without typing ({phone.Screens.MapRowCount} rows) (#1253)");
         await Key(Godot.Key.Escape, 1.0);
 
         // the camera app: raised before the face, the lens out of its back; Enter shoots into the album
