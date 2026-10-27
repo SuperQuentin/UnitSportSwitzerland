@@ -1131,3 +1131,13 @@
 4.3	Unlisted / SteamerMeshBuilder.LeverMesh
 408.9	Unlisted / SteamerMeshBuilder.WheelMesh
 30	World / Ropeways - T-bar
+292.3	Clothes / Zipfelmütze
+167.1	Clothes / Treichel
+7	Items / VsTag
+7	Items / VsSniff
+7	Items / VsDecoy
+7	Items / VsSprint
+7	Items / VsMoo
+7	Items / VsDisguise
+3.1	Items / Zipfelmuetze
+4.7	Items / Treichel
