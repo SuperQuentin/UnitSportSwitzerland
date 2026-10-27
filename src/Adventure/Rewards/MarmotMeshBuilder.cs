@@ -17,21 +17,25 @@ public static class MarmotMeshBuilder
     private static readonly Color Fur = M("8a6a48"), FurDark = M("5e4630"), Belly = M("b89a72"), Muzzle = M("e8dcc6"), Nose = M("201812"), Eye = M("0c0c0c");
 
     /// <summary>Where the parts join, node space.</summary>
-    public static readonly Vector3 Neck = new(0, 0.22f, -0.2f), Tail = new(0, 0.2f, 0.22f);
-    public static readonly Vector3[] Hips = { new(-0.09f, 0.11f, -0.13f), new(0.09f, 0.11f, -0.13f), new(-0.09f, 0.11f, 0.13f), new(0.09f, 0.11f, 0.13f) };
+    public static readonly Vector3 Neck = new(0, 0.2f, -0.21f), Tail = new(0, 0.16f, 0.22f);
+    public static readonly Vector3[] Hips = { new(-0.1f, 0.08f, -0.13f), new(0.1f, 0.08f, -0.13f), new(-0.1f, 0.08f, 0.12f), new(0.1f, 0.08f, 0.12f) };
 
     private static ArrayMesh? _body, _head, _leg, _tail;
 
+    [Showcase("Parts", "Marmot body")]
     public static ArrayMesh Body() => _body ??= Build(s =>
     {
         using (s.Smoothing(true))
         {
-            s.RoundedBox(new Vector3(0, 0.17f, 0), new Vector3(0.26f, 0.2f, 0.44f), Fur, null, 5, 8);
-            s.RoundedBox(new Vector3(0, 0.11f, 0.02f), new Vector3(0.2f, 0.08f, 0.34f), Belly, null, 5, 8);
+            // a plump, low barrel: the rump the widest, the shoulders narrower
+            s.RoundedBox(new Vector3(0, 0.15f, -0.06f), new Vector3(0.3f, 0.2f, 0.26f), Fur, null, 5, 8);
+            s.RoundedBox(new Vector3(0, 0.16f, 0.1f), new Vector3(0.24f, 0.19f, 0.22f), Fur, null, 5, 8);
+            s.RoundedBox(new Vector3(0, 0.09f, 0.0f), new Vector3(0.22f, 0.07f, 0.36f), Belly, null, 5, 8);
         }
     }, Vector3.Zero);
 
     /// <summary>The head, its origin at <see cref="Neck"/>.</summary>
+    [Showcase("Parts", "Marmot head")]
     public static ArrayMesh Head() => _head ??= Build(s =>
     {
         var n = new Vector3(0, Neck.Y, -Neck.Z);   // authored (+Z forward)
@@ -46,13 +50,15 @@ public static class MarmotMeshBuilder
     }, new Vector3(0, Neck.Y, -Neck.Z));
 
     /// <summary>One leg, its origin at the hip, down to a dark paw.</summary>
+    [Showcase("Parts", "Marmot leg")]
     public static ArrayMesh Leg() => _leg ??= Build(s =>
     {
-        s.Tube(new Vector3(0, 0.11f, 0), new Vector3(0, 0.02f, 0.01f), 0.03f, 0.022f, FurDark, 5);
+        s.Tube(new Vector3(0, 0.08f, 0), new Vector3(0, 0.02f, 0.01f), 0.034f, 0.024f, FurDark, 5);
         s.Box(new Vector3(0, 0.012f, 0.02f), new Vector3(0.04f, 0.024f, 0.05f), Nose);
-    }, new Vector3(0, 0.11f, 0));
+    }, new Vector3(0, 0.08f, 0));
 
     /// <summary>The tail, its origin at its base.</summary>
+    [Showcase("Parts", "Marmot tail")]
     public static ArrayMesh TailMesh() => _tail ??= Build(s =>
     {
         var b = new Vector3(0, Tail.Y, -Tail.Z);

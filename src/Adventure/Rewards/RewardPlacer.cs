@@ -23,7 +23,7 @@ public static class RewardPlacer
     public const double Cell = 250;
 
     // per 250 m cell, before the terrain's say: tuned with --rewardstats toward the plan's densities
-    public const double PCommon = 0.085, PFine = 0.03, PRemote = 0.0035, PEdelweiss = 0.07;
+    public const double PCommon = 0.085, PFine = 0.026, PRemote = 0.0035, PEdelweiss = 0.11;
     public const int MaxChests = 8, MaxEdelweiss = 10, MaxCairns = 2;
     public const double EdelweissFloor = 1500;
     /// <summary>A chest keeps this far off a carriageway, a Fine one this far, a remote Precious one this far, an edelweiss this far.</summary>

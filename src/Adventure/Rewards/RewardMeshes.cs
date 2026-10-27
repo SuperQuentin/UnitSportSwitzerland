@@ -112,6 +112,7 @@ public static class RewardMeshes
     }
 
     /// <summary>The seal's band of light round a sealed chest (drawn with <see cref="GlowMaterial"/>).</summary>
+    [Showcase("Parts", "Chest seal band")]
     public static ArrayMesh SealBand() => _band ??= Build(s =>
     {
         float y = ChestH * 0.55f;
@@ -122,6 +123,7 @@ public static class RewardMeshes
     });
 
     /// <summary>The light shaft a chest sends up when it opens (an open tube, scaled and faded by a tween).</summary>
+    [Showcase("Parts", "Chest light shaft")]
     public static ArrayMesh Shaft() => _shaft ??= Build(s => s.Tube(new Vector3(0, 0, 0), new Vector3(0, 6f, 0), 0.32f, 0.5f, White, 10));
 
     private static ArrayMesh? _band, _shaft, _edelweiss, _cairn, _stone, _stack, _flame, _plate, _rail, _bell, _ring, _mound, _perch, _box, _post, _gate;

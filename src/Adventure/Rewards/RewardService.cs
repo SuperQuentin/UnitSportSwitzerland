@@ -536,6 +536,16 @@ public partial class RewardService : Node
         if (_adventure.Progress(peer) is { } p && _runs.Leave(p.Key)) EndTrial(peer, "", 0, -1, false, -1);
     }
 
+    /// <summary><c>/trial leave</c>: leaves the trial one runs. The chat's sender is the peer (offline, the local player).</summary>
+    public string Command(long sender, string rest)
+    {
+        long peer = _networked ? sender : AdventureService.LocalPeer;
+        if (rest.Trim() != "leave") return "Usage: /trial leave";
+        if (_adventure.Progress(peer) is not { } p || !_runs.Running(p.Key, out _, out _, out _)) return "You are not running a trial.";
+        ServeTrialLeave(peer);
+        return "You left the trial.";
+    }
+
     private void SendBoard(long peer, string trialId)
     {
         var rows = _board.Of(trialId);
@@ -668,7 +678,8 @@ public partial class RewardService : Node
 
     private static async void Log(Task<string?> t)
     {
-        if (await t is { } why) GD.Print($"[rewards] {why}");
+        // the refusals were said where they happened; only the quiet outcomes are left
+        if (await t is { } why && why is not ("inactive" or "gone" or "ignored" or "taken")) GD.Print($"[rewards] {why}");
     }
 
     public void AskOpen(string id)

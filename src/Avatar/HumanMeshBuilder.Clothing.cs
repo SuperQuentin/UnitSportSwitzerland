@@ -1123,14 +1123,17 @@ public static partial class HumanMeshBuilder
             case GarmentShape.FeltHat:
             {
                 // #1227: the mountain guide's felt hat: a pinched crown, a brim turned down at the front, its band and the edelweiss pin
-                var from = head.Centre(0.14f);
-                float r = hw + 0.022f;
-                s.Tube(from + up * 0.005f, top + up * 0.055f, r, r * 0.78f, c.A, 10);
-                s.Tube(top + up * 0.05f, top + up * 0.062f, r * 0.78f, r * 0.55f, c.A, 10);
-                s.Tube(from - up * 0.004f, from + up * 0.006f, r + 0.05f, r + 0.045f, c.A, 12);
-                s.Box(from + fwd * (r + 0.03f) - up * 0.008f, new Vector3(0.12f, 0.008f, 0.04f), c.A, f.Basis);
-                s.Tube(from + up * 0.008f, from + up * 0.026f, r + 0.003f, r + 0.002f, c.B, 10);
-                var pin = from + up * 0.018f + side * (r + 0.004f);
+                var from = head.Centre(0.12f);
+                float r = hw + 0.02f;
+                // a low crown that narrows, its top pinched in a ridge front to back
+                s.Tube(from + up * 0.005f, top + up * 0.012f, r + 0.006f, (r + 0.006f) * 0.9f, c.A, 10);
+                s.Box(top + up * 0.016f, new Vector3(r * 0.8f, 0.016f, r * 1.4f), c.A, f.Basis);
+                // the brim: wide, a touch lower at the front and back than at the sides
+                s.Tube(from - up * 0.006f, from + up * 0.004f, r + 0.085f, r + 0.08f, c.A, 14);
+                s.Box(from + fwd * (r + 0.045f) - up * 0.012f, new Vector3(0.16f, 0.01f, 0.06f), c.A, f.Basis);
+                s.Box(from - fwd * (r + 0.045f) - up * 0.012f, new Vector3(0.16f, 0.01f, 0.06f), c.A, f.Basis);
+                s.Tube(from + up * 0.006f, from + up * 0.03f, r + 0.003f, r * 0.96f, c.B, 10);
+                var pin = from + up * 0.02f + side * (r + 0.006f);
                 s.Box(pin, new Vector3(0.006f, 0.022f, 0.022f), c.C, f.Basis);
                 break;
             }

@@ -292,7 +292,8 @@ public partial class RewardWorld : Node3D
             _props[id].Root.QueueFree();
             _props.Remove(id);
         }
-        Fill(_flowerMesh, _flowers.Select(f => (f.At, (float)(f.Spot.Hash % 628) / 100f)));
+        // an edelweiss is a few centimetres across: drawn 2.5 times its size, so a player sees it from the path
+        Fill(_flowerMesh, _flowers.Select(f => (f.At, (float)(f.Spot.Hash % 628) / 100f)), EdelweissScale);
         Fill(_cairnMesh, _cairns.Select(f => (f.At, (float)(f.Spot.Hash % 628) / 100f)));
         Fill(_stoneMesh, stones.Select(s => (s, 0.4f)));
         // trial posts and offering boxes at the places in range
@@ -311,11 +312,14 @@ public partial class RewardWorld : Node3D
         Fill(_boxMesh, _boxes.Select(b => (b.At, (float)(b.Shrine.Hash % 628) / 100f)));
     }
 
-    private static void Fill(MultiMeshInstance3D layer, IEnumerable<(Vector3 At, float Yaw)> items)
+    public const float EdelweissScale = 2.5f;
+
+    private static void Fill(MultiMeshInstance3D layer, IEnumerable<(Vector3 At, float Yaw)> items, float scale = 1)
     {
         var list = items.ToList();
         layer.Multimesh.InstanceCount = list.Count;
-        for (int i = 0; i < list.Count; i++) layer.Multimesh.SetInstanceTransform(i, new Transform3D(new Basis(Vector3.Up, list[i].Yaw), list[i].At));
+        for (int i = 0; i < list.Count; i++)
+            layer.Multimesh.SetInstanceTransform(i, new Transform3D(new Basis(Vector3.Up, list[i].Yaw).Scaled(Vector3.One * scale), list[i].At));
     }
 
     // ---- seal props -------------------------------------------------------------------------------

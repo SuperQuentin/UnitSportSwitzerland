@@ -43,3 +43,26 @@
   onto the station (nothing), syncs the cross by E (the 3 km disc in its fog); B, on at the same time with its
   own `user://`, gets none of it; the server restarts and A keeps its stamps, view and fog. RESULT line; logs
   `test_output/placesnet_*.log`.
+
+## Rewards (#1227)
+
+- `--rewardspots fixture`: hand-placed reward spots round the fixture start (`RewardSpots.Fixture`: a Common chest
+  25 m east and another, one chest per seal, the fixture peak's Luxurious chest, seven edelweiss on the walk to the chapel,
+  the pass's cairn) and a photo spot of the fixture peak from the start; `--rewardspots <file>`: lines `kind tier seal dE
+  dN` from the start. Without it a fixture course places nothing.
+- Quick: `--rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture`
+  (`RewardCheck`, offline, ~2 min of game time): a Common chest opened (lid, reveal, pack, events), reopened and forged ids
+  refused, a chest 80 m off refused; every seal broken and its chest opened (Höhenfeuer, cowbells with a wrong bell, rings,
+  plates held by a dropped stone, the marmot's three legs), the Luxurious chest by its edition; seven edelweiss by the
+  gather hold's target, five offered at the chapel's box; a stone on the pass's cairn; the chapel's run to gold (the
+  board), a second run out for its pace; the fixture photo refused 90° off, then taken; the fauna page; the detector's beep
+  quickening; a gust; the Collection tab; the save file read back. Progress in `test_output/rewardcheck`; a scratch
+  inventory and bank. Windowed it saves `test_output/reward_chest.png`, `reward_guide.png`, `reward_collection.png`.
+- Net: `tools/rewardnetcheck.sh` (~2 min, port 7933): a server on the flat fixture with the fixture POIs and spots; A opens
+  the Common chest (gone for A only), is refused a second time and for two forged ids, picks an edelweiss, runs the
+  chapel's trial; B, at the same time with its own `user://`, still sees the chest and opens it (its own roll), still sees
+  the edelweiss and picks it, and is sent the server's board with A's run (not in B's progress); in a Battle Royale lobby
+  A's chest is refused. RESULT line; logs `test_output/rewardnet_*.log`.
+- Tier 3: `--rewardstats [E,N[,km]] --chunks <dir> --systems terrain,adventure` (headless, ~1 min): places every tile of
+  the square round the point with the client's own placement and prints the spots per km² by kind, tier and seal, then
+  quits (RESULT line). Tiles without terrain are left out.

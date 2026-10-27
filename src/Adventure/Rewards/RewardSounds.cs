@@ -96,7 +96,7 @@ public static class RewardSounds
     /// <summary>A bottled gust let out: a rising roar of wind.</summary>
     public static AudioStreamWav Gust => _gust ??= Dsp.OneShot(2.5f, 12275, (rng, n) =>
     {
-        var s = Dsp.BandPass(Dsp.Noise(rng, n), 200, 1600);
+        var s = Dsp.BandPass(Dsp.Noise(rng, n), Dsp.Coef(200), Dsp.Coef(1600));
         for (int i = 0; i < n; i++)
         {
             float t = i / (float)Dsp.Rate;

@@ -1101,6 +1101,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Adventure.Rewards.FaunaPage.Register();
             if (Adventure.Rewards.RewardCheck.Requested) AddChild(new Adventure.Rewards.RewardCheck(items, () => LocalPlayer));
             if (Adventure.Rewards.RewardNetProbe.Role != null) AddChild(new Adventure.Rewards.RewardNetProbe(items));
+            if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
         }
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)

@@ -563,6 +563,10 @@ public partial class ChatManager : Node
                 Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
                 return;
 
+            case "trial":
+                Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
+                return;
+
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
                 or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
@@ -909,6 +913,11 @@ public partial class ChatManager : Node
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
                     id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
+            // an adventure trial (#1227): leave the one you run
+            case "trial":
+                if (Adventure.Rewards.RewardService.Instance is not { } rewards) ReplyTo(sender, "Trials are not available here.", ChatKind.Error);
+                else ReplyTo(sender, rewards.Command(sender, rest), ChatKind.Private);
                 return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
