@@ -3,22 +3,24 @@
 
 # Adventure rewards: chests, edelweiss, guides, trials and photo quests
 
-Status: **planned**. Tracking issue: #1227 (overview: #1228). Part of the Adventure layer, beside
+Status: **built (#1227)**, but for the parts marked otherwise below. Tracking issue: #1227 (overview: #1228). Part of the Adventure layer, beside
 `adventure-objectives.md` (progress store, quests), `adventure-places.md` (POI catalogue),
 `adventure-navigation.md` (compass, pins, fast travel) and `adventure-stamina.md` (stamina, climbing).
+Notes: `docs/notes/adventure/rewards.md`, `chests-and-seals.md`, `collectibles.md`, `trials.md`, `photo-spots.md`,
+`reward-gadgets.md`.
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Placement | planned | `RewardPlacer`: chests, edelweiss and cairns per 1 km tile, the same on every peer, from a hash of the tile, the POIs and the coarse terrain |
-| 2 Tiered chests | planned | Common / Fine / Precious / Luxurious, opened once per player, loot rolled by the server, a reveal ceremony |
-| 3 Seals | planned | Höhenfeuer braziers, a ring run, pressure plates, a cowbell tune, a guide: a small challenge before a chest opens |
-| 4 Edelweiss and cairns | planned | Collectibles on ledges and summits; offered at a summit cross they raise max stamina |
-| 5 Guide animals | planned | A marmot (on the ground) or a bearded vulture (along a cliff) that leads to a hidden chest |
-| 6 Trials | planned | One-off timed runs at landmarks on the race machinery, personal best, a server leaderboard, a ghost |
-| 7 Photo quests and fauna | planned | Famous views judged by the server; a fauna page in the bird journal |
-| 8 Gadgets | planned | Treasure detector, travel flag (the item; travel is navigation's), bottled gust |
-| 9 Shared album | planned, optional | A group photo and an album a party shares |
-| 10 Checks and notes | planned | Tier 0 tests, `--rewardcheck`, `tools/rewardnetcheck.sh`, notes in `docs/notes/adventure/` |
+| 1 Placement | built (#1227) | `RewardPlacer`: chests, edelweiss and cairns per 1 km tile, the same on every peer, from a hash of the tile, the POIs and the coarse terrain; `--rewardstats` on real tiles |
+| 2 Tiered chests | built (#1227) | Common / Fine / Precious / Luxurious, opened once per player (Luxurious once a year), loot rolled by the server, a reveal ceremony |
+| 3 Seals | built (#1227) | Höhenfeuer stacks, a ring run, pressure plates, a cowbell tune, a guide: a small challenge before a chest opens |
+| 4 Edelweiss and cairns | built (#1227), the stamina step through #1225's handler | Collectibles on ledges and summits; offered at a summit cross or a chapel they raise max stamina |
+| 5 Guide animals | built (#1227) | A marmot (on the ground) or a bearded vulture (along a cliff) that leads to a hidden chest |
+| 6 Trials | partly (#1227): run and glide | One-off timed runs at landmarks, personal best, a server leaderboard, a ghost; pass drive, downhill and ride are follow-ups |
+| 7 Photo quests and fauna | built (#1227), the Atlas tick not | Famous views judged by the server; a Fauna tab in the Journal |
+| 8 Gadgets | built (#1227), the gust lifts through #1225's `AirLift.Volumes`, the flag sets #1226's `TravelBook.Flag` | Treasure detector, travel flag (the item; travel is navigation's), bottled gust |
+| 9 Shared album | not built (optional) | A group photo and an album a party shares |
+| 10 Checks and notes | built (#1227) | Tier 0 tests, `--rewardcheck`, `tools/rewardnetcheck.sh`, notes in `docs/notes/adventure/` |
 
 ## Goal
 
@@ -358,6 +360,47 @@ weight (ok, nothing to build). Sense for a future co-op bot: the same `RewardPla
   ids moved since the last version; `--models,test_output/models --modelsonly Adventure`.
 - `tools/lib/checkmap.txt`: `src/Adventure/Rewards quick --rewardcheck`, `src/Adventure/Rewards net
   tools/rewardnetcheck.sh`.
+
+## Built differently from the plan (#1227)
+
+- **Trials do not ride `RaceManager`**: the game has no `RaceKind` to extend and a race's RPCs are built round several
+  entrants, so a trial is its own small machine (`TrialRuns`, `RequestTrial` / `RequestTrialGate`), checked the same way
+  (the body at the gate, `MaxPace` between gates). Two kinds made from POIs alone: a **run** (chapel, hut, tower, castle
+  to the next place 0.4-3 km off) and a **glide** (a peak or viewpoint to a place 2-8 km off and 300 m lower). The pass
+  drive (`RaceRoute`), the downhill (`BuildPisteAsync`) and the bike ride are follow-ups. Leaving is `/trial leave` (the
+  quick menu's Activities entry is not built).
+- **Seal steps are client-reported, server-checked**: a ring or a plate is reported when the body reaches it and the
+  server checks the body's published position there (rather than the server scanning bodies every tick); `SealState`
+  is `TellSeal`, `Refused(id, byte)` is `TellRefused(id, why)` (the text the HUD shows). Höhenfeuer stacks are lit by E
+  only (no torch or flare aimed at them yet).
+- **A guide is seen by its follower only** (`GuideLeg` goes to it alone; others do not see someone's marmot); it is
+  woken by the chest's id (`RequestGuide(chestId)`), its burrow being part of the chest's layout.
+- **Cairns**: twenty per canton at its passes, peaks, crosses and huts under 2500 m (by hash: a canton-wide pick, so the
+  placer asks `Cairns.Of`); the twentieth gives a Precious roll in place of the canton's flag cosmetic (no flag garments yet).
+- **The offering** offers every whole five held at once (confirmed in a `Ui/Modal`), not five per press.
+- **Fauna** is its own Journal tab (Fauna, after Fish) through `AdventureLog.RegisterTab`, not a third page inside
+  `BirdJournal`; the animals are reported by the client (trusted: they give nothing but the list).
+- **Photo spots** are checked against the terrain's line of sight only (buildings are not in it); the Atlas tick is not
+  built (the Collection tab lists them). The curated thirty were checked against the main checkout's tiles (notes:
+  `photo-spots`).
+- **The Alpine set** is seven pieces (404-410): no belt slot exists, so the rope belt became Bergführer breeches; two new
+  garment shapes (`FeltHat`, `Bandana`). It is not made at a workbench (the game never crafts clothes): chests only.
+- **The generated world places nothing** (it has no coarse tiles to place from), rather than peaks found on it.
+- **The gust** is `ItemUse.Gust` (thrown like the smoke canister), not `ItemUse.Throw` (the radio's world-object throw).
+  Its lift is an `AirLift.Volumes.Add` column (6 m, 40 m high, 6 m/s, 20 s on the server's clock) added on every client
+  where it lands; only the own glider reads it, and none rises in a Battle Royale round (`Permissions.LiftOn`).
+- **The travel flag** is one a player (`PlacedObjects` refuses a second, so no flag is lost by a replace); the server's
+  `PlacedObjects.ServedByPeer` hands the planter to `AdventureTravel.SetPortable` / `ClearPortable`. Travelling to it
+  (a "Your flag" row on the board) is navigation's and not drawn yet.
+- **The offering's stamina steps** share the stamina section's ten with quests' `"stamina"` rewards (one cap, the
+  stamina plan's), so edelweiss may buy fewer than ten when quests gave some.
+- **The edelweiss is drawn 2.5 times life size**, so it is seen from the path.
+- **The chest's seal band** is a mesh shown or hidden on a change, not a shader parameter; the light shaft is a tweened
+  mesh's `Transparency`.
+- **Densities measured on real tiles** (`--rewardstats`, the main checkout's terrain, no `pois.bin` there, so no POI
+  chests): Bernese Oberland 2600000/1150000, 144 km²: Common 1.11, Fine 0.48 (before the 0.03 → 0.026 cut), edelweiss
+  0.40; Jungfrau-Aletsch 2645000/1150000, 64 km² all high: Common 1.05, Fine 0.41, remote Precious 0.08, edelweiss 0.77;
+  Fribourg 2560000/1180000, 100 km²: Common 1.15, Fine 0.35, Precious 0.02. The POI chests are not measured.
 
 ## Open questions
 

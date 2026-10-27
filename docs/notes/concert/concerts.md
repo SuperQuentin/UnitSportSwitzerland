@@ -195,6 +195,16 @@
   errors in one play session, worst in busy, fast sections).
   The rest of the rig is under 0.5 ms (desk, effects, rays, heads, screens).
 
+### Streaming the stage in (#1264)
+
+- Walking round Paléo hitched: the stage's tile committed for 1.05-1.6 s on the main thread (under 45 ms with
+  `--concert off`). `ConcertRig._Ready` took 1.35 s: the crowd's two 8 s loops synthesised on first use (740 ms,
+  now `ConcertSound.Prewarm` on a thread from `ConcertDirector._Ready`, the loops `Lazy`), the crowd's placement
+  (`StagePlan.Blocked` x 404 boxes x 18 000 field points, 300 ms, now `StagePlan.BlockedTester` with each box's axes
+  worked out once) and two interop calls a person (now one `MultiMesh.Buffer`). Left: ~0.45 s, mostly the performers'
+  poses (95 ms), the PA and effects. Find such a stall with `--perflog 90` and `commits.csv` (the slowest commit's tile),
+  against the same run with `--concert off`.
+
 ## The effects (`ConcertSfx`)
 
 - Fixtures with an arm and a fire channel (`Attr.Arm`, `Attr.Fire`): flame projectors and CO2 jets

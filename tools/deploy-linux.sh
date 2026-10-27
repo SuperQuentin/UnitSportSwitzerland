@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 # Build the Linux x64 dedicated server and deploy it to a Debian/Ubuntu host over SSH.
-# Usage: tools/deploy-linux.sh [--check] [--setup] [--build] [--chunks] [--nakama] [--restart] [--no-chunks] [--dry-run] [--checksum] [--prune]
+# Usage: tools/deploy-linux.sh [--check] [--setup] [--build] [--chunks] [--nakama] [--restart] [--no-chunks] [--dry-run] [--checksum] [--prune] [--smtp-check <to>]
 #   no step flag = everything: setup, build + upload, chunk sync, Nakama (when NAKAMA=1), restart.  --check = report only.
+#   --smtp-check <to> = a step of its own: the layout service sends a test mail to <to> with the host's SMTP settings.
 # Config: tools/deploy.env (copy tools/deploy.env.example); env vars override it. Details: docs/notes/general/linux-deploy.md
 # Needs (local, Git Bash or Linux): ssh with key auth to the host, tar, dotnet SDK, Godot mono + Linux export templates.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
-S_SETUP=0 S_BUILD=0 S_CHUNKS=0 S_NAKAMA=0 S_RESTART=0 CHECK=0 DRY=0 CHECKSUM=0 PRUNE=0 NOCHUNKS=0
-for a in "$@"; do
+usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+S_SETUP=0 S_BUILD=0 S_CHUNKS=0 S_NAKAMA=0 S_RESTART=0 CHECK=0 DRY=0 CHECKSUM=0 PRUNE=0 NOCHUNKS=0 S_SMTP=0 SMTP_TO=
+while [ $# -gt 0 ]; do
+  a=$1; shift
   case $a in
+    --smtp-check) [ $# -gt 0 ] && [ "${1#-}" = "$1" ] || { echo "--smtp-check needs an address"; usage 1; }; S_SMTP=1 SMTP_TO=$1; shift ;;
     --check) CHECK=1 DRY=1 S_SETUP=1 S_CHUNKS=1 ;;
     --setup) S_SETUP=1 ;; --build) S_BUILD=1 ;; --chunks) S_CHUNKS=1 ;; --nakama) S_NAKAMA=1 ;; --restart) S_RESTART=1 ;;
     --no-chunks) NOCHUNKS=1 ;; --dry-run) DRY=1 ;; --checksum) CHECKSUM=1 ;; --prune) PRUNE=1 ;;
     -h|--help) usage ;; *) echo "Unknown option $a"; usage 1 ;;
   esac
 done
-[ $((S_SETUP + S_BUILD + S_CHUNKS + S_NAKAMA + S_RESTART)) = 0 ] && S_SETUP=1 S_BUILD=1 S_CHUNKS=1 S_NAKAMA=2 S_RESTART=1
+[ $((S_SETUP + S_BUILD + S_CHUNKS + S_NAKAMA + S_RESTART + S_SMTP)) = 0 ] && S_SETUP=1 S_BUILD=1 S_CHUNKS=1 S_NAKAMA=2 S_RESTART=1
 [ $NOCHUNKS = 1 ] && S_CHUNKS=0
 
 # --- config: tools/deploy.env, but variables already set in the environment win ---
@@ -91,6 +94,12 @@ say "Preflight ($DEPLOY_HOST)"
 "${SSH[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$DEPLOY_HOST" true \
   || die "ssh $DEPLOY_HOST failed with key auth. Run: ssh-keygen (once), then ssh-copy-id -p $DEPLOY_PORT_SSH $DEPLOY_HOST"
 echo "  ssh    OK ($(rq 'uname -srm; . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-}"' | tr '\n' ' '))"
+if [ $S_SMTP = 1 ]; then  # the layout service's own check, with layouts.env (SMTP_PASS stays on the host) loaded
+  say "SMTP check ($DEPLOY_HOST)"
+  rq "set -a; . $(qd "$LAYOUTS_DIR/layouts.env"); set +a; $(qd "$LAYOUTS_DIR/app/LayoutService") --smtp-check $(qd "$SMTP_TO")" \
+    && echo "  SMTP    OK" || die "SMTP check failed (see above; settings come from SMTP_* in tools/deploy.env, written to $LAYOUTS_DIR/layouts.env by --setup)"
+  exit 0
+fi
 SUDO=sudo
 if rq 'sudo -n true' 2>/dev/null; then SUDO_TTY=(); echo "  sudo   OK (passwordless)"
 elif [ -t 0 ]; then SUDO_TTY=(-t); echo "  sudo   will ask for your password"

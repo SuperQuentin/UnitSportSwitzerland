@@ -27,10 +27,12 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `flag-plant` — Swiss flag: placement ghost (green/red, pick-up halo), raise-and-stab / pull-up strokes, replicated Plant arms, spawn thud + dirt
 - `bags` — Bag slot adds pack rows (pouch/handbag/backpack/hiking +9..+36), one array with a moving Capacity, ChangeBag compacts or refuses, found in wardrobes/halls/nightstands (#208)
 - `throw-drop` — Drop (Q / Ctrl+Q / pack panel), pointing outline (inverted hull overlay), E pick-up, grenade-style charged throw (arc, ring, shoulder cam, wind-up arm pose), local proxy + remote prediction, CCD + under-terrain rescue, ImpactFx, Minecraft-style floating/spinning look at rest (DropFloat); `tools/dropcheck.sh` (#206)
+- `interact-outline` — What E / pad / VR grip acts on is outlined (#1286): `Interaction` = words + `Outline`, one rule `InteriorManager.Interacting` in TryInteract's order, furniture pieces built alone into a proxy, boxes for baked things, `Outranks` over items/car doors; `InteractOutlineTests`, `--outlinecheck`
 - `throw-hits` — A thrown item hitting a player (#261): thrower-side path test, `ItemEventKind.Bonk` relayed by the server, non-lethal damage (floor 5), flinch on every copy, bonk + oof + dizzy tune
 - `catalogue` — Item catalogue (#262): every item as tiles, tabs + search, click 1 / right 10 / shift stack, money + clear buttons; only sends chat commands, so the server checks admin
 - `barracks-items` — Cards, chips, beer, Gamelle and the TAZ 90 uniform (#716): held meshes in `BarracksMeshes`, camo as `Finish.Camo`, where they are sold and found, viewer commands
 - `traffic-tool` — An admin's traffic tool (#971): held, the traffic endpoints show and a ghost where Use places a generator (or a halo on one Use opens); its settings window (`TrafficGeneratorUi`); from the debug menu only
+- `adventure/reward-gadgets` (in docs/notes/adventure/) — Bergkristall, the treasure detector (`ItemUse.Detector`), the travel flag (`PlacedKind.TravelFlag`), the bottled gust (`ItemUse.Gust`, `ItemEventKind.Gust`), the Alpine set; ItemId 400-410 (#1227)
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
 
 - `vehicles/pallets` (in docs/notes/vehicles/) — `Pallets` (load byte, ids, fork rule), `PalletNode`, `PalletService` at World/Pallets (server-owned, session-only), `PalletCheck`, `PalletNetProbe` (#583)

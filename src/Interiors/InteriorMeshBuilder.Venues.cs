@@ -52,7 +52,7 @@ public static partial class InteriorMeshBuilder
     private static bool IsVenuePiece(FurnitureType t) => t is FurnitureType.LanePair or FurnitureType.Settee
         or FurnitureType.ShoeCounter or FurnitureType.BallRack or FurnitureType.BarCounter or FurnitureType.BackBar
         or FurnitureType.BarStool or FurnitureType.PoolTable or FurnitureType.Pinball or FurnitureType.ArcadeCabinet
-        or FurnitureType.DartBoard or FurnitureType.ShoeRack or FurnitureType.Confetti;
+        or FurnitureType.DartBoard or FurnitureType.ShoeRack or FurnitureType.Confetti or FurnitureType.CueRack;
 
     private static void VenuePiece(Scratch s, FurniturePlan p, Vector3 at, Basis basis)
     {
@@ -264,6 +264,22 @@ public static partial class InteriorMeshBuilder
                 B(-0.13f, 1.6f, -d + 0.07f, 0.13f, 1.86f, -d + 0.11f, C(0.12f, 0.50f, 0.20f));
                 B(-0.07f, 1.66f, -d + 0.07f, 0.07f, 1.8f, -d + 0.125f, C(0.80f, 0.10f, 0.12f));
                 B(-0.02f, 1.71f, -d + 0.07f, 0.02f, 1.75f, -d + 0.14f, C(0.98f, 0.92f, 0.20f));
+                break;
+            }
+            case FurnitureType.CueRack:
+            {
+                // a wall rack [S: 10-12 cues, 1.5 m]: its back board, the shelf the butts stand on, the bar
+                // that holds the tips, the cues between, dark butts and pale shafts
+                B(-w, 0.2f, -d, w, 1.7f, -d + 0.03f, darkWood);
+                B(-w, 0.2f, -d + 0.03f, w, 0.26f, d, darkWood);
+                B(-w, 1.5f, -d + 0.03f, w, 1.56f, d, darkWood);
+                int cues = Math.Max(3, (int)((p.W - 0.08f) / 0.07f));
+                for (int i = 0; i < cues; i++)
+                {
+                    float cx = -w + 0.06f + i * (p.W - 0.12f) / Math.Max(1, cues - 1), cz = -d + 0.03f + (d * 2 - 0.03f) * 0.5f;
+                    B(cx - 0.015f, 0.26f - 0.012f, cz - 0.015f, cx + 0.015f, 0.8f, cz + 0.015f, Hash(p, 60 + i) < 0.5f ? C(0.20f, 0.10f, 0.06f) : C(0.08f, 0.08f, 0.08f));
+                    B(cx - 0.006f, 0.8f - 0.012f, cz - 0.006f, cx + 0.006f, 1.62f, cz + 0.006f, C(0.86f, 0.74f, 0.52f));
+                }
                 break;
             }
         }

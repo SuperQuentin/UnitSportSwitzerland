@@ -37,6 +37,8 @@ public partial class ArcadeProbe : Node
         new("under-flats", 16, 22, 15, BuildingKind.Apartment, true, 20),
         // a kiosk: no arcade fits, the ordinary rules furnish it
         new("too-small", 5, 6, 4, BuildingKind.Commercial, false),
+        // an arcade by OSM that its name says is a billiard hall (Bluff Billard, Geneva, #1250)
+        new("billard", 20, 26, 4.5f, BuildingKind.Commercial, true),
     };
 
     public override void _Ready()
@@ -73,11 +75,29 @@ public partial class ArcadeProbe : Node
         Check(l.Type == BuildingType.Arcade, $"{what}: the plan is an arcade ({l.Type})");
         Check(l.Group == $"Arcade{InteriorGenerator.ArcadeRules}", $"{what}: fingerprinted with the arcade rules ({l.Group})");
 
+        int Count(FurnitureType t) => l.Furniture.Count(f => f.Type == t);
+        if (InteriorGenerator.IsBilliard($"Arcade {c.Name}"))
+        {
+            Check(l.Floors[0].Rooms.Any(r => r.Type == RoomType.BilliardHall), $"{what}: a billiard hall on the ground floor");
+            Check(Count(FurnitureType.PoolTable) >= 4, $"{what}: pool tables ({Count(FurnitureType.PoolTable)})");
+            Check(Count(FurnitureType.BarCounter) == 1 && Count(FurnitureType.BarStool) >= 3, $"{what}: the bar and its stools");
+            Check(Count(FurnitureType.CueRack) >= 2, $"{what}: cue racks ({Count(FurnitureType.CueRack)})");
+            Check(Count(FurnitureType.HighTable) + Count(FurnitureType.Sofa) >= 1, $"{what}: somewhere to sit between the tables");
+            // every pool table keeps a cue's swing clear of every other piece
+            foreach (var t in l.Furniture.Where(x => x.Type == FurnitureType.PoolTable))
+            {
+                float ew = t.Turns % 2 == 0 ? t.W : t.D, ed = t.Turns % 2 == 0 ? t.D : t.W;
+                var swing = new RectPlan(t.X - ew / 2 - 1.2f, t.Z - ed / 2 - 1.2f, t.X + ew / 2 + 1.2f, t.Z + ed / 2 + 1.2f);
+                var hit = l.Furniture.FirstOrDefault(x => x != t && x.Floor == t.Floor && x.Type is not (FurnitureType.Confetti)
+                    && swing.Overlaps(new RectPlan(x.X - 0.01f, x.Z - 0.01f, x.X + 0.01f, x.Z + 0.01f)));
+                Check(hit == null, $"{what}: a pool table at {t.X:F1},{t.Z:F1} keeps its swing clear ({hit?.Type})");
+            }
+            return;
+        }
         var hall = l.Floors[0].Rooms.FirstOrDefault(r => r.Type == RoomType.ArcadeHall);
         Check(hall != null, $"{what}: an arcade hall on the ground floor");
         if (hall == null) return;
         Check(hall.Openings.All(o => o.Kind != OpeningKind.Window), $"{what}: the hall is dark (no windows)");
-        int Count(FurnitureType t) => l.Furniture.Count(f => f.Type == t);
         int machines = l.Furniture.Count(f => f.Type is FurnitureType.ArcadeCabinet or FurnitureType.Pinball or FurnitureType.ClawMachine
             or FurnitureType.Racer or FurnitureType.SimPod or FurnitureType.DanceMachine or FurnitureType.DrumGame
             or FurnitureType.BasketballGame or FurnitureType.AirHockey);

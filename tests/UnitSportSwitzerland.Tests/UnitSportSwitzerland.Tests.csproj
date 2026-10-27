@@ -102,6 +102,14 @@
     <Compile Include="..\..\src\Adventure\PlayerProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\AdventureEvents.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Quests\*.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- Versteckis (#1268): the rules, the area, the hide plan, the bots' tactics, the progress section -->
+    <Compile Include="..\..\src\Adventure\Versteckis\VsProps.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Versteckis\VsRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Versteckis\VsState.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Versteckis\VsArea.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Versteckis\HidePlan.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Versteckis\VsTactics.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Versteckis\VersteckisProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishCatalog.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
@@ -124,6 +132,8 @@
     <Compile Include="..\..\src\Combat\AuraMatch.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\AuraBody.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- one "in a round" registry for the Battle Royale and Versteckis (#1268) -->
+    <Compile Include="..\..\src\Core\Rounds.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
@@ -175,12 +185,28 @@
     <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
     <Compile Include="..\..\tools\TerrainPreprocessor\PoiPick.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\PoiCatalogue.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- /locate (#1277): the vocabulary, the chat's @E,N, the building index and the search -->
+    <Compile Include="..\..\src\World\Locate\LocateQuery.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Locate\LocateCoords.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Locate\BuildingIndex.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Locate\LocateEngine.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Locate\TileQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- adventure places part 2 (#1224): discovery, fog, the Atlas's progress and texts -->
     <Compile Include="..\..\src\Adventure\Places\PlacesProgress.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\DiscoveryRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\FogMask.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\AtlasProgress.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\AtlasFacts.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- adventure rewards (#1227): placement, chests, seals, edelweiss, guides, trials, photos -->
+    <Compile Include="..\..\src\Adventure\Rewards\RewardRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\RewardPlacer.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\ChestLoot.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Seals.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Edelweiss.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\GuideAnimal.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Trials.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\PhotoSpots.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Gadgets.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />

@@ -549,6 +549,33 @@ public partial class ItemController : Node
             case ItemUse.Readout:
                 break;
 
+            case ItemUse.Round:
+                // a Versteckis round tool (#1268): the game's server checks it all
+                Adventure.Versteckis.VersteckisManager.Instance?.UseTool(player, def.Id, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
+            case ItemUse.Detector:
+                // the treasure detector (#1227): one strong ping, a direction for 3 s
+                Adventure.Rewards.RewardHud.Instance?.Ping();
+                break;
+
+            case ItemUse.Gust:
+            {
+                // a bottled gust (#1227): thrown ahead like the smoke, an updraft where it lands
+                if (Core.GameClock.Now < _nextShotAt) break;
+                _nextShotAt = Core.GameClock.Now + 0.8;
+                var (eye, aim) = AimFrom(player, SwissItems.SmokeThrow);
+                var space = player.GetWorld3D().DirectSpaceState;
+                var hit = AimRay.Cast(space, eye, eye + aim * SwissItems.SmokeThrow, uint.MaxValue, player.SelfExclude);
+                var at = hit.Count > 0 ? hit["position"].AsVector3() : eye + aim * SwissItems.SmokeThrow;
+                if (hit.Count == 0 && AimRay.Cast(space, at, at + Vector3.Down * 40f, uint.MaxValue, player.SelfExclude) is { Count: > 0 } ground)
+                    at = ground["position"].AsVector3();
+                _inventory.TakeOne(slot);
+                Kick(player);
+                ItemEvents.Instance?.Send(ItemEventKind.Gust, at, aim);
+                break;
+            }
+
             case ItemUse.Shoot:
             {
                 if (Weapons.Get(stack.Id) is not { } weapon) break;
@@ -827,9 +854,11 @@ public partial class ItemController : Node
         }
         else if (_throw.SinceRelease < 0.4f) player.ItemAction = 4;
 
-        Highlight.Point(usable && !_throw.Active && !_ui.IsOpen ? Highlight.Find(player) : null);
+        // what E would act on before them (a crate at the feet, a crane's ladder) keeps these borders off (#1286)
+        bool free = usable && !_throw.Active && !_ui.IsOpen;
+        Highlight.Point(free && InteractOutline.Outranks != Outranking.ItemAndVehicle ? Highlight.Find(player) : null);
         // a world item pointed at comes first; else the car door (or machine) the player is at (#261)
-        Vehicles.VehicleReach.Point(usable && !_throw.Active && !_ui.IsOpen && Highlight.Pointed == null
+        Vehicles.VehicleReach.Point(free && Highlight.Pointed == null && InteractOutline.Outranks == Outranking.None
             ? Vehicles.VehicleReach.Find(player) : null);
     }
 
@@ -1123,7 +1152,8 @@ public partial class ItemController : Node
             if (IsInstanceValid(player))
             {
                 var (e, n) = _origin.ToLv95(player.GlobalPosition);
-                photo = PhotoStore.Save(image, e, n, player.GlobalPosition.Y, _focalMm, path);
+                photo = PhotoStore.Save(image, e, n, player.GlobalPosition.Y, _focalMm, path,
+                    Adventure.Rewards.RewardPhotos.SpotFor(player, player.Camera, FovFromFocal(_focalMm)));
             }
         }
         catch (Exception e)
@@ -1144,6 +1174,8 @@ public partial class ItemController : Node
             _ui.Toast("Photo failed.");
             return;
         }
+        // a photo spot framed, an animal in the frame (#1227): the server judges the view
+        Adventure.Rewards.RewardPhotos.Report(player, player.Camera, FovFromFocal(_focalMm));
         // two frames for a camera lowered right after the shot to be drawn again, so the print
         // comes out of it
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

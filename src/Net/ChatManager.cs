@@ -179,6 +179,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(stamina, ChatKind.Private);
             return;
         }
+        // tracking a point and showing it on the map are this screen's alone (#1277)
+        if (World.Locate.LocateClient.Run(text) is var (located, locateFailed))
+        {
+            if (located.Length > 0) LineReceived?.Invoke(located, locateFailed ? ChatKind.Error : ChatKind.Private);
+            return;
+        }
         // the visual style is this screen's alone: never a server's business
         if (Styles.StyleCommand.Run(text.Trim()) is { } style)
         {
@@ -400,6 +406,19 @@ public partial class ChatManager : Node
                 : $"Spawned {count - left} x {def.Name}; {left} did not fit.";
     }
 
+    /// <summary><c>/locate</c> offline (#1277): this machine's own <see cref="World.Locate.LocateService"/>.</summary>
+    private async void LocateLocal(string rest)
+    {
+        if (World.Locate.LocateService.Instance is not { } locate)
+        {
+            LineReceived?.Invoke("No map data to search here.", ChatKind.Error);
+            return;
+        }
+        var (lines, failed) = await locate.Answer(rest, Here?.Invoke());
+        if (!IsInsideTree()) return;
+        foreach (string line in lines) LineReceived?.Invoke(line, failed ? ChatKind.Error : ChatKind.Private);
+    }
+
     /// <summary>
     /// A line typed with no server to send it to: commands run here. Only what makes sense alone
     /// works; the rest says it needs a server rather than silently doing nothing.
@@ -459,6 +478,16 @@ public partial class ChatManager : Node
                     Teleporter.TeleportTo(place.E, place.N, place.Name);
                     Show($"Teleported to {place.Name}", ChatKind.System);
                 }
+                return;
+
+            case "locate" or "find":
+                LocateLocal(rest);
+                return;
+
+            case "go":
+                if (!World.Locate.LocateCoords.TryParse(rest, out double goE, out double goN)) Show("Usage: /go @E,N (LV95 metres, e.g. /go @2533450,1152300)", ChatKind.Error);
+                else if (Teleporter?.TeleportTo(goE, goN, World.Locate.LocateCoords.Format(goE, goN)) == true) Show($"Teleported to {World.Locate.LocateCoords.Format(goE, goN)}", ChatKind.System);
+                else Show("Nothing to teleport here.", ChatKind.Error);
                 return;
 
             case "stadium" or "venue":
@@ -578,9 +607,14 @@ public partial class ChatManager : Node
                 Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
                 return;
 
+            case "trial":
+                Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
+                return;
+
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
-                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
-                Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
+                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis":
+                // Versteckis has no offline game (#1268): its bots need a server; Host a game from the menu
+                Show(verb is "vs" or "versteckis" ? "Versteckis needs a multiplayer game: Host a game from the menu, and bots fill it." : $"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
             default:
@@ -635,6 +669,12 @@ public partial class ChatManager : Node
         text = text.Trim();
         if (text.Length == 0) return;
         if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        // a round's spectators talk among themselves while it runs (#1268, Core/Rounds): nobody calls out the spots
+        if (Core.Rounds.ChatScope(peer) is { } scope && Versteckis != null)
+        {
+            foreach (long member in Versteckis.ScopeMembers(scope)) ReplyTo(member, $"{NameOf(peer)} (spectating): {Scrub(text)}", ChatKind.Say);
+            return;
+        }
         Broadcast($"{NameOf(peer)}: {Scrub(text)}", ChatKind.Say);
         Rpc(MethodName.Said, peer, Scrub(text));
     }
@@ -795,6 +835,8 @@ public partial class ChatManager : Node
 
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
+    /// <summary>Versteckis (#1268): <c>/vs …</c>, and the spectators' chat scope.</summary>
+    public Adventure.Versteckis.VersteckisManager? Versteckis { get; set; }
 
     /// <summary>Server: the spawn and teleport rule (#799); <c>/city</c> asks it.</summary>
     public Arrival? Arrival { get; set; }
@@ -824,8 +866,10 @@ public partial class ChatManager : Node
     /// </summary>
     private bool RefusedInMatch(long sender, long peer)
     {
-        if (BattleRoyale?.Playing(peer) != true) return false;
-        ReplyTo(sender, peer == sender ? NotInMatch : $"{NameOf(peer)} is in a Battle Royale match: everyone plays it on equal terms.", ChatKind.Error);
+        // every round mode (#1268, Core/Rounds): the Battle Royale answers first, in its own words
+        if (Core.Rounds.PlayingIn(peer) is not { } mode) return false;
+        ReplyTo(sender, peer == sender ? (mode.Name == "br" ? NotInMatch : $"Not in {mode.Label}: everyone plays it on equal terms.")
+            : $"{NameOf(peer)} is in {mode.Label}: everyone plays it on equal terms.", ChatKind.Error);
         return true;
     }
 
@@ -882,6 +926,8 @@ public partial class ChatManager : Node
             case "travel" or "pin": if (RequiresAvatar(sender, verb)) TravelCommand(sender, verb, rest); return;
             // the venues (#994): anyone lists them; going to one is a teleport like /city
             case "stadium" or "venue": CommandStadium(sender, rest); return;
+            case "locate" or "find": CommandLocate(sender, rest); return;
+            case "go": if (RequiresAvatar(sender, verb)) CommandGo(sender, rest); return;
             case "login": if (RequiresAvatar(sender, verb)) CommandLogin(sender, rest); return;
             case "me":
                 if (rest.Length > 0) Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
@@ -922,10 +968,20 @@ public partial class ChatManager : Node
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
+            // Versteckis (#1268): anyone opens, joins, leaves; the opener starts; an admin closes any
+            case "vs" or "versteckis":
+                if (Versteckis == null) ReplyTo(sender, "Versteckis is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, Versteckis.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
             case "bot" or "bots":
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
                     id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
+            // an adventure trial (#1227): leave the one you run
+            case "trial":
+                if (Adventure.Rewards.RewardService.Instance is not { } rewards) ReplyTo(sender, "Trials are not available here.", ChatKind.Error);
+                else ReplyTo(sender, rewards.Command(sender, rest), ChatKind.Private);
                 return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
@@ -1199,9 +1255,9 @@ public partial class ChatManager : Node
     /// <summary>Whether a player may teleport themselves (<c>/city</c>, <c>/stadium</c>); tells them why not.</summary>
     private bool MayTeleport(long sender)
     {
-        if (BattleRoyale?.Playing(sender) == true)
+        if (Core.Rounds.PlayingIn(sender) is { } mode)
         {
-            ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
+            ReplyTo(sender, mode.NoTeleport.Length > 0 ? mode.NoTeleport : $"No teleporting out of {mode.Label}.", ChatKind.Error);
             return false;
         }
         if (Arrival is { FreeTeleport: false } && !IsAdmin(sender))
@@ -1236,6 +1292,37 @@ public partial class ChatManager : Node
         if (!TryFindPlace(sender, query, out var place)) return;
 
         RpcId(sender, MethodName.ForceTeleport, place.E, place.N, place.Name);
+    }
+
+    /// <summary>
+    /// <c>/locate &lt;thing&gt; [+ selector ...] [in &lt;town&gt;]</c> (#1277): the nearest things the server's map data
+    /// knows, from where the asker stands; each line ends in its <c>@E,N</c>, which the chat turns into buttons.
+    /// </summary>
+    private async void CommandLocate(long sender, string rest)
+    {
+        if (World.Locate.LocateService.Instance is not { } locate)
+        {
+            ReplyTo(sender, "This server has no map data to search.", ChatKind.Error);
+            return;
+        }
+        var (lines, failed) = await locate.Answer(rest, _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global);
+        if (!IsInsideTree()) return;
+        foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
+    }
+
+    /// <summary>
+    /// <c>/go @E,N</c> (#1277): a teleport to a point, what the chat's Teleport button sends, on the same
+    /// terms as <c>/city</c> (<see cref="MayTeleport"/>), where <c>/tp E N</c> stays an admin's.
+    /// </summary>
+    private void CommandGo(long sender, string rest)
+    {
+        if (!World.Locate.LocateCoords.TryParse(rest, out double e, out double n))
+        {
+            ReplyTo(sender, "Usage: /go @E,N (LV95 metres, e.g. /go @2533450,1152300)", ChatKind.Error);
+            return;
+        }
+        if (!MayTeleport(sender)) return;
+        RpcId(sender, MethodName.ForceTeleport, e, n, World.Locate.LocateCoords.Format(e, n));
     }
 
     /// <summary>
@@ -1307,9 +1394,9 @@ public partial class ChatManager : Node
     {
         if (!TryFindPlace(sender, query, out var place)) return;
 
-        // a Battle Royale is left alone (#425): its entrants stay where the match has them
+        // a Battle Royale is left alone (#425), and every other round (#1268): its entrants stay where the game has them
         foreach (int peer in Multiplayer.GetPeers())
-            if (BattleRoyale?.Playing(peer) != true) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
+            if (!Core.Rounds.Playing(peer)) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
         Broadcast($"{NameOf(sender)} moved everyone to {place.Name}", ChatKind.Admin);
     }
 

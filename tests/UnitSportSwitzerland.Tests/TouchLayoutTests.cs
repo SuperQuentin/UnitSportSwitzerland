@@ -182,4 +182,36 @@ public class TouchLayoutTests
             Assert.Equal(right.GetCenter().Y, left.GetCenter().Y, 3);
         }
     }
+
+    /// <summary>The phone app's finger (#1253): millimetres turned into pixels on every screen density.</summary>
+    [Theory]
+    [InlineData(6f)]
+    [InlineData(10f)]
+    [InlineData(17f)]
+    public void ThePhoneAppsFingerCountsInMillimetres(float pxPerMm)
+    {
+        float slop = TouchLayout.TapSlopMm * pxPerMm, back = TouchLayout.BackSwipeMm * pxPerMm;
+        // 1.5 mm of wobble is a tap, 2.5 mm is a drag
+        Assert.False(TouchLayout.Beyond(new Vector2(1.5f * pxPerMm, 0f), slop));
+        Assert.True(TouchLayout.Beyond(new Vector2(2.5f * pxPerMm, 0f), slop));
+        // a back swipe needs 10 mm, mostly sideways
+        Assert.Equal(1, TouchLayout.SideSwipe(new Vector2(11f * pxPerMm, 2f * pxPerMm), back));
+        Assert.Equal(-1, TouchLayout.SideSwipe(new Vector2(-11f * pxPerMm, 0f), back));
+        Assert.Equal(0, TouchLayout.SideSwipe(new Vector2(9f * pxPerMm, 0f), back));
+        Assert.Equal(0, TouchLayout.SideSwipe(new Vector2(11f * pxPerMm, 9f * pxPerMm), back));
+        // a swipe down (put the folded phone away) likewise
+        Assert.Equal(1, TouchLayout.DownSwipe(new Vector2(1f * pxPerMm, 11f * pxPerMm), back));
+        Assert.Equal(-1, TouchLayout.DownSwipe(new Vector2(0f, -11f * pxPerMm), back));
+        Assert.Equal(0, TouchLayout.DownSwipe(new Vector2(11f * pxPerMm, 11f * pxPerMm), back));
+    }
+
+    [Fact]
+    public void ThePhoneAppsTargetsAreAtLeastSevenMillimetres()
+    {
+        Assert.True(TouchLayout.MinTargetMm >= 7f);
+        Assert.True(TouchLayout.PrimaryTargetMm >= 9f);
+        Assert.True(TouchLayout.PrimaryTargetMm > TouchLayout.MinTargetMm);
+        // the slop stays under the back swipe, or a tap could be a swipe
+        Assert.True(TouchLayout.TapSlopMm * 2f < TouchLayout.BackSwipeMm);
+    }
 }

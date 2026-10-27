@@ -109,6 +109,9 @@ public sealed class GameSettings
     // ---- the adventure's navigation (#1226, docs/notes/adventure/compass.md, guide.md, travel.md) ----
     /// <summary>The free-roam compass strip at the top of the screen.</summary>
     public bool AdventureCompass { get; set; } = true;
+
+    /// <summary>Versteckis (#1268): the blind seeker hears the count, a tick a second.</summary>
+    public bool VersteckisCounting { get; set; } = true;
     /// <summary>The guiding gust: 0 on demand (N), 1 always while a target is tracked, 2 arrow only, 3 off.</summary>
     public int GuideWind { get; set; }
     /// <summary>The guide as a high-contrast arrow on the ground instead of leaves (accessibility).</summary>
@@ -325,6 +328,12 @@ public sealed class GameSettings
 
     /// <summary>The gliders' variometer: a beep that rises with the climb, a low tone in sink (#1225, <see cref="Audio.Variometer"/>).</summary>
     public bool Variometer { get; set; } = true;
+
+    /// <summary>
+    /// Radios, stereos and speakers muffled by what stands between them and the ears, found by rays
+    /// (<see cref="Audio.Hearing"/>). Off: heard as in the open, no rays cast (#1281).
+    /// </summary>
+    public bool SoundOcclusion { get; set; } = true;
 
     /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
     public bool ChatBubbles { get; set; } = true;

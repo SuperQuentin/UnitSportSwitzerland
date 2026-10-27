@@ -235,6 +235,18 @@ public partial class Herds : Node3D, IOriginContainer
             foreach (var h in list) h.Epoch = Now;
     }
 
+    /// <summary>The cows within <paramref name="radius"/> of a world point, into a reused list (the camera's fauna page, #1227).</summary>
+    public void CowsNear(Vector3 at, float radius, List<Vector3> into)
+    {
+        into.Clear();
+        foreach (var live in _all)
+            foreach (var cow in live.Cows)
+            {
+                var p = cow.BeamPosition;
+                if (p.DistanceSquaredTo(at) <= radius * radius) into.Add(p);
+            }
+    }
+
     /// <summary>A staged herd's cows where they are now, LV95 and compass yaw (rad), for the director's track dump.</summary>
     public IEnumerable<(double E, double N, float Alt, float Yaw)> StagedCows(int handle)
     {

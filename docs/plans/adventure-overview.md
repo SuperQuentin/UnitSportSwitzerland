@@ -3,7 +3,7 @@
 
 # Adventure layer, phases 1 and 2: overview
 
-Status: **planned**. Tracking issue: #1228.
+Status: **built** (October 2026): #1229 (core), #1230 (places), #1231 (stamina), #1236 (navigation), #1252 (rewards). Tracking issue: #1228; follow-ups: #1263.
 
 UnitSport already has the expensive parts of a Genshin-like open world: real Switzerland, swimming,
 gliding, skiing, ~60 vehicles, farming, fishing, crafting, building, loot, bots, events. What it lacks

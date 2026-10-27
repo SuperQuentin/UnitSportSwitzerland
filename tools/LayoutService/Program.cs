@@ -19,6 +19,12 @@ using Microsoft.AspNetCore.HttpOverrides;
 using UnitSport.LayoutService;
 using UnitSport.Terrain.Format;
 
+if (args.Length > 0 && args[0] == "--smtp-check")   // a deploy check, before anything else starts (tools/deploy-linux.sh --smtp-check)
+{
+    if (args.Length != 2) { Console.Error.WriteLine("usage: LayoutService --smtp-check <to>"); return 2; }
+    return await new Mailer(Microsoft.Extensions.Logging.Abstractions.NullLogger<Mailer>.Instance).Check(args[1]);
+}
+
 string Env(string k, string d) => Environment.GetEnvironmentVariable(k) is { Length: > 0 } v ? v : d;
 var dataDir = Path.GetFullPath(Env("LAYOUTS_DATA", "layouts-data"));
 var uploads = Path.Combine(dataDir, "uploads");
@@ -340,6 +346,7 @@ admin.MapPost("/claims/{id:long}/reject", (long id, ReasonBody body, HttpContext
 });
 
 app.Run();
+return 0;
 
 static string Trim(string? s, int max) => (s ?? "").Trim() is var t && t.Length > max ? t[..max] : (s ?? "").Trim();
 

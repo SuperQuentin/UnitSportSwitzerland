@@ -75,7 +75,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
-            new("Phone: take it out, again to open it; out, WASD and the mouse work it (click, swipe), Enter selects, S / Esc puts it away", PlayerInput.Phone, Pad: "{quick_menu} (hold) › Phone"),
+            new("Phone: take it out, again to open it; out, WASD and the mouse work it (click, swipe), Enter selects, Esc / Backspace / right click goes back, hold Esc puts it away", PlayerInput.Phone, Pad: "{quick_menu} (hold) › Phone"),
             new("Accept the invite on screen", PlayerInput.QuickMenu, Keys: "{quick_menu} (tap)", Pad: "{menu}, then A"),
             new("Decline the invite on screen", PlayerInput.InviteDecline, Pad: "{quick_menu} (hold) › Invites"),
         }),
@@ -323,6 +323,15 @@ public partial class ControlsHelp : CanvasLayer
             new("Switch tool (rectangle, brush, erase)", PlayerInput.MapTool),
             new("Find a place", PlayerInput.MapSearch),
         }),
+        ("Versteckis", new Row[]
+        {
+            new("Use the round tool in hand (tag, sniff, decoy, sprint, voice, disguise)", PlayerInput.UseItem),
+            new("Copy the prop you look at (with the Disguise)", Keys: "{aim_item} + {use_item}", Pad: "LB + RB"),
+            new("Sprint burst while disguised", PlayerInput.Sprint),
+            new("Settle the prop", PlayerInput.CrouchSlide),
+            new("Hold: ring the bell, light the fire; take or set down the milk can", PlayerInput.InteractMount),
+            new("Caught: follow the next player", Keys: "← / →", Pad: "D-pad ← / →"),
+        }),
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
@@ -330,7 +339,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Free the mouse cursor (tap; Alt again or click the world to look)", PlayerInput.FreeCursor, Pad: "—"),
             new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
-            new("Chat / command", Keys: "Enter or /", Pad: "—"),
+            new("Chat / command (the \"/\" button lists the commands as buttons)", Keys: "Enter or /", Pad: "{quick_menu} › Chat"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
             new("Debug menu (offline or admin)", PlayerInput.DebugMenu),

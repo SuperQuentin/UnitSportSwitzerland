@@ -60,6 +60,10 @@ public partial class PhoneScreens : Node
     public event Action<string, bool>? WallpaperPicked;
     /// <summary>A page changed (the controller hands the mouse over for the camera).</summary>
     public event Action<Page>? PageShown;
+    /// <summary>The back chevron on an app's page was pressed (the controller goes up one level).</summary>
+    public event Action? BackPressed;
+    /// <summary>A zoom chip was picked on the glass (the controller plays the tap).</summary>
+    public event Action? ZoomPicked;
 
     private readonly Func<PlaceSearchUi?> _places;
     private readonly Func<ChatManager?> _chat;
@@ -84,7 +88,10 @@ public partial class PhoneScreens : Node
     public float InnerScale => _innerRoot.Scale.Y;
     private GridContainer _homeGrid = null!;
     private readonly List<(Label Label, string Accept, string Back)> _hints = new();
-    private bool _vr;
+    /// <summary>Extra key lines of a page (the photo pager's), named for the device in hand.</summary>
+    private readonly List<(Label Label, Func<string> Text)> _keyLines = new();
+    private bool _vr, _touch;
+    private float _touchUnits = TouchUnitsDefault;
     private Vector2 _fitWindow;
     // inner
     private Control _innerRoot = null!;
@@ -100,11 +107,18 @@ public partial class PhoneScreens : Node
     private string _trShown = "";
     private double _actRefreshAt;
     private RaceManager? _races;
-    private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!, _travelNote = null!, _zoomLabel = null!;
+    private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!, _travelNote = null!;
     private LineEdit _query = null!;
     private VBoxContainer _results = null!, _people = null!, _calls = null!;
     private Label _mapHint = null!;
+    private Button _travelCancel = null!;
+    private PanelContainer _coverBanner = null!;
+    private Label _bannerWho = null!, _bannerKeys = null!;
     private TextureRect _lastShot = null!;
+    private readonly List<Button> _zoomChips = new();
+    private Button _shutterButton = null!, _selfieButton = null!, _photoPrev = null!, _photoNext = null!, _photoLock = null!, _photoHome = null!;
+    private ScrollContainer _photosScroll = null!;
+    private List<string> _photoIds = new();
     private ColorRect _flash = null!;
     private readonly List<Button> _homeTiles = new();
     private string _clockShown = "";
@@ -171,7 +185,7 @@ public partial class PhoneScreens : Node
         var size = new Vector2I(Mathf.RoundToInt(h * PhoneModel.InnerW / PhoneModel.InnerH), h);
         // laid out for a screen 800 units high, drawn at the pixels it covers; in VR for 640, so every
         // target is a quarter bigger at arm's length (#920)
-        float k = h / (_vr ? VrUnits : 800f);
+        float k = h / (_vr ? VrUnits : _touch ? _touchUnits : 800f);
         if (Inner.Size == size && Mathf.IsEqualApprox(_innerRoot.Scale.Y, k)) return;
         Inner.Size = size;
         _innerRoot.Scale = new Vector2(k, k);
@@ -180,9 +194,16 @@ public partial class PhoneScreens : Node
     }
 
     private const float VrUnits = 640f;
+    /// <summary>Touch lays the inner screen out for this many units high at most; the real number follows the phone's height (8.2 units a millimetre).</summary>
+    private const float TouchUnitsDefault = 560f, TouchUnitsPerMm = 8.2f;
+    /// <summary>The smallest a touch target is on the glass: 7 mm, 9 mm for the primary ones (<see cref="TouchLayout.MinTargetMm"/>).</summary>
+    private static float TouchTarget(bool primary) => (primary ? TouchLayout.PrimaryTargetMm : TouchLayout.MinTargetMm) * TouchUnitsPerMm;
 
     /// <summary>The home screen's apps per row (6; 3 in VR), for the checks.</summary>
     internal int HomeColumns => _homeGrid.Columns;
+
+    /// <summary>How many apps the home screen shows, for the checks.</summary>
+    internal int HomeTileCount => _homeTiles.Count;
 
     /// <summary>
     /// The VR layout (#920): seen at arm's length the screen is about 23° wide, so it is laid out a
@@ -193,16 +214,57 @@ public partial class PhoneScreens : Node
     {
         if (vr == _vr) return;
         _vr = vr;
-        _homeGrid.Columns = vr ? 3 : 6;
+        Relayout();
+    }
+
+    /// <summary>
+    /// The touch layout (#1253): the screen is seen square on, filling a phone, so it is laid out for about
+    /// 8.2 units a millimetre of the window's height (<paramref name="windowHeightMm"/>), the VR layout's
+    /// three-column Home, and every target at least 7 mm (<see cref="TouchLayout.MinTargetMm"/>).
+    /// </summary>
+    public void SetTouch(bool on, float windowHeightMm)
+    {
+        float units = Mathf.Clamp(windowHeightMm * TouchUnitsPerMm, 420f, 800f);
+        if (on == _touch && (!on || Mathf.IsEqualApprox(units, _touchUnits))) return;
+        _touch = on;
+        _touchUnits = units;
+        Relayout();
+    }
+
+    /// <summary>Whether the touch layout is on, for the checks.</summary>
+    internal bool Touch => _touch;
+
+    private void Relayout()
+    {
+        bool compact = _vr || _touch;
+        _homeGrid.Columns = compact ? 3 : 6;
         foreach (var tile in _homeTiles)
         {
-            tile.CustomMinimumSize = vr ? new Vector2(196, 196) : new Vector2(152, 152);
-            tile.AddThemeFontSizeOverride("font_size", vr ? 30 : 24);
+            tile.CustomMinimumSize = _vr ? new Vector2(196, 196) : compact ? new Vector2(180, 120) : new Vector2(152, 152);
+            tile.AddThemeFontSizeOverride("font_size", compact ? 30 : 24);
         }
-        _homeClock.AddThemeFontSizeOverride("font_size", vr ? 72 : 120);
-        _grid.Columns = vr ? 4 : 6;
+        _homeClock.AddThemeFontSizeOverride("font_size", _vr ? 72 : _touch ? 48 : 120);
+        _grid.Columns = _vr || _touch ? 4 : 6;
         foreach (var (label, accept, back) in _hints) label.Text = HintText(accept, back);
+        foreach (var (label, text) in _keyLines) label.Text = text();
+        if (_touch) GrowTargets(_innerRoot);
         if (_fitWindow.Y > 0) Fit(_fitWindow);
+    }
+
+    /// <summary>Touch: no button is smaller than 7 mm on the glass, the back chevron and the shutter 9 mm or more.</summary>
+    private void GrowTargets(Node under)
+    {
+        foreach (var child in under.GetChildren())
+        {
+            if (child is Button b)
+            {
+                bool primary = b.TooltipText is "Back" or "Take a photo";
+                float min = TouchTarget(primary);
+                var size = b.CustomMinimumSize;
+                if (size.Y < min || size.X < min) b.CustomMinimumSize = new Vector2(Mathf.Max(size.X, min), Mathf.Max(size.Y, min));
+            }
+            GrowTargets(child);
+        }
     }
 
     // ---------------------------------------------------------------- cover
@@ -231,6 +293,21 @@ public partial class PhoneScreens : Node
         _coverClock = Big("12:00", 96);
         col.AddChild(_coverClock);
         col.AddChild(UiKit.Spacer(expand: true));
+
+        // an incoming call: a banner above the tiles, so the tiles never shift under the hands (#1253)
+        var bannerBox = new StyleBoxFlat { BgColor = new Color(0.16f, 0.55f, 0.28f, 0.88f), CornerDetail = 8 };
+        bannerBox.SetCornerRadiusAll(24);
+        bannerBox.SetContentMarginAll(12);
+        _coverBanner = new PanelContainer { Visible = false };
+        _coverBanner.AddThemeStyleboxOverride("panel", bannerBox);
+        var banner = UiKit.VBox(2);
+        _bannerWho = Big("", 22);
+        _bannerWho.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        banner.AddChild(_bannerWho);
+        _bannerKeys = Big("", 20, InkDim);
+        banner.AddChild(_bannerKeys);
+        _coverBanner.AddChild(banner);
+        col.AddChild(_coverBanner);
 
         _coverCardBox = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.35f), CornerDetail = 8 };
         _coverCardBox.SetCornerRadiusAll(28);
@@ -302,12 +379,17 @@ public partial class PhoneScreens : Node
         _coverContent.Visible = !on;
     }
 
+    /// <summary>The call banner on the cover, 0..1 of the screen; empty when no call rings.</summary>
+    public Rect2 CoverBannerUv() => _coverBanner.Visible
+        ? new Rect2(_coverBanner.GetGlobalRect().Position / new Vector2(CoverW, CoverH), _coverBanner.GetGlobalRect().Size / new Vector2(CoverW, CoverH))
+        : default;
+
     /// <summary>The middle of the quick-action card on the cover, 0..1: where a keyboard-led finger rests.</summary>
     public Vector2 CoverCardUv() => _coverCard.GetGlobalRect().GetCenter() / new Vector2(CoverW, CoverH);
 
     /// <summary>The middle of what has the keys on the inner screen, 0..1; null when nothing has.</summary>
     public Vector2? FocusUv() => Inner.GuiGetFocusOwner() is { } c && c.IsVisibleInTree()
-        ? c.GetGlobalRect().GetCenter() / (Vector2)Inner.Size : null;
+        ? UvOf(c) : null;
 
     /// <summary>The two wallpapers: a photo each, or null for the drawn gradient.</summary>
     public void SetWallpapers(Texture2D? lockScreen, Texture2D? home)
@@ -329,8 +411,14 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>The cover's picture: the clock, and the quick action <paramref name="index"/> of <paramref name="quick"/>.</summary>
-    public void ShowCover(IReadOnlyList<Quick> quick, int index)
+    public void ShowCover(IReadOnlyList<Quick> quick, int index, string? call = null)
     {
+        _coverBanner.Visible = call != null;
+        if (call != null)
+        {
+            SetText(_bannerWho, call);
+            SetText(_bannerKeys, _vr ? "tap left: Answer   right: Decline" : InputHints.Pad ? "A  Answer      B  Decline" : "Enter  Answer      Esc  Decline");
+        }
         var q = quick[Mathf.Clamp(index, 0, quick.Count - 1)];
         SetText(_coverAction, $"‹  {q.Label}  ›");
         SetText(_coverCall, q.Detail ?? "");
@@ -399,13 +487,11 @@ public partial class PhoneScreens : Node
         row.AddThemeConstantOverride("h_separation", 16);
         row.AddThemeConstantOverride("v_separation", 16);
         row.AddChild(Tile("Map", "Find a place, go there", new Color(0.18f, 0.55f, 0.36f), () => ShowPage(Page.Map)));
-        row.AddChild(Tile("Contacts", "Call people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
+        row.AddChild(Tile("Contacts", "Invite people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
         row.AddChild(Tile("Camera", "Take photos and selfies into your album", new Color(0.22f, 0.24f, 0.28f), () => ShowPage(Page.Camera)));
         row.AddChild(Tile("Photos", "Your album; set a photo as a wallpaper", new Color(0.86f, 0.30f, 0.45f), () => ShowPage(Page.Photos)));
-        row.AddChild(Tile("Activities", "Join a Battle Royale or a race", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
-        row.AddChild(Tile("Menu", "The full Activities menu: set up a race, a Battle Royale", new Color(0.50f, 0.30f, 0.62f), () => ActivitiesPicked?.Invoke()));
+        row.AddChild(Tile("Activities", "Join a Battle Royale or a race, host one, train on your home trainer", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
         row.AddChild(Tile("Journal", "Your quests, and the birds and fish you found", new Color(0.62f, 0.48f, 0.18f), () => JournalPicked?.Invoke()));
-        row.AddChild(Tile("Training", "Ride a GPX course on your home trainer, the road's grade on the trainer", new Color(0.10f, 0.55f, 0.58f), () => ShowPage(Page.Training)));
         col.AddChild(row);
         col.AddChild(UiKit.Spacer(expand: true));
         col.AddChild(Hint("open", "put the phone away"));
@@ -435,11 +521,21 @@ public partial class PhoneScreens : Node
     {
         var col = UiKit.VBox(12);
         col.AddChild(Title("Map"));
-        _query = new LineEdit { PlaceholderText = "Search a town, a summit, a pass", CustomMinimumSize = new Vector2(0, 64) };
+        _query = new LineEdit { PlaceholderText = "Search (press /)", CustomMinimumSize = new Vector2(0, 64) };
         _query.AddThemeFontSizeOverride("font_size", 30);
         _query.TextChanged += _ => FillResults();
         _query.TextSubmitted += _ => { if (_results.GetChildCount() > 0 && _results.GetChild(0) is Button b) b.EmitSignal(BaseButton.SignalName.Pressed); };
         col.AddChild(_query);
+        var chips = UiKit.HBox(10);
+        foreach (var (name, kind) in new (string, PlaceKind?)[] { ("All", null), ("Towns", PlaceKind.Town), ("Summits", PlaceKind.Summit), ("Passes", PlaceKind.Pass) })
+        {
+            var chip = Small(name, new Color(0.30f, 0.32f, 0.38f), () => { _mapKind = kind; FillResults(); });
+            chip.CustomMinimumSize = new Vector2(150, 48);
+            chip.AddThemeFontSizeOverride("font_size", 22);
+            _chips.Add((chip, kind, name));
+            chips.AddChild(chip);
+        }
+        col.AddChild(chips);
         _mapHint = Big("", 22, InkDim);
         col.AddChild(_mapHint);
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
@@ -451,35 +547,168 @@ public partial class PhoneScreens : Node
         return col;
     }
 
+    /// <summary>The Map's place rows, for the checks.</summary>
+    internal bool HasPlaces => _places() != null;
+
+    internal int MapRowCount => _results.GetChildren().OfType<Button>().Count();
+
+    /// <summary>Puts the keys in the Map's search box ("/").</summary>
+    public void FocusSearch() => _query.GrabFocus();
+
+    /// <summary>Where the player stands (LV95), for "Near you"; set by the controller.</summary>
+    public Func<(double E, double N)?>? Here;
+
+    /// <summary>The last places travelled to from the phone, newest first (this session).</summary>
+    private static readonly List<Place> Recents = new();
+    private const int RecentsShown = 3, NearShown = 4, TownsShown = 8;
+
+    private const string RecentsFile = "user://phone_recents.json";
+    private static bool _recentsLoaded;
+
+    /// <summary>Recents kept between sessions: the places' LV95 coordinates, matched back to the index.</summary>
+    private static void LoadRecents(PlaceSearchUi places)
+    {
+        if (_recentsLoaded) return;
+        _recentsLoaded = true;
+        try
+        {
+            if (!Godot.FileAccess.FileExists(RecentsFile)) return;
+            using var f = Godot.FileAccess.Open(RecentsFile, Godot.FileAccess.ModeFlags.Read);
+            if (Json.ParseString(f.GetAsText()).Obj is not Godot.Collections.Array list) return;
+            foreach (var item in list)
+                if (item.Obj is Godot.Collections.Array pair && pair.Count == 2
+                    && places.All.FirstOrDefault(p => Math.Abs(p.E - (double)pair[0]) < 1 && Math.Abs(p.N - (double)pair[1]) < 1) is { } place
+                    && !Recents.Contains(place))
+                    Recents.Add(place);
+        }
+        catch (Exception e) { GD.PushWarning($"[phone] recents not read: {e.Message}"); }
+    }
+
+    private static void SaveRecents()
+    {
+        try
+        {
+            var list = new Godot.Collections.Array();
+            foreach (var p in Recents.Take(RecentsShown)) list.Add(new Godot.Collections.Array { p.E, p.N });
+            using var f = Godot.FileAccess.Open(RecentsFile, Godot.FileAccess.ModeFlags.Write);
+            f.StoreString(Json.Stringify(list));
+        }
+        catch (Exception e) { GD.PushWarning($"[phone] recents not saved: {e.Message}"); }
+    }
+
+    private PlaceKind? _mapKind;
+    private readonly List<(Button Chip, PlaceKind? Kind, string Name)> _chips = new();
+
+    /// <summary>
+    /// The Map's list is rows you can reach without typing (#1253): Recent, Near you with the distance,
+    /// then the biggest places; a category chip narrows them and the search box is optional.
+    /// </summary>
     private void FillResults()
     {
-        foreach (var child in _results.GetChildren()) child.QueueFree();
+        foreach (var child in _results.GetChildren())
+        {
+            _results.RemoveChild(child);
+            child.QueueFree();
+        }
         var places = _places();
         if (places == null)
         {
             SetText(_mapHint, "No map here.");
             return;
         }
+        LoadRecents(places);
+        foreach (var (chip, kind, name) in _chips) chip.Text = _mapKind == kind ? $"● {name}" : name;
         string q = _query.Text.Trim();
-        var shown = q.Length == 0
-            ? places.All.Where(p => p.Kind == PlaceKind.Town).OrderByDescending(p => p.Buildings).Take(10).ToList()
-            : places.Search(q, 10);
-        SetText(_mapHint, !Permissions.CanTeleport ? "This server does not allow travelling: ask a player in Contacts to bring you."
-            : q.Length == 0 ? "Popular places" : shown.Count == 0 ? "Nothing by that name" : "");
-        foreach (var place in shown)
+        SetText(_mapHint, !Permissions.CanTeleport ? "This server does not allow travelling: ask a player in Contacts to bring you." : "");
+        bool Fits(Place p) => _mapKind == null || p.Kind == _mapKind;
+        var here = Here?.Invoke();
+        string Dist(Place p) => here is { } h ? $"   ·  {Distance(h, p)}" : "";
+
+        if (q.Length > 0)
         {
-            var b = Row(PlaceSearchUi.Describe(place));
-            var p = place;
-            b.Pressed += () => TravelPicked?.Invoke(p);
+            var found = places.Search(q, 30).Where(Fits).Take(10).ToList();
+            if (found.Count == 0) AddHeading("Nothing by that name");
+            foreach (var place in found) AddPlace(place, Dist(place));
+            return;
+        }
+        var recent = Recents.Where(Fits).Take(RecentsShown).ToList();
+        if (recent.Count > 0)
+        {
+            AddHeading("Recent");
+            foreach (var place in recent) AddPlace(place, Dist(place));
+        }
+        if (here is { } me)
+        {
+            var near = places.All.Where(Fits).Where(p => !recent.Contains(p))
+                .Select(p => (Place: p, D: Math.Sqrt((p.E - me.E) * (p.E - me.E) + (p.N - me.N) * (p.N - me.N))))
+                .Where(x => x.D > 500).OrderBy(x => x.D).Take(NearShown).ToList();
+            if (near.Count > 0)
+            {
+                AddHeading("Near you");
+                foreach (var (place, _) in near) AddPlace(place, Dist(place));
+            }
+        }
+        var big = places.All.Where(Fits).OrderByDescending(p => p.Rank).Take(TownsShown + RecentsShown + NearShown)
+            .Where(p => !recent.Contains(p)).Take(TownsShown).ToList();
+        AddHeading(_mapKind switch { PlaceKind.Summit => "Summits", PlaceKind.Pass => "Passes", PlaceKind.Town => "Towns", _ => "Popular places" });
+        foreach (var place in big) AddPlace(place, Dist(place));
+
+        void AddHeading(string text) => _results.AddChild(Big(text, 22, InkDim));
+        void AddPlace(Place place, string distance)
+        {
+            var b = Row(PlaceSearchUi.Describe(place) + distance);
+            b.Pressed += () =>
+            {
+                Recents.Remove(place);
+                Recents.Insert(0, place);
+                SaveRecents();
+                TravelPicked?.Invoke(place);
+            };
             b.Disabled = !Permissions.CanTeleport;
             _results.AddChild(b);
         }
     }
 
+    /// <summary>"850 m" or "12 km" from the player to a place.</summary>
+    internal static string Distance((double E, double N) from, Place to)
+    {
+        double d = Math.Sqrt((to.E - from.E) * (to.E - from.E) + (to.N - from.N) * (to.N - from.N));
+        return d < 1000 ? $"{Math.Round(d / 10) * 10:0} m" : d < 10000 ? $"{d / 1000:0.0} km" : $"{d / 1000:0} km";
+    }
+
+    // ---------------------------------------------------------------- contacts (#1253)
+
+    private enum Sheet { None, Actions, Confirm }
+    private Label _conResult = null!;
+    private Control _conList = null!;
+    private VBoxContainer _conSheet = null!;
+    private Sheet _sheet;
+    private string _sheetFor = "";
+    private string _confirmKind = "";
+    /// <summary>The invite just sent from here, until the server says how it went: kind, who, and whether the server confirmed it ("Sent").</summary>
+    private (string Kind, string Who, bool Sent)? _pending;
+    private InviteService? _followedInvites;
+    private ChatManager? _followedChat;
+
+    /// <summary>Checks: players to list instead of the server's (an offline phone has nobody to ask).</summary>
+    internal List<string>? TestPeople;
+    internal int ContactRowCount => _people.GetChildren().OfType<Button>().Count(b => !b.IsQueuedForDeletion());
+    internal bool ContactsSheetOpen => _sheet != Sheet.None;
+    internal bool ContactsConfirmOpen => _sheet == Sheet.Confirm;
+    internal string ContactsResult => _conResult.Text;
+    internal string? ContactsFocus => Inner.GuiGetFocusOwner() is Button b ? b.Text : null;
+
+    private static string Verb(string kind) => kind switch { "tp" => "Go to", "tphere" => "Bring here", "party" => "Party invite", _ => "Fight" };
+
     private Control BuildContacts()
     {
         var col = UiKit.VBox(12);
         col.AddChild(Title("Contacts"));
+        // the result of the last action stays here, above the list and the sheet alike
+        _conResult = Big("", 26, new Color(0.70f, 0.85f, 1f));
+        _conResult.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _conResult.Visible = false;
+        col.AddChild(_conResult);
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         var list = UiKit.VBox(10);
         list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -488,19 +717,30 @@ public partial class PhoneScreens : Node
         _people = UiKit.VBox(6);
         list.AddChild(_people);
         scroll.AddChild(list);
+        _conList = scroll;
         col.AddChild(scroll);
-        col.AddChild(Hint("call", "back"));
+        _conSheet = UiKit.VBox(12);
+        _conSheet.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _conSheet.Visible = false;
+        col.AddChild(_conSheet);
+        col.AddChild(Hint("open", "back"));
         return col;
     }
 
-    /// <summary>Lists the incoming calls (invites) and everyone online, each with what you can ask them.</summary>
+    private void SetResult(string text)
+    {
+        _conResult.Text = text;
+        _conResult.Visible = text.Length > 0;
+    }
+
+    /// <summary>Lists the incoming invites and everyone online, one row each; Enter on a row opens what you can ask them.</summary>
     public void FillContacts()
     {
-        foreach (var child in _calls.GetChildren()) child.QueueFree();
-        foreach (var child in _people.GetChildren()) child.QueueFree();
+        foreach (var child in _calls.GetChildren()) { _calls.RemoveChild(child); child.QueueFree(); }
+        foreach (var child in _people.GetChildren()) { _people.RemoveChild(child); child.QueueFree(); }
         if (InviteService.Client is { } invites && invites.Incoming.Any())
         {
-            _calls.AddChild(Big("Calls", 26, InkDim));
+            _calls.AddChild(Big("Invites", 26, InkDim));
             foreach (var call in invites.Incoming)
             {
                 var row = UiKit.HBox(10);
@@ -516,27 +756,149 @@ public partial class PhoneScreens : Node
         }
         _people.AddChild(Big("People", 26, InkDim));
         var chat = _chat();
-        if (!Permissions.Online || chat == null)
+        if (TestPeople == null && (!Permissions.Online || chat == null))
         {
-            _people.AddChild(Big("Nobody to call: play online to reach other players.", 26, InkDim));
+            _people.AddChild(Big("Nobody to invite: play online to reach other players.", 26, InkDim));
+            var more = Small("Open Activities", new Color(0.50f, 0.30f, 0.62f), () => ShowPage(Page.Activities));
+            more.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+            _people.AddChild(more);
             return;
         }
         string me = GameShell.Instance?.PlayerName ?? "";
-        var names = chat.PlayerNames.Where(n => !n.Equals(me, StringComparison.OrdinalIgnoreCase)).ToList();
+        var names = TestPeople ?? chat!.PlayerNames.Where(n => !n.Equals(me, StringComparison.OrdinalIgnoreCase)).ToList();
         if (names.Count == 0) _people.AddChild(Big("Nobody else is online.", 26, InkDim));
         foreach (var name in names)
         {
-            var row = UiKit.HBox(10);
-            var who = Big(name, 30);
-            who.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-            row.AddChild(who);
             string n = name;
-            row.AddChild(Small("Go to", new Color(0.20f, 0.42f, 0.80f), () => CommandPicked?.Invoke($"/tpa {n}")));
-            row.AddChild(Small("Bring here", new Color(0.20f, 0.42f, 0.80f), () => CommandPicked?.Invoke($"/tphere {n}")));
-            row.AddChild(Small("Party", new Color(0.45f, 0.30f, 0.70f), () => CommandPicked?.Invoke($"/party invite {n}")));
-            row.AddChild(Small("Fight", new Color(0.70f, 0.22f, 0.20f), () => CommandPicked?.Invoke($"/fight {n}")));
+            var row = Row($"{n}   ·   {StatusOf(n)}");
+            row.Pressed += () => OpenSheet(n);
             _people.AddChild(row);
         }
+    }
+
+    private static string StatusOf(string name) =>
+        Parties.Client is { InParty: true } p && p.Members.Any(m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ? "In your party" : "Online";
+
+    /// <summary>The sheet of what you can ask <paramref name="name"/>.</summary>
+    internal void OpenSheet(string name)
+    {
+        _sheet = Sheet.Actions;
+        _sheetFor = name;
+        _conList.Visible = false;
+        _conSheet.Visible = true;
+        Clear(_conSheet);
+        _conSheet.AddChild(Big(name, 44));
+        _conSheet.AddChild(Big(StatusOf(name), 24, InkDim));
+        var blue = new Color(0.20f, 0.42f, 0.80f);
+        AddSheetButton("Go to", blue, () => Ask("tp", $"/tpa {name}"));
+        AddSheetButton("Bring here", blue, () => Confirm("tphere"));
+        AddSheetButton("Party invite", new Color(0.45f, 0.30f, 0.70f), () => Ask("party", $"/party invite {name}"));
+        AddSheetButton("Fight", new Color(0.70f, 0.22f, 0.20f), () => Confirm("fight"));
+        FocusSheet();
+    }
+
+    private Button AddSheetButton(string text, Color colour, Action pressed)
+    {
+        var b = Small(text, colour, pressed);
+        b.CustomMinimumSize = new Vector2(0, 64);
+        _conSheet.AddChild(b);
+        return b;
+    }
+
+    private void FocusSheet() => Callable.From(() => FocusFirst(_conSheet)).CallDeferred();
+
+    /// <summary>Bring here and Fight ask first, Cancel focused: a stray Enter changes nothing.</summary>
+    internal void Confirm(string kind)
+    {
+        _sheet = Sheet.Confirm;
+        _confirmKind = kind;
+        Clear(_conSheet);
+        _conSheet.AddChild(Big(kind == "fight" ? $"Fight {_sheetFor}?" : $"Bring {_sheetFor} here?", 40));
+        var note = Big(kind == "fight" ? "They can accept or decline. A fight starts only if they accept." : "They are asked to come to you. It happens only if they accept.", 26, InkDim);
+        note.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _conSheet.AddChild(note);
+        AddSheetButton("Cancel", new Color(0.30f, 0.32f, 0.38f), () => CloseContactsSheet());
+        AddSheetButton(kind == "fight" ? "Fight" : "Bring here", kind == "fight" ? new Color(0.70f, 0.22f, 0.20f) : new Color(0.20f, 0.42f, 0.80f),
+            () => Ask(kind, kind == "fight" ? $"/fight {_sheetFor}" : $"/tphere {_sheetFor}"));
+        FocusSheet();
+    }
+
+    /// <summary>Sends the request through the chat command (the server path a bot uses too) and starts the result line.</summary>
+    private void Ask(string kind, string command)
+    {
+        _pending = (kind, _sheetFor, false);
+        SetResult($"{Verb(kind)} · {_sheetFor}: asking…");
+        CloseSheet();
+        CommandPicked?.Invoke(command);
+    }
+
+    private void CloseSheet()
+    {
+        _sheet = Sheet.None;
+        _conSheet.Visible = false;
+        _conList.Visible = true;
+        string back = _sheetFor;
+        Callable.From(() =>
+        {
+            foreach (var b in _people.GetChildren().OfType<Button>())
+                if (b.Text.StartsWith(back, StringComparison.Ordinal)) { b.GrabFocus(); return; }
+            FocusFirst(_contacts);
+        }).CallDeferred();
+    }
+
+    /// <summary>Back inside Contacts: a confirm goes up to the sheet, the sheet to the list. False when it was already the list.</summary>
+    public bool CloseContactsSheet()
+    {
+        switch (_sheet)
+        {
+            case Sheet.Confirm: OpenSheet(_sheetFor); return true;
+            case Sheet.Actions: CloseSheet(); return true;
+            default: return false;
+        }
+    }
+
+    /// <summary>The invite service's and the chat's events, followed as they come and go with the connection.</summary>
+    private void FollowInvites()
+    {
+        if (InviteService.Client != _followedInvites)
+        {
+            if (_followedInvites != null) { _followedInvites.Resolved -= OnResolved; _followedInvites.Changed -= OnInvitesChanged; }
+            _followedInvites = InviteService.Client;
+            if (_followedInvites != null) { _followedInvites.Resolved += OnResolved; _followedInvites.Changed += OnInvitesChanged; }
+        }
+        var chat = _chat();
+        if (chat != _followedChat)
+        {
+            if (_followedChat != null) _followedChat.LineReceived -= OnChatLine;
+            _followedChat = chat;
+            if (chat != null) chat.LineReceived += OnChatLine;
+        }
+    }
+
+    /// <summary>The server's word on an invite sent from here: Accepted, Declined or Timed out.</summary>
+    internal void OnResolved(string kind, string who, string outcome)
+    {
+        SetResult($"{Verb(kind)} · {who}: {outcome switch { "accepted" => "Accepted", "declined" => "Declined", _ => "Timed out" }}");
+        if (_pending is { } p && p.Kind == kind) _pending = null;
+    }
+
+    /// <summary>The server took the request: the invite shows among those sent.</summary>
+    private void OnInvitesChanged()
+    {
+        if (_pending is { Sent: false } p && InviteService.Client is { } invites
+            && invites.Sent.Any(v => v.Kind == p.Kind && v.PeerName.Equals(p.Who, StringComparison.OrdinalIgnoreCase)))
+        {
+            _pending = (p.Kind, p.Who, true);
+            SetResult($"{Verb(p.Kind)} · {p.Who}: Sent");
+        }
+    }
+
+    /// <summary>A private reply while the server has not taken the request is why it was not (a cooldown, a match, no such player).</summary>
+    private void OnChatLine(string text, ChatKind kind)
+    {
+        if (_pending is not { Sent: false } p || kind != ChatKind.Private) return;
+        SetResult($"{Verb(p.Kind)} · {p.Who}: {text}");
+        _pending = null;
     }
 
     /// <summary>The Activities app: the Battle Royale lobby and the races on the server, joined from the phone.</summary>
@@ -547,6 +909,12 @@ public partial class PhoneScreens : Node
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         var list = UiKit.VBox(12);
         list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        // what used to be the Menu and Training tiles of the home screen (#1253)
+        var more = UiKit.HBox(12);
+        more.AddChild(Small("Host…", new Color(0.50f, 0.30f, 0.62f), () => ActivitiesPicked?.Invoke()));
+        more.AddChild(Small("Training", new Color(0.10f, 0.55f, 0.58f), () => ShowPage(Page.Training)));
+        foreach (var b in more.GetChildren().OfType<Button>()) b.CustomMinimumSize = new Vector2(200, 54);
+        list.AddChild(more);
         list.AddChild(Big("Battle Royale", 26, InkDim));
         _actBrTitle = Big("", 30);
         list.AddChild(_actBrTitle);
@@ -781,20 +1149,46 @@ public partial class PhoneScreens : Node
         col.AddChild(Title("Photos"));
         _photosEmpty = Big("No photos yet: take some with the Camera app.", 26, InkDim);
         col.AddChild(_photosEmpty);
-        var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        var scroll = _photosScroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, FollowFocus = true };
         _grid = new GridContainer { Columns = 6, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _grid.AddThemeConstantOverride("h_separation", 10);
         _grid.AddThemeConstantOverride("v_separation", 10);
         scroll.AddChild(_grid);
         col.AddChild(scroll);
+        col.AddChild(KeyLine(() => _vr ? "swipe up and down to scroll" : _touch ? "drag up and down to scroll" : InputHints.Pad ? "LB RB  page" : "arrows move      PgUp PgDn  page"));
         col.AddChild(Hint("open", "back"));
         return col;
     }
 
+    private Label KeyLine(Func<string> text)
+    {
+        var l = Big(text(), 22, InkDim);
+        l.HorizontalAlignment = HorizontalAlignment.Center;
+        _keyLines.Add((l, text));
+        return l;
+    }
+
+    /// <summary>The photo grid, a page at a time (the pad's LB / RB): focus moves a screenful of rows up or down.</summary>
+    public void PageGrid(int direction)
+    {
+        int count = _grid.GetChildCount();
+        if (count == 0) return;
+        int at = _grid.GetChildren().ToList().FindIndex(c => c is Control { } k && k.HasFocus());
+        float row = _grid.GetChild<Control>(0).Size.Y + 10f;
+        int rows = Mathf.Max(1, Mathf.FloorToInt(_photosScroll.Size.Y / Mathf.Max(row, 1f)));
+        int to = Mathf.Clamp((at < 0 ? 0 : at) + direction * rows * _grid.Columns, 0, count - 1);
+        _grid.GetChild<Control>(to).GrabFocus();
+    }
+
+    /// <summary>The photo grid's focused thumb (its index), -1 when none; for the checks.</summary>
+    internal int GridFocus => _grid.GetChildren().ToList().FindIndex(c => c is Control k && k.HasFocus());
+
+    internal int GridCount => _grid.GetChildCount();
+
     private void FillPhotos()
     {
         Clear(_grid);
-        var ids = Items.PhotoStore.Archive().Take(60).ToList();
+        var ids = _photoIds = Items.PhotoStore.Archive().Take(60).ToList();
         _photosEmpty.Visible = ids.Count == 0;
         foreach (var id in ids)
         {
@@ -822,21 +1216,52 @@ public partial class PhoneScreens : Node
     private Control BuildPhoto()
     {
         var col = UiKit.VBox(10);
+        var top = UiKit.HBox(16);
+        top.AddChild(BackChevron());
+        col.AddChild(top);
         _photoView = new TextureRect
         {
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            SizeFlagsVertical = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        col.AddChild(_photoView);
+        // previous / next on the glass (the keys: Left Right, LB RB; a sideways swipe)
+        var view = UiKit.HBox(12);
+        view.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _photoPrev = Small("‹", new Color(0.30f, 0.32f, 0.38f), () => StepPhoto(-1));
+        _photoNext = Small("›", new Color(0.30f, 0.32f, 0.38f), () => StepPhoto(1));
+        foreach (var b in new[] { _photoPrev, _photoNext })
+        {
+            b.CustomMinimumSize = new Vector2(64, 120);
+            b.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+            b.FocusMode = Control.FocusModeEnum.None;
+            b.AddThemeFontSizeOverride("font_size", 40);
+        }
+        _photoPrev.TooltipText = "Previous photo";
+        _photoNext.TooltipText = "Next photo";
+        view.AddChild(_photoPrev);
+        view.AddChild(_photoView);
+        view.AddChild(_photoNext);
+        col.AddChild(view);
         _photoCaption = Big("", 22, InkDim);
         _photoCaption.HorizontalAlignment = HorizontalAlignment.Center;
         col.AddChild(_photoCaption);
         var row = UiKit.HBox(14);
         row.Alignment = BoxContainer.AlignmentMode.Center;
-        row.AddChild(Small("Set as lock screen", new Color(0.20f, 0.42f, 0.80f), () => { if (_photoShown != null) WallpaperPicked?.Invoke(_photoShown, true); }));
-        row.AddChild(Small("Set as home screen", new Color(0.18f, 0.55f, 0.36f), () => { if (_photoShown != null) WallpaperPicked?.Invoke(_photoShown, false); }));
+        _photoLock = Small("Set as lock screen", new Color(0.20f, 0.42f, 0.80f), () => { if (_photoShown != null) WallpaperPicked?.Invoke(_photoShown, true); });
+        _photoHome = Small("Set as home screen", new Color(0.18f, 0.55f, 0.36f), () => { if (_photoShown != null) WallpaperPicked?.Invoke(_photoShown, false); });
+        row.AddChild(_photoLock);
+        row.AddChild(_photoHome);
         foreach (var b in row.GetChildren().OfType<Button>()) b.CustomMinimumSize = new Vector2(260, 54);
         col.AddChild(row);
+        // Left and Right page through the photos, so the two wallpaper buttons are reached up and down
+        Callable.From(() =>
+        {
+            _photoLock.FocusNeighborBottom = _photoLock.GetPathTo(_photoHome);
+            _photoHome.FocusNeighborTop = _photoHome.GetPathTo(_photoLock);
+            _photoLock.FocusNeighborLeft = _photoLock.GetPathTo(_photoLock);
+            _photoHome.FocusNeighborRight = _photoHome.GetPathTo(_photoHome);
+        }).CallDeferred();
+        col.AddChild(KeyLine(() => _vr || _touch ? "swipe sideways or tap ‹ ›  previous, next" : InputHints.Pad ? "LB RB  previous, next      D-pad down  wallpaper" : "Left Right  previous, next      Down  wallpaper"));
         col.AddChild(Hint("choose", "back to the album"));
         return col;
     }
@@ -844,10 +1269,36 @@ public partial class PhoneScreens : Node
     public void ShowPhoto(string id)
     {
         _photoShown = id;
-        _photoView.Texture = PhoneWallpaper.FullOf(id);
-        SetText(_photoCaption, Items.PhotoStore.ShortCaption(id));
+        if (!_photoIds.Contains(id)) _photoIds = Items.PhotoStore.Archive().Take(60).ToList();
+        ShowPhotoNow(id);
         ShowPage(Page.Photo);
     }
+
+    private void ShowPhotoNow(string id)
+    {
+        _photoShown = id;
+        _photoView.Texture = PhoneWallpaper.FullOf(id);
+        int at = _photoIds.IndexOf(id);
+        SetText(_photoCaption, Items.PhotoStore.ShortCaption(id) + (at >= 0 ? $"   {at + 1} / {_photoIds.Count}" : ""));
+        if (_photoPrev != null)
+        {
+            _photoPrev.Disabled = at <= 0;
+            _photoNext.Disabled = at < 0 || at >= _photoIds.Count - 1;
+        }
+    }
+
+    /// <summary>The photo viewer's previous (-1) or next (+1) photo, newest first; false at either end.</summary>
+    public bool StepPhoto(int step)
+    {
+        int at = _photoShown == null ? -1 : _photoIds.IndexOf(_photoShown);
+        int to = at + step;
+        if (at < 0 || to < 0 || to >= _photoIds.Count) return false;
+        ShowPhotoNow(_photoIds[to]);
+        return true;
+    }
+
+    /// <summary>The photo the viewer shows, for the checks.</summary>
+    internal string? PhotoShown => _photoShown;
 
     /// <summary>The camera app: the back lens edge to edge, the shutter on the right, zoom above it, the last shot below.</summary>
     private Control BuildCamera()
@@ -862,15 +1313,30 @@ public partial class PhoneScreens : Node
         finder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         page.AddChild(finder);
 
+        var back = BackChevron();
+        back.Position = new Vector2(40, 64);
+        page.AddChild(back);
+
         var side = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         side.AddThemeConstantOverride("separation", 26);
         side.SetAnchorsPreset(Control.LayoutPreset.RightWide);
-        side.OffsetLeft = -150; side.OffsetRight = -30;
+        side.OffsetLeft = -260; side.OffsetRight = -30;
         page.AddChild(side);
-        _zoomLabel = Big("1×", 30);
-        _zoomLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        side.AddChild(_zoomLabel);
-        var shutter = new Button { CustomMinimumSize = new Vector2(120, 120), FocusMode = Control.FocusModeEnum.None, TooltipText = "Take a photo" };
+        // the lenses as chips, the current one lit: a stray trigger no longer zooms, a pick does (#1253)
+        var chips = UiKit.HBox(8);
+        chips.Alignment = BoxContainer.AlignmentMode.Center;
+        for (int i = 0; i < Zooms.Length; i++)
+        {
+            int lens = i;
+            var chip = Small($"{Zooms[i]:0.#}×", new Color(0.18f, 0.19f, 0.22f, 0.85f), () => { SetZoom(lens); ZoomPicked?.Invoke(); });
+            chip.CustomMinimumSize = new Vector2(66, 56);
+            chip.TooltipText = $"Zoom {Zooms[i]:0.#}×";
+            chip.AddThemeFontSizeOverride("font_size", 24);
+            chips.AddChild(chip);
+            _zoomChips.Add(chip);
+        }
+        side.AddChild(chips);
+        var shutter = _shutterButton = new Button { CustomMinimumSize = new Vector2(120, 120), FocusMode = Control.FocusModeEnum.All, TooltipText = "Take a photo", SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
         foreach (var (state, c) in new[] { ("normal", Ink), ("hover", Ink), ("pressed", new Color(0.8f, 0.8f, 0.82f)), ("focus", Ink) })
         {
             var ring = new StyleBoxFlat { BgColor = c, BorderColor = new Color(1, 1, 1, 0.45f), CornerDetail = 16 };
@@ -889,10 +1355,14 @@ public partial class PhoneScreens : Node
         side.AddChild(_lastShot);
         var turn = Small("Selfie", new Color(0.30f, 0.32f, 0.38f), () => SelfiePressed?.Invoke());
         turn.CustomMinimumSize = new Vector2(120, 50);
-        turn.FocusMode = Control.FocusModeEnum.None;
+        _selfieButton = turn;
+        turn.TooltipText = "Selfie";
         side.AddChild(turn);
+        LightZoom();
 
-        var hint = Big(InputHints.Pad ? "L stick  walk      RT  shoot      LB RB  zoom      Y  selfie      B  back" : "WASD  walk      Click / Enter  shoot      Wheel  zoom      F  selfie      Esc  back", 22, Ink);
+        var hint = Big(_vr ? "tap  shutter, zoom, selfie      trigger  shoot      B  back"
+            : _touch ? "stick  walk      drag  look      tap  shutter, zoom, selfie"
+            : InputHints.Pad ? "L stick  walk      RT  shoot      LB RB  zoom      Y  selfie      B  back" : "WASD  walk      Click / Enter  shoot      Wheel  zoom      F  selfie      Esc  back", 22, Ink);
         hint.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
         hint.OffsetTop = -54; hint.OffsetBottom = -20; hint.OffsetLeft = 40;
         page.AddChild(hint);
@@ -904,11 +1374,45 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>Steps the zoom by <paramref name="step"/> (1×, 2×, 5×).</summary>
-    public void StepZoom(int step, bool wrap = false)
+    public void StepZoom(int step, bool wrap = false) =>
+        SetZoom(wrap ? (_zoom + step + Zooms.Length) % Zooms.Length : Mathf.Clamp(_zoom + step, 0, Zooms.Length - 1));
+
+    /// <summary>Picks lens <paramref name="index"/> (0 = 1×, 1 = 2×, 2 = 5×) and lights its chip.</summary>
+    public void SetZoom(int index)
     {
-        _zoom = wrap ? (_zoom + step + Zooms.Length) % Zooms.Length : Mathf.Clamp(_zoom + step, 0, Zooms.Length - 1);
-        SetText(_zoomLabel, $"{Zoom:0.#}×");
+        _zoom = Mathf.Clamp(index, 0, Zooms.Length - 1);
+        LightZoom();
     }
+
+    /// <summary>The current lens's chip lit (bright, dark text), the others dim.</summary>
+    private void LightZoom()
+    {
+        for (int i = 0; i < _zoomChips.Count; i++)
+        {
+            bool on = i == _zoom;
+            var chip = _zoomChips[i];
+            var fill = on ? new Color(1f, 0.85f, 0.35f) : new Color(0.18f, 0.19f, 0.22f, 0.85f);
+            foreach (var state in new[] { "normal", "hover", "pressed" })
+                if (chip.GetThemeStylebox(state) is StyleBoxFlat box) box.BgColor = on ? fill : state == "pressed" ? fill.Darkened(0.2f) : state == "hover" ? fill.Lightened(0.15f) : fill;
+            chip.AddThemeColorOverride("font_color", on ? new Color(0.1f, 0.1f, 0.1f) : Ink);
+        }
+    }
+
+    /// <summary>Which chip is lit (0, 1, 2), for the checks.</summary>
+    internal int LitChip => _zoom;
+
+    /// <summary>The middle of a zoom chip on the inner screen, 0..1 (for a finger or a ray).</summary>
+    internal Vector2 ZoomChipUv(int index) => UvOf(_zoomChips[index]);
+
+    /// <summary>The middle of the shutter button, 0..1.</summary>
+    internal Vector2 ShutterUv() => UvOf(_shutterButton);
+
+    /// <summary>The middle of the Selfie button, 0..1.</summary>
+    internal Vector2 SelfieUv() => UvOf(_selfieButton);
+
+    internal Button ShutterButton => _shutterButton;
+
+    private Vector2 UvOf(Control c) => c.GetGlobalTransform() * (c.Size * 0.5f) / (Vector2)Inner.Size;
 
     /// <summary>The shutter went: the screen flashes white, and the shot lands in the corner.</summary>
     public void Shot(Texture2D? print)
@@ -932,6 +1436,10 @@ public partial class PhoneScreens : Node
         _travelNote.HorizontalAlignment = HorizontalAlignment.Center;
         _travelNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         col.AddChild(_travelNote);
+        // until the jump runs, the player can still change their mind
+        _travelCancel = Small("Cancel", new Color(0.30f, 0.32f, 0.38f), () => BackPressed?.Invoke());
+        _travelCancel.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        col.AddChild(_travelCancel);
         col.AddChild(UiKit.Spacer(expand: true));
         return col;
     }
@@ -939,10 +1447,14 @@ public partial class PhoneScreens : Node
     /// <summary>The travelling page: where to, and dots that go round while the ground there streams in.</summary>
     public void ShowTravel(string where, string note = "")
     {
+        _travelCancel.Visible = true;
         SetText(_travelTitle, $"Travelling to {where}");
         SetText(_travelNote, note);
         ShowPage(Page.Travel);
     }
+
+    /// <summary>The jump has run: there is nothing left to cancel.</summary>
+    public void HideTravelCancel() => _travelCancel.Visible = false;
 
     public void ShowPage(Page page)
     {
@@ -964,7 +1476,8 @@ public partial class PhoneScreens : Node
             case Page.Map:
                 _query.Clear();
                 FillResults();
-                Callable.From(() => _query.GrabFocus()).CallDeferred();
+                // the rows have the keys; the search box is optional ("/" or a click)
+                Callable.From(() => FocusFirst(_results)).CallDeferred();
                 break;
             case Page.Contacts:
                 _chat()?.RequestPlayerNames();
@@ -997,6 +1510,7 @@ public partial class PhoneScreens : Node
     /// <summary>The time on both screens, the travelling dots and the shutter's flash, set only when they change.</summary>
     public void Tick(string clock, string date, float dt)
     {
+        FollowFocusHint();
         if (clock != _clockShown)
         {
             _clockShown = clock;
@@ -1006,6 +1520,7 @@ public partial class PhoneScreens : Node
             _coverDate.Text = date;
             _homeDate.Text = date;
         }
+        FollowInvites();
         if (Shown == Page.Activities) RefreshActivities(force: false);
         if (Shown == Page.Training) RefreshTraining(force: false);
         if (Shown == Page.Travel) SetText(_travelDots, ((int)(RealClock.Now * 3) % 3) switch { 0 => "●  ○  ○", 1 => "○  ●  ○", _ => "○  ○  ●" });
@@ -1036,7 +1551,25 @@ public partial class PhoneScreens : Node
         return l;
     }
 
-    private static Label Title(string text) => Big(text, 54);
+    /// <summary>An app's heading with its back chevron: every page has a visible way up one level (#1253).</summary>
+    private Control Title(string text)
+    {
+        var row = UiKit.HBox(16);
+        row.AddChild(BackChevron());
+        row.AddChild(Big(text, 54));
+        return row;
+    }
+
+    /// <summary>The round "‹" that goes back one step; pointer-only, so the keys' selection stays where it is.</summary>
+    private Button BackChevron()
+    {
+        var b = Small("‹", new Color(0.30f, 0.32f, 0.38f), () => BackPressed?.Invoke());
+        b.CustomMinimumSize = new Vector2(64, 64);
+        b.FocusMode = Control.FocusModeEnum.None;
+        b.TooltipText = "Back";
+        b.AddThemeFontSizeOverride("font_size", 40);
+        return b;
+    }
 
     /// <summary>The page's two keys, named for the device in hand (a menu's accept and back, not the game's actions).</summary>
     private Label Hint(string accept, string back)
@@ -1047,9 +1580,38 @@ public partial class PhoneScreens : Node
         return l;
     }
 
-    private string HintText(string accept, string back) =>
+    private Control? _hintFocus;
+    private string? _hintVerb;
+
+    /// <summary>The page's hint names what Enter / A / a tap does to the control that has the keys now (#1253).</summary>
+    private void FollowFocusHint()
+    {
+        var owner = Inner.GuiGetFocusOwner();
+        if (owner == _hintFocus) return;
+        _hintFocus = owner;
+        _hintVerb = AcceptVerb(owner);
+        foreach (var (label, accept, back) in _hints) label.Text = HintText(accept, back);
+    }
+
+    private string? AcceptVerb(Control? c)
+    {
+        if (c == null || !c.IsVisibleInTree()) return null;
+        if (c is LineEdit) return "search";
+        if (c is not Button b || b.Text.Length == 0) return null;
+        string name = b.Text.Split("   ")[0].Split(',')[0].Trim();
+        if (name.Length > 22) name = name[..21] + "…";
+        if (_homeTiles.Contains(b)) return $"open {name}";
+        if (Shown == Page.Map && _results.IsAncestorOf(b)) return $"travel to {name}";
+        if (_chips.Any(x => x.Chip == b)) return $"show {name.TrimStart('●', ' ')}";
+        return name;
+    }
+
+    private string HintText(string accept, string back) => HintLine(_hintVerb ?? accept, back);
+
+    private string HintLine(string accept, string back) =>
         _vr ? $"tap  {accept}      swipe right or B  {back}"
-        : InputHints.Pad ? $"A  {accept}      B  {back}" : $"Enter  {accept}      Esc  {back}";
+        : _touch ? $"tap  {accept}      swipe right  {back}"
+        : InputHints.Pad ? $"A  {accept}      B  {back}  (hold: put away)" : $"Enter  {accept}      Esc  {back}  (hold: put away)";
 
     private static Button Row(string text)
     {
@@ -1081,7 +1643,7 @@ public partial class PhoneScreens : Node
     {
         foreach (var child in under.GetChildren())
         {
-            if (child is Button { Visible: true, Disabled: false } b) { b.GrabFocus(); return; }
+            if (child is Button { Visible: true, Disabled: false, FocusMode: not Control.FocusModeEnum.None } b) { b.GrabFocus(); return; }
             FocusFirst(child);
             if (under.GetViewport()?.GuiGetFocusOwner() is { } owner && under.IsAncestorOf(owner)) return;
         }

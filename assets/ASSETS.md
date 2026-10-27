@@ -76,6 +76,20 @@ export preset packs `music/` by its `include_filter`. The playlists: `TrackerLib
 | `drozerix_-_leisurely_voice.xm` | cinema | "Leisurely Voice" by Drozerix (Chiptune), [The Mod Archive #183837](https://modarchive.org/index.php?request=view_by_moduleid&query=183837) | Public Domain |
 | `ambient_starfield.xm` | cinema | "Ambient Starfield" by Drozerix (Electronic - Ambient), [The Mod Archive #174160](https://modarchive.org/index.php?request=view_by_moduleid&query=174160) | Public Domain |
 
+## `cinema/` (the cinema screens' slideshow, #1250)
+
+Cat photos from [Wikimedia Commons](https://commons.wikimedia.org), each released under **CC0 1.0** by
+its author, cropped to the screen's 2.39:1 and scaled to 960x402 (`InteriorNode.Slide`).
+
+| File | Source | Author |
+|---|---|---|
+| `cat_1.jpg` | [Cat resting on a couch (Unsplash)](https://commons.wikimedia.org/wiki/File:Cat_resting_on_a_couch_(Unsplash).jpg) | Erik-Jan Leusink |
+| `cat_2.jpg` | [A curious kitten (Pixabay)](https://commons.wikimedia.org/wiki/File:A_curious_kitten_(Pixabay).jpg) | Dimitri Houtteman |
+| `cat_3.jpg` | [Cat-on-couch](https://commons.wikimedia.org/wiki/File:Cat-on-couch.jpg) | Christoffer G. Thomsen |
+| `cat_4.jpg` | [Cat portrait (Unsplash)](https://commons.wikimedia.org/wiki/File:Cat_portrait_(Unsplash).jpg) | Anton Petrov |
+| `cat_5.jpg` | [Relaxed tabby cat (Unsplash)](https://commons.wikimedia.org/wiki/File:Relaxed_tabby_cat_(Unsplash).jpg) | Erik-Jan Leusink |
+| `cat_6.jpg` | [Calico cat yawning](https://commons.wikimedia.org/wiki/File:Calico_cat_yawning.jpg) | 0959kedi |
+
 ## `fonts/` (the menus, #1135)
 
 | File | Source | Licence |

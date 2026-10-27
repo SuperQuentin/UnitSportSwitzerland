@@ -25,6 +25,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private Node3D? _players;
     private GpxSession? _gpx;
     private PlaceSearchUi? _places;
+    /// <summary>This machine's own terrain source and manifest, for /locate offline (#1277).</summary>
+    private IChunkSource? _localSource;
+    private Terrain.Format.TerrainManifest? _localManifest;
     private RideUi? _rides;
     private Vehicles.GarageUi? _garage;
     private Items.ItemController? _items;
@@ -219,6 +222,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.ArcadeProbe { Name = "ArcadeProbe" });
             return;
         }
+        // the cinema projection POC's cost in a real hall (#1250), windowed
+        if (Interiors.ProjectionPerfProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.ProjectionPerfProbe { Name = "ProjectionPerfProbe" });
+            return;
+        }
+        // what E's outline draws, interiors planned in hand-made buildings (#1286)
+        if (Items.InteractOutlineCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Items.InteractOutlineCheck { Name = "InteractOutlineCheck" });
+            return;
+        }
         // cinemas planned in hand-made buildings (#1238)
         if (Interiors.CinemaProbe.ParseArgs())
         {
@@ -318,8 +335,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the region's points of interest (#1224): this client's own pois.bin, again once a server sent its own
         Adventure.Places.PoiCatalogueHost.Load(source, _fixtureStart);
         if (Adventure.Places.PoiCheck.Requested) AddChild(new Adventure.Places.PoiCheck(_fixtureStart) { Name = "PoiCheck" });
+        if (World.Locate.LocateCheck.Requested) AddChild(new World.Locate.LocateCheck(SpawnPoint.ParseTarget(Launch)) { Name = "LocateCheck" });
         var manifest = await source.LoadManifestAsync();
         if (!IsInsideTree()) return;   // left during the load
+        _localSource = source;
+        _localManifest = manifest;
         Report(LoadStage.BuildingWorld, 0.06f);
 
         // Wherever there is no terrain data, it is generated (FallbackChunkSource) and blended
@@ -898,6 +918,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
+            || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
@@ -948,6 +969,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ExcavatorNetProbe.Role != null) AddChild(new Player.ExcavatorNetProbe(items));
         if (Items.SitePalletNetProbe.Role != null) AddChild(new Items.SitePalletNetProbe(items));
         if (Terrain.Construction.CraneNetProbe.Role != null) AddChild(new Terrain.Construction.CraneNetProbe(items));
+        if (World.Locate.LocateNetProbe.Role != null) AddChild(new World.Locate.LocateNetProbe(items));
         if (Loot.YardLootNetProbe.Role != null) AddChild(new Loot.YardLootNetProbe(items));
         if (Items.BedNetProbe.Role != null) AddChild(new Items.BedNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
@@ -1014,6 +1036,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat.PlaceSearch = _places;
         _chat.Here = () => _teleporter?.ActiveTarget() is { } body && _worldOrigin != null ? _worldOrigin.ToGlobal(body.GlobalPosition) : null;
         AddChild(_chat);
+        // /locate offline (#1277): this machine owns the world and searches its own tiles, indexed on first use
+        if (_localSource != null && _localManifest != null && _worldOrigin != null)
+            AddChild(new World.Locate.LocateService(_localSource, _localManifest, () => _places?.Index, _worldOrigin,
+                () => LocalPlayer is { } me ? [me.Global] : []) { OnDemand = true });
         _chatUi = ChatUi.Create(_chat, new ChatCompleter
         {
             Places = (query, limit) => _places!.Search(query, limit).Select(p => p.Name),
@@ -1088,8 +1114,37 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Adventure.Places.AdventureMap.PlaceSearch = () => _places?.SetOpen(true);
             if (Adventure.Places.PlacesCheck.Requested) AddChild(new Adventure.Places.PlacesCheck(items, () => LocalPlayer));
             if (Adventure.Places.PlacesNetProbe.Role != null) AddChild(new Adventure.Places.PlacesNetProbe(items));
+            // rewards (#1227): chests, edelweiss and cairns, seals, guides, trials, photo spots; offline this client checks its own claims
+            var start = _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+            var rewards = Adventure.Rewards.RewardService.Create(adventure, server: false, networked: Launch.Networked, () => _chunks?.Source, start);
+            rewards.Occupied = (e, n, radius, except) => Adventure.Rewards.RewardWorld.DroppedOn(e, n, radius);
+            Func<Vector3, float?> groundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            AddChild(new Adventure.Rewards.RewardWorld(() => _onFoot ? LocalPlayer : null, () => _worldOrigin, groundAt));
+            AddChild(new Adventure.Rewards.GuideNode(() => _worldOrigin, groundAt));
+            AddChild(new Adventure.Rewards.TrialRunner(() => LocalPlayer, () => _worldOrigin, () => _chunks));
+            AddChild(new Adventure.Rewards.ChestRevealUi());
+            AddChild(new Adventure.Rewards.RewardHud(() => LocalPlayer));
+            Adventure.Rewards.CollectionPage.Register();
+            Adventure.Rewards.FaunaPage.Register();
+            if (Adventure.Rewards.RewardCheck.Requested) AddChild(new Adventure.Rewards.RewardCheck(items, () => LocalPlayer));
+            if (Adventure.Rewards.RewardNetProbe.Role != null) AddChild(new Adventure.Rewards.RewardNetProbe(items));
+            if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
             AddNavigation(adventure, items, ground);
         }
+        // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
+        // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it
+        var versteckis = Adventure.Versteckis.VersteckisManager.CreateClient(origin);
+        versteckis.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+        versteckis.Inventory = () => _items?.Inventory;
+        versteckis.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
+        versteckis.AddAnchor = node => _chunks?.AddAnchor(node);
+        versteckis.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
+        versteckis.Source = () => _chunks?.Source;
+        versteckis.GroundAt = p => _chunks != null && _chunks.TryGetSurface(p, out float h) ? h : null;
+        AddChild(versteckis);
+        if (Adventure.Versteckis.VersteckisCheck.Requested && _items != null) AddChild(new Adventure.Versteckis.VersteckisCheck(_items, () => LocalPlayer));
+        if (Adventure.Versteckis.VersteckisNetProbe.Role != null && _items != null) AddChild(new Adventure.Versteckis.VersteckisNetProbe(_items));
+        if (Adventure.Versteckis.VersteckisBotProbe.Requested && _items != null) AddChild(new Adventure.Versteckis.VersteckisBotProbe(_items));
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
         {
@@ -1581,6 +1636,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
         Adventure.Navigation.DepartureBoard.Register();
         Adventure.Navigation.NavMapOverlay.Register();
+        // the point the chat's Map button shows (#1277)
+        World.Locate.LocateMapPin.Register();
         if (Adventure.Navigation.NavCheck.Requested) AddChild(new Adventure.Navigation.NavCheck(items, () => LocalPlayer));
         if (Adventure.Navigation.TravelCheck.Requested) AddChild(new Adventure.Navigation.TravelCheck(items, () => LocalPlayer));
         if (Adventure.Navigation.NavNetProbe.Role != null) AddChild(new Adventure.Navigation.NavNetProbe(items));
@@ -2136,11 +2193,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (p.LiftWait > 0) yield return (PlayerInput.InteractMount, $"Waiting for {name}: {p.LiftWait:0} s");
                 else if (drag) yield return (PlayerInput.InteractMount, $"Let go of {name}");
             }
-            else if (p.LiftInReach() is { } station)
-                yield return (PlayerInput.InteractMount, $"Take {World.Ropeways.RopewayService.Called(station)}");
+            else if (p.LiftStationInteraction() is { } take)
+                yield return (PlayerInput.InteractMount, take.Text);
             // a bus door's button in reach, inside or out (#162)
-            if (p.Vehicle == null && p.ButtonInReach() is { } button)
-                yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
+            if (p.DoorButtonInteraction() is { } button)
+                yield return (PlayerInput.InteractMount, button.Text);
             if (p.RidingAlong && p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
             // at a crane's controls (#618): the hook, the view, and letting go; the levers are in F1
             if (p.CraneWorking)
@@ -2249,16 +2306,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (Items.ItemController.Instance?.Inventory.Held.IsEmpty == true) yield return (PlayerInput.UseItem, "Take the radio");
                 yield return (PlayerInput.InteractMount, Items.RadioTap.Prompt);
             }
-            else if (Vehicles.VehicleReach.Current == null && Combat.FightManager.Client is { } fights
-                     && NetLink.Online(this) && p.PointedFighter() is { } rival && FootPlayer.NetId(rival.Name) is { } rivalId)
+            else if (p.FighterInteraction() is { } fight)
                 // another player looked at (#495): E challenges, or takes their challenge; an aura
                 // challenge from them comes first (#914)
-                yield return (PlayerInput.InteractMount, Combat.AuraManager.Client?.ChallengedBy(rivalId) == true
-                    ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
+                yield return (PlayerInput.InteractMount, fight.Text);
             else if (p.Indoors)
             {
-                // a cinema's booth (#1238): the lights or the screen, by the half of its panel you stand at
-                if (Interiors.CinemaBooths.Prompt(p) is { } booth) yield return (PlayerInput.InteractMount, booth);
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))
@@ -2268,10 +2321,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else
             {
                 // a concert's light desk (#885), at its console
-                if (Concert.ConcertDeskUi.At(p) != null) yield return (PlayerInput.InteractMount, "Light desk");
+                if (p.LightDeskInteraction() is { } desk) yield return (PlayerInput.InteractMount, desk.Text);
                 // a stand's seat (#885), before the dance: E sits there first
                 else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
-                else if (p.SeatInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
+                else if (p.SeatInteraction() is { } seat) yield return (PlayerInput.InteractMount, seat.Text);
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");

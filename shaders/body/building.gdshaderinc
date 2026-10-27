@@ -759,7 +759,8 @@ void fragment() {
         vec2 lo = vec2(0.30 * window_spacing, 0.32 * storey_h);
         vec2 hi = vec2(0.70 * window_spacing, 0.76 * storey_h);
         vec2 q = vec2(col_u * window_spacing, wall_v * storey_h);
-        bool windowed = facade.y > 0.35 && garage_flag < 2.5;
+        // a hall venue's ground storey (BlindGroundFlag, #1250) has no windows; the storeys above keep theirs
+        bool windowed = facade.y > 0.35 && garage_flag < 2.5 && !(garage_flag > 0.1 && garage_flag < 0.5 && facade.y < 1.0);
 
         // shutters on some houses, not on blocks of flats or a church: one paint a house
         float house = hash(floor(pattern_xz(world_pos) / 24.0) + 0.37);

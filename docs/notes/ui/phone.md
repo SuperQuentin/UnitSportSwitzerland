@@ -12,7 +12,7 @@
   | folded: pick / run | ← → or the wheel / Enter, Space, click | D-pad, stick / A | swipe the fingertip across the cover / tap it, or point the right hand's ray and pull its trigger |
   | open | Up | D-pad ↑ | the free hand swings the front half open by its loose edge; X (fold again: X) |
   | back / put away | Esc (open: back, then fold), ↓ folded | B | B, or a swipe right; let go at the pocket (anywhere else it flies home) |
-  | camera app: shoot / selfie / zoom | click, Enter / F / wheel | RT / Y / LB RB | the holding hand's trigger / turn the phone's back to your face / the right trigger with its ray off the phone (1×, 2×, 5×, round) |
+  | camera app: shoot / selfie / zoom | click, Enter / F / wheel | RT / Y / LB RB | the holding hand's trigger / turn the phone's back to your face / the zoom chips on the glass (1×, 2×, 5×) |
   | travel / answer a call | automatic / cover › Answer | same | raise the phone to your eyes (a blink after 3 s) / to your ear |
 
   No pad button is free on foot (D-pad ↑ is the emote wheel), so the pad takes it out from the quick
@@ -28,8 +28,8 @@
   within 10 cm of an ear answers. Let go away from the pocket it hangs 0.5 s and flies home. The
   inner screen is laid out for 640 units (3 × 2 home tiles). No camera moves in VR (#186: `PhoneLook`
   must not raise the throw view there). Away from the glass, the right hand's aim ray (the menus'
-  faint beam, the screen's ring as its reticle) with its trigger is the pointer; off the phone, in
-  the camera app, that trigger steps the zoom (items are off while the phone is out, so it is free). Check: `--phonevrcheck --xrsim --world fixture` (scripted
+  faint beam, the screen's ring as its reticle) with its trigger is the pointer; off the phone it does nothing
+  (since #1253 the camera zoom is the chips). Check: `--phonevrcheck --xrsim --world fixture` (scripted
   hands: `XrPhone.Sim*`, a ringing call: `PhoneController.SimCall`).
 - **Wire**: one byte, `FootPlayer.PhoneState` (0 pocket, 1 folded, 2 open), on change, in
   `OnChangeProperties` and the movie recorder (`ActorIo`, index 23). Every peer derives the arm pose
@@ -158,3 +158,88 @@
   otherwise), the same height of view: the saved photo is exactly the preview (`--phonecheck` checks the
   selfie's shape).
 
+
+## Five verbs, stage 1 (#1253, plan `docs/plans/phone-redesign.md`)
+
+- **Back is generic**: `PhoneController.Back` sends any page but Home and Travel up one level (Photo to Photos,
+  the rest to Home); only Home folds. A new app can never fold the phone by accident.
+- **Back is visible and has more ways in**: every app page has a `‹` chevron (`PhoneScreens.BackChevron`,
+  pointer-only, `BackPressed`); Backspace and a right click also go back (the camera app keeps the right click
+  for the selfie).
+- **Put away from any page**: hold Esc / the pad's B for `StowHoldSeconds` (0.4 s); a tap is still one step back.
+  The page hints say so. Not while a text box has the keys, in VR (its own buttons) or on Travel.
+- **Travel can be cancelled** until the jump has run: Esc / B / the Cancel button on the curtain
+  (`PhoneController.CancelTravel`) drops the pending jump and shows Home; once the jump ran, the button goes.
+- **Touch**: a PHONE pill in the on-foot top bar (`TouchLayout`, 9 mm, sends the `phone` action); it was only in More.
+- **Not done, and why**: a hold on D-pad Up cannot take the phone out, the hold is already the emote wheel
+  (`EmoteWheel`), so the pad keeps quick menu › Phone. The Phone key stays Up (P is the radio and the character
+  menu); the toggle is Esc/B held, Down folded. The persistent hint bar built from the focused control moves
+  to a later stage with the Home/cover rework.
+- **Check**: `--phonecheck` asserts Esc and Backspace go back, Training does not fold the phone, a held Esc puts it away, and Esc on the travel curtain cancels the jump.
+
+## Home and cover, stage 2 (#1253)
+
+- **Fixed cover order**: Open, Map, Camera, Contacts, Photos, Activities (`RefreshQuick`); the first thing selected
+  is Open, and the digit keys 1 to 6 run a tile directly. A call no longer inserts Answer / Decline into the list.
+- **A call is a banner** above the tiles (`PhoneScreens.ShowCover`, `CoverBannerUv`): Enter / A answers, Esc / B
+  declines (while it rings, they are not "run the tile" and "put away"); a click or VR tap on the banner's left
+  half answers, the right half declines; the tiles are still picked with arrows, digits or a click elsewhere.
+- **Home has six apps** (Map, Contacts, Camera, Photos, Activities, Journal): the Menu tile (the full Activities
+  screen) became **Host…** and Training a **Training** button at the top of the Activities app; Back from
+  Training goes to Activities, then Home.
+- **Checks**: `--phonecheck` (six tiles, Training's way back); `--phonevrcheck` selects the Camera tile before its
+  tap (`PhoneController.SelectQuick`). The banner itself is not exercised headless (no invite service in the fixture).
+
+## Map and Travel, stage 3 (#1253)
+
+- **The Map lists places without typing** (`PhoneScreens.FillResults`): Recent (the last three travelled to this
+  session, `PhoneScreens.Recents`), Near you (the four nearest places over 500 m away, `Here` from the controller),
+  then the biggest places; each row shows its distance. Chips (All, Towns, Summits, Passes) narrow every section.
+  The rows have the keys on open; the search box is optional (`/` or a click, `FocusSearch`) and, typed into,
+  lists matches with the same chips.
+- **Travel in VR is easier to start**: the curtain runs when the glass is within 40 cm of the eyes and faces them
+  (`XrPhone.EyesReach` / `EyesFacing`, was 14 cm), else the blink comes after 1.5 s (`VrRaiseSeconds`, was 3 s).
+- **Check**: `--phonecheck` counts the Map's rows; `--phonevrcheck` raises the phone for a travel under 1.4 s and
+  holds it at the hip (`BeforeEyes(low:)`) for the blink. Recents are not saved between sessions.
+
+## Camera, touch, stage 5 (#1253)
+
+- **Camera app buttons**: zoom chips 1x 2x 5x with the current lens lit (`PhoneScreens.SetZoom`, gold chip), a focusable
+  shutter and Selfie button. In VR the zoom is the chips only: a right trigger pulled off the phone no longer steps it
+  (`VrZoom` is gone). The selfie key (F, Tab, right click, pad Y) lives in `CameraInput`, so it means nothing on any other
+  page (right click is Back there).
+- **Photos**: Left / Right and LB / RB are previous / next in the viewer (Down / Up reach its two wallpaper buttons;
+  `PhoneScreens.StepPhoto`, `‹ ›` buttons and a "n / m" caption); LB / RB page the grid by a screenful of rows
+  (`PageGrid`). A sideways swipe in the viewer is previous / next (mouse, finger, VR fingertip), never Back (`Swiped`).
+- **Touch** (`Platform.IsTouch`, also `--mobile`): see `core/touch-controls` (millimetre slop and swipes, the square-on
+  enlarged screen, camera taps). Mouse thresholds now scale with the window's height (2 % slop, 5.7 % swipe).
+- **Not done**: pad A shoots when standing still (needs a definition of "still"), VR face-button handedness, the on-screen
+  keyboard, tapping the glass of a *raised* phone from a real device (only the emulated mouse is checked).
+- **Check**: `--phonecheck` (chips, Selfie button, F / Tab off the camera, finger tap / swipe thresholds; windowed also the
+  photo pager and LB / RB), also run with `--mobile` (touch layout; windowed screenshots `test_output/phone_*_screen.png`);
+  `--phonevrcheck` (stray trigger does not zoom, fingertip on the chips); `TouchLayoutTests`.
+
+## Contacts, stage 4 (#1253)
+
+- **One row per online player** (`PhoneScreens.FillContacts`): name and status (Online, In your party); Enter, A or a
+  tap opens a sheet (`OpenSheet`) with Go to, Bring here, Party invite and Fight. Offline the page says so and
+  offers Open Activities. "Call" is gone from the UI: the heading is Invites, the home tile says "Invite people".
+- **Bring here and Fight confirm first** (`Confirm`): Cancel is the first and focused button, so a stray Enter sends
+  nothing. Back (`PhoneScreens.CloseContactsSheet`, called first by `PhoneController.Back`) goes confirm, sheet, list,
+  Home, in that order.
+- **The phone sends the same chat commands as before** (`/tpa`, `/tphere`, `/party invite`, `/fight`), which is the
+  path a bot uses; no new key, so pad (A / B), VR and touch (taps on rows and buttons) work as in every app.
+- **A result line** under the heading stays after the action: `Fight · Anna: asking…`, then `Sent` once the
+  server's Outgoing invite shows in `InviteService.Sent`, then `Accepted`, `Declined` or `Timed out`. A private
+  chat line while still asking (a cooldown, a match in the way, no such player) replaces it as the reason.
+- **Server feedback** (protocol 55): `InviteService.Ended` (RPC to the sender of a direct invite, from `Answer`
+  and from the expiry sweep) raises the client's `Resolved(kind, name, outcome)`; the chat's "accepts / declines"
+  lines are unchanged. Bots get no RPC (never a screen).
+- **Checks**: `--phonecheck` (`ContactsChecks`: rows, sheet, Cancel default, nothing sent until Confirm, result
+  lines; the fixture has no server, so `TestPeople` stands in and `OnResolved` plays the server's word);
+  `tools/invitecheck.sh` asserts the sender is told accepted (`/tpa`, party) and declined (race duel).
+
+## Hint line and recents (#1253 follow-up)
+
+- **The page hint follows the focus** (`PhoneScreens.FollowFocusHint`, `AcceptVerb`): Enter / A / a tap is named for the control that has the keys ("travel to Leytron", "open Map", "search", a button's own label); the back half of the line is unchanged.
+- **Map recents are saved** in `user://phone_recents.json` (LV95 coordinates of the last three, matched back to the index on load).

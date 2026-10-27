@@ -43,7 +43,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
 | on-foot camera zoom (#1149): far out down to the face | Shift + wheel, = - / hold R3 + right stick up/down (a tap of R3 still switches the view) | n/a: VR is first person (#186), the head is the camera | keep |
 | phone camera app: walk while it is open (#1149) | WASD, Space / left stick, A | ok: the body already walks with the phone out in VR (#920) | keep |
-| phone (#889): out, quick action, open, back | ↑, ← → Enter, ↑, Esc ↓ / quick menu › Phone, D-pad A, D-pad ↑, B | ok (#920): grip at the left front pocket or wrist menu › Phone; the real index tip taps, drags and swipes the glass, or the right ray and trigger press from afar (`XrPhone`); the free hand swings it open, X opens / folds, B back / away; the arm aims the camera app, the holding trigger shoots, the right trigger (ray off the phone) steps the zoom, turned round it is a selfie; raised to the eyes it travels (a blink after 3 s), to an ear it answers; let go it goes home to the pocket | keep |
+| phone (#889): out, quick action, open, back | ↑, ← → Enter, ↑, Esc ↓ / quick menu › Phone, D-pad A, D-pad ↑, B | ok (#920): grip at the left front pocket or wrist menu › Phone; the real index tip taps, drags and swipes the glass, or the right ray and trigger press from afar (`XrPhone`); the free hand swings it open, X opens / folds, B back / away; the arm aims the camera app, the holding trigger shoots, the zoom is the on-glass 1x 2x 5x chips (a trigger pulled off the phone does nothing since #1253), turned round (or the Selfie button) it is a selfie; raised to the eyes it travels (a blink after 3 s), to an ear it answers; let go it goes home to the pocket | keep |
+| phone camera and photos (#1253): shutter, zoom, selfie, previous / next photo | click / Enter, wheel / Up Down / chips, F Tab right click (camera app only), Left Right, PgUp PgDn / RT, LB RB zoom, Y, LB RB page and previous / next | ok: trigger of the holding hand or the ray on the shutter; fingertip or ray on the 1x 2x 5x chips, the Selfie button, the ‹ › arrows; a sideways fingertip swipe is previous / next in the viewer | keep; pad A shoots when standing still is not done (no definition of standing still yet) |
 | phone › Training app (#901): import, search, connect, start / stop | the phone's own navigation (Enter, Esc) / D-pad A B | ok: the phone's poke and ray, as every app (the OS file picker shows on the desktop) | keep |
 | training: the next junction's road left / right (#901) | A D / left stick | ok: the stick, as steering; the Training app's Left / Right by poke | keep |
 | training: ride_rejoin, ride_uturn, ride_erg, ride_power_up / down (#901) | PgUp PgDn \ ] [ / the Training app's buttons (no pad button is free on a bike) | ok: the Training app's Rejoin, Turn round, ERG, ±10 W by poke | a wrist-menu row if riders want it without the phone |
@@ -76,6 +77,14 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | quest: track / start / abandon (#1223) | buttons in the Journal / A on the button | ok: laser + trigger on the button | keep |
 | quest: hand over a delivery (#1223) | the Journal's Hand over button / A on it | ok: laser + trigger on the button | gap: `interact` (E / X) or a **grip** on the target's marker, once navigation draws markers (#1226) |
 | place: look out from a viewpoint / use a stamp post (#1224) | `interact_mount` E / Y within 3 m of the cross, telescope or stamp post (`PoiMarkers`) | ok: reach out and grip it (`TryInteract(byHand)`) | keep |
+| open a chest (#1227) | `interact_mount` E / Y within 2.4 m (`RewardWorld`) | ok: reach out and grip it (`TryInteract(byHand)`) | **grip the lid and lift** (R1) |
+| light a Höhenfeuer stack, ring a cowbell, wake a guide, start a trial, offer edelweiss (#1227) | E / Y at the stack, bell, burrow, post or offering box | ok: grip it; the offering's confirmation by the ray (`Ui/Modal`) | swing the bell's clapper (R1) |
+| pick an edelweiss, add a cairn stone (#1227) | hold G / X (`gather`, offered before water and stone) | ok: hold X | **grip and pull**, like gather |
+| ring run, pressure plate (#1227) | the body through the ring, standing on the plate | ok: the body (room-scale or stick) | keep |
+| skip the chest's reveal (#1227) | any key / any button | ok: it fades by itself; a pad button through `XrPad` skips | keep |
+| treasure detector ping (#1227) | Use (LMB / RB) with the detector in hand | ok: R trigger (`use_item`) | point it and squeeze |
+| bottled gust (#1227) | Use (LMB / RB): thrown ahead | ok: R trigger (`use_item`) | a real throw by release velocity (the throw-drop target) |
+| `/trial leave` (#1227) | chat | ok: wrist menu › chat | a quick menu entry (gap, also on pad) |
 | adventure map (#1224) | M (`teleport`) while adventuring / quick menu › Map; drag, wheel, click; left stick, LB / RB, A | ok: wrist menu › Map on the `XrUi` panel, ray drag and trigger (the shoulders do not zoom in VR) | keep |
 | Atlas (#1224) | J then Q / E, LB / RB to the Atlas tab; buttons | ok: wrist menu › Journal, laser + trigger | keep |
 | guide: the guiding gust (#1226) | N on foot / mounted (not in a bus, tipper, mixer, mini dumper: N is theirs) / quick menu › Guide | new: the open left hand held palm up 0.5 s (`XrRig.PalmUp`); wrist menu › Guide; a buzz on start | keep (headset check of the palm's sign) |
@@ -184,8 +193,16 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | playtest_topview / _scrub (#844) | Shift+F12, Ctrl+F12 / panel › Top view | ok: the panel's Top view button toggles it on the XrUi screen; zoom and scrub (Shift/Ctrl + wheel): keyboard only, a tuning aid | — |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
+| Versteckis round tool: tag, sniff, decoy, sprint, moo, the Disguise radial (#1268) | LMB `use_item` / RB | new: trigger (the item seam); the radial by laser | tag by touching a prop with a hand + trigger |
+| Versteckis: copy a decor prop (#1268) | RMB + LMB / LB + RB | new: point the hand at it, trigger | keep |
+| Versteckis: sprint burst while disguised (#1268) | Shift `sprint` / L3 | new: left stick click | keep |
+| Versteckis: settle the prop (#1268) | Ctrl / C `crouch_slide` / B | new: B, or crouch for real | keep |
+| Versteckis: hold at the bell, the Höhenfeuer; take and set down the milk can (#1268) | hold E `interact_mount` / hold Y | new: hold Y through `XrPad`; a grip near the site (`TryInteract(byHand)`) starts it | grip the bell rope, the wood stack, the can (after a headset playtest) |
+| Versteckis: follow-cam next / previous (#1268, `Ui/FollowCam`) | ← / → / D-pad ← → | new: the D-pad through `XrPad` | the right stick |
+| Versteckis: open, join, leave (#1268) | Activities tab, `/vs` / quick menu › Activities | new: wrist menu › Activities | keep |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
-| chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
+| chat | Enter, / | partly (#1277): the quick menu's Chat wedge opens it with the "/" picker, the commands and their words as buttons the ray presses; free text still no keyboard | laser key grid on the `XrUi` panel, for free text |
+| chat coordinates: Teleport, Track, Show on map, Copy (#1277) | click a point's pin or coordinates; pad: focus its line, A | ok: the ray on the open chat (`XrUi` draws it) | keep |
 | watch | — | ok: Swiss watch on the drawn left wrist (#439, #1097); read it and the radial menu opens over it | keep |
 | save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
 | movie studio timeline (#638, markers #656, camera keys #669, cameras #675) | Space J K L, ← →, S, Del, M, I, V, 1-9, C / Y, LT RT, D-pad, X (hold: cut to camera), R3, View, L3, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |

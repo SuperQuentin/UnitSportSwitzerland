@@ -54,6 +54,13 @@ public partial class VenueTerraces : Node
     // ---- what goes where (pure) ------------------------------------------------------------------
 
     /// <summary>
+    /// Whether a venue's name is on an awning over its front rather than on a board (#1250): every café,
+    /// and the restaurants whose dice say so; with its terrace's tables under it, or alone over the door.
+    /// </summary>
+    public static bool HasAwning(VenueRecord v) =>
+        v.Type == VenueType.Cafe || v.Type == VenueType.Restaurant && (uint)(Fnv.Unit(v.Osm + "|awning") * 1000) % 2 == 0;
+
+    /// <summary>
     /// Whether a venue has a terrace: as OSM says when it says (<c>outdoor_seating</c>), else by odds
     /// [E]: 0.55 restaurants, cafés and bars, 0.5 pubs, 0.35 fast food, 0.9 beer gardens, never a club.
     /// </summary>
@@ -84,7 +91,8 @@ public partial class VenueTerraces : Node
     {
         var items = new List<TerraceItem>();
         var outward = d.Outward with { Y = 0 };
-        if (d.Width <= 0 || outward.LengthSquared() < 1e-4f || !Wants(v)) return items;
+        bool awning = HasAwning(v);
+        if (d.Width <= 0 || outward.LengthSquared() < 1e-4f || !Wants(v) && !awning) return items;
         outward = outward.Normalized();
         var along = new Vector3(outward.Z, 0, -outward.X);
         float yaw = Mathf.Atan2(outward.X, outward.Z), floor = d.Position.Y;
@@ -95,7 +103,6 @@ public partial class VenueTerraces : Node
         float[] rows = garden ? new[] { 1.1f, 2.9f } : new[] { 0.75f };
         int perSide = garden ? 3 : 2;
         int colour = (int)(Fnv.Unit(v.Osm + "|colour") * TerraceProps.Colours.Length);
-        uint seed = (uint)(Fnv.Unit(v.Osm + "|awning") * 1000);
 
         // the ground a piece stands on there, or null: too near the carriageway, on another level, not level
         float? Fits(Vector3 c, float halfAlong, float halfOut)
@@ -112,7 +119,8 @@ public partial class VenueTerraces : Node
         }
 
         var sets = new List<(Vector3 At, float S)>();
-        foreach (float row in rows)
+        if (Wants(v))
+            foreach (float row in rows)
             foreach (int side in new[] { -1, 1 })
                 for (int k = 0; k < perSide; k++)
                 {
@@ -121,12 +129,21 @@ public partial class VenueTerraces : Node
                     if (Fits(c, setAlong / 2, setOut / 2) is not { } y) break;
                     sets.Add((c with { Y = y }, s));
                 }
-        if (sets.Count == 0) return items;
+        if (sets.Count == 0)
+        {
+            // no tables: the awning alone over the door and its windows, the name on it (#1250)
+            if (awning)
+            {
+                float span = Math.Max(d.Width + 1.6f, 3.2f);
+                if (d.Run > 0) span = Math.Min(span, d.Run - 0.4f);
+                if (span >= d.Width + 0.4f) items.Add(new TerraceItem(TerraceKind.Awning, d.Position with { Y = floor }, yaw, colour, span));
+            }
+            return items;
+        }
         foreach (var (at, _) in sets) items.Add(new TerraceItem(kind, at, yaw, colour));
 
         // shade: an awning across the front of a café or restaurant, else a parasol through each table
         float lo = sets.Min(x => x.S) - setAlong / 2, hi = sets.Max(x => x.S) + setAlong / 2;
-        bool awning = !garden && v.Type is VenueType.Cafe or VenueType.Restaurant && seed % 2 == 0;
         if (awning)
             items.Add(new TerraceItem(TerraceKind.Awning, (d.Position + along * ((lo + hi) / 2)) with { Y = floor }, yaw, colour, hi - lo));
         else if (!garden)
@@ -210,6 +227,33 @@ public partial class VenueTerraces : Node
         });
     }
 
+    /// <summary>The venue's name painted along an awning's valance (#1250): dark on a pale awning, the awning's colour on a strong one.</summary>
+    private static Label3D Valance(string name, TerraceItem it, Basis basis)
+    {
+        var c = TerraceProps.Colours[it.Colour % TerraceProps.Colours.Length];
+        bool pale = c.R + c.G + c.B > 2.2f;
+        float letters = TerraceProps.ValanceH * 0.62f, em = letters / 0.7f;
+        string text = NeonSign.Lettering(name);
+        float textW = Math.Max(1, text.Length) * em * 0.55f;
+        em *= Math.Min(1f, (it.Span - 0.4f) / textW);
+        const int fontSize = 64;
+        return new Label3D
+        {
+            Name = "Valance",
+            Text = text,
+            Font = NeonSign.SignFont(),
+            FontSize = fontSize,
+            PixelSize = em / fontSize,
+            Modulate = pale ? new Color(0.10f, 0.14f, 0.30f) : new Color(c.R, c.G, c.B),
+            OutlineSize = 0,
+            Shaded = true,
+            DoubleSided = false,
+            VisibilityRangeEnd = NeonSign.DrawnM,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Transform = new Transform3D(basis, it.At + basis * TerraceProps.ValanceFront),
+        };
+    }
+
     private void Build(ChunkNode node, DoorSpot[] doors, RoadTile? roads)
     {
         node.GetNodeOrNull(NodeName)?.QueueFree();
@@ -248,6 +292,7 @@ public partial class VenueTerraces : Node
                     Transform = new Transform3D(it.Kind == TerraceKind.Awning ? look * Basis.FromScale(new Vector3(it.Span, 1, 1)) : look, it.At),
                 };
                 root.AddChild(mesh);
+                if (it.Kind == TerraceKind.Awning) root.AddChild(Valance(Venues.NameOf(v), it, basis));
                 if (TerraceProps.Solid(it.Kind) is { } box)
                     body.AddChild(new CollisionShape3D
                     {
@@ -326,13 +371,17 @@ public static class TerraceProps
         return s.Build();
     }, candle: false)).ToArray();
 
+    /// <summary>An awning's valance: its middle's height, its height, and the point 1.2 cm before its face the name is painted at (#1250).</summary>
+    public const float ValanceY = 2.12f, ValanceH = 0.30f;
+    public static readonly Vector3 ValanceFront = new(0, ValanceY, 2.2f + 0.015f + 0.012f);
+
     public static readonly PropKind[] Awnings = Colours.Select((c, i) => new PropKind($"Terrace awning {i}", () =>
     {
         var s = new MeshScratch();
         // 1 m wide (stretched to the terrace), from the facade out 2.2 m and down 0.5 m, a valance at its edge
         var tilt = new Basis(Vector3.Right, Mathf.DegToRad(13));
         s.Box(new Vector3(0, 2.5f, 1.1f), new Vector3(1f, 0.04f, 2.26f), c, tilt);
-        s.Box(new Vector3(0, 2.15f, 2.2f), new Vector3(0.97f, 0.22f, 0.03f), PropColors.Matte(0.95f, 0.95f, 0.93f));
+        s.Box(new Vector3(0, ValanceY, 2.2f), new Vector3(0.97f, ValanceH, 0.03f), PropColors.Matte(0.95f, 0.95f, 0.93f));
         s.Box(new Vector3(0, 2.75f, 0.04f), new Vector3(1.03f, 0.1f, 0.08f), Dark);
         return s.Build();
     }, candle: false)).ToArray();

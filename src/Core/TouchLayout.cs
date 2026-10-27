@@ -144,6 +144,20 @@ public static class TouchLayout
     /// <summary>Extra touch margin round every control, mm.</summary>
     public const float HitMarginMm = 2f;
 
+    /// <summary>The phone app's finger (#1253): a touch moving less than 2 mm is a tap, a sideways stroke of 10 mm is a back swipe, targets are 7 mm (9 mm primary).</summary>
+    public const float TapSlopMm = 2f, BackSwipeMm = 10f, MinTargetMm = 7f, PrimaryTargetMm = 9f;
+
+    /// <summary>Whether a press that has moved <paramref name="moved"/> pixels is a drag rather than a tap (slop in pixels).</summary>
+    public static bool Beyond(Vector2 moved, float slopPx) => moved.Length() > slopPx;
+
+    /// <summary>A mostly sideways stroke of at least <paramref name="minPx"/>: 1 to the right, -1 to the left, 0 when it is neither.</summary>
+    public static int SideSwipe(Vector2 moved, float minPx) =>
+        Mathf.Abs(moved.X) > Mathf.Abs(moved.Y) * 1.5f && Mathf.Abs(moved.X) >= minPx ? (moved.X > 0f ? 1 : -1) : 0;
+
+    /// <summary>A mostly vertical stroke of at least <paramref name="minPx"/>: 1 down, -1 up, 0 when it is neither.</summary>
+    public static int DownSwipe(Vector2 moved, float minPx) =>
+        Mathf.Abs(moved.Y) > Mathf.Abs(moved.X) * 1.5f && Mathf.Abs(moved.Y) >= minPx ? (moved.Y > 0f ? 1 : -1) : 0;
+
     /// <summary>The largest size setting: past it a 16:9 phone has no room for the hotbar beside the buttons.</summary>
     public const float MaxScale = 1.2f;
     /// <summary>A hotbar cell on a phone, and the gap between cells, mm.</summary>
@@ -274,6 +288,7 @@ public static class TouchLayout
             top("exit", "Get out", TouchSend.Pad(JoyButton.Y), 51.5f, 12f);
         else if (mode is TouchMode.Foot or TouchMode.Passenger)
             top("bag", "BAG", TouchSend.Act("inventory"), 49f, 8f, TouchFeel.NotWithHotbar);
+        if (mode == TouchMode.Foot) top("phone", "PHONE", TouchSend.Act("phone"), 60f, 9f);
         return k;
     }
 

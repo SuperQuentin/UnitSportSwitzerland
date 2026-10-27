@@ -64,12 +64,18 @@ public partial class ConcertCrowd : Node3D
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = mesh, InstanceCount = n,
             };
+            // one buffer, not two interop calls a person: transform (3 rows of basis + origin), then custom data
+            var buffer = new float[n * 16];
             for (int i = 0; i < n; i++)
             {
                 var (t, custom) = places[from + i];
-                mm.SetInstanceTransform(i, t);
-                mm.SetInstanceCustomData(i, custom);
+                int k = i * 16;
+                buffer[k] = t.Basis.X.X; buffer[k + 1] = t.Basis.Y.X; buffer[k + 2] = t.Basis.Z.X; buffer[k + 3] = t.Origin.X;
+                buffer[k + 4] = t.Basis.X.Y; buffer[k + 5] = t.Basis.Y.Y; buffer[k + 6] = t.Basis.Z.Y; buffer[k + 7] = t.Origin.Y;
+                buffer[k + 8] = t.Basis.X.Z; buffer[k + 9] = t.Basis.Y.Z; buffer[k + 10] = t.Basis.Z.Z; buffer[k + 11] = t.Origin.Z;
+                buffer[k + 12] = custom.R; buffer[k + 13] = custom.G; buffer[k + 14] = custom.B; buffer[k + 15] = custom.A;
             }
+            mm.Buffer = buffer;
             AddChild(new MultiMeshInstance3D
             {
                 Name = $"Crowd{b}", Multimesh = mm, MaterialOverride = _material,
@@ -138,12 +144,13 @@ public partial class ConcertCrowd : Node3D
         // the floor: everyone looks at the stage; densest in front of it. A festival field is wide:
         // spread out to at most MaxFloor people, as the eye counts a crowd from inside it
         var s = _plan.Event.Stadium;
+        var blocked = _plan.BlockedTester(1.2f);
         float spacing = Math.Max(FloorSpacing, MathF.Sqrt(4f * s.FrontHalfU * s.FrontHalfV * 0.55f / MaxFloor));
         for (float u = -s.FrontHalfU + 2; u < s.FrontHalfU - 2; u += spacing)
             for (float v = -s.FrontHalfV + 2; v < s.FrontHalfV - 2; v += spacing)
             {
                 var p = new Vector2(u, v) + new Vector2((float)rng.NextDouble() - 0.5f, (float)rng.NextDouble() - 0.5f) * spacing * 0.7f;
-                if (_plan.Blocked(p, 1.2f)) continue;
+                if (blocked(p)) continue;
                 Vector2 toStage;
                 float density;
                 if (_plan.Round)

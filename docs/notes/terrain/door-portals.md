@@ -14,6 +14,9 @@ changed is how you get there.
   every door of the building the player is in, and from inside, every open door within 45 m of
   one of its open doorways (seen through it) gets its interior built here and a `DoorLink`.
   Other clients ask for the plan with `RequestPlan`. Interiors nobody can see are freed.
+  An interior that throws while being built (#1250: a cinema whose cat photos were git-lfs pointers)
+  is logged, not retried until a door to it opens again (`_failed`), and the door this client opened
+  shuts with a hint (`BuildFailed`): never a door left open onto nothing.
 - **`DoorLink` = two frames and a map.** The facade doorway (origin on the sill at the facade,
   Z out of the building) and the interior doorway (at the outer end of the 6 cm reveal, i.e. the
   plan box edge). `ToInside = Inside * Outside⁻¹`, and back. Rigid: the 3 km drop plus the small

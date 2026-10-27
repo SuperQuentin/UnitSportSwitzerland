@@ -80,11 +80,21 @@ public partial class FootPlayer
     private static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
 
     /// <summary>The prompt at a crane's foot, or in its cab, or null (#618).</summary>
-    public string? CranePrompt()
+    public string? CranePrompt() => CraneInteraction()?.Text;
+
+    /// <summary>How much of a ladder's foot the outline takes, m.</summary>
+    private const float LadderOutline = 3f;
+
+    /// <summary>The prompt at a crane's foot, or on its ladder, and the ladder or the remote's box to outline (#1286); or null.</summary>
+    public Items.Interaction? CraneInteraction()
     {
-        if (_craneAt == CraneSeat.Ladder) return InputHints.Format("{move_forward} / {move_back}: climb · {jump}: let go");
+        if (_craneAt == CraneSeat.Ladder) return new(InputHints.Format("{move_forward} / {move_back}: climb · {jump}: let go"), default);
         if (CraneWorking || CraneInReach() is not { } near) return null;
-        return InputHints.Prompt(PlayerInput.InteractMount, near.Ladder ? "Climb the crane" : "Take the crane's remote");
+        return near.Ladder
+            ? new(InputHints.Prompt(PlayerInput.InteractMount, "Climb the crane"),
+                Items.Outline.Box(null, near.Crane.LadderFrame(LadderOutline), new Vector3(0.56f, LadderOutline, 0.06f)))
+            : new(InputHints.Prompt(PlayerInput.InteractMount, "Take the crane's remote"),
+                Items.Outline.Box(null, near.Crane.RemoteFrame, new Vector3(0.36f, 0.44f, 0.36f)));
     }
 
     /// <summary>

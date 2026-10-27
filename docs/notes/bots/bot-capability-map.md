@@ -64,6 +64,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
+| find the nearest castle, lake, cinema, church + spire... (`/locate`, #1277) | — (a query string, as typed) | `LocateService.FindAsync(query, e, n, max)`: the same engine, index and garage check as the chat's | the answer's `LocateHit`s: name, LV95, distance | — | gap: no brain asks yet; the sense a "go to the nearest X" goal needs |
+| go to coordinates (`/go @E,N`, #1277) | — | `ChatManager.CommandGo` on the `/city` terms (`MayTeleport`), `ForceTeleport` to the owner | — | — | n/a: a bot walks or travels; a teleport is a player's |
 | discover a place, clear fog (#1224) | the body's position and ride (`PlacesBodies`) | `PlacesService` tick, after `Enroll(bot)` (session-only progress, `SessionFor`) | `PoiCatalogue.Near` | — | gap: the bot director does not call `Enroll` yet |
 | sync a viewpoint / use a stamp post (#1224) | `TryInteract` at a marker | `PlacesService.ServerInteract(peer, poiId)` | `PoiCatalogue.Near` ("nearest summit cross") | — | gap: no brain uses it (a guide bot later) |
 | travel the network (#1226) | — | `AdventureTravel.TravelBot(bot, poiId, fromSignId)`: `TravelNetwork.MayTravel`, the fare, `FootPlayer.DebugLaunch` (no RPC) | memory of unlocked points: its session `travel` section | wander-travel (walk to a sign, travel) | gap: no brain step yet |
@@ -95,7 +97,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
 | join the field | — | `BrManager.BoardBots` at GO | — | — | ok (aboard the plane) |
-| the phone (#889): calls, travel, activities from its apps | — | none of its own: its apps send the same invites, teleport requests and activity commands | — | — | n/a |
+| the phone (#889): invites, travel, activities from its apps | — | none of its own: its apps send the same invites, teleport requests and activity commands | — | — | n/a |
+| the phone's Contacts (#1253): Go to, Bring here, Party invite, Fight | — | the chat commands `/tpa`, `/tphere`, `/party invite`, `/fight` (unchanged, a bot sends them); the sender's accepted / declined / timed-out word is `InviteService.Ended`, client-only and never sent to a bot | — | — | n/a |
 | home-trainer training (#901): the phone's Training app | `RideControls` (the lean `AutoPilot`) | none: client-side, the local rider's GPX and trainer | — | — | n/a (a bot has no trainer; it already rides routes through the same pilot) |
 | training: a road at a junction, Rejoin, U-turn, ERG (#901) | `TrainingSession.Choose` / `Rejoin` / `UTurn`, `TrainerLink.SetErg` / `StepErg` (methods, never raw keys) | none: client-side | — | — | n/a until group rides (phase 4): the junction logic (`JunctionChoice`) is pure and would serve a server-run rider |
 | invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `BoardBots` | — | — | n/a |
@@ -119,3 +122,22 @@ gives one progress for the session, never saved.
 | reach a quest's area | `WalkControls` | the server's 2 Hz reach check (`PositionOf` reads the body) | the step's `Target` (`QuestEngine.Locate`) | `MoveTo` | n/a phase 1 |
 | hand a delivery over | — | `AdventureService.Deliver(peer, id, step)` | the step's target | `MoveTo` + `Deliver` | gap: a co-op brain; a bot's pack is its own (`BotHands`), the client's `DeliverOk` take has no bot side |
 | adventure progress, rewards | — | `SessionFor(peer)`, `Grant` | — | — | n/a: no identity, never saved; cash goes to the bank by name (`Bank.Credit` skips the RPC for a bot id) |
+| open a chest (#1227) | — | `RewardService.ServeOpen(peer, id)` (checks the body, not the input) | `RewardService.Map` (the server's own placement) | `MoveTo` + open | n/a: a player's progression |
+| pick an edelweiss, add a cairn stone (#1227) | — | `ServePick(peer, id)` | the same placement | `MoveTo` + pick | n/a |
+| a seal's step: a stack, a bell, a ring, a plate (#1227) | — | `ServeSealStep(peer, chestId, step)` (body at the prop) | `Map.LayoutOf(chest)` | `MoveTo` | n/a; a bot's **body on a pressure plate** counts as a weight for a player (`Occupied`): ok, nothing to build |
+| follow a guide (#1227) | `WalkControls` | `ServeGuide(peer, chestId)`, then the server's 4 Hz follow (`GuideBook.Follow`) on the body | the layout's waypoints | `MoveTo` per leg | n/a |
+| offer edelweiss (#1227) | — | `ServeOffer(peer, shrineId)` | the catalogue's shrines | — | n/a |
+| run a trial (#1227) | `WalkControls` | `ServeTrialStart`, `ServeTrialGate` (body at the gate, pace) | `Trials.At`, the gates | `MoveTo` per gate | n/a |
+| photo spots, fauna (#1227) | — | `ServePhoto` (body in the disc, line of sight), `ServeFauna` | `PhotoSpots` | — | n/a |
+| treasure detector (#1227) | — | none (client readout) | — | — | n/a |
+| bottled gust (#1227) | `BotHands` | `ItemEvents` relay (`ItemEventKind.Gust`; any peer's event is relayed) | — | — | gap: `BotHands` throws nothing yet (no smoke either); a server-side `ItemEvents` send at the bot's aim is all it needs |
+| plant / take up the travel flag (#1227) | `BotHands` | `PlacedObjects` `ServePlace` / `ServeRemove` (private: a client's `AskPlace`/`AskRemove`); planted, `ServedByPeer` sets the planter's `TravelBook.Flag` (`AdventureTravel.SetPortable`) | — | — | gap: no server-side place for a bot (a public `ServePlace(peer, ...)` is all it needs); travel to the flag is navigation's, not built |
+| Versteckis: disguise as a prop (#1268) | — | `VersteckisManager.ServeDisguise(peer, kind)` | `StateOf(game).Kinds`, `DecorOf` | `VersteckisBrain` (the kind the village has most of) | ok |
+| Versteckis: hide by a prop of its kind (#1268) | `WalkControls` (disguised walk cap through `FootPlayer.PropWalk`) | the body | `VsTactics.HiderSpot` (cover from the door by `BotRays`) | `MoveTo` | ok |
+| Versteckis: tag (#1268) | — | `ServeTag(peer, e, n, alt)` (server positions) | `VsSuspicion` from sight (decor in the cone, bodies `Looks` as their prop), hearing, puffs | `MoveTo` + tag in reach | ok |
+| Versteckis: sniff (#1268) | — | `ServeSniff(peer)` (puffs handed to the brain, never `RpcId` a bot) | `VersteckisBrain.Puff` | when nothing is suspicious | ok |
+| Versteckis: decoy (#1268) | — | `ServeDecoy(peer)` | — | once a round, then a new spot | ok |
+| Versteckis: sprint burst (#1268) | `WalkControls` (6.5 m/s through `PropWalk`) | `ServeSprint(peer)` | the seeker seen within 7 m facing it | flee | ok |
+| Versteckis: moo (#1268) | — | `ServeMoo(peer)` | the seeker far and looking away | by boldness | ok |
+| Versteckis: the bell, the Höhenfeuer, the milk can (#1268) | `WalkControls` | `ServeObjective(peer, site, step)` (body within 2.5 m, the hold on the game clock) | the seeker far from the site; one bot at a time (`ClaimObjective`) | `MoveTo` + hold | ok |
+| Versteckis: follow-cam once caught (#1268) | — | — | — | — | n/a: a bot has no camera |

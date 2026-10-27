@@ -43,6 +43,12 @@ public partial class WebRadio : Node
     /// <summary>Beyond this from the listener a radio is not asked for.</summary>
     public const float HearRadius = 50f;
     private const int MaxWanted = 3;
+    /// <summary>
+    /// A venue's music beyond its reach plus this sleeps (no speaker processing): a city holds hundreds
+    /// of them, and each one's radio and tracker speaker stepping its hearing every frame cost Geneva
+    /// half its main thread.
+    /// </summary>
+    private const float VenueWakeMargin = 15f;
     /// <summary>A station stays asked for this long after its last radio went: getting out of a car hands it to the parked one.</summary>
     private const double KeepFor = 4;
     private const double CloseAfter = 20;
@@ -138,6 +144,15 @@ public partial class WebRadio : Node
         var near = new List<(float Dist, int Station)>();
         foreach (var (node, station) in sources)
         {
+            float d = ear is { } at ? at.DistanceTo(node.GlobalPosition) : 0f;
+            if (node is VenueMusicSource far)
+            {
+                // out of earshot its speakers sleep, the tracker's too (they inherit the mode)
+                bool awake = d < Items.RadioLoudness.Radius(far.Volume) + VenueWakeMargin;
+                var mode = awake ? ProcessModeEnum.Inherit : ProcessModeEnum.Disabled;
+                if (far.ProcessMode != mode) far.ProcessMode = mode;
+                if (!awake) continue;
+            }
             var speaker = node.GetNodeOrNull<WebRadioSpeaker>(SpeakerName);
             if (Stations.For(station) == null)
             {
@@ -156,7 +171,6 @@ public partial class WebRadio : Node
                 VenueMusicSource venue => venue.Volume,
                 _ => Items.RadioLoudness.Default,
             };
-            float d = ear is { } at ? at.DistanceTo(node.GlobalPosition) : 0f;
             if (d < HearRadius) near.Add((d, station));
         }
         double now = ClockSync.LocalNow;
