@@ -144,18 +144,25 @@ public static partial class InteriorGenerator
         // what the fit may change, kept whole to go back to
         string saved = l.ToJson();
         bool inside = l.Floors.All(fl => fl.Rooms.All(r => RectInside(rings, r.X0, r.Z0, r.X1, r.Z1, 0.3f)));
-        bool ok = inside ? Extend(l, rings) : Clip(l, rings);
-        if (ok)
+        bool Good()
         {
             var after = InteriorValidator.Validate(l);
-            if (after.Count > before.Count) ok = Unfit($"{(inside ? "grown" : "cut")}, it does not validate: {string.Join("; ", after.Except(before).Take(3))}");
-            else if (l.Floors.SelectMany(fl => fl.Rooms).FirstOrDefault(r => !Drawable(r)) is { } bad) ok = Unfit($"the {bad.Type}'s shape does not triangulate");
+            if (after.Count > before.Count) return Unfit($"{(inside ? "grown" : "cut")}, it does not validate: {string.Join("; ", after.Except(before).Take(3))}");
+            if (l.Floors.SelectMany(fl => fl.Rooms).FirstOrDefault(r => !Drawable(r)) is { } bad) return Unfit($"the {bad.Type}'s shape does not triangulate");
+            return true;
         }
-        if (ok) return;
-        var back = InteriorLayout.FromJson(saved)!;
-        l.Floors = back.Floors;
-        l.InnerDoors = back.InnerDoors;
-        l.Entrances = back.Entrances;
+        void Back()
+        {
+            var back = InteriorLayout.FromJson(saved)!;
+            l.Floors = back.Floors;
+            l.InnerDoors = back.InnerDoors;
+            l.Entrances = back.Entrances;
+        }
+        if ((inside ? Extend(l, rings) : Clip(l, rings)) && Good()) return;
+        Back();
+        // a room dropped out in the yard may have been the way to another: cut again, dropping none
+        if (!inside && Clip(l, rings, drop: false) && Good()) return;
+        Back();
     }
 
     /// <summary>
@@ -634,10 +641,23 @@ public static partial class InteriorGenerator
 
     // ---- clip --------------------------------------------------------------------------------
 
-    private static bool Clip(InteriorLayout l, List<Vector2[]> rings)
+    /// <summary>
+    /// Every room the outline cuts takes the cut, room by room: one that cannot (a stair in it, a
+    /// courtyard in it, cut in two, a doorway left off its walls) keeps its rectangle, and the rest
+    /// are still cut. A room out in the yard goes when <paramref name="drop"/> (and nothing is reached
+    /// only through it, which the validator tells). False, with the first reason, if nothing changed.
+    /// </summary>
+    private static bool Clip(InteriorLayout l, List<Vector2[]> rings, bool drop = true)
     {
         var outers = rings.Where(r => RoomShapes.Area(r) > 0).ToList();
         var holes = rings.Where(r => RoomShapes.Area(r) < 0).ToList();
+        string? why = null;
+        bool changed = false;
+        bool Keep(string reason)
+        {
+            why ??= reason;
+            return false;
+        }
         for (int f = 0; f < l.Floors.Count; f++)
         {
             var gone = new List<int>();
@@ -645,47 +665,56 @@ public static partial class InteriorGenerator
             {
                 var r = l.Floors[f].Rooms[i];
                 if (RectInside(rings, r.X0, r.Z0, r.X1, r.Z1, 0.01f)) continue;
-                if (!Shapeable(l, f, r)) return Unfit($"floor {f} {r.Type} holds a stair or a shaft and leaves the outline");
+                if (!Shapeable(l, f, r)) { Keep($"floor {f} {r.Type} holds a stair or a shaft and leaves the outline"); continue; }
                 // a courtyard in the room: cutting it out would need a hole in the floor
-                if (holes.Any(h => h.Any(v => v.X > r.X0 && v.X < r.X1 && v.Y > r.Z0 && v.Y < r.Z1))) return Unfit($"floor {f} {r.Type}: a courtyard inside it");
+                if (holes.Any(h => h.Any(v => v.X > r.X0 && v.X < r.X1 && v.Y > r.Z0 && v.Y < r.Z1))) { Keep($"floor {f} {r.Type}: a courtyard inside it"); continue; }
                 var pieces = new List<List<Vector2>>();
+                bool split = false;
                 foreach (var o in outers)
                 {
-                    var p = RoomShapes.ClipToRect(o, r.X0, r.Z0, r.X1, r.Z1, out bool split);
+                    var p = RoomShapes.ClipToRect(o, r.X0, r.Z0, r.X1, r.Z1, out bool twice);
                     if (p.Count < 3 || RoomShapes.Area(p) < 0.25f) continue;
-                    if (split) return Unfit($"floor {f} {r.Type}: the outline meets it twice");
+                    split |= twice;
                     pieces.Add(p);
                 }
-                // a room out in the yard goes (if nothing is reached only through it, which the
-                // validator tells); one cut in two would need two rooms
-                if (pieces.Count == 0 || pieces.Count == 1 && RoomShapes.Area(pieces[0]) < 1.5f) { gone.Add(i); continue; }
-                if (pieces.Count != 1) return Unfit($"floor {f} {r.Type}: cut in {pieces.Count}");
+                if (split) { Keep($"floor {f} {r.Type}: the outline meets it twice"); continue; }
+                // a room out in the yard goes; one cut in two would need two rooms
+                if (pieces.Count == 0 || pieces.Count == 1 && RoomShapes.Area(pieces[0]) < 1.5f)
+                {
+                    if (drop) gone.Add(i);
+                    continue;
+                }
+                if (pieces.Count != 1) { Keep($"floor {f} {r.Type}: cut in {pieces.Count}"); continue; }
                 var shape = pieces[0];
-                // every cut in its walls still on a wall; a window that is not goes, anything else undoes it
-                foreach (var o in r.Openings.ToList())
+                // every cut in its walls still on a wall: a window that is not goes, another street door
+                // than the main one loses its doorway (it reads as locked, #498), anything else keeps the rectangle
+                var off = new List<(OpeningPlan O, int Entrance, EntrancePlan? Way)>();
+                foreach (var o in r.Openings)
                 {
                     if (o.Edge != null) continue;
                     var (at, _, along) = r.WallFrame(o);
-                    bool on = RoomShapes.EdgeDistance(shape, at - along * (o.Width / 2)) < 0.03f
-                              && RoomShapes.EdgeDistance(shape, at + along * (o.Width / 2)) < 0.03f;
-                    if (on) continue;
-                    // another street door than the main one, out where the building is not: its door
-                    // has no doorway then, and reads as locked (#498)
-                    if (o.Kind == OpeningKind.Entry && l.Entrances.Count > 1
-                        && l.Entrances.FindIndex(e => new Vector2(e.X, e.Z).DistanceTo(at) < 0.05f) is var ei && ei > 0)
-                    {
-                        l.Entrances.RemoveAt(ei);
-                        r.Openings.Remove(o);
-                        continue;
-                    }
-                    if (o.Kind != OpeningKind.Window) return Unfit($"floor {f} {r.Type}: a {o.Kind} off the outline");
+                    if (RoomShapes.EdgeDistance(shape, at - along * (o.Width / 2)) < 0.03f
+                        && RoomShapes.EdgeDistance(shape, at + along * (o.Width / 2)) < 0.03f) continue;
+                    int ei = o.Kind == OpeningKind.Entry && l.Entrances.Count > 1
+                        ? l.Entrances.FindIndex(e => new Vector2(e.X, e.Z).DistanceTo(at) < 0.05f) : -1;
+                    if (o.Kind != OpeningKind.Window && ei <= 0) { off.Clear(); off.Add((o, -2, null)); break; }
+                    off.Add((o, ei, ei > 0 ? l.Entrances[ei] : null));
+                }
+                if (off is [(var bad, -2, _)]) { Keep($"floor {f} {r.Type}: a {bad.Kind} off the outline"); continue; }
+                foreach (var (o, _, way) in off)
+                {
                     r.Openings.Remove(o);
+                    if (way != null) l.Entrances.Remove(way);
                 }
                 r.SetShape(shape);
+                changed = true;
             }
             for (int k = gone.Count - 1; k >= 0; k--)
-                if (!Drop(l, f, gone[k])) return Unfit($"floor {f}: {l.Floors[f].Rooms[gone[k]].Type} out in the yard is a way in");
+                if (Drop(l, f, gone[k])) changed = true;
+                else Keep($"floor {f}: {l.Floors[f].Rooms[gone[k]].Type} out in the yard is a way in");
         }
+        if (!changed) return Unfit(why ?? "nothing to cut");
+        if (why != null) OutlineFailure = $"partly: {why}";
         EdgeWindows(l, rings);
         return true;
     }

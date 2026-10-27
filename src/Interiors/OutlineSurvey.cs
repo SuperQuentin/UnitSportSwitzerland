@@ -33,7 +33,7 @@ public static class OutlineSurvey
         public readonly Dictionary<string, int> Why = new();
     }
 
-    /// <summary>At most this many tiles (<c>--tiles N</c>), for a quick look.</summary>
+    /// <summary>At most this many tiles a town (<c>--tiles N</c>), for a quicker look.</summary>
     private static int MaxTiles => int.TryParse(CmdArgs.Value("--tiles"), out int n) ? n : int.MaxValue;
 
     public static int Run()
@@ -49,14 +49,15 @@ public static class OutlineSurvey
         foreach (var town in Towns)
         {
             var c = TileId.FromLv95(town.E, town.N);
+            int townTiles = 0;
             for (int de = -1; de <= 1; de++)
                 for (int dn = -1; dn <= 1; dn++)
                 {
                     var id = new TileId(c.E + de, c.N + dn);
                     var tile = src.LoadBuildingsAsync(id).GetAwaiter().GetResult();
                     if (tile == null) continue;
+                    if (++townTiles > MaxTiles) continue;
                     tiles++;
-                    if (tiles > MaxTiles) continue;
                     var roads = src.LoadRoadsAsync(id).GetAwaiter().GetResult();
                     var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
                     var tileWatch = Stopwatch.StartNew();
