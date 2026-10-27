@@ -57,7 +57,7 @@ host wall, `b` away from it.
   `WcSignAccessible`) over each doorway on the host's side.
 - **Shared** (less space; ~2.4 x 2.9 m): one anteroom off the host with the basin(s), two stalls off its
   back wall, a women's and a men's sign over their doors; a `WcSignAll` over the way in.
-- **Single** (really no space; ~1.4 x 1.9 m): one `WC` room, bowl, basin, its own door, `WcSignAll`.
+- **Single** (really no space; ~1.4 x 1.7 m): one `WC` room, bowl, basin, its own door, `WcSignAll`.
 
 ## Where each building has them
 
