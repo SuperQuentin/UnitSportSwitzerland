@@ -13,6 +13,18 @@ public static partial class InteriorGenerator
     private const int PocketAllowance = 30;
     /// <summary>Rooms bigger than this are halls, laid out by their own rules and not worth a grid.</summary>
     private const float WalkableMaxArea = 100f;
+    /// <summary>
+    /// But a strip this narrow is a way, whatever its length, gridded up to <see cref="StripMaxArea"/>: a
+    /// multiplex's projection room is 2.6 m by 40-120 m, and a platter and a chair once shut its far end,
+    /// panel and all (#1279).
+    /// </summary>
+    private const float StripMaxWidth = 4f, StripMaxArea = 400f;
+    /// <summary>
+    /// A player's body radius and a hair (FootPlayer's 0.32 m): a strip, and a check, take walkers this wide. The
+    /// rooms' <see cref="WalkerRadius"/> lets a player squeeze where the grid says a way is; in a 2.6 m booth a
+    /// platter left two 0.6 m lanes the grid passed and the body did not (#1279).
+    /// </summary>
+    private const float BodyRadius = 0.34f;
 
     /// <summary>A room's floor as a grid of cells a walker's centre may stand on, and where its doorways let in.</summary>
     private sealed class WalkMap
@@ -22,43 +34,64 @@ public static partial class InteriorGenerator
         private readonly int _nx, _nz;
         public readonly List<int> Seeds = new();
 
-        public WalkMap(RoomPlan r)
+        private readonly bool _any;
+        private readonly float _rad;
+
+        /// <param name="any">Grid it whatever its size: a check asks, and its cost does not matter.</param>
+        public WalkMap(RoomPlan r, bool any = false)
         {
             _r = r;
-            _x0 = r.X0 + WallInset + WalkerRadius;
-            _z0 = r.Z0 + WallInset + WalkerRadius;
-            _nx = (int)((r.X1 - WallInset - WalkerRadius - _x0) / WalkCell) + 1;
-            _nz = (int)((r.Z1 - WallInset - WalkerRadius - _z0) / WalkCell) + 1;
+            _any = any;
+            // a strip, and a projection room whatever its size: where a player must reach the pieces they work
+            _rad = any || r.Area > WalkableMaxArea || r.Type == RoomType.ProjectionRoom ? BodyRadius : WalkerRadius;
+            _x0 = r.X0 + WallInset + _rad;
+            _z0 = r.Z0 + WallInset + _rad;
+            _nx = (int)((r.X1 - WallInset - _rad - _x0) / WalkCell) + 1;
+            _nz = (int)((r.Z1 - WallInset - _rad - _z0) / WalkCell) + 1;
             if (!Usable) return;
             foreach (var o in r.Openings.Where(o => o.Kind != OpeningKind.Window))
             {
                 // a step inside the doorway, on the room's walkable floor
-                float x = o.Side switch { Side.Left => _x0, Side.Right => r.X1 - WallInset - WalkerRadius, _ => o.Center };
-                float z = o.Side switch { Side.Front => _z0, Side.Back => r.Z1 - WallInset - WalkerRadius, _ => o.Center };
+                float x = o.Side switch { Side.Left => _x0, Side.Right => r.X1 - WallInset - _rad, _ => o.Center };
+                float z = o.Side switch { Side.Front => _z0, Side.Back => r.Z1 - WallInset - _rad, _ => o.Center };
                 int i = Math.Clamp((int)MathF.Round((x - _x0) / WalkCell), 0, _nx - 1);
                 int j = Math.Clamp((int)MathF.Round((z - _z0) / WalkCell), 0, _nz - 1);
                 Seeds.Add(j * _nx + i);
             }
         }
 
-        public bool Usable => _r.Area <= WalkableMaxArea && _nx >= 2 && _nz >= 2;
+        public bool Usable => (_any || _r.Area <= WalkableMaxArea || Math.Min(_r.Width, _r.Depth) <= StripMaxWidth && _r.Area <= StripMaxArea)
+            && _nx >= 2 && _nz >= 2;
 
-        /// <summary>Cells a walker cannot stand on: within <see cref="WalkerRadius"/> of any piece.</summary>
+        /// <summary>Cells a walker cannot stand on: within the walker's radius of any piece.</summary>
         public bool[] Shut(IEnumerable<RectPlan> pieces, RectPlan? extra = null)
         {
             var shut = new bool[_nx * _nz];
             void Mark(RectPlan q)
             {
-                int i0 = Math.Max(0, (int)MathF.Ceiling((q.X0 - WalkerRadius + 1e-3f - _x0) / WalkCell));
-                int i1 = Math.Min(_nx - 1, (int)MathF.Floor((q.X1 + WalkerRadius - 1e-3f - _x0) / WalkCell));
-                int j0 = Math.Max(0, (int)MathF.Ceiling((q.Z0 - WalkerRadius + 1e-3f - _z0) / WalkCell));
-                int j1 = Math.Min(_nz - 1, (int)MathF.Floor((q.Z1 + WalkerRadius - 1e-3f - _z0) / WalkCell));
+                int i0 = Math.Max(0, (int)MathF.Ceiling((q.X0 - _rad + 1e-3f - _x0) / WalkCell));
+                int i1 = Math.Min(_nx - 1, (int)MathF.Floor((q.X1 + _rad - 1e-3f - _x0) / WalkCell));
+                int j0 = Math.Max(0, (int)MathF.Ceiling((q.Z0 - _rad + 1e-3f - _z0) / WalkCell));
+                int j1 = Math.Min(_nz - 1, (int)MathF.Floor((q.Z1 + _rad - 1e-3f - _z0) / WalkCell));
                 for (int j = j0; j <= j1; j++)
                     for (int i = i0; i <= i1; i++) shut[j * _nx + i] = true;
             }
             foreach (var q in pieces) Mark(q);
             if (extra != null) Mark(extra);
             return shut;
+        }
+
+        /// <summary>The cells whose middle is within <paramref name="reach"/> of (<paramref name="x"/>, <paramref name="z"/>).</summary>
+        public IEnumerable<int> Near(float x, float z, float reach)
+        {
+            int i0 = Math.Max(0, (int)MathF.Floor((x - reach - _x0) / WalkCell)), i1 = Math.Min(_nx - 1, (int)MathF.Ceiling((x + reach - _x0) / WalkCell));
+            int j0 = Math.Max(0, (int)MathF.Floor((z - reach - _z0) / WalkCell)), j1 = Math.Min(_nz - 1, (int)MathF.Ceiling((z + reach - _z0) / WalkCell));
+            for (int j = j0; j <= j1; j++)
+                for (int i = i0; i <= i1; i++)
+                {
+                    float dx = _x0 + i * WalkCell - x, dz = _z0 + j * WalkCell - z;
+                    if (dx * dx + dz * dz <= reach * reach) yield return j * _nx + i;
+                }
         }
 
         /// <summary>The cells reachable from the first doorway, and how many free cells are not.</summary>
@@ -120,6 +153,32 @@ public static partial class InteriorGenerator
         if (shut[map.Seeds[0]]) return 0;
         var (reached, _) = map.Flood(shut);
         return map.Seeds.Count(s => !shut[s] && !reached[s]);
+    }
+
+    /// <summary>
+    /// Whether a person coming in by the first doorway can stand within <paramref name="reach"/> of the point
+    /// (<paramref name="x"/>, <paramref name="z"/>) among <paramref name="pieces"/>: a panel or a till they must use (#1279).
+    /// </summary>
+    internal static bool CanReach(RoomPlan r, List<RectPlan> pieces, float x, float z, float reach)
+    {
+        var map = new WalkMap(r, any: true);
+        if (!map.Usable || map.Seeds.Count == 0) return true;
+        var shut = map.Shut(pieces);
+        if (shut[map.Seeds[0]]) return false;
+        var (reached, _) = map.Flood(shut);
+        return map.Near(x, z, reach).Any(c => reached[c]);
+    }
+
+    /// <summary>The floor <paramref name="depth"/> deep in front of a piece, as wide as it: where someone stands to use it.</summary>
+    internal static RectPlan UseSpot(FurniturePlan p, float depth)
+    {
+        // the way a piece faces: 0 turns toward +Z, 1 toward +X, 2 toward -Z, 3 toward -X
+        bool acrossX = (p.Turns & 1) == 1;
+        float half = p.W / 2, face = p.D / 2, sign = (p.Turns & 3) is 0 or 1 ? 1 : -1;
+        float a = face * sign, b = (face + depth) * sign;
+        return acrossX
+            ? new RectPlan(p.X + Math.Min(a, b), p.Z - half, p.X + Math.Max(a, b), p.Z + half)
+            : new RectPlan(p.X - half, p.Z + Math.Min(a, b), p.X + half, p.Z + Math.Max(a, b));
     }
 
     /// <summary>Floor, in m², that a person coming in by the first doorway could not walk to among <paramref name="pieces"/>.</summary>

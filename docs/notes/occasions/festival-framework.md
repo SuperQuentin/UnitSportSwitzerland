@@ -61,7 +61,7 @@ the starter quest catalogue's cash (CHF 440). `A_festival_is_worth_about_six_hun
 - **Conversion**: `ConvertFor(peer)` runs when a peer's progress loads and when a festival ends under an online peer: every instance that is over and
   not paid yet becomes francs in the account (`Bank.Credit(peer, n, "festival")`), once (`Converted`), with a card in the Journal. A player away
   for a year is paid the next time they come.
-- **Wire (protocol 58)**: server → client `TellFestivals` (the running list as JSON), `TellBoard` (a `BoardView`), `TellConverted`, `TellRang`,
+- **Wire (protocol 59)**: server → client `TellFestivals` (the running list as JSON), `TellBoard` (a `BoardView`), `TellConverted`, `TellRang`,
   `TellRefused`; client → server `RequestRing`, `RequestTestDate` (the last two only on a server started with `--festival test`). The section travels by
   the adventure service's `SectionSync`.
 - **Journal**: `FestivalPage` (tab "Festival", order 35, `AdventureLog.RegisterTab`): where it is held, the day, the day table (open / tomorrow /

@@ -3,7 +3,8 @@ using Godot;
 namespace UnitSport.Audio.Tracker;
 
 /// <summary>What a venue plays when its radio is silent: the mood of its kind (#1244).</summary>
-public enum VenueMood { None, Arcade, Bowling, Club, Bar, Cafe, Pub, Beiz, Pizzeria, FastFood, Cinema }
+/// <summary>A playlist's mood; <see cref="Film"/> is a cinema hall's while its screen is on (#1279), <see cref="Cinema"/> its lobby's.</summary>
+public enum VenueMood { None, Arcade, Bowling, Club, Bar, Cafe, Pub, Beiz, Pizzeria, FastFood, Cinema, Film }
 
 /// <summary>
 /// The venues' tracker modules (#1244), in <c>assets/music/venues/</c> (not <c>assets/audio/</c>, which no
@@ -31,6 +32,8 @@ public static class TrackerLibrary
         [VenueMood.Pizzeria] = new[] { "jam_-_saltarello.xm", "drozerix_-_bakin_blueberry_pie.xm" },
         [VenueMood.FastFood] = new[] { "headspin.xm", "girl_from_mars.xm" },
         [VenueMood.Cinema] = new[] { "drozerix_-_leisurely_voice.xm", "ambient_starfield.xm" },
+        // a hall's film music while its screen is on (#1279): the free archive's nearest to a score
+        [VenueMood.Film] = new[] { "thrones.mod", "crusaders.xm", "hom.xm", "jttt.xm", "jam_-_vocatio_spirituum.xm" },
     };
 
     /// <summary>Every song of every mood, its first 30 s in mono, in the sound player (<c>--sounds</c>).</summary>
@@ -76,6 +79,10 @@ public static class TrackerLibrary
     /// What <paramref name="mood"/> plays at <paramref name="time"/> on the shared clock for a venue whose
     /// salt is <paramref name="salt"/>: the file, how far into it, and how long until the next one.
     /// </summary>
+    /// <summary>How long <paramref name="mood"/>'s playlist runs round, s (0 for none).</summary>
+    public static double Cycle(VenueMood mood) =>
+        Playlists.TryGetValue(mood, out var list) ? list.Sum(f => Math.Max(0, Get(f).Length)) : 0;
+
     public static (string File, double Into, double Left)? At(VenueMood mood, double time, uint salt)
     {
         if (!Playlists.TryGetValue(mood, out var list)) return null;

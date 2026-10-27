@@ -1306,11 +1306,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a player's proxy re-entering the tree stays a plain anchor
         if (Terrain != null && !Terrain.HasAnchor(this))
             Terrain.AddAnchor(this, collision: !Net.NetworkManager.DedicatedServer || IsMultiplayerAuthority());
+        // a body stands in a cinema's beam and shadows it (#1279)
+        Interiors.InteriorNode.BeamBodies.Add(this);
     }
 
     public override void _ExitTree()
     {
         Terrain?.RemoveAnchor(this);
+        Interiors.InteriorNode.BeamBodies.Remove(this);
         Explosion.Blast -= OnBlast;
         if (!NetProxy && !Puppet && !Net.NetLink.Dropped(this) && !IsMultiplayerAuthority())
             GD.Print($"[net] player {Name} left view");
@@ -2759,6 +2762,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (_ride == null && interiors?.TryInside(this) == true) return true;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
+            if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
             if (!byHand && interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))

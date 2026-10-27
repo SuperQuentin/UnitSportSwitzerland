@@ -5,7 +5,7 @@ using UnitSport.Core;
 
 namespace UnitSport.Occasions.Festivals;
 
-// The wire of the festival service (protocol 58): the server tells every client what runs, each member its crew's standing, the
+// The wire of the festival service (protocol 59): the server tells every client what runs, each member its crew's standing, the
 // owner what was converted; clients ask for the check-only festival's bell and gong. Sections travel by the adventure
 // service's own SectionSync.
 public partial class FestivalService

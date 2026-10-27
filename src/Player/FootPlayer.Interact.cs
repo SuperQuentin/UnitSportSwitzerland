@@ -61,12 +61,15 @@ public partial class FootPlayer
         return new("Light desk", Outline.Box(rig, new Transform3D(new Basis(Vector3.Up, console.Yaw), console.Centre), console.Size), InBar: true);
     }
 
-    /// <summary>A stand's seat in reach (#885): "Sit down", the place (no seat is modelled, a box at the hip) outlined.</summary>
+    /// <summary>
+    /// A seat in reach, a stand's (#885) or a cinema's (#1279): "Sit down", a box at the hip outlined (a stand models
+    /// no seat; a cinema's cushion is folded until sat on).
+    /// </summary>
     public Interaction? SeatInteraction()
     {
-        if (SeatInReach() is not { } seat || Origin is not { } origin) return null;
-        // the hip's height is the body's own (seat.Hip over the floor under it): snapped, so a step's bob builds nothing
-        var at = origin.ToWorld(seat.E, seat.N, 0) with { Y = Mathf.Snapped(GlobalPosition.Y + seat.Hip - 0.2f, 0.1f) };
+        if (SitInReach() is not { } seat) return null;
+        // the hip's height snapped, so a step's bob builds nothing
+        var at = seat.Hip with { Y = Mathf.Snapped(seat.Hip.Y - 0.2f, 0.1f) };
         return new("Sit down", Outline.Box(null, new Transform3D(new Basis(Vector3.Up, seat.Yaw), at), new Vector3(0.5f, 0.4f, 0.45f)), InBar: true);
     }
 }
