@@ -193,11 +193,30 @@ public static partial class InteriorGenerator
                 {
                     taken.Add(ki);
                     var k = rooms[ki];
-                    // the WC at one end of the strip, from a room that seats enough to need one, its door onto the guest room
+                    // the public toilets at one end of the strip (#1285), from a room that seats enough to need them, their
+                    // doors onto the guest room: what the strip holds past a kitchen of 2.4 m, by gender in a big restaurant
                     var end = Turn(back);
-                    int wi = g.Area >= 30f && wall - 2.0f >= 2.6f ? Carve(l, rooms, ki, end, 1.9f, RoomType.WC) : -1;
-                    if (wi >= 0)
+                    int seats = (int)(g.Area / 1.4f);
+                    var loo = g.Area >= 30f ? ToiletSizing.Choose(wall - 2.4f, back is Side.Front or Side.Back ? k.Depth : k.Width, seats)
+                        : ToiletSizing.Plan.None;
+                    int wi = loo.Set != ToiletSet.None ? Carve(l, rooms, ki, end, loo.Length, RoomType.WC) : -1;
+                    if (wi >= 0 && wi == rooms.Count - 1 && rooms[wi].Openings.All(o => o.Kind == OpeningKind.Window))
                     {
+                        var piece = rooms[wi];
+                        rooms.RemoveAt(wi);
+                        var at = end switch
+                        {
+                            Side.Front => ((piece.X0 + piece.X1) / 2, piece.Z0),
+                            Side.Back => ((piece.X0 + piece.X1) / 2, piece.Z1),
+                            Side.Left => (piece.X0, (piece.Z0 + piece.Z1) / 2),
+                            _ => (piece.X1, (piece.Z0 + piece.Z1) / 2),
+                        };
+                        PublicToilets(l, l.Floors.First(fl => fl.Rooms == rooms), gi, new RectPlan(piece.X0, piece.Z0, piece.X1, piece.Z1), Opposite(back), at, seats);
+                        for (int i = wi; i < rooms.Count; i++) taken.Add(i);
+                    }
+                    else if (wi >= 0)
+                    {
+                        // a strip end that carried a doorway on: the one WC it always was
                         taken.Add(wi);
                         Opening(rooms, gi, back, wi, Mid(rooms[wi], back), InnerDoor, top, OpeningKind.Door);
                     }

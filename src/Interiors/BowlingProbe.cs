@@ -25,21 +25,24 @@ public partial class BowlingProbe : Node
 
     /// <summary>A building to plan: its size, its height, its kind, and what is expected of it.</summary>
     private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, bool Bowling, bool Mini = false,
-        bool Mezzanine = false, bool Spare = false);
+        bool Mezzanine = false, bool Spare = false,
+        ToiletSet Toilets = ToiletSet.Shared, bool Accessible = false);
 
     private static readonly Case[] Cases =
     {
         // a classic box on two levels: 8 m tall, room for a mezzanine over the concourse
-        new("two-levels", 30, 48, 8.5f, BuildingKind.Commercial, true, Mezzanine: true),
+        new("two-levels", 30, 48, 8.5f, BuildingKind.Commercial, true, Mezzanine: true, Toilets: ToiletSet.Gendered, Accessible: true),
         // the same lanes on one level, the bar down on the concourse
-        new("one-level", 24, 45, 6, BuildingKind.Commercial, true),
+        new("one-level", 24, 45, 6, BuildingKind.Commercial, true, Toilets: ToiletSet.Gendered, Accessible: true),
         // a bowl bar in a town building (Lausanne's Flon is 13 x 24 m): mini lanes
         new("bowl-bar", 13, 24, 5, BuildingKind.Commercial, true, Mini: true),
         // wider than deep: the lanes run along X from the end nearer the door
-        new("along-x", 62, 34, 7, BuildingKind.Industrial, true),
+        new("along-x", 62, 34, 7, BuildingKind.Industrial, true, Toilets: ToiletSet.Gendered, Accessible: true),
         // a mall: the centre in a block at the entrance, plain halls beyond
         // (20 m tall, so not a box of its own: its storeys stay, and two of them give a mezzanine)
-        new("mall", 180, 120, 20, BuildingKind.Commercial, true, Mezzanine: true, Spare: true),
+        new("mall", 180, 120, 20, BuildingKind.Commercial, true, Mezzanine: true, Spare: true, Toilets: ToiletSet.Gendered, Accessible: true),
+        // a narrow alley of mini lanes: a single WC beside the concourse (#1285)
+        new("alley", 8.6f, 24, 5, BuildingKind.Commercial, true, Mini: true, Toilets: ToiletSet.Single),
         // a kiosk: no lanes fit, the ordinary rules furnish it
         new("too-small", 8, 12, 4, BuildingKind.Commercial, false),
     };
@@ -108,7 +111,9 @@ public partial class BowlingProbe : Node
         Check(l.Furniture.Any(f => f.Type == FurnitureType.ShoeCounter), $"{what}: a shoe counter");
         Check(l.Furniture.Any(f => f.Type == FurnitureType.Pinball), $"{what}: a pinball in the arcade corner");
         Check(l.Furniture.Any(f => f.Type == FurnitureType.BarCounter), $"{what}: a bar");
-        Check(l.Floors[0].Rooms.Any(r => r.Type == RoomType.WC), $"{what}: a WC");
+        // the public toilets the footprint has room for (#1285)
+        var loo = ToiletCheck.Problems(l, c.Toilets, c.Accessible);
+        Check(loo.Count == 0, $"{what}: toilets {ToiletCheck.Describe(l)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
         bool mezz = l.Floors.Count > 1 && l.Floors[1].Rooms.Any(r => r.Type == RoomType.Mezzanine);
         Check(mezz == c.Mezzanine, $"{what}: {(c.Mezzanine ? "a mezzanine over the concourse" : "one level")} ({l.Floors.Count} floor(s))");
         if (mezz)

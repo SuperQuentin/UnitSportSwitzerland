@@ -40,6 +40,9 @@ public enum RoomType
     Gaststube, Pizzeria, CafeRoom, FastFoodRoom, KebabRoom, BarRoom, PubRoom, ClubRoom, GastroKitchen,
     // #1250: an arcade that is a billiard hall by its name (Bluff Billard, Geneva): pool tables under their lamps
     BilliardHall,
+    // #1285: public toilets: an anteroom with the basins (a gendered room's, or the shared one), the women's and the
+    // men's washroom behind it, a stall off either, the accessible WC
+    ToiletLobby, WomensToilet, MensToilet, ToiletStall, AccessibleToilet,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -264,6 +267,9 @@ public enum FurnitureType
     CueRack, Loudspeaker, WallSconce,
     /// <summary>A floor-level booth's raised floor (#1250): its projectionist's eyes at the viewing windows, steps up from its door.</summary>
     BoothDeck,
+    // #1285: public toilets: a counter of basins, a hand dryer, the screen between urinals, an accessible WC's rails,
+    // and the signs over the doorways
+    SinkRow, HandDryer, UrinalScreen, GrabRail, WcSignWomen, WcSignMen, WcSignAll, WcSignAccessible,
 }
 
 public sealed class FurniturePlan
