@@ -72,6 +72,7 @@ public partial class CinemaBooths : Node
     private string _appliedPlan = "";
     private int _applied = -1, _appliedMask = -1;
     private long _appliedReels = -1;
+    private int _appliedHere = -2;
     private InteriorNode? _appliedNode;
     private int _slide = -1;
     private bool _real;
@@ -245,19 +246,24 @@ public partial class CinemaBooths : Node
         }
         // High detail throws the picture with a light in the hall the camera is in (InteriorNode's screens)
         bool real = InteriorNode.RealProjection;
-        if (node != _appliedNode || code != _applied || mask != _appliedMask || reels != _appliedReels || node.Layout.Key != _appliedPlan || real != _real)
+        if (node != _appliedNode || code != _applied || mask != _appliedMask || reels != _appliedReels || here != _appliedHere
+            || node.Layout.Key != _appliedPlan || real != _real)
         {
-            _appliedNode = node;
             _applied = code;
             _appliedMask = mask;
             _appliedReels = reels;
+            // the same hall's lights switched fade; walking into another hall shows its level at once
+            bool snap = node != _appliedNode || here != _appliedHere;
+            _appliedHere = here;
+            _appliedNode = node;
             _appliedPlan = node.Layout.Key;
             _real = real;
             var (lights, screen) = Unpack(code);
-            node.ShowCinema(Level(lights), mask, halls, screen, real);
+            node.ShowCinema(Level(lights), mask, halls, screen, real, snap);
         }
         if (real && cam != null) node.ProjectFor(node.ToLocal(cam.GlobalPosition));
-        // the seats let down under whoever sits (#1279)
+        // the seats let down under whoever sits, the house lights fading to their level (#1279)
         node.UpdateSeats();
+        node.FadeHouse(delta);
     }
 }

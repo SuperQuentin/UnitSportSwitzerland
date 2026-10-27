@@ -47,7 +47,8 @@ Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --a
 - [ ] Walk along a row's lane to a seat → no climbing through seats, the step down to the next row at the lane's front edge; E sits facing the screen, E or walking stands up. Rows staggered, the top row against the back wall.
 - [ ] Switch a hall's screen off and on → another tune.
 - [ ] Sit down → your seat's cushion folds down under you (and someone else's, online); stand up → it folds up again.
-- [ ] Lights off in a hall → dark but for the screen's glow; dim → between. Look into a projector's lens from the seats → the picture, small and bright.
+- [ ] Lights off in a hall → they fade over some seconds to dark but for the screen's glow; dim → between. Walk into another hall → its level at once.
+- [ ] Look at a hall's port from the seats with the screen on → the picture faint in the hole, the lens glowing in the picture's colour; screen off → both gone.
 - [ ] The lobby's music: the same level across the room.
 - [ ] The beam: bright at the lens, nearly gone at the screen, faint from the side; walk into it → a dark wedge behind you in the beam, not only on the screen.
 - [ ] Grütli from outside → one entrance, no extra doors round the building.

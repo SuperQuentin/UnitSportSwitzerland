@@ -26,13 +26,27 @@ public partial class InteriorNode
     /// and its number (<see cref="CinemaBooths.HallAt"/>), whose panel switches it (#1279).
     /// </summary>
     private sealed record CinemaScreen(MeshInstance3D Picture, MeshInstance3D? Lit, SpotLight3D? Projector,
-        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall, int No, MeshInstance3D? Lens = null);
+        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall, int No, MeshInstance3D? Port = null, MeshInstance3D? Glow = null);
 
     private readonly List<CinemaScreen> _screens = new();
     /// <summary>The halls whose screens are on, a bit each.</summary>
     private int _screensOn;
     /// <summary>Each showing hall's music (#1279), by its number: made when its screen comes on, freed when it goes off.</summary>
     private readonly Dictionary<int, (Audio.Live.VenueMusicSource Source, int Reel)> _hallMusic = new();
+    /// <summary>The house lights shown (-1: not yet) and where they are going (#1279).</summary>
+    private float _house = -1f, _houseTarget = 1f;
+
+    /// <summary>How long a cinema's house lights take from full to off, s [S: dimmers fade over 5-10 s].</summary>
+    private const float HouseFadeSeconds = 6f;
+
+    /// <summary>The house lights a step nearer their level, written only while they move. Per frame from <see cref="CinemaBooths"/>.</summary>
+    public void FadeHouse(double delta)
+    {
+        if (_house < 0 || _house == _houseTarget) return;
+        _house = Mathf.MoveToward(_house, _houseTarget, (float)delta / HouseFadeSeconds);
+        _lit?.SetShaderParameter(GHouse, _house);
+    }
+
     /// <summary>The halls' codes as last shown (<see cref="CinemaBooths"/>'s, read only), for their showing numbers.</summary>
     private int[]? _codes;
     private bool _realShow;
@@ -111,24 +125,38 @@ public partial class InteriorNode
             // the beam's apex at the projector's lens in the booth, behind the hole in the wall; the port's middle
             // if the booth had no room for that projector
             var from = new Vector3(port.X, layout.FloorY(port.Floor) + port.Lift + port.H / 2, port.Z);
-            MeshInstance3D? lensPicture = null;
+            // the picture going through the port, where its glass would be (#1279): faint, the size of the hole, on the
+            // wall's line (the hall's porthole stands 0.1 m in front of it)
+            var portBasis = new Basis(Vector3.Up, port.Turns * Mathf.Pi / 2);
+            const float holeW = 2 * InteriorGenerator.PortHalf - 0.02f;
+            var portPicture = new MeshInstance3D
+            {
+                Name = "PortPicture",
+                Mesh = new QuadMesh { Size = new Vector2(holeW, holeW / 2.39f) },
+                MaterialOverride = PortMaterial(),
+                Transform = new Transform3D(portBasis, from + portBasis * new Vector3(0, 0, -0.1f)),
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            node.AddChild(portPicture);
+            MeshInstance3D? lensGlow = null;
             var proj = projectors.MinBy(q => (q.X - port.X) * (q.X - port.X) + (q.Z - port.Z) * (q.Z - port.Z));
             if (proj != null && (proj.X - port.X) * (proj.X - port.X) + (proj.Z - port.Z) * (proj.Z - port.Z) < 1.5f * 1.5f)
             {
                 from = new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift + proj.H - InteriorGenerator.ProjectorLensDrop, proj.Z)
                     + new Basis(Vector3.Up, proj.Turns * Mathf.Pi / 2) * new Vector3(0, 0, proj.D / 2);
-                // the picture on the lens's glass, small and bright, as one sees it looking into a projector (#1279)
+                // the lens's glow, in the picture's mean colour brightened (#1279): a bloom on its glass, off with the screen
                 var toward = (centre - from).Normalized();
-                lensPicture = new MeshInstance3D
+                lensGlow = new MeshInstance3D
                 {
-                    Name = "LensPicture",
-                    Mesh = new QuadMesh { Size = new Vector2(0.15f, 0.15f / 2.39f) },
-                    MaterialOverride = CatMaterial(),
-                    Transform = new Transform3D(Basis.LookingAt(-toward, Vector3.Up), from + toward * 0.012f),
+                    Name = "LensGlow",
+                    Mesh = new QuadMesh { Size = new Vector2(0.3f, 0.3f) },
+                    MaterialOverride = LensGlowMaterial(),
+                    Position = from + toward * 0.02f,
                     Visible = false,
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 };
-                node.AddChild(lensPicture);
+                node.AddChild(lensGlow);
                 from -= toward * ApexBehindLens;
             }
             var right = basis * new Vector3(half.X, 0, 0);
@@ -166,7 +194,7 @@ public partial class InteriorNode
             spot.LookAtFromPosition(lens, centre, Vector3.Up);
             Projectors.RemoveAll(w => !w.TryGetTarget(out var s) || !IsInstanceValid(s));
             Projectors.Add(new WeakReference<SpotLight3D>(spot));
-            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall, no, lensPicture));
+            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall, no, portPicture, lensGlow));
         }
     }
 
@@ -313,9 +341,16 @@ public partial class InteriorNode
     /// The booth's state on this cinema: the house lights' level and the screen's wash (one each for the whole
     /// interior: the hall the camera is in), the halls whose cat slides and beams are on (a bit each), and the way they are shown.
     /// </summary>
-    public void ShowCinema(float houseLights, int screens, int[]? codes, bool glow, bool real)
+    public void ShowCinema(float houseLights, int screens, int[]? codes, bool glow, bool real, bool snap = true)
     {
-        _lit?.SetShaderParameter(GHouse, houseLights);
+        // the house lights fade to their new level (FadeHouse), as a cinema's dim over seconds; another hall's level,
+        // or the first showing, is at once
+        _houseTarget = houseLights;
+        if (_house < 0 || snap)
+        {
+            _house = houseLights;
+            _lit?.SetShaderParameter(GHouse, houseLights);
+        }
         ShowGlow(glow);
         _screensOn = screens;
         _codes = codes;
@@ -396,7 +431,8 @@ public partial class InteriorNode
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;
             HallMusic(s, on);
-            if (s.Lens != null) s.Lens.Visible = on;
+            if (s.Port != null) s.Port.Visible = on;
+            if (s.Glow != null) s.Glow.Visible = on;
             if (s.Beam == null) continue;
             s.Beam.Visible = on;
             s.Beam.MaterialOverride = _realShow ? s.Marched : PlainBeam();
@@ -527,6 +563,36 @@ public partial class InteriorNode
         DisableReceiveShadows = true,
     };
 
+    private static StandardMaterial3D? _portMaterial, _lensGlow;
+
+    /// <summary>The picture in the port (#1279): see-through, unlit, both faces (seen from the hall and the booth).</summary>
+    private static StandardMaterial3D PortMaterial() => _portMaterial ??= new StandardMaterial3D
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        AlbedoTexture = Slide(_slide),
+        AlbedoColor = new Color(1, 1, 1, 0.45f),
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+    };
+
+    /// <summary>The lens's bloom (#1279): a soft round glow facing the camera, added on, in the picture's mean colour.</summary>
+    private static StandardMaterial3D LensGlowMaterial() => _lensGlow ??= new StandardMaterial3D
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        AlbedoTexture = new GradientTexture2D
+        {
+            Fill = GradientTexture2D.FillEnum.Radial, FillFrom = new Vector2(0.5f, 0.5f), FillTo = new Vector2(1f, 0.5f),
+            Gradient = new Gradient { Colors = new[] { Colors.White, new Color(1, 1, 1, 0.35f), new Color(1, 1, 1, 0) }, Offsets = new[] { 0f, 0.25f, 1f } },
+            Width = 64, Height = 64,
+        },
+        AlbedoColor = Full(SlideTint(_slide)) * 1.6f,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+        BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+        NoDepthTest = false,
+    };
+
     /// <summary>A colour brought to full brightness, its hue kept: the plain beam is as bright for a dark cat as a light one.</summary>
     private static Color Full(Color c)
     {
@@ -632,6 +698,8 @@ public partial class InteriorNode
         foreach (var w in Beams)
             if (w.TryGetTarget(out var m)) m.SetShaderParameter(GPicture, Slide(i));
         if (_plainBeam != null) _plainBeam.AlbedoColor = Full(SlideTint(i));
+        if (_portMaterial != null) _portMaterial.AlbedoTexture = Slide(i);
+        if (_lensGlow != null) _lensGlow.AlbedoColor = Full(SlideTint(i)) * 1.6f;
         foreach (var w in Projectors)
             if (w.TryGetTarget(out var s) && IsInstanceValid(s)) s.LightProjector = Letterboxed(i);
     }
