@@ -41,9 +41,12 @@ public static partial class InteriorGenerator
         {
             var fp = BuildingFootprint.Compute(tile, index, roads, grid);
             if (fp == null) return null;
-            int venue = BuildingTypes.For(tile).VenueOf(index);
+            var map = BuildingTypes.For(tile);
+            int venue = map.VenueOf(index);
+            var dining = map.DiningOf(index);
             layout = Generate(fp, tile.Buildings[index], Loot.ShopTables.IsRural(tile.Buildings.Count),
-                group?.Type ?? BuildingType.None, venue >= 0 ? Venues.At(venue) : null);
+                group?.Type ?? BuildingType.None, venue >= 0 ? Venues.At(venue) : null,
+                dining.Count > 0 ? dining.Select(Venues.At).ToList() : null);
         }
         layout.Group = GroupPrint(tile, index);
         return layout;
