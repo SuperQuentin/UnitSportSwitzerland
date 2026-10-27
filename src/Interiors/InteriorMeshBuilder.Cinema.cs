@@ -47,32 +47,33 @@ public static partial class InteriorMeshBuilder
         {
             case FurnitureType.SeatingBank:
             {
-                // rows rising from the front (+Z, toward the screen) to the back, an aisle each side with
-                // half steps and step lights, a ramp of collision up each aisle so the steps are walked; behind the
-                // top row a walkway at its height to the back wall (#1279)
-                const float aisle = InteriorGenerator.AisleWidth, seat = 0.58f, walk = InteriorGenerator.TopWalk;
-                int rows = Math.Max(1, (int)((p.D - walk) / InteriorGenerator.RowPitch));
-                float pitch = (p.D - walk) / rows, rise = H / Math.Max(1, rows - 1 + 1e-3f);
+                // rows rising from the front (+Z, toward the screen) to the back wall, an aisle each side with half
+                // steps and step lights, a ramp of collision up each aisle so the steps are walked (#1279: the seats
+                // folded at each row's back, solid, the lane in front of them walked; every other row staggered)
+                const float aisle = InteriorGenerator.AisleWidth, deep = InteriorGenerator.SeatDepth;
+                var bank = InteriorGenerator.RowsOf(p);
+                int rows = bank.Rows;
+                float pitch = bank.Pitch, rise = bank.Rise;
                 var velvet = Velvet[(int)(Hash(p, 1) * Velvet.Length) % Velvet.Length];
                 var back = (velvet * 0.85f) with { A = 1 };
                 var tier = C(0.12f, 0.10f, 0.14f);
                 var step = (tier * 0.9f) with { A = 1 };
-                float sx0 = -w + aisle, sx1 = w - aisle;
-                int seats = Math.Max(1, (int)((sx1 - sx0) / seat));
-                float sw = (sx1 - sx0) / seats;
+                float sx0 = bank.X0, sx1 = bank.X1, sw = bank.SeatW;
                 for (int k = 0; k < rows; k++)
                 {
-                    float z1 = d - k * pitch, z0 = z1 - pitch, y = k * rise;
+                    var (z0, z1, y) = bank.Row(k);
                     // the tier reaches 1.5 cm into each aisle, so its side and the aisle's never share a plane
                     if (y > 0.01f) B(sx0 - 0.015f, 0, z0, sx1 + 0.015f, y, z1, tier, true);
-                    // the seats of the row: a cushion, a back behind it, armrests between them
-                    float cz = z0 + pitch * 0.45f;
-                    B(sx0, y + 0.35f, cz - 0.05f, sx1, y + 0.47f, cz + 0.42f, velvet);
-                    B(sx0 + 0.015f, y + 0.33f, cz - 0.17f, sx1 - 0.015f, y + 0.95f, cz - 0.035f, back);
-                    for (int i = 0; i <= seats; i++)
+                    // the row's seats, folded: the backs at the row's back edge, the cushions tipped up in front of them,
+                    // solid together; armrests between them, reaching over the lane's edge
+                    int n = bank.SeatsIn(k);
+                    float xa = bank.SeatX(k, 0) - sw / 2, xb = bank.SeatX(k, n - 1) + sw / 2;
+                    B(xa + 0.015f, y + 0.33f, z0 + 0.02f, xb - 0.015f, y + 0.95f, z0 + 0.15f, back, true);
+                    B(xa + 0.04f, y + 0.40f, z0 + 0.15f - sink, xb - 0.04f, y + 0.86f, z0 + deep, velvet, true);
+                    for (int i = 0; i <= n; i++)
                     {
-                        float x = sx0 + i * sw;
-                        B(x - 0.03f, y - sink, cz - 0.15f, x + 0.03f, y + 0.62f, cz + 0.4f, dark);
+                        float x = xa + i * sw;
+                        B(x - 0.03f, y - sink, z0 + 0.04f, x + 0.03f, y + 0.62f, z0 + deep + 0.2f, dark);
                     }
                     // the aisles: two half steps a row, a step light at each
                     foreach (float ax in new[] { -w, w - aisle })
@@ -86,17 +87,14 @@ public static partial class InteriorMeshBuilder
                         B(lx, y - sink, z1 - 0.07f, lx + 0.04f, y + 0.05f, z1 - 0.03f, Lit(1.0f, 0.62f, 0.20f));
                     }
                 }
-                // the walkway: the top row's height, wall to wall and to the back wall; a hair into the top row and a hair
-                // under its tread, inside the aisles' sides, so no face of it lies on theirs
                 float topY = (rows - 1) * rise;
-                if (topY > 0.01f) B(-w + sink, 0, -d, w - sink, topY - sink, -d + walk + sink, tier, true);
                 // walked up the aisles on a ramp, the front of each row a step
                 foreach (float ax in new[] { -w, w - aisle })
                 {
                     var p0 = at + basis * new Vector3(ax, 0, d);
                     var p1 = at + basis * new Vector3(ax + aisle, 0, d);
-                    var p2 = at + basis * new Vector3(ax + aisle, topY, -d + walk);
-                    var p3 = at + basis * new Vector3(ax, topY, -d + walk);
+                    var p2 = at + basis * new Vector3(ax + aisle, topY, -d);
+                    var p3 = at + basis * new Vector3(ax, topY, -d);
                     s.Col.Add(p0); s.Col.Add(p1); s.Col.Add(p2); s.Col.Add(p0); s.Col.Add(p2); s.Col.Add(p3);
                 }
                 break;
@@ -289,7 +287,7 @@ public static partial class InteriorMeshBuilder
             {
                 // a short flight on the walkway (#1279): up toward the back wall (−Z) to the service doorway's sill,
                 // each step a box reaching back to the wall, a hair narrower than the one under it; a ramp through the nosings
-                int n = Math.Max(1, (int)MathF.Round(p.D / InteriorGenerator.DeckTread));
+                int n = Math.Max(1, (int)MathF.Round(p.D / InteriorGenerator.ServiceTread));
                 float tread = p.D / n, rise = H / n;
                 var stair = C(0.12f, 0.10f, 0.14f);
                 var nose = C(0.70f, 0.58f, 0.12f);

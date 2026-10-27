@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 11;
+    public const int CinemaRules = 12;
 
     /// <summary>A hall's clear height in a building of storeys, at least where it has them, m [S: small halls 6-8 m]; and the most storeys it takes.</summary>
     private const float HallMinClear = 6.0f;
@@ -67,16 +67,40 @@ public static partial class InteriorGenerator
     /// <summary>Row pitch [S: 1.0-1.2 m]; the rise of each row [S: 0.10-0.45 m, here a steady one].</summary>
     public const float RowPitch = 1.1f, RowRise = 0.32f;
     private const float ExitClear = 0.7f;
+    /// <summary>The seating bank's aisles' width, m: against the side walls (#1279).</summary>
+    internal const float AisleWidth = 1.1f;
+    /// <summary>A seat's width along its row; the folded seat's depth from the row's back edge (its back and its
+    /// cushion tipped up, as an empty cinema seat is), the rest of the row the lane walked to the seats (#1279), m.</summary>
+    internal const float SeatPitch = 0.58f, SeatDepth = 0.3f;
+
     /// <summary>
-    /// The seating bank's aisles' width, and the walkway along the back wall at the top row's height (#1279: the
-    /// stairs run up to the walls, no drop behind the top row), m.
+    /// A seating bank's rows (#1279), in its own frame (front +Z toward the screen, rows from the front, the top row
+    /// against the back wall), as the mesh draws them and a player sits in them: so the two never disagree.
     /// </summary>
-    internal const float AisleWidth = 1.1f, TopWalk = 1.2f;
+    internal readonly record struct BankRows(int Rows, float Pitch, float Rise, float X0, float X1, int Seats, float SeatW, float D)
+    {
+        /// <summary>Row <paramref name="k"/>'s front (step) and back edges, and its tread's height.</summary>
+        public (float Z0, float Z1, float Y) Row(int k) => (D - (k + 1) * Pitch, D - k * Pitch, k * Rise);
+        /// <summary>Seats in row <paramref name="k"/>: every other row one fewer, staggered half a seat.</summary>
+        public int SeatsIn(int k) => k % 2 == 1 ? Math.Max(1, Seats - 1) : Seats;
+        /// <summary>The middle of seat <paramref name="i"/> of row <paramref name="k"/>, along the row.</summary>
+        public float SeatX(int k, int i) => X0 + (i + (k % 2 == 1 && Seats > 1 ? 1f : 0.5f)) * SeatW;
+    }
+
+    internal static BankRows RowsOf(FurniturePlan p)
+    {
+        int rows = Math.Max(1, (int)(p.D / RowPitch));
+        float x0 = -p.W / 2 + AisleWidth, x1 = p.W / 2 - AisleWidth;
+        int seats = Math.Max(1, (int)((x1 - x0) / SeatPitch));
+        return new BankRows(rows, p.D / rows, p.H / Math.Max(1, rows - 1 + 1e-3f), x0, x1, seats, (x1 - x0) / seats, p.D / 2);
+    }
     /// <summary>The bank's gap to a wall with no doorway in it: a hair off its face.</summary>
     private const float BankInset = WallInset + 0.02f;
     /// <summary>The service doorway from a hall's top walkway into the booth (#1279): its width, its height, the most steps up to it.</summary>
     private const float ServiceW = 0.9f, ServiceH = 2.0f;
     private const int ServiceMaxSteps = 4;
+    /// <summary>The service steps' tread, m: four fit in the top row's aisle, against the back wall.</summary>
+    internal const float ServiceTread = 0.25f;
 
     private sealed class CinemaPlan
     {
@@ -394,7 +418,8 @@ public static partial class InteriorGenerator
             float a0 = hU0 + hallW * i, a1 = a0 + hallW;
             var (_, rows, rise) = Seating(plan, hallW, l.ClearOf(aud), Lens(l, plan));
             if (rows == 0) continue;
-            float lift = sill - rows * rise;
+            // the steps climb from the top aisle's lower half step, a short flight that fits its row
+            float lift = sill - (rows - 0.5f) * rise;
             if (lift < -0.01f || lift > ServiceMaxSteps * DeckRiser + 0.01f) continue;
             float su = staffAtL ? a1 - BankInset - AisleWidth / 2 : a0 + BankInset + AisleWidth / 2;
             float boothTop = Math.Min(sill - hallLift + ServiceH, l.ClearOf(boothFloor.Rooms[iBooth]) - 0.05f);
@@ -449,14 +474,14 @@ public static partial class InteriorGenerator
     /// </summary>
     /// <summary>
     /// A hall's seating: the front row's v, the rows and each row's rise (its top tread is rows x rise). The rows end
-    /// a <see cref="TopWalk"/> short of the back wall, the walkway at the top row's height filling the rest.
+    /// at the back wall (#1279: the top row against it, no walkway).
     /// </summary>
     private static (float Front, int Rows, float Rise) Seating(CinemaPlan p, float width, float clear, float lens)
     {
         // the front row 0.6 screen widths from the screen [S], at least 3 m
         float screenW = Math.Clamp(width - 3.6f, 3f, 21f);
         float front = p.LobbyV + 0.15f + ScreenDepth + Math.Max(3f, 0.6f * screenW * 0.7f);
-        float depth = p.HallV1 - BankInset - TopWalk - front;
+        float depth = p.HallV1 - BankInset - front;
         if (depth < RowPitch * 2) return (front, 0, 0);
         int rows = (int)(depth / RowPitch);
         float rise = Math.Min(RowRise, Math.Max(0.12f, (clear - 2.8f) / Math.Max(1f, depth / RowPitch)));
@@ -512,11 +537,13 @@ public static partial class InteriorGenerator
             }
             if (hasService && Math.Abs(service.U - (service.U < uMid ? b0 + AisleWidth / 2 : b1 - AisleWidth / 2)) <= 0.05f)
             {
-                int n = (int)MathF.Ceiling((service.Sill - top - 0.01f) / DeckRiser);
+                // from the top aisle's lower half step: its back half is the top row's height, its front half half a rise under
+                float from = top - rise / 2;
+                int n = (int)MathF.Ceiling((service.Sill - from - 0.01f) / DeckRiser);
                 if (n > 0)
                 {
-                    var (tx, tz) = fr.Point(service.U, back - n * DeckTread / 2);
-                    Put(l, f, FurnitureType.ServiceSteps, tx, tz, fr.FaceVMinus, AisleWidth - 0.1f, n * DeckTread, service.Sill - top, placed, lift: top);
+                    var (tx, tz) = fr.Point(service.U, back - n * ServiceTread / 2);
+                    Put(l, f, FurnitureType.ServiceSteps, tx, tz, fr.FaceVMinus, AisleWidth - 0.1f, n * ServiceTread, service.Sill - from, placed, lift: from);
                 }
                 hasService = false;
             }
@@ -546,7 +573,7 @@ public static partial class InteriorGenerator
                 if (r.Openings.Any(o => o.Side == wallSide && Math.Abs(o.Center - at) < o.Width / 2 + 0.7f)) continue;
                 var (x, z) = fr.Point(wu, v);
                 // over the aisle's steps where they run along the wall (#1279)
-                float aisle = rows > 0 ? Math.Clamp(MathF.Floor((v - front) / ((back - TopWalk - front) / rows)) + 1, 0, rows) * rise : 0;
+                float aisle = rows > 0 ? Math.Clamp(MathF.Floor((v - front) / ((back - front) / rows)) + 1, 0, rows) * rise : 0;
                 if (k % 2 == 0)
                     Put(l, f, FurnitureType.Loudspeaker, x, z, turns, 0.45f, 0.32f, 0.65f, placed, lift: Math.Min(3.2f + aisle, clear - 0.9f));
                 else
@@ -720,7 +747,7 @@ public static partial class InteriorGenerator
                 // the show on, as the booth would have it: lights dimmed, the cat on the screen
                 InteriorNode.ShowSlide(0);
                 bool real = InteriorNode.RealProjection;
-                node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), ~0, glow: true, real);
+                node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), ~0, null, glow: true, real);
                 var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
                 // at High detail the first hall's projector throws the picture, as for a player standing in it
                 if (real)

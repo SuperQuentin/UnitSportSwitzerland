@@ -2295,6 +2295,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             {
                 // a cinema's booth (#1238): the lights or the screen, by the half of its panel you stand at
                 if (Interiors.CinemaBooths.Prompt(p) is { } booth) yield return (PlayerInput.InteractMount, booth);
+                // a cinema seat (#1279), from its row's lane
+                else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                else if (p.SitInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))
@@ -2307,7 +2310,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (Concert.ConcertDeskUi.At(p) != null) yield return (PlayerInput.InteractMount, "Light desk");
                 // a stand's seat (#885), before the dance: E sits there first
                 else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
-                else if (p.SeatInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
+                else if (p.SitInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");

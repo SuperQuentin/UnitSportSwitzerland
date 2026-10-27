@@ -59,23 +59,33 @@ lane frame and rules (`bowling-centres`).
   room is walked at a player's width (`BodyRadius` 0.34 m, not the rooms' 0.24 m): a platter left two 0.6 m
   lanes the grid passed and the body did not. Each panel's use spot is kept clear, and `--cinemacheck` walks
   to every panel (`CanReach`, which grids any room).
-- **Stairs to the walls, a service door** (#1279): the seating bank runs wall to wall (its aisles against the side
-  walls, `AisleWidth`), off a side wall (`ExitClear`) only where a facade doorway (#498, the only way a hall gets a
-  fire exit: a hall's back wall is the booth's) opens beside the seats; behind the top row a walkway at its height
-  to the back wall (`TopWalk`). At the top of the aisle away from the booth's own door, `ServiceSteps` (up to 4)
-  climb to a service doorway into the booth (`CinemaPlan.Service`): an open `Window` between the floors (doors are
-  same-floor only) with a real leaf, an `InnerDoorPlan` with a sill (`Bottom`, worked as a flat's door), on the
-  booth's floor or deck, its sill 1 cm over it. Moved to the other aisle when a facade doorway keeps the seats off
-  its wall, dropped when the rise is more than a short flight (six rows under a 3.5 m booth) or the aisle cannot
-  reach it. The wall speakers and lights ride up the aisle. Each doorway's reveals, drawn by both rooms past the
-  shared line, add a door's usual z-fight (baseline lines for the two showcase cinemas moved, main was already
-  over them).
+- **Seats, stairs to the walls, a service door** (#1279): the bank runs wall to wall (its aisles against the side
+  walls, `AisleWidth`; off a wall, `ExitClear`, only where a facade doorway opens beside the seats, which no cinema
+  has now: a cinema keeps its one entrance, `BuildingFootprint`'s budget 1) and its rows to the back wall (the top
+  row against it). Rows (`InteriorGenerator.RowsOf`, one source for the mesh and sitting): the seats folded at each
+  row's back (`SeatDepth`, solid), a lane of 0.8 m in front walked to them, every other row one seat fewer and
+  staggered half a seat. `CinemaSeats.At`: from a row's lane, E sits on the seat in front (`FootPlayer.SitInReach`,
+  the stands' sitting, #885: nothing new on the wire), facing the screen. At the top of the aisle away from the
+  booth's door, `ServiceSteps` (up to 4, `ServiceTread` 0.25 m) climb from the top aisle's lower half step to a
+  service doorway into the booth (`CinemaPlan.Service`): an open `Window` between the floors (doors are
+  same-floor only) with a real leaf, an `InnerDoorPlan` with a sill (`Bottom`), on the booth's floor or deck. Moved
+  to the other aisle when a facade doorway keeps the seats off its wall, dropped when the rise is more than the
+  flight (six rows under a 3.5 m booth). The wall speakers and lights ride up the aisle.
 - **Halls mid-film, doors shut** (#1279): `CinemaBooths.Default(plan, hall)`: 40 % of halls (`ShowingShare`, from
   the hall's seed) start lights off with the screen on, the rest lit and dark; every peer starts the same and only
   what players set is sent (`SendTo` skips a hall at its default). Every hall's door from the lobby is an
   `InnerDoorPlan`, a leaf shut until someone opens it.
 - **Bump `CinemaRules` with every change to a cinema's plan**: stored plans are kept by it, and a game that
   saw a cinema keeps its old plan otherwise (#1279's panels, aisles and service doors did not show until 11).
+- **The beam** (#1279, `projector_beam.gdshader`), after research (froxel fog ignores the projector texture and
+  ghosts, a spatial shader cannot read the shadow map): the view ray clipped to the pyramid (Cyrus-Beck), 24
+  equiangular samples round the lens (light per metre 1/d^2: bright at the projector, nothing at the screen), a
+  Henyey-Greenstein phase g 0.6 with a 20 % isotropic floor (bright looking back at the lens, faint from the side),
+  and up to eight capsules (`InteriorNode.BeamBodies`: players, the viewer's walker) shadowing it, written per frame
+  only as they move. Its lines meet 0.2 m behind the lens's glass (`ApexBehindLens`). The plain beam fades to
+  nothing at the screen. The spot's own shadow still does the screen.
+- **New music each showing**: bits 3-6 of a hall's code count its showings (`CinemaBooths.ReelOf`), the server
+  counting up as the screen comes on; the hall's music draws again from it.
 - **Box office glass** (#1279): a see-through pane of its own (`InteriorNode.AddClearGlass`), the mesh only its
   rail and posts: the interior's one mesh is opaque, and vertex alpha marks lit faces or sky glass.
 - **Checks**: `--cinemacheck --systems ui` (`CinemaProbe`: a two-level town cinema, a small one, a

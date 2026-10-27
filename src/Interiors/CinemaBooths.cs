@@ -71,6 +71,7 @@ public partial class CinemaBooths : Node
 
     private string _appliedPlan = "";
     private int _applied = -1, _appliedMask = -1;
+    private long _appliedReels = -1;
     private InteriorNode? _appliedNode;
     private int _slide = -1;
     private bool _real;
@@ -93,6 +94,12 @@ public partial class CinemaBooths : Node
     private long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
 
     public static int Pack(Lights lights, bool screen) => (int)lights | (screen ? 4 : 0);
+
+    /// <summary>
+    /// A hall's showing number (#1279), bits 3-6 of its code: the server counts it up each time the hall's screen comes
+    /// on, and the hall's music draws again from it, so a restarted film gets another tune, the same on every peer.
+    /// </summary>
+    public static int ReelOf(int code) => (code >> 3) & 15;
     public static (Lights Lights, bool Screen) Unpack(int code) => ((Lights)Math.Clamp(code & 3, 0, 2), (code & 4) != 0);
 
     /// <summary>A hall's lights and screen: full and off until someone works its panel.</summary>
@@ -181,6 +188,11 @@ public partial class CinemaBooths : Node
         if (!inside) { GD.Print($"[cinema] peer {peer} is not in {plan}: refused"); return false; }
         code &= 7;
         if ((code & 3) > 2 || hall < 0 || hall >= MaxHalls) return false;
+        // the showing number counts up as the screen comes on, and stays with it
+        int was = HallsOf(plan)[hall];
+        int reel = ReelOf(was);
+        if (Unpack(code).Screen && !Unpack(was).Screen) reel = (reel + 1) & 15;
+        code |= reel << 3;
         Set(plan, hall, code);
         if (Online) Rpc(MethodName.Set, plan, hall, code);
         return true;
@@ -212,8 +224,12 @@ public partial class CinemaBooths : Node
         var halls = ShowAll ? null : HallsOf(node.Layout.Key);
         // the halls whose screens are on, a bit each; the house lights of the hall the camera is in or nearest
         int mask = 0;
+        long reels = 0;
         for (int h = 0; h < MaxHalls; h++)
+        {
             if (ShowAll || halls != null && Unpack(halls[h]).Screen) mask |= 1 << h;
+            if (halls != null) reels |= (long)ReelOf(halls[h]) << (h * 4);
+        }
         var cam = GetViewport().GetCamera3D();
         int here = cam != null ? node.HallNear(node.ToLocal(cam.GlobalPosition)) : 0;
         int code = ShowAll ? Pack(Lights.Dim, true) : halls != null && here >= 0 ? halls[here] : 0;
@@ -229,15 +245,16 @@ public partial class CinemaBooths : Node
         }
         // High detail throws the picture with a light in the hall the camera is in (InteriorNode's screens)
         bool real = InteriorNode.RealProjection;
-        if (node != _appliedNode || code != _applied || mask != _appliedMask || node.Layout.Key != _appliedPlan || real != _real)
+        if (node != _appliedNode || code != _applied || mask != _appliedMask || reels != _appliedReels || node.Layout.Key != _appliedPlan || real != _real)
         {
             _appliedNode = node;
             _applied = code;
             _appliedMask = mask;
+            _appliedReels = reels;
             _appliedPlan = node.Layout.Key;
             _real = real;
             var (lights, screen) = Unpack(code);
-            node.ShowCinema(Level(lights), mask, screen, real);
+            node.ShowCinema(Level(lights), mask, halls, screen, real);
         }
         if (real && cam != null) node.ProjectFor(node.ToLocal(cam.GlobalPosition));
     }

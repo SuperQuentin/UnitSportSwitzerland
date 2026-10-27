@@ -42,7 +42,7 @@ public partial class ProjectionPerfProbe : Node3D
             Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
         AddChild(node);
         InteriorNode.ShowSlide(0);
-        node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), ~0, glow: true, real: false);
+        node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), ~0, null, glow: true, real: false);
 
         var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
         var target = new Vector3(screen.X, layout.FloorY(screen.Floor) + 2.6f, screen.Z);

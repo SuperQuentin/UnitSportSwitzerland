@@ -44,5 +44,9 @@ Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --a
 - [ ] A hall's screen on → its film music plays (Radio Swiss Classic; offline, the Film modules); off → it stops. Judge the five Film modules: drop any that do not fit.
 - [ ] Grütli's third hall (and Empire's 3rd, 5th, 6th) is mid-film when you arrive: its door shut, lights off, the cat on, music playing. The others lit and dark; their doors shut too and open with E.
 - [ ] Two halls showing side by side → different music in each (some halls play the radio, others the modules).
+- [ ] Walk along a row's lane to a seat → no climbing through seats, the step down to the next row at the lane's front edge; E sits facing the screen, E or walking stands up. Rows staggered, the top row against the back wall.
+- [ ] Switch a hall's screen off and on → another tune.
+- [ ] The beam: bright at the lens, nearly gone at the screen, faint from the side; walk into it → a dark wedge behind you in the beam, not only on the screen.
+- [ ] Grütli from outside → one entrance, no extra doors round the building.
 - [ ] The box office's glass → see-through, the cashier visible behind it.
 - [ ] High detail, in a hall with its screen on, walk into the beam → the cat on you, your shadow on the screen.

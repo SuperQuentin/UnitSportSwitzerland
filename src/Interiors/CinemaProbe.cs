@@ -164,6 +164,15 @@ public partial class CinemaProbe : Node
                 && InteriorGenerator.CanReach(booth, pieces, (spot.X0 + spot.X1) / 2, (spot.Z0 + spot.Z1) / 2, 0.3f));
             Check(reached == Count(FurnitureType.BoothPanel), $"{what}: every panel is reached from the booth's door ({reached} of {Count(FurnitureType.BoothPanel)}, {booth.Width:F1}x{booth.Depth:F1} m booth)");
         }
+        // the seats folded at each row's back, a lane a player's width in front of them, every other row staggered (#1279)
+        foreach (var b in l.Furniture.Where(f => f.Type == FurnitureType.SeatingBank))
+        {
+            var rows = InteriorGenerator.RowsOf(b);
+            Check(rows.Pitch - InteriorGenerator.SeatDepth >= 0.66f, $"{what}: a {rows.Pitch - InteriorGenerator.SeatDepth:F2} m lane in front of the seats, a player's width");
+            Check(rows.Rows < 2 || Math.Abs(rows.SeatX(1, 0) - rows.SeatX(0, 0) - rows.SeatW / 2) < 0.01f, $"{what}: every other row staggered half a seat");
+        }
+        // one way in (#1279): the extra doors of #498 landed in the halls' side walls
+        Check(BuildingFootprint.ComputeDoors(tile, null, null).Count(d => d.Index == 0) == 1, $"{what}: one door, the entrance");
         // every hall's door from the lobby a real leaf, shut until someone opens it (#1279)
         Check(halls.All(h => l.InnerDoors.Any(d => d.Floor == 0 && l.Floors[0].Rooms[d.Room] == h && d.Bottom == 0
                 && h.Openings.Any(o => o.Kind == OpeningKind.Door && o.Side == d.Side && Math.Abs(o.Center - d.Center) < 0.01f))),

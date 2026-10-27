@@ -658,8 +658,8 @@
 2897.2	Interiors / Arcade
 5097.8	Interiors / Bowling centre - Bowl bar
 9294.1	Interiors / Bowling centre - Two levels
-5598.2	Interiors / Cinema - Small
-8854.1	Interiors / Cinema - Town
+5129.4	Interiors / Cinema - Small
+8387.1	Interiors / Cinema - Town
 7294	Interiors / Dining - Bar
 8279.3	Interiors / Dining - Café
 7711.2	Interiors / Dining - Club

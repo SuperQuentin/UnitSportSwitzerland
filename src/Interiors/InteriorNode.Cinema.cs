@@ -32,13 +32,29 @@ public partial class InteriorNode
     /// <summary>The halls whose screens are on, a bit each.</summary>
     private int _screensOn;
     /// <summary>Each showing hall's music (#1279), by its number: made when its screen comes on, freed when it goes off.</summary>
-    private readonly Dictionary<int, Audio.Live.VenueMusicSource> _hallMusic = new();
+    private readonly Dictionary<int, (Audio.Live.VenueMusicSource Source, int Reel)> _hallMusic = new();
+    /// <summary>The halls' codes as last shown (<see cref="CinemaBooths"/>'s, read only), for their showing numbers.</summary>
+    private int[]? _codes;
     private bool _realShow;
     private int _projecting = -1;
     private const string GHouse = "house_lights";
 
     /// <summary>The projector light's reach out of the porthole, m: clear of the wall, which would shadow it all.</summary>
     private const float LensOut = 0.5f;
+
+    /// <summary>How far behind the lens's glass the beam's lines meet, m (#1279): a lens's focus is inside it, so the
+    /// beam leaves the glass already a few centimetres wide, not from a point in front of it.</summary>
+    private const float ApexBehindLens = 0.2f;
+
+    /// <summary>The bodies that shadow a beam (#1279): every player's, registered while in the tree, read on the main thread.</summary>
+    public static readonly HashSet<Node3D> BeamBodies = new();
+
+    /// <summary>A body's height over its feet, m, for the beam's capsules.</summary>
+    private const float BodyHeight = 1.8f;
+
+    private static readonly StringName[] GBody = { "body0", "body1", "body2", "body3", "body4", "body5", "body6", "body7" };
+    /// <summary>What each beam capsule was last set to, so a parameter is written only when it moves.</summary>
+    private readonly Vector4[] _bodies = new Vector4[8];
 
     /// <summary>
     /// Whether this client throws the picture with a light (High detail, a desktop, no headset) or pastes it
@@ -93,8 +109,11 @@ public partial class InteriorNode
             var from = new Vector3(port.X, layout.FloorY(port.Floor) + port.Lift + port.H / 2, port.Z);
             var proj = projectors.MinBy(q => (q.X - port.X) * (q.X - port.X) + (q.Z - port.Z) * (q.Z - port.Z));
             if (proj != null && (proj.X - port.X) * (proj.X - port.X) + (proj.Z - port.Z) * (proj.Z - port.Z) < 1.5f * 1.5f)
+            {
                 from = new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift + proj.H - InteriorGenerator.ProjectorLensDrop, proj.Z)
                     + new Basis(Vector3.Up, proj.Turns * Mathf.Pi / 2) * new Vector3(0, 0, proj.D / 2);
+                from -= (centre - from).Normalized() * ApexBehindLens;
+            }
             var right = basis * new Vector3(half.X, 0, 0);
             var up = new Vector3(0, half.Y, 0);
             var marched = BeamFor(from, centre, right, up);
@@ -233,11 +252,12 @@ public partial class InteriorNode
     /// The booth's state on this cinema: the house lights' level and the screen's wash (one each for the whole
     /// interior: the hall the camera is in), the halls whose cat slides and beams are on (a bit each), and the way they are shown.
     /// </summary>
-    public void ShowCinema(float houseLights, int screens, bool glow, bool real)
+    public void ShowCinema(float houseLights, int screens, int[]? codes, bool glow, bool real)
     {
         _lit?.SetShaderParameter(GHouse, houseLights);
         ShowGlow(glow);
         _screensOn = screens;
+        _codes = codes;
         _realShow = real;
         RefreshScreens();
     }
@@ -265,9 +285,44 @@ public partial class InteriorNode
     public void ProjectFor(Vector3 camera)
     {
         int i = _realShow ? _screens.FindIndex(s => s.Projector != null && On(s) && s.Hall.HasPoint(camera)) : -1;
-        if (i == _projecting) return;
-        _projecting = i;
-        RefreshScreens();
+        if (i != _projecting)
+        {
+            _projecting = i;
+            RefreshScreens();
+        }
+        if (i >= 0 && _screens[i].Marched is { } beam) ShadowBeam(beam, _screens[i].Hall);
+    }
+
+    /// <summary>
+    /// The people standing in the hall being projected, as the beam's capsules (#1279): the beam shows the shadow
+    /// a body throws through it, as the screen does. Written only when a capsule moves.
+    /// </summary>
+    private void ShadowBeam(ShaderMaterial beam, Aabb hall)
+    {
+        int k = 0;
+        var room = hall.Grow(0.5f);
+        foreach (var body in BeamBodies)
+        {
+            if (k >= GBody.Length) break;
+            if (!IsInstanceValid(body) || !body.IsInsideTree()) continue;
+            var feet = ToLocal(body.GlobalPosition);
+            if (!room.HasPoint(feet + Vector3.Up * 0.5f)) continue;
+            Body(beam, k++, new Vector4(feet.X, feet.Z, feet.Y, feet.Y + BodyHeight));
+        }
+        for (; k < GBody.Length; k++) Body(beam, k, new Vector4(0, 0, 0, -1));
+    }
+
+    /// <summary>The projected beam's capsules again, for a body that moves without a booth driving the show (the model viewer's walker).</summary>
+    public void ShadowProjected()
+    {
+        if (_projecting >= 0 && _screens[_projecting].Marched is { } beam) ShadowBeam(beam, _screens[_projecting].Hall);
+    }
+
+    private void Body(ShaderMaterial beam, int k, Vector4 v)
+    {
+        if (_bodies[k].IsEqualApprox(v)) return;
+        _bodies[k] = v;
+        beam.SetShaderParameter(GBody[k], v);
     }
 
     private void RefreshScreens()
@@ -295,14 +350,19 @@ public partial class InteriorNode
     /// </summary>
     private void HallMusic(CinemaScreen s, bool on)
     {
-        if (s.No < 0 || _hallMusic.ContainsKey(s.No) == on) return;
-        if (!on)
+        if (s.No < 0) return;
+        // a new showing (the screen switched off and on again, #1279) draws again
+        int reel = _codes != null && s.No < _codes.Length ? CinemaBooths.ReelOf(_codes[s.No]) : 0;
+        bool playing = _hallMusic.TryGetValue(s.No, out var now);
+        if (playing && (!on || now.Reel != reel))
         {
-            if (_hallMusic.Remove(s.No, out var gone) && IsInstanceValid(gone)) gone.QueueFree();
-            return;
+            _hallMusic.Remove(s.No);
+            if (IsInstanceValid(now.Source)) now.Source.QueueFree();
+            playing = false;
         }
+        if (!on || playing) return;
         var c = s.Hall.GetCenter();
-        uint seed = (uint)Core.Fnv.Hash($"{Layout.Key}#{s.No}");
+        uint seed = (uint)Core.Fnv.Hash($"{Layout.Key}#{s.No}#{reel}");
         int modules = Audio.Tracker.TrackerLibrary.Playlists[Audio.Tracker.VenueMood.Film].Length;
         var music = new Audio.Live.VenueMusicSource
         {
@@ -311,13 +371,14 @@ public partial class InteriorNode
             Volume = VenueMusic.RoomVolume,
             Mood = Audio.Tracker.VenueMood.Film,
             // the halls spread evenly round the playlist, so the next hall is a song or two on
-            Salt = (uint)(seed % 997 + s.No * Audio.Tracker.TrackerLibrary.Cycle(Audio.Tracker.VenueMood.Film) / Math.Max(1, _screens.Count)),
+            // the halls spread evenly round the playlist, so the next hall is a song or two on; each showing somewhere in its hall's share
+            Salt = (uint)((s.No + seed % 1000 / 1000.0) * Audio.Tracker.TrackerLibrary.Cycle(Audio.Tracker.VenueMood.Film) / Math.Max(1, _screens.Count)),
             Position = new Vector3(c.X, s.Hall.Position.Y + Math.Min(3f, s.Hall.Size.Y - 0.5f), c.Z),
             // the whole hall at full level, as its surround speakers make it
             Spread = new Vector2(s.Hall.Size.X, s.Hall.Size.Z).Length() / 2,
         };
         AddChild(music);
-        _hallMusic[s.No] = music;
+        _hallMusic[s.No] = (music, reel);
     }
 
     /// <summary>A light pyramid from a point to a rectangle: four faces, bright at the lens, faint at the screen.</summary>
@@ -326,8 +387,9 @@ public partial class InteriorNode
         var corners = new[] { centre - right - up, centre + right - up, centre + right + up, centre - right + up };
         var v = new List<Vector3>();
         var col = new List<Color>();
-        var at = new Color(1f, 0.96f, 0.86f, 0.10f);
-        var screen = new Color(1f, 0.96f, 0.86f, 0.02f);
+        // bright at the lens, nothing left at the screen (#1279)
+        var at = new Color(1f, 0.96f, 0.86f, 0.06f);
+        var screen = new Color(1f, 0.96f, 0.86f, 0f);
         for (int i = 0; i < 4; i++)
         {
             v.Add(from); col.Add(at);
