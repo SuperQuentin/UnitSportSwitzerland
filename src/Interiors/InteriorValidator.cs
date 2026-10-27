@@ -46,6 +46,7 @@ public static class InteriorValidator
                     errors.Add($"floor {f} room {i} {r.Type} outside the footprint");
                 if (Math.Min(r.Width, r.Depth) < 1.0f && !r.Piece)
                     errors.Add($"floor {f} room {i} {r.Type} is {r.Width:F1}x{r.Depth:F1} m");
+                if (r.Shape != null) ShapeErrors(l, f, i, hw, hd, errors);
                 // An opening cannot be taller than the room it is cut in. Worth stating because a
                 // room's headroom is no longer always the storey's: a site's service block is a
                 // 2.6 m room inside a 9 m hall (RoomPlan.Clear, #497), so anything that sizes a
@@ -232,6 +233,35 @@ public static class InteriorValidator
     }
 
     /// <summary>
+    /// A shaped room (#1290): inside the footprint, counter-clockwise, and no other room's floor
+    /// (on its floor, or rising into it) under any of it, sampled every 0.4 m away from its walls.
+    /// </summary>
+    private static void ShapeErrors(InteriorLayout l, int f, int i, float hw, float hd, List<string> errors)
+    {
+        var r = l.Floors[f].Rooms[i];
+        var c = r.Corners();
+        if (c.Any(p => p.X < -hw || p.X > hw || p.Y < -hd || p.Y > hd)) errors.Add($"floor {f} room {i} {r.Type}: its shape leaves the footprint");
+        if (RoomShapes.Area(c) <= 0) { errors.Add($"floor {f} room {i} {r.Type}: its shape is wound backwards"); return; }
+        float x0 = c.Min(p => p.X), x1 = c.Max(p => p.X), z0 = c.Min(p => p.Y), z1 = c.Max(p => p.Y);
+        for (float x = x0 + 0.2f; x < x1; x += 0.4f)
+            for (float z = z0 + 0.2f; z < z1; z += 0.4f)
+            {
+                var q = new Godot.Vector2(x, z);
+                if (!RoomShapes.Contains(c, q) || RoomShapes.EdgeDistance(c, q) < 0.1f) continue;
+                for (int g = 0; g <= f; g++)
+                    for (int j = 0; j < l.Floors[g].Rooms.Count; j++)
+                    {
+                        var o = l.Floors[g].Rooms[j];
+                        if (g == f && j == i || g + o.Span <= f) continue;
+                        bool under = o.Shape == null
+                            ? x > o.X0 + 0.1f && x < o.X1 - 0.1f && z > o.Z0 + 0.1f && z < o.Z1 - 0.1f
+                            : RoomShapes.Contains(o.Corners(), q) && RoomShapes.EdgeDistance(o.Corners(), q) >= 0.1f;
+                        if (under) { errors.Add($"floor {f} room {i} {r.Type}: its shape overlaps room {j} {o.Type} of floor {g}"); return; }
+                    }
+            }
+    }
+
+    /// <summary>
     /// The stairs up from a floor, each as its first and last flight: a whole-storey flight on its
     /// own, or a flight to a half landing and the one on from it (#571) — the one starting at the
     /// height the other ends, on a landing both reach.
@@ -297,7 +327,7 @@ public static class InteriorValidator
     }
 
     /// <summary>Plan view of every floor side by side, the front wall at the bottom.</summary>
-    public static string ToSvg(InteriorLayout l)
+    public static string ToSvg(InteriorLayout l, IReadOnlyList<Godot.Vector2[]>? outline = null)
     {
         var inv = CultureInfo.InvariantCulture;
         const float S = 24f, Gap = 30f;
@@ -336,20 +366,28 @@ public static class InteriorValidator
                     RoomType.Storage or RoomType.TechRoom => "#cfc6b8",
                     _ => "#ddd",
                 };
-                sb.Append($"<rect x=\"{N(X(r.X0))}\" y=\"{N(Y(r.Z1))}\" width=\"{N(r.Width * S)}\" height=\"{N(r.Depth * S)}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"2\"/>");
+                if (r.Shape != null)
+                {
+                    // a shaped room (#1290): its polygon, its core dashed inside it
+                    var pts = string.Join(" ", r.Corners().Select(p => $"{N(X(p.X))},{N(Y(p.Y))}"));
+                    sb.Append($"<polygon points=\"{pts}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"2\"/>");
+                    sb.Append($"<rect x=\"{N(X(r.X0))}\" y=\"{N(Y(r.Z1))}\" width=\"{N(r.Width * S)}\" height=\"{N(r.Depth * S)}\" fill=\"none\" stroke=\"#333\" stroke-width=\"0.6\" stroke-dasharray=\"3 3\"/>");
+                }
+                else
+                    sb.Append($"<rect x=\"{N(X(r.X0))}\" y=\"{N(Y(r.Z1))}\" width=\"{N(r.Width * S)}\" height=\"{N(r.Depth * S)}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"2\"/>");
                 sb.Append($"<text x=\"{N(X((r.X0 + r.X1) / 2))}\" y=\"{N(Y((r.Z0 + r.Z1) / 2))}\" text-anchor=\"middle\">{r.Type}</text>");
                 foreach (var o in r.Openings)
                 {
-                    bool along = o.Side is Side.Front or Side.Back;
-                    float a = o.Center - o.Width / 2, b = o.Center + o.Width / 2;
-                    float fixedC = o.Side switch { Side.Front => r.Z0, Side.Back => r.Z1, Side.Left => r.X0, _ => r.X1 };
+                    var (at, _, dir) = r.WallFrame(o);
+                    var a = at - dir * (o.Width / 2);
+                    var b = at + dir * (o.Width / 2);
                     string col = o.Kind switch { OpeningKind.Window => "#4aa3ff", OpeningKind.Entry => "#d11", _ => "#fff" };
-                    if (along)
-                        sb.Append($"<line x1=\"{N(X(a))}\" y1=\"{N(Y(fixedC))}\" x2=\"{N(X(b))}\" y2=\"{N(Y(fixedC))}\" stroke=\"{col}\" stroke-width=\"4\"/>");
-                    else
-                        sb.Append($"<line x1=\"{N(X(fixedC))}\" y1=\"{N(Y(a))}\" x2=\"{N(X(fixedC))}\" y2=\"{N(Y(b))}\" stroke=\"{col}\" stroke-width=\"4\"/>");
+                    sb.Append($"<line x1=\"{N(X(a.X))}\" y1=\"{N(Y(a.Y))}\" x2=\"{N(X(b.X))}\" y2=\"{N(Y(b.Y))}\" stroke=\"{col}\" stroke-width=\"4\"/>");
                 }
             }
+            // the building's real outline, when the check has it
+            foreach (var ring in outline ?? [])
+                sb.Append($"<polygon points=\"{string.Join(" ", ring.Select(p => $"{N(X(p.X))},{N(Y(p.Y))}"))}\" fill=\"none\" stroke=\"#c40\" stroke-width=\"1.5\" stroke-dasharray=\"6 3\"/>");
             foreach (var h in floor.Holes)
                 sb.Append($"<rect x=\"{N(X(h.X0))}\" y=\"{N(Y(h.Z1))}\" width=\"{N((h.X1 - h.X0) * S)}\" height=\"{N((h.Z1 - h.Z0) * S)}\" fill=\"#333\" fill-opacity=\"0.5\"/>");
             foreach (var g in floor.Landings)

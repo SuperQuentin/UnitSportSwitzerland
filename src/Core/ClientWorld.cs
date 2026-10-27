@@ -159,7 +159,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         foreach (var (requested, run) in QuickChecks)
             if (requested())
             {
-                GetTree().Quit(run());
+                // a check that throws fails and quits, rather than leaving the game running headless
+                int code;
+                try { code = run(); }
+                catch (Exception ex)
+                {
+                    GD.PrintErr(ex.ToString());
+                    GD.Print("RESULT: FAILED (the check threw)");
+                    code = 1;
+                }
+                GetTree().Quit(code);
                 return;
             }
         if (OriginCheck.Requested)

@@ -130,6 +130,9 @@ public static partial class InteriorGenerator
         try { flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b, b.Kind, n, flats, rng); }
         finally { DiningShops = false; }
         planned |= flatsPlanned;
+        // the building's real outline (#1290) as its roof on a grid, null when it is its box
+        var outline = OutlineOf(fp, b);
+        bool onCore = false;
         if (!planned)
         {
             bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
@@ -138,18 +141,29 @@ public static partial class InteriorGenerator
                 || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
 
             int below = single ? 0 : Cellars(layout.Key, b.Kind, n);
-            if (single || !TryCored(layout, fp, b.Kind, n, below, bank, rng)
-                && (below == 0 || !TryCored(layout, fp, b.Kind, n, 0, bank, rng)))
+            void Single()
             {
                 layout.Below = 0;
                 SingleRoom(layout, b.Kind, fp.Door.Height, rng);
                 if (bank) layout.Floors[0].Rooms[0].Type = RoomType.BankHall;
             }
+            // a shaped building is planned on its biggest rectangle behind the door, then grown out
+            // to its outline (#1290)
+            onCore = outline != null && (single
+                ? TryOnCore(layout, fp, b, () => { Single(); return true; })
+                : TryOnCore(layout, fp, b, () => TryCored(layout, fp, b.Kind, n, below, bank, rng)
+                                                 || below > 0 && TryCored(layout, fp, b.Kind, n, 0, bank, rng)));
+            if (!onCore && (single || !TryCored(layout, fp, b.Kind, n, below, bank, rng)
+                && (below == 0 || !TryCored(layout, fp, b.Kind, n, 0, bank, rng))))
+                Single();
         }
 
         // a doorway for every other facade door (#498), before the furniture, which keeps clear
         // of every opening by itself (Clearance)
-        if (fp.Extra.Count > 0 && !flatsPlanned) Entrances(layout, fp);
+        if (fp.Extra.Count > 0 && !flatsPlanned && !onCore) Entrances(layout, fp);
+
+        // every room out to the facade, or cut by it (#1290), before the furniture stands in them
+        if (outline != null) FitOutline(layout, outline);
 
         DiningUnits(layout, fp, dining);
         Furnish(layout, rng);
@@ -868,16 +882,7 @@ public static partial class InteriorGenerator
                 float b = side is Side.Front or Side.Back ? r.X1 : r.Z1;
                 float len = b - a;
 
-                var (width, bottom, top, spacing) = r.Type switch
-                {
-                    RoomType.WC or RoomType.Bathroom => (0.6f, 1.4f, 2.0f, 99f),
-                    RoomType.Shop when side == Side.Front && f == 0 => (Math.Min(2.6f, len * 0.4f), 0.3f, 2.4f, 3.4f),
-                    RoomType.Nave => (1.0f, 2.5f, clear - 1.2f, 4.5f),
-                    RoomType.Workshop => (1.8f, clear - 1.6f, clear - 0.5f, 4f),
-                    RoomType.Barn => (0.7f, clear * 0.6f, clear * 0.6f + 0.6f, 9f),
-                    RoomType.Garage or RoomType.Storage => (0.7f, 1.4f, 2.0f, 99f),
-                    _ => (1.1f, 0.9f, Math.Min(2.2f, clear - 0.3f), 3.2f),
-                };
+                var (width, bottom, top, spacing) = WindowSize(r.Type, side == Side.Front && f == 0, clear, len);
                 if (top - bottom < 0.4f || len < width + 0.8f) continue;
                 int count = Math.Max(1, (int)(len / spacing));
                 for (int k = 0; k < count; k++)
@@ -900,8 +905,20 @@ public static partial class InteriorGenerator
         }
     }
 
+    /// <summary>A room's windows: width, sill, head and the wall length per window. A shop's street front is glass.</summary>
+    private static (float Width, float Bottom, float Top, float Spacing) WindowSize(RoomType t, bool shopFront, float clear, float len) => t switch
+    {
+        RoomType.WC or RoomType.Bathroom => (0.6f, 1.4f, 2.0f, 99f),
+        RoomType.Shop when shopFront => (Math.Min(2.6f, len * 0.4f), 0.3f, 2.4f, 3.4f),
+        RoomType.Nave => (1.0f, 2.5f, clear - 1.2f, 4.5f),
+        RoomType.Workshop => (1.8f, clear - 1.6f, clear - 0.5f, 4f),
+        RoomType.Barn => (0.7f, clear * 0.6f, clear * 0.6f + 0.6f, 9f),
+        RoomType.Garage or RoomType.Storage => (0.7f, 1.4f, 2.0f, 99f),
+        _ => (1.1f, 0.9f, Math.Min(2.2f, clear - 0.3f), 3.2f),
+    };
+
     private static bool Blocked(RoomPlan r, Side side, float c, float w) =>
-        r.Openings.Any(o => o.Side == side && Math.Abs(o.Center - c) < (o.Width + w) / 2 + 0.3f);
+        r.Openings.Any(o => o.Side == side && o.Edge == null && Math.Abs(o.Center - c) < (o.Width + w) / 2 + 0.3f);
 
     // ---- furniture -----------------------------------------------------------------------------
 
@@ -1555,6 +1572,7 @@ public static partial class InteriorGenerator
     private static RectPlan Clearance(RoomPlan r, OpeningPlan o)
     {
         float half = o.Width / 2 + 0.25f, deep = 1.1f;
+        if (o.Edge != null) return Across(r, o, half, deep);
         return o.Side switch
         {
             Side.Front => new RectPlan(o.Center - half, r.Z0, o.Center + half, r.Z0 + deep),
@@ -1569,6 +1587,8 @@ public static partial class InteriorGenerator
         const float inset = WallInset + 0.02f;
         if (p.X0 < r.X0 + inset - 1e-3f || p.X1 > r.X1 - inset + 1e-3f
             || p.Z0 < r.Z0 + inset - 1e-3f || p.Z1 > r.Z1 - inset + 1e-3f) return false;
+        // a room the facade cuts (#1290): the piece stands inside what is left of it
+        if (r.Shape != null && !InShape(r, p, inset)) return false;
         var grown = new RectPlan(p.X0 - gap, p.Z0 - gap, p.X1 + gap, p.Z1 + gap);
         return !placed.Any(q => q.Overlaps(grown)) && !blocked.Any(q => q.Overlaps(p));
     }
@@ -1610,7 +1630,7 @@ public static partial class InteriorGenerator
                     };
                     if (!Free(r, rect, placed, blocked, 0.05f) || solid && !KeepsWay(r, placed, rect)) continue;
                     // tall pieces stay out of windows
-                    if (p.H > 1.0f && r.Openings.Any(o => o.Kind == OpeningKind.Window && o.Side == side
+                    if (p.H > 1.0f && r.Openings.Any(o => o.Kind == OpeningKind.Window && o.Side == side && o.Edge == null
                         && Math.Abs(o.Center - c) < (o.Width + p.W) / 2)) continue;
                     int turns = side switch { Side.Front => 0, Side.Left => 1, Side.Back => 2, _ => 3 };
                     Add(l, f, p, rect, turns, placed);

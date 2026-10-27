@@ -304,6 +304,7 @@ public static partial class InteriorMeshBuilder
 
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
     {
+        if (r.Shape != null) { ShapedRoom(s, r, y0, clear); return; }
         var (floorCol, wallCol, ceilCol) = Palette(r.Type);
         const float t = InteriorGenerator.WallInset;
         var inner = new RectPlan(r.X0 + t, r.Z0 + t, r.X1 - t, r.Z1 - t);
@@ -339,13 +340,86 @@ public static partial class InteriorMeshBuilder
     {
         bool along = side is Side.Front or Side.Back;
         float a = along ? inner.X0 : inner.Z0, b = along ? inner.X1 : inner.Z1;
-        float top = y0 + clear;
-        var cuts = r.Openings.Where(o => o.Side == side)
+        var cuts = r.Openings.Where(o => o.Side == side && o.Edge == null)
             .Select(o => (S0: Math.Max(a, o.Center - o.Width / 2), S1: Math.Min(b, o.Center + o.Width / 2), O: o))
             .Where(c => c.S1 - c.S0 > 0.05f)
             .OrderBy(c => c.S0).ToList();
+        WallRun(s, r, (u, y, d) => OnWall(side, inner, u, y, d), a, b, cuts, y0, clear, col,
+            (s0, s1, ob, ot) => BlastDoor(s, side, inner, s0, s1, ob, ot, b));
+    }
 
-        Vector3 P(float u, float y) => OnWall(side, inner, u, y, 0);
+    /// <summary>
+    /// A shaped room (#1290): its floor and ceiling the shape inset by the wall's half thickness,
+    /// triangulated, and a wall along every edge, straight or at an angle. An opening on the
+    /// rectangle's wall line (<see cref="OpeningPlan.Side"/>) sits on the edge that carries that
+    /// line; one on an angled edge names it (<see cref="OpeningPlan.Edge"/>). Never holed: a room
+    /// with a stair or a shaft keeps its rectangle.
+    /// </summary>
+    private static void ShapedRoom(Scratch s, RoomPlan r, float y0, float clear)
+    {
+        var (floorCol, wallCol, ceilCol) = Palette(r.Type);
+        const float t = InteriorGenerator.WallInset;
+        var corners = r.Corners();
+        var inner = RoomShapes.Inset(corners, t);
+        float top = y0 + clear;
+        var grown = RoomShapes.Inset(inner, -Seam);
+        var tris = RoomShapes.Triangulate(grown);
+        for (int i = 0; i + 2 < tris.Count; i += 3)
+        {
+            Vector2 a = grown[tris[i]], b = grown[tris[i + 1]], c = grown[tris[i + 2]];
+            s.Tri(new(a.X, y0, a.Y), new(b.X, y0, b.Y), new(c.X, y0, c.Y), floorCol, true);
+            s.Tri(new(a.X, top, a.Y), new(c.X, top, c.Y), new(b.X, top, b.Y), ceilCol, true);
+        }
+
+        int n = corners.Length;
+        for (int k = 0; k < n; k++)
+        {
+            var p0 = corners[k];
+            var p1 = corners[(k + 1) % n];
+            var q0 = inner[k];
+            var q1 = inner[(k + 1) % n];
+            float len = p0.DistanceTo(p1);
+            if (len < 1e-3f) continue;
+            var dir = (p1 - p0) / len;
+            var outward = new Vector2(dir.Y, -dir.X);
+            // the inner edge's run, measured along the outer one from p0
+            float a = (q0 - p0).Dot(dir), b = (q1 - p0).Dot(dir);
+            // openings on this edge: named by it, or on the rectangle's wall line it lies on
+            var cuts = new List<(float S0, float S1, OpeningPlan O)>();
+            foreach (var o in r.Openings)
+            {
+                float c;
+                if (o.Edge is int e) { if (e != k) continue; c = o.Center; }
+                else
+                {
+                    var (at, _, _) = r.WallFrame(o);
+                    if (RoomShapes.SegmentDistance(p0, p1, at) > 0.03f) continue;
+                    c = (at - p0).Dot(dir);
+                }
+                float s0 = Math.Max(a, c - o.Width / 2), s1 = Math.Min(b, c + o.Width / 2);
+                if (s1 - s0 > 0.05f) cuts.Add((s0, s1, o));
+            }
+            cuts.Sort((x, y) => x.S0.CompareTo(y.S0));
+            // the inner face of this wall: the edge pushed in by the inset, along the outer edge's line
+            var face0 = p0 - outward * t;
+            Vector3 Map(float u, float y, float d)
+            {
+                var q = face0 + dir * u + outward * d;
+                return new Vector3(q.X, y, q.Y);
+            }
+            WallRun(s, r, Map, a, b, cuts, y0, clear, wallCol, null);
+        }
+    }
+
+    /// <summary>
+    /// One wall's run from <paramref name="a"/> to <paramref name="b"/> along it, holed by its
+    /// openings: <paramref name="map"/> takes (along, height, depth out of the room) to interior space.
+    /// </summary>
+    private static void WallRun(Scratch s, RoomPlan r, Func<float, float, float, Vector3> map, float a, float b,
+        List<(float S0, float S1, OpeningPlan O)> cuts, float y0, float clear, Color col, Action<float, float, float, float>? blast)
+    {
+        float top = y0 + clear;
+        Vector3 P(float u, float y) => map(u, y, 0);
         void Panel(float u0, float u1, float ya, float yb)
         {
             if (u1 - u0 < 1e-3f || yb - ya < 1e-3f) return;
@@ -371,7 +445,7 @@ public static partial class InteriorMeshBuilder
             float depth = shared ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
             var reveal = col * 0.9f;
             reveal.A = 1;
-            Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
+            Vector3 R(float u, float y, float d) => map(u, y, d);
             s.Quad(R(s0, ob, 0), R(s0, ot, 0), R(s0, ot, depth), R(s0, ob, depth), reveal);
             s.Quad(R(s1, ob, 0), R(s1, ob, depth), R(s1, ot, depth), R(s1, ot, 0), reveal);
             // (no soffit where the opening runs up to the ceiling, as a garage ramp's does, #558: a
@@ -396,7 +470,7 @@ public static partial class InteriorMeshBuilder
                     R(s1, tr + 0.03f, depth - 0.01f), R(s0, tr + 0.03f, depth - 0.01f), frame, false);
             }
             // the front door's leaf is not baked: it swings (DoorLeaf, see Leaf below)
-            if (r.Type == RoomType.Shelter && o.Kind == OpeningKind.Door) BlastDoor(s, side, inner, s0, s1, ob, ot, b);
+            if (r.Type == RoomType.Shelter && o.Kind == OpeningKind.Door) blast?.Invoke(s0, s1, ob, ot);
             cursor = s1;
         }
         Panel(cursor, b, y0, top);

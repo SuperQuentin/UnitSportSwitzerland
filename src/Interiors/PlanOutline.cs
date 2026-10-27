@@ -30,10 +30,121 @@ public static class PlanOutline
     /// The wings of a building in its interior frame, or null when the box is the building
     /// (nearly full, no roof to read, or nothing a wing fits in).
     /// </summary>
-    public static List<RectPlan>? Wings(Building b, Vector2 center, Vector2 axisU, float width, float depth)
+    public static List<RectPlan>? Wings(Building b, Vector2 center, Vector2 axisU, float width, float depth) =>
+        Grid(b, center, axisU, width, depth, Cell) is { } grid ? Peel(grid, width, depth) : null;
+
+    /// <summary>Cells of the fine grid the outline is traced on (#1290).</summary>
+    public const float FineCell = 0.25f;
+    /// <summary>How far a traced edge may stray from the cells' staircase: an angled facade is one edge again.</summary>
+    public const float Tolerance = 0.3f;
+    /// <summary>An outline covering this much of its box is the box: nothing to follow.</summary>
+    public const float Boxlike = 0.97f;
+    /// <summary>The deepest vestibule a doorway on the box's side gets in to the building.</summary>
+    public const float MaxStub = 3.0f;
+
+    /// <summary>
+    /// The building's outline in its interior frame (#1290): rings, the outer counter-clockwise and
+    /// a courtyard's clockwise, each edge a facade (an angled one straight), or null when it is
+    /// its box (no roof to read, or the roof covers nearly all of it).
+    /// </summary>
+    public static List<Vector2[]>? Rings(Building b, Vector2 center, Vector2 axisU, float width, float depth) =>
+        FineGrid(b, center, axisU, width, depth) is { } grid ? Rings(grid, width, depth) : null;
+
+    /// <summary>The roof on the <see cref="FineCell"/> grid, or null when it is nearly all of the box.</summary>
+    public static bool[,]? FineGrid(Building b, Vector2 center, Vector2 axisU, float width, float depth)
+    {
+        if (Grid(b, center, axisU, width, depth, FineCell) is not { } grid) return null;
+        int covered = 0;
+        foreach (bool g in grid) if (g) covered++;
+        return covered >= Boxlike * grid.Length ? null : grid;
+    }
+
+    /// <summary>
+    /// The rings of a <see cref="FineGrid"/>, with a stub for each doorway: the stretch of the box's
+    /// side a way in stands on, from the side in to where the building is (<paramref name="doors"/>:
+    /// the side, the middle along it and the width). A plan keeps its doorways on the box's sides,
+    /// so a hall cut by a facade at an angle keeps the way in to its door: a short vestibule.
+    /// </summary>
+    public static List<Vector2[]> Rings(bool[,] fine, float width, float depth, IEnumerable<(Side Side, float At, float Width, bool Main)>? doors = null)
+    {
+        var grid = fine;
+        if (doors != null)
+        {
+            grid = (bool[,])fine.Clone();
+            int nx = grid.GetLength(0), nz = grid.GetLength(1);
+            foreach (var (side, at, w, main) in doors)
+            {
+                bool along = side is Side.Front or Side.Back;
+                int n = along ? nx : nz, deep = along ? nz : nx;
+                float half = (along ? width : depth) / 2;
+                int c0 = Math.Clamp((int)((at - w / 2 - 0.3f + half) / FineCell), 0, n - 1);
+                int c1 = Math.Clamp((int)((at + w / 2 + 0.3f + half) / FineCell), 0, n - 1);
+                // in from the side, row by row, until the whole band is building; another door than
+                // the main one no further than a vestibule goes (a door out in an L's yard gets none)
+                var rows = new List<int>();
+                bool reached = false;
+                for (int k = 0; k < (main ? deep / 2 : Math.Min(deep, (int)(MaxStub / FineCell))); k++)
+                {
+                    int row = side is Side.Front or Side.Left ? k : deep - 1 - k;
+                    bool full = true;
+                    for (int c = c0; c <= c1; c++) full &= along ? grid[c, row] : grid[row, c];
+                    if (full) { reached = true; break; }
+                    rows.Add(row);
+                }
+                if (!reached) continue;
+                foreach (int row in rows)
+                    for (int c = c0; c <= c1; c++)
+                        if (along) grid[c, row] = true; else grid[row, c] = true;
+            }
+        }
+        return RoomShapes.Trace(grid, FineCell, width, depth, Tolerance);
+    }
+
+    /// <summary>
+    /// The biggest rectangle of the outline that stands on the front wall and holds the stretch
+    /// <paramref name="lo"/>..<paramref name="hi"/> of it (the main door's), each side at least
+    /// <paramref name="min"/>; a side within a cell and a half of the box's is put on it. Null if
+    /// none: the front is not the building's there, or too little of it is.
+    /// </summary>
+    public static RectPlan? FrontCore(Building b, Vector2 center, Vector2 axisU, float width, float depth, float lo, float hi, float min)
+    {
+        if (Grid(b, center, axisU, width, depth, Cell) is not { } g) return null;
+        int nx = g.GetLength(0), nz = g.GetLength(1);
+        int c0 = Math.Clamp((int)((lo + width / 2) / Cell), 0, nx - 1), c1 = Math.Clamp((int)MathF.Ceiling((hi + width / 2) / Cell) - 1, 0, nx - 1);
+        int need = (int)MathF.Ceiling(min / Cell);
+        var full = new bool[nx];
+        for (int i = 0; i < nx; i++) full[i] = true;
+        (int I0, int I1, int H)? best = null;
+        int bestArea = 0;
+        // where the building starts behind the door's stretch of the front: the first row, or a cell
+        // short of it (a cell centre off the roof's edge), or further back where the front is not
+        // straight (the notch of a bent bar): the door then opens into a recess
+        int start = 0;
+        while (start < nz - need && Enumerable.Range(c0, c1 - c0 + 1).Any(i => !g[i, start])) start++;
+        if (start >= nz - need) return null;
+        for (int h = 1; start + h <= nz; h++)
+        {
+            int j = start + h - 1;
+            for (int i = 0; i < nx; i++) full[i] &= g[i, j];
+            if (!full[c0] || !full[c1]) break;
+            int i0 = c0, i1 = c1;
+            while (i0 > 0 && full[i0 - 1]) i0--;
+            while (i1 < nx - 1 && full[i1 + 1]) i1++;
+            int w = i1 - i0 + 1;
+            if (w >= need && h >= need && w * h > bestArea) { bestArea = w * h; best = (i0, i1, h); }
+        }
+        if (best is not { } r) return null;
+        float hw = width / 2, hd = depth / 2, snap = Cell * 1.5f;
+        float x0 = r.I0 * Cell - hw, x1 = Math.Min((r.I1 + 1) * Cell, width) - hw, z1 = Math.Min((start + r.H) * Cell, depth) - hd;
+        float z0 = start * Cell - hd;
+        return new RectPlan(x0 <= -hw + snap ? -hw : x0, z0 <= -hd + snap ? -hd : z0, x1 >= hw - snap ? hw : x1, z1 >= hd - snap ? hd : z1);
+    }
+
+    /// <summary>The roof laid flat on a grid of <paramref name="cell"/> in the plan frame, or null with no roof.</summary>
+    public static bool[,]? Grid(Building b, Vector2 center, Vector2 axisU, float width, float depth, float cell)
     {
         var axisV = new Vector2(-axisU.Y, axisU.X);
-        int nx = Math.Max(1, (int)MathF.Ceiling(width / Cell)), nz = Math.Max(1, (int)MathF.Ceiling(depth / Cell));
+        int nx = Math.Max(1, (int)MathF.Ceiling(width / cell)), nz = Math.Max(1, (int)MathF.Ceiling(depth / cell));
         var grid = new bool[nx, nz];
         bool any = false;
         for (int t = 0; t < b.TriangleCount; t++)
@@ -49,18 +160,17 @@ public static class PlanOutline
                 return new Vector2(q.Dot(axisU) + width / 2, q.Dot(axisV) + depth / 2);
             }
             var pa = L(a); var pc = L(c); var pd = L(d);
-            int i0 = Math.Max(0, (int)(Math.Min(pa.X, Math.Min(pc.X, pd.X)) / Cell)), i1 = Math.Min(nx - 1, (int)(Math.Max(pa.X, Math.Max(pc.X, pd.X)) / Cell));
-            int j0 = Math.Max(0, (int)(Math.Min(pa.Y, Math.Min(pc.Y, pd.Y)) / Cell)), j1 = Math.Min(nz - 1, (int)(Math.Max(pa.Y, Math.Max(pc.Y, pd.Y)) / Cell));
+            int i0 = Math.Max(0, (int)(Math.Min(pa.X, Math.Min(pc.X, pd.X)) / cell)), i1 = Math.Min(nx - 1, (int)(Math.Max(pa.X, Math.Max(pc.X, pd.X)) / cell));
+            int j0 = Math.Max(0, (int)(Math.Min(pa.Y, Math.Min(pc.Y, pd.Y)) / cell)), j1 = Math.Min(nz - 1, (int)(Math.Max(pa.Y, Math.Max(pc.Y, pd.Y)) / cell));
             for (int i = i0; i <= i1; i++)
                 for (int j = j0; j <= j1; j++)
-                    if (!grid[i, j] && InTriangle(new Vector2((i + 0.5f) * Cell, (j + 0.5f) * Cell), pa, pc, pd))
+                    if (!grid[i, j] && InTriangle(new Vector2((i + 0.5f) * cell, (j + 0.5f) * cell), pa, pc, pd))
                     {
                         grid[i, j] = true;
                         any = true;
                     }
         }
-        if (!any) return null;
-        return Peel(grid, width, depth);
+        return any ? grid : null;
     }
 
     /// <summary>
