@@ -2312,6 +2312,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.InteractMount, fight.Text);
             else if (p.Indoors)
             {
+                // seated in a cinema (#1279): E stands up (the seat itself is offered by InteriorManager.Interacting)
+                if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))

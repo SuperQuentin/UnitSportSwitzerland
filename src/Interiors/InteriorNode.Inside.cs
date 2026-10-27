@@ -88,7 +88,7 @@ public partial class InteriorNode
         {
             var d = l.InnerDoors[i];
             var r = l.Floors[d.Floor].Rooms[d.Room];
-            float y = l.FloorY(d.Floor);
+            float y = l.FloorY(d.Floor) + d.Bottom;
             // the doorway frame as a street door's (DoorLeaf): origin on the sill at the wall line,
             // Z out of the flat, so the leaf hangs on the hall's side and swings into it
             var (at, z) = d.Side switch
@@ -99,7 +99,7 @@ public partial class InteriorNode
                 _ => (new Vector3(r.X1, y, d.Center), new Vector3(1, 0, 0)),
             };
             var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), at);
-            var leaf = DoorLeaf.Create($"flat{i}", doorway, d.Width, d.Top, Terrain.Format.BuildingKind.Apartment, material);
+            var leaf = DoorLeaf.Create($"flat{i}", doorway, d.Width, d.Top - d.Bottom, Terrain.Format.BuildingKind.Apartment, material);
             node.AddChild(leaf);
             leaf.SetSwing(0);
             node._innerLeaves[i] = leaf;

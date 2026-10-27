@@ -21,17 +21,57 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class InteriorNode
 {
-    /// <summary>One hall's screen: its pasted picture, its lit screen and projector light, its beam, the hall's box (node-local).</summary>
+    /// <summary>
+    /// One hall's screen: its pasted picture, its lit screen and projector light, its beam, the hall's box (node-local)
+    /// and its number (<see cref="CinemaBooths.HallAt"/>), whose panel switches it (#1279).
+    /// </summary>
     private sealed record CinemaScreen(MeshInstance3D Picture, MeshInstance3D? Lit, SpotLight3D? Projector,
-        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall);
+        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall, int No, MeshInstance3D? Port = null, MeshInstance3D? Glow = null);
 
     private readonly List<CinemaScreen> _screens = new();
-    private bool _screenOn, _realShow;
+    /// <summary>The halls whose screens are on, a bit each.</summary>
+    private int _screensOn;
+    /// <summary>Each showing hall's music (#1279), by its number: made when its screen comes on, freed when it goes off.</summary>
+    private readonly Dictionary<int, (Audio.Live.VenueMusicSource Source, int Reel)> _hallMusic = new();
+    /// <summary>The house lights shown (-1: not yet) and where they are going (#1279).</summary>
+    private float _house = -1f, _houseTarget = 1f;
+
+    /// <summary>How long a cinema's house lights take from full to off, s [S: dimmers fade over 5-10 s].</summary>
+    private const float HouseFadeSeconds = 6f;
+
+    /// <summary>The house lights a step nearer their level, written only while they move. Per frame from <see cref="CinemaBooths"/>.</summary>
+    public void FadeHouse(double delta)
+    {
+        if (_house < 0 || _house == _houseTarget) return;
+        _house = Mathf.MoveToward(_house, _houseTarget, (float)delta / HouseFadeSeconds);
+        _lit?.SetShaderParameter(GHouse, _house);
+    }
+
+    /// <summary>The halls' codes as last shown (<see cref="CinemaBooths"/>'s, read only), for their showing numbers.</summary>
+    private int[]? _codes;
+    private bool _realShow;
     private int _projecting = -1;
     private const string GHouse = "house_lights";
 
     /// <summary>The projector light's reach out of the porthole, m: clear of the wall, which would shadow it all.</summary>
     private const float LensOut = 0.5f;
+
+    /// <summary>How far behind the lens's glass the beam's lines meet, m (#1279): a lens's focus is inside it, so the
+    /// beam leaves the glass already a few centimetres wide, not from a point in front of it.</summary>
+    private const float ApexBehindLens = 0.2f;
+
+    /// <summary>The bodies that shadow a beam (#1279): every player's, registered while in the tree, read on the main thread.</summary>
+    public static readonly HashSet<Node3D> BeamBodies = new();
+
+    /// <summary>Each seating bank's cushions (#1279): the piece, its mesh, the seats let down now (and a spare set to fill).</summary>
+    private readonly List<(FurniturePlan Bank, MeshInstance3D Mesh, HashSet<int> Down, HashSet<int> Next)> _cushions = new();
+
+    /// <summary>A body's height over its feet, m, for the beam's capsules.</summary>
+    private const float BodyHeight = 1.8f;
+
+    private static readonly StringName[] GBody = { "body0", "body1", "body2", "body3", "body4", "body5", "body6", "body7" };
+    /// <summary>What each beam capsule was last set to, so a parameter is written only when it moves.</summary>
+    private readonly Vector4[] _bodies = new Vector4[8];
 
     /// <summary>
     /// Whether this client throws the picture with a light (High detail, a desktop, no headset) or pastes it
@@ -51,6 +91,8 @@ public partial class InteriorNode
         var layout = node.Layout;
         if (layout.Type != BuildingType.Cinema) return;
         AddViewGlass(node);
+        AddClearGlass(node);
+        AddCushions(node);
         var ports = layout.Furniture.Where(f => f.Type == FurnitureType.Porthole).ToList();
         var projectors = layout.Furniture.Where(f => f.Type == FurnitureType.Projector).ToList();
         foreach (var p in layout.Furniture.Where(f => f.Type == FurnitureType.MovieScreen))
@@ -75,19 +117,54 @@ public partial class InteriorNode
             }
             var picture = Quad("CatScreen", CatMaterial());
             var hall = HallOf(layout, p);
+            int no = CinemaBooths.HallAt(layout, p.X, p.Z);
 
             // the beam from this hall's porthole: the nearest one to the screen
             var port = ports.MinBy(q => (q.X - p.X) * (q.X - p.X) + (q.Z - p.Z) * (q.Z - p.Z));
-            if (port == null) { node._screens.Add(new CinemaScreen(picture, null, null, null, null, hall)); continue; }
+            if (port == null) { node._screens.Add(new CinemaScreen(picture, null, null, null, null, hall, no)); continue; }
             // the beam's apex at the projector's lens in the booth, behind the hole in the wall; the port's middle
             // if the booth had no room for that projector
             var from = new Vector3(port.X, layout.FloorY(port.Floor) + port.Lift + port.H / 2, port.Z);
+            // the wall's line through the port (the hall's porthole stands 0.1 m in front of it)
+            var portBasis = new Basis(Vector3.Up, port.Turns * Mathf.Pi / 2);
+            var wallAt = from + portBasis * new Vector3(0, 0, -0.1f);
+            MeshInstance3D? lensGlow = null;
             var proj = projectors.MinBy(q => (q.X - port.X) * (q.X - port.X) + (q.Z - port.Z) * (q.Z - port.Z));
             if (proj != null && (proj.X - port.X) * (proj.X - port.X) + (proj.Z - port.Z) * (proj.Z - port.Z) < 1.5f * 1.5f)
+            {
                 from = new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift + proj.H - InteriorGenerator.ProjectorLensDrop, proj.Z)
                     + new Basis(Vector3.Up, proj.Turns * Mathf.Pi / 2) * new Vector3(0, 0, proj.D / 2);
+                // the lens's glow, in the picture's mean colour brightened (#1279): a bloom on its glass, off with the screen
+                var toward = (centre - from).Normalized();
+                lensGlow = new MeshInstance3D
+                {
+                    Name = "LensGlow",
+                    Mesh = new QuadMesh { Size = new Vector2(0.18f, 0.18f) },
+                    MaterialOverride = LensGlowMaterial(),
+                    Position = from + toward * 0.02f,
+                    Visible = false,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                };
+                node.AddChild(lensGlow);
+                from -= toward * ApexBehindLens;
+            }
             var right = basis * new Vector3(half.X, 0, 0);
             var up = new Vector3(0, half.Y, 0);
+            // the picture going through the port, where its glass would be (#1279): faint, the cone's own cut through the
+            // wall's line (the screen's picture scaled by apex-to-wall over apex-to-screen), on the beam's axis, seen
+            // from the hall's side so mirrored (PortMaterial); the wall hides all of it but what the hole shows
+            var wallNormal = portBasis * Vector3.Back;
+            float k = Math.Clamp(wallNormal.Dot(wallAt - from) / Math.Max(1e-3f, wallNormal.Dot(centre - from)), 0.01f, 1f);
+            var portPicture = new MeshInstance3D
+            {
+                Name = "PortPicture",
+                Mesh = new QuadMesh { Size = new Vector2(2 * half.X * k, 2 * half.Y * k) },
+                MaterialOverride = PortMaterial(),
+                Transform = new Transform3D(basis, from + (centre - from) * k),
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            node.AddChild(portPicture);
             var marched = BeamFor(from, centre, right, up);
             var beam = new MeshInstance3D
             {
@@ -121,7 +198,7 @@ public partial class InteriorNode
             spot.LookAtFromPosition(lens, centre, Vector3.Up);
             Projectors.RemoveAll(w => !w.TryGetTarget(out var s) || !IsInstanceValid(s));
             Projectors.Add(new WeakReference<SpotLight3D>(spot));
-            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall));
+            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall, no, portPicture, lensGlow));
         }
     }
 
@@ -167,6 +244,92 @@ public partial class InteriorNode
         });
     }
 
+    /// <summary>Every seating bank's cushions, all folded (nobody sits yet).</summary>
+    private static void AddCushions(InteriorNode node)
+    {
+        var l = node.Layout;
+        foreach (var bank in l.Furniture)
+        {
+            if (bank.Type != FurnitureType.SeatingBank) continue;
+            var down = new HashSet<int>();
+            var mi = new MeshInstance3D { Name = "Cushions", Mesh = CushionMesh(node, bank, down) };
+            node.AddChild(mi);
+            node._cushions.Add((bank, mi, down, new HashSet<int>()));
+        }
+    }
+
+    private static ArrayMesh CushionMesh(InteriorNode node, FurniturePlan bank, HashSet<int> down) =>
+        BuildMesh(InteriorMeshBuilder.Cushions(bank, node.Layout.FloorY(bank.Floor) + bank.Lift, down), node._lit!);
+
+    /// <summary>
+    /// The seats let down under whoever sits in this cinema (#1279), anyone's body in the sit pose over a seat; a bank's
+    /// cushions are built again only when its set changes. Per frame from <see cref="CinemaBooths"/>, without allocating.
+    /// </summary>
+    public void UpdateSeats()
+    {
+        for (int b = 0; b < _cushions.Count; b++)
+        {
+            var (bank, mesh, down, next) = _cushions[b];
+            next.Clear();
+            var basis = new Basis(Vector3.Up, bank.Turns * Mathf.Pi / 2);
+            var origin = new Vector3(bank.X, Layout.FloorY(bank.Floor) + bank.Lift, bank.Z);
+            var rows = InteriorGenerator.RowsOf(bank);
+            foreach (var body in BeamBodies)
+            {
+                if (body is not Player.FootPlayer { PoseKind: Player.FootPlayer.PoseSit } p || !IsInstanceValid(p) || !p.IsInsideTree()) continue;
+                var local = basis.Inverse() * (ToLocal(p.GlobalPosition) - origin);
+                if (Math.Abs(local.Z) > bank.D / 2 || Math.Abs(local.X) > bank.W / 2) continue;
+                int id = CinemaSeats.SeatId(rows, local);
+                if (id >= 0) next.Add(id);
+            }
+            if (next.SetEquals(down)) continue;
+            _cushions[b] = (bank, mesh, next, down);
+            mesh.Mesh = CushionMesh(this, bank, next);
+        }
+    }
+
+    private static StandardMaterial3D? _clearGlass;
+
+    /// <summary>The box office's glass, in the counter's frame (x across, z out of its back): see-through, as the mesh's never is.</summary>
+    internal static (float X0, float X1, float Y0, float Y1, float Z) BoxOfficeGlass(FurniturePlan p) =>
+        (-p.W / 2 + 0.055f, p.W / 2 - 0.055f, 1.1f, 1.95f, p.D / 2 - 0.41f);
+
+    /// <summary>
+    /// Clear panes over counters (#1279): the box office's glass, which the interior's one opaque mesh drew as a
+    /// pale wall in front of the cashier. A faint tint and nothing else, so the cashier shows through it.
+    /// </summary>
+    private static void AddClearGlass(InteriorNode node)
+    {
+        var layout = node.Layout;
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        int panes = 0;
+        foreach (var p in layout.Furniture.Where(f => f.Type == FurnitureType.BoxOffice))
+        {
+            var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
+            var at = new Vector3(p.X, layout.FloorY(p.Floor) + p.Lift, p.Z);
+            var (x0, x1, y0, y1, z) = BoxOfficeGlass(p);
+            Vector3 P(float x, float y) => at + basis * new Vector3(x, y, z);
+            foreach (var v in new[] { P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y0), P(x1, y1), P(x0, y1) }) st.AddVertex(v);
+            panes++;
+        }
+        if (panes == 0) return;
+        _clearGlass ??= new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoColor = new Color(0.75f, 0.86f, 0.92f, 0.14f),
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        };
+        node.AddChild(new MeshInstance3D
+        {
+            Name = "ClearGlass",
+            Mesh = st.Commit(),
+            MaterialOverride = _clearGlass,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        });
+    }
+
     /// <summary>The auditorium a screen stands in, as a box in the node's frame (the screen's own spot if none holds it).</summary>
     private static Aabb HallOf(InteriorLayout layout, FurniturePlan p)
     {
@@ -178,15 +341,42 @@ public partial class InteriorNode
         return new Aabb(new Vector3(p.X - 1, y, p.Z - 1), new Vector3(2, 3, 2));
     }
 
-    /// <summary>The booth's state on this cinema: the house lights' level, the cat slides and the beams on or off, and the way they are shown.</summary>
-    public void ShowCinema(float houseLights, bool screen, bool real)
+    /// <summary>
+    /// The booth's state on this cinema: the house lights' level and the screen's wash (one each for the whole
+    /// interior: the hall the camera is in), the halls whose cat slides and beams are on (a bit each), and the way they are shown.
+    /// </summary>
+    public void ShowCinema(float houseLights, int screens, int[]? codes, bool glow, bool real, bool snap = true)
     {
-        _lit?.SetShaderParameter(GHouse, houseLights);
-        ShowGlow(screen);
-        _screenOn = screen;
+        // the house lights fade to their new level (FadeHouse), as a cinema's dim over seconds; another hall's level,
+        // or the first showing, is at once
+        _houseTarget = houseLights;
+        if (_house < 0 || snap)
+        {
+            _house = houseLights;
+            _lit?.SetShaderParameter(GHouse, houseLights);
+        }
+        ShowGlow(glow);
+        _screensOn = screens;
+        _codes = codes;
         _realShow = real;
         RefreshScreens();
     }
+
+    /// <summary>The hall a node-local point is in, or the nearest one (-1 in a cinema with none): whose house lights to show.</summary>
+    public int HallNear(Vector3 at)
+    {
+        int best = -1;
+        float bestD = float.MaxValue;
+        foreach (var s in _screens)
+        {
+            if (s.Hall.HasPoint(at)) return s.No;
+            float d = (s.Hall.GetCenter() - at).LengthSquared();
+            if (d < bestD) (best, bestD) = (s.No, d);
+        }
+        return best;
+    }
+
+    private bool On(CinemaScreen s) => s.No >= 0 && (_screensOn >> s.No & 1) != 0;
 
     /// <summary>
     /// Real projection: the hall whose projector throws the picture, the one the camera stands in
@@ -194,10 +384,45 @@ public partial class InteriorNode
     /// </summary>
     public void ProjectFor(Vector3 camera)
     {
-        int i = _screenOn && _realShow ? _screens.FindIndex(s => s.Projector != null && s.Hall.HasPoint(camera)) : -1;
-        if (i == _projecting) return;
-        _projecting = i;
-        RefreshScreens();
+        int i = _realShow ? _screens.FindIndex(s => s.Projector != null && On(s) && s.Hall.HasPoint(camera)) : -1;
+        if (i != _projecting)
+        {
+            _projecting = i;
+            RefreshScreens();
+        }
+        if (i >= 0 && _screens[i].Marched is { } beam) ShadowBeam(beam, _screens[i].Hall);
+    }
+
+    /// <summary>
+    /// The people standing in the hall being projected, as the beam's capsules (#1279): the beam shows the shadow
+    /// a body throws through it, as the screen does. Written only when a capsule moves.
+    /// </summary>
+    private void ShadowBeam(ShaderMaterial beam, Aabb hall)
+    {
+        int k = 0;
+        var room = hall.Grow(0.5f);
+        foreach (var body in BeamBodies)
+        {
+            if (k >= GBody.Length) break;
+            if (!IsInstanceValid(body) || !body.IsInsideTree()) continue;
+            var feet = ToLocal(body.GlobalPosition);
+            if (!room.HasPoint(feet + Vector3.Up * 0.5f)) continue;
+            Body(beam, k++, new Vector4(feet.X, feet.Z, feet.Y, feet.Y + BodyHeight));
+        }
+        for (; k < GBody.Length; k++) Body(beam, k, new Vector4(0, 0, 0, -1));
+    }
+
+    /// <summary>The projected beam's capsules again, for a body that moves without a booth driving the show (the model viewer's walker).</summary>
+    public void ShadowProjected()
+    {
+        if (_projecting >= 0 && _screens[_projecting].Marched is { } beam) ShadowBeam(beam, _screens[_projecting].Hall);
+    }
+
+    private void Body(ShaderMaterial beam, int k, Vector4 v)
+    {
+        if (_bodies[k].IsEqualApprox(v)) return;
+        _bodies[k] = v;
+        beam.SetShaderParameter(GBody[k], v);
     }
 
     private void RefreshScreens()
@@ -205,14 +430,57 @@ public partial class InteriorNode
         for (int i = 0; i < _screens.Count; i++)
         {
             var s = _screens[i];
-            bool thrown = _screenOn && _realShow && i == _projecting;
-            s.Picture.Visible = _screenOn && !thrown;
+            bool on = On(s), thrown = on && _realShow && i == _projecting;
+            s.Picture.Visible = on && !thrown;
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;
+            HallMusic(s, on);
+            if (s.Port != null) s.Port.Visible = on;
+            if (s.Glow != null) s.Glow.Visible = on;
             if (s.Beam == null) continue;
-            s.Beam.Visible = _screenOn;
+            s.Beam.Visible = on;
             s.Beam.MaterialOverride = _realShow ? s.Marched : PlainBeam();
         }
+    }
+
+    /// <summary>
+    /// A hall's film music while its screen is on (#1279), drawn per hall from the hall's own seed so a multiplex's
+    /// halls do not all play one thing: Radio Swiss Classic on the relay (its modules when the relay is silent) as
+    /// one draw among the film playlist's modules (<see cref="Audio.Tracker.VenueMood.Film"/>), which play at once,
+    /// each hall its own bar of them, the same on every client (the playlist runs on the shared clock). Under the
+    /// hall's ceiling, in its middle.
+    /// </summary>
+    private void HallMusic(CinemaScreen s, bool on)
+    {
+        if (s.No < 0) return;
+        // a new showing (the screen switched off and on again, #1279) draws again
+        int reel = _codes != null && s.No < _codes.Length ? CinemaBooths.ReelOf(_codes[s.No]) : 0;
+        bool playing = _hallMusic.TryGetValue(s.No, out var now);
+        if (playing && (!on || now.Reel != reel))
+        {
+            _hallMusic.Remove(s.No);
+            if (IsInstanceValid(now.Source)) now.Source.QueueFree();
+            playing = false;
+        }
+        if (!on || playing) return;
+        var c = s.Hall.GetCenter();
+        uint seed = (uint)Core.Fnv.Hash($"{Layout.Key}#{s.No}#{reel}");
+        int modules = Audio.Tracker.TrackerLibrary.Playlists[Audio.Tracker.VenueMood.Film].Length;
+        var music = new Audio.Live.VenueMusicSource
+        {
+            Name = $"FilmMusic{s.No}",
+            Station = seed % (uint)(modules + 1) == 0 ? VenueMusic.FilmStation : 0,
+            Volume = VenueMusic.RoomVolume,
+            Mood = Audio.Tracker.VenueMood.Film,
+            // the halls spread evenly round the playlist, so the next hall is a song or two on
+            // the halls spread evenly round the playlist, so the next hall is a song or two on; each showing somewhere in its hall's share
+            Salt = (uint)((s.No + seed % 1000 / 1000.0) * Audio.Tracker.TrackerLibrary.Cycle(Audio.Tracker.VenueMood.Film) / Math.Max(1, _screens.Count)),
+            Position = new Vector3(c.X, s.Hall.Position.Y + Math.Min(3f, s.Hall.Size.Y - 0.5f), c.Z),
+            // the whole hall at full level, as its surround speakers make it
+            Spread = new Vector2(s.Hall.Size.X, s.Hall.Size.Z).Length() / 2,
+        };
+        AddChild(music);
+        _hallMusic[s.No] = (music, reel);
     }
 
     /// <summary>A light pyramid from a point to a rectangle: four faces, bright at the lens, faint at the screen.</summary>
@@ -221,8 +489,9 @@ public partial class InteriorNode
         var corners = new[] { centre - right - up, centre + right - up, centre + right + up, centre - right + up };
         var v = new List<Vector3>();
         var col = new List<Color>();
-        var at = new Color(1f, 0.96f, 0.86f, 0.10f);
-        var screen = new Color(1f, 0.96f, 0.86f, 0.02f);
+        // bright at the lens, nothing left at the screen (#1279)
+        var at = new Color(1f, 0.96f, 0.86f, 0.06f);
+        var screen = new Color(1f, 0.96f, 0.86f, 0f);
         for (int i = 0; i < 4; i++)
         {
             v.Add(from); col.Add(at);
@@ -296,6 +565,38 @@ public partial class InteriorNode
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
         DisableReceiveShadows = true,
+    };
+
+    private static StandardMaterial3D? _portMaterial, _lensGlow;
+
+    /// <summary>The picture in the port (#1279): see-through, unlit, both faces (seen from the hall and the booth), mirrored.</summary>
+    private static StandardMaterial3D PortMaterial() => _portMaterial ??= new StandardMaterial3D
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        AlbedoTexture = Slide(_slide),
+        AlbedoColor = new Color(1, 1, 1, 0.45f),
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+        // no flip of its own: it faces the screen's way, so from the seats (looking back at the port) it is seen from
+        // behind, the screen's picture mirrored, as light going through glass toward you is
+    };
+
+    /// <summary>The lens's bloom (#1279): a soft round glow facing the camera, added on, in the picture's mean colour.</summary>
+    private static StandardMaterial3D LensGlowMaterial() => _lensGlow ??= new StandardMaterial3D
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        AlbedoTexture = new GradientTexture2D
+        {
+            Fill = GradientTexture2D.FillEnum.Radial, FillFrom = new Vector2(0.5f, 0.5f), FillTo = new Vector2(1f, 0.5f),
+            Gradient = new Gradient { Colors = new[] { Colors.White, new Color(1, 1, 1, 0.35f), new Color(1, 1, 1, 0) }, Offsets = new[] { 0f, 0.25f, 1f } },
+            Width = 64, Height = 64,
+        },
+        AlbedoColor = Full(SlideTint(_slide)) * 1.6f,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+        BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+        NoDepthTest = false,
     };
 
     /// <summary>A colour brought to full brightness, its hue kept: the plain beam is as bright for a dark cat as a light one.</summary>
@@ -403,6 +704,8 @@ public partial class InteriorNode
         foreach (var w in Beams)
             if (w.TryGetTarget(out var m)) m.SetShaderParameter(GPicture, Slide(i));
         if (_plainBeam != null) _plainBeam.AlbedoColor = Full(SlideTint(i));
+        if (_portMaterial != null) _portMaterial.AlbedoTexture = Slide(i);
+        if (_lensGlow != null) _lensGlow.AlbedoColor = Full(SlideTint(i)) * 1.6f;
         foreach (var w in Projectors)
             if (w.TryGetTarget(out var s) && IsInstanceValid(s)) s.LightProjector = Letterboxed(i);
     }

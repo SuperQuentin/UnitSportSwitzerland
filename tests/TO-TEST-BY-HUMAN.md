@@ -55,6 +55,30 @@ Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --a
 - [ ] Walk past a café or bar, then into one → its music fades in as you near it (it wakes within ~15 m of its reach) and plays inside.
 - [ ] Settings › Audio › **Sound occlusion** off, stand behind a building from a playing car radio → heard as in the open; on → muffled again. Same row on a pad and in the VR panel.
 
+## Cinemas: hall height, a panel per hall, aisles to the walls, the service door, film music ([#1280](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1280))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (outside Cinémas du Grütli, Geneva).
+
+- [ ] Go in: the halls are three storeys high (8 m), not one.
+- [ ] The booth (up the stair in the staff corridor): walk its whole length → nothing blocks the way, and every hall's panel beside its projector can be reached.
+- [ ] At a hall's panel, E on its right half → only that hall's screen comes on; another hall's panel works its own. Its left half cycles that hall's lights. Same with the pad's interact and a VR grip.
+- [ ] Online, a second player in another hall → sees each hall's screen as set; a late joiner too.
+- [ ] In a hall: the side aisles run up against the side walls, the walkway along the back wall behind the top row, no drop anywhere.
+- [ ] At the top of one aisle: walk up the steps to the service door, E opens it → walk through into the booth (onto its deck in a floor-level booth), and back down into the hall.
+- [ ] A hall's screen on → its film music plays (Radio Swiss Classic; offline, the Film modules); off → it stops. Judge the five Film modules: drop any that do not fit.
+- [ ] Grütli's third hall (and Empire's 3rd, 5th, 6th) is mid-film when you arrive: its door shut, lights off, the cat on, music playing. The others lit and dark; their doors shut too and open with E.
+- [ ] Two halls showing side by side → different music in each (some halls play the radio, others the modules).
+- [ ] Walk along a row's lane to a seat → no climbing through seats, the step down to the next row at the lane's front edge; E sits facing the screen, E or walking stands up. Rows staggered, the top row against the back wall.
+- [ ] Switch a hall's screen off and on → another tune.
+- [ ] Sit down → your seat's cushion folds down under you (and someone else's, online); stand up → it folds up again.
+- [ ] Lights off in a hall → they fade over some seconds to dark but for the screen's glow; dim → between. Walk into another hall → its level at once.
+- [ ] Look at a hall's port from the seats with the screen on → the picture faint in the hole, the lens glowing in the picture's colour; screen off → both gone.
+- [ ] The lobby's music: the same level across the room.
+- [ ] The beam: bright at the lens, nearly gone at the screen, faint from the side; walk into it → a dark wedge behind you in the beam, not only on the screen.
+- [ ] Grütli from outside → one entrance, no extra doors round the building.
+- [ ] The box office's glass → see-through, the cashier visible behind it.
+- [ ] High detail, in a hall with its screen on, walk into the beam → the cat on you, your shadow on the screen.
+
 ## Stuck keys after a hitch ([#1284](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1284))
 
 Windowed on Windows, with a heavy place to cause hitches (Geneva: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500300,1118450`).

@@ -85,6 +85,9 @@ public static partial class InteriorGenerator
         /// <summary>Where along a ±u wall a point at <paramref name="v"/> is, as <see cref="OpeningPlan.Center"/> counts.</summary>
         public float OnUWall(float v) => AlongZ ? -D / 2 + v : Point(0, v).X;
 
+        /// <summary>The v of a point at <paramref name="c"/> along a ±u wall: <see cref="OnUWall"/> undone.</summary>
+        public float FromUWall(float c) => AlongZ ? c + D / 2 : V(c, 0);
+
         /// <summary>Quarter turns that face a piece's front (its local +Z) toward +v, −v, +u or −u.</summary>
         public int FaceVPlus => AlongZ ? 0 : Dir > 0 ? 1 : 3;
         public int FaceVMinus => (FaceVPlus + 2) % 4;
