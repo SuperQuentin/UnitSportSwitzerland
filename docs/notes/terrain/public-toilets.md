@@ -59,6 +59,36 @@ host wall, `b` away from it.
   back wall, a women's and a men's sign over their doors; a `WcSignAll` over the way in.
 - **Single** (really no space; ~1.4 x 1.9 m): one `WC` room, bowl, basin, its own door, `WcSignAll`.
 
+## Where each building has them
+
+`PublicToilets(l, floor, host, strip, hostSide, startNear, people, clear, reuse)` plans into a strip; the
+rest of the strip comes back (at least `ToiletRest`, 1.2 m: a shorter sliver widens the set's last room)
+for the caller's store. Bump a generator's rules constant when its toilets change.
+
+- **Cinema** (`CinemaRules` 10): the column beside the lobby, 3.4 m wide in a lobby 9 m deep or more
+  (gendered), 3 m (shared), 2 m in a cinema under 10 m wide (one WC); seats ~0.6 a m² of hall.
+- **Bowling** (`BowlingRules` 5): the concourse's service column the same way; six people a lane, twice.
+- **Arcade** (`ArcadeRules` 6): the 3 m strip across the back, from the end away from the door; a
+  store kept at the door's end when a mall's back hall is reached through it; a player per 4 m².
+- **Dining** (`InteriorLayout.CurrentVersion` 38): `dining` (the kitchen strip's end, a strip off the
+  room, a bar's store, or the building's own WC adopted with `AdoptWC`); seats 1 a 1.4 m².
+- **IKEA** (`IkeaRules` 2): a low block along the back wall, `ikea`.
+- **Not yet**: shops, offices and civic buildings planned by the cored rules keep their plain `WC`
+  rooms; stations and church halls have no planner of their own.
+
+## Checks
+
+- `ToiletSizingTests` (tier 0): the sets and counts.
+- `ToiletCheck.Problems` (each generator's probe: `--cinemacheck`, `--bowlingcheck`, `--arcadecheck`,
+  `--diningcheck`, `--ikeacheck`, all `--systems ui`): the set the case's footprint should have, and a
+  whole one: basins and mirrors in each anteroom, its two doorways on square walls, a bowl and a leaf in
+  every stall and accessible WC, as many screens as urinals and one, the rails, the signs, every
+  doorway of a toilet room reachable among its pieces. Each generator has a single, a shared and a
+  gendered case.
+- Model viewer: `Interiors / Public toilets - Gendered|Shared|Single`, and every piece under Furniture.
+  Inside: `--modelsonly "Public toilets - Gendered" --modelsyaw 180 --modelspitch -5 --modelslook 0,1.4,0.6,4.2`
+  (the doorways from the hall), `--modelsyaw 0 --modelspitch -12 --modelslook 0.6,0.9,0.9,2.5` (the urinals).
+
 ## Doors
 
 - Stall doors, the accessible WC's and the single WC's are real leaves (`InnerDoorPlan`, as a flat's

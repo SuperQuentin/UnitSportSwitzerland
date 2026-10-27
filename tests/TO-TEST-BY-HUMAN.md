@@ -22,6 +22,18 @@ Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --a
 - [ ] Dev region (6,699 tiles), first server boot with `user://cache/locate/` deleted → the `[locate] building index: … in N ms` line. Estimated ~50 s: note the real time here. During the build, `/locate apartment building` from a player should answer at once round them, with the "isn't finished" note only when something unread is nearer.
 - [ ] A region with `pois.bin` → `/locate a lake`, `/locate station`, `/locate church` (named after the survey's church) answer with names.
 
+## Public toilets by gender ([#1288](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1288))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks`; CinéVersoix `--at 2501700,1126110`, BowlinGland `--at 2510395,1140935`.
+
+- [ ] In a multiplex or a big bowling centre's lobby, find the toilets at its end → a women's and a men's doorway with their signs over them, and the accessible WC's door. From the lobby, look into each doorway → only the anteroom's basins and mirrors, never a stall or a urinal.
+- [ ] Walk in: anteroom, then the washroom by the side doorway at its far end → stalls along the far wall; in the men's, urinals with screens along the lobby wall. Walking feels right: no snagging on the screens, the dryer, the doorways (0.9 m).
+- [ ] E at a stall door → it swings into the stall and shuts again; step in and turn round with the door open → room to stand (the stall is 0.88 m clear). Pad: Y. VR: grip the door.
+- [ ] Two clients: one opens a stall door → the other sees it open.
+- [ ] A small town cinema, a café, a bar → a shared anteroom with a women's and a men's stall, or one WC with its own door and a sign. A village Beiz in a house → the house's WC has the sign and a door leaf.
+- [ ] The light in the stalls (they have no lamp of their own; the washroom's reaches them) → not darker than the washroom.
+- [ ] An IKEA → toilets in a low block along the back wall of the market hall, the stock room beside them.
+
 ## Geneva lag, doors, sound occlusion setting ([#1282](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1282))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500300,1118450` (Geneva).
