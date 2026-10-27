@@ -551,6 +551,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     [Export] public int DeviceKind { get; set; }
 
     private int _visualAppearance;
+    /// <summary>The figure the body on screen was built from (a probe checks the owner's own body follows the Character menu).</summary>
+    public int DrawnAppearance => _visualAppearance;
 
     /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
     private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
@@ -2286,6 +2288,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void ApplyFootPose()
     {
+        // the figure chosen in the Character menu reaches the owner after the body was built (PublishAppearance): draw it again
+        if (AppearanceBits != _visualAppearance) RefreshVisual();
         if (_walker == null) return;
         // clothes put on or taken off (#251) are a new look
         if (_poseOutfit != OutfitBits)

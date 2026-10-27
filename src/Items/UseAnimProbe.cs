@@ -138,6 +138,7 @@ public partial class UseAnimProbe : ChatProbe
         // and a figure of A's choosing (#394), as the Character menu sets it (in memory: the probe saves nothing; ClientWorld publishes it)
         Core.GameSettings.Current.AppearanceBits = Chosen;
         Expect(await Until(() => me.AppearanceBits == Chosen, 5), "the appearance is published on A's player");
+        Expect(await Until(() => me.DrawnAppearance == Chosen, 5), "A's own body is redrawn as the chosen figure");
         Say("dressed");
         // dressed on a bike too: B must see the cyclist in the same clothes
         await Heard("B", "seen", 60);
