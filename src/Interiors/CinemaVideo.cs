@@ -36,9 +36,9 @@ public static class CinemaVideo
 
     /// <summary>
     /// Local files for the checks only (<c>--cinemavideolocal</c>, on the server and the clients): a player's
-    /// link is always the web's.
+    /// link is always the web's. Set by <see cref="CinemaBooths.Create"/> from the command line.
     /// </summary>
-    public static readonly bool AllowLocal = Core.CmdArgs.Has("--cinemavideolocal");
+    public static bool AllowLocal { get; set; }
 
     /// <summary>
     /// Whether a link may go on a screen: http(s), printable, not too long; a check's local file with
