@@ -562,6 +562,40 @@ public partial class PhoneScreens : Node
     private static readonly List<Place> Recents = new();
     private const int RecentsShown = 3, NearShown = 4, TownsShown = 8;
 
+    private const string RecentsFile = "user://phone_recents.json";
+    private static bool _recentsLoaded;
+
+    /// <summary>Recents kept between sessions: the places' LV95 coordinates, matched back to the index.</summary>
+    private static void LoadRecents(PlaceSearchUi places)
+    {
+        if (_recentsLoaded) return;
+        _recentsLoaded = true;
+        try
+        {
+            if (!Godot.FileAccess.FileExists(RecentsFile)) return;
+            using var f = Godot.FileAccess.Open(RecentsFile, Godot.FileAccess.ModeFlags.Read);
+            if (Json.ParseString(f.GetAsText()).Obj is not Godot.Collections.Array list) return;
+            foreach (var item in list)
+                if (item.Obj is Godot.Collections.Array pair && pair.Count == 2
+                    && places.All.FirstOrDefault(p => Math.Abs(p.E - (double)pair[0]) < 1 && Math.Abs(p.N - (double)pair[1]) < 1) is { } place
+                    && !Recents.Contains(place))
+                    Recents.Add(place);
+        }
+        catch (Exception e) { GD.PushWarning($"[phone] recents not read: {e.Message}"); }
+    }
+
+    private static void SaveRecents()
+    {
+        try
+        {
+            var list = new Godot.Collections.Array();
+            foreach (var p in Recents.Take(RecentsShown)) list.Add(new Godot.Collections.Array { p.E, p.N });
+            using var f = Godot.FileAccess.Open(RecentsFile, Godot.FileAccess.ModeFlags.Write);
+            f.StoreString(Json.Stringify(list));
+        }
+        catch (Exception e) { GD.PushWarning($"[phone] recents not saved: {e.Message}"); }
+    }
+
     private PlaceKind? _mapKind;
     private readonly List<(Button Chip, PlaceKind? Kind, string Name)> _chips = new();
 
@@ -582,6 +616,7 @@ public partial class PhoneScreens : Node
             SetText(_mapHint, "No map here.");
             return;
         }
+        LoadRecents(places);
         foreach (var (chip, kind, name) in _chips) chip.Text = _mapKind == kind ? $"● {name}" : name;
         string q = _query.Text.Trim();
         SetText(_mapHint, !Permissions.CanTeleport ? "This server does not allow travelling: ask a player in Contacts to bring you." : "");
@@ -626,6 +661,7 @@ public partial class PhoneScreens : Node
             {
                 Recents.Remove(place);
                 Recents.Insert(0, place);
+                SaveRecents();
                 TravelPicked?.Invoke(place);
             };
             b.Disabled = !Permissions.CanTeleport;
@@ -1474,6 +1510,7 @@ public partial class PhoneScreens : Node
     /// <summary>The time on both screens, the travelling dots and the shutter's flash, set only when they change.</summary>
     public void Tick(string clock, string date, float dt)
     {
+        FollowFocusHint();
         if (clock != _clockShown)
         {
             _clockShown = clock;
@@ -1543,7 +1580,35 @@ public partial class PhoneScreens : Node
         return l;
     }
 
-    private string HintText(string accept, string back) =>
+    private Control? _hintFocus;
+    private string? _hintVerb;
+
+    /// <summary>The page's hint names what Enter / A / a tap does to the control that has the keys now (#1253).</summary>
+    private void FollowFocusHint()
+    {
+        var owner = Inner.GuiGetFocusOwner();
+        if (owner == _hintFocus) return;
+        _hintFocus = owner;
+        _hintVerb = AcceptVerb(owner);
+        foreach (var (label, accept, back) in _hints) label.Text = HintText(accept, back);
+    }
+
+    private string? AcceptVerb(Control? c)
+    {
+        if (c == null || !c.IsVisibleInTree()) return null;
+        if (c is LineEdit) return "search";
+        if (c is not Button b || b.Text.Length == 0) return null;
+        string name = b.Text.Split("   ")[0].Split(',')[0].Trim();
+        if (name.Length > 22) name = name[..21] + "…";
+        if (_homeTiles.Contains(b)) return $"open {name}";
+        if (Shown == Page.Map && _results.IsAncestorOf(b)) return $"travel to {name}";
+        if (_chips.Any(x => x.Chip == b)) return $"show {name.TrimStart('●', ' ')}";
+        return name;
+    }
+
+    private string HintText(string accept, string back) => HintLine(_hintVerb ?? accept, back);
+
+    private string HintLine(string accept, string back) =>
         _vr ? $"tap  {accept}      swipe right or B  {back}"
         : _touch ? $"tap  {accept}      swipe right  {back}"
         : InputHints.Pad ? $"A  {accept}      B  {back}  (hold: put away)" : $"Enter  {accept}      Esc  {back}  (hold: put away)";
