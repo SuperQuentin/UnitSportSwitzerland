@@ -44,7 +44,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 - `never-capture-thing-player-controls` — Never capture "the thing the player controls" at startup
 - `footplayer-spectatorcamera-read-physical-keys` — `FootPlayer` and `SpectatorCamera` read PHYSICAL keys every frame
-- `held-keys` — `PlayerInput.HoldOff()` at a switch (Shift of Shift+T no longer sinks the spectator camera); Windows stuck keys released against `GetAsyncKeyState` by scan code (#1002)
+- `held-keys` — `PlayerInput.HoldOff()` at a switch (Shift of Shift+T no longer sinks the spectator camera); Windows stuck keys released against `GetAsyncKeyState` by scan code (#1002), the key-up on the key-down's device and keycode (#1283)
 - `mode-owns-screen-drop-anchors` — A mode that owns the screen must drop the anchors of the mode it replaced
 - `never-default-world-origin-lv95` — Never default the world origin to LV95 0/0: Switzerland is 2.6 million metres from there, so float precision...
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key
