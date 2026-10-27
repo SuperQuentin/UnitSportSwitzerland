@@ -99,6 +99,10 @@ public static partial class InteriorMeshBuilder
         RoomType.Kitchen => (C(0.72f, 0.70f, 0.66f), C(0.86f, 0.88f, 0.82f), C(0.95f, 0.95f, 0.93f)),
         RoomType.Bedroom => (C(0.62f, 0.52f, 0.46f), C(0.82f, 0.86f, 0.90f), C(0.95f, 0.95f, 0.95f)),
         RoomType.Bathroom or RoomType.WC => (C(0.78f, 0.80f, 0.82f), C(0.70f, 0.82f, 0.88f), C(0.95f, 0.96f, 0.97f)),
+        // #1285: public toilets: dark tiles underfoot, pale tiled walls, the anteroom a shade warmer
+        RoomType.WomensToilet or RoomType.MensToilet or RoomType.ToiletStall or RoomType.AccessibleToilet
+            => (C(0.36f, 0.38f, 0.40f), C(0.82f, 0.86f, 0.88f), C(0.95f, 0.96f, 0.97f)),
+        RoomType.ToiletLobby => (C(0.36f, 0.38f, 0.40f), C(0.88f, 0.86f, 0.82f), C(0.95f, 0.96f, 0.97f)),
         RoomType.Office or RoomType.Classroom => (C(0.46f, 0.48f, 0.52f), C(0.88f, 0.88f, 0.86f), C(0.93f, 0.93f, 0.93f)),
         RoomType.Shop => (C(0.80f, 0.78f, 0.74f), C(0.94f, 0.93f, 0.90f), C(0.96f, 0.96f, 0.96f)),
         RoomType.Nave => (C(0.66f, 0.62f, 0.56f), C(0.90f, 0.88f, 0.82f), C(0.80f, 0.76f, 0.70f)),
@@ -1002,7 +1006,10 @@ public static partial class InteriorMeshBuilder
             // #1250: a booth's deck collides as its slab and the ramp up its steps
             or FurnitureType.BoothDeck
             // #1242: a dance floor is danced on
-            or FurnitureType.DanceFloor);
+            or FurnitureType.DanceFloor
+            // #1285: what hangs on a toilet's walls, and the signs over its doorways
+            or FurnitureType.HandDryer or FurnitureType.GrabRail or FurnitureType.WcSignWomen or FurnitureType.WcSignMen
+            or FurnitureType.WcSignAll or FurnitureType.WcSignAccessible);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
         if (IsVenuePiece(p.Type))
         {
@@ -1022,6 +1029,11 @@ public static partial class InteriorMeshBuilder
         if (IsDiningPiece(p.Type))
         {
             DiningPiece(s, p, at, basis);
+            return;
+        }
+        if (IsToiletPiece(p.Type))
+        {
+            ToiletPiece(s, p, at, basis);
             return;
         }
 

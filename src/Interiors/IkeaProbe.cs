@@ -158,7 +158,7 @@ public partial class IkeaProbe : Node
         Check(layout.Floors.Count == 1 && layout.Below == 0, "one floor, no cellar");
 
         var hall = layout.Floors[0].Rooms[0];
-        Check(layout.Floors[0].Rooms.Count == 1 && hall.Type == RoomType.IkeaMarket, "one market hall");
+        Check(layout.Floors[0].Rooms.Count(r => r.Type == RoomType.IkeaMarket) == 1 && hall.Type == RoomType.IkeaMarket, "one market hall");
         Check(hall.Area > 0.9f * layout.Width * layout.Depth, "the hall is the whole slab");
         Check(hall.Openings.Any(o => o.Kind == OpeningKind.Entry && o.Width >= 3f),
             "the entrance is a store's, not a house's");
@@ -182,6 +182,18 @@ public partial class IkeaProbe : Node
 
         var problems = InteriorValidator.Validate(layout);
         Check(problems.Count == 0, $"the plan validates{(problems.Count == 0 ? "" : ": " + string.Join("; ", problems.Take(4)))}");
+        // the public toilets along the back wall (#1285): a store has room for every set
+        var loo = ToiletCheck.Problems(layout, ToiletSet.Gendered, accessible: true);
+        Check(loo.Count == 0, $"toilets {ToiletCheck.Describe(layout)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
+        // and a slab of each size has the set it has room for
+        foreach (var (w, d, want) in new[] { (9f, 10f, ToiletSet.Single), (9f, 12f, ToiletSet.Shared), (40f, 30f, ToiletSet.Gendered) })
+        {
+            var small = InteriorGenerator.IkeaOfSize(w, d);
+            if (small == null) { Check(false, $"a {w}x{d} m store is planned"); continue; }
+            var bad = InteriorValidator.Validate(small);
+            bad.AddRange(ToiletCheck.Problems(small, want, accessible: want == ToiletSet.Gendered));
+            Check(bad.Count == 0, $"a {w}x{d} m store: toilets {ToiletCheck.Describe(small)}{(bad.Count == 0 ? "" : ": " + string.Join("; ", bad.Take(4)))}");
+        }
 
         // the plan as a picture, the way SiteProbe writes its sites: the one artefact that shows
         // the rows of bins and the lane in from the door at a glance

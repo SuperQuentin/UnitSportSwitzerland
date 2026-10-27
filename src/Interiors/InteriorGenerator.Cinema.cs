@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 9;
+    public const int CinemaRules = 10;
 
     private const float BoothDepth = 2.6f, LobbyMin = 4.6f, LobbyMax = 12f, AudMinLength = 8.5f, AudMaxLength = 32f;
     private const float AudMinWidth = 7f, AudTargetWidth = 13f, AudMaxWidth = 18f, StaffWidth = 1.6f;
@@ -112,6 +112,7 @@ public static partial class InteriorGenerator
         }
         (l.StoreyHeight, l.EntryX, l.EntryWidth, l.Type, l.Shop) = (storey, entryX, entryW, type, shop);
         l.Floors.Clear();
+        l.InnerDoors.Clear();
         l.Below = 0;
         CinemaPlans.Remove(l);
         return false;
@@ -161,12 +162,15 @@ public static partial class InteriorGenerator
         l.Below = 0;
         l.Floors.Clear();
         l.Lifts.Clear();
+        l.InnerDoors.Clear();
         var ground = new FloorPlan();
         l.Floors.Add(ground);
         float clear = l.StoreyHeight - Slab, top = Math.Min(2.05f, clear - 0.2f);
 
-        // the WC column at the lobby's end away from the door (and the staff corridor)
-        const float svcW = 2.6f;
+        // the public toilets in a column at the lobby's end away from the door (and the staff corridor), by gender
+        // in a deep lobby (#1285), then a store
+        // a narrow one keeps a column for one WC
+        float svcW = lobby >= 9f && progW >= 10.4f ? 3.4f : progW >= 10f ? 3.0f : 2.0f;
         bool svc = progW >= svcW + 7f && lobby >= 2.4f;
         float cU0 = svc && !staffAtL ? uL + svcW : uL, cU1 = svc && staffAtL ? uR - svcW : uR;
         var hall = new RoomPlan { Type = RoomType.CinemaLobby };
@@ -176,20 +180,16 @@ public static partial class InteriorGenerator
         if (svc)
         {
             float su0 = staffAtL ? uR - svcW : uL;
-            var program = new List<RoomType> { RoomType.WC };
-            if (lobby >= 5.4f) program.Add(RoomType.WC);
-            if (lobby - 2.6f * program.Count >= 1.8f) program.Add(RoomType.Storage);
-            float step = lobby / program.Count;
-            for (int i = 0; i < program.Count; i++)
+            var side = staffAtL ? frame.UMinus : frame.UPlus;
+            // seats: about 0.6 a square metre of hall [D: 157 seats a screen, ProCinema]
+            int seats = (int)(halls * hallW * hallLen * 0.6f);
+            var (_, left) = PublicToilets(l, ground, iLobby, frame.Rect(su0, 0, su0 + svcW, lobby), side, frame.Point(su0 + svcW / 2, lobby), seats);
+            if (left != null)
             {
-                var room = new RoomPlan { Type = program[i] };
-                SetRect(room, frame.Rect(su0, step * i, su0 + svcW, i == program.Count - 1 ? lobby : step * (i + 1)));
-                ground.Rooms.Add(room);
-                int ri = ground.Rooms.Count - 1;
-                float c = frame.OnUWall(step * (i + 0.5f));
-                var side = staffAtL ? frame.UMinus : frame.UPlus;
-                room.Openings.Add(new OpeningPlan { Side = side, Center = c, Width = InnerDoor, Top = top, Kind = OpeningKind.Door, Other = iLobby });
-                hall.Openings.Add(new OpeningPlan { Side = Opposite(side), Center = c, Width = InnerDoor, Top = top, Kind = OpeningKind.Door, Other = ri });
+                var store = new RoomPlan { Type = RoomType.Storage };
+                SetRect(store, left);
+                ground.Rooms.Add(store);
+                Opening(ground.Rooms, ground.Rooms.Count - 1, side, iLobby, Mid(store, side), InnerDoor, top, OpeningKind.Door);
             }
         }
 

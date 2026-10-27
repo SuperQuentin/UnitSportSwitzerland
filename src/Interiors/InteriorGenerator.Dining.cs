@@ -98,10 +98,17 @@ public static partial class InteriorGenerator
             taken.Add(best);
             // through its doors: the first kitchen, store or pantry becomes its kitchen, a dining room its Säli
             bool kitchen = false;
-            foreach (var o in rooms[best].Openings)
+            int store = -1;
+            foreach (var o in rooms[best].Openings.ToList())
             {
                 if (o.Kind != OpeningKind.Door || o.Other < 0 || o.Other >= rooms.Count || taken.Contains(o.Other)) continue;
                 var next = rooms[o.Other];
+                // a bar or a club, which cooks nothing, may have its toilets there instead (#1285): kept for BackOfHouse
+                if (store < 0 && !Cooks(guest) && next.Type is RoomType.Storage or RoomType.Pantry && next.Area >= 5f)
+                {
+                    store = o.Other;
+                    continue;
+                }
                 if (!kitchen && next.Type is RoomType.Kitchen or RoomType.Storage or RoomType.Pantry && next.Area >= 5f)
                 {
                     next.Type = RoomType.GastroKitchen;
@@ -130,7 +137,22 @@ public static partial class InteriorGenerator
             }
             // a place that serves food and still has none: its kitchen, and a WC beside it, walled off the
             // back of its own room; an oversized room gives a second room through an arch (#1250)
-            BackOfHouse(l, rooms, best, guest, kitchen, taken, was);
+            bool toilets = BackOfHouse(l, rooms, best, guest, kitchen, store, taken, was);
+            // none of its own: a WC the building has on its ground floor is the venue's (a Beiz's in the house, #1285)
+            if (!toilets)
+            {
+                int f = l.Floors.FindIndex(fl => fl.Rooms == rooms);
+                for (int i = 0; i < rooms.Count; i++)
+                {
+                    if (rooms[i].Type != RoomType.WC || rooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry)) continue;
+                    // in by the doorway from the biggest room it opens onto: the hall, not a pantry behind it
+                    var door = rooms[i].Openings.Where(o => o.Kind == OpeningKind.Door && o.Other >= 0 && o.Other < rooms.Count)
+                        .OrderByDescending(o => rooms[o.Other].Area).FirstOrDefault();
+                    if (door == null) continue;
+                    AdoptWC(l, f, i, door);
+                    break;
+                }
+            }
         }
         // the shop counter a shop building is promised goes to its shop, never into a restaurant
         if (taken.Count > 0 && l.Shop != Loot.ShopType.None && !l.Floors.Any(fl => fl.Rooms.Any(r => r.Type == RoomType.Shop)))
@@ -161,8 +183,11 @@ public static partial class InteriorGenerator
     /// the guest room; a room still over <see cref="GuestMaxArea"/> is cut across, the far part a second
     /// guest room through a wide arch. Each cut is given up where it would cross a door.
     /// </summary>
-    private static void BackOfHouse(InteriorLayout l, List<RoomPlan> rooms, int gi, RoomType guest, bool kitchen, HashSet<int> taken, RoomType was)
+    /// <param name="store">A store off a venue that cooks nothing: its toilets when none fit in its room, else its glass-wash (#1285).</param>
+    /// <returns>Whether the venue has its public toilets (#1285).</returns>
+    private static bool BackOfHouse(InteriorLayout l, List<RoomPlan> rooms, int gi, RoomType guest, bool kitchen, int store, HashSet<int> taken, RoomType was)
     {
+        bool toilets = false;
         var g = rooms[gi];
         var entry = g.Openings.Where(o => o.Kind is OpeningKind.Entry or OpeningKind.Door).OrderByDescending(o => o.Kind == OpeningKind.Entry).FirstOrDefault();
         var inSide = entry?.Side ?? Side.Front;
@@ -193,23 +218,61 @@ public static partial class InteriorGenerator
                 {
                     taken.Add(ki);
                     var k = rooms[ki];
-                    // the WC at one end of the strip, from a room that seats enough to need one, its door onto the guest room
-                    var end = Turn(back);
-                    int wi = g.Area >= 30f && wall - 2.0f >= 2.6f ? Carve(l, rooms, ki, end, 1.9f, RoomType.WC) : -1;
-                    if (wi >= 0)
+                    // the public toilets at one end of the strip (#1285), from a room that seats enough to need them, their
+                    // doors onto the guest room: what the strip holds past a kitchen of 2.4 m, by gender in a big restaurant
+                    // the strip's end with no doorway in it (an extra street door is often there, #498)
+                    var end = k.Openings.Any(o => o.Side == Turn(back) && o.Kind != OpeningKind.Window)
+                        && !k.Openings.Any(o => o.Side == Opposite(Turn(back)) && o.Kind != OpeningKind.Window) ? Opposite(Turn(back)) : Turn(back);
+                    int seats = (int)(g.Area / 1.4f);
+                    var loo = !toilets && g.Area >= 18f ? ToiletSizing.Choose(wall - 2.4f, back is Side.Front or Side.Back ? k.Depth : k.Width, seats)
+                        : ToiletSizing.Plan.None;
+                    // a doorway in the strip's end wall stays with the WC it always was
+                    bool endDoor = k.Openings.Any(o => o.Side == end && o.Kind != OpeningKind.Window);
+                    int wi = loo.Set != ToiletSet.None ? Carve(l, rooms, ki, end, endDoor ? 1.9f : loo.Length, RoomType.WC) : -1;
+                    if (wi >= 0 && !endDoor && wi == rooms.Count - 1 && rooms[wi].Openings.All(o => o.Kind == OpeningKind.Window))
                     {
+                        var piece = rooms[wi];
+                        rooms.RemoveAt(wi);
+                        var at = end switch
+                        {
+                            Side.Front => ((piece.X0 + piece.X1) / 2, piece.Z0),
+                            Side.Back => ((piece.X0 + piece.X1) / 2, piece.Z1),
+                            Side.Left => (piece.X0, (piece.Z0 + piece.Z1) / 2),
+                            _ => (piece.X1, (piece.Z0 + piece.Z1) / 2),
+                        };
+                        PublicToilets(l, l.Floors.First(fl => fl.Rooms == rooms), gi, new RectPlan(piece.X0, piece.Z0, piece.X1, piece.Z1), Opposite(back), at, seats);
+                        for (int i = wi; i < rooms.Count; i++) taken.Add(i);
+                        toilets = true;
+                    }
+                    else if (wi >= 0)
+                    {
+                        // a strip end that carried a doorway on: the one WC it always was, the public one
                         taken.Add(wi);
                         Opening(rooms, gi, back, wi, Mid(rooms[wi], back), InnerDoor, top, OpeningKind.Door);
+                        AdoptWC(l, l.Floors.FindIndex(fl => fl.Rooms == rooms), wi, rooms[wi].Openings[^1]);
+                        toilets = true;
                     }
                     Opening(rooms, gi, back, ki, Mid(k, back), InnerDoor, top, OpeningKind.Door);
                 }
+            }
+        }
+        // a venue the kitchen strip gave no toilets (a bar, a club, a café with no kitchen of its own): a strip of them
+        // walled off a wall with no doorway in it (#1285)
+        if (!toilets && g.Area >= 18f) toilets = ToiletsOff(l, rooms, gi, back, taken, top);
+        if (store >= 0)
+        {
+            if (!toilets) toilets = StoreToilets(l, rooms, gi, store, taken);
+            if (!taken.Contains(store))
+            {
+                rooms[store].Type = RoomType.GastroKitchen;
+                taken.Add(store);
             }
         }
         // a hall of a room: cut across its length, the far part a second room of the same kind through an
         // arch (the Säli, no bar of its own); what is still over GuestMaxArea after that is cut again, the far
         // parts left the kind of room they were before the venue took the room (a shop, a living room, an
         // office), behind a door (Café du Vieil Ouchy's room was 590 m2: one venue, not a warren of bars, nor stores)
-        if (guest is RoomType.ClubRoom) return;
+        if (guest is RoomType.ClubRoom) return toilets;
         bool sali = false;
         var todo = new Queue<int>();
         todo.Enqueue(gi);
@@ -261,6 +324,105 @@ public static partial class InteriorGenerator
             sali = true;
             todo.Enqueue(ri);
         }
+        return toilets;
+    }
+
+    /// <summary>
+    /// A store off guest room <paramref name="gi"/> made the venue's public toilets (#1285), when its one doorway is
+    /// onto the room, the room runs the length of that wall and a set fits: a bar's or a club's, which cook nothing.
+    /// The set's first room takes the store's slot; what is left of it is a store again.
+    /// </summary>
+    private static bool StoreToilets(InteriorLayout l, List<RoomPlan> rooms, int gi, int si, HashSet<int> taken)
+    {
+        var s = rooms[si];
+        var g = rooms[gi];
+        var doors = s.Openings.Where(o => o.Kind != OpeningKind.Window).ToList();
+        if (doors.Count != 1 || doors[0].Kind != OpeningKind.Door || doors[0].Other != gi) return false;
+        var side = doors[0].Side;
+        bool alongX = side is Side.Front or Side.Back;
+        if (alongX ? g.X0 > s.X0 + 0.01f || g.X1 < s.X1 - 0.01f : g.Z0 > s.Z0 + 0.01f || g.Z1 < s.Z1 - 0.01f) return false;
+        float len = alongX ? s.Width : s.Depth, deep = alongX ? s.Depth : s.Width;
+        int seats = (int)(g.Area / 1.4f);
+        if (ToiletSizing.Choose(len, deep, seats).Set == ToiletSet.None) return false;
+        float c = doors[0].Center, mid = alongX ? (s.X0 + s.X1) / 2 : (s.Z0 + s.Z1) / 2;
+        g.Openings.RemoveAll(o => o.Kind == OpeningKind.Door && o.Other == si && Math.Abs(o.Center - c) < 0.01f);
+        var rect = new RectPlan(s.X0, s.Z0, s.X1, s.Z1);
+        var at = alongX ? (c > mid ? s.X0 : s.X1, (s.Z0 + s.Z1) / 2) : ((s.X0 + s.X1) / 2, c > mid ? s.Z0 : s.Z1);
+        int before = rooms.Count;
+        var (_, left) = PublicToilets(l, l.Floors.First(fl => fl.Rooms == rooms), gi, rect, side, at, seats, reuse: si);
+        if (left != null)
+        {
+            var store = new RoomPlan { Type = RoomType.Storage };
+            SetRect(store, left);
+            rooms.Add(store);
+            Opening(rooms, rooms.Count - 1, side, gi, Mid(store, side), InnerDoor, Math.Min(2.05f, l.ClearOf(store) - 0.2f), OpeningKind.Door);
+        }
+        taken.Add(si);
+        for (int i = before; i < rooms.Count; i++) taken.Add(i);
+        return true;
+    }
+
+    /// <summary>
+    /// Public toilets (#1285) in a strip walled off guest room <paramref name="gi"/>: off its back wall, else a side
+    /// wall, one with no doorway in or near it, as deep as the set the wall's length holds needs (a gendered set
+    /// 3.4 m, the shared anteroom 2.9, a WC 2.0), while the room keeps its size; what the set leaves of the strip
+    /// is a store off the room. False when no wall takes them.
+    /// </summary>
+    private static bool ToiletsOff(InteriorLayout l, List<RoomPlan> rooms, int gi, Side back, HashSet<int> taken, float top)
+    {
+        var g = rooms[gi];
+        int seats = (int)(g.Area / 1.4f);
+        foreach (var side in new[] { back, Turn(back), Opposite(Turn(back)) })
+        {
+            float wall = side is Side.Front or Side.Back ? g.Width : g.Depth, across = side is Side.Front or Side.Back ? g.Depth : g.Width;
+            float line = side switch { Side.Front => g.Z0, Side.Back => g.Z1, Side.Left => g.X0, _ => g.X1 };
+            foreach (float deep in new[] { 3.4f, ToiletSizing.SharedD, ToiletSizing.SingleD + 0.1f })
+            {
+                var plan = ToiletSizing.Choose(wall, deep, seats);
+                float need = plan.Set switch
+                {
+                    ToiletSet.Gendered => 3.4f, ToiletSet.Shared => ToiletSizing.SharedD, ToiletSet.Single => ToiletSizing.SingleD + 0.1f, _ => 0f,
+                };
+                // the shallowest strip that holds the set: a deeper one only wastes the room
+                if (plan.Set == ToiletSet.None || need < deep - 0.01f) continue;
+                // the room keeps 4 m across and most of its floor for its tables (a kebab's or a café's counter needs less)
+                if (across - deep < 4f || wall * (across - deep) < Math.Max((DiningMinArea(g.Type) < 10f ? 1.5f : 2f) * DiningMinArea(g.Type), Math.Min(0.65f * g.Area, 40f))) continue;
+                // no doorway on that wall, nor on a side wall within the strip: the cut takes those with it
+                bool lateral(OpeningPlan o) => o.Side != side && o.Side != Opposite(side);
+                if (g.Openings.Any(o => o.Kind != OpeningKind.Window
+                        && (o.Side == side || lateral(o) && Math.Abs(o.Center - line) < deep + o.Width / 2 + 0.2f)))
+                    continue;
+                int si = Carve(l, rooms, gi, side, deep, RoomType.Storage);
+                if (si < 0) continue;
+                var strip = rooms[si];
+                if (si != rooms.Count - 1 || strip.Openings.Any(o => o.Kind != OpeningKind.Window))
+                {
+                    // never meant to happen: keep it a store off the room, as a strip always could be
+                    taken.Add(si);
+                    Opening(rooms, gi, side, si, Mid(strip, side), InnerDoor, top, OpeningKind.Door);
+                    return false;
+                }
+                rooms.RemoveAt(si);
+                var rect = new RectPlan(strip.X0, strip.Z0, strip.X1, strip.Z1);
+                // the toilets from the end away from the way in
+                var entry = g.Openings.FirstOrDefault(o => o.Kind is OpeningKind.Entry or OpeningKind.Door);
+                float mid = side is Side.Front or Side.Back ? (rect.X0 + rect.X1) / 2 : (rect.Z0 + rect.Z1) / 2;
+                bool lowEnd = entry != null && lateral(entry) ? false : (entry?.Center ?? mid) > mid;
+                var at = side is Side.Front or Side.Back ? (lowEnd ? rect.X0 : rect.X1, (rect.Z0 + rect.Z1) / 2)
+                    : ((rect.X0 + rect.X1) / 2, lowEnd ? rect.Z0 : rect.Z1);
+                var (_, left) = PublicToilets(l, l.Floors.First(fl => fl.Rooms == rooms), gi, rect, Opposite(side), at, seats);
+                if (left != null)
+                {
+                    var store = new RoomPlan { Type = RoomType.Storage };
+                    SetRect(store, left);
+                    rooms.Add(store);
+                    Opening(rooms, rooms.Count - 1, Opposite(side), gi, Mid(store, side), InnerDoor, top, OpeningKind.Door);
+                }
+                for (int i = si; i < rooms.Count; i++) taken.Add(i);
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>The middle of room <paramref name="r"/> along its wall <paramref name="side"/> (or the one across from it).</summary>

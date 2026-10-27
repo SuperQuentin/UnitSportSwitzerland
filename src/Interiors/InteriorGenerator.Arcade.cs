@@ -12,7 +12,7 @@ namespace UnitSport.Interiors;
 /// door the prize counter with its clerk, the change machine and the claw machines; along the side
 /// walls the racers, simulators, the dance and drum games and the basketball; along the back a row of
 /// pinballs; in the middle islands of upright cabinets back to back with 1.8 m aisles between; air
-/// hockey tables in the open floor; a strip of WC, store and office across the back. 14-16 machines to
+/// hockey tables in the open floor; a strip of public toilets (#1285), store and office across the back. 14-16 machines to
 /// 100 m2 at most, and never more than <see cref="MaxMachines"/>: a mall's arcade keeps to 32 m a side
 /// and the rest of the solid is a plain hall.
 /// </para>
@@ -20,7 +20,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored arcades are planned again.</summary>
-    public const int ArcadeRules = 5;
+    public const int ArcadeRules = 6;
 
     /// <summary>A billiard hall's longest side, m (#1250).</summary>
     private const float BilliardMaxSide = 22f;
@@ -28,7 +28,7 @@ public static partial class InteriorGenerator
     /// <summary>The most pool tables a billiard hall has.</summary>
     private const int MaxPoolTables = 12;
 
-    private const float ArcadeMinSide = 6f, ArcadeMaxSide = 32f, ArcadeService = 2.6f, ArcadeAisle = 1.8f;
+    private const float ArcadeMinSide = 6f, ArcadeMaxSide = 32f, ArcadeService = 3.0f, ArcadeAisle = 1.8f;
     /// <summary>Machines in one arcade at most: an upright is ~400 vertices, a racer ~600.</summary>
     private const int MaxMachines = 110;
 
@@ -51,6 +51,7 @@ public static partial class InteriorGenerator
         if (PlanArcade(l, doorHeight, whole, IsBilliard(name)) && InteriorValidator.Validate(l).Count == 0) return true;
         (l.StoreyHeight, l.EntryX, l.EntryWidth, l.Type, l.Shop) = (storey, entryX, entryW, type, shop);
         l.Floors.Clear();
+        l.InnerDoors.Clear();
         l.Below = 0;
         ArcadePlans.Remove(l);
         return false;
@@ -87,11 +88,13 @@ public static partial class InteriorGenerator
         l.Below = 0;
         l.Floors.Clear();
         l.Lifts.Clear();
+        l.InnerDoors.Clear();
         var ground = new FloorPlan();
         l.Floors.Add(ground);
         float clear = l.StoreyHeight - Slab, top = Math.Min(2.05f, clear - 0.2f);
 
-        // the service strip across the back: a WC, a store, an office, side by side, each off the hall
+        // the service strip across the back: the public toilets (#1285) at the end away from the door, a store
+        // and an office beside them, each off the hall
         bool service = progV >= 9f && progW >= 5.2f;
         float hallV1 = service ? progV - ArcadeService : progV;
         var hall = new RoomPlan { Type = billiard ? RoomType.BilliardHall : RoomType.ArcadeHall };
@@ -100,19 +103,35 @@ public static partial class InteriorGenerator
         int storeRoom = -1;
         if (service)
         {
-            var program = new List<RoomType> { RoomType.WC, RoomType.Storage, RoomType.Office };
-            int n = Math.Clamp((int)(progW / 3.2f), 1, program.Count);
-            float each = progW / n;
-            for (int i = 0; i < n; i++)
+            // players: about one to 4 m2 of the hall
+            int people = (int)(progW * hallV1 / 4f);
+            bool farR = doorU <= (uL + uR) / 2;
+            // a mall's plain hall behind is reached through the store: keep a store's width at the door's end
+            float keep = along - progV >= 3f ? 1.6f : 0f;
+            float t0 = farR ? uL + keep : uL, t1 = farR ? uR : uR - keep;
+            var (_, rest) = PublicToilets(l, ground, 0, frame.Rect(t0, hallV1, t1, progV), frame.VMinus, frame.Point(farR ? uR : uL, progV), people);
+            if (keep > 0)
             {
-                var room = new RoomPlan { Type = program[i] };
-                SetRect(room, frame.Rect(uL + each * i, hallV1, i == n - 1 ? uR : uL + each * (i + 1), progV));
-                ground.Rooms.Add(room);
-                int ri = ground.Rooms.Count - 1;
-                if (program[i] == RoomType.Storage) storeRoom = ri;
-                float c = uL + each * (i + 0.5f);
-                room.Openings.Add(new OpeningPlan { Side = frame.VMinus, Center = c, Width = InnerDoor, Top = top, Kind = OpeningKind.Door, Other = 0 });
-                hall.Openings.Add(new OpeningPlan { Side = frame.VPlus, Center = c, Width = InnerDoor, Top = top, Kind = OpeningKind.Door, Other = ri });
+                var kept = frame.Rect(farR ? uL : uR - keep, hallV1, farR ? uL + keep : uR, progV);
+                rest = rest == null ? kept : new RectPlan(Math.Min(rest.X0, kept.X0), Math.Min(rest.Z0, kept.Z0), Math.Max(rest.X1, kept.X1), Math.Max(rest.Z1, kept.Z1));
+            }
+            if (rest != null)
+            {
+                // a store, and an office beside it where the rest takes both
+                bool alongX = frame.VMinus is Side.Front or Side.Back;
+                float r0 = alongX ? rest.X0 : rest.Z0, r1 = alongX ? rest.X1 : rest.Z1;
+                var program = r1 - r0 >= 6.4f ? new[] { RoomType.Storage, RoomType.Office } : new[] { RoomType.Storage };
+                float each = (r1 - r0) / program.Length;
+                for (int i = 0; i < program.Length; i++)
+                {
+                    float a = r0 + each * i, b = i == program.Length - 1 ? r1 : a + each;
+                    var room = new RoomPlan { Type = program[i] };
+                    SetRect(room, alongX ? new RectPlan(a, rest.Z0, b, rest.Z1) : new RectPlan(rest.X0, a, rest.X1, b));
+                    ground.Rooms.Add(room);
+                    int ri = ground.Rooms.Count - 1;
+                    if (program[i] == RoomType.Storage) storeRoom = ri;
+                    Opening(ground.Rooms, ri, frame.VMinus, 0, (a + b) / 2, InnerDoor, top, OpeningKind.Door);
+                }
             }
         }
 
