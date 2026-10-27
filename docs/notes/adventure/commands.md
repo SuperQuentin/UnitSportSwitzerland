@@ -43,3 +43,17 @@
   onto the station (nothing), syncs the cross by E (the 3 km disc in its fog); B, on at the same time with its
   own `user://`, gets none of it; the server restarts and A keeps its stamps, view and fog. RESULT line; logs
   `test_output/placesnet_*.log`.
+
+## Navigation (#1226)
+
+- `--adventure-travel network|off` (a server; offline too, for checks): the travel mode. `/travel`, `/travel to <id>`,
+  admin `/travel unlock|lock <id|all> [player]`; `/pin list|add [1-6] [note]|clear`.
+- Quick: `--navcheck --world fixture --systems ui,physics,adventure --pois fixture` (compass, marker on and off screen,
+  gust and arrow, a pin on the map, the Travel tab, the save; windowed `test_output/nav_*.png`, `--style ps1|real+` for
+  the other styles) and `--travelcheck ... --adventure-travel network` (unlocks, the sign and its board, refusals, a
+  charged trip and its curtain, the 10 s rule, the half-fare reward, the GA at the ticket office; windowed
+  `test_output/travel_*.png`). Progress in `test_output/navcheck`, `test_output/travelcheck`.
+- Net: `tools/navnetcheck.sh` (~3 min, port 7931): server `--adventure-travel network`; A unlocks by walking, `/city`
+  refused, a shared pin reaches B in A's party, a locked point and the map without the GA refused, a trip from the
+  station's sign charged (B, an admin, funds it) and B sees A's remote body land, the GA bought and used from anywhere
+  for nothing, refused in a BR round, the pin gone from B when A leaves. RESULT line; logs `test_output/navnet_*.log`.

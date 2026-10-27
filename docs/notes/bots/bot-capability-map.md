@@ -61,6 +61,9 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 |---|---|---|---|---|---|
 | discover a place, clear fog (#1224) | the body's position and ride (`PlacesBodies`) | `PlacesService` tick, after `Enroll(bot)` (session-only progress, `SessionFor`) | `PoiCatalogue.Near` | — | gap: the bot director does not call `Enroll` yet |
 | sync a viewpoint / use a stamp post (#1224) | `TryInteract` at a marker | `PlacesService.ServerInteract(peer, poiId)` | `PoiCatalogue.Near` ("nearest summit cross") | — | gap: no brain uses it (a guide bot later) |
+| travel the network (#1226) | — | `AdventureTravel.TravelBot(bot, poiId, fromSignId)`: `TravelNetwork.MayTravel`, the fare, `FootPlayer.DebugLaunch` (no RPC) | memory of unlocked points: its session `travel` section | wander-travel (walk to a sign, travel) | gap: no brain step yet |
+| unlock a travel point (#1226) | the body's position | the `AdventureTravel` 1 Hz tick (session progress, `SessionFor`) | `PoiCatalogue.Near` | — | gap: the bot director does not enrol bots |
+| compass, pins, target marker, guiding gust (#1226) | — | — | the target directly | — | n/a: UI over a target a bot reads itself |
 | BR crates, supply drops, death boxes: take | — | `BrCrates.TryTake` (a player's request goes through it too) | a crate within 120 m in sight (a ray), or within 25 m | `BotSkills.TakeOne`, `Wants` | ok |
 | a bot's own death box | — | `BrManager.DeathBox` from `Bot.Inventory` | — | — | ok |
 | building loot (furniture) | — | `LootService.ServeTake` needs the bot in the interior's space | — | `Loot` | gap: interiors on the server (a follow-up) |
