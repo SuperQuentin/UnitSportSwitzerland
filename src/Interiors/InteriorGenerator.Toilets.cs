@@ -11,19 +11,19 @@ namespace UnitSport.Interiors;
 /// picks for the strip and the people:
 ///
 /// <list type="bullet">
-/// <item><b>Gendered</b>: along the host wall the women's anteroom (the basins, a mirror over each, the
-/// hand dryer) and the washroom behind it, the men's the same with the urinals and their screens, then
-/// the accessible WC (SIA 500) in a big building. The door from the host is in the anteroom's host
-/// wall, the one into the washroom in its side wall at the far end, square to it: nothing in the room is
-/// seen from the host, even with both open. The stalls are a row along the washroom's far side wall.</item>
+/// <item><b>Gendered</b>: along the host wall the women's washroom (in by its door, the basins along its
+/// outer wall with a mirror over each and the hand dryer, a row of stalls along its far side wall), the
+/// men's the same with the urinals and their screens along the host wall, then the accessible WC
+/// (SIA 500) in a big building.</item>
 /// <item><b>Shared</b>: one anteroom with the basin, a women's and a men's stall off its back wall.</item>
 /// <item><b>Single</b>: one WC with its own door.</item>
 /// </list>
 ///
 /// <para>
-/// Every way into a toilet room is closed by a leaf (<see cref="InnerDoorPlan"/>, a flat door's: E / Y or a
-/// VR grip, server state) hanging in the room before it and swinging into the toilet: the anterooms', the
-/// washrooms', the stalls' (rooms walled to the ceiling), the WC's and the accessible WC's. The pieces are planned with the rooms and stood when
+/// A door into the room with the basins, then one into each stall: every way in is a leaf
+/// (<see cref="InnerDoorPlan"/>, a flat door's: E / Y or a VR grip, server state) hanging in the room before it
+/// and swinging into the toilet: the washrooms', the shared anteroom's, the stalls' (rooms walled to the
+/// ceiling), the WC's and the accessible WC's. The pieces are planned with the rooms and stood when
 /// the floor is furnished (<see cref="PlaceToiletPieces"/>). Numbers in <c>docs/notes/terrain/public-toilets.md</c>.
 /// </para>
 /// </summary>
@@ -248,28 +248,24 @@ public static partial class InteriorGenerator
         }
 
         /// <summary>
-        /// An anteroom and its washroom from <paramref name="a"/>: the women's (stalls) or the men's (stalls and
+        /// A washroom from <paramref name="a"/>: the women's (basins, stalls) or the men's (basins, stalls and
         /// urinals). Returns where the next room starts.
         /// </summary>
         private float Washroom(float a, bool women, int stalls, int urinals, float extra)
         {
             float a1 = a + AnteW, wash1 = a1 + (women ? WomenWashW : MenWashW(urinals)) + extra, row0 = wash1 - StallD;
-            int ante = Room(RoomType.ToiletLobby, a, 0, a1, D);
-            int wash = Room(women ? RoomType.WomensToilet : RoomType.MensToilet, a1, 0, row0, D);
-            // in at the anteroom's host wall, toward its far side; on into the washroom by its side wall at the back:
-            // a door on each, as Swiss toilets have them, swinging away from the corridor
-            HostDoor(ante, a1 - 0.1f - ToiletSizing.Door / 2, ToiletSizing.Door, true, women ? FurnitureType.WcSignWomen : FurnitureType.WcSignMen);
-            float innerB = D - 0.15f - ToiletSizing.Door / 2;
-            Link(ante, StripWall.End, wash, a1, innerB, ToiletSizing.Door, true);
+            // one room: in by its door from the host, the basins along its outer wall, the stalls along the far one
+            int wash = Room(women ? RoomType.WomensToilet : RoomType.MensToilet, a, 0, row0, D);
+            HostDoor(wash, a1 - 0.1f - ToiletSizing.Door / 2, ToiletSizing.Door, true, women ? FurnitureType.WcSignWomen : FurnitureType.WcSignMen);
 
-            // the basins along the anteroom's outer wall, a mirror over each, the dryer after them
+            // the basins along the outer wall, a mirror over each, the dryer after them
             int fixtures = stalls + urinals;
             int basins = Basins(fixtures, D - 0.6f);
             float run = basins * BasinPitch, b0 = 0.1f;
-            if (Fix(FurnitureType.SinkRow, StripWall.Start, a, 0, a1, D, b0 + run / 2, run, 0.45f, 0.85f, gap: 0.04f))
+            if (Fix(FurnitureType.SinkRow, StripWall.Start, a, 0, row0, D, b0 + run / 2, run, 0.45f, 0.85f, gap: 0.04f))
                 for (int i = 0; i < basins; i++)
-                    Fix(FurnitureType.Mirror, StripWall.Start, a, 0, a1, D, b0 + BasinPitch * (i + 0.5f), 0.54f, 0.025f, 0.64f, 1.2f, force: true);
-            Fix(FurnitureType.HandDryer, StripWall.Start, a, 0, a1, D, b0 + run + 0.3f, 0.3f, 0.2f, 0.32f, 1.05f);
+                    Fix(FurnitureType.Mirror, StripWall.Start, a, 0, row0, D, b0 + BasinPitch * (i + 0.5f), 0.54f, 0.025f, 0.64f, 1.2f, force: true);
+            Fix(FurnitureType.HandDryer, StripWall.Start, a, 0, row0, D, b0 + run + 0.3f, 0.3f, 0.2f, 0.32f, 1.05f);
 
             // the stalls along the washroom's far side wall, and a cleaner's cupboard past them
             var (sw, left) = StallRow(stalls, D);

@@ -30,6 +30,17 @@ public static class ToiletCheck
             List<FurniturePlan> In(RoomPlan r) => l.Furniture.Where(p => p.Floor == fi && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1).ToList();
             bool Leaf(int ri, OpeningPlan o) => l.InnerDoors.Any(d => d.Floor == fi && Math.Abs(d.Center - o.Center) < 0.01f
                 && (d.Room == ri && d.Side == o.Side || d.Room == o.Other && d.Side == Opposite(o.Side)));
+            // the room with the basins: in from the host by a door, the basins and a mirror, every other doorway a stall's
+            void Basins(RoomPlan r, List<FurniturePlan> pieces, int ri, string what)
+            {
+                if (!pieces.Any(p => p.Type == FurnitureType.SinkRow)) bad.Add($"{what} without basins");
+                if (!pieces.Any(p => p.Type == FurnitureType.Mirror)) bad.Add($"{what} without a mirror");
+                var ways = r.Openings.Where(o => o.Kind == OpeningKind.Door && o.Other >= 0).ToList();
+                var host = ways.FirstOrDefault(o => !InteriorGenerator.ToiletRoom(rooms[o.Other].Type) && rooms[o.Other].Type != RoomType.Storage);
+                if (host == null) bad.Add($"{what} with no way in");
+                else if (!Leaf(ri, host)) bad.Add($"{what} with no door");
+                if (ways.Any(o => o != host && !Leaf(ri, o))) bad.Add($"{what} with a doorway but no door");
+            }
             for (int ri = 0; ri < rooms.Count; ri++)
             {
                 var r = rooms[ri];
@@ -52,21 +63,15 @@ public static class ToiletCheck
                     }
                     case RoomType.ToiletLobby:
                     {
-                        if (!pieces.Any(p => p.Type == FurnitureType.SinkRow)) bad.Add("an anteroom without basins");
-                        if (!pieces.Any(p => p.Type == FurnitureType.Mirror)) bad.Add("an anteroom without a mirror");
-                        // a gendered room's anteroom: in from the host on one wall, on into the washroom by a wall square to it
-                        var wash = r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Door && o.Other >= 0
-                            && rooms[o.Other].Type is RoomType.WomensToilet or RoomType.MensToilet);
-                        var host = r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Door && o.Other >= 0 && !InteriorGenerator.ToiletRoom(rooms[o.Other].Type));
-                        if (host == null) bad.Add("an anteroom with no way in");
-                        else if (!Leaf(ri, host)) bad.Add("an anteroom with no door");
-                        if (wash != null && !Leaf(ri, wash)) bad.Add("a washroom with no door");
-                        else if (wash != null && (wash.Side == host.Side || wash.Side == Opposite(host.Side)))
-                            bad.Add("an anteroom whose two doorways face each other: the washroom is seen from outside");
+                        Basins(r, pieces, ri, "an anteroom");
                         break;
                     }
+                    case RoomType.WomensToilet:
+                        Basins(r, pieces, ri, "a women's room");
+                        break;
                     case RoomType.MensToilet:
                     {
+                        Basins(r, pieces, ri, "a men's room");
                         int urinals = pieces.Count(p => p.Type == FurnitureType.Urinal), screens = pieces.Count(p => p.Type == FurnitureType.UrinalScreen);
                         if (urinals == 0) bad.Add("a men's room without urinals");
                         if (screens != urinals + 1) bad.Add($"{urinals} urinals and {screens} screens");

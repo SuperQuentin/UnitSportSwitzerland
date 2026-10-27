@@ -29,11 +29,10 @@ tested).
   clear [S: Maryland Aviation Administration, restroom standards 7.6]. Swiss workplaces: toilets
   separated from work rooms by a ventilated anteroom (Vorraum), hand washing near them, by gender as
   a rule [S: ArGV 3 Art. 32, SECO Wegleitung, via arbeitsrecht-aktuell.ch].
-  Here: each gendered room is entered through its own **anteroom 1.6 m wide** (`ToiletLobby`), the
-  basins along its outer wall; the doorway into the washroom is on the anteroom's side wall at its
-  far end, square to the doorway from the corridor, so no straight line runs from the corridor
-  through both into the room. Each doorway has a door all the same (the owner's call: Swiss toilets have
-  them; the offset keeps the washroom out of sight while both stand open).
+  Here, the owner's call (#1285): **one room** per gender, a door from the corridor into it, the basins
+  along its outer wall beside the door, the stalls along the far wall, each with its own door; no
+  maze and no separate anteroom (a first version had both: an anteroom with the basins and an offset
+  doorway on into the washroom). The door is what keeps the room out of sight.
 - **Accessible WC** (SIA 500): at least **1.80 x 1.65 m** with the door opening out, **1.65 x 2.30 m** with
   it opening in; the bowl's axis **0.45 m** from the corner; usable door at least 0.80 m; the figures are
   binding, mirrored allowed [S: hindernisfreie-architektur.ch, Procap M105, SIA 500-C2]. Here: 1.8 m
@@ -51,10 +50,11 @@ tested).
 Frame: a strip along one wall of its host room (the lobby, concourse, hall, guest room), `a` along the
 host wall, `b` away from it.
 
-- **Gendered** (plenty of space; strip at least ~9 m long and 2.8 m deep): along `a` the women's anteroom
-  and washroom, the men's anteroom and washroom, then the accessible WC where the building is big.
-  Women's washroom: a row of stalls along its far side wall, doors into the aisle. Men's: the stalls
-  likewise, the urinals along the host wall with their screens. Signs (`WcSignWomen`, `WcSignMen`,
+- **Gendered** (plenty of space; strip at least ~9 m long and 2.8 m deep): along `a` the women's
+  washroom, the men's, then the accessible WC where the building is big. Each: its door from the host
+  toward its near end, the basins (one counter, a mirror over each, the dryer) along its outer wall, a
+  row of stalls along its far side wall, doors into the aisle; the men's the urinals along the host wall
+  with their screens. Signs (`WcSignWomen`, `WcSignMen`,
   `WcSignAccessible`) over each doorway on the host's side.
 - **Shared** (less space; ~2.4 x 2.9 m): one anteroom off the host with the basin(s), two stalls off its
   back wall, a women's and a men's sign over their doors; a `WcSignAll` over the way in.
@@ -82,7 +82,7 @@ for the caller's store. Bump a generator's rules constant when its toilets chang
 - `ToiletSizingTests` (tier 0): the sets and counts.
 - `ToiletCheck.Problems` (each generator's probe: `--cinemacheck`, `--bowlingcheck`, `--arcadecheck`,
   `--diningcheck`, `--ikeacheck`, all `--systems ui`): the set the case's footprint should have, and a
-  whole one: basins and mirrors in each anteroom, its two doorways on square walls, a bowl and a leaf in
+  whole one: basins and mirrors in each room that has them, its door from the host, a bowl and a leaf in
   every stall and accessible WC, as many screens as urinals and one, the rails, the signs, every
   doorway of a toilet room reachable among its pieces. Each generator has a single, a shared and a
   gendered case.
@@ -92,8 +92,8 @@ for the caller's store. Bump a generator's rules constant when its toilets chang
 
 ## Doors
 
-- Every way into a toilet room is a real leaf: the anterooms' (gendered and shared), the washrooms', the
-  stalls', the accessible WC's and the single WC's (`InnerDoorPlan`, as a flat's
+- A door into the room with the basins, then a door into each stall, nothing else: every one a real leaf
+  (the washrooms', the shared anteroom's, the stalls', the accessible WC's and the single WC's) (`InnerDoorPlan`, as a flat's
   front door, #557): server state, open or shut for everyone. The leaf hangs in the outer room and swings
   into the toilet (`Room` is the outer room). Not lockable.
 - **Keyboard / pad / VR**: the flat doors' existing action, nothing new: E / Y at the door opens or shuts it,
@@ -105,7 +105,7 @@ for the caller's store. Bump a generator's rules constant when its toilets chang
 
 ## Light and perf
 
-- A stall has no lamp of its own: the washroom's (or anteroom's) lamp reaches it (`RoomLights`, its box
+- A stall has no lamp of its own: the washroom's (or the shared anteroom's) lamp reaches it (`RoomLights`, its box
   grown over the stalls that open off it), as a real ceiling light does over cubicle tops. So a set adds
   two or three lights, not one per stall.
 - Mirrors are framed `Mirror` pieces: only the nearest one renders (`wall-mirrors`).
