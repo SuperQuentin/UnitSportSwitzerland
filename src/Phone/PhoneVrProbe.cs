@@ -110,16 +110,18 @@ public partial class PhoneVrProbe : Node
         await Wait(0.7);
         Check(!phone.Selfie && me.PhoneState == FootPlayer.PhoneCameraState, $"turned back, the selfie ends (state {me.PhoneState})");
 
-        // the right trigger, its ray off the phone, steps the lens: 2x, 5x, round to 1x
+        // the right trigger, its ray off the phone, no longer steps the lens (a stray pull must not zoom, #1253)
         XrPhone.SimRay = Head * new Transform3D(Basis.Identity, new Vector3(0.25f, -0.3f, -0.2f));
-        var zooms = new List<float>();
-        for (int i = 0; i < 3; i++)
-        {
-            await Trigger();
-            zooms.Add(phone.Screens.Zoom);
-        }
+        for (int i = 0; i < 3; i++) await Trigger();
         XrPhone.SimRay = null;
-        Check(zooms is [2f, 5f, 1f], $"the right trigger off the phone steps the zoom ({string.Join(", ", zooms)})");
+        Check(phone.Screens.Zoom == 1f, $"a trigger pulled off the phone does not zoom ({phone.Screens.Zoom}x)");
+        // the chips do: a fingertip on 5x, then 2x, each lit when it is the lens
+        await Tap(phone.Screens.ZoomChipUv(2), cover: false);
+        Check(phone.Screens.Zoom == 5f && phone.Screens.LitChip == 2, $"a fingertip on the 5x chip zooms to it and lights it ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        await Tap(phone.Screens.ZoomChipUv(1), cover: false);
+        Check(phone.Screens.Zoom == 2f && phone.Screens.LitChip == 1, $"and the 2x chip ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        await Tap(phone.Screens.ZoomChipUv(0), cover: false);
+        Check(phone.Screens.Zoom == 1f, "and back to 1x");
 
         await Button(JoyButton.B, 0.6);
         Check(me.PhoneState == FootPlayer.PhoneOpenState && phone.Screens.Shown == PhoneScreens.Page.Home, "B goes back to the home screen");
