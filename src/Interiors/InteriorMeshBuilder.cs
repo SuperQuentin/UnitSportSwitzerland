@@ -149,6 +149,8 @@ public static partial class InteriorMeshBuilder
         RoomType.Auditorium => (C(0.16f, 0.06f, 0.08f), C(0.24f, 0.07f, 0.10f), C(0.05f, 0.05f, 0.06f)),
         RoomType.StaffCorridor => (C(0.46f, 0.46f, 0.46f), C(0.82f, 0.82f, 0.80f), C(0.90f, 0.90f, 0.88f)),
         RoomType.ProjectionRoom => (C(0.30f, 0.30f, 0.32f), C(0.20f, 0.20f, 0.22f), C(0.14f, 0.14f, 0.15f)),
+        // #1240: an arcade's black carpet, dark violet walls, black ceiling
+        RoomType.ArcadeHall => (C(0.08f, 0.06f, 0.14f), C(0.12f, 0.08f, 0.22f), C(0.05f, 0.04f, 0.07f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -914,6 +916,11 @@ public static partial class InteriorMeshBuilder
         if (IsCinemaPiece(p.Type))
         {
             CinemaPiece(s, p, at, basis);
+            return;
+        }
+        if (IsArcadePiece(p.Type))
+        {
+            ArcadePiece(s, p, at, basis);
             return;
         }
 

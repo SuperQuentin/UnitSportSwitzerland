@@ -136,7 +136,8 @@ vec3 room_light(vec3 p, vec3 n) {
             float on = max(world_night, a.y);
             float fall = 1.0 - clamp(d / a.x, 0.0, 1.0);
             float facing = clamp(dot(n, dir) * 0.5 + 0.5, 0.0, 1.0);
-            vec3 lamp = a.z > 1.5 ? lamp_color * house_lights
+            vec3 lamp = a.z > 2.5 ? vec3(0.34, 0.18, 0.62)
+                : a.z > 1.5 ? lamp_color * house_lights
                 : a.z > 0.5 ? mix(lamp_color, vec3(0.30, 0.10, 0.80), world_night) : lamp_color;
             total += lamp * lamp_gain * on * (0.12 + 0.88 * fall * fall) * (0.4 + 0.6 * facing);
         }

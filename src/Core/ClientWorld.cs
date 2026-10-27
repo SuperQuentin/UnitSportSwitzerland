@@ -191,6 +191,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // arcades planned in hand-made buildings (#1240)
+        if (Interiors.ArcadeProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.ArcadeProbe { Name = "ArcadeProbe" });
+            return;
+        }
         // cinemas planned in hand-made buildings (#1238)
         if (Interiors.CinemaProbe.ParseArgs())
         {

@@ -199,16 +199,17 @@ public static partial class InteriorMeshBuilder
             {
                 // legs, the body sloping up to the backbox, a lit playfield under its glass, the backglass
                 var body = Vinyl[(int)(Hash(p, 4) * Vinyl.Length) % Vinyl.Length];
-                foreach (var (lx, lz) in new[] { (-w + 0.05f, d - 0.08f), (w - 0.05f, d - 0.08f), (-w + 0.05f, -d + 0.35f), (w - 0.05f, -d + 0.35f) })
+                foreach (var (lx, lz) in new[] { (-w + 0.065f, d - 0.08f), (w - 0.065f, d - 0.08f), (-w + 0.065f, -d + 0.35f), (w - 0.065f, -d + 0.35f) })
                     B(lx - 0.03f, 0, lz - 0.03f, lx + 0.03f, 0.77f, lz + 0.03f, Chrome);
-                B(-w, 0.76f, -d + 0.25f, w, 0.96f, d, body);
+                // the body and the backbox kept 1.5 cm in from the piece's sides: pinballs stand in rows, side by side
+                B(-w + 0.015f, 0.76f, -d + 0.25f, w - 0.015f, 0.96f, d, body);
                 B(-w + 0.04f, 0.95f, -d + 0.3f, w - 0.04f, 0.975f, d - 0.06f, Lit(0.10f + 0.5f * Hash(p, 6), 0.20f, 0.70f));
                 for (int i = 0; i < 5; i++)
                 {
                     float bx = (Hash(p, 60 + i) - 0.5f) * (p.W - 0.25f), bz = -d + 0.5f + Hash(p, 70 + i) * (p.D - 0.8f);
                     B(bx - 0.05f, 0.965f, bz - 0.05f, bx + 0.05f, 1.0f, bz + 0.05f, Lit(0.98f, 0.30f + 0.6f * Hash(p, 80 + i), 0.20f));
                 }
-                B(-w, 0.95f, -d, w, H, -d + 0.25f, (body * 0.8f) with { A = 1 });
+                B(-w + 0.015f, 0.95f, -d, w - 0.015f, H, -d + 0.25f, (body * 0.8f) with { A = 1 });
                 B(-w + 0.05f, 1.22f, -d + 0.24f, w - 0.05f, H - 0.08f, -d + 0.265f, Lit(0.98f, 0.60f, 0.16f));
                 B(-w - 0.015f, 0.86f, d - 0.25f, -w + 0.01f, 0.9f, d - 0.2f, Lit(0.98f, 0.20f, 0.20f));
                 B(w - 0.01f, 0.86f, d - 0.25f, w + 0.015f, 0.9f, d - 0.2f, Lit(0.98f, 0.20f, 0.20f));

@@ -16,6 +16,7 @@ public partial class InteriorNode
     private static float? StaffAt(FurniturePlan p) => p.Type switch
     {
         FurnitureType.ShoeCounter or FurnitureType.BarCounter or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
+            or FurnitureType.PrizeCounter
             => -p.D / 2 + 0.45f + (p.D - 0.45f - 0.8f) / 2,
         _ => null,
     };
