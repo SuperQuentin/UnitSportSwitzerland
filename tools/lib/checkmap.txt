@@ -163,6 +163,12 @@ tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
 src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
 src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
 src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+# #1238: cinemas planned in hand-made buildings; the booth over the network
+src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
+src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
+src/Interiors/CinemaProbe   quick  --cinemacheck --systems ui
+src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
+src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
 src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
 src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
 shaders/body/interior      quick  --bowlingcheck --systems ui
