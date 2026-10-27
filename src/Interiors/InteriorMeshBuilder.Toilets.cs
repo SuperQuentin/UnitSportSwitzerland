@@ -29,7 +29,7 @@ public static partial class InteriorMeshBuilder
                 // a bowl sunk in it every 0.65 m and a tap behind each
                 var stone = C(0.40f, 0.42f, 0.44f);
                 B(-w, H - 0.1f, -d, w, H, d, stone);
-                B(-w, H - 0.012f, -d - 0.04f, w, H + 0.1f, -d + 0.012f, stone * 0.9f);
+                B(-w + sink, H - 0.012f, -d - 0.04f, w - sink, H + 0.1f, -d + 0.012f, stone * 0.9f);
                 B(-w + 0.04f, H - 0.32f, -d + 0.05f, w - 0.04f, H - 0.1f + sink, -d + 0.1f, stone * 0.8f);
                 int n = Math.Max(1, (int)MathF.Round(p.W / ToiletSizing.BasinPitch));
                 float pitch = p.W / n;
