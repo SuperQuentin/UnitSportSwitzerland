@@ -144,6 +144,11 @@ public static partial class InteriorMeshBuilder
         RoomType.BowlingLanes => (C(0.10f, 0.10f, 0.22f), C(0.16f, 0.18f, 0.40f), C(0.07f, 0.07f, 0.10f)),
         RoomType.Concourse => (C(0.14f, 0.11f, 0.30f), C(0.16f, 0.36f, 0.46f), C(0.16f, 0.16f, 0.22f)),
         RoomType.Mezzanine => (C(0.46f, 0.30f, 0.18f), C(0.70f, 0.24f, 0.22f), C(0.20f, 0.18f, 0.20f)),
+        // #1238: a red-carpet lobby under a warm ceiling; a hall's dark carpet, wine walls and black ceiling
+        RoomType.CinemaLobby => (C(0.42f, 0.06f, 0.10f), C(0.30f, 0.16f, 0.12f), C(0.86f, 0.80f, 0.66f)),
+        RoomType.Auditorium => (C(0.16f, 0.06f, 0.08f), C(0.24f, 0.07f, 0.10f), C(0.05f, 0.05f, 0.06f)),
+        RoomType.StaffCorridor => (C(0.46f, 0.46f, 0.46f), C(0.82f, 0.82f, 0.80f), C(0.90f, 0.90f, 0.88f)),
+        RoomType.ProjectionRoom => (C(0.30f, 0.30f, 0.32f), C(0.20f, 0.20f, 0.22f), C(0.14f, 0.14f, 0.15f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -897,11 +902,18 @@ public static partial class InteriorMeshBuilder
             // #822: what hangs on a cabin's walls
             or FurnitureType.PaperRoll or FurnitureType.Mirror or FurnitureType.CoatHook
             // #1235: lanes are walked on (their machine end collides by itself); a dart board hangs on the wall
-            or FurnitureType.LanePair or FurnitureType.DartBoard or FurnitureType.Confetti);
+            or FurnitureType.LanePair or FurnitureType.DartBoard or FurnitureType.Confetti
+            // #1238: a seating bank collides as tiers and aisle ramps; signs, ports and posters are on the wall
+            or FurnitureType.SeatingBank or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.PosterFrame);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
         if (IsVenuePiece(p.Type))
         {
             VenuePiece(s, p, at, basis);
+            return;
+        }
+        if (IsCinemaPiece(p.Type))
+        {
+            CinemaPiece(s, p, at, basis);
             return;
         }
 

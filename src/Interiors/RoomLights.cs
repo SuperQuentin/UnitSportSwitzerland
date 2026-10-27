@@ -89,9 +89,16 @@ public static class RoomLights
     /// <summary>
     /// A lamp's tint code: 0 the interior's lamp colour; 1 cosmic bowling (#1235), the lane hall's
     /// lamps going blacklight purple as night falls, which leaves its self-lit paint, numbers and
-    /// screens glowing.
+    /// screens glowing; 2 an auditorium's house lights, scaled by the interior material's
+    /// <c>house_lights</c> (<see cref="CinemaBooths"/>).
     /// </summary>
-    public static float Tint(RoomType t) => t == RoomType.BowlingLanes ? 1 : 0;
+    public static float Tint(RoomType t) => t switch
+    {
+        RoomType.BowlingLanes => 1,
+        // #1238: an auditorium's house lights, which the booth dims (the material's `house_lights`)
+        RoomType.Auditorium => 2,
+        _ => 0,
+    };
 
     private static float[] Light(Vector3 c, float kind, float a, float b, float d, float e, RoomPlan r, float y0, float top) =>
     [

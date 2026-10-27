@@ -114,10 +114,11 @@ public static partial class InteriorGenerator
         bool planned = type == BuildingType.Ikea
             ? TryIkea(layout, fp.Door.Height)
             : venue?.Type == VenueType.Bowling && type == BuildingType.None && TryBowling(layout, fp, b, fp.Door.Height, rng)
+              || venue?.Type == VenueType.Cinema && type == BuildingType.None && TryCinema(layout, fp, b, fp.Door.Height, rng)
               || site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
-        if (layout.Type == BuildingType.Bowling) site = BuildingType.None;
+        if (layout.Type is BuildingType.Bowling or BuildingType.Cinema) site = BuildingType.None;
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
-        var flats = !planned && site == BuildingType.None && type == BuildingType.None && layout.Type != BuildingType.Bowling
+        var flats = !planned && site == BuildingType.None && type == BuildingType.None && layout.Type is not (BuildingType.Bowling or BuildingType.Cinema)
             ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
         bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b, b.Kind, n, flats, rng);
         planned |= flatsPlanned;

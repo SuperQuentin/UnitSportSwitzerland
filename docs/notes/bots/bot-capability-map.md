@@ -54,6 +54,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | thrown items (bonk) | — | `ItemEvents.RelayBonk` (client sender) | — | — | gap: later |
 | radio, camera, GPS, fishing, farm tools | — | — | — | — | n/a for a fighting bot (an ambient brain may want them) |
 | a radio's voice/music mix (#1153) | `RadioBody.Mix` / `FootPlayer.RadioMix` set directly | `RadioManager.SetMix` (server: set `Mix`) | — | — | n/a for a fighting bot; an ambient bot DJ could set it server-side |
+| a cinema's booth: house lights and the screen (#1238) | none (a bot never stands at a panel to press it) | `CinemaBooths.Serve(peer, plan, code)` (server: the bot must be inside that cinema, as a player) | `CinemaBooths.StateOf(plan)` | — | n/a for a fighting bot; an usher bot could dim the lights for a show |
 
 ## World, loot and vehicles
 

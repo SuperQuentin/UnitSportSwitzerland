@@ -345,8 +345,9 @@ public static partial class BuildingMeshBuilder
                 // grid of flats painted across 200 m of blue sheet is the one thing that would
                 // stop it reading as an IKEA (#501)
                 _ when type == BuildingType.Ikea => (0f, 0),
-                // a bowling centre that is its whole building (#1235) is a blind box: lanes have no windows
-                _ when Venues.HallOf(types, bi) == Terrain.Format.VenueType.Bowling && Venues.WholeBuilding(b) => (0f, 0),
+                // a bowling centre or a cinema that is its whole building (#1235, #1238) is a blind box:
+                // lanes and auditoriums have no windows
+                _ when Venues.Planned(Venues.HallOf(types, bi)) && Venues.WholeBuilding(b) => (0f, 0),
                 _ => Storeys(b),
             };
             // a spire's faces are steep enough to count as wall; above the eave they are roof

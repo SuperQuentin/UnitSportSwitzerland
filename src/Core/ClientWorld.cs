@@ -191,6 +191,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // cinemas planned in hand-made buildings (#1238)
+        if (Interiors.CinemaProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.CinemaProbe { Name = "CinemaProbe" });
+            return;
+        }
         // bowling centres planned in hand-made buildings (#1235)
         if (Interiors.BowlingProbe.ParseArgs())
         {
@@ -467,6 +474,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Audio.Cd.CdUploadProbe.Requested) AddChild(new Audio.Cd.CdUploadProbe());
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
+        Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
@@ -860,7 +868,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -892,6 +900,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
+        if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
@@ -2172,6 +2181,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
             else if (p.Indoors)
             {
+                // a cinema's booth (#1238): the lights or the screen, by the half of its panel you stand at
+                if (Interiors.CinemaBooths.Prompt(p) is { } booth) yield return (PlayerInput.InteractMount, booth);
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))
