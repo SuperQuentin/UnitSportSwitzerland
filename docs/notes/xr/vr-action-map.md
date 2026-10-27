@@ -77,6 +77,10 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | quest: track / start / abandon (#1223) | buttons in the Journal / A on the button | ok: laser + trigger on the button | keep |
 | quest: hand over a delivery (#1223) | the Journal's Hand over button / A on it | ok: laser + trigger on the button | gap: `interact` (E / X) or a **grip** on the target's marker, once navigation draws markers (#1226) |
 | place: look out from a viewpoint / use a stamp post (#1224) | `interact_mount` E / Y within 3 m of the cross, telescope or stamp post (`PoiMarkers`) | ok: reach out and grip it (`TryInteract(byHand)`) | keep |
+| hold hands, rope up, let go (#1266) | hold E 0.5 s at a party member (tap stays the fight challenge), `/rope`; E with no target lets go | ok: hold Y; Y with no target | ok: the pad route through `XrPad` (hold Y); **gap**: gripping their hand (15 cm) and opening it to let go (`XrHandHold`) are not built |
+| haul a roped partner (#1266) | hold E 2 s at the rope | hold Y | ok: the pad route (hold Y); **gap**: pulling the rope hand over hand |
+| leg-up, two-handle gate (#1266) | crouch at a wall / jump onto the crouched friend; hold E at a wheel | B / A; hold Y | real crouch (`XrPad.RealCrouch`) / A; the wheel by the pad route (hold Y); **gap**: gripping and turning it |
+| sit at the pot, add, stir, dip, forfeit (#1266) | E at a table or hut; panel chips 1-4; hold LMB and trace an eight; LMB dip; 1-3 forfeit | Y; D-pad + A; right stick; RB; D-pad + A | ok: the panel by the ray, stir with the stick; **gap**: the real fork over the pot |
 | open a chest (#1227) | `interact_mount` E / Y within 2.4 m (`RewardWorld`) | ok: reach out and grip it (`TryInteract(byHand)`) | **grip the lid and lift** (R1) |
 | light a Höhenfeuer stack, ring a cowbell, wake a guide, start a trial, offer edelweiss (#1227) | E / Y at the stack, bell, burrow, post or offering box | ok: grip it; the offering's confirmation by the ray (`Ui/Modal`) | swing the bell's clapper (R1) |
 | pick an edelweiss, add a cairn stone (#1227) | hold G / X (`gather`, offered before water and stone) | ok: hold X | **grip and pull**, like gather |
