@@ -956,10 +956,11 @@ src/Player/PigeonFlight        quick  --flycheck pigeon-thermal --time 13 --chun
 src/Net/Arrival                net    tools/climbnetcheck.sh
 src/Player/FootPlayer.Climb    net    tools/climbnetcheck.sh
 # #1266: playing together: the together rule, links (hands, the rope, the tether, belays), the shared pot (offline quick probes; server + two clients)
-src/Adventure/Together/  quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure
-src/Player/FootPlayer.Together quick --togethercheck --world fixture --systems ui,terrain,physics,adventure
-src/Avatar/HumanMeshBuilder quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/  quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Player/FootPlayer.Together quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Avatar/HumanMeshBuilder quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
 src/Adventure/Together/Fondue quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/Pot  quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/TogetherService.Pots quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/Stir quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Rewards/Seals.cs quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt

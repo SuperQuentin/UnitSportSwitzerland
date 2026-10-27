@@ -20,6 +20,9 @@ public partial class FootPlayer
     /// <summary>Who the body is with, for the regen (<see cref="StaminaCompany"/>).</summary>
     public Func<StaminaCompany>? CompanyNow { get; set; }
 
+    /// <summary>A jump off the floor beside a linked friend who offers a step: true makes it a leg-up (2.6 m, free).</summary>
+    public Func<bool>? LegUp { get; set; }
+
     /// <summary>A friend's hand to hold (every peer, from the link book): its world point, and whether the figure's left hand reaches.</summary>
     public (Vector3 World, bool Left)? HandHold { get; set; }
 

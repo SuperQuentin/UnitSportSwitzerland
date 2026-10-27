@@ -25,6 +25,10 @@ public enum SealKind : byte
     Bells = 4,
     /// <summary>A guide animal (a marmot or a bearded vulture) leads to it: its arrival unseals.</summary>
     Guide = 5,
+    /// <summary>#1266: a roped pair (rope mode, both adventuring) within 8 m opens it: high glacier chests.</summary>
+    Roped = 6,
+    /// <summary>#1266: a heavy gate with two wheel handles 3.5 m apart, held by two bodies within 1.5 s: open 60 s for everyone there.</summary>
+    Gate = 7,
 }
 
 /// <summary>

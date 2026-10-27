@@ -28,6 +28,7 @@ public partial class TogetherService
         public Func<(Vector3 Wish, bool Run), (Vector3 Wish, bool Run)> TetherFn = null!;
         public Func<Vector3, float, (Vector3 Velocity, bool Held)> RopeFn = null!;
         public Func<StaminaCompany> CompanyFn = null!;
+        public Func<bool> LegUpFn = null!;
     }
 
     private readonly Dictionary<long, Owned> _owned = new();
@@ -41,17 +42,20 @@ public partial class TogetherService
         o.TetherFn = own => self.Hooked ? Tether.Apply(own, self.State) : own;
         o.RopeFn = (v, dt) => RopeStep(self, v, dt);
         o.CompanyFn = () => self.Company;
+        o.LegUpFn = () => LegUpFor(self);
         _owned[peer] = o;
         return o;
     }
 
-    private static void Unhook(Owned o)
+    private void Unhook(Owned o)
     {
+        Offer(o.Peer, false);
         if (o.Body is { } b && GodotObject.IsInstanceValid(b) && o.Hooked)
         {
             if (b.Tethered == o.TetherFn) b.Tethered = null;
             if (b.RopeHold == o.RopeFn) b.RopeHold = null;
             if (b.CompanyNow == o.CompanyFn) b.CompanyNow = null;
+            if (b.LegUp == o.LegUpFn) b.LegUp = null;
         }
         o.Hooked = false;
         o.Hanging = o.Hauled = false;
@@ -116,6 +120,7 @@ public partial class TogetherService
             body.Tethered = o.TetherFn;
             body.RopeHold = o.RopeFn;
             body.CompanyNow = o.CompanyFn;
+            body.LegUp = o.LegUpFn;
             o.Hooked = true;
         }
         var mode = Links.ModeOf(peer);
@@ -146,6 +151,8 @@ public partial class TogetherService
         float dist = self.DistanceTo(other);
         o.Company = mode == LinkMode.Rope && climbing && partnerHolds ? StaminaCompany.Belayed
             : dist <= LinkRules.Length(mode) + 0.5f ? StaminaCompany.Linked : StaminaCompany.None;
+        // crouched still while linked: a step offered to the partner (a leg-up)
+        Offer(peer, Crouching(body, own: body == Me?.Invoke()) && body.IsOnFloor() && body.Velocity.Length() < 0.4f);
         // a rope that caught a fall: back on the floor, the rope's full length again
         if (body.IsOnFloor() || climbing)
         {

@@ -225,8 +225,7 @@ public partial class RewardService : Node
         var chests = p.Get(ChestsProgress.Section);
         if (chests.Opened.Contains(openId)) return Refuse(peer, openId, "You opened it already.");
         if (!Near(peer, chest.E, chest.N, chest.Alt, RewardRules.ClaimReachM, out string why)) return Refuse(peer, openId, why);
-        if (chest.Seal != SealKind.None && !_seals.IsDone(p.Key, chest.Id))
-            return Refuse(peer, openId, $"Sealed: {Seals.Hint(chest.Seal)}");
+        if (!SealOpen(peer, p, chest)) return Refuse(peer, openId, $"Sealed: {Seals.Hint(chest.Seal)}");
         chests.Opened.Add(openId);
         chests.ByTier[(int)chest.Tier]++;
         chests.ByCanton[chest.Canton] = chests.ByCanton.GetValueOrDefault(chest.Canton) + 1;
@@ -327,6 +326,7 @@ public partial class RewardService : Node
         var layout = await Map.LayoutAsync(chest);
         if (!IsInstanceValid(this) || _adventure.Progress(peer) != p || layout.Kind == SealKind.None) return "gone";
         if (layout.Kind == SealKind.Guide) return Refuse(peer, chestId, "Follow the guide.");
+        if (layout.Kind == SealKind.Roped) return Refuse(peer, chestId, Seals.Hint(SealKind.Roped));
         if (step < 0 || step >= layout.Props.Length) return Refuse(peer, chestId, "No such step.");
         var prop = layout.Props[step];
         float reach = layout.Kind switch
@@ -334,9 +334,11 @@ public partial class RewardService : Node
             SealKind.Rings => prop.Radius + 6,
             SealKind.Plates => prop.Radius + 1.5f,
             SealKind.Bells => 3.5f,
+            SealKind.Gate => Seals.GateReachM + 0.6f,   // the published position lags the body a little
             _ => RewardRules.PropReachM,
         };
         if (!Near(peer, prop.E, prop.N, layout.Kind == SealKind.Rings ? prop.Alt - 1.8f : prop.Alt, reach, out string why)) return Refuse(peer, chestId, why);
+        if (layout.Kind == SealKind.Gate) return TurnHandle(peer, p, chest, step);
         if (layout.Kind == SealKind.Plates)
         {
             var other = layout.Props[1 - step];
@@ -346,6 +348,53 @@ public partial class RewardService : Node
         var result = StepForParty(peer, p, chest, layout, step);
         return result is SealStep.Ignored ? "ignored" : null;
     }
+
+    // ---- #1266: the rope team's and the two-handle gate's seals ----------------------------------------
+
+    /// <summary>A roped pair (rope mode, both adventuring) within <paramref name="reach"/> m of a point, one of them the peer; set by the together service.</summary>
+    public Func<long, double, double, float, bool>? RopedAt { get; set; }
+
+    // the gates: when each wheel was last turned and by whom; open until
+    private readonly Dictionary<string, (string? Key0, double At0, string? Key1, double At1, double Until)> _gates = new(StringComparer.Ordinal);
+
+    /// <summary>Whether a chest's seal lets this peer open it now.</summary>
+    private bool SealOpen(long peer, PlayerProgress p, RewardSpot chest) => chest.Seal switch
+    {
+        SealKind.None => true,
+        SealKind.Roped => RopedAt?.Invoke(peer, chest.E, chest.N, Seals.RopedReachM) == true,
+        SealKind.Gate => _gates.TryGetValue(chest.Id, out var g) && Now < g.Until || _seals.IsDone(p.Key, chest.Id),
+        _ => _seals.IsDone(p.Key, chest.Id),
+    };
+
+    /// <summary>
+    /// A wheel of a two-handle gate turned (held: the owner sends it twice a second): when the other wheel was turned by
+    /// another body within 1.5 s, the gate opens for 60 s, and its seal is done for every adventuring player within 30 m.
+    /// </summary>
+    private string? TurnHandle(long peer, PlayerProgress p, RewardSpot chest, int handle)
+    {
+        double now = Now;
+        var g = _gates.GetValueOrDefault(chest.Id);
+        if (handle == 0) (g.Key0, g.At0) = (p.Key, now);
+        else (g.Key1, g.At1) = (p.Key, now);
+        bool both = g.Key0 != null && g.Key1 != null && g.Key0 != g.Key1 && Math.Abs(g.At0 - g.At1) <= Seals.GateTogetherSeconds;
+        if (both && now >= g.Until)
+        {
+            g.Until = now + Seals.GateOpenSeconds;
+            GD.Print($"[rewards] {chest.Id}: the two-handle gate opens");
+            foreach (long other in _adventure.Peers)
+            {
+                if (!_adventure.Active(other) || _adventure.Progress(other) is not { } op || _adventure.PositionOf?.Invoke(other) is not { } at) continue;
+                if (Math.Sqrt((at.E - chest.E) * (at.E - chest.E) + (at.N - chest.N) * (at.N - chest.N)) > 30) continue;
+                _seals.MarkDone(op.Key, chest.Id, now);
+                SendSeal(other, chest.Id, _seals.MaskOf(op.Key, chest.Id));
+            }
+        }
+        _gates[chest.Id] = g;
+        return null;
+    }
+
+    /// <summary>Whether a two-handle gate stands open now (checks).</summary>
+    public bool GateOpen(string chestId) => _gates.TryGetValue(chestId, out var g) && Now < g.Until;
 
     private SealStep StepForParty(long peer, PlayerProgress p, RewardSpot chest, SealLayout layout, int step)
     {

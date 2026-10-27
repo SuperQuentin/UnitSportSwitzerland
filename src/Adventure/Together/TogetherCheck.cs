@@ -70,6 +70,8 @@ public partial class TogetherCheck : ChatProbe
         await Tether(me);
         await Led(me);
         await Fall(me);
+        await LegUp(me);
+        if (Rewards.RewardService.Instance is { Map.Fixed.Count: > 0 }) await Seals(me);
 
         Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
         Expect(await Until(() => Svc.Links.Count == 0 && me.HandHold == null && _partner.HandHold == null, 3), "let go: no links, no held hands");
@@ -168,6 +170,71 @@ public partial class TogetherCheck : ChatProbe
         me.DebugLaunch(ground + Vector3.Up * 0.3f, Vector3.Zero);
         _partner.DebugLaunch(ground + new Vector3(1.2f, 0.3f, 0), Vector3.Zero);
         await Seconds(1);
+    }
+
+    private async Task LegUp(FootPlayer me)
+    {
+        // the player crouches still: a step offered; the partner, beside it, jumps: 2.6 m up, for nothing
+        Svc.ServeLink(AdventureService.LocalPeer, Pal, LinkMode.Hand);
+        _partner!.DebugLaunch(me.GlobalPosition + new Vector3(0.7f, 0.3f, 0), Vector3.Zero);
+        await Seconds(0.6);
+        Input.ActionPress(PlayerInput.CrouchSlide);
+        Expect(await Until(() => Svc.OffersStep(AdventureService.LocalPeer), 2), "crouched still, linked: a step offered");
+        float ground = _partner.GlobalPosition.Y, top = ground;
+        bool jump = true;
+        _partner.FootActions = () => (jump, false, false);
+        await Seconds(0.1);
+        jump = false;
+        for (int i = 0; i < 60; i++)
+        {
+            top = Mathf.Max(top, _partner.GlobalPosition.Y);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        }
+        Input.ActionRelease(PlayerInput.CrouchSlide);
+        _partner.FootActions = null;
+        Expect(top - ground > 2.2f, FormattableString.Invariant($"the partner's leg-up: {top - ground:F2} m up (a jump alone is ~0.9)"));
+        Expect(await Until(() => !Svc.OffersStep(AdventureService.LocalPeer), 2), "standing up: no step");
+        Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
+    }
+
+    private async Task Seals(FootPlayer me)
+    {
+        var rewards = Rewards.RewardService.Instance!;
+        var roped = rewards.Map.Fixed!.First(s => s.Seal == Rewards.SealKind.Roped);
+        var gate = rewards.Map.Fixed!.First(s => s.Seal == Rewards.SealKind.Gate);
+        string Open(Rewards.RewardSpot c) => Rewards.RewardRules.OpenId(c, Rewards.RewardRules.Edition(DateTime.UtcNow));
+        var origin = me.Origin!;
+        Vector3 At(double e, double n, float up = 0.4f) => origin.ToWorld(e, n, roped.Alt) + Vector3.Up * up;
+
+        // a rope team's chest: alone, sealed; roped with the partner beside it, it opens
+        me.DebugLaunch(At(roped.E - 1.5, roped.N, 1f), Vector3.Zero);
+        _partner!.DebugLaunch(At(roped.E - 30, roped.N, 1f), Vector3.Zero);
+        await Seconds(1);
+        Expect(await rewards.ServeOpen(AdventureService.LocalPeer, Open(roped)) != null, "a rope team's chest stays sealed alone");
+        _partner.DebugLaunch(At(roped.E - 3, roped.N + 2, 1f), Vector3.Zero);
+        await Seconds(1);
+        Svc.ServeLink(AdventureService.LocalPeer, Pal, LinkMode.Rope);
+        Expect(Svc.RopedHere(roped.E, roped.N, Rewards.Seals.RopedReachM), "the client sees the seal lift (roped, both within 8 m)");
+        Expect(await rewards.ServeOpen(AdventureService.LocalPeer, Open(roped)) == null, "roped up beside it, it opens");
+        Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
+
+        // the two-handle gate: one body on both wheels opens nothing, two within 1.5 s open it for a minute
+        var layout = await rewards.Map.LayoutAsync(gate);
+        me.DebugLaunch(At(layout.Props[0].E, layout.Props[0].N, 1f), Vector3.Zero);
+        await Seconds(0.8);
+        await rewards.ServeSealStep(AdventureService.LocalPeer, gate.Id, 0);
+        me.DebugLaunch(At(layout.Props[1].E, layout.Props[1].N, 1f), Vector3.Zero);
+        await Seconds(0.8);
+        await rewards.ServeSealStep(AdventureService.LocalPeer, gate.Id, 1);
+        Expect(!rewards.GateOpen(gate.Id), "one body on both wheels opens nothing");
+        _partner.DebugLaunch(At(layout.Props[0].E, layout.Props[0].N, 1f), Vector3.Zero);
+        await Seconds(0.8);
+        await rewards.ServeSealStep(Pal, gate.Id, 0);
+        await rewards.ServeSealStep(AdventureService.LocalPeer, gate.Id, 1);
+        Expect(rewards.GateOpen(gate.Id), "two bodies on the wheels at once: the gate opens");
+        me.DebugLaunch(At(gate.E - 1.5, gate.N, 1f), Vector3.Zero);
+        await Seconds(0.8);
+        Expect(await rewards.ServeOpen(AdventureService.LocalPeer, Open(gate)) == null, "the chest behind the gate opens");
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();

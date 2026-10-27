@@ -4046,7 +4046,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _lastWallNormal = Vector3.Zero;
             if (!_sliding && spaceDown && !steep)
             {
-                velocity.Y = JumpVelocity;
+                // a friend's leg-up (#1266, Räuberleiter): a free climb-jump of 2.6 m, winded or not
+                velocity.Y = jumpPressed && LegUp?.Invoke() == true ? Mathf.Sqrt(2f * Gravity * Adventure.Together.TogetherService.LegUpHeight) : JumpVelocity;
                 _groundCoyote = 0;
                 // a held Space re-jumps on every landing; each is a jump worth hearing
                 Jumped?.Invoke();

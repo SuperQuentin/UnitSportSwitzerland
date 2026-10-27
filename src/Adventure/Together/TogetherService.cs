@@ -70,6 +70,7 @@ public partial class TogetherService : Node
         ReadyLinks();
         ReadyPots();
         ReadyProgress();
+        ReadyRoutes();
         GD.Print($"[together] {(_server ? "server" : _networked ? "client" : "offline")}");
     }
 
@@ -208,6 +209,7 @@ public partial class TogetherService : Node
     partial void ReadyLinks();
     partial void ReadyPots();
     partial void ReadyProgress();
+    partial void ReadyRoutes();
     partial void ProcessLinks(double delta, double now);
     partial void ProcessPots(double delta, double now);
     partial void ProcessProgress(double delta, double now);

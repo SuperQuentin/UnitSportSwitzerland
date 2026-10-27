@@ -18,6 +18,9 @@ public partial class ClientWorld
             : peer == Multiplayer.GetUniqueId() || !Launch.Networked && peer == Adventure.AdventureService.LocalPeer
                 ? GameSettings.Current.PlayerName is { Length: > 0 } me ? me : "You" : $"#{peer}";
         together.Toast = Toast;
+        // a check's partner body is where it stands, not where the local player is (offline the service asks one body)
+        var position = adventure.PositionOf;
+        adventure.PositionOf = peer => together.PairPeer != 0 && peer == together.PairPeer ? together.Body(peer)?.Global : position?.Invoke(peer);
         together.GlacierAt = g => _chunks != null && _worldOrigin is { } o && _chunks.TryGetCover(o.ToWorld(g), out var cover)
             ? cover is Terrain.Format.CoverClass.Glacier or Terrain.Format.CoverClass.Snowfield : null;
         AddChild(new TogetherChip());

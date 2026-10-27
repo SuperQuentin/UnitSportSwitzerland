@@ -61,6 +61,9 @@ public partial class RewardWorld : Node3D
         /// <summary>The plates' keys in the stood-on set, made once (the 10 Hz sense allocates nothing).</summary>
         public readonly List<string> PlateKeys = new();
         public int Mask = -1;
+        /// <summary>A two-handle gate's gate (#1266), and where it stands closed.</summary>
+        public Node3D? Gate;
+        public float GateY;
     }
 
     public RewardWorld(Func<FootPlayer?> me, Func<WorldOrigin?> origin, Func<Vector3, float?> ground)
@@ -211,7 +214,9 @@ public partial class RewardWorld : Node3D
 
     /// <summary>Whether a chest opens for this player now: no seal, or the server said it is complete.</summary>
     public static bool Unsealed(RewardSpot chest) =>
-        chest.Seal == SealKind.None || Svc?.SealMasks.TryGetValue(chest.Id, out int m) == true && (m & Seals.DoneBit) != 0;
+        chest.Seal == SealKind.None || Svc?.SealMasks.TryGetValue(chest.Id, out int m) == true && (m & Seals.DoneBit) != 0
+        // a rope team's chest (#1266): open while this player is roped to a friend beside it
+        || chest.Seal == SealKind.Roped && Together.TogetherService.Instance?.RopedHere(chest.E, chest.N, Seals.RopedReachM) == true;
 
     private Vector3 Snap(WorldOrigin origin, double e, double n, float alt)
     {
@@ -363,6 +368,18 @@ public partial class RewardWorld : Node3D
                     if (i == 0)
                         part.AddChild(new MeshInstance3D { Mesh = layout.Guide == GuideKind.Vulture ? RewardMeshes.Perch() : RewardMeshes.Mound(), MaterialOverride = material });
                     break;
+                case SealKind.Gate:
+                    // a wheel on its post (#1266), turning while held; the gate itself between the two, lowered when open
+                    var wheel = new MeshInstance3D { Name = "Wheel", Mesh = Together.GateMeshes.Wheel(), MaterialOverride = material, Position = new Vector3(0, 1.0f, 0) };
+                    part.AddChild(new MeshInstance3D { Mesh = Together.GateMeshes.Post(), MaterialOverride = material });
+                    part.AddChild(wheel);
+                    if (i == 0)
+                    {
+                        var gate = new MeshInstance3D { Name = "Gate", Mesh = Together.GateMeshes.Gate(), MaterialOverride = material };
+                        root.AddChild(gate);
+                        p.Gate = gate;
+                    }
+                    break;
             }
             if (lit != null) part.AddChild(lit);
             p.Lit.Add(lit!);
@@ -389,7 +406,15 @@ public partial class RewardWorld : Node3D
             var a = l.Props[next == i ? prev : next];
             double de = a.E - prop.E, dn = a.N - prop.N;
             float yaw = (float)Math.Atan2(-de, -dn);
-            if (l.Kind is SealKind.Rings or SealKind.Bells) p.Parts[i].Rotation = new Vector3(0, yaw + (l.Kind == SealKind.Bells ? Mathf.Pi / 2 : 0), 0);
+            if (l.Kind is SealKind.Rings or SealKind.Bells or SealKind.Gate) p.Parts[i].Rotation = new Vector3(0, yaw + (l.Kind == SealKind.Bells ? Mathf.Pi / 2 : 0), 0);
+        }
+        // the two-handle gate stands between its wheels, across the way to the chest
+        if (p.Gate is { } gate && l.Props.Length == 2)
+        {
+            gate.Position = (p.At[0] + p.At[1]) * 0.5f;
+            p.GateY = gate.Position.Y;
+            var across = p.At[1] - p.At[0];
+            gate.Rotation = new Vector3(0, Mathf.Atan2(-across.Z, across.X), 0);
         }
     }
 
@@ -397,6 +422,12 @@ public partial class RewardWorld : Node3D
     {
         if (p.Mask == mask) return;
         p.Mask = mask;
+        // an opened gate sinks into the ground (a tween of its node, never a new mesh)
+        if (p.Gate is { } gate && GodotObject.IsInstanceValid(gate))
+        {
+            bool open = (mask & Seals.DoneBit) != 0;
+            gate.CreateTween().TweenProperty(gate, "position:y", p.GateY - (open ? 2.6f : 0f), 1.2f);
+        }
         for (int i = 0; i < p.Lit.Count; i++)
             if (p.Lit[i] != null) p.Lit[i].Visible = (mask & (1 << i)) != 0;
     }
@@ -424,6 +455,19 @@ public partial class RewardWorld : Node3D
                     svc.AskSealStep(id, i);
                 }
             }
+            else if (p.Layout.Kind == SealKind.Gate && PlayerInput.Held(PlayerInput.InteractMount))
+            {
+                // a wheel held (#1266): turned twice a second while E stays down within reach
+                for (int i = 0; i < p.At.Count; i++)
+                {
+                    var d = p.At[i] - feet;
+                    if (d.X * d.X + d.Z * d.Z > Seals.GateReachM * Seals.GateReachM || Mathf.Abs(d.Y) > 2f) continue;
+                    if (Core.GameClock.Now < _wheelNext) break;
+                    _wheelNext = Core.GameClock.Now + 0.5;
+                    if (p.Parts[i].GetNodeOrNull<Node3D>("Wheel") is { } wheel) wheel.RotateObjectLocal(Vector3.Forward, 0.6f);
+                    svc.AskSealStep(id, i);
+                }
+            }
             else if (p.Layout.Kind == SealKind.Plates)
             {
                 for (int i = 0; i < p.At.Count; i++)
@@ -447,7 +491,9 @@ public partial class RewardWorld : Node3D
 
     // ---- interacting ---------------------------------------------------------------------------
 
-    private enum Thing { None, Chest, Stack, Bell, TuneBell, Burrow, Post, Box }
+    private enum Thing { None, Chest, Stack, Bell, TuneBell, Burrow, Post, Box, Wheel }
+
+    private double _wheelNext;
 
     private (Thing Kind, string Id, int Index, Vector3 At) InReach(FootPlayer p)
     {
@@ -471,6 +517,7 @@ public partial class RewardWorld : Node3D
                     case SealKind.Bonfire: Try(Thing.Stack, id, i, s.At[i], 2.6f); break;
                     case SealKind.Bells: Try(i == 4 ? Thing.TuneBell : Thing.Bell, id, i, s.At[i], 0.9f); break;
                     case SealKind.Guide when i == 0: Try(Thing.Burrow, id, 0, s.At[0], 2.6f); break;
+                    case SealKind.Gate: Try(Thing.Wheel, id, i, s.At[i], Seals.GateReachM); break;
                 }
         for (int i = 0; i < _posts.Count; i++) Try(Thing.Post, _posts[i].Def.Id, i, _posts[i].At);
         for (int i = 0; i < _boxes.Count; i++) Try(Thing.Box, _boxes[i].Shrine.Id, i, _boxes[i].At);
@@ -506,6 +553,9 @@ public partial class RewardWorld : Node3D
             case Thing.Burrow:
                 svc.AskGuide(id);
                 return true;
+            case Thing.Wheel:
+                svc.AskSealStep(id, index);
+                return true;
             case Thing.Post:
                 svc.AskTrial(id);
                 return true;
@@ -536,6 +586,7 @@ public partial class RewardWorld : Node3D
             Thing.TuneBell => "Listen to the tune",
             Thing.Burrow => w._props.TryGetValue(id, out var s) && s.Layout.Guide == GuideKind.Vulture ? "Wake the bearded vulture" : "Wake the marmot",
             Thing.Post => $"Start the trial: {w._posts[index].Def.Name}",
+            Thing.Wheel => "Hold: turn the wheel (a friend turns the other)",
             Thing.Box => $"Offer edelweiss at {w._boxes[index].Shrine.Name}",
             _ => "",
         };
