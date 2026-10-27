@@ -191,6 +191,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // bowling centres planned in hand-made buildings (#1235)
+        if (Interiors.BowlingProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.BowlingProbe { Name = "BowlingProbe" });
+            return;
+        }
         // the venue list, its rules on a hand-made tile, and the real tiles when there are any (#1232)
         if (Interiors.VenueProbe.ParseArgs())
         {

@@ -67,6 +67,18 @@ public static class Venues
     /// <summary>A venue that is a hall of its own (lanes, screens, rows of machines), not a room on a ground floor.</summary>
     public static bool IsHall(VenueType kind) => kind is VenueType.Bowling or VenueType.Cinema or VenueType.Arcade;
 
+    /// <summary>
+    /// Whether a hall venue takes its whole solid (#1235): a low building that is nothing else, which
+    /// loses its window grid outside and plans as one box inside. A taller one, or a block of flats,
+    /// keeps its facade and the venue plans into its bottom storeys. Shared by the facade and the planner.
+    /// </summary>
+    public static bool WholeBuilding(Building b) =>
+        b.MaxY - b.MinY <= 13f && b.Kind is not (BuildingKind.House or BuildingKind.Apartment);
+
+    /// <summary>The hall venue a solid is, if it is one, whatever the planner then made of it: the facade's and the door's question.</summary>
+    public static VenueType HallOf(BuildingTypeMap map, int index) =>
+        map.VenueOf(index) is int v and >= 0 && IsHall(At(v).Type) ? At(v).Type : VenueType.None;
+
     /// <summary>A place to eat or drink.</summary>
     public static bool IsDining(VenueType kind) => kind is VenueType.Restaurant or VenueType.Cafe or VenueType.FastFood
         or VenueType.Bar or VenueType.Pub or VenueType.Nightclub or VenueType.Biergarten;

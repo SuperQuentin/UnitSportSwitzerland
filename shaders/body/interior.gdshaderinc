@@ -9,7 +9,8 @@
 //   - the sun's patch through each window, on the floor and the wall opposite,
 //   - a ceiling lamp per room: on at night, and all day in a room with no window.
 // The same formula in every style, so a room by noon, at sunset or at midnight reads like the
-// street outside it. Vertex alpha < 0.5 marks glass, drawn as the flat colour of the sky outside.
+// street outside it. Vertex alpha < 0.2 marks glass, drawn as the flat colour of the sky outside;
+// 0.2 to 0.5 a part that lights itself (#1235: a score screen, a pinball's playfield, neon), drawn as it is.
 //   INTERIOR_CARTOON  the light in soft bands, colours toward pastel (style_grade)
 //   INTERIOR_REAL     plaster on walls and ceilings, boards on wooden floors (style_tinted)
 // Without either: the PS1 finish (vertex snap, light steps, Bayer dither), behind `retro`.
@@ -189,6 +190,9 @@ void fragment() {
         light *= max(banded, 0.05) / l;
 #endif
         col *= light * light_gain;
+    } else if (COLOR.a >= 0.2) {
+        // self-lit: the colour itself, whatever the room's light
+        col = COLOR.rgb;
     } else {
         col = min(world_sky * glass_gain + glass_night * world_night, vec3(1.0));
     }

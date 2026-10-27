@@ -193,7 +193,8 @@ public static partial class InteriorGenerator
     private static bool LaysItselfOut(RoomType t) =>
         t is RoomType.WarehouseHall or RoomType.ProductionHall or RoomType.TruckBay
             or RoomType.ServiceBay or RoomType.Showroom
-            or RoomType.IkeaMarket;        // #501, laid out in InteriorGenerator.Ikea
+            or RoomType.IkeaMarket         // #501, laid out in InteriorGenerator.Ikea
+        || BowlingRoom(t);                  // #1235, laid out in InteriorGenerator.Bowling
 
     /// <summary>Lays out one site hall; the wall dressing is added afterwards by the generic placer.</summary>
     /// <param name="lanes">
@@ -205,6 +206,7 @@ public static partial class InteriorGenerator
     private static void HallLayout(InteriorLayout l, int f, RoomPlan r,
         List<RectPlan> placed, List<RectPlan> blocked, List<RectPlan> lanes, Random rng)
     {
+        if (BowlingRoom(r.Type)) { BowlingLayout(l, f, r, placed, blocked, rng); return; }
         switch (r.Type)
         {
             case RoomType.WarehouseHall: blocked.AddRange(lanes); Aisles(l, f, r, placed, blocked, rng); break;

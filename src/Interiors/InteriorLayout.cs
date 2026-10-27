@@ -30,6 +30,8 @@ public enum RoomType
     // #827: the site office's upper containers, off the gallery: the site manager's office over the
     // office, the drawing office over the mess room
     SiteManager, DrawingOffice,
+    // #1235: a bowling centre: the lane hall, the concourse in front of it, a mezzanine over that
+    BowlingLanes, Concourse, Mezzanine,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -230,6 +232,9 @@ public enum FurnitureType
     Pillar, StorageCage, Mailboxes, BikeRack,
     // #822: a building site's office and mess room, and its toilet cabins
     CoffeeMachine, Heater, Urinal, PaperRoll, Mirror, CoatHook,
+    // #1235: a bowling centre's lanes and settees, its counters, bar and games
+    LanePair, Settee, ShoeCounter, ShoeRack, BallRack, BarCounter, BackBar, BarStool, PoolTable,
+    Pinball, ArcadeCabinet, DartBoard,
 }
 
 public sealed class FurniturePlan
@@ -412,7 +417,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 28; // 28: a site office's upper containers through raised doors off its gallery (#827); 27: a building site's interior is its site office and its toilet cabins (#822); 26: open stairwells with a railing, TVs facing the sofa, furniture that leaves a way through (#680); 25: a studio under 5.7 m deep keeps its kitchenette at least 1.2 m (#694); 24: ramp-first garages, a ramp square to the front wall or along the facade beside a single stairwell (#694); 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 29; // 29: bowling centres at their real places (#1235); 28: a site office's upper containers through raised doors off its gallery (#827); 27: a building site's interior is its site office and its toilet cabins (#822); 26: open stairwells with a railing, TVs facing the sofa, furniture that leaves a way through (#680); 25: a studio under 5.7 m deep keeps its kitchenette at least 1.2 m (#694); 24: ramp-first garages, a ramp square to the front wall or along the facade beside a single stairwell (#694); 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
