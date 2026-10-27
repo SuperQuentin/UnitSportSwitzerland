@@ -353,8 +353,20 @@ public partial class InteriorNode
     public static Texture2D Slide(int i)
     {
         _slides ??= Enumerable.Range(1, SlideCount)
-            .Select(k => GD.Load<Texture2D>($"res://assets/cinema/cat_{k}.jpg")).ToArray();
+            .Select(k => GD.Load<Texture2D>($"res://assets/cinema/cat_{k}.jpg") ?? MissingSlide(k)).ToArray();
         return _slides[((i % SlideCount) + SlideCount) % SlideCount];
+    }
+
+    /// <summary>
+    /// A plain grey picture for a photo that did not load (a checkout without git-lfs has text pointers
+    /// where the JPEGs are): said once, never a cinema that cannot be built.
+    /// </summary>
+    private static Texture2D MissingSlide(int k)
+    {
+        GD.PushWarning($"[cinema] assets/cinema/cat_{k}.jpg did not load (git-lfs not installed? `git lfs pull`): a grey slide instead");
+        var img = Image.CreateEmpty(478, 200, false, Image.Format.Rgb8);
+        img.Fill(new Color(0.35f, 0.35f, 0.37f));
+        return ImageTexture.CreateFromImage(img);
     }
 
     /// <summary>The slide showing at a shared-clock time, s.</summary>
