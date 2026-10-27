@@ -129,11 +129,13 @@ vec3 room_light(vec3 p, vec3 n) {
                 }
             }
         } else {
-            // a ceiling lamp: on at night, or always in a windowless room
+            // a ceiling lamp: on at night, or always in a windowless room; a bowling hall's goes
+            // blacklight purple as night falls (tint 1, RoomLights.Tint: cosmic bowling, #1235)
             float on = max(world_night, a.y);
             float fall = 1.0 - clamp(d / a.x, 0.0, 1.0);
             float facing = clamp(dot(n, dir) * 0.5 + 0.5, 0.0, 1.0);
-            total += lamp_color * lamp_gain * on * (0.12 + 0.88 * fall * fall) * (0.4 + 0.6 * facing);
+            vec3 lamp = a.z > 0.5 ? mix(lamp_color, vec3(0.30, 0.10, 0.80), world_night) : lamp_color;
+            total += lamp * lamp_gain * on * (0.12 + 0.88 * fall * fall) * (0.4 + 0.6 * facing);
         }
     }
     return total;

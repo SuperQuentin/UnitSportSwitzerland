@@ -142,7 +142,7 @@ public static partial class InteriorMeshBuilder
         RoomType.Ramp => (C(0.46f, 0.46f, 0.45f), C(0.72f, 0.72f, 0.70f), C(0.60f, 0.60f, 0.59f)),
         // #1235: a bowling hall's dark carpet and night-blue walls under a black ceiling; a lit concourse
         RoomType.BowlingLanes => (C(0.10f, 0.10f, 0.22f), C(0.16f, 0.18f, 0.40f), C(0.07f, 0.07f, 0.10f)),
-        RoomType.Concourse => (C(0.18f, 0.14f, 0.34f), C(0.86f, 0.80f, 0.70f), C(0.92f, 0.92f, 0.90f)),
+        RoomType.Concourse => (C(0.14f, 0.11f, 0.30f), C(0.16f, 0.36f, 0.46f), C(0.16f, 0.16f, 0.22f)),
         RoomType.Mezzanine => (C(0.46f, 0.30f, 0.18f), C(0.70f, 0.24f, 0.22f), C(0.20f, 0.18f, 0.20f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
@@ -897,7 +897,7 @@ public static partial class InteriorMeshBuilder
             // #822: what hangs on a cabin's walls
             or FurnitureType.PaperRoll or FurnitureType.Mirror or FurnitureType.CoatHook
             // #1235: lanes are walked on (their machine end collides by itself); a dart board hangs on the wall
-            or FurnitureType.LanePair or FurnitureType.DartBoard);
+            or FurnitureType.LanePair or FurnitureType.DartBoard or FurnitureType.Confetti);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
         if (IsVenuePiece(p.Type))
         {

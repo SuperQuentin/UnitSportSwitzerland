@@ -235,6 +235,8 @@ public enum FurnitureType
     // #1235: a bowling centre's lanes and settees, its counters, bar and games
     LanePair, Settee, ShoeCounter, ShoeRack, BallRack, BarCounter, BackBar, BarStool, PoolTable,
     Pinball, ArcadeCabinet, DartBoard,
+    /// <summary>A bowling carpet's print (#1235): neon shapes scattered over a room's floor, walked over like paint.</summary>
+    Confetti,
 }
 
 public sealed class FurniturePlan

@@ -28,7 +28,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored bowling centres are planned again.</summary>
-    public const int BowlingRules = 1;
+    public const int BowlingRules = 2;
 
     /// <summary>One pair of lanes across, capping boards included [S: 11 ft 6 in].</summary>
     public const float PairPitch = 3.50f;
@@ -356,6 +356,43 @@ public static partial class InteriorGenerator
 
     // ---- furnishing (HallLayout) -------------------------------------------------------------------
 
+    /// <summary>The bowling pieces at the sizes this file places them, for the model viewer.</summary>
+    private static readonly Piece[] BowlingPieces =
+    {
+        new(FurnitureType.LanePair, PairPitch, FullLanes.Block - RearAisle, 4.0f, false),
+        new(FurnitureType.Settee, PairPitch - 0.3f, FullLanes.Settee - ArchClear - 0.1f, 1.0f, false),
+        new(FurnitureType.ShoeCounter, 3.6f, 2.2f, 2.3f, true),
+        new(FurnitureType.BallRack, 2.4f, 0.55f, 1.1f, true),
+        new(FurnitureType.BarCounter, 4.0f, 2.2f, 2.2f, true),
+        new(FurnitureType.BarStool, 0.4f, 0.4f, 0.78f, false),
+        new(FurnitureType.PoolTable, 1.4f, 2.7f, 0.8f, false),
+        new(FurnitureType.Pinball, 0.75f, 1.4f, 1.93f, true),
+        new(FurnitureType.ArcadeCabinet, 0.75f, 0.9f, 1.85f, true),
+        new(FurnitureType.DartBoard, 0.7f, 0.15f, 2.0f, true),
+    };
+
+    /// <summary>Whole bowling centres in the model viewer: one on two levels, and a bowl bar with mini lanes.</summary>
+    [Core.Showcase("Interiors", "Bowling centre")]
+    private static IEnumerable<(string Name, Func<Godot.Node3D> Make)> ShowcaseBowling()
+    {
+        foreach (var (name, w, d, h) in new[] { ("Two levels", 30f, 48f, 8.5f), ("Bowl bar", 13f, 24f, 5f) })
+            yield return (name, () =>
+            {
+                var id = new TileId(2600, 1200);
+                var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, w, d, h, BuildingKind.Commercial) } };
+                Venues.Override = new List<VenueRecord>
+                {
+                    new("n1", VenueType.Bowling, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", name),
+                };
+                var layout = Generate(tile, 0, null, null)!;
+                Venues.Override = null;
+                var node = InteriorNode.Create(layout, InteriorMeshBuilder.Build(layout),
+                    Styles.StyleKit.Material(Styles.MaterialRole.Interior), Godot.Transform3D.Identity);
+                foreach (var leaf in node.GetChildren().OfType<DoorLeaf>()) leaf.Visible = false;
+                return node;
+            });
+    }
+
     private static bool BowlingRoom(RoomType t) => t is RoomType.BowlingLanes or RoomType.Concourse or RoomType.Mezzanine;
 
     private static void BowlingLayout(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
@@ -438,6 +475,7 @@ public static partial class InteriorGenerator
     private static void Concourse(InteriorLayout l, int f, RoomPlan r, BowlPlan p, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
     {
         var fr = p.Frame;
+        Carpet(l, f, r, placed);
         // the walk from the door to the lanes, and the strip along the arch, stay clear
         var (dx, dz) = fr.Point(p.DoorU, p.DoorV);
         blocked.Add(new RectPlan(dx - 1.6f, dz - 1.6f, dx + 1.6f, dz + 1.6f).Clip(r));
@@ -459,7 +497,8 @@ public static partial class InteriorGenerator
         for (int i = 0; i < cabinets; i++)
             TryPlace(l, f, r, new Piece(FurnitureType.ArcadeCabinet, 0.75f, 0.9f, 1.85f, true), placed, blocked, rng, near.Far);
         TryPlace(l, f, r, new Piece(FurnitureType.DartBoard, 0.7f, 0.15f, 2.0f, true), placed, blocked, rng, near.Far);
-        if (!p.Mezzanine) Lounge(l, f, r, fr, placed, blocked, rng);
+        // the pool tables and tables: here, unless a mezzanine has them; a big concourse gets some anyway
+        if (!p.Mezzanine || r.Area >= 150f) Lounge(l, f, r, fr, placed, blocked, rng);
         TryPlace(l, f, r, new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true), placed, blocked, rng);
     }
 
@@ -467,6 +506,7 @@ public static partial class InteriorGenerator
     private static void Gallery(InteriorLayout l, int f, RoomPlan r, BowlPlan p, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
     {
         var fr = p.Frame;
+        Carpet(l, f, r, placed);
         if (p.Flight is { } fl) blocked.Add(fl.Grow(1.2f));
         var near = Sides(fr, l, r);
         Bar(l, f, r, placed, blocked, rng, near);
@@ -530,6 +570,14 @@ public static partial class InteriorGenerator
             if (!Free(r, rect, placed, blocked, 0.02f)) continue;
             Put(l, f, FurnitureType.BarStool, x, z, bar.Turns, 0.4f, 0.4f, 0.78f, placed);
         }
+    }
+
+    /// <summary>The carpet's print over a room's floor, a hand in from the walls; walked over, so it blocks nothing.</summary>
+    private static void Carpet(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed)
+    {
+        const float inset = WallInset + 0.05f;
+        if (r.Width < 1f || r.Depth < 1f) return;
+        Put(l, f, FurnitureType.Confetti, (r.X0 + r.X1) / 2, (r.Z0 + r.Z1) / 2, 0, r.Width - 2 * inset, r.Depth - 2 * inset, 0.005f, placed);
     }
 
     /// <summary>A strip <paramref name="deep"/> m deep along one wall of a room.</summary>

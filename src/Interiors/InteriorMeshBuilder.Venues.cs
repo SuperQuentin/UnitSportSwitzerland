@@ -45,7 +45,7 @@ public static partial class InteriorMeshBuilder
     private static bool IsVenuePiece(FurnitureType t) => t is FurnitureType.LanePair or FurnitureType.Settee
         or FurnitureType.ShoeCounter or FurnitureType.BallRack or FurnitureType.BarCounter or FurnitureType.BackBar
         or FurnitureType.BarStool or FurnitureType.PoolTable or FurnitureType.Pinball or FurnitureType.ArcadeCabinet
-        or FurnitureType.DartBoard or FurnitureType.ShoeRack;
+        or FurnitureType.DartBoard or FurnitureType.ShoeRack or FurnitureType.Confetti;
 
     private static void VenuePiece(Scratch s, FurniturePlan p, Vector3 at, Basis basis)
     {
@@ -218,6 +218,27 @@ public static partial class InteriorMeshBuilder
                 B(-0.23f, 1.08f, d - 0.21f, -0.14f, 1.12f, d - 0.12f, C(0.85f, 0.10f, 0.10f));
                 for (int i = 0; i < 3; i++)
                     B(0.0f + i * 0.08f, 0.98f, d - 0.17f, 0.05f + i * 0.08f, 1.0f, d - 0.12f, Lit(0.2f + 0.3f * i, 0.8f, 0.3f));
+                break;
+            }
+            case FurnitureType.Confetti:
+            {
+                // the print of a bowling carpet: bars, squares and chevrons in neon on the dark pile, a
+                // few to the square metre, laid out from the piece's own place so every peer lays the same
+                Color[] neon = { C(0.98f, 0.20f, 0.70f), C(0.20f, 0.90f, 0.98f), C(0.98f, 0.86f, 0.12f), C(0.50f, 0.96f, 0.20f), C(0.98f, 0.50f, 0.10f) };
+                int n = Math.Min(260, (int)(p.W * p.D * 0.9f));
+                for (int i = 0; i < n; i++)
+                {
+                    float x = -w + 0.2f + Hash(p, 3 * i) * (p.W - 0.4f), z = -d + 0.2f + Hash(p, 3 * i + 1) * (p.D - 0.4f);
+                    float roll = Hash(p, 3 * i + 2);
+                    var col = neon[(int)(roll * 97) % neon.Length];
+                    if (roll < 0.4f) B(x - 0.18f, 0.002f, z - 0.035f, x + 0.18f, 0.005f, z + 0.035f, col);
+                    else if (roll < 0.7f) B(x - 0.035f, 0.002f, z - 0.18f, x + 0.035f, 0.005f, z + 0.18f, col);
+                    else
+                    {
+                        B(x - 0.09f, 0.002f, z - 0.09f, x + 0.09f, 0.005f, z - 0.05f, col);
+                        B(x - 0.09f, 0.002f, z - 0.05f, x - 0.05f, 0.005f, z + 0.09f, col);
+                    }
+                }
                 break;
             }
             case FurnitureType.DartBoard:

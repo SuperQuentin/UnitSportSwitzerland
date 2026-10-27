@@ -63,6 +63,11 @@ public partial class BowlingProbe : Node
         string what = $"{c.Name} ({c.W}x{c.D} m, {c.H} m, {c.Kind})";
         var map = BuildingTypes.For(tile);
         Check(Venues.HallOf(map, 0) == VenueType.Bowling, $"{what}: the solid is a bowling centre");
+        if (c.Bowling)
+        {
+            var main = BuildingFootprint.ComputeDoors(tile, null, null).First(d => d.Index == 0 && d.Slot == 0);
+            Check(main.Width >= 2.0f, $"{what}: its way in is a double door ({main.Width:F1} m)");
+        }
 
         InteriorLayout? l;
         try { l = InteriorGenerator.Generate(tile, 0, null, null); }
@@ -135,8 +140,8 @@ public partial class BowlingProbe : Node
         catch (Exception e) { GD.Print($"[bowling] could not write the plan: {e.Message}"); }
     }
 
-    /// <summary>A flat-topped box: four walls and a roof.</summary>
-    private static Building Box(float cx, float cz, float w, float d, float h, BuildingKind kind)
+    /// <summary>A flat-topped box: four walls and a roof (the model viewer's centres are built in one too).</summary>
+    internal static Building Box(float cx, float cz, float w, float d, float h, BuildingKind kind)
     {
         float x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
         var t = new List<float>();

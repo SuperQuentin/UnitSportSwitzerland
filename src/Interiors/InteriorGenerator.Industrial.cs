@@ -236,7 +236,7 @@ public static partial class InteriorGenerator
         });
         // paint on the floor and a beam under the roof take no room: a lift stands on its marked-out
         // bay, and a rack row runs under the crane
-        if (type is FurnitureType.FloorMarking or FurnitureType.Gantry) return;
+        if (type is FurnitureType.FloorMarking or FurnitureType.Gantry or FurnitureType.Confetti) return;
         // the footprint a turned piece really takes, so the next row keeps off it
         float ew = turns % 2 == 0 ? w : d, ed = turns % 2 == 0 ? d : w;
         placed.Add(new RectPlan(x - ew / 2, z - ed / 2, x + ew / 2, z + ed / 2));
