@@ -183,6 +183,32 @@ public static class ShapedCheck
     private static double Sq(double v) => v * v;
 
     /// <summary>
+    /// The generated shaped building of a shape nearest the default spawn, as built, its kind
+    /// changed if asked (<c>--flattour --block shaped:L:House</c>), or null.
+    /// </summary>
+    public static (BuildingTile Tile, int Index)? Pick(string shape, BuildingKind? kind)
+    {
+        double e0 = SpawnPoint.DefaultLv95E, n0 = SpawnPoint.DefaultLv95N;
+        var world = new ProceduralWorld(e0, n0);
+        foreach (var p in world.ShapedNear(e0, n0, Radius).Where(p => p.Shape == shape).OrderBy(p => Sq(p.E - e0) + Sq(p.N - n0)))
+        {
+            var id = TileId.FromLv95(p.E, p.N);
+            if (world.BuildBuildings(id) is not { } tile) continue;
+            var outer = p.Rings[0].Select(q => new Vector2((float)(q.E - id.MinE), (float)(id.MaxN - q.N))).ToArray();
+            int index = Find(tile, outer);
+            if (index < 0) continue;
+            if (kind is not { } k) return (tile, index);
+            var b = tile.Buildings[index];
+            var list = new List<Building>(tile.Buildings)
+            {
+                [index] = new Building { Kind = k, Egid = b.Egid, YearBuilt = b.YearBuilt, Floors = Math.Min(b.Floors, (byte)2), MinY = b.MinY, MaxY = b.MaxY, Triangles = b.Triangles },
+            };
+            return (new BuildingTile { Id = tile.Id, Buildings = list }, index);
+        }
+        return null;
+    }
+
+    /// <summary>
     /// How much of its outline a plan's ground floor must fill (#1290): an angled facade is
     /// followed, but a stairwell on a facade keeps its wall, and so does a street door's stretch.
     /// </summary>
