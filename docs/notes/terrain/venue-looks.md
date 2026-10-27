@@ -23,7 +23,7 @@ at, not shipped.
   (`CinemaBooths`, `InteriorNode.SlideAt`); the hall has its screen speaker stacks, surround speakers
   and wall lights (`Loudspeaker`, `WallSconce`). The porthole is a casing round real holes in the wall
   (`OpeningKind.Window` with `Other` set: an inner window; `Open` = the projection port, unglazed; the two
-  viewing windows beside it get dark see-through glass, `InteriorNode.AddViewGlass`, as the interior's own
+  viewing windows beside it, out past the projector's body (`PortCasingW`), get dark see-through glass, `InteriorNode.AddViewGlass`, as the interior's own
   glass is opaque sky), at 1.3-1.7 m over an upstairs booth's floor; the seating's rise is capped so the
   back row's tread is 2 m under the lens (`ProjectorClear`, checked by `--cinemacheck`). The beam samples the picture along each view ray (`projector_beam.gdshader`) and the house lamps carry a
   wash of the slide's mean colour (`screen_glow`).

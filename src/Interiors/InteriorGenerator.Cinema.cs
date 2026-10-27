@@ -36,7 +36,7 @@ public static partial class InteriorGenerator
     private const float ScreenDepth = 1.1f;
 
     /// <summary>
-    /// The holes through a hall's back wall into the booth (#1250), across a porthole's 1.4 × 0.45 m casing
+    /// The holes through a hall's back wall into the booth (#1250), across a porthole's <see cref="PortCasingW"/> × 0.45 m casing
     /// (x from its middle, y over its foot): the projection port in the middle (±<see cref="PortHalf"/>), a
     /// darkened viewing window from <see cref="ViewIn"/> to <see cref="ViewOut"/> either side, all from
     /// <see cref="PortFoot"/> to <see cref="PortHead"/>. The casing's mesh frames exactly these.
@@ -47,7 +47,10 @@ public static partial class InteriorGenerator
     /// <summary>How far a projector's lens sits under the top of its piece, m (the mesh's pedestal makes up the rest).</summary>
     internal const float ProjectorLensDrop = 0.43f;
 
-    internal const float PortHalf = 0.18f, ViewIn = 0.23f, ViewOut = 0.67f, PortFoot = 0.075f, PortHead = 0.375f;
+    internal const float PortHalf = 0.18f, ViewIn = 0.5f, ViewOut = 1.05f, PortFoot = 0.075f, PortHead = 0.375f;
+
+    /// <summary>The casing's width, m: the viewing windows clear of the projector's 0.8 m body, so the projectionist sees past it.</summary>
+    internal const float PortCasingW = 2 * ViewOut + 0.1f;
     /// <summary>Row pitch [S: 1.0-1.2 m]; the rise of each row [S: 0.10-0.45 m, here a steady one].</summary>
     public const float RowPitch = 1.1f, RowRise = 0.32f;
     private const float ExitClear = 0.7f;
@@ -406,7 +409,7 @@ public static partial class InteriorGenerator
         }
         // the porthole the projector shines through, high in the back wall
         var (px, pz) = fr.Point(uMid, p.HallV1 - 0.1f);
-        Put(l, f, FurnitureType.Porthole, px, pz, fr.FaceVMinus, 1.4f, 0.1f, 0.45f, placed, lift: (p.BoothUpstairs ? l.StoreyHeight : 0) + p.PortY);
+        Put(l, f, FurnitureType.Porthole, px, pz, fr.FaceVMinus, PortCasingW, 0.1f, 0.45f, placed, lift: (p.BoothUpstairs ? l.StoreyHeight : 0) + p.PortY);
     }
 
     /// <summary>The projection room: a projector to each hall's porthole, the rack, the old platter, the control panel.</summary>
@@ -427,7 +430,7 @@ public static partial class InteriorGenerator
             // the porthole it shines through, from the booth's side (#1250): the hall's is on the other face of
             // the wall, at the same height over the hall's floor
             var (wx, wz) = fr.Point(u, p.HallV1 + 0.1f);
-            Put(l, f, FurnitureType.Porthole, wx, wz, fr.FaceVPlus, 1.4f, 0.1f, 0.45f, placed, lift: p.PortY);
+            Put(l, f, FurnitureType.Porthole, wx, wz, fr.FaceVPlus, PortCasingW, 0.1f, 0.45f, placed, lift: p.PortY);
         }
         TryPlace(l, f, r, new Piece(FurnitureType.BoothPanel, 1.2f, 0.3f, 1.7f, true), placed, blocked, rng, new[] { fr.VPlus });
         TryPlace(l, f, r, new Piece(FurnitureType.ServerRack, 0.6f, 0.9f, 2.0f, true), placed, blocked, rng, new[] { fr.VPlus });
@@ -546,7 +549,7 @@ public static partial class InteriorGenerator
         new(FurnitureType.SeatingBank, 12f, 9f, 3f, false),
         new(FurnitureType.MovieScreen, 9f, ScreenDepth, 5f, true),
         new(FurnitureType.ExitSign, 0.45f, 0.08f, 0.22f, true),
-        new(FurnitureType.Porthole, 1.4f, 0.1f, 0.45f, true),
+        new(FurnitureType.Porthole, PortCasingW, 0.1f, 0.45f, true),
         new(FurnitureType.BoxOffice, 3.0f, 2.2f, 2.3f, true),
         new(FurnitureType.ConcessionStand, 5.0f, 2.4f, 2.6f, true),
         new(FurnitureType.PosterFrame, 0.9f, 0.1f, 2.1f, true),
