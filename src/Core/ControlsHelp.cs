@@ -63,6 +63,15 @@ public partial class ControlsHelp : CanvasLayer
             new("Journal: quests, birds, fish (tabs: Q / E)", PlayerInput.BirdJournal, Pad: "{quick_menu} (hold) › Journal; LB / RB for the tabs"),
             new("Character: your figure (on foot)", PlayerInput.CharacterMenu, Pad: "{quick_menu} (hold) › Character, or {menu} › Character"),
         }),
+        ("Adventure: navigation and travel (#1226)", new Row[]
+        {
+            new("Guiding wind toward what you track (on foot, mounted)", PlayerInput.Guide, Pad: "{quick_menu} (hold) › Guide"),
+            new("Departure board at a station, stop, landing or cable-car sign", PlayerInput.InteractMount),
+            new("Board: pick a destination, travel; type to search", Keys: "↑ ↓, Enter", Pad: "D-pad, A"),
+            new("Map: place a pin / edit a pin", Keys: "RMB", Pad: "X at the centre cross"),
+            new("Map: pin icon", Keys: "1–6", Pad: "D-pad, A"),
+            new("Map: track a place, a pin, a travel point", Keys: "Track (click)", Pad: "A on it, then Track"),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
