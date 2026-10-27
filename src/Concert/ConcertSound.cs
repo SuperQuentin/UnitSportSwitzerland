@@ -298,13 +298,18 @@ public partial class ConcertSound : Node3D
 
     // ---- the crowd's sounds (static: in the sound player) -------------------------------------------
 
-    private static AudioStreamWav? _roarWav, _clapWav;
+    private static readonly Lazy<AudioStreamWav> _roarWav = new(MakeRoar), _clapWav = new(MakeApplause);
+
+    /// <summary>Synthesises both loops (0.7 s of DSP) off the main thread, so the first stage built nearby finds them made.</summary>
+    public static void Prewarm() { _ = _roarWav.Value; _ = _clapWav.Value; }
 
     /// <summary>
     /// A stadium crowd's roar, 8 s stereo loop: a low hubbub, sixty yells a side ("woo", "yeah": a
     /// voice's buzz through two vowel formants, gliding), and a few whistles; each side its own people.
     /// </summary>
-    public static AudioStreamWav CrowdRoar => _roarWav ??= StereoLoop(8f, 984, (rng, n) =>
+    public static AudioStreamWav CrowdRoar => _roarWav.Value;
+
+    private static AudioStreamWav MakeRoar() => StereoLoop(8f, 984, (rng, n) =>
     {
         var s = new float[n];
         var hub = BandPass(Noise(rng, n), Coef(160f), Coef(1100f));
@@ -350,7 +355,9 @@ public partial class ConcertSound : Node3D
     /// A stadium's applause, 8 s stereo loop: a dozen clappers close by (each clapping ~4 a second at
     /// their own hands' pitch) over a thousand claps a second further off, a dense hiss with grain in it.
     /// </summary>
-    public static AudioStreamWav CrowdApplause => _clapWav ??= StereoLoop(8f, 985, (rng, n) =>
+    public static AudioStreamWav CrowdApplause => _clapWav.Value;
+
+    private static AudioStreamWav MakeApplause() => StereoLoop(8f, 985, (rng, n) =>
     {
         var far = new float[n];
         int claps = (int)(n / (float)Rate * 1000f);

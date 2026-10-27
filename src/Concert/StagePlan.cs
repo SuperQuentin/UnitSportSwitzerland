@@ -98,6 +98,34 @@ public sealed class StagePlan
     }
 
     /// <summary>
+    /// <see cref="Blocked"/> for many points at one margin (the crowd asks it for 18 000 on a festival field against 400
+    /// boxes: 300 ms of trigonometry on the main thread): each box's axes and reach worked out once, the plan not changed after.
+    /// </summary>
+    public Func<Vector2, bool> BlockedTester(float margin)
+    {
+        var boxes = new List<(Vector2 C, float C2, float S, float Hx, float Hz, float Reach2)>();
+        foreach (var b in Boxes)
+        {
+            if (b.Size.X * b.Size.Z < 0.5f) continue;   // a pole
+            float reach = MathF.Sqrt(b.Size.X * b.Size.X + b.Size.Z * b.Size.Z) / 2 + margin;
+            boxes.Add((new Vector2(b.Centre.X, b.Centre.Z), MathF.Cos(b.Yaw), MathF.Sin(b.Yaw), b.Size.X / 2 + margin, b.Size.Z / 2 + margin, reach * reach));
+        }
+        return uv =>
+        {
+            if (Mvr.MvrCollision.Blocks(ObjectFootprints, uv, margin)) return true;
+            foreach (var (c, cos, sin, hx, hz, reach2) in boxes)
+            {
+                var d = uv - c;
+                if (d.LengthSquared() > reach2) continue;
+                if (MathF.Abs(d.X * cos - d.Y * sin) < hx && MathF.Abs(d.X * sin + d.Y * cos) < hz) return true;
+            }
+            foreach (var z in Zones)
+                if (z.Contains(uv, margin)) return true;
+            return false;
+        };
+    }
+
+    /// <summary>
     /// Where the stage stands on the grass (#956): a rectangle of the stage's own frame (x across, z
     /// towards the audience), the deck, its wings and its back to the stand. The pitch's protection
     /// floor is laid everywhere else.
