@@ -18,6 +18,12 @@ public static class NeonSign
     /// <summary>The tube's width, m, at an icon one metre tall.</summary>
     private const float Tube = 0.07f;
 
+    /// <summary>
+    /// How far in front of the tube before it each tube of an icon stands, at an icon one metre tall: over
+    /// the 8 mm a z-fight is judged within (`zfight`) at the smallest icon a sign draws (0.8 m).
+    /// </summary>
+    private const float StrokeStep = 0.02f;
+
     /// <summary>Longest name lettered in full; a longer one is cut at a word.</summary>
     private const int MaxChars = 26;
 
@@ -91,7 +97,7 @@ public static class NeonSign
                 Name = "IconWash",
                 Mesh = new QuadMesh { Size = Vector2.One * icon * 1.9f },
                 MaterialOverride = Wash(IconColor(kind, cuisine)),
-                Position = new Vector3(-total / 2 + icon / 2, 0, -0.065f),
+                Position = new Vector3(-total / 2 + icon / 2, 0, -0.09f),
                 VisibilityRangeEnd = DrawnM,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             });
@@ -343,8 +349,10 @@ public static class NeonSign
         var v = new List<Vector3>();
         var uv = new List<Vector2>();
         var col = new List<Color>();
-        // the joint discs sit a hair behind the tubes: drawn level, their radial shading beaded every bend
-        float depth = z;
+        // each tube a layer in front of the one before, so tubes of two colours crossing never share a plane
+        // (a pin's stripes over its outline, a ball's holes); a tube's joint discs a hair behind its strips:
+        // drawn level, their radial shading beaded every bend
+        float layer = z, depth = z;
         void Tri(Vector2 a, float ua, Vector2 b, float ub, Vector2 c, float uc, Color k)
         {
             v.Add(new Vector3(a.X, a.Y, depth)); uv.Add(new Vector2(0, ua)); col.Add(k);
@@ -353,6 +361,7 @@ public static class NeonSign
         }
         foreach (var st in strokes)
         {
+            depth = layer;
             var p = st.Points;
             int segs = st.Closed ? p.Length : p.Length - 1;
             for (int i = 0; i < segs; i++)
@@ -367,15 +376,15 @@ public static class NeonSign
                 Tri(a, 1, b, 1, b - n, 0, st.Color);
                 Tri(a, 1, b - n, 0, a - n, 0, st.Color);
             }
+            layer += StrokeStep;
             if (!joints) continue;
-            depth = z - 0.004f;
+            depth -= 0.004f;
             foreach (var c in p)
                 for (int k = 0; k < 8; k++)
                 {
                     float a0 = Mathf.Tau * k / 8, a1 = Mathf.Tau * (k + 1) / 8;
                     Tri(c, 1, c + h * new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)), 0, c + h * new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)), 0, st.Color);
                 }
-            depth = z;
         }
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);

@@ -264,6 +264,9 @@
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Castles.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Castles.List.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the entertainment venues (#1233): matched by footprint in BuildingTypes, the list embedded as in the game -->
+    <Compile Include="..\..\src\Interiors\Venues.cs" Link="Game\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\src\Interiors\venues.tsv.gz" LogicalName="venues.tsv.gz" WithCulture="false" />
     <!-- the farm machines' tanks, codes and draft (#494) -->
     <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->
