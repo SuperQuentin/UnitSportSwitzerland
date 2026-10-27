@@ -205,6 +205,12 @@ public enum ItemId
 
     /// <summary>An admin's traffic tool (#971): places, edits and removes traffic generators (<see cref="ItemUse.TrafficTool"/>); from the debug menu only.</summary>
     TrafficTool = 380,
+
+    // ---- the travel network (#1226, docs/notes/adventure/fares.md); 400-419 belong to the rewards plan ----
+    /// <summary>The GA travelcard: rail, bus and ship trips free, cable cars half, travel from anywhere. The server trusts <c>TravelBook.HasGa</c>; the item is its picture.</summary>
+    GaCard = 420,
+    /// <summary>The half-fare travelcard: every fare halved (<c>TravelBook.HasHalfFare</c>).</summary>
+    HalfFare = 421,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

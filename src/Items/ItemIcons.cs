@@ -1149,6 +1149,46 @@ public static class ItemIcons
             "................",
         };
 
+        // the travelcards (#1226): the red SwissPass card, "GA" or "1/2" in white
+        d[ItemId.GaCard] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".kkkkkkkkkkkkkk.",
+            ".kqrrrrrrrrrrrk.",
+            ".krwwwrrrwwrrRk.",
+            ".krwrrrrwrrwrRk.",
+            ".krwrwwrwwwwrRk.",
+            ".krwrrwrwrrwrRk.",
+            ".krwwwwrwrrwrRk.",
+            ".krrrrrrrrrrrRk.",
+            ".krwwwwwwrrrrRk.",
+            ".kRRRRRRRRRRRRk.",
+            ".kkkkkkkkkkkkkk.",
+            "................",
+            "................",
+        };
+        d[ItemId.HalfFare] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".kkkkkkkkkkkkkk.",
+            ".kqrrrrrrrrrrrk.",
+            ".krrwrrrrrwrrRk.",
+            ".krwwrrrrwrrrRk.",
+            ".krrwrrrwrwwrRk.",
+            ".krrwrrwrrrwrRk.",
+            ".krwwwwrrrwrrRk.",
+            ".krrrrrrrwwwrRk.",
+            ".krwwwwwwrrrrRk.",
+            ".kRRRRRRRRRRRRk.",
+            ".kkkkkkkkkkkkkk.",
+            "................",
+            "................",
+        };
+
         // the traffic tool (#971): a traffic cone, orange with a white band
         d[ItemId.TrafficTool] = new[]
         {

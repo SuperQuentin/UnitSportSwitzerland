@@ -236,6 +236,11 @@ public static class ItemDefs
         Eat(ItemId.BeerBottle, "Beer", 6, "#7a4a1a", "BE", 10, ItemCategory.Water, 3),
         new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
             ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
+        // the travel network (#1226): the travelcards; the server keeps who holds one (TravelBook), the card is its picture
+        new(ItemId.GaCard, "GA travelcard", "The Generalabonnement: trains, buses and ships free, cable cars half price, and travel from anywhere: the map, the Journal, the phone.",
+            ItemUse.Material, 1, new Color("#c8102e"), "GA", 0, ItemCategory.Gear, 0f),
+        new(ItemId.HalfFare, "Half-fare travelcard", "Every fare of the travel network halved, cable cars included.",
+            ItemUse.Material, 1, new Color("#c8102e"), "HT", 0, ItemCategory.Gear, 0f),
     };
 
     private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>
