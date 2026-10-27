@@ -19,6 +19,14 @@ nothing in its card game and hide-and-seek, and that is the mistake not to repea
 | [`adventure-versteckis`](adventure-versteckis.md) #1268 | **Versteckis** prop hunt: 1 seeker against 3-7 hiders disguised as village props, objectives (church bell, Höhenfeuer, milk can), bots in both roles, its own `VersteckisManager`, a shared `Core/Rounds` registry extracted from BR | phases 1-2 |
 | [`adventure-festivals`](adventure-festivals.md) #1269 | A festival framework on occasions (`FestivalOccasion`, Batzen tokens, a party score board, fireworks), the Älplerfest (Schwingen, Steinstossen, Fahnenschwingen, alphorn and yodel with valley echo), the Désalpe cow drive, six real-calendar festivals | together (shared pot), errands (festival givers) |
 
+Plus [`adventure-alcohol`](adventure-alcohol.md) #1271 (asked by the owner while deciding): a real blood
+alcohol level, its effects on walking and driving, an electronic and a single-use breathalyzer. It
+builds after `together` (wine, kirsch, the fondue pot), and its ItemIds 486-488 are in together's block.
+
+## Decisions taken (October 27, 2026)
+
+Every recommendation in the table below is accepted, except question 8, which became the alcohol plan.
+
 ## Build order
 
 1. **In parallel:**
@@ -66,7 +74,7 @@ Each plan's own list holds the details; these are the ones that change what gets
 | 5 | Group bonus for the party only, or anyone nearby? | party only |
 | 6 | Holding hands: hold E at a party member (a tap stays the fight challenge)? | hold E |
 | 7 | Fondue forfeit "buy a round" charging money by default? | yes, capped at CHF 5 a head; `--forfeits off\|mild\|all` |
-| 8 | Wine and kirsch as items (no drunk effect)? | yes, groceries only |
+| 8 | Wine and kirsch as items? | **decided**: yes, with a real blood alcohol level, its effects, an electronic and a single-use breathalyzer: [`adventure-alcohol`](adventure-alcohol.md) #1271 |
 | 9 | Glacier crevasses (a collision trick)? | build last, behind a setting |
 | 10 | Versteckis offline? | no; offline offers "Host a game" with bots |
 | 11 | Versteckis variants (jail and rescue, caught hiders become seekers)? | plain rules first, then a lobby option |

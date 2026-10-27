@@ -541,7 +541,7 @@ declared in `TogetherProgress.cs`:
 5. **Money forfeit by default.** *Recommendation*: `all` by default, capped at CHF 5 a head. Hosts who
    dislike it set `--forfeits mild`.
 6. **Wine and kirsch as items.** Beer already exists (`BeerBottle`). *Recommendation*: add both
-   (480, 481), sold at groceries and in Fine chests' snack pool, with no drunk effect. Cheese stays a
+   (480, 481), sold at groceries and in Fine chests' snack pool, their alcohol counted by `adventure-alcohol` (#1271: blood level, effects, breathalyzers). Cheese stays a
    bought item until a dairy follow-up or the festivals' Chästeilet.
 7. **Weekly chest timezone.** *Recommendation*: Europe/Zurich, Monday 00:00 by the server's clock, the
    same for every player on a server.
