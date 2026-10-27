@@ -312,6 +312,7 @@ public partial class TogetherService
     /// <summary>E with nothing else at hand while tied: "Hold: haul Lea up" over a hanging partner, else "Let go". Null when free.</summary>
     public string? InteractPrompt(FootPlayer me)
     {
+        if (PotPrompt() is { } pot) return pot;
         if (!LinkedHere) return null;
         long hanging = HaulTarget(me);
         if (hanging == 0) return "Let go";
@@ -360,7 +361,7 @@ public partial class TogetherService
     /// <c>/rope &lt;player&gt;</c> asks to rope up, <c>/rope hands &lt;player&gt;</c> to hold hands, <c>/rope off</c> lets go,
     /// <c>/rope</c> says who you are tied to. The reply.
     /// </summary>
-    public string Command(long sender, string verb, string rest) => verb == "rope" ? RopeCommand(sender, rest) : "[together] No shared pot here yet.";
+    public string Command(long sender, string verb, string rest) => verb == "rope" ? RopeCommand(sender, rest) : FondueCommand(sender, rest);
 
     /// <summary>The <c>/rope</c> half of <see cref="Command"/>.</summary>
     public string RopeCommand(long sender, string rest)

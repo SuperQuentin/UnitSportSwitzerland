@@ -48,6 +48,10 @@ public sealed partial class TogetherChip : CanvasLayer
     {
         // the service comes and goes with the world: hook it when it is there
         var s = TogetherService.Instance;
+        // at a shared pot its panel is the HUD
+        bool atPot = s?.MyPot != null;
+        if (atPot && _label.Visible) _label.Visible = false;
+        else if (!atPot && !_label.Visible && s != null && s.NearHere > 0 && GameSettings.Current.TogetherChip && !Permissions.InMatch) _label.Visible = true;
         if (s == _service) return;
         if (_service != null && IsInstanceValid(_service)) _service.NearChanged -= OnNear;
         _service = s;

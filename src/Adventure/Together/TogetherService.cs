@@ -215,5 +215,5 @@ public partial class TogetherService : Node
 
     private bool Connected(long peer) => peer > 0 && Multiplayer.MultiplayerPeer != null && Multiplayer.GetPeers().Contains((int)peer);
 
-    private string Who(long peer) => NameOf?.Invoke(peer) ?? (peer == PairPeer ? "Partner" : $"#{peer}");
+    private string Who(long peer) => peer == PairPeer && peer != 0 ? "Partner" : NameOf?.Invoke(peer) ?? $"#{peer}";
 }

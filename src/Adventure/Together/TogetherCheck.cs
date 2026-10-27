@@ -25,6 +25,7 @@ public partial class TogetherCheck : ChatProbe
     private FootPlayer? _partner;
     private Vector3 _partnerWish, _myWish;
     private Camera3D? _cam;
+    private ItemStack _keptSlot = ItemStack.Empty;
 
     public TogetherCheck(ItemController items, Func<FootPlayer?> me) : base(items, "togethercheck", "", "together_") => _me = me;
     public TogetherCheck() : this(null!, () => null) { }
@@ -72,20 +73,30 @@ public partial class TogetherCheck : ChatProbe
         Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
         Expect(await Until(() => Svc.Links.Count == 0 && me.HandHold == null && _partner.HandHold == null, 3), "let go: no links, no held hands");
         me.WalkControls = null;
+        if (!_keptSlot.IsEmpty) _items.Inventory.Put(0, _keptSlot);
         await Finish(0.5);
     }
 
     private async Task Hands(FootPlayer me)
     {
+        // side by side, facing the same way, an arm's length apart
+        me.LookYaw = 0f;
+        _partner!.DebugLaunch(me.GlobalPosition + new Vector3(1.0f, 0.2f, 0f), Vector3.Zero);
+        _partner.Rotation = Vector3.Zero;
+        await Seconds(0.6);
+        // an empty hand to hold with (a held item keeps the other hand, which may not reach across)
+        _keptSlot = _items.Inventory[0];
+        _items.Inventory.Put(0, ItemStack.Empty);
+        _items.Inventory.Select(0);
         Expect(Svc.ServeLink(AdventureService.LocalPeer, Pal, LinkMode.Hand) == null, "the player takes the partner's hand");
         Expect(Svc.Links.ModeOf(Pal) == LinkMode.Hand && Svc.Links.LeaderOf(Pal) == AdventureService.LocalPeer, "a hand link, the player leads");
         Expect(await Until(() => me.HandHold != null && _partner!.HandHold != null, 2), "both bodies hold a hand");
         await Seconds(0.5);
         if (me.HoldWrist is { } a && _partner!.HoldWrist is { } b)
-            Expect(a.DistanceTo(b) < 0.05f, FormattableString.Invariant($"the two wrists meet ({a.DistanceTo(b):F3} m apart)"));
+            Expect(a.DistanceTo(b) < 0.05f, FormattableString.Invariant($"the two wrists meet ({a.DistanceTo(b):F3} m apart, holding item {me.HeldItemId})"));
         else Expect(false, "posed wrists to compare");
         Expect(await Until(() => Svc.CompanyOf(AdventureService.LocalPeer) == StaminaCompany.Linked, 2), "standing together: linked regen");
-        if (Windowed) GD.Print($"{Log} shot {ShotAt("hands", me.GlobalPosition, _partner!.GlobalPosition, 3.2f)}");
+        if (Windowed) GD.Print($"{Log} shot {await ShotAt("hands", me.GlobalPosition, _partner!.GlobalPosition, 3.2f)}");
     }
 
     private async Task Tether(FootPlayer me)
@@ -99,7 +110,7 @@ public partial class TogetherCheck : ChatProbe
         Expect(away < LinkBook.RopeLength + 1.5f, FormattableString.Invariant($"the tether held it within the rope ({away:F1} m, it walked {Flat(_partner.GlobalPosition - start):F1} m of 20)"));
         Expect(Svc.Links.ModeOf(Pal) == LinkMode.Rope, "pulled apart, the hands paid out to a rope");
         Expect(Svc.RopeOf(Pal) is { Visible: true }, "a rope is drawn between them");
-        if (Windowed) GD.Print($"{Log} shot {ShotAt("rope", me.GlobalPosition, _partner.GlobalPosition, 6f)}");
+        if (Windowed) GD.Print($"{Log} shot {await ShotAt("rope", me.GlobalPosition, _partner.GlobalPosition, 6f)}");
         // back side by side on easy ground: hands again
         _partnerWish = Vector3.Left;
         await Until(() => Flat(_partner.GlobalPosition - me.GlobalPosition) < 1.0f, 8);
@@ -159,7 +170,7 @@ public partial class TogetherCheck : ChatProbe
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>A picture of the pair from the side and a little above.</summary>
-    private string ShotAt(string name, Vector3 a, Vector3 b, float back)
+    private async Task<string> ShotAt(string name, Vector3 a, Vector3 b, float back)
     {
         var mid = (a + b) * 0.5f + Vector3.Up;
         _cam ??= new Camera3D { Name = "TogetherCam", Fov = 50f };
@@ -170,7 +181,7 @@ public partial class TogetherCheck : ChatProbe
         _cam.LookAt(mid, Vector3.Up);
         var was = GetViewport().GetCamera3D();
         _cam.MakeCurrent();
-        RenderingServer.ForceDraw();
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         string path = Shot(name);
         was?.MakeCurrent();
         return path;

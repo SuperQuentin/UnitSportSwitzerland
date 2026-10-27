@@ -73,7 +73,10 @@ public partial class FootPlayer
     /// </summary>
     private bool TryTogetherInteract()
     {
-        if (Bot || Npc || TogetherService.Instance is not { } together || !together.LinkedHere) return false;
+        if (Bot || Npc || TogetherService.Instance is not { } together) return false;
+        // a shared pot offered here, or a hut or a restaurant to start one at
+        if (together.TryPotInteract(this)) return true;
+        if (!together.LinkedHere) return false;
         if (together.HaulTarget(this) is long hanging and not 0)
         {
             _togetherPeer = hanging;
