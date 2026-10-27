@@ -173,6 +173,9 @@ src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
 src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
 src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
 src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
+# #1243: terraces in front of restaurants, cafés and bars
+src/Interiors/VenueTerraces quick  --terracecheck
+src/Interiors/TerraceProbe  quick  --terracecheck
 # #1242: restaurants, cafés, bars and clubs in hand-made buildings
 src/Interiors/InteriorGenerator.Dining quick --diningcheck --systems ui
 src/Interiors/InteriorMeshBuilder.Dining quick --diningcheck --systems ui

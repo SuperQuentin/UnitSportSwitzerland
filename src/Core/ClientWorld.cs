@@ -191,6 +191,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // venue terraces in front of a hand-made door (#1243)
+        if (Interiors.TerraceProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.TerraceProbe { Name = "TerraceProbe" });
+            return;
+        }
         // restaurants, cafés, bars and clubs in hand-made buildings (#1242)
         if (Interiors.DiningProbe.ParseArgs())
         {
@@ -578,6 +585,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(_chunks));   // neon over every venue (#1232)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(_chunks, _cache!));   // tables out front (#1243)
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
         // tonight's concert in each stadium (#885)

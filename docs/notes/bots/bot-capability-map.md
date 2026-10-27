@@ -55,6 +55,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | radio, camera, GPS, fishing, farm tools | — | — | — | — | n/a for a fighting bot (an ambient brain may want them) |
 | a radio's voice/music mix (#1153) | `RadioBody.Mix` / `FootPlayer.RadioMix` set directly | `RadioManager.SetMix` (server: set `Mix`) | — | — | n/a for a fighting bot; an ambient bot DJ could set it server-side |
 | a cinema's booth: house lights and the screen (#1238) | none (a bot never stands at a panel to press it) | `CinemaBooths.Serve(peer, plan, code)` (server: the bot must be inside that cinema, as a player) | `CinemaBooths.StateOf(plan)` | — | n/a for a fighting bot; an usher bot could dim the lights for a show |
+| a venue terrace's tables, planters and menu board (#1243) | none (scenery) | none: built and solid on clients only, as trees (`VenueTerraces`) | none (no server collision: a bot walks through them, as through trees) | — | gap: server collision for terraces and trees together, if bots are ever to weave between tables |
 
 ## World, loot and vehicles
 
