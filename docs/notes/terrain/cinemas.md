@@ -88,9 +88,10 @@ lane frame and rules (`bowling-centres`).
   room lights are looked up by it), folded, or let down under a body in the sit pose (`InteriorNode.UpdateSeats`,
   per frame from `CinemaBooths` without allocating, the mesh built again only when a bank's seated set changes).
   The bank keeps their collision. The projectionist's chair stands between the first projector and its panel,
-  facing the hall's window. While the screen is on, the port shows the picture faintly, the size of the hole, on the
-  wall's line (`PortPicture`, where glass would be), and the lens a bloom of the picture's mean colour brightened
-  (`LensGlow`, a billboard, added on).
+  facing the hall's window. While the screen is on, the port shows the picture faintly where glass would be
+  (`PortPicture`): the cone's own cut through the wall's line (the screen's picture scaled by apex-to-wall over
+  apex-to-screen, on the beam's axis, mirrored: seen from the light's side), the wall hiding all but the hole. The
+  lens's glass is dark; beside it a 0.18 m bloom of the picture's mean colour brightened (`LensGlow`, a billboard).
 - **Smooth house lights** (#1279): a hall's lights fade to their new level over 6 s (`InteriorNode.FadeHouse`,
   `HouseFadeSeconds`, the shader value written only while it moves); walking into another hall, or into the
   cinema, shows its level at once.

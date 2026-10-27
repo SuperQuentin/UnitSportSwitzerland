@@ -125,20 +125,9 @@ public partial class InteriorNode
             // the beam's apex at the projector's lens in the booth, behind the hole in the wall; the port's middle
             // if the booth had no room for that projector
             var from = new Vector3(port.X, layout.FloorY(port.Floor) + port.Lift + port.H / 2, port.Z);
-            // the picture going through the port, where its glass would be (#1279): faint, the size of the hole, on the
-            // wall's line (the hall's porthole stands 0.1 m in front of it)
+            // the wall's line through the port (the hall's porthole stands 0.1 m in front of it)
             var portBasis = new Basis(Vector3.Up, port.Turns * Mathf.Pi / 2);
-            const float holeW = 2 * InteriorGenerator.PortHalf - 0.02f;
-            var portPicture = new MeshInstance3D
-            {
-                Name = "PortPicture",
-                Mesh = new QuadMesh { Size = new Vector2(holeW, holeW / 2.39f) },
-                MaterialOverride = PortMaterial(),
-                Transform = new Transform3D(portBasis, from + portBasis * new Vector3(0, 0, -0.1f)),
-                Visible = false,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            };
-            node.AddChild(portPicture);
+            var wallAt = from + portBasis * new Vector3(0, 0, -0.1f);
             MeshInstance3D? lensGlow = null;
             var proj = projectors.MinBy(q => (q.X - port.X) * (q.X - port.X) + (q.Z - port.Z) * (q.Z - port.Z));
             if (proj != null && (proj.X - port.X) * (proj.X - port.X) + (proj.Z - port.Z) * (proj.Z - port.Z) < 1.5f * 1.5f)
@@ -150,7 +139,7 @@ public partial class InteriorNode
                 lensGlow = new MeshInstance3D
                 {
                     Name = "LensGlow",
-                    Mesh = new QuadMesh { Size = new Vector2(0.3f, 0.3f) },
+                    Mesh = new QuadMesh { Size = new Vector2(0.18f, 0.18f) },
                     MaterialOverride = LensGlowMaterial(),
                     Position = from + toward * 0.02f,
                     Visible = false,
@@ -161,6 +150,21 @@ public partial class InteriorNode
             }
             var right = basis * new Vector3(half.X, 0, 0);
             var up = new Vector3(0, half.Y, 0);
+            // the picture going through the port, where its glass would be (#1279): faint, the cone's own cut through the
+            // wall's line (the screen's picture scaled by apex-to-wall over apex-to-screen), on the beam's axis, seen
+            // from the hall's side so mirrored (PortMaterial); the wall hides all of it but what the hole shows
+            var wallNormal = portBasis * Vector3.Back;
+            float k = Math.Clamp(wallNormal.Dot(wallAt - from) / Math.Max(1e-3f, wallNormal.Dot(centre - from)), 0.01f, 1f);
+            var portPicture = new MeshInstance3D
+            {
+                Name = "PortPicture",
+                Mesh = new QuadMesh { Size = new Vector2(2 * half.X * k, 2 * half.Y * k) },
+                MaterialOverride = PortMaterial(),
+                Transform = new Transform3D(basis, from + (centre - from) * k),
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            node.AddChild(portPicture);
             var marched = BeamFor(from, centre, right, up);
             var beam = new MeshInstance3D
             {
@@ -565,7 +569,7 @@ public partial class InteriorNode
 
     private static StandardMaterial3D? _portMaterial, _lensGlow;
 
-    /// <summary>The picture in the port (#1279): see-through, unlit, both faces (seen from the hall and the booth).</summary>
+    /// <summary>The picture in the port (#1279): see-through, unlit, both faces (seen from the hall and the booth), mirrored.</summary>
     private static StandardMaterial3D PortMaterial() => _portMaterial ??= new StandardMaterial3D
     {
         ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -574,6 +578,9 @@ public partial class InteriorNode
         Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+        // seen from the hall, the side the light comes out of: the screen's picture mirrored
+        Uv1Scale = new Vector3(-1, 1, 1),
+        Uv1Offset = new Vector3(1, 0, 0),
     };
 
     /// <summary>The lens's bloom (#1279): a soft round glow facing the camera, added on, in the picture's mean colour.</summary>

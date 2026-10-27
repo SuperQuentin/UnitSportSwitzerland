@@ -343,7 +343,8 @@ public static partial class InteriorMeshBuilder
                 B(-0.3f, 0, -0.4f, 0.3f, t, 0.4f, dark);
                 B(-w, t - sink, -d, w, t + 0.55f, d - 0.15f, C(0.20f, 0.20f, 0.22f));
                 B(-0.12f, t + 0.15f, d - 0.165f, 0.12f, t + 0.39f, d, dark);
-                B(-0.09f, t + 0.18f, d - sink, 0.09f, t + 0.36f, d + sink, Lit(0.70f, 0.80f, 1.00f));
+                // the lens's glass, dark: its light is the glow beside it while the film runs (InteriorNode.LensGlow, #1279)
+                B(-0.09f, t + 0.18f, d - sink, 0.09f, t + 0.36f, d + sink, C(0.04f, 0.05f, 0.07f));
                 B(w - 0.2f, t + 0.55f - sink, -d + 0.1f, w - 0.05f, t + 0.6f, -d + 0.3f, Lit(0.20f, 0.90f, 0.30f));
                 break;
             }
