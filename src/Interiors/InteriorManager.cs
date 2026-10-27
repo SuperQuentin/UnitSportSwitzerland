@@ -1413,6 +1413,7 @@ public partial class InteriorNode : Node3D
         AddBayCars(node, origin);
         AddStaff(node);   // a venue's clerk and bartender (#1235)
         AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
+        VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
         // an apartment block's elevator doors and flats' front doors (#557)
         AddLiftDoors(node, material);
         AddInnerDoors(node, material);
