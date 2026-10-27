@@ -65,7 +65,7 @@ public partial class CinemaBooths
         if (hall < 0 || hall >= MaxHalls) return false;
         link = link.Trim();
         if (link.Length > 0 && !CinemaVideo.Allowed(link)) { GD.Print($"[cinema] peer {peer}: not a web link, refused"); return false; }
-        double wall = Time.GetTicksMsec() / 1000.0;
+        double wall = Core.RealClock.Now;   // a person's pace, not the world's speed
         if (link.Length > 0 && _lastVideo.TryGetValue(peer, out double last) && wall - last < VideoCooldown) return false;
         if (link.Length > 0) _lastVideo[peer] = wall;
         double t0 = ClockSync.ServerNow;
