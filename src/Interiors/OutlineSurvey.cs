@@ -33,6 +33,9 @@ public static class OutlineSurvey
         public readonly Dictionary<string, int> Why = new();
     }
 
+    /// <summary>At most this many tiles (<c>--tiles N</c>), for a quick look.</summary>
+    private static int MaxTiles => int.TryParse(CmdArgs.Value("--tiles"), out int n) ? n : int.MaxValue;
+
     public static int Run()
     {
         var args = OS.GetCmdlineUserArgs();
@@ -53,8 +56,12 @@ public static class OutlineSurvey
                     var tile = src.LoadBuildingsAsync(id).GetAwaiter().GetResult();
                     if (tile == null) continue;
                     tiles++;
+                    if (tiles > MaxTiles) continue;
                     var roads = src.LoadRoadsAsync(id).GetAwaiter().GetResult();
                     var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+                    var tileWatch = Stopwatch.StartNew();
+                    int tilePlans = 0;
+                    (double Ms, int Index, BuildingKind Kind) slowest = default;
                     foreach (int index in doors.Where(d => d.Width > 0).Select(d => d.Index).Distinct())
                     {
                         var b = tile.Buildings[index];
@@ -66,6 +73,9 @@ public static class OutlineSurvey
                         try { l = InteriorGenerator.Generate(tile, index, roads, null); }
                         catch (Exception ex) { GD.PrintErr($"[outlinesurvey] {id} #{index}: {ex.Message}"); continue; }
                         double ms = watch.Elapsed.TotalMilliseconds;
+                        tilePlans++;
+                        if (ms > slowest.Ms) slowest = (ms, index, b.Kind);
+                        if (ms > 2000) GD.Print($"[outlinesurvey]   slow: {id} #{index} {b.Kind} {fp.Width:F0}x{fp.Depth:F0} m, {ms:F0} ms");
                         if (l == null) continue;
                         foreach (var x in new[] { row, total })
                         {
@@ -73,7 +83,12 @@ public static class OutlineSurvey
                             x.Ms += ms;
                             x.MaxMs = Math.Max(x.MaxMs, ms);
                         }
-                        if (InteriorValidator.Validate(l).Count > 0) { row.Invalid++; total.Invalid++; }
+                        if (InteriorValidator.Validate(l) is { Count: > 0 } bad)
+                        {
+                            row.Invalid++;
+                            total.Invalid++;
+                            GD.Print($"[outlinesurvey]   invalid: {id} #{index} {b.Kind} {l.Type}: {string.Join("; ", bad.Take(3))}");
+                        }
                         var grid = PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
                         if (grid == null) { row.Boxlike++; total.Boxlike++; continue; }
                         bool shaped = l.Floors.Any(f => f.Rooms.Any(q => q.Shape != null));
@@ -91,6 +106,7 @@ public static class OutlineSurvey
                         var (used, outside, area) = Cover(l, rings);
                         foreach (var x in new[] { row, total }) { x.Used += used; x.Outside += outside; x.Area += area; }
                     }
+                    GD.Print($"[outlinesurvey] {town.Name} {id}: {tilePlans} plans in {tileWatch.Elapsed.TotalSeconds:F1} s, slowest #{slowest.Index} {slowest.Kind} {slowest.Ms:F0} ms");
                 }
         }
 

@@ -243,21 +243,30 @@ public static class InteriorValidator
         if (c.Any(p => p.X < -hw || p.X > hw || p.Y < -hd || p.Y > hd)) errors.Add($"floor {f} room {i} {r.Type}: its shape leaves the footprint");
         if (RoomShapes.Area(c) <= 0) { errors.Add($"floor {f} room {i} {r.Type}: its shape is wound backwards"); return; }
         float x0 = c.Min(p => p.X), x1 = c.Max(p => p.X), z0 = c.Min(p => p.Y), z1 = c.Max(p => p.Y);
+        // only the rooms whose box meets the shape's (a big block has hundreds a floor)
+        var near = new List<(int G, int J, RoomPlan O, Godot.Vector2[]? C)>();
+        for (int g = 0; g <= f; g++)
+            for (int j = 0; j < l.Floors[g].Rooms.Count; j++)
+            {
+                var o = l.Floors[g].Rooms[j];
+                if (g == f && j == i || g + o.Span <= f) continue;
+                var oc = o.Shape == null ? null : o.Corners();
+                float ox0 = oc?.Min(p => p.X) ?? o.X0, ox1 = oc?.Max(p => p.X) ?? o.X1, oz0 = oc?.Min(p => p.Y) ?? o.Z0, oz1 = oc?.Max(p => p.Y) ?? o.Z1;
+                if (ox1 > x0 && ox0 < x1 && oz1 > z0 && oz0 < z1) near.Add((g, j, o, oc));
+            }
+        if (near.Count == 0) return;
         for (float x = x0 + 0.2f; x < x1; x += 0.4f)
             for (float z = z0 + 0.2f; z < z1; z += 0.4f)
             {
                 var q = new Godot.Vector2(x, z);
                 if (!RoomShapes.Contains(c, q) || RoomShapes.EdgeDistance(c, q) < 0.1f) continue;
-                for (int g = 0; g <= f; g++)
-                    for (int j = 0; j < l.Floors[g].Rooms.Count; j++)
-                    {
-                        var o = l.Floors[g].Rooms[j];
-                        if (g == f && j == i || g + o.Span <= f) continue;
-                        bool under = o.Shape == null
-                            ? x > o.X0 + 0.1f && x < o.X1 - 0.1f && z > o.Z0 + 0.1f && z < o.Z1 - 0.1f
-                            : RoomShapes.Contains(o.Corners(), q) && RoomShapes.EdgeDistance(o.Corners(), q) >= 0.1f;
-                        if (under) { errors.Add($"floor {f} room {i} {r.Type}: its shape overlaps room {j} {o.Type} of floor {g}"); return; }
-                    }
+                foreach (var (g, j, o, oc) in near)
+                {
+                    bool under = oc == null
+                        ? x > o.X0 + 0.1f && x < o.X1 - 0.1f && z > o.Z0 + 0.1f && z < o.Z1 - 0.1f
+                        : RoomShapes.Contains(oc, q) && RoomShapes.EdgeDistance(oc, q) >= 0.1f;
+                    if (under) { errors.Add($"floor {f} room {i} {r.Type}: its shape overlaps room {j} {o.Type} of floor {g}"); return; }
+                }
             }
     }
 

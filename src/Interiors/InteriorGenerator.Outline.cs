@@ -243,6 +243,7 @@ public static partial class InteriorGenerator
     {
         var claims = l.Floors.Select(_ => new List<Vector2[]>()).ToList();
         var fresh = new HashSet<RoomPlan>();
+        var cache = new FloorRects();
         for (int f = 0; f < l.Floors.Count; f++)
         {
             var floor = l.Floors[f];
@@ -255,7 +256,7 @@ public static partial class InteriorGenerator
                 bool shapeable = Shapeable(l, f, r);
                 bool arms = i < count;
                 if (!shapeable && !(arms && Splits(l, r) && r.Type is not (RoomType.Elevator or RoomType.Ramp))) continue;
-                if (Grow(l, f, i, rings, claims[f], arms, fresh, shapeable) is not { } shape) continue;
+                if (Grow(l, f, i, rings, claims[f], arms, fresh, cache, shapeable) is not { } shape) continue;
                 r.SetShape(shape);
                 for (int g = f; g < Math.Min(l.Floors.Count, f + r.Span); g++) claims[g].Add(shape);
             }
@@ -264,14 +265,28 @@ public static partial class InteriorGenerator
         return true;
     }
 
-    /// <summary>The other rooms' rectangles on a floor (with those rising into it from below), as rings.</summary>
-    private static List<Vector2[]> Others(InteriorLayout l, int f, RoomPlan self)
+    /// <summary>A floor's rooms' rectangles as rings, built once a floor (and again when an arm adds rooms).</summary>
+    private sealed class FloorRects
     {
-        var o = new List<Vector2[]>();
-        for (int g = 0; g <= f; g++)
-            foreach (var q in l.Floors[g].Rooms)
-                if (q != self && g + q.Span > f)
-                    o.Add([new(q.X0, q.Z0), new(q.X1, q.Z0), new(q.X1, q.Z1), new(q.X0, q.Z1)]);
+        public int Floor = -1, Count = -1;
+        public readonly List<(RoomPlan Room, Vector2[] Ring)> All = new();
+    }
+
+    /// <summary>The other rooms' rectangles on a floor (with those rising into it from below), as rings.</summary>
+    private static List<Vector2[]> Others(InteriorLayout l, int f, RoomPlan self, FloorRects cache)
+    {
+        if (cache.Floor != f || cache.Count != l.Floors[f].Rooms.Count)
+        {
+            cache.All.Clear();
+            for (int g = 0; g <= f; g++)
+                foreach (var q in l.Floors[g].Rooms)
+                    if (g + q.Span > f)
+                        cache.All.Add((q, [new(q.X0, q.Z0), new(q.X1, q.Z0), new(q.X1, q.Z1), new(q.X0, q.Z1)]));
+            (cache.Floor, cache.Count) = (f, l.Floors[f].Rooms.Count);
+        }
+        var o = new List<Vector2[]>(cache.All.Count);
+        foreach (var (q, ring) in cache.All)
+            if (q != self) o.Add(ring);
         return o;
     }
 
@@ -282,11 +297,11 @@ public static partial class InteriorGenerator
     /// </summary>
     /// <param name="shapeable">False for a room with a stair: it only gets its arms' rooms, never a shape.</param>
     private static Vector2[]? Grow(InteriorLayout l, int f, int index, List<Vector2[]> rings, List<Vector2[]> claims, bool arms,
-        HashSet<RoomPlan> fresh, bool shapeable = true)
+        HashSet<RoomPlan> fresh, FloorRects cache, bool shapeable = true)
     {
         var floor = l.Floors[f];
         var r = floor.Rooms[index];
-        var allOthers = Others(l, f, r);
+        var allOthers = Others(l, f, r, cache);
         allOthers.AddRange(claims);
         // everything a ray from a wall can meet: the outline first, so its rings keep their indices
         var allWalls = new List<IReadOnlyList<Vector2>>(rings);
@@ -371,7 +386,7 @@ public static partial class InteriorGenerator
                     var (bu0, bu1, bd) = RunCore(run);
                     added |= bd >= 2.4f && bu1 - bu0 >= 2.4f && Arm(l, f, index, lines[s], bu0, bu1, bd, fresh);
                 }
-            if (added) return Grow(l, f, index, rings, claims, false, fresh, shapeable);
+            if (added) return Grow(l, f, index, rings, claims, false, fresh, cache, shapeable);
         }
         if (!shapeable) return null;
 

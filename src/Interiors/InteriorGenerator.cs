@@ -164,10 +164,12 @@ public static partial class InteriorGenerator
         // of every opening by itself (Clearance)
         if (fp.Extra.Count > 0 && !flatsPlanned && !onCore) Entrances(layout, fp);
 
-        // every room out to the facade, or cut by it (#1290), before the furniture stands in them
+        DiningUnits(layout, fp, dining);
+
+        // every room out to the facade, or cut by it (#1290): after the dining venues carve their rooms
+        // (a carved room keeps a rectangle), before the furniture stands in them
         if (outline != null) FitOutline(layout, outline);
 
-        DiningUnits(layout, fp, dining);
         Furnish(layout, rng);
         return layout;
     }
