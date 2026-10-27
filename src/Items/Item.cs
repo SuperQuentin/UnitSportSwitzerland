@@ -359,6 +359,7 @@ public static class ItemDefs
             GarmentStyle.Workwear => " Building-site workwear.",
             GarmentStyle.Alien => " From another world.",
             GarmentStyle.Alpine => " The Alpine set, from the mountains' chests.",
+            GarmentStyle.Together => " Earned playing together: never found, never made.",
             _ => "",
         };
         string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";

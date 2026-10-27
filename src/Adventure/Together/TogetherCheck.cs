@@ -25,7 +25,7 @@ public partial class TogetherCheck : ChatProbe
     private FootPlayer? _partner;
     private Vector3 _partnerWish, _myWish;
     private Camera3D? _cam;
-    private ItemStack _keptSlot = ItemStack.Empty;
+    private readonly ItemStack[] _kept = new ItemStack[Inventory.Size];
 
     public TogetherCheck(ItemController items, Func<FootPlayer?> me) : base(items, "togethercheck", "", "together_") => _me = me;
     public TogetherCheck() : this(null!, () => null) { }
@@ -48,6 +48,7 @@ public partial class TogetherCheck : ChatProbe
         await Until(() => Me!.Down != 0, 3);
         await Until(() => Me!.Down == 0 && !Me.KnockedOut, 30);
         var me = Me!;
+        for (int i = 0; i < Inventory.Size; i++) _kept[i] = _items.Inventory[i];
         Expect(await Until(() => me.BodyPose.Basis.Y.Y > 0.95f, 20), "the player stands");
         Expect(Svc.Authority, "offline, this client keeps the links");
         Expect(Svc.NearHere == 0, "alone: nobody near");
@@ -73,7 +74,10 @@ public partial class TogetherCheck : ChatProbe
         Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
         Expect(await Until(() => Svc.Links.Count == 0 && me.HandHold == null && _partner.HandHold == null, 3), "let go: no links, no held hands");
         me.WalkControls = null;
-        if (!_keptSlot.IsEmpty) _items.Inventory.Put(0, _keptSlot);
+        _partner.QueueFree();
+        await Seconds(0.2);
+        // the pack as it was (the week's chest of --together-day-seconds lands in it)
+        for (int i = 0; i < Inventory.Size; i++) _items.Inventory.Put(i, _kept[i]);
         await Finish(0.5);
     }
 
@@ -85,7 +89,6 @@ public partial class TogetherCheck : ChatProbe
         _partner.Rotation = Vector3.Zero;
         await Seconds(0.6);
         // an empty hand to hold with (a held item keeps the other hand, which may not reach across)
-        _keptSlot = _items.Inventory[0];
         _items.Inventory.Put(0, ItemStack.Empty);
         _items.Inventory.Select(0);
         Expect(Svc.ServeLink(AdventureService.LocalPeer, Pal, LinkMode.Hand) == null, "the player takes the partner's hand");

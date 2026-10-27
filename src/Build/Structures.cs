@@ -496,6 +496,10 @@ public partial class Structures : Node
         var placed = new Placed { Piece = piece!.Value, Owner = owner, BuiltAt = Now };
         PutPiece(s, placed, live: true);
         ToKnowers(s.Id, MethodName.AddPiece, s.Id, Pack(placed.Piece), placed.Owner, 0f, placed.BuiltAt, true);
+        // a structure of ten pieces (#1266): the Adventure's build milestone (mentors), raised once per structure
+        if (!s.Match && s.Pieces.Count == StructureBuilt.Pieces && Adventure.AdventureService.Instance is { } adventure
+            && adventure.Progress(Online ? peer : Adventure.AdventureService.LocalPeer) is { } progress)
+            adventure.Events.Raise(new StructureBuilt(Online ? peer : Adventure.AdventureService.LocalPeer, progress.Key, s.Id, s.Pieces.Count));
         if (!s.Match) Save();
         Reply(peer, req, "");
     }
@@ -676,4 +680,10 @@ public partial class Structures : Node
         }
         catch (Exception ex) { GD.PushError($"[build] saving: {ex.Message}"); }
     }
+}
+
+/// <summary>A player's structure reached <see cref="Pieces"/> pieces (#1266): the Adventure's build milestone, for the mentors and quests.</summary>
+public sealed record StructureBuilt(long Peer, string Key, long StructureId, int PieceCount) : Adventure.AdventureEvent(Peer, Key)
+{
+    public const int Pieces = 10;
 }

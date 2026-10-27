@@ -198,6 +198,8 @@
     <Compile Include="..\..\src\Adventure\Together\StirRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Together\FondueRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Together\PotBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Together\TogetherProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Together\MentorRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />

@@ -535,6 +535,12 @@ public partial class RewardService : Node
         else SendBoard(peer, def.Id);
     }
 
+    /// <summary>A chest roll of <paramref name="tier"/> given to a peer outright (#1266: the week's chest, a full punch card), with its reveal.</summary>
+    public void GrantRoll(long peer, ChestTier tier, string why)
+    {
+        if (_adventure.Progress(peer) is { } p) GrantRoll(peer, p, tier, why);
+    }
+
     private void GrantRoll(long peer, PlayerProgress p, ChestTier tier, string why)
     {
         var (lines, francs, note) = RollAndGrant(peer, p, tier, why, why);

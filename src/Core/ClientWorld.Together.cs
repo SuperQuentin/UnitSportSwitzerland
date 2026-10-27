@@ -22,6 +22,7 @@ public partial class ClientWorld
             ? cover is Terrain.Format.CoverClass.Glacier or Terrain.Format.CoverClass.Snowfield : null;
         AddChild(new TogetherChip());
         AddChild(new FonduePanel());
+        TogetherPage.Register();
         if (FondueCheck.Requested) AddChild(new FondueCheck(items, () => LocalPlayer));
         if (TogetherCheck.Requested) AddChild(new TogetherCheck(items, () => LocalPlayer));
     }

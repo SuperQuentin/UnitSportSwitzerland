@@ -210,6 +210,11 @@ public partial class TogetherService
                 break;
             case DipResult.LostBread:
                 GD.Print($"[fondue] {Who(peer)} lost the bread in pot {pot.Id}");
+                if (_adventure.Progress(peer) is { } lostP)
+                {
+                    lostP.Get(TogetherProgress.Section).BreadLost++;
+                    lostP.Touch(TogetherProgress.Section);
+                }
                 foreach (long s in pot.Seats) SendBreadLost(s, pot.Id, peer);
                 if (Forfeits != ForfeitMode.Off) _forfeitDue[peer] = (pot.Id, GameClock.Now + FondueRules.ForfeitSeconds);
                 break;
@@ -319,6 +324,7 @@ public partial class TogetherService
         {
             SendFeast(s, mask, seconds, FondueRules.FeastHeal);
             SendPotTo(s, null);
+            CountPot(s, pot);
             PotEnded?.Invoke(s, pot, q);
             if (_adventure.Progress(s) is { } p) _adventure.Events.Raise(new FondueShared(s, p.Key, pot.SpotId, q, seats.Length));
         }
