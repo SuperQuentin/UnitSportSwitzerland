@@ -70,6 +70,9 @@ public partial class QuickMenu : CanvasLayer
                 () => Callable.From(() => Adventure.Navigation.GuidingWind.Instance?.Summon()).CallDeferred(), () => Key(PlayerInput.Guide)),
             new("Character", () => null, () => Callable.From(CharacterScreen.Open).CallDeferred(), () => Key(PlayerInput.CharacterMenu)),
             new("Controls", () => null, () => Press(PlayerInput.Help), () => Key(PlayerInput.Help)),
+            // the chat with its command picker (#1277): a pad's and a VR hand's way to the commands
+            new("Chat", () => Core.ChatUi.Instance == null ? "No chat here" : null,
+                () => Callable.From(() => Core.ChatUi.Instance?.OpenForPad()).CallDeferred(), () => InputHints.Pad ? null : "Enter"),
         };
     }
 

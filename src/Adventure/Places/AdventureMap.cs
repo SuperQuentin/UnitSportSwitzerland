@@ -81,6 +81,24 @@ public partial class AdventureMap : Screen
         shell.Push(Create(focus));
     }
 
+    /// <summary>
+    /// Opens the map centred on a point that is no place (the chat's coordinates, #1277), or centres an open one.
+    /// </summary>
+    public static void OpenAt(double e, double n)
+    {
+        if (GameShell.Instance is not { InWorld: true } shell) return;
+        if (shell.Top is AdventureMap open)
+        {
+            open.View.FocusOn(e, n, Math.Max(open.View.PxPerKm, 32));
+            open.Redraw();
+            return;
+        }
+        if (shell.Top != null) return;
+        shell.Push(new AdventureMap { Name = "AdventureMap", _point = (e, n) });
+    }
+
+    private (double E, double N)? _point;
+
     public override void _Ready()
     {
         _places = PlacesService.Instance;
@@ -128,6 +146,7 @@ public partial class AdventureMap : Screen
         // centred on the player, or the place asked for
         if (Me?.Invoke() is { } me) _canvas.View.FocusOn(me.At.E, me.At.N, 32);
         if (_focus != null) Select(_focus, centre: true);
+        if (_point is { } point) _canvas.View.FocusOn(point.E, point.N, 32);
         if (AdventureService.Instance is { } svc) svc.SectionChanged += OnSection;
     }
 

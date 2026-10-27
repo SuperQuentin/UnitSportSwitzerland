@@ -215,6 +215,30 @@ public static class BuildingTypes
         var boxes = new PlanBox?[n];
         for (int i = 0; i < n; i++) boxes[i] = PlanBox.Of(tile.Buildings[i]);
 
+        var groups = Churches(tile, boxes);
+
+        // a landmark is recognised by where it stands, not by its shape (#501): the tile knows its
+        // own id, so this stays a pure function of the tile's bytes like everything above it. One
+        // member for now — grouping a store with its garden centre and its annexes is a follow-up.
+        if (Landmarks.Match(tile, boxes) is { } hit && groups.All(g => !g.Members.Contains(hit.Index)))
+            groups.Add(new BuildingGroup(hit.Store.Type, new[] { hit.Index }, new[] { BuildingPart.Store }));
+
+        var contained = Venues.Contained(tile);
+        return new BuildingTypeMap(boxes, groups, Castles.Match(tile), Venues.Match(tile, contained), Venues.Dining(tile, contained));
+    }
+
+    /// <summary>
+    /// Whether a solid's kind can be a church's hall or tower: the only boxes <see cref="Churches"/> reads
+    /// (a caller that needs no other may leave the rest null, as <c>/locate</c>'s index does, #1277).
+    /// </summary>
+    public static bool ChurchPart(BuildingKind kind) =>
+        kind is not (BuildingKind.House or BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Industrial
+            or BuildingKind.Agricultural or BuildingKind.UnderConstruction);
+
+    /// <summary>The tile's churches: each hall with its towers (<see cref="Detect"/>'s first step).</summary>
+    public static List<BuildingGroup> Churches(BuildingTile tile, PlanBox?[] boxes)
+    {
+        int n = tile.Buildings.Count;
         var towers = new List<int>();
         var halls = new List<int>();
         for (int i = 0; i < n; i++)
@@ -264,15 +288,7 @@ public static class BuildingTypes
             }
             groups.Add(new BuildingGroup(BuildingType.Church, members, parts));
         }
-
-        // a landmark is recognised by where it stands, not by its shape (#501): the tile knows its
-        // own id, so this stays a pure function of the tile's bytes like everything above it. One
-        // member for now — grouping a store with its garden centre and its annexes is a follow-up.
-        if (Landmarks.Match(tile, boxes) is { } hit && groups.All(g => !g.Members.Contains(hit.Index)))
-            groups.Add(new BuildingGroup(hit.Store.Type, new[] { hit.Index }, new[] { BuildingPart.Store }));
-
-        var contained = Venues.Contained(tile);
-        return new BuildingTypeMap(boxes, groups, Castles.Match(tile), Venues.Match(tile, contained), Venues.Dining(tile, contained));
+        return groups;
     }
 
     private static bool IsTower(Building b, PlanBox box)

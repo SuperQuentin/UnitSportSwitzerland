@@ -967,3 +967,9 @@ src/Core/Rounds           quick  --brcheck
 src/Ui/FollowCam          quick  --brcheck
 src/Core/Rounds           net    tools/brbotcheck.sh
 src/Ui/FollowCam          net    tools/brbotcheck.sh
+# /locate (#1277): the index, the lists and the garage doors offline on the garage course; the server's answers and /go
+src/World/Locate/          quick  --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
+src/Interiors/BuildingTypes quick --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
+src/World/Locate/          net    tools/locatenetcheck.sh
+src/Net/ChatManager        net    tools/locatenetcheck.sh
+tools/locatenetcheck.sh    net    tools/locatenetcheck.sh

@@ -64,6 +64,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
+| find the nearest castle, lake, cinema, church + spire... (`/locate`, #1277) | — (a query string, as typed) | `LocateService.FindAsync(query, e, n, max)`: the same engine, index and garage check as the chat's | the answer's `LocateHit`s: name, LV95, distance | — | gap: no brain asks yet; the sense a "go to the nearest X" goal needs |
+| go to coordinates (`/go @E,N`, #1277) | — | `ChatManager.CommandGo` on the `/city` terms (`MayTeleport`), `ForceTeleport` to the owner | — | — | n/a: a bot walks or travels; a teleport is a player's |
 | discover a place, clear fog (#1224) | the body's position and ride (`PlacesBodies`) | `PlacesService` tick, after `Enroll(bot)` (session-only progress, `SessionFor`) | `PoiCatalogue.Near` | — | gap: the bot director does not call `Enroll` yet |
 | sync a viewpoint / use a stamp post (#1224) | `TryInteract` at a marker | `PlacesService.ServerInteract(peer, poiId)` | `PoiCatalogue.Near` ("nearest summit cross") | — | gap: no brain uses it (a guide bot later) |
 | travel the network (#1226) | — | `AdventureTravel.TravelBot(bot, poiId, fromSignId)`: `TravelNetwork.MayTravel`, the fare, `FootPlayer.DebugLaunch` (no RPC) | memory of unlocked points: its session `travel` section | wander-travel (walk to a sign, travel) | gap: no brain step yet |
