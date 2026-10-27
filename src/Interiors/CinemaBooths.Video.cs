@@ -83,6 +83,9 @@ public partial class CinemaBooths
         v[hall] = (link, t0);
     }
 
+    /// <summary>A shot's hall holds a link as if the server had sent it (<see cref="CinemaVideoShot"/>).</summary>
+    public void SetVideoForShot(string plan, int hall, string link, double t0) => SetVideo(plan, hall, link, t0);
+
     /// <summary>Server: a newly joined client gets every hall's video.</summary>
     private void SendVideosTo(long peer)
     {

@@ -21,7 +21,8 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class CinemaPanelUi : CanvasLayer
 {
-    private const float Width = 620, Gutter = 16;
+    /// <summary>This wide, this far above the bottom of the screen: low, so the hall's screen stays in view above it (as the radio's player).</summary>
+    private const float Width = 620, Gutter = 16, Lift = 96;
     private const int MaxRecent = 6;
     private const string RecentFile = "user://cinema_links.txt";
 
@@ -31,6 +32,8 @@ public partial class CinemaPanelUi : CanvasLayer
     private Label _title = null!, _now = null!, _status = null!;
     private Button _off = null!, _slides = null!, _stop = null!, _play = null!;
     private LineEdit _link = null!;
+    /// <summary>Where focus lands on opening: a pad or a VR laser starts on a button, never in the text box.</summary>
+    private Button _paste = null!;
     private VBoxContainer _recent = null!;
     private UnitSport.Player.FootPlayer? _me;
     private string _plan = "";
@@ -41,12 +44,12 @@ public partial class CinemaPanelUi : CanvasLayer
     public bool IsOpen => _panel != null && _panel.Visible;
 
     /// <summary>Opens the panel of hall <paramref name="hall"/> of cinema <paramref name="plan"/>, making it the first time.</summary>
-    public static void Open(UnitSport.Player.FootPlayer me, string plan, int hall)
+    public static void Open(UnitSport.Player.FootPlayer? me, string plan, int hall)
     {
         if (Instance == null || !IsInstanceValid(Instance))
         {
             Instance = new CinemaPanelUi { Name = "CinemaPanelUi" };
-            me.GetTree().Root.AddChild(Instance);
+            ((Node?)me ?? CinemaBooths.Instance!).GetTree().Root.AddChild(Instance);
         }
         Instance._me = me;
         Instance.OpenFor(plan, hall);
@@ -101,7 +104,7 @@ public partial class CinemaPanelUi : CanvasLayer
         };
         _link.TextSubmitted += _ => PlayTyped();
         row.AddChild(_link);
-        var paste = UiKit.Button("Paste");
+        var paste = _paste = UiKit.Button("Paste");
         paste.TooltipText = "The link on your clipboard";
         paste.Pressed += () =>
         {
@@ -114,6 +117,7 @@ public partial class CinemaPanelUi : CanvasLayer
         row.AddChild(_play);
         _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
         _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _status.Visible = false;
         box.AddChild(_status);
 
         _recent = UiKit.VBox(4);
@@ -137,8 +141,8 @@ public partial class CinemaPanelUi : CanvasLayer
         _panel.Visible = true;
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
-        Callable.From(() => { Fit(); (_play.Visible ? _link : (Control)_slides).GrabFocus(); }).CallDeferred();
-        if (!CinemaVideoStream.CanDecode) _status.Text = "This device cannot play videos: the others in the hall see it, you see the slides.";
+        Callable.From(() => { Fit(); _paste.GrabFocus(); }).CallDeferred();
+        if (!CinemaVideoStream.CanDecode) Status = "This device cannot play videos: the others in the hall see it, you see the slides.";
     }
 
     public void Close()
@@ -154,11 +158,26 @@ public partial class CinemaPanelUi : CanvasLayer
     {
         var screen = GetViewport().GetVisibleRect().Size;
         float w = Mathf.Min(Width, screen.X - 2 * Gutter), h = _panel.GetCombinedMinimumSize().Y;
-        _panel.SetAnchorsPreset(Control.LayoutPreset.Center);
+        // on a short screen it would reach the middle: down to the bottom gutter instead
+        float lift = screen.Y - Lift - h >= screen.Y / 2 ? Lift : Gutter;
+        _panel.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         _panel.OffsetLeft = -w / 2;
         _panel.OffsetRight = w / 2;
-        _panel.OffsetTop = -h / 2;
-        _panel.OffsetBottom = h / 2;
+        _panel.OffsetTop = -lift - h;
+        _panel.OffsetBottom = -lift;
+    }
+
+    /// <summary>The line under the link: hidden while it has nothing to say, so the panel keeps no gap.</summary>
+    private string Status
+    {
+        get => _status.Text;
+        set
+        {
+            if (_status.Text == value) return;
+            _status.Text = value;
+            _status.Visible = value.Length > 0;
+            Callable.From(Fit).CallDeferred();
+        }
     }
 
     // ---- asking ----------------------------------------------------------------------------------
@@ -166,7 +185,7 @@ public partial class CinemaPanelUi : CanvasLayer
     private void PlayTyped()
     {
         string link = _link.Text.Trim();
-        if (!CinemaVideo.Allowed(link)) { _status.Text = "That is not a web link (https://…)."; return; }
+        if (!CinemaVideo.Allowed(link)) { Status = "That is not a web link (https://…)."; return; }
         Remember(link);
         Ask(screen: true, link);
         _link.Text = "";
@@ -179,7 +198,7 @@ public partial class CinemaPanelUi : CanvasLayer
         var (lights, _) = booths.StateOf(_plan, _hall);
         booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, screen));
         booths.AskVideo(_plan, _hall, screen ? link : "");
-        _status.Text = link.Length > 0 ? "Starting…" : "";
+        Status = link.Length > 0 ? "Starting…" : "";
     }
 
     // ---- what plays ------------------------------------------------------------------------------
@@ -187,8 +206,9 @@ public partial class CinemaPanelUi : CanvasLayer
     public override void _Process(double delta)
     {
         if (!IsOpen) return;
-        if (CinemaBooths.Instance is not { } booths || InteriorManager.Instance?.Current?.Key != _plan
-            || _me is not { } me || !IsInstanceValid(me) || CinemaBooths.At(me) is not { } at || at.Plan != _plan || at.Hall != _hall)
+        // a shot's panel has no player (null): it stays until closed
+        if (CinemaBooths.Instance == null || _me != null && (!IsInstanceValid(_me) || InteriorManager.Instance?.Current?.Key != _plan
+            || CinemaBooths.At(_me) is not { } at || at.Plan != _plan || at.Hall != _hall))
         {
             Close();
             return;
@@ -216,8 +236,8 @@ public partial class CinemaPanelUi : CanvasLayer
         _slides.Visible = link.Length == 0;
         _slides.Disabled = screen;
         _stop.Visible = link.Length > 0;
-        if (stream is { Failed: true }) _status.Text = stream.Status;
-        else if (_status.Text == "Starting…" && link.Length > 0) _status.Text = "";
+        if (stream is { Failed: true }) Status = stream.Status;
+        else if (_status.Text == "Starting…" && link.Length > 0) Status = "";
     }
 
     // ---- the links played before -----------------------------------------------------------------

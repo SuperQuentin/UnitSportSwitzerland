@@ -10,7 +10,7 @@ namespace UnitSport.Interiors;
 /// the game (<see cref="CinemaVideoStream"/>, from now on the clock) and shown through <see cref="InteriorNode.ShowVideo"/>.
 /// Takes <c>&lt;prefix&gt;_pasted.png</c> once frames come, then <c>&lt;prefix&gt;_thrown.png</c> with the projector light
 /// (High detail's way) and <c>&lt;prefix&gt;_booth.png</c> from the booth's side, printing where the video is against the
-/// clock at each.
+/// clock at each, and <c>&lt;prefix&gt;_panel.png</c> with the hall's projector panel open over it (<see cref="CinemaPanelUi"/>).
 /// </summary>
 public partial class CinemaVideoShot : Node3D
 {
@@ -22,6 +22,7 @@ public partial class CinemaVideoShot : Node3D
     private Camera3D _cam = null!;
     private double _t0, _shotAt = -1;
     private int _step;
+    private string _plan = "";
     private Vector3 _target, _booth;
 
     public CinemaVideoShot(string link, string prefix) { _link = link; _prefix = prefix; }
@@ -51,6 +52,8 @@ public partial class CinemaVideoShot : Node3D
         AddChild(_cam);
         _cam.LookAtFromPosition(_target + facing * 12f + new Vector3(0, 0.6f, 0), _target, Vector3.Up);
 
+        if (CinemaBooths.Instance == null) CinemaBooths.Create(this);
+        _plan = layout.Key;
         _t0 = Net.ClockSync.ServerNow;
         _stream = new CinemaVideoStream(_link, _t0);
         GD.Print($"[cinemavideo] {_link} on hall {CinemaBooths.HallAt(layout, screen.X, screen.Z) + 1}");
@@ -64,12 +67,19 @@ public partial class CinemaVideoShot : Node3D
         if (_stream.CurrentIndex < 0) return;
         if (_shotAt < 0) _shotAt = pos + 2;
         if (pos < _shotAt) return;
-        string[] names = { "pasted", "thrown", "booth" };
+        string[] names = { "pasted", "thrown", "booth", "panel" };
         Shoot($"{_prefix}_{names[_step]}.png", pos);
         _step++;
         if (_step == 1) _node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Off), ~0, null, glow: true, real: true);
         if (_step == 2) _cam.LookAtFromPosition(_booth, _target, Vector3.Up);
-        if (_step < 3) { _node.ProjectFor(_node.ToLocal(_cam.GlobalPosition)); _shotAt = pos + 2; return; }
+        if (_step == 3)
+        {
+            // the panel as a player sees it while the hall plays: the link the server would hold, and this decoder's state
+            CinemaBooths.Instance!.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+            CinemaBooths.Instance!.SetVideoForShot(_plan, 0, _link, _t0);
+            CinemaPanelUi.Open(null, _plan, 0);
+        }
+        if (_step < 4) { _node.ProjectFor(_node.ToLocal(_cam.GlobalPosition)); _shotAt = pos + 2; return; }
         Done("ok");
     }
 
