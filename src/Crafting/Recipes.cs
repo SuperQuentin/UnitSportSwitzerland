@@ -125,6 +125,18 @@ public static class Recipes
         Bench(ItemId.FishingRod, 1, 5f, I(ItemId.WoodPlanks, 2), I(ItemId.Rope), I(ItemId.ScrapMetal), I(ItemId.Screws, 2)),
         Bench(ItemId.Spinner, 2, 3f, I(ItemId.ScrapMetal), I(ItemId.Screws)),
 
+        // the Adventure gadgets and the Alpine set (#1227): rock crystal from the chests and duplicates, worked
+        Bench(ItemId.TreasureDetector, 1, 5f, I(ItemId.Bergkristall, 4), I(ItemId.Electronics), I(ItemId.CopperWire)),
+        Bench(ItemId.TravelFlag, 1, 3f, I(ItemId.Bergkristall, 2), I(ItemId.SwissFlag)),
+        Bench(ItemId.BottledGust, 1, 3f, I(ItemId.Bergkristall, 3), I(ItemId.Glass)),
+        Bench(ItemId.Sennenkaeppi, 1, 4f, I(ItemId.Bergkristall, 8), I(ItemId.Cloth, 2)),
+        Bench(ItemId.EdelweissShirt, 1, 4f, I(ItemId.Bergkristall, 10), I(ItemId.Cloth, 3)),
+        Bench(ItemId.GuideHat, 1, 4f, I(ItemId.Bergkristall, 10), I(ItemId.Cloth, 2)),
+        Bench(ItemId.GuideBreeches, 1, 4f, I(ItemId.Bergkristall, 10), I(ItemId.Cloth, 3)),
+        Bench(ItemId.CrossBandana, 1, 3f, I(ItemId.Bergkristall, 6), I(ItemId.Cloth)),
+        Bench(ItemId.AlpineSocks, 1, 3f, I(ItemId.Bergkristall, 6), I(ItemId.Cloth)),
+        Bench(ItemId.AlpineGloves, 1, 3f, I(ItemId.Bergkristall, 6), I(ItemId.Cloth)),
+
         // ---- at a fire: a campfire or a stove (#272) ----
         Cook(ItemId.Fondue, 8f, I(ItemId.Cheese, 2), I(ItemId.Bread), I(ItemId.MineralWater)),
         Cook(ItemId.HotChocolate, 4f, I(ItemId.Chocolate), I(ItemId.MineralWater)),
@@ -183,6 +195,8 @@ public static class Recipes
         ItemId.Fertiliser,
         // found or bought (#716): the barracks' small goods
         ItemId.PlayingCards, ItemId.PokerChips, ItemId.BeerBottle, ItemId.Gamelle,
+        // the Adventure's rock crystal (#1227): found in chests and offerings only
+        ItemId.Bergkristall,
     }.Concat(FishCatalog.Items).ToHashSet();   // fish are caught (#493)
 
     /// <summary>Everything a recipe gives, the main output first.</summary>
