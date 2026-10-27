@@ -93,6 +93,7 @@ public static partial class InteriorGenerator
                 if (score.CompareTo(bestD) < 0) (best, bestD) = (i, score);
             }
             if (best < 0) continue;
+            var was = rooms[best].Type;
             rooms[best].Type = guest;
             taken.Add(best);
             // through its doors: the first kitchen, store or pantry becomes its kitchen, a dining room its Säli
@@ -129,7 +130,7 @@ public static partial class InteriorGenerator
             }
             // a place that serves food and still has none: its kitchen, and a WC beside it, walled off the
             // back of its own room; an oversized room gives a second room through an arch (#1250)
-            BackOfHouse(l, rooms, best, guest, kitchen, taken);
+            BackOfHouse(l, rooms, best, guest, kitchen, taken, was);
         }
         // the shop counter a shop building is promised goes to its shop, never into a restaurant
         if (taken.Count > 0 && l.Shop != Loot.ShopType.None && !l.Floors.Any(fl => fl.Rooms.Any(r => r.Type == RoomType.Shop)))
@@ -160,7 +161,7 @@ public static partial class InteriorGenerator
     /// the guest room; a room still over <see cref="GuestMaxArea"/> is cut across, the far part a second
     /// guest room through a wide arch. Each cut is given up where it would cross a door.
     /// </summary>
-    private static void BackOfHouse(InteriorLayout l, List<RoomPlan> rooms, int gi, RoomType guest, bool kitchen, HashSet<int> taken)
+    private static void BackOfHouse(InteriorLayout l, List<RoomPlan> rooms, int gi, RoomType guest, bool kitchen, HashSet<int> taken, RoomType was)
     {
         var g = rooms[gi];
         var entry = g.Openings.Where(o => o.Kind is OpeningKind.Entry or OpeningKind.Door).OrderByDescending(o => o.Kind == OpeningKind.Entry).FirstOrDefault();
@@ -206,7 +207,8 @@ public static partial class InteriorGenerator
         }
         // a hall of a room: cut across its length, the far part a second room of the same kind through an
         // arch (the Säli, no bar of its own); what is still over GuestMaxArea after that is cut again, the far
-        // parts stores off it (Café du Vieil Ouchy's room was 590 m2: one venue, not a warren of bars)
+        // parts left the kind of room they were before the venue took the room (a shop, a living room, an
+        // office), behind a door (Café du Vieil Ouchy's room was 590 m2: one venue, not a warren of bars, nor stores)
         if (guest is RoomType.ClubRoom) return;
         bool sali = false;
         var todo = new Queue<int>();
@@ -236,7 +238,7 @@ public static partial class InteriorGenerator
                 foreach (float cut in new[] { want, want * 0.8f, want * 1.2f })
                 {
                     if (cut < 2.4f || len - cut < 3f) continue;
-                    si = Carve(l, rooms, ri, far, cut, sali ? RoomType.Storage : guest);
+                    si = Carve(l, rooms, ri, far, cut, sali ? was : guest);
                     if (si >= 0) break;
                 }
                 if (si >= 0) break;
@@ -244,8 +246,12 @@ public static partial class InteriorGenerator
             if (si < 0) continue;
             taken.Add(si);
             var s = rooms[si];
-            if (s.Type == RoomType.Storage)
+            if (s.Type != guest)
+            {
+                // the building's own room again: not the venue's, so out of its count
+                taken.Remove(si);
                 Opening(rooms, ri, far, si, Mid(s, far), InnerDoor, top, OpeningKind.Door);
+            }
             else
             {
                 float span = far is Side.Front or Side.Back ? s.Width : s.Depth;

@@ -107,7 +107,9 @@ public partial class VenueSigns : Node
         // high over its door. What tells a bowling centre from a warehouse across the car park.
         if (Venues.IsHall(v.Type) && BigY(d, nameY) is var (bigY, letters))
         {
-            var big = NeonSign.Make(Venues.GenericName(v.Type).ToUpperInvariant(), v.Type, v.Cuisine,
+            // an arcade that is a billiard hall by its name says so (#1250: Bluff Billard)
+            string word = v.Type == VenueType.Arcade && InteriorGenerator.IsBilliard(Venues.NameOf(v)) ? "Billard" : Venues.GenericName(v.Type);
+            var big = NeonSign.Make(word.ToUpperInvariant(), v.Type, v.Cuisine,
                 letterHeight: letters, maxWidth: 14f, flicker: false);
             big.Transform = frame.Translated(frame.Basis * new Vector3(0, bigY, 0.10f));
             root.AddChild(big);

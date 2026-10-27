@@ -200,14 +200,37 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.Standee:
             {
-                // a cardboard cut-out on its foot: a hero, cape and all, the title over it
-                var cape = C(0.20f + 0.7f * Hash(p, 1), 0.10f, 0.60f * Hash(p, 2));
-                B(-w, 0, -d, w, 0.04f, d, darkWood);
-                B(-0.18f, 0.04f - sink, -0.02f, 0.18f, 0.9f, 0.02f, C(0.20f, 0.24f, 0.50f));
-                B(-0.2f, 0.9f - sink, -0.035f, 0.2f, 1.5f, 0.035f, cape);
-                B(-0.12f, 1.5f - sink, -0.02f, 0.12f, 1.78f, 0.02f, C(0.86f, 0.70f, 0.56f));
-                B(-w, 0.3f, -0.03f, -0.215f, 1.6f, -0.01f, (cape * 0.8f) with { A = 1 });
-                B(-w + 0.05f, 1.8f, -0.02f, w - 0.05f, H, 0.02f, C(0.96f, 0.80f, 0.20f));
+                // a cardboard promo board for a coming film (#1250: the cut-out hero read as a stiff person): a
+                // printed panel on its easel, the key art (a sky in two bands, a sun, hills, the hero small in
+                // front of them), the title band with its lettering, a logo block standing proud on top
+                float t = 0.03f, f = t / 2;
+                var sky = C(0.15f + 0.7f * Hash(p, 1), 0.15f + 0.5f * Hash(p, 2), 0.30f + 0.6f * Hash(p, 3));
+                var deep = (sky * 0.55f) with { A = sky.A };
+                var sun = C(1.0f, 0.80f + 0.15f * Hash(p, 4), 0.35f);
+                var hills = C(0.08f, 0.10f + 0.2f * Hash(p, 5), 0.12f);
+                var cardboard = C(0.66f, 0.52f, 0.34f);
+                float top = H - 0.2f, bottom = 0.08f;
+                // the easel: a foot and a strut behind the board
+                B(-w * 0.6f, 0, -d, w * 0.6f, 0.03f, d, cardboard);
+                B(-0.06f, 0.03f - sink, -d + 0.02f, 0.06f, 1.3f, -f - 0.01f, cardboard);
+                // the board and its print, each layer 1.2 cm proud of the one under it
+                B(-w, bottom, -f, w, top, f, deep);
+                B(-w + 0.04f, (bottom + top) / 2, f - sink, w - 0.04f, top - 0.04f, f + sink, sky);
+                B(-0.18f, top - 0.6f, f, 0.18f, top - 0.24f, f + 2 * sink, sun);
+                B(-w + 0.055f, 0.62f, f, w - 0.055f, 0.98f, f + 2 * sink, hills);
+                B(-w * 0.55f, 0.98f - sink, f, w * 0.1f, 1.09f, f + 2 * sink, hills);
+                B(-0.07f, 0.6f, f, 0.07f, 1.05f, f + 3 * sink, C(0.05f, 0.05f, 0.06f));
+                B(-0.05f, 1.05f - sink, f, 0.05f, 1.16f, f + 3 * sink, C(0.05f, 0.05f, 0.06f));
+                // the title band and its lettering
+                var band = C(0.96f, 0.90f, 0.70f);
+                B(-w + 0.04f, 0.3f, f, w - 0.04f, 0.56f, f + sink, band);
+                for (int k = 0; k < 5; k++)
+                {
+                    float x0 = -w + 0.1f + k * (p.W - 0.2f) / 5;
+                    B(x0, 0.37f, f, x0 + (p.W - 0.2f) / 5 - 0.05f, 0.49f, f + 2 * sink, C(0.12f, 0.06f, 0.08f));
+                }
+                // the logo block, the film's own colour, standing proud of the top edge
+                B(-w * 0.55f, top - sink, -f - 0.04f, w * 0.55f, H, f + 0.04f, (sun * 0.9f) with { A = sun.A });
                 break;
             }
             case FurnitureType.Stanchions:
