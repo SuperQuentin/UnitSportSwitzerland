@@ -312,7 +312,9 @@ public partial class InteriorNode
             Mood = Audio.Tracker.VenueMood.Film,
             // the halls spread evenly round the playlist, so the next hall is a song or two on
             Salt = (uint)(seed % 997 + s.No * Audio.Tracker.TrackerLibrary.Cycle(Audio.Tracker.VenueMood.Film) / Math.Max(1, _screens.Count)),
-            Position = new Vector3(c.X, s.Hall.Position.Y + Math.Max(2.3f, s.Hall.Size.Y - 1.0f), c.Z),
+            Position = new Vector3(c.X, s.Hall.Position.Y + Math.Min(3f, s.Hall.Size.Y - 0.5f), c.Z),
+            // the whole hall at full level, as its surround speakers make it
+            Spread = new Vector2(s.Hall.Size.X, s.Hall.Size.Z).Length() / 2,
         };
         AddChild(music);
         _hallMusic[s.No] = music;

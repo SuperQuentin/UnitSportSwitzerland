@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 10;
+    public const int CinemaRules = 11;
 
     /// <summary>A hall's clear height in a building of storeys, at least where it has them, m [S: small halls 6-8 m]; and the most storeys it takes.</summary>
     private const float HallMinClear = 6.0f;

@@ -74,6 +74,8 @@ lane frame and rules (`bowling-centres`).
   the hall's seed) start lights off with the screen on, the rest lit and dark; every peer starts the same and only
   what players set is sent (`SendTo` skips a hall at its default). Every hall's door from the lobby is an
   `InnerDoorPlan`, a leaf shut until someone opens it.
+- **Bump `CinemaRules` with every change to a cinema's plan**: stored plans are kept by it, and a game that
+  saw a cinema keeps its old plan otherwise (#1279's panels, aisles and service doors did not show until 11).
 - **Box office glass** (#1279): a see-through pane of its own (`InteriorNode.AddClearGlass`), the mesh only its
   rail and posts: the interior's one mesh is opaque, and vertex alpha marks lit faces or sky glass.
 - **Checks**: `--cinemacheck --systems ui` (`CinemaProbe`: a two-level town cinema, a small one, a

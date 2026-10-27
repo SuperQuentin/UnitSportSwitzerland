@@ -50,7 +50,7 @@ public partial class TrackerSpeaker : AudioStreamPlayer3D, IMusicSpeaker
     {
         SfxBus.Ensure();
         Bus = SfxBus.Music;
-        UnitSize = 3f;
+        UnitSize = GetParent() is VenueMusicSource { } src ? src.Spread : 3f;
         MaxDistance = 45f;
         AttenuationModel = AttenuationModelEnum.InverseDistance;
         AttenuationFilterCutoffHz = 6000f;
