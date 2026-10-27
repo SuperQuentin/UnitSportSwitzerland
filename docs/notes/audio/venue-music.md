@@ -51,6 +51,7 @@ ffmpeg or internet), they play tracker modules on our own player, also the same 
 - **Checks**: `--trackercheck` (every module loads and lasts 69-316 s, plays neither silent nor clipped,
   seeking to 30 s sounds as playing to it, correlation 0.97-1.00; the schedule runs on with the clock;
   20 s of each mood written to `test_output/tracker/`). The sound player: "Venue music", 30 s of each.
+  The owner listened to the arcade, Beiz, club and café renders (Oct 27 2026): they sound right.
   Offline at the Flon without ffmpeg the log shows `Bowling plays drozerix_-_poppy_flower_girls.xm from
   12 s` 5 s after the radio stayed silent.
 - **Next**: venue ambience (chatter, cutlery, balls and pins, coin drops) in the sound player, quiet hours
