@@ -140,7 +140,7 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
         if (now < _nextPlaces) return;
         _nextPlaces = now + PlacesEvery;
         _placeCount = 0;
-        if (PlacesService.Instance is not { } places || AdventureService.Instance is not { } svc) return;
+        if (PlacesService.Instance is not { } places || AdventureService.Instance is not { } svc || !svc.Mine.Has(PlacesProgress.Section.Id)) return;
         var mine = svc.Mine.Get(PlacesProgress.Section);
         places.Catalogue.Near(me.E, me.N, PlacesM, _near);
         foreach (var poi in _near)

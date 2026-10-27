@@ -60,8 +60,6 @@ public sealed class ChatCompleter
 #endif
         ("city", false, true, "<town>", "Travel", "teleport to a town"),
         ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]", "Travel", "the venues: what plays there, go to one"),
-        ("travel", false, true, "[list] | to <point id> | unlock <id | all> [player] | lock <id | all> [player]", "Travel", "the adventure's travel network (unlock and lock: admins)"),
-        ("pin", false, true, "list | add [1-6] [note] | clear", "Travel", "your map pins"),
         ("tpa", false, false, "<player>", "Travel", "ask to go to a player"),
         ("tphere", false, false, "<player>", "Travel", "ask a player over"),
         ("tp", true, true, "<player> | <E> <N>", "Travel", "go to a player or an LV95 point"),
@@ -102,6 +100,9 @@ public sealed class ChatCompleter
         ("despawn", true, true, "<vehicles | items | all> [radius m | everywhere]", "Admin", "remove parked vehicles or dropped items around you"),
         ("debug", true, true, "", "Admin", "the debug menu"),
         ("update", true, false, "", "Admin", "update and restart the server"),
+        // the adventure's travel (#1226): last in the table, so the short offline list keeps its first commands; /help groups them under Travel
+        ("travel", false, true, "[list] | to <point id> | unlock <id | all> [player] | lock <id | all> [player]", "Travel", "the adventure's travel network (unlock and lock: admins)"),
+        ("pin", false, true, "list | add [1-6] [note] | clear", "Travel", "your map pins"),
     ];
 
     /// <summary>The commands this player can run right now.</summary>

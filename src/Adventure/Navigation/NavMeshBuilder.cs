@@ -45,7 +45,7 @@ public static class NavMeshBuilder
     /// <summary>The SBB station pole: the clock on top, the blue name board, a red stripe when lit.</summary>
     private static ArrayMesh Sbb(bool lit) => PoiMarkerMeshBuilder.Build(st =>
     {
-        PoiMarkerMeshBuilder.Box(st, new Vector3(0, 1.5f, 0), new Vector3(0.1f, 3.0f, 0.1f), Grey);
+        PoiMarkerMeshBuilder.Box(st, new Vector3(0, 1.475f, 0), new Vector3(0.1f, 2.95f, 0.1f), Grey);
         PoiMarkerMeshBuilder.Box(st, new Vector3(0, 3.2f, 0), new Vector3(0.56f, 0.56f, 0.08f), Grey);
         PoiMarkerMeshBuilder.Box(st, new Vector3(0, 3.2f, 0.045f), new Vector3(0.48f, 0.48f, 0.01f), White);
         PoiMarkerMeshBuilder.Box(st, new Vector3(0, 3.27f, 0.055f), new Vector3(0.03f, 0.16f, 0.008f), Black);
@@ -61,24 +61,26 @@ public static class NavMeshBuilder
     private static ArrayMesh PostAuto(bool lit) => PoiMarkerMeshBuilder.Build(st =>
     {
         var plate = lit ? PostYellow : new Color(0.45f, 0.38f, 0.12f);
-        PoiMarkerMeshBuilder.Box(st, new Vector3(0, 1.3f, 0), new Vector3(0.08f, 2.6f, 0.08f), Grey);
+        // the pole behind the plate, 5 mm clear of it
+        PoiMarkerMeshBuilder.Box(st, new Vector3(0, 1.3f, -0.05f), new Vector3(0.08f, 2.6f, 0.04f), Grey);
         PoiMarkerMeshBuilder.Box(st, new Vector3(0, 2.4f, 0), new Vector3(0.6f, 0.45f, 0.05f), plate);
-        // the horn: a bell and a looped tube, in black on both faces
-        foreach (float z in new[] { 0.03f, -0.03f })
+        // the horn: a bell and a looped tube, in black on the face
+        // (each part stands 1 cm proud of the plate and clear of the next: no shared faces, no z-fight)
+        foreach (float z in new[] { 0.036f })
         {
-            PoiMarkerMeshBuilder.Box(st, new Vector3(-0.12f, 2.4f, z), new Vector3(0.22f, 0.05f, 0.01f), Black);
-            PoiMarkerMeshBuilder.Box(st, new Vector3(0.06f, 2.4f, z), new Vector3(0.06f, 0.16f, 0.01f), Black);
-            PoiMarkerMeshBuilder.Box(st, new Vector3(0.14f, 2.4f, z), new Vector3(0.1f, 0.24f, 0.01f), Black);
+            PoiMarkerMeshBuilder.Box(st, new Vector3(-0.125f, 2.4f, z), new Vector3(0.21f, 0.05f, 0.01f), Black);
+            PoiMarkerMeshBuilder.Box(st, new Vector3(0.0575f, 2.4f, z), new Vector3(0.055f, 0.16f, 0.01f), Black);
+            PoiMarkerMeshBuilder.Box(st, new Vector3(0.145f, 2.4f, z), new Vector3(0.1f, 0.24f, 0.01f), Black);
         }
-        PoiMarkerMeshBuilder.Box(st, new Vector3(0, 1.75f, 0.06f), new Vector3(0.36f, 0.5f, 0.04f), lit ? White : Grey);
+        PoiMarkerMeshBuilder.Box(st, new Vector3(0, 1.75f, 0.07f), new Vector3(0.36f, 0.5f, 0.04f), lit ? White : Grey);
         PoiMarkerMeshBuilder.Box(st, new Vector3(0, 0.03f, 0), new Vector3(0.3f, 0.06f, 0.3f), Grey);
     });
 
     /// <summary>A lake landing: two posts and a wide blue board with a white wave.</summary>
     private static ArrayMesh Landing(bool lit) => PoiMarkerMeshBuilder.Build(st =>
     {
-        PoiMarkerMeshBuilder.Box(st, new Vector3(-0.7f, 1.1f, 0), new Vector3(0.1f, 2.2f, 0.1f), Grey);
-        PoiMarkerMeshBuilder.Box(st, new Vector3(0.7f, 1.1f, 0), new Vector3(0.1f, 2.2f, 0.1f), Grey);
+        PoiMarkerMeshBuilder.Box(st, new Vector3(-0.7f, 1.125f, 0), new Vector3(0.1f, 2.15f, 0.1f), Grey);
+        PoiMarkerMeshBuilder.Box(st, new Vector3(0.7f, 1.125f, 0), new Vector3(0.1f, 2.15f, 0.1f), Grey);
         PoiMarkerMeshBuilder.Box(st, new Vector3(0, 2.0f, 0), new Vector3(1.6f, 0.45f, 0.06f), lit ? LakeBlue : Dark);
         PoiMarkerMeshBuilder.Box(st, new Vector3(-0.2f, 1.93f, 0.035f), new Vector3(0.5f, 0.05f, 0.01f), lit ? White : Grey);
         PoiMarkerMeshBuilder.Box(st, new Vector3(0.3f, 1.98f, 0.035f), new Vector3(0.5f, 0.05f, 0.01f), lit ? White : Grey);

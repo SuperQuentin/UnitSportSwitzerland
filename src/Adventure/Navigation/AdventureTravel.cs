@@ -85,8 +85,11 @@ public partial class AdventureTravel : Node
     public event Action? PartyPinsChanged;
 
     /// <summary>Client: this player's travel and pins sections as the server last sent them.</summary>
-    public TravelBook MyBook => _adventure.Mine.Get(TravelBook.Section);
-    public PinBook MyPins => _adventure.Mine.Get(PinBook.Section);
+    /// <remarks>A client's mirror is read without making the section (the server sends it); offline it is the progress itself.</remarks>
+    public TravelBook MyBook => Authority || _adventure.Mine.Has(TravelBook.Section.Id) ? _adventure.Mine.Get(TravelBook.Section) : NoBook;
+    public PinBook MyPins => Authority || _adventure.Mine.Has(PinBook.Section.Id) ? _adventure.Mine.Get(PinBook.Section) : NoPins;
+    private static readonly TravelBook NoBook = new();
+    private static readonly PinBook NoPins = new();
 
     public static AdventureTravel Create(AdventureService adventure, bool server, bool networked)
     {
