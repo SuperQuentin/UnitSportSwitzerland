@@ -326,6 +326,12 @@ public sealed class GameSettings
     /// <summary>The gliders' variometer: a beep that rises with the climb, a low tone in sink (#1225, <see cref="Audio.Variometer"/>).</summary>
     public bool Variometer { get; set; } = true;
 
+    /// <summary>
+    /// Radios, stereos and speakers muffled by what stands between them and the ears, found by rays
+    /// (<see cref="Audio.Hearing"/>). Off: heard as in the open, no rays cast (#1281).
+    /// </summary>
+    public bool SoundOcclusion { get; set; } = true;
+
     /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
     public bool ChatBubbles { get; set; } = true;
 
