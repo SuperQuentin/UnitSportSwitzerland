@@ -180,6 +180,7 @@
     <Compile Include="..\..\src\World\Locate\LocateCoords.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Locate\BuildingIndex.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Locate\LocateEngine.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Locate\TileQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- adventure places part 2 (#1224): discovery, fog, the Atlas's progress and texts -->
     <Compile Include="..\..\src\Adventure\Places\PlacesProgress.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\DiscoveryRules.cs" Link="Game\%(Filename)%(Extension)" />

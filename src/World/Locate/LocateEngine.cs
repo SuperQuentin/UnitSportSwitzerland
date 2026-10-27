@@ -10,7 +10,7 @@ public readonly record struct LocatePoint(LocateTarget Target, string Name, doub
 public readonly record struct LocateHit(string Title, string Detail, double E, double N, double Distance, IndexedBuilding? Building = null);
 
 /// <summary>What a search gave: the hits nearest first, or why there are none.</summary>
-public sealed record LocateResult(List<LocateHit> Hits, string? Refusal = null)
+public sealed record LocateResult(List<LocateHit> Hits, string? Refusal = null, string? Note = null)
 {
     public static LocateResult Refused(string why) => new([], why);
 }
@@ -70,7 +70,9 @@ public sealed class LocateEngine
                 hits.Add(new LocateHit(TitleOf(q, b), DetailOf(b), b.E, b.N, d, b));
                 if (hits.Count >= want) break;
             }
-            return new LocateResult(hits);
+            // a garage's candidates are judged once their doors are checked (LocateService)
+            if (Buildings.Complete || q.Has(LocateModifier.Parking)) return new LocateResult(hits);
+            return Partial(hits, Buildings.CoveredRadius(e, n), max, BuildingsPending());
         }
 
         if (q.Target != LocateTarget.Steamer && CountOf(q.Target) == 0 && FromPoisOnly(q.Target))
@@ -86,6 +88,22 @@ public sealed class LocateEngine
             if (kept.Count >= max) break;
         }
         return new LocateResult(kept);
+    }
+
+    /// <summary>
+    /// An answer from an index still filling (#1277): when the <paramref name="max"/> nearest all lie within the
+    /// radius where every tile is in (<see cref="BuildingIndex.CoveredRadius"/>), they are the true nearest and stand
+    /// alone; otherwise they are the nearest found so far, said so, with how far the index reaches and the time left.
+    /// </summary>
+    public static LocateResult Partial(List<LocateHit> hits, double covered, int max, string? pending)
+    {
+        string wait = pending ?? "Still indexing the buildings.";
+        // enough of them, and no tile left unread nearer than the last: the true nearest, nothing to add
+        if (hits.Count >= max && hits[max - 1].Distance <= covered) return new LocateResult(hits.Take(max).ToList());
+        string reach = covered >= 1000 ? $"everything within {LocateCoords.Distance(covered)} is in" : "the tiles round you are not all in yet";
+        if (hits.Count == 0) return LocateResult.Refused($"The building index isn't finished ({reach}), and none found so far. {wait}");
+        return new LocateResult(hits.Take(max).ToList(),
+            Note: $"The building index isn't finished ({reach}): these are the nearest found so far, a nearer one may still come. {wait}");
     }
 
     /// <summary>The nouns only the survey's points of interest (<c>pois.bin</c>) answer.</summary>
@@ -173,7 +191,7 @@ public sealed class LocateEngine
     {
         if (r.Refusal != null) return [r.Refusal];
         if (r.Hits.Count == 0) return [$"No {q.Describe()} found on this map."];
-        var lines = new List<string>(r.Hits.Count + 1)
+        var lines = new List<string>(r.Hits.Count + 2)
         {
             r.Hits.Count == 1 ? $"Nearest {q.Describe()} (from {from}):" : $"Nearest {q.Describe()}s (from {from}):",
         };
@@ -185,6 +203,7 @@ public sealed class LocateEngine
             lines[0] = $"Nearest {Plural(d[..at])}{d[at..]} (from {from}):";
         }
         else if (r.Hits.Count > 1) lines[0] = $"Nearest {Plural(q.Describe())} (from {from}):";
+        if (r.Note != null) lines.Add(r.Note);
         foreach (var h in r.Hits)
         {
             string detail = h.Detail.Length > 0 ? $" ({h.Detail})" : "";
@@ -195,12 +214,13 @@ public sealed class LocateEngine
 
     /// <summary>
     /// "Still indexing the buildings: 40 %, about 25 s left." The time left is the pace so far carried over the tiles
-    /// still to read; before a tenth of a second's worth of tiles there is no pace yet.
+    /// still to read; before 8 tiles and a second there is no pace yet (one tile in, it said 2 min for a 6 s build).
     /// </summary>
     public static string Indexing(int done, int total, double elapsedSeconds)
     {
         int pct = total <= 0 ? 0 : Math.Clamp(100 * done / total, 0, 99);
-        if (done <= 0 || elapsedSeconds < 0.1) return $"Still indexing the buildings: {pct} %, working out how long it takes. Try again in a few seconds.";
+        // the first tiles carry the start-up (the reads warming the disk): their pace says nothing yet
+        if (done < 8 || elapsedSeconds < 1) return $"Still indexing the buildings: {pct} %, working out how long it takes. Try again in a few seconds.";
         double left = elapsedSeconds / done * Math.Max(0, total - done);
         string eta = left < 5 ? "a few seconds" : left < 90 ? $"about {Math.Ceiling(left / 5) * 5:0} s" : $"about {Math.Round(left / 60):0} min";
         return $"Still indexing the buildings: {pct} %, {eta} left.";

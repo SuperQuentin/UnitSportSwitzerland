@@ -177,6 +177,52 @@ public class LocateTests
     }
 
     [Fact]
+    public void A_growing_index_knows_how_far_round_a_point_it_is_whole()
+    {
+        var tiles = new[] { new TileId(2600, 1200), new TileId(2601, 1200), new TileId(2605, 1200) };
+        var index = BuildingIndex.Growing(tiles);
+        Assert.False(index.Complete);
+        Assert.Equal(0, index.CoveredRadius(2_600_500, 1_200_500));   // its own tile is not in
+        index.AddTile(tiles[0], [B(2_600_500, 1_200_500, BuildingKind.House)]);
+        Assert.Equal(500, index.CoveredRadius(2_600_500, 1_200_500), 3);   // the next tile starts 500 m east
+        index.AddTile(tiles[1], []);
+        Assert.Equal(4500, index.CoveredRadius(2_600_500, 1_200_500), 3);
+        Assert.Equal((2, 3), index.Progress);
+        index.AddTile(tiles[2], []);
+        Assert.True(index.Complete);
+        Assert.Equal(double.PositiveInfinity, index.CoveredRadius(2_600_500, 1_200_500));
+    }
+
+    [Fact]
+    public void A_partial_answer_stands_alone_only_when_nothing_unread_is_nearer()
+    {
+        LocateHit H(double d) => new("x", "", 0, 0, d);
+        // three hits, all within the whole radius: the true nearest
+        Assert.Null(LocateEngine.Partial([H(100), H(200), H(300)], 500, 3, "wait").Note);
+        // the third lies past an unread tile: said
+        Assert.Contains("isn't finished", LocateEngine.Partial([H(100), H(200), H(900)], 500, 3, "wait").Note);
+        // fewer than three: said
+        Assert.Contains("isn't finished", LocateEngine.Partial([H(100)], 5000, 3, "wait").Note);
+        Assert.Contains("isn't finished", LocateEngine.Partial([], 5000, 3, "wait").Refusal);
+    }
+
+    [Fact]
+    public void Tiles_are_read_nearest_the_players_and_an_asker_first()
+    {
+        var tiles = Enumerable.Range(0, 20).Select(i => new TileId(2600 + i, 1200)).ToList();
+        var queue = new TileQueue(tiles, 2_600_500, 1_200_500);
+        Assert.True(queue.TryNext(out var first));
+        Assert.Equal(new TileId(2600, 1200), first);
+        queue.SetPlayers([(2_610_500, 1_200_500)]);
+        Assert.True(queue.TryNext(out var second));
+        Assert.Equal(new TileId(2610, 1200), second);
+        queue.Prefer(2_619_500, 1_200_500);
+        Assert.True(queue.TryNext(out var third));
+        Assert.Equal(new TileId(2619, 1200), third);
+        Assert.Equal(17, queue.Left);
+    }
+
+    [Fact]
     public void Parking_entrances_come_back_as_candidates_for_the_footprint_to_decide()
     {
         var engine = new LocateEngine([]) { Buildings = new BuildingIndex(

@@ -36,7 +36,9 @@ public partial class LocateService : Node
     private PoiCatalogue? _enginePois;
     private Task<LocateEngine>? _engineBuild;
     private BuildingIndex? _buildings;
-    private int _tilesDone;
+    private TileQueue? _queue;
+    private readonly Func<IEnumerable<GlobalPos>> _players;
+    private double _playersIn;
     /// <summary>Runs from the first tile read, for the time left in <see cref="Pending"/>.</summary>
     private readonly System.Diagnostics.Stopwatch _indexClock = new();
     private bool _indexing;
@@ -47,8 +49,11 @@ public partial class LocateService : Node
     /// <summary>The building index, once built or read (null before; empty with no tiles).</summary>
     public BuildingIndex? Buildings => _buildings;
 
-    public LocateService(IChunkSource source, TerrainManifest manifest, Func<PlaceIndex?> places, WorldOrigin origin)
+    /// <param name="players">Where the players are, for the order the index is built in (round them first).</param>
+    public LocateService(IChunkSource source, TerrainManifest manifest, Func<PlaceIndex?> places, WorldOrigin origin,
+        Func<IEnumerable<GlobalPos>>? players = null)
     {
+        _players = players ?? (() => []);
         Name = NodeName;
         _source = source;
         _manifest = manifest;
@@ -102,8 +107,15 @@ public partial class LocateService : Node
                 // a quarter of the cores: the server keeps running its world while this goes on
                 int workers = Math.Max(1, System.Environment.ProcessorCount / 4);
                 var tiles = _manifest.Tiles.Select(t => t.Id).ToList();
+                // filled in place, round the players first: /locate answers from it while it grows
+                var growing = BuildingIndex.Growing(tiles);
+                _queue = new TileQueue(tiles, _origin.E, _origin.N);
+                FeedPlayers();
+                _buildings = growing;
+                if (_engine != null) _engine.Buildings = growing;
                 _indexClock.Restart();
-                index = await Task.Run(() => BuildingIndexBuilder.BuildAsync(_source, tiles, workers, d => _tilesDone = d, _cancel.Token));
+                await BuildingIndexBuilder.BuildInto(_source, growing, _queue, workers, _cancel.Token);
+                index = growing;
                 if (key != null) await Task.Run(() => BuildingIndexBuilder.WriteCache(key, index));
             }
             _buildings = index;
@@ -121,9 +133,23 @@ public partial class LocateService : Node
         finally { _indexing = false; }
     }
 
-    private string? Pending() => _buildings != null ? null
-        : _indexing ? LocateEngine.Indexing(_tilesDone, _manifest.Tiles.Count, _indexClock.Elapsed.TotalSeconds)
+    private string? Pending() => _buildings is { Complete: false } growing
+        ? LocateEngine.Indexing(growing.Progress.Done, growing.Progress.Total, _indexClock.Elapsed.TotalSeconds)
+        : _buildings != null ? null
+        : _indexing ? "Reading the building index…"
         : "The building index is not ready.";
+
+    /// <summary>While the index fills: the players' positions, once a second, for the order it is read in.</summary>
+    public override void _Process(double delta)
+    {
+        if (_queue is not { Left: > 0 }) return;
+        _playersIn -= delta;
+        if (_playersIn > 0) return;
+        _playersIn = 1;
+        FeedPlayers();
+    }
+
+    private void FeedPlayers() => _queue?.SetPlayers(_players().Select(p => (p.E, p.N)).ToList());
 
     /// <summary>The engine over the lists as they are now; rebuilt when the POI catalogue arrives or changes.</summary>
     private async Task<LocateEngine> EngineAsync()
@@ -252,11 +278,19 @@ public partial class LocateService : Node
         }
         else if (at is { } here) (e, n) = (here.E, here.N);
         else return (["Where are you? Get into the world first, or ask '/locate <thing> in <town>'."], true);
+        // still indexing: what is round the asker next
+        if (q.OnBuildings || q.Target == LocateTarget.Church) _queue?.Prefer(e, n);
 
         var engine = await EngineAsync();
         var result = engine.Find(q, e, n, MaxHits);
         if (q.Has(LocateModifier.Parking) && result.Refusal == null)
-            result = new LocateResult(await GaragesAsync(result.Hits, MaxHits));
+        {
+            var doors = await GaragesAsync(result.Hits, MaxHits);
+            // the doors are judged against what is indexed, as the engine judges any other answer
+            result = _buildings is { Complete: false } growing
+                ? LocateEngine.Partial(doors, growing.CoveredRadius(e, n), MaxHits, Pending())
+                : new LocateResult(doors);
+        }
         return (LocateEngine.Lines(q, result, e, n, from), result.Refusal != null);
     }
 

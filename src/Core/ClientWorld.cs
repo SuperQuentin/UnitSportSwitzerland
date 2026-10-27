@@ -1031,7 +1031,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(_chat);
         // /locate offline (#1277): this machine owns the world and searches its own tiles, indexed on first use
         if (_localSource != null && _localManifest != null && _worldOrigin != null)
-            AddChild(new World.Locate.LocateService(_localSource, _localManifest, () => _places?.Index, _worldOrigin) { OnDemand = true });
+            AddChild(new World.Locate.LocateService(_localSource, _localManifest, () => _places?.Index, _worldOrigin,
+                () => LocalPlayer is { } me ? [me.Global] : []) { OnDemand = true });
         _chatUi = ChatUi.Create(_chat, new ChatCompleter
         {
             Places = (query, limit) => _places!.Search(query, limit).Select(p => p.Name),

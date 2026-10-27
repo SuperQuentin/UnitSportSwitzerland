@@ -73,22 +73,22 @@ public static class BuildingIndexBuilder
     }
 
     /// <summary>
-    /// Reads every tile of <paramref name="tiles"/> from <paramref name="source"/> and indexes its buildings,
-    /// <paramref name="workers"/> tiles at a time. <paramref name="progress"/> gets the tiles done (from a worker).
+    /// Fills <paramref name="index"/> (<see cref="BuildingIndex.Growing"/>) from <paramref name="source"/>, <paramref name="workers"/>
+    /// tiles at a time, in the order <paramref name="queue"/> gives (round the players first): <c>/locate</c> reads the
+    /// index while it fills and knows how far round the asker it is whole.
     /// </summary>
-    public static async Task<BuildingIndex> BuildAsync(IChunkSource source, IReadOnlyList<TileId> tiles, int workers,
-        Action<int>? progress = null, CancellationToken ct = default)
+    public static async Task BuildInto(IChunkSource source, BuildingIndex index, TileQueue queue, int workers, CancellationToken ct = default)
     {
-        var parts = new List<IndexedBuilding>[tiles.Count];
-        int done = 0;
-        await Parallel.ForEachAsync(Enumerable.Range(0, tiles.Count), new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, workers), CancellationToken = ct },
-            async (i, token) =>
+        async Task Work()
+        {
+            while (!ct.IsCancellationRequested && queue.TryNext(out var id))
             {
-                var tile = await source.LoadBuildingsAsync(tiles[i], token);
-                parts[i] = tile == null ? [] : Entries(tile);
-                progress?.Invoke(Interlocked.Increment(ref done));
-            });
-        return new BuildingIndex(parts.SelectMany(p => p).ToList());
+                var tile = await source.LoadBuildingsAsync(id, ct);
+                index.AddTile(id, tile == null ? [] : Entries(tile));
+            }
+        }
+        await Task.WhenAll(Enumerable.Range(0, Math.Max(1, workers)).Select(_ => Task.Run(Work, ct)));
+        ct.ThrowIfCancellationRequested();
     }
 
     /// <summary>A spire inside the hall's own solid: this much higher than the eave at least, m...</summary>

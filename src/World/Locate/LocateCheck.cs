@@ -46,14 +46,15 @@ public partial class LocateCheck : Node
         }
         if (_running || LocateService.Instance is not { } locate) return;
         locate.EnsureIndexing();
-        if (locate.Buildings == null) return;
+        // "--locateearly": ask as soon as the index starts filling, to read the answers of a partial one
+        if (locate.Buildings is not { Complete: true } && !(CmdArgs.Has("--locateearly") && locate.Buildings is { Progress.Done: > 0 })) return;
         _running = true;
         _ = Run(locate);
     }
 
     private async Task Run(LocateService locate)
     {
-        GD.Print($"[locatecheck] index: {locate.Buildings!.Count} buildings, {(Time.GetTicksMsec() - _began)} ms after boot");
+        GD.Print($"[locatecheck] index: {locate.Buildings!.Count} buildings ({locate.Buildings.Progress.Done} of {locate.Buildings.Progress.Total} tiles), {(Time.GetTicksMsec() - _began)} ms after boot");
         string? asked = CmdArgs.Value("--locatecheck", notFlag: true);
         var queries = asked != null ? asked.Split('|', StringSplitOptions.RemoveEmptyEntries) : Default;
         var from = new GlobalPos(_from.E, _from.N, 0);
