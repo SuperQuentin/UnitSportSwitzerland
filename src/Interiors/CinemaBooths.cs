@@ -75,16 +75,7 @@ public partial class CinemaBooths : Node
 
     /// <summary>Which control of a cinema's panel <paramref name="p"/> stands at: the plan key and whether it is the screen's half.</summary>
     public static (string Plan, bool Screen)? At(FootPlayer p)
-    {
-        if (!p.Indoors || InteriorManager.Instance is not { Current: { Type: BuildingType.Cinema } layout, CurrentNode: { } node }) return null;
-        int i = Loot.LootService.NearestOf(p, layout, node, t => t == FurnitureType.BoothPanel, Reach);
-        if (i < 0) return null;
-        var panel = layout.Furniture[i];
-        // the player in the panel's own frame: its left half (local -X) the lights, its right the screen
-        var local = node.ToLocal(p.GlobalPosition) - new Vector3(panel.X, 0, panel.Z);
-        float across = local.Rotated(Vector3.Up, -panel.Turns * Mathf.Pi / 2).X;
-        return (layout.Key, across > 0);
-    }
+        => PanelAt(p) is { } at ? (at.Node.Layout.Key, at.Screen) : null;
 
     /// <summary>The prompt at the panel, or null: what E would do there.</summary>
     public static string? Prompt(FootPlayer p)

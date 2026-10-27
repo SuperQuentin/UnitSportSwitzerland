@@ -21,20 +21,24 @@ public partial class ArcadeProbe : Node
         _ok &= condition;
     }
 
-    private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, bool Arcade, int MinMachines = 0);
+    private sealed record Case(string Name, float W, float D, float H, BuildingKind Kind, bool Arcade, int MinMachines = 0,
+        ToiletSet Toilets = ToiletSet.Shared, bool Accessible = false);
 
     private static readonly Case[] Cases =
     {
         // a high-street arcade of its own
-        new("small", 12, 18, 5, BuildingKind.Commercial, true, 15),
+        new("small", 12, 18, 5, BuildingKind.Commercial, true, 15, Toilets: ToiletSet.Gendered),
         // a big hall: islands of uprights in the middle
-        new("big", 28, 36, 7, BuildingKind.Commercial, true, 60),
+        new("big", 28, 36, 7, BuildingKind.Commercial, true, 60, Toilets: ToiletSet.Gendered, Accessible: true),
         // wider than deep
-        new("along-x", 30, 16, 5, BuildingKind.Commercial, true, 30),
+        new("along-x", 30, 16, 5, BuildingKind.Commercial, true, 30, Toilets: ToiletSet.Gendered, Accessible: true),
         // in a mall: the arcade keeps to 32 m a side, the rest a plain hall
-        new("mall", 80, 60, 10, BuildingKind.Commercial, true, 80),
+        new("mall", 80, 60, 10, BuildingKind.Commercial, true, 80, Toilets: ToiletSet.Gendered, Accessible: true),
         // under flats: the ground floor
-        new("under-flats", 16, 22, 15, BuildingKind.Apartment, true, 20),
+        new("under-flats", 16, 22, 15, BuildingKind.Apartment, true, 20, Toilets: ToiletSet.Gendered, Accessible: true),
+        // a corner arcade: a shared anteroom with a stall each; a booth of a few machines: one WC (#1285)
+        new("corner", 8, 12, 4, BuildingKind.Commercial, true, 6),
+        new("booth", 6, 10, 4, BuildingKind.Commercial, true, 3, Toilets: ToiletSet.Single),
         // a kiosk: no arcade fits, the ordinary rules furnish it
         new("too-small", 5, 6, 4, BuildingKind.Commercial, false),
         // an arcade by OSM that its name says is a billiard hall (Bluff Billard, Geneva, #1250)
@@ -104,17 +108,21 @@ public partial class ArcadeProbe : Node
         Check(machines >= c.MinMachines, $"{what}: {machines} machines (at least {c.MinMachines})");
         Check(machines <= 110, $"{what}: at most 110 machines");
         Check(machines <= hall.Area * 0.17f, $"{what}: at most ~16 machines to 100 m2 ({machines} in {hall.Area:F0} m2)");
+        // a corner arcade of a few machines (#1285's small footprints) is there for its toilets: the full set is a hall's
+        bool full = c.MinMachines >= 10;
         Check(Count(FurnitureType.PrizeCounter) == 1, $"{what}: a prize counter");
-        Check(Count(FurnitureType.ClawMachine) >= 2, $"{what}: claw machines ({Count(FurnitureType.ClawMachine)})");
-        Check(Count(FurnitureType.Racer) >= 1, $"{what}: a racer ({Count(FurnitureType.Racer)})");
-        Check(Count(FurnitureType.Pinball) >= 2, $"{what}: a row of pinballs ({Count(FurnitureType.Pinball)})");
-        Check(Count(FurnitureType.ArcadeCabinet) >= 2, $"{what}: uprights ({Count(FurnitureType.ArcadeCabinet)})");
+        Check(!full || Count(FurnitureType.ClawMachine) >= 2, $"{what}: claw machines ({Count(FurnitureType.ClawMachine)})");
+        Check(!full || Count(FurnitureType.Racer) >= 1, $"{what}: a racer ({Count(FurnitureType.Racer)})");
+        Check(!full || Count(FurnitureType.Pinball) >= 2, $"{what}: a row of pinballs ({Count(FurnitureType.Pinball)})");
+        Check(!full || Count(FurnitureType.ArcadeCabinet) >= 2, $"{what}: uprights ({Count(FurnitureType.ArcadeCabinet)})");
         int kinds = new[] { FurnitureType.Racer, FurnitureType.SimPod, FurnitureType.DanceMachine, FurnitureType.DrumGame,
             FurnitureType.BasketballGame, FurnitureType.AirHockey }.Count(t => Count(t) > 0);
-        Check(kinds >= 3, $"{what}: {kinds} kinds of big machine");
-        Check(l.Floors[0].Rooms.Any(r => r.Type == RoomType.WC) || hall.Area < 60, $"{what}: a WC");
+        Check(!full || kinds >= 3, $"{what}: {kinds} kinds of big machine");
+        // the public toilets the footprint has room for (#1285)
+        var loo = ToiletCheck.Problems(l, c.Toilets, c.Accessible);
+        Check(loo.Count == 0, $"{what}: toilets {ToiletCheck.Describe(l)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
         var main = BuildingFootprint.ComputeDoors(tile, null, null).First(d => d.Index == 0 && d.Slot == 0);
-        Check(main.Width >= 2.0f, $"{what}: its way in is a double door ({main.Width:F1} m)");
+        Check(!full || main.Width >= 2.0f, $"{what}: its way in is a double door ({main.Width:F1} m)");
 
         var mesh = InteriorMeshBuilder.Build(l);
         Check(mesh.Vertices.Length > 0 && mesh.Collision.Length > 0, $"{what}: meshes ({mesh.Vertices.Length} vertices) with collision");

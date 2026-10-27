@@ -417,8 +417,14 @@ public partial class BrCrates : Node3D, IOriginContainer
         return true;
     }
 
-    public string? PromptFor(FootPlayer p) =>
-        NearestTo(p) is { } c ? InputHints.Prompt(PlayerInput.InteractMount, c.Locked ? $"Crack {c.Label}" : $"Search {c.Label}") : null;
+    public string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The crate at the feet E opens, and its body to outline (#1286: not an airdrop's canopy or beacon), or null.</summary>
+    public Interaction? InteractionFor(FootPlayer p) =>
+        NearestTo(p) is { } c
+            ? new(InputHints.Prompt(PlayerInput.InteractMount, c.Locked ? $"Crack {c.Label}" : $"Search {c.Label}"),
+                Outline.Of(_nodes.TryGetValue(c.Id, out var node) ? node.GetChildOrNull<MeshInstance3D>(0) : null))
+            : null;
 
     /// <summary>Asks the server for one stack of a crate.</summary>
     public void Take(long id, int index, ItemStack stack) =>

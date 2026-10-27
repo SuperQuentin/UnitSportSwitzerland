@@ -526,9 +526,17 @@ public partial class FarmStands : Node
     private (long Id, bool Mine, int Stocked, int Cash, InputDevice Device) _promptKey;
     private string? _promptText;
 
-    public string? PromptFor(FootPlayer p)
+    public string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt at a stand in reach and the stand to outline (#1286), or null.</summary>
+    public Interaction? InteractionFor(FootPlayer p)
     {
         if (IsOpen || StandAt(p) is not { } o) return null;
+        return new(PromptText(o), Outline.Of(_placed?.GetNodeOrNull<Node3D>($"P{o.Id}")));
+    }
+
+    private string PromptText(PlacedObject o)
+    {
         _stands.TryGetValue(o.Id, out var s);
         var key = (o.Id, IsMine(o.Id), s?.Stocked ?? 0, s?.Cash ?? 0, PlayerInput.HintDevice);
         if (_promptText != null && key == _promptKey) return _promptText;

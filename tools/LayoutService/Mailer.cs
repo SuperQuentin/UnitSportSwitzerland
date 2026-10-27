@@ -20,16 +20,22 @@ public sealed class Mailer(ILogger<Mailer> log)
     private readonly string? _pass = Environment.GetEnvironmentVariable("SMTP_PASS");
     private readonly string _from = Environment.GetEnvironmentVariable("SMTP_FROM") ?? "unitsport@localhost";
 
-    public async Task SendLoginLink(string to, string link)
+    public Task SendLoginLink(string to, string link) => Deliver(to, "login link", "UnitSport: your login link for house layouts",
+        "Open this link to log in to the UnitSport house layout editor (valid 30 minutes, once):\n\n" + link
+        + "\n\nIf you did not ask for it, ignore this email.");
+
+    public Task SendPasswordReset(string to, string link) => Deliver(to, "password reset link", "UnitSport: reset your password",
+        "Open this link to choose a new password for your UnitSport account (valid 30 minutes, once):\n\n" + link
+        + "\n\nIf you did not ask for it, ignore this email: your password stays as it is.");
+
+    private async Task Deliver(string to, string what, string subject, string text)
     {
         if (string.IsNullOrEmpty(_host))
         {
-            log.LogWarning("no SMTP_HOST: login link for {To}: {Link}", to, link);
+            log.LogWarning("no SMTP_HOST: {What} for {To}: {Text}", what, to, text);
             return;
         }
-        await Send(to, "UnitSport: your login link for house layouts",
-            "Open this link to log in to the UnitSport house layout editor (valid 30 minutes, once):\n\n"
-            + link + "\n\nIf you did not ask for it, ignore this email.");
+        await Send(to, subject, text);
     }
 
     /// <summary>The one connect, authenticate and send path (login links and the check).</summary>
