@@ -135,6 +135,17 @@ public partial class SettingsScreen : Screen
                 v => v <= 0 ? "off" : $"{v:F0} min", "The last minutes of everyone in view, for the movie studio (F5 or Pause > Save clip)");
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
+            // the adventure's navigation (#1226)
+            rows.AddChild(UiKit.Spacer(6));
+            rows.AddChild(UiKit.Section("Adventure"));
+            UiKit.ToggleRow(rows, "Compass", s.AdventureCompass, on => GameSettings.Current.AdventureCompass = on,
+                "The strip at the top while exploring: north, what you track, your party, pins, places nearby");
+            UiKit.OptionRow(rows, "Guiding wind", new[] { "On demand", "Always", "Arrow only", "Off" }, Math.Clamp(s.GuideWind, 0, 3),
+                i => GameSettings.Current.GuideWind = i, InputHints.Format("A gust toward what you track: {guide}, or always while tracking"));
+            UiKit.ToggleRow(rows, "High-contrast guide", s.GuideHighContrast, on => GameSettings.Current.GuideHighContrast = on,
+                "An amber arrow on the ground instead of leaves");
+            UiKit.OptionRow(rows, "Travel (your own world)", new[] { "Free: jump anywhere", "Network: the stations you reached" }, s.AdventureTravelNetwork ? 1 : 0,
+                i => GameSettings.Current.AdventureTravelNetwork = i == 1, "Network: travel from a station sign to the points you unlocked, for the fare; the GA card travels from anywhere");
             // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
             Button replay = null!;
             replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>

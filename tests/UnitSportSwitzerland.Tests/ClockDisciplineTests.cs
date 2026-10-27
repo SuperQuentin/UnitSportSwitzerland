@@ -90,6 +90,7 @@ public class ClockDisciplineTests
         ["src/Adventure/Rewards/RewardHud.cs"] = "presentation: a trial's clock on the HUD counts from the server's start stamp (#1227); calendar: the detector skips the Luxurious chests of this real year's edition already opened",
         ["src/Adventure/Rewards/RewardWorld.cs"] = "calendar: which Luxurious edition this player sees is the real year's (#1227)",
         ["src/Adventure/Places/PlacesProgress.cs"] = "calendar: a stamp's day is the real date the place was found, saved with the Atlas (#1224)",
+        ["src/Adventure/Navigation/AdventureTravel.cs"] = "calendar: a trip's time and a pin's are saved with the progress (the 10 s rule across a reconnect), and the travelcards' price changes on the December timetable date (#1226)",
         ["src/Vehicles/VehicleState.cs"] = "plumbing: SpawnedAt is a Unix stamp that outlives the server on disk (#452)",
         ["src/Bots/BotDirector.cs"] = "plumbing: a random seed",
         ["src/Playtest/PlaytestDirector.cs"] = "plumbing: the live listener's poll liveness, and a ledger entry's date",

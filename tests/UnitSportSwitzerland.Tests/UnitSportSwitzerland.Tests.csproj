@@ -191,6 +191,13 @@
     <Compile Include="..\..\src\Adventure\Rewards\Trials.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Rewards\PhotoSpots.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Rewards\Gadgets.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
+    <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Navigation\TravelRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Navigation\TravelNetwork.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Navigation\NavMath.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Ui\CompassMath.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\WaveSpectrum.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\SeaStateCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\WaterLayer.cs" Link="Game\%(Filename)%(Extension)" />

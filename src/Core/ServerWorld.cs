@@ -378,6 +378,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
                     }
                 return false;
             };
+            // navigation (#1226): the travel network (unlocks, trips, fares, the travelcards) and the pins, shared with the party
+            var travel = Adventure.Navigation.AdventureTravel.Create(adventure, server: true, networked: true);
+            travel.IsAdmin = _chat.IsAdminPeer;
+            travel.Racing = peer => race.RaceOf(peer) != 0;
+            travel.GroundAt = ground;
             // climbs higher than the stamina rules allow, logged (#1225): no correction
             AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
         }
@@ -681,6 +686,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _adventure?.PeerLeft(id);
         Adventure.Places.PlacesService.Instance?.PeerLeft(id);
         Adventure.Rewards.RewardService.Instance?.PeerLeft(id);
+        Adventure.Navigation.AdventureTravel.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);

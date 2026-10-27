@@ -65,6 +65,9 @@ public partial class QuickMenu : CanvasLayer
             // the Journal (#1223): quests, birds, fish; opened straight, not by a key press the ring would eat
             new("Journal", () => null, () => Callable.From(() => AdventureLog.Open()).CallDeferred(), () => Key(PlayerInput.BirdJournal)),
             // the figure editor (#1127): from anywhere here, mounted too (only the key is on foot only)
+            // the guiding gust (#1226): no free pad button on foot, so the ring's wedge
+            new("Guide", () => Adventure.Navigation.GuidingWind.Can ? null : "Nothing tracked",
+                () => Callable.From(() => Adventure.Navigation.GuidingWind.Instance?.Summon()).CallDeferred(), () => Key(PlayerInput.Guide)),
             new("Character", () => null, () => Callable.From(CharacterScreen.Open).CallDeferred(), () => Key(PlayerInput.CharacterMenu)),
             new("Controls", () => null, () => Press(PlayerInput.Help), () => Key(PlayerInput.Help)),
         };

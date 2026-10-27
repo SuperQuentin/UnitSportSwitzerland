@@ -18,7 +18,7 @@ namespace UnitSport.Net;
 /// invite and <c>/accept br</c>; B is in the lobby on A's party team; A cancels.</item>
 /// <item>Fight: A <c>/fight</c> B; B accepts with E at A (<see cref="FightManager.Engage"/>); both in it; A leaves.</item>
 /// <item>Race duel: A <c>/race duel</c> B; B declines with Shift+F2; A hears the duel end.</item>
-/// <item>The quick menu opens on a held F2 and lists its nine wedges.</item>
+/// <item>The quick menu opens on a held F2 and lists its wedges (Guide since #1226).</item>
 /// </list>
 /// With <c>--windowed</c> B saves <c>test_output/invite_*.png</c>: the toast, the quick menu, the Activities tabs.
 /// </summary>
@@ -174,8 +174,8 @@ public partial class InviteProbe : ChatProbe
         await Until(() => GameClock.Now - held > 0.6, 10);
         var menu = QuickMenu.Instance;
         Expect(menu?.IsOpen == true, "a held F2 opens the quick menu");
-        Expect(menu?.Names.SequenceEqual(new[] { "Activities", "Invites", "Inventory", "Vehicles", "Map", "Phone", "Emotes", "Journal", "Character", "Controls" }) == true,
-            "its nine wedges, Activities at the top");
+        Expect(menu?.Names.SequenceEqual(new[] { "Activities", "Invites", "Inventory", "Vehicles", "Map", "Phone", "Emotes", "Journal", "Guide", "Character", "Controls" }) == true,
+            "its wedges, Activities at the top");
         if (Windowed) Shot("quickmenu");
         Press(Key.F2, false);
         await Seconds(0.3);

@@ -217,6 +217,11 @@ public enum ItemId
     BottledGust = 403,
     /// <summary>Garments (Avatar.Garments): the Alpine set, found in chests only.</summary>
     Sennenkaeppi = 404, EdelweissShirt = 405, GuideHat = 406, GuideBreeches = 407, CrossBandana = 408, AlpineSocks = 409, AlpineGloves = 410,
+    // ---- the travel network (#1226, docs/notes/adventure/fares.md); 400-419 belong to the rewards plan ----
+    /// <summary>The GA travelcard: rail, bus and ship trips free, cable cars half, travel from anywhere. The server trusts <c>TravelBook.HasGa</c>; the item is its picture.</summary>
+    GaCard = 420,
+    /// <summary>The half-fare travelcard: every fare halved (<c>TravelBook.HasHalfFare</c>).</summary>
+    HalfFare = 421,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

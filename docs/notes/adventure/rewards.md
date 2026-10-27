@@ -41,7 +41,7 @@ id is a spot of the server's own placement of its tile (`RewardMap.FindAsync`: a
 burrow, 10 m of a shrine), not already in the player's section, the seal complete. The server places a tile only when a
 claim names it and keeps the last 64 (`RewardMap`, LRU); a layout is computed only once its tile's grid is in.
 
-## Wire (protocol: one above main's when the PR is marked ready)
+## Wire (protocol 55)
 
 Client to server, `AnyPeer` reliable: `RequestOpen(id)`, `RequestPick(id)`, `RequestSealStep(chestId, step)`,
 `RequestOffer(shrineId)`, `RequestGuide(chestId)`, `RequestPhoto(spot, yaw, pitch, fov)`, `RequestFauna(name)`,
