@@ -159,7 +159,8 @@ public partial class VenueProbe : Node
                     if (match[i] < 0) continue;
                     shown[(t, i)] = match[i];
                     if (!Venues.IsHall(list[match[i]].Type)) continue;
-                    doors ??= BuildingFootprint.ComputeDoors(tile, null, null);
+                    // with the tile's roads, as the game places doors: without them a door can land on another facade
+                    doors ??= BuildingFootprint.ComputeDoors(tile, Roads(dir, t), null);
                     var d = doors.FirstOrDefault(x => x.Index == i && x.Slot == 0);
                     doorAt[(t, i)] = d.Width > 0
                         ? $" door E {t.MinE + d.Position.X:F0} N {t.MaxN - d.Position.Z:F0} out {d.Outward.X:F2},{-d.Outward.Z:F2}"
@@ -197,6 +198,17 @@ public partial class VenueProbe : Node
             }
             else GD.Print($"[venues] MISS {where} no solid covers the point");
         }
+    }
+
+    private static RoadTile? Roads(string dir, TileId t)
+    {
+        string path = dir.PathJoin(RoadFormat.FileName(t));
+        if (!Godot.FileAccess.FileExists(path)) return null;
+        using var f = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+        if (f == null) return null;
+        using var ms = new MemoryStream(f.GetBuffer((long)f.GetLength()));
+        try { return RoadCodec.Decode(ms); }
+        catch (Exception) { return null; }
     }
 
     /// <summary>A flat-topped box: four walls and a roof, as the IKEA probe builds its store.</summary>

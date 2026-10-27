@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 1;
+    public const int CinemaRules = 2;
 
     private const float BoothDepth = 2.6f, LobbyMin = 4.6f, LobbyMax = 12f, AudMinLength = 8.5f, AudMaxLength = 32f;
     private const float AudMinWidth = 7f, AudTargetWidth = 13f, AudMaxWidth = 18f, StaffWidth = 1.6f;
@@ -374,15 +374,49 @@ public static partial class InteriorGenerator
             TryPlace(l, f, r, new Piece(FurnitureType.ConcessionStand, len, 2.4f, 2.6f, true), placed, blocked, rng, near.Far);
             if (l.Furniture.Count > before) break;
         }
-        int posters = Math.Clamp((int)(r.Width / 2.5f), 2, 10);
+        // the rest scales with the floor: a multiplex's foyer is a big room, and an empty one reads as a hangar
+        float area = r.Area;
+        int posters = Math.Clamp((int)((r.Width + r.Depth) / 2.2f), 2, 16);
         for (int i = 0; i < posters; i++)
             TryPlace(l, f, r, new Piece(FurnitureType.PosterFrame, 0.9f, 0.1f, 2.1f, true), placed, blocked, rng);
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < Math.Clamp((int)(area / 70f), 1, 6); i++)
             TryPlace(l, f, r, new Piece(FurnitureType.Standee, 0.8f, 0.4f, 1.9f, false), placed, blocked, rng);
-        TryPlace(l, f, r, new Piece(FurnitureType.Stanchions, 3.0f, 0.3f, 1.0f, false), placed, blocked, rng);
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < Math.Clamp((int)(area / 150f), 1, 3); i++)
+            TryPlace(l, f, r, new Piece(FurnitureType.Stanchions, 3.0f, 0.3f, 1.0f, false), placed, blocked, rng);
+        for (int i = 0; i < Math.Clamp((int)(area / 50f), 2, 8); i++)
             TryPlace(l, f, r, new Piece(FurnitureType.Bench, 1.6f, 0.5f, 0.45f, true), placed, blocked, rng);
-        TryPlace(l, f, r, new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true), placed, blocked, rng);
+        // a big foyer has a few arcade machines for the wait, as multiplexes do
+        if (area >= 200f)
+            for (int i = 0; i < Math.Clamp((int)(area / 150f), 2, 5); i++)
+                TryPlace(l, f, r, new Piece(FurnitureType.ArcadeCabinet, 0.75f, 0.9f, 1.85f, true), placed, blocked, rng, near.Far);
+        for (int i = 0; i < Math.Clamp((int)(area / 80f), 1, 6); i++)
+            TryPlace(l, f, r, new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true), placed, blocked, rng);
+    }
+
+    /// <summary>Whole cinemas in the model viewer: a town cinema on two levels, and a small one on one.</summary>
+    [Core.Showcase("Interiors", "Cinema")]
+    private static IEnumerable<(string Name, Func<Godot.Node3D> Make)> ShowcaseCinema()
+    {
+        foreach (var (name, w, d, h) in new[] { ("Town", 18f, 34f, 9f), ("Small", 14f, 26f, 5f) })
+            yield return (name, () =>
+            {
+                var id = new TileId(2600, 1200);
+                var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, w, d, h, BuildingKind.Commercial) } };
+                Venues.Override = new List<VenueRecord>
+                {
+                    new("n1", VenueType.Cinema, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", name),
+                };
+                var layout = Generate(tile, 0, null, null)!;
+                Venues.Override = null;
+                var node = InteriorNode.Create(layout, InteriorMeshBuilder.Build(layout),
+                    Styles.StyleKit.Material(Styles.MaterialRole.Interior), Godot.Transform3D.Identity);
+                foreach (var leaf in node.GetChildren().OfType<DoorLeaf>()) leaf.Visible = false;
+                // the show on, as the booth would have it: lights dimmed, the cat on the screen
+                node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), screen: true);
+                var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
+                Godot.GD.Print($"[cinema] {name}: screen at {screen.X:F1}, {screen.Z:F1}, {screen.W:F1} m wide, turns {screen.Turns}");
+                return node;
+            });
     }
 
     /// <summary>The cinema pieces at the sizes this file places them, for the model viewer.</summary>
