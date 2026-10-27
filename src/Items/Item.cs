@@ -147,8 +147,8 @@ public static class ItemDefs
             ItemUse.TrafficTool, 1, new Color(0.95f, 0.5f, 0.1f), "TG", 0, ItemCategory.Gear, 0f),
 
         // the Adventure rewards (#1227, Adventure/Rewards): the chests' crystal and the three gadgets it makes
-        new(ItemId.Bergkristall, "Bergkristall", "Rock crystal from the mountains' chests. At a workbench it makes the adventure gadgets and the Alpine set.",
-            ItemUse.Material, 99, new Color(0.80f, 0.90f, 0.98f), "RC", 0, ItemCategory.Mineral, 20f),
+        new(ItemId.Bergkristall, "Bergkristall", "Rock crystal from the mountains' chests. At a workbench it makes the adventure gadgets.",
+            ItemUse.Material, 99, new Color(0.80f, 0.90f, 0.98f), "RC", 0, ItemCategory.Mineral, 8f),
         new(ItemId.TreasureDetector, "Treasure detector", "Held, it beeps faster the nearer an unopened chest or an unpicked edelweiss is, within 250 m. {use_item}: one strong ping that points the way for 3 seconds.",
             ItemUse.Detector, 1, new Color(0.25f, 0.55f, 0.45f), "TD", 0, ItemCategory.Gear, 150f),
         new(ItemId.TravelFlag, "Travel flag", "{use_item} plants it where you look: a waypoint of your own. {use_item} on a planted one picks it back up.",

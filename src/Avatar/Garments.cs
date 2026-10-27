@@ -78,7 +78,7 @@ public enum GarmentStyle
     Basic, Gothic, Kawaii, Special, Workwear,
     /// <summary>#880: from another world (antennae, a silver suit): uncommon in a wardrobe, worn by the films' aliens (<see cref="Aliens"/>).</summary>
     Alien,
-    /// <summary>#1227: the Alpine set, from the Adventure's chests (and the workbench, from Bergkristall), never a wardrobe's.</summary>
+    /// <summary>#1227: the Alpine set, from the Adventure's chests only, never a wardrobe's or a workbench's.</summary>
     Alpine,
 }
 

@@ -384,7 +384,7 @@ weight (ok, nothing to build). Sense for a future co-op bot: the same `RewardPla
   built (the Collection tab lists them). The curated thirty were checked against the main checkout's tiles (notes:
   `photo-spots`).
 - **The Alpine set** is seven pieces (404-410): no belt slot exists, so the rope belt became Bergführer breeches; two new
-  garment shapes (`FeltHat`, `Bandana`). It is also made at a workbench from Bergkristall (6-10 each).
+  garment shapes (`FeltHat`, `Bandana`). It is not made at a workbench (the game never crafts clothes): chests only.
 - **The generated world places nothing** (it has no coarse tiles to place from), rather than peaks found on it.
 - **The gust** is `ItemUse.Gust` (thrown like the smoke canister), not `ItemUse.Throw` (the radio's world-object throw).
 - **The edelweiss is drawn 2.5 times life size**, so it is seen from the path.

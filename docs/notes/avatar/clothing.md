@@ -10,7 +10,7 @@
   #822, 359-362 of #880: the aliens' antennae and suit, `GarmentStyle.Alien`, see `aliens`; append only). `GarmentStyle.Workwear` (#822: the building site's hard hat and hi-vis vest)
   is in no wardrobe pool: only the site's hard-hat rail and lockers give it (`terrain/construction-sites`).
   `GarmentStyle.Alpine` (404-410 of #1227: the Alpine set, two shapes of its own, `FeltHat` and `Bandana`) is in no
-  wardrobe pool either: the Adventure's chests and the workbench give it (`adventure/reward-gadgets`).
+  wardrobe pool either: only the Adventure's chests give it, never a workbench (`adventure/reward-gadgets`).
 - **Slots**: `WearSlot` Head, Eyes, Face, Ears, Neck, Top, Bottom, Legs, Feet, Hands. Occasion hats are
   Head items too. A Robe/Dress/SpaceSuit (`CoversBottom`) takes the bottom slot as well; only a Robe or
   Dress is `Draped` (a skirt that blows in the wind).

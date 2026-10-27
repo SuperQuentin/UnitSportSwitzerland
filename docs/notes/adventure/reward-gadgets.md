@@ -7,14 +7,14 @@
 
 | Item | Id | Use | How |
 |---|---|---|---|
-| Bergkristall | 400 | material (`ItemCategory.Mineral`, CHF 20) | from chests, offerings and duplicates; never crafted |
+| Bergkristall | 400 | material (`ItemCategory.Mineral`, CHF 8) | from chests, offerings and duplicates; never crafted |
 | Treasure detector | 401 | `ItemUse.Detector` | held: beeps every 0.12-1.6 s by the distance to the nearest unopened chest or unpicked edelweiss within 250 m of this client's own placement (nothing secret, nothing sent; worked out at 4 Hz, `RewardHud`); Use: one ping, an arrow and the distance for 3 s, 10 s to recharge |
 | Travel flag | 402 | `ItemUse.Place`, `PlacedKind.TravelFlag` = 12 | planted like the Swiss flag (a yellow pennant with the mountain band), only its owner pulls it up; what travel to it means is navigation's (`AdventureTravel.SetPortable`, #1226) |
 | Bottled gust | 403 | `ItemUse.Gust`, `ItemEventKind.Gust` = 11 | thrown ahead like the smoke canister; on every peer a column of rising rings for 20 s (`GustFx`) and the wind; the lift is a volume of the stamina plan's air (`World/AirLift.Volumes`, #1225) |
 | The Alpine set | 404-410 | `ItemUse.Wear` | Sennenkäppi, edelweiss shirt, mountain guide's hat, Bergführer breeches, Swiss-cross bandana, Alpine knee socks and gloves (`GarmentStyle.Alpine`, chests only) |
 
 - Workbench recipes (`Crafting.Recipes`): detector = 4 Bergkristall + Electronics + Copper wire; flag = 2 + a Swiss flag;
-  gust = 3 + Glass; each Alpine piece 6-10 Bergkristall and cloth.
+  gust = 3 + Glass. The Alpine set is never made (clothes are found, `invcheck`): chests only.
 - The `gadgets` section counts the gadgets a player ever got from a reward.
 - Held models in `ItemDefs.HandMesh` (crystal cluster, the probe with its coil, the corked bottle, the furled flag), the
   planted flag `ItemDefs.PlantedTravelFlagMesh`: all in the model viewer.
