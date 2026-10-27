@@ -79,7 +79,8 @@ public partial class CinemaProbe : Node
         int Count(FurnitureType t) => l.Furniture.Count(f => f.Type == t);
         Check(Count(FurnitureType.SeatingBank) == halls.Count, $"{what}: a seating bank in every hall ({Count(FurnitureType.SeatingBank)})");
         Check(Count(FurnitureType.MovieScreen) == halls.Count, $"{what}: a screen in every hall");
-        Check(Count(FurnitureType.Porthole) == halls.Count, $"{what}: a porthole in every hall");
+        // each porthole twice: on the hall's face of the wall and on the booth's (#1250)
+        Check(Count(FurnitureType.Porthole) == 2 * halls.Count, $"{what}: a porthole in every hall, seen from the booth too ({Count(FurnitureType.Porthole)})");
         Check(Count(FurnitureType.ExitSign) >= halls.Count, $"{what}: exit signs over the doors");
         Check(Count(FurnitureType.Projector) == halls.Count, $"{what}: a projector for every hall ({Count(FurnitureType.Projector)})");
         Check(Count(FurnitureType.BoothPanel) == 1, $"{what}: the booth's control panel");

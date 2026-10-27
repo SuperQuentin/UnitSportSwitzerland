@@ -50,6 +50,11 @@ public partial class InteriorNode
                 Visible = false,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             };
+            // the cone in the shader's terms (projector_beam): the lens, the picture's centre and half extents
+            beam.SetInstanceShaderParameter("apex", from);
+            beam.SetInstanceShaderParameter("centre", centre);
+            beam.SetInstanceShaderParameter("half_right", right);
+            beam.SetInstanceShaderParameter("half_up", up);
             node.AddChild(beam);
             node._cinemaShow.Add(beam);
         }
@@ -59,6 +64,7 @@ public partial class InteriorNode
     public void ShowCinema(float houseLights, bool screen)
     {
         _lit?.SetShaderParameter(GHouse, houseLights);
+        ShowGlow(screen);
         foreach (var n in _cinemaShow)
             if (IsInstanceValid(n)) n.Visible = screen;
     }
@@ -122,6 +128,41 @@ public partial class InteriorNode
     /// <summary>The slide showing at a shared-clock time, s.</summary>
     public static int SlideAt(double now) => (int)(Math.Floor(now / SlideSeconds) % SlideCount + SlideCount) % SlideCount;
 
-    /// <summary>Every screen's picture (one material for all): to slide <paramref name="i"/>, on change only.</summary>
-    public static void ShowSlide(int i) => CatMaterial().AlbedoTexture = Slide(i);
+    private static readonly StringName GGlow = "screen_glow", GPicture = "picture";
+
+    /// <summary>How much of the picture's colour the hall takes back from its screen: a wash, under the house lights.</summary>
+    private const float GlowGain = 0.45f;
+
+    private static int _slide;
+    private static Color[]? _tints;
+
+    /// <summary>A slide's mean colour, from its picture shrunk to a pixel: what its beam and its glow are tinted.</summary>
+    public static Color SlideTint(int i)
+    {
+        _tints ??= new Color[SlideCount];
+        i = ((i % SlideCount) + SlideCount) % SlideCount;
+        if (_tints[i].A > 0) return _tints[i];
+        var img = Slide(i).GetImage();
+        if (img == null) return _tints[i] = Colors.White;
+        if (img.IsCompressed()) img.Decompress();
+        img.Resize(1, 1, Image.Interpolation.Bilinear);
+        var c = img.GetPixel(0, 0);
+        return _tints[i] = new Color(c.R, c.G, c.B, 1f);
+    }
+
+    /// <summary>Every screen's picture (one material for all) and every beam's colour: to slide <paramref name="i"/>, on change only.</summary>
+    public static void ShowSlide(int i)
+    {
+        _slide = i;
+        CatMaterial().AlbedoTexture = Slide(i);
+        // the beams carry the picture itself, blurred: what each part of the haze lights (projector_beam)
+        BeamMaterial().SetShaderParameter(GPicture, Slide(i));
+    }
+
+    /// <summary>This hall's wash of the screen's colour: the current slide's while the screen is on, none off.</summary>
+    public void ShowGlow(bool screen)
+    {
+        var t = SlideTint(_slide);
+        _lit?.SetShaderParameter(GGlow, screen ? new Vector3(t.R, t.G, t.B) * GlowGain : Vector3.Zero);
+    }
 }

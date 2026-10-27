@@ -44,7 +44,7 @@ public partial class CinemaBooths : Node
     private string _appliedPlan = "";
     private int _applied = -1;
     private InteriorNode? _appliedNode;
-    private int _slide;
+    private int _slide = -1;
 
     public static CinemaBooths Create(Node world)
     {
@@ -161,7 +161,11 @@ public partial class CinemaBooths : Node
         if (Unpack(code).Screen)
         {
             int slide = InteriorNode.SlideAt(ClockSync.ServerNow);
-            if (slide != _slide) InteriorNode.ShowSlide(_slide = slide);
+            if (slide != _slide)
+            {
+                InteriorNode.ShowSlide(_slide = slide);
+                if (node == _appliedNode) node.ShowGlow(true);
+            }
         }
         if (node == _appliedNode && code == _applied && node.Layout.Key == _appliedPlan) return;
         _appliedNode = node;

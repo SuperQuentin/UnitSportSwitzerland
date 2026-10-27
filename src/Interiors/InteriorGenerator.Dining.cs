@@ -204,24 +204,56 @@ public static partial class InteriorGenerator
                 }
             }
         }
-        // a hall of a room: cut across its length, the far part a second room of the same kind
-        if (g.Area > GuestMaxArea && guest is not RoomType.ClubRoom)
+        // a hall of a room: cut across its length, the far part a second room of the same kind through an
+        // arch (the Säli, no bar of its own); what is still over GuestMaxArea after that is cut again, the far
+        // parts stores off it (Café du Vieil Ouchy's room was 590 m2: one venue, not a warren of bars)
+        if (guest is RoomType.ClubRoom) return;
+        bool sali = false;
+        var todo = new Queue<int>();
+        todo.Enqueue(gi);
+        for (int guard = 0; todo.Count > 0 && guard < 16; guard++)
         {
-            bool alongX = g.Width >= g.Depth;
-            // the end away from the way in: across from it when it is in an end wall, else the end it is not near
-            float mid = alongX ? (g.X0 + g.X1) / 2 : (g.Z0 + g.Z1) / 2;
-            bool inLong = entry != null && (entry.Side is Side.Front or Side.Back) == alongX;
-            var far = entry != null && !inLong ? Opposite(entry.Side)
-                : alongX ? ((entry?.Center ?? mid) <= mid ? Side.Right : Side.Left) : ((entry?.Center ?? mid) <= mid ? Side.Back : Side.Front);
-            float len = alongX ? g.Width : g.Depth;
-            int si = Carve(l, rooms, gi, far, len * 0.42f, guest);
-            if (si >= 0)
+            int ri = todo.Dequeue();
+            var r = rooms[ri];
+            if (r.Area <= GuestMaxArea) continue;
+            var way = r.Openings.Where(o => o.Kind is OpeningKind.Entry or OpeningKind.Door or OpeningKind.Arch)
+                .OrderByDescending(o => o.Kind == OpeningKind.Entry).FirstOrDefault();
+            int si = -1;
+            Side far = Side.Back;
+            foreach (bool alongX in new[] { r.Width >= r.Depth, r.Width < r.Depth })
             {
-                taken.Add(si);
-                var s = rooms[si];
-                float span = far is Side.Front or Side.Back ? s.Width : s.Depth;
-                Opening(rooms, gi, far, si, Mid(s, far), Math.Min(2.4f, span - 1.2f), top, OpeningKind.Arch);
+                float len = alongX ? r.Width : r.Depth;
+                if (len < 7f) continue;
+                // the end away from the way in: across from it when it is in an end wall, else the end it is not near
+                float mid = alongX ? (r.X0 + r.X1) / 2 : (r.Z0 + r.Z1) / 2;
+                bool inLong = way != null && (way.Side is Side.Front or Side.Back) == alongX;
+                far = way != null && !inLong ? Opposite(way.Side)
+                    : alongX ? ((way?.Center ?? mid) <= mid ? Side.Right : Side.Left) : ((way?.Center ?? mid) <= mid ? Side.Back : Side.Front);
+                // the Säli up to the size of a room; a store whatever is left past that
+                // rooms kept near square: a side of at least sqrt(GuestMaxArea), the other cut next time round
+                float keep = Math.Max(MathF.Sqrt(GuestMaxArea), GuestMaxArea / (alongX ? r.Depth : r.Width));
+                float want = !sali ? Math.Min(len * 0.45f, keep) : len - keep;
+                foreach (float cut in new[] { want, want * 0.8f, want * 1.2f })
+                {
+                    if (cut < 2.4f || len - cut < 3f) continue;
+                    si = Carve(l, rooms, ri, far, cut, sali ? RoomType.Storage : guest);
+                    if (si >= 0) break;
+                }
+                if (si >= 0) break;
             }
+            if (si < 0) continue;
+            taken.Add(si);
+            var s = rooms[si];
+            if (s.Type == RoomType.Storage)
+                Opening(rooms, ri, far, si, Mid(s, far), InnerDoor, top, OpeningKind.Door);
+            else
+            {
+                float span = far is Side.Front or Side.Back ? s.Width : s.Depth;
+                Opening(rooms, ri, far, si, Mid(s, far), Math.Min(2.4f, span - 1.2f), top, OpeningKind.Arch);
+                todo.Enqueue(si);
+            }
+            sali = true;
+            todo.Enqueue(ri);
         }
     }
 
@@ -329,8 +361,12 @@ public static partial class InteriorGenerator
         var walls = new[] { Opposite(inSide), Turn(inSide), Opposite(Turn(inSide)), inSide };
         var barSides = new[] { barSide }.Concat(walls.Where(s => s != barSide)).ToArray();
 
+        // a Säli: the second room through an arch from the venue's room (#1250), served from that one's bar
+        bool second = r.Openings.Any(o => o.Kind == OpeningKind.Arch && o.Other >= 0 && o.Other < rooms.IndexOf(r)
+            && rooms[o.Other].Type == r.Type);
         void Bar(float len, bool stools)
         {
+            if (second) return;
             int before = l.Furniture.Count;
             foreach (float n in new[] { len, Math.Min(len, 2.4f), 1.8f })
             {
@@ -378,7 +414,7 @@ public static partial class InteriorGenerator
                 Tables(l, f, r, placed, blocked, 1.7f, 1.7f, 2.5f, 2.5f);
                 break;
             case RoomType.Pizzeria:
-                TryPlace(l, f, r, new Piece(FurnitureType.PizzaOven, 1.8f, 1.6f, 2.4f, true), placed, blocked, rng, barSides, barAt);
+                if (!second) TryPlace(l, f, r, new Piece(FurnitureType.PizzaOven, 1.8f, 1.6f, 2.4f, true), placed, blocked, rng, barSides, barAt);
                 Bar(2.4f, stools: false);
                 TryPlace(l, f, r, new Piece(FurnitureType.WineRack, 1.2f, 0.4f, 1.9f, true), placed, blocked, rng, walls);
                 if (r.Area >= 40f) TryPlace(l, f, r, new Piece(FurnitureType.WineRack, 1.2f, 0.4f, 1.9f, true), placed, blocked, rng, far);
@@ -388,8 +424,9 @@ public static partial class InteriorGenerator
             case RoomType.CafeRoom:
                 // the pastry case and the coffee bar by the door, little tables for two
                 // counter-high in the plan, so a shopfront's windows do not keep it off the wall
-                TryPlace(l, f, r, new Piece(FurnitureType.PastryCase, Math.Clamp(r.Width * 0.4f, 2.2f, 4.0f), 1.8f, 1.0f, true),
-                    placed, blocked, rng, new[] { Turn(inSide), Opposite(Turn(inSide)), Opposite(inSide) });
+                if (!second)
+                    TryPlace(l, f, r, new Piece(FurnitureType.PastryCase, Math.Clamp(r.Width * 0.4f, 2.2f, 4.0f), 1.8f, 1.0f, true),
+                        placed, blocked, rng, new[] { Turn(inSide), Opposite(Turn(inSide)), Opposite(inSide) });
                 Along(new Piece(FurnitureType.BanquetteSet, 1.2f, 1.45f, 1.0f, true), 6, far);
                 Tables(l, f, r, placed, blocked, 1.0f, 1.5f, 1.8f, 2.2f);
                 TryPlace(l, f, r, new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true), placed, blocked, rng);
@@ -400,7 +437,7 @@ public static partial class InteriorGenerator
                 var counter = r.Type == RoomType.KebabRoom ? FurnitureType.KebabCounter : FurnitureType.OrderCounter;
                 // counter-high in the plan (its menu boards hang over the back line at their own height), so
                 // a shopfront's windows do not keep it off the wall
-                TryPlace(l, f, r, new Piece(counter, Math.Clamp(r.Width * 0.5f, 2.2f, 5.0f), 2.0f, 1.05f, true), placed, blocked, rng, walls);
+                if (!second) TryPlace(l, f, r, new Piece(counter, Math.Clamp(r.Width * 0.5f, 2.2f, 5.0f), 2.0f, 1.05f, true), placed, blocked, rng, walls);
                 Along(new Piece(FurnitureType.BanquetteSet, 1.2f, 1.45f, 1.0f, true), 6, far);
                 Tables(l, f, r, placed, blocked, 1.0f, 1.5f, 1.9f, 2.2f);
                 break;

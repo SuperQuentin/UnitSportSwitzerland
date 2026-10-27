@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 3;
+    public const int CinemaRules = 7;
 
     private const float BoothDepth = 2.6f, LobbyMin = 4.6f, LobbyMax = 12f, AudMinLength = 8.5f, AudMaxLength = 32f;
     private const float AudMinWidth = 7f, AudTargetWidth = 13f, AudMaxWidth = 18f, StaffWidth = 1.6f;
@@ -86,6 +86,10 @@ public static partial class InteriorGenerator
     {
         float W = l.Width, D = l.Depth;
         var frame = D >= W ? new BowlFrame(true, 1, W, D) : new BowlFrame(false, l.EntryX <= 0 ? 1 : -1, W, D);
+        // a door far along a long wall would stretch the lobby to it (CinéVersoix's was 36 x 57 m, #1250): the
+        // halls run across the building instead, the lobby along the door's wall, where the depth allows them
+        if (!frame.AlongZ && frame.V(l.EntryX, -D / 2) + 2.5f > LobbyMax && D - LobbyMin - BoothDepth >= AudMinLength)
+            frame = new BowlFrame(true, 1, W, D);
         float along = frame.Along, across = frame.Across;
         float doorU = frame.U(l.EntryX, -D / 2), doorV = frame.V(l.EntryX, -D / 2);
 
@@ -323,6 +327,28 @@ public static partial class InteriorGenerator
             int rows = (int)(depth / RowPitch);
             Put(l, f, FurnitureType.SeatingBank, bx, bz, fr.FaceVMinus, width - 2 * ExitClear, depth, rows * rise, placed);
         }
+        // the screen channels in tall stacks either side of the screen, the surrounds and wall lights along the
+        // side walls in turn, clear of their doors (#1250)
+        foreach (int side in new[] { -1, 1 })
+        {
+            var (lx, lz) = fr.Point(uMid + side * (screenW / 2 + 0.55f), p.LobbyV + 0.15f + 0.35f);
+            var stack = new RectPlan(lx - 0.4f, lz - 0.4f, lx + 0.4f, lz + 0.4f);
+            if (Free(r, stack, placed, blocked, 0.02f)) Put(l, f, FurnitureType.Loudspeaker, lx, lz, fr.FaceVPlus, 0.7f, 0.6f, Math.Min(2.4f, clear - 0.5f), placed);
+            var wallSide = side < 0 ? fr.UMinus : fr.UPlus;
+            float wu = side < 0 ? u0 + 0.18f : u1 - 0.18f;
+            int turns = side < 0 ? fr.FaceUPlus : fr.FaceUMinus;
+            int k = 0;
+            for (float v = p.LobbyV + ScreenDepth + 2.5f; v < p.HallV1 - 1.0f; v += 1.8f, k++)
+            {
+                float at = fr.OnUWall(v);
+                if (r.Openings.Any(o => o.Side == wallSide && Math.Abs(o.Center - at) < o.Width / 2 + 0.7f)) continue;
+                var (x, z) = fr.Point(wu, v);
+                if (k % 2 == 0)
+                    Put(l, f, FurnitureType.Loudspeaker, x, z, turns, 0.45f, 0.32f, 0.65f, placed, lift: Math.Min(3.2f, clear - 0.9f));
+                else
+                    Put(l, f, FurnitureType.WallSconce, x, z, turns, 0.36f, 0.16f, 0.5f, placed, lift: Math.Min(2.1f, clear - 1.6f));
+            }
+        }
         // exit signs over the doors, green running men [S: CH/EU]
         foreach (var o in r.Openings.Where(o => o.Kind == OpeningKind.Door))
         {
@@ -348,6 +374,11 @@ public static partial class InteriorGenerator
             var rect = new RectPlan(x - 0.6f, z - 0.6f, x + 0.6f, z + 0.6f);
             if (!Free(r, rect, placed, blocked, 0.05f)) continue;
             Put(l, f, FurnitureType.Projector, x, z, fr.FaceVMinus, 0.8f, 1.2f, 1.6f, placed);
+            // the porthole it shines through, from the booth's side (#1250): the hall's is on the other face of
+            // the wall, at the same height over the hall's floor
+            var (wx, wz) = fr.Point(u, p.HallV1 + 0.1f);
+            float portY = p.BoothUpstairs ? 1.0f : Math.Min(l.ClearOf(r) - 0.7f, 2.4f);
+            Put(l, f, FurnitureType.Porthole, wx, wz, fr.FaceVPlus, 1.4f, 0.1f, 0.45f, placed, lift: portY);
         }
         TryPlace(l, f, r, new Piece(FurnitureType.BoothPanel, 1.2f, 0.3f, 1.7f, true), placed, blocked, rng, new[] { fr.VPlus });
         TryPlace(l, f, r, new Piece(FurnitureType.ServerRack, 0.6f, 0.9f, 2.0f, true), placed, blocked, rng, new[] { fr.VPlus });
@@ -379,7 +410,7 @@ public static partial class InteriorGenerator
         int posters = Math.Clamp((int)((r.Width + r.Depth) / 2.2f), 2, 16);
         for (int i = 0; i < posters; i++)
             TryPlace(l, f, r, new Piece(FurnitureType.PosterFrame, 0.9f, 0.1f, 2.1f, true), placed, blocked, rng);
-        for (int i = 0; i < Math.Clamp((int)(area / 70f), 1, 6); i++)
+        for (int i = 0; i < Math.Clamp((int)(area / 120f), 1, 3); i++)
             TryPlace(l, f, r, new Piece(FurnitureType.Standee, 0.8f, 0.4f, 1.9f, false), placed, blocked, rng);
         for (int i = 0; i < Math.Clamp((int)(area / 150f), 1, 3); i++)
             TryPlace(l, f, r, new Piece(FurnitureType.Stanchions, 3.0f, 0.3f, 1.0f, false), placed, blocked, rng);
@@ -393,12 +424,31 @@ public static partial class InteriorGenerator
             TryPlace(l, f, r, new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true), placed, blocked, rng);
         // the middle of a big foyer (#1250): high tables by the bar's side, sofas, standees of the coming
         // films, a table or two [S: Cineplexx, Kino Svetozor, CinemaxX foyers]
-        FillFloor(l, f, r, placed, blocked, 3.6f, 3.6f, 1.4f, (i, k) => ((i * 5 + k * 3) % 5) switch
+        // a wide foyer's roof stands on columns, a row of them down its middle every 8 m [S: multiplex foyers]
+        if (Math.Min(r.Width, r.Depth) >= 10f)
         {
-            0 or 3 => HighTables,
+            bool alongX = r.Width >= r.Depth;
+            float len = alongX ? r.Width : r.Depth, mid = alongX ? (r.Z0 + r.Z1) / 2 : (r.X0 + r.X1) / 2;
+            int n = (int)(len / 8f);
+            for (int i = 1; i < n; i++)
+            {
+                float a = (alongX ? r.X0 : r.Z0) + len * i / n;
+                var (x, z) = alongX ? (a, mid) : (mid, a);
+                var rect = new RectPlan(x - 0.25f, z - 0.25f, x + 0.25f, z + 0.25f);
+                if (Free(r, rect, placed, blocked, 0.1f)) Put(l, f, FurnitureType.Pillar, x, z, 0, 0.5f, 0.5f, l.ClearOf(r), placed);
+            }
+        }
+        // groups on every other cell, so the foyer keeps its ways across: a few high tables by the bar, sofas,
+        // two pairs of standees, a table or two, a plant
+        int standees = 0;
+        FillFloor(l, f, r, placed, blocked, 3.6f, 3.6f, 1.4f, (i, k) => (i + k) % 2 == 1 ? null : ((i / 2 * 3 + k) % 6) switch
+        {
+            0 => HighTables,
             1 => LoungeGroup,
-            2 => Standees,
-            _ => TableForFour,
+            2 when standees++ < 2 => Standees,
+            3 => TableForFour,
+            4 => HighTables,
+            _ => null,
         });
     }
 
@@ -421,6 +471,7 @@ public static partial class InteriorGenerator
                     Styles.StyleKit.Material(Styles.MaterialRole.Interior), Godot.Transform3D.Identity);
                 foreach (var leaf in node.GetChildren().OfType<DoorLeaf>()) leaf.Visible = false;
                 // the show on, as the booth would have it: lights dimmed, the cat on the screen
+                InteriorNode.ShowSlide(0);
                 node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), screen: true);
                 var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
                 Godot.GD.Print($"[cinema] {name}: screen at {screen.X:F1}, {screen.Z:F1}, {screen.W:F1} m wide, turns {screen.Turns}");
@@ -444,5 +495,7 @@ public static partial class InteriorGenerator
         new(FurnitureType.ServerRack, 0.6f, 0.9f, 2.0f, true),
         new(FurnitureType.FilmPlatter, 1.2f, 1.2f, 1.5f, false),
         new(FurnitureType.BoothPanel, 1.2f, 0.3f, 1.7f, true),
+        new(FurnitureType.Loudspeaker, 0.45f, 0.32f, 0.65f, true),
+        new(FurnitureType.WallSconce, 0.36f, 0.16f, 0.5f, true),
     };
 }

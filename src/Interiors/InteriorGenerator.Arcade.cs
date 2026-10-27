@@ -20,7 +20,13 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored arcades are planned again.</summary>
-    public const int ArcadeRules = 3;
+    public const int ArcadeRules = 5;
+
+    /// <summary>A billiard hall's longest side, m (#1250).</summary>
+    private const float BilliardMaxSide = 22f;
+
+    /// <summary>The most pool tables a billiard hall has.</summary>
+    private const int MaxPoolTables = 12;
 
     private const float ArcadeMinSide = 6f, ArcadeMaxSide = 32f, ArcadeService = 2.6f, ArcadeAisle = 1.8f;
     /// <summary>Machines in one arcade at most: an upright is ~400 vertices, a racer ~600.</summary>
@@ -58,15 +64,20 @@ public static partial class InteriorGenerator
     {
         float W = l.Width, D = l.Depth;
         var frame = D >= W ? new BowlFrame(true, 1, W, D) : new BowlFrame(false, l.EntryX <= 0 ? 1 : -1, W, D);
+        // a billiard hall with its door far along a long wall keeps to its size from that wall (#1250)
+        if (billiard && !frame.AlongZ && frame.V(l.EntryX, -D / 2) + 4f > BilliardMaxSide && D >= ArcadeMinSide + 1f)
+            frame = new BowlFrame(true, 1, W, D);
         float along = frame.Along, across = frame.Across;
         if (along < ArcadeMinSide + 1f || across < ArcadeMinSide) return false;
         float doorU = frame.U(l.EntryX, -D / 2), doorV = frame.V(l.EntryX, -D / 2);
 
-        float progV = Math.Min(along, ArcadeMaxSide);
+        // a billiard hall is smaller than an arcade's hangar [S: Bluff Billard Geneva, 8 tables]; the rest a plain hall
+        float maxSide = billiard ? BilliardMaxSide : ArcadeMaxSide;
+        float progV = Math.Min(along, maxSide);
         // a door in a long wall past the programme along X: the programme reaches it
         if (!frame.AlongZ) progV = Math.Min(along, Math.Max(progV, doorV + 4f));
         if (along - progV < 3f) progV = along;
-        float progW = Math.Min(across, ArcadeMaxSide);
+        float progW = Math.Min(across, maxSide);
         if (across - progW < 3f) progW = across;
         float uL = frame.AlongZ ? Fit(doorU - progW / 2, -across / 2, across / 2 - progW) : -across / 2;
         float uR = uL + progW;
@@ -240,8 +251,13 @@ public static partial class InteriorGenerator
         var near = Sides(fr, l, r);
         SnackBar(l, f, r, near.Far, placed, blocked, rng, Math.Clamp(r.Width * 0.3f, 3f, 6f));
         // the tables first, they are what the hall is for
-        if (FillFloor(l, f, r, placed, blocked, PoolBay.W + 0.2f, PoolBay.D + 0.2f, 0.4f, (_, _) => PoolBay, gap: 0.05f) == 0)
-            FillFloor(l, f, r, placed, blocked, PoolBay.W, PoolBay.D, 0.3f, (_, _) => PoolBay, gap: 0f);
+        // at most a dozen [S: Bluff has 8]; the floor past them takes lounges
+        int pools = 0;
+        if (FillFloor(l, f, r, placed, blocked, PoolBay.W + 0.2f, PoolBay.D + 0.2f, 0.4f, (_, _) => pools++ < MaxPoolTables ? PoolBay : null, gap: 0.05f) == 0)
+        {
+            pools = 0;
+            FillFloor(l, f, r, placed, blocked, PoolBay.W, PoolBay.D, 0.3f, (_, _) => pools++ < MaxPoolTables ? PoolBay : null, gap: 0f);
+        }
         foreach (var piece in new[]
                  {
                      new Piece(FurnitureType.DartBoard, 0.7f, 0.15f, 2.0f, true), new Piece(FurnitureType.DartBoard, 0.7f, 0.15f, 2.0f, true),

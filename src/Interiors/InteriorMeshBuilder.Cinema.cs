@@ -12,7 +12,8 @@ public static partial class InteriorMeshBuilder
     private static bool IsCinemaPiece(FurnitureType t) => t is FurnitureType.SeatingBank or FurnitureType.MovieScreen
         or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.BoxOffice or FurnitureType.ConcessionStand
         or FurnitureType.PosterFrame or FurnitureType.Standee or FurnitureType.Stanchions or FurnitureType.Projector
-        or FurnitureType.ServerRack or FurnitureType.FilmPlatter or FurnitureType.BoothPanel;
+        or FurnitureType.ServerRack or FurnitureType.FilmPlatter or FurnitureType.BoothPanel
+        or FurnitureType.Loudspeaker or FurnitureType.WallSconce;
 
     /// <summary>Velvet for the seats: the classic red, a modern dark blue, a burgundy.</summary>
     private static readonly Color[] Velvet = { C(0.62f, 0.06f, 0.10f), C(0.10f, 0.14f, 0.34f), C(0.42f, 0.06f, 0.14f) };
@@ -125,6 +126,24 @@ public static partial class InteriorMeshBuilder
                 B(-0.02f, 0.15f, d - sink, 0.02f, 0.19f, d + sink, white);
                 break;
             }
+            case FurnitureType.Loudspeaker:
+            {
+                // a black cabinet, its grille a hand proud, a woofer under a horn [S: surround speakers on the
+                // side walls, 2.5-3.5 m up, every 3-4 m; the screen channels in tall stacks either side]
+                B(-w, 0, -d, w, H, d, dark);
+                var grille = C(0.16f, 0.16f, 0.17f);
+                B(-w + 0.03f, 0.03f, d - sink, w - 0.03f, H - 0.03f, d + sink, grille);
+                var cone = C(0.30f, 0.30f, 0.32f);
+                float c = Math.Min(w, H / 4) * 0.7f;
+                B(-c, H * 0.3f - c, d, c, H * 0.3f + c, d + 2 * sink, cone);
+                B(-c * 0.8f, H * 0.72f - c * 0.45f, d, c * 0.8f, H * 0.72f + c * 0.45f, d + 2 * sink, cone);
+                break;
+            }
+            case FurnitureType.WallSconce:
+                // a dark plate on the wall, an uplight shell glowing warm over it
+                B(-w * 0.4f, 0, -d, w * 0.4f, H, -d + 0.03f, darkWood);
+                B(-w, H * 0.35f, -d + 0.03f - sink, w, H * 0.75f, d, Lit(1.0f, 0.74f, 0.42f));
+                break;
             case FurnitureType.Porthole:
                 // the projection port and the viewing port beside it, lit from the booth behind
                 B(-w, 0, -d, w, H, d, dark);

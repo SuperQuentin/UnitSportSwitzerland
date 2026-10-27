@@ -32,7 +32,8 @@ public static class HallFront
     public readonly record struct Shape(float Width, float GlassTop, bool Canopy)
     {
         /// <summary>Where a name sign over the front stands, its centre's height.</summary>
-        public float NameY => Canopy ? GlassTop + CanopyThick + 0.65f : GlassTop + 0.55f;
+        /// (over a canopy high enough that the street sees it past the canopy's edge)
+        public float NameY => Canopy ? GlassTop + CanopyThick + 1.15f : GlassTop + 0.55f;
     }
 
     /// <summary>The front a door gets, or null when its wall is too short or its building too low for one.</summary>

@@ -214,6 +214,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// is harmless), and returns its key; null while no door within <paramref name="reach"/> has
     /// streamed in. Offline only: online a door is the server's, for a player standing at it.
     /// </summary>
+    /// <summary>As <see cref="OpenDoorForCamera(Vector3, float)"/>, through the door <paramref name="key"/> names (a shot's 8th field, #1250).</summary>
+    public string? OpenDoorForCamera(string key)
+    {
+        if (Online) return null;
+        var p = key.Split('_');
+        if (p.Length is < 3 or > 4 || !int.TryParse(p[0], out int e) || !int.TryParse(p[1], out int n) || !int.TryParse(p[2], out int i))
+            return null;
+        var door = new DoorKey(e, n, i, p.Length == 4 && int.TryParse(p[3], out int s) ? s : 0);
+        if (DoorIndex.Find(door) is null) return null;
+        string k = door.ToString();
+        if (!_doors.ContainsKey(k) && _requestingDoor == null) AskDoor(k, true);
+        return k;
+    }
+
     public string? OpenDoorForCamera(Vector3 at, float reach)
     {
         if (Online) return null;

@@ -41,10 +41,10 @@ namespace UnitSport.Core;
 public partial class ShotRunner : Node
 {
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
-        float? AboveGround = null, string? Command = null, float? Inside = null, Vector2? ShiftBy = null);
+        float? AboveGround = null, string? Command = null, float? Inside = null, Vector2? ShiftBy = null, string? Door = null);
 
     /// <summary>How far from an "i" shot's point its door may be, m.</summary>
-    private const float InsideDoorReach = 30f;
+    private const float InsideDoorReach = 50f;
 
     /// <summary>How long an "i" shot waits for its door and its interior before it fails, s.</summary>
     private const double InsideTimeout = 40;
@@ -442,7 +442,8 @@ public partial class ShotRunner : Node
         var p = line.Split(',');
         // InvariantCulture: this project is developed on a fr-CH machine (invariant-culture-floats)
         var inv = CultureInfo.InvariantCulture;
-        if (p.Length != 7
+        // an 8th field on an "i" shot names its door (a building's key, _slot for another door of it, #1250)
+        if (p.Length is not (7 or 8)
             || !float.TryParse(p[0], NumberStyles.Float, inv, out float x)
             || !(float.TryParse(p[1], NumberStyles.Float, inv, out float y)
                 || ((p[1].StartsWith('g') || p[1].StartsWith('i')) && float.TryParse(p[1][1..], NumberStyles.Float, inv, out y)))
@@ -455,7 +456,7 @@ public partial class ShotRunner : Node
         // above the ground: start high, so nothing is clipped while the ground streams in
         bool aboveGround = p[1].StartsWith('g'), inside = p[1].StartsWith('i');
         shot = new Shot(new Vector3(x, aboveGround || inside ? 2000f : y, z), pitch, yaw, seconds, p[6].Trim(),
-            aboveGround ? y : null, Inside: inside ? y : null);
+            aboveGround ? y : null, Inside: inside ? y : null, Door: p.Length == 8 ? p[7].Trim() : null);
         return true;
     }
 
@@ -479,7 +480,10 @@ public partial class ShotRunner : Node
         if (GroundHeight?.Invoke(_camera.GlobalPosition) is not { } ground) return;
         var at = _camera.GlobalPosition with { Y = ground + height };
         _camera.GlobalPosition = at;
-        _door = interiors.OpenDoorForCamera(at, InsideDoorReach) ?? _door;
+        // the door is looked for at a walker's height: a camera asked high (over an auditorium's back rows,
+        // on a booth upstairs) is over every sill's level band
+        _door = (_shot!.Value.Door is { } named ? interiors.OpenDoorForCamera(named)
+            : interiors.OpenDoorForCamera(at with { Y = ground + Math.Min(height, 1.6f) }, InsideDoorReach)) ?? _door;
         if (_door == null || interiors.BuiltLink(_door) is not { } link) return;
 
         // as far behind the doorway as the point stands in front of it, at the height asked above
