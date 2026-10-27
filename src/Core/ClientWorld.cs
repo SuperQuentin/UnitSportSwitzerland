@@ -2271,7 +2271,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 // another player looked at (#495): E challenges, or takes their challenge; an aura
                 // challenge from them comes first (#914)
                 yield return (PlayerInput.InteractMount, Combat.AuraManager.Client?.ChallengedBy(rivalId) == true
-                    ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
+                    ? Combat.AuraManager.Client.Prompt(rivalId) : Adventure.Together.TogetherService.LinkPrompt(rivalId, fights.Prompt(rivalId)));
             else if (p.Indoors)
             {
                 // a cinema's booth (#1238): the lights or the screen, by the half of its panel you stand at
@@ -2292,6 +2292,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
+                // tied to a friend (#1266): hold to haul a hanging partner up, tap to let go
+                else if (Adventure.Together.TogetherService.Instance?.InteractPrompt(p) is { } together)
+                    yield return (PlayerInput.InteractMount, together);
                 if (Vehicles.VehicleReach.Current is { } at)
                 {
                     yield return (PlayerInput.InteractMount, at.Action);

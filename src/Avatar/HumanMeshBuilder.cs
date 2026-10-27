@@ -281,6 +281,32 @@ public static partial class HumanMeshBuilder
         };
     }
 
+    /// <summary>
+    /// A hand held by another player's (#1266, <c>ArmHold</c>): where the wrist goes, in the figure's own frame (x right,
+    /// y up, -z ahead, from the feet), and which hand reaches (<see cref="Left"/>: the figure's left; the right is the
+    /// item hand). Every peer computes it from the link book and both bodies' replicated positions; bones only.
+    /// </summary>
+    public readonly record struct HandHold(Vector3 Local, bool Left);
+
+    /// <summary>A wrist's reach for a held hand, m: the arm almost straight.</summary>
+    public const float HoldReach = 0.62f;
+
+    /// <summary>Puts one wrist at a held hand (<see cref="HandHold"/>), within <see cref="HoldReach"/> of its shoulder, and re-solves that elbow.</summary>
+    private static Rig ApplyHold(Rig rig, HandHold? hold)
+    {
+        if (hold is not { } h) return rig;
+        // the figure's left is the rig's +X side (R), its right the item side (L)
+        if (h.Left)
+        {
+            var wrist = Reach(rig.ShoulderR, Author(h.Local), HoldReach);
+            var elbow = Limb.Solve(rig.ShoulderR, wrist, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
+            return rig with { ElbowR = elbow, WristR = wrist };
+        }
+        var wl = Reach(rig.ShoulderL, Author(h.Local), HoldReach);
+        var el = Limb.Solve(rig.ShoulderL, wl, UpperArmLength, ForearmLength, new Vector3(-0.6f, -0.6f, -0.2f));
+        return rig with { ElbowL = el, WristL = wl, HandDir = (wl - el).Normalized() };
+    }
+
     /// <summary>The body faces -Z, the author space +Z: a half turn about Y.</summary>
     private static Vector3 Author(Vector3 v) => new(-v.X, v.Y, -v.Z);
 
@@ -425,8 +451,8 @@ public static partial class HumanMeshBuilder
     /// </para>
     /// </summary>
     public static GaitMounts MountsFor(float speed, float phase,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, VrArms? vr = null) =>
-        MountsForRig(ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr));
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, VrArms? vr = null, HandHold? hold = null) =>
+        MountsForRig(ApplyVr(ApplyHold(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), hold), vr));
 
     /// <summary>
     /// Mounts for a fixed (non-gait) pose — a cyclist, who does not run, still needs a head to

@@ -89,6 +89,7 @@ public partial class TogetherService : Node
         PairPeer = peer;
         _pairBody = body;
         _adventure.SessionFor(peer);
+        _nextNear = 0;
         GD.Print($"[together] paired with a test body as peer {peer}");
     }
 

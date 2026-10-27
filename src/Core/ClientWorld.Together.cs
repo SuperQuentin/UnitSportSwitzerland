@@ -16,6 +16,10 @@ public partial class ClientWorld
         together.BodyOf = peer => peer == Multiplayer.GetUniqueId() ? LocalPlayer : _players?.GetNodeOrNull<FootPlayer>(peer.ToString());
         together.NameOf = peer => Net.Parties.Client?.Members.FirstOrDefault(m => m.Peer == peer).Name is { Length: > 0 } n ? n
             : peer == Multiplayer.GetUniqueId() || !Launch.Networked && peer == Adventure.AdventureService.LocalPeer ? GameSettings.Current.PlayerName : $"#{peer}";
+        together.Toast = Toast;
+        together.GlacierAt = g => _chunks != null && _worldOrigin is { } o && _chunks.TryGetCover(o.ToWorld(g), out var cover)
+            ? cover is Terrain.Format.CoverClass.Glacier or Terrain.Format.CoverClass.Snowfield : null;
         AddChild(new TogetherChip());
+        if (TogetherCheck.Requested) AddChild(new TogetherCheck(items, () => LocalPlayer));
     }
 }

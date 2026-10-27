@@ -350,6 +350,17 @@ public partial class ActivitiesScreen : Screen
             foreach (var (peer, name) in parties.Members)
             {
                 var (row, _) = ListRow(peer == parties.Members[0].Peer ? $"{name}  (leader)" : name, null);
+                // playing together (#1266): hold hands or rope up with a party member near you
+                if (peer != Multiplayer.GetUniqueId() && Adventure.Together.TogetherService.Instance is { } together && together.MayAskLink(peer))
+                {
+                    string who = name;
+                    var hands = UiKit.Button("Hold hands");
+                    hands.Pressed += () => Run($"/rope hands {who}");
+                    var rope = UiKit.Button("Rope up");
+                    rope.Pressed += () => Run($"/rope {who}");
+                    row.AddChild(hands);
+                    row.AddChild(rope);
+                }
                 if (parties.IsLeader && peer != Multiplayer.GetUniqueId())
                 {
                     var kick = UiKit.Button("Put out");

@@ -2329,7 +2329,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a fall's windmill runs on this peer's clock: nothing more is replicated than the pose kind
         _flailClock = PoseKind == PoseFall ? _flailClock + dt : 0f;
         float phase = PoseKind == PoseFall ? _flailClock : _stridePhase;
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind);
+        // a hand held by a friend's (#1266, ArmHold): keyed to 2 cm, the item hand stays the item's
+        var hold = PoseKind == PoseStride && dance == null && vr == null ? HoldPose(armed) : null;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2342,7 +2344,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseFall => Avatar.HumanMeshBuilder.MountsForFall(_flailClock, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
                 PoseSit => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Standing, arm, blend),
-                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
+                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr, hold),
             };
         }
         // the dedicated server draws nothing (#842): a bot it runs walks without its figure being posed;
@@ -2362,7 +2364,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 case PoseHang or PoseClimb: Avatar.HumanMeshBuilder.PosePosed(_walker, CarriedFigure(), arm, blend, wind); break;
                 // seated on a stand (#885): the figure round its hip, which BodyPose lifts
                 case PoseSit: Avatar.SeatedFigure.Pose(_walker, new Avatar.SeatAnchor(0, new Vector3(0, Anim.X, 0), Anim.Y, 0f)); break;
-                default: Avatar.HumanMeshBuilder.PoseStride(_walker, Anim.X, _stridePhase, arm, blend, dance, vr, point, wind); break;
+                default: Avatar.HumanMeshBuilder.PoseStride(_walker, Anim.X, _stridePhase, arm, blend, dance, vr, point, wind, hold); break;
             }
         }
         var mounts = _poseMounts;
@@ -2388,7 +2390,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
-        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null, Vector3 Wind = default);
+        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null, Vector3 Wind = default,
+        Avatar.HumanMeshBuilder.HandHold? Hold = null);
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
@@ -2808,6 +2811,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (IsOnFloor() && Concert.ConcertDeskUi.TryOpen(this)) return true;
         // a stand's row (#885): sit down, by hand too (a VR grip), before music's dance
         if (TrySit()) return true;
+        // linked to a friend (#1266): hold E at the rope to haul them up, tap E to let go
+        if (!byHand && TryTogetherInteract()) return true;
         if (byHand) return false;
         // music heard here: E starts the dance; stopping works for as long as it lasts
         if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
@@ -3802,6 +3807,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             TickHealth(dt, onFloor);
             TickStamina(dt, onFloor);   // #1225, FootPlayer.Stamina.cs
             TickFarmFoot(dt);
+            TickTogether(dt);   // #1266, FootPlayer.Together.cs: a held E at a friend or the rope
         }
         using var walkTime = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Walk, Bot);
 
@@ -3906,6 +3912,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             moveAmount = Mathf.Min(walk.Wish.Length(), 1f);
             direction = moveAmount > 0.01f ? walk.Wish.Normalized() : Vector3.Zero;
             running = walk.Run;
+        }
+        // holding hands or roped (#1266): the soft follow constraint, on the intent (a bot's too)
+        if (Tethered?.Invoke((direction * moveAmount, running)) is { } tied)
+        {
+            moveAmount = Mathf.Min(tied.Wish.Length(), 1f);
+            direction = moveAmount > 0.01f ? tied.Wish.Normalized() : Vector3.Zero;
+            running = tied.Run;
         }
         if (_slideCooldown > 0) _slideCooldown -= dt;
         // sprinting in a fight costs stamina (#1225); out of one it is free. Empty or winded: a run is a walk
@@ -4091,6 +4104,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
         }
 
+        // roped (#1266): a fall is caught at the rope's length round a partner who stands
+        if (!onFloor && RopeHold?.Invoke(velocity, dt) is { Held: true } rope)
+        {
+            velocity = rope.Velocity;
+            _fallSpeed = 0f;
+        }
         Velocity = velocity;
         // an open doorway: let through the building's shell to the sill, then carried across it
         var interiors = Interiors.InteriorManager.Instance;
