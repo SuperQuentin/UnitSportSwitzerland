@@ -33,7 +33,7 @@ public partial class TogetherService
     /// <c>--together-glacier E,N,R</c> (checks, on every peer): glacier cover within R m of (E, N), whatever the terrain
     /// says (the fixture course has none).
     /// </summary>
-    public static readonly (double E, double N, double R)? GlacierBox = ParseGlacier();
+    public static (double E, double N, double R)? GlacierBox { get; set; } = ParseGlacier();
 
     private static (double, double, double)? ParseGlacier()
     {

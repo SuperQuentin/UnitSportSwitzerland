@@ -35,6 +35,13 @@ public partial class TogetherService
     {
         if (!Authority) return;
         _adventure.Events.Raised += OnAdventureEvent;
+        _adventure.Saving += FlushSeconds;
+    }
+
+    /// <summary>Before a save: the seconds counted since the last batched Touch are told too, so the save is never a surprise.</summary>
+    private void FlushSeconds(PlayerProgress p)
+    {
+        if (p.Has(TogetherProgress.Section.Id) && p.Untouched().Contains(TogetherProgress.Section.Id)) p.Touch(TogetherProgress.Section);
     }
 
     private static string PeakTag => PoiId.Tag(PoiKind.Peak);

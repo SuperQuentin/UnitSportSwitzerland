@@ -41,6 +41,7 @@ public partial class TogetherService
         bool held = Links.ModeOf(self) == LinkMode.Rope && Body(Links.PartnerOf(self)) is { } pb
             && pb.PoseKind == FootPlayer.PoseStride && pb.RideKindId == 0;
         var origin = me.Origin;
+        GD.Print($"[together] crevasse: mode {Links.ModeOf(self)}, partner {Links.PartnerOf(self)}, body {Body(Links.PartnerOf(self))?.PoseKind}");
         if (origin != null && !Net.NetworkManager.DedicatedServer)
         {
             var slot = new CrevasseNode { Name = "Crevasse" };
