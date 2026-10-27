@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>S10 Hint bar, patterns and VR/touch feedback</title>
+<style>
+:root{--bg:#0b0d12;--glass:#161a22;--glass2:#1d222c;--line:#2b3140;--tx:#e8ebf2;--dim:#8d96a8;--amb:#fab81a;--red:#ff6b5e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1280px;height:720px;overflow:hidden;background:var(--bg);color:var(--tx);font:12px/1.3 "Segoe UI",Arial,sans-serif}
+header{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--line)}
+header b{font-size:15px}header span{color:var(--dim)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,198px);gap:8px;padding:8px 12px}
+.cell{background:#10131a;border:1px solid var(--line);border-radius:8px;padding:6px 8px;position:relative;overflow:hidden}
+.cell h3{font-size:11px;color:var(--amb);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.cell h3 i{color:var(--dim);font-style:normal;margin-right:4px}
+.row{display:flex;gap:10px;align-items:flex-start}
+.phone{width:92px;height:150px;border:2px solid #3a4152;border-radius:12px;background:var(--glass);position:relative;flex:none;overflow:hidden}
+.phone .bar{height:9px;background:#0d1016}
+.tile{position:absolute;border-radius:5px;background:var(--glass2);border:1px solid var(--line)}
+.sel{border:2px solid var(--amb);box-shadow:0 0 6px rgba(250,184,26,.6)}
+.hint{position:absolute;left:0;right:0;bottom:0;height:18px;background:rgba(10,12,18,.92);border-top:1px solid var(--line);display:flex;align-items:center;gap:5px;padding:0 4px;font-size:8px;color:var(--dim);white-space:nowrap}
+.k{display:inline-block;min-width:14px;padding:0 3px;border:1px solid #556;border-radius:3px;color:var(--tx);text-align:center;font-size:8px;background:#222836}
+.pad{border-radius:50%;background:#2a3a55;border-color:#4a6;}
+.pad.a{background:#2c5a3a}.pad.b{background:#6a2d2d}.pad.x{background:#2d4a7a}
+.txt{font-size:11px;color:var(--dim);flex:1}
+.txt b{color:var(--tx)}
+.txt p{margin-bottom:4px}
+.big{position:relative;height:150px;flex:1;border-radius:6px;background:var(--glass);border:1px solid var(--line);overflow:hidden}
+.btn{display:inline-block;padding:3px 9px;border-radius:5px;background:var(--glass2);border:1px solid var(--line);color:var(--tx);font-size:10px}
+.btn.pri{background:var(--amb);color:#1a1200;border-color:var(--amb);font-weight:600}
+.chev{position:absolute;left:4px;top:12px;width:22px;height:22px;border-radius:50%;border:1px solid var(--amb);color:var(--amb);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+.ring{position:absolute;border-radius:50%;border:2px solid var(--amb);box-shadow:0 0 8px rgba(250,184,26,.7)}
+.ban{border-left:4px solid var(--red);background:#2a1618;border-radius:4px;padding:5px 7px;font-size:10px}
+.cap{position:absolute;left:0;right:0;bottom:0;height:54px;border-top:1px solid var(--line);background:#0e1117;display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+.cap div{padding:5px 14px;font-size:11px;color:var(--dim);border-right:1px solid var(--line)}
+.cap div:last-child{border:0}.cap b{color:var(--amb);display:block;font-size:10px;text-transform:uppercase;margin-bottom:1px}
+.cap em{font-style:normal;color:var(--tx)}
+.mm{position:absolute;border:1px dashed var(--amb);background:rgba(250,184,26,.12);color:var(--amb);font-size:9px;display:flex;align-items:center;justify-content:center}
+</style></head><body>
+<header><b>S10 &nbsp;Hint bar, patterns and VR / touch feedback</b><span>Phone Interactions v2 &middot; shared components &middot; dark glass, one amber accent (0.98, 0.72, 0.10)</span></header>
+<div class="grid">
+
+<div class="cell"><h3><i>1</i>Keyboard hint</h3><div class="row">
+<div class="phone"><div class="bar"></div>
+<div class="tile sel" style="left:6px;top:20px;width:38px;height:30px"></div><div class="tile" style="left:48px;top:20px;width:38px;height:30px"></div>
+<div class="tile" style="left:6px;top:56px;width:38px;height:30px"></div><div class="tile" style="left:48px;top:56px;width:38px;height:30px"></div>
+<div class="hint"><span class="k">Enter</span>Travel</div></div>
+<div class="txt"><p>One bar, built from the <b>focused control</b>.</p><p>Row: <span class="k">Enter</span> Travel &nbsp;<span class="k">Esc</span> Back</p><p>Search field: <span class="k">Enter</span> Search &nbsp;<span class="k">Esc</span> Leave field</p><p>Phone key: <span class="k">P</span> / <span class="k">Up</span> Put away</p></div></div></div>
+
+<div class="cell"><h3><i>2</i>Pad hint</h3><div class="row">
+<div class="phone"><div class="bar"></div>
+<div class="tile sel" style="left:6px;top:20px;width:80px;height:24px"></div><div class="tile" style="left:6px;top:50px;width:80px;height:24px"></div><div class="tile" style="left:6px;top:80px;width:80px;height:24px"></div>
+<div class="hint"><span class="k pad a">A</span>Travel <span class="k pad b">B</span>Back</div></div>
+<div class="txt"><p>Same bar, pad glyphs.</p><p><span class="k pad a">A</span> Open &nbsp;<span class="k pad b">B</span> Back (tap)</p><p><span class="k pad b">B</span> hold 0.4 s: Put away (ring fills in the bar)</p><p><span class="k">LB</span><span class="k">RB</span> page up/down</p></div></div></div>
+
+<div class="cell"><h3><i>3</i>VR hint card</h3><div class="row">
+<div class="phone"><div class="bar"></div>
+<div class="tile" style="left:6px;top:20px;width:38px;height:30px"></div><div class="tile sel" style="left:48px;top:20px;width:38px;height:30px"></div>
+<div class="tile" style="left:6px;top:56px;width:38px;height:30px"></div><div class="tile" style="left:48px;top:56px;width:38px;height:30px"></div>
+<div class="hint" style="height:30px;flex-wrap:wrap;line-height:1.1;padding:2px 4px;white-space:normal"><span><span class="k x">X</span> Open &nbsp;<span class="k b pad">B</span> Back</span><span style="color:var(--amb)">Grab the edge to open</span></div></div>
+<div class="txt"><p>Card on the <b>lower glass edge</b>.</p><p>Back: holding-hand face button (swaps with handedness)</p><p>Hold Back 0.4 s: Put away</p><p>First use: "pocket grip" and "grab the edge to open" prompts</p></div></div></div>
+
+<div class="cell"><h3><i>4</i>Touch: chevrons only</h3><div class="row">
+<div class="phone"><div class="bar"></div><div class="chev" style="left:4px;top:13px;width:18px;height:18px;font-size:11px">&#8249;</div>
+<div class="tile" style="left:6px;top:40px;width:80px;height:28px"></div><div class="tile" style="left:6px;top:74px;width:80px;height:28px"></div><div class="tile" style="left:6px;top:108px;width:80px;height:28px"></div></div>
+<div class="txt"><p>No hint bar. Labelled buttons and a <b>Back chevron</b> top-left of every app (9 mm).</p><p>Left-edge swipe 10 mm = Back (ignored on Map and Photo pan).</p><p>Tap outside the phone: Put away.</p></div></div></div>
+
+<div class="cell"><h3><i>5</i>Typing in a field</h3><div class="row">
+<div class="phone"><div class="bar"></div>
+<div class="tile sel" style="left:6px;top:16px;width:80px;height:16px;background:#0d1016"></div><div style="position:absolute;left:10px;top:18px;font-size:9px">Zerm<span style="color:var(--amb)">|</span></div>
+<div class="tile" style="left:6px;top:38px;width:80px;height:14px"></div>
+<div style="position:absolute;left:0;right:0;top:78px;height:54px;background:#0d1016;border-top:1px solid var(--line)"></div>
+<div class="hint"><span class="k">Enter</span>Search <span class="k">Esc</span>Leave</div></div>
+<div class="txt"><p>Phone key is <b>ignored while typing</b>: P types a letter.</p><p>Esc leaves the field first, then Back.</p><p>Pad / VR: on-screen keyboard; touch: native keyboard lifts the screen.</p></div></div></div>
+
+<div class="cell"><h3><i>6</i>Empty state with action</h3><div class="row">
+<div class="phone"><div class="bar"></div>
+<div style="position:absolute;left:10px;right:10px;top:34px;text-align:center;font-size:9px;color:var(--dim)"><div style="font-size:24px;margin-bottom:2px;color:#555d70">&#9711;</div>No photos yet<div class="btn pri" style="margin-top:6px;font-size:8px;padding:3px 6px">Open Camera</div></div>
+<div class="hint"><span class="k pad a">A</span>Open Camera</div></div>
+<div class="txt"><p>Never a blank list: a line saying why, plus a <b>primary action</b> (focused by default).</p><p>Photos: Open Camera<br>Contacts: Invite a friend<br>Activities: Host one</p></div></div></div>
+
+<div class="cell"><h3><i>7</i>Error banner</h3><div class="row">
+<div class="phone"><div class="bar"></div>
+<div class="ban" style="position:absolute;left:4px;right:4px;top:14px;font-size:8px">Fight request timed out<br><span style="color:var(--amb)">Retry</span> &middot; Dismiss</div>
+<div class="tile" style="left:6px;top:58px;width:80px;height:22px"></div><div class="tile" style="left:6px;top:86px;width:80px;height:22px"></div>
+<div class="hint"><span class="k pad a">A</span>Retry</div></div>
+<div class="txt"><p>Banners <b>stay</b> until dismissed or resolved (no toast-only errors).</p><p>Reasons named: "In a cab", "Busy", "Typing".</p><p>Result line on social actions: Sent, Accepted, Declined, Timed out.</p></div></div></div>
+
+<div class="cell"><h3><i>8</i>VR ring: far / at touch / hover</h3>
+<div class="row" style="gap:8px">
+<div class="big" style="width:110px;flex:none"><div class="tile" style="left:14px;top:50px;width:80px;height:26px"></div><div class="ring" style="left:44px;top:52px;width:34px;height:34px;opacity:.55"></div><div style="position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:9px;color:var(--dim)">far (45 mm)</div></div>
+<div class="big" style="width:110px;flex:none"><div class="tile" style="left:14px;top:50px;width:80px;height:26px"></div><div class="ring" style="left:50px;top:56px;width:14px;height:14px;background:rgba(250,184,26,.35)"></div><div style="position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:9px;color:var(--dim)">at touch (6 mm)</div></div>
+<div class="big" style="width:110px;flex:none"><div class="tile sel" style="left:14px;top:50px;width:80px;height:26px;background:#3a2f12"></div><div style="position:absolute;left:14px;top:20px;width:80px;height:1px;border-top:1px dashed rgba(250,184,26,.5);transform:rotate(25deg);transform-origin:left"></div><div class="ring" style="left:48px;top:56px;width:14px;height:14px"></div><div style="position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:9px;color:var(--dim)">hover + faint ray</div></div>
+</div>
+<div style="font-size:10px;color:var(--dim);margin-top:5px">Ring shrinks with depth. Grip release: phone hangs 0.5 s, flies home.</div></div>
+
+<div class="cell"><h3><i>9</i>Tap target mm overlay</h3>
+<div class="big" style="height:158px">
+<div class="mm" style="left:8px;top:8px;width:46px;height:46px;border-radius:50%">9 mm Back</div>
+<div class="mm" style="left:64px;top:8px;width:46px;height:46px">9 mm</div>
+<div class="mm" style="left:120px;top:14px;width:36px;height:36px">7 mm min</div>
+<div class="mm" style="left:8px;top:66px;width:140px;height:62px;border-style:solid">12 mm shutter (Camera)</div>
+<div style="position:absolute;left:170px;top:10px;right:6px;font-size:10px;color:var(--dim);line-height:1.5"><b style="color:var(--tx)">Sizes via pxPerMm</b><br>Targets: 7 mm min, 9 mm primary<br>Touch slop: 2 mm<br>Back swipe: 10 mm<br>Mouse threshold: scales with window height<br>VR travel look: 25-45 cm</div>
+</div></div>
+
+</div>
+<div class="cap">
+<div><b>Keyboard / mouse</b><em>Enter</em> select &middot; <em>Esc / right click / Backspace</em> Back &middot; <em>P / Up</em> toggle phone</div>
+<div><b>Gamepad</b><em>A</em> open &middot; <em>B</em> back, hold 0.4 s put away &middot; hold <em>D-pad Up</em> take out</div>
+<div><b>VR</b>Fingertip 6 mm or ray + trigger &middot; Back on holding hand &middot; pocket grip</div>
+<div><b>Touch</b>Tap 7/9 mm targets &middot; Back chevron &middot; 10 mm edge swipe &middot; Phone button</div>
+</div>
+</body></html>

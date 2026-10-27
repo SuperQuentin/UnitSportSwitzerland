@@ -158,3 +158,34 @@
   otherwise), the same height of view: the saved photo is exactly the preview (`--phonecheck` checks the
   selfie's shape).
 
+
+## Five verbs, stage 1 (#1253, plan `docs/plans/phone-redesign.md`)
+
+- **Back is generic**: `PhoneController.Back` sends any page but Home and Travel up one level (Photo to Photos,
+  the rest to Home); only Home folds. A new app can never fold the phone by accident.
+- **Back is visible and has more ways in**: every app page has a `‹` chevron (`PhoneScreens.BackChevron`,
+  pointer-only, `BackPressed`); Backspace and a right click also go back (the camera app keeps the right click
+  for the selfie).
+- **Put away from any page**: hold Esc / the pad's B for `StowHoldSeconds` (0.4 s); a tap is still one step back.
+  The page hints say so. Not while a text box has the keys, in VR (its own buttons) or on Travel.
+- **Travel can be cancelled** until the jump has run: Esc / B / the Cancel button on the curtain
+  (`PhoneController.CancelTravel`) drops the pending jump and shows Home; once the jump ran, the button goes.
+- **Touch**: a PHONE pill in the on-foot top bar (`TouchLayout`, 9 mm, sends the `phone` action); it was only in More.
+- **Not done, and why**: a hold on D-pad Up cannot take the phone out, the hold is already the emote wheel
+  (`EmoteWheel`), so the pad keeps quick menu › Phone. The Phone key stays Up (P is the radio and the character
+  menu); the toggle is Esc/B held, Down folded. The persistent hint bar built from the focused control moves
+  to a later stage with the Home/cover rework.
+- **Check**: `--phonecheck` asserts Esc and Backspace go back, Training does not fold the phone, a held Esc puts it away, and Esc on the travel curtain cancels the jump.
+
+## Home and cover, stage 2 (#1253)
+
+- **Fixed cover order**: Open, Map, Camera, Contacts, Photos, Activities (`RefreshQuick`); the first thing selected
+  is Open, and the digit keys 1 to 6 run a tile directly. A call no longer inserts Answer / Decline into the list.
+- **A call is a banner** above the tiles (`PhoneScreens.ShowCover`, `CoverBannerUv`): Enter / A answers, Esc / B
+  declines (while it rings, they are not "run the tile" and "put away"); a click or VR tap on the banner's left
+  half answers, the right half declines; the tiles are still picked with arrows, digits or a click elsewhere.
+- **Home has six apps** (Map, Contacts, Camera, Photos, Activities, Journal): the Menu tile (the full Activities
+  screen) became **Host…** and Training a **Training** button at the top of the Activities app; Back from
+  Training goes to Activities, then Home.
+- **Checks**: `--phonecheck` (six tiles, Training's way back); `--phonevrcheck` selects the Camera tile before its
+  tap (`PhoneController.SelectQuick`). The banner itself is not exercised headless (no invite service in the fixture).

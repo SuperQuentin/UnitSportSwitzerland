@@ -274,6 +274,7 @@ public static class TouchLayout
             top("exit", "Get out", TouchSend.Pad(JoyButton.Y), 51.5f, 12f);
         else if (mode is TouchMode.Foot or TouchMode.Passenger)
             top("bag", "BAG", TouchSend.Act("inventory"), 49f, 8f, TouchFeel.NotWithHotbar);
+        if (mode == TouchMode.Foot) top("phone", "PHONE", TouchSend.Act("phone"), 60f, 9f);
         return k;
     }
 

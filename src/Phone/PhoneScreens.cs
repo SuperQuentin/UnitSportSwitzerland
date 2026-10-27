@@ -60,6 +60,8 @@ public partial class PhoneScreens : Node
     public event Action<string, bool>? WallpaperPicked;
     /// <summary>A page changed (the controller hands the mouse over for the camera).</summary>
     public event Action<Page>? PageShown;
+    /// <summary>The back chevron on an app's page was pressed (the controller goes up one level).</summary>
+    public event Action? BackPressed;
 
     private readonly Func<PlaceSearchUi?> _places;
     private readonly Func<ChatManager?> _chat;
@@ -104,6 +106,9 @@ public partial class PhoneScreens : Node
     private LineEdit _query = null!;
     private VBoxContainer _results = null!, _people = null!, _calls = null!;
     private Label _mapHint = null!;
+    private Button _travelCancel = null!;
+    private PanelContainer _coverBanner = null!;
+    private Label _bannerWho = null!, _bannerKeys = null!;
     private TextureRect _lastShot = null!;
     private ColorRect _flash = null!;
     private readonly List<Button> _homeTiles = new();
@@ -184,6 +189,9 @@ public partial class PhoneScreens : Node
     /// <summary>The home screen's apps per row (6; 3 in VR), for the checks.</summary>
     internal int HomeColumns => _homeGrid.Columns;
 
+    /// <summary>How many apps the home screen shows, for the checks.</summary>
+    internal int HomeTileCount => _homeTiles.Count;
+
     /// <summary>
     /// The VR layout (#920): seen at arm's length the screen is about 23° wide, so it is laid out a
     /// quarter bigger, the home screen's six apps in two rows of three (each about 1.6× the desktop's
@@ -231,6 +239,21 @@ public partial class PhoneScreens : Node
         _coverClock = Big("12:00", 96);
         col.AddChild(_coverClock);
         col.AddChild(UiKit.Spacer(expand: true));
+
+        // an incoming call: a banner above the tiles, so the tiles never shift under the hands (#1253)
+        var bannerBox = new StyleBoxFlat { BgColor = new Color(0.16f, 0.55f, 0.28f, 0.88f), CornerDetail = 8 };
+        bannerBox.SetCornerRadiusAll(24);
+        bannerBox.SetContentMarginAll(12);
+        _coverBanner = new PanelContainer { Visible = false };
+        _coverBanner.AddThemeStyleboxOverride("panel", bannerBox);
+        var banner = UiKit.VBox(2);
+        _bannerWho = Big("", 22);
+        _bannerWho.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        banner.AddChild(_bannerWho);
+        _bannerKeys = Big("", 20, InkDim);
+        banner.AddChild(_bannerKeys);
+        _coverBanner.AddChild(banner);
+        col.AddChild(_coverBanner);
 
         _coverCardBox = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.35f), CornerDetail = 8 };
         _coverCardBox.SetCornerRadiusAll(28);
@@ -302,6 +325,11 @@ public partial class PhoneScreens : Node
         _coverContent.Visible = !on;
     }
 
+    /// <summary>The call banner on the cover, 0..1 of the screen; empty when no call rings.</summary>
+    public Rect2 CoverBannerUv() => _coverBanner.Visible
+        ? new Rect2(_coverBanner.GetGlobalRect().Position / new Vector2(CoverW, CoverH), _coverBanner.GetGlobalRect().Size / new Vector2(CoverW, CoverH))
+        : default;
+
     /// <summary>The middle of the quick-action card on the cover, 0..1: where a keyboard-led finger rests.</summary>
     public Vector2 CoverCardUv() => _coverCard.GetGlobalRect().GetCenter() / new Vector2(CoverW, CoverH);
 
@@ -329,8 +357,14 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>The cover's picture: the clock, and the quick action <paramref name="index"/> of <paramref name="quick"/>.</summary>
-    public void ShowCover(IReadOnlyList<Quick> quick, int index)
+    public void ShowCover(IReadOnlyList<Quick> quick, int index, string? call = null)
     {
+        _coverBanner.Visible = call != null;
+        if (call != null)
+        {
+            SetText(_bannerWho, call);
+            SetText(_bannerKeys, _vr ? "tap left: Answer   right: Decline" : InputHints.Pad ? "A  Answer      B  Decline" : "Enter  Answer      Esc  Decline");
+        }
         var q = quick[Mathf.Clamp(index, 0, quick.Count - 1)];
         SetText(_coverAction, $"‹  {q.Label}  ›");
         SetText(_coverCall, q.Detail ?? "");
@@ -402,10 +436,8 @@ public partial class PhoneScreens : Node
         row.AddChild(Tile("Contacts", "Call people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
         row.AddChild(Tile("Camera", "Take photos and selfies into your album", new Color(0.22f, 0.24f, 0.28f), () => ShowPage(Page.Camera)));
         row.AddChild(Tile("Photos", "Your album; set a photo as a wallpaper", new Color(0.86f, 0.30f, 0.45f), () => ShowPage(Page.Photos)));
-        row.AddChild(Tile("Activities", "Join a Battle Royale or a race", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
-        row.AddChild(Tile("Menu", "The full Activities menu: set up a race, a Battle Royale", new Color(0.50f, 0.30f, 0.62f), () => ActivitiesPicked?.Invoke()));
+        row.AddChild(Tile("Activities", "Join a Battle Royale or a race, host one, train on your home trainer", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
         row.AddChild(Tile("Journal", "Your quests, and the birds and fish you found", new Color(0.62f, 0.48f, 0.18f), () => JournalPicked?.Invoke()));
-        row.AddChild(Tile("Training", "Ride a GPX course on your home trainer, the road's grade on the trainer", new Color(0.10f, 0.55f, 0.58f), () => ShowPage(Page.Training)));
         col.AddChild(row);
         col.AddChild(UiKit.Spacer(expand: true));
         col.AddChild(Hint("open", "put the phone away"));
@@ -547,6 +579,12 @@ public partial class PhoneScreens : Node
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         var list = UiKit.VBox(12);
         list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        // what used to be the Menu and Training tiles of the home screen (#1253)
+        var more = UiKit.HBox(12);
+        more.AddChild(Small("Host…", new Color(0.50f, 0.30f, 0.62f), () => ActivitiesPicked?.Invoke()));
+        more.AddChild(Small("Training", new Color(0.10f, 0.55f, 0.58f), () => ShowPage(Page.Training)));
+        foreach (var b in more.GetChildren().OfType<Button>()) b.CustomMinimumSize = new Vector2(200, 54);
+        list.AddChild(more);
         list.AddChild(Big("Battle Royale", 26, InkDim));
         _actBrTitle = Big("", 30);
         list.AddChild(_actBrTitle);
@@ -822,6 +860,9 @@ public partial class PhoneScreens : Node
     private Control BuildPhoto()
     {
         var col = UiKit.VBox(10);
+        var top = UiKit.HBox(16);
+        top.AddChild(BackChevron());
+        col.AddChild(top);
         _photoView = new TextureRect
         {
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
@@ -861,6 +902,10 @@ public partial class PhoneScreens : Node
         };
         finder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         page.AddChild(finder);
+
+        var back = BackChevron();
+        back.Position = new Vector2(40, 64);
+        page.AddChild(back);
 
         var side = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
         side.AddThemeConstantOverride("separation", 26);
@@ -932,6 +977,10 @@ public partial class PhoneScreens : Node
         _travelNote.HorizontalAlignment = HorizontalAlignment.Center;
         _travelNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         col.AddChild(_travelNote);
+        // until the jump runs, the player can still change their mind
+        _travelCancel = Small("Cancel", new Color(0.30f, 0.32f, 0.38f), () => BackPressed?.Invoke());
+        _travelCancel.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        col.AddChild(_travelCancel);
         col.AddChild(UiKit.Spacer(expand: true));
         return col;
     }
@@ -939,10 +988,14 @@ public partial class PhoneScreens : Node
     /// <summary>The travelling page: where to, and dots that go round while the ground there streams in.</summary>
     public void ShowTravel(string where, string note = "")
     {
+        _travelCancel.Visible = true;
         SetText(_travelTitle, $"Travelling to {where}");
         SetText(_travelNote, note);
         ShowPage(Page.Travel);
     }
+
+    /// <summary>The jump has run: there is nothing left to cancel.</summary>
+    public void HideTravelCancel() => _travelCancel.Visible = false;
 
     public void ShowPage(Page page)
     {
@@ -1036,7 +1089,25 @@ public partial class PhoneScreens : Node
         return l;
     }
 
-    private static Label Title(string text) => Big(text, 54);
+    /// <summary>An app's heading with its back chevron: every page has a visible way up one level (#1253).</summary>
+    private Control Title(string text)
+    {
+        var row = UiKit.HBox(16);
+        row.AddChild(BackChevron());
+        row.AddChild(Big(text, 54));
+        return row;
+    }
+
+    /// <summary>The round "‹" that goes back one step; pointer-only, so the keys' selection stays where it is.</summary>
+    private Button BackChevron()
+    {
+        var b = Small("‹", new Color(0.30f, 0.32f, 0.38f), () => BackPressed?.Invoke());
+        b.CustomMinimumSize = new Vector2(64, 64);
+        b.FocusMode = Control.FocusModeEnum.None;
+        b.TooltipText = "Back";
+        b.AddThemeFontSizeOverride("font_size", 40);
+        return b;
+    }
 
     /// <summary>The page's two keys, named for the device in hand (a menu's accept and back, not the game's actions).</summary>
     private Label Hint(string accept, string back)
@@ -1049,7 +1120,7 @@ public partial class PhoneScreens : Node
 
     private string HintText(string accept, string back) =>
         _vr ? $"tap  {accept}      swipe right or B  {back}"
-        : InputHints.Pad ? $"A  {accept}      B  {back}" : $"Enter  {accept}      Esc  {back}";
+        : InputHints.Pad ? $"A  {accept}      B  {back}  (hold: put away)" : $"Enter  {accept}      Esc  {back}  (hold: put away)";
 
     private static Button Row(string text)
     {
@@ -1081,7 +1152,7 @@ public partial class PhoneScreens : Node
     {
         foreach (var child in under.GetChildren())
         {
-            if (child is Button { Visible: true, Disabled: false } b) { b.GrabFocus(); return; }
+            if (child is Button { Visible: true, Disabled: false, FocusMode: not Control.FocusModeEnum.None } b) { b.GrabFocus(); return; }
             FocusFirst(child);
             if (under.GetViewport()?.GuiGetFocusOwner() is { } owner && under.IsAncestorOf(owner)) return;
         }

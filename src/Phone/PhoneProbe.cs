@@ -115,6 +115,26 @@ public partial class PhoneProbe : Node
         Check(phone.Screens.Shown == PhoneScreens.Page.Activities, "the Activities app opens on the phone");
         Shot("phone_5c_activities.png");
         await Key(Godot.Key.Escape, 0.4);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Esc goes back from an app to home (#1253)");
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        await Key(Godot.Key.Backspace, 0.4);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Backspace goes back too (#1253)");
+        phone.Open(PhoneScreens.Page.Training);
+        await Wait(0.4);
+        await Key(Godot.Key.Escape, 0.4);
+        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Activities, "Esc from Training goes up to Activities, it does not fold the phone (#1253)");
+        await Key(Godot.Key.Escape, 0.4);
+        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "and once more to the home screen (#1253)");
+        Check(phone.Screens.HomeTileCount == 6, $"the home screen has six apps ({phone.Screens.HomeTileCount}); Menu and Training live in Activities (#1253)");
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        await Hold(Godot.Key.Escape, PhoneController.StowHoldSeconds + 0.6);
+        for (int i = 0; i < 30 && phone.IsOut; i++) await Wait(0.1);
+        Check(!phone.IsOut, "holding Esc puts the phone away from any page (#1253)");
+        await Press(PlayerInput.Phone, 1.0);
+        phone.Open(PhoneScreens.Page.Home);
+        await Wait(0.6);
 
         // the map: closer first, then the world fades to black behind the phone
         phone.Open(PhoneScreens.Page.Map);
@@ -181,6 +201,15 @@ public partial class PhoneProbe : Node
         else Log("skip (headless: no shot to open or set as a wallpaper)");
         await Key(Godot.Key.Escape, 0.6);
         Shot("phone_12_home_wallpaper.png");
+
+        // Esc on the curtain cancels a travel that has not jumped yet
+        var stay = me.Global;
+        Teleporter.Instance?.TeleportTo(stay.E + 500, stay.N, "probe cancelled");
+        await Wait(0.1);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Travel, "the curtain is up while the jump waits (#1253)");
+        await Key(Godot.Key.Escape, 2.5);
+        var stayed = me.Global;
+        Check(Math.Abs(stayed.E - stay.E) < 2 && phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the curtain cancels the travel and stays on the phone (#1253)");
 
         // travel while open: behind the phone once the world is dark, and the phone folds away there
         var from = me.GlobalPosition;
