@@ -19,6 +19,12 @@ public static partial class InteriorGenerator
     /// panel and all (#1279).
     /// </summary>
     private const float StripMaxWidth = 4f, StripMaxArea = 400f;
+    /// <summary>
+    /// A player's body radius and a hair (FootPlayer's 0.32 m): a strip, and a check, take walkers this wide. The
+    /// rooms' <see cref="WalkerRadius"/> lets a player squeeze where the grid says a way is; in a 2.6 m booth a
+    /// platter left two 0.6 m lanes the grid passed and the body did not (#1279).
+    /// </summary>
+    private const float BodyRadius = 0.34f;
 
     /// <summary>A room's floor as a grid of cells a walker's centre may stand on, and where its doorways let in.</summary>
     private sealed class WalkMap
@@ -29,22 +35,25 @@ public static partial class InteriorGenerator
         public readonly List<int> Seeds = new();
 
         private readonly bool _any;
+        private readonly float _rad;
 
         /// <param name="any">Grid it whatever its size: a check asks, and its cost does not matter.</param>
         public WalkMap(RoomPlan r, bool any = false)
         {
             _r = r;
             _any = any;
-            _x0 = r.X0 + WallInset + WalkerRadius;
-            _z0 = r.Z0 + WallInset + WalkerRadius;
-            _nx = (int)((r.X1 - WallInset - WalkerRadius - _x0) / WalkCell) + 1;
-            _nz = (int)((r.Z1 - WallInset - WalkerRadius - _z0) / WalkCell) + 1;
+            // a strip, and a projection room whatever its size: where a player must reach the pieces they work
+            _rad = any || r.Area > WalkableMaxArea || r.Type == RoomType.ProjectionRoom ? BodyRadius : WalkerRadius;
+            _x0 = r.X0 + WallInset + _rad;
+            _z0 = r.Z0 + WallInset + _rad;
+            _nx = (int)((r.X1 - WallInset - _rad - _x0) / WalkCell) + 1;
+            _nz = (int)((r.Z1 - WallInset - _rad - _z0) / WalkCell) + 1;
             if (!Usable) return;
             foreach (var o in r.Openings.Where(o => o.Kind != OpeningKind.Window))
             {
                 // a step inside the doorway, on the room's walkable floor
-                float x = o.Side switch { Side.Left => _x0, Side.Right => r.X1 - WallInset - WalkerRadius, _ => o.Center };
-                float z = o.Side switch { Side.Front => _z0, Side.Back => r.Z1 - WallInset - WalkerRadius, _ => o.Center };
+                float x = o.Side switch { Side.Left => _x0, Side.Right => r.X1 - WallInset - _rad, _ => o.Center };
+                float z = o.Side switch { Side.Front => _z0, Side.Back => r.Z1 - WallInset - _rad, _ => o.Center };
                 int i = Math.Clamp((int)MathF.Round((x - _x0) / WalkCell), 0, _nx - 1);
                 int j = Math.Clamp((int)MathF.Round((z - _z0) / WalkCell), 0, _nz - 1);
                 Seeds.Add(j * _nx + i);
@@ -54,16 +63,16 @@ public static partial class InteriorGenerator
         public bool Usable => (_any || _r.Area <= WalkableMaxArea || Math.Min(_r.Width, _r.Depth) <= StripMaxWidth && _r.Area <= StripMaxArea)
             && _nx >= 2 && _nz >= 2;
 
-        /// <summary>Cells a walker cannot stand on: within <see cref="WalkerRadius"/> of any piece.</summary>
+        /// <summary>Cells a walker cannot stand on: within the walker's radius of any piece.</summary>
         public bool[] Shut(IEnumerable<RectPlan> pieces, RectPlan? extra = null)
         {
             var shut = new bool[_nx * _nz];
             void Mark(RectPlan q)
             {
-                int i0 = Math.Max(0, (int)MathF.Ceiling((q.X0 - WalkerRadius + 1e-3f - _x0) / WalkCell));
-                int i1 = Math.Min(_nx - 1, (int)MathF.Floor((q.X1 + WalkerRadius - 1e-3f - _x0) / WalkCell));
-                int j0 = Math.Max(0, (int)MathF.Ceiling((q.Z0 - WalkerRadius + 1e-3f - _z0) / WalkCell));
-                int j1 = Math.Min(_nz - 1, (int)MathF.Floor((q.Z1 + WalkerRadius - 1e-3f - _z0) / WalkCell));
+                int i0 = Math.Max(0, (int)MathF.Ceiling((q.X0 - _rad + 1e-3f - _x0) / WalkCell));
+                int i1 = Math.Min(_nx - 1, (int)MathF.Floor((q.X1 + _rad - 1e-3f - _x0) / WalkCell));
+                int j0 = Math.Max(0, (int)MathF.Ceiling((q.Z0 - _rad + 1e-3f - _z0) / WalkCell));
+                int j1 = Math.Min(_nz - 1, (int)MathF.Floor((q.Z1 + _rad - 1e-3f - _z0) / WalkCell));
                 for (int j = j0; j <= j1; j++)
                     for (int i = i0; i <= i1; i++) shut[j * _nx + i] = true;
             }

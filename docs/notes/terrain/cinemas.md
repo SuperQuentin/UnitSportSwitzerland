@@ -40,7 +40,7 @@ lane frame and rules (`bowling-centres`).
 - **Showing it** (client, on change only): the interior material's `house_lights` (1, 0.3, 0) scales
   the tint-2 lamps (`RoomLights.Tint`); the cat (`InteriorNode.CatPicture`: a cartoon cat drawn by code,
   no image file) on every screen, 2 cm proud of it, and the projector's beam from each hall's porthole
-  (`projector_beam.gdshader`, additive), built hidden with the interior. Dim was 0.12 first: at night
+  (`projector_beam.gdshader`, additive), built hidden with the interior. Per hall since #1279 (below). Dim was 0.12 first: at night
   that left a hall black.
 - **Outside**: as bowling (blind box, double door, the name and CINEMA big over the door).
 - **Staff**: a cashier at the box office, a seller at the concession stand (`InteriorNode.Staff`).
@@ -49,10 +49,16 @@ lane frame and rules (`bowling-centres`).
   2.76 m storeys) had one-storey halls 2.56 m clear before. A building with no storey grid (`Storeys` count
   under 2, Cinérama Empire: 32 m tagged a garage) takes a whole hall's heights. Every real cinema on the
   Geneva/Vaud tiles now has its booth upstairs; the deck is for low halls (under 7 m) only.
-- **A way to the panel** (#1279): the walk grid (`InteriorGenerator.Walkable`) also covers a strip room up to
-  4 m wide and 400 m2, whatever its length (the booth is 2.6 m by up to 118 m), so the platter and the chair
-  no longer shut its far end; the panel's use spot is kept clear, and `--cinemacheck` walks to it
-  (`CanReach`, which grids any room).
+- **A panel per hall** (#1279): each hall's `BoothPanel` stands on the booth's hall-side wall beside that
+  hall's viewing windows; `CinemaBooths` keeps lights and screen per hall (`HallAt`: the auditorium whose middle
+  is nearest, numbered as the ground floor lists them; protocol 57 carries the hall). Each screen and beam
+  shows its own hall's switch; `house_lights` and the screen's wash are one value for the whole interior, so
+  they show the hall the camera is in or nearest (`InteriorNode.HallNear`).
+- **A way to the panels** (#1279): the walk grid (`InteriorGenerator.Walkable`) also covers a strip room up to
+  4 m wide and 400 m2, whatever its length (the booth is 2.6 m by up to 118 m), and a strip or a projection
+  room is walked at a player's width (`BodyRadius` 0.34 m, not the rooms' 0.24 m): a platter left two 0.6 m
+  lanes the grid passed and the body did not. Each panel's use spot is kept clear, and `--cinemacheck` walks
+  to every panel (`CanReach`, which grids any room).
 - **Box office glass** (#1279): a see-through pane of its own (`InteriorNode.AddClearGlass`), the mesh only its
   rail and posts: the interior's one mesh is opaque, and vertex alpha marks lit faces or sky glass.
 - **Checks**: `--cinemacheck --systems ui` (`CinemaProbe`: a two-level town cinema, a small one, a

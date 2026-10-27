@@ -55,9 +55,9 @@ public partial class CinemaNetProbe : ChatProbe
         {
             if (!await WalkIn(me, interiors, door)) return;
             string plan = interiors.Current!.Key;
-            Expect(booths.StateOf(plan) == (CinemaBooths.Lights.Full, false), "the house starts with its lights full and no picture");
-            booths.Ask(plan, Show);
-            Expect(await Until(() => booths.StateOf(plan) == (CinemaBooths.Lights.Off, true), 10),
+            Expect(booths.StateOf(plan, 0) == (CinemaBooths.Lights.Full, false), "the house starts with its lights full and no picture");
+            booths.Ask(plan, 0, Show);
+            Expect(await Until(() => booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), 10),
                 "the server granted A, inside, the lights off and the cat on");
             // said over and over: C has not joined yet
             bool b = false, c = false;
@@ -71,22 +71,22 @@ public partial class CinemaNetProbe : ChatProbe
             }
             Expect(b, "B saw it, and was refused");
             Expect(c, "C, joining late, found it");
-            Expect(booths.StateOf(plan) == (CinemaBooths.Lights.Off, true), "B's refused ask changed nothing for A");
+            Expect(booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), "B's refused ask changed nothing for A");
         }
         else
         {
             if (!await Heard("A", "set", 240)) { Fail("A never set anything"); return; }
             string line = _heard.Last(l => l.Contains("CN A set"));
             string plan = line[(line.IndexOf("CN A set", StringComparison.Ordinal) + "CN A set".Length)..].Trim();
-            Expect(await Until(() => booths.StateOf(plan) == (CinemaBooths.Lights.Off, true), 10),
+            Expect(await Until(() => booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), 10),
                 $"{_role} sees {plan}'s lights off and the cat on");
             if (_role == "B")
             {
                 // outside: the server must refuse, and nothing changes
                 Expect(!me.Indoors, "B is outside");
-                booths.Ask(plan, CinemaBooths.Pack(CinemaBooths.Lights.Full, false));
+                booths.Ask(plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Full, false));
                 await Seconds(3);
-                Expect(booths.StateOf(plan) == (CinemaBooths.Lights.Off, true), "the server refused B, who is not inside");
+                Expect(booths.StateOf(plan, 0) == (CinemaBooths.Lights.Off, true), "the server refused B, who is not inside");
             }
             Say("done");
         }

@@ -21,12 +21,17 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class InteriorNode
 {
-    /// <summary>One hall's screen: its pasted picture, its lit screen and projector light, its beam, the hall's box (node-local).</summary>
+    /// <summary>
+    /// One hall's screen: its pasted picture, its lit screen and projector light, its beam, the hall's box (node-local)
+    /// and its number (<see cref="CinemaBooths.HallAt"/>), whose panel switches it (#1279).
+    /// </summary>
     private sealed record CinemaScreen(MeshInstance3D Picture, MeshInstance3D? Lit, SpotLight3D? Projector,
-        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall);
+        MeshInstance3D? Beam, ShaderMaterial? Marched, Aabb Hall, int No);
 
     private readonly List<CinemaScreen> _screens = new();
-    private bool _screenOn, _realShow;
+    /// <summary>The halls whose screens are on, a bit each.</summary>
+    private int _screensOn;
+    private bool _realShow;
     private int _projecting = -1;
     private const string GHouse = "house_lights";
 
@@ -76,10 +81,11 @@ public partial class InteriorNode
             }
             var picture = Quad("CatScreen", CatMaterial());
             var hall = HallOf(layout, p);
+            int no = CinemaBooths.HallAt(layout, p.X, p.Z);
 
             // the beam from this hall's porthole: the nearest one to the screen
             var port = ports.MinBy(q => (q.X - p.X) * (q.X - p.X) + (q.Z - p.Z) * (q.Z - p.Z));
-            if (port == null) { node._screens.Add(new CinemaScreen(picture, null, null, null, null, hall)); continue; }
+            if (port == null) { node._screens.Add(new CinemaScreen(picture, null, null, null, null, hall, no)); continue; }
             // the beam's apex at the projector's lens in the booth, behind the hole in the wall; the port's middle
             // if the booth had no room for that projector
             var from = new Vector3(port.X, layout.FloorY(port.Floor) + port.Lift + port.H / 2, port.Z);
@@ -122,7 +128,7 @@ public partial class InteriorNode
             spot.LookAtFromPosition(lens, centre, Vector3.Up);
             Projectors.RemoveAll(w => !w.TryGetTarget(out var s) || !IsInstanceValid(s));
             Projectors.Add(new WeakReference<SpotLight3D>(spot));
-            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall));
+            node._screens.Add(new CinemaScreen(picture, lit, spot, beam, marched, hall, no));
         }
     }
 
@@ -221,15 +227,34 @@ public partial class InteriorNode
         return new Aabb(new Vector3(p.X - 1, y, p.Z - 1), new Vector3(2, 3, 2));
     }
 
-    /// <summary>The booth's state on this cinema: the house lights' level, the cat slides and the beams on or off, and the way they are shown.</summary>
-    public void ShowCinema(float houseLights, bool screen, bool real)
+    /// <summary>
+    /// The booth's state on this cinema: the house lights' level and the screen's wash (one each for the whole
+    /// interior: the hall the camera is in), the halls whose cat slides and beams are on (a bit each), and the way they are shown.
+    /// </summary>
+    public void ShowCinema(float houseLights, int screens, bool glow, bool real)
     {
         _lit?.SetShaderParameter(GHouse, houseLights);
-        ShowGlow(screen);
-        _screenOn = screen;
+        ShowGlow(glow);
+        _screensOn = screens;
         _realShow = real;
         RefreshScreens();
     }
+
+    /// <summary>The hall a node-local point is in, or the nearest one (-1 in a cinema with none): whose house lights to show.</summary>
+    public int HallNear(Vector3 at)
+    {
+        int best = -1;
+        float bestD = float.MaxValue;
+        foreach (var s in _screens)
+        {
+            if (s.Hall.HasPoint(at)) return s.No;
+            float d = (s.Hall.GetCenter() - at).LengthSquared();
+            if (d < bestD) (best, bestD) = (s.No, d);
+        }
+        return best;
+    }
+
+    private bool On(CinemaScreen s) => s.No >= 0 && (_screensOn >> s.No & 1) != 0;
 
     /// <summary>
     /// Real projection: the hall whose projector throws the picture, the one the camera stands in
@@ -237,7 +262,7 @@ public partial class InteriorNode
     /// </summary>
     public void ProjectFor(Vector3 camera)
     {
-        int i = _screenOn && _realShow ? _screens.FindIndex(s => s.Projector != null && s.Hall.HasPoint(camera)) : -1;
+        int i = _realShow ? _screens.FindIndex(s => s.Projector != null && On(s) && s.Hall.HasPoint(camera)) : -1;
         if (i == _projecting) return;
         _projecting = i;
         RefreshScreens();
@@ -248,12 +273,12 @@ public partial class InteriorNode
         for (int i = 0; i < _screens.Count; i++)
         {
             var s = _screens[i];
-            bool thrown = _screenOn && _realShow && i == _projecting;
-            s.Picture.Visible = _screenOn && !thrown;
+            bool on = On(s), thrown = on && _realShow && i == _projecting;
+            s.Picture.Visible = on && !thrown;
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;
             if (s.Beam == null) continue;
-            s.Beam.Visible = _screenOn;
+            s.Beam.Visible = on;
             s.Beam.MaterialOverride = _realShow ? s.Marched : PlainBeam();
         }
     }

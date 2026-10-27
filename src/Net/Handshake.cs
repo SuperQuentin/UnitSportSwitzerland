@@ -85,7 +85,8 @@ public partial class Handshake : Node
     /// Ghost/GhostPart; TellOpened/Picked/Seal/Refused/Offered/Photo/TrialStarted/TrialGate/TrialEnded/Board/Ghost, GuideLeg),
     /// PlacedKind.TravelFlag 12, ItemEventKind.Gust 11.
     /// 56: World/Invites Ended (kind, name, outcome): the sender of a direct invite learns accepted, declined or lapsed (#1253; 55 is main's).
-    public const int Protocol = 56;
+    /// 57: World/CinemaBooths AskSet and Set carry the hall (#1279: a panel per hall).
+    public const int Protocol = 57;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

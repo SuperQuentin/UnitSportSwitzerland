@@ -442,7 +442,14 @@ public static partial class InteriorGenerator
         Put(l, f, FurnitureType.Porthole, px, pz, fr.FaceVMinus, PortCasingW, 0.1f, 0.45f, placed, lift: (p.BoothUpstairs ? l.StoreyHeight : 0) + p.PortY);
     }
 
-    /// <summary>The projection room: a projector to each hall's porthole, the rack, the old platter, the control panel.</summary>
+    /// <summary>A piece's floor rectangle at (<paramref name="x"/>, <paramref name="z"/>), turned as it will stand.</summary>
+    private static RectPlan Turned(float x, float z, int turns, float w, float d)
+    {
+        float hx = (turns & 1) == 1 ? d / 2 : w / 2, hz = (turns & 1) == 1 ? w / 2 : d / 2;
+        return new RectPlan(x - hx, z - hz, x + hx, z + hz);
+    }
+
+    /// <summary>The projection room: a projector to each hall's porthole and that hall's control panel, the rack, the old platter.</summary>
     private static void Booth(InteriorLayout l, int f, RoomPlan r, CinemaPlan p, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
     {
         var fr = p.Frame;
@@ -479,11 +486,21 @@ public static partial class InteriorGenerator
             // the wall, at the same height over the hall's floor
             var (wx, wz) = fr.Point(u, p.HallV1 + 0.1f);
             Put(l, f, FurnitureType.Porthole, wx, wz, fr.FaceVPlus, PortCasingW, 0.1f, 0.45f, placed, lift: p.PortY);
+            // the hall's own control panel (#1279: one per hall, not one for the cinema), on the hall's wall beside
+            // the viewing windows, so the projectionist sees the hall they work; where the projectionist stands kept clear
+            foreach (int side in new[] { 1, -1 })
+            {
+                float pu = u + side * (PortCasingW / 2 + 0.7f);
+                if (pu - 0.6f < u0 + hallW * i || pu + 0.6f > u0 + hallW * (i + 1)) continue;
+                var (cx, cz) = fr.Point(pu, p.HallV1 + WallInset + 0.17f);
+                var at = Turned(cx, cz, fr.FaceVPlus, 1.2f, 0.3f);
+                if (!Free(r, at, placed, blocked, 0.05f)) continue;
+                Put(l, f, FurnitureType.BoothPanel, cx, cz, fr.FaceVPlus, 1.2f, 0.3f, 1.7f, placed, lift: deck);
+                blocked.Add(UseSpot(l.Furniture[^1], 0.8f).Clip(r));
+                break;
+            }
         }
         int before = l.Furniture.Count;
-        TryPlace(l, f, r, new Piece(FurnitureType.BoothPanel, 1.2f, 0.3f, 1.7f, true), placed, blocked, rng, new[] { fr.VPlus });
-        // where the projectionist stands at it, kept clear: the walk check keeps it joined to the door (#1279)
-        if (l.Furniture.Count > before) blocked.Add(UseSpot(l.Furniture[^1], 0.8f).Clip(r));
         TryPlace(l, f, r, new Piece(FurnitureType.ServerRack, 0.6f, 0.9f, 2.0f, true), placed, blocked, rng, new[] { fr.VPlus });
         TryPlace(l, f, r, new Piece(FurnitureType.FilmPlatter, 1.2f, 1.2f, 1.5f, false), placed, blocked, rng);
         TryPlace(l, f, r, new Piece(FurnitureType.Chair, 0.45f, 0.45f, 0.9f, false), placed, blocked, rng);
@@ -578,7 +595,7 @@ public static partial class InteriorGenerator
                 // the show on, as the booth would have it: lights dimmed, the cat on the screen
                 InteriorNode.ShowSlide(0);
                 bool real = InteriorNode.RealProjection;
-                node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), screen: true, real);
+                node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Dim), ~0, glow: true, real);
                 var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
                 // at High detail the first hall's projector throws the picture, as for a player standing in it
                 if (real)

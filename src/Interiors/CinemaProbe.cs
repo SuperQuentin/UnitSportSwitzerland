@@ -118,10 +118,14 @@ public partial class CinemaProbe : Node
         Check(c.Upstairs == (deck == null), $"{what}: a deck in a floor-level booth only");
         if (deck != null)
             Check(l.Furniture.Where(f => f.Type is FurnitureType.Projector or FurnitureType.BoothPanel).All(f => Math.Abs(f.Lift - deck.H) < 0.01f),
-                $"{what}: the projectors and the panel stand on the deck");
+                $"{what}: the projectors and the panels stand on the deck");
         Check(Count(FurnitureType.ExitSign) >= halls.Count, $"{what}: exit signs over the doors");
         Check(Count(FurnitureType.Projector) == halls.Count, $"{what}: a projector for every hall ({Count(FurnitureType.Projector)})");
-        Check(Count(FurnitureType.BoothPanel) == 1, $"{what}: the booth's control panel");
+        // a panel per hall, beside its projector (#1279), each its own hall's
+        var panels = l.Furniture.Where(f => f.Type == FurnitureType.BoothPanel).ToList();
+        Check(panels.Count == halls.Count, $"{what}: a control panel for every hall ({panels.Count})");
+        Check(panels.Select(f => CinemaBooths.HallAt(l, f.X, f.Z)).Distinct().Count() == panels.Count && panels.All(f => CinemaBooths.HallAt(l, f.X, f.Z) >= 0),
+            $"{what}: each panel works a hall of its own ({string.Join(", ", panels.Select(f => CinemaBooths.HallAt(l, f.X, f.Z)))})");
         Check(Count(FurnitureType.BoxOffice) == 1, $"{what}: a box office");
         Check(Count(FurnitureType.ConcessionStand) == 1, $"{what}: a concession stand");
         Check(l.Floors[0].Rooms.Any(r => r.Type == RoomType.WC), $"{what}: a WC");
@@ -129,16 +133,15 @@ public partial class CinemaProbe : Node
         Check(upstairs == c.Upstairs, $"{what}: the booth {(c.Upstairs ? "upstairs" : "at floor level")} ({l.Floors.Count} floor(s))");
         var booth = l.Floors.SelectMany(f => f.Rooms).FirstOrDefault(r => r.Type == RoomType.ProjectionRoom);
         Check(booth != null, $"{what}: a projection room");
-        // the projectionist walks from the booth's door to the panel (#1279: a platter and a chair shut it off)
-        var panel = l.Furniture.FirstOrDefault(f => f.Type == FurnitureType.BoothPanel);
-        if (booth != null && panel != null)
+        // the projectionist walks from the booth's door to every panel, a player's width (#1279: a platter and a chair shut them off)
+        if (booth != null)
         {
             int bf = l.Floors.FindIndex(fl => fl.Rooms.Contains(booth));
             var pieces = l.Furniture.Where(f => f.Floor == bf && f.Type is not (FurnitureType.BoothDeck or FurnitureType.Porthole)
                 && f.X > booth.X0 && f.X < booth.X1 && f.Z > booth.Z0 && f.Z < booth.Z1).Select(PieceRect).ToList();
-            var spot = InteriorGenerator.UseSpot(panel, 0.5f);
-            Check(InteriorGenerator.CanReach(booth, pieces, (spot.X0 + spot.X1) / 2, (spot.Z0 + spot.Z1) / 2, 0.3f),
-                $"{what}: the booth's panel is reached from its door ({booth.Width:F1}x{booth.Depth:F1} m booth)");
+            int reached = l.Furniture.Count(f => f.Type == FurnitureType.BoothPanel && InteriorGenerator.UseSpot(f, 0.5f) is var spot
+                && InteriorGenerator.CanReach(booth, pieces, (spot.X0 + spot.X1) / 2, (spot.Z0 + spot.Z1) / 2, 0.3f));
+            Check(reached == Count(FurnitureType.BoothPanel), $"{what}: every panel is reached from the booth's door ({reached} of {Count(FurnitureType.BoothPanel)}, {booth.Width:F1}x{booth.Depth:F1} m booth)");
         }
         // a hall is a hall's height (#1279): in a building of storeys, two or three of them, never one
         if (c.MinClear > 0)
