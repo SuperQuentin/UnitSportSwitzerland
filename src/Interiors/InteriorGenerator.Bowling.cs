@@ -28,7 +28,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored bowling centres are planned again.</summary>
-    public const int BowlingRules = 2;
+    public const int BowlingRules = 3;
 
     /// <summary>One pair of lanes across, capping boards included [S: 11 ft 6 in].</summary>
     public const float PairPitch = 3.50f;
@@ -235,7 +235,7 @@ public static partial class InteriorGenerator
         lanes.Openings.Add(new OpeningPlan
         {
             Side = frame.VMinus, Center = (uL + uR) / 2, Width = progW - 0.4f,
-            Top = lanesClear - 0.05f, Kind = OpeningKind.Arch, Other = iHall,
+            Top = lanesClear - 0.2f, Kind = OpeningKind.Arch, Other = iHall,
         });
 
         // ---- a plain hall beyond the programme: behind the machines, beside the games side --------------
@@ -312,7 +312,7 @@ public static partial class InteriorGenerator
         // the foot of the stair and its landing keep off the doorway
         if (plan.DoorV < 0.5f && plan.DoorU > lo - landing - 1.6f && plan.DoorU < hi + 1.6f) return false;
 
-        var lane = frame.Rect(lo, 0.06f, hi, 0.06f + laneW);
+        var lane = frame.Rect(lo, 0.15f, hi, 0.15f + laneW);
         var flight = frame.AlongZ
             ? new FlightPlan { AlongX = true, X0 = lane.Z0, X1 = lane.Z1, ZBottom = bottom, ZTop = top }
             : new FlightPlan { X0 = lane.X0, X1 = lane.X1, ZBottom = bottom, ZTop = top };
@@ -326,8 +326,8 @@ public static partial class InteriorGenerator
         upper.Rooms.Add(mezz);
         upper.Holes.Add(flight.Area());
         // the guard along the shaft's open edge
-        var (ax, az) = frame.Point(lo, 0.06f + laneW);
-        var (bx, bz) = frame.Point(hi, 0.06f + laneW);
+        var (ax, az) = frame.Point(lo, 0.15f + laneW);
+        var (bx, bz) = frame.Point(hi, 0.15f + laneW);
         upper.Rails.Add(new RectPlan(ax, az, bx, bz));
         // a parapet over the lanes, open above it
         mezz.Openings.Add(new OpeningPlan
