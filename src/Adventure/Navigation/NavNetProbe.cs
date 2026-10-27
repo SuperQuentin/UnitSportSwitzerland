@@ -106,15 +106,17 @@ public partial class NavNetProbe : ChatProbe
         await Seconds(1.0);
         Expect(Bank.Instance!.Balance == had, $"and free ({had} -> {Bank.Instance!.Balance})");
 
-        // nothing in a Battle Royale lobby
+        // nothing in a Battle Royale round, even for an admin (opening a lobby is an admin's)
+        if (!await LogIn("navpw")) return;
         Chat.Send("/br open here");
-        await Seconds(1.5);
+        Expect(await Until(() => BattleRoyale.BrManager.Instance?.State.Phase is BattleRoyale.BrPhase.Lobby, 15), "a Battle Royale lobby is open");
         Chat.Send("/br join");
-        await Until(() => false, 11);
+        Expect(await Until(() => BattleRoyale.BrManager.Instance?.MyEntry != null, 15), "A joined it");
         Travel.AskTravel(station.Id, "");
-        Expect(await Until(() => Travel.LastRefusal == TravelNetwork.Why(TravelRefusal.NoAdventure), 10), $"in a Battle Royale lobby a trip is refused ({Travel.LastRefusal})");
+        Expect(await Until(() => Travel.LastRefusal == TravelNetwork.Why(TravelRefusal.NoAdventure), 10), $"in a Battle Royale round a trip is refused ({Travel.LastRefusal})");
         Chat.Send("/br leave");
-        await Seconds(1.0);
+        await Until(() => BattleRoyale.BrManager.Instance?.MyEntry == null, 15);
+        Chat.Send("/br cancel");
 
         Chat.Send("/party leave");
         Expect(await Until(() => Parties.Client is { InParty: false }, 10), "A left the party");

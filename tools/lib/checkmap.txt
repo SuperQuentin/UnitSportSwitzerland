@@ -862,6 +862,22 @@ src/Adventure/Places/     net    tools/placesnetcheck.sh
 src/Adventure/AdventureService net tools/placesnetcheck.sh
 src/Net/ChatManager.Invites net  tools/placesnetcheck.sh
 tools/placesnetcheck.sh   net    tools/placesnetcheck.sh
+# #1226 adventure navigation: compass, marker, gust, pins, travel network and fares (offline quick probes; server + two clients)
+src/Adventure/Navigation/ quick  --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Navigation/ quick  --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Ui/CompassStrip       quick  --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Ui/CompassStrip       quick  --brcheck
+src/BattleRoyale/BrCompass quick --brcheck
+src/XR/XrWatch            quick  --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Places/AdventureMap quick --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Places/PoiMarkers quick --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Items/Bank            quick  --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Adventure/Quests/     quick  --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+assets/adventure/fares.json quick --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Adventure/Navigation/ net    tools/navnetcheck.sh
+src/Net/Invites/Parties   net    tools/navnetcheck.sh
+src/Net/Arrival           net    tools/navnetcheck.sh
+tools/navnetcheck.sh      net    tools/navnetcheck.sh
 # #1223: the Adventure layer: progress store, quests, the Journal (offline quick probe; server + clients over loopback)
 src/Adventure/           quick  --adventurecheck --systems ui,physics,adventure
 src/Ui/AdventureLog      quick  --adventurecheck --systems ui,physics,adventure

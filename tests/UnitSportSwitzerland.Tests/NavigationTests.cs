@@ -392,6 +392,10 @@ public class CompassMathTests
         Assert.True(d.X < 0);
         Assert.Equal(Vector2.Down, NavMath.OffscreenDir(screen / 2, screen, behind: true));
         Assert.True(NavMath.Size(5000) > NavMath.Size(10));
+        // straight behind: down; behind and to the right: down and right
+        Assert.Equal(Vector2.Down, NavMath.BehindDir(0, 50));
+        var br = NavMath.BehindDir(30, 50);
+        Assert.True(br.X > 0 && br.Y > 0);
     }
 }
 

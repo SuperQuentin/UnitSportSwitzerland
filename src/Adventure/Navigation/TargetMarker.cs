@@ -131,7 +131,8 @@ public partial class TargetMarker : CanvasLayer
         }
         else
         {
-            var dir = NavMath.OffscreenDir(p, screen, behind);
+            var local = cam.GlobalTransform.AffineInverse() * world;
+            var dir = behind ? NavMath.BehindDir(local.X, local.Z) : NavMath.OffscreenDir(p, screen, false);
             var edge = NavMath.EdgePoint(screen, dir);
             _arrow.Position = edge - _arrow.PivotOffset;
             _arrow.Rotation = dir.Angle();

@@ -68,6 +68,17 @@ public static class NavMath
         return d.LengthSquared() < 1f ? Vector2.Down : d;
     }
 
+    /// <summary>
+    /// The screen direction toward a target behind the camera, from its camera-space x (right) and z (back): down
+    /// ("turn round"), leaning to the side it is on. A projection through the camera's plane would mirror it, and with a
+    /// camera pitched down a target behind lands at the top; this never does.
+    /// </summary>
+    public static Vector2 BehindDir(float localX, float localZ)
+    {
+        var d = new Vector2(localX, Mathf.Max(Mathf.Abs(localZ), 0.01f));
+        return d.Normalized();
+    }
+
     /// <summary>The marker's size: 28 px far (2 km and more) to 18 px near (50 m and less).</summary>
     public static float Size(double m) => Mathf.Lerp(18f, 28f, Mathf.Clamp((float)((m - 50) / 1950), 0f, 1f));
 }
