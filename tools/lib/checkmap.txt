@@ -927,6 +927,12 @@ src/Net/Sleepers         net    tools/adventurenetcheck.sh
 src/Items/Bank           net    tools/adventurenetcheck.sh
 src/BattleRoyale/BrManager.cs net tools/adventurenetcheck.sh
 tools/adventurenetcheck.sh net  tools/adventurenetcheck.sh
+# #1227: adventure rewards: chests and seals, edelweiss and cairns, guides, trials, photos, gadgets (offline quick probe; server + two clients)
+src/Adventure/Rewards/   quick  --rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture
+src/Loot/Gathering       quick  --rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture
+src/Items/ItemController quick  --rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture
+src/Adventure/Rewards/   net    tools/rewardnetcheck.sh
+tools/rewardnetcheck.sh  net    tools/rewardnetcheck.sh
 # #1225: stamina, free climbing, the crag; thermals, ridge lift and campfire updrafts
 src/Player/FootPlayer.Climb    quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
 src/Player/FootPlayer.Stamina  quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure

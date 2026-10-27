@@ -206,6 +206,17 @@ public enum ItemId
     /// <summary>An admin's traffic tool (#971): places, edits and removes traffic generators (<see cref="ItemUse.TrafficTool"/>); from the debug menu only.</summary>
     TrafficTool = 380,
 
+    // ---- the Adventure rewards (#1227, docs/notes/adventure/rewards.md); 400-419 are this plan's, navigation took 420-421 ----
+    /// <summary>Rock crystal: the Adventure crafting material, from chests and duplicates (<c>Adventure.Rewards.ChestLoot</c>).</summary>
+    Bergkristall = 400,
+    /// <summary>Held, it beeps faster nearer the closest unopened chest or unpicked edelweiss within 250 m; Use pings a direction (<see cref="ItemUse.Detector"/>).</summary>
+    TreasureDetector = 401,
+    /// <summary>Planted, a waypoint of one's own (<c>PlacedKind.TravelFlag</c>); what travel to it means is the navigation plan's.</summary>
+    TravelFlag = 402,
+    /// <summary>Thrown, an updraft column where it lands for 20 s (<see cref="ItemUse.Gust"/>, <c>ItemEventKind.Gust</c>).</summary>
+    BottledGust = 403,
+    /// <summary>Garments (Avatar.Garments): the Alpine set, found in chests only.</summary>
+    Sennenkaeppi = 404, EdelweissShirt = 405, GuideHat = 406, GuideBreeches = 407, CrossBandana = 408, AlpineSocks = 409, AlpineGloves = 410,
     // ---- the travel network (#1226, docs/notes/adventure/fares.md); 400-419 belong to the rewards plan ----
     /// <summary>The GA travelcard: rail, bus and ship trips free, cable cars half, travel from anywhere. The server trusts <c>TravelBook.HasGa</c>; the item is its picture.</summary>
     GaCard = 420,
@@ -266,4 +277,8 @@ public enum ItemUse
     Farm,
     /// <summary>Use places a traffic generator on the road aimed at, or opens the one aimed at (<see cref="TrafficTool"/>, #971).</summary>
     TrafficTool,
+    /// <summary>Held, it beeps nearer the closest reward; Use pings a direction (<see cref="ItemId.TreasureDetector"/>, #1227).</summary>
+    Detector,
+    /// <summary>Use throws it ahead: an updraft where it lands (<see cref="ItemId.BottledGust"/>, #1227).</summary>
+    Gust,
 }

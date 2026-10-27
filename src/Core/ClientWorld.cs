@@ -898,6 +898,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
+            || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
@@ -1088,6 +1089,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Adventure.Places.AdventureMap.PlaceSearch = () => _places?.SetOpen(true);
             if (Adventure.Places.PlacesCheck.Requested) AddChild(new Adventure.Places.PlacesCheck(items, () => LocalPlayer));
             if (Adventure.Places.PlacesNetProbe.Role != null) AddChild(new Adventure.Places.PlacesNetProbe(items));
+            // rewards (#1227): chests, edelweiss and cairns, seals, guides, trials, photo spots; offline this client checks its own claims
+            var start = _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+            var rewards = Adventure.Rewards.RewardService.Create(adventure, server: false, networked: Launch.Networked, () => _chunks?.Source, start);
+            rewards.Occupied = (e, n, radius, except) => Adventure.Rewards.RewardWorld.DroppedOn(e, n, radius);
+            Func<Vector3, float?> groundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            AddChild(new Adventure.Rewards.RewardWorld(() => _onFoot ? LocalPlayer : null, () => _worldOrigin, groundAt));
+            AddChild(new Adventure.Rewards.GuideNode(() => _worldOrigin, groundAt));
+            AddChild(new Adventure.Rewards.TrialRunner(() => LocalPlayer, () => _worldOrigin, () => _chunks));
+            AddChild(new Adventure.Rewards.ChestRevealUi());
+            AddChild(new Adventure.Rewards.RewardHud(() => LocalPlayer));
+            Adventure.Rewards.CollectionPage.Register();
+            Adventure.Rewards.FaunaPage.Register();
+            if (Adventure.Rewards.RewardCheck.Requested) AddChild(new Adventure.Rewards.RewardCheck(items, () => LocalPlayer));
+            if (Adventure.Rewards.RewardNetProbe.Role != null) AddChild(new Adventure.Rewards.RewardNetProbe(items));
+            if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
             AddNavigation(adventure, items, ground);
         }
         // online the server says where we start (#799): the loading screen holds until it has

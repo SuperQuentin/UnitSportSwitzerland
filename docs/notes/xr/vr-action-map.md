@@ -76,6 +76,14 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | quest: track / start / abandon (#1223) | buttons in the Journal / A on the button | ok: laser + trigger on the button | keep |
 | quest: hand over a delivery (#1223) | the Journal's Hand over button / A on it | ok: laser + trigger on the button | gap: `interact` (E / X) or a **grip** on the target's marker, once navigation draws markers (#1226) |
 | place: look out from a viewpoint / use a stamp post (#1224) | `interact_mount` E / Y within 3 m of the cross, telescope or stamp post (`PoiMarkers`) | ok: reach out and grip it (`TryInteract(byHand)`) | keep |
+| open a chest (#1227) | `interact_mount` E / Y within 2.4 m (`RewardWorld`) | ok: reach out and grip it (`TryInteract(byHand)`) | **grip the lid and lift** (R1) |
+| light a Höhenfeuer stack, ring a cowbell, wake a guide, start a trial, offer edelweiss (#1227) | E / Y at the stack, bell, burrow, post or offering box | ok: grip it; the offering's confirmation by the ray (`Ui/Modal`) | swing the bell's clapper (R1) |
+| pick an edelweiss, add a cairn stone (#1227) | hold G / X (`gather`, offered before water and stone) | ok: hold X | **grip and pull**, like gather |
+| ring run, pressure plate (#1227) | the body through the ring, standing on the plate | ok: the body (room-scale or stick) | keep |
+| skip the chest's reveal (#1227) | any key / any button | ok: it fades by itself; a pad button through `XrPad` skips | keep |
+| treasure detector ping (#1227) | Use (LMB / RB) with the detector in hand | ok: R trigger (`use_item`) | point it and squeeze |
+| bottled gust (#1227) | Use (LMB / RB): thrown ahead | ok: R trigger (`use_item`) | a real throw by release velocity (the throw-drop target) |
+| `/trial leave` (#1227) | chat | ok: wrist menu › chat | a quick menu entry (gap, also on pad) |
 | adventure map (#1224) | M (`teleport`) while adventuring / quick menu › Map; drag, wheel, click; left stick, LB / RB, A | ok: wrist menu › Map on the `XrUi` panel, ray drag and trigger (the shoulders do not zoom in VR) | keep |
 | Atlas (#1224) | J then Q / E, LB / RB to the Atlas tab; buttons | ok: wrist menu › Journal, laser + trigger | keep |
 | guide: the guiding gust (#1226) | N on foot / mounted (not in a bus, tipper, mixer, mini dumper: N is theirs) / quick menu › Guide | new: the open left hand held palm up 0.5 s (`XrRig.PalmUp`); wrist menu › Guide; a buzz on start | keep (headset check of the palm's sign) |

@@ -403,8 +403,11 @@
 79.2	Cars / ZN6 (parked)
 4.8	Cars / ZZW30 MR-S
 4.8	Cars / ZZW30 MR-S (parked)
+310.6	Clothes / Alpine knee socks
+115.4	Clothes / Alpine wool gloves
 1917.7	Clothes / Bee stockings
 4.2	Clothes / Bell collar
+549	Clothes / Bergführer breeches
 409.1	Clothes / Big pink bow
 115.4	Clothes / Black band tee
 265.5	Clothes / Black beanie
@@ -426,6 +429,7 @@
 96.1	Clothes / Devil horns
 115.4	Clothes / Disco platforms
 96.1	Clothes / Disco-ball top
+703.9	Clothes / Edelweiss shirt
 6.5	Clothes / Fang mask
 76.1	Clothes / Fingerless gloves
 5689.4	Clothes / Fishnets
@@ -443,6 +447,7 @@
 444.1	Clothes / Kawaii knee socks
 549	Clothes / Lace arm warmers
 96.1	Clothes / Lava tee
+12.4	Clothes / Mountain guide's hat
 287.5	Clothes / Navy polo
 549	Clothes / Neon gloves
 405.8	Clothes / Neon headset
@@ -464,6 +469,7 @@
 611.2	Clothes / Rainbow stockings
 115.4	Clothes / Red tartan skirt
 2965.5	Clothes / Ruffled black mini
+100.4	Clothes / Sennenkäppi
 549	Clothes / Silver antennae
 99.1	Clothes / Silver hoops
 549	Clothes / Silver space suit
@@ -474,6 +480,7 @@
 2633.3	Clothes / Striped long-sleeve
 12.5	Clothes / Swirly A mask
 100.5	Clothes / Swirly OwO mask
+3.8	Clothes / Swiss-cross bandana
 483.5	Clothes / TAZ 90 jacket
 115.4	Clothes / Tall antennae
 6.4	Clothes / Tongue-out mask
@@ -663,6 +670,8 @@
 2.3	Items / Agone
 3	Items / AlienAntennae
 44.9	Items / Alphorn
+3	Items / AlpineGloves
+2.6	Items / AlpineSocks
 2.3	Items / ArcticChar
 3	Items / ArmyTee
 5.5	Items / Backpack
@@ -704,11 +713,13 @@
 2.6	Items / Coal
 3.4	Items / CombatBoots
 6.5	Items / CopperWire
+3	Items / CrossBandana
 3.1	Items / DevilHorns
 3.4	Items / DiscoPlatforms
 2.9	Items / DiscoTop
 4.8	Items / Dogtag
 8.5	Items / DuctTape
+3	Items / EdelweissShirt
 5.2	Items / Electronics
 29.6	Items / EnergyBar
 2.1	Items / EnginePart
@@ -736,6 +747,8 @@
 50.6	Items / Gps
 2.3	Items / Grayling
 3	Items / GreenPolo
+3.7	Items / GuideBreeches
+3	Items / GuideHat
 8.5	Items / HalfFare
 5.9	Items / Hammer
 7.6	Items / Handbag
@@ -821,6 +834,7 @@
 2.3	Items / Rudd
 7.5	Items / RuffledMini
 5.9	Items / SeedPotato
+3.1	Items / Sennenkaeppi
 6.4	Items / Shotgun
 3	Items / SilverAntennae
 7.5	Items / SlitMaxiSkirt

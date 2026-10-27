@@ -65,6 +65,8 @@ public enum GarmentShape
     HardHat, HiVisVest,
     // #880: the aliens' (head, head, top: one piece to the ankles)
     Antennae, LongAntennae, SpaceSuit,
+    // #1227: the Alpine set's (head, neck)
+    FeltHat, Bandana,
 }
 
 /// <summary>The pixel face printed on a <see cref="GarmentShape.Mask"/>.</summary>
@@ -76,6 +78,8 @@ public enum GarmentStyle
     Basic, Gothic, Kawaii, Special, Workwear,
     /// <summary>#880: from another world (antennae, a silver suit): uncommon in a wardrobe, worn by the films' aliens (<see cref="Aliens"/>).</summary>
     Alien,
+    /// <summary>#1227: the Alpine set, from the Adventure's chests only, never a wardrobe's or a workbench's.</summary>
+    Alpine,
 }
 
 /// <summary>
@@ -275,6 +279,18 @@ public static class Garments
         new(ItemId.LongAntennae, "Tall antennae", WearSlot.Head, 15, GarmentShape.LongAntennae, GarmentStyle.Alien, new("b48cf0"), new("5a3a8a"), new("5af0ff")),
         // the suit, its collar, belt and cuffs, the badge on the chest (neon)
         new(ItemId.SilverSuit, "Silver space suit", WearSlot.Top, 26, GarmentShape.SpaceSuit, GarmentStyle.Alien, new("a9bcd6"), new("34426a"), new("5af0ff")),
+
+        // ---- #1227: the Alpine set, the Adventure chests' cosmetics (Adventure/Rewards/ChestLoot.Cosmetics) ----
+        // the herdsman's little black cap and its red band; a blue-and-white checked edelweiss shirt
+        new(ItemId.Sennenkaeppi, "Sennenkäppi", WearSlot.Head, 16, GarmentShape.Beanie, GarmentStyle.Alpine, new("1c1a1a"), new("b8202a"), new("f2efe6")),
+        new(ItemId.EdelweissShirt, "Edelweiss shirt", WearSlot.Top, 27, GarmentShape.Polo, GarmentStyle.Alpine, new("2f5f9e"), new("f4f2ea"), new("2f5f9e"), Finish.Checker),
+        // the mountain guide's green felt hat (crown, brim, band, the edelweiss pin) and his corduroy breeches
+        new(ItemId.GuideHat, "Mountain guide's hat", WearSlot.Head, 17, GarmentShape.FeltHat, GarmentStyle.Alpine, new("3e5a34"), new("2a2018"), new("f4f2ea")),
+        new(ItemId.GuideBreeches, "Bergführer breeches", WearSlot.Bottom, 12, GarmentShape.Pants, GarmentStyle.Alpine, new("6a4a2e"), new("4a3420"), new("6a4a2e")),
+        // a red bandana with its white cross; red and white knee socks and wool gloves
+        new(ItemId.CrossBandana, "Swiss-cross bandana", WearSlot.Neck, 5, GarmentShape.Bandana, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("a01820")),
+        new(ItemId.AlpineSocks, "Alpine knee socks", WearSlot.Legs, 8, GarmentShape.KneeSock, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("c8202a")),
+        new(ItemId.AlpineGloves, "Alpine wool gloves", WearSlot.Hands, 6, GarmentShape.Gloves, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("c8202a")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

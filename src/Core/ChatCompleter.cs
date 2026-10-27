@@ -75,6 +75,7 @@ public sealed class ChatCompleter
         ("stamina", false, true, "[infinite | on | full]", "World", "your stamina meter (infinite: admin online)"),
         ("inertia", false, false, "[steady | sway | full]", "World", "how standing passengers sway"),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel", "Activities", "races"),
+        ("trial", false, false, "leave", "Activities", "an adventure trial"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status", "Activities", "Battle Royale"),
         ("fight", false, false, "<player> | accept | decline | leave", "Activities", "a fist fight"),
         ("aura", false, false, "<player> | accept | decline | leave", "Activities", "an aura battle"),

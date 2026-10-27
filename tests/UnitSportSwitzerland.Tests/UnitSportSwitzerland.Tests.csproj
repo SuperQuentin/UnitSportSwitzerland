@@ -181,6 +181,16 @@
     <Compile Include="..\..\src\Adventure\Places\FogMask.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\AtlasProgress.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\AtlasFacts.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- adventure rewards (#1227): placement, chests, seals, edelweiss, guides, trials, photos -->
+    <Compile Include="..\..\src\Adventure\Rewards\RewardRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\RewardPlacer.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\ChestLoot.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Seals.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Edelweiss.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\GuideAnimal.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Trials.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\PhotoSpots.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Rewards\Gadgets.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
