@@ -20,7 +20,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored arcades are planned again.</summary>
-    public const int ArcadeRules = 2;
+    public const int ArcadeRules = 3;
 
     private const float ArcadeMinSide = 6f, ArcadeMaxSide = 32f, ArcadeService = 2.6f, ArcadeAisle = 1.8f;
     /// <summary>Machines in one arcade at most: an upright is ~400 vertices, a racer ~600.</summary>

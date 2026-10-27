@@ -27,7 +27,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored cinemas are planned again.</summary>
-    public const int CinemaRules = 2;
+    public const int CinemaRules = 3;
 
     private const float BoothDepth = 2.6f, LobbyMin = 4.6f, LobbyMax = 12f, AudMinLength = 8.5f, AudMaxLength = 32f;
     private const float AudMinWidth = 7f, AudTargetWidth = 13f, AudMaxWidth = 18f, StaffWidth = 1.6f;

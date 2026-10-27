@@ -50,6 +50,21 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     public int Venue { get; init; }
 
     /// <summary>
+    /// The top of the door's building, m, as <see cref="Position"/>'s Y (#1250): a hall venue's big sign
+    /// stands under it. Set on main doors carrying a <see cref="Venue"/>; 0 elsewhere.
+    /// </summary>
+    public float Top { get; init; }
+
+    /// <summary>Whether the venue on this door is a hall that takes its whole building (<see cref="Venues.WholeBuilding"/>): a blind box with a glazed entrance.</summary>
+    public bool WholeHall { get; init; }
+
+    /// <summary>
+    /// The straight run of wall the door stands in the middle of, m (0 when it stands on a curved
+    /// wall's piece): how wide a hall's glazed entrance can be (#1250). Not part of its key.
+    /// </summary>
+    public float Run { get; init; }
+
+    /// <summary>
     /// Storeys above its building's ground floor the door opens onto (#827): a site office's upper
     /// container, off its walkway. 0, the ground floor, on every other door. Not part of its key.
     /// </summary>
@@ -277,6 +292,8 @@ public static class BuildingFootprint
             doors.Add((fp?.Door ?? new DoorSpot(i, Vector3.Zero, Vector3.Forward, 0f, 0f)) with
             {
                 Kind = kind, Bank = fp != null && IsBank(fp), Shop = shop, Venue = types.VenueOf(i) + 1,
+                Top = types.VenueOf(i) >= 0 ? tile.Buildings[i].MaxY : 0f,
+                WholeHall = Venues.Planned(Venues.HallOf(types, i)) && Venues.WholeBuilding(tile.Buildings[i]),
             });
             if (fp == null) continue;
             foreach (var extra in fp.Extra) doors.Add(extra with { Kind = kind });
@@ -462,7 +479,7 @@ public static class BuildingFootprint
             ranked.Add(new Cand(score, f.Normal, f.Offset, s0, s1,
                 new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)
                 {
-                    Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind),
+                    Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind), Run = length,
                 }));
         }
 
