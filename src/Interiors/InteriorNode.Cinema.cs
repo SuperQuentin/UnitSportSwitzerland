@@ -31,6 +31,8 @@ public partial class InteriorNode
     private readonly List<CinemaScreen> _screens = new();
     /// <summary>The halls whose screens are on, a bit each.</summary>
     private int _screensOn;
+    /// <summary>Each showing hall's music (#1279), by its number: made when its screen comes on, freed when it goes off.</summary>
+    private readonly Dictionary<int, Audio.Live.VenueMusicSource> _hallMusic = new();
     private bool _realShow;
     private int _projecting = -1;
     private const string GHouse = "house_lights";
@@ -277,10 +279,38 @@ public partial class InteriorNode
             s.Picture.Visible = on && !thrown;
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;
+            HallMusic(s, on);
             if (s.Beam == null) continue;
             s.Beam.Visible = on;
             s.Beam.MaterialOverride = _realShow ? s.Marched : PlainBeam();
         }
+    }
+
+    /// <summary>
+    /// A hall's film music while its screen is on (#1279): Radio Swiss Classic on the relay, the film playlist when
+    /// the relay is silent (<see cref="Audio.Tracker.VenueMood.Film"/>), each hall its own bar of it, the same on
+    /// every client (the playlist runs on the shared clock). Under the hall's ceiling, in its middle.
+    /// </summary>
+    private void HallMusic(CinemaScreen s, bool on)
+    {
+        if (s.No < 0 || _hallMusic.ContainsKey(s.No) == on) return;
+        if (!on)
+        {
+            if (_hallMusic.Remove(s.No, out var gone) && IsInstanceValid(gone)) gone.QueueFree();
+            return;
+        }
+        var c = s.Hall.GetCenter();
+        var music = new Audio.Live.VenueMusicSource
+        {
+            Name = $"FilmMusic{s.No}",
+            Station = VenueMusic.FilmStation,
+            Volume = VenueMusic.RoomVolume,
+            Mood = Audio.Tracker.VenueMood.Film,
+            Salt = (uint)Core.Fnv.Hash(Layout.Key) + (uint)s.No * 7919u,
+            Position = new Vector3(c.X, s.Hall.Position.Y + Math.Max(2.3f, s.Hall.Size.Y - 1.0f), c.Z),
+        };
+        AddChild(music);
+        _hallMusic[s.No] = music;
     }
 
     /// <summary>A light pyramid from a point to a rectangle: four faces, bright at the lens, faint at the screen.</summary>

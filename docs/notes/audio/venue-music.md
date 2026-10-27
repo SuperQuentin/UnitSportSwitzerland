@@ -54,5 +54,10 @@ ffmpeg or internet), they play tracker modules on our own player, also the same 
   The owner listened to the arcade, Beiz, club and café renders (Oct 27 2026): they sound right.
   Offline at the Flon without ffmpeg the log shows `Bowling plays drozerix_-_poppy_flower_girls.xm from
   12 s` 5 s after the radio stayed silent.
+- **Film music** (#1279): a cinema hall plays while its screen is on (`InteriorNode.HallMusic`, a source per
+  showing hall, made and freed with its screen): Radio Swiss Classic (`VenueMusic.FilmStation`), the `Film`
+  playlist when the relay is silent. Of the archive's 239 public-domain/CC0 XM and MOD modules only "Crusaders"
+  is tagged orchestral; the others by mood: Thrones (a 32-channel MOD, quiet: rms 0.015), Haunted Occult
+  Mansion, Journey through time, Vocatio Spirituum.
 - **Next**: venue ambience (chatter, cutlery, balls and pins, coin drops) in the sound player, quiet hours
   for terraces, IT modules (most of the archive's free ones) if a playlist wants them.

@@ -16,6 +16,9 @@ public static class VenueMusic
     /// <summary>A room's speaker, and the one behind the door that the street hears.</summary>
     public const float RoomVolume = 0.5f, DoorVolume = 0.12f;
 
+    /// <summary>What a cinema hall plays while its screen is on (#1279): Radio Swiss Classic, the nearest the relay has to film music.</summary>
+    public const int FilmStation = 10;
+
     /// <summary>
     /// Which part of the country a tile lies in, for the stations that speak its language: Romandie
     /// west of about E 2'570'000, Ticino and the Italian valleys south of N 1'170'000 east of E 2'680'000.
