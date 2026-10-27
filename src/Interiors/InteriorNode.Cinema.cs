@@ -578,9 +578,8 @@ public partial class InteriorNode
         Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
-        // seen from the hall, the side the light comes out of: the screen's picture mirrored
-        Uv1Scale = new Vector3(-1, 1, 1),
-        Uv1Offset = new Vector3(1, 0, 0),
+        // no flip of its own: it faces the screen's way, so from the seats (looking back at the port) it is seen from
+        // behind, the screen's picture mirrored, as light going through glass toward you is
     };
 
     /// <summary>The lens's bloom (#1279): a soft round glow facing the camera, added on, in the picture's mean colour.</summary>
