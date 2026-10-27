@@ -109,6 +109,7 @@
     ".acct-dlg .go[disabled]{opacity:.6;cursor:wait}",
     ".acct-dlg .err{color:var(--rose,#e0567a);font-size:13px;min-height:1em}",
     ".acct-dlg .close{align-self:flex-end;background:none;border:none;color:var(--dim,#8d7e80);font-size:13px;cursor:pointer}",
+    ".acct-dlg .linkish{align-self:flex-start;background:none;border:none;padding:0;color:var(--glow2,#ffb36b);font-size:13px;cursor:pointer;text-decoration:underline}",
     ".acct-dlg .hint{font-size:12px;color:var(--dim,#8d7e80)}",
   ].join("");
 
@@ -123,6 +124,7 @@
       '<label>Password<input id="acct-password" name="password" type="password" autocomplete="current-password" minlength="8" required></label>' +
       '<label class="newonly">Name in the game<input id="acct-name" name="name" type="text" maxlength="20" autocomplete="nickname" placeholder="Heidi_92"></label>' +
       '<div class="hint newonly">8 characters or more. The same account works in the game (Settings, Account).</div>' +
+      '<button class="forgot linkish" type="button">Forgot your password?</button>' +
       '<div class="err" role="alert"></div>' +
       '<button class="go" type="submit">Sign in</button>' +
       '<button class="close" type="button">Close</button></form>';
@@ -132,15 +134,32 @@
       mode = m;
       d.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.mode === m ? "true" : "false"); });
       d.querySelectorAll(".newonly").forEach(function (el) { el.hidden = m !== "new"; });
+      // "forgot" (#1257): only the email, and a mailed link that opens reset.html
+      d.querySelector("#acct-password").parentNode.hidden = m === "forgot";
+      d.querySelector(".forgot").hidden = m !== "in";
+      d.querySelectorAll(".tabs button").forEach(function (b) { b.hidden = m === "forgot"; });
       d.querySelector("#acct-password").autocomplete = m === "new" ? "new-password" : "current-password";
-      go.textContent = m === "new" ? "Create account" : "Sign in";
-      err.textContent = "";
+      go.textContent = m === "new" ? "Create account" : m === "forgot" ? "Email me a link" : "Sign in";
+      err.textContent = ""; err.style.color = "";
     }
     d.querySelectorAll(".tabs button").forEach(function (b) { b.addEventListener("click", function () { setMode(b.dataset.mode); }); });
     d.querySelector(".close").addEventListener("click", function () { d.close(); });
+    d.querySelector(".forgot").addEventListener("click", function () { setMode("forgot"); });
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var email = form.email.value.trim(), pw = form.password.value, name = form.name.value.trim();
+      if (mode === "forgot") {
+        if (!email) { err.textContent = "Type the email of your account."; return; }
+        go.disabled = true; err.textContent = "";
+        fetch("/api/password/forgot", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "houses" }, body: JSON.stringify({ email: email }) })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            if (!x.ok) { err.textContent = x.j.error || "Could not send the email."; return; }
+            err.style.color = "var(--ok,#4fe08a)"; err.textContent = "If an account has this email, a link to choose a new password is on its way (30 minutes).";
+          }, function () { err.textContent = "The server does not answer."; })
+          .then(function () { go.disabled = false; });
+        return;
+      }
       if (!email || pw.length < 8) { err.textContent = "An email and a password of 8 characters or more."; return; }
       if (mode === "new" && name && !/^[A-Za-z0-9_-]{2,20}$/.test(name)) { err.textContent = "The name: 2 to 20 letters, digits, - and _."; return; }
       go.disabled = true; err.textContent = "";

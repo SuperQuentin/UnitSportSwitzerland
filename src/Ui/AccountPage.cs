@@ -119,6 +119,26 @@ public static class AccountPage
         go.Pressed += Go;
         password.TextSubmitted += _ => Go();
 
+        // a forgotten password (#1257): a mailed link that opens a page of the site; only where the server has one
+        if (!creating && AccountRules.SiteOf(Account.Url).Length > 0)
+        {
+            var forgot = UiKit.Button("Forgot your password?");
+            forgot.Flat = true;
+            forgot.Alignment = HorizontalAlignment.Left;
+            UiKit.DimFont(forgot);
+            into.AddChild(forgot);
+            forgot.Pressed += async () =>
+            {
+                forgot.Disabled = true;
+                note.Text = "Sending the email...";
+                note.Visible = true;
+                string? why = await Account.ForgotPassword(email.Text);
+                if (!GodotObject.IsInstanceValid(note)) return;
+                forgot.Disabled = false;
+                note.Text = why ?? "If an account has this email, a link to choose a new password is on its way (30 minutes).";
+            };
+        }
+
         Advanced(into);
     }
 
