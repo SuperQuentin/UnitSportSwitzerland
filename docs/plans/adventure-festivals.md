@@ -44,7 +44,7 @@ day by day, a shared score for a party, festival tokens and a closing show.
 
 | Part | PR | What it does | Status |
 |---|---|---|---|
-| 1 Festival framework | 1 | `FestivalDef`, sites, day unlocks, the `festivals` section, Batzen tokens and their conversion, the party board, decorations, the Journal tab, two new schedule tokens | built, protocol 58 |
+| 1 Festival framework | 1 | `FestivalDef`, sites, day unlocks, the `festivals` section, Batzen tokens and their conversion, the party board, decorations, the Journal tab, two new schedule tokens | built, protocol 59 |
 | 2 Fireworks and the closing show | 2 | `FireworkShow` (pure, seeded) and `Fireworks` (GPU particles, sound with distance delay); a festival's show is fireworks, a concert or both | planned |
 | 3 Steinstossen | 3 | The 83.5 kg Unspunnen stone: lift, run-up, push; server-computed distance; bots throw | planned |
 | 4 Alphorn and yodel | 4 | Natural-tone rhythm on the beat, harmony scored across players, an echo off the real valley wall | planned |
