@@ -79,6 +79,8 @@ public partial class PhoneVrProbe : Node
         Check(off is >= 0f and < 0.08f, $"it is in the hand, before the eyes ({off:F2} m off)");
         Shot("phonevr_1_folded.png");
 
+        phone.SelectQuick("Camera");
+        await Wait(0.2);
         await Tap(phone.Screens.CoverCardUv(), cover: true);
         await Wait(1.4);
         Check(me.PhoneState == FootPlayer.PhoneCameraState, $"a tap on the cover runs its quick action, the camera app (state {me.PhoneState})");

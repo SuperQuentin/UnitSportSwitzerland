@@ -123,7 +123,10 @@ public partial class PhoneProbe : Node
         phone.Open(PhoneScreens.Page.Training);
         await Wait(0.4);
         await Key(Godot.Key.Escape, 0.4);
-        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc from Training goes up one level, it does not fold the phone (#1253)");
+        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Activities, "Esc from Training goes up to Activities, it does not fold the phone (#1253)");
+        await Key(Godot.Key.Escape, 0.4);
+        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "and once more to the home screen (#1253)");
+        Check(phone.Screens.HomeTileCount == 6, $"the home screen has six apps ({phone.Screens.HomeTileCount}); Menu and Training live in Activities (#1253)");
         phone.Open(PhoneScreens.Page.Contacts);
         await Wait(0.4);
         await Hold(Godot.Key.Escape, PhoneController.StowHoldSeconds + 0.6);
