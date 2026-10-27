@@ -14,8 +14,8 @@ public static class OccasionWeekdays
 {
     private static readonly string[] Days = { "sun", "mon", "tue", "wed", "thu", "fri", "sat" };
 
-    /// <summary>Whether <paramref name="from"/> is a weekday token (<c>fri#1</c>), so the window is this form.</summary>
-    public static bool IsToken(string from) => TryParse(from, out _, out _);
+    /// <summary>Whether <paramref name="from"/> is a weekday token (<c>fri#1</c>, <c>04-mon#3</c>) or an Easter one (<c>easter-46</c>), so the window is this form.</summary>
+    public static bool IsToken(string from) => TryParseToken(from, out _);
 
     /// <summary>
     /// Whether <paramref name="date"/> falls in the window <paramref name="from"/> .. <paramref name="to"/>.
@@ -24,14 +24,28 @@ public static class OccasionWeekdays
     public static bool Contains(string from, string to, DateOnly date, out int startYear)
     {
         startYear = date.Year;
-        if (!TryParse(from, out var day, out int nth)) return false;
+        if (!TryParseToken(from, out var token)) return false;
         int extra = Extra(from, to);
         if (extra < 0) return false;
-        // the window opened this month, or (with a +N tail) late last month
+        if (token.Month == 0 && !token.Easter)
+        {
+            // the window opened this month, or (with a +N tail) late last month
+            for (int back = 0; back <= 1; back++)
+            {
+                var month = new DateOnly(date.Year, date.Month, 1).AddMonths(-back);
+                if (Nth(month.Year, month.Month, token.Day, token.Nth) is not { } opened) continue;
+                if (date >= opened && date <= opened.AddDays(extra))
+                {
+                    startYear = opened.Year;
+                    return true;
+                }
+            }
+            return false;
+        }
+        // once a year: it opened this year, or (with a tail over new year) last year
         for (int back = 0; back <= 1; back++)
         {
-            var month = new DateOnly(date.Year, date.Month, 1).AddMonths(-back);
-            if (Nth(month.Year, month.Month, day, nth) is not { } opened) continue;
+            if (Opening(token, date.Year - back) is not { } opened) continue;
             if (date >= opened && date <= opened.AddDays(extra))
             {
                 startYear = opened.Year;
@@ -39,6 +53,36 @@ public static class OccasionWeekdays
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// The day a once-a-year token (<c>04-mon#3</c>, <c>easter-46</c>) opens in <paramref name="year"/>, or null for
+    /// a monthly token (<c>fri#1</c> opens twelve times) or one that has no such day that year (a fifth Monday).
+    /// </summary>
+    public static DateOnly? Opening(string from, int year) =>
+        TryParseToken(from, out var token) ? Opening(token, year) : null;
+
+    private static DateOnly? Opening(Token token, int year)
+    {
+        if (token.Easter) return Easter(year).AddDays(token.Offset);
+        return token.Month == 0 ? null : Nth(year, token.Month, token.Day, token.Nth);
+    }
+
+    /// <summary>
+    /// Easter Sunday (the Gregorian calendar, the "Anonymous Gregorian" algorithm: Meeus/Jones/Butcher), valid for
+    /// any Gregorian year.
+    /// </summary>
+    public static DateOnly Easter(int year)
+    {
+        int a = year % 19, b = year / 100, c = year % 100;
+        int d = b / 4, e = b % 4, f = (b + 8) / 25, g = (b - f + 1) / 3;
+        int h = (19 * a + b - d - g + 15) % 30;
+        int i = c / 4, k = c % 4;
+        int l = (32 + 2 * e + 2 * i - h - k) % 7;
+        int m = (a + 11 * h + 22 * l) / 451;
+        int month = (h + l - 7 * m + 114) / 31;
+        int day = (h + l - 7 * m + 114) % 31 + 1;
+        return new DateOnly(year, month, day);
     }
 
     /// <summary>The <paramref name="nth"/> <paramref name="day"/> of a month (negative counts from its end), or null.</summary>
@@ -60,24 +104,52 @@ public static class OccasionWeekdays
     }
 
     /// <summary>The days after the opening one: 0 for the same token or an empty To, N for <c>+N</c>, -1 if unreadable.</summary>
+    public static int ExtraDays(string from, string to) => Extra(from, to);
+
     private static int Extra(string from, string to)
     {
         to = to.Trim();
         if (to.Length == 0 || string.Equals(to, from.Trim(), StringComparison.OrdinalIgnoreCase)) return 0;
-        if (to[0] == '+' && int.TryParse(to.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n <= 6)
+        if (to[0] == '+' && int.TryParse(to.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n <= MaxTail)
             return n;
         return -1;
     }
 
-    private static bool TryParse(string s, out DayOfWeek day, out int nth)
+    /// <summary>A tail longer than this is a typo: the longest festival runs eleven days.</summary>
+    private const int MaxTail = 13;
+
+    /// <summary>A parsed token: <c>Month</c> 0 = every month; <c>Easter</c> with its <c>Offset</c> in days.</summary>
+    private readonly record struct Token(int Month, DayOfWeek Day, int Nth, bool Easter, int Offset);
+
+    private static bool TryParseToken(string s, out Token token)
     {
-        day = DayOfWeek.Sunday;
-        nth = 0;
-        var parts = s.Trim().ToLowerInvariant().Split('#');
-        if (parts.Length != 2) return false;
-        int i = Array.IndexOf(Days, parts[0]);
-        if (i < 0 || !int.TryParse(parts[1], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out nth)) return false;
-        day = (DayOfWeek)i;
-        return nth != 0 && nth is >= -5 and <= 5;
+        token = default;
+        s = s.Trim().ToLowerInvariant();
+        if (s.StartsWith("easter", StringComparison.Ordinal))
+        {
+            string rest = s[6..];
+            int offset = 0;
+            if (rest.Length > 0 && !(rest[0] is '+' or '-' && int.TryParse(rest, NumberStyles.AllowLeadingSign,
+                    CultureInfo.InvariantCulture, out offset))) return false;
+            if (offset is < -100 or > 100) return false;
+            token = new Token(0, DayOfWeek.Sunday, 0, true, offset);
+            return true;
+        }
+        var parts = s.Split('#');
+        if (parts.Length != 2 || !int.TryParse(parts[1], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int nth)
+            || nth == 0 || nth is < -5 or > 5) return false;
+        int month = 0;
+        string name = parts[0];
+        int dash = name.IndexOf('-');
+        if (dash >= 0)
+        {
+            if (!int.TryParse(name.AsSpan(0, dash), NumberStyles.None, CultureInfo.InvariantCulture, out month) || month is < 1 or > 12)
+                return false;
+            name = name[(dash + 1)..];
+        }
+        int i = Array.IndexOf(Days, name);
+        if (i < 0) return false;
+        token = new Token(month, (DayOfWeek)i, nth, false, 0);
+        return true;
     }
 }

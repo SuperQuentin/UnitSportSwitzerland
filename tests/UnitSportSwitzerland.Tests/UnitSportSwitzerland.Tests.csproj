@@ -238,6 +238,14 @@
     <!-- UFO sightings and the herds they beam up (#863): schedule, herds, cows, paths; pure -->
     <Compile Include="..\..\src\Occasions\OccasionWeekdays.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\UfoSighting.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the festival framework (#1269): definition, calendar, sites, Batzen book and party board; pure -->
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalDef.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCalendar.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalSites.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalBook.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalBoard.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalEvents.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
