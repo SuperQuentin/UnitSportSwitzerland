@@ -169,8 +169,4 @@ public partial class CinemaBooths
 
     private static readonly bool LocalFiles = Core.CmdArgs.Has("--cinemavideolocal");
 
-    public override void _Notification(int what)
-    {
-        if (what == NotificationPredelete) _stream?.Dispose();
-    }
 }

@@ -434,12 +434,12 @@ public partial class InteriorNode
             s.Picture.Visible = on && !thrown;
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;
-            HallMusic(s, on);
+            HallMusic(s, on && (_videoMuted >> Math.Max(0, s.No) & 1) == 0);
             if (s.Port != null) s.Port.Visible = on;
             if (s.Glow != null) s.Glow.Visible = on;
             if (s.Beam == null) continue;
             s.Beam.Visible = on;
-            s.Beam.MaterialOverride = _realShow ? s.Marched : PlainBeam();
+            s.Beam.MaterialOverride = _realShow ? s.Marched : s.No == _videoHall && _videoPlain != null ? _videoPlain : PlainBeam();
         }
     }
 
@@ -702,17 +702,19 @@ public partial class InteriorNode
         CatMaterial().AlbedoTexture = Slide(i);
         // the beams carry the picture itself, blurred: what each part of the haze lights (projector_beam)
         foreach (var w in Beams)
-            if (w.TryGetTarget(out var m)) m.SetShaderParameter(GPicture, Slide(i));
+            if (w.TryGetTarget(out var m) && !VideoOwned.Contains(m)) m.SetShaderParameter(GPicture, Slide(i));
         if (_plainBeam != null) _plainBeam.AlbedoColor = Full(SlideTint(i));
         if (_portMaterial != null) _portMaterial.AlbedoTexture = Slide(i);
         if (_lensGlow != null) _lensGlow.AlbedoColor = Full(SlideTint(i)) * 1.6f;
         foreach (var w in Projectors)
-            if (w.TryGetTarget(out var s) && IsInstanceValid(s)) s.LightProjector = Letterboxed(i);
+            if (w.TryGetTarget(out var s) && IsInstanceValid(s) && !VideoOwned.Contains(s)) s.LightProjector = Letterboxed(i);
     }
 
     /// <summary>This hall's wash of the screen's colour: the current slide's while the screen is on, none off.</summary>
     public void ShowGlow(bool screen)
     {
+        // a video's hall takes its wash from its frames (ShowVideo)
+        if (_videoHall >= 0) return;
         var t = SlideTint(_slide);
         _lit?.SetShaderParameter(GGlow, screen ? new Vector3(t.R, t.G, t.B) * GlowGain : Vector3.Zero);
     }

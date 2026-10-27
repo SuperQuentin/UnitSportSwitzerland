@@ -226,8 +226,8 @@ public partial class CinemaPanelUi : CanvasLayer
     {
         try
         {
-            if (!FileAccess.FileExists(RecentFile)) return new();
-            using var f = FileAccess.Open(RecentFile, FileAccess.ModeFlags.Read);
+            if (!Godot.FileAccess.FileExists(RecentFile)) return new();
+            using var f = Godot.FileAccess.Open(RecentFile, Godot.FileAccess.ModeFlags.Read);
             return f.GetAsText().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Where(CinemaVideo.Allowed).Take(MaxRecent).ToList();
         }
@@ -241,7 +241,7 @@ public partial class CinemaPanelUi : CanvasLayer
         all.Insert(0, link);
         try
         {
-            using var f = FileAccess.Open(RecentFile, FileAccess.ModeFlags.Write);
+            using var f = Godot.FileAccess.Open(RecentFile, Godot.FileAccess.ModeFlags.Write);
             f?.StoreString(string.Join('\n', all.Take(MaxRecent)));
         }
         catch (Exception) { /* a read-only profile: no history */ }

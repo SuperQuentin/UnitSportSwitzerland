@@ -88,7 +88,8 @@ public partial class Handshake : Node
     /// 57: World/Versteckis (#1268: RequestDisguise/Tag/Sniff/Decoy/Sprint/Moo/Objective; SetGames, Enter, Kit, PutAt, Release, Caught,
     /// Missed, Sniffed, Sounded), the <c>versteckis</c> invite kind, <c>InterestService.Withheld</c>, ItemId 460-467, ItemUse.Round.
     /// 58: World/CinemaBooths AskSet and Set carry the hall (#1279: a panel per hall; 57 is main's).
-    public const int Protocol = 58;
+    /// 59: World/CinemaBooths AskVideoRpc and SetVideo (#1298: a hall's video link and its start on the shared clock).
+    public const int Protocol = 59;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
