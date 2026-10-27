@@ -318,6 +318,9 @@ public partial class ModelViewer : Node3D
                 // two frames: one for _Ready-built meshes, one to render them
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                // a wall mirror renders every other frame once picked, its picture the frame after (#1285)
+                if (GetTree().GetNodeCountInGroup(Interiors.WallMirror.Group) > 0)
+                    for (int k = 0; k < 4; k++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 var entry = _categories[c].Entries[i];
                 string file = $"{_shots}/{c:00}-{i:000}-{Slug(entry.Category)}-{Slug(entry.Name)}.png";
