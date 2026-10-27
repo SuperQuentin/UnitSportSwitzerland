@@ -159,6 +159,13 @@ src/Interiors/BuildingTypes quick  --venuecheck --systems ui
 src/Interiors/BuildingFootprint quick --venuecheck --systems ui
 src/Interiors/venues.tsv.gz quick  --venuecheck --systems ui
 tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
+# #1235: bowling centres planned in hand-made buildings
+src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
+src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
+src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
+src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
+shaders/body/interior      quick  --bowlingcheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
