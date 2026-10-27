@@ -183,7 +183,8 @@ public static class HallFront
             }
             s.Box(new Vector3(side * (dw + half) / 2, doorTop + m / 2, mz + Sink), new Vector3(half - dw, m, md), Alu);
         }
-        s.Box(new Vector3(0, doorTop + m / 2, mz + Sink), new Vector3(2 * dw + m, m, md), Alu);
+        // the bar over the door a hand proud of the side bars it meets, so their faces never share a plane
+        s.Box(new Vector3(0, doorTop + m / 2, mz + 2 * Sink), new Vector3(2 * dw + m, m + 2 * Sink, md), Alu);
 
         if (shape.Canopy)
         {

@@ -278,7 +278,7 @@ public static partial class InteriorMeshBuilder
                 {
                     float cx = -w + 0.06f + i * (p.W - 0.12f) / Math.Max(1, cues - 1), cz = -d + 0.03f + (d * 2 - 0.03f) * 0.5f;
                     B(cx - 0.015f, 0.26f - 0.012f, cz - 0.015f, cx + 0.015f, 0.8f, cz + 0.015f, Hash(p, 60 + i) < 0.5f ? C(0.20f, 0.10f, 0.06f) : C(0.08f, 0.08f, 0.08f));
-                    B(cx - 0.01f, 0.8f - 0.012f, cz - 0.01f, cx + 0.01f, 1.62f, cz + 0.01f, C(0.86f, 0.74f, 0.52f));
+                    B(cx - 0.006f, 0.8f - 0.012f, cz - 0.006f, cx + 0.006f, 1.62f, cz + 0.006f, C(0.86f, 0.74f, 0.52f));
                 }
                 break;
             }

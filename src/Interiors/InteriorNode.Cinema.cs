@@ -78,6 +78,15 @@ public partial class InteriorNode
             v.Add(corners[i]); col.Add(screen);
             v.Add(corners[(i + 1) % 4]); col.Add(screen);
         }
+        // the cone closed at the screen, 3 cm short of the picture (#1250): looking at the screen from inside
+        // the beam, its haze is drawn from there back to the eye, over the picture
+        var near = corners.Select(c => c + (from - c).Normalized() * 0.03f).ToArray();
+        foreach (var (a, b, c) in new[] { (0, 1, 2), (0, 2, 3) })
+        {
+            v.Add(near[a]); col.Add(screen);
+            v.Add(near[b]); col.Add(screen);
+            v.Add(near[c]); col.Add(screen);
+        }
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = v.ToArray();

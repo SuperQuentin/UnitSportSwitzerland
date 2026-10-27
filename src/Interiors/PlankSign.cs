@@ -97,16 +97,18 @@ public static class PlankSign
         // the board, standing off the wall on its brackets' plates
         s.Box(new Vector3(0, 0, Depth / 2), new Vector3(w, BoardH, Depth), board);
         // the moulded frame round its face, 2.4 cm proud of it and a little past its edges
-        float fz = Depth + 0.024f - (Depth + 0.024f) / 2;
-        s.Box(new Vector3(0, BoardH / 2 - FrameW / 2 + 0.01f, fz), new Vector3(w + 0.02f, FrameW, Depth + 0.024f), Frame);
-        s.Box(new Vector3(0, -BoardH / 2 + FrameW / 2 - 0.01f, fz), new Vector3(w + 0.02f, FrameW, Depth + 0.024f), Frame);
+        // its back a hand off the board's, so the two never share the plane against the wall
+        const float fd = Depth + 0.024f - 0.012f;
+        float fz = Depth + 0.024f - fd / 2;
+        s.Box(new Vector3(0, BoardH / 2 - FrameW / 2 + 0.01f, fz), new Vector3(w + 0.02f + 2 * Sink, FrameW, fd), Frame);
+        s.Box(new Vector3(0, -BoardH / 2 + FrameW / 2 - 0.01f, fz), new Vector3(w + 0.02f + 2 * Sink, FrameW, fd), Frame);
         foreach (int side in new[] { -1, 1 })
         {
-            s.Box(new Vector3(side * (w / 2 - FrameW / 2 + 0.01f), 0, fz), new Vector3(FrameW, BoardH - 2 * FrameW + 0.02f + 2 * Sink, Depth + 0.024f), Frame);
+            s.Box(new Vector3(side * (w / 2 - FrameW / 2 + 0.01f), 0, fz), new Vector3(FrameW, BoardH - 2 * FrameW + 0.02f + 2 * Sink, fd - 2 * Sink), Frame);
             // a bracket's wall plate and arm over the board's top, then the lamp it carries out front
             float x = side * w * 0.3f;
-            s.Box(new Vector3(x, BoardH / 2 + 0.16f, 0.01f), new Vector3(0.06f, 0.14f, 0.02f), Iron);
-            s.Box(new Vector3(x, BoardH / 2 + 0.2f, 0.17f), new Vector3(0.025f, 0.025f, 0.32f), Iron);
+            s.Box(new Vector3(x, BoardH / 2 + 0.12f, 0.01f), new Vector3(0.06f, 0.12f, 0.02f), Iron);
+            s.Box(new Vector3(x, BoardH / 2 + 0.22f, 0.165f), new Vector3(0.025f, 0.025f, 0.33f), Iron);
             s.Box(new Vector3(x, BoardH / 2 + 0.17f, 0.33f), new Vector3(0.12f, 0.05f, 0.09f), Iron);
             s.Box(new Vector3(x, BoardH / 2 + 0.14f - Sink, 0.33f), new Vector3(0.08f, 0.02f, 0.06f), Bulb);
         }
