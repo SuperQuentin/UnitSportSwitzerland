@@ -51,7 +51,7 @@ lane frame and rules (`bowling-centres`).
   Geneva/Vaud tiles now has its booth upstairs; the deck is for low halls (under 7 m) only.
 - **A panel per hall** (#1279): each hall's `BoothPanel` stands on the booth's hall-side wall beside that
   hall's viewing windows; `CinemaBooths` keeps lights and screen per hall (`HallAt`: the auditorium whose middle
-  is nearest, numbered as the ground floor lists them; protocol 57 carries the hall). Each screen and beam
+  is nearest, numbered as the ground floor lists them; protocol 58 carries the hall). Each screen and beam
   shows its own hall's switch; `house_lights` and the screen's wash are one value for the whole interior, so
   they show the hall the camera is in or nearest (`InteriorNode.HallNear`).
 - **A way to the panels** (#1279): the walk grid (`InteriorGenerator.Walkable`) also covers a strip room up to

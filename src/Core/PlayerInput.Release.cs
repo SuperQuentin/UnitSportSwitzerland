@@ -57,8 +57,8 @@ public partial class PlayerInput
     [DllImport("user32.dll")] private static extern uint MapVirtualKeyW(uint code, uint mapType);
     private const uint MapScanToVk = 1;   // MAPVK_VSC_TO_VK
 
-    /// <summary>Physical keys Godot believes down, from the events it gave us.</summary>
-    private static readonly HashSet<Key> DownKeys = new();
+    /// <summary>Physical keys Godot believes down, with the key-down event that pressed them.</summary>
+    private static readonly Dictionary<Key, InputEventKey> DownKeys = new();
     /// <summary>Keys the OS said were up at the last look: released if it says so again.</summary>
     private static readonly HashSet<Key> UpOnce = new();
     private static readonly List<Key> ToRelease = new();
@@ -72,7 +72,7 @@ public partial class PlayerInput
         if (k.Echo) return;
         var key = k.PhysicalKeycode;
         if (key == Key.None) return;
-        if (k.Pressed) DownKeys.Add(key);
+        if (k.Pressed) DownKeys[key] = k;
         else
         {
             DownKeys.Remove(key);
@@ -91,7 +91,7 @@ public partial class PlayerInput
         if (!DisplayServer.WindowIsFocused() || MouseCapture.Disabled) { UpOnce.Clear(); return; }
 
         ToRelease.Clear();
-        foreach (var key in DownKeys)
+        foreach (var key in DownKeys.Keys)
         {
             int vk = VirtualKey(key);
             if (vk == 0) continue;
@@ -102,11 +102,27 @@ public partial class PlayerInput
         {
             GD.Print($"[input] {key} was let go during a hitch: released");
             // through Godot's own input, so the action and its "just released" edge follow as for a real key-up
-            Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = key, Pressed = false });
+            Input.ParseInputEvent(KeyUp(DownKeys[key]));
             DownKeys.Remove(key);
             UpOnce.Remove(key);
         }
     }
+
+    /// <summary>
+    /// The key-up for a key-down, on its device and with its keycode and label: Godot keeps an
+    /// action pressed per device (real keys come as <see cref="InputEvent.DeviceIdKeyboard"/>), and
+    /// <c>Input.IsKeyPressed</c> goes by the keycode, so a bare physical key-up on device 0 let go of
+    /// neither and the key stayed held (#1283).
+    /// </summary>
+    internal static InputEventKey KeyUp(InputEventKey down) => new()
+    {
+        Device = down.Device,
+        PhysicalKeycode = down.PhysicalKeycode,
+        Keycode = down.Keycode,
+        KeyLabel = down.KeyLabel,
+        Location = down.Location,
+        Pressed = false,
+    };
 
     /// <summary>
     /// The Windows virtual key for a physical key, 0 for one not checked. Letters and digits go by

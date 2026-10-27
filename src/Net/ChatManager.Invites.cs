@@ -98,7 +98,7 @@ public partial class ChatManager
         foreach (long peer in new[] { a, b })
         {
             string who = peer == asking ? "You are" : $"{NameOf(peer)} is";
-            if (BattleRoyale?.Playing(peer) == true) return $"{who} in a Battle Royale match.";
+            if (Core.Rounds.PlayingIn(peer) is { } mode) return $"{who} in {mode.Label}.";
             if (Race?.RaceOf(peer) is > 0) return $"{who} in a race.";
         }
         return null;

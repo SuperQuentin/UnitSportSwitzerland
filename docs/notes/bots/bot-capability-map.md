@@ -133,3 +133,12 @@ gives one progress for the session, never saved.
 | treasure detector (#1227) | — | none (client readout) | — | — | n/a |
 | bottled gust (#1227) | `BotHands` | `ItemEvents` relay (`ItemEventKind.Gust`; any peer's event is relayed) | — | — | gap: `BotHands` throws nothing yet (no smoke either); a server-side `ItemEvents` send at the bot's aim is all it needs |
 | plant / take up the travel flag (#1227) | `BotHands` | `PlacedObjects` `ServePlace` / `ServeRemove` (private: a client's `AskPlace`/`AskRemove`); planted, `ServedByPeer` sets the planter's `TravelBook.Flag` (`AdventureTravel.SetPortable`) | — | — | gap: no server-side place for a bot (a public `ServePlace(peer, ...)` is all it needs); travel to the flag is navigation's, not built |
+| Versteckis: disguise as a prop (#1268) | — | `VersteckisManager.ServeDisguise(peer, kind)` | `StateOf(game).Kinds`, `DecorOf` | `VersteckisBrain` (the kind the village has most of) | ok |
+| Versteckis: hide by a prop of its kind (#1268) | `WalkControls` (disguised walk cap through `FootPlayer.PropWalk`) | the body | `VsTactics.HiderSpot` (cover from the door by `BotRays`) | `MoveTo` | ok |
+| Versteckis: tag (#1268) | — | `ServeTag(peer, e, n, alt)` (server positions) | `VsSuspicion` from sight (decor in the cone, bodies `Looks` as their prop), hearing, puffs | `MoveTo` + tag in reach | ok |
+| Versteckis: sniff (#1268) | — | `ServeSniff(peer)` (puffs handed to the brain, never `RpcId` a bot) | `VersteckisBrain.Puff` | when nothing is suspicious | ok |
+| Versteckis: decoy (#1268) | — | `ServeDecoy(peer)` | — | once a round, then a new spot | ok |
+| Versteckis: sprint burst (#1268) | `WalkControls` (6.5 m/s through `PropWalk`) | `ServeSprint(peer)` | the seeker seen within 7 m facing it | flee | ok |
+| Versteckis: moo (#1268) | — | `ServeMoo(peer)` | the seeker far and looking away | by boldness | ok |
+| Versteckis: the bell, the Höhenfeuer, the milk can (#1268) | `WalkControls` | `ServeObjective(peer, site, step)` (body within 2.5 m, the hold on the game clock) | the seeker far from the site; one bot at a time (`ClaimObjective`) | `MoveTo` + hold | ok |
+| Versteckis: follow-cam once caught (#1268) | — | — | — | — | n/a: a bot has no camera |

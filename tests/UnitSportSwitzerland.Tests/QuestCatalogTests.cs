@@ -125,6 +125,10 @@ public class QuestCatalogTests
         Feed(new TravelUnlocked(1, "k", "station:far.0000000100", "station", "TI", 50, 5));
         Assert.Contains("grand-tour", done);
 
+        // Versteckis (#1268): the first game played anywhere starts and finishes "Versteckis im Dorf"
+        Feed(new UnitSport.Adventure.Versteckis.VersteckisPlayed(1, "k", 3, 12, false, "VS"));
+        Assert.Contains("versteckis-im-dorf", done);
+
         Assert.Equal(QuestCatalog.All.Length, p.Done.Count);
     }
 

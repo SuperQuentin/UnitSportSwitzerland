@@ -291,6 +291,11 @@ public static class Garments
         new(ItemId.CrossBandana, "Swiss-cross bandana", WearSlot.Neck, 5, GarmentShape.Bandana, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("a01820")),
         new(ItemId.AlpineSocks, "Alpine knee socks", WearSlot.Legs, 8, GarmentShape.KneeSock, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("c8202a")),
         new(ItemId.AlpineGloves, "Alpine wool gloves", WearSlot.Hands, 6, GarmentShape.Gloves, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("c8202a")),
+
+        // ---- #1268: Versteckis, earned by playing (Adventure/Versteckis/VersteckisRewards) ----
+        // the gnome's red Zipfelmütze (10 games); the Treichel, a big cowbell on its embroidered strap (30 rounds survived)
+        new(ItemId.Zipfelmuetze, "Zipfelmütze", WearSlot.Head, 18, GarmentShape.Beanie, GarmentStyle.Alpine, new("c8202a"), new("a01820"), new("f2efe6")),
+        new(ItemId.Treichel, "Treichel", WearSlot.Neck, 6, GarmentShape.BellCollar, GarmentStyle.Alpine, new("3a2418"), new("c99a3a"), new("c8202a")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);
