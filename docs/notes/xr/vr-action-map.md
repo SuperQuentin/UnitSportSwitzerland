@@ -80,6 +80,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | quest: hand over a delivery (#1223) | the Journal's Hand over button / A on it | ok: laser + trigger on the button | gap: `interact` (E / X) or a **grip** on the target's marker, once navigation draws markers (#1226) |
 | place: look out from a viewpoint / use a stamp post (#1224) | `interact_mount` E / Y within 3 m of the cross, telescope or stamp post (`PoiMarkers`) | ok: reach out and grip it (`TryInteract(byHand)`) | keep |
 | hold hands, rope up, let go (#1266) | hold E 0.5 s at a party member (tap stays the fight challenge), `/rope`; E with no target lets go | ok: hold Y; Y with no target | ok: the pad route through `XrPad` (hold Y); **gap**: gripping their hand (15 cm) and opening it to let go (`XrHandHold`) are not built |
+| drink with alcohol (beer, wine, kirsch; #1271) | `use_item` with the drink in hand (the mouth pose) | RT | ok: the pad route (RT); **gap**: bringing the bottle to the mouth by hand |
+| breathalyzer: blow into it for 5 s (#1271) | `use_item` with it in hand | RT | ok: the pad route (RT); **gap**: bringing it to the mouth by hand |
+| breathalyzer: offer a test to a player (#1271) | `interact_mount` E at them with the electronic device in hand (shown by `InputHints`, outlined) | Y | ok: the pad route (Y) or a grip at them (`TryInteract(byHand)`) |
 | haul a roped partner (#1266) | hold E 2 s at the rope | hold Y | ok: the pad route (hold Y); **gap**: pulling the rope hand over hand |
 | talk to an errand giver (#1267) | E / Y within 3 m of the figure (a prompt "Talk to ...") | ok: Y, or reach out and grip toward the giver (`TryInteract(byHand)`) | keep |
 | errand dialogue: choose, next card, leave (#1267) | 1-3, Enter, Left / Right, Esc / D-pad, A, LB / RB, B | ok: laser + trigger on the panel, the pad's route | keep |

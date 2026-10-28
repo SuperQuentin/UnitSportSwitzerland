@@ -222,6 +222,13 @@ public enum ItemId
     WhiteWine = 480,
     /// <summary>Kirsch, a shot a drink: the shared pot's <c>Hearty</c>.</summary>
     Kirsch = 481,
+    // ---- alcohol (#1271, docs/notes/adventure/alcohol.md) ----
+    /// <summary>An electronic breathalyzer, reusable: blow for 5 s and its screen reads the per mille and mg/L (<see cref="ItemUse.Breath"/>); held out to a player, it tests them if they agree.</summary>
+    Breathalyzer = 486,
+    /// <summary>A single-use crystal-tube test: one blow, green (under 0.5 per mille) or amber (over), then used up (<see cref="ItemUse.Breath"/>).</summary>
+    BreathTestSingle = 487,
+    /// <summary>An alcohol-free beer (0.5 %), the driver's choice: drunk like a beer.</summary>
+    BeerAlcoholFree = 488,
     /// <summary>Garments (Avatar.Garments, <c>GarmentStyle.Together</c>): a mentored newcomer's first summit, glacier, ride and build.</summary>
     ErstbesteigungCap = 482, GletscherScarf = 483, MitfahrerGloves = 484, ZimmermannCap = 485,
     /// <summary>Garments: the mentor's own for each milestone, and the tenth punch card's felt hat.</summary>
@@ -315,4 +322,6 @@ public enum ItemUse
     Gust,
     /// <summary>A Versteckis round tool (#1268): Use asks the game's server for it (tag, sniff, decoy, sprint, moo, the Disguise radial).</summary>
     Round,
+    /// <summary>Use blows into it for 5 s (#1271): the electronic breathalyzer is kept, the single-use test is used up.</summary>
+    Breath,
 }

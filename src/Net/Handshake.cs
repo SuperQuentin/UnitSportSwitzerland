@@ -100,7 +100,8 @@ public partial class Handshake : Node
     /// 66: World/CinemaBooths AskDisplayRpc and SetDisplay (#1298: a hall's projector fit and ratio).
     /// 67: World/Errands (#1267: RequestAccept/Share/Join; Accepted, Shared, TookBack, Told), the <c>errands</c> section, ItemId 430-444.
     /// 68: World/Adventure/Festivals RequestFahneStart, RequestFahneRoutine, TellFahneStart, TellFahneResult (#1269 part 5: Fahnenschwingen).
-    public const int Protocol = 68;
+    /// 69: World/Alcohol (#1271: ReportDrank, RequestSelfTest, RequestOffer; TellResult), World/Arrival Rules carries <c>--alcohol</c>, the <c>breath</c> invite kind, ItemId 486-488, ItemUse.Breath.
+    public const int Protocol = 69;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
