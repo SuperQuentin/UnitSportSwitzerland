@@ -578,6 +578,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
             interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+            // --enter: straight into a building once spawned, or at once for a shot run's free camera (#1244)
+            if (Interiors.InteriorManager.EnterTarget is { } enter)
+            {
+                if (CmdArgs.Has("--shot-queue") || CmdArgs.Has("--shot"))
+                    GetTree().CreateTimer(3.0).Timeout += () => interiors.Enter(enter, null);
+                else
+                {
+                    void Go()
+                    {
+                        Teleporter.Arrived -= Go;
+                        interiors.Enter(enter, _onFoot ? LocalPlayer : null);
+                    }
+                    Teleporter.Arrived += Go;
+                }
+            }
             var chunksForDoors = _chunks;
             interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
             interiors.OccupancySink = chunksForDoors.SetOccupancy;
