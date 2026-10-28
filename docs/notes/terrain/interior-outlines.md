@@ -98,12 +98,13 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
 
 - A civic building (60 %) or a house (85 %) of an irregular old-town outline fills it only so far, and a
   house or an office round a U or a courtyard fills its far wings only part of the way: arm rooms make
-  no arms of their own.
+  no arms of their own. Since #1304 an office, a school or a works whose outline peels into wings is also planned
+  wing by wing (`doors-planned`).
 - A courtyard inside a box-planned single room keeps the box (no holed floors).
 - A street door whose room cannot take a shape (a hall with the stair) keeps its doorway on that room's
   rectangle (shrunk to fit where it can), up to ~2 m from the door. A wing of flats plans its stairwell where its own plan wants it,
   and the side door opens into that lobby up to ~9 m along the facade (as before #1290). Another side
   door whose doorway would stand more than 3 m from it reads as locked: 1,388 of 3,156 on the survey's
-  tiles (186 before). Planning a way in behind every side door is #1304.
+  tiles (186 before); 688 since #1304 (`doors-planned`).
 - An upper floor set back from the ground floor's outline is planned to the roof's outline: the roof is
   all the outline there is.
