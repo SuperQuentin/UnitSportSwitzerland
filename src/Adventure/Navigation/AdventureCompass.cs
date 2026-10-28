@@ -122,6 +122,10 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
                     Add(key, pin.E, pin.N, NavIcons.ColorOf(pin.Icon), MarkerShape.Icon, 2, pin.Icon, Label(key, Dist(me, pin.E, pin.N), double.NaN));
                 }
         }
+        // 3b. the world events running near: a cow loose, a lost hiker, an avalanche, smoke (#1339)
+        if (Errands.WorldEvents.Instance is { } events)
+            foreach (var (key, ee, nn2, kind, name) in events.Markers)
+                Add(key, ee, nn2, Errands.WorldEvents.ColorOf(kind), MarkerShape.Diamond, 1, 0, Label(key, Dist(me, ee, nn2), double.NaN, name));
         // 4. discovered places nearby, nearest first, their name near the caret only
         RefreshPlaces(me);
         float heading = Heading is { } h ? CompassMath.Bearing(h) : 0;

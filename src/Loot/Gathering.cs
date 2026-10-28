@@ -147,7 +147,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     public override void _Process(double delta)
     {
         var p = Eligible();
-        if (p == null)
+        // a world event's dig or beating owns the hold (#1339)
+        if (p == null || Adventure.Errands.WorldEvents.OwnsGather)
         {
             _target = default;
             Cancel();

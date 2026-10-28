@@ -47,7 +47,7 @@ public partial class InteriorManager
         outranks = Outranking.Vehicle;
         if (p.CraneInteraction() is { } crane) return crane;
         if ((Farming.FarmSales.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
-            ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p)
+            ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p) ?? Adventure.Errands.WorldEvents.InteractionFor(p)
             ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p)
             ?? Occasions.Festivals.Horn.HornGround.InteractionFor(p) ?? Occasions.Festivals.SteinGame.InteractionFor(p)) is { } outdoors) return outdoors;
         outranks = Outranking.None;

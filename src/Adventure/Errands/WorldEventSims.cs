@@ -27,7 +27,7 @@ public sealed class CowSim
         (_outE, _outN) = (Math.Sin(bearingU * Math.Tau), Math.Cos(bearingU * Math.Tau));
         E = homeE + _outE * startM;
         N = homeN + _outN * startM;
-        Yaw = (float)Math.Atan2(-_outE, -_outN);
+        Yaw = (float)Math.Atan2(-_outE, _outN);
     }
 
     public double HomeDistance => Math.Sqrt((E - HomeE) * (E - HomeE) + (N - HomeN) * (N - HomeN));
@@ -57,7 +57,7 @@ public sealed class CowSim
         dx /= len; dn /= len;
         E += dx * speed * dt;
         N += dn * speed * dt;
-        Yaw = (float)Math.Atan2(-dx, -dn);
+        Yaw = (float)Math.Atan2(-dx, dn);
         return pushed;
     }
 
@@ -67,7 +67,7 @@ public sealed class CowSim
         double dx = HomeE - E, dn = HomeN - N, len = Math.Sqrt(dx * dx + dn * dn);
         if (len < 1e-6) return;
         E += dx / len * LooseMps * dt; N += dn / len * LooseMps * dt;
-        Yaw = (float)Math.Atan2(-dx, -dn);
+        Yaw = (float)Math.Atan2(-dx, dn);
     }
 }
 
@@ -106,7 +106,7 @@ public sealed class HikerSim
         double dx = (l.E - E) / dist, dn = (l.N - N) / dist;
         double move = Math.Min(WalkMps * dt, dist - BehindM);
         E += dx * move; N += dn * move;
-        Yaw = (float)Math.Atan2(-dx, -dn);
+        Yaw = (float)Math.Atan2(-dx, dn);
         Walking = true;
     }
 }

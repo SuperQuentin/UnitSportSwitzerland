@@ -16,6 +16,13 @@ public partial class ClientWorld
         var errands = ErrandService.Create(adventure, server: false, networked: Launch.Networked);
         errands.Toast = Toast;
         errands.NameOf = peer => Net.Parties.Client?.Members.FirstOrDefault(m => m.Peer == peer).Name is { Length: > 0 } n ? n : $"#{peer}";
+        var events = WorldEvents.Create(adventure, server: false, networked: Launch.Networked);
+        events.Toast = Toast;
+        events.Origin = () => _worldOrigin;
+        events.Me = () => LocalPlayer;
+        events.GroundAt = (e, n) => _chunks != null && _worldOrigin is { } o && _chunks.TryGetHeight(o.ToWorld(e, n, 0), out float h) ? h : null;
+        events.ForestAt = (e, n) => _chunks != null && _worldOrigin is { } o && events.GroundAt?.Invoke(e, n) is { } g
+            && _chunks.TryGetCover(o.ToWorld(e, n, g), out var cover) ? cover is Terrain.Format.CoverClass.Forest : null;
         AddChild(new ErrandGivers(() => _onFoot ? LocalPlayer : null, () => _worldOrigin,
             p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
         AddChild(new ErrandDialog(() => _onFoot ? LocalPlayer : null));

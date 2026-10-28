@@ -2819,6 +2819,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Occasions.Festivals.SteinGame.TryInteract(this)) return true;
         // an errand giver at hand (#1267): talk to them
         if (Adventure.Errands.ErrandGivers.TryInteract(this)) return true;
+        // a lost hiker at hand (#1339): talk to them, and they follow
+        if (Adventure.Errands.WorldEvents.TryInteract(this)) return true;
         // the Älplerfest's flag ground (#1269): swing the flag
         if (Occasions.Festivals.Fahnen.FahnenGame.TryInteract(this)) return true;
         // the festival ground's alphorn row (#1269): a seat in the song
