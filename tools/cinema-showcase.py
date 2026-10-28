@@ -40,6 +40,10 @@ def ffmpeg():
     found = shutil.which("ffmpeg")
     if found:
         return found
+    # winget's full build (https, libx264), else Krita's (neither, #1105)
+    winget = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe"
+    if winget.exists():
+        return str(winget)
     krita = Path(r"C:\Program Files\Krita (x64)\bin\ffmpeg.exe")
     return str(krita) if krita.exists() else "ffmpeg"
 
@@ -97,11 +101,19 @@ CINEMA_DOOR = (2.7, "i1.6", -1.3, 0, 115.5)   # 2.7 m in front of the door, faci
 HALL2_PORT = (0.8, 4.5, 13.6)                 # the middle hall's porthole
 HALL2_LENS = (0.8, 4.35, 14.0)
 
+# open films (#1298: a hall plays a web link on the shared clock; /cinema play acts on the hall the camera is in)
+BUNNY = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+SINTEL = "https://www.youtube.com/watch?v=eRsGyueVLvQ"
+SINTEL_TRAILER = "https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4"
+
 
 def cinema_takes():
     enter = [f"{CINEMA_DOOR[0]},{CINEMA_DOOR[1]},{CINEMA_DOOR[2]},{CINEMA_DOOR[3]},{CINEMA_DOOR[4]},3,{OUT.as_posix()}/in.png,{GRUTLI}",
              # every hall as the film wants it: 1 dimmed mid-film, 2 lit and waiting, 3 dark mid-film
-             "/cinema 1 lights dim film on", "/cinema 2 lights full film off", "/cinema 3 lights off film on"]
+             "/cinema 1 lights dim film on", "/cinema 2 lights full film off", "/cinema 3 lights off film on",
+             # hall 1 plays Sintel from now on; hall 2 waits, lit, for its film (the lights take)
+             still((-13.1, 3.6, 3.5), (-13.1, 4.0, -7), 0.3, "h1"), f"/cinema play {SINTEL}",
+             still((0.8, 3.6, 3.5), (0.8, 4.0, -7), 0.3, "h2"), "/cinema stop", "/cinema 2 lights full film off"]
     door = (0.0, 2.2, 0.0)
     return [
         Take("exterior", "Cinémas du Grütli, Geneva",
@@ -117,13 +129,16 @@ def cinema_takes():
         Take("lights", "The house lights go down, slowly",
              [still((0.8, 6.0, 11.8), (0.8, 3.6, -7), 6, "lights0")],
              [glide((0.8, 4.4, 4.0), (0.8, 3.4, -7), 9, "~ease")],
-             before=["/cinema 2 lights off film on"]),
+             # the lights go down, and the film comes on a few seconds later, as it does
+             before=["/cinema 2 lights off film on", f"/cinema play {BUNNY}"]),
         Take("films", "Every hall shows its own film",
-             [still((14.7, 3.6, 3.5), (14.7, 4.0, -7), 1, "films0")],
-             [glide((14.7, 2.6, -1.0), (14.7, 4.2, -7), 4, "~ease"),
-              # through the wall to the dimmed hall next door: a cut inside the take
-              glide((-13.1, 3.6, 3.5), (-13.1, 4.0, -7), 0.04, "~lin"),
-              glide((-13.1, 2.6, -1.0), (-13.1, 4.2, -7), 4, "~ease")]),
+             # a hall decodes its film while the camera is in it: wait there until it runs
+             [still((14.7, 3.6, 3.5), (14.7, 4.0, -7), 0.3, "films0"), f"/cinema play {SINTEL_TRAILER}",
+              still((14.7, 3.6, 3.5), (14.7, 4.0, -7), 24, "films1")],
+             [glide((14.7, 2.6, -1.0), (14.7, 4.2, -7), 5, "~ease")]),
+        Take("films2", "",
+             [still((-13.1, 3.6, 3.5), (-13.1, 4.0, -7), 12, "films2")],
+             [glide((-13.1, 2.6, -1.0), (-13.1, 4.2, -7), 4, "~ease")]),
         Take("beam", "Light thrown from the booth",
              [still((5.0, 1.5, -6.0), HALL2_PORT, 1, "beam0")],
              [glide((3.4, 3.4, 4.0), HALL2_PORT, 8, "~ease")]),
