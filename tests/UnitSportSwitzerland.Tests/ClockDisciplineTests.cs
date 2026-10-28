@@ -51,6 +51,7 @@ public class ClockDisciplineTests
     /// </summary>
     private static readonly Dictionary<string, string> Allowed = new()
     {
+        ["src/Adventure/Alcohol/Bac.cs"] = "real: blood alcohol runs on real time, so a player who logs off drunk comes back sober (#1271); pure, linked into tier 0",
         // ---- the clocks themselves ----
         ["src/Core/RealClock.cs"] = "clock: it is the wall clock",
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",

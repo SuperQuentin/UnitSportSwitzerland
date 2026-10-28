@@ -1005,3 +1005,10 @@ tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
 tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
 src/Adventure/Together/ net tools/togethernetcheck.sh
+
+# #1271: alcohol: the drink log, the curve, the effects on the intents, the climb gate, passing out, the two breathalyzers (offline quick probe; server + two clients)
+src/Adventure/Alcohol/  quick  --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Drunk quick --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/Alcohol/AlcoholNetProbe net tools/alcoholnetcheck.sh
+tools/alcoholnetcheck.sh  net  tools/alcoholnetcheck.sh
+src/Adventure/Alcohol/ net tools/alcoholnetcheck.sh

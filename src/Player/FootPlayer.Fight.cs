@@ -395,6 +395,12 @@ public partial class FootPlayer
     {
         if (FightManager.Client is not { } fights || !NetLink.Online(this) || PointedFighter() is not { } p) return false;
         if (NetId(p.Name) is not { } peer || peer <= 0) return false;
+        // a breathalyzer in hand (#1271): E offers them a test, not a fight
+        if (Items.ItemController.Instance?.Inventory.HeldId == Items.ItemId.Breathalyzer && Adventure.Alcohol.AlcoholService.Instance is { } alcohol)
+        {
+            alcohol.AskTest(peer);
+            return true;
+        }
         // they challenged you to an aura battle (#914): E takes that; otherwise E is the fight's
         if (AuraManager.Client?.AcceptFrom(peer) == true) return true;
         // a party member (#1266): holding E asks to hold hands, a tap stays the fight's challenge

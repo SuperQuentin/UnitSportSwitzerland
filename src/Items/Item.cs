@@ -259,6 +259,13 @@ public static class ItemDefs
             { Blurb = "A Valais white. {use_item} to drink a glass. At a shared pot, the fondue's wine: everyone at the table climbs warmer.", DrinkMl = 100f, Abv = 0.12f },
         Eat(ItemId.Kirsch, "Kirsch", 4, "#f2f0ea", "KI", 2, ItemCategory.Water, 14) with
             { Blurb = "Cherry spirit. {use_item} to drink a shot. At a shared pot, a dash in the fondue: everyone at the table gets their breath back faster.", DrinkMl = 20f, Abv = 0.40f },
+        // alcohol (#1271): the driver's beer and the two breathalyzers
+        Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
+            { Blurb = "{use_item} to drink. 0.5 %: the Swiss driver's choice.", DrinkMl = 330f, Abv = 0.005f },
+        new(ItemId.Breathalyzer, "Breathalyzer", "An electronic one. {use_item} blows into it for 5 s and its screen reads your per mille and mg/L; wait 15 min after a drink. {interact_mount} at a player offers them a test.",
+            ItemUse.Breath, 1, new Color("#38485a"), "BR", 0, ItemCategory.Gear, 120f),
+        new(ItemId.BreathTestSingle, "Breath test", "Single use. {use_item} blows into the crystal tube for 5 s: green under 0.5 per mille, amber over. Then it is used up.",
+            ItemUse.Breath, 4, new Color("#c8d8c0"), "BT", 0, ItemCategory.Gear, 4f),
         new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
             ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
         // the travel network (#1226): the travelcards; the server keeps who holds one (TravelBook), the card is its picture
@@ -685,7 +692,14 @@ public static class ItemDefs
                 BarracksMeshes.AppendChips(s);
                 break;
             case ItemId.BeerBottle:
+            case ItemId.BeerAlcoholFree:
                 BarracksMeshes.AppendBeer(s);
+                break;
+            case ItemId.Breathalyzer:
+                Adventure.Alcohol.AlcoholMeshes.AppendDevice(s);
+                break;
+            case ItemId.BreathTestSingle:
+                Adventure.Alcohol.AlcoholMeshes.AppendTube(s, Adventure.Alcohol.TubeColour.Clear);
                 break;
             case ItemId.Gamelle:
                 BarracksMeshes.AppendGamelle(s);

@@ -91,7 +91,8 @@ public partial class Handshake : Node
     /// 59: World/Adventure/Festivals (#1269 part 1: RequestRing/TestDate; TellFestivals, TellBoard, TellConverted, TellRang, TellRefused),
     /// the <c>festivals</c> section, <c>OccasionFacets.Games</c> (1 &lt;&lt; 6) on the occasions wire.
     /// 60: World/Together (#1266: Links, GateOpen, PotState, BreadLost, TellFeast, TellHaul, the Ask* requests), invite kinds rope and fondue.
-    public const int Protocol = 60;
+    /// 61: World/Alcohol (#1271: ReportDrank, RequestSelfTest, RequestOffer; TellResult), World/Arrival Rules carries <c>--alcohol</c>, the <c>breath</c> invite kind, ItemId 486-488, ItemUse.Breath.
+    public const int Protocol = 61;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
