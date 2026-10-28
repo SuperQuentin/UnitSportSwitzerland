@@ -121,3 +121,16 @@ Nothing is player-facing yet but the Journal tab and the poles: the check-only f
 - [ ] Walk round the spawn → a ring of 16 red Swiss-flag poles stands about 60 m out. Settings › Occasions › the test festival › Off → the poles go, while the Journal's Festival tab and the score stay.
 - [ ] Real map, dev region, a dedicated server with the same flags → the log says `[festival] running: test day 2/5 at the test field`; join with a client and open the Journal → the same tab, with the same day.
 - [ ] Real map: a real festival site outside the region relocates to the largest town ("held this year in Bulle"): needs a real festival, so this waits for part 3 (Älplerfest); the rule is unit-tested only.
+
+## Adventure errands: givers, dialogue, daily Postkarten, canton reputation ([#1311](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1311))
+
+On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`) the eight givers stand within 350 m of the start; on a real map there are wardens at the huts, masters at the stations and the landings only (the OSM stage for post offices, farms and dairies is not built).
+
+- [ ] Walk up to a giver → a figure stands at its place with an amber card glyph over its head; within 3 m the prompt says "Talk to ..." and its outline shows. Judge the figure's height, the glyph's size and whether it reads from 20 m.
+- [ ] E (pad Y, VR: reach out and grip toward the giver) → the dialogue opens bottom centre with three choices. Pad: D-pad + A pick, B leaves, LB / RB switch cards. VR: laser + trigger on the panel. Judge the panel's size and distance in VR.
+- [ ] Take the mail run → three sacks in the pack, the card in the Journal's Quests tab and the tracker, a stamp toast and sound. Hand a sack over at each stop (Journal › Hand over) → CHF in the account, +3 reputation in the canton.
+- [ ] Take three cards, then ask a fourth → "Three cards a day". Wait for midnight in Switzerland (or `--errand-day-offset 2`) → the running cards expire, their cargo goes back, three new cards.
+- [ ] With a friend in a party: both take the same card (or Share with party in the Errands tab, the friend Joins) and finish it → both get "Together with ...: +CHF" and +1 reputation. Judge whether +50 % is felt.
+- [ ] Journal › Errands tab on a pad (LB / RB to it): cards, Track, Share, reputation. Judge the layout at 1080p and with `--mobile`.
+- [ ] Reputation 10 / 30 / 60 / 100 points in one canton (many cards) → level-up toasts, the title "Ehrenbürger von ..." at the top. Judge the pace.
+- [ ] Giver models in the model viewer (`--models`, People › Errand givers) → eight figures with the Sennenkäppi, guide hat and vest; look right in Cartoon, PS1 and Realistic.

@@ -24,10 +24,11 @@ touches its topic; search with `grep -ril <word> docs/notes/adventure`.
 - `compass` — `Ui/CompassStrip` + `ICompassSource` (BR and free roam), redraw on change only, the VR watch bezel; the target marker (edge ellipse, a target behind points down); the guiding gust (N, palm up, shader, settings)
 - `versteckis` — hide-and-seek as village props (#1268): `VersteckisManager` (lobby, rounds, rotation, Serve* paths, 4 Hz checks with a 1 s speed window, `InterestService.Withheld` in Hide, equal pay), `VsGround`/`HidePlan` decor and objectives from the tiles, `VsDisguise` mesh swap, `VsHud`, protocol 57, `--versteckischeck`, `tools/versteckisnetcheck.sh`, `tools/versteckisbotcheck.sh`
 - `together` — the together rule (party, 60 m, cap 3), the group yield (gathering, harvest, fishing, rare finds, quest cash), the week's chest and the punch card (#1266)
+- `errands` — errand givers at huts, stations and landings, the dialogue, the daily Postkarten (8 per 5 km cell per Swiss day, 3 a day), the friend bonus, canton reputation (#1267)
 - `links` — hands and the rope (`LinkBook`, `Tether`, belays, `ArmHold`, `RopeNode`), the leg-up, two-handle gates, roped chests, hidden crevasses (stumble fallback)
 - `fondue` — the shared pot: spots, ingredients, la huit, dips, the lost bread and its forfeit, `--forfeits`, `--fondueseed`
 - `mentors` — milestones, newcomer and veteran, the eight `GarmentStyle.Together` cosmetics, titles
 
 ## Commands
 
-- `commands` — `--systems ...,adventure`, `--adventure-test`, `--adventure-dir`, `--journal`; `--adventurecheck` (quick) and `tools/adventurenetcheck.sh` (net); `--pois fixture|<file>`, `--placescheck` (quick) and `tools/placesnetcheck.sh` (net); `--adventure-travel`, `/travel`, `/pin`, `--navcheck` and `--travelcheck` (quick), `tools/navnetcheck.sh` (net); `--rewardspots fixture|<file>`, `--rewardcheck` (quick) and `tools/rewardnetcheck.sh` (net)
+- `commands` — `--systems ...,adventure`, `--adventure-test`, `--adventure-dir`, `--journal`; `--adventurecheck` (quick) and `tools/adventurenetcheck.sh` (net); `--pois fixture|<file>`, `--placescheck` (quick) and `tools/placesnetcheck.sh` (net); `--adventure-travel`, `/travel`, `/pin`, `--navcheck` and `--travelcheck` (quick), `tools/navnetcheck.sh` (net); `--rewardspots fixture|<file>`, `--rewardcheck` (quick) and `tools/rewardnetcheck.sh` (net); `--givers fixture`, `--errandcheck` (quick) and `tools/errandnetcheck.sh` (net)
