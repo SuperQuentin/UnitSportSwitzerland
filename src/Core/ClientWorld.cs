@@ -1138,6 +1138,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
+            AddErrands(adventure, items);   // #1267, ClientWorld.Errands.cs
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
         // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it

@@ -341,12 +341,29 @@ public partial class AdventureService : Node
         return null;
     }
 
+    /// <summary>
+    /// Starts a <see cref="QuestStart.Given"/> quest for a peer: only its giver's own path may (#1267, <c>ErrandService</c>), who has
+    /// checked where the peer stands. Null when started, else why not (the caller tells the peer).
+    /// </summary>
+    public string? StartGiven(long peer, string questId, int seed)
+    {
+        if (!Active(peer) || Progress(peer) is not { } p) return "No adventuring now.";
+        var q = p.Get(QuestsProgress.Section);
+        if (Quests.Start(q, questId, Now, seed, given: true) is { } why) return why;
+        p.Touch(QuestsProgress.Section);
+        Note(peer, new QuestChange(questId, QuestChangeKind.Started, 0, 0));
+        return null;
+    }
+
     public bool Abandon(long peer, string questId)
     {
         if (!Active(peer) || Progress(peer) is not { } p) { Refuse(peer, "No adventuring now."); return false; }
-        if (!Quests.Abandon(p.Get(QuestsProgress.Section), questId)) return false;
+        var q = p.Get(QuestsProgress.Section);
+        var state = q.Active.GetValueOrDefault(questId);
+        if (!Quests.Abandon(q, questId)) return false;
         p.Touch(QuestsProgress.Section);
         Note(peer, new QuestChange(questId, QuestChangeKind.Abandoned, 0, 0));
+        Events.Raise(new QuestAbandoned(peer, p.Key, questId, state?.Step ?? 0, state?.Count ?? 0));
         return true;
     }
 
@@ -450,7 +467,7 @@ public partial class AdventureService : Node
         else if (!_networked) QuestNote(c.QuestId, (int)c.What, c.Step, c.Count);
     }
 
-    private string Refuse(long peer, string why)
+    internal string Refuse(long peer, string why)
     {
         if (Connected(peer)) RpcId(peer, MethodName.TellRefused, why);
         else if (!_networked) TellRefused(why);
