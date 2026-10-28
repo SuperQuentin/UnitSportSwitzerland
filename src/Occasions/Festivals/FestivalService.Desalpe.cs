@@ -283,7 +283,7 @@ public partial class FestivalService
         {
             if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Where are you?");
             double x = at.E - s.Site.E - s.Run.Flock.X[cow], y = at.N - s.Site.N - s.Run.Flock.Y[cow];
-            if (x * x + y * y > (DesalpeRules.DressReach + 3) * (DesalpeRules.DressReach + 3)) return Tell(peer, "Go to the cow to dress it.");
+            if (x * x + y * y > (DesalpeRules.DressReach + 3) * (DesalpeRules.DressReach + 3)) return Tell(peer, $"Go to the cow to dress it ({Math.Sqrt(x * x + y * y):F0} m).");
         }
         byte was = s.Run.Dress[cow];
         if (!s.Run.TryDress(cow, (byte)dress)) return Tell(peer, "That cow cannot wear that.");

@@ -357,15 +357,15 @@ public partial class DesalpeGame : CanvasLayer
         }
 
         private void Panel(Vector2 c, float height) =>
-            DrawRect(new Rect2(c.X - 300, c.Y - height / 2 - 12, 600, height), new Color(0, 0, 0, 0.45f), true);
+            DrawRect(new Rect2(c.X - 380, c.Y - height / 2 - 12, 760, height), new Color(0, 0, 0, 0.45f), true);
 
         private void Text(string s, Vector2 at, int size, Color colour, bool bold = false)
         {
             if (s.Length == 0) return;
             var font = bold ? UiTheme.Bold : UiTheme.Font;
-            var left = at - new Vector2(300f, 0);
-            DrawString(font, left + new Vector2(2f, 2f), s, HorizontalAlignment.Center, 600f, size, new Color(Shadow, Shadow.A * colour.A));
-            DrawString(font, left, s, HorizontalAlignment.Center, 600f, size, colour);
+            var left = at - new Vector2(380f, 0);
+            DrawString(font, left + new Vector2(2f, 2f), s, HorizontalAlignment.Center, 760f, size, new Color(Shadow, Shadow.A * colour.A));
+            DrawString(font, left, s, HorizontalAlignment.Center, 760f, size, colour);
         }
     }
 

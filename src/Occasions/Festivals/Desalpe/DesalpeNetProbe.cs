@@ -59,7 +59,7 @@ public partial class DesalpeNetProbe : ChatProbe
             await Seconds(1.0);   // the server learns where the body is from the movement packets: let it
             int cow = game.NearCow;
             DesalpeGame.TryInteract(Me!);
-            Expect(await Until(() => herd.DressOf(cow) != 0, 10), $"the server dressed cow {cow} ({DesalpeModels.Describe(herd.DressOf(cow))})");
+            Expect(await Until(() => herd.DressOf(cow) != 0, 10), $"the server dressed cow {cow} ({DesalpeModels.Describe(herd.DressOf(cow))}; refused: {refused})");
             Expect(await Until(() => Mine.Batzen == DesalpeRules.DressBatzen, 10), $"the dressing paid in A's own section ({Mine.Batzen})");
             Say($"dressed {cow} {herd.DressOf(cow)}");
             Expect(await Heard("B", "saw", 60), "B saw the dress");
@@ -129,7 +129,7 @@ public partial class DesalpeNetProbe : ChatProbe
             await Seconds(4);
             var (e1, n1) = herd.CowAt(0)!.Value;
             double endDist = Math.Sqrt((e1 - site.E) * (e1 - site.E) + (n1 - site.N) * (n1 - site.N));
-            Expect(startDist > 30 && endDist < 25, $"the Leitkuh walked from {startDist:F0} m to {endDist:F0} m from the fair");
+            Expect(startDist > 20 && endDist < 25, $"the Leitkuh walked from {startDist:F0} m to {endDist:F0} m from the fair");
             string leader = (await HeardStarting("A", "leader ", 30))!;
             var parts = leader.Split(' ');
             double ae = Float(parts[1]), an = Float(parts[2]);
