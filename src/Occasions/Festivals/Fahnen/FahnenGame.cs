@@ -56,6 +56,7 @@ public partial class FahnenGame : CanvasLayer
     internal FahnenGrade LastGrade { get; private set; }
     internal int GradedFigures { get; private set; }
     internal Phase Current => _phase;
+    internal FahnenRoutine Routine => _routine;
     internal bool FlagShown => _flag != null && GodotObject.IsInstanceValid(_flag);
     internal (int Score, int Batzen, bool Synced, int Hits, int Figures, bool Dropped) LastResult => (_result.Score, _result.Batzen, _result.Synced, _result.Hits, _result.Figures, _result.Dropped);
 
