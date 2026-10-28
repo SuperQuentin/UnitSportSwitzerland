@@ -31,6 +31,7 @@ public sealed class CinemaRelayFeed : ICinemaFeed
     private readonly CinemaVideo.Shape _shape = new(CinemaVideo.RelayFps / 3);
     private int _measured;
     public float ContentWidth => _shape.Width;
+    public float ContentHeight => _shape.Height;
     private readonly int _width, _height;
     public string Status { get; private set; } = "Through the server…";
     public bool Failed { get; private set; }
@@ -116,11 +117,12 @@ public sealed class CinemaRelayFeed : ICinemaFeed
                 {
                     var im = img;
                     int eye = Stereo == CinemaVideo.Stereo.Mono ? im.GetWidth() : im.GetWidth() / 2;
-                    _shape.Add(CinemaVideo.ContentWidth(eye, im.GetHeight(), (x, y) =>
+                    var (w, h) = CinemaVideo.ContentSize(eye, im.GetHeight(), (x, y) =>
                     {
                         var c = im.GetPixel(x, y);
                         return c.R + c.G + c.B > 3 * 0.1f;
-                    }));
+                    });
+                    _shape.Add(w, h);
                 }
                 if (img.GetFormat() != Image.Format.Rgba8) img.Convert(Image.Format.Rgba8);
                 if (img.GetWidth() != _width || img.GetHeight() != _height)
