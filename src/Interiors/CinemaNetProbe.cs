@@ -51,6 +51,8 @@ public partial class CinemaNetProbe : ChatProbe
     /// <summary>How long each peer watches it, s.</summary>
     private const double WatchSeconds = 16;
 
+    private static readonly int Display = CinemaVideo.PackDisplay(CinemaVideo.Fit.Cover, Array.FindIndex(CinemaVideo.Ratios, r => r.Name == "16:9"));
+
     private static readonly int Show = CinemaBooths.Pack(CinemaBooths.Lights.Off, true);
 
     /// <summary>What A sets on hall 0: the show, or, where the hall starts mid-film (#1279), the lights dimmed and the screen off.</summary>
@@ -86,6 +88,9 @@ public partial class CinemaNetProbe : ChatProbe
             Say($"showings {Showings(booths, plan)}");
             Expect(booths.StateOf(plan, 0) == CinemaBooths.Unpack(CinemaBooths.Default(plan, 0)), $"the hall starts as its seed says ({booths.StateOf(plan, 0)})");
             booths.Ask(plan, 0, Target(plan));
+            // the projector's display (#1298): cover at 16:9, for everyone, a joiner too
+            booths.AskDisplay(plan, 0, Display);
+            Expect(await Until(() => booths.DisplayOf(plan, 0) == Display, 10), "the server granted A's display (cover, 16:9)");
             Expect(await Until(() => booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), 10),
                 $"the server granted A, inside, {CinemaBooths.Unpack(Target(plan))}");
             // said over and over: C has not joined yet
@@ -167,6 +172,7 @@ public partial class CinemaNetProbe : ChatProbe
             else Fail("A never said its showings");
             Expect(await Until(() => booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), 10),
                 $"{_role} sees {plan}'s hall as A set it, {CinemaBooths.Unpack(Target(plan))}");
+            Expect(await Until(() => booths.DisplayOf(plan, 0) == Display, 10), $"{_role} sees the hall's display as A set it (cover, 16:9)");
             if (_role == "B")
             {
                 // outside: the server must refuse, and nothing changes
@@ -248,7 +254,8 @@ public partial class CinemaNetProbe : ChatProbe
             bool stalled = wall - _lastLook > 0.1;
             _lastLook = wall;
             if (stream.CurrentTime >= 0 && double.IsNaN(_firstShown)) _firstShown = pos;
-            bool settling = !double.IsNaN(_firstShown) && pos < _firstShown + 1.0;
+            // a live source's first two seconds: the streamer's own decoder or capture still catching up (all peers alike)
+            bool settling = !double.IsNaN(_firstShown) && pos < _firstShown + (CinemaVideo.IsLive(link) ? 2.0 : 1.0);
             if (m != mark && (stalled || settling) && stream.CurrentTime >= 0)
             {
                 mark = m;
