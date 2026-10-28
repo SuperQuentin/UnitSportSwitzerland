@@ -131,7 +131,7 @@ public static class OccasionConfig
             {
                 Id = Festivals.FestivalCatalog.TestId, Priority = 8,
                 Schedule = { new DateWindow("03-10", "03-14") },
-                Facets = new FacetToggles { Atmosphere = false, Audio = false, Loot = false, Hunt = false, Hats = false },
+                Facets = new FacetToggles { Atmosphere = false, Audio = true, Loot = false, Hunt = false, Hats = false },
             });
         return entries;
     }

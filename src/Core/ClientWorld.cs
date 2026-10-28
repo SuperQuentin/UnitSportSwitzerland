@@ -1137,6 +1137,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             festivals.Start = () => _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
             Occasions.Festivals.FestivalPage.Register();
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs

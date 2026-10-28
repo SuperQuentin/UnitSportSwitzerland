@@ -85,6 +85,7 @@ public sealed class FestivalOccasion : Occasion
         return s.Build();
     }, candle: false);
 
+    private const double RackOffset = 14;
     private const int Poles = 16;
     private const uint Salt = 0xFE57A;
 
@@ -114,9 +115,10 @@ public sealed class FestivalOccasion : Occasion
             into.Add(FlagPole, new Transform3D(new Basis(Vector3.Up, yaw + jitter), local));
         }
         // the closing show's launch point: the rack at the site's middle, its tubes leaning away from where the shells fan out
-        if (FestivalCatalog.Get(Id) is { } def && FestivalShows.HasFireworks(def.Show) && TileId.FromLv95(site.E, site.N) == tile.Id)
+        if (FestivalCatalog.Get(Id) is { } def && FestivalShows.HasFireworks(def.Show) && TileId.FromLv95(site.E - RackOffset, site.N) == tile.Id)
         {
-            var local = tile.Local(site.E, site.N);
+            // 14 m west of the middle, so a crowd standing there is not inside the tubes
+            var local = tile.Local(site.E - RackOffset, site.N);
             if (tile.HeightAt(local) is { } h)
             {
                 local.Y = h;

@@ -8,7 +8,7 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Occasions.Festivals;
 
 /// <summary>A festival that runs now, as the server sees it and tells every client.</summary>
-/// <param name="ShowStart">Server time (<c>ClockSync.ServerNow</c>) the closing show's first second falls at, or 0 when no show is on the books.</param>
+/// <param name="ShowStart">Server time (<c>ClockSync.SimNow</c>) the closing show's first second falls at, or 0 when no show is on the books.</param>
 /// <param name="ShowSeed">The seed the show is planned from (<see cref="FireworkShow.Plan"/>): every peer plans the same one.</param>
 public sealed record RunningFestival(string Id, string Instance, string Title, int Day, int Length, DateOnly Start, DateOnly End, ResolvedSite? Site,
     double ShowStart = 0, int ShowSeed = 0);
@@ -186,7 +186,7 @@ public partial class FestivalService : Node
         _evaluated = true;
         var om = OccasionManager.Instance;
         var list = new List<RunningFestival>();
-        double hour = Hour(), serverNow = Net.ClockSync.ServerNow;
+        double hour = Hour(), serverNow = Net.ClockSync.SimNow;
         if (om != null)
             foreach (var def in FestivalCatalog.All)
             {
@@ -428,7 +428,7 @@ public partial class FestivalService : Node
     /// </summary>
     private void CheckShow()
     {
-        double now = Net.ClockSync.ServerNow;
+        double now = Net.ClockSync.SimNow;
         foreach (var run in Running)
         {
             if (run.ShowStart <= 0 || now < run.ShowStart || run.Site is not { } site) continue;

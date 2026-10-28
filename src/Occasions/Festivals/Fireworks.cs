@@ -10,7 +10,7 @@ namespace UnitSport.Occasions.Festivals;
 /// The fireworks, drawn and heard (client, #1269 part 2, <c>docs/notes/occasions/festival-fireworks.md</c>). It watches the running
 /// festivals for a closing show on the books (<see cref="RunningFestival.ShowStart"/>, the server's word) and plays the
 /// <see cref="FireworkShow"/> of its seed from the shared clock: every peer sees the same shell at the same moment, a peer that joins
-/// late joins the show where it is. Everything is pooled and GPU-side: 24 one-shot particle bursts, 12 climbing sparks, 4 flash
+/// late joins the show where it is. Everything is pooled and GPU-side: 32 one-shot particle bursts, 12 climbing sparks, 4 flash
 /// lights, 10 sound voices, all made once; a shell costs a material assignment and a <c>Restart</c>, nothing is built per frame
 /// and nothing is allocated (the cursor walks the script). Placed from LV95 at each use, so a floating-origin shift moves nothing by hand.
 /// The bang is heard <c>distance / 343</c> s after the flash: a shell 2 km off, 6 s late.
@@ -19,8 +19,9 @@ public partial class Fireworks : Node3D, IOriginContainer
 {
     public const string NodeName = "Fireworks";
 
-    private const int BurstSlots = 24, RocketSlots = 12, LightSlots = 4, Voices = 10, PendingSounds = 96, PendingBursts = 48;
-    private const int StarsPerBurst = 180;
+    public const int Bursts = 32;
+    private const int BurstSlots = Bursts, RocketSlots = 12, LightSlots = 4, Voices = 10, PendingSounds = 96, PendingBursts = 48;
+    private const int StarsPerBurst = 150;
 
     private enum Look { Peony, Chrysanthemum, Willow, Palm, Ring, Crossette, CrossetteChild, CrossRed, CrossStars, Count }
 
@@ -117,7 +118,7 @@ public partial class Fireworks : Node3D, IOriginContainer
     public int ShowSeed => _show?.Seed ?? 0;
 
     /// <summary>Seconds into the show playing now, or -1 when none is.</summary>
-    public double ShowTime => _show == null ? -1 : Clock - _start;
+    public double ShowTime => _show == null ? -1 : Clock + Skew - _start;
 
     /// <summary>The shell the burst cursor stands at (checks).</summary>
     public int Cursor => _burstCursor;
@@ -125,7 +126,7 @@ public partial class Fireworks : Node3D, IOriginContainer
     /// <summary>Particles a full set of pools can hold: the budget of the plan (6 000).</summary>
     public const int ParticleBudget = BurstSlots * StarsPerBurst + RocketSlots * 48;
 
-    private static double Clock => ClockSync.ServerNow;
+    private static double Clock => ClockSync.SimNow;
 
     public Fireworks(WorldOrigin origin, Func<Vector3, float?> groundAt)
     {
@@ -241,6 +242,20 @@ public partial class Fireworks : Node3D, IOriginContainer
         PlaySounds(t);
     }
 
+    /// <summary>
+    /// Checks only: jumps to <paramref name="t"/> seconds into the show playing without firing the shells in between (the way a peer that
+    /// joins late arrives), clearing what waits for its moment.
+    /// </summary>
+    public void Seek(double t)
+    {
+        if (_show == null) return;
+        Skew += t - (Clock + Skew - _start);
+        _burstCursor = _launchCursor = _show.First(t - 0.5);
+        _soundCount = 0;
+        _laterCount = 0;
+        foreach (var r in _rockets) Park(r);
+    }
+
     private void FindShow()
     {
         var svc = FestivalService.Instance;
@@ -251,7 +266,7 @@ public partial class Fireworks : Node3D, IOriginContainer
             var r = running[i];
             if (r.ShowStart <= 0 || r.Site is not { } site || r.ShowStart == _doneStart) continue;
             var om = OccasionManager.Instance;
-            _sees = om == null || om.IsActive(r.Id, OccasionFacets.Atmosphere);
+            _sees = om == null || om.IsActive(r.Id, OccasionFacets.Decorations);
             _hears = om == null || om.IsActive(r.Id, OccasionFacets.Audio);
             Begin(r.ShowStart, r.ShowSeed, site.E, site.N);
             return;
@@ -424,7 +439,7 @@ public partial class Fireworks : Node3D, IOriginContainer
         slot.P.Emitting = false;
         slot.P.ProcessMaterial = Material(look, colour);
         slot.P.Lifetime = style.Life;
-        slot.Q.Size = Vector2.One * style.Size * Mathf.Clamp(distance / 300f, 1f, 8f);
+        slot.Q.Size = Vector2.One * style.Size * 1.6f * Mathf.Clamp(distance / 300f, 1f, 8f);
         var basis = Basis.Identity;
         if (look == Look.Ring)
             basis = new Basis(Vector3.Right, (float)_jitter.NextDouble() * 1.1f) * new Basis(Vector3.Up, (float)_jitter.NextDouble() * Mathf.Tau);
