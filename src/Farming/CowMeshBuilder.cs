@@ -27,10 +27,13 @@ public static class CowMeshBuilder
     private static readonly Color BrownCoat = M(0.40f, 0.32f, 0.26f), BrownDark = M(0.30f, 0.24f, 0.20f), BrownMuzzle = M(0.82f, 0.77f, 0.66f);
     private static readonly Color White = M(0.90f, 0.88f, 0.82f), Red = M(0.56f, 0.26f, 0.12f);
 
-    private static readonly ArrayMesh?[] Bodies = new ArrayMesh?[2], Heads = new ArrayMesh?[2];
+    private static readonly ArrayMesh?[] Bodies = new ArrayMesh?[4], Heads = new ArrayMesh?[2];
 
     /// <summary>A breed's body (legs, udder, tail, bell), shared by every herd of it.</summary>
-    public static ArrayMesh Body(CowBreed breed) => Bodies[(int)breed] ??= BuildBody(breed);
+    public static ArrayMesh Body(CowBreed breed) => Bodies[(int)breed] ??= BuildBody(breed, true);
+
+    /// <summary>A breed's body without its little cowbell and strap: the Désalpe's cows wear a Treichel of their own (#1269 part 7).</summary>
+    public static ArrayMesh BodyWithoutBell(CowBreed breed) => Bodies[2 + (int)breed] ??= BuildBody(breed, false);
 
     /// <summary>A breed's head, its pivot at <see cref="Neck"/> (the mesh's origin).</summary>
     public static ArrayMesh Head(CowBreed breed) => Heads[(int)breed] ??= BuildHead(breed);
@@ -39,7 +42,7 @@ public static class CowMeshBuilder
     private static void Lump(MeshScratch s, Vector3 centre, Vector3 size, Color c, Basis? turn = null) =>
         s.RoundedBox(centre, size, c, turn, 5, 8);
 
-    private static ArrayMesh BuildBody(CowBreed breed)
+    private static ArrayMesh BuildBody(CowBreed breed, bool bell)
     {
         // authored facing +Z, as every MeshScratch model is (Build turns it to face -Z)
         var s = new MeshScratch();
@@ -61,7 +64,7 @@ public static class CowMeshBuilder
             // udder
             Lump(s, new Vector3(0, 0.64f, -0.42f), new Vector3(0.36f, 0.24f, 0.36f), Udder);
             // the cowbell on its broad leather strap
-            Lump(s, new Vector3(0, 1.02f, 1.12f), new Vector3(0.48f, 0.10f, 0.12f), Strap, new Basis(Vector3.Right, -0.45f));
+            if (bell) Lump(s, new Vector3(0, 1.02f, 1.12f), new Vector3(0.48f, 0.10f, 0.12f), Strap, new Basis(Vector3.Right, -0.45f));
         }
         // the legs, tapering to dark hooves, the hind ones angled back a little
         foreach (var (x, z, back) in new[] { (-0.24f, -0.66f, 0f), (0.24f, -0.66f, 0f), (-0.24f, 0.70f, 0.06f), (0.24f, 0.70f, 0.06f) })
@@ -75,7 +78,7 @@ public static class CowMeshBuilder
         s.Tube(new Vector3(0, 1.32f, -0.96f), new Vector3(0, 0.62f, -1.02f), 0.045f, 0.03f, sim ? White : coat, 5);
         s.Box(new Vector3(0, 0.52f, -1.02f), new Vector3(0.10f, 0.20f, 0.10f), sim ? White : BrownDark);
         // the bell itself: a brass bell under the throat, wider at the mouth
-        s.Tube(new Vector3(0, 0.86f, 1.20f), new Vector3(0, 0.62f, 1.22f), 0.08f, 0.14f, Brass, 7);
+        if (bell) s.Tube(new Vector3(0, 0.86f, 1.20f), new Vector3(0, 0.62f, 1.22f), 0.08f, 0.14f, Brass, 7);
         return s.Build();
     }
 

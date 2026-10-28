@@ -104,7 +104,8 @@ public partial class Handshake : Node
     /// 70: World/Schwing (#1269 Schwingen: RequestJoin/RequestLeave/Act/Tug; Begin, State, Thrown, Ended, TellQueue), the <c>schwing</c> invite kind, FootPlayer.SchwingPose, ItemId 500.
     /// 71: World/Adventure/Festivals alphorn game (#1269 part 4: RequestHornStart/Song; TellHornSeat, TellHornResult).
     /// 72: World/Adventure/Festivals/Stein RequestBegin, RequestThrow, TellBegin, TellNo, TellLanded (#1269 part 3: the stone put).
-    public const int Protocol = 72;
+    /// 73: World/Adventure/Festivals Désalpe RequestDesalpeDress/Start/Vote, TellDesalpe, TellDesalpeSnap, TellDesalpeResult, TellDesalpeVoted (#1269 part 7).
+    public const int Protocol = 73;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

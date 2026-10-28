@@ -2821,6 +2821,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Adventure.Errands.ErrandGivers.TryInteract(this)) return true;
         // the Älplerfest's flag ground (#1269): swing the flag
         if (Occasions.Festivals.Fahnen.FahnenGame.TryInteract(this)) return true;
+        // the Désalpe's herd, alp sign or fair ring (#1269 part 7): dress a cow, start the drive, vote
+        if (Occasions.Festivals.Desalpe.DesalpeGame.TryInteract(this)) return true;
         // the festival ground's alphorn row (#1269): a seat in the song
         if (Occasions.Festivals.Horn.HornGround.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)

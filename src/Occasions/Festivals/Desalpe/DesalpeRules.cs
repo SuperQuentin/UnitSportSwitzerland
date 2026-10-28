@@ -91,3 +91,24 @@ public static class DesalpeRules
     /// <summary>What voting for a herd pays: (Batzen, points). Once an instance.</summary>
     public const int VoteBatzen = 20, VotePoints = 40;
 }
+
+/// <summary>Where the Désalpe's places are, derived from the resolved site alone so the server and every client agree with nothing sent.</summary>
+public static class DesalpeGround
+{
+    public static int SeedOf(ResolvedSite site) => (int)(((long)site.E * 31 + (long)site.N) & 0x7FFFFFFF);
+
+    /// <summary>The route of a site's drive: down to the site's middle, the fair.</summary>
+    public static DesalpeRoute RouteOf(ResolvedSite site, double meters) => DesalpeRoute.Plan(SeedOf(site), meters);
+
+    /// <summary>LV95 of a point in metres east and north of the fair.</summary>
+    public static (double E, double N) Lv95(ResolvedSite site, (double X, double Y) p) => (site.E + p.X, site.N + p.Y);
+
+    /// <summary>The alp sign stands 14 m down the route from the herd's start, the fair's ring at its end.</summary>
+    public static (double E, double N) Sign(ResolvedSite site, DesalpeRoute route)
+    {
+        var (tx, ty) = route.Tangent(0);
+        return Lv95(site, (route.Start.X + tx * 14, route.Start.Y + ty * 14));
+    }
+
+    public static (double E, double N) Ring(ResolvedSite site) => (site.E, site.N);
+}
