@@ -16,3 +16,6 @@ public sealed record FestivalGamePlayed(long Peer, string Key, string Festival, 
 
 /// <summary>The party score reached its <paramref name="Index"/>-th milestone (0-based) and this member was paid.</summary>
 public sealed record FestivalMilestoneReached(long Peer, string Key, string Festival, int Index) : AdventureEvent(Peer, Key);
+
+/// <summary>The peer stood within 1.5 km of the site for 20 s of the festival's closing show (#1269 part 2): raised once per festival instance.</summary>
+public sealed record FestivalShowWatched(long Peer, string Key, string Festival) : AdventureEvent(Peer, Key);

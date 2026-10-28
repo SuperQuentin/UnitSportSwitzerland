@@ -95,7 +95,7 @@ public partial class FestivalCheck : ChatProbe
         string lines = string.Join("\n", page.Lines);
         Expect(lines.Contains("Day 2 of 5") && lines.Contains("Test festival at the test field"), "the tab names the day and the place");
         Expect(lines.Contains("Ring the bell") && lines.Contains("open") && lines.Contains("Ring the gong · tomorrow"), "the day table: the bell open, the gong tomorrow");
-        Expect(lines.Contains("closing show: bonfires"), "the closing show is listed");
+        Expect(lines.Contains("closing show: fireworks"), "the closing show is listed");
         Expect(lines.Contains("400 points") && lines.Contains("Warm-up") && lines.Contains("Crowd · 400 points") && lines.Contains("Whole village"), "the party score and the milestones");
         Expect(lines.Contains("160 Batzen held") && lines.Contains("worth CHF 160"), "the Batzen held and their worth");
         page.QueueFree();

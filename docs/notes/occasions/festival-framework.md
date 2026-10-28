@@ -88,4 +88,4 @@ bots earn nothing.
 
 Register the festival's def (`FestivalCatalog.Register`) and its `OccasionEntry` default; call `Award` from the game's server method after checking the body
 is at the ground; a game's day goes in `Days`. Every new `ItemId` of a festival is in 500-539 and every `Headwear` in 5-20 (reserved in the enums).
-Part 2's closing show reads `FestivalDef.Show` and the last day (`FestivalCalendar`).
+The closing show (part 2, built: `festival-fireworks`) reads `FestivalDef.Show` and the last day; a def with `ClosingShow.Fireworks` gets it for free.

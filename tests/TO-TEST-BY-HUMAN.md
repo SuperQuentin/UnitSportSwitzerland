@@ -136,3 +136,18 @@ Offline is enough for most: `--systems ui,physics,adventure,terrain` on any map;
 - [ ] The single-use Breath test: blow 5 s, a tube on screen turns green (under 0.5) or amber, then it is used up. Judge whether the colours read clearly and whether "no number" feels right.
 - [ ] The glass icon left of the stamina ring appears above 0.3 per mille and nowhere else shows the level. Judge its place against the Together chip and in VR.
 - [ ] Models: the Breathalyzer and the Breath test tubes (clear, green, amber) in the model viewer, category Adventure, and in the hand in first and third person → they look right; the sounds are in the sound player under `AlcoholSounds`.
+
+## Festival fireworks and the closing show ([#1310](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1310))
+
+`--festival test --date 2027-03-14 --time 22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure` (the last day of the check-only festival, 22:00): a show starts about 15 s after load. Online: a server with `--festival test` plus a client, same date.
+
+- [ ] Walk to the field (the mortar rack with its tubes stands at its middle, the flag poles round it) → the first shell climbs with a spark trail, bursts with a flash on the ground, and its bang comes a moment later. Is the delay believable, the bang low and round rather than a click?
+- [ ] Watch from 150 m, 1 km and 3 km (walk or `/tp`) → the bursts stay readable sparks at 3 km, the bang is 9 s late there, and the light on the ground and the tent fades with distance.
+- [ ] Peony, chrysanthemum, willow, palm, ring, crossette (four small ones a second after) and the Swiss cross (a white cross hanging over a red burst, turned to face you) → each is told apart from the others. Judge the willow's droop and the palm: do they read as such?
+- [ ] The finale (the last 20 s of 6-12 minutes; wait, or join late) → forty shells with no stutter. Note the frame time with F3 or `--perf`: the plan's budget is under 0.3 ms.
+- [ ] Join a second client halfway through the show → it sees the shells from where the show is, not a pile of old ones, and the same shell at the same moment as the first client.
+- [ ] Cartoon, PS1 and Realistic (Settings › Style) → the sparks, flashes and sky look right in each.
+- [ ] Settings › Occasions: set the test festival to Off → no shells and no bangs, and the Journal's Festival tab still shows the score.
+- [ ] VR headset: stand at the field, look up → depth reads right; no particle sheet or flash light clips close to the eyes.
+- [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
+- [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
