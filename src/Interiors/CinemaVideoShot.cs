@@ -68,7 +68,8 @@ public partial class CinemaVideoShot : Node3D
                 {
                     "monitor" => f.Monitors.FirstOrDefault(),
                     "window" => f.Windows.FirstOrDefault(),
-                    "camera" => f.Cameras.FirstOrDefault(),
+                    "camera" => f.Cameras.FirstOrDefault(c => c.Kind == CaptureKind.Webcam),
+                    "ndi" => f.Cameras.FirstOrDefault(c => c.Kind == CaptureKind.Ndi),
                     _ => new CaptureSource(CaptureKind.Test, "Test pattern", "test"),
                 };
                 if (source == null) { Done($"FAILED (no {kind} to share)"); return; }
