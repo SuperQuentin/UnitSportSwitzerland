@@ -48,9 +48,35 @@ public partial class FestivalNetProbe : ChatProbe
             case "A": await A(); break;
             case "B": await B(); break;
             case "B2": await B2(); break;
+            case "SHOW": await Show(); break;
             default: await A2(); break;
         }
         await Finish(3.0);
+    }
+
+    /// <summary>
+    /// The closing show over the wire (#1269 part 2), on a server read as the festival's last day (14 March 2027) with its sky running: at
+    /// 10:00 no show; the admin sets the clock to 21:24 and the server's evening crossing 21:30 fixes a start and a seed, which arrive in this
+    /// remote client's running list; the client's own <see cref="Fireworks"/> plans that very show, plays its first shell with its
+    /// sounds.
+    /// </summary>
+    private async Task Show()
+    {
+        Expect(await Running(5), "the server runs the test festival on its last day");
+        var fw = Fireworks.Instance;
+        Expect(fw != null, "this client has the fireworks node");
+        if (fw == null) return;
+        Expect(Svc.RunningOf(FestivalCatalog.TestId)!.ShowStart == 0 && fw.ShowSeed == 0, "in the morning no show is on the books");
+        if (!await LogIn("fwpw")) return;
+        Chat!.Send("/time set 21:24");
+        Expect(await Until(() => Svc.RunningOf(FestivalCatalog.TestId)!.ShowStart > 0, 60), "the server's evening starts the show, and the start reached this client");
+        var run = Svc.RunningOf(FestivalCatalog.TestId)!;
+        Expect(run.ShowSeed == FestivalShows.SeedOf(run.Instance, 1), $"the seed is the instance's first ({run.ShowSeed})");
+        Expect(await Until(() => fw.ShowSeed == run.ShowSeed, 10), "the client plans the same show");
+        Expect(await Until(() => fw.ShowTime >= FireworkShow.Plan(run.ShowSeed).Shells[0].T + 1, 60), $"it plays on the shared clock ({fw.ShowTime:F1} s in)");
+        Expect(fw.RocketsFired >= 1 && fw.BurstsFired >= 1, $"a shell climbed and burst in this client ({fw.RocketsFired}/{fw.BurstsFired})");
+        Expect(await Until(() => fw.SoundsPlayed >= 2, 20), $"and was heard ({fw.SoundsPlayed})");
+        Expect(Math.Abs(fw.ShowTime - (ClockSync.SimNow - run.ShowStart)) < 1, "the show's time is the server's clock minus its start");
     }
 
     private async Task<bool> Running(int day, double seconds = 30) =>
