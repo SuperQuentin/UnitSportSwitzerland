@@ -63,12 +63,21 @@ public partial class CinemaVideoShot : Node3D
         booths.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
         // showing: the film the hall draws by itself, as a cinema first seen mid-showing (the cat slides one entry: a new
         // showing until it draws a film)
-        if (_link == "showing")
+        // file:<path>: this machine plays a video file of its own for the hall (#1298 phase 4), sharp
+        if (_link.StartsWith("file:", StringComparison.Ordinal))
+            booths.StartFile(_plan, 0, _link[5..], CinemaVideo.LiveQuality.High, CinemaVideo.Guess(_link[5..]));
+        // showing[:n]: the n-th film (1 the first) the hall draws by itself, a new showing each draw
+        else if (_link == "showing" || _link.StartsWith("showing:", StringComparison.Ordinal))
         {
-            for (int reel = 0; reel < 16 && booths.VideoOf(_plan, 0).Link.Length == 0; reel++)
+            int want = _link.Length > 8 && int.TryParse(_link[8..], out int n) ? Math.Max(1, n) : 1, films = 0;
+            for (int reel = 0; reel < 40 && films < want; reel++)
             {
-                booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, false));
-                booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+                if (reel > 0 || booths.VideoOf(_plan, 0).Link.Length == 0)
+                {
+                    booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, false));
+                    booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+                }
+                if (booths.VideoOf(_plan, 0).Link.Length > 0) films++;
             }
             GD.Print($"[cinemavideo] hall 1 is showing {booths.FilmTitle(booths.VideoOf(_plan, 0).Link)} ({booths.VideoOf(_plan, 0).Link})");
         }
