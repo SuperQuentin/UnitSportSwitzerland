@@ -3,8 +3,9 @@
 
 # Venues and shop units: their own street door and a glazed front (#1292)
 
-Status: **in progress** on `feat/1292-venue-own-door` (worktree `../UnitSportSwitzerland-1292`), started
-2026-10-28 after #1294 merged. See-through glass is the follow-up #1321. Related: #60.
+Status: **done**, PR #1327 (`feat/1292-venue-own-door`), all six design steps; quick and net tiers run
+(Oct 28). Rules and measurements: `docs/notes/terrain/venue-own-door.md`. See-through glass is the
+follow-up #1321. Related: #60.
 
 ## Decisions (owner, 2026-10-28)
 
