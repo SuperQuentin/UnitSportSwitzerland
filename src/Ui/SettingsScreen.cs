@@ -155,6 +155,13 @@ public partial class SettingsScreen : Screen
                 "The faint figure-eight behind your trace while you stir a shared pot");
             UiKit.ToggleRow(rows, "Crevasses", s.Crevasses, on => GameSettings.Current.Crevasses = on,
                 "Hidden crevasses on glaciers: unroped, a snow bridge may give way under you");
+            // alcohol (#1271)
+            rows.AddChild(UiKit.Spacer(6));
+            rows.AddChild(UiKit.Section("Alcohol"));
+            UiKit.OptionRow(rows, "Alcohol (your own world)", new[] { "Off: drinks carry no alcohol", "Mild: half the effects, no passing out", "Real: builds up and wears off" }, Math.Clamp(s.AlcoholMode, 0, 2),
+                i => GameSettings.Current.AlcoholMode = i, "On a server, the server decides (--alcohol)");
+            UiKit.ToggleRow(rows, "Alcohol view effects", s.AlcoholViewEffects, on => GameSettings.Current.AlcoholViewEffects = on,
+                "The camera's sway and the blurred edges while drunk; off keeps the input lag. VR never sways, it narrows the view instead");
             // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
             Button replay = null!;
             replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>

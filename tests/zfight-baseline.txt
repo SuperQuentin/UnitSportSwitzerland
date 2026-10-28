@@ -1,5 +1,6 @@
 # --zfightcheck baseline (#788): cm² of fighting faces per model of the model viewer.
 # A model over its line (or a new one with any) fails the check. Lower it with --zfightcheck update.
+42.2	Adventure / Breathalyzer
 134.9	Adventure / Caquelon
 8040	Adventure / Crevasse
 4.8	Adventure / Fondue bread
@@ -697,6 +698,7 @@
 3.9	Items / Barley
 5.9	Items / BarleySeed
 2.6	Items / BeeStockings
+200.8	Items / BeerAlcoholFree
 200.8	Items / BeerBottle
 4.7	Items / BellCollar
 6.9	Items / BeltPouch
@@ -707,6 +709,7 @@
 3.7	Items / BlackShorts
 2.6	Items / BlackStockings
 6.4	Items / Bread
+42.2	Items / Breathalyzer
 2.3	Items / BrookTrout
 2.3	Items / BrownTrout
 3	Items / BuckleCorset
