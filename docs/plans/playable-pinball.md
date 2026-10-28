@@ -3,7 +3,7 @@
 
 # Playable pinball (#1325, epic #1322)
 
-Status: **planned**; built on `feat/1325-pinball`. Status updates ride the branch.
+Status: **built** on `feat/1325-pinball` (PR #1333): the core, four tables, cabinets, net, controls, sounds, checks; open points with the owner (the PR's questions). Details as built: `docs/notes/terrain/pinball-play.md`.
 
 ## Decisions (owner, 2026-10-28, on #1325)
 

@@ -7,7 +7,7 @@ namespace UnitSport.Interiors.Pinball;
 // flippers, balls, lamps, drop targets, spinners and the backbox's display all move.
 public partial class PinballCabinet
 {
-    [Showcase("Venues", "Pinball - ")]
+    [Showcase("Venues", "Pinball")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseTables()
     {
         for (int i = 0; i < PinballLayouts.Count; i++)

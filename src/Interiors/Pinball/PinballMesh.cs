@@ -108,6 +108,44 @@ internal sealed class PinballMesh
         Box((a + b) / 2, new Vector3(r, len / 2, r), new Basis(x, y, z), col);
     }
 
+
+    /// <summary>
+    /// A decal that cannot z-fight: the quad a-b-c-d raised <paramref name="thick"/> along <paramref name="normal"/>
+    /// with its edges closed down to the surface (no face lies on the surface it sits on).
+    /// </summary>
+    public void Plate(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal, float thick, Color col)
+    {
+        var up = normal * thick;
+        Quad(a + up, b + up, c + up, d + up, col);
+        bool was = TwoSided;
+        TwoSided = true;
+        var side = (col * 0.8f) with { A = col.A };
+        Quad(a, b, b + up, a + up, side);
+        Quad(b, c, c + up, b + up, side);
+        Quad(c, d, d + up, c + up, side);
+        Quad(d, a, a + up, d + up, side);
+        TwoSided = was;
+    }
+
+    /// <summary>A raised flat ring (or a disc, <paramref name="r0"/> 0) on a horizontal surface.</summary>
+    public void RingPlate(Vector3 at, float r0, float r1, float thick, Color col, int sides = 16)
+    {
+        var up = Vector3.Up * thick;
+        var side = (col * 0.8f) with { A = col.A };
+        bool was = TwoSided;
+        for (int i = 0; i < sides; i++)
+        {
+            float a0 = Mathf.Tau * i / sides, a1 = Mathf.Tau * (i + 1) / sides;
+            Vector3 D(float a, float r) => at + new Vector3(Mathf.Cos(a) * r, 0, Mathf.Sin(a) * r);
+            TwoSided = was;
+            if (r0 > 0) Quad(D(a0, r0) + up, D(a0, r1) + up, D(a1, r1) + up, D(a1, r0) + up, col);
+            else Tri(at + up, D(a0, r1) + up, D(a1, r1) + up, col);
+            TwoSided = true;
+            Quad(D(a0, r1), D(a1, r1), D(a1, r1) + up, D(a0, r1) + up, side);
+            if (r0 > 0) Quad(D(a0, r0), D(a1, r0), D(a1, r0) + up, D(a0, r0) + up, side);
+        }
+        TwoSided = was;
+    }
     public ArrayMesh Build()
     {
         Core.ShowcaseTrace.Mark();

@@ -669,9 +669,9 @@
 20	Furniture / WashingMachine
 144	Furniture / WaterTank
 100	Furniture / Workbench
-4149.2	Interiors / Arcade
+6279.7	Interiors / Arcade
 4600.6	Interiors / Bowling centre - Bowl bar
-9314	Interiors / Bowling centre - Two levels
+9441.8	Interiors / Bowling centre - Two levels
 5357.4	Interiors / Cinema - Small
 7718.5	Interiors / Cinema - Town
 8447.8	Interiors / Dining - Bar
@@ -1165,6 +1165,10 @@
 160.5	Unlisted / RadioBody.Mesh
 4.3	Unlisted / SteamerMeshBuilder.LeverMesh
 408.9	Unlisted / SteamerMeshBuilder.WheelMesh
+194455.5	Venues / Pinball - Alpine Ski Race, a robot playing
+202942.1	Venues / Pinball - Clockwork, a robot playing
+167444.1	Venues / Pinball - Haunted Castle, a robot playing
+174635.9	Venues / Pinball - Space Mission, a robot playing
 30	World / Ropeways - T-bar
 5.9	Items / Appenzeller
 9.4	Items / BaslerLaeckerli

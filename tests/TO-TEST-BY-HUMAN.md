@@ -209,3 +209,19 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] Journal › Errands tab on a pad (LB / RB to it): cards, Track, Share, reputation. Judge the layout at 1080p and with `--mobile`.
 - [ ] Reputation 10 / 30 / 60 / 100 points in one canton (many cards) → level-up toasts, the title "Ehrenbürger von ..." at the top. Judge the pace.
 - [ ] Giver models in the model viewer (`--models`, People › Errand givers) → eight figures with the Sennenkäppi, guide hat and vest; look right in Cartoon, PS1 and Realistic.
+
+## Pinball ([#1333](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1333))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2510425,1140985` (BowlinGland, Gland: its main door reads as locked, go in by the side door; two pinballs by the arcade corner). Any arcade or bar with pinballs works.
+
+- [ ] E at a machine's front → the eye view over the lockdown bar, the backbox's display at the top; a game starts (the ball on the plunger). V → straight down; V → back.
+- [ ] Hold Space and let go → the ball goes up the shooter lane; soft → into the top lanes (the lit one: "SKILL SHOT"); hard → round the arch.
+- [ ] A / D (and the arrows) flip; a ball rolling down an inlane can be cradled and aimed. Do the flippers feel strong enough, too strong? Can you make each ramp and orbit on purpose?
+- [ ] W nudges (Q / R to the sides): a few hard nudges → "DANGER", then TILT (flippers dead, the ball drains, no bonus).
+- [ ] Play a whole game on each of the four tables (Clockwork, Space Mission, Haunted Castle, Alpine Ski Race): the lit scoop starts a mission, its shots blink, the timer runs; lock lights, two locks → multiball; ball save; the bonus at the drain; GAME OVER and MATCH. Is it fun? Is any shot impossible or too easy?
+- [ ] The backbox per era readable from the player's eye and from 3 m away: reels (Clockwork), segments (Space), orange dots (Castle), LCD (Alpine).
+- [ ] Sounds: flippers, bumpers, slings, drops, spinner, plunger, drain, knocker; Clockwork's chimes; the jingles on the others; the ball's roll and the wire forms.
+- [ ] Pad: LB / RB and LT / RT flip, A holds the plunger (and the right stick pulled back), X nudges (left stick for the side), R3 the top view, Y Start, B steps back.
+- [ ] VR: reach out and grip at the machine; the head stays the view; the grips and triggers flip, A plunges, X nudges with a buzz.
+- [ ] Two players online in the same venue: one plays, the other watches the balls, flippers, lamps and backbox move a little behind; the watcher presses E at the machine during ball 1 → joins as player 2; at the drain the table passes to them (their client runs it), scores on the backbox for both.
+- [ ] The player up walks out of the venue mid-ball → their ball is skipped, the next player is up (or GAME OVER alone).

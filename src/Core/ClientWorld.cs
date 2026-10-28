@@ -225,6 +225,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.DiningProbe { Name = "DiningProbe" });
             return;
         }
+        // the four pinball tables built and played through their nodes (#1325)
+        if (Interiors.Pinball.PinballProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
+            return;
+        }
         // arcades planned in hand-made buildings (#1240)
         if (Interiors.ArcadeProbe.ParseArgs())
         {

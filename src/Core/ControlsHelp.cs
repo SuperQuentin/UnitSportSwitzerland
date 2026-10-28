@@ -45,6 +45,11 @@ public partial class ControlsHelp : CanvasLayer
             new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
+            new("Pinball: E at a machine steps up to it and presses Start (again to add a player in the first ball); Esc steps back", PlayerInput.InteractMount),
+            new("Pinball: the flippers", Keys: "{pinball_left} / {pinball_right}", Pad: "LB / RB (or LT / RT)"),
+            new("Pinball: hold to pull the plunger, let go to launch", PlayerInput.PinballPlunge),
+            new("Pinball: nudge the cabinet (too hard, too often: tilt); Q / R to the sides, the pad's left stick sideways", PlayerInput.PinballNudge),
+            new("Pinball: the player's view or straight down on the playfield", PlayerInput.CameraToggle),
         }),
         ("Items", new Row[]
         {

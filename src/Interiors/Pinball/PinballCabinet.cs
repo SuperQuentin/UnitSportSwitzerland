@@ -40,6 +40,9 @@ public partial class PinballCabinet : Node3D
     private MultiMeshInstance3D _discs = null!, _arrows = null!;
     private int[] _discLamps = Array.Empty<int>(), _arrowLamps = Array.Empty<int>();
     private byte[] _lampsShown = Array.Empty<byte>();
+
+    /// <summary>The lamps as last shown (the check reads it: headless, a MultiMesh keeps no colours).</summary>
+    public byte[] LampsShown => _lampsShown;
     private bool _blinkShown;
 
     /// <summary>A table's playfield point (x across, y up the table, h above it) in the playfield node's frame.</summary>
@@ -258,9 +261,9 @@ public partial class PinballCabinet : Node3D
             s.Quad(P(x1, bottom, Back), P(x1, Top(Back), Back), P(x1, Top(Front), Front), P(x1, bottom, Front), paint * 0.86f);
             s.Quad(P(x, Top(Front), Front), P(x1, Top(Front), Front), P(x1, Top(Back), Back), P(x, Top(Back), Back), trim);
             // the side rail's art stripe, lit like the backglass
-            s.Quad(P(x - 0.0005f * Math.Sign(x), 0.80f, Front - 0.05f), P(x - 0.0005f * Math.Sign(x), 0.84f, Front - 0.05f),
-                P(x - 0.0005f * Math.Sign(x), 0.84f + 1.2f * tan, Back + 0.06f), P(x - 0.0005f * Math.Sign(x), 0.80f + 1.2f * tan, Back + 0.06f),
-                Math.Sign(x) < 0 ? t.AccentA.SrgbToLinear() : t.AccentA.SrgbToLinear());
+            float xs = x < 0 ? -HalfWidth : HalfWidth;
+            s.Plate(P(xs, 0.80f, Front - 0.05f), P(xs, 0.84f, Front - 0.05f), P(xs, 0.84f + 1.2f * tan, Back + 0.06f), P(xs, 0.80f + 1.2f * tan, Back + 0.06f),
+                new Vector3(Math.Sign(xs), 0, 0), 0.009f, PinballMesh.Lit(t.AccentA.SrgbToLinear()));
         }
         s.Box(new Vector3(-HalfWidth, bottom, Front - wall), new Vector3(HalfWidth, BarY, Front), paint);
         s.Box(new Vector3(-HalfWidth, bottom, Back), new Vector3(HalfWidth, Top(Back), Back + wall), paint);
@@ -276,7 +279,9 @@ public partial class PinballCabinet : Node3D
         // the plunger's housing
         s.Box(new Vector3(t.ShooterX - 0.025f, 0.81f, Front), new Vector3(t.ShooterX + 0.025f, 0.86f, Front + 0.012f), Chrome);
         // the backbox: a cabinet of its own on the back, the backglass lit in the table's colours
-        s.Box(new Vector3(-BoxHalf, BoxBottom, BoxBack), new Vector3(BoxHalf, BoxTop, BoxFront), paint, true);
+        // its front 12 mm back, the backglass panel standing proud of it (so neither lies on the other)
+        s.Box(new Vector3(-BoxHalf, BoxBottom, BoxBack), new Vector3(BoxHalf, BoxTop, BoxFront - 0.012f), paint, true);
+        s.Box(new Vector3(-0.33f, 1.10f, BoxFront - 0.012f), new Vector3(0.33f, 1.89f, BoxFront), PinballMesh.Lit(t.Ground.SrgbToLinear() * 1.6f));
         s.Box(new Vector3(-BoxHalf - 0.003f, BoxTop - 0.03f, BoxBack - 0.003f), new Vector3(BoxHalf + 0.003f, BoxTop + 0.004f, BoxFront + 0.003f), trim);
         // the neck between the cabinet and the backbox
         s.Box(new Vector3(-0.1f, Top(Back) - 0.01f, BoxBack + 0.05f), new Vector3(0.1f, BoxBottom, BoxFront - 0.02f), Black);
@@ -287,13 +292,14 @@ public partial class PinballCabinet : Node3D
     /// <summary>The backglass: a lit picture in the table's theme round the display, the speaker grilles below.</summary>
     private static void BackglassArt(PinballMesh s, PinballTable t)
     {
-        float z = BoxFront + 0.002f;
-        var ground = PinballMesh.Lit(t.Ground.SrgbToLinear() * 1.6f);
+        float z = BoxFront;
         var a = PinballMesh.Lit(t.AccentA.SrgbToLinear());
         var b = PinballMesh.Lit(t.AccentB.SrgbToLinear());
+        // each picture layer a plate 2 mm proud of the one under it: nothing lies flat on anything (zfight)
         void Flat(float x0, float y0, float x1, float y1, Color c, float dz = 0) =>
-            s.Quad(new Vector3(x0, y0, z + dz), new Vector3(x1, y0, z + dz), new Vector3(x1, y1, z + dz), new Vector3(x0, y1, z + dz), c);
-        Flat(-0.33f, 1.10f, 0.33f, 1.89f, ground);
+            s.Plate(new Vector3(x0, y0, z), new Vector3(x0, y1, z), new Vector3(x1, y1, z), new Vector3(x1, y0, z), Vector3.Back, 0.009f * Level(dz), c);
+        // a layer of the picture 9 mm proud of the one under it: closer would z-fight (8 mm, zfight)
+        static int Level(float dz) => dz <= 0.0008f ? 1 : dz <= 0.001f ? 2 : dz <= 0.0014f ? 3 : 4;
         // the speaker panel at the bottom
         Flat(-0.33f, 1.10f, 0.33f, 1.16f, Black, 0.0005f);
         for (int i = 0; i < 9; i++) Flat(-0.30f + i * 0.068f, 1.115f, -0.27f + i * 0.068f, 1.145f, PinballMesh.Col(0.2f, 0.2f, 0.22f), 0.001f);
@@ -307,8 +313,8 @@ public partial class PinballCabinet : Node3D
                     var c = new Vector3(-0.2f + i * 0.2f, 1.62f, z + 0.0008f);
                     Flat(c.X - 0.07f, c.Y - 0.07f, c.X + 0.07f, c.Y + 0.07f, i == 1 ? a : b, 0.0008f);
                     Flat(c.X - 0.055f, c.Y - 0.055f, c.X + 0.055f, c.Y + 0.055f, PinballMesh.Lit(PinballMesh.Col(0.95f, 0.9f, 0.75f)), 0.0012f);
-                    Flat(c.X - 0.004f, c.Y - 0.003f, c.X + 0.004f, c.Y + 0.045f, Black, 0.0016f);
-                    Flat(c.X - 0.003f, c.Y - 0.004f, c.X + 0.035f, c.Y + 0.004f, Black, 0.0016f);
+                    Flat(c.X - 0.004f, c.Y - 0.003f, c.X + 0.004f, c.Y + 0.045f, Black, 0.002f);
+                    Flat(c.X - 0.003f, c.Y - 0.004f, c.X + 0.035f, c.Y + 0.004f, Black, 0.002f);
                 }
                 break;
             case PinballEra.Segments:
@@ -335,7 +341,7 @@ public partial class PinballCabinet : Node3D
                 for (int i = 0; i < 3; i++)
                 {
                     float x = -0.28f + i * 0.2f;
-                    s.Tri(new Vector3(x, 1.36f, z + 0.0008f), new Vector3(x + 0.24f, 1.36f, z + 0.0008f), new Vector3(x + 0.12f, 1.66f + i % 2 * 0.06f, z + 0.0008f), PinballMesh.Lit(PinballMesh.Col(0.85f, 0.92f, 1f)));
+                    s.Plate(new Vector3(x, 1.36f, z), new Vector3(x + 0.12f, 1.66f + i % 2 * 0.06f, z), new Vector3(x + 0.24f, 1.36f, z), new Vector3(x + 0.24f, 1.36f, z), Vector3.Back, 0.009f, PinballMesh.Lit(PinballMesh.Col(0.85f, 0.92f, 1f)));
                 }
                 for (int i = 0; i < 5; i++) Flat(-0.25f + i * 0.12f, 1.38f, -0.24f + i * 0.12f, 1.46f, i % 2 == 0 ? a : b, 0.0012f);
                 break;
@@ -393,9 +399,9 @@ public partial class PinballCabinet : Node3D
         }
         foreach (var sc in t.Scoops)
         {
-            s.Disc(P(sc.C.X, sc.C.Y, 0.0005f), sc.R * 0.85f, Black, 14);
-            s.Ring(P(sc.C.X, sc.C.Y, 0.0006f), sc.R * 0.85f, sc.R, Chrome, 14);
-            if (sc.Subway) s.Ring(P(sc.Exit.X, sc.Exit.Y, 0.0006f), 0.012f, 0.016f, Chrome, 12);
+            s.RingPlate(P(sc.C.X, sc.C.Y, 0), 0, sc.R * 0.85f, 0.001f, Black, 14);
+            s.RingPlate(P(sc.C.X, sc.C.Y, 0), sc.R * 0.85f, sc.R, 0.002f, Chrome, 14);
+            if (sc.Subway) s.RingPlate(P(sc.Exit.X, sc.Exit.Y, 0), 0.012f, 0.016f, 0.002f, Chrome, 12);
         }
         foreach (var sn in t.Sensors)
         {
@@ -433,8 +439,8 @@ public partial class PinballCabinet : Node3D
         }
         // the apron over the outhole, the shooter lane's floor stripe
         s.Box(P(PinballLayouts.Left, -0.07f) + new Vector3(0, 0, 0), P(PinballLayouts.InnerShooter, 0.055f, 0.03f), trim);
-        s.Quad(P(PinballLayouts.InnerShooter + 0.004f, 0.78f, 0.0005f), P(PinballLayouts.Right - 0.004f, 0.78f, 0.0005f),
-            P(PinballLayouts.Right - 0.004f, 0.05f, 0.0005f), P(PinballLayouts.InnerShooter + 0.004f, 0.05f, 0.0005f), ground * 0.7f);
+        s.Plate(P(PinballLayouts.InnerShooter + 0.004f, 0.78f), P(PinballLayouts.Right - 0.004f, 0.78f),
+            P(PinballLayouts.Right - 0.004f, 0.05f), P(PinballLayouts.InnerShooter + 0.004f, 0.05f), Vector3.Up, 0.001f, ground * 0.7f);
         // the side rails over the playfield's edges
         s.Box(P(-Width / 2 - 0.025f, -0.07f), P(-Width / 2, Length, 0.06f), Wood);
         s.Box(P(Width / 2, -0.07f), P(Width / 2 + 0.025f, Length, 0.06f), Wood);
@@ -446,8 +452,9 @@ public partial class PinballCabinet : Node3D
     private static void PlayfieldArt(PinballMesh s, PinballTable t, Color ground, Color a, Color b)
     {
         Vector3 P(float x, float y, float h = 0.0003f) => Local(new Vector3(x, y, h));
-        void Rect(float x0, float y0, float x1, float y1, Color c, float h = 0.0003f) => s.Quad(P(x1, y0, h), P(x0, y0, h), P(x0, y1, h), P(x1, y1, h), c);
-        void Ring(float x, float y, float r0, float r1, Color c, float h = 0.0004f) => s.Ring(P(x, y, h), r0, r1, c, 24);
+        // printed art as thin plates, each layer proud of the one under it (zfight)
+        void Rect(float x0, float y0, float x1, float y1, Color c, float h = 0.0003f) => s.Plate(P(x1, y0, 0), P(x0, y0, 0), P(x0, y1, 0), P(x1, y1, 0), Vector3.Up, h * 4f, c);
+        void Ring(float x, float y, float r0, float r1, Color c, float h = 0.0004f) => s.RingPlate(P(x, y, 0), r0, r1, h * 4f, c, 24);
         switch (t.Era)
         {
             case PinballEra.Reels:
@@ -569,8 +576,7 @@ public partial class PinballCabinet : Node3D
     {
         // a flag hanging from its axle (the node turns round X)
         var s = new PinballMesh { TwoSided = true };
-        s.Box(new Vector3(-0.022f, -0.028f, -0.001f), new Vector3(0.022f, -0.002f, 0.001f), Chrome);
-        s.Box(new Vector3(-0.018f, -0.024f, -0.0015f), new Vector3(0.018f, -0.006f, 0.0015f), PinballMesh.Lit(PinballMesh.Col(1f, 0.8f, 0.2f)));
+        s.Box(new Vector3(-0.02f, -0.026f, -0.0015f), new Vector3(0.02f, -0.003f, 0.0015f), PinballMesh.Lit(PinballMesh.Col(1f, 0.8f, 0.2f)));
         return s.Build();
     }
 
