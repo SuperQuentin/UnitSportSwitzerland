@@ -29,5 +29,7 @@ public partial class InteriorNode
             node.AddChild(rig);
             node._laneRigs[i] = rig;
         }
+        // the decoration bowlers and bot partners' figures (#1323)
+        if (node._laneRigs.Count > 0) node.AddChild(BowlingDeco.Create(node, material));
     }
 }

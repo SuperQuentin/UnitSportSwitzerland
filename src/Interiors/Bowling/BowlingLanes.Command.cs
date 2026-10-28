@@ -7,7 +7,7 @@ namespace UnitSport.Interiors;
 public partial class BowlingLanes
 {
     public const string CommandUsage =
-        "Usage: /bowl signin | /bowl ball [colour 0-7] [pounds 6-16] | /bowl roll <x> <angle> <m/s> <revs> <axis> | /bowl score";
+        "Usage: /bowl signin | /bowl ball [colour 0-7] [pounds 6-16] | /bowl roll <x> <angle> <m/s> <revs> <axis> | /bowl bot | /bowl score";
 
     /// <summary>
     /// <c>/bowl</c> for <paramref name="peer"/> in centre <paramref name="key"/> (the one they are in): what to
@@ -40,6 +40,8 @@ public partial class BowlingLanes
                 }
                 return ServeRelease(peer, key, release.Pack(), Now) ? "Rolled." : "Not rolled.";
             }
+            case "bot":
+                return ServeAddBot(peer, key) ? "A bot partner joins your game." : "No bot added.";
             case "score":
             {
                 if (SignedIn(peer) is not { } me) return "Not signed in.";

@@ -50,6 +50,12 @@ public partial class BowlingLanes
         else ServeTakeBall(MyId, key, color, weight);
     }
 
+    public void AskAddBot(string key)
+    {
+        if (Online) RpcId(1, MethodName.RequestAddBot, key);
+        else ServeAddBot(MyId, key);
+    }
+
     public void AskRelease(string key, BowlingBall.Release release)
     {
         double at = Now;
@@ -62,6 +68,18 @@ public partial class BowlingLanes
         if (Online) RpcId(1, MethodName.RequestRelease, key, release.Pack(), at);
         else ServeRelease(MyId, key, release.Pack(), at);
     }
+
+    /// <summary>The lane of centre <paramref name="key"/> a bowler named <paramref name="name"/> is on, as this peer knows it.</summary>
+    public Lane? LaneWith(string key, string name)
+    {
+        foreach (var lanes in Centres.GetValueOrDefault(key)?.Values ?? Enumerable.Empty<Lane[]>())
+            foreach (var lane in lanes)
+                if (lane.Bowlers.Any(b => b.Name == name)) return lane;
+        return null;
+    }
+
+    /// <summary>How many of the deck's frames this peer got for the lane's latest roll (the net check's).</summary>
+    public int FramesSeen(string key, int pair, int lane) => _plays.TryGetValue((key, pair, lane), out var p) ? p.Frames.Count : 0;
 
     // ---- what the server sends ---------------------------------------------------------------
 

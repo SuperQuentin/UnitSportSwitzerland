@@ -11,14 +11,21 @@ public partial class BowlingLanes
 {
     private const float UseReach = 1.2f;
 
-    private enum Use { SignIn, SignOut, Rack, Hood, Bowl }
+    private enum Use { SignIn, SignOut, AddBot, Rack, Hood, Bowl }
 
     private (Use Use, InteriorNode Node, int Piece, int Tier, int Slot)? At(FootPlayer p)
     {
         if (!p.Indoors || InteriorManager.Instance is not { Current: { Type: BuildingType.Bowling } layout, CurrentNode: { } node }) return null;
         var me = SignedIn(MyId);
         int counter = Loot.LootService.NearestOf(p, layout, node, t => t == FurnitureType.ShoeCounter, UseReach);
-        if (counter >= 0) return (me == null ? Use.SignIn : Use.SignOut, node, counter, 0, 0);
+        if (counter >= 0)
+        {
+            if (me == null) return (Use.SignIn, node, counter, 0, 0);
+            // before the first ball, with room: a bot partner (leaving the building gives the shoes back too)
+            var mine = PairOf(me.Value.Key, me.Value.Pair)[me.Value.Lane];
+            bool open = mine.Bowlers.Count < MaxBowlers && mine.Bowlers.All(b => b.Rolls.Count == 0);
+            return (open ? Use.AddBot : Use.SignOut, node, counter, 0, 0);
+        }
         if (me == null) return null;
         if (me.Value.Bowler.Ball == BallAt.None)
         {
@@ -55,6 +62,7 @@ public partial class BowlingLanes
         {
             case Use.SignIn: return "Sign in to bowl";
             case Use.SignOut: return "Give the shoes back";
+            case Use.AddBot: return "Add a bot partner";
             case Use.Rack:
             {
                 var (_, _, _, pounds) = InteriorMeshBuilder.RackBall(at.Node.Layout.Furniture[at.Piece], at.Slot, at.Tier);
@@ -95,6 +103,9 @@ public partial class BowlingLanes
                 b.AskTakeBall(key, color, pounds);
                 break;
             }
+            case Use.AddBot:
+                b.AskAddBot(key);
+                break;
             case Use.Hood:
                 b.AskTakeBall(key, 0, 0);
                 break;

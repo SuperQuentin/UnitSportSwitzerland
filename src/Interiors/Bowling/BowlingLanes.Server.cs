@@ -42,6 +42,7 @@ public partial class BowlingLanes
         }
         if (!Near(peer, l, FurnitureType.ShoeCounter)) return Refuse(peer, "Sign in at the shoe counter.");
         (int Pair, int Lane, int Score)? best = null;
+        var deco = DecoLanes(l);
         foreach (int pair in PairsOf(l))
         {
             var lanes = PairOf(key, pair);
@@ -49,6 +50,8 @@ public partial class BowlingLanes
             {
                 var lane = lanes[i];
                 if (lane.Bowlers.Count >= MaxBowlers) continue;
+                // the decoration bowlers' lanes last: a player gets one only when every other is taken
+                if (deco.Contains((pair, i)) && lane.Bowlers.Count == 0) { best ??= (pair, i, 0); continue; }
                 bool fresh = lane.Bowlers.All(b => b.Rolls.Count == 0);
                 // a game not begun with friends in it first, then an empty lane, then the emptiest
                 int score = lane.Bowlers.Count > 0 && fresh ? 100 - lane.Bowlers.Count : lane.Bowlers.Count == 0 ? 50 : 10 - lane.Bowlers.Count;
@@ -232,6 +235,7 @@ public partial class BowlingLanes
                             changed = true;
                         }
                     }
+                    changed |= StepBots(key, pair, lane, now);
                     if (!double.IsNaN(lane.OverAt) && now > lane.OverAt + 20 && !lane.CycleBusy(now))
                     {
                         // everyone finished a while ago: a new game on the same lane
@@ -266,7 +270,7 @@ public partial class BowlingLanes
     private InteriorLayout? Plan(long peer, string key)
     {
         if (InteriorManager.Instance is not { } im || im.Planned(key) is not { Type: BuildingType.Bowling } l) return null;
-        if (Online && im.SpaceOf(peer) != key) { GD.Print($"[bowling] peer {peer} is not in {key}: refused"); return null; }
+        if (Online && !IsBot(peer) && im.SpaceOf(peer) != key) { GD.Print($"[bowling] peer {peer} is not in {key}: refused"); return null; }
         return l;
     }
 
@@ -316,6 +320,7 @@ public partial class BowlingLanes
 
     private bool OnApproach(long peer, InteriorLayout l, int pair, int lane)
     {
+        if (IsBot(peer)) return true;
         var f = l.Furniture[pair];
         if (InPiece(peer, l, f) is not { } at) return !Online;
         var g = LaneGeometry.Of(f);
@@ -393,6 +398,12 @@ public partial class BowlingLanes
     private void RequestRelease(string key, int[] release, double at)
     {
         if (Multiplayer.IsServer()) ServeRelease(Multiplayer.GetRemoteSenderId(), key, release, at);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestAddBot(string key)
+    {
+        if (Multiplayer.IsServer()) ServeAddBot(Multiplayer.GetRemoteSenderId(), key);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
