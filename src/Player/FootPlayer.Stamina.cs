@@ -149,7 +149,8 @@ public partial class FootPlayer
             if (infinite) _stamina.Refill();
         }
         if (!Bot && !Npc && Adventure.StaminaUpgrades.MySteps is int steps) SetStaminaSteps(steps);
-        _stamina.Step(dt, StaminaRestNow(onFloor));
+        // linked or belayed (#1266): set by the owner from its link and the partner's pose
+        _stamina.Step(dt, StaminaRestNow(onFloor), CompanyNow?.Invoke() ?? StaminaCompany.None);
         bool winded = _stamina.Winded;
         if (winded && !_wasWinded) WindedStarted?.Invoke();
         _wasWinded = winded;

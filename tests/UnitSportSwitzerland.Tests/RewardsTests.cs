@@ -151,8 +151,17 @@ public class RewardPlacerTests
         Assert.Equal(peak.Id, lux.PoiId);
         Assert.True(RewardRules.TryTile(lux.Id, p => cat.Resolve(p) is { } q ? (q.E, q.N) : null, out var t));
         Assert.Equal((id.E, id.N), t);
-        // a castle's sealed chest is held by pressure plates
-        Assert.Equal(SealKind.Plates, RewardPlacer.SealFor(ChestTier.Luxurious, 7, castle, 500, 5, false));
+        // a castle's sealed chest is held by pressure plates, or one in six by a two-handle gate (#1266)
+        int gates = 0;
+        for (ulong h = 0; h < 1200; h++)
+        {
+            var seal = RewardPlacer.SealFor(ChestTier.Luxurious, h, castle, 500, 5, false);
+            Assert.True(seal is SealKind.Plates or SealKind.Gate, $"{seal}");
+            if (seal == SealKind.Gate) gates++;
+        }
+        Assert.InRange(gates, 150, 250);
+        // a Luxurious chest high on a glacier needs a rope team
+        Assert.Equal(SealKind.Roped, RewardPlacer.SealFor(ChestTier.Luxurious, 7, null, 3100, 10, false));
     }
 
     [Fact]

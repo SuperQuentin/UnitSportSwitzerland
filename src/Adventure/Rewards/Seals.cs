@@ -27,6 +27,8 @@ public sealed record SealLayout(SealKind Kind, SealProp[] Props, int[] Tune, flo
         SealKind.Plates => 1,
         SealKind.Bells => Tune.Length,
         SealKind.Guide => Props.Length - 1,
+        SealKind.Gate => 2,
+        SealKind.Roped => 1,
         _ => 0,
     };
 
@@ -157,6 +159,20 @@ public static class Seals
                 var guide = (slope?.Invoke(props[0].E, props[0].N) ?? 0) > 32 ? GuideKind.Vulture : GuideKind.Marmot;
                 return new SealLayout(SealKind.Guide, props, Array.Empty<int>(), 0, guide);
             }
+            case SealKind.Gate:
+            {
+                // the gate 3 m in front of the chest, its two wheel handles 3.5 m apart on either side of it (#1266)
+                double a = heading, side = a + Math.PI / 2;
+                double cx = chest.E + Math.Sin(a) * 3, cy = chest.N + Math.Cos(a) * 3;
+                var props = new[]
+                {
+                    At(cx + Math.Sin(side) * GateHandleApartM / 2, cy + Math.Cos(side) * GateHandleApartM / 2, 0, GateReachM),
+                    At(cx - Math.Sin(side) * GateHandleApartM / 2, cy - Math.Cos(side) * GateHandleApartM / 2, 0, GateReachM),
+                };
+                return new SealLayout(SealKind.Gate, props, Array.Empty<int>(), GateOpenSeconds, GuideKind.None);
+            }
+            case SealKind.Roped:
+                return new SealLayout(SealKind.Roped, Array.Empty<SealProp>(), Array.Empty<int>(), 0, GuideKind.None);
         }
         return SealLayout.None;
     }
@@ -187,8 +203,17 @@ public static class Seals
         SealKind.Plates => "Pressure plates",
         SealKind.Bells => "Cowbell tune",
         SealKind.Guide => "Guide",
+        SealKind.Roped => "Rope team",
+        SealKind.Gate => "Two-handle gate",
         _ => "",
     };
+
+    /// <summary>The two-handle gate's wheels apart, m; a body turns one within <see cref="GateReachM"/>.</summary>
+    public const float GateHandleApartM = 3.5f, GateReachM = 1.5f;
+    /// <summary>Both wheels within this of each other, s; the gate then stays open this long.</summary>
+    public const float GateTogetherSeconds = 1.5f, GateOpenSeconds = 60f;
+    /// <summary>A roped pair this close to the chest opens a <see cref="SealKind.Roped"/> seal, m.</summary>
+    public const float RopedReachM = 8f;
 
     /// <summary>What the seal asks, one line (the chest's prompt while sealed).</summary>
     public static string Hint(SealKind k) => k switch
@@ -198,6 +223,8 @@ public static class Seals
         SealKind.Plates => "Hold both stone plates down at once: a friend, or something dropped on one.",
         SealKind.Bells => "Ring the four cowbells in the order the fifth plays.",
         SealKind.Guide => "Follow the guide to it.",
+        SealKind.Roped => "Tie in with a friend to reach this.",
+        SealKind.Gate => "Two turn the wheels at once: hold E at one while a friend holds the other.",
         _ => "",
     };
 }
@@ -329,6 +356,16 @@ public sealed class SealBook
 
     /// <summary>The next ring, bell or leg expected (rings, bells, guide).</summary>
     public int NextOf(string key, string chestId) => _entries.TryGetValue((key, chestId), out var e) ? e.Next : 0;
+
+    /// <summary>A seal done by other means (#1266: a two-handle gate opened for everyone there).</summary>
+    public void MarkDone(string key, string chestId, double now)
+    {
+        var id = (key, chestId);
+        if (!_entries.TryGetValue(id, out var e)) _entries[id] = e = new Entry { Started = now };
+        e.Done = true;
+        e.Last = now;
+        e.Mask = 3;
+    }
 
     /// <summary>A chest was opened: its seal is spent.</summary>
     public void Spend(string key, string chestId) => _entries.Remove((key, chestId));

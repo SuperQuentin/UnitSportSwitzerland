@@ -148,6 +148,13 @@ public partial class SettingsScreen : Screen
                 "An amber arrow on the ground instead of leaves");
             UiKit.OptionRow(rows, "Travel (your own world)", new[] { "Free: jump anywhere", "Network: the stations you reached" }, s.AdventureTravelNetwork ? 1 : 0,
                 i => GameSettings.Current.AdventureTravelNetwork = i == 1, "Network: travel from a station sign to the points you unlocked, for the fare; the GA card travels from anywhere");
+            // playing together (#1266)
+            UiKit.ToggleRow(rows, "Together chip", s.TogetherChip, on => GameSettings.Current.TogetherChip = on,
+                "Shows how many party friends are near (their bonus) beside the stamina ring");
+            UiKit.ToggleRow(rows, "Fondue stirring guide", s.StirGuide, on => GameSettings.Current.StirGuide = on,
+                "The faint figure-eight behind your trace while you stir a shared pot");
+            UiKit.ToggleRow(rows, "Crevasses", s.Crevasses, on => GameSettings.Current.Crevasses = on,
+                "Hidden crevasses on glaciers: unroped, a snow bridge may give way under you");
             // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
             Button replay = null!;
             replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>

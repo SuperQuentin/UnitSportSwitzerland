@@ -89,3 +89,9 @@
   refused, a shared pin reaches B in A's party, a locked point and the map without the GA refused, a trip from the
   station's sign charged (B, an admin, funds it) and B sees A's remote body land, the GA bought and used from anywhere
   for nothing, refused in a BR round, the pin gone from B when A leaves. RESULT line; logs `test_output/navnet_*.log`.
+
+## Together (#1266)
+
+- `--togethercheck`, `--fonduecheck` (quick, `--world fixture --systems ui,terrain,physics,adventure`; `--rewardspots res://tools/lib/together_spots.txt`, `--fondueseed 2`), `tools/togethernetcheck.sh` (net).
+- Server: `--forfeits off|mild|all`, `--fondueseed N`, `--together-test` (opens `/rope test veteran|<milestone>`), `--together-day-seconds N`. Any peer: `--together-glacier E,N,R`.
+- Chat: `/rope [hands] <player>`, `/rope off`, `/fondue [start|raclette|sit|invite <p>|leave|forfeit 1-3]`.

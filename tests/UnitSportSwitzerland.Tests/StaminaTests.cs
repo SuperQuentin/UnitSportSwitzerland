@@ -209,4 +209,59 @@ public class StaminaTests
         // 100 base + Fed: 1.5 x (125 + 75) / 9 x 1.2 + 4 = 44 m
         Assert.Equal(44f, Stamina.PlausibleClimbM(125f), 1);
     }
+
+    // ---- playing together (#1266) ----------------------------------------------------------------
+
+    [Fact]
+    public void Linked_on_the_floor_regens_a_fifth_faster()
+    {
+        var a = Stamina.Full();
+        var b = Stamina.Full();
+        a.Points = b.Points = 10f;
+        for (int i = 0; i < 20; i++) { a.Step(0.05f, StaminaRest.Floor); b.Step(0.05f, StaminaRest.Floor, StaminaCompany.Linked); }
+        // 1 s (nothing spent: no delay) at 25 and at 30 per second
+        Assert.Equal(35f, a.Points, 1);
+        Assert.Equal(40f, b.Points, 1);
+        Assert.Equal(Stamina.RegenSeated * 1.2f, Stamina.RegenRate(StaminaRest.Seated, StaminaCompany.Linked), 3);
+        Assert.Equal(Stamina.RegenRiding, Stamina.RegenRate(StaminaRest.Riding, StaminaCompany.Linked), 3);
+    }
+
+    [Fact]
+    public void Belayed_on_a_face_holding_still_is_free_and_regens()
+    {
+        var s = Stamina.Full();
+        s.Points = 20f;
+        s.Step(0.05f, StaminaRest.None, StaminaCompany.Belayed);
+        for (int i = 0; i < 60; i++)
+        {
+            Assert.True(s.Spend(StaminaKind.ClimbHold, 0.05f));
+            s.Step(0.05f, StaminaRest.None, StaminaCompany.Belayed);
+        }
+        // nothing spent holding (so no regen delay either): 3 s at 6 /s
+        Assert.InRange(s.Points, 37.5f, 38.6f);
+        // alone the same hold costs and nothing comes back
+        var alone = Stamina.Full();
+        alone.Points = 20f;
+        for (int i = 0; i < 60; i++) { alone.Spend(StaminaKind.ClimbHold, 0.05f); alone.Step(0.05f, StaminaRest.None); }
+        Assert.Equal(17f, alone.Points, 1);
+        // belayed and winded: the rope still holds
+        var winded = Stamina.Full();
+        winded.Points = 0f;
+        winded.Winded = true;
+        winded.Step(0.05f, StaminaRest.None, StaminaCompany.Belayed);
+        Assert.True(winded.Spend(StaminaKind.ClimbHold, 0.05f));
+    }
+
+    [Fact]
+    public void Hearty_regens_a_quarter_faster_for_its_time()
+    {
+        var s = Stamina.Full();
+        s.Buff(StaminaBuff.Hearty, 2f);
+        Assert.Equal(2f, s.BuffLeft(StaminaBuff.Hearty));
+        s.Points = 0f;
+        for (int i = 0; i < 40; i++) s.Step(0.05f, StaminaRest.Floor);
+        // 2 s at 25 x 1.25
+        Assert.Equal(62.5f, s.Points, 1);
+        Assert.Equal(0f, s.BuffLeft(StaminaBuff.Hearty), 3);
+    }
 }

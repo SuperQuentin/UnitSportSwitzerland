@@ -239,6 +239,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.ProjectionPerfProbe { Name = "ProjectionPerfProbe" });
             return;
         }
+        // a video on a cinema hall's screen (#1298), windowed: shots of the picture, the projector light, the booth
+        if (Interiors.CinemaVideoShot.ParseArgs() is { } videoShot)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.CinemaVideoShot(videoShot[0], videoShot[1]) { Name = "CinemaVideoShot" });
+            return;
+        }
+        // what this machine can share in a cinema hall (#1298 phase 3), tried for real
+        if (Interiors.CinemaCaptureCheck.ParseArgs() is { } captureDir)
+        {
+            AddChild(new Interiors.CinemaCaptureCheck(captureDir) { Name = "CinemaCaptureCheck" });
+            return;
+        }
         // what E's outline draws, interiors planned in hand-made buildings (#1286)
         if (Items.InteractOutlineCheck.Requested)
         {
@@ -598,6 +611,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.OccasionPrecip());
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
+            // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
+            Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
         // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
@@ -1139,7 +1154,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Adventure.Rewards.RewardCheck.Requested) AddChild(new Adventure.Rewards.RewardCheck(items, () => LocalPlayer));
             if (Adventure.Rewards.RewardNetProbe.Role != null) AddChild(new Adventure.Rewards.RewardNetProbe(items));
             if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
+            // festivals (#1269): the running list from the server (offline: this client's own), the Journal's Festival tab
+            var festivals = Occasions.Festivals.FestivalService.Create(adventure, server: false, networked: Launch.Networked);
+            festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
+            festivals.Start = () => _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+            Occasions.Festivals.FestivalPage.Register();
+            if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
             AddNavigation(adventure, items, ground);
+            AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
         // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it
@@ -2340,6 +2364,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
+                // tied to a friend (#1266): hold to haul a hanging partner up, tap to let go
+                else if (Adventure.Together.TogetherService.Instance?.InteractPrompt(p) is { } together)
+                    yield return (PlayerInput.InteractMount, together);
                 if (Vehicles.VehicleReach.Current is { } at)
                 {
                     yield return (PlayerInput.InteractMount, at.Action);
