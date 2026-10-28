@@ -48,6 +48,22 @@ public static partial class InteriorMeshBuilder
         (C(0.24f, 0.04f, 0.30f), Lit(0.98f, 0.70f, 0.10f), Lit(0.40f, 0.70f, 1.00f)),   // planets
     };
 
+    /// <summary>How many house balls a rack holds on each of its two tiers.</summary>
+    public static int RackBalls(FurniturePlan p) => Math.Max(3, (int)(p.W / 0.26f));
+
+    /// <summary>
+    /// A rack's ball <paramref name="i"/> on <paramref name="tier"/> (0 the lower): where it sits across the rack
+    /// and its height, its colour (<see cref="Ball"/>'s index) and its weight in pounds, lightest to heaviest
+    /// along the rack (#1323: the ball a bowler takes is the one they reach for).
+    /// </summary>
+    public static (float X, float Y, int Color, int Pounds) RackBall(FurniturePlan p, int i, int tier)
+    {
+        int n = RackBalls(p);
+        float x = -p.W / 2 + 0.15f + i * (p.W - 0.3f) / Math.Max(1, n - 1), y = tier == 0 ? 0.4f : 0.85f;
+        int color = (int)(Hash(p, i * 2 + tier) * BallColors.Length) % BallColors.Length;
+        return (x, y, color, 8 + (int)MathF.Round(8f * i / Math.Max(1, n - 1)));
+    }
+
     /// <summary>Whether a piece is drawn here rather than in the main switch.</summary>
     private static bool IsVenuePiece(FurnitureType t) => t is FurnitureType.LanePair or FurnitureType.Settee
         or FurnitureType.ShoeCounter or FurnitureType.BallRack or FurnitureType.BarCounter or FurnitureType.BackBar
@@ -122,12 +138,12 @@ public static partial class InteriorMeshBuilder
                 }
                 foreach (float x in new[] { -w, w - 0.05f })
                     B(x, 0, -d, x + 0.05f, 0.9f, d, Chrome);
-                int n = Math.Max(3, (int)(p.W / 0.26f));
+                int n = RackBalls(p);
                 for (int tier = 0; tier < 2; tier++)
                     for (int i = 0; i < n; i++)
                     {
-                        float x = -w + 0.15f + i * (p.W - 0.3f) / Math.Max(1, n - 1), y = tier == 0 ? 0.4f : 0.85f;
-                        var col = BallColors[(int)(Hash(p, i * 2 + tier) * BallColors.Length) % BallColors.Length];
+                        var (x, y, color, _) = RackBall(p, i, tier);
+                        var col = BallColors[color];
                         B(x - 0.1f, y, -0.1f, x + 0.1f, y + 0.2f, 0.1f, col);
                     }
                 break;
@@ -296,12 +312,13 @@ public static partial class InteriorMeshBuilder
         Action<float, float, float, float, float, float, Color, bool> B)
     {
         float w = p.W / 2, d = p.D / 2, H = p.H;
-        bool mini = p.D < 20f;
-        var spec = mini ? InteriorGenerator.MiniLanes : InteriorGenerator.FullLanes;
-        float scale = mini ? spec.Lane / InteriorGenerator.FullLanes.Lane : 1f;
-        float z0 = -d, foul = z0 + spec.Approach, laneEnd = foul + spec.Lane;
-        float[] lanes = { -w / 2 + 0.0375f, w / 2 - 0.0375f };   // ±0.8875 at the regulation pitch
-        const float half = 0.53f, gutter = 0.2325f;
+        var g = LaneGeometry.Of(p);
+        bool mini = g.Mini;
+        var spec = g.Spec;
+        float scale = g.Scale;
+        float z0 = g.Front, foul = g.Foul, laneEnd = g.LaneEnd;
+        float[] lanes = { g.LaneX(0), g.LaneX(1) };   // ±0.8875 at the regulation pitch
+        const float half = LaneGeometry.HalfLane, gutter = LaneGeometry.Gutter;
 
         // the approach, the foul line, the dots: the approach and the lanes meet under the foul line, which hides the seam
         B(-w, 0, z0, w, 0.02f, foul - 0.015f, LaneMaple, false);
@@ -323,7 +340,6 @@ public static partial class InteriorMeshBuilder
                 float az = arrows + Math.Abs(a - 3) * 0.3f * scale;
                 B(ax - 0.015f, 0.004f, az, ax + 0.015f, 0.038f, az + 0.15f * scale, Lit(0.30f, 0.60f, 1.00f), false);
             }
-            Pins(c, laneEnd - 0.868f * scale, scale, B);
             B(c - half - gutter, 0, laneEnd + 0.024f, c + half + gutter, 0.009f, laneEnd + 0.6f * scale + 0.015f, Pit, false);
         }
         // the capping boards: between the two lanes (the ball return runs under it), and half of each outer one
@@ -336,26 +352,25 @@ public static partial class InteriorMeshBuilder
         var hood = Masking[(int)(Hash(p, 11) * Masking.Length) % Masking.Length].A;
         B(-0.38f, 0, hz, 0.38f, 0.62f, hz + 0.72f, C(0.14f, 0.14f, 0.18f), true);
         B(-0.32f, 0.61f, hz + 0.05f, 0.32f, 0.76f, hz + 0.67f, hood, false);
-        for (int i = 0; i < 3; i++)
-        {
-            float bx = -0.22f + i * 0.22f;
-            B(bx - 0.1f, 0.62f, hz + 0.75f, bx + 0.1f, 0.82f, hz + 0.95f, BallColors[(int)(Hash(p, 30 + i) * BallColors.Length) % BallColors.Length], false);
-        }
+        // the rack the balls wait on (the balls are the lane rig's, LaneRig): two chrome rails, rows of three
+        // the rack's box behind the hood (its top the dark tray), the rails set into it, ends inset: no shared face
+        B(-0.36f, 0, hz + 0.73f, 0.36f, 0.5f, hz + 1.2f, C(0.08f, 0.08f, 0.10f), true);
+        foreach (float rx in new[] { -0.3f, 0.3f })
+            B(rx - 0.015f, 0.45f, hz + 0.75f, rx + 0.015f, 0.6f, hz + 1.18f, Chrome, false);
 
         // the score screens over the approach, facing back at the settees, on poles to the ceiling
-        float sy = Math.Min(2.5f, H - 0.7f), sz = z0 + spec.Approach * 0.4f;
+        float sy = g.ScreenY, sz = g.ScreenZ;
         foreach (float c in lanes)
         {
             B(c - 0.45f, sy, sz, c + 0.45f, sy + 0.52f, sz + 0.06f, C(0.06f, 0.06f, 0.08f), false);
             B(c - 0.42f, sy + 0.03f, sz - 0.012f, c + 0.42f, sy + 0.49f, sz + 0.01f, Lit(0.12f, 0.22f, 0.70f), false);
-            for (int row = 0; row < 3; row++)
-                B(c - 0.38f, sy + 0.1f + row * 0.13f, sz - 0.025f, c + 0.38f, sy + 0.12f + row * 0.13f, sz - 0.005f, Lit(0.94f, 0.94f, 0.80f), false);
+            // the game itself is the lane rig's text on it (LaneRig.SetScore, #1323)
             B(c - 0.02f, sy + 0.52f, sz + 0.02f, c + 0.02f, H, sz + 0.04f, C(0.2f, 0.2f, 0.22f), false);
         }
 
         // the masking unit over the decks: a themed panel, the lane numbers, the bowl / don't-bowl light
         var theme = Masking[(int)(Hash(p, 12) * Masking.Length) % Masking.Length];
-        float mz = laneEnd - 1.15f * scale, top = Math.Min(H, mini ? 2.4f : 3.3f), bottom = mini ? 0.6f : 0.85f;
+        float mz = g.Masking, top = g.MaskingTop, bottom = g.MaskingBottom;
         B(-w, bottom, mz, w, top, mz + 0.3f, theme.Ground, false);
         for (int i = 0; i < 5; i++)
         {
@@ -382,19 +397,5 @@ public static partial class InteriorMeshBuilder
         }
         // nobody walks into the machines: the masking unit down to the floor and everything behind it collides
         CollisionBox(s, at, basis, new Vector3(-w, 0, mz), new Vector3(w, H, d));
-    }
-
-    /// <summary>Ten pins in their triangle on a deck, the head pin at <paramref name="head"/>, 0.305 m apart [S].</summary>
-    private static void Pins(float c, float head, float scale, Action<float, float, float, float, float, float, Color, bool> B)
-    {
-        float spacing = 0.305f * scale, row = 0.264f * scale, r = 0.06f * scale, ph = 0.381f * scale;
-        for (int k = 0; k < 4; k++)
-            for (int i = 0; i <= k; i++)
-            {
-                float x = c + (i - k / 2f) * spacing, z = head + k * row;
-                B(x - r, 0.026f, z - r, x + r, 0.04f + ph * 0.6f, z + r, PinWhite, false);
-                B(x - r * 0.55f, 0.03f + ph * 0.6f, z - r * 0.55f, x + r * 0.55f, 0.04f + ph * 0.72f, z + r * 0.55f, PinRed, false);
-                B(x - r * 0.75f, 0.03f + ph * 0.72f, z - r * 0.75f, x + r * 0.75f, 0.04f + ph, z + r * 0.75f, PinWhite, false);
-            }
     }
 }

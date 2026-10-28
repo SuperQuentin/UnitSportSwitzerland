@@ -163,6 +163,10 @@ tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
 src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
 src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
 src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+# #1323: playable bowling: the lane rig in every centre; balls rolled into the pins in their own physics space
+src/Interiors/Bowling/ quick --bowlingcheck --systems ui
+src/Interiors/Bowling/ quick --bowlingrollcheck --systems physics
+src/Interiors/Bowling/ net    tools/bowlingnetcheck.sh
 # #1238: cinemas planned in hand-made buildings; the booth over the network
 src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
 src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui

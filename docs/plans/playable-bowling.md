@@ -3,8 +3,15 @@
 
 # Playable bowling (#1323, epic #1322)
 
-Status: **planned, started.** Branch `feat/1323-bowling`, worktree `../UnitSportSwitzerland-1323`.
-Pinball (#1325) is a separate plan and PR.
+Status: **phases 1-6 built** on `feat/1323-bowling` (PR #1328); the net tier still to be run on a
+machine with more free memory. Pinball (#1325) is a separate plan and PR.
+
+As built, differences from the plan below:
+- The deck runs in real time (Godot steps every active space with the physics tick: no
+  faster-than-real-time stepping), its frames streamed as they come; clients replay a lag behind.
+- Slow-motion replay of each roll on the lane's screen (owner, mid-work).
+- Bots, basic for now (owner): decoration bowlers built with the interior and body-less partner
+  bots; real bots inside buildings are #1330. The details: `docs/notes/terrain/bowling-play.md`.
 
 ## Decisions (owner, 2026-10-28)
 
