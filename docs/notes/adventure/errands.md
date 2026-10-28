@@ -25,7 +25,7 @@ Wearing the flag, the costume and the recipes, running the givers stage nationwi
 
 ## Section and wire
 
-Section `errands` (`ErrandsProgress`): `day`, `taken`, `rep`, `together`, `done`, `bonusPaid`, `flags`, `flag`. Node `World/Errands` on the server and every client. Client to server: `RequestAccept`, `RequestShare`, `RequestJoin`; server to owner: `Accepted`, `Shared`, `TookBack`, `Told`. Offers are never sent.
+Section `errands` (`ErrandsProgress`): `day`, `taken`, `rep`, `together`, `done`, `bonusPaid`, `flags`, `flag`, `events` (world events helped per kind, #1339). Node `World/Errands` on the server and every client. Client to server: `RequestAccept`, `RequestShare`, `RequestJoin`; server to owner: `Accepted`, `Shared`, `TookBack`, `Told`. Offers are never sent.
 
 ## Commands and checks
 
