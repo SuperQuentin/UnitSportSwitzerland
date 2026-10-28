@@ -48,6 +48,22 @@ public static partial class InteriorMeshBuilder
         (C(0.24f, 0.04f, 0.30f), Lit(0.98f, 0.70f, 0.10f), Lit(0.40f, 0.70f, 1.00f)),   // planets
     };
 
+    /// <summary>How many house balls a rack holds on each of its two tiers.</summary>
+    public static int RackBalls(FurniturePlan p) => Math.Max(3, (int)(p.W / 0.26f));
+
+    /// <summary>
+    /// A rack's ball <paramref name="i"/> on <paramref name="tier"/> (0 the lower): where it sits across the rack
+    /// and its height, its colour (<see cref="Ball"/>'s index) and its weight in pounds, lightest to heaviest
+    /// along the rack (#1323: the ball a bowler takes is the one they reach for).
+    /// </summary>
+    public static (float X, float Y, int Color, int Pounds) RackBall(FurniturePlan p, int i, int tier)
+    {
+        int n = RackBalls(p);
+        float x = -p.W / 2 + 0.15f + i * (p.W - 0.3f) / Math.Max(1, n - 1), y = tier == 0 ? 0.4f : 0.85f;
+        int color = (int)(Hash(p, i * 2 + tier) * BallColors.Length) % BallColors.Length;
+        return (x, y, color, 8 + (int)MathF.Round(8f * i / Math.Max(1, n - 1)));
+    }
+
     /// <summary>Whether a piece is drawn here rather than in the main switch.</summary>
     private static bool IsVenuePiece(FurnitureType t) => t is FurnitureType.LanePair or FurnitureType.Settee
         or FurnitureType.ShoeCounter or FurnitureType.BallRack or FurnitureType.BarCounter or FurnitureType.BackBar
@@ -122,12 +138,12 @@ public static partial class InteriorMeshBuilder
                 }
                 foreach (float x in new[] { -w, w - 0.05f })
                     B(x, 0, -d, x + 0.05f, 0.9f, d, Chrome);
-                int n = Math.Max(3, (int)(p.W / 0.26f));
+                int n = RackBalls(p);
                 for (int tier = 0; tier < 2; tier++)
                     for (int i = 0; i < n; i++)
                     {
-                        float x = -w + 0.15f + i * (p.W - 0.3f) / Math.Max(1, n - 1), y = tier == 0 ? 0.4f : 0.85f;
-                        var col = BallColors[(int)(Hash(p, i * 2 + tier) * BallColors.Length) % BallColors.Length];
+                        var (x, y, color, _) = RackBall(p, i, tier);
+                        var col = BallColors[color];
                         B(x - 0.1f, y, -0.1f, x + 0.1f, y + 0.2f, 0.1f, col);
                     }
                 break;
@@ -343,13 +359,12 @@ public static partial class InteriorMeshBuilder
             B(rx - 0.015f, 0.45f, hz + 0.75f, rx + 0.015f, 0.6f, hz + 1.18f, Chrome, false);
 
         // the score screens over the approach, facing back at the settees, on poles to the ceiling
-        float sy = Math.Min(2.5f, H - 0.7f), sz = z0 + spec.Approach * 0.4f;
+        float sy = g.ScreenY, sz = g.ScreenZ;
         foreach (float c in lanes)
         {
             B(c - 0.45f, sy, sz, c + 0.45f, sy + 0.52f, sz + 0.06f, C(0.06f, 0.06f, 0.08f), false);
             B(c - 0.42f, sy + 0.03f, sz - 0.012f, c + 0.42f, sy + 0.49f, sz + 0.01f, Lit(0.12f, 0.22f, 0.70f), false);
-            for (int row = 0; row < 3; row++)
-                B(c - 0.38f, sy + 0.1f + row * 0.13f, sz - 0.025f, c + 0.38f, sy + 0.12f + row * 0.13f, sz - 0.005f, Lit(0.94f, 0.94f, 0.80f), false);
+            // the game itself is the lane rig's text on it (LaneRig.SetScore, #1323)
             B(c - 0.02f, sy + 0.52f, sz + 0.02f, c + 0.02f, H, sz + 0.04f, C(0.2f, 0.2f, 0.22f), false);
         }
 

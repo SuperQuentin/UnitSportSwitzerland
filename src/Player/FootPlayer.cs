@@ -2765,6 +2765,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (_ride == null && interiors?.TryInside(this) == true) return true;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
+            if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)

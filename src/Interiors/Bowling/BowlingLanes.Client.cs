@@ -105,7 +105,29 @@ public partial class BowlingLanes
                     Begin(key, pair, i, lane.RollId, lane.Release, lane.ReleaseAt, roller?.Color ?? 0, false);
                 }
             }
+        _version++;
         StateChanged?.Invoke(key);
+    }
+
+    private int _version;
+    private readonly Dictionary<(string, int), int> _scoresShown = new();
+
+    /// <summary>A lane's screen text: per bowler their name and total, then their frames; the one up marked.</summary>
+    private static string ScoreText(Lane lane)
+    {
+        if (lane.Bowlers.Count == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < lane.Bowlers.Count; i++)
+        {
+            var b = lane.Bowlers[i];
+            string name = b.Name.Length > 12 ? b.Name[..12] : b.Name;
+            sb.Append(i == lane.Turn && double.IsNaN(lane.OverAt) ? "▶ " : "   ").Append(name).Append("   ").Append(BowlingScore.Total(b.Rolls)).Append('\n');
+            sb.Append("   ");
+            foreach (var f in BowlingScore.Frames(b.Rolls))
+                sb.Append(f.Marks.Length == 0 ? "·" : string.Concat(f.Marks)).Append(' ');
+            sb.Append('\n');
+        }
+        return sb.ToString();
     }
 
     private void Begin(string key, int pair, int lane, int rollId, BowlingBall.Release release, double at, byte color, bool mine)
@@ -125,7 +147,14 @@ public partial class BowlingLanes
     {
         if (DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase) && Online && Multiplayer.IsServer()) return;
         var im = InteriorManager.Instance;
-        if (im?.Current is not { Type: BuildingType.Bowling } here) { _asked = ""; return; }
+        if (im?.Current is not { Type: BuildingType.Bowling } here)
+        {
+            // out of the centre a client hears no more of it (the server signs a leaver out): forget it,
+            // so the shoes come off and nothing stale shows on coming back
+            if (_asked.Length > 0 && Online && !Multiplayer.IsServer()) { Centres.Clear(); _plays.Clear(); _cycles.Clear(); }
+            _asked = "";
+            return;
+        }
         if (_asked != here.Key)
         {
             _asked = here.Key;
@@ -144,8 +173,54 @@ public partial class BowlingLanes
                 Show(rig, here.Key, pair, i, lane, now);
             }
             Hood(rig, lanes);
+            if (lanes != null && _scoresShown.GetValueOrDefault((here.Key, pair), -1) != _version)
+            {
+                _scoresShown[(here.Key, pair)] = _version;
+                for (int i = 0; i < 2; i++) rig.SetScore(i, ScoreText(lanes[i]));
+            }
         }
+        HeldBalls(here.Key);
     }
+
+    // ---- balls in hands ------------------------------------------------------------------------
+
+    private readonly Dictionary<long, MeshInstance3D> _held = new();
+    private readonly HashSet<long> _holding = new();
+
+    /// <summary>
+    /// Every bowler of the centre holding their ball has it at the wrist, as a node under their body moved
+    /// each frame (nothing rebuilt); seen from their own eye only in the mirror, as a held item is.
+    /// </summary>
+    private void HeldBalls(string key)
+    {
+        _holding.Clear();
+        if (Centres.TryGetValue(key, out var pairs))
+            foreach (var lanes in pairs.Values)
+                foreach (var lane in lanes)
+                    foreach (var b in lane.Bowlers)
+                        if (b.Ball == BallAt.Hand && BodyOf(b.Peer) is { HandLocal: { } hand } body)
+                        {
+                            _holding.Add(b.Peer);
+                            if (!_held.TryGetValue(b.Peer, out var ball) || !IsInstanceValid(ball) || ball.GetParent() != body)
+                            {
+                                if (ball != null && IsInstanceValid(ball)) ball.QueueFree();
+                                _held[b.Peer] = ball = new MeshInstance3D { Name = "BowlingBall", Mesh = LaneRig.BallMeshOf(b.Color) };
+                                ball.MaterialOverride = InteriorManager.Instance?.BuiltNode(key) is { } node ? node.LitMaterial : null;
+                                body.AddChild(ball);
+                            }
+                            uint layers = body.BodyFromEye && !XR.XrSession.Active ? Avatar.OwnBody.Layer : Avatar.OwnBody.World;
+                            if (ball.Layers != layers) ball.Layers = layers;
+                            // the ball in the palm: a hand's length past the wrist, below it
+                            ball.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.11f, -0.06f));
+                        }
+        foreach (var (peer, ball) in _held)
+            if (!_holding.Contains(peer) && IsInstanceValid(ball) && ball.Visible) ball.Visible = false;
+            else if (_holding.Contains(peer) && IsInstanceValid(ball) && !ball.Visible) ball.Visible = true;
+    }
+
+    private Player.FootPlayer? BodyOf(long peer) =>
+        peer == MyId ? InteriorManager.Instance?.LocalPlayer?.Invoke()
+            : GetParent()?.GetNodeOrNull<Node>("Players")?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
 
     private void Show(LaneRig rig, string key, int pair, int i, Lane? lane, double now)
     {
@@ -177,7 +252,12 @@ public partial class BowlingLanes
             var b = k + 1 < play.Frames.Count ? play.Frames[k + 1] : a;
             float w = b.Time > a.Time ? Mathf.Clamp((float)((deckTime - a.Time) / (b.Time - a.Time)), 0, 1) : 0;
             rig.ShowDeck(i, a.Bodies, b.Bodies, w, play.Color);
-            if (k + 1 >= play.Frames.Count && lane is { Rolling: false } && lane.RollId == play.RollId) play.Ended = true;
+            if (k + 1 >= play.Frames.Count && lane is { Rolling: false } && lane.RollId == play.RollId)
+            {
+                play.Ended = true;
+                // the impact again on the lane's screen, slowly
+                rig.PlayReplay(i, play.Frames, play.Color);
+            }
             return;
         }
         if (lane == null) return;

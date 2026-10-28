@@ -298,6 +298,8 @@ public static class Garments
         // the gnome's red Zipfelmütze (10 games); the Treichel, a big cowbell on its embroidered strap (30 rounds survived)
         new(ItemId.Zipfelmuetze, "Zipfelmütze", WearSlot.Head, 18, GarmentShape.Beanie, GarmentStyle.Alpine, new("c8202a"), new("a01820"), new("f2efe6")),
         new(ItemId.Treichel, "Treichel", WearSlot.Neck, 6, GarmentShape.BellCollar, GarmentStyle.Alpine, new("3a2418"), new("c99a3a"), new("c8202a")),
+        // the hire shoes a bowling centre's counter lends (#1323): two-tone, red and cream with a blue heel
+        new(ItemId.BowlingShoes, "Bowling shoes", WearSlot.Feet, 7, GarmentShape.Sneakers, GarmentStyle.Basic, new("b8202a"), new("efe6d2"), new("2a3c8c")),
         // ---- #1266: playing together (Adventure/Together/MentorRules, TogetherProgress), earned only ----
         // a mentored newcomer's: the first summit's cap, the glacier's scarf, the first ride's gloves, the first build's cap
         new(ItemId.ErstbesteigungCap, "Erstbesteigung cap", WearSlot.Head, 40, GarmentShape.Beanie, GarmentStyle.Together, new("2e6b3a"), new("f4f2ea"), new("c8202a")),

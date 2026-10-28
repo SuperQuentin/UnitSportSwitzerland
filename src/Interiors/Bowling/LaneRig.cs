@@ -138,7 +138,8 @@ public partial class LaneRig : Node3D
             if (t >= PinsetterCycle.Length(l.Kind)) l.CycleStart = double.NaN;
             else any = true;
         }
-        if (!any) SetProcess(false);
+        bool replay = StepReplay(delta);
+        if (!any && !replay) SetProcess(false);
     }
 
     private void Step(int lane, PinsetterCycle.Pose pose)
@@ -296,6 +297,9 @@ public partial class LaneRig : Node3D
             _balls[i].Position = Geometry.HoodSlot(i);
         }
     }
+
+    /// <summary>A house ball's mesh of colour <paramref name="color"/>, shared by every centre (the material goes on the instance).</summary>
+    public static ArrayMesh BallMeshOf(int color) => BallMesh(color);
 
     private static ArrayMesh BallMesh(int color)
     {

@@ -13,6 +13,9 @@ public partial class InteriorNode
     /// <summary>The rig of the lane pair at furniture index <paramref name="furniture"/>, if this interior has one.</summary>
     public LaneRig? LaneRigOf(int furniture) => _laneRigs.GetValueOrDefault(furniture);
 
+    /// <summary>This interior's own lit material (its building's lights), for things drawn in it that are not its children.</summary>
+    public Material? LitMaterial => _lit;
+
     private static void AddLaneRigs(InteriorNode node, Material material)
     {
         var l = node.Layout;

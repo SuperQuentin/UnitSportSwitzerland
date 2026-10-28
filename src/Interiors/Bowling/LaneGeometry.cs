@@ -53,6 +53,10 @@ public readonly record struct LaneGeometry(float W, float D, float H, bool Mini)
         return new Vector3(LaneX(lane) + (row / 2f - i) * PinSpacing * Scale, DeckTop, HeadPin + row * PinRow * Scale);
     }
 
+    /// <summary>The score screens' bottom edge and their face, over the approach, facing back at the settees (−Z).</summary>
+    public float ScreenY => Mathf.Min(2.5f, H - 0.7f);
+    public float ScreenZ => Front + Spec.Approach * 0.4f;
+
     /// <summary>The ball return's hood at the head of the approach, between the two lanes.</summary>
     public float HoodZ => Front + 0.15f;
     /// <summary>The hood's rack holds this many balls: two rows of three behind the hood.</summary>

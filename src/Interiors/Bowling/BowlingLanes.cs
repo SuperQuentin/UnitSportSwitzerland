@@ -118,6 +118,9 @@ public partial class BowlingLanes : Node
     /// <summary>Whether <paramref name="peer"/> wears bowling shoes: signed in at a lane.</summary>
     public bool WearsShoes(long peer) => SignedIn(peer) != null;
 
+    /// <summary>Whether this peer's own player wears the hire shoes.</summary>
+    public bool WearsShoesHere() => WearsShoes(MyId);
+
     // ---- the wire: a whole centre in a few hundred bytes ------------------------------------------
 
     protected byte[] Pack(string key)
