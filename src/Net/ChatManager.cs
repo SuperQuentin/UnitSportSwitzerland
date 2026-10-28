@@ -617,6 +617,12 @@ public partial class ChatManager : Node
                 Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
                 return;
 
+            // the films a cinema can be showing (#1298): offline the player is the admin
+            case "cinema":
+                Show(Interiors.CinemaBooths.Instance?.PoolCommand(1, string.Join(' ', parts[1..]), true, line => Show(line, ChatKind.Private))
+                     ?? "No cinemas here.", ChatKind.Private);
+                return;
+
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
                 or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis":
                 // Versteckis has no offline game (#1268): its bots need a server; Host a game from the menu
@@ -983,6 +989,11 @@ public partial class ChatManager : Node
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
                     id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
+            // the films a server's cinemas can be showing (#1298): anyone lists, an admin changes
+            case "cinema":
+                if (Interiors.CinemaBooths.Instance is not { } booths) ReplyTo(sender, "No cinemas on this server.", ChatKind.Error);
+                else ReplyTo(sender, booths.PoolCommand(sender, rest, IsAdmin(sender), line => ReplyTo(sender, line, ChatKind.Private)), ChatKind.Private);
                 return;
             // an adventure trial (#1227): leave the one you run
             case "trial":

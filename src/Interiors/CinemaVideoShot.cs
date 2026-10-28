@@ -15,6 +15,8 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class CinemaVideoShot : Node3D
 {
+    private static readonly bool Curtains = CmdArgs.Has("--cinemashotcurtains");
+
     public static string[]? ParseArgs() => CmdArgs.Value("--cinemavideoshot")?.Split(',', 2) is { Length: 2 } a ? a : null;
 
     private readonly string _link, _prefix;
@@ -22,9 +24,14 @@ public partial class CinemaVideoShot : Node3D
     private ICinemaFeed? _stream;
     private Camera3D _cam = null!;
     private double _t0, _shotAt = -1;
+    /// <summary>When the shot began (RealClock): a showing is mid-film, so its position says nothing of how long we waited.</summary>
+    private readonly double _began = Core.RealClock.Now;
     private int _step;
+    private Image? _thrown;
     private string _plan = "";
-    private Vector3 _target, _booth;
+    private Vector3 _target, _booth, _port;
+    private static readonly bool PortLook = CmdArgs.Has("--cinemashotport");
+    private static readonly bool BeamLook = CmdArgs.Has("--cinemashotbeam");
 
     public CinemaVideoShot(string link, string prefix) { _link = link; _prefix = prefix; }
     public CinemaVideoShot() : this("", "") { }
@@ -42,13 +49,15 @@ public partial class CinemaVideoShot : Node3D
         _node = InteriorNode.Create(layout, InteriorMeshBuilder.Build(layout),
             Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
         AddChild(_node);
-        _node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Off), ~0, null, glow: true, real: false);
+        // pasted first (the default sequence throws it at its second shot); a beam view at the detail asked (--cinemaprojection)
+        _node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Off), ~0, null, glow: true, real: BeamLook && InteriorNode.RealProjection);
 
         var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
         _target = new Vector3(screen.X, layout.FloorY(screen.Floor) + 2.6f, screen.Z);
         var facing = new Basis(Vector3.Up, screen.Turns * Mathf.Pi / 2) * Vector3.Back;
         var proj = layout.Furniture.FirstOrDefault(f => f.Type == FurnitureType.Porthole);
         _booth = proj != null ? new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift - 1.2f, proj.Z) - facing * 1.5f : _target + facing * 20f;
+        _port = proj != null ? new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift + proj.H / 2, proj.Z) : _booth;
         _cam = new Camera3D { Current = true, Near = 0.05f };
         AddChild(_cam);
         _cam.LookAtFromPosition(_target + facing * 12f + new Vector3(0, 0.6f, 0), _target, Vector3.Up);
@@ -57,8 +66,35 @@ public partial class CinemaVideoShot : Node3D
         _plan = layout.Key;
         _t0 = Net.ClockSync.ServerNow;
         booths.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+        // --cinemadisplay <fit>,<ratio>: the hall's projector set so first (contain, cover, stretch; full, 2, 1.85, 16:9, 4:3)
+        if (CmdArgs.Value("--cinemadisplay")?.Split(',') is { Length: 2 } shown && Enum.TryParse(shown[0], true, out CinemaVideo.Fit fit))
+        {
+            int ratio = shown[1].Equals("full", StringComparison.OrdinalIgnoreCase) ? 0
+                : Math.Max(0, Array.FindIndex(CinemaVideo.Ratios, r => r.Name.StartsWith(shown[1], StringComparison.OrdinalIgnoreCase)));
+            booths.ServeDisplay(1, _plan, 0, CinemaVideo.PackDisplay(fit, ratio));
+        }
+        // showing: the film the hall draws by itself, as a cinema first seen mid-showing (the cat slides one entry: a new
+        // showing until it draws a film)
+        // file:<path>: this machine plays a video file of its own for the hall (#1298 phase 4), sharp
+        if (_link.StartsWith("file:", StringComparison.Ordinal))
+            booths.StartFile(_plan, 0, _link[5..], CinemaVideo.LiveQuality.High, CinemaVideo.Guess(_link[5..]));
+        // showing[:n]: the n-th film (1 the first) the hall draws by itself, a new showing each draw
+        else if (_link == "showing" || _link.StartsWith("showing:", StringComparison.Ordinal))
+        {
+            int want = _link.Length > 8 && int.TryParse(_link[8..], out int n) ? Math.Max(1, n) : 1, films = 0;
+            for (int reel = 0; reel < 40 && films < want; reel++)
+            {
+                if (reel > 0 || booths.VideoOf(_plan, 0).Link.Length == 0)
+                {
+                    booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, false));
+                    booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+                }
+                if (booths.VideoOf(_plan, 0).Link.Length > 0) films++;
+            }
+            GD.Print($"[cinemavideo] hall 1 is showing {booths.FilmTitle(booths.VideoOf(_plan, 0).Link)} ({booths.VideoOf(_plan, 0).Link})");
+        }
         // live:monitor, live:window, live:camera, live:test: this machine shares its first one (#1298 phase 3), sharp
-        if (CinemaVideo.IsLive(_link))
+        else if (CinemaVideo.IsLive(_link))
         {
             string kind = _link[CinemaVideo.LivePrefix.Length..];
             Task.Run(CinemaDevices.List).ContinueWith(found => Callable.From(() =>
@@ -68,14 +104,15 @@ public partial class CinemaVideoShot : Node3D
                 {
                     "monitor" => f.Monitors.FirstOrDefault(),
                     "window" => f.Windows.FirstOrDefault(),
-                    "camera" => f.Cameras.FirstOrDefault(),
+                    "camera" => f.Cameras.FirstOrDefault(c => c.Kind == CaptureKind.Webcam),
+                    "ndi" => f.Cameras.FirstOrDefault(c => c.Kind == CaptureKind.Ndi),
                     _ => new CaptureSource(CaptureKind.Test, "Test pattern", "test"),
                 };
                 if (source == null) { Done($"FAILED (no {kind} to share)"); return; }
                 booths.StartSharing(_plan, 0, source, CinemaVideo.LiveQuality.High, f.PcSound, null);
             }).CallDeferred());
         }
-        else booths.SetVideoForShot(_plan, 0, _link, _t0);
+        else booths.SetVideoForShot(_plan, 0, _link, _t0, CinemaVideo.Guess(_link));
         booths.ProbeWatch = (_plan, 0);
         booths.ProbeNode = _node;
         GD.Print($"[cinemavideo] {_link} on hall {CinemaBooths.HallAt(layout, screen.X, screen.Z) + 1}");
@@ -86,30 +123,83 @@ public partial class CinemaVideoShot : Node3D
         // the hall's own start: a share's T0 is the server's, set once it granted it
         double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, CinemaBooths.Instance!.VideoOf(_plan, 0) is { Link.Length: > 0 } v ? v.T0 : _t0);
         _stream = CinemaBooths.Instance!.StreamOf(_plan, 0);
-        if (_stream is { Failed: true } || pos > 90) { Done($"FAILED ({_stream?.Status ?? "no feed"})"); return; }
+        // this cinema is no interior the booth steps (none is current): its curtains moved here
+        _node.MoveCurtains(delta);
+        if (_stream is { Failed: true } || Core.RealClock.Now - _began > 90) { Done($"FAILED ({_stream?.Status ?? "no feed"})"); return; }
         if (_stream == null || _stream.CurrentTime < 0) return;
-        if (_shotAt < 0) _shotAt = pos + 2;
+        if (_shotAt < 0) _shotAt = pos + (Curtains ? 0 : 2);
         if (pos < _shotAt) return;
-        string[] names = { "pasted", "thrown", "booth", "panel" };
-        Shoot($"{_prefix}_{names[_step]}.png", pos);
+        // --cinemashotcurtains: the camera kept in the seats, a shot every 1.5 s from the first frame: the curtains closing in
+        // --cinemashotbeam: one shot from the hall's side, low by the front rows, across the beam from the porthole to the screen
+        if (BeamLook)
+        {
+            var mid = _target.Lerp(_port, 0.5f);
+            var across = (_port - _target).Cross(Vector3.Up).Normalized();
+            _cam.LookAtFromPosition(_target.Lerp(_port, 0.3f) + across * 6f + new Vector3(0, -1.6f, 0), mid, Vector3.Up);
+            if (_step++ == 0) { _shotAt = pos + 0.3; return; }
+            Shoot($"{_prefix}_beam.png", pos);
+            Done("ok");
+            return;
+        }
+        // --cinemashotport: one shot from 2.5 m in front of the porthole looking up at it: the picture in its glass
+        if (PortLook)
+        {
+            _cam.LookAtFromPosition(_port + (_target - _port).Normalized() * 2.5f + new Vector3(0, -0.6f, 0), _port, Vector3.Up);
+            if (_step++ == 0) { _shotAt = pos + 0.3; return; }
+            Shoot($"{_prefix}_port.png", pos);
+            Done("ok");
+            return;
+        }
+        if (Curtains)
+        {
+            Shoot($"{_prefix}_curtains{_step}.png", pos);
+            GD.Print($"[cinemavideo] the picture fills {_stream!.ContentWidth:P0} of the screen's width");
+            if (++_step < 5) { _shotAt = pos + 1.5; return; }
+            Done("ok");
+            return;
+        }
+        string[] names = { "pasted", "thrown", "moving", "booth", "panel" };
+        var shot = Shoot($"{_prefix}_{names[_step]}.png", pos);
         _step++;
         if (_step == 1) _node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Off), ~0, null, glow: true, real: true);
-        if (_step == 2) _cam.LookAtFromPosition(_booth, _target, Vector3.Up);
+        if (_step == 2) _thrown = shot;
+        // the thrown picture a second later must have moved: the light's projector texture once froze on its first frame
         if (_step == 3)
+        {
+            float moved = Moved(_thrown!, shot);
+            GD.Print($"[cinemavideo] the thrown picture changed on {moved:P1} of the view in 1 s");
+            if (moved < 0.005f) { Done("FAILED (the thrown picture is frozen)"); return; }
+            _cam.LookAtFromPosition(_booth, _target, Vector3.Up);
+        }
+        if (_step == 4)
         {
             // the panel as a player sees it while the hall plays: the link the server would hold, and this decoder's state
             CinemaPanelUi.Open(null, _plan, 0);
         }
-        if (_step < 4) { _node.ProjectFor(_node.ToLocal(_cam.GlobalPosition)); _shotAt = pos + 2; return; }
+        if (_step < 5) { _node.ProjectFor(_node.ToLocal(_cam.GlobalPosition)); _shotAt = pos + (_step == 2 ? 1 : 2); return; }
         Done("ok");
     }
 
-    private void Shoot(string path, double pos)
+    /// <summary>The share of pixels that changed by more than a few levels between two shots of the same view.</summary>
+    private static float Moved(Image a, Image b)
+    {
+        int changed = 0, seen = 0;
+        for (int y = 0; y < a.GetHeight(); y += 4)
+            for (int x = 0; x < a.GetWidth(); x += 4, seen++)
+            {
+                Color p = a.GetPixel(x, y), q = b.GetPixel(x, y);
+                if (Math.Abs(p.R - q.R) + Math.Abs(p.G - q.G) + Math.Abs(p.B - q.B) > 0.06f) changed++;
+            }
+        return (float)changed / Math.Max(1, seen);
+    }
+
+    private Image Shoot(string path, double pos)
     {
         var img = GetViewport().GetTexture().GetImage();
         img.SavePng(path);
         GD.Print($"[cinemavideo] {path}: the hall at {pos:F2} s shows {_stream!.CurrentTime:F2} s (off {(pos - _stream.CurrentTime) * 1000:F0} ms, "
             + $"restarts {_stream.Restarts}{(_stream is CinemaRelayFeed ? ", through the server" : "")})");
+        return img;
     }
 
     private void Done(string result)
