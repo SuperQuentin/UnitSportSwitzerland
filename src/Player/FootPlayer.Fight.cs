@@ -397,6 +397,8 @@ public partial class FootPlayer
         if (NetId(p.Name) is not { } peer || peer <= 0) return false;
         // they challenged you to an aura battle (#914): E takes that; otherwise E is the fight's
         if (AuraManager.Client?.AcceptFrom(peer) == true) return true;
+        // a party member (#1266): holding E asks to hold hands, a tap stays the fight's challenge
+        if (BeginTogetherHold(peer, () => fights.Engage(peer))) return true;
         fights.Engage(peer);
         return true;
     }

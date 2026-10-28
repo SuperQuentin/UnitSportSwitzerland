@@ -80,6 +80,8 @@ public enum GarmentStyle
     Alien,
     /// <summary>#1227: the Alpine set, from the Adventure's chests only, never a wardrobe's or a workbench's.</summary>
     Alpine,
+    /// <summary>#1266: earned playing together only (a mentor's milestone, the tenth punch card), never in a pool, a chest or a workbench.</summary>
+    Together,
 }
 
 /// <summary>
@@ -296,6 +298,19 @@ public static class Garments
         // the gnome's red Zipfelmütze (10 games); the Treichel, a big cowbell on its embroidered strap (30 rounds survived)
         new(ItemId.Zipfelmuetze, "Zipfelmütze", WearSlot.Head, 18, GarmentShape.Beanie, GarmentStyle.Alpine, new("c8202a"), new("a01820"), new("f2efe6")),
         new(ItemId.Treichel, "Treichel", WearSlot.Neck, 6, GarmentShape.BellCollar, GarmentStyle.Alpine, new("3a2418"), new("c99a3a"), new("c8202a")),
+        // ---- #1266: playing together (Adventure/Together/MentorRules, TogetherProgress), earned only ----
+        // a mentored newcomer's: the first summit's cap, the glacier's scarf, the first ride's gloves, the first build's cap
+        new(ItemId.ErstbesteigungCap, "Erstbesteigung cap", WearSlot.Head, 40, GarmentShape.Beanie, GarmentStyle.Together, new("2e6b3a"), new("f4f2ea"), new("c8202a")),
+        new(ItemId.GletscherScarf, "Gletscher scarf", WearSlot.Neck, 40, GarmentShape.Bandana, GarmentStyle.Together, new("8ec8e8"), new("f4f8fc"), new("4a8ab8")),
+        new(ItemId.MitfahrerGloves, "Mitfahrer gloves", WearSlot.Hands, 40, GarmentShape.Gloves, GarmentStyle.Together, new("3a3a3e"), new("e8a020"), new("3a3a3e")),
+        new(ItemId.ZimmermannCap, "Zimmermann hat", WearSlot.Head, 41, GarmentShape.FeltHat, GarmentStyle.Together, new("1c1a1a"), new("3a3028"), new("d8b060")),
+        // the mentor's own for each: the guide's cap, the rope team's scarf, the driving teacher's gloves, the foreman's hat
+        new(ItemId.BergfuehrerCap, "Bergführer cap", WearSlot.Head, 42, GarmentShape.Beanie, GarmentStyle.Together, new("c8202a"), new("f4f2ea"), new("1c1a1a")),
+        new(ItemId.SeilschaftScarf, "Seilschaft scarf", WearSlot.Neck, 41, GarmentShape.Bandana, GarmentStyle.Together, new("dc4a1c"), new("f2c21a"), new("a8320e")),
+        new(ItemId.FahrlehrerGloves, "Fahrlehrer gloves", WearSlot.Hands, 41, GarmentShape.Gloves, GarmentStyle.Together, new("8a5a30"), new("f4f2ea"), new("6a4224")),
+        new(ItemId.PolierHat, "Polier hat", WearSlot.Head, 43, GarmentShape.FeltHat, GarmentStyle.Together, new("f4f2ea"), new("2a2018"), new("c8202a")),
+        // the tenth punch card's: the regular's felt hat with its little Swiss-cross pin
+        new(ItemId.StammgastHat, "Stammgast felt hat", WearSlot.Head, 44, GarmentShape.FeltHat, GarmentStyle.Together, new("6a2a2a"), new("1c1a1a"), new("f4f2ea")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

@@ -30,6 +30,9 @@ public static class RewardPlacer
     public const double RoadClear = 6, FineClear = 80, RemoteClear = 400, EdelweissClear = 150;
 
     private const ulong SaltCommon = 0xc0aa0UL, SaltFine = 0xf1eeUL, SaltRemote = 0x4e30UL, SaltEdel = 0xede1UL, SaltPoi = 0x9015UL, SaltSeal = 0x5ea1UL;
+    private const ulong SaltGate = 0x6a7e1266UL, SaltRoped = 0x40be1266UL;
+    /// <summary>#1266: chests above this (glacier country; the placer has no fine cover) may need a rope team.</summary>
+    public const float RopedAltitude = 2800f;
 
     /// <summary>
     /// The spots of a tile. <paramref name="coarse"/> null (no terrain there): nothing. <paramref name="pois"/>
@@ -181,6 +184,10 @@ public static class RewardPlacer
         var rng = new SpotRng(hash ^ SaltSeal);
         double sealed_ = tier switch { ChestTier.Common => 0, ChestTier.Fine => 0.2, ChestTier.Precious => 0.6, _ => 1 };
         if (rng.Next() >= sealed_) return SealKind.None;
+        // #1266: one castle or hut spot in six is behind a two-handle gate; the high glacier chests need a rope team
+        if (poi?.Kind is PoiKind.Castle or PoiKind.Hut && new SpotRng(hash ^ SaltGate).Below(6) == 0) return SealKind.Gate;
+        if (alt >= RopedAltitude && (tier == ChestTier.Luxurious || tier == ChestTier.Precious && new SpotRng(hash ^ SaltRoped).Next() < 0.3))
+            return SealKind.Roped;
         if (poi?.Kind == PoiKind.Castle) return SealKind.Plates;
         Span<SealKind> options = stackalloc SealKind[5];
         int n = 0;

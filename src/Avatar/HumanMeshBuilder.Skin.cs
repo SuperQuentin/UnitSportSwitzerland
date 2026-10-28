@@ -203,11 +203,12 @@ public static partial class HumanMeshBuilder
 
     /// <summary><see cref="BuildStride"/>'s figure as bones: the gait, a dance, an item's arms, VR hands, a pointing finger.</summary>
     public static void PoseStride(SkinnedFigure f, float speed, float phase, ItemArmPose arm = ItemArmPose.None, float armBlend = 0f,
-        DanceParams? dance = null, VrArms? vr = null, Pointing? point = null, Vector3 wind = default)
+        DanceParams? dance = null, VrArms? vr = null, Pointing? point = null, Vector3 wind = default, HandHold? hold = null)
     {
         // a skirt with no measured wind still feels the stride's own (#251)
         if (wind == Vector3.Zero && speed > 0.05f && f.Skin is { Flutters: true }) wind = new Vector3(0, 0, -speed);
-        PoseRig(f, ApplyPoint(ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr), point), wind);
+        // a held hand (#1266) over the item's arms; VR hands over both
+        PoseRig(f, ApplyPoint(ApplyVr(ApplyHold(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), hold), vr), point), wind);
     }
 
     /// <summary>

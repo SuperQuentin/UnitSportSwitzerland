@@ -154,6 +154,8 @@ public static class ShopTables
             L(ItemId.Potato, 0.6f, 4, 12), L(ItemId.Carrot, 0.5f, 4, 12), L(ItemId.Flour, 0.5f, 3, 10),
             // the barracks (#716): a six-pack by the register
             L(ItemId.BeerBottle, 0.8f, 6, 18),
+            // playing together (#1266): the fondue's wine and kirsch, after the beer
+            L(ItemId.WhiteWine, 0.6f, 2, 6), L(ItemId.Kirsch, 0.4f, 1, 3),
         },
         // #501: the blue box. A Blåhaj, and the flat-pack and bits anyone actually leaves with.
         [ShopType.Ikea] = new[]

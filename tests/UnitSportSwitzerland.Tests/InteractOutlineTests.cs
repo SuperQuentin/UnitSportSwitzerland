@@ -42,10 +42,10 @@ public class InteractOutlineTests
     /// <summary>The prompts made outside an <c>Interaction</c> on purpose: how many in the method, and why.</summary>
     private static readonly Dictionary<string, (int Count, string Why)> Allowed = new()
     {
-        ["src/Core/ClientWorld.cs:Prompts"] = (12,
+        ["src/Core/ClientWorld.cs:Prompts"] = (13,
             "the prompt bar: a world item and a radio (Highlight.Pointed outlines them), a vehicle's door (VehicleReach); "
             + "acts with no thing: the ski lift's wait and letting go, the crane's controls let go, a deck's hint, "
-            + "standing up (three times: a stand, a deck, a cinema seat #1279), getting out, the dance (twice)"),
+            + "standing up (three times: a stand, a deck, a cinema seat #1279), getting out, the dance (twice), the rope's let go / haul and the pot's seat (#1266)"),
         ["src/BattleRoyale/BrHud.cs:_Draw"] = (1, "the drop's jump from the plane: no thing"),
     };
 

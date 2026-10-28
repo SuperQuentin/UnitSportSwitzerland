@@ -49,7 +49,8 @@ public partial class FootPlayer
         if (UnitSport.Vehicles.VehicleReach.Current != null || UnitSport.Combat.FightManager.Client is not { } fights || !UnitSport.Net.NetLink.Online(this)
             || PointedFighter() is not { } rival || NetId(rival.Name) is not { } id) return null;
         // an aura challenge from them comes first (#914)
-        string text = UnitSport.Combat.AuraManager.Client?.ChallengedBy(id) == true ? UnitSport.Combat.AuraManager.Client.Prompt(id) : fights.Prompt(id);
+        string text = UnitSport.Combat.AuraManager.Client?.ChallengedBy(id) == true ? UnitSport.Combat.AuraManager.Client.Prompt(id)
+            : UnitSport.Adventure.Together.TogetherService.LinkPrompt(id, fights.Prompt(id));
         return new(text, Outline.Of(rival.Visual), InBar: true);
     }
 

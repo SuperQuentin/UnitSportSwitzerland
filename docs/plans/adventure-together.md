@@ -3,7 +3,7 @@
 
 # Adventure together: group yield, the shared pot, rope-up, mentors, the punch card
 
-Status: **planned**. Tracking issue: #1266 (phase 3: #1270).
+Status: **built** (PR #1274). Tracking issue: #1266 (phase 3: #1270). Parts 1-7 and the checks are in; see "Built differently" at the end for what changed.
 
 One of four Adventure phase 3 plans, written in parallel: `adventure-errands` (errand givers,
 Postkarte errands, world events, canton reputation), `adventure-versteckis` (prop hunt),
@@ -581,3 +581,18 @@ declared in `TogetherProgress.cs`:
   - stamina: `StaminaCompany`, `RegenBelayed`, `StaminaBuff.Hearty`;
   - build: the `StructureBuilt` event;
   - venues #1232: a `Caquelon` and `RacletteHeater` piece in the Fondue Stübli archetype.
+
+## Built differently
+
+- **Crevasses**: the plan's fallback only. A step onto a hidden strip breaks the bridge: unroped, the body is pushed back and left winded (stamina 0) with a blue slot marking the spot for 30 s; roped to a standing partner, a stumble. No slot with its own collision, no terrain-layer drop, no `PoseKind.Crevasse`: follow-up. Behind `Settings > Gameplay > Crevasses`.
+- **VR**: the grip gestures (`XrHandHold`, gripping the rope, the wheel, a real fork) are not built; VR reaches every action through the pad route (`XrPad`). Rows in `xr/vr-action-map` say so.
+- **Server and campfires**: `PlacedObjects.Instance` is client-only, so the server's `TogetherService` takes its placed objects from `PlacedSource` (set by `ServerWorld`).
+- **Test seams**: `--together-glacier E,N,R` (a pretend glacier), `--together-test` (server: `/rope test veteran|<milestone>`), `--together-day-seconds`, `--fondueseed`, `--forfeits`.
+- **Pending save**: the batched once-a-minute `Touch` of the seconds together is flushed in `AdventureService.Saving`, so a save never finds an untouched section.
+- **Net check**: `tools/togethernetcheck.sh` runs on `--systems network,adventure,sky`. The Battle Royale part checks the link, not the client's `NearHere` (a lobby is not `Permissions.InMatch` on the client, the server's `Active` is what ends it).
+- **Protocol**: 60 (58 is the cinema halls #1279, 59 the festival framework #1295).
+- **Pings fixed**: the synthesised ping's envelope broke at t = 0, which silenced the clink and the Prost sound; fixed after `--sounds,check` found it.
+- Not verified: a real glacier, hut or castle gate, a headset and a pad (see `tests/TO-TEST-BY-HUMAN.md`).
+- **Prompt bar**: the rope's let go / haul and the pot's seat are bar rows with no outlined thing; `InteractOutlineTests` lists them (#1286's rule).
+- **Z-fight baseline**: the nine Together garments have their own `Clothes /` rows; the garment rows sit after the Versteckis ones so their index stays put.
+

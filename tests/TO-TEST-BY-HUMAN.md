@@ -137,3 +137,41 @@ Host a game: main menu › Host, then Activities › **Versteckis** › Open (bo
 - [ ] Phone or touch: the Versteckis tab and the hotbar tools are usable.
 - [ ] Windowed `tools/brcheck.sh` → the Battle Royale still looks and plays as before (its spectator camera now lives in `Ui/FollowCam`).
 - [ ] A game with 8 players (or 1 + 7 bots) → frames stay steady (F4), the server's `--serverstats` line shows no spike.
+
+## Adventure together: hands, rope, the shared pot, mentors ([#1274](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1274))
+
+Two players in one party, `--systems ...,adventure`. On a real region for the glacier and the climb lines.
+
+- [ ] Hold E 0.5 s at a party member, the other accepts with F2 → hands are posed to meet at hip height on both screens; walk with no input as the follower and you are led along the leader's trail. Tap E at the same person → still the fist-fight challenge.
+- [ ] Pad: hold Y at a party member → the same invite; Y with no target lets go. VR: the same through the pad route (hold Y); gripping a hand and opening the grip are not built. Judge whether the hand pose looks natural.
+- [ ] Rope up on a glacier or a snowfield (`/rope <player>`), then fall off a ledge or into the snow → the rope catches you, you hang at the rope's length; the partner holds E 2 s (pad hold Y) → you rise. Judge the swing and the haul speed.
+- [ ] A real glacier unroped, walking across it (`Settings › Gameplay › Crevasses` on) → now and then a hidden crevasse's bridge breaks: you stumble back winded and a blue slot opens. Roped to a standing partner → a stumble only. Judge how often it happens (4 % of 12 m cells) and whether it is fun or an annoyance. Not built: the slot with its own collision, you cannot fall in.
+- [ ] A mountain hut, a Beiz or a lit campfire with a fondue pot (E, or use the pot item at the fire) → the panel opens, the party sits down; trace an eight with the mouse (hold LMB) and the right stick (VR: the stick; no real fork yet) → the cheese stays smooth; stop stirring on a high heat → it splits with a hiss. Judge the stirring feel and the panel's size on a pad and in VR.
+- [ ] Lose your bread (keep dipping) → the forfeit popup (line, buy a round, yodel) answers with 1-3, D-pad + A and the laser; `--forfeits mild` hides the money one.
+- [ ] Two-handle gate at a castle, hut or mine (`RewardPlacer` layouts, real region) → two players hold E at the two wheels within 1.5 s and it opens for 60 s; leg-up: crouch at a high boulder, the partner jumps onto the step → 2.6 m climb-jump without stamina.
+- [ ] With a veteran (3 summits) guiding a newcomer to a first summit on a real map → both get their cap (Erstbesteigung, Bergführer); the Journal's Collection > Together page shows the stamps, the week's minutes and the mentor table. Judge the page's layout.
+- [ ] `--world fixture` is enough for everything except the glacier, the real huts and the gates; the Crevasse, Caquelon, Rope, Harness and Gate models are in the model viewer (`--models`, category Adventure) → look right in Cartoon, PS1 and Realistic.
+## Festival framework, part 1 of the festivals ([#1295](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1295))
+
+Nothing is player-facing yet but the Journal tab and the poles: the check-only festival stands in for the real ones. Offline: `<godot> --path . -- --festival test --date 2027-03-11 --systems ui,physics,occasions,adventure --world fixture` (add `--chunks D:/UnitSportSwitzerland/terrain_chunks` for the real map, where the test festival is held at the Riddes spawn).
+
+- [ ] Press J → the **Festival** tab (between Collection and Travel) lists "Test festival at the test field", day 2 of 5, the bell open, the gong tomorrow, the closing show, the score bar and the Batzen. Judge the layout at 1080p and on a phone-sized window (`--mobile`): readable, nothing cut off but the scroll.
+- [ ] Pad: the tab opens with LB / RB; the stick or D-pad scrolls the page (it has no buttons yet) → it scrolls, focus stays visible.
+- [ ] Walk round the spawn → a ring of 16 red Swiss-flag poles stands about 60 m out. Settings › Occasions › the test festival › Off → the poles go, while the Journal's Festival tab and the score stay.
+- [ ] Real map, dev region, a dedicated server with the same flags → the log says `[festival] running: test day 2/5 at the test field`; join with a client and open the Journal → the same tab, with the same day.
+- [ ] Real map: a real festival site outside the region relocates to the largest town ("held this year in Bulle"): needs a real festival, so this waits for part 3 (Älplerfest); the rule is unit-tested only.
+
+## Festival fireworks and the closing show ([#1310](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1310))
+
+`--festival test --date 2027-03-14 --time 22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure` (the last day of the check-only festival, 22:00): a show starts about 15 s after load. Online: a server with `--festival test` plus a client, same date.
+
+- [ ] Walk to the field (the mortar rack with its tubes stands at its middle, the flag poles round it) → the first shell climbs with a spark trail, bursts with a flash on the ground, and its bang comes a moment later. Is the delay believable, the bang low and round rather than a click?
+- [ ] Watch from 150 m, 1 km and 3 km (walk or `/tp`) → the bursts stay readable sparks at 3 km, the bang is 9 s late there, and the light on the ground and the tent fades with distance.
+- [ ] Peony, chrysanthemum, willow, palm, ring, crossette (four small ones a second after) and the Swiss cross (a white cross hanging over a red burst, turned to face you) → each is told apart from the others. Judge the willow's droop and the palm: do they read as such?
+- [ ] The finale (the last 20 s of 6-12 minutes; wait, or join late) → forty shells with no stutter. Note the frame time with F3 or `--perf`: the plan's budget is under 0.3 ms.
+- [ ] Join a second client halfway through the show → it sees the shells from where the show is, not a pile of old ones, and the same shell at the same moment as the first client.
+- [ ] Cartoon, PS1 and Realistic (Settings › Style) → the sparks, flashes and sky look right in each.
+- [ ] Settings › Occasions: set the test festival to Off → no shells and no bangs, and the Journal's Festival tab still shows the score.
+- [ ] VR headset: stand at the field, look up → depth reads right; no particle sheet or flash light clips close to the eyes.
+- [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
+- [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
