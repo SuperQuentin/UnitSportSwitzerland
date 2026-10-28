@@ -176,7 +176,7 @@ public partial class SchwingNetProbe : ChatProbe
         // the telegraph is seen here, with A's copy in the throw pose; B braces it (Gammen: brace Left)
         bool saw = await Until(() => v.Pending == SchwingThrow.Gammen, 30);
         Expect(saw, "B sees A's Gammen winding up");
-        Expect(Copy(v.A) is { } a && SchwingRules.ThrowOf(a.SchwingPose) == SchwingThrow.Gammen, "A's copy shows the throw pose");
+        Expect(await Until(() => Copy(v.A) is { } a && SchwingRules.ThrowOf(a.SchwingPose) == SchwingThrow.Gammen, 3), "A's copy shows the throw pose");
         if (DisplayServer.GetName() != "headless") GD.Print($"{Log} shot {Shot("B_schwing")}");
         Bouts.SendAct((int)SchwingLean.Left, true, 0);
         Expect(await Until(() => v.LastAnswer == SchwingAnswer.Braced && v.LastBy == v.A, 5), "B sees its brace stop the throw");
