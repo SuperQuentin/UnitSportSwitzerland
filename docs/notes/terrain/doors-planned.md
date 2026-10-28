@@ -6,10 +6,12 @@ walls alone (`BuildingFootprint.Compute`), before the plan, so #1304 works on bo
 
 ## Outside: where the doors go
 
-- **A block of flats** (`BuildingKind.Apartment`): its other doors go only on the main door's facade, and keep
-  `DoorBudget.Spacing` (22 m) apart however the TIN breaks that facade into offset pieces (`SameFacade`). The planner
-  builds a stairwell behind each front door far enough from the next one; a door on an end or the back wall, or
-  closer, opened into a flat (a bedroom, mostly). A 20 m block now has one entrance.
+- **A block of flats** (`BuildingKind.Apartment`): its other doors go only on one facade a wing (the main door's for
+  a block in one piece; for an L, a U or a courtyard block, planned wing by wing (#577), each wing's first door's,
+  as `TryWings` gives the doors out), and keep `DoorBudget.Spacing` (22 m) apart however the TIN breaks that facade
+  into offset pieces (`SameFacade`). The planner builds a stairwell behind each front door far enough from the next
+  one; a door on an end or the back wall, or closer, opened into a flat (a bedroom, mostly). A 30 m block now has one
+  entrance, a 60 m one three (`--doorcheck`).
 - **A courtyard the roof closes round** (`PlanOutline.Enclosed`: empty cells not joined to the grid's border) gets
   no side door, and the main door avoids it. Rare on real tiles: what looked like courtyards were mostly the open
   yards between the halls of one works.
@@ -34,9 +36,9 @@ behind them, why wing plans failed, and with `--key E_N_I` one building's doors 
 before; `--svgkeys a,b` draws those plans to `test_output/survey-plans/` (the first dozen planned wing by wing are
 drawn both ways); `test_output/survey-locked/` holds examples of each locked kind, a magenta dot at the door.
 
-Oct 28, 4 tiles of Geneva and Lausanne: street doors 3,156 → 2,634 (flats lose their end and back doors), locked
-1,388 → 927 (flats 716 → 319, civic 222 → 186, industrial 114 → 89), a doorway more than 1 m off its door
-453 → 398, invalid plans 0. 30 buildings planned wing by wing.
+Oct 28, 4 tiles of Geneva and Lausanne: street doors 3,156 → 2,715 (flats 1,432 → 992: they lose their end and back
+doors), locked 1,388 → 891 (flats 716 → 313, civic 222 → 162, industrial 114 → 88), civic outline filled 65 → 75 %,
+a doorway more than 1 m off its door 453 → 437, invalid plans 0. 49 buildings planned wing by wing.
 
 ## Known limits
 
@@ -44,5 +46,5 @@ Oct 28, 4 tiles of Geneva and Lausanne: street doors 3,156 → 2,634 (flats lose
   they cannot be linked, and the box hall stands over the yards with its doors deep inside it.
 - A door with no room behind it on a wing the plan leaves out (a civic block's far arm the peel misses, a flats
   wing that does not plan), or on a set-back piece of a stepped front.
-- A building that plans wing by wing is planned three times (front rectangle, box, wings): the worst plan on the
-  survey's tiles takes ~8 s.
+- A building whose outline is not its box is planned up to three times (front rectangle, box, wings): 296 → 358 ms a
+  plan on the survey's tiles, the worst ~10 s (on a loaded machine).

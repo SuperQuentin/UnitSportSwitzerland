@@ -105,6 +105,6 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   rectangle (shrunk to fit where it can), up to ~2 m from the door. A wing of flats plans its stairwell where its own plan wants it,
   and the side door opens into that lobby up to ~9 m along the facade (as before #1290). Another side
   door whose doorway would stand more than 3 m from it reads as locked: 1,388 of 3,156 on the survey's
-  tiles (186 before); 927 since #1304 (`doors-planned`).
+  tiles (186 before); 891 since #1304 (`doors-planned`).
 - An upper floor set back from the ground floor's outline is planned to the roof's outline: the roof is
   all the outline there is.
