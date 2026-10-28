@@ -145,6 +145,36 @@ public class CinemaVideoTests
     }
 
     [Fact]
+    public void The_curtains_measure_a_picture_between_its_black_bars()
+    {
+        // a 16:9 picture padded into 854x358: 636 columns lit in the middle
+        int lit0 = (854 - 636) / 2;
+        Assert.Equal(636 / 854f, CinemaVideo.ContentWidth(854, 358, (x, _) => x >= lit0 && x < lit0 + 636), 3);
+        // a scope picture fills it all; a black frame says nothing
+        Assert.Equal(1f, CinemaVideo.ContentWidth(854, 358, (_, _) => true));
+        Assert.Equal(-1f, CinemaVideo.ContentWidth(854, 358, (_, _) => false));
+        // a dark scene lit only in its middle row still counts its widest lit column
+        Assert.Equal(0.5f, CinemaVideo.ContentWidth(100, 90, (x, y) => y == 45 && x >= 25 && x < 75), 3);
+    }
+
+    [Fact]
+    public void A_picture_shape_waits_and_only_widens()
+    {
+        var shape = new CinemaVideo.Shape(6);
+        // open until 1.5 s of measures: a black start says nothing
+        for (int i = 0; i < 8; i++) shape.Add(0.74f);
+        Assert.Equal(1f, shape.Width);
+        shape.Add(0.74f);
+        Assert.Equal(0.74f, shape.Width, 3);
+        // a dark scene never narrows it; a wider shot widens it; a black frame is no measure
+        shape.Add(0.3f);
+        shape.Add(-1f);
+        Assert.Equal(0.74f, shape.Width, 3);
+        shape.Add(0.9f);
+        Assert.Equal(0.9f, shape.Width, 3);
+    }
+
+    [Fact]
     public void A_restart_leads_further_but_not_forever()
     {
         Assert.True(CinemaVideo.RestartLead(1) > CinemaVideo.StartLead);

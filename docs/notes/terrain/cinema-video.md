@@ -120,6 +120,19 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   not a live stream) and `remove <n>`. The panel names a showing by its title. Checked: A, B and C (late) draw the same
   film and loop phase for every hall (`cinemanetcheck`); `--cinemavideoshot showing,<prefix>` (Cosmos Laundromat 604 s in,
   on the clock within 50 ms).
+- **Side curtains frame the picture** (the owner's, Oct 28: "open and close to adapt to the streamed ratio", smoothly;
+  `InteriorNode.Curtains.cs`): each screen's side folds left its static mesh for a node per side over a mesh built once
+  in the interior's frame (`InteriorMeshBuilder.Curtain`; the shader looks room lights up by the mesh's own coordinates,
+  so the node is stretched about the curtain's outer edge along the screen, never moved into another room). They frame
+  the screen's own picture from the start (a screen narrowed by the room's height is framed at once) and close in over
+  a narrower picture's black bars (`FrameCurtains`, from `ShowVideo`; the slides and a stopped video open them again),
+  on a critically damped spring (`MoveCurtains`, per frame from the booth, written only while moving: ~3 s, no
+  overshoot, smooth when the target changes mid-way). The picture's width is measured from the frames on the feeds'
+  workers (`CinemaVideo.ContentWidth`: the lit columns on 9 rows, a 3D frame's left eye), every 5th frame decoded here or
+  every 3rd through the relay, kept as the widest seen once 1.5 s of measures came (`CinemaVideo.Shape`: a dark scene
+  never narrows it, a black start says nothing): any source, link, relay, share, file or NDI. Big Buck Bunny (16:9):
+  75 %, the curtains on its edges about 4 s in (`--cinemashotcurtains --cinemavideoshot <link>,<prefix>`: five shots 1.5 s
+  apart, the camera in the seats).
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`

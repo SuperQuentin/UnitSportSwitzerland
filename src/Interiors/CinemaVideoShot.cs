@@ -15,6 +15,8 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class CinemaVideoShot : Node3D
 {
+    private static readonly bool Curtains = CmdArgs.Has("--cinemashotcurtains");
+
     public static string[]? ParseArgs() => CmdArgs.Value("--cinemavideoshot")?.Split(',', 2) is { Length: 2 } a ? a : null;
 
     private readonly string _link, _prefix;
@@ -100,10 +102,21 @@ public partial class CinemaVideoShot : Node3D
         // the hall's own start: a share's T0 is the server's, set once it granted it
         double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, CinemaBooths.Instance!.VideoOf(_plan, 0) is { Link.Length: > 0 } v ? v.T0 : _t0);
         _stream = CinemaBooths.Instance!.StreamOf(_plan, 0);
+        // this cinema is no interior the booth steps (none is current): its curtains moved here
+        _node.MoveCurtains(delta);
         if (_stream is { Failed: true } || Core.RealClock.Now - _began > 90) { Done($"FAILED ({_stream?.Status ?? "no feed"})"); return; }
         if (_stream == null || _stream.CurrentTime < 0) return;
-        if (_shotAt < 0) _shotAt = pos + 2;
+        if (_shotAt < 0) _shotAt = pos + (Curtains ? 0 : 2);
         if (pos < _shotAt) return;
+        // --cinemashotcurtains: the camera kept in the seats, a shot every 1.5 s from the first frame: the curtains closing in
+        if (Curtains)
+        {
+            Shoot($"{_prefix}_curtains{_step}.png", pos);
+            GD.Print($"[cinemavideo] the picture fills {_stream!.ContentWidth:P0} of the screen's width");
+            if (++_step < 5) { _shotAt = pos + 1.5; return; }
+            Done("ok");
+            return;
+        }
         string[] names = { "pasted", "thrown", "booth", "panel" };
         Shoot($"{_prefix}_{names[_step]}.png", pos);
         _step++;

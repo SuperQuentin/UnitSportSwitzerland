@@ -30,6 +30,10 @@ public sealed class CinemaVideoStream : ICinemaFeed
     private readonly int _width, _height, _frameBytes;
     public CinemaVideo.Stereo Stereo { get; }
 
+    // measured every fifth frame (ReadVideo)
+    private readonly CinemaVideo.Shape _shape = new(CinemaVideo.Fps / 5);
+    public float ContentWidth => _shape.Width;
+
     /// <summary>Frames decoded ahead at most (12 MB); the sound ahead at most, s, of a ring twice that.</summary>
     private const int Ring = 10;
     private const double SoundAhead = 8;
@@ -274,6 +278,16 @@ public sealed class CinemaVideoStream : ICinemaFeed
                 }
                 if (got < _frameBytes) { _free.Add(pixels); break; }
                 if (gen != _generation) { _free.Add(pixels); break; }
+                // the picture's width, the left eye of a 3D frame: a few rows of a few frames a second are plenty
+                if (index % 5 == 0)
+                {
+                    var p = pixels;
+                    _shape.Add(CinemaVideo.ContentWidth(CinemaVideo.Width, _height, (x, y) =>
+                    {
+                        int at = (y * _width + x) * 4;
+                        return p[at] + p[at + 1] + p[at + 2] > 3 * 24;
+                    }));
+                }
                 _frames.Enqueue(new Frame(index, pixels, MeanColour(pixels)));
                 _lastIndex = index++;
             }

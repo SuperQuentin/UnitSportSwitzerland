@@ -157,6 +157,54 @@ public static class CinemaVideo
     public static double LoopStart(double now, double seconds, double phase) =>
         seconds <= 0 ? phase : phase + Math.Floor((now - phase) / seconds) * seconds;
 
+    /// <summary>
+    /// The share of a frame's width its picture fills, as the screen's curtains frame it (#1298): its columns from the
+    /// first to the last with a lit pixel on any of a few rows across it (<paramref name="lit"/>), within the first
+    /// <paramref name="width"/> columns (a 3D frame's left eye); -1 for a frame lit nowhere (a fade, a black slate), which
+    /// says nothing of the picture's shape.
+    /// </summary>
+    public static float ContentWidth(int width, int height, Func<int, int, bool> lit)
+    {
+        const int rows = 9;
+        bool Column(int x)
+        {
+            for (int r = 1; r <= rows; r++)
+                if (lit(x, r * height / (rows + 1))) return true;
+            return false;
+        }
+        int left = 0;
+        while (left < width && !Column(left)) left++;
+        if (left >= width) return -1;
+        int right = width - 1;
+        while (right > left && !Column(right)) right--;
+        return (right - left + 1) / (float)width;
+    }
+
+    /// <summary>
+    /// A feed's picture width from its frames: the widest seen (a dark scene never narrows it), and only once frames worth
+    /// <see cref="ShapeAfter"/> s were measured (a black start says nothing); 1 (the curtains open) until then.
+    /// </summary>
+    public sealed class Shape
+    {
+        public const double ShapeAfter = 1.5;
+        private float _widest = -1;
+        private int _frames;
+        private readonly int _need;
+
+        /// <summary>A shape measured <paramref name="perSecond"/> times a second.</summary>
+        public Shape(int perSecond) => _need = (int)(ShapeAfter * perSecond);
+
+        /// <summary>A frame's measure (<see cref="ContentWidth"/>); any thread, one writer.</summary>
+        public void Add(float width)
+        {
+            if (width <= 0) return;
+            _frames++;
+            if (width > _widest) _widest = width;
+        }
+
+        public float Width => _frames >= _need && _widest > 0 ? _widest : 1f;
+    }
+
     /// <summary>The longest link the server takes.</summary>
     public const int MaxLink = 1000;
 

@@ -282,5 +282,6 @@ public partial class CinemaBooths : Node
         // the seats let down under whoever sits, the house lights fading to their level (#1279)
         node.UpdateSeats();
         node.FadeHouse(delta);
+        node.MoveCurtains(delta);
     }
 }

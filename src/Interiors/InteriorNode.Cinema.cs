@@ -118,6 +118,8 @@ public partial class InteriorNode
             var picture = Quad("CatScreen", CatMaterial());
             var hall = HallOf(layout, p);
             int no = CinemaBooths.HallAt(layout, p.X, p.Z);
+            // the side curtains, their own nodes: they close in over a narrower picture (#1298)
+            AddCurtains(node, p, no, half.X);
 
             // the beam from this hall's porthole: the nearest one to the screen
             var port = ports.MinBy(q => (q.X - p.X) * (q.X - p.X) + (q.Z - p.Z) * (q.Z - p.Z));

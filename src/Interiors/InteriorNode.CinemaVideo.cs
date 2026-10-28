@@ -129,6 +129,8 @@ public partial class InteriorNode
         _videoPlain!.AlbedoColor = full;
         _lit?.SetShaderParameter(GGlow, new Vector3(tint.R, tint.G, tint.B) * GlowGain);
         if (_videoSpeaker != null) _videoSpeaker.Video = stream;
+        // the side curtains to the picture's edges, a narrower one framed
+        FrameCurtains(hall, stream?.ContentWidth ?? 1f);
     }
 
     /// <summary>Hall <paramref name="hall"/>'s screen, or null: a loop, no closure, as it runs every frame.</summary>
@@ -191,6 +193,8 @@ public partial class InteriorNode
     {
         if (_videoHall < 0) return;
         var s = ScreenOf(_videoHall);
+        // the slides fill the screen: the curtains drawn back
+        FrameCurtains(_videoHall, 1f);
         _videoHall = -1;
         bool was3d = _videoIs3d;
         _videoIs3d = false;
