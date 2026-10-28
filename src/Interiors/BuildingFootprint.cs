@@ -399,6 +399,24 @@ public static class BuildingFootprint
         }
         bool Under(Vector2 p) => roof.Any(r => InTriangle(p, r.A, r.B, r.C));
 
+        // the courtyards the roof closes round (#1304): a door there opens where no one from the street
+        // stands, and the plan inside never has a room on that wall, so none goes there
+        bool[,]? shut = null;
+        bool shutRead = false;
+        float sw = Math.Max(1f, w), sd = Math.Max(1f, dpt);
+        bool Courtyard(Vector2 wall, Vector2 n)
+        {
+            if (!shutRead)
+            {
+                shutRead = true;
+                if (PlanOutline.Grid(b, center, u, sw, sd, PlanOutline.Cell) is { } g) shut = PlanOutline.Enclosed(g);
+            }
+            if (shut == null) return false;
+            var q = wall + n * 1.0f - center;
+            int i = (int)((q.Dot(u) + sw / 2) / PlanOutline.Cell), j = (int)((q.Dot(new Vector2(-u.Y, u.X)) + sd / 2) / PlanOutline.Cell);
+            return i >= 0 && j >= 0 && i < shut.GetLength(0) && j < shut.GetLength(1) && shut[i, j];
+        }
+
         // ---- facade facets: coplanar wall triangles, merged along their wall line --------
         var facets = new Dictionary<(int, int), Facet>();
         var cuts = new List<(Vector2 Mid, Vector2 Normal, float Ground)>();
@@ -478,6 +496,7 @@ public static class BuildingFootprint
             }
             else score += f.Normal.Dot(new Vector2(0.3f, 0.95f)) * 0.3f; // south-ish, like Swiss entrances
             if (ground < b.MinY - 0.6f) score -= 2f;          // on stilts over a slope
+            if (Courtyard(xz, f.Normal)) score -= 4f;         // on a courtyard the roof closes round
             if (ground > b.MaxY - plainH - 0.3f) score -= 3f; // buried side of a hillside house
             if (width < doorW * 0.8f) score -= 1f;
             // too little wall here for the door this building wants: it can still take a shorter
@@ -738,7 +757,7 @@ public static class BuildingFootprint
                     if (placed.Count >= pedBudget) break;
                     if (off == 0 && c == main) continue; // the main door already stands there
                     var xz = c.Normal * c.Offset + t * (mid + off);
-                    if (Covered(xz)) continue;
+                    if (Covered(xz) || Courtyard(xz, c.Normal)) continue;
                     float ground = grid != null
                         ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
                         : b.MinY + 0.8f;

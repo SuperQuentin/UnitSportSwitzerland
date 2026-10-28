@@ -134,6 +134,39 @@ public static class PlanOutline
     }
 
     /// <summary>
+    /// The courtyards of a roof grid (#1304): its empty cells no path of empty cells joins to the grid's
+    /// border, so the roof closes round them. A door on a wall facing one opens where no one from the
+    /// street can stand.
+    /// </summary>
+    public static bool[,] Enclosed(bool[,] grid)
+    {
+        int nx = grid.GetLength(0), nz = grid.GetLength(1);
+        var open = new bool[nx, nz];
+        var todo = new Stack<(int, int)>();
+        void Seed(int i, int j)
+        {
+            if (grid[i, j] || open[i, j]) return;
+            open[i, j] = true;
+            todo.Push((i, j));
+        }
+        for (int i = 0; i < nx; i++) { Seed(i, 0); Seed(i, nz - 1); }
+        for (int j = 0; j < nz; j++) { Seed(0, j); Seed(nx - 1, j); }
+        while (todo.Count > 0)
+        {
+            var (i, j) = todo.Pop();
+            if (i > 0) Seed(i - 1, j);
+            if (i < nx - 1) Seed(i + 1, j);
+            if (j > 0) Seed(i, j - 1);
+            if (j < nz - 1) Seed(i, j + 1);
+        }
+        var shut = new bool[nx, nz];
+        for (int i = 0; i < nx; i++)
+            for (int j = 0; j < nz; j++)
+                shut[i, j] = !grid[i, j] && !open[i, j];
+        return shut;
+    }
+
+    /// <summary>
     /// The rectangles of a covered grid, biggest first (pure; the shaped blocks of `--flatcheck`): null when the grid is
     /// nearly full or no wing fits.
     /// </summary>

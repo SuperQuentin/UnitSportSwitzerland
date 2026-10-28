@@ -62,16 +62,38 @@ public static partial class InteriorGenerator
         if (_onCore)
         {
             var boxed = Generate(fp, b, rural, type, null, venue, dining, out _, core: false)!;
-            if (OutlineScore(boxed, fp, b) > OutlineScore(plan, fp, b)) return boxed;
+            if (OutlineScore(boxed, fp, b) > OutlineScore(plan, fp, b)) plan = boxed;
+        }
+        // planned wing by wing (#1304): a far wing gets rooms of its own, and its doors open into them;
+        // kept when it fills the outline and opens its street doors better, a door worth DoorWorth m²
+        Winged = false;
+        if (FollowOutlines && PlanWings && OutlineOf(fp, b) != null
+            && Generate(fp, b, rural, type, null, venue, dining, out _, wings: true) is { } winged
+            && OutlineScore(winged, fp, b) + DoorWorth * Opened(winged) > OutlineScore(plan, fp, b) + DoorWorth * Opened(plan))
+        {
+            Winged = true;
+            return winged;
         }
         return plan;
     }
+
+    /// <summary>Off only for <c>--outlinesurvey --no-wings</c>: no building but flats planned wing by wing, to compare (#1304).</summary>
+    internal static bool PlanWings = true;
+
+    /// <summary>Whether the last plan on this thread was the one made wing by wing (#1304).</summary>
+    [ThreadStatic] internal static bool Winged;
+
+    /// <summary>What a street door that opens is worth against m² of outline filled, choosing between plans (#1304).</summary>
+    private const float DoorWorth = 20f;
+
+    /// <summary>The ground-floor street doors a plan has a doorway for.</summary>
+    private static int Opened(InteriorLayout l) => l.AllEntrances().Count(e => e.Level == 0);
 
     /// <summary>Whether the last plan on this thread was made on the front rectangle (<see cref="TryOnCore"/>).</summary>
     [ThreadStatic] private static bool _onCore;
 
     private static InteriorLayout? Generate(Footprint fp, Building b, bool rural, BuildingType type, HouseLayout? house,
-        VenueRecord? venue, IReadOnlyList<VenueRecord>? dining, out string why, bool core = true)
+        VenueRecord? venue, IReadOnlyList<VenueRecord>? dining, out string why, bool core = true, bool wings = false)
     {
         _onCore = false;
         why = "";
@@ -127,13 +149,29 @@ public static partial class InteriorGenerator
             foreach (var (piece, t) in extra) piece.Type = t;
             return layout;
         }
+        // one hall, not rooms round a stair: the kinds that are a hall, and what is too small for more
+        bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
+            or BuildingKind.Garage
+            or BuildingKind.UnderConstruction or BuildingKind.Sacral
+            || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
+        // wing by wing (#1304), when the caller asks for it: any building but a block of flats (which
+        // plans its wings itself), a house, a venue, a landmark, a bank or a restaurant's
+        bool winged = false;
+        if (wings)
+        {
+            // a house is one home: a wing each would be a house each, with its own kitchen and stair
+            if (type != BuildingType.None || venue != null || dining is { Count: > 0 } || bank || b.Kind == BuildingKind.House
+                || site == BuildingType.None && ApartmentTypeFor(fp, b.Kind, n, bank) != BuildingType.None) { WingFailure = "one wing"; return null; }
+            if (!TryKindWings(layout, fp, b, n, site, single || site != BuildingType.None)) return null;
+            winged = true;
+        }
         // a bowling centre at its OSM place (#1235) plans its own lanes and concourse
-        bool planned = type == BuildingType.Ikea
+        bool planned = winged || (type == BuildingType.Ikea
             ? TryIkea(layout, fp.Door.Height)
             : venue?.Type == VenueType.Bowling && type == BuildingType.None && TryBowling(layout, fp, b, fp.Door.Height, rng)
               || venue?.Type == VenueType.Cinema && type == BuildingType.None && TryCinema(layout, fp, b, fp.Door.Height, rng)
               || venue?.Type == VenueType.Arcade && type == BuildingType.None && TryArcade(layout, fp, b, fp.Door.Height, rng, Venues.NameOf(venue))
-              || site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
+              || site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng));
         if (layout.Type is BuildingType.Bowling or BuildingType.Cinema or BuildingType.Arcade) site = BuildingType.None;
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
         var flats = !planned && site == BuildingType.None && type == BuildingType.None && layout.Type is not (BuildingType.Bowling or BuildingType.Cinema or BuildingType.Arcade)
@@ -149,11 +187,6 @@ public static partial class InteriorGenerator
         bool onCore = false;
         if (!planned)
         {
-            bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
-                or BuildingKind.Garage
-                or BuildingKind.UnderConstruction or BuildingKind.Sacral
-                || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
-
             int below = single ? 0 : Cellars(layout.Key, b.Kind, n);
             void Single()
             {
@@ -174,7 +207,7 @@ public static partial class InteriorGenerator
 
         // a doorway for every other facade door (#498), before the furniture, which keeps clear
         // of every opening by itself (Clearance)
-        if (fp.Extra.Count > 0 && !flatsPlanned && !onCore) Entrances(layout, fp);
+        if (fp.Extra.Count > 0 && !flatsPlanned && !onCore && !winged) Entrances(layout, fp);
 
         DiningUnits(layout, fp, dining);
 
@@ -239,10 +272,11 @@ public static partial class InteriorGenerator
         var ground = l.GroundFloor;
         float clear = l.StoreyHeight - Slab;
         l.Entrances.Clear();
-        // the main door, exactly as InteriorLayout.AllEntrances would have synthesised it
+        // the main door, exactly as InteriorLayout.AllEntrances would have synthesised it (a wing's main
+        // door may be another street door, or the link to the next wing, #1304)
         l.Entrances.Add(new EntrancePlan
         {
-            Door = new DoorKey(fp.Key).ToString(),
+            Door = new DoorKey(fp.Key, fp.Door.Slot).ToString(),
             X = l.EntryX, Z = -l.Depth / 2, InX = 0, InZ = 1, Width = l.EntryWidth,
             DoorX = l.DoorX, DoorY = l.DoorY, DoorZ = l.DoorZ,
             DoorOutX = l.DoorOutX, DoorOutZ = l.DoorOutZ,

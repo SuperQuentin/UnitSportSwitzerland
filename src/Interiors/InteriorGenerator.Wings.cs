@@ -49,6 +49,16 @@ public static partial class InteriorGenerator
 
     private sealed record Link(int A, int B, Side ASide, float At);
 
+    /// <summary>
+    /// How one kind of building plans each of its wings (#1304): a block of flats its stairwells and flats
+    /// (<see cref="TryBlock"/>), a hall a hall, an office or a school a cored plan. Every wing gets the
+    /// same <see cref="Below"/> under its <see cref="Above"/>; <see cref="Plan"/> fills the wing's own layout from its footprint (its main
+    /// door, and every other door, the links to the next wings among them, as an extra) and cuts a doorway
+    /// for each, or says no. <see cref="BackLanding"/>: a link on a wing's side meets its back landing's
+    /// corridor, which only flats run.
+    /// </summary>
+    private sealed record WingPlanner(int Above, int Below, Func<InteriorLayout, Footprint, AptOptions, Random, bool> Plan, bool BackLanding);
+
     /// <summary>The planner's door: the building's real outline if it has wings (#577), else the box.</summary>
     internal static bool TryApartments(InteriorLayout l, Footprint fp, Building b, BuildingKind kind, int above, BuildingType type, Random rng)
     {
@@ -56,7 +66,12 @@ public static partial class InteriorGenerator
         if (wings is { Count: >= 1 })
         {
             var (t, below, x, width) = (l.Type, l.Below, l.EntryX, l.EntryWidth);
-            if (TryWings(l, fp, kind, above, type, wings)) return true;
+            bool mixed = type == BuildingType.MixedUse;
+            float area = wings.Sum(w => (w.X1 - w.X0) * (w.Z1 - w.Z0));
+            // a garage (#694) has the basement it leads to
+            int cellars = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any) ? 1 : AptBasement(l.Key, mixed, above, area);
+            var flats = new WingPlanner(above, cellars, (sl, sub, opts, rng) => TryBlock(sl, sub, kind, above, type, rng, opts), BackLanding: true);
+            if (TryWings(l, fp, type, wings, flats)) return true;
             // what a wing plan that came apart left behind, gone before the box is planned
             (l.Type, l.Below, l.EntryX, l.EntryWidth) = (t, below, x, width);
             l.Floors.Clear();
@@ -65,6 +80,39 @@ public static partial class InteriorGenerator
             l.Entrances.Clear();
         }
         return TryBlock(l, fp, kind, above, type, rng, new AptOptions());
+    }
+
+    /// <summary>
+    /// Any other building whose outline peels into wings (#1304), planned wing by wing as a block of flats
+    /// is: a hall-like kind or a works (#497) a hall a wing, the main door's wing the site's own plan with
+    /// its service block; an office, a school, a shop, a house a cored plan a wing, each with its stair.
+    /// A wing no street door reaches is entered through the next one (<see cref="TryWings"/>), so a door on
+    /// a far wing opens into a room of that wing instead of the far side of a box. False when the outline
+    /// is one wing, or the wings do not plan (each its own floors, a link that does not meet): the caller
+    /// plans as before.
+    /// </summary>
+    private static bool TryKindWings(InteriorLayout l, Footprint fp, Building b, int above, BuildingType site, bool single)
+    {
+        WingFailure = null;
+        if (PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) is not { Count: >= 2 } rects) return Fail("one wing");
+        var kind = b.Kind;
+        int below = single ? 0 : Cellars(l.Key, kind, above);
+        var planner = new WingPlanner(single ? 1 : above, below, (sl, sub, opts, rng) =>
+        {
+            float height = sub.Door.Height;
+            // the main door's wing is the works itself: its hall, its lockers and offices behind
+            if (site != BuildingType.None && sub.Door.Slot == fp.Door.Slot && TryIndustrial(sl, site, height, rng)) { }
+            else if (single)
+            {
+                SingleRoom(sl, kind, height, rng);
+                if (site != BuildingType.None) sl.Floors[0].Rooms[0].Type = HallRoom(site);
+            }
+            else if (!TryCored(sl, sub, kind, above, below, false, rng)) return false;
+            // always: the plan's own fallback entrance names door 0, and a wing's main door may be another
+            Entrances(sl, sub);
+            return true;
+        }, BackLanding: false);
+        return TryWings(l, fp, site, rects, planner);
     }
 
     // ---- frames ------------------------------------------------------------------------------
@@ -148,7 +196,7 @@ public static partial class InteriorGenerator
         return false;
     }
 
-    private static bool TryWings(InteriorLayout l, Footprint fp, BuildingKind kind, int above, BuildingType type, List<RectPlan> rects)
+    private static bool TryWings(InteriorLayout l, Footprint fp, BuildingType type, List<RectPlan> rects, WingPlanner planner)
     {
         WingFailure = null;
         var axisU = fp.AxisU;
@@ -232,11 +280,7 @@ public static partial class InteriorGenerator
         // where each link meets: a door of the wing it joins if that is its front, the corridor off
         // its back landing if it is an end of it (that corridor's height in the wing is fixed), else
         // the middle of the shared wall
-        bool mixed = type == BuildingType.MixedUse;
-        float area = wings.Sum(w => (w.R.X1 - w.R.X0) * (w.R.Z1 - w.R.Z0));
-        // a garage (#694) has the basement it leads to
-        int below = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any) ? 1 : AptBasement(l.Key, mixed, above, area);
-        int floors = above + below;
+        int below = planner.Below;
         for (int i = 0; i < links.Count; i++)
         {
             var k = links[i];
@@ -245,7 +289,7 @@ public static partial class InteriorGenerator
             var sh = Shared(aw.R, bw.R)!.Value;
             float at = k.At;
             var subSide = TurnSide(k.ASide, -aw.Turns);
-            if (subSide is Side.Left or Side.Right && BackLandingOf(aw.W, aw.D, l.StoreyHeight, floors) is { } rows)
+            if (planner.BackLanding && subSide is Side.Left or Side.Right && BackLandingOf(aw.W, aw.D, l.StoreyHeight, planner.Above + below) is { } rows)
             {
                 float zc = (rows.ZM + rows.ZB1) / 2;
                 var (bx, bz) = ToBox(aw, subSide == Side.Left ? -aw.W / 2 : aw.W / 2, zc);
@@ -359,7 +403,7 @@ public static partial class InteriorGenerator
             // the wall that faces out is what the next wing does not stand against
             opts.Free = (s, lo, hi) =>
                 hi - lo - blocked.Where(x => x.Side == s).Sum(x => Math.Max(0, Math.Min(hi, x.Hi) - Math.Max(lo, x.Lo)));
-            if (!TryBlock(sl, sub, kind, above, type, new Random(StableHash(l.Key + "|wing" + w.Index)), opts)) return Fail($"wing {w.Index} ({w.W:F1} x {w.D:F1}, front {w.Front}) does not plan");
+            if (!planner.Plan(sl, sub, opts, new Random(StableHash(l.Key + "|wing" + w.Index)))) return Fail($"wing {w.Index} ({w.W:F1} x {w.D:F1}, front {w.Front}) does not plan");
             w.Sub = sl;
         }
         if (wings.Select(w => w.Sub.Floors.Count).Distinct().Count() != 1) return Fail("wings of different floor counts");
