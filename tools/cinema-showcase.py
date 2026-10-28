@@ -143,7 +143,8 @@ def cinema_takes():
         Take("beam", "Light thrown from the booth",
              # hall 2 changes to a lively film, past its titles before the take
              [still((5.0, 1.5, -6.0), HALL2_PORT, 0.3, "beam0"), "/cinema 2 lights off film on", f"/cinema play {COFFEE_RUN}",
-              still((5.0, 1.5, -6.0), HALL2_PORT, 22, "beam1")],
+              # Coffee Run's liveliest seconds, 55-65 s: big cuts, its brightness swinging 160 to 90 (mean colour per frame)
+              still((5.0, 1.5, -6.0), HALL2_PORT, 54, "beam1")],
              [glide((3.4, 3.0, 2.0), HALL2_PORT, 5, "~in"),
               # turning round under the beam to the picture it throws
               glide((3.2, 4.4, 10.0), (0.8, 3.6, -7), 5, "~out")]),
