@@ -234,6 +234,7 @@ public static partial class InteriorGenerator
             var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
             // only a door on the front wall leads straight into a stairwell
             if (outward.Dot(axisV) > -0.8f || d.Vehicle) continue;   // the garage door has a ramp, not a stairwell (#558)
+            if (d.Unit) continue;   // a shop's or a venue's own door opens into its unit (#1292)
             cands.Add((rel.Dot(fp.AxisU), d.Slot));
         }
         float spacing = wellW + (mixed ? 12f : 2 * MinFlatSide + 0.6f);
@@ -1674,6 +1675,45 @@ public static partial class InteriorGenerator
     {
         var R = reg.R;
         if ((R.X1 - R.X0) * (R.Z1 - R.Z0) < 20f || R.X1 - R.X0 < 2.6f) return;
+        // a shop wider than a street unit is several (#1292, the owner's call from --shopsurvey): units of about
+        // UnitWidth, the one beside the stairwell off its lobby, each further one through a door off the one before
+        int n = R.X1 - R.X0 > SplitOver ? Math.Max(2, (int)MathF.Round((R.X1 - R.X0) / UnitWidth)) : 1;
+        float w = (R.X1 - R.X0) / n;
+        bool fromLeft = reg.Side == Side.Left;
+        int prev = -1;
+        for (int k = 0; k < n; k++)
+        {
+            float x0 = fromLeft ? R.X0 + k * w : R.X1 - (k + 1) * w;
+            var part = new Region(new RectPlan(x0, R.Z0, x0 + w, R.Z1), reg.Side, k == 0 ? reg.Ways : new List<Way>());
+            int shop = ShopUnit(a, floor, part, f, rng, ref unit);
+            if (prev >= 0 && shop >= 0)
+            {
+                // the two sales floors share their wall over the shallower one's depth
+                var p = floor.Rooms[prev];
+                var s = floor.Rooms[shop];
+                float z0 = Math.Max(p.Z0, s.Z0), z1 = Math.Min(p.Z1, s.Z1);
+                if (z1 - z0 >= FlatDoor + 0.4f)
+                {
+                    float c = (z0 + z1) / 2, top = Math.Min(2.05f, a.Clear - 0.2f);
+                    Opening(floor.Rooms, shop, reg.Side, prev, c, FlatDoor, top, OpeningKind.Door);
+                    a.L.InnerDoors.Add(new InnerDoorPlan { Floor = f, Room = shop, Side = reg.Side, Center = c, Width = FlatDoor, Top = top, Unit = s.Unit });
+                }
+            }
+            if (shop >= 0) prev = shop;
+        }
+    }
+
+    /// <summary>A street shop wider than this is cut into units (#1292), m.</summary>
+    internal const float SplitOver = 14f;
+
+    /// <summary>About how wide a unit cut from a wide shop is (#1292), m.</summary>
+    internal const float UnitWidth = 8f;
+
+    /// <summary>One shop unit filling <paramref name="reg"/>; its sales floor's index, -1 if it is too small for one.</summary>
+    private static int ShopUnit(Apt a, FloorPlan floor, Region reg, int f, Random rng, ref int unit)
+    {
+        var R = reg.R;
+        if ((R.X1 - R.X0) * (R.Z1 - R.Z0) < 20f || R.X1 - R.X0 < 2.6f) return -1;
         var items = new List<FlatItem> { new(RoomType.Shop, 5f, 10) };
         if (R.Z1 - R.Z0 >= 8f) items.Add(new FlatItem(RoomType.Storage, 1.3f, 5));
         int first = floor.Rooms.Count;
@@ -1692,9 +1732,9 @@ public static partial class InteriorGenerator
         int shop = first;
         ConnectFlat(floor.Rooms, first, floor.Rooms.Count, shop, a.Clear, rng);
         var r = floor.Rooms[shop];
-        var way = reg.Ways.MaxBy(w => Overlap(w, r.Z0, r.Z1))!;
-        float o0 = Math.Max(way.Lo, r.Z0 + 0.15f), o1 = Math.Min(way.Hi, r.Z1 - 0.15f);
-        if (o1 - o0 >= WayMin)
+        var way = reg.Ways.MaxBy(w => Overlap(w, r.Z0, r.Z1));
+        float o0 = way == null ? 0 : Math.Max(way.Lo, r.Z0 + 0.15f), o1 = way == null ? 0 : Math.Min(way.Hi, r.Z1 - 0.15f);
+        if (way != null && o1 - o0 >= WayMin)
         {
             float c = Fit((o0 + o1) / 2, o0 + FlatDoor / 2 + 0.1f, o1 - FlatDoor / 2 - 0.1f);
             float top = Math.Min(2.05f, a.Clear - 0.2f);
@@ -1702,6 +1742,7 @@ public static partial class InteriorGenerator
             a.L.InnerDoors.Add(new InnerDoorPlan { Floor = f, Room = shop, Side = reg.Side, Center = c, Width = FlatDoor, Top = top, Unit = unit });
         }
         unit++;
+        return shop;
     }
 
     // ---- the basement --------------------------------------------------------------------------
@@ -1860,7 +1901,8 @@ public static partial class InteriorGenerator
                 foreach (var s in new[] { Side.Front, Side.Right, Side.Back, Side.Left }
                              .OrderByDescending(x => Facing(x).X * faces.X + Facing(x).Z * faces.Y).ThenBy(x => (int)x))
                 {
-                    if (!FitEntry(l, ground, s, s is Side.Front or Side.Back ? at.X : at.Y, width, out var r, out float c, StreetRank)) continue;
+                    // a shop's or a venue's own door (#1292) opens into a shop's sales floor, the one it stands in front of
+                    if (!FitEntry(l, ground, s, s is Side.Front or Side.Back ? at.X : at.Y, width, out var r, out float c, d.Unit ? UnitRank : StreetRank)) continue;
                     if (Math.Min(d.Height, l.ClearOf(r) - 0.15f) < 1.9f) continue;
                     room = r;
                     side = s;
@@ -1896,6 +1938,9 @@ public static partial class InteriorGenerator
         // (a wing of a bigger building keeps it: its door may be a link, #577)
         if (l.Entrances.Count == 1 && fp.Extra.Count == 0 && fp.Door.Slot == 0) l.Entrances.Clear();
     }
+
+    /// <summary>Which rooms a unit's own street door may open into (#1292): a shop's sales floor only.</summary>
+    private static int UnitRank(RoomPlan r) => r.Type == RoomType.Shop ? 0 : -1;
 
     /// <summary>Which rooms a side street door may open into, best first; -1 never.</summary>
     private static int StreetRank(RoomPlan r) => r.Type switch

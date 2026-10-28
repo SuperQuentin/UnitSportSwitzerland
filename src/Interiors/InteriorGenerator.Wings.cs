@@ -201,6 +201,8 @@ public static partial class InteriorGenerator
             }
             if (best == null) continue;
             best.Doors.Add(d);
+            // a shop's or a venue's own door (#1292) is no wing's front door: the wing is planned as without it
+            if (d.Unit) continue;
             if (best.Main == null || d.Slot < best.Main.Value.Slot) { best.Main = d; best.Front = side; }
         }
         if (!wings.Any(w => w.Main is { Slot: 0 })) return Fail("no street door on a wing");

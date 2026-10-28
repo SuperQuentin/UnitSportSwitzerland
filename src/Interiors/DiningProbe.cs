@@ -38,18 +38,19 @@ public partial class DiningProbe : Node
         new("pizzeria", 12, 16, 4, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "pizza") },
             new[] { RoomType.Pizzeria }, new[] { FurnitureType.PizzaOven }, Toilets: ToiletSet.Single),
         new("bar", 14, 18, 4.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.Bar, "") },
-            new[] { RoomType.BarRoom }, new[] { FurnitureType.BarCounter, FurnitureType.BarStool }, Toilets: ToiletSet.Single),
+            new[] { RoomType.BarRoom }, new[] { FurnitureType.BarCounter, FurnitureType.BarStool }, Toilets: ToiletSet.Pair),
         new("club", 20, 24, 5, BuildingKind.Commercial, new[] { new Spot(VenueType.Nightclub, "") },
-            new[] { RoomType.ClubRoom }, new[] { FurnitureType.DanceFloor, FurnitureType.DjBooth, FurnitureType.BarCounter }, Toilets: ToiletSet.Gendered),
+            new[] { RoomType.ClubRoom }, new[] { FurnitureType.DanceFloor, FurnitureType.DjBooth, FurnitureType.BarCounter }, Toilets: ToiletSet.Pair),
         new("kebab", 7, 9, 3.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.FastFood, "kebab") },
             new[] { RoomType.KebabRoom }, new[] { FurnitureType.KebabCounter }, Toilets: ToiletSet.Shared),
         // a block of flats with a restaurant and a bar on its ground floor: shop units for them, flats above
         new("block", 26, 14, 16, BuildingKind.Apartment,
             new[] { new Spot(VenueType.Restaurant, "regional", -9, 0), new Spot(VenueType.Bar, "", 9, 0) },
-            new[] { RoomType.Gaststube, RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true, Toilets: ToiletSet.Gendered),
-        // a restaurant hall: big enough for toilets by gender (#1285)
+            new[] { RoomType.Gaststube, RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true, Toilets: ToiletSet.Shared),
+        // a restaurant in a commercial block's street unit, its front 7 bays (#1292): a women's and a men's WC, the big
+        // gendered set needs more wall than its room has (the owner's call: compact washrooms where space is short)
         new("hall", 18, 24, 4.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "regional") },
-            new[] { RoomType.Gaststube, RoomType.GastroKitchen }, new[] { FurnitureType.CookLine }, Toilets: ToiletSet.Gendered),
+            new[] { RoomType.Gaststube, RoomType.GastroKitchen }, new[] { FurnitureType.CookLine }, Toilets: ToiletSet.Pair),
         // a kiosk: no room big enough, the ordinary rules furnish it
         new("too-small", 3f, 3.5f, 3, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "") },
             Array.Empty<RoomType>(), Array.Empty<FurnitureType>()),
