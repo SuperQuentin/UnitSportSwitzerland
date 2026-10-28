@@ -92,7 +92,11 @@ public partial class CinemaPanelUi : CanvasLayer
         _slides.Pressed += () => Ask(screen: true, link: "");
         shows.AddChild(_slides);
         _stop = UiKit.Button("Stop the video");
-        _stop.Pressed += () => Ask(screen: true, link: "");
+        _stop.Pressed += () =>
+        {
+            if (CinemaBooths.Instance is { } booths && booths.SharingIn(_plan, _hall)) booths.StopSharing();
+            else Ask(screen: true, link: "");
+        };
         shows.AddChild(_stop);
 
         box.AddChild(UiKit.Line());
@@ -138,6 +142,94 @@ public partial class CinemaPanelUi : CanvasLayer
 
         _recent = UiKit.VBox(4);
         box.AddChild(_recent);
+
+        // sharing from this computer (#1298 phase 3): a desktop only (ffmpeg)
+        _shareBox = UiKit.VBox(8);
+        _shareBox.Visible = Platform.CanSpawnProcesses;
+        box.AddChild(_shareBox);
+        _shareBox.AddChild(UiKit.Line());
+        _shareBox.AddChild(UiKit.Section("Share from this computer"));
+        var what = UiKit.HBox(10);
+        _shareBox.AddChild(what);
+        // a window's title can be long: the picker keeps the panel's width, not its longest item's
+        _source = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.All, ClipText = true, FitToLongestItem = false };
+        _source.TooltipText = "A monitor, a window or a webcam";
+        what.AddChild(_source);
+        _quality = new OptionButton { FocusMode = Control.FocusModeEnum.All };
+        _quality.AddItem("Low (light)", (int)CinemaVideo.LiveQuality.Low);
+        _quality.AddItem("Sharp (text)", (int)CinemaVideo.LiveQuality.High);
+        _quality.AddItem("Smooth (motion)", (int)CinemaVideo.LiveQuality.Smooth);
+        _quality.Select(1);
+        _quality.TooltipText = "Low: 480x200, 15 a second. Sharp: 960x400, 10 a second (text reads from the seats). Smooth: 960x400, 20 a second (twice the data).";
+        what.AddChild(_quality);
+        var sound = UiKit.HBox(10);
+        _shareBox.AddChild(sound);
+        _pcSound = new CheckBox { Text = "PC sound", ButtonPressed = true, FocusMode = Control.FocusModeEnum.All,
+            TooltipText = "What your computer plays (every app but the game), for a screen or a window" };
+        sound.AddChild(_pcSound);
+        _mic = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.All, ClipText = true, FitToLongestItem = false };
+        _mic.TooltipText = "A microphone mixed in, to talk over it";
+        sound.AddChild(_mic);
+        _share = UiKit.Button("Share", primary: true);
+        _share.Pressed += ToggleShare;
+        sound.AddChild(_share);
+    }
+
+    private VBoxContainer _shareBox = null!;
+    private OptionButton _source = null!, _quality = null!, _mic = null!;
+    private CheckBox _pcSound = null!;
+    private Button _share = null!;
+    private CinemaDevices.Found? _devices;
+    private readonly List<CaptureSource> _sources = new();
+    private bool _listing;
+
+    /// <summary>What this computer can share, listed on a worker the first time the panel opens (ffmpeg takes a moment).</summary>
+    private void ListDevices()
+    {
+        if (_listing || !Platform.CanSpawnProcesses) return;
+        _listing = true;
+        _source.Clear();
+        _source.AddItem("Looking for screens and cameras…");
+        _source.Disabled = true;
+        Task.Run(() =>
+        {
+            var found = CinemaDevices.List();
+            Callable.From(() => ShowDevices(found)).CallDeferred();
+        });
+    }
+
+    private void ShowDevices(CinemaDevices.Found found)
+    {
+        _listing = false;
+        _devices = found;
+        _sources.Clear();
+        _sources.AddRange(found.Monitors);
+        _sources.AddRange(found.Windows);
+        _sources.AddRange(found.Cameras);
+        if (CinemaVideo.AllowLocal) _sources.Add(new CaptureSource(CaptureKind.Test, "Test pattern", "test"));
+        _source.Clear();
+        foreach (var s in _sources)
+            _source.AddItem(s.Kind switch { CaptureKind.Window => $"Window: {s.Label}", CaptureKind.Webcam => $"Camera: {s.Label}", _ => s.Label });
+        _source.Disabled = _sources.Count == 0;
+        if (_sources.Count == 0) _source.AddItem("Nothing to share found");
+        _pcSound.Visible = found.PcSound;
+        _mic.Clear();
+        _mic.AddItem("No microphone");
+        foreach (string m in found.Mics) _mic.AddItem(m);
+        Callable.From(Fit).CallDeferred();
+    }
+
+    private void ToggleShare()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        if (booths.SharingIn(_plan, _hall)) { booths.StopSharing(); Refresh(true); return; }
+        int i = _source.Selected;
+        if (i < 0 || i >= _sources.Count) { Status = "Nothing to share was found on this computer."; return; }
+        var (lights, _) = booths.StateOf(_plan, _hall);
+        booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, true));
+        string? mic = _mic.Selected > 0 && _devices != null ? _devices.Mics[_mic.Selected - 1] : null;
+        booths.StartSharing(_plan, _hall, _sources[i], (CinemaVideo.LiveQuality)_quality.GetSelectedId(), _pcSound.Visible && _pcSound.ButtonPressed, mic);
+        Status = "Starting the share…";
     }
 
     public override void _ExitTree()
@@ -153,7 +245,8 @@ public partial class CinemaPanelUi : CanvasLayer
         _link.Text = "";
         _shown = "\0";
         Rebuild();
-        Refresh();
+        Refresh(true);
+        if (_devices == null) ListDevices();
         _panel.Visible = true;
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
@@ -239,17 +332,21 @@ public partial class CinemaPanelUi : CanvasLayer
     }
 
     /// <summary>The header and the buttons from the hall's state and this client's decoder, on change only.</summary>
-    private void Refresh()
+    private void Refresh(bool force = false)
     {
         if (CinemaBooths.Instance is not { } booths) return;
+        if (force) _shown = "\0";
         var (_, screen) = booths.StateOf(_plan, _hall);
         var (link, _) = booths.VideoOf(_plan, _hall);
         var stream = booths.StreamOf(_plan, _hall);
         if (link.Length > 0) _relay.SetPressedNoSignal(booths.RelayOf(_plan, _hall));
         string now = !screen ? "The screen is off"
             : link.Length == 0 ? "Showing the cat slides"
-            : $"Playing {CinemaVideo.Title(link)}" + (stream is CinemaRelayFeed ? "  ·  through the server" : "")
+            : (CinemaVideo.IsLive(link) ? $"Live: {CinemaVideo.Title(link)}" : $"Playing {CinemaVideo.Title(link)}")
+              + (stream is CinemaRelayFeed && !CinemaVideo.IsLive(link) ? "  ·  through the server" : "")
               + (stream is { Status.Length: > 0 } s ? $"  ·  {s.Status}" : "");
+        bool sharing = booths.SharingIn(_plan, _hall);
+        now += sharing ? "  ·  you share it" + (booths.Sharing is { Status.Length: > 0 } c ? $" ({c.Status})" : "") : "";
         if (now == _shown) return;
         _shown = now;
         _now.Text = now;
@@ -259,8 +356,13 @@ public partial class CinemaPanelUi : CanvasLayer
         _slides.Disabled = screen;
         _slides.TooltipText = screen ? "The slides are showing already" : "The cat slides, with the hall's film music";
         _stop.Visible = link.Length > 0;
+        _stop.Text = CinemaVideo.IsLive(link) ? "Stop the share" : "Stop the video";
+        _share.Text = sharing ? "Stop sharing" : "Share";
+        _relay.Visible = !CinemaVideo.IsLive(link);
+        if (sharing && _status.Text == "Starting the share…") Status = "";
         if (stream is { Failed: true }) Status = stream.Status;
         else if (_status.Text == "Starting…" && link.Length > 0) Status = "";
+        if (booths.Sharing is { Failed: true } failed && sharing) Status = failed.Status;
     }
 
     // ---- the links played before -----------------------------------------------------------------

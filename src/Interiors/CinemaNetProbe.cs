@@ -22,6 +22,11 @@ namespace UnitSport.Interiors;
 /// starts A with <c>--cinemanodecode</c> (a phone's way): A's frames come through the server's relay (#1298 phase 2),
 /// B decodes the link itself, and both must be on the clock.
 /// </para>
+/// <para>
+/// Then a live share (#1298 phase 3, with the video): A shares a test pattern with a tone (<see cref="CaptureKind.Test"/>)
+/// on the hall; B walks into the house; both watch it through the server (A its own share, as a streamer sees it) and
+/// must be on the clock with the sound due; A stops it and B sees the hall's link go.
+/// </para>
 /// </summary>
 public partial class CinemaNetProbe : ChatProbe
 {
@@ -107,6 +112,22 @@ public partial class CinemaNetProbe : ChatProbe
                 Expect(b && c, "B and C got the video");
                 await Watch(VideoLink, t0);
                 Expect(booths.VideoOf(plan, 0).Link == VideoLink, "B's refused link changed nothing for A");
+
+                // a live share: A's test pattern, through the server to B and back to A
+                booths.StartSharing(plan, 0, new CaptureSource(CaptureKind.Test, "Test pattern", "test"), CinemaVideo.LiveQuality.Low, false, null);
+                Expect(await Until(() => booths.SharingIn(plan, 0), 10), "the server granted A's share");
+                var (live, liveT0) = booths.VideoOf(plan, 0);
+                Expect(CinemaVideo.LiveOf(live).Label == "Test pattern", $"the hall shows A's share ({live})");
+                bool inside = false;
+                for (int t = 0; t < 40 && !inside; t++)
+                {
+                    Say("live");
+                    inside = await Until(() => _heard.Any(l => l.Contains("CN B inside")), 2);
+                }
+                Expect(inside, "B came in to watch");
+                await Watch(live, liveT0);
+                booths.StopSharing();
+                Expect(await Until(() => booths.VideoOf(plan, 0).Link.Length == 0, 10), "A stopped the share: the hall's link is gone");
             }
         }
         else
@@ -139,6 +160,18 @@ public partial class CinemaNetProbe : ChatProbe
                 if (_role == "B") await Watch(VideoLink, t0);
                 else await Seconds(WatchSeconds);
                 Expect(booths.VideoOf(plan, 0).Link == VideoLink, $"{_role}: the server refused B's link (B is outside)");
+                if (_role == "B")
+                {
+                    // A's live share: only from inside, so B walks in
+                    if (!await Heard("A", "live", 120)) { Fail("A never shared"); return; }
+                    if (!await WalkIn(me, interiors, door)) return;
+                    Expect(interiors.Current?.Key == plan, $"B is in A's house ({interiors.Current?.Key})");
+                    Say("inside");
+                    var (live, liveT0) = booths.VideoOf(plan, 0);
+                    Expect(CinemaVideo.IsLive(live), $"B holds A's live share ({live})");
+                    await Watch(live, liveT0);
+                    Expect(await Until(() => booths.VideoOf(plan, 0).Link.Length == 0, 20), "B saw A's share end");
+                }
             }
         }
         await Finish(6);
@@ -178,7 +211,9 @@ public partial class CinemaNetProbe : ChatProbe
                     double off = pos - stream.CurrentTime;
                     marks++;
                     // two frames: the relay's are 15 a second, a decoder's 30
-                    if (off >= -0.001 && off < 2.0 / (stream is CinemaRelayFeed ? CinemaVideo.RelayFps : CinemaVideo.Fps)) close++;
+                    // a live share's frames come as captured, not on a grid: a quarter second
+                    double tolerance = CinemaVideo.IsLive(link) ? 0.25 : 2.0 / (stream is CinemaRelayFeed ? CinemaVideo.RelayFps : CinemaVideo.Fps);
+                    if (off >= -0.001 && off < tolerance) close++;
                     // the sound due now: the test film's tone, not silence (a headless peer has no speaker to play it)
                     listened++;
                     if (stream.SoundAt(pos, out long sample))
@@ -194,7 +229,7 @@ public partial class CinemaNetProbe : ChatProbe
         booths.ProbeWatch = null;
         Expect(stream is { Failed: false }, $"{_role} plays the video ({stream?.Status ?? "no feed"})");
         Expect(heard >= listened - 1 && listened >= 3, $"{_role} has the sound due at {heard}/{listened} marks");
-        Expect(relayed == !CinemaVideoStream.CanDecode, $"{_role} plays it {(relayed ? "through the server" : "from the link itself")}");
+        Expect(relayed == (!CinemaVideoStream.CanDecode || CinemaVideo.IsLive(link)), $"{_role} plays it {(relayed ? "through the server" : "from the link itself")}");
         Expect(marks >= 3 && close == marks, $"{_role} on the shared clock at {close}/{marks} marks (worst {worst * 1000:F0} ms)");
     }
 

@@ -64,6 +64,27 @@ public class CinemaVideoTests
     public void The_position_never_goes_before_the_start() => Assert.Equal(0, CinemaVideo.PositionAt(5, 10));
 
     [Fact]
+    public void A_live_link_names_its_owner_and_never_comes_from_a_player()
+    {
+        string link = CinemaVideo.LiveLink(1762081815, "Monitor 1 (1920x1080)");
+        Assert.True(CinemaVideo.IsLive(link));
+        Assert.Equal((1762081815L, "Monitor 1 (1920x1080)"), CinemaVideo.LiveOf(link));
+        Assert.Equal("Monitor 1 (1920x1080)", CinemaVideo.Title(link));
+        // a player typing one is refused: only the server writes it
+        Assert.False(CinemaVideo.Allowed(link));
+        Assert.Equal((0L, ""), CinemaVideo.LiveOf("https://example.org/live:1:x"));
+        Assert.Equal((0L, ""), CinemaVideo.LiveOf("live:notanumber:x"));
+    }
+
+    [Fact]
+    public void A_live_label_is_cut_to_printable_and_short()
+    {
+        var (_, label) = CinemaVideo.LiveOf(CinemaVideo.LiveLink(5, "a\nb" + new string('x', 200)));
+        Assert.DoesNotContain('\n', label);
+        Assert.True(label.Length <= 80);
+    }
+
+    [Fact]
     public void A_restart_leads_further_but_not_forever()
     {
         Assert.True(CinemaVideo.RestartLead(1) > CinemaVideo.StartLead);

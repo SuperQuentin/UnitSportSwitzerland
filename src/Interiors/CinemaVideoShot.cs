@@ -57,7 +57,25 @@ public partial class CinemaVideoShot : Node3D
         _plan = layout.Key;
         _t0 = Net.ClockSync.ServerNow;
         booths.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
-        booths.SetVideoForShot(_plan, 0, _link, _t0);
+        // live:monitor, live:window, live:camera, live:test: this machine shares its first one (#1298 phase 3), sharp
+        if (CinemaVideo.IsLive(_link))
+        {
+            string kind = _link[CinemaVideo.LivePrefix.Length..];
+            Task.Run(CinemaDevices.List).ContinueWith(found => Callable.From(() =>
+            {
+                var f = found.Result;
+                var source = kind switch
+                {
+                    "monitor" => f.Monitors.FirstOrDefault(),
+                    "window" => f.Windows.FirstOrDefault(),
+                    "camera" => f.Cameras.FirstOrDefault(),
+                    _ => new CaptureSource(CaptureKind.Test, "Test pattern", "test"),
+                };
+                if (source == null) { Done($"FAILED (no {kind} to share)"); return; }
+                booths.StartSharing(_plan, 0, source, CinemaVideo.LiveQuality.High, f.PcSound, null);
+            }).CallDeferred());
+        }
+        else booths.SetVideoForShot(_plan, 0, _link, _t0);
         booths.ProbeWatch = (_plan, 0);
         booths.ProbeNode = _node;
         GD.Print($"[cinemavideo] {_link} on hall {CinemaBooths.HallAt(layout, screen.X, screen.Z) + 1}");
@@ -65,7 +83,8 @@ public partial class CinemaVideoShot : Node3D
 
     public override void _Process(double delta)
     {
-        double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, _t0);
+        // the hall's own start: a share's T0 is the server's, set once it granted it
+        double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, CinemaBooths.Instance!.VideoOf(_plan, 0) is { Link.Length: > 0 } v ? v.T0 : _t0);
         _stream = CinemaBooths.Instance!.StreamOf(_plan, 0);
         if (_stream is { Failed: true } || pos > 90) { Done($"FAILED ({_stream?.Status ?? "no feed"})"); return; }
         if (_stream == null || _stream.CurrentTime < 0) return;

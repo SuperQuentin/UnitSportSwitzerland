@@ -56,6 +56,31 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
 - **One feed for both ways**: `ICinemaFeed` (`CinemaFeed.cs`, with `CinemaLookup`: yt-dlp, ffmpeg arguments, process
   start and stop for the decoder and the tap): `Picture` (an `Image`), `Tint`, `Pump`, `SoundAt`/`Sample`/`Heard`.
 - **Phones and Quest**: no ffmpeg: through the server (the panel says so).
+- **Live sources** (phase 3, `CinemaBooths.Live.cs`, `CinemaCapture.cs`, `PcSoundLoopback.cs`, `WindowGrab.cs`): the
+  panel's **Share from this computer** (desktop only): a monitor, a window or a camera, a quality (Low 480x200 @ 15,
+  Sharp 960x400 @ 10 for text, Smooth 960x400 @ 20), **PC sound** and a microphone. `AskLiveRpc` → `ServeLive` (inside,
+  the 2 s cooldown) writes the hall's link `live:<peer>:<label>` (`CinemaVideo.LiveLink`; `Allowed` refuses the scheme
+  from a player), relay on. The streamer's game captures (`PumpCapture`, wherever the player looks) and pushes
+  `PushFrame` (unreliable) / `PushSound` (reliable) on channel 5; the server keeps only the owner's (`Pushed`, at most
+  64 waiting, a JPEG at most 512 kB) and forwards them in `PumpRelay` like a tap's; the owner out of that cinema for
+  5 s, or anything else played, ends it. Frames are stamped with the hall's moment of capture + 1.5 s
+  (`LiveDelay`), the sound runs on the clock as the radio tap's (a source short gives silence, one ahead is trimmed to
+  0.3 s), so everyone, the streamer too, sees and hears the same moment.
+- **Capture per OS**: monitor gdigrab with the monitor's rectangle from `EnumDisplayMonitors` (Windows), x11grab
+  (Linux, X11 only: Wayland not done), avfoundation's "Capture screen N" (macOS); window: `PrintWindow` with
+  `PW_RENDERFULLCONTENT` on its handle (GPU-drawn windows, even under the game; not minimised; gdigrab's `title=` gives
+  a blank browser, and ffmpeg's `gfxcapture` (Windows.Graphics.Capture) sends a frame only when the window changes and
+  ffmpeg held even the first back, measured Oct 28), letterboxed and made a JPEG in C#; camera dshow / v4l2 /
+  avfoundation from ffmpeg's `-list_devices` (Windows found the Logi C310 and the Quest headsets' virtual cameras).
+  Windows are listed with `EnumWindows` (visible, titled, not tool windows, not cloaked, not this game).
+- **PC sound**: Windows WASAPI process loopback (`VAD\Process_Loopback`, `PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE`
+  on this process: every app but the game, so the hall's own sound never echoes; Windows 10 20348+ / 11), COM interop,
+  48 kHz stereo 16-bit read on an MTA thread, averaged to 24 kHz mono; Linux PulseAudio's `@DEFAULT_MONITOR@` through
+  ffmpeg; macOS: phase 7 (ScreenCaptureKit). Mixed with the microphone sample by sample.
+- `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
+  last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
+  30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`
+  shares on the shot's hall (`live:test` needs `--cinemavideolocal`).
 - **Sources tested** (Oct 2026): YouTube `aqz-KE-bpKQ` (Big Buck Bunny), `download.blender.org/durian/trailer/
   sintel_trailer-480p.mp4`, `test-streams.mux.dev/x36xhzz/x36xhzz.m3u8` (HLS VOD), ireplay's live HLS. Dead:
   the gtv-videos-bucket sample (403), Akamai's `cph-p2p-msl` live test (404).
@@ -64,6 +89,8 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   it, B outside is refused, A, B, C hold the same link and T0; A (`--cinemanodecode`) watches through the server, B
   decodes it, both through the booth's own feed (`CinemaBooths.ProbeWatch`) and within two of their frames of the clock
   with the sound due at every mark (the probe reports the heard sample as a speaker does). C only checks the state: a
-  third ffmpeg pair hit the RAM floor on a 16 GB machine. Windowed shots: `--cinemavideoshot <link>,<prefix>` (Town
+  third ffmpeg pair hit the RAM floor on a 16 GB machine. Then a live share: A shares a test pattern with a tone
+  (`CaptureKind.Test`, `--cinemavideolocal` only), B walks into the house, both watch it through the server (A its own
+  share), on the clock within 0.25 s (live frames come as captured) with the sound due; A stops it and B sees it end. Windowed shots: `--cinemavideoshot <link>,<prefix>` (Town
   cinema: `_pasted`, `_thrown`, `_booth`, `_panel`.png), `--cinemanodecode` for the relay (this process its own server).
   Without ffmpeg on PATH (a dev build has no `bin/`), put the release's `test_output/release/tools/<os>` first.

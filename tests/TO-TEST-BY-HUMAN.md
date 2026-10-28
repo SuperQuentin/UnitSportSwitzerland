@@ -29,6 +29,17 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] A live Twitch channel through the server → every player on it sees the same moment (unlike each fetching it).
 - [ ] Server bandwidth: three players watching through the server → about 1.5-2 Mbit/s each in the server's stats; nothing when nobody watches.
 
+## Sharing a screen, a window or a webcam ([#1301](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1301))
+
+- [ ] Projector panel › Share from this computer › a monitor, Sharp → the hall shows your screen about 1.5 s later, for you and the others at the same moment; text on it reads from the middle rows.
+- [ ] Share a browser window playing a video, with **PC sound** → its picture (even while the game covers it) and its sound in the hall; the hall's own sound does not come back into it (no echo).
+- [ ] Add a microphone → your voice over the PC's sound, both in sync with the picture.
+- [ ] Share the webcam (with its mic) → your face on the screen, the mirror the right way for the audience?
+- [ ] Smooth on a game or a video → motion looks fluid; note the upload in Task Manager (about 6 Mbit/s).
+- [ ] Leave the cinema while sharing → after about 5 s the hall goes back to the slides; Stop sharing → at once.
+- [ ] Pad: D-pad through the share pickers (OptionButton popups), A to pick, Share. VR: the laser on the pickers and Share.
+- [ ] Linux (X11): a monitor share and the PC sound (PulseAudio monitor). macOS: a monitor and a camera share (screen-recording permission asked).
+
 ## What E acts on is outlined ([#1291](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1291))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7` (Cinémas du Grütli, Geneva), then walk in.
