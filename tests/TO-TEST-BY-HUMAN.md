@@ -7,6 +7,45 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## A video on a cinema hall's screen ([#1299](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1299))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (Cinémas du Grütli, Geneva), walk up to the booth. A dev build needs ffmpeg on PATH (yt-dlp too for YouTube); a release ships both.
+
+- [ ] E at the screen half of a hall's booth panel → the projector panel opens, low on the screen. Paste a YouTube link, Play → within a few seconds the hall's screen, the projector beam, the port and the lens glow show it; its sound comes from the screen and the film music stops.
+- [ ] Two players in the same hall (one online, one host) → the same picture at the same moment, the same sound; a third who joins later lands on the same moment.
+- [ ] Sound: does the video's level sit right against the hall (too loud, too quiet), and is it heard from the lobby through the door?
+- [ ] At High detail, walk into the beam → you wear the video and leave a shadow on the screen. Below High → the pasted picture.
+- [ ] Pad: Y at the screen half, D-pad to Paste / a recent link, A → it plays. B closes.
+- [ ] VR: grip the screen half → the panel on the VR panel, the laser picks Paste or a recent link.
+- [ ] A Twitch live channel and an `.m3u8` live stream → they play (the players a segment or so apart: expected until the relay).
+- [ ] Stop the video → the cat slides and the film music come back. Screen off → dark and silent.
+- [ ] Perf: F3 Detailed while a 480p video plays in the hall → note the frame time against the slides.
+
+## A cinema hall's video through the server ([#1298](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1298) phase 2)
+
+- [ ] On a server, tick **Through the server** in the projector panel while a video plays → every player's picture turns a little softer (the server's copy), it goes on at the same moment, nobody's restarts.
+- [ ] A phone (or the Quest) joins the hall → it shows the video and plays its sound through the server, on time with the desktops.
+- [ ] Block the video's domain on one PC (hosts file) and play it → that player gets it through the server after a few seconds; the others are unaffected.
+- [ ] A live Twitch channel through the server → every player on it sees the same moment (unlike each fetching it).
+- [ ] Server bandwidth: three players watching through the server → about 1.5-2 Mbit/s each in the server's stats; nothing when nobody watches.
+
+## Sharing a screen, a window or a webcam ([#1301](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1301))
+
+- [ ] Projector panel › Share from this computer › a monitor, Sharp → the hall shows your screen about 1.5 s later, for you and the others at the same moment; text on it reads from the middle rows.
+- [ ] Share a browser window playing a video, with **PC sound** → its picture (even while the game covers it) and its sound in the hall; the hall's own sound does not come back into it (no echo).
+- [ ] Add a microphone → your voice over the PC's sound, both in sync with the picture.
+- [ ] Share the webcam (with its mic) → your face on the screen, the mirror the right way for the audience?
+- [ ] Smooth on a game or a video → motion looks fluid; note the upload in Task Manager (about 6 Mbit/s).
+- [ ] Leave the cinema while sharing → after about 5 s the hall goes back to the slides; Stop sharing → at once.
+- [ ] Pad: D-pad through the share pickers (OptionButton popups), A to pick, Share. VR: the laser on the pickers and Share.
+- [ ] Play a video file… (an mp4 or mkv from your disk) → the hall plays it from the start, everyone at the same moment, its sound from the screen; at its end the slides come back. A file of several GB starts within a few seconds.
+- [ ] **NDI** (needs NDI Tools from ndi.video; OBS's NDI output already checked by the scripts): host a concert and `/concert ndi on`, then in a cinema's projector panel pick `NDI: … (PGM)` → the concert's program camera on the hall's screen. With OBS: its sound heard in the hall, in sync with its picture, the same moment for two players. ([#1303](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1303))
+- [ ] Walk into a cinema you never entered → some halls are mid-film: an open film (Sintel, Spring, …) or the cat slides, with its sound; a friend joining sees the same moment. `/cinema pool` lists the films; as an admin `/cinema pool add <a YouTube link>` → "Added …", and after a while new cinemas show it too.
+- [ ] Play a 16:9 video, then a scope (2.39:1) film → the side curtains glide in to frame the 16:9 picture and back out for the scope one, smoothly, no jump; a dark opening scene does not close them on the picture.
+- [ ] Projector panel › Display: Cover, then Stretch, then Contain with 4:3 and 1.85 → the screen, the beam (High detail) and the picture in the porthole's glass all show the same framing; the curtains glide to its edges; a friend in the hall sees the same.
+- [ ] **3D**: play a side-by-side or top-and-bottom film (a name with SBS / TB picks the layout, or the 3D picker) → with red-cyan glasses the screen has depth; untick Red-cyan glasses → the plain left picture. In a headset → each eye its own picture, real depth, no colour fringes. Does the depth feel right (eyes not swapped)? ([#1298](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1298) phase 6)
+- [ ] Linux (X11): a monitor share and the PC sound (PulseAudio monitor). macOS: a monitor and a camera share (screen-recording permission asked).
+
 ## What E acts on is outlined ([#1291](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1291))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7` (Cinémas du Grütli, Geneva), then walk in.
