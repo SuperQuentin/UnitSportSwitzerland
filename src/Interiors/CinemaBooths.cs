@@ -218,6 +218,7 @@ public partial class CinemaBooths : Node
                 if (halls[h] != Default(plan, h)) RpcId(peer, MethodName.Set, plan, h, halls[h]);
         SendVideosTo(peer);
         SendPool(peer);
+        SendDisplaysTo(peer);
     }
 
     // ---- client: showing it ----------------------------------------------------------------------

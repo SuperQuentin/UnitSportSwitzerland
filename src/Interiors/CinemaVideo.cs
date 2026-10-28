@@ -194,15 +194,96 @@ public static class CinemaVideo
         /// <summary>A shape measured <paramref name="perSecond"/> times a second.</summary>
         public Shape(int perSecond) => _need = (int)(ShapeAfter * perSecond);
 
-        /// <summary>A frame's measure (<see cref="ContentWidth"/>); any thread, one writer.</summary>
-        public void Add(float width)
+        private float _tallest = -1;
+
+        /// <summary>A frame's measure (<see cref="ContentWidth"/>, or both ways: <see cref="ContentSize"/>); any thread, one writer.</summary>
+        public void Add(float width, float height = 1f)
         {
             if (width <= 0) return;
             _frames++;
             if (width > _widest) _widest = width;
+            if (height > _tallest) _tallest = height;
         }
 
-        public float Width => _frames >= _need && _widest > 0 ? _widest : 1f;
+        private bool Known => _frames >= _need && _widest > 0;
+        public float Width => Known ? _widest : 1f;
+        public float Height => Known && _tallest > 0 ? _tallest : 1f;
+    }
+
+    /// <summary>
+    /// How a hall's projector shows a video (#1298, the owner's: "cover/contain/stretch and aspect ratio selection,
+    /// default contain with the full screen ratio, the curtains adapt"): the picture fitted into a frame of the chosen
+    /// ratio, centred on the screen at its full height. Contain shows all of it (black bars where the shapes differ),
+    /// Cover fills the frame (cropping), Stretch fills it (distorting). A hall's setting, the same for everyone in it and
+    /// kept across videos; the slides are not touched.
+    /// </summary>
+    public enum Fit : byte { Contain = 0, Cover = 1, Stretch = 2 }
+
+    /// <summary>The frames a projector can show, by their ratio: the screen's own first (the default).</summary>
+    public static readonly (string Name, float Ratio)[] Ratios =
+    {
+        ("Full screen (2.39:1)", ScreenRatio), ("2:1", 2f), ("1.85:1 (flat)", 1.85f), ("16:9", 16f / 9f), ("4:3", 4f / 3f),
+    };
+
+    /// <summary>The screen's own shape: scope.</summary>
+    public const float ScreenRatio = 2.39f;
+
+    /// <summary>A hall's display packed in one int for the wire and the table: the fit, then the ratio's index.</summary>
+    public static int PackDisplay(Fit fit, int ratio) => (int)fit | Math.Clamp(ratio, 0, Ratios.Length - 1) << 4;
+
+    public static (Fit Fit, int Ratio) UnpackDisplay(int display) =>
+        ((Fit)Math.Clamp(display & 15, 0, 2), Math.Clamp(display >> 4 & 15, 0, Ratios.Length - 1));
+
+    /// <summary>The share of the screen's width the chosen frame takes (its full height): 1 for the screen's own ratio.</summary>
+    public static float FrameWidth(int ratio) => Math.Min(1f, Ratios[Math.Clamp(ratio, 0, Ratios.Length - 1)].Ratio / ScreenRatio);
+
+    /// <summary>
+    /// The share of the screen's width the picture shows under a display, for the curtains to frame: the frame for Cover
+    /// and Stretch, the picture inside it for Contain (narrower when the picture's shape <paramref name="pictureRatio"/>
+    /// is narrower than the frame's).
+    /// </summary>
+    public static float VisibleWidth(Fit fit, int ratio, float pictureRatio)
+    {
+        float frame = FrameWidth(ratio), frameRatio = frame * ScreenRatio;
+        return fit != Fit.Contain || pictureRatio >= frameRatio ? frame : frame * pictureRatio / frameRatio;
+    }
+
+    /// <summary>
+    /// Where a point of the screen (<paramref name="u"/>, <paramref name="v"/> in 0..1) samples the picture under a display,
+    /// in the picture's own 0..1 (its measured rectangle, ratio <paramref name="pictureRatio"/>), or null where the screen
+    /// shows black. What <c>shaders/cinema_screen.gdshader</c> does per pixel, here for the tests.
+    /// </summary>
+    public static (float X, float Y)? MapScreen(float u, float v, Fit fit, int ratio, float pictureRatio)
+    {
+        float frame = FrameWidth(ratio), x0 = 0.5f - frame / 2;
+        if (u < x0 || u > 1 - x0) return null;
+        float s = (u - x0) / frame, t = v, frameRatio = frame * ScreenRatio;
+        if (fit == Fit.Stretch) return (s, t);
+        bool wider = pictureRatio > frameRatio;
+        if (fit == Fit.Contain)
+        {
+            if (wider)
+            {
+                float h = frameRatio / pictureRatio;
+                return Math.Abs(t - 0.5f) > h / 2 ? null : (s, (t - 0.5f) / h + 0.5f);
+            }
+            float w = pictureRatio / frameRatio;
+            return Math.Abs(s - 0.5f) > w / 2 ? null : ((s - 0.5f) / w + 0.5f, t);
+        }
+        // cover: the picture fills the frame, its overflow cropped
+        return wider ? ((s - 0.5f) * frameRatio / pictureRatio + 0.5f, t) : (s, (t - 0.5f) * pictureRatio / frameRatio + 0.5f);
+    }
+
+    /// <summary>
+    /// A frame's picture: the share of its width and of its height that is lit (<see cref="ContentWidth"/>, both ways),
+    /// centred as every decoder letterboxes; (-1, -1) for a frame lit nowhere.
+    /// </summary>
+    public static (float Width, float Height) ContentSize(int width, int height, Func<int, int, bool> lit)
+    {
+        float w = ContentWidth(width, height, lit);
+        if (w < 0) return (-1, -1);
+        float h = ContentWidth(height, width, (y, x) => lit(x, y));
+        return (w, h);
     }
 
     /// <summary>The longest link the server takes.</summary>

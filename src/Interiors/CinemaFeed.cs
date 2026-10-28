@@ -33,6 +33,9 @@ public interface ICinemaFeed : IDisposable
     /// <summary>The share of the screen's width the picture fills (1 a scope film, 0.74 a 16:9 one), measured from its frames: the curtains frame it.</summary>
     float ContentWidth { get; }
 
+    /// <summary>The share of the frame's height the picture fills (below 1 only for a picture wider than the screen).</summary>
+    float ContentHeight { get; }
+
     /// <summary>The moment of the video the frame shown is of, s (-1 before the first); for the checks.</summary>
     double CurrentTime { get; }
     int Restarts { get; }

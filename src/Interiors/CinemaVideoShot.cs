@@ -28,7 +28,8 @@ public partial class CinemaVideoShot : Node3D
     private readonly double _began = Core.RealClock.Now;
     private int _step;
     private string _plan = "";
-    private Vector3 _target, _booth;
+    private Vector3 _target, _booth, _port;
+    private static readonly bool PortLook = CmdArgs.Has("--cinemashotport");
 
     public CinemaVideoShot(string link, string prefix) { _link = link; _prefix = prefix; }
     public CinemaVideoShot() : this("", "") { }
@@ -53,6 +54,7 @@ public partial class CinemaVideoShot : Node3D
         var facing = new Basis(Vector3.Up, screen.Turns * Mathf.Pi / 2) * Vector3.Back;
         var proj = layout.Furniture.FirstOrDefault(f => f.Type == FurnitureType.Porthole);
         _booth = proj != null ? new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift - 1.2f, proj.Z) - facing * 1.5f : _target + facing * 20f;
+        _port = proj != null ? new Vector3(proj.X, layout.FloorY(proj.Floor) + proj.Lift + proj.H / 2, proj.Z) : _booth;
         _cam = new Camera3D { Current = true, Near = 0.05f };
         AddChild(_cam);
         _cam.LookAtFromPosition(_target + facing * 12f + new Vector3(0, 0.6f, 0), _target, Vector3.Up);
@@ -61,6 +63,13 @@ public partial class CinemaVideoShot : Node3D
         _plan = layout.Key;
         _t0 = Net.ClockSync.ServerNow;
         booths.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+        // --cinemadisplay <fit>,<ratio>: the hall's projector set so first (contain, cover, stretch; full, 2, 1.85, 16:9, 4:3)
+        if (CmdArgs.Value("--cinemadisplay")?.Split(',') is { Length: 2 } shown && Enum.TryParse(shown[0], true, out CinemaVideo.Fit fit))
+        {
+            int ratio = shown[1].Equals("full", StringComparison.OrdinalIgnoreCase) ? 0
+                : Math.Max(0, Array.FindIndex(CinemaVideo.Ratios, r => r.Name.StartsWith(shown[1], StringComparison.OrdinalIgnoreCase)));
+            booths.ServeDisplay(1, _plan, 0, CinemaVideo.PackDisplay(fit, ratio));
+        }
         // showing: the film the hall draws by itself, as a cinema first seen mid-showing (the cat slides one entry: a new
         // showing until it draws a film)
         // file:<path>: this machine plays a video file of its own for the hall (#1298 phase 4), sharp
@@ -118,6 +127,15 @@ public partial class CinemaVideoShot : Node3D
         if (_shotAt < 0) _shotAt = pos + (Curtains ? 0 : 2);
         if (pos < _shotAt) return;
         // --cinemashotcurtains: the camera kept in the seats, a shot every 1.5 s from the first frame: the curtains closing in
+        // --cinemashotport: one shot from 2.5 m in front of the porthole looking up at it: the picture in its glass
+        if (PortLook)
+        {
+            _cam.LookAtFromPosition(_port + (_target - _port).Normalized() * 2.5f + new Vector3(0, -0.6f, 0), _port, Vector3.Up);
+            if (_step++ == 0) { _shotAt = pos + 0.3; return; }
+            Shoot($"{_prefix}_port.png", pos);
+            Done("ok");
+            return;
+        }
         if (Curtains)
         {
             Shoot($"{_prefix}_curtains{_step}.png", pos);

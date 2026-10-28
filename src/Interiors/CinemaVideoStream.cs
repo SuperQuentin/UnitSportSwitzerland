@@ -33,6 +33,7 @@ public sealed class CinemaVideoStream : ICinemaFeed
     // measured every fifth frame (ReadVideo)
     private readonly CinemaVideo.Shape _shape = new(CinemaVideo.Fps / 5);
     public float ContentWidth => _shape.Width;
+    public float ContentHeight => _shape.Height;
 
     /// <summary>Frames decoded ahead at most (12 MB); the sound ahead at most, s, of a ring twice that.</summary>
     private const int Ring = 10;
@@ -282,11 +283,12 @@ public sealed class CinemaVideoStream : ICinemaFeed
                 if (index % 5 == 0)
                 {
                     var p = pixels;
-                    _shape.Add(CinemaVideo.ContentWidth(CinemaVideo.Width, _height, (x, y) =>
+                    var (w, h) = CinemaVideo.ContentSize(CinemaVideo.Width, _height, (x, y) =>
                     {
                         int at = (y * _width + x) * 4;
                         return p[at] + p[at + 1] + p[at + 2] > 3 * 24;
-                    }));
+                    });
+                    _shape.Add(w, h);
                 }
                 _frames.Enqueue(new Frame(index, pixels, MeanColour(pixels)));
                 _lastIndex = index++;

@@ -36,6 +36,9 @@ public partial class CinemaBooths
     private string _streamPlan = "";
     private int _streamHall = -1;
 
+    /// <summary>Client: the display the watched hall's frame was last shown with.</summary>
+    private int _shownDisplay;
+
     /// <summary>Client: the link and T0 whose own decoding failed here: that video comes through the server instead.</summary>
     private (string Link, double T0) _failedHere;
 
@@ -176,7 +179,13 @@ public partial class CinemaBooths
         }
         if (relay) KeepWatching(plan, here);
         double position = CinemaVideo.PositionAt(ClockSync.ServerNow, t0);
-        if (_stream.Pump(position) && _stream.Picture is { } frame) node?.ShowVideo(here, frame, _stream.Tint, _stream);
+        // a new frame, or the projector set otherwise (a still share sends no new frame to show it on)
+        int display = DisplayOf(plan, here);
+        if ((_stream.Pump(position) | display != _shownDisplay) && _stream.Picture is { } frame)
+        {
+            _shownDisplay = display;
+            node?.ShowVideo(here, frame, _stream.Tint, _stream, display);
+        }
         if (_stream.Failed && !relay)
         {
             // this machine could not get it (a blocked domain, a site that refuses it): the server's copy instead
@@ -211,6 +220,7 @@ public partial class CinemaBooths
         string plan = node.Layout.Key;
         string verb = parts.Length > 1 ? parts[1].ToLowerInvariant() : "";
         var (link, t0) = booths.VideoOf(plan, hall);
+        if (booths.DisplayCommand(plan, hall, verb, parts.Length > 2 ? parts[2] : "") is { } display) return display;
         switch (verb)
         {
             case "play" when parts.Length > 2:
@@ -233,7 +243,7 @@ public partial class CinemaBooths
                       + (stream == null ? "" : $" ({(stream is CinemaRelayFeed ? "through the server, " : "")}"
                           + $"{(stream.Status.Length > 0 ? stream.Status : "playing")}, frame at {stream.CurrentTime:F2} s, {stream.Restarts} restarts)");
             default:
-                return "Usage: /cinema play <link>  |  /cinema stop  |  /cinema relay on|off  |  /cinema pool  |  /cinema";
+                return "Usage: /cinema play <link>  |  /cinema stop  |  /cinema relay on|off  |  /cinema fit contain|cover|stretch  |  /cinema ratio full|16:9|…  |  /cinema pool  |  /cinema";
         }
     }
 

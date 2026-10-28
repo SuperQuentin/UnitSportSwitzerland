@@ -99,7 +99,7 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   Buck Bunny). Every decoder (`CinemaVideoStream`, the relay's tap, a file share) packs both eyes side by side, each
   fitted to the screen on its own (`StereoFit`: crop, a half layout unsqueezed when an eye is narrower than 1.2:1 or
   wider than 2.5:1, letterbox, `hstack`), so a 3D picture is twice as wide (`PackedSize`). The pasted picture is then
-  `shaders/cinema_stereo.gdshader`: in a headset `VIEW_INDEX` picks each eye's half; on a flat display red-cyan anaglyph
+  `shaders/cinema_screen.gdshader` (`cinema_stereo` before the display options): in a headset `VIEW_INDEX` picks each eye's half; on a flat display red-cyan anaglyph
   with Dubois' matrices, or the left eye alone (**Red-cyan glasses** in the panel, the viewer's own, `user://cinema.cfg`).
   The projector light, the beam and the port take the left eye (a second texture); a 3D hall is never thrown by the light
   at High detail (one picture per light), it keeps its pasted screen. "Proper separation on supported displays" beyond VR:
@@ -133,6 +133,22 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   never narrows it, a black start says nothing): any source, link, relay, share, file or NDI. Big Buck Bunny (16:9):
   75 %, the curtains on its edges about 4 s in (`--cinemashotcurtains --cinemavideoshot <link>,<prefix>`: five shots 1.5 s
   apart, the camera in the seats).
+- **The projector's display** (the owner's, Oct 28: "cover/contain/stretch and aspect ratio selection, default contain
+  with the full screen ratio, curtains adapt"; `CinemaBooths.Display.cs`): per hall a fit (`CinemaVideo.Fit`: Contain,
+  Cover, Stretch) and the ratio of the frame the picture is fitted into, centred at the screen's full height
+  (`CinemaVideo.Ratios`: full screen 2.39:1, 2:1, 1.85:1, 16:9, 4:3), packed in one int (`PackDisplay`); 0 = contain at
+  the screen's ratio. A hall's setting, like the lights: kept across videos, the same for everyone (`AskDisplayRpc` →
+  `ServeDisplay`, inside only → `SetDisplay`, sent to a joiner; protocol 64); the panel's **Display** row, `/cinema fit
+  contain|cover|stretch`, `/cinema ratio full|2|1.85|16:9|4:3`. Applied per pixel to the decoded frame, nothing decoded
+  again: `shaders/cinema_display.gdshaderinc` (`display_at`, the same as `CinemaVideo.MapScreen`, tested) shared by the
+  screen (`cinema_screen.gdshader`, every video now, 3D included; replaces `cinema_stereo`), the port's glass
+  (`cinema_port.gdshader`) and the marched beam (`projector_beam.gdshader`): they all show the same framing (defaults =
+  the slides' whole frame). The picture's rectangle comes from the frames (`ContentSize`: width and height, the shape
+  keeps the widest and the tallest). The curtains frame what is shown (`VisibleWidth`: the frame for Cover and Stretch,
+  the picture inside it for Contain). The High-detail projector light carries the frame as decoded, so a display other
+  than the default (or a 3D film) keeps the pasted screen at every detail. The slides are not touched. Shots:
+  `--cinemadisplay <fit>,<ratio>` with `--cinemavideoshot` (and `--cinemashotcurtains`, `--cinemashotport` for the
+  porthole's glass from 2.5 m).
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`
