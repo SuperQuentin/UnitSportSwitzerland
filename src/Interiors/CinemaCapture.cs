@@ -46,8 +46,8 @@ public sealed class CinemaFileSource : ILiveSource
     public static readonly string[] Extensions = { ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".ogv", ".ts", ".mpg", ".wmv" };
 }
 
-/// <summary>What a streamer can share (#1298 phase 3): a monitor, a window, a webcam; a test pattern for the checks.</summary>
-public enum CaptureKind { Monitor, Window, Webcam, Test }
+/// <summary>What a streamer can share (#1298 phases 3, 5): a monitor, a window, a webcam, an NDI source; a test pattern for the checks.</summary>
+public enum CaptureKind { Monitor, Window, Webcam, Test, Ndi }
 
 /// <summary>One thing to share: its kind, what ffmpeg names it (a window's title, a camera's name), the area of a monitor.</summary>
 public sealed record CaptureSource(CaptureKind Kind, string Label, string Name, Rect2I Area = default);
@@ -107,6 +107,13 @@ public static class CinemaDevices
             GD.Print($"[cinema] listing what can be shared failed: {e.Message}");
         }
         bool pcSound = PcSoundLoopback.Supported || OperatingSystem.IsLinux();
+        // NDI sources on the network (phase 5): an in-world camera's program ("PGM"), OBS, a vision mixer; none without the runtime
+        try
+        {
+            foreach (string name in Concert.ConcertNdi.Sources(1500, out _) ?? new List<string>())
+                cameras.Add(new CaptureSource(CaptureKind.Ndi, $"NDI: {name}", name));
+        }
+        catch (Exception e) { GD.Print($"[cinema] NDI sources not listed: {e.Message}"); }
         return new Found(monitors, windows, cameras, mics, pcSound);
     }
 
@@ -232,7 +239,8 @@ public sealed class CinemaCapture : ILiveSource
         _size = CinemaVideo.SizeOf(quality);
         StartVideo();
         if (source.Kind == CaptureKind.Test) mic = "test";
-        if (pcSound && source.Kind != CaptureKind.Webcam) StartPcSound();
+        // an NDI source brings its own sound; the PC's would double it
+        if (pcSound && source.Kind is not (CaptureKind.Webcam or CaptureKind.Ndi)) StartPcSound();
         if (!string.IsNullOrEmpty(mic)) StartMic(mic);
     }
 
@@ -241,6 +249,11 @@ public sealed class CinemaCapture : ILiveSource
         string fps = _size.Fps.ToString();
         var input = new List<string> { "-nostdin", "-hide_banner", "-nostats" };
         var s = Source;
+        if (s.Kind == CaptureKind.Ndi)
+        {
+            StartNdi();
+            return;
+        }
         if (s.Kind == CaptureKind.Test) input.AddRange(new[] { "-re", "-f", "lavfi", "-i", $"testsrc2=size=1280x720:rate={fps}" });
         else if (OperatingSystem.IsWindows())
         {
@@ -296,15 +309,59 @@ public sealed class CinemaCapture : ILiveSource
             next = Math.Max(next + 1.0 / _size.Fps, now);
             if (!WindowGrab.Grab(window, ref pixels, out int w, out int h)) { Fail($"{Source.Label} closed or minimised"); return; }
             if (w < 8 || h < 8 || _frames.Count >= _size.Fps) continue;
-            var img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, pixels.Length == w * h * 4 ? pixels : pixels[..(w * h * 4)]);
-            float k = Math.Min(_size.Width / (float)w, _size.Height / (float)h);
-            int fw = Math.Max(1, (int)(w * k)), fh = Math.Max(1, (int)(h * k));
-            img.Resize(fw, fh, Image.Interpolation.Bilinear);
-            var frame = Image.CreateEmpty(_size.Width, _size.Height, false, Image.Format.Rgba8);
-            frame.BlitRect(img, new Rect2I(0, 0, fw, fh), new Vector2I((_size.Width - fw) / 2, (_size.Height - fh) / 2));
-            _frames.Enqueue(frame.SaveJpgToBuffer(1f - _size.JpegQ / 31f));
+            _frames.Enqueue(Letterbox(Image.CreateFromData(w, h, false, Image.Format.Rgba8, pixels.Length == w * h * 4 ? pixels : pixels[..(w * h * 4)])));
             if (Status.Length > 0 && !Failed) Status = "";
         }
+    }
+
+    private Concert.ConcertNdi.Receiver? _ndi;
+
+    /// <summary>
+    /// An NDI source (phase 5) through the concert's receiver at full bandwidth: its newest frame letterboxed and made a JPEG
+    /// at the quality's rate on a worker, its sound down to the relay's mono (averaged channels, nearest sample).
+    /// </summary>
+    private void StartNdi()
+    {
+        _ndi = Concert.ConcertNdi.Receiver.Start(Source.Name, out string? why, full: true, sound: (samples, channels, rate) =>
+        {
+            int frames = samples.Length / channels;
+            int outCount = (int)((long)frames * CinemaVideo.RelaySoundRate / Math.Max(1, rate));
+            var mono = new short[outCount];
+            for (int i = 0; i < outCount; i++)
+            {
+                int at = (int)((long)i * rate / CinemaVideo.RelaySoundRate) * channels;
+                float v = 0;
+                for (int c = 0; c < channels; c++) v += samples[at + c];
+                mono[i] = (short)Math.Clamp(v / channels * 32767f, short.MinValue, short.MaxValue);
+            }
+            Offer(_pc, mono);
+        });
+        if (_ndi == null) { Fail(why ?? "NDI is not installed on this computer"); return; }
+        new Thread(() =>
+        {
+            byte[]? rgba = null;
+            double next = RealClock.Now;
+            while (!_disposed)
+            {
+                double now = RealClock.Now;
+                if (now < next) { Thread.Sleep((int)Math.Max(1, (next - now) * 1000)); continue; }
+                next = Math.Max(next + 1.0 / _size.Fps, now);
+                if (!_ndi.Take(ref rgba, out int w, out int h) || rgba == null || _frames.Count >= _size.Fps) continue;
+                _frames.Enqueue(Letterbox(Image.CreateFromData(w, h, false, Image.Format.Rgba8, rgba)));
+            }
+        }) { IsBackground = true, Name = "cinema-capture-ndi" }.Start();
+    }
+
+    /// <summary>A picture fitted into the quality's size with black bars, as a JPEG.</summary>
+    private byte[] Letterbox(Image img)
+    {
+        int w = img.GetWidth(), h = img.GetHeight();
+        float k = Math.Min(_size.Width / (float)w, _size.Height / (float)h);
+        int fw = Math.Max(1, (int)(w * k)), fh = Math.Max(1, (int)(h * k));
+        img.Resize(fw, fh, Image.Interpolation.Bilinear);
+        var frame = Image.CreateEmpty(_size.Width, _size.Height, false, Image.Format.Rgba8);
+        frame.BlitRect(img, new Rect2I(0, 0, fw, fh), new Vector2I((_size.Width - fw) / 2, (_size.Height - fh) / 2));
+        return frame.SaveJpgToBuffer(1f - _size.JpegQ / 31f);
     }
 
     private void StartPcSound()
@@ -439,5 +496,6 @@ public sealed class CinemaCapture : ILiveSource
         CinemaLookup.Stop(_micProcess);
         CinemaLookup.Stop(_pcProcess);
         _loopback?.Dispose();
+        _ndi?.Dispose();
     }
 }

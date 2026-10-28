@@ -153,7 +153,7 @@ public partial class CinemaPanelUi : CanvasLayer
         _shareBox.AddChild(what);
         // a window's title can be long: the picker keeps the panel's width, not its longest item's
         _source = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.All, ClipText = true, FitToLongestItem = false };
-        _source.TooltipText = "A monitor, a window or a webcam";
+        _source.TooltipText = "A monitor, a window, a webcam, or an NDI source on the network (OBS, a vision mixer, a concert's program camera)";
         what.AddChild(_source);
         _quality = new OptionButton { FocusMode = Control.FocusModeEnum.All };
         _quality.AddItem("Low (light)", (int)CinemaVideo.LiveQuality.Low);
