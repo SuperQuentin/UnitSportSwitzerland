@@ -80,9 +80,10 @@ class Take:
 
     def lines(self):
         out = list(self.setup)
-        out += list(self.before)
-        # a little over the moves: the first frames are trimmed in the cut (the clip starts a frame late)
+        # a little over the moves: the first frames are trimmed in the cut (the clip starts a frame late). The queue
+        # holds this line until the take before is written, so what the take changes ("before") comes after it
         out.append(f"/clip start {self.name} {self.seconds + self.lead:.1f} 0")
+        out += list(self.before)
         out += self.moves
         return out
 
@@ -103,12 +104,16 @@ def cinema_takes():
              "/cinema 1 lights dim film on", "/cinema 2 lights full film off", "/cinema 3 lights off film on"]
     door = (0.0, 2.2, 0.0)
     return [
-        Take("exterior", "Cinemas du Grutli, Geneva",
-             [still((38, 10, -32), door, 3, "ext0", "g")],
-             [glide((15.5, 1.8, -7.6), (0, 3.2, 0), 7, "~out", "g")]),
+        Take("exterior", "Cinémas du Grütli, Geneva",
+             # down the street the door faces
+             [still((40.5, 6, -19.4), door, 3, "ext0", "g")],
+             [glide((17.0, 1.8, -8.2), (0, 3.2, 0), 7, "~out", "g")]),
         Take("lobby", "A box office, a snack bar, the queue",
              enter + [still((5, 1.7, -10.4), (2, 1.2, -16), 1, "lobby0")],
              [glide((-15, 1.7, -10.4), (-18, 1.1, -16), 7, "~lin")]),
+        Take("aisle", "Steps by the seats, a service door to the booth",
+             [still((7.0, 2.2, 2.0), (7.0, 3.2, 13.5), 1, "aisle0")],
+             [glide((7.0, 3.5, 10.4), (7.1, 3.0, 13.5), 5, "~ease")]),
         Take("lights", "The house lights go down, slowly",
              [still((0.8, 6.0, 11.8), (0.8, 3.6, -7), 6, "lights0")],
              [glide((0.8, 4.4, 4.0), (0.8, 3.4, -7), 9, "~ease")],
@@ -119,19 +124,13 @@ def cinema_takes():
               # through the wall to the dimmed hall next door: a cut inside the take
               glide((-13.1, 3.6, 3.5), (-13.1, 4.0, -7), 0.04, "~lin"),
               glide((-13.1, 2.6, -1.0), (-13.1, 4.2, -7), 4, "~ease")]),
-        Take("beam", "Light thrown from the booth, shadows in the beam",
-             [still((2.6, 1.0, -5.5), HALL2_PORT, 1, "beam0")],
-             [glide((-1.2, 2.4, -2.5), HALL2_PORT, 8, "~ease")]),
+        Take("beam", "Light thrown from the booth",
+             [still((5.0, 1.5, -6.0), HALL2_PORT, 1, "beam0")],
+             [glide((3.4, 3.4, 4.0), HALL2_PORT, 8, "~ease")]),
         Take("booth", "Up in the booth: a projector and a panel for each hall",
              [still((3.4, 4.6, 16.0), (2.6, 3.9, 13.9), 1, "booth0")],
              [glide((1.9, 4.5, 15.9), (0.8, 4.3, 14.2), 5, "~ease"),
               glide((0.6, 4.55, 15.6), HALL2_PORT, 5, "~ease")]),
-        Take("aisle", "Steps by the seats, a service door to the booth",
-             [still((7.0, 2.2, 2.0), (7.0, 3.2, 13.5), 1, "aisle0")],
-             [glide((7.0, 3.5, 10.4), (7.1, 3.0, 13.5), 5, "~ease")]),
-        Take("toilets", "And yes, the toilets",
-             [still((17.6, 1.7, -12.6), (20.0, 1.6, -9.3), 1, "wc0")],
-             [glide((19.3, 1.7, -10.3), (21.7, 1.2, -9.0), 4, "~ease")]),
     ]
 
 
@@ -153,6 +152,12 @@ def city_takes():
              [f"1566.6,i1.6,-245.8,-5,123.5,3,{OUT.as_posix()}/bl.png,2501_1117_180",
               still((6.0, 2.2, -42.0), (-7, 0.8, -30), 1, "bl1")],
              [glide((-1.0, 1.7, -40.0), (-11, 1.0, -28), 6, "~ease")]),
+        Take("toilets", "And yes, the toilets",
+             [still((6.0, 1.6, -30.0), (0, 1.8, -24.2), 1, "wc0")],
+             [glide((3.0, 1.7, -28.0), (2, 2.0, -24.2), 3, "~ease"),
+              # through the door: the men's, urinals with their screens
+              glide((3.6, 1.6, -21.6), (1.2, 1.0, -23.8), 0.04, "~lin"),
+              glide((2.9, 1.6, -21.9), (0.8, 1.0, -23.8), 3, "~ease")]),
     ]
 
 
@@ -264,20 +269,21 @@ def cut():
     work = OUT / "cut"
     work.mkdir(parents=True, exist_ok=True)
     card_png("CINEMAS", "UnitSport Switzerland", work / "title.png")
-    card_png("A night out in Geneva", "Cinemas, billiards, pizzerias, pubs, bowling", work / "end.png")
+    card_png("A night out in Switzerland", "Cinemas, billiards, pizzerias, pubs, bowling", work / "end.png")
 
     inputs, lengths, captions = [], [], []
     inputs += ["-loop", "1", "-t", f"{TITLE}", "-framerate", str(FPS), "-i", str(work / "title.png")]
     lengths.append(TITLE)
     for t in takes:
-        inputs += ["-ss", f"{TRIM}", "-t", f"{t.seconds}", "-i", str(TAKES / f"{t.name}.mp4")]
-        lengths.append(t.seconds)
+        # the moves end a frame or two before the clip: stop short of the next take's first pose
+        inputs += ["-ss", f"{TRIM}", "-t", f"{t.seconds - TRIM - 0.05:.2f}", "-i", str(TAKES / f"{t.name}.mp4")]
+        lengths.append(t.seconds - TRIM - 0.05)
     inputs += ["-loop", "1", "-t", f"{END}", "-framerate", str(FPS), "-i", str(work / "end.png")]
     lengths.append(END)
 
     # the chain of crossfades, and when each take starts in the film
     parts, starts, at, last = [], [], 0.0, "[v0]"
-    parts.append(f"[0:v]format=yuv420p,setsar=1,fps={FPS}[v0]")
+    parts.append(f"[0:v]format=yuv420p,setsar=1,fps={FPS},settb=AVTB[v0]")
     for i in range(1, len(lengths)):
         parts.append(f"[{i}:v]scale=1920:1080,format=yuv420p,setsar=1,fps={FPS},settb=AVTB[s{i}]")
     at = lengths[0]
@@ -298,7 +304,7 @@ def cut():
         png = work / f"cap_{t.name}.png"
         caption_png(t.caption, png)
         start = starts[k] + 0.4
-        dur = min(t.seconds - 0.6, 4.0)
+        dur = min(lengths[k + 1] - 0.8, 4.0)
         cap_inputs += ["-loop", "1", "-t", f"{dur:.2f}", "-framerate", str(FPS), "-i", str(png)]
         idx = n_in + len(captions)
         parts.append(f"[{idx}:v]format=rgba,fade=t=in:st=0:d=0.4:alpha=1,fade=t=out:st={dur - 0.4:.2f}:d=0.4:alpha=1,"
