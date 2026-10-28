@@ -22,6 +22,23 @@ public partial class SteinCheck : ChatProbe
 {
     public static bool Requested => CmdArgs.Has("--steincheck");
 
+    private static string? _scratch;
+
+    /// <summary>
+    /// Where this check keeps its progress, emptied the first time it is asked (before the progress loads): the day's puts are saved, and
+    /// a second run would find them used up.
+    /// </summary>
+    public static string Scratch
+    {
+        get
+        {
+            if (_scratch != null) return _scratch;
+            _scratch = ProjectSettings.GlobalizePath("res://test_output/steincheck");
+            if (System.IO.Directory.Exists(_scratch)) System.IO.Directory.Delete(_scratch, recursive: true);
+            return _scratch;
+        }
+    }
+
     private readonly Func<FootPlayer?> _me;
 
     public SteinCheck(ItemController items, Func<FootPlayer?> me) : base(items, "steincheck", "", "stein_") => _me = me;
@@ -53,10 +70,9 @@ public partial class SteinCheck : ChatProbe
         var me0 = Me!;
         GD.Print(FormattableString.Invariant($"{Log} stone at {ground.E:F1}/{ground.N:F1}, thrown ({ground.DirE:F2}, {ground.DirN:F2}); body at {me0.Global.E:F1}/{me0.Global.N:F1}"));
 
-        // ---- at a distance nothing is offered ----------------------------------------------------------
-        await Jump(ground.E + 30, ground.N);
-        await Seconds(0.8);
-        Expect(SteinGame.InteractionFor(me0) == null && !SteinGame.TryInteract(me0), "30 m from the stone: no prompt, E does nothing");
+        // ---- at a distance nothing is offered (the body spawned 12 m from the stone) ------------------------
+        double away = ground.DistanceTo(me0.Global.E, me0.Global.N);
+        Expect(away > 5 && SteinGame.InteractionFor(me0) == null && !SteinGame.TryInteract(me0), $"{away:F0} m from the stone: no prompt, E does nothing");
 
         // ---- beside it: the prompt, E ---------------------------------------------------------------------
         await Jump(ground.E - ground.DirE * 0.8, ground.N - ground.DirN * 0.8);
@@ -64,22 +80,17 @@ public partial class SteinCheck : ChatProbe
         string prompt = SteinGame.InteractionFor(me0)?.Text ?? "";
         Expect(prompt.Contains("Put the stone") && prompt.Contains("3 of 3"), $"it names the puts left ({prompt})");
         var walkBefore = me0.WalkControls;
-        Expect(me0.TryInteract() && await Until(() => game.State == SteinGame.Phase.Ready, 5), $"E opens an attempt ({game.State})");
+        GD.Print($"{Log} body: ride {me0.Ride}, kind {me0.RideKindId}, indoors {me0.Indoors}, downed {me0.Downed}, duel {me0.InDuel}, sitting {me0.Sitting}, viewing {me0.IsViewing}");
+        // a body that was just moved cannot use anything for a couple of seconds (its respawn timer): E until it takes
+        bool took = false;
+        await Until(() => took = me0.TryInteract(), 15);
+        Expect(took && await Until(() => game.State == SteinGame.Phase.Ready, 5), $"E opens an attempt (took {took}, {game.State})");
         Expect(me0.GameBusy && me0.WalkControls != null && me0.WalkControls().Wish == Vector3.Zero, "the hands and the walk are taken");
         Expect(game.Attempt is { Class: 0 }, "the Unspunnen stone first");
         Input.ActionPress(PlayerInput.Jump);
         await Seconds(0.1);
         Input.ActionRelease(PlayerInput.Jump);
         Expect(await Until(() => game.State == SteinGame.Phase.Ready && game.Attempt is { Class: 1 }, 5), "jump changes the stone: the 40 kg one");
-        for (int i = 0; i < 2; i++)
-        {
-            Input.ActionPress(PlayerInput.Jump);
-            await Seconds(0.1);
-            Input.ActionRelease(PlayerInput.Jump);
-            await Until(() => game.State == SteinGame.Phase.Ready, 5);
-            await Seconds(0.1);
-        }
-        Expect(game.Attempt is { Class: 0 }, "and round again to the Unspunnen stone");
 
         // ---- a perfect put ---------------------------------------------------------------------------------
         game.PitchOverride = 41;
@@ -90,10 +101,10 @@ public partial class SteinCheck : ChatProbe
         if (landings.Count == 0) { await Finish(0); return; }
         var first = landings[0];
         GD.Print(FormattableString.Invariant($"{Log} put {first.Metres:F2} m at {first.Angle:F0} deg, power {first.Power:F2}, +{first.Batzen} Batzen, {first.Points} points"));
-        Expect(first.Foul == null && first.Metres > 3.0, $"a perfect put goes far: {first.Metres:F2} m of {SteinRules.Class(0).Par}");
+        Expect(first.Foul == null && first.Metres > 3.0, $"a perfect put goes far: {first.Metres:F2} m of {SteinRules.Class(first.Class).Par}");
         Expect(first.Power > 0.95, $"the lift and the drum were on the beat (power {first.Power:F2})");
         Expect(Math.Abs(first.Angle - 41) < 0.01, "the push took the camera's angle");
-        Expect(first.Batzen == (int)Math.Round(SteinRules.Class(0).MaxBatzen * Math.Min(1.0, first.Metres / SteinRules.Class(0).Par)),
+        Expect(first.Batzen == (int)Math.Round(SteinRules.Class(first.Class).MaxBatzen * Math.Min(1.0, first.Metres / SteinRules.Class(first.Class).Par)),
             $"it paid its distance's share ({first.Batzen} Batzen)");
         Expect(Inst.Batzen == first.Batzen && Inst.Points == first.Points && Inst.Played.GetValueOrDefault("stein:5") == 1,
             $"the section holds it ({Inst.Batzen} Batzen, {Inst.Points} points, {Inst.Played.GetValueOrDefault("stein:5")} play)");

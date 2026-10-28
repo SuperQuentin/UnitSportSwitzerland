@@ -297,7 +297,8 @@ public partial class AdventureService : Node
         : Together.TogetherCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/togethercheck")
         : Together.FondueCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fonduecheck")
         : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck")
-        : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck") : null;
+        : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck")
+        : Occasions.Festivals.SteinCheck.Requested ? Occasions.Festivals.SteinCheck.Scratch : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));

@@ -90,6 +90,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | treasure detector ping (#1227) | Use (LMB / RB) with the detector in hand | ok: R trigger (`use_item`) | point it and squeeze |
 | bottled gust (#1227) | Use (LMB / RB): thrown ahead | ok: R trigger (`use_item`) | a real throw by release velocity (the throw-drop target) |
 | `/trial leave` (#1227) | chat | ok: wrist menu › chat | a quick menu entry (gap, also on pad) |
+| Steinstossen (#1269): open an attempt at the Älplerfest's stone, change stone | E / Y at the stone (`interact_mount`), Space / A (`jump`) | new, pad route: the pad actions through `XrPad` (grip or Y at the stone), A; the prompt through `InputHints` | keep |
+| Steinstossen: hold the lift, let go on the meter's peak, press on the drum's beats, push | hold LMB / RB (`use_item`), release, LMB on each beat; the camera's pitch is the angle | new, pad route: the trigger / shoulder (`use_item`), the head or stick sets the pitch; gap: a real two-handed lift and push by hand speed (plan section 3) | keep; the real lift is a later target |
 | adventure map (#1224) | M (`teleport`) while adventuring / quick menu › Map; drag, wheel, click; left stick, LB / RB, A | ok: wrist menu › Map on the `XrUi` panel, ray drag and trigger (the shoulders do not zoom in VR) | keep |
 | Atlas (#1224) | J then Q / E, LB / RB to the Atlas tab; buttons | ok: wrist menu › Journal, laser + trigger | keep |
 | guide: the guiding gust (#1226) | N on foot / mounted (not in a bus, tipper, mixer, mini dumper: N is theirs) / quick menu › Guide | new: the open left hand held palm up 0.5 s (`XrRig.PalmUp`); wrist menu › Guide; a buzz on start | keep (headset check of the palm's sign) |

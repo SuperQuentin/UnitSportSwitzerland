@@ -72,6 +72,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Map: pin icon", Keys: "1–6", Pad: "D-pad, A"),
             new("Map: track a place, a pin, a travel point", Keys: "Track (click)", Pad: "A on it, then Track"),
         }),
+        ("Festivals: the Älplerfest's stone put (#1269)", new Row[]
+        {
+            new("Put the stone at its ground (an open Älplerfest): lift it", PlayerInput.InteractMount),
+            new("Lift: hold, let go on the meter's peak; then once on each beat of the drum, the last is the push (look up to about 40 degrees)", PlayerInput.UseItem),
+            new("Another stone while you are lifting it", PlayerInput.Jump),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

@@ -16,6 +16,8 @@ touches its topic; search with `grep -ril <word> docs/notes/occasions`.
 
 - `festival-fireworks` — the closing show (#1269 part 2): `FireworkShow.Plan(seed)` (pure, 6-12 min, three acts and a 40-shell finale), the server fixes `ShowStart`/`ShowSeed` in the running list on the last day at 21:30 game time (no new RPC), `Fireworks` plays it from `ClockSync.ServerNow` with pooled GPU particles, flashes and bangs delayed by distance / 343, `FestivalShowWatched`, `--fireworkscheck`
 
+- `festival-steinstossen` — the stone put (#1269 part 3): `SteinRules` (pure: six press stamps, a seeded meter, the 90 BPM run-up graded with the pogo's windows, a ballistic flight, Batzen by distance over par), the server path `SteinService` (`ServeBegin`/`ServeAttempt`/`ServeBot`, protocol 61), `SteinGame` (prompt, meter, drum, arc, stakes), the ground as `PropKind`s, `FestivalCatalog.Aelplerfest()`, `--steincheck`, `tools/steinnetcheck.sh`
+
 ## Commands
 
 - `commands` — Commands: --avatars, --date, --decorlog, --hats, --headless, --huntcheck, --occasion, --occasioncheck, --path, --shot, --sighting, --soundcheck

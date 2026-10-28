@@ -178,7 +178,7 @@ public partial class SteinService : Node
         var (s, n) = _rate.GetValueOrDefault(peer);
         n = s == second ? n + 1 : 1;
         _rate[peer] = (second, n);
-        return n <= 4;
+        return n <= 8;
     }
 
     private void Tell(SteinLanding l, ResolvedSite site)
