@@ -27,6 +27,7 @@ public partial class CinemaVideoShot : Node3D
     /// <summary>When the shot began (RealClock): a showing is mid-film, so its position says nothing of how long we waited.</summary>
     private readonly double _began = Core.RealClock.Now;
     private int _step;
+    private Image? _thrown;
     private string _plan = "";
     private Vector3 _target, _booth, _port;
     private static readonly bool PortLook = CmdArgs.Has("--cinemashotport");
@@ -157,26 +158,48 @@ public partial class CinemaVideoShot : Node3D
             Done("ok");
             return;
         }
-        string[] names = { "pasted", "thrown", "booth", "panel" };
-        Shoot($"{_prefix}_{names[_step]}.png", pos);
+        string[] names = { "pasted", "thrown", "moving", "booth", "panel" };
+        var shot = Shoot($"{_prefix}_{names[_step]}.png", pos);
         _step++;
         if (_step == 1) _node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Off), ~0, null, glow: true, real: true);
-        if (_step == 2) _cam.LookAtFromPosition(_booth, _target, Vector3.Up);
+        if (_step == 2) _thrown = shot;
+        // the thrown picture a second later must have moved: the light's projector texture once froze on its first frame
         if (_step == 3)
+        {
+            float moved = Moved(_thrown!, shot);
+            GD.Print($"[cinemavideo] the thrown picture changed on {moved:P1} of the view in 1 s");
+            if (moved < 0.005f) { Done("FAILED (the thrown picture is frozen)"); return; }
+            _cam.LookAtFromPosition(_booth, _target, Vector3.Up);
+        }
+        if (_step == 4)
         {
             // the panel as a player sees it while the hall plays: the link the server would hold, and this decoder's state
             CinemaPanelUi.Open(null, _plan, 0);
         }
-        if (_step < 4) { _node.ProjectFor(_node.ToLocal(_cam.GlobalPosition)); _shotAt = pos + 2; return; }
+        if (_step < 5) { _node.ProjectFor(_node.ToLocal(_cam.GlobalPosition)); _shotAt = pos + (_step == 2 ? 1 : 2); return; }
         Done("ok");
     }
 
-    private void Shoot(string path, double pos)
+    /// <summary>The share of pixels that changed by more than a few levels between two shots of the same view.</summary>
+    private static float Moved(Image a, Image b)
+    {
+        int changed = 0, seen = 0;
+        for (int y = 0; y < a.GetHeight(); y += 4)
+            for (int x = 0; x < a.GetWidth(); x += 4, seen++)
+            {
+                Color p = a.GetPixel(x, y), q = b.GetPixel(x, y);
+                if (Math.Abs(p.R - q.R) + Math.Abs(p.G - q.G) + Math.Abs(p.B - q.B) > 0.06f) changed++;
+            }
+        return (float)changed / Math.Max(1, seen);
+    }
+
+    private Image Shoot(string path, double pos)
     {
         var img = GetViewport().GetTexture().GetImage();
         img.SavePng(path);
         GD.Print($"[cinemavideo] {path}: the hall at {pos:F2} s shows {_stream!.CurrentTime:F2} s (off {(pos - _stream.CurrentTime) * 1000:F0} ms, "
             + $"restarts {_stream.Restarts}{(_stream is CinemaRelayFeed ? ", through the server" : "")})");
+        return img;
     }
 
     private void Done(string result)

@@ -164,5 +164,6 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   third ffmpeg pair hit the RAM floor on a 16 GB machine. Then a live share: A shares a test pattern with a tone
   (`CaptureKind.Test`, `--cinemavideolocal` only), B walks into the house, both watch it through the server (A its own
   share), on the clock within 0.25 s (live frames come as captured) with the sound due; A stops it and B sees it end. Windowed shots: `--cinemavideoshot <link>,<prefix>` (Town
-  cinema: `_pasted`, `_thrown`, `_booth`, `_panel`.png), `--cinemanodecode` for the relay (this process its own server).
+  cinema: `_pasted`, `_thrown`, `_moving`, `_booth`, `_panel`.png; FAILED when `_moving` hardly differs from `_thrown` a second
+  earlier: a light copies its projector texture when it is set, so the High light takes two textures in turns), `--cinemanodecode` for the relay (this process its own server).
   Without ffmpeg on PATH (a dev build has no `bin/`), put the release's `test_output/release/tools/<os>` first.

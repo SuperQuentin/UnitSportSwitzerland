@@ -27,7 +27,7 @@ public partial class InteriorNode
 
     private int _videoHall = -1;
     private Image? _videoSquareImage, _videoEyeImage;
-    private ImageTexture? _videoTexture, _videoSquare, _videoEye;
+    private ImageTexture? _videoTexture, _videoSquare, _videoSquareB, _videoEye;
     private StandardMaterial3D? _videoGlow, _videoPlain;
     private ShaderMaterial? _videoScreen, _videoPort;
     private CinemaVideoSpeaker? _videoSpeaker;
@@ -142,10 +142,14 @@ public partial class InteriorNode
                 _videoSquareImage = Image.CreateEmpty(w, w, false, Image.Format.Rgba8);
                 _videoSquareImage.Fill(Colors.Black);
                 _videoSquare = ImageTexture.CreateFromImage(_videoSquareImage);
+                _videoSquareB = ImageTexture.CreateFromImage(_videoSquareImage);
             }
             _videoSquareImage.BlitRect(one, new Rect2I(0, 0, w, h), new Vector2I(0, (w - h) / 2));
-            _videoSquare!.Update(_videoSquareImage);
-            if (spot.LightProjector != _videoSquare) spot.LightProjector = _videoSquare;
+            // a light copies its projector texture into the renderer's atlas when the texture is set, not when its
+            // pixels change: two textures taking turns, the one the light is not using updated and set each frame
+            var next = spot.LightProjector == _videoSquare ? _videoSquareB! : _videoSquare!;
+            next.Update(_videoSquareImage);
+            spot.LightProjector = next;
         }
         var full = Full(tint);
         _videoGlow!.AlbedoColor = full * 1.6f;
