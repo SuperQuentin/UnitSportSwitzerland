@@ -549,11 +549,6 @@ public partial class ChatManager : Node
                 Show(Audio.Cd.CdLibrary.Instance?.Command(rest, mayChange: true) ?? "There are no CDs here.", ChatKind.Private);
                 return;
 
-            case "cinema":
-                if (Interiors.CinemaBooths.Instance is not { } booths) Show("There are no cinemas here.", ChatKind.Error);
-                else Show(booths.Command(parts[1..], admin: true, Interiors.InteriorManager.Instance?.Current?.Key), ChatKind.Private);
-                return;
-
             case "seastate":
                 if (parts.Length == 1) Show($"The sea is {World.SeaStateCommand.Describe(World.WaterField.SeaState)}.", ChatKind.Private);
                 else if (World.SeaStateCommand.TryParse(rest, out float sea, out string seaError))
@@ -622,6 +617,11 @@ public partial class ChatManager : Node
                 Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
                 return;
 
+            // a hall's lights and film by its number (#1306); the films' words below
+            case "cinema" when parts.Length > 1 && int.TryParse(parts[1], out _):
+                if (Interiors.CinemaBooths.Instance is not { } hallBooths) Show("There are no cinemas here.", ChatKind.Error);
+                else Show(hallBooths.Command(parts[1..], admin: true, Interiors.InteriorManager.Instance?.Current?.Key), ChatKind.Private);
+                return;
             // the films a cinema can be showing (#1298): offline the player is the admin
             case "cinema":
                 Show(Interiors.CinemaBooths.Instance?.PoolCommand(1, string.Join(' ', parts[1..]), true, line => Show(line, ChatKind.Private))
@@ -995,10 +995,10 @@ public partial class ChatManager : Node
                 if (Versteckis == null) ReplyTo(sender, "Versteckis is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, Versteckis.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
-            // a cinema hall's lights and film (#1306), an admin's (checked inside)
-            case "cinema":
-                if (Interiors.CinemaBooths.Instance is not { } booths) ReplyTo(sender, "There are no cinemas here.", ChatKind.Error);
-                else ReplyTo(sender, booths.Command(parts[1..], IsAdmin(sender),
+            // a cinema hall's lights and film by its number (#1306), an admin's (checked inside); the films' words below
+            case "cinema" when parts.Length > 1 && int.TryParse(parts[1], out _):
+                if (Interiors.CinemaBooths.Instance is not { } hallBooths) ReplyTo(sender, "There are no cinemas here.", ChatKind.Error);
+                else ReplyTo(sender, hallBooths.Command(parts[1..], IsAdmin(sender),
                     Interiors.InteriorManager.Instance is { } im ? im.SpaceOf(sender) is { Length: > 0 } space ? space : im.Current?.Key : null), ChatKind.Private);
                 return;
             case "bot" or "bots":
