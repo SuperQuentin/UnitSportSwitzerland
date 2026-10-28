@@ -103,6 +103,14 @@ Generated world (the spawn's villages have an L, a U, a courtyard, a trapezoid a
 - [ ] VR: walk into an angled room → the walls hold you (teleport into the corner too).
 - [ ] A house drawn on the web with an angled wall (`--house-layouts`, see `net/house-layouts`) → that wall is one straight wall in the game, its door in it.
 
+## Doors placed where the plan has a way in ([#1329](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1329))
+
+Geneva: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7`; `--outlinesurvey --key E_N_I` names a building's doors.
+
+- [ ] Walk round a block of flats → its doors are on the street front, each into its own stairwell lobby; no door on its ends or at the back.
+- [ ] Walk into a school or an office with a long wing → the wing has rooms and its own stair; its side doors open into them, and the wing joins the rest through an arch.
+- [ ] A works of several halls → each hall wing has a floor, and you walk from one to the next through an arch.
+
 ## Cinemas: hall height, a panel per hall, aisles to the walls, the service door, film music ([#1280](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1280))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (outside Cinémas du Grütli, Geneva).

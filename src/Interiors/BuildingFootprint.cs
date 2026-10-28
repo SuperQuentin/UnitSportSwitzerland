@@ -742,9 +742,29 @@ public static class BuildingFootprint
         if (found && door.Width > 0 && pedBudget > 1 + extras.Count)
         {
             var (serviceW, serviceH) = ServiceDoorFor(kind);
-            // a block of flats in one wing (#1304): its wings planned apart (an L, a U, a courtyard, #577) each
-            // have a stairwell behind their own facade's door, so only a single-wing block keeps to its main facade
-            bool oneFront = kind == BuildingKind.Apartment && PlanOutline.Wings(b, center, u, w, dpt) is not { Count: >= 2 };
+            // a block of flats (#1304) is entered by the stairwells its planner builds behind the doors on each
+            // wing's front: one facade a wing (the main door's for a block in one piece; a wing of an L, a U or a
+            // courtyard block, planned apart, #577, the facade of its first door), as TryWings gives them out
+            var flatWings = kind == BuildingKind.Apartment ? PlanOutline.Wings(b, center, u, w, dpt) : null;
+            var v = new Vector2(-u.Y, u.X);
+            int WingOf(Vector2 xz, Vector2 n)
+            {
+                if (flatWings is not { Count: >= 2 }) return 0;
+                var q = xz - center;
+                float x = q.Dot(u), z = q.Dot(v), nx = n.Dot(u), nz = n.Dot(v);
+                for (int i = 0; i < flatWings.Count; i++)
+                {
+                    var r = flatWings[i];
+                    bool alongX = Math.Abs(nz) >= Math.Abs(nx);
+                    float edge = alongX ? (nz < 0 ? r.Z0 : r.Z1) : (nx < 0 ? r.X0 : r.X1);
+                    float across = alongX ? z : x, along = alongX ? x : z;
+                    float lo = alongX ? r.X0 : r.Z0, hi = alongX ? r.X1 : r.Z1;
+                    if (Math.Abs(edge - across) < 2f && along > lo - 0.5f && along < hi + 0.5f) return i;
+                }
+                return -1;
+            }
+            var fronts = new Dictionary<int, Vector2>();
+            if (kind == BuildingKind.Apartment) fronts[WingOf(new Vector2(door.Position.X, door.Position.Z), new Vector2(door.Outward.X, door.Outward.Z))] = new Vector2(door.Outward.X, door.Outward.Z);
             var placed = new List<DoorSpot> { door };
             placed.AddRange(extras);   // the bays are already on the wall and keep their room
             var order = new List<Cand>();
@@ -785,8 +805,13 @@ public static class BuildingFootprint
                     // front door far enough from the next: so its doors are on the main door's facade, a street
                     // front's spacing apart however the TIN breaks that facade up; on an end or at the back, or
                     // closer, a door would open into a flat
-                    if (kind == BuildingKind.Apartment && (oneFront && main != null && c.Normal.Dot(main.Normal) < 0.95f
-                            || placed.Any(q => SameFacade(q, spot) && Flat(q).DistanceTo(xz) < DoorBudget.Spacing - 1f))) continue;
+                    if (kind == BuildingKind.Apartment)
+                    {
+                        int wing = WingOf(xz, c.Normal);
+                        if (wing < 0 || fronts.TryGetValue(wing, out var front) && c.Normal.Dot(front) < 0.95f
+                            || placed.Any(q => SameFacade(q, spot) && Flat(q).DistanceTo(xz) < DoorBudget.Spacing - 1f)) continue;
+                        fronts.TryAdd(wing, c.Normal);
+                    }
                     // a front-wall entrance (and its stairwell) keeps clear of the ramp's lane and car park (#694), any other door of the garage door
                     if (garage != null && planX != null && c.Normal.Dot(main!.Normal) > 0.9f && (garageLeft ? planX(xz) < keepX - 0.01f : planX(xz) > keepX + 0.01f)) continue;
                     if (placed.Any(q => q.Link.Any && new Vector2(q.Position.X, q.Position.Z).DistanceTo(xz) < GarageRule.StairClear)) continue;
