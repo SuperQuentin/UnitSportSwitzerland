@@ -67,7 +67,6 @@ not its strike rules. Built on the festival framework (`festival-framework`): th
 - The Anschwingen is not a bracket: two in the queue wrestle, and every ring bout pays. The Schlussgang is the longer bout from day 9, not "the two best", and no
   Schwingerkönig title or bull's bell yet. Spectators see the poses and hear the sounds but get no HUD (the ring has no `Watch` feed).
 - The Schwingerhosen (`ItemId.Schwingerhosen` = 500, Alpine set, Bottom slot) can be worn but are not required and not yet sold or found.
-- A Gang is not recorded in movie clips (`ActorIo` does not carry `SchwingPose`).
 - Gripping the belt for real in VR, and a Schwing challenge on the Activities screen, are later.
 
 ## How to check

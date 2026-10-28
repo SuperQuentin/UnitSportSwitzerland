@@ -173,12 +173,13 @@ public partial class SchwingNetProbe : ChatProbe
         Expect(!v.IsA, "B wrestles the challenger");
         Expect(await Until(() => v.Phase == SchwingPhase.Live, 10), "the bout is live for B");
 
-        // the telegraph is seen here, with A's copy in the throw pose; B braces it (Gammen: brace Left)
+        // B is braced before A throws (the telegraph is 0.35 s of simulated time, 90 ms real at /speed 4: a reaction would be a race);
+        // the Gammen's brace is the Left lean. The telegraph is seen here, with A's copy in the throw pose
+        Bouts.SendAct((int)SchwingLean.Left, true, 0);
         bool saw = await Until(() => v.Pending == SchwingThrow.Gammen, 30);
         Expect(saw, "B sees A's Gammen winding up");
         Expect(await Until(() => Copy(v.A) is { } a && SchwingRules.ThrowOf(a.SchwingPose) == SchwingThrow.Gammen, 3), "A's copy shows the throw pose");
         if (DisplayServer.GetName() != "headless") GD.Print($"{Log} shot {Shot("B_schwing")}");
-        Bouts.SendAct((int)SchwingLean.Left, true, 0);
         Expect(await Until(() => v.LastAnswer == SchwingAnswer.Braced && v.LastBy == v.A, 5), "B sees its brace stop the throw");
         Expect(v.MyBalance >= 95, $"the brace cost B nothing ({v.MyBalance})");
         if (!await Heard("A", "braced", 30)) { Fail("A never saw the brace"); return; }
