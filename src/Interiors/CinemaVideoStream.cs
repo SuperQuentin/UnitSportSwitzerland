@@ -27,7 +27,9 @@ namespace UnitSport.Interiors;
 public sealed class CinemaVideoStream : ICinemaFeed
 {
     /// <summary>A frame's size: the screen's, twice as wide for a 3D film (both eyes side by side).</summary>
-    private readonly int _width, _height, _frameBytes;
+    private readonly int _width, _height, _frameBytes, _eyeWidth, _lines;
+    /// <summary>The size this stream decodes at (<see cref="QualityHere"/> when it was made).</summary>
+    public CinemaVideo.Quality Quality { get; }
     public CinemaVideo.Stereo Stereo { get; }
 
     // measured every fifth frame (ReadVideo)
@@ -91,13 +93,28 @@ public sealed class CinemaVideoStream : ICinemaFeed
     private volatile bool _videoDone;
 
     public CinemaVideoStream(string link, double t0, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
+        : this(link, t0, stereo, QualityHere) { }
+
+    public CinemaVideoStream(string link, double t0, CinemaVideo.Stereo stereo, CinemaVideo.Quality quality)
     {
         Link = link;
         T0 = t0;
         Stereo = stereo;
-        (_width, _height) = CinemaVideo.PackedSize(stereo, CinemaVideo.Width, CinemaVideo.Height);
+        Quality = quality;
+        (_eyeWidth, int eyeHeight, _lines) = CinemaVideo.DecodeSize(quality);
+        (_width, _height) = CinemaVideo.PackedSize(stereo, _eyeWidth, eyeHeight);
         _frameBytes = _width * _height * 4;
     }
+
+    /// <summary>
+    /// The size this machine decodes a hall's video at (#1319): the player's setting, the VR one in a headset;
+    /// <c>--cinemaquality low|medium|high</c> for the checks.
+    /// </summary>
+    public static CinemaVideo.Quality QualityHere =>
+        Forced ?? (XR.XrSession.Active ? Core.GameSettings.Current.VrCinemaVideo : Core.GameSettings.Current.CinemaVideo);
+
+    private static readonly CinemaVideo.Quality? Forced =
+        Enum.TryParse(CmdArgs.Value("--cinemaquality"), true, out CinemaVideo.Quality q) ? q : null;
 
     /// <summary>
     /// Whether this machine can decode at all: a desktop that may start processes. <c>--cinemanodecode</c> plays one
@@ -189,7 +206,7 @@ public sealed class CinemaVideoStream : ICinemaFeed
     {
         try
         {
-            if (CinemaLookup.Run(Link, out string why) is not { } found) { Fail(why); return; }
+            if (CinemaLookup.Run(Link, out string why, tallest: _lines) is not { } found) { Fail(why); return; }
             Live = found.Live;
             Duration = found.Duration;
             _videoUrl = found.Video;
@@ -228,7 +245,7 @@ public sealed class CinemaVideoStream : ICinemaFeed
         _start = Live ? double.NaN : at;
         _soundStart = Live ? double.NaN : at;
         _restartAfter = position + lead + CinemaVideo.FallBehind;
-        string size = $"{CinemaVideo.StereoFit(Stereo, CinemaVideo.Width, CinemaVideo.Height)},fps={CinemaVideo.Fps}";
+        string size = $"{CinemaVideo.StereoFit(Stereo, _eyeWidth, _height)},fps={CinemaVideo.Fps}";
         _video = CinemaLookup.Ffmpeg(CinemaLookup.Input(_videoUrl, at, Live).Concat(new[] { "-an", "-sn", "-vf", size, "-f", "rawvideo", "-pix_fmt", "rgba", "-" }),
             info: true, line => Said(line, true));
         _audio = CinemaLookup.Ffmpeg(CinemaLookup.Input(_audioUrl, at, Live).Concat(new[] { "-vn", "-sn", "-ac", "2", "-ar", CinemaVideo.AudioRate.ToString(), "-f", "s16le", "-" }),
@@ -283,7 +300,7 @@ public sealed class CinemaVideoStream : ICinemaFeed
                 if (index % 5 == 0)
                 {
                     var p = pixels;
-                    var (w, h) = CinemaVideo.ContentSize(CinemaVideo.Width, _height, (x, y) =>
+                    var (w, h) = CinemaVideo.ContentSize(_eyeWidth, _height, (x, y) =>
                     {
                         int at = (y * _width + x) * 4;
                         return p[at] + p[at + 1] + p[at + 2] > 3 * 24;
@@ -337,8 +354,8 @@ public sealed class CinemaVideoStream : ICinemaFeed
     {
         long r = 0, g = 0, b = 0, count = 0;
         // the left eye's half of a 3D film: the same colour as the right
-        for (int y = 8; y < _height; y += 24)
-            for (int x = 8; x < CinemaVideo.Width; x += 24)
+        for (int y = 8; y < _height; y += _height / 15)
+            for (int x = 8; x < _eyeWidth; x += _eyeWidth / 36)
             {
                 int at = (y * _width + x) * 4;
                 r += p[at]; g += p[at + 1]; b += p[at + 2];
