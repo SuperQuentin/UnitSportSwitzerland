@@ -57,6 +57,7 @@ public partial class FahnenFlag : Node3D
     }
 
     /// <summary>A grid of quads, UV 0..1 over the cloth, its left edge on the staff; built once for every flag.</summary>
+    [Showcase("Parts", "Fahnenflag cloth")]
     private static ArrayMesh Cloth()
     {
         if (_cloth != null) return _cloth;

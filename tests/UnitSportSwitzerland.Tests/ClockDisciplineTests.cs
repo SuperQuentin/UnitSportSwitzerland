@@ -119,6 +119,8 @@ public class ClockDisciplineTests
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
         ["src/Concert/ConcertService.Songs.cs"] = "presentation: /concert song reads where the setlist is on the shared clock the music plays to",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
+        ["src/Occasions/Festivals/Fahnen/FahnenGame.cs"] = "presentation: the flag swinger's figures are judged against a drum that plays on the shared clock in real time, like the pogo's beat",
+        ["src/Occasions/Festivals/FestivalService.Fahnen.cs"] = "clock: a routine's start, its stamps and its settlement are on the server's real clock (the drum's beat, 96 BPM), not the simulated one /speed scales",
         ["src/Concert/PogoQte.cs"] = "presentation: the pogo QTE judges a press against the beat of the music as heard, which plays on the shared clock in real time",
         ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
         ["src/Concert/Mvr/Mdns.cs"] = "plumbing: mDNS answers at most once a second, real time on its receive thread",

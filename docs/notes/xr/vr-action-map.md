@@ -205,6 +205,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | Versteckis: hold at the bell, the Höhenfeuer; take and set down the milk can (#1268) | hold E `interact_mount` / hold Y | new: hold Y through `XrPad`; a grip near the site (`TryInteract(byHand)`) starts it | grip the bell rope, the wood stack, the can (after a headset playtest) |
 | Versteckis: follow-cam next / previous (#1268, `Ui/FollowCam`) | ← / → / D-pad ← → | new: the D-pad through `XrPad` | the right stick |
 | Versteckis: open, join, leave (#1268) | Activities tab, `/vs` / quick menu › Activities | new: wrist menu › Activities | keep |
+| Älplerfest flag swinging: join at the flag ground (#1269 part 5) | `interact_mount` E / Y within 16 m of the stage (`FahnenGame.TryInteract`) | new: Y through `XrPad`; a grip at the ground (`TryInteract(byHand)`) | grip the flag stand (after a headset playtest) |
+| Älplerfest flag swinging: draw the figure (up, down, sweep, circle, eight) before its last beat (#1269) | mouse motion / right stick (`GestureRing`, 8 sectors at 30 Hz) | new: the right stick through `XrPad` | **swing the flag by hand** (the controller's path through `GestureRing`) (`gap`) |
+| Älplerfest flag swinging: high throw and catch (#1269) | hold `use_item` LMB, release on a beat, press to catch | new: RB / the trigger through `XrPad` | throw it by hand (`gap`) |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | partly (#1277): the quick menu's Chat wedge opens it with the "/" picker, the commands and their words as buttons the ray presses; free text still no keyboard | laser key grid on the `XrUi` panel, for free text |
 | chat coordinates: Teleport, Track, Show on map, Copy (#1277) | click a point's pin or coordinates; pad: focus its line, A | ok: the ray on the open chat (`XrUi` draws it) | keep |
