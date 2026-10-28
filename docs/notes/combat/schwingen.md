@@ -31,7 +31,7 @@ not its strike rules. Built on the festival framework (`festival-framework`): th
   game opens (day 5). E at it (`RequestJoin`; pad Y; the VR pad route) joins the queue, E again leaves. Two humans in the queue wrestle; one alone for 8 s is
   given the nearest free bot within 400 m (`FreeBot`, the bot is set down beside the human). From festival day 9 a ring bout is a Schlussgang. A ring bout
   pays through `Award(peer, "aelplerfest", batzen, why, "schwingen", points)` once it is over, to each human: never to a bot, never for a bout under 20 s of play, never to a forfeiter.
-- **Wire** (protocol 61, no other bump): client to server `RequestJoin`, `RequestLeave`, `Act(bout, lean, brace, throw)` (budget 20 a second, from a wrestler within 9 m of the
+- **Wire** (protocol 70, no other bump): client to server `RequestJoin`, `RequestLeave`, `Act(bout, lean, brace, throw)` (budget 20 a second, from a wrestler within 9 m of the
   bout's centre), `Tug(bout)`; server to the two wrestlers `Begin`, `State` (on change and at 10 Hz while live, reliable: the payload is 15 small ints; the plan said
   unreliable), `Thrown(bout, by, throw, answer)` (answer 0 = the telegraph starts), `Ended`, `TellQueue`. Refusals log `[schwing] #n refused ...`.
 - **`ActFor` / `TugFor`** are the server methods the RPCs and a bot call alike (`bots/bot-capability-map`).
