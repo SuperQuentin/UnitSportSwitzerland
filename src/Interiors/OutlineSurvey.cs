@@ -161,7 +161,7 @@ public static class OutlineSurvey
                         var entrances = l.AllEntrances().Where(e => e.Level == 0).ToList();
                         if (InteriorGenerator.Winged) winged.Add($"{fp.Key} {b.Kind}");
                         // the first dozen planned wing by wing, drawn both ways: as planned, and as they were before #1304
-                        if (InteriorGenerator.Winged && winged.Count <= 12)
+                        if (InteriorGenerator.Winged && (winged.Count <= 12 || svgKeys.Contains(fp.Key.ToString())))
                         {
                             svgKeys.Add(fp.Key.ToString());
                             InteriorGenerator.PlanWings = false;
@@ -187,7 +187,7 @@ public static class OutlineSurvey
                             System.IO.File.WriteAllText($"test_output/survey-plans/{fp.Key}{(InteriorGenerator.PlanWings ? "" : "_before")}.svg",
                                 InteriorValidator.ToSvg(l, g == null ? null : InteriorGenerator.RingsFor(l, g), shut));
                         }
-                        if (InteriorGenerator.WingFailure != "one wing" && !(InteriorGenerator.WingFailure == null && l.Type is BuildingType.Apartments or BuildingType.MixedUse))
+                        if (InteriorGenerator.WingFailure != "one wing" && InteriorGenerator.WingFailure?.StartsWith("not for it") != true && !(InteriorGenerator.WingFailure == null && l.Type is BuildingType.Apartments or BuildingType.MixedUse))
                         {
                             string ww = InteriorGenerator.WingFailure == null ? "planned (taken, or not better)"
                                 : System.Text.RegularExpressions.Regex.Replace(InteriorGenerator.WingFailure, @"[-\d.,]+|\(.*?\)", "#");
@@ -198,8 +198,28 @@ public static class OutlineSurvey
                         if (CmdArgs.Value("--key") == fp.Key.ToString())
                         {
                             GD.Print($"[outlinesurvey] {fp.Key} {b.Kind} {l.Type} {l.Width:F1}x{l.Depth:F1} m, entry x {l.EntryX:F1}, wings: {InteriorGenerator.WingFailure ?? "planned"}");
+                            // the roof on a 2 m grid, the back at the top: # roof, . open, D a street door
+                            if (PlanOutline.Grid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth, 2f) is { } map)
+                                for (int j = map.GetLength(1) - 1; j >= 0; j--)
+                                {
+                                    var mapRow = new StringBuilder("[outlinesurvey]   ");
+                                    for (int i = 0; i < map.GetLength(0); i++)
+                                    {
+                                        bool isDoor = fp.Doors.Any(d =>
+                                        {
+                                            var q = new Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y);
+                                            return (int)((q.Dot(fp.AxisU) + fp.Width / 2) / 2f) == i && (int)((q.Dot(fp.AxisV) + fp.Depth / 2) / 2f) == j;
+                                        });
+                                        mapRow.Append(isDoor ? 'D' : map[i, j] ? '#' : '.');
+                                    }
+                                    GD.Print(mapRow.ToString());
+                                }
                             foreach (var wr in PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) ?? [])
                                 GD.Print($"[outlinesurvey]   wing x {wr.X0:F1}..{wr.X1:F1} z {wr.Z0:F1}..{wr.Z1:F1}");
+                            foreach (var rm in l.GroundFloor.Rooms)
+                                GD.Print($"[outlinesurvey]   room {rm.Type} x {rm.X0:F1}..{rm.X1:F1} z {rm.Z0:F1}..{rm.Z1:F1}{(rm.Shape != null ? " shaped" : "")}");
+                            foreach (var wr in PlanOutline.Pieces(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) ?? [])
+                                GD.Print($"[outlinesurvey]   piece x {wr.X0:F1}..{wr.X1:F1} z {wr.Z0:F1}..{wr.Z1:F1}");
                             foreach (var d in fp.Doors.Where(d => d.Level == 0))
                             {
                                 var at = InPlan(l, d);

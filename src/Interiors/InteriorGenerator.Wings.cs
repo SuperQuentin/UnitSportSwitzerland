@@ -100,7 +100,9 @@ public static partial class InteriorGenerator
     private static bool TryKindWings(InteriorLayout l, Footprint fp, Building b, int above, BuildingType site, bool single)
     {
         WingFailure = null;
-        if (PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) is not { Count: >= 2 } rects) return Fail("one wing");
+        // a hall is in as many pieces as its roof takes; rooms round a stair need a wing worth one
+        var rects = single ? PlanOutline.Pieces(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) : PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+        if (rects is not { Count: >= 2 }) return Fail("one wing");
         var kind = b.Kind;
         int below = single ? 0 : Cellars(l.Key, kind, above);
         var planner = new WingPlanner(single ? 1 : above, below, (sl, sub, opts, rng) =>

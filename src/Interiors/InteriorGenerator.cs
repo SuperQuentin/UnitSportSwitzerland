@@ -155,13 +155,18 @@ public static partial class InteriorGenerator
             or BuildingKind.UnderConstruction or BuildingKind.Sacral
             || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
         // wing by wing (#1304), when the caller asks for it: any building but a block of flats (which
-        // plans its wings itself), a house, a venue, a landmark, a bank or a restaurant's
+        // plans its wings itself), a house, a hall venue (bowling, cinema, arcade), a landmark or a bank; a
+        // restaurant or a bar takes a ground-floor room of whichever plan after (DiningUnits)
         bool winged = false;
         if (wings)
         {
             // a house is one home: a wing each would be a house each, with its own kitchen and stair
-            if (type != BuildingType.None || venue != null || dining is { Count: > 0 } || bank || b.Kind == BuildingKind.House
-                || site == BuildingType.None && ApartmentTypeFor(fp, b.Kind, n, bank) != BuildingType.None) { WingFailure = "one wing"; return null; }
+            if (type != BuildingType.None || venue?.Type is VenueType.Bowling or VenueType.Cinema or VenueType.Arcade || bank || b.Kind == BuildingKind.House
+                || site == BuildingType.None && ApartmentTypeFor(fp, b.Kind, n, bank) != BuildingType.None)
+            {
+                WingFailure = $"not for it (type {type}, venue {venue?.Type}, dining {dining?.Count ?? 0}, bank {bank}, kind {b.Kind})";
+                return null;
+            }
             if (!TryKindWings(layout, fp, b, n, site, single || site != BuildingType.None)) return null;
             winged = true;
         }
