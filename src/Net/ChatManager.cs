@@ -185,6 +185,12 @@ public partial class ChatManager : Node
             if (located.Length > 0) LineReceived?.Invoke(located, locateFailed ? ChatKind.Error : ChatKind.Private);
             return;
         }
+        // a cinema hall's video (#1298): this client knows the hall it is in, and asks the server as the panel does
+        if (Interiors.CinemaBooths.RunLocal(text.Trim()) is { } cinema)
+        {
+            LineReceived?.Invoke(cinema, ChatKind.Private);
+            return;
+        }
         // the visual style is this screen's alone: never a server's business
         if (Styles.StyleCommand.Run(text.Trim()) is { } style)
         {
@@ -611,6 +617,11 @@ public partial class ChatManager : Node
                 Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
                 return;
 
+            // the films a cinema can be showing (#1298): offline the player is the admin
+            case "cinema":
+                Show(Interiors.CinemaBooths.Instance?.PoolCommand(1, string.Join(' ', parts[1..]), true, line => Show(line, ChatKind.Private))
+                     ?? "No cinemas here.", ChatKind.Private);
+                return;
             // playing together (#1266): the rope and the shared pot
             case "rope" or "fondue":
                 Show(Adventure.Together.TogetherService.Instance?.Command(Adventure.AdventureService.LocalPeer, verb, rest) is { } said
@@ -986,6 +997,11 @@ public partial class ChatManager : Node
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
                     id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
+            // the films a server's cinemas can be showing (#1298): anyone lists, an admin changes
+            case "cinema":
+                if (Interiors.CinemaBooths.Instance is not { } booths) ReplyTo(sender, "No cinemas on this server.", ChatKind.Error);
+                else ReplyTo(sender, booths.PoolCommand(sender, rest, IsAdmin(sender), line => ReplyTo(sender, line, ChatKind.Private)), ChatKind.Private);
                 return;
             // playing together (#1266): the rope and the shared pot
             case "rope" or "fondue":

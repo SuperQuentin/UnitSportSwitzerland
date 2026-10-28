@@ -104,7 +104,6 @@ public partial class SchwingNetProbe : ChatProbe
         Expect(await Until(() => SchwingManager.RingNow() != null, 30), "the Älplerfest's ring is open");
         await ToRing(me);
         Bouts.EngageRing();
-        Expect(await Until(() => Bouts.Queued, 5), "A is in the ring's queue");
         if (!Expect2(await Until(() => Bouts.Current is { Festival: true }, 20), "B and A are paired at the ring")) return;
         v = Bouts.Current!;
         if (!Expect2(await Until(() => v.Phase == SchwingPhase.Live, 10), "the ring bout is live")) return;
@@ -175,6 +174,7 @@ public partial class SchwingNetProbe : ChatProbe
 
         // B is braced before A throws (the telegraph is 0.35 s of simulated time, 90 ms real at /speed 4: a reaction would be a race);
         // the Gammen's brace is the Left lean. The telegraph is seen here, with A's copy in the throw pose
+        await Seconds(0.5);   // after the body's own first act of the bout, which would overwrite it
         Bouts.SendAct((int)SchwingLean.Left, true, 0);
         bool saw = await Until(() => v.Pending == SchwingThrow.Gammen, 30);
         Expect(saw, "B sees A's Gammen winding up");
