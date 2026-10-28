@@ -190,7 +190,7 @@ public partial class WorldEvents
             float y = GroundAt?.Invoke(e, nn) is { } g ? g - v.Ground : 0f;
             var at = new Vector3(a * FireSim.CellM, y, -b * FireSim.CellM);
             flames.SetInstanceTransform(i, new Transform3D(Basis.Identity, at));
-            smoke.SetInstanceTransform(i, new Transform3D(Basis.Identity, at));
+            smoke.SetInstanceTransform(i, new Transform3D(Basis.Identity, at + WorldEventMeshes.SmokeShift));
         }
         flames.VisibleInstanceCount = n;
         smoke.VisibleInstanceCount = n;

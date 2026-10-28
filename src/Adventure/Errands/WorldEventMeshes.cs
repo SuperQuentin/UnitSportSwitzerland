@@ -30,7 +30,7 @@ public static class WorldEventMeshes
     private static ArrayMesh BuildDebris()
     {
         var s = new MeshScratch();
-        var rings = new (float R, float Y, int N, float Size)[] { (ConeRadius - 2.5f, 0.2f, 20, 3.2f), (ConeRadius * 0.55f, 1.0f, 12, 3.0f), (ConeRadius * 0.2f, 1.8f, 5, 2.6f) };
+        var rings = new (float R, float Y, int N, float Size)[] { (ConeRadius - 2.5f, 0.5f, 20, 3.4f), (ConeRadius * 0.55f, 1.9f, 12, 3.4f), (ConeRadius * 0.2f, 3.2f, 5, 3.0f) };
         int k = 0;
         foreach (var (r, y, n, size) in rings)
         {
@@ -46,7 +46,7 @@ public static class WorldEventMeshes
             }
         }
         // a flat skirt of loose snow round the heap
-        s.Box(new Vector3(0, -0.55f, 0), new Vector3(ConeRadius * 1.5f, 1.2f, ConeRadius * 1.5f), Snow);
+        s.Box(new Vector3(0, -0.9f, 0), new Vector3(ConeRadius * 1.5f, 2.0f, ConeRadius * 1.5f), Snow);
         return s.Build();
     }
 
@@ -116,6 +116,9 @@ public static class WorldEventMeshes
         ("Flames and smoke", () => Burn(withSmoke: true)),
     ];
 
+    /// <summary>A puff stands a little behind its flame: two quads on one plane would fight.</summary>
+    public static readonly Vector3 SmokeShift = new(0.3f, 0f, 0.3f);
+
     private static Node3D Burn(bool withSmoke)
     {
         var root = new Node3D();
@@ -123,7 +126,7 @@ public static class WorldEventMeshes
         {
             var at = new Vector3((i - 2) * 1.6f, 0, (i % 2) * 1.2f);
             root.AddChild(new MeshInstance3D { Mesh = Flame(), MaterialOverride = FlameMaterial(), Position = at, Name = "Flame" + i });
-            if (withSmoke) root.AddChild(new MeshInstance3D { Mesh = Smoke(), MaterialOverride = SmokeMaterial(), Position = at, Name = "Smoke" + i });
+            if (withSmoke) root.AddChild(new MeshInstance3D { Mesh = Smoke(), MaterialOverride = SmokeMaterial(), Position = at + SmokeShift, Name = "Smoke" + i });
         }
         return root;
     }
