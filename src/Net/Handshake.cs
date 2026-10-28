@@ -89,7 +89,9 @@ public partial class Handshake : Node
     /// Missed, Sniffed, Sounded), the <c>versteckis</c> invite kind, <c>InterestService.Withheld</c>, ItemId 460-467, ItemUse.Round.
     /// 58: World/CinemaBooths AskSet and Set carry the hall (#1279: a panel per hall; 57 is main's).
     /// 59: World/CinemaBooths AskVideoRpc and SetVideo (#1298: a hall's video link and its start on the shared clock).
-    public const int Protocol = 59;
+    /// 60: World/CinemaBooths AskVideoRpc and SetVideo carry the hall's relay switch; WatchRelay, RelayFrame, RelaySound,
+    /// RelayStatus on channel 5 (#1298 phase 2: the hall's video through the server).
+    public const int Protocol = 60;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

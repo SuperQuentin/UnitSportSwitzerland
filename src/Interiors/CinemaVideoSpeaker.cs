@@ -18,7 +18,7 @@ public partial class CinemaVideoSpeaker : AudioStreamPlayer3D, IMusicSpeaker
     private const float DriftTolerance = 0.05f;
 
     /// <summary>The stream it plays, set by the hall each frame (null: silent).</summary>
-    public CinemaVideoStream? Video { get; set; }
+    public ICinemaFeed? Video { get; set; }
 
     /// <summary>How far from it the sound keeps its full level, m: the hall's half-diagonal, its surround speakers.</summary>
     public float Spread { get; set; } = 8f;

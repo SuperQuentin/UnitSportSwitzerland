@@ -91,6 +91,8 @@ public partial class CinemaBooths : Node
         if (Instance == this) Instance = null;
         _stream?.Dispose();
         _stream = null;
+        foreach (var tap in _taps.Values) tap.Dispose();
+        _taps.Clear();
     }
 
     private bool Online => NetLink.Online(this);
@@ -218,6 +220,8 @@ public partial class CinemaBooths : Node
 
     public override void _Process(double delta)
     {
+        // the server's copy of each hall someone watches through it (#1298 phase 2)
+        if (ServerSide) PumpRelay(delta);
         if (NetworkManager.DedicatedServer) return;
         var im = InteriorManager.Instance;
         if (im?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) { _appliedNode = null; PumpVideo(null, -1, 0); return; }

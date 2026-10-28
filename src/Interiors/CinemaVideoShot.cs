@@ -62,9 +62,9 @@ public partial class CinemaVideoShot : Node3D
     public override void _Process(double delta)
     {
         double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, _t0);
-        if (_stream.Pump(pos) && _stream.Current is { } frame) _node.ShowVideo(0, frame, _stream.Tint, _stream);
+        if (_stream.Pump(pos) && _stream.Picture is { } frame) _node.ShowVideo(0, frame, _stream.Tint, _stream);
         if (_stream.Failed || pos > 90) { Done($"FAILED ({_stream.Status})"); return; }
-        if (_stream.CurrentIndex < 0) return;
+        if (_stream.CurrentTime < 0) return;
         if (_shotAt < 0) _shotAt = pos + 2;
         if (pos < _shotAt) return;
         string[] names = { "pasted", "thrown", "booth", "panel" };

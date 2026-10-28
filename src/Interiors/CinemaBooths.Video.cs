@@ -12,6 +12,12 @@ namespace UnitSport.Interiors;
 /// nearest, from the booth) is decoded: one ffmpeg pair at a time, none outside a cinema.
 ///
 /// <para>
+/// Through the server (phase 2, <c>CinemaBooths.Relay</c>): a hall whose panel says so, a client that cannot decode
+/// (a phone, a headset, <c>--cinemanodecode</c>) and a client whose own decoder failed (a blocked domain) take the
+/// server's frames and sound instead (<see cref="CinemaRelayFeed"/>), stamped with their moment of the video, so they
+/// stay on the same clock as the rest.
+/// </para>
+/// <para>
 /// Who: anyone inside that cinema, as for the panel; the last one wins. Asked from the projector panel
 /// (<see cref="CinemaPanelUi"/>) or <c>/cinema play &lt;link&gt;</c>; bots call <see cref="ServeVideo"/> on the server.
 /// </para>
@@ -21,121 +27,158 @@ public partial class CinemaBooths
     /// <summary>A peer's next link no sooner than this, s: each one starts a decoder on every client in the hall.</summary>
     private const double VideoCooldown = 2;
 
-    /// <summary>Server and client: each cinema's halls' links and their T0, absent until one plays.</summary>
-    private readonly Dictionary<string, (string Link, double T0)[]> _videos = new();
+    /// <summary>Server and client: each cinema's halls' links, their T0 and whether through the server, absent until one plays.</summary>
+    private readonly Dictionary<string, (string Link, double T0, bool Relay)[]> _videos = new();
     private readonly Dictionary<long, double> _lastVideo = new();
 
-    /// <summary>Client: this machine's decoder of the hall it watches, if any.</summary>
-    private CinemaVideoStream? _stream;
+    /// <summary>Client: this machine's feed of the hall it watches, if any: its own decoder or the relay.</summary>
+    private ICinemaFeed? _stream;
     private string _streamPlan = "";
     private int _streamHall = -1;
 
+    /// <summary>Client: the link and T0 whose own decoding failed here: that video comes through the server instead.</summary>
+    private (string Link, double T0) _failedHere;
+
+    /// <summary>
+    /// A check's hall to watch from anywhere (<see cref="CinemaNetProbe"/>): its feed runs as a player's in the hall
+    /// would, with no screen to show it on. Null: the hall the camera is in.
+    /// </summary>
+    public (string Plan, int Hall)? ProbeWatch { get; set; }
+
     /// <summary>A hall's link ("" for none) and the shared-clock moment it started.</summary>
     public (string Link, double T0) VideoOf(string plan, int hall) =>
-        hall >= 0 && hall < MaxHalls && _videos.TryGetValue(plan, out var v) && v[hall].Link != null ? v[hall] : ("", 0);
+        hall >= 0 && hall < MaxHalls && _videos.TryGetValue(plan, out var v) && v[hall].Link != null ? (v[hall].Link, v[hall].T0) : ("", 0);
 
-    /// <summary>This client's decoder of a hall, or null when it is not the one watched.</summary>
-    public CinemaVideoStream? StreamOf(string plan, int hall) => _streamPlan == plan && _streamHall == hall ? _stream : null;
+    /// <summary>Whether a hall's video goes through the server for everyone (its panel's switch).</summary>
+    public bool RelayOf(string plan, int hall) =>
+        hall >= 0 && hall < MaxHalls && _videos.TryGetValue(plan, out var v) && v[hall].Relay;
+
+    /// <summary>This client's feed of a hall, or null when it is not the one watched.</summary>
+    public ICinemaFeed? StreamOf(string plan, int hall) => _streamPlan == plan && _streamHall == hall ? _stream : null;
 
     // ---- asking ----------------------------------------------------------------------------------
 
-    /// <summary>Plays <paramref name="link"/> in a hall from now ("" stops it: the slides again).</summary>
-    public void AskVideo(string plan, int hall, string link)
+    /// <summary>
+    /// Plays <paramref name="link"/> in a hall from now ("" stops it: the slides again), through the server for everyone
+    /// when <paramref name="relay"/>. The same link again with only the switch changed keeps its place.
+    /// </summary>
+    public void AskVideo(string plan, int hall, string link, bool relay = false)
     {
-        if (Online) RpcId(1, MethodName.AskVideoRpc, plan, hall, link);
-        else ServeVideo(MyId, plan, hall, link);
+        if (Online) RpcId(1, MethodName.AskVideoRpc, plan, hall, link, relay);
+        else ServeVideo(MyId, plan, hall, link, relay);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AskVideoRpc(string plan, int hall, string link)
+    private void AskVideoRpc(string plan, int hall, string link, bool relay)
     {
-        if (Multiplayer.IsServer()) ServeVideo(Multiplayer.GetRemoteSenderId(), plan, hall, link);
+        if (Multiplayer.IsServer()) ServeVideo(Multiplayer.GetRemoteSenderId(), plan, hall, link, relay);
     }
 
     /// <summary>
     /// Server (and offline): <paramref name="peer"/> plays <paramref name="link"/> on hall <paramref name="hall"/> of
-    /// cinema <paramref name="plan"/> from now, or stops it with "". Refused unless they are inside it, the link is a
-    /// web link (<see cref="CinemaVideo.Allowed"/>), and their last one was <see cref="VideoCooldown"/> ago. What a
-    /// bot calls, with its own peer id.
+    /// cinema <paramref name="plan"/> from now (through the server for everyone when <paramref name="relay"/>), or stops
+    /// it with "". Refused unless they are inside it, the link is a web link (<see cref="CinemaVideo.Allowed"/>), and
+    /// their last new link was <see cref="VideoCooldown"/> ago. The same link with only the switch changed keeps its
+    /// T0. What a bot calls, with its own peer id.
     /// </summary>
-    public bool ServeVideo(long peer, string plan, int hall, string link)
+    public bool ServeVideo(long peer, string plan, int hall, string link, bool relay = false)
     {
         bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
         if (!inside) { GD.Print($"[cinema] peer {peer} is not in {plan}: no video"); return false; }
         if (hall < 0 || hall >= MaxHalls) return false;
         link = link.Trim();
         if (link.Length > 0 && !CinemaVideo.Allowed(link)) { GD.Print($"[cinema] peer {peer}: not a web link, refused"); return false; }
+        var (was, wasT0) = VideoOf(plan, hall);
+        // only the switch changed: the video goes on where it is
+        bool same = link.Length > 0 && link == was;
         double wall = Core.RealClock.Now;   // a person's pace, not the world's speed
-        if (link.Length > 0 && _lastVideo.TryGetValue(peer, out double last) && wall - last < VideoCooldown) return false;
-        if (link.Length > 0) _lastVideo[peer] = wall;
-        double t0 = ClockSync.ServerNow;
-        SetVideo(plan, hall, link, t0);
-        if (Online) Rpc(MethodName.SetVideo, plan, hall, link, t0);
-        GD.Print(link.Length > 0 ? $"[cinema] hall {hall + 1} of {plan} plays {link} from {t0:F2} (peer {peer})" : $"[cinema] hall {hall + 1} of {plan}: video stopped (peer {peer})");
+        if (link.Length > 0 && !same && _lastVideo.TryGetValue(peer, out double last) && wall - last < VideoCooldown) return false;
+        if (link.Length > 0 && !same) _lastVideo[peer] = wall;
+        double t0 = same ? wasT0 : ClockSync.ServerNow;
+        relay &= link.Length > 0;
+        SetVideo(plan, hall, link, t0, relay);
+        if (Online) Rpc(MethodName.SetVideo, plan, hall, link, t0, relay);
+        GD.Print(link.Length > 0
+            ? $"[cinema] hall {hall + 1} of {plan} plays {link} from {t0:F2}{(relay ? " through the server" : "")} (peer {peer})"
+            : $"[cinema] hall {hall + 1} of {plan}: video stopped (peer {peer})");
         return true;
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void SetVideo(string plan, int hall, string link, double t0)
+    private void SetVideo(string plan, int hall, string link, double t0, bool relay)
     {
         if (hall < 0 || hall >= MaxHalls || link.Length > CinemaVideo.MaxLink) return;
-        if (!_videos.TryGetValue(plan, out var v)) _videos[plan] = v = new (string, double)[MaxHalls];
-        v[hall] = (link, t0);
+        if (!_videos.TryGetValue(plan, out var v)) _videos[plan] = v = new (string, double, bool)[MaxHalls];
+        v[hall] = (link, t0, relay);
     }
 
     /// <summary>A shot's hall holds a link as if the server had sent it (<see cref="CinemaVideoShot"/>).</summary>
-    public void SetVideoForShot(string plan, int hall, string link, double t0) => SetVideo(plan, hall, link, t0);
+    public void SetVideoForShot(string plan, int hall, string link, double t0) => SetVideo(plan, hall, link, t0, false);
 
     /// <summary>Server: a newly joined client gets every hall's video.</summary>
     private void SendVideosTo(long peer)
     {
         foreach (var (plan, halls) in _videos)
             for (int h = 0; h < halls.Length; h++)
-                if (!string.IsNullOrEmpty(halls[h].Link)) RpcId(peer, MethodName.SetVideo, plan, h, halls[h].Link, halls[h].T0);
+                if (!string.IsNullOrEmpty(halls[h].Link)) RpcId(peer, MethodName.SetVideo, plan, h, halls[h].Link, halls[h].T0, halls[h].Relay);
     }
 
     // ---- client: playing it ----------------------------------------------------------------------
 
     /// <summary>
-    /// Client, every frame inside a cinema: decodes the video of hall <paramref name="here"/> (the camera's) when its
+    /// Client, every frame inside a cinema: plays the video of hall <paramref name="here"/> (the camera's) when its
     /// screen is on, hands each new frame to <paramref name="node"/>, and returns the halls whose screens show a video
-    /// now (a bit each): their slides and film music give way. A video that ended or cannot play here gives the hall
-    /// back its slides.
+    /// now (a bit each): their slides and film music give way. Decoded here, or through the server when the hall says
+    /// so, this machine cannot decode, or its own decoding of this video failed. A video that ended, or failed both
+    /// ways, gives the hall back its slides.
     /// </summary>
     private int PumpVideo(InteriorNode? node, int here, int screens)
     {
         string plan = node?.Layout.Key ?? "";
-        var (link, t0) = node != null && here >= 0 && (screens >> here & 1) != 0 ? VideoOf(plan, here) : ("", 0);
-        bool want = link.Length > 0 && CinemaVideoStream.CanDecode && !NetworkManager.DedicatedServer;
-        if (_stream != null && (!want || _streamPlan != plan || _streamHall != here || _stream.Link != link || _stream.T0 != t0))
+        bool on = node != null && here >= 0 && (screens >> here & 1) != 0;
+        if (ProbeWatch is { } probe) (plan, here, on) = (probe.Plan, probe.Hall, true);
+        var (link, t0) = on ? VideoOf(plan, here) : ("", 0);
+        bool want = link.Length > 0 && !NetworkManager.DedicatedServer;
+        bool relay = want && (RelayOf(plan, here) || !CinemaVideoStream.CanDecode || _failedHere == (link, t0));
+        if (_stream != null && (!want || _streamPlan != plan || _streamHall != here || _stream.Link != link || _stream.T0 != t0
+                                || _stream is CinemaRelayFeed != relay))
         {
             _stream.Dispose();
             _stream = null;
             node?.ShowVideo(_streamHall, null, default, null);
             _streamHall = -1;
         }
-        if (!want || node == null) return 0;
+        if (!want) return 0;
         if (_stream == null)
         {
-            _stream = new CinemaVideoStream(link, t0);
+            _stream = relay ? new CinemaRelayFeed(link, t0) : new CinemaVideoStream(link, t0);
             _streamPlan = plan;
             _streamHall = here;
-            GD.Print($"[cinema] hall {here + 1}: decoding {link}");
+            _watchSent = -1;
+            GD.Print($"[cinema] hall {here + 1}: {(relay ? "through the server" : "decoding")} {link}");
         }
+        if (relay) KeepWatching(plan, here);
         double position = CinemaVideo.PositionAt(ClockSync.ServerNow, t0);
-        if (_stream.Pump(position) && _stream.Current is { } frame) node.ShowVideo(here, frame, _stream.Tint, _stream);
-        if (_stream.Ended || _stream.Failed)
+        if (_stream.Pump(position) && _stream.Picture is { } frame) node?.ShowVideo(here, frame, _stream.Tint, _stream);
+        if (_stream.Failed && !relay)
         {
-            node.ShowVideo(here, null, default, null);
+            // this machine could not get it (a blocked domain, a site that refuses it): the server's copy instead
+            GD.Print($"[cinema] hall {here + 1}: {_stream.Status}; through the server instead");
+            _failedHere = (link, t0);
             return 0;
         }
-        return _stream.Current != null ? 1 << here : 0;
+        if (_stream.Ended || _stream.Failed)
+        {
+            node?.ShowVideo(here, null, default, null);
+            return 0;
+        }
+        return _stream.Picture != null ? 1 << here : 0;
     }
 
     /// <summary>
-    /// <c>/cinema play &lt;link&gt;</c>, <c>/cinema stop</c>, <c>/cinema</c> (#1298): the projector panel's video from the
-    /// chat, for the hall the camera is in (or the nearest), on this client, which asks the server as the panel does.
-    /// Null for a line that is not one.
+    /// <c>/cinema play &lt;link&gt;</c>, <c>/cinema stop</c>, <c>/cinema relay on|off</c>, <c>/cinema</c> (#1298): the
+    /// projector panel's video from the chat, for the hall the camera is in (or the nearest), on this client, which asks
+    /// the server as the panel does. Null for a line that is not one.
     /// </summary>
     public static string? RunLocal(string line)
     {
@@ -148,28 +191,32 @@ public partial class CinemaBooths
         if (hall < 0) return "This cinema has no hall.";
         string plan = node.Layout.Key;
         string verb = parts.Length > 1 ? parts[1].ToLowerInvariant() : "";
+        var (link, t0) = booths.VideoOf(plan, hall);
         switch (verb)
         {
             case "play" when parts.Length > 2:
                 if (!CinemaVideo.Allowed(parts[2])) return "That is not a web link (https://…).";
                 var (lights, _) = booths.StateOf(plan, hall);
                 booths.Ask(plan, hall, Pack(lights, true));
-                booths.AskVideo(plan, hall, parts[2]);
+                booths.AskVideo(plan, hall, parts[2], booths.RelayOf(plan, hall));
                 return $"Hall {hall + 1}: playing {CinemaVideo.Title(parts[2])}";
             case "stop":
                 booths.AskVideo(plan, hall, "");
                 return $"Hall {hall + 1}: back to the slides";
+            case "relay" when parts.Length > 2 && parts[2] is "on" or "off":
+                if (link.Length == 0) return $"Hall {hall + 1} shows no video.";
+                booths.AskVideo(plan, hall, link, parts[2] == "on");
+                return $"Hall {hall + 1}: {(parts[2] == "on" ? "through the server for everyone" : "each player fetches it")}";
             case "":
-                var (link, t0) = booths.VideoOf(plan, hall);
                 var stream = booths.StreamOf(plan, hall);
-                return link.Length == 0 ? $"Hall {hall + 1} shows no video. /cinema play <link>, /cinema stop"
+                return link.Length == 0 ? $"Hall {hall + 1} shows no video. /cinema play <link>, /cinema stop, /cinema relay on|off"
                     : $"Hall {hall + 1}: {link}, at {CinemaVideo.PositionAt(ClockSync.ServerNow, t0):F0} s"
-                      + (stream == null ? "" : $" ({(stream.Status.Length > 0 ? stream.Status : "playing")}, frame at {stream.CurrentTime:F2} s, {stream.Restarts} restarts)");
+                      + (stream == null ? "" : $" ({(stream is CinemaRelayFeed ? "through the server, " : "")}"
+                          + $"{(stream.Status.Length > 0 ? stream.Status : "playing")}, frame at {stream.CurrentTime:F2} s, {stream.Restarts} restarts)");
             default:
-                return "Usage: /cinema play <link>  |  /cinema stop  |  /cinema";
+                return "Usage: /cinema play <link>  |  /cinema stop  |  /cinema relay on|off  |  /cinema";
         }
     }
 
     private static readonly bool LocalFiles = Core.CmdArgs.Has("--cinemavideolocal");
-
 }

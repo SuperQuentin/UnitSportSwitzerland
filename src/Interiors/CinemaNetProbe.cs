@@ -16,9 +16,11 @@ namespace UnitSport.Interiors;
 /// Coordinated through chat lines; A repeats its line until both answer.
 /// <para>
 /// Then the hall's video (#1298), with <c>--cinemavideo &lt;link&gt;</c>: A plays it; B, outside, is refused a
-/// link of its own; every peer must hold the same link and T0, and A and B decode it
-/// (<see cref="CinemaVideoStream"/>, headless too) and prints, at every 2 s of the shared clock, where the
-/// hall is and which moment of the video its frame shows. Each must be within two frames of the clock.
+/// link of its own; every peer must hold the same link and T0, and A and B play it the way a player in the hall
+/// would (<see cref="CinemaBooths.ProbeWatch"/>, headless too) and print, at every 2 s of the shared clock, where the
+/// hall is and which moment of the video their frame shows. Each must be within two frames of the clock. The script
+/// starts A with <c>--cinemanodecode</c> (a phone's way): A's frames come through the server's relay (#1298 phase 2),
+/// B decodes the link itself, and both must be on the clock.
 /// </para>
 /// </summary>
 public partial class CinemaNetProbe : ChatProbe
@@ -148,25 +150,40 @@ public partial class CinemaNetProbe : ChatProbe
     /// </summary>
     private async Task Watch(string link, double t0)
     {
-        if (!CinemaVideoStream.CanDecode) { GD.Print($"{Log} cannot decode here: no watch"); return; }
-        using var stream = new CinemaVideoStream(link, t0);
+        var booths = CinemaBooths.Instance!;
+        string plan = InteriorManager.Instance?.Current?.Key ?? _heard.Last(l => l.Contains("CN A set"))[(_heard.Last(l => l.Contains("CN A set")).IndexOf("CN A set", StringComparison.Ordinal) + 8)..].Trim();
+        booths.ProbeWatch = (plan, 0);
         double until = Net.ClockSync.ServerNow + WatchSeconds;
+        ICinemaFeed? stream = null;
         long mark = -1;
         int marks = 0, close = 0;
         double worst = 0;
-        while (Net.ClockSync.ServerNow < until && !stream.Failed && !stream.Ended)
+        bool relayed = false;
+        int heard = 0, listened = 0;
+        while (Net.ClockSync.ServerNow < until && stream is not { Failed: true } && stream is not { Ended: true })
         {
             double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, t0);
-            stream.Pump(pos);
+            // the booth's own feed, pumped by it every frame as in a hall
+            stream = booths.StreamOf(plan, 0);
+            relayed |= stream is CinemaRelayFeed;
+            if (stream == null) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); continue; }
+            // what the screen's speaker does in a hall: say which sample is heard, so a decoder keeps reading ahead of it
+            if (stream.SoundAt(pos, out long heardNow)) stream.Heard(heardNow);
             long m = (long)Math.Floor(Net.ClockSync.ServerNow / 2);
             if (m != mark)
             {
                 mark = m;
-                if (stream.CurrentIndex >= 0)
+                if (stream.CurrentTime >= 0)
                 {
                     double off = pos - stream.CurrentTime;
                     marks++;
-                    if (off >= -0.001 && off < 2.0 / CinemaVideo.Fps) close++;
+                    // two frames: the relay's are 15 a second, a decoder's 30
+                    if (off >= -0.001 && off < 2.0 / (stream is CinemaRelayFeed ? CinemaVideo.RelayFps : CinemaVideo.Fps)) close++;
+                    // the sound due now: the test film's tone, not silence (a headless peer has no speaker to play it)
+                    listened++;
+                    if (stream.SoundAt(pos, out long sample))
+                        for (long s = sample; s < sample + 4800; s += 7)
+                            if (stream.Sample(s).Length() > 0.01f) { heard++; break; }
                     worst = Math.Max(worst, Math.Abs(off));
                     GD.Print($"{Log} mark {m} at {pos:F3} s shows {stream.CurrentTime:F3} s (off {off * 1000:F0} ms, restarts {stream.Restarts})");
                 }
@@ -174,7 +191,10 @@ public partial class CinemaNetProbe : ChatProbe
             }
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
-        Expect(!stream.Failed, $"{_role} plays the video ({stream.Status})");
+        booths.ProbeWatch = null;
+        Expect(stream is { Failed: false }, $"{_role} plays the video ({stream?.Status ?? "no feed"})");
+        Expect(heard >= listened - 1 && listened >= 3, $"{_role} has the sound due at {heard}/{listened} marks");
+        Expect(relayed == !CinemaVideoStream.CanDecode, $"{_role} plays it {(relayed ? "through the server" : "from the link itself")}");
         Expect(marks >= 3 && close == marks, $"{_role} on the shared clock at {close}/{marks} marks (worst {worst * 1000:F0} ms)");
     }
 

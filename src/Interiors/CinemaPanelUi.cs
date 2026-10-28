@@ -34,6 +34,8 @@ public partial class CinemaPanelUi : CanvasLayer
     private LineEdit _link = null!;
     /// <summary>Where focus lands on opening: a pad or a VR laser starts on a button, never in the text box.</summary>
     private Button _paste = null!;
+    /// <summary>The hall's video through the server for everyone (#1298 phase 2): for a link some players cannot reach.</summary>
+    private CheckBox _relay = null!;
     private VBoxContainer _recent = null!;
     private UnitSport.Player.FootPlayer? _me;
     private string _plan = "";
@@ -115,6 +117,19 @@ public partial class CinemaPanelUi : CanvasLayer
         _play = UiKit.Button("Play", primary: true);
         _play.Pressed += PlayTyped;
         row.AddChild(_play);
+        _relay = new CheckBox
+        {
+            Text = "Through the server",
+            FocusMode = Control.FocusModeEnum.All,
+            TooltipText = "The server fetches the video and sends it to everyone in the hall: for a link some players cannot reach. Smaller picture.",
+        };
+        _relay.Toggled += on =>
+        {
+            if (CinemaBooths.Instance is not { } booths) return;
+            var (playing, _) = booths.VideoOf(_plan, _hall);
+            if (playing.Length > 0 && booths.RelayOf(_plan, _hall) != on) booths.AskVideo(_plan, _hall, playing, on);
+        };
+        box.AddChild(_relay);
         _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
         _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _status.Visible = false;
@@ -197,7 +212,7 @@ public partial class CinemaPanelUi : CanvasLayer
         if (CinemaBooths.Instance is not { } booths) return;
         var (lights, _) = booths.StateOf(_plan, _hall);
         booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, screen));
-        booths.AskVideo(_plan, _hall, screen ? link : "");
+        booths.AskVideo(_plan, _hall, screen ? link : "", _relay.ButtonPressed);
         Status = link.Length > 0 ? "Starting…" : "";
     }
 
@@ -226,9 +241,11 @@ public partial class CinemaPanelUi : CanvasLayer
         var (_, screen) = booths.StateOf(_plan, _hall);
         var (link, _) = booths.VideoOf(_plan, _hall);
         var stream = booths.StreamOf(_plan, _hall);
+        if (link.Length > 0) _relay.SetPressedNoSignal(booths.RelayOf(_plan, _hall));
         string now = !screen ? "The screen is off"
             : link.Length == 0 ? "Showing the cat slides"
-            : $"Playing {CinemaVideo.Title(link)}" + (stream is { Status.Length: > 0 } s ? $"  ·  {s.Status}" : "");
+            : $"Playing {CinemaVideo.Title(link)}" + (stream is CinemaRelayFeed ? "  ·  through the server" : "")
+              + (stream is { Status.Length: > 0 } s ? $"  ·  {s.Status}" : "");
         if (now == _shown) return;
         _shown = now;
         _now.Text = now;

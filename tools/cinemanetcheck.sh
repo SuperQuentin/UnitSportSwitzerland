@@ -5,7 +5,7 @@
 # must see it arrive and be refused when it asks the opposite; C joins only after A's ask and must find
 # the state from the table the server sends a newcomer.
 # Then the hall's video (#1298): A plays VIDEO, B is refused one, all three decode it and must show the
-# frame due on the shared clock. VIDEO=<link> (a web link: internet), none, or by default a 60 s test film
+# frame due on the shared clock: A through the server's relay (--cinemanodecode), B from the link itself. VIDEO=<link> (a web link: internet), none, or by default a 60 s test film
 # made with ffmpeg in the temp folder (never under the project) played as a local file (--cinemavideolocal).
 #   GODOT=<exe> [PORT=] [AT=E,N] [VIDEO=] tools/cinemanetcheck.sh      output in test_output/cinemanet_*.log
 . "$(dirname "$0")/lib/twoclient.sh" cinemanet
@@ -33,7 +33,8 @@ fi
 # C starts on A's "set" line: never on an earlier run's log
 rm -f "$OUT"/cinemanet_A.log "$OUT"/cinemanet_B.log "$OUT"/cinemanet_C.log
 tc_server 420 120 "$OUT/cinemanet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" ${VARGS[@]+"${VARGS[@]}"}
-tc_client 360 "$OUT/cinemanet_A.log" --connect 127.0.0.1:$PORT --name CinemaA $WORLD --cinemanet A ${VARGS[@]+"${VARGS[@]}"} & A=$!
+# A cannot decode (a phone's way): its video comes through the server's relay (#1298 phase 2); B decodes the link
+tc_client 360 "$OUT/cinemanet_A.log" --connect 127.0.0.1:$PORT --name CinemaA $WORLD --cinemanet A ${VARGS[@]+"${VARGS[@]}" --cinemanodecode} & A=$!
 tc_client 360 "$OUT/cinemanet_B.log" --connect 127.0.0.1:$PORT --name CinemaB $WORLD --cinemanet B ${VARGS[@]+"${VARGS[@]}"} & B=$!
 # C joins late: once A's ask was granted
 for i in $(seq 1 600); do

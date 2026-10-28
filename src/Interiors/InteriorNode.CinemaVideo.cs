@@ -25,21 +25,20 @@ public partial class InteriorNode
     private int _videoMuted;
 
     /// <summary>
-    /// Shows a decoded frame (RGBA, <see cref="CinemaVideo.Width"/> x <see cref="CinemaVideo.Height"/>) on hall
+    /// Shows a decoded frame (RGBA8, <see cref="CinemaVideo.Width"/> x <see cref="CinemaVideo.Height"/>) on hall
     /// <paramref name="hall"/>'s screen, light, beam, port and glow, its sound from <paramref name="stream"/>; null gives
     /// the hall its slides back. Per new frame (30 a second at most): two texture updates (one at High detail), no mesh.
     /// </summary>
-    public void ShowVideo(int hall, byte[]? rgba, Color tint, CinemaVideoStream? stream)
+    public void ShowVideo(int hall, Image? picture, Color tint, ICinemaFeed? stream)
     {
-        if (rgba == null || hall < 0) { StopVideo(); return; }
+        if (picture == null || hall < 0) { StopVideo(); return; }
         var s = ScreenOf(hall);
         if (s == null) return;
         if (_videoHall != hall) { StopVideo(); StartVideo(s); }
-        _videoImage!.SetData(CinemaVideo.Width, CinemaVideo.Height, false, Image.Format.Rgba8, rgba);
-        _videoTexture!.Update(_videoImage);
+        _videoTexture!.Update(picture);
         if (s.Projector is { Visible: true } spot)
         {
-            _videoSquareImage!.BlitRect(_videoImage, new Rect2I(0, 0, CinemaVideo.Width, CinemaVideo.Height),
+            _videoSquareImage!.BlitRect(picture, new Rect2I(0, 0, CinemaVideo.Width, CinemaVideo.Height),
                 new Vector2I(0, (CinemaVideo.Width - CinemaVideo.Height) / 2));
             _videoSquare!.Update(_videoSquareImage);
             if (spot.LightProjector != _videoSquare) spot.LightProjector = _videoSquare;

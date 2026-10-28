@@ -18,6 +18,19 @@ public static class CinemaVideo
     /// <summary>The sound, decoded by a second ffmpeg at the same moment: 48 kHz stereo.</summary>
     public const int AudioRate = 48000;
 
+    /// <summary>
+    /// Through the server (phase 2): JPEG frames this size and rate (about 10-15 kB each, 1.2-1.8 Mbit/s a watcher),
+    /// scaled up to <see cref="Width"/> x <see cref="Height"/> on the client; the sound mono at this rate as 8-bit
+    /// µ-law (192 kbit/s), in chunks of <see cref="RelayChunk"/> samples.
+    /// </summary>
+    public const int RelayWidth = 480, RelayHeight = 200, RelayFps = 15, RelaySoundRate = 24000, RelayChunk = 4800;
+
+    /// <summary>How far ahead of the hall's moment the server sends, s: the round trip and a stall's room.</summary>
+    public const double RelayAhead = 2.5;
+
+    /// <summary>The relay's sample index of a moment of the video (video time × rate), and back.</summary>
+    public static long RelaySampleAt(double videoTime) => (long)Math.Floor(videoTime * RelaySoundRate);
+
     /// <summary>The longest link the server takes.</summary>
     public const int MaxLink = 1000;
 
