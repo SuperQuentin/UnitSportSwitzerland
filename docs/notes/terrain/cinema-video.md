@@ -83,6 +83,13 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   machine on the local file: decoded from the hall's moment on the clock, stamped with video time, sent up to 2.5 s ahead,
   restarted further on after a stall, the share stopped when the file ends. `ILiveSource` is what a share pushes from
   (capture or file). The check plays the test film this way after the test pattern.
+- **NDI** (phase 5, `CaptureKind.Ndi`): the share's source list adds the network's NDI sources (`ConcertNdi.Sources`,
+  1.5 s of looking; none without the runtime): OBS, a vision mixer, the concert's own program camera ("PGM", sent by
+  `/concert ndi on`: the in-world cameras). The streamer's game receives it with the concert's `ConcertNdi.Receiver`,
+  now at full bandwidth (`full`; a concert screen keeps the preview) and with NDI's audio (`recv_capture_v2`'s audio frame,
+  planar floats, interleaved, freed with `recv_free_audio_v2`): the newest frame letterboxed and made a JPEG at the
+  share's quality on a worker, the sound to the relay's mono, sent like any share. No PC sound on top (it would double).
+  **Not yet run against a runtime** (none on the dev PC, Oct 28; the owner chose to test later).
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`
