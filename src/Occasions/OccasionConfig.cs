@@ -123,6 +123,13 @@ public static class OccasionConfig
                 // no loot, no hunt, no hat: the saucers (Decorations), the green night, the wail
                 Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false, Games = false },
             },
+            new()
+            {
+                // the Älplerfest (#1269): 14-24 August; the alphorn row and the other games run on its Games facet
+                Id = Festivals.FestivalCatalog.AelplerfestId, Priority = 8,
+                Schedule = { new DateWindow("08-14", "08-24") },
+                Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false },
+            },
         };
         // festivals (#1269): each part registers its own default entry here (priority 8: under the seasons for the sky, over the
         // UFOs); part 1 ships none. The check-only festival exists only under --festival test

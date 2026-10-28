@@ -1008,3 +1008,9 @@ tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
 tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
 src/Adventure/Together/ net tools/togethernetcheck.sh
+
+# #1269 the alphorn and yodel game: the offline check (a four-voice song, harmony, pay, forged and early songs refused, the valley echo) and the two-client check
+src/Occasions/Festivals/Horn/   quick  --hornscheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Horn   net  tools/hornnetcheck.sh
+src/Occasions/Festivals/Horn/   net    tools/hornnetcheck.sh
+tools/hornnetcheck.sh           net    tools/hornnetcheck.sh

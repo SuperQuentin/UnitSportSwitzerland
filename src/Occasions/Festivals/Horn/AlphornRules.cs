@@ -29,6 +29,8 @@ public static class AlphornRules
     /// <summary>The breath bar: this many beats of blowing, refilled <see cref="RefillPerBeat"/> beats per beat of rest.</summary>
     public const double BreathBeats = 8, RefillPerBeat = 2;
     public const int MaxVoices = 4;
+    /// <summary>The game's id in a <see cref="FestivalDef"/>.</summary>
+    public const string GameId = "alphorn";
     /// <summary>The best harmony multiplier on every voice's score.</summary>
     public const double MaxHarmony = 1.6;
 

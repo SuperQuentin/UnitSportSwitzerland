@@ -235,3 +235,7 @@ work (#437, #438); 8 fixed by #435.
    Shift (physical-key rule, `core/key-hints`). Kept: the vending code and the radio's `/` and
    Ctrl+F are typed characters, so the printed letter is the right one; Shift sits in the same
    place on every layout, and the pad paths (sprint, the catalogue's X / Y) already exist.
+| Älplerfest alphorn row (#1269): take a seat in the song | E `interact_mount` / Y | new: Y through `XrPad`; a grip near the row (`TryInteract`) is the same call | grip a horn of the row |
+| Alphorn: blow (hold from a note's start to its end) | LMB `use_item` / RB or RT | new: the trigger (replays as the pad's RT through `XrPad`) | raise the horn to the mouth and blow (a later target) |
+| Alphorn: choose the note (partial) | wheel, W / S / R stick up-down | new: the right stick up-down through `XrPad` | keep |
+| Yodel: tap on the beat | Space `jump` / A | new: A | keep |

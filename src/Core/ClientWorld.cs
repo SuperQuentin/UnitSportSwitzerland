@@ -1136,6 +1136,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
             festivals.Start = () => _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
             Occasions.Festivals.FestivalPage.Register();
+            AddChild(new Occasions.Festivals.Horn.HornGame(() => LocalPlayer, () => _worldOrigin, () => _chunks));
+            if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));

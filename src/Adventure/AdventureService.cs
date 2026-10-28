@@ -123,7 +123,7 @@ public partial class AdventureService : Node
         }
         if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested
             || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
-            || Occasions.Festivals.FireworksCheck.Requested) AdventureCheck.ClearScratch();
+            || Occasions.Festivals.FireworksCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -297,7 +297,8 @@ public partial class AdventureService : Node
         : Together.TogetherCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/togethercheck")
         : Together.FondueCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fonduecheck")
         : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck")
-        : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck") : null;
+        : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck")
+        : Occasions.Festivals.Horn.HornCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/hornscheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));

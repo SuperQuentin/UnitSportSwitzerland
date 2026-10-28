@@ -16,6 +16,8 @@ touches its topic; search with `grep -ril <word> docs/notes/occasions`.
 
 - `festival-fireworks` — the closing show (#1269 part 2): `FireworkShow.Plan(seed)` (pure, 6-12 min, three acts and a 40-shell finale), the server fixes `ShowStart`/`ShowSeed` in the running list on the last day at 21:30 game time (no new RPC), `Fireworks` plays it from `ClockSync.ServerNow` with pooled GPU particles, flashes and bangs delayed by distance / 343, `FestivalShowWatched`, `--fireworkscheck`
 
+- `festival-alphorn` — the Älplerfest's alphorn and yodel game (#1269 part 4): the row of horns at the site, a song per festival instance and 90 s slot (up to four voices: melody, second voice, drone, yodel), natural tones 2-12 of F-sharp 1, the breath bar, blows graded by the server from the whole song, harmony scored chart-relative (x1.6), the valley echo (`EchoFinder`), bots, protocol 61, `--hornscheck`, `tools/hornnetcheck.sh`
+
 ## Commands
 
 - `commands` — Commands: --avatars, --date, --decorlog, --hats, --headless, --huntcheck, --occasion, --occasioncheck, --path, --shot, --sighting, --soundcheck

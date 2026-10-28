@@ -136,3 +136,15 @@ Nothing is player-facing yet but the Journal tab and the poles: the check-only f
 - [ ] VR headset: stand at the field, look up → depth reads right; no particle sheet or flash light clips close to the eyes.
 - [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
 - [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
+
+## Älplerfest alphorn and yodel ([#1317](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1317))
+
+The Älplerfest runs 14-24 August (Interlaken; a region without it moves it to its largest town). Try it any day with the check-only festival: `<godot> --path . -- --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure`, or with the real map and `--date 2027-08-18` near Interlaken or the relocated town.
+
+- [ ] Walk to the three horns on trestles, 16 m east and 7 m north of the festival's middle → the prompt "Play the alphorn and yodel" appears; E starts a four-beat count-in. Judge the look of the horns (Cartoon, PS1, Realistic) and whether the row is easy to find.
+- [ ] Play the melody with the mouse (wheel to pick the note, hold left button from a note's start to its end) → the word PERFECT / GOOD / MISS shows on each press, the breath bar drains while blowing and refills in rests, the note sounds like an alphorn. Is the bottom panel readable at 1080p and with `--mobile`, and does it stay clear of the hotbar?
+- [ ] Same on a pad (R stick up / down to pick, RT or RB to blow, A for the yodel) and in a headset (right stick, trigger, A through the pad route) → the same song plays; the prompts name the right buttons. VR gap: raising a horn to the mouth is not built.
+- [ ] With the real map in a wide valley (Interlaken), blow facing a mountain face → the note comes back a few seconds later from the wall, duller and quieter; facing the open lake or a flat plain → no echo. Does the delay feel like the distance?
+- [ ] Two or three players sit down within a minute of each other (same 90 s slot) → they get melody, second voice and drone, play the same song, and each is told the harmony multiplier (up to x1.6) and the Batzen; the Journal's Festival tab and the party board show the points. Does the harmony reward feel fair? Does a late joiner understand they play the same chart?
+- [ ] Press Esc or walk away mid-song → the song ends with nothing paid and a message; a fifth player is told the row is full.
+- [ ] Others near the row do not hear the blower (a known gap): is that too strange for a festival? A bot taking a seat is a server-side call; there is no bot spawner for it in the game yet.

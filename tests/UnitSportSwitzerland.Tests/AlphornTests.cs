@@ -1,3 +1,4 @@
+using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.Horn;
 using Xunit;
 
@@ -203,5 +204,48 @@ public class AlphornTests
         var far = EchoFinder.Find((e, _) => e < 1000 ? 0 : 300, 0, 0, Math.PI / 2, 0, 0)!.Value;
         Assert.Equal(2, near.Gain / far.Gain, 1);
         Assert.True(far.LowPassHz < near.LowPassHz);
+    }
+
+    // ---- the wire and the festival ---------------------------------------------------------------
+
+    [Fact]
+    public void Blows_survive_the_wire_and_a_bad_string_is_refused_whole()
+    {
+        var c = AlphornChart.Make(9);
+        var plays = Perfect(c, HornPart.Melody);
+        var back = HornWire.Decode(HornWire.Encode(plays))!;
+        Assert.Equal(plays.Length, back.Length);
+        Assert.All(plays.Zip(back), z => { Assert.Equal(z.First.Partial, z.Second.Partial); Assert.Equal(z.First.On, z.Second.On, 3); Assert.Equal(z.First.Off, z.Second.Off, 3); });
+        Assert.Empty(HornWire.Decode("")!);
+        Assert.Null(HornWire.Decode("8,100"));          // a field short
+        Assert.Null(HornWire.Decode("13,100,200"));     // not a natural tone
+        Assert.Null(HornWire.Decode("8,200,100"));      // ends before it starts
+        Assert.Null(HornWire.Decode("8,-5,100"));
+        Assert.Null(HornWire.Decode("8,1,2;x"));
+        Assert.Null(HornWire.Decode(string.Join(";", Enumerable.Repeat("8,1,2", HornWire.MaxPlays + 1))));
+        Assert.Null(HornWire.Decode(new string('1', HornWire.MaxChars + 1)));
+    }
+
+    [Fact]
+    public void The_song_of_a_slot_is_the_same_for_everyone_and_changes_with_the_slot_and_the_year()
+    {
+        Assert.Equal(HornWire.SeedOf("aelplerfest-2027", 5), HornWire.SeedOf("aelplerfest-2027", 5));
+        Assert.NotEqual(HornWire.SeedOf("aelplerfest-2027", 5), HornWire.SeedOf("aelplerfest-2027", 6));
+        Assert.NotEqual(HornWire.SeedOf("aelplerfest-2027", 5), HornWire.SeedOf("aelplerfest-2028", 5));
+        Assert.All(Enumerable.Range(0, 50), s => Assert.True(HornWire.SeedOf("x", s) >= 0));
+    }
+
+    [Fact]
+    public void The_alplerfest_is_a_sound_festival_with_the_alphorn_open_from_the_first_day()
+    {
+        var def = FestivalCatalog.Get(FestivalCatalog.AelplerfestId)!;
+        Assert.NotNull(def);
+        Assert.Empty(def.Problems());
+        Assert.True(def.IsOpen(AlphornRules.GameId, 1));
+        Assert.Equal(11, def.Length);
+        Assert.Equal(AlphornRules.DayCap, def.Game(AlphornRules.GameId)!.DayCap);
+        // a perfect song at full harmony pays 32: the day's cap of 80 bites on the third
+        int best = AlphornRules.Batzen(new HornScore(100, 100, 1, 1, 1, 0, []), AlphornRules.MaxHarmony);
+        Assert.True(best * 2 < AlphornRules.DayCap && best * 3 > AlphornRules.DayCap);
     }
 }
