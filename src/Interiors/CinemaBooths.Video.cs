@@ -96,7 +96,7 @@ public partial class CinemaBooths
     /// </summary>
     public bool ServeVideo(long peer, string plan, int hall, string link, bool relay = false, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside) { GD.Print($"[cinema] peer {peer} is not in {plan}: no video"); return false; }
         if (hall < 0 || hall >= MaxHalls) return false;
         link = link.Trim();
@@ -212,6 +212,8 @@ public partial class CinemaBooths
         if (parts.Length == 0 || !parts[0].Equals("/cinema", StringComparison.OrdinalIgnoreCase)) return null;
         // the server's film list is the server's: the line goes on to it
         if (parts.Length > 1 && parts[1].Equals("pool", StringComparison.OrdinalIgnoreCase)) return null;
+        // a hall's number first: an admin's lights and film (the cinema showcase's /cinema <hall> ..., #1307), the server's
+        if (parts.Length > 1 && int.TryParse(parts[1], out _)) return null;
         if (Instance is not { } booths) return "No cinemas here.";
         if (InteriorManager.Instance?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) return "Go into a cinema first.";
         var cam = booths.GetViewport().GetCamera3D();

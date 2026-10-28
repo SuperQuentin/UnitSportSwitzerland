@@ -102,6 +102,16 @@ public partial class CinemaBooths : Node
 
     private long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
 
+    /// <summary>
+    /// Whether <paramref name="peer"/> is inside cinema <paramref name="plan"/>, where its booth may be worked: where the
+    /// server places their body; offline also the interior the camera is in (a free camera, a shot queue, has no body:
+    /// the one player is the only one there).
+    /// </summary>
+    private bool Inside(long peer, string plan) =>
+        plan.Length > 0 && (InteriorManager.Instance is { } im
+            ? im.SpaceOf(peer) == plan || !Online && im.Current?.Key == plan
+            : !Online);
+
     public static int Pack(Lights lights, bool screen) => (int)lights | (screen ? 4 : 0);
 
     /// <summary>
@@ -189,7 +199,7 @@ public partial class CinemaBooths : Node
     /// </summary>
     public bool Serve(long peer, string plan, int hall, int code)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside) { GD.Print($"[cinema] peer {peer} is not in {plan}: refused"); return false; }
         code &= 7;
         if ((code & 3) > 2 || hall < 0 || hall >= MaxHalls) return false;

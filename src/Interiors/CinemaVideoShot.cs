@@ -30,6 +30,7 @@ public partial class CinemaVideoShot : Node3D
     private string _plan = "";
     private Vector3 _target, _booth, _port;
     private static readonly bool PortLook = CmdArgs.Has("--cinemashotport");
+    private static readonly bool BeamLook = CmdArgs.Has("--cinemashotbeam");
 
     public CinemaVideoShot(string link, string prefix) { _link = link; _prefix = prefix; }
     public CinemaVideoShot() : this("", "") { }
@@ -47,7 +48,8 @@ public partial class CinemaVideoShot : Node3D
         _node = InteriorNode.Create(layout, InteriorMeshBuilder.Build(layout),
             Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
         AddChild(_node);
-        _node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Off), ~0, null, glow: true, real: false);
+        // pasted first (the default sequence throws it at its second shot); a beam view at the detail asked (--cinemaprojection)
+        _node.ShowCinema(CinemaBooths.Level(CinemaBooths.Lights.Off), ~0, null, glow: true, real: BeamLook && InteriorNode.RealProjection);
 
         var screen = layout.Furniture.First(f => f.Type == FurnitureType.MovieScreen);
         _target = new Vector3(screen.X, layout.FloorY(screen.Floor) + 2.6f, screen.Z);
@@ -127,6 +129,17 @@ public partial class CinemaVideoShot : Node3D
         if (_shotAt < 0) _shotAt = pos + (Curtains ? 0 : 2);
         if (pos < _shotAt) return;
         // --cinemashotcurtains: the camera kept in the seats, a shot every 1.5 s from the first frame: the curtains closing in
+        // --cinemashotbeam: one shot from the hall's side, low by the front rows, across the beam from the porthole to the screen
+        if (BeamLook)
+        {
+            var mid = _target.Lerp(_port, 0.5f);
+            var across = (_port - _target).Cross(Vector3.Up).Normalized();
+            _cam.LookAtFromPosition(_target.Lerp(_port, 0.3f) + across * 6f + new Vector3(0, -1.6f, 0), mid, Vector3.Up);
+            if (_step++ == 0) { _shotAt = pos + 0.3; return; }
+            Shoot($"{_prefix}_beam.png", pos);
+            Done("ok");
+            return;
+        }
         // --cinemashotport: one shot from 2.5 m in front of the porthole looking up at it: the picture in its glass
         if (PortLook)
         {

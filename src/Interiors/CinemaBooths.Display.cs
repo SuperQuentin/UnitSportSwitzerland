@@ -33,7 +33,7 @@ public partial class CinemaBooths
     /// <summary>Server (and offline): <paramref name="peer"/> sets a hall's display; refused unless they are inside that cinema.</summary>
     public bool ServeDisplay(long peer, string plan, int hall, int display)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside || hall < 0 || hall >= MaxHalls) { GD.Print($"[cinema] peer {peer} may not set {plan}'s projector: not inside"); return false; }
         var (fit, ratio) = CinemaVideo.UnpackDisplay(display);
         display = CinemaVideo.PackDisplay(fit, ratio);

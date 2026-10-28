@@ -254,7 +254,8 @@ public partial class CinemaNetProbe : ChatProbe
             bool stalled = wall - _lastLook > 0.1;
             _lastLook = wall;
             if (stream.CurrentTime >= 0 && double.IsNaN(_firstShown)) _firstShown = pos;
-            bool settling = !double.IsNaN(_firstShown) && pos < _firstShown + 1.0;
+            // a live source's first two seconds: the streamer's own decoder or capture still catching up (all peers alike)
+            bool settling = !double.IsNaN(_firstShown) && pos < _firstShown + (CinemaVideo.IsLive(link) ? 2.0 : 1.0);
             if (m != mark && (stalled || settling) && stream.CurrentTime >= 0)
             {
                 mark = m;
