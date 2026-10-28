@@ -21,7 +21,7 @@ nothing in its card game and hide-and-seek, and that is the mistake not to repea
 
 Plus [`adventure-alcohol`](adventure-alcohol.md) #1271 (asked by the owner while deciding): a real blood
 alcohol level, its effects on walking and driving, an electronic and a single-use breathalyzer. It
-builds after `together` (wine, kirsch, the fondue pot), and its ItemIds 486-488 are in together's block.
+builds after `together` (wine, kirsch, the fondue pot), and its ItemIds 486-488 are in together's block. Built in [#1309](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1309).
 
 ## Decisions taken (October 27, 2026)
 

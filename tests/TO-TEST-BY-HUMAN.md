@@ -43,6 +43,8 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Walk into a cinema you never entered → some halls are mid-film: an open film (Sintel, Spring, …) or the cat slides, with its sound; a friend joining sees the same moment. `/cinema pool` lists the films; as an admin `/cinema pool add <a YouTube link>` → "Added …", and after a while new cinemas show it too.
 - [ ] Play a 16:9 video, then a scope (2.39:1) film → the side curtains glide in to frame the 16:9 picture and back out for the scope one, smoothly, no jump; a dark opening scene does not close them on the picture.
 - [ ] Projector panel › Display: Cover, then Stretch, then Contain with 4:3 and 1.85 → the screen, the beam (High detail) and the picture in the porthole's glass all show the same framing; the curtains glide to its edges; a friend in the hall sees the same.
+- [ ] **VR sharp cinema screen** ([#1319](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1319)): in a headset, play a 2D film in a hall → the log says the screen is on a compositor layer; the picture is sharper than with Settings › VR sharp cinema screen off; it stays put on the screen as you walk and turn (no swimming, no lag); a seat back, another player's head, the curtains and your hands cover it where they are in front; Cover/4:3 framing as on the mesh screen; walking out of the hall takes it away; the menus' panel still draws over it.
+- [ ] **Cinema video quality** ([#1319](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1319)): Settings › Video › Cinema video Low / Medium / High while a film plays → it restarts in a moment, on the clock with a friend's; High visibly sharper from the front rows; no stutter on your machine at High (CPU).
 - [ ] **3D**: play a side-by-side or top-and-bottom film (a name with SBS / TB picks the layout, or the 3D picker) → with red-cyan glasses the screen has depth; untick Red-cyan glasses → the plain left picture. In a headset → each eye its own picture, real depth, no colour fringes. Does the depth feel right (eyes not swapped)? ([#1298](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1298) phase 6)
 - [ ] Linux (X11): a monitor share and the PC sound (PulseAudio monitor). macOS: a monitor and a camera share (screen-recording permission asked).
 
@@ -169,6 +171,21 @@ Nothing is player-facing yet but the Journal tab and the poles: the check-only f
 - [ ] Walk round the spawn → a ring of 16 red Swiss-flag poles stands about 60 m out. Settings › Occasions › the test festival › Off → the poles go, while the Journal's Festival tab and the score stay.
 - [ ] Real map, dev region, a dedicated server with the same flags → the log says `[festival] running: test day 2/5 at the test field`; join with a client and open the Journal → the same tab, with the same day.
 - [ ] Real map: a real festival site outside the region relocates to the largest town ("held this year in Bulle"): needs a real festival, so this waits for part 3 (Älplerfest); the rule is unit-tested only.
+
+## Alcohol: a real blood alcohol level and two breathalyzers ([#1309](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1309))
+
+Offline is enough for most: `--systems ui,physics,adventure,terrain` on any map; `--alcohol-clock 30` makes the half-hours pass faster, `/alcohol test drink 4 40` logs four beers drunk 40 min ago, `/give` the Breathalyzer and the Breath test (or buy them at a pharmacy).
+
+- [ ] Drink three beers within a few minutes, wait (or `--alcohol-clock 30`) → around half an hour in the view starts to sway a little; at about 0.5 per mille driving a car, the steering answers a beat late. Judge whether the sway is subtle, not nauseating, and whether the lag is fair rather than frustrating.
+- [ ] At 0.8 and over (`/alcohol test drink 6 30`) → the screen edges blur, walking drifts slowly to the side, and the view feels drunk. Judge the blur strength in the Cartoon, PS1 and Realistic styles and the drift's size.
+- [ ] At 1.5 and over (`/alcohol test drink 10 30`) → you stumble now and then (flat for a second), a climbable wall will not be grabbed, and the toast says "Not in this state". Over 2.5 you pass out for a minute and wake. Judge how often the stumble comes and whether passing out feels fair.
+- [ ] Settings > Gameplay > Alcohol: **View effects** off → no sway and no blur, the input lag stays. Mode **Off** → drinks carry nothing; **Mild** → half the effects, nobody passes out.
+- [ ] VR: drunk, the head does not sway; a soft vignette comes instead, and the lag is the same. Judge the comfort on a headset.
+- [ ] Hold Use with the electronic Breathalyzer in hand → 5 s of rising tone in the view pose at the mouth, two beeps, then its screen low in the view: `0.62 ‰ · 0.31 mg/L` and `> 0.5 ‰: do not drive`. Within 15 min of a drink it says `WAIT 12 min`. Pad: RT; VR: RT (bringing it to the mouth by hand is not built). Judge the screen's size and how long it stays (8 s).
+- [ ] With a friend online: hold the device out (E, pad Y, or a VR grip near them) → they get an invite, accept with F2 / the invites panel, and both screens read the same number. A server-run bot accepts at once and reads 0.00.
+- [ ] The single-use Breath test: blow 5 s, a tube on screen turns green (under 0.5) or amber, then it is used up. Judge whether the colours read clearly and whether "no number" feels right.
+- [ ] The glass icon left of the stamina ring appears above 0.3 per mille and nowhere else shows the level. Judge its place against the Together chip and in VR.
+- [ ] Models: the Breathalyzer and the Breath test tubes (clear, green, amber) in the model viewer, category Adventure, and in the hand in first and third person → they look right; the sounds are in the sound player under `AlcoholSounds`.
 
 ## Festival fireworks and the closing show ([#1310](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1310))
 

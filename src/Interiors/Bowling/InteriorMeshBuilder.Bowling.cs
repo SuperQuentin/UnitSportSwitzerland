@@ -112,6 +112,12 @@ public static partial class InteriorMeshBuilder
         var s = new Scratch();
         float half = LaneGeometry.HalfLane + LaneGeometry.Gutter;
         s.Box(new Vector3(-half, 0, -0.03f), new Vector3(half, 0.24f, 0.01f), C(0.08f, 0.08f, 0.09f), false);
+        // over each gutter the board reaches down to its floor (#1334): the lane's base 0.013 m up, the sweep's edge at
+        // the deck's top, so a pin or ball lying in a gutter is pushed to the pit too
+        float skirt = LaneGeometry.DeckTop + 0.005f - 0.016f;
+        foreach (float sx in new[] { -1f, 1f })
+            s.Box(new Vector3(sx < 0 ? -half : LaneGeometry.HalfLane, -skirt, -0.03f), new Vector3(sx < 0 ? -LaneGeometry.HalfLane : half, 0f, 0.01f),
+                C(0.08f, 0.08f, 0.09f), false);
         for (int i = 0; i < 6; i++)
         {
             float x = -half + 0.12f + i * (2 * half - 0.24f) / 5;

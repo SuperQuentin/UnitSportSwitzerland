@@ -153,6 +153,9 @@ public partial class FondueCheck : ChatProbe
         var m = me.StaminaMeter;
         Expect(m.BuffLeft(StaminaBuff.Fed) > 0 && m.BuffLeft(StaminaBuff.Warm) > 0, $"Fed and Warm on the stamina ({m.BuffLeft(StaminaBuff.Fed):F0} s, {m.BuffLeft(StaminaBuff.Warm):F0} s)");
         Expect(_partner.StaminaMeter.BuffLeft(StaminaBuff.Fed) > 0, "the partner is fed too");
+        // the wine (and kirsch) in the pot carried alcohol (#1271): 4 g, 3 g more with kirsch, logged for the seat as eaten
+        if (Alcohol.AlcoholService.Instance != null && AdventureService.Instance!.Mine.Get(Alcohol.AlcoholProgress.Section).Drinks is { } drinks)
+            Expect(drinks.Count > 0 && drinks.All(d => d.F) && drinks.Sum(d => (double)d.G) is >= 3.9 and <= 7.1, $"the pot's alcohol is in the drink log ({drinks.Sum(d => (double)d.G):F1} g)");
         Expect(panel.Open == false, "the panel closes");
 
         // a second pot, nobody stirring and no wine: it splits

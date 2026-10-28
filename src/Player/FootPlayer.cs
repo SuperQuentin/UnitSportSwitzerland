@@ -3973,6 +3973,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             direction = moveAmount > 0.01f ? walk.Wish.Normalized() : Vector3.Zero;
             running = walk.Run;
         }
+        // drunk (#1271): the intent lags and drifts, whatever made it
+        if (Drunk is { } drunk)
+        {
+            var w = drunk.Walk(direction * moveAmount, dt);
+            moveAmount = Mathf.Min(w.Length(), 1f);
+            direction = moveAmount > 0.01f ? w.Normalized() : Vector3.Zero;
+        }
         // holding hands or roped (#1266): the soft follow constraint, on the intent (a bot's too)
         if (Tethered?.Invoke((direction * moveAmount, running)) is { } tied)
         {
@@ -4774,6 +4781,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
         if (_ride is { WheelLock: > 0f } && XR.XrSession.Active && RideControls == null && !float.IsNaN(XR.XrSession.WheelAngle))
             input = input with { WheelAngle = XR.XrSession.WheelAngle };
+        // drunk (#1271): the same lag and noise whatever made the input (keys, pad, wheel, VR hands)
+        if (Drunk is { } drunk) input = drunk.Ride(input, dt);
 
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);

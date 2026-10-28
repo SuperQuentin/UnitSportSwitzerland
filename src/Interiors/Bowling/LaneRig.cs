@@ -184,11 +184,22 @@ public partial class LaneRig : Node3D
                 if (l.State[i] == PinState.Standing) at.Basis = new Basis(Vector3.Right, Mathf.Pi / 2) * at.Basis;
                 l.State[i] = PinState.Down;
             }
-            if (at.Origin.Z > g.LaneEnd) l.State[i] = PinState.Gone;
+            // over the deck's end it tumbles down into the pit, and is gone only once it is down there (#1334): it
+            // used to vanish the moment the sweep pushed it past the edge
+            float over = at.Origin.Z - g.LaneEnd;
+            if (over > 0)
+            {
+                float drop = Mathf.Min(PitDrop * g.Scale, over * 2.5f);
+                at.Origin = at.Origin with { Y = Mathf.Min(at.Origin.Y, LaneGeometry.DeckTop + LaneGeometry.PinRadius - drop) };
+                if (over * 2.5f >= PitDrop * g.Scale) l.State[i] = PinState.Gone;
+            }
             l.Pins[i] = at;
         }
         Push(lane);
     }
+
+    /// <summary>How far a pin pushed over the deck's end falls into the pit before it is gone, m (the pit's depth, under the masking).</summary>
+    private const float PitDrop = 0.45f;
 
     // a pin gone into the pit is folded away to nothing: the machine has it now
     private static readonly Transform3D Hidden = new(Basis.Identity.Scaled(Vector3.Zero), Vector3.Zero);
@@ -338,6 +349,15 @@ public partial class LaneRig : Node3D
 
     private readonly List<int> _hoodShown = new();
 
+    /// <summary>The thunk of a ball pushed up into the hood (a player's, or a decoration bowler's, #1334).</summary>
+    public void HoodThunk()
+    {
+        if (!Audible) return;
+        _hoodVoice ??= new AudioStreamPlayer3D { Name = "Hood", Bus = Audio.SfxBus.Name, UnitSize = 5f, MaxDistance = 35f, Stream = BowlingSounds.Thunk, Position = Geometry.HoodLift };
+        if (_hoodVoice.GetParent() == null) AddChild(_hoodVoice);
+        _hoodVoice.Play();
+    }
+
     /// <summary>
     /// The balls waiting on the hood's rack: one per entry (a house ball's colour), in slot order.
     /// Rebuilt only when the set changes.
@@ -345,12 +365,7 @@ public partial class LaneRig : Node3D
     public void SetHoodBalls(IReadOnlyList<int> colors)
     {
         if (_hoodShown.SequenceEqual(colors)) return;
-        if (colors.Count > _hoodShown.Count && Audible)
-        {
-            _hoodVoice ??= new AudioStreamPlayer3D { Name = "Hood", Bus = Audio.SfxBus.Name, UnitSize = 5f, MaxDistance = 35f, Stream = BowlingSounds.Thunk, Position = Geometry.HoodLift };
-            if (_hoodVoice.GetParent() == null) AddChild(_hoodVoice);
-            _hoodVoice.Play();
-        }
+        if (colors.Count > _hoodShown.Count) HoodThunk();
         _hoodShown.Clear();
         _hoodShown.AddRange(colors);
         while (_balls.Count < colors.Count)

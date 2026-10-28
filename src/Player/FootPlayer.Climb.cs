@@ -159,6 +159,14 @@ public partial class FootPlayer
         if (Interiors.InteriorManager.Instance?.InOpenDoorway(point) == true) { _climbPush = 0f; return false; }
         var flat = new Vector3(normal.X, 0, normal.Z);
         if (flat.LengthSquared() < 1e-4f || direction.Dot(-flat.Normalized()) < ClimbPushDot) { _climbPush = 0f; return false; }
+        // drunk (#1271): a face to climb is refused from 1.5 per mille
+        if (Drunk is { Fx.NoClimb: true } drunk)
+        {
+            ClimbRefused = "Not in this state";
+            drunk.ClimbRefused?.Invoke();
+            _climbPush = 0f;
+            return false;
+        }
         if (onFloor && !botClimb)
         {
             _climbPush += dt;
