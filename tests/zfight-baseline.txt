@@ -411,7 +411,7 @@
 1917.7	Clothes / Bee stockings
 4.2	Clothes / Bell collar
 549	Clothes / Bergführer breeches
-267.7	Clothes / Bergführer cap
+128.1	Clothes / Bergführer cap
 409.1	Clothes / Big pink bow
 115.4	Clothes / Black band tee
 265.5	Clothes / Black beanie
@@ -434,13 +434,14 @@
 115.4	Clothes / Disco platforms
 96.1	Clothes / Disco-ball top
 703.9	Clothes / Edelweiss shirt
-292.3	Clothes / Erstbesteigung cap
-18	Clothes / Fahrlehrer gloves
+110.1	Clothes / Erstbesteigung cap
+517.9	Clothes / Mitfahrer gloves
+517.9	Clothes / Fahrlehrer gloves
 6.5	Clothes / Fang mask
 76.1	Clothes / Fingerless gloves
 5689.4	Clothes / Fishnets
 115.4	Clothes / Galaxy hoodie
-120.2	Clothes / Gletscher scarf
+104.6	Clothes / Gletscher scarf
 99.1	Clothes / Glitch tee
 2.8	Clothes / Gothic round shades
 285.1	Clothes / Green polo
@@ -470,21 +471,21 @@
 18	Clothes / Pink sneakers
 2645.9	Clothes / Pink-white thigh-highs
 489.5	Clothes / Platform buckle boots
-3.2	Clothes / Polier hat
+12.4	Clothes / Polier hat
 3797.8	Clothes / Postal-doll jacket
 23.5	Clothes / Postal-doll skirt
 96.1	Clothes / Rainbow cat ears
 611.2	Clothes / Rainbow stockings
 115.4	Clothes / Red tartan skirt
 2965.5	Clothes / Ruffled black mini
-120.2	Clothes / Seilschaft scarf
+99.8	Clothes / Seilschaft scarf
 100.4	Clothes / Sennenkäppi
 549	Clothes / Silver antennae
 99.1	Clothes / Silver hoops
 549	Clothes / Silver space suit
 113.2	Clothes / Skull mask
 179.4	Clothes / Spiked choker
-72.2	Clothes / Stammgast felt hat
+77.5	Clothes / Stammgast felt hat
 124.9	Clothes / Star glasses
 506.7	Clothes / Striped arm warmers
 2633.3	Clothes / Striped long-sleeve
@@ -497,7 +498,7 @@
 99.1	Clothes / UwU mask
 115.4	Clothes / White marcel
 533.3	Clothes / Witch robe
-3.2	Clothes / Zimmermann hat
+12.4	Clothes / Zimmermann hat
 418	Concert / Stage - Center: Remy Rossi (Pop, screens CenterAndSides)
 313.2	Concert / Stage - EndNorth: Silent Echoes (HipHop, screens None)
 281.6	Concert / Stage - EndSouth: Paper Foxes (Pop, screens Center)
