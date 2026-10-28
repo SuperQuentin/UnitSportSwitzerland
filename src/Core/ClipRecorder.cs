@@ -38,6 +38,12 @@ public partial class ClipRecorder : Node
     /// <summary><c>--clip-realtime</c>: a slow frame fills every 1/30 s slot it took (repeated), the clip keeps the wall clock's pace.</summary>
     private static readonly bool RealTime = CmdArgs.Has("--clip-realtime");
 
+    /// <summary>
+    /// <c>--clip-hq</c> (#1306, a showcase film): the frames at the window's own size, x264 at CRF 16; with
+    /// <c>--fixed-fps 30</c> the game waits for the encoder instead of dropping a frame, so every frame is one of the film.
+    /// </summary>
+    private static readonly bool HighQuality = CmdArgs.Has("--clip-hq");
+
     /// <summary>The longest <c>--clip</c> from the command line (#971: a demo of several traffic light cycles); the chat's stays at <see cref="MaxSeconds"/>.</summary>
     private const double MaxCommandSeconds = 600;
 
@@ -168,8 +174,9 @@ public partial class ClipRecorder : Node
         if (_size == default)
         {
             // even sides: yuv420p (the MP4) needs them
-            int h = (int)System.Math.Round(Width * image.GetHeight() / (double)image.GetWidth() / 2) * 2;
-            _size = new Vector2I(Width, h);
+            int w = HighQuality ? image.GetWidth() / 2 * 2 : Width;
+            int h = (int)System.Math.Round(w * image.GetHeight() / (double)image.GetWidth() / 2) * 2;
+            _size = new Vector2I(w, h);
             if (!StartEncoder())
             {
                 _recording = false;
@@ -183,6 +190,12 @@ public partial class ClipRecorder : Node
         var bytes = image.GetData();
         for (int k = 0; k < copies; k++)
             if (_queue!.Writer.TryWrite(bytes)) _frames++;
+            // a frame-exact film: wait for the encoder rather than lose the frame
+            else if (HighQuality && GameClock.Fixed && _pipeError == null)
+            {
+                _queue.Writer.WriteAsync(bytes).AsTask().Wait();
+                _frames++;
+            }
 
         if (_pipeError != null || _elapsed >= _seconds) Stop();
     }
@@ -193,7 +206,7 @@ public partial class ClipRecorder : Node
         string encoders = Encoders();
         _hasX264 ??= encoders.Contains("libx264") || encoders.Contains("libopenh264");
         string[] h264 = encoders.Contains("libx264")
-            ? ["-c:v", "libx264", "-preset", "medium", "-crf", "20"]
+            ? ["-c:v", "libx264", "-preset", HighQuality ? "slow" : "medium", "-crf", HighQuality ? "16" : "20"]
             : ["-c:v", "libopenh264", "-b:v", "6M"];
         // 128 colours a clip; the bayer dither finer in the lit styles (#1070): at PS1's scale 5,
         // Cartoon's sky gradients and the haze round the sun banded into rings (scale 3: ~13% more bytes)

@@ -73,6 +73,7 @@ public sealed class ChatCompleter
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>", "World", "the time of day"),
         ("speed", false, true, "[<0.05 .. 8> | normal]", "World", "how fast the simulation runs"),
         ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]", "World", "the weather and snow"),
+        ("cinema", true, true, "<hall> [lights full | dim | off] [film on | off]", "World", "a cinema hall's lights and film, in the cinema you are in"),
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]", "World", "waves on the lakes"),
         ("water", false, true, "[E N]", "World", "the water surface at a point"),
         ("occasion", false, true, "[list | start | stop | auto] [id]", "World", "world events"),

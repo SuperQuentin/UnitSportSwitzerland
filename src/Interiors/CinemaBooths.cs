@@ -194,6 +194,40 @@ public partial class CinemaBooths : Node
         return true;
     }
 
+    public const string CommandUsage = "Usage: /cinema <hall 1..> [lights full|dim|off] [film on|off], in the cinema you are in";
+
+    /// <summary>
+    /// <c>/cinema</c> (#1306), an admin's: a hall's lights and film set from the chat, as its panel would, in the cinema
+    /// <paramref name="plan"/> (the one the sender is in, or offline the one the free camera is in: a scripted
+    /// film's camera has no body to walk to the panel). The replies.
+    /// </summary>
+    public string Command(string[] args, bool admin, string? plan)
+    {
+        if (!admin) return "Setting a cinema's halls is an admin command.";
+        if (plan == null || plan.Length == 0) return "You are not in a cinema.";
+        if (args.Length < 1 || !int.TryParse(args[0], out int number) || number < 1 || number > MaxHalls) return CommandUsage;
+        int hall = number - 1;
+        var (lights, screen) = StateOf(plan, hall);
+        for (int i = 1; i + 1 < args.Length; i += 2)
+            switch (args[i].ToLowerInvariant(), args[i + 1].ToLowerInvariant())
+            {
+                case ("lights", "full" or "on"): lights = Lights.Full; break;
+                case ("lights", "dim"): lights = Lights.Dim; break;
+                case ("lights", "off"): lights = Lights.Off; break;
+                case ("film", "on"): screen = true; break;
+                case ("film", "off"): screen = false; break;
+                default: return CommandUsage;
+            }
+        if (args.Length % 2 == 0) return CommandUsage;
+        // as the server's own peer: the sender's place was checked by the caller
+        int was = HallsOf(plan)[hall], reel = ReelOf(was);
+        if (screen && !Unpack(was).Screen) reel = (reel + 1) & 15;
+        int code = Pack(lights, screen) | reel << 3;
+        Set(plan, hall, code);
+        if (Online) Rpc(MethodName.Set, plan, hall, code);
+        return $"Hall {number}: lights {lights.ToString().ToLowerInvariant()}, film {(screen ? "on" : "off")}.";
+    }
+
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Set(string plan, int hall, int code)
     {

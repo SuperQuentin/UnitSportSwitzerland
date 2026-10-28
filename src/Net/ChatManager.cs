@@ -543,6 +543,11 @@ public partial class ChatManager : Node
                 Show(Audio.Cd.CdLibrary.Instance?.Command(rest, mayChange: true) ?? "There are no CDs here.", ChatKind.Private);
                 return;
 
+            case "cinema":
+                if (Interiors.CinemaBooths.Instance is not { } booths) Show("There are no cinemas here.", ChatKind.Error);
+                else Show(booths.Command(parts[1..], admin: true, Interiors.InteriorManager.Instance?.Current?.Key), ChatKind.Private);
+                return;
+
             case "seastate":
                 if (parts.Length == 1) Show($"The sea is {World.SeaStateCommand.Describe(World.WaterField.SeaState)}.", ChatKind.Private);
                 else if (World.SeaStateCommand.TryParse(rest, out float sea, out string seaError))
@@ -972,6 +977,12 @@ public partial class ChatManager : Node
             case "vs" or "versteckis":
                 if (Versteckis == null) ReplyTo(sender, "Versteckis is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, Versteckis.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
+            // a cinema hall's lights and film (#1306), an admin's (checked inside)
+            case "cinema":
+                if (Interiors.CinemaBooths.Instance is not { } booths) ReplyTo(sender, "There are no cinemas here.", ChatKind.Error);
+                else ReplyTo(sender, booths.Command(parts[1..], IsAdmin(sender),
+                    Interiors.InteriorManager.Instance is { } im ? im.SpaceOf(sender) is { Length: > 0 } space ? space : im.Current?.Key : null), ChatKind.Private);
                 return;
             case "bot" or "bots":
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
