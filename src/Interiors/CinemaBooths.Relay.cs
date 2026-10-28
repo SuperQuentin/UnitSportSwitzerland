@@ -76,7 +76,7 @@ public partial class CinemaBooths
     /// </summary>
     public bool ServeWatch(long peer, string plan, int hall)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside || hall < 0 || hall >= MaxHalls || VideoOf(plan, hall).Link.Length == 0) return false;
         if (!_watchers.TryGetValue((plan, hall), out var peers)) _watchers[(plan, hall)] = peers = new();
         if (!peers.ContainsKey(peer)) GD.Print($"[cinema] peer {peer} watches hall {hall + 1} of {plan} through the server");
@@ -108,7 +108,7 @@ public partial class CinemaBooths
                     foreach (var gone in peers.Keys.Except(_relayPeers).ToList()) peers.Remove(gone);
             }
             _taps.TryGetValue(key, out var tap);
-            if (tap != null && (tap.Link != link || tap.T0 != t0))
+            if (tap != null && (tap.Link != link || tap.T0 != t0 || tap.Stereo != StereoOf(key.Plan, key.Hall)))
             {
                 tap.Dispose();
                 _taps.Remove(key);
@@ -134,7 +134,7 @@ public partial class CinemaBooths
             }
             if (tap == null && !live)
             {
-                _taps[key] = tap = new CinemaRelayTap(link, t0);
+                _taps[key] = tap = new CinemaRelayTap(link, t0, CinemaVideo.LiveQuality.Low, StereoOf(key.Plan, key.Hall));
                 GD.Print($"[cinema] relay of hall {key.Hall + 1} of {key.Plan} opened: {link}");
             }
             if (tap != null)
