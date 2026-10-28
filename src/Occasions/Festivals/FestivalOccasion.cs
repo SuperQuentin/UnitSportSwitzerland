@@ -126,5 +126,44 @@ public sealed class FestivalOccasion : Occasion
                 into.Add(MortarRack, new Transform3D(new Basis(Vector3.Up, 0f), local));
             }
         }
+        // the flag swingers' ground (#1269 part 5): a low stage with the flag stand, where the Fahnenschwingen game is played
+        if (FestivalCatalog.Get(Id) is { } fd && fd.Game(FestivalCatalog.FahneGame) != null)
+        {
+            var (ge, gn) = FestivalCatalog.FahneGround(site);
+            if (TileId.FromLv95(ge, gn) == tile.Id && tile.HeightAt(tile.Local(ge, gn)) is { } gh)
+            {
+                var local = tile.Local(ge, gn);
+                local.Y = gh;
+                into.Add(FlagStage, new Transform3D(new Basis(Vector3.Up, 0f), local));
+            }
+        }
     }
+
+    private static readonly Color Bunting = Matte(0.98f, 0.82f, 0.18f);
+
+    /// <summary>
+    /// The flag swingers' stage (#1269 part 5): a square of planks a hand high, a flag stand with a Swiss flag at each corner and a
+    /// red-and-white swag between them. Seen in the model viewer (Occasions › Prop); the ground the game is played on.
+    /// </summary>
+    public static readonly PropKind FlagStage = new("FestivalFlagStage", () =>
+    {
+        var s = new MeshScratch();
+        s.Box(new Vector3(0, 0.1f, 0), new Vector3(6f, 0.2f, 6f), Wood);
+        s.Box(new Vector3(0, 0.22f, 0), new Vector3(5.6f, 0.04f, 5.6f), Matte(0.62f, 0.5f, 0.34f));
+        foreach (var (x, z) in new[] { (-2.8f, -2.8f), (2.8f, -2.8f), (-2.8f, 2.8f), (2.8f, 2.8f) })
+        {
+            s.Tube(new Vector3(x, 0.2f, z), new Vector3(x, 3.2f, z), 0.05f, 0.035f, Pole, 6);
+            s.Box(new Vector3(x + 0.4f, 2.7f, z), new Vector3(0.8f, 0.8f, 0.03f), Red);
+            s.Box(new Vector3(x + 0.4f, 2.7f, z), new Vector3(0.46f, 0.14f, 0.05f), White);
+            s.Box(new Vector3(x + 0.4f, 2.7f, z), new Vector3(0.14f, 0.46f, 0.05f), White);
+        }
+        // a swag of pennants along the front and back edges
+        for (int k = 0; k < 10; k++)
+        {
+            float x = -2.5f + k * 0.55f, sag = 0.18f * MathF.Sin(MathF.PI * k / 9f);
+            s.Box(new Vector3(x, 2.95f - sag, -2.8f), new Vector3(0.3f, 0.3f, 0.02f), k % 2 == 0 ? Red : White);
+            s.Box(new Vector3(x, 2.95f - sag, 2.8f), new Vector3(0.3f, 0.3f, 0.02f), k % 2 == 0 ? Bunting : Red);
+        }
+        return s.Build();
+    }, candle: false);
 }

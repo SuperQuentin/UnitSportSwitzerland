@@ -105,13 +105,13 @@ public partial class GameShell : Node
     }
 
     /// <summary>
-    /// A play launch at a spawn point (#1296): <c>--at</c> and otherwise only what <see cref="UseTitle"/> lets
+    /// A play launch at a spawn point (#1296): <c>--at</c> (or <c>--enter</c>, #1244) and otherwise only what <see cref="UseTitle"/> lets
     /// through. It skips the title but not the loading screen: Explore at that point, as from the menus (on
     /// foot on open ground, frames for the screen to draw). A probe or a tool naming its own flags stays
     /// <see cref="Direct"/>.
     /// </summary>
     public static bool PlayAt(string[] args) =>
-        args.Contains("--at") && UseTitle(args.Where(a => a != "--at").ToArray());
+        (args.Contains("--at") || args.Contains("--enter")) && UseTitle(args.Where(a => a is not ("--at" or "--enter" or "--patronhour")).ToArray());
 
     public override void _Ready()
     {
@@ -192,7 +192,8 @@ public partial class GameShell : Node
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
             // "--at E,N" on a play launch (#1296): the same, at that point
-            else if (PlayAt(CmdArgs.All) && SpawnPoint.ParseLv95("--at") is { } at)
+            // "--enter <venue>" (#1244) too: its building is the landing, and the player goes inside once on foot
+            else if (PlayAt(CmdArgs.All) && (SpawnPoint.ParseLv95("--at") ?? Interiors.InteriorManager.EnterLv95()) is { } at)
                 Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore, Landing = at, World = WorldChoice.FromArgs() })).CallDeferred();
             // a .gpx opened with the game (#1029): straight into its replay
             GpxOpenWith.Register();

@@ -7,6 +7,18 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Schwingen at the Älplerfest ([#1315](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1315))
+
+Online (a server and two clients), or `--festival test --date 2027-08-18 --world fixture`; the ring stands 20 m north of the festival's middle. `/schwing bot` works anywhere a bot is near.
+
+- [ ] Walk to the sawdust ring and look at it: the prompt says "Wrestle: Schwingen"; E (pad Y) joins the queue, E again leaves it. With nobody else, a bot joins after about 8 s.
+- [ ] In the bout: lean with the stick (screen-right is towards them, up and down lean round), throw with LMB (or X on a pad), hook a leg with RMB. Do the leans, the braced stance, each of the six throws and the thrown body read well from the side-on camera in Cartoon, PS1 and Realistic? Does the lying body sit in the sawdust, not float or sink?
+- [ ] When they throw, the banner names the throw and tells how to answer; hold Shift (pad B) and lean the named way, or lean the counter. Is the 0.35 s window fair on a pad and at 100 ms ping?
+- [ ] On the ground, mashing the punch key pins them or gets you out; do the winner's brush and the loser's dusting look right, and does the ring bell and thump sound good (sound player: Schwing*)?
+- [ ] A won bout pays Batzen and party points (chat line, the Journal's Festival tab); a bout under 20 s or a forfeit pays the forfeiter nothing.
+- [ ] VR: the stick leans (forward = towards the rival), B braces, the triggers throw; the head keeps its view. Gripping the belt for real is not built.
+- [ ] The Schwingerhosen (jute trousers, Alpine set) wear from the inventory and look right in the Bottom slot (they are not yet sold or found: `/give` one).
+
 ## A video on a cinema hall's screen ([#1299](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1299))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (Cinémas du Grütli, Geneva), walk up to the booth. A dev build needs ffmpeg on PATH (yt-dlp too for YouTube); a release ships both.
@@ -43,6 +55,8 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Walk into a cinema you never entered → some halls are mid-film: an open film (Sintel, Spring, …) or the cat slides, with its sound; a friend joining sees the same moment. `/cinema pool` lists the films; as an admin `/cinema pool add <a YouTube link>` → "Added …", and after a while new cinemas show it too.
 - [ ] Play a 16:9 video, then a scope (2.39:1) film → the side curtains glide in to frame the 16:9 picture and back out for the scope one, smoothly, no jump; a dark opening scene does not close them on the picture.
 - [ ] Projector panel › Display: Cover, then Stretch, then Contain with 4:3 and 1.85 → the screen, the beam (High detail) and the picture in the porthole's glass all show the same framing; the curtains glide to its edges; a friend in the hall sees the same.
+- [ ] **VR sharp cinema screen** ([#1319](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1319)): in a headset, play a 2D film in a hall → the log says the screen is on a compositor layer; the picture is sharper than with Settings › VR sharp cinema screen off; it stays put on the screen as you walk and turn (no swimming, no lag); a seat back, another player's head, the curtains and your hands cover it where they are in front; Cover/4:3 framing as on the mesh screen; walking out of the hall takes it away; the menus' panel still draws over it.
+- [ ] **Cinema video quality** ([#1319](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1319)): Settings › Video › Cinema video Low / Medium / High while a film plays → it restarts in a moment, on the clock with a friend's; High visibly sharper from the front rows; no stutter on your machine at High (CPU).
 - [ ] **3D**: play a side-by-side or top-and-bottom film (a name with SBS / TB picks the layout, or the 3D picker) → with red-cyan glasses the screen has depth; untick Red-cyan glasses → the plain left picture. In a headset → each eye its own picture, real depth, no colour fringes. Does the depth feel right (eyes not swapped)? ([#1298](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1298) phase 6)
 - [ ] Linux (X11): a monitor share and the PC sound (PulseAudio monitor). macOS: a monitor and a camera share (screen-recording permission asked).
 
@@ -93,6 +107,15 @@ Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --a
 - [ ] Walk (no slide) into a house's open door, with the Adventure layer on → you go through, no climb up the facade. Push into a plain wall for a second → the climb still grabs it.
 - [ ] Walk past a café or bar, then into one → its music fades in as you near it (it wakes within ~15 m of its reach) and plays inside.
 - [ ] Settings › Audio › **Sound occlusion** off, stand behind a building from a playing car radio → heard as in the open; on → muffled again. Same row on a pad and in the VR panel.
+
+## Interiors follow the building's outline ([#1294](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1294))
+
+Generated world (the spawn's villages have an L, a U, a courtyard, a trapezoid and a bent block each within a few km: `--shapedcheck` prints where), or a real old town (Geneva above, Sion `--at 2594000,1120000`).
+
+- [ ] Walk into an L-shaped house → rooms in both arms (a hall down the far arm with rooms off it), none out in the yard.
+- [ ] Look out of a window on an angled wall → the day's light comes in through it like any other.
+- [ ] VR: walk into an angled room → the walls hold you (teleport into the corner too).
+- [ ] A house drawn on the web with an angled wall (`--house-layouts`, see `net/house-layouts`) → that wall is one straight wall in the game, its door in it.
 
 ## Cinemas: hall height, a panel per hall, aisles to the walls, the service door, film music ([#1280](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1280))
 
@@ -161,6 +184,21 @@ Nothing is player-facing yet but the Journal tab and the poles: the check-only f
 - [ ] Real map, dev region, a dedicated server with the same flags → the log says `[festival] running: test day 2/5 at the test field`; join with a client and open the Journal → the same tab, with the same day.
 - [ ] Real map: a real festival site outside the region relocates to the largest town ("held this year in Bulle"): needs a real festival, so this waits for part 3 (Älplerfest); the rule is unit-tested only.
 
+## Alcohol: a real blood alcohol level and two breathalyzers ([#1309](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1309))
+
+Offline is enough for most: `--systems ui,physics,adventure,terrain` on any map; `--alcohol-clock 30` makes the half-hours pass faster, `/alcohol test drink 4 40` logs four beers drunk 40 min ago, `/give` the Breathalyzer and the Breath test (or buy them at a pharmacy).
+
+- [ ] Drink three beers within a few minutes, wait (or `--alcohol-clock 30`) → around half an hour in the view starts to sway a little; at about 0.5 per mille driving a car, the steering answers a beat late. Judge whether the sway is subtle, not nauseating, and whether the lag is fair rather than frustrating.
+- [ ] At 0.8 and over (`/alcohol test drink 6 30`) → the screen edges blur, walking drifts slowly to the side, and the view feels drunk. Judge the blur strength in the Cartoon, PS1 and Realistic styles and the drift's size.
+- [ ] At 1.5 and over (`/alcohol test drink 10 30`) → you stumble now and then (flat for a second), a climbable wall will not be grabbed, and the toast says "Not in this state". Over 2.5 you pass out for a minute and wake. Judge how often the stumble comes and whether passing out feels fair.
+- [ ] Settings > Gameplay > Alcohol: **View effects** off → no sway and no blur, the input lag stays. Mode **Off** → drinks carry nothing; **Mild** → half the effects, nobody passes out.
+- [ ] VR: drunk, the head does not sway; a soft vignette comes instead, and the lag is the same. Judge the comfort on a headset.
+- [ ] Hold Use with the electronic Breathalyzer in hand → 5 s of rising tone in the view pose at the mouth, two beeps, then its screen low in the view: `0.62 ‰ · 0.31 mg/L` and `> 0.5 ‰: do not drive`. Within 15 min of a drink it says `WAIT 12 min`. Pad: RT; VR: RT (bringing it to the mouth by hand is not built). Judge the screen's size and how long it stays (8 s).
+- [ ] With a friend online: hold the device out (E, pad Y, or a VR grip near them) → they get an invite, accept with F2 / the invites panel, and both screens read the same number. A server-run bot accepts at once and reads 0.00.
+- [ ] The single-use Breath test: blow 5 s, a tube on screen turns green (under 0.5) or amber, then it is used up. Judge whether the colours read clearly and whether "no number" feels right.
+- [ ] The glass icon left of the stamina ring appears above 0.3 per mille and nowhere else shows the level. Judge its place against the Together chip and in VR.
+- [ ] Models: the Breathalyzer and the Breath test tubes (clear, green, amber) in the model viewer, category Adventure, and in the hand in first and third person → they look right; the sounds are in the sound player under `AlcoholSounds`.
+
 ## Festival fireworks and the closing show ([#1310](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1310))
 
 `--festival test --date 2027-03-14 --time 22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure` (the last day of the check-only festival, 22:00): a show starts about 15 s after load. Online: a server with `--festival test` plus a client, same date.
@@ -176,6 +214,56 @@ Nothing is player-facing yet but the Journal tab and the poles: the check-only f
 - [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
 - [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
 
+## Älplerfest flag swinging, part 5 of the festivals ([#1316](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1316))
+
+The checks drive the stick and the use key from a script; what only a person can judge is the feel of the figures and the screen. Run with the Älplerfest on (a real date 17-24 August, or the operator's `occasions.json`, or `--festival test --date 2027-08-16`).
+- [ ] Mouse: at the flag stage press the interact key → "Getting in line", a drum, the ring closes on each beat; draw the figure with the mouse (up, a circle, an eight, a sideways sweep, down) → it is recognised without big sweeps, the camera does not turn, the flag in your hand follows the figure.
+- [ ] Pad: the same with the right stick (the stick's feel at 30 Hz sampling, the dead zone) and the use button for the throw.
+- [ ] VR headset (pad route): Y at the stage, the right stick draws the figures, the trigger throws; the HUD is readable at the bottom of the view, not in the way. Swinging the flag by hand is not built.
+- [ ] The high throw: hold, let go on the 1st, 2nd or 3rd beat → the flag flies as many beats as it was held plus one; catching on the beat it lands is fair at 96 BPM; a dropped flag ends the routine and the score.
+- [ ] Two people ask within a few seconds of each other → the same routine, "in step x1.3" when both land most figures; one alone gets no bonus.
+- [ ] Cartoon, PS1 and Realistic: the flag's cloth and the stage look right in each (the cloth is its own shader, it ignores the style).
+- [ ] The result panel and the Journal's Festival tab agree on the points and the Batzen; the daily cap of 100 Batzen stops the Batzen but not the points.
+- [ ] Real map: the Älplerfest at Interlaken's Höhematte (a western-region run moves it to the largest town); the stage stands on level ground there.
+
+## Adventure errands: givers, dialogue, daily Postkarten, canton reputation ([#1311](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1311))
+
+On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`) the eight givers stand within 350 m of the start; on a real map there are wardens at the huts, masters at the stations and the landings only (the OSM stage for post offices, farms and dairies is not built).
+
+- [ ] Walk up to a giver → a figure stands at its place with an amber card glyph over its head; within 3 m the prompt says "Talk to ..." and its outline shows. Judge the figure's height, the glyph's size and whether it reads from 20 m.
+- [ ] E (pad Y, VR: reach out and grip toward the giver) → the dialogue opens bottom centre with three choices. Pad: D-pad + A pick, B leaves, LB / RB switch cards. VR: laser + trigger on the panel. Judge the panel's size and distance in VR.
+- [ ] Take the mail run → three sacks in the pack, the card in the Journal's Quests tab and the tracker, a stamp toast and sound. Hand a sack over at each stop (Journal › Hand over) → CHF in the account, +3 reputation in the canton.
+- [ ] Take three cards, then ask a fourth → "Three cards a day". Wait for midnight in Switzerland (or `--errand-day-offset 2`) → the running cards expire, their cargo goes back, three new cards.
+- [ ] With a friend in a party: both take the same card (or Share with party in the Errands tab, the friend Joins) and finish it → both get "Together with ...: +CHF" and +1 reputation. Judge whether +50 % is felt.
+- [ ] Journal › Errands tab on a pad (LB / RB to it): cards, Track, Share, reputation. Judge the layout at 1080p and with `--mobile`.
+- [ ] Reputation 10 / 30 / 60 / 100 points in one canton (many cards) → level-up toasts, the title "Ehrenbürger von ..." at the top. Judge the pace.
+- [ ] Giver models in the model viewer (`--models`, People › Errand givers) → eight figures with the Sennenkäppi, guide hat and vest; look right in Cartoon, PS1 and Realistic.
+
+## Venue patrons and ambience ([#1331](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1331))
+
+`--enter bowlingland --time 20` (BowlinGland, Gland), then `/enter "pathé galeries"`, `/enter "brasserie de montelly"`, `/enter hype club` (add `--patronhour 1` for the club, `12.5` for lunch). Walk about in each.
+
+- [ ] Look away from a full table and back, many times over a few minutes → guests change only while you were not looking; nobody pops in or out on screen.
+- [ ] Sit in a cinema seat a patron is in → the patron is gone as you sit; stand up and leave the hall, wait 15 minutes of play, come back → the audience may have changed, never while you were in it.
+- [ ] A queue at the kebab or the box office → it steps forward now and then, the served customer steps aside; nobody joins the back while you watch it.
+- [ ] The loops look right at a glance: eating, sipping, talking, the pool shot, darts, table football, the arcade sticks, the dancers, the cheers on the settees (no arm through a table or a head).
+- [ ] Sound: the murmur and the cutlery sit right under the venue's music, louder in a full room, gone in an empty one; the grinder, the tap, the jingles, the coin, the pool click, the dart and the cheer are not too loud or too often.
+- [ ] A terrace at lunch on a warm day (`/weather temp 20`) → most tables taken; at 23:00 or in snow → empty.
+- [ ] Perf on the Quest: a full multiplex hall and a full restaurant → note the frame time.
+
+## Bowling ([#1328](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1328))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2510425,1140985 --time 22` (BowlinGland, Gland; its main door reads as locked, go in by the side door on the same wall, 34 m along).
+
+- [ ] E at the shoe counter → signed in, the hire shoes on your feet (red and cream, blue heel); E again → shoes back.
+- [ ] E at a ball rack → the ball you face is in your hand (the lower row when looking down), its weight in the prompt.
+- [ ] E on your lane's approach → the bowling camera: A/D moves your spot, Space sets it, A/D turns the line, Space, hold Space and move the mouse sideways → the curve bends; let go → the ball rolls at once, the pins fall, the slow-motion replay plays on the screen, then the score. Does the hook feel right (too much, too little)? Does the swing's power feel controllable?
+- [ ] Shift in the bowling camera → the view down at the pins.
+- [ ] The ball comes back to the hood with a thunk after a few seconds; E at the hood → it is in your hand again.
+- [ ] Sound: the ball's rumble rising with speed, the crash, the machine, the gutter's rattle.
+- [ ] Pad: Y at the counter, rack, hood and approach; left stick and A for the steps, L3 to look at the pins, B steps back.
+- [ ] VR: grip at the counter and the rack; on the approach grip your ball, swing and let go → it rolls with your line and speed; twisting the wrist at the release hooks it.
+- [ ] Two players online on one lane → turns alternate; the other sees your ball roll and the same pins fall; a third who walks in later sees the score and the standing pins.
 ## Älplerfest alphorn and yodel ([#1317](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1317))
 
 The Älplerfest runs 14-24 August (Interlaken; a region without it moves it to its largest town). Try it any day with the check-only festival: `<godot> --path . -- --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure`, or with the real map and `--date 2027-08-18` near Interlaken or the relocated town.

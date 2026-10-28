@@ -81,6 +81,9 @@ public partial class ItemController : Node
 
     public Inventory Inventory => _inventory;
 
+    /// <summary>A use is playing in the hand (checks wait for it to end).</summary>
+    public bool UseBusy => _useBusy;
+
     /// <summary>A short line over the hotbar.</summary>
     public void Toast(string text) => _ui.Toast(text);
 
@@ -485,12 +488,13 @@ public partial class ItemController : Node
         {
             case ItemUse.Consume:
                 if (_useBusy) break;
-                if (player.Health >= FootPlayer.MaxHealth - 0.01f)
+                if (player.Health >= FootPlayer.MaxHealth - 0.01f && !(def.Abv > 0f && def.DrinkMl > 0f))
                 {
                     _ui.Toast("Already at full health.");
                     break;
                 }
                 bool drink = def.Category == ItemCategory.Water;
+                bool alcoholic = def.Abv > 0f && def.DrinkMl > 0f && Adventure.Alcohol.AlcoholService.Instance is { Mode: not Adventure.Alcohol.AlcoholMode.Off };
                 // dressing a wound takes a while, in the hand (#455): a fight does not reset on a click
                 float apply = MedicalSeconds(def.Id);
                 if (apply > 0f)
@@ -506,10 +510,12 @@ public partial class ItemController : Node
                 {
                     // refused only when neither health nor stamina would change (#1225)
                     bool feeds = player.StaminaWouldTake(def.Stamina, def.Buff);
-                    if (!player.Heal(def.Heal) && !feeds) return;
+                    // a drink with alcohol (#1271) is drunk at full health too
+                    if (!player.Heal(def.Heal) && !feeds && !alcoholic) return;
                     float gained = feeds ? player.RestoreStamina(def.Stamina) : 0f;
                     if (feeds && def.Buff != StaminaBuff.None) player.BuffStamina(def.Buff, def.BuffSeconds);
                     _inventory.TakeOne(slot);
+                    if (alcoholic) Adventure.Alcohol.AlcoholService.Instance?.Drank(def.Id, player.StaminaMeter.BuffLeft(StaminaBuff.Fed) > 0f);
                     Kick(player);
                     var bank = drink ? SfxSynth.GulpBank : SfxSynth.CrunchBank;
                     Play(bank.Variants[SfxRng.Next(bank.Variants.Length)]);
@@ -517,6 +523,10 @@ public partial class ItemController : Node
                         + (gained >= 1f ? ", +" + gained.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) + " stamina" : "")
                         + (feeds && def.Buff == StaminaBuff.Warm ? ", warm" : feeds && def.Buff == StaminaBuff.Fed ? ", fed" : ""));
                 });
+                break;
+
+            case ItemUse.Breath:
+                UseBreath(player, slot, def);
                 break;
 
             case ItemUse.Photo:
@@ -791,7 +801,23 @@ public partial class ItemController : Node
         _usePeaked = false;
         _useItem = def.Id;
         visual.PlayOneShot(pose, inTime, hold, outTime, () => { _usePeaked = true; effect(); },
-            peakAfterHold: MedicalSeconds(def.Id) > 0f);
+            peakAfterHold: MedicalSeconds(def.Id) > 0f || def.Use == ItemUse.Breath);
+    }
+
+    /// <summary>A breathalyzer (#1271): five seconds blowing into it in the hand; then the server reading. The single-use test is used up at the end.</summary>
+    private void UseBreath(FootPlayer player, int slot, ItemDef def)
+    {
+        if (_useBusy) return;
+        if (Adventure.Alcohol.AlcoholService.Instance is not { } alcohol) { _ui.Toast("No breath tests here."); return; }
+        if (!Inventory.IsHotbar(slot)) { _ui.Toast($"Put the {def.Name.ToLowerInvariant()} on your hotbar to blow into it."); return; }
+        _inventory.Select(slot);
+        bool single = def.Id == ItemId.BreathTestSingle;
+        alcohol.BlowStart();
+        StartUse(player, slot, def, ViewPose.Mouth, 0.35f, Adventure.Alcohol.AlcoholRules.BlowSeconds, 0.3f, () =>
+        {
+            if (single) _inventory.TakeOne(slot);
+            alcohol.Blown(single);
+        });
     }
 
     /// <summary>

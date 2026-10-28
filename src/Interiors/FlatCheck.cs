@@ -234,9 +234,12 @@ public static class FlatCheck
                 }
 
             var mine = doors.Where(d => d.Index == i && d.Width > 0).ToList();
+            // a side door whose doorway inside would stand more than 3 m from it reads as locked (#1290, #1304);
+            // the main door never does
+            int mainSlot = mine.Count > 0 ? mine.Min(x => x.Slot) : 0;
             foreach (var d in mine)
-                Expect(l.EntranceOf(d.KeyIn(tile.Id).ToString()) != null,
-                    $"{box.What} slot {d.Slot}: the door arrives at a doorway inside");
+                Expect(l.EntranceOf(d.KeyIn(tile.Id).ToString()) != null || d.Slot != mainSlot,
+                    $"{box.What} slot {d.Slot}: the door arrives at a doorway inside{(l.EntranceOf(d.KeyIn(tile.Id).ToString()) == null ? " (locked: no room behind it)" : "")}");
             GD.Print($"[flatcheck] {box.What}: {l.Floors.Count} floor(s) ({l.Below} below), {wells} stairwell(s), "
                 + $"{l.Lifts.Count} elevator(s), {l.Floors[^1].Rooms.Where(r => r.Unit >= 0).Select(r => r.Unit).Distinct().Count()} flat(s) on top, "
                 + $"{mine.Count} door(s), {l.Furniture.Count} pieces");

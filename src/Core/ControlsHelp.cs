@@ -45,6 +45,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
+            new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
+            new("Bowling: move your spot, then your line; hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
             new("Festival alphorn row: sit down to the song; blow, pick the note, yodel", Keys: "{interact_mount}, hold {use_item}, wheel or {move_forward} / {move_back}, {jump}", Pad: "{interact_mount}, hold {use_item}, right stick ↑ ↓, {jump}"),
         }),
         ("Items", new Row[]
@@ -62,6 +64,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Journal: quests, birds, fish (tabs: Q / E)", PlayerInput.BirdJournal, Pad: "{quick_menu} (hold) › Journal; LB / RB for the tabs"),
+            new("Talk to an errand giver (a figure at a post office, hut, station or landing): take the day's cards, hand cargo over", PlayerInput.InteractMount),
             new("Character: your figure (on foot)", PlayerInput.CharacterMenu, Pad: "{quick_menu} (hold) › Character, or {menu} › Character"),
         }),
         ("Adventure: navigation and travel (#1226)", new Row[]
@@ -87,6 +90,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
             new("Wind the line in; cancel a cast", PlayerInput.AimItem),
         }),
+        ("Flag swinging at the Älplerfest (#1269)", new Row[]
+        {
+            new("Step onto the flag ground and swing the flag", PlayerInput.InteractMount),
+            new("Draw the figure shown (up, down, a sweep, a circle, an eight) before its last beat", Keys: "Mouse", Pad: "Right stick"),
+            new("High throw: hold, let go on a beat; catch on the beat it lands", PlayerInput.UseItem),
+        }),
         ("Fist fight (#495)", new Row[]
         {
             new("Challenge a player you look at, or accept their challenge", PlayerInput.InteractMount),
@@ -98,6 +107,16 @@ public partial class ControlsHelp : CanvasLayer
             new("Uppercut: down, forward + punch", Keys: "{move_back} {move_right} + {fight_punch}", Pad: "{move_back} {move_right} + {fight_punch}"),
             new("String: punch, punch, kick", Keys: "{fight_punch} {fight_punch} {fight_kick}", Pad: "{fight_punch} {fight_punch} {fight_kick}"),
             new("Finish them: down, down + kick", Keys: "{move_back} {move_back} + {fight_kick}", Pad: "{move_back} {move_back} + {fight_kick}"),
+        }),
+        ("Schwingen (#1269, the Älplerfest ring, /schwing <player or bot>)", new Row[]
+        {
+            new("Join the ring's queue (at the sawdust ring), or give the place up", PlayerInput.InteractMount),
+            new("Lean (towards / away / round)", Keys: "{move_left} {move_right} {move_forward} {move_back}", Pad: "{move_right}"),
+            new("Throw (the lean picks which)", PlayerInput.FightPunch),
+            new("Leg hook (Gammen)", PlayerInput.FightKick),
+            new("Brace against a throw (hold), or lean its counter", PlayerInput.FightBlock),
+            new("On the ground: mash to pin or to get out", PlayerInput.FightPunch),
+            new("Leave: /schwing leave", Keys: "/schwing", Pad: "/schwing"),
         }),
         ("Aura battle (#907, /aura <player>)", new Row[]
         {
