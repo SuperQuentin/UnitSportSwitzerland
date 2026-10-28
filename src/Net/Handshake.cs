@@ -93,7 +93,8 @@ public partial class Handshake : Node
     /// RelayStatus on channel 5 (#1298 phase 2: the hall's video through the server).
     /// 61: World/CinemaBooths AskLiveRpc, PushFrame, PushSound (#1298 phase 3: a player's screen, window or webcam on a hall).
     /// 62: World/CinemaBooths AskVideoRpc, AskLiveRpc and SetVideo carry the hall's 3D layout (#1298 phase 6).
-    public const int Protocol = 62;
+    /// 63: World/CinemaBooths SetPool (#1298: the server's own films a showing hall draws from).
+    public const int Protocol = 63;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
