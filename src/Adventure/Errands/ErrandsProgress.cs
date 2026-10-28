@@ -27,6 +27,8 @@ public sealed class ErrandsProgress
     /// <summary>Canton flags earned (level 3) and the one worn ("" = Swiss).</summary>
     public List<string> Flags { get; set; } = new();
     public string Flag { get; set; } = "";
+    /// <summary>World events helped, by <see cref="WorldEventKind"/> name (#1339): five of a kind earn its title.</summary>
+    public Dictionary<string, int> Events { get; set; } = new(StringComparer.Ordinal);
 
     public const int DailyCards = 3;
     public const int TogetherTitleAt = 10;

@@ -245,6 +245,9 @@
     <Compile Include="..\..\src\Adventure\Errands\ErrandLines.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\Postkarte.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\PostkarteSource.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\WorldEventRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\WorldEventSims.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\ErrandSteps.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
