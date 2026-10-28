@@ -46,7 +46,7 @@ day by day, a shared score for a party, festival tokens and a closing show.
 |---|---|---|---|
 | 1 Festival framework | 1 | `FestivalDef`, sites, day unlocks, the `festivals` section, Batzen tokens and their conversion, the party board, decorations, the Journal tab, two new schedule tokens | built, protocol 59 |
 | 2 Fireworks and the closing show | 2 | `FireworkShow` (pure, seeded) and `Fireworks` (GPU particles, sound with distance delay); a festival's show is fireworks, a concert or both | fireworks built (the concert half is not), no protocol bump |
-| 3 Steinstossen | 3 | The 83.5 kg Unspunnen stone: lift, run-up, push; server-computed distance; bots throw | built (the Älplerfest registers here), protocol 61 |
+| 3 Steinstossen | 3 | The 83.5 kg Unspunnen stone: lift, run-up, push; server-computed distance; bots throw | built (the Älplerfest registers here), protocol 67 |
 | 4 Alphorn and yodel | 4 | Natural-tone rhythm on the beat, harmony scored across players, an echo off the real valley wall | planned |
 | 5 Fahnenschwingen | 5 | Flag figures on the beat, a high throw and the catch | planned |
 | 6 Schwingen | 6 | Sawdust-ring wrestling on the fist fight's match shell, new grapple rules, a bot side | planned |

@@ -29,7 +29,7 @@ site, the `Games` facet, `FestivalOccasion.Decorate` for the ground. Other games
 - `SteinGround.Of(site)`: the stone lies 12 m to the left of the site's middle, thrown along one of eight compass directions picked by the site's coordinates; pure, so the server and
   every client agree with nothing sent.
 
-## The wire (`SteinService`, protocol 61): `World/Adventure/Festivals/Stein`
+## The wire (`SteinService`, protocol 67): `World/Adventure/Festivals/Stein`
 
 Client to server: `RequestBegin(class)`, `RequestThrow(attempt, stamps, pitch)`. Server to client: `TellBegin(id, seed, class, begun)`, `TellNo(why)`, `TellLanded(...)` (to the thrower
 and every peer within 300 m of the stone). Reliable, 8 requests a second per peer. Server methods carry the rules: `ServeBegin(peer, class)` (festival running and the stone open, an adventuring

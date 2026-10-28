@@ -229,6 +229,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.ProjectionPerfProbe { Name = "ProjectionPerfProbe" });
             return;
         }
+        // a video on a cinema hall's screen (#1298), windowed: shots of the picture, the projector light, the booth
+        if (Interiors.CinemaVideoShot.ParseArgs() is { } videoShot)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.CinemaVideoShot(videoShot[0], videoShot[1]) { Name = "CinemaVideoShot" });
+            return;
+        }
+        // what this machine can share in a cinema hall (#1298 phase 3), tried for real
+        if (Interiors.CinemaCaptureCheck.ParseArgs() is { } captureDir)
+        {
+            AddChild(new Interiors.CinemaCaptureCheck(captureDir) { Name = "CinemaCaptureCheck" });
+            return;
+        }
         // what E's outline draws, interiors planned in hand-made buildings (#1286)
         if (Items.InteractOutlineCheck.Requested)
         {
