@@ -115,7 +115,7 @@ public partial class PinballCabinet : Node3D
         {
             Name = "Title", Text = t.Title.ToUpperInvariant(), FontSize = 64, PixelSize = 0.0011f, Modulate = t.AccentA * 1.3f,
             OutlineModulate = t.Cabinet * 0.5f, OutlineSize = 10, Shaded = false, DoubleSided = false,
-            Position = new Vector3(0, 1.72f, BoxFront + 0.006f),
+            Position = new Vector3(0, 1.72f, BoxFront + 0.045f),
         };
         c.AddChild(title);
         c.ShowScreen(PinballScreen.Idle(t), 0);
@@ -196,7 +196,8 @@ public partial class PinballCabinet : Node3D
             for (int k = 0; k < lamps.Length; k++)
             {
                 var l = Table.Lamps[lamps[k]];
-                float h = l.Kind == LampKind.BumperCap ? 0.047f : 0.0012f;
+                // over the printed art (plates up to 2 mm): an insert is never buried
+                float h = l.Kind == LampKind.BumperCap ? 0.047f : 0.0028f;
                 float yaw = l.Dir == Vector2.Zero ? 0 : Mathf.Atan2(l.Dir.Y, l.Dir.X);
                 var basis = new Basis(Vector3.Up, yaw).Scaled(new Vector3(l.Size, 1, l.Size) * (l.Kind == LampKind.BumperCap ? 0.85f : 1f));
                 mm.SetInstanceTransform(k, new Transform3D(basis, Local(l.At, h)));
@@ -321,7 +322,7 @@ public partial class PinballCabinet : Node3D
                 // a starfield, a planet and a rocket
                 for (int i = 0; i < 40; i++)
                 {
-                    float x = -0.32f + (i * 0.6180339f % 1f) * 0.64f, y = 1.36f + (i * 0.3819f % 1f) * 0.5f;
+                    float x = -0.32f + (i * 0.6180339f % 1f) * 0.64f, y = 1.36f + (i * 0.7548777f % 1f) * 0.5f;
                     Flat(x, y, x + 0.006f, y + 0.006f, PinballMesh.Lit(Colors.White), 0.0006f);
                 }
                 Flat(0.12f, 1.48f, 0.28f, 1.64f, b, 0.001f);
