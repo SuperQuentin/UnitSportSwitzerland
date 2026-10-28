@@ -125,6 +125,11 @@ public sealed class GameSettings
     public bool StirGuide { get; set; } = true;
     /// <summary>Hidden crevasses on glacier cover: a snow bridge may break under an unroped player.</summary>
     public bool Crevasses { get; set; } = true;
+    // ---- alcohol (#1271, docs/notes/adventure/alcohol.md) ----
+    /// <summary>Offline: <c>0</c> off, <c>1</c> mild, <c>2</c> real (the default). A server's <c>--alcohol</c> decides online.</summary>
+    public int AlcoholMode { get; set; } = 2;
+    /// <summary>Comfort: the view sway and edge blur while drunk (the input lag stays); VR never sways.</summary>
+    public bool AlcoholViewEffects { get; set; } = true;
 
     /// <summary>No hover tilts, pops or ambient animation in the menus (#1135): plain fades only.</summary>
     public bool ReduceMotion { get; set; }

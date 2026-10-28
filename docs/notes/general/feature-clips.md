@@ -20,6 +20,10 @@
   LGPL `bin/ffmpeg` does not, so an export writes the GIF only), else libopenh264 at 6 Mb/s (#1105: Krita's ffmpeg,
   `C:/Program Files/Krita (x64)/bin` put on PATH, where no chocolatey one is installed). Drag the MP4 or the GIF into a PR
   description.
+- **`--clip-hq`** (#1306, a showcase film): the frames at the window's size (`--resolution 1920x1080`), x264 CRF 16 slow (or
+  openh264 at 24 Mb/s); with `--fixed-fps 30` the game waits for the encoder instead of dropping a frame, so every frame of
+  the shot queue's glides is in the film, however slowly it renders. Winget's full ffmpeg (`Gyan.FFmpeg`, in
+  `%LOCALAPPDATA%/Microsoft/WinGet/Links`) has libx264 and https; Krita's has neither.
 - **`--clip-realtime`** (#1105): a slow frame fills every 1/30 s slot it took (the picture repeated) instead of one, so a
   heavy scene (a busy junction at 10-27 fps) plays in the time it filmed; without it such a clip played up to 3x fast. E.g.
   two cycles of the signal test region's J14: `SIZE=1280x720 tools/record-clip.sh j14-two-cycles 50 250 --clip-realtime

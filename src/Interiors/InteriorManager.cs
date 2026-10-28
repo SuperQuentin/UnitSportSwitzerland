@@ -242,6 +242,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return door;
     }
 
+    /// <summary>A plan's interior node once it is built here, else null (the shot queue's "l" lines, #1306).</summary>
+    public InteriorNode? BuiltNode(string plan) => _built.TryGetValue(plan, out var node) ? node : null;
+
     /// <summary>A door's link once its interior is built here, else null.</summary>
     public DoorLink? BuiltLink(string door) =>
         _links.TryGetValue(door, out var link) && _built.ContainsKey(link.Plan) ? link : null;
@@ -1470,6 +1473,7 @@ public partial class InteriorNode : Node3D
         AddForklifts(node, origin);
         AddBayCars(node, origin);
         AddStaff(node);   // a venue's clerk and bartender (#1235)
+        AddLaneRigs(node, material);   // a bowling centre's pins, pinsetters and hood balls (#1323)
         AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
         VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
         // an apartment block's elevator doors and flats' front doors (#557)

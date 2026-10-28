@@ -327,6 +327,9 @@ public partial class TogetherService
         foreach (long s in seats)
         {
             SendFeast(s, mask, seconds, FondueRules.FeastHeal);
+            // wine and kirsch in the pot carry alcohol (#1271): 4 g a wine pour, 3 g with kirsch; they just ate, so slowly absorbed
+            double grams = (pot.Wine ? Alcohol.AlcoholRules.FondueWineGrams : 0) + (pot.Kirsch ? Alcohol.AlcoholRules.FondueKirschGrams : 0);
+            if (grams > 0) Alcohol.AlcoholService.Instance?.ServeGrams(s, grams, fed: true, "fondue");
             SendPotTo(s, null);
             CountPot(s, pot);
             PotEnded?.Invoke(s, pot, q);

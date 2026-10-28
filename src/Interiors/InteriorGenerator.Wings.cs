@@ -313,6 +313,10 @@ public static partial class InteriorGenerator
             {
                 Key = l.Key, Kind = l.Kind, Width = w.W, Depth = w.D, StoreyHeight = l.StoreyHeight,
                 EntryX = sub.EntryX, EntryWidth = Math.Min(main.Width, 1.8f), DoorHeight = main.Height,
+                // its door, for the entrance AllEntrances makes of a wing with no other: without it the
+                // door's portal stood at the tile's corner (found by #1290's door gaps)
+                DoorX = main.Position.X, DoorY = main.Position.Y, DoorZ = main.Position.Z,
+                DoorOutX = main.Outward.X, DoorOutZ = main.Outward.Z, DoorWidth = main.Width,
             };
 
             // what the wing is told: the basement, where corridors must run, what is no facade

@@ -80,8 +80,10 @@ public sealed class QuestEngine
     public bool Playable(QuestDef def) => def.Steps.All(s => s.Plan == null || Plans.Contains(s.Plan));
 
     /// <summary>Why <paramref name="def"/> cannot start now, or null when it can.</summary>
-    public string? CanStart(QuestsProgress p, QuestDef def)
+    /// <param name="given">The giver's own path (<c>ErrandService.Accept</c>) starts a <see cref="QuestStart.Given"/> quest; nothing else may (#1267).</param>
+    public string? CanStart(QuestsProgress p, QuestDef def, bool given = false)
     {
+        if (def.Start == QuestStart.Given && !given) return "Ask the giver.";
         if (p.Active.ContainsKey(def.Id)) return "Already running.";
         if (p.Done.ContainsKey(def.Id) && !def.Repeatable) return "Already done.";
         if (def.Requires.FirstOrDefault(r => !p.Done.ContainsKey(r)) is { } missing)
@@ -92,10 +94,10 @@ public sealed class QuestEngine
     }
 
     /// <summary>Starts a quest; null when started, else why not. The first one started is tracked.</summary>
-    public string? Start(QuestsProgress p, string id, long now, int seed = 0)
+    public string? Start(QuestsProgress p, string id, long now, int seed = 0, bool given = false)
     {
         if (Resolve(id) is not { } def) return "No such quest.";
-        if (CanStart(p, def) is { } why) return why;
+        if (CanStart(p, def, given) is { } why) return why;
         p.Active[id] = new QuestState { Started = now, Seed = seed };
         p.Tracked ??= id;
         return null;

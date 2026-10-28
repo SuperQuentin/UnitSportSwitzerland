@@ -133,6 +133,13 @@ public static class OccasionConfig
                 Schedule = { new DateWindow("03-10", "03-14") },
                 Facets = new FacetToggles { Atmosphere = false, Audio = true, Loot = false, Hunt = false, Hats = false },
             });
+        // the Alpine herders' festival (#1269 part 5): 14-24 August; the sky stays the season's, the games and the flags run
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.AelplerfestId, Priority = 8,
+            Schedule = { new DateWindow("08-14", "08-24") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 

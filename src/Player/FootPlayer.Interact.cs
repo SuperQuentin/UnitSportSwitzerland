@@ -48,6 +48,9 @@ public partial class FootPlayer
     {
         if (UnitSport.Vehicles.VehicleReach.Current != null || UnitSport.Combat.FightManager.Client is not { } fights || !UnitSport.Net.NetLink.Online(this)
             || PointedFighter() is not { } rival || NetId(rival.Name) is not { } id) return null;
+        // a breathalyzer in hand (#1271): E offers a test
+        if (Items.ItemController.Instance?.Inventory.HeldId == Items.ItemId.Breathalyzer && Adventure.Alcohol.AlcoholService.Instance != null)
+            return new(Adventure.Alcohol.AlcoholHud.OfferPrompt, Outline.Of(rival.Visual), InBar: true);
         // an aura challenge from them comes first (#914)
         string text = UnitSport.Combat.AuraManager.Client?.ChallengedBy(id) == true ? UnitSport.Combat.AuraManager.Client.Prompt(id)
             : UnitSport.Adventure.Together.TogetherService.LinkPrompt(id, fights.Prompt(id));

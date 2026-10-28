@@ -23,10 +23,10 @@ namespace UnitSport.Adventure;
 public sealed class QuestCatalog : IQuestSource
 {
     /// <summary>The reward kinds another plan registers (<c>AdventureService.RegisterReward</c>).</summary>
-    public static readonly string[] UnlockKinds = { "reveal", "travel", "stamina" };
+    public static readonly string[] UnlockKinds = { "reveal", "travel", "stamina", "rep" };
 
     /// <summary>The plans a step may need (<see cref="Step.Plan"/>).</summary>
-    public static readonly string[] KnownPlans = { "places", "rewards", "navigation", "stamina", "versteckis" };
+    public static readonly string[] KnownPlans = { "places", "rewards", "navigation", "stamina", "versteckis", "errands" };
 
     /// <summary>
     /// The POIs the starter quests name, canonical (<c>&lt;tag&gt;:&lt;slug&gt;.&lt;hash&gt;</c>: the hash comes from the

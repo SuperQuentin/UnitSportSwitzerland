@@ -45,6 +45,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
+            new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
+            new("Bowling: move your spot, then your line; hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
         }),
         ("Items", new Row[]
         {
@@ -61,6 +63,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Journal: quests, birds, fish (tabs: Q / E)", PlayerInput.BirdJournal, Pad: "{quick_menu} (hold) › Journal; LB / RB for the tabs"),
+            new("Talk to an errand giver (a figure at a post office, hut, station or landing): take the day's cards, hand cargo over", PlayerInput.InteractMount),
             new("Character: your figure (on foot)", PlayerInput.CharacterMenu, Pad: "{quick_menu} (hold) › Character, or {menu} › Character"),
         }),
         ("Adventure: navigation and travel (#1226)", new Row[]
@@ -85,6 +88,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Strike when the float dips", PlayerInput.UseItem),
             new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
             new("Wind the line in; cancel a cast", PlayerInput.AimItem),
+        }),
+        ("Flag swinging at the Älplerfest (#1269)", new Row[]
+        {
+            new("Step onto the flag ground and swing the flag", PlayerInput.InteractMount),
+            new("Draw the figure shown (up, down, a sweep, a circle, an eight) before its last beat", Keys: "Mouse", Pad: "Right stick"),
+            new("High throw: hold, let go on a beat; catch on the beat it lands", PlayerInput.UseItem),
         }),
         ("Fist fight (#495)", new Row[]
         {

@@ -617,12 +617,25 @@ public partial class ChatManager : Node
                 Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
                 return;
 
+            // a hall's lights and film by its number (#1306); the films' words below
+            case "cinema" when parts.Length > 1 && int.TryParse(parts[1], out _):
+                if (Interiors.CinemaBooths.Instance is not { } hallBooths) Show("There are no cinemas here.", ChatKind.Error);
+                else Show(hallBooths.Command(parts[1..], admin: true, Interiors.InteriorManager.Instance?.Current?.Key), ChatKind.Private);
+                return;
             // the films a cinema can be showing (#1298): offline the player is the admin
             case "cinema":
                 Show(Interiors.CinemaBooths.Instance?.PoolCommand(1, string.Join(' ', parts[1..]), true, line => Show(line, ChatKind.Private))
                      ?? "No cinemas here.", ChatKind.Private);
                 return;
+            // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the player is in
+            case "bowl":
+                Show(Interiors.BowlingLanes.Instance?.Command(1, rest, Interiors.InteriorManager.Instance?.Current?.Key, "You") ?? "Bowling is not running.", ChatKind.Private);
+                return;
             // playing together (#1266): the rope and the shared pot
+            case "alcohol":
+                Show(Adventure.Alcohol.AlcoholService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "Alcohol needs the Adventure layer.", ChatKind.Private);
+                return;
+
             case "rope" or "fondue":
                 Show(Adventure.Together.TogetherService.Instance?.Command(Adventure.AdventureService.LocalPeer, verb, rest) is { } said
                     ? said.Length > 0 ? said : "Asked." : "Playing together needs the Adventure layer.", ChatKind.Private);
@@ -990,6 +1003,12 @@ public partial class ChatManager : Node
                 if (Versteckis == null) ReplyTo(sender, "Versteckis is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, Versteckis.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
+            // a cinema hall's lights and film by its number (#1306), an admin's (checked inside); the films' words below
+            case "cinema" when parts.Length > 1 && int.TryParse(parts[1], out _):
+                if (Interiors.CinemaBooths.Instance is not { } hallBooths) ReplyTo(sender, "There are no cinemas here.", ChatKind.Error);
+                else ReplyTo(sender, hallBooths.Command(parts[1..], IsAdmin(sender),
+                    Interiors.InteriorManager.Instance is { } im ? im.SpaceOf(sender) is { Length: > 0 } space ? space : im.Current?.Key : null), ChatKind.Private);
+                return;
             case "bot" or "bots":
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
@@ -1000,7 +1019,16 @@ public partial class ChatManager : Node
                 if (Interiors.CinemaBooths.Instance is not { } booths) ReplyTo(sender, "No cinemas on this server.", ChatKind.Error);
                 else ReplyTo(sender, booths.PoolCommand(sender, rest, IsAdmin(sender), line => ReplyTo(sender, line, ChatKind.Private)), ChatKind.Private);
                 return;
+            // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the sender is in
+            case "bowl":
+                if (Interiors.BowlingLanes.Instance is not { } bowling) ReplyTo(sender, "Bowling is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, bowling.Command(sender, rest, Interiors.InteriorManager.Instance?.SpaceOf(sender), NameOf(sender)), ChatKind.Private);
+                return;
             // playing together (#1266): the rope and the shared pot
+            case "alcohol":
+                if (Adventure.Alcohol.AlcoholService.Instance is not { } alcohol) ReplyTo(sender, "Alcohol is not available here.", ChatKind.Error);
+                else ReplyTo(sender, alcohol.Command(sender, rest), ChatKind.Private);
+                return;
             case "rope" or "fondue":
                 if (Adventure.Together.TogetherService.Instance is not { } together) ReplyTo(sender, "Playing together is not available here.", ChatKind.Error);
                 else if (together.Command(sender, verb, rest) is { Length: > 0 } reply) ReplyTo(sender, reply, ChatKind.Private);

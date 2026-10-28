@@ -128,6 +128,9 @@ public partial class FestivalService : Node
         {
             var (e, n) = Start();
             FestivalCatalog.Register(FestivalCatalog.Test(e, n));
+            // the Älplerfest's games are checked at the same field (on a date inside its real dates, --date 2027-08-16)
+            if (FestivalCatalog.Get(FestivalCatalog.AelplerfestId) is { } alp)
+                FestivalCatalog.Register(alp with { Sites = [new FestivalSite("the test field", e, n, 400)] });
         }
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
