@@ -1,6 +1,7 @@
 // The fake room behind a pane (#59), shared by the buildings' window grid and a shop's glazed front (#1292).
 // The includer declares hash(), and the uniforms window_color, window_lit and room_depth; world_night and
-// world_sky come from world.gdshaderinc.
+// world_sky come from world.gdshaderinc. ROOM_SHOP, defined before the include, leaves out a home's curtains
+// and the window's own mullion and transom: a shop's glass is clear and framed by its front.
 
 // --- interior mapping ------------------------------------------------------------------
 // A room behind every window, without any geometry: the view ray enters at the glass and is
@@ -77,6 +78,7 @@ vec3 room_behind(vec3 p, vec3 eye, vec2 tangent, float w, float h, float lu01, f
     // windows and drawn side curtains in the rest, and under a strong reflection of the sky.
     vec3 average = wall * (lit ? window_lit : mix(vec3(0.30), vec3(0.05), world_night));
     c = mix(c, average, 0.45);
+#ifndef ROOM_SHOP
     float drape = hash(cell + 8.8);
     if (drape < 0.5) {
         // a sheer net curtain across the whole pane: a figure behind a lit one still shows
@@ -86,13 +88,16 @@ vec3 room_behind(vec3 p, vec3 eye, vec2 tangent, float w, float h, float lu01, f
         vec3 cloth = drape < 0.67 ? vec3(0.45, 0.14, 0.12) : drape < 0.84 ? vec3(0.22, 0.34, 0.24) : vec3(0.70, 0.62, 0.48);
         c = cloth * (lit ? window_lit * 0.8 : mix(vec3(0.6), vec3(0.08), world_night));
     }
+#endif
     float fres = 0.35 + 0.4 * pow(1.0 - dd, 2.0);
     vec3 glass = mix(window_color, world_sky, 0.55);
     c = mix(c, glass, lit ? fres * 0.35 : fres);
+#ifndef ROOM_SHOP
     // a mullion and a transom
     if (abs(lu01 - 0.5) < 0.012 || abs(lv01 - 0.62) < 0.012) {
         c = vec3(0.86, 0.85, 0.82) * (lit ? 0.7 : 1.0);
     }
+#endif
     return c;
 }
 

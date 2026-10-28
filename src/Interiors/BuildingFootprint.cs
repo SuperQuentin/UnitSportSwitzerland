@@ -77,6 +77,9 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     /// </summary>
     public float Span { get; init; }
 
+    /// <summary>The top of that front's glass over the door's foot (#1292), m: <see cref="VenueFront.Top"/>, under the ground storey's ceiling.</summary>
+    public float FrontTop { get; init; }
+
     /// <summary>
     /// Storeys above its building's ground floor the door opens onto (#827): a site office's upper
     /// container, off its walkway. 0, the ground floor, on every other door. Not part of its key.
@@ -838,6 +841,9 @@ public static class BuildingFootprint
 
         var placed = fp.Doors.ToList();
         int slot = placed.Max(d => d.Slot) + 1;
+        // the glass stops under the ground storey's ceiling; a storey too low for glass over a door has none
+        float glassTop = Math.Min(VenueFront.Top, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.3f);
+        bool glazed = glassTop >= DoorBudget.ServiceHeight + 0.3f;
         var tid = tile.Id;
         Vector2 PointOf(VenueRecord v) => new((float)(v.E - tid.MinE), (float)(tid.MaxN - v.N));
 
@@ -862,8 +868,8 @@ public static class BuildingFootprint
             var spot = new DoorSpot(index, new Vector3(xz.X + c.Normal.X * 0.03f, baseY, xz.Y + c.Normal.Y * 0.03f),
                 new Vector3(c.Normal.X, 0, c.Normal.Y), w, h)
             {
-                Slot = slot, Hang = DoorHang.Inward, Vehicle = false, Unit = true, Span = span >= VenueFront.MinSpan ? span : 0f,
-                Run = c.S1 - c.S0,
+                Slot = slot, Hang = DoorHang.Inward, Vehicle = false, Unit = true, Span = glazed && span >= VenueFront.MinSpan ? span : 0f,
+                FrontTop = glazed ? glassTop : 0f, Run = c.S1 - c.S0,
             };
             if (!DoorOnWall(b, spot) || placed.Any(q => TooClose(q, spot))) return null;
             return spot;
