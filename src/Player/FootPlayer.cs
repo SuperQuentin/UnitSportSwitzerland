@@ -1146,6 +1146,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
     public bool JumpTaken { get; set; }
 
+    /// <summary>The look (mouse and right stick) belongs to something else this frame (the flag swinger's figures, #1269): the camera stays. Owner only.</summary>
+    public bool LookTaken { get; set; }
+
     /// <summary>
     /// A bot (#837): a body the dedicated server runs itself (authority 1), an <see cref="Npc"/> with
     /// no race driver. Set from the spawn data on every peer, before the node enters the tree: clients
@@ -2807,6 +2810,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Adventure.Places.PoiMarkers.TryInteract(this)) return true;
         // an errand giver at hand (#1267): talk to them
         if (Adventure.Errands.ErrandGivers.TryInteract(this)) return true;
+        // the Älplerfest's flag ground (#1269): swing the flag
+        if (Occasions.Festivals.Fahnen.FahnenGame.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
         if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
@@ -3686,7 +3691,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        if (@event is InputEventMouseMotion motion && PlayerInput.IsLookMotion(motion))
+        if (@event is InputEventMouseMotion motion && !LookTaken && PlayerInput.IsLookMotion(motion))
         {
             // Mounted, the body's yaw belongs to the steering — a bicycle goes where it points,
             // and letting the mouse turn it would mean looking over your shoulder steered you
@@ -3730,7 +3735,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Excavator { Digging: true } or WheelLoader { Working: true } or Telehandler { Working: true }) return;
         // and a crane's operator hoists with it (#618)
         if (CraneWorking) return;
-        var look = PlayerInput.LookRate;
+        var look = LookTaken ? Vector2.Zero : PlayerInput.LookRate;
         // R3 held (#1149): the stick's up and down are the zoom, its sides still turn the view
         if (_padZoomHeld)
         {

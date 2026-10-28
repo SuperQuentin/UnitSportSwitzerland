@@ -87,6 +87,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
             new("Wind the line in; cancel a cast", PlayerInput.AimItem),
         }),
+        ("Flag swinging at the Älplerfest (#1269)", new Row[]
+        {
+            new("Step onto the flag ground and swing the flag", PlayerInput.InteractMount),
+            new("Draw the figure shown (up, down, a sweep, a circle, an eight) before its last beat", Keys: "Mouse", Pad: "Right stick"),
+            new("High throw: hold, let go on a beat; catch on the beat it lands", PlayerInput.UseItem),
+        }),
         ("Fist fight (#495)", new Row[]
         {
             new("Challenge a player you look at, or accept their challenge", PlayerInput.InteractMount),

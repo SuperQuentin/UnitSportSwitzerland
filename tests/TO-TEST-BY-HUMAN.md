@@ -185,6 +185,18 @@ Nothing is player-facing yet but the Journal tab and the poles: the check-only f
 - [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
 - [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
 
+## Älplerfest flag swinging, part 5 of the festivals ([#1316](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1316))
+
+The checks drive the stick and the use key from a script; what only a person can judge is the feel of the figures and the screen. Run with the Älplerfest on (a real date 17-24 August, or the operator's `occasions.json`, or `--festival test --date 2027-08-16`).
+- [ ] Mouse: at the flag stage press the interact key → "Getting in line", a drum, the ring closes on each beat; draw the figure with the mouse (up, a circle, an eight, a sideways sweep, down) → it is recognised without big sweeps, the camera does not turn, the flag in your hand follows the figure.
+- [ ] Pad: the same with the right stick (the stick's feel at 30 Hz sampling, the dead zone) and the use button for the throw.
+- [ ] VR headset (pad route): Y at the stage, the right stick draws the figures, the trigger throws; the HUD is readable at the bottom of the view, not in the way. Swinging the flag by hand is not built.
+- [ ] The high throw: hold, let go on the 1st, 2nd or 3rd beat → the flag flies as many beats as it was held plus one; catching on the beat it lands is fair at 96 BPM; a dropped flag ends the routine and the score.
+- [ ] Two people ask within a few seconds of each other → the same routine, "in step x1.3" when both land most figures; one alone gets no bonus.
+- [ ] Cartoon, PS1 and Realistic: the flag's cloth and the stage look right in each (the cloth is its own shader, it ignores the style).
+- [ ] The result panel and the Journal's Festival tab agree on the points and the Batzen; the daily cap of 100 Batzen stops the Batzen but not the points.
+- [ ] Real map: the Älplerfest at Interlaken's Höhematte (a western-region run moves it to the largest town); the stage stands on level ground there.
+
 ## Adventure errands: givers, dialogue, daily Postkarten, canton reputation ([#1311](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1311))
 
 On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`) the eight givers stand within 350 m of the start; on a real map there are wardens at the huts, masters at the stations and the landings only (the OSM stage for post offices, farms and dairies is not built).

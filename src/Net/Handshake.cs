@@ -99,7 +99,8 @@ public partial class Handshake : Node
     /// 65: World/CinemaBooths SetPool (#1298: the server's own films a showing hall draws from).
     /// 66: World/CinemaBooths AskDisplayRpc and SetDisplay (#1298: a hall's projector fit and ratio).
     /// 67: World/Errands (#1267: RequestAccept/Share/Join; Accepted, Shared, TookBack, Told), the <c>errands</c> section, ItemId 430-444.
-    public const int Protocol = 67;
+    /// 68: World/Adventure/Festivals RequestFahneStart, RequestFahneRoutine, TellFahneStart, TellFahneResult (#1269 part 5: Fahnenschwingen).
+    public const int Protocol = 68;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
