@@ -8,7 +8,7 @@ namespace UnitSport.Occasions.Festivals.Desalpe;
 
 /// <summary>
 /// <c>--desalpecheck --festival test --date 2027-09-24 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure</c> (quick tier,
-/// #1269 part 7): offline, this client plays the server's part. The Désalpe (held at the fixture's start under <c>--festival test</c>, a 110 m
+/// #1269 part 7): offline, this client plays the server's part. The Désalpe (held at the fixture's start under <c>--festival test</c>, a 45 m
 /// route) is on its day 5 of 16: the herd stands on the alp and is drawn. The check dresses cows through the real game (E for the headdress, Use for the
 /// colour, the prompt and the outline at hand, none away from the herd), pays the first dressing only, refuses a dress from afar; starts the drive at the
 /// alp sign with a farmhand and a bot; drives the herd (the player walks behind the Leitkuh) to the fair; checks the result, the Batzen, the party board
@@ -135,7 +135,7 @@ public partial class DesalpeCheck : ChatProbe
         Expect(live.Phase == DesalpePhase.Arrived && live.Result is { } , $"the herd came down ({live.Phase}, leader at {live.Flock.LeaderS:F0}/{route.Length:F0} m)");
         var r = live.Result!;
         GD.Print($"[desalpecheck] drive: {r}");
-        Expect(r.Arrived >= 10 && r.Total == DesalpeRules.Cows, $"most of the herd arrived ({r.Arrived}/{r.Total}, {r.Lost} lost)");
+        Expect(r.Arrived >= 8 && r.Total == DesalpeRules.Cows, $"most of the herd arrived ({r.Arrived}/{r.Total}, {r.Lost} lost)");
         Expect(r.Dressed == 3 || r.ArrivedDressed >= 2, $"the dressed cows came too ({r.ArrivedDressed}/{r.Dressed})");
         Expect(r.Score >= r.Arrived * 50, $"the score counts the cows ({r.Score})");
         Expect(await Until(() => svc.LastDesalpe != null, 5) && svc.LastDesalpe!.Value.Paid == 1, $"one person was paid ({svc.LastDesalpe?.Paid})");

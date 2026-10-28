@@ -21,7 +21,7 @@ public static class DesalpeRules
     public const int Cows = 14;
 
     /// <summary>Metres of route: the production drive and the one under <c>--festival test</c> (a check cannot wait a quarter of an hour).</summary>
-    public const double RouteMeters = 700, TestRouteMeters = 110;
+    public const double RouteMeters = 700, TestRouteMeters = 45;
 
     /// <summary>The flight zone of a body on foot and of one mounted, m.</summary>
     public const float ZoneFoot = 5f, ZoneMounted = 9f;

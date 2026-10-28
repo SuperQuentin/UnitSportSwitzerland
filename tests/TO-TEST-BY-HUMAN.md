@@ -239,6 +239,21 @@ The checks drive the stick and the use key from a script; what only a person can
 - [ ] The result panel and the Journal's Festival tab agree on the points and the Batzen; the daily cap of 100 Batzen stops the Batzen but not the points.
 - [ ] Real map: the Älplerfest at Interlaken's Höhematte (a western-region run moves it to the largest town); the stage stands on level ground there.
 
+## Désalpe, the cow drive, part 7 of the festivals ([#1341](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1341))
+
+The checks script the keys and the walk behind the herd; what only a person can judge is how it looks and feels. `--festival test --date 2027-09-24 --world fixture --chunks fixture:flat` puts the Désalpe at the fixture start (a 45 m route); on a real date (20 September to 5 October) at Charmey (a western-region run moves it to the largest town) the route is 700 m.
+
+- [ ] On the alp, walk up to a cow: the prompt says "Dress the cow: wreath" with the outline round it; E (pad Y) turns the shape (wreath, straw hat, fan crown, bare), LMB (pad X) turns the colour. Do the three headdresses read from 5 m in Cartoon, PS1 and Realistic, and do the six colours differ? Does the Leitkuh's big Treichel look right on every cow's neck (dressed and bare)?
+- [ ] Look at the dressed herd from the side, front and a distance of 60 m: headdress on the head when the head is down grazing and up walking; the Treichel swings with the stride. Any flicker (z-fight) on the headdresses or the collar?
+- [ ] At the alp sign: E (pad Y) starts the Alpabzug, the herder's call plays. Walk behind the herd: do the cows stay together, go on when you are behind them and back off when you come at them from the front? Is the 5 m flight zone right on foot and the 9 m mounted (bike, quad, tractor)? Do the cows stop when you leave them?
+- [ ] At a junction a cow or two wander into the field: does the panel say so ("wandered off: go round them from the field side"), and does it take the right feel to bring them back? Are they lost (150 m) too easily?
+- [ ] Alone, farmhands make up the flanks: do they read as help (not as cheating) and is the herd still lost cows to a careless player? With a bot beside you?
+- [ ] Sounds (sound player: Treichel big / middle / small, herder call): the bells ring from the walking cows near you, deeper on the Leitkuh, the call at the start. Level against the field herds' moos and the alp ambience.
+- [ ] At the fair the herd stands in the ring (the round fence, the board of rosettes). On day 4 (`--date 2027-09-24`) walk into the ring: E (pad Y) gives the vote to the herd shown, LMB (pad X) picks the next one; your own herd is refused. Online with a friend: they vote for yours, you see the count.
+- [ ] The result panel, the chat line and the Journal's Festival tab agree on the points and the Batzen; the daily cap of 120 stops the Batzen but not the points.
+- [ ] VR (pad route): Y at a cow, the sign and the ring, the trigger for the colour and the pick; the panel readable at the bottom of the view. Dressing by holding a headdress to the cow's head is not built.
+- [ ] Real map: the Désalpe at Charmey's fair: the alp (700 m up the valley, in the seeded direction) and the fair's ring stand on level ground and the herd does not walk through houses or off a cliff (the route is not the real road yet).
+
 ## Adventure errands: givers, dialogue, daily Postkarten, canton reputation ([#1311](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1311))
 
 On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`) the eight givers stand within 350 m of the start; on a real map there are wardens at the huts, masters at the stations and the landings only (the OSM stage for post offices, farms and dairies is not built).

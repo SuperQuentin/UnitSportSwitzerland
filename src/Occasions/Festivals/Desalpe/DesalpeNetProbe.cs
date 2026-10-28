@@ -8,7 +8,7 @@ namespace UnitSport.Occasions.Festivals.Desalpe;
 
 /// <summary>
 /// <c>--desalpenet a|b</c> with <c>--connect --festival test</c> (driven by <c>tools/desalpenetcheck.sh</c>, #1269 part 7): the Désalpe over a dedicated
-/// server whose calendar reads 24 September 2027 (day 5 of the Désalpe, held at the fixture start, a 110 m route). Everything is asserted on the REMOTE peers.
+/// server whose calendar reads 24 September 2027 (day 5 of the Désalpe, held at the fixture start, a 45 m route). Everything is asserted on the REMOTE peers.
 /// Lea (A) dresses a cow at the alp and drives the herd down; Tom (B) stands 150 m away on the other side of the fair. B sees A's dress arrive over the wire
 /// and the herd walk to the fair (the same place A sees it at), is refused when it tries to dress a cow or start the drive from where it stands, is not paid
 /// for A's drive, and then, standing in the ring, gives its vote to A's herd and is paid. A sees the vote and is refused its own.
@@ -56,6 +56,7 @@ public partial class DesalpeNetProbe : ChatProbe
             var (ce, cn) = herd.CowAt(2)!.Value;
             Teleport(ce + 1.6, cn);
             Expect(await Until(() => game.Dressing && game.NearCow >= 0, 10), "A stands by a cow of the herd");
+            await Seconds(1.0);   // the server learns where the body is from the movement packets: let it
             int cow = game.NearCow;
             DesalpeGame.TryInteract(Me!);
             Expect(await Until(() => herd.DressOf(cow) != 0, 10), $"the server dressed cow {cow} ({DesalpeModels.Describe(herd.DressOf(cow))})");
@@ -66,6 +67,7 @@ public partial class DesalpeNetProbe : ChatProbe
             var (se, sn) = DesalpeGround.Sign(site, route);
             Teleport(se, sn);
             Expect(await Until(() => DesalpeGame.InteractionFor(Me!) is { } p && p.Text.Contains("Start the Alpabzug"), 10), "the prompt at the sign");
+            await Seconds(1.0);
             DesalpeGame.TryInteract(Me!);
             Expect(await Until(() => herd.Phase == DesalpePhase.Driving, 10), "the herd is on its way (over the wire)");
             Say("driving");
@@ -85,11 +87,11 @@ public partial class DesalpeNetProbe : ChatProbe
             Expect(await Until(() => Svc.BoardOf(Id) is { } b && b.Points >= scored[0], 15), $"and its board holds the points ({Svc.BoardOf(Id)?.Points})");
             await Seconds(4);
             var (le, ln) = herd.CowAt(0)!.Value;
-            Say($"leader {le:F1} {ln:F1}");
+            Say(FormattableString.Invariant($"leader {le:F1} {ln:F1}"));
             // the vote: B gives it; A sees it, and its own is refused
             Expect(await Until(() => Svc.DesalpeNow is { Ring.Length: 1 } v && v.Ring[0].Votes == 1, 90), "A sees B's vote in the ring");
             Teleport(site.E + 6, site.N);
-            await Seconds(0.5);
+            await Seconds(1.5);
             refused = null;
             Svc.AskDesalpeVote(1);
             Expect(await Until(() => refused?.Contains("own herd") == true, 10), $"A's own herd is refused ({refused})");
@@ -127,7 +129,7 @@ public partial class DesalpeNetProbe : ChatProbe
             await Seconds(4);
             var (e1, n1) = herd.CowAt(0)!.Value;
             double endDist = Math.Sqrt((e1 - site.E) * (e1 - site.E) + (n1 - site.N) * (n1 - site.N));
-            Expect(startDist > 60 && endDist < 25, $"the Leitkuh walked from {startDist:F0} m to {endDist:F0} m from the fair");
+            Expect(startDist > 30 && endDist < 25, $"the Leitkuh walked from {startDist:F0} m to {endDist:F0} m from the fair");
             string leader = (await HeardStarting("A", "leader ", 30))!;
             var parts = leader.Split(' ');
             double ae = Float(parts[1]), an = Float(parts[2]);
@@ -136,6 +138,7 @@ public partial class DesalpeNetProbe : ChatProbe
             // into the ring: vote for A's herd
             Teleport(site.E - 8, site.N);
             Expect(await Until(() => game.Voting && DesalpeGame.InteractionFor(Me!) is { } p && p.Text.Contains("Vote for Herd 1"), 15), $"the vote prompt in the ring ({DesalpeGame.InteractionFor(Me!)?.Text})");
+            await Seconds(1.0);
             DesalpeGame.TryInteract(Me!);
             Expect(await Until(() => voted == 1, 10), "B's vote counted");
             Expect(await Until(() => Mine.Batzen == DesalpeRules.VoteBatzen && Mine.Points == DesalpeRules.VotePoints, 15), $"and paid, in B's own section ({Mine.Batzen}/{Mine.Points})");
