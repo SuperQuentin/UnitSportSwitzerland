@@ -179,12 +179,13 @@ public static partial class InteriorGenerator
     /// <summary>The ground-floor room a street doorway is cut in, or null.</summary>
     internal static int? EntryRoom(List<RoomPlan> rooms, EntrancePlan e)
     {
+        // on a rectangle's wall or, once the outline fit moved it (#1290), on a shaped room's angled edge
         for (int i = 0; i < rooms.Count; i++)
             foreach (var o in rooms[i].Openings)
             {
-                if (o.Kind != OpeningKind.Entry || o.Edge != null) continue;
-                var (x, z) = WallPoint(rooms[i], o.Side, o.Center);
-                if (Math.Abs(x - e.X) < 0.05f && Math.Abs(z - e.Z) < 0.05f) return i;
+                if (o.Kind != OpeningKind.Entry) continue;
+                var at = rooms[i].WallFrame(o).At;
+                if (Math.Abs(at.X - e.X) < 0.05f && Math.Abs(at.Y - e.Z) < 0.05f) return i;
             }
         return null;
     }

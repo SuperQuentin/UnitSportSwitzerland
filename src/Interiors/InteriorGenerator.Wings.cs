@@ -56,7 +56,15 @@ public static partial class InteriorGenerator
         if (wings is { Count: >= 1 })
         {
             var (t, below, x, width) = (l.Type, l.Below, l.EntryX, l.EntryWidth);
-            if (TryWings(l, fp, kind, above, type, wings)) return true;
+            // a wing plan is kept only if the whole of it validates, upper floors and all: planned whole, even when the
+            // footprint asks only for the shop units (#1292), or it could keep a plan the game would not
+            bool groundOnly = GroundOnly;
+            GroundOnly = false;
+            try
+            {
+                if (TryWings(l, fp, kind, above, type, wings)) return true;
+            }
+            finally { GroundOnly = groundOnly; }
             // what a wing plan that came apart left behind, gone before the box is planned
             (l.Type, l.Below, l.EntryX, l.EntryWidth) = (t, below, x, width);
             l.Floors.Clear();

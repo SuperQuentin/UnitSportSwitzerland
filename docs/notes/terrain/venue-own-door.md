@@ -51,7 +51,14 @@ Plan and the owner's decisions: `docs/plans/venue-own-door.md`. See-through glas
 - `--venuecheck --chunks <dir> --venuedoors <name>`: prints each venue's own door, its front and the room
   it opens into. Trois Verres (Geneva): slot 5 on the school's west wall into its Gaststube.
 - `--shopsurvey --chunks <dir>`: unit widths, venues by building kind, own doors (locked, into the wrong
-  room, rooms narrower than their front), ms a plan.
+  room, rooms narrower than their front), ms a plan, ms a tile's doors and the units' share. Measured
+  (Oct 28, 17 tiles of Geneva and Lausanne): street units 9.8 → 8.0 m median (771 of them); 1,633 own doors
+  (693 a venue's), 4 with no doorway inside, 61 into a room not theirs; 842 glazed, 114 rooms more than
+  1 m narrower than their front (by 2.4 m median). A tile's doors 2.2 s on average on the worker, 0.55 s
+  of it the blocks' units (`StreetUnits` plans up to the ground floor only, `GroundOnly`; a wing plan whole,
+  as it is kept only if all of it validates).
+- **Never locked**: `MoveEntries` (#1290) keeps a unit's own doorway as it keeps the main door's
+  (`UnitDoors`): its room goes back to its rectangle rather than its door reading as locked (603 → 4).
 
 ## Known limits
 

@@ -40,6 +40,9 @@ public static class ShopSurvey
         // #1292: every door of its own, whether it opens into its unit, and how its room's street wall compares with its front
         int ownDoors = 0, ownVenue = 0, ownLocked = 0, ownWrongRoom = 0, glazed = 0, narrower = 0;
         var shortBy = new List<float>();
+        var lockedWhy = new Dictionary<string, int>();
+        var doorsMs = new List<double>();
+        var unitsMs = new List<double>();
         double planMs = 0;
         int plans = 0;
         foreach (var town in Towns)
@@ -55,6 +58,10 @@ public static class ShopSurvey
                     tiles++;
                     var roads = src.LoadRoadsAsync(id).GetAwaiter().GetResult();
                     var map = BuildingTypes.For(tile);
+                    long units0 = BuildingFootprint.StreetUnitsTicks, doors0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                    BuildingFootprint.ComputeDoors(tile, roads, null);
+                    doorsMs.Add((System.Diagnostics.Stopwatch.GetTimestamp() - doors0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                    unitsMs.Add((BuildingFootprint.StreetUnitsTicks - units0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
                     for (int index = 0; index < tile.Buildings.Count; index++)
                     {
                         var b = tile.Buildings[index];
@@ -63,6 +70,7 @@ public static class ShopSurvey
                         if (dining.Count == 0 && b.Kind != BuildingKind.Commercial) continue;
                         if (BuildingFootprint.Compute(tile, index, roads, null) is not { } fp || fp.Door.Width <= 0) continue;
                         InteriorLayout l;
+                        InteriorGenerator.OutlineFailure = null;
                         var watch = System.Diagnostics.Stopwatch.StartNew();
                         try { l = InteriorGenerator.Generate(tile, index, roads, null); }
                         catch (Exception ex) { GD.PrintErr($"[shopsurvey] {id} #{index}: {ex.Message}"); continue; }
@@ -75,7 +83,14 @@ public static class ShopSurvey
                             if (own.Venue > 0) ownVenue++;
                             var e = l.EntranceOf(new DoorKey(fp.Key, own.Slot).ToString());
                             int? ri = e == null ? null : InteriorGenerator.EntryRoom(ground.Rooms, e);
-                            if (ri is not int k) { ownLocked++; continue; }
+                            if (ri is not int k)
+                            {
+                                ownLocked++;
+                                string why = $"{l.Type}{(e == null ? "" : " entrance but no room")}{(InteriorGenerator.OutlineFailure is { } f ? " outline: " + f : "")}";
+                                lockedWhy[why[..Math.Min(60, why.Length)]] = lockedWhy.GetValueOrDefault(why[..Math.Min(60, why.Length)]) + 1;
+                                if (lockedWhy.Values.Sum() <= 12) sb.AppendLine($"  locked: {id} #{index} slot {own.Slot} {(own.Venue > 0 ? "venue" : "shop")} {l.Type}");
+                                continue;
+                            }
                             var room = ground.Rooms[k];
                             bool right = own.Venue > 0 ? InteriorGenerator.DiningRoom(room.Type) : room.Type == RoomType.Shop;
                             if (!right) ownWrongRoom++;
@@ -139,8 +154,10 @@ public static class ShopSurvey
         head.AppendLine($"  street front per shop unit: {Q(perFront.Where(p => p.Shops > 0).Select(p => p.Run / p.Shops).ToList())}");
         head.AppendLine($"  blocks with no shop on the street: {perFront.Count(p => p.Shops == 0)}");
         head.AppendLine($"doors of their own (#1292): {ownDoors} ({ownVenue} a venue's); no doorway inside {ownLocked}; into a room not theirs {ownWrongRoom}");
+        foreach (var (w, n) in lockedWhy.OrderByDescending(x => x.Value).Take(8)) head.AppendLine($"    locked {n,5}: {w}");
         head.AppendLine($"  glazed: {glazed}; the room's street wall more than 1 m narrower than its front: {narrower}, short by {Q(shortBy)}");
         head.AppendLine($"  {(plans > 0 ? planMs / plans : 0):F0} ms a plan over {plans} plans");
+        head.AppendLine($"  a tile's doors: {(doorsMs.Count > 0 ? doorsMs.Average() : 0):F0} ms on average, worst {(doorsMs.Count > 0 ? doorsMs.Max() : 0):F0} ms; of which the blocks' units {(unitsMs.Count > 0 ? unitsMs.Average() : 0):F0} ms, worst {(unitsMs.Count > 0 ? unitsMs.Max() : 0):F0} ms");
         head.AppendLine($"dining venues: {venueRows.Values.Sum(r => r.Venues)} ({multi} buildings hold several)");
         head.AppendLine("  building (kind/plan)          venues  drawn  facade width of the guest room          area");
         foreach (var (k, r) in venueRows.OrderByDescending(v => v.Value.Venues))

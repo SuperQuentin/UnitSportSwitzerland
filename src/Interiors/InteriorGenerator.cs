@@ -181,7 +181,12 @@ public static partial class InteriorGenerator
 
         // every room out to the facade, or cut by it (#1290): after the dining venues carve their rooms
         // (a carved room keeps a rectangle), before the furniture stands in them
-        if (outline != null) FitOutline(layout, outline);
+        if (outline != null)
+        {
+            UnitDoors = fp.Doors.Where(d => d.Unit).Select(d => new DoorKey(fp.Key, d.Slot).ToString()).ToHashSet();
+            try { FitOutline(layout, outline); }
+            finally { UnitDoors = null; }
+        }
         _onCore = onCore;
         FrontWindows(layout, fp);
 
@@ -269,11 +274,12 @@ public static partial class InteriorGenerator
         };
         var rng = new Random(StableHash(fp.Key.ToString()));
         DiningShops = dining;
+        GroundOnly = true;
         try
         {
             if (!TryApartments(layout, fp, b, b.Kind, n, flats, rng)) return [];
         }
-        finally { DiningShops = false; }
+        finally { DiningShops = GroundOnly = false; }
         return layout.GroundFloor.Rooms.Where(r => r.Type == RoomType.Shop).Select(r => new RectPlan(r.X0, r.Z0, r.X1, r.Z1)).ToList();
     }
 

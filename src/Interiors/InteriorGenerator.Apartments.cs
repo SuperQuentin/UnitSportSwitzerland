@@ -71,6 +71,9 @@ public static partial class InteriorGenerator
 
     private enum AptFloor { Flats, Shops, Basement }
 
+    /// <summary>Set while <see cref="StreetUnits"/> plans a block: its floors up to the ground floor only. Per thread.</summary>
+    [ThreadStatic] private static bool GroundOnly;
+
     /// <summary>A way into a region: a stretch of a circulation room's wall it may open a door in.</summary>
     private sealed record Way(int Room, float Lo, float Hi);
 
@@ -291,7 +294,9 @@ public static partial class InteriorGenerator
         l.Floors.Clear();
         l.Lifts.Clear();
         l.InnerDoors.Clear();
-        for (int f = 0; f < floors; f++)
+        // the footprint asking where the shop units fall (#1292) wants the ground floor and what is under it, no flats
+        // above: each floor has its own seed, so the ground floor is the same either way
+        for (int f = 0; f < (GroundOnly ? Math.Min(floors, below + 1) : floors); f++)
         {
             int level = f - below;
             var what = level < 0 ? AptFloor.Basement : level == 0 && (mixed || DiningShops) ? AptFloor.Shops : AptFloor.Flats;
@@ -313,7 +318,7 @@ public static partial class InteriorGenerator
             }
 
         AptEntrances(a, fp);
-        for (int f = below; f < floors; f++) AddWindows(l, l.Floors[f], f - below);
+        for (int f = below; f < l.Floors.Count; f++) AddWindows(l, l.Floors[f], f - below);
         return true;
     }
 

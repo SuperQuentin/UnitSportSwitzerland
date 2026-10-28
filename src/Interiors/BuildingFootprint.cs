@@ -811,6 +811,9 @@ public static class BuildingFootprint
         return own.Count == 0 ? built : built with { Extra = extras.Concat(own).ToList() };
     }
 
+    /// <summary>Time spent asking the apartment planner for a block's units (#1292), Stopwatch ticks, for <c>--shopsurvey</c>.</summary>
+    internal static long StreetUnitsTicks;
+
     /// <summary>A unit's own street door (#1292): a shop door, man-sized.</summary>
     public const float UnitDoorWidth = 1.2f;
 
@@ -884,7 +887,10 @@ public static class BuildingFootprint
         if (shops)
         {
             var mainOut = new Vector2(fp.Door.Outward.X, fp.Door.Outward.Z);
-            foreach (var u in InteriorGenerator.StreetUnits(fp, b, flats, dining.Count > 0))
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            var units = InteriorGenerator.StreetUnits(fp, b, flats, dining.Count > 0);
+            Interlocked.Add(ref StreetUnitsTicks, System.Diagnostics.Stopwatch.GetTimestamp() - t0);
+            foreach (var u in units)
             {
                 // its street wall: a side with no roof outside it and a wall run along it, the main door's way first, then the longest
                 var options = new List<(Cand C, float S, float Lo, float Hi, float Rank)>();
