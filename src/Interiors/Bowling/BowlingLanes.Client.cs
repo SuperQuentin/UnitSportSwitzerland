@@ -212,6 +212,8 @@ public partial class BowlingLanes
                             if (ball.Layers != layers) ball.Layers = layers;
                             // the ball in the palm: a hand's length past the wrist, below it
                             ball.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.11f, -0.06f));
+                            // a VR hand gripping it for a throw: in the controller itself
+                            if (b.Peer == MyId && XrBowling.HeldAt is { } inGrip) ball.GlobalTransform = inGrip;
                         }
         foreach (var (peer, ball) in _held)
             if (!_holding.Contains(peer) && IsInstanceValid(ball) && ball.Visible) ball.Visible = false;

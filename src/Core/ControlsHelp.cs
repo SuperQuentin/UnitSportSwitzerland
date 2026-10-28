@@ -45,6 +45,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
+            new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
+            new("Bowling: move your spot, then your line; hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
         }),
         ("Items", new Row[]
         {
