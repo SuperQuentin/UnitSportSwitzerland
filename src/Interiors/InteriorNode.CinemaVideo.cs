@@ -26,7 +26,7 @@ public partial class InteriorNode
     private static readonly HashSet<GodotObject> VideoOwned = new();
 
     private int _videoHall = -1;
-    private Image? _videoSquareImage, _videoEyeImage;
+    private Image? _videoSquareImage, _videoEyeImage, _videoSmall;
     private ImageTexture? _videoTexture, _videoSquare, _videoSquareB, _videoEye;
     private StandardMaterial3D? _videoGlow, _videoPlain;
     private ShaderMaterial? _videoScreen, _videoPort;
@@ -86,7 +86,8 @@ public partial class InteriorNode
         if (s == null) return;
         bool stereo = stream is { Stereo: not CinemaVideo.Stereo.Mono };
         if (_videoHall != hall || stereo != _videoIs3d) { StopVideo(); StartVideo(s, stereo); }
-        bool pastedOnly = stereo || display != 0;
+        // a sharper picture than the light's (#1319) and the headset's layer, which shows through the screen's mesh, too
+        bool pastedOnly = stereo || display != 0 || picture.GetHeight() > CinemaVideo.Height || LayerWanted(stereo);
         if (pastedOnly != _videoPastedOnly) { _videoPastedOnly = pastedOnly; RefreshScreens(); }
         // a texture is the size it was made: a new one when the picture's size changes (2D to 3D, the relay's to one's own)
         if (_videoTexture == null || _videoTexture.GetWidth() != picture.GetWidth() || _videoTexture.GetHeight() != picture.GetHeight())
@@ -126,7 +127,8 @@ public partial class InteriorNode
         float cw = stream?.ContentWidth ?? 1f, ch = stream?.ContentHeight ?? 1f;
         var (fit, ratio) = CinemaVideo.UnpackDisplay(display);
         float pictureRatio = cw / Math.Max(0.05f, ch) * CinemaVideo.ScreenRatio;
-        if (_screenSet != (display, cw, ch))
+        bool displayChanged = _screenSet != (display, cw, ch);
+        if (displayChanged)
         {
             _screenSet = (display, cw, ch);
             // the screen, the picture in the port and the beam all show the same framing
@@ -134,8 +136,18 @@ public partial class InteriorNode
             SetDisplay(_videoPort!, display, cw, ch);
             if (s.Marched != null) SetDisplay(s.Marched, display, cw, ch);
         }
+        FeedLayer(s, stereo, new Vector2I(picture.GetWidth(), picture.GetHeight()), displayChanged, display, cw, ch);
         if (s.Projector is { Visible: true } spot)
         {
+            // the light carries the Low size (#1319): its picture lights the room and whoever stands in the beam, the
+            // sharper one is the pasted screen's
+            if (one.GetWidth() > CinemaVideo.Width)
+            {
+                _videoSmall ??= Image.CreateEmpty(CinemaVideo.Width, CinemaVideo.Height, false, Image.Format.Rgba8);
+                _videoSmall.CopyFrom(one);
+                _videoSmall.Resize(CinemaVideo.Width, one.GetHeight() * CinemaVideo.Width / one.GetWidth(), Image.Interpolation.Nearest);
+                one = _videoSmall;
+            }
             int w = one.GetWidth(), h = one.GetHeight();
             if (_videoSquareImage == null || _videoSquareImage.GetWidth() != w)
             {
@@ -204,6 +216,7 @@ public partial class InteriorNode
         if (_videoTexture == null) return;
         Texture2D one = _videoIs3d && _videoEye != null ? _videoEye : _videoTexture;
         _videoScreen?.SetShaderParameter(GPicture, _videoTexture);
+        _layerPicture?.SetShaderParameter(GPicture, _videoTexture);
         _videoPort!.SetShaderParameter(GPicture, one);
         s.Marched?.SetShaderParameter(GPicture, one);
     }
@@ -228,6 +241,7 @@ public partial class InteriorNode
     private void StopVideo()
     {
         if (_videoHall < 0) return;
+        DropLayer();
         var s = ScreenOf(_videoHall);
         // the slides fill the screen: the curtains drawn back
         FrameCurtains(_videoHall, 1f);

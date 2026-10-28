@@ -68,6 +68,7 @@ public partial class SettingsScreen : Screen
             UiKit.OptionRow(rows, "Concert screens", new[] { "Low (256x144)", "Medium (512x288)", "High (1024x576)" },
                 Math.Max(0, Array.IndexOf(imag, s.ConcertScreenWidth)), i => GameSettings.Current.ConcertScreenWidth = imag[i],
                 "The stadium screens' camera feed; higher is sharper and a little slower");
+            CinemaRow(rows, "Cinema video", s.CinemaVideo, q => GameSettings.Current.CinemaVideo = q);
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
@@ -542,6 +543,9 @@ public partial class SettingsScreen : Screen
         UiKit.OptionRow(rows, "VR terrain detail", new[] { "Very low", "Low", "Medium", "High" },
             Math.Max(0, Array.IndexOf(vrDetails, GameSettings.Current.VrDetail)), i => GameSettings.Current.VrDetail = vrDetails[i],
             "The headset's own Detail. Low draws a third of Medium's triangles, Very low a quarter of Low's");
+        CinemaRow(rows, "VR cinema video", GameSettings.Current.VrCinemaVideo, q => GameSettings.Current.VrCinemaVideo = q);
+        UiKit.ToggleRow(rows, "VR sharp cinema screen", GameSettings.Current.VrCinemaLayer, on => GameSettings.Current.VrCinemaLayer = on,
+            "The film on a layer of its own, drawn at the headset's full resolution (2D films)");
         // comfort (#439, docs/notes/xr/rig.md)
         int[] snaps = { 0, 15, 30, 45 };
         UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },
@@ -660,6 +664,11 @@ public partial class SettingsScreen : Screen
     /// The main view's anti-aliasing (#768), greyed out while the style is PS1, which turns it off
     /// as it keeps its own low resolution (<see cref="DisplaySettings"/>); it follows a live style switch.
     /// </summary>
+    /// <summary>A cinema video quality row (#1319): 480p, 720p, 1080p sources; a playing hall's decoder restarts on a change.</summary>
+    private static void CinemaRow(Container into, string name, Interiors.CinemaVideo.Quality current, Action<Interiors.CinemaVideo.Quality> set) =>
+        UiKit.OptionRow(into, name, new[] { "Low (480p)", "Medium (720p)", "High (1080p)" }, (int)current,
+            i => set((Interiors.CinemaVideo.Quality)i), "A cinema's film decoded on this computer; higher is sharper and costs more CPU");
+
     private static void AntiAliasingRow(Container into, AntiAliasing current)
     {
         var option = UiKit.OptionRow(into, "Anti-aliasing", new[] { "Off", "FXAA", "MSAA 2x", "MSAA 4x", "MSAA 8x" },

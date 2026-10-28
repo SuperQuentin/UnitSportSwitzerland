@@ -172,6 +172,13 @@ public sealed class GameSettings
     /// </summary>
     public int ConcertScreenWidth { get; set; } = 512;
 
+    /// <summary>
+    /// How sharp a cinema hall's video is decoded on this machine (#1319, <see cref="Interiors.CinemaVideo.DecodeSize"/>):
+    /// 480p, 720p or 1080p sources. Only what this machine decodes itself; through the server it stays the relay's.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Interiors.CinemaVideo.Quality CinemaVideo { get; set; } = Interiors.CinemaVideo.Quality.Medium;
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
 
@@ -483,6 +490,14 @@ public sealed class GameSettings
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public DetailPreset VrDetail { get; set; } = DetailPreset.Low;
+    /// <summary>The cinema's video in the headset (#1319): the screen fills much more of the view there.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Interiors.CinemaVideo.Quality VrCinemaVideo { get; set; } = Interiors.CinemaVideo.Quality.High;
+    /// <summary>
+    /// The playing hall's screen as a compositor layer of its own in the headset (#1319, <c>InteriorNode.CinemaLayer</c>):
+    /// sampled at the headset's resolution, never resampled into the eye picture first.
+    /// </summary>
+    public bool VrCinemaLayer { get; set; } = true;
 
     // --- VR comfort (#439) ---
     /// <summary>The right stick's turn on foot: a snap of 15, 30 or 45 degrees, or 0 for a smooth turn.</summary>
