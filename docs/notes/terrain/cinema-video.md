@@ -89,7 +89,10 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   now at full bandwidth (`full`; a concert screen keeps the preview) and with NDI's audio (`recv_capture_v2`'s audio frame,
   planar floats, interleaved, freed with `recv_free_audio_v2`): the newest frame letterboxed and made a JPEG at the
   share's quality on a worker, the sound to the relay's mono, sent like any share. No PC sound on top (it would double).
-  **Not yet run against a runtime** (none on the dev PC, Oct 28; the owner chose to test later).
+  Tested Oct 28 against OBS's NDI output (NDI 6 Tools, `C:\Program Files\NDI\NDI 6 Tools\Runtime`): the source is
+  listed as `NDI: <MACHINE> (OBS PGM)`, `--capturecheck` receives 24 frames in 3 s at Sharp and its sound (13 of 15
+  chunks not silent), and `--cinemavideoshot live:ndi,<prefix>` shows it on a hall through the server 83-133 ms off the
+  clock. NDI Tools also installs "NDI Webcam" virtual cameras and mics: they show in the lists as ordinary cameras.
 - **3D** (phase 6, the owner's: anaglyph on flat displays, each eye its own picture in VR): a hall's video carries a
   `CinemaVideo.Stereo` (2D, side by side, top and bottom; protocol 62: `AskVideoRpc`, `AskLiveRpc`, `SetVideo`), picked in
   the panel and guessed from a link's or a file's name (`Guess`: SBS, HSBS, LR, 3D; TB, OU, HOU, ABL as Blender's 3D Big
