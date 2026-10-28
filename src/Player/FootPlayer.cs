@@ -2306,7 +2306,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Another camera shows this owner's body (the bowling camera behind the bowler, #1336): drawn as everyone sees it,
     /// whole and with what it holds, even when the player plays in first person.
     /// </summary>
-    public bool SeenFromOutside { get; set; }
+    public bool SeenFromOutside
+    {
+        get => _seenFromOutside;
+        set
+        {
+            _seenFromOutside = value;
+            // seen through, so the lane ahead shows past it (#1336): every other pixel or so left out
+            _walker?.SetInstanceShaderParameter(SeeThrough, value ? SeeThroughShare : 0f);
+        }
+    }
+
+    private bool _seenFromOutside;
+    private static readonly StringName SeeThrough = "see_through";
+    /// <summary>The share of the body's pixels left out while another camera looks over it.</summary>
+    private const float SeeThroughShare = 0.6f;
 
     private void ApplyFootPose()
     {
