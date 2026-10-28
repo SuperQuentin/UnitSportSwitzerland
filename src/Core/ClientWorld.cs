@@ -266,6 +266,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.CinemaProbe { Name = "CinemaProbe" });
             return;
         }
+        // balls rolled into the pins, each deck in its own physics space (#1323)
+        if (Interiors.BowlingRollProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.BowlingRollProbe { Name = "BowlingRollProbe" });
+            return;
+        }
         // bowling centres planned in hand-made buildings (#1235)
         if (Interiors.BowlingProbe.ParseArgs())
         {
@@ -546,6 +553,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))

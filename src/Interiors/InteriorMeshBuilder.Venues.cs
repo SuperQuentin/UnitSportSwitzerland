@@ -337,10 +337,10 @@ public static partial class InteriorMeshBuilder
         B(-0.38f, 0, hz, 0.38f, 0.62f, hz + 0.72f, C(0.14f, 0.14f, 0.18f), true);
         B(-0.32f, 0.61f, hz + 0.05f, 0.32f, 0.76f, hz + 0.67f, hood, false);
         // the rack the balls wait on (the balls are the lane rig's, LaneRig): two chrome rails, rows of three
-        B(-0.36f, 0, hz + 0.72f, 0.36f, 0.5f, hz + 1.2f, C(0.14f, 0.14f, 0.18f), true);
-        foreach (float rx in new[] { -0.34f, 0.34f })
-            B(rx - 0.015f, 0.5f, hz + 0.72f, rx + 0.015f, 0.6f, hz + 1.2f, Chrome, false);
-        B(-0.33f, 0.5f, hz + 0.72f, 0.33f, 0.53f, hz + 1.2f, C(0.08f, 0.08f, 0.10f), false);
+        // the rack's box behind the hood (its top the dark tray), the rails set into it, ends inset: no shared face
+        B(-0.36f, 0, hz + 0.73f, 0.36f, 0.5f, hz + 1.2f, C(0.08f, 0.08f, 0.10f), true);
+        foreach (float rx in new[] { -0.3f, 0.3f })
+            B(rx - 0.015f, 0.45f, hz + 0.75f, rx + 0.015f, 0.6f, hz + 1.18f, Chrome, false);
 
         // the score screens over the approach, facing back at the settees, on poles to the ceiling
         float sy = Math.Min(2.5f, H - 0.7f), sz = z0 + spec.Approach * 0.4f;

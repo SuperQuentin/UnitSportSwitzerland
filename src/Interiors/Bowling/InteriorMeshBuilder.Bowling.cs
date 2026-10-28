@@ -100,7 +100,8 @@ public static partial class InteriorMeshBuilder
             for (int i = 0; i <= k; i++)
             {
                 float x = (i - k / 2f) * LaneGeometry.PinSpacing * scale, z = k * LaneGeometry.PinRow * scale;
-                B(x - 0.045f, 0, z - 0.045f, x + 0.045f, 0.025f, z + 0.045f, C(0.12f, 0.12f, 0.13f));
+                // up into the plate, its top a centimetre past the plate's underside: no face shared with it
+                B(x - 0.045f, 0, z - 0.045f, x + 0.045f, 0.035f, z + 0.045f, C(0.12f, 0.12f, 0.13f));
             }
         return Data(s);
     }
@@ -118,7 +119,7 @@ public static partial class InteriorMeshBuilder
         }
         // the arms it hangs from, up into the machine
         foreach (float x in new[] { -half + 0.03f, half - 0.03f })
-            s.Box(new Vector3(x - 0.02f, 0.24f, -0.02f), new Vector3(x + 0.02f, 1.2f, 0.0f), C(0.3f, 0.3f, 0.32f), false);
+            s.Box(new Vector3(x - 0.02f, 0.2f, -0.02f), new Vector3(x + 0.02f, 1.2f, -0.005f), C(0.3f, 0.3f, 0.32f), false);
         return Data(s);
     }
 

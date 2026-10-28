@@ -191,12 +191,94 @@ public partial class LaneRig : Node3D
             mm.SetInstanceTransform(lane * 10 + i, l.State[i] == PinState.Gone ? Hidden : l.Pins[i]);
     }
 
+    // ---- a roll shown: the ball on the lane, then the deck's frames ----------------------------------
+
+    private readonly MeshInstance3D?[] _rolling = new MeshInstance3D?[2];
+    private readonly int[] _rollingColor = { -1, -1 };
+
+    private MeshInstance3D RollingBall(int lane, int color)
+    {
+        var ball = _rolling[lane];
+        if (ball == null)
+        {
+            ball = _rolling[lane] = new MeshInstance3D { Name = $"Rolling{lane}", MaterialOverride = _material };
+            AddChild(ball);
+        }
+        if (_rollingColor[lane] != color)
+        {
+            _rollingColor[lane] = color;
+            ball.Mesh = BallMesh(color);
+        }
+        ball.Visible = true;
+        return ball;
+    }
+
+    public void HideBall(int lane)
+    {
+        if (_rolling[lane] is { Visible: true } ball) ball.Visible = false;
+    }
+
+    /// <summary>
+    /// Lane <paramref name="lane"/>'s ball on its run, at <paramref name="pos"/> in the run's frame
+    /// (<see cref="BowlingBall"/>: from the foul line, y up from the lane), stepping up onto the deck's
+    /// height over its last metre.
+    /// </summary>
+    public void ShowBall(int lane, Vector3 pos, Quaternion turn, int color, bool onDeck)
+    {
+        var g = Geometry;
+        float deck = g.HeadPin - g.Foul - BowlingBall.HandOver;
+        float up = onDeck ? 1 : Mathf.SmoothStep(deck - 1f, deck, pos.Z);
+        var at = new Vector3(g.LaneX(lane) + pos.X, LaneGeometry.LaneTop + up * (LaneGeometry.DeckTop - LaneGeometry.LaneTop) + pos.Y, g.Foul + pos.Z);
+        RollingBall(lane, color).Transform = new Transform3D(new Basis(turn), at);
+    }
+
+    /// <summary>
+    /// Lane <paramref name="lane"/>'s deck between two of the server's frames (the ball, then the ten
+    /// pins, in the deck's frame), <paramref name="w"/> of the way from <paramref name="a"/> to <paramref name="b"/>.
+    /// </summary>
+    public void ShowDeck(int lane, Transform3D[] a, Transform3D[] b, float w, int color)
+    {
+        var g = Geometry;
+        var origin = new Vector3(g.LaneX(lane), LaneGeometry.DeckTop, g.Foul);
+        Transform3D Lerp(int i) => w <= 0 ? a[i] : a[i].InterpolateWith(b[i], w);
+        var ball = Lerp(0);
+        if (ball.Origin.Y < -1f) HideBall(lane);
+        else RollingBall(lane, color).Transform = ball with { Origin = ball.Origin + origin };
+        var l = _lanes[lane];
+        for (int i = 0; i < 10; i++)
+        {
+            var t = Lerp(i + 1);
+            if (t.Origin.Y < -0.35f) { l.State[i] = PinState.Gone; continue; }
+            l.Pins[i] = t with { Origin = t.Origin + origin };
+            l.State[i] = t.Basis.Y.Normalized().Y > 0.94f ? PinState.Standing : PinState.Down;
+        }
+        Push(lane);
+    }
+
+    /// <summary>Lane <paramref name="lane"/>'s pins at rest as <paramref name="standing"/> says: those on their spots, the rest gone.</summary>
+    public void SetStanding(int lane, ushort standing)
+    {
+        var l = _lanes[lane];
+        for (int i = 0; i < 10; i++)
+        {
+            bool up = (standing & (1 << i)) != 0;
+            l.Pins[i] = new Transform3D(Basis.Identity, Geometry.PinSpot(lane, i));
+            l.State[i] = up ? PinState.Standing : PinState.Gone;
+        }
+        Push(lane);
+    }
+
+    private readonly List<int> _hoodShown = new();
+
     /// <summary>
     /// The balls waiting on the hood's rack: one per entry (a house ball's colour), in slot order.
     /// Rebuilt only when the set changes.
     /// </summary>
     public void SetHoodBalls(IReadOnlyList<int> colors)
     {
+        if (_hoodShown.SequenceEqual(colors)) return;
+        _hoodShown.Clear();
+        _hoodShown.AddRange(colors);
         while (_balls.Count < colors.Count)
         {
             var b = new MeshInstance3D { Name = $"Ball{_balls.Count}", MaterialOverride = _material };
