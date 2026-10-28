@@ -83,6 +83,45 @@ public sealed class ConcertNdi : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int RecvCapture(IntPtr r, ref VideoFrame v, IntPtr audio, IntPtr meta, uint ms);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void RecvFree(IntPtr r, ref VideoFrame v);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void RecvDestroy(IntPtr r);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void RecvFreeAudio(IntPtr r, IntPtr audio);
+
+    /// <summary>
+    /// NDIlib_audio_frame_v2_t (x64): rate, channels, samples, timecode, planar float data, the stride between channels,
+    /// metadata, timestamp. Read from the buffer <c>recv_capture_v2</c> fills (#1298: a cinema's NDI share carries its sound).
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AudioFrame
+    {
+        public int SampleRate, Channels, Samples;
+        public long Timecode;
+        public IntPtr Data;
+        public int ChannelStride;
+        public IntPtr Metadata;
+        public long Timestamp;
+    }
+
+    /// <summary>
+    /// Off the main thread (#1298): the NDI sources on the network after <paramref name="waitMs"/> ms of looking, or null with
+    /// <paramref name="why"/> (no runtime). The concert's own program, sent by <c>/concert ndi on</c>, is one ("PGM").
+    /// </summary>
+    public static List<string>? Sources(int waitMs, out string? why)
+    {
+        why = Load();
+        if (why != null) return null;
+        var fc = new FindCreate { ShowLocal = true };
+        var finder = Fn<FindCreateFn>("NDIlib_find_create_v2")(ref fc);
+        if (finder == IntPtr.Zero) { why = "NDI: no finder"; return null; }
+        try
+        {
+            Fn<FindWait>("NDIlib_find_wait_for_sources")(finder, (uint)waitMs);
+            var list = Fn<FindSources>("NDIlib_find_get_current_sources")(finder, out uint count);
+            var names = new List<string>();
+            for (int i = 0; i < count; i++)
+                names.Add(Marshal.PtrToStringUTF8(Marshal.PtrToStructure<Source>(list + i * Marshal.SizeOf<Source>()).Name) ?? "");
+            return names;
+        }
+        finally { Fn<FindDestroy>("NDIlib_find_destroy")(finder); }
+    }
 
     private static T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(_lib, name));
 
@@ -191,19 +230,27 @@ public sealed class ConcertNdi : IDisposable
         private byte[]? _back, _ready;
         private int _w, _h;
         private bool _fresh;
+        private readonly bool _full;
+        private readonly Action<float[], int, int>? _sound;
 
-        private Receiver(string source)
+        private Receiver(string source, bool full, Action<float[], int, int>? sound)
         {
             Source = source;
+            _full = full;
+            _sound = sound;
             _worker = new Thread(Run) { IsBackground = true, Name = "NDI receive" };
             _worker.Start();
         }
 
-        /// <summary>A receiver looking for <paramref name="source"/>, or null with the reason (no runtime). Main thread.</summary>
-        public static Receiver? Start(string source, out string? why)
+        /// <summary>
+        /// A receiver looking for <paramref name="source"/>, or null with the reason (no runtime). Main thread. A screen takes
+        /// NDI's preview stream; <paramref name="full"/> the full one (a cinema's share, #1298), and <paramref name="sound"/>
+        /// gets its audio on the worker: interleaved samples, channels, rate.
+        /// </summary>
+        public static Receiver? Start(string source, out string? why, bool full = false, Action<float[], int, int>? sound = null)
         {
             why = Load();
-            return why == null ? new Receiver(source) : null;
+            return why == null ? new Receiver(source, full, sound) : null;
         }
 
         /// <summary>Main thread: the newest frame (RGBA) in place of <paramref name="buffer"/> when one came since the last take.</summary>
@@ -242,19 +289,44 @@ public sealed class ConcertNdi : IDisposable
                     {
                         var src = Marshal.PtrToStructure<Source>(list + i * Marshal.SizeOf<Source>());
                         if (!(Marshal.PtrToStringUTF8(src.Name) ?? "").Contains(Source, StringComparison.OrdinalIgnoreCase)) continue;
-                        var rc = new RecvCreate { SourceToConnect = src, ColorFormat = 2, Bandwidth = 0, AllowFields = false };
+                        // 100: the full stream; 0: the preview, plenty for an LED wall of the game's pixels
+                        var rc = new RecvCreate { SourceToConnect = src, ColorFormat = 2, Bandwidth = _full ? 100 : 0, AllowFields = false };
                         recv = Fn<RecvCreateFn>("NDIlib_recv_create_v3")(ref rc);
                         Status = recv != IntPtr.Zero ? $"connected to {Marshal.PtrToStringUTF8(src.Name)}" : "could not connect";
                     }
                 }
             }
             finally { findDestroy(finder); }
+            IntPtr audio = _sound != null ? Marshal.AllocHGlobal(Marshal.SizeOf<AudioFrame>()) : IntPtr.Zero;
+            var freeAudio = _sound != null ? Fn<RecvFreeAudio>("NDIlib_recv_free_audio_v2") : null;
             try
             {
                 while (!_stop && recv != IntPtr.Zero)
                 {
                     var v = new VideoFrame();
-                    if (capture(recv, ref v, IntPtr.Zero, IntPtr.Zero, 200) != 1) continue;   // 1 = a video frame
+                    int type = capture(recv, ref v, audio, IntPtr.Zero, 200);
+                    if (type == 2 && _sound != null)
+                    {
+                        // 2 = an audio frame: planar floats, one channel after the other, interleaved for the caller
+                        var a = Marshal.PtrToStructure<AudioFrame>(audio);
+                        try
+                        {
+                            if (a.Samples > 0 && a.Channels > 0 && a.Channels <= 16 && a.Data != IntPtr.Zero)
+                            {
+                                var plane = new float[a.Samples];
+                                var mixed = new float[a.Samples * a.Channels];
+                                for (int c = 0; c < a.Channels; c++)
+                                {
+                                    Marshal.Copy(a.Data + c * a.ChannelStride, plane, 0, a.Samples);
+                                    for (int i = 0; i < a.Samples; i++) mixed[i * a.Channels + c] = plane[i];
+                                }
+                                _sound(mixed, a.Channels, a.SampleRate);
+                            }
+                        }
+                        finally { freeAudio!(recv, audio); }
+                        continue;
+                    }
+                    if (type != 1) continue;   // 1 = a video frame
                     try
                     {
                         int w = v.XRes, h = v.YRes, row = w * 4;
@@ -272,7 +344,11 @@ public sealed class ConcertNdi : IDisposable
                     finally { free(recv, ref v); }
                 }
             }
-            finally { if (recv != IntPtr.Zero) Fn<RecvDestroy>("NDIlib_recv_destroy")(recv); }
+            finally
+            {
+                if (recv != IntPtr.Zero) Fn<RecvDestroy>("NDIlib_recv_destroy")(recv);
+                if (audio != IntPtr.Zero) Marshal.FreeHGlobal(audio);
+            }
         }
 
         public void Dispose()

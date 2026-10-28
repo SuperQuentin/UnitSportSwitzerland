@@ -24,9 +24,16 @@ namespace UnitSport.Interiors;
 /// Every process is killed by its own <see cref="Process"/> on <see cref="Dispose"/>, never by name.
 /// </para>
 /// </summary>
-public sealed class CinemaVideoStream : IDisposable
+public sealed class CinemaVideoStream : ICinemaFeed
 {
-    public const int FrameBytes = CinemaVideo.Width * CinemaVideo.Height * 4;
+    /// <summary>A frame's size: the screen's, twice as wide for a 3D film (both eyes side by side).</summary>
+    private readonly int _width, _height, _frameBytes;
+    public CinemaVideo.Stereo Stereo { get; }
+
+    // measured every fifth frame (ReadVideo)
+    private readonly CinemaVideo.Shape _shape = new(CinemaVideo.Fps / 5);
+    public float ContentWidth => _shape.Width;
+    public float ContentHeight => _shape.Height;
 
     /// <summary>Frames decoded ahead at most (12 MB); the sound ahead at most, s, of a ring twice that.</summary>
     private const int Ring = 10;
@@ -50,8 +57,11 @@ public sealed class CinemaVideoStream : IDisposable
     /// <summary>Past its end: the hall goes back to its slides.</summary>
     public bool Ended { get; private set; }
 
-    /// <summary>The frame shown now (RGBA, <see cref="FrameBytes"/>), null before the first; its mean colour; its index.</summary>
+    /// <summary>The frame shown now (RGBA), null before the first; its mean colour; its index.</summary>
     public byte[]? Current { get; private set; }
+
+    /// <summary>The frame shown now as an image (one, refilled on change): what the screen uploads.</summary>
+    public Image? Picture { get; private set; }
     public Color Tint { get; private set; } = Colors.White;
     public long CurrentIndex { get; private set; } = -1;
 
@@ -80,14 +90,22 @@ public sealed class CinemaVideoStream : IDisposable
     private long _lastIndex = -1;
     private volatile bool _videoDone;
 
-    public CinemaVideoStream(string link, double t0)
+    public CinemaVideoStream(string link, double t0, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
         Link = link;
         T0 = t0;
+        Stereo = stereo;
+        (_width, _height) = CinemaVideo.PackedSize(stereo, CinemaVideo.Width, CinemaVideo.Height);
+        _frameBytes = _width * _height * 4;
     }
 
-    /// <summary>Whether this machine can decode at all: a desktop that may start processes.</summary>
-    public static bool CanDecode => Platform.CanSpawnProcesses;
+    /// <summary>
+    /// Whether this machine can decode at all: a desktop that may start processes. <c>--cinemanodecode</c> plays one
+    /// that cannot (a phone's way: the server's relay), for the checks.
+    /// </summary>
+    public static bool CanDecode => Platform.CanSpawnProcesses && !NoDecode;
+
+    private static readonly bool NoDecode = CmdArgs.Has("--cinemanodecode");
 
     // ---- main thread -----------------------------------------------------------------------------
 
@@ -119,7 +137,12 @@ public sealed class CinemaVideoStream : IDisposable
                 CurrentIndex = f.Index;
                 changed = true;
             }
-            if (changed) Status = "";
+            if (changed)
+            {
+                Status = "";
+                Picture ??= Image.CreateEmpty(_width, _height, false, Image.Format.Rgba8);
+                Picture.SetData(_width, _height, false, Image.Format.Rgba8, Current!);
+            }
             // fallen behind: the next frame it has (or would have) is long past due
             long next = _frames.TryPeek(out var n) ? n.Index : _lastIndex + 1;
             bool late = due - next > CinemaVideo.FallBehind * CinemaVideo.Fps;
@@ -161,41 +184,16 @@ public sealed class CinemaVideoStream : IDisposable
 
     // ---- the decoders ----------------------------------------------------------------------------
 
-    /// <summary>yt-dlp for a site's link: the video and sound URLs, live or not, the length. On a worker.</summary>
+    /// <summary>yt-dlp for a site's link or a playlist: the video and sound URLs, live or not, the length. On a worker.</summary>
     private void Resolve()
     {
         try
         {
-            if (!CinemaVideo.NeedsLookup(Link))
-            {
-                _videoUrl = _audioUrl = Link;
-                return;
-            }
-            var info = Start("yt-dlp", BundledTools.YtDlpJsArgs().Concat(new[]
-            {
-                "--no-playlist", "--no-warnings", "-f", CinemaVideo.SiteFormat,
-                "-O", "%(is_live)s %(duration)s", "-O", "urls", Link,
-            }));
-            if (info == null) { Fail("yt-dlp is missing: a site's link cannot play here"); return; }
-            string output = info.StandardOutput.ReadToEnd();
-            string errors = info.StandardError.ReadToEnd();
-            info.WaitForExit();
-            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (info.ExitCode != 0 || lines.Length < 2)
-            {
-                GD.Print($"[cinema] yt-dlp could not open {Link}: {errors.Trim()}");
-                Fail("The site would not give the video");
-                return;
-            }
-            var head = lines[0].Split(' ');
-            Live = head[0] == "True";
-            if (head.Length > 1 && double.TryParse(head[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double d)) Duration = d;
-            _videoUrl = lines[1];
-            _audioUrl = lines.Length > 2 ? lines[2] : lines[1];
-        }
-        catch (Exception e)
-        {
-            Fail($"yt-dlp failed: {e.Message}");
+            if (CinemaLookup.Run(Link, out string why) is not { } found) { Fail(why); return; }
+            Live = found.Live;
+            Duration = found.Duration;
+            _videoUrl = found.Video;
+            _audioUrl = found.Sound;
         }
         finally
         {
@@ -230,10 +228,11 @@ public sealed class CinemaVideoStream : IDisposable
         _start = Live ? double.NaN : at;
         _soundStart = Live ? double.NaN : at;
         _restartAfter = position + lead + CinemaVideo.FallBehind;
-        string size = $"scale={CinemaVideo.Width}:{CinemaVideo.Height}:force_original_aspect_ratio=decrease,"
-            + $"pad={CinemaVideo.Width}:{CinemaVideo.Height}:(ow-iw)/2:(oh-ih)/2,fps={CinemaVideo.Fps}";
-        _video = Start("ffmpeg", Input(_videoUrl, at, Live).Concat(new[] { "-an", "-sn", "-vf", size, "-f", "rawvideo", "-pix_fmt", "rgba", "-" }), info: true);
-        _audio = Start("ffmpeg", Input(_audioUrl, at, Live).Concat(new[] { "-vn", "-sn", "-ac", "2", "-ar", CinemaVideo.AudioRate.ToString(), "-f", "s16le", "-" }));
+        string size = $"{CinemaVideo.StereoFit(Stereo, CinemaVideo.Width, CinemaVideo.Height)},fps={CinemaVideo.Fps}";
+        _video = CinemaLookup.Ffmpeg(CinemaLookup.Input(_videoUrl, at, Live).Concat(new[] { "-an", "-sn", "-vf", size, "-f", "rawvideo", "-pix_fmt", "rgba", "-" }),
+            info: true, line => Said(line, true));
+        _audio = CinemaLookup.Ffmpeg(CinemaLookup.Input(_audioUrl, at, Live).Concat(new[] { "-vn", "-sn", "-ac", "2", "-ar", CinemaVideo.AudioRate.ToString(), "-f", "s16le", "-" }),
+            info: false, line => Said(line, false));
         if (_video == null) { Fail("ffmpeg is missing: the video cannot play here"); return; }
         var room = _room;
         var vout = _video.StandardOutput.BaseStream;
@@ -242,49 +241,6 @@ public sealed class CinemaVideoStream : IDisposable
         {
             var aout = _audio.StandardOutput.BaseStream;
             new Thread(() => ReadAudio(aout, gen)) { IsBackground = true, Name = "cinema-sound" }.Start();
-        }
-    }
-
-    /// <summary>ffmpeg's input arguments: the web only (or a check's file), reconnecting, seeked to <paramref name="at"/>.</summary>
-    private static IEnumerable<string> Input(string url, double at, bool live)
-    {
-        var args = new List<string> { "-nostdin", "-hide_banner", "-nostats" };
-        bool web = url.StartsWith("http", StringComparison.OrdinalIgnoreCase);
-        args.AddRange(new[] { "-protocol_whitelist", web ? "http,https,tls,tcp,crypto,hls" : "file,crypto" });
-        if (web) args.AddRange(new[] { "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5" });
-        // a live playlist from near its edge, not the start of its window: every client a segment or two behind live
-        if (live && url.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)) args.AddRange(new[] { "-live_start_index", "-2" });
-        if (at > 0.01) args.AddRange(new[] { "-ss", at.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) });
-        args.AddRange(new[] { "-i", url });
-        return args;
-    }
-
-    private Process? Start(string tool, IEnumerable<string> args, bool info = false)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo(BundledTools.Resolve(tool))
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            if (tool == "ffmpeg") { psi.ArgumentList.Add("-loglevel"); psi.ArgumentList.Add(info ? "info" : "error"); }
-            foreach (var a in args) psi.ArgumentList.Add(a);
-            var p = Process.Start(psi);
-            if (p == null) return null;
-            if (tool == "ffmpeg")
-            {
-                p.ErrorDataReceived += (_, e) => Said(e.Data, info);
-                p.BeginErrorReadLine();
-            }
-            return p;
-        }
-        catch (Exception e)
-        {
-            GD.Print($"[cinema] cannot start {tool}: {e.Message}");
-            return null;
         }
     }
 
@@ -313,16 +269,27 @@ public sealed class CinemaVideoStream : IDisposable
             {
                 room.Wait();
                 if (_disposed || gen != _generation) break;
-                if (!_free.TryTake(out var pixels)) pixels = new byte[FrameBytes];
+                if (!_free.TryTake(out var pixels)) pixels = new byte[_frameBytes];
                 int got = 0;
-                while (got < FrameBytes)
+                while (got < _frameBytes)
                 {
-                    int n = stdout.Read(pixels, got, FrameBytes - got);
+                    int n = stdout.Read(pixels, got, _frameBytes - got);
                     if (n <= 0) break;
                     got += n;
                 }
-                if (got < FrameBytes) { _free.Add(pixels); break; }
+                if (got < _frameBytes) { _free.Add(pixels); break; }
                 if (gen != _generation) { _free.Add(pixels); break; }
+                // the picture's width, the left eye of a 3D frame: a few rows of a few frames a second are plenty
+                if (index % 5 == 0)
+                {
+                    var p = pixels;
+                    var (w, h) = CinemaVideo.ContentSize(CinemaVideo.Width, _height, (x, y) =>
+                    {
+                        int at = (y * _width + x) * 4;
+                        return p[at] + p[at + 1] + p[at + 2] > 3 * 24;
+                    });
+                    _shape.Add(w, h);
+                }
                 _frames.Enqueue(new Frame(index, pixels, MeanColour(pixels)));
                 _lastIndex = index++;
             }
@@ -366,13 +333,14 @@ public sealed class CinemaVideoStream : IDisposable
     }
 
     /// <summary>A frame's mean colour, from a sparse grid of its pixels: what the beam, the glow and the hall's wash take.</summary>
-    private static Color MeanColour(byte[] p)
+    private Color MeanColour(byte[] p)
     {
         long r = 0, g = 0, b = 0, count = 0;
-        for (int y = 8; y < CinemaVideo.Height; y += 24)
+        // the left eye's half of a 3D film: the same colour as the right
+        for (int y = 8; y < _height; y += 24)
             for (int x = 8; x < CinemaVideo.Width; x += 24)
             {
-                int at = (y * CinemaVideo.Width + x) * 4;
+                int at = (y * _width + x) * 4;
                 r += p[at]; g += p[at + 1]; b += p[at + 2];
                 count++;
             }
@@ -382,11 +350,8 @@ public sealed class CinemaVideoStream : IDisposable
     private void StopProcesses()
     {
         _generation++;
-        foreach (var p in new[] { _video, _audio })
-        {
-            try { if (p is { HasExited: false }) p.Kill(); } catch (Exception) { }
-            p?.Dispose();
-        }
+        CinemaLookup.Stop(_video);
+        CinemaLookup.Stop(_audio);
         _video = _audio = null;
         // a worker blocked on a full ring wakes to see its generation is gone
         _room.Release(Ring);

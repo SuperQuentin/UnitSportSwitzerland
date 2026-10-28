@@ -83,6 +83,8 @@ public partial class CinemaBooths : Node
         world.AddChild(node);
         Instance = node;
         CinemaVideo.AllowLocal = LocalFiles;
+        // a server's own films for its showing halls (a client's copy is replaced by its server's on join)
+        node.LoadPool();
         return node;
     }
 
@@ -91,11 +93,24 @@ public partial class CinemaBooths : Node
         if (Instance == this) Instance = null;
         _stream?.Dispose();
         _stream = null;
+        foreach (var tap in _taps.Values) tap.Dispose();
+        _capture?.Dispose();
+        _taps.Clear();
     }
 
     private bool Online => NetLink.Online(this);
 
     private long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
+
+    /// <summary>
+    /// Whether <paramref name="peer"/> is inside cinema <paramref name="plan"/>, where its booth may be worked: where the
+    /// server places their body; offline also the interior the camera is in (a free camera, a shot queue, has no body:
+    /// the one player is the only one there).
+    /// </summary>
+    private bool Inside(long peer, string plan) =>
+        plan.Length > 0 && (InteriorManager.Instance is { } im
+            ? im.SpaceOf(peer) == plan || !Online && im.Current?.Key == plan
+            : !Online);
 
     public static int Pack(Lights lights, bool screen) => (int)lights | (screen ? 4 : 0);
 
@@ -184,7 +199,7 @@ public partial class CinemaBooths : Node
     /// </summary>
     public bool Serve(long peer, string plan, int hall, int code)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside) { GD.Print($"[cinema] peer {peer} is not in {plan}: refused"); return false; }
         code &= 7;
         if ((code & 3) > 2 || hall < 0 || hall >= MaxHalls) return false;
@@ -212,13 +227,19 @@ public partial class CinemaBooths : Node
             for (int h = 0; h < halls.Length; h++)
                 if (halls[h] != Default(plan, h)) RpcId(peer, MethodName.Set, plan, h, halls[h]);
         SendVideosTo(peer);
+        SendPool(peer);
+        SendDisplaysTo(peer);
     }
 
     // ---- client: showing it ----------------------------------------------------------------------
 
     public override void _Process(double delta)
     {
+        // the server's copy of each hall someone watches through it (#1298 phase 2)
+        if (ServerSide) PumpRelay(delta);
         if (NetworkManager.DedicatedServer) return;
+        // this machine's own share, if it runs one (CinemaBooths.Live): pushed wherever the player looks
+        PumpCapture();
         var im = InteriorManager.Instance;
         if (im?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) { _appliedNode = null; PumpVideo(null, -1, 0); return; }
         // --cinemashow: every cinema dimmed with the cat on, for a shot (no panel to press in one)
@@ -272,5 +293,6 @@ public partial class CinemaBooths : Node
         // the seats let down under whoever sits, the house lights fading to their level (#1279)
         node.UpdateSeats();
         node.FadeHouse(delta);
+        node.MoveCurtains(delta);
     }
 }

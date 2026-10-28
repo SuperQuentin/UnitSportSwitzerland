@@ -83,8 +83,9 @@ lane frame and rules (`bowling-centres`).
   equiangular samples round the lens (light per metre 1/d^2: bright at the projector, nothing at the screen), a
   Henyey-Greenstein phase g 0.6 with a 20 % isotropic floor (bright looking back at the lens, faint from the side),
   and up to eight capsules (`InteriorNode.BeamBodies`: players, the viewer's walker) shadowing it, written per frame
-  only as they move. Its lines meet 0.2 m behind the lens's glass (`ApexBehindLens`). The plain beam fades to
-  nothing at the screen. The spot's own shadow still does the screen.
+  only as they move. Its lines meet 0.2 m behind the lens's glass (`ApexBehindLens`). The plain beam looks the same from afar
+  (#1298): ten rings along its cone, vertex alpha `BeamFade` falling with the square of the distance past the first
+  sixteenth of the throw, nothing at the screen. The spot's own shadow still does the screen.
 - **Cushions** (#1279): their own mesh per seating bank in the interior's frame (`InteriorMeshBuilder.Cushions`, the
   room lights are looked up by it), folded, or let down under a body in the sit pose (`InteriorNode.UpdateSeats`,
   per frame from `CinemaBooths` without allocating, the mesh built again only when a bank's seated set changes).
