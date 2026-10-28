@@ -305,3 +305,17 @@ The Älplerfest runs 14-24 August (Interlaken; a region without it moves it to i
 - [ ] Two or three players sit down within 45 s of each other (the first opens the song, the others join it) → they get melody, second voice and drone, play the same song, and each is told the harmony multiplier (up to x1.6) and the Batzen; the Journal's Festival tab and the party board show the points. Does the harmony reward feel fair? Does a late joiner understand they play the same chart?
 - [ ] Press Esc or walk away mid-song → the song ends with nothing paid and a message; a fifth player is told the row is full.
 - [ ] Others near the row do not hear the blower (a known gap): is that too strange for a festival? A bot taking a seat is a server-side call; there is no bot spawner for it in the game yet.
+
+## Errands part 2: world events, the hiker and postcard cards ([#1340](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1340))
+
+A windowed offline game on real terrain with the adventure on. `--worldevent cow,hiker,avalanche,fire` plans one of each in turn near you (season and chance aside); `--world-events rare|off` changes how often they come on their own. A fire needs forest cover under you, an avalanche steep ground (the forced ones relax the height and the slope).
+
+- [ ] The cow: a Simmental cow stands 45 m off and walks away from its pasture; stand on its far side within 7 m and it turns home at a walking pace. Does it read as a stray cow, and does the bell clank carry?
+- [ ] The lost hiker: a compass diamond ("Last seen near ...") and a map letter H; find them (a figure standing by a peak or pass), E / Y talks, they follow you to the hut or stop. Does the walking figure look right behind you, and the call carry?
+- [ ] The avalanche: a heap of snow blocks on a slope; within 60 m a beep quickens as you near ("Signal 25 m"), hold G (pad X) at the spot: the bar fills in about eight seconds, a probe pole marks the place. Is the cone well set into the slope (no floating or buried rim)?
+- [ ] The fire: flames and rising smoke at a forest edge; beat a cell out by holding G (pad X) next to it for two seconds; the smoke dims the view up close but never hurts. Do the flames flicker well, is the smoke too heavy or too light, does it spread too fast (one cell in 15 s)?
+- [ ] Two players: both see the same event, dig it out in half the time, and both are paid (a toast "CHF 60, +5 VS"); five of one kind give a title in the Journal.
+- [ ] Walk into a Versteckis game or a Battle Royale round near an event: no toast, no pay, nothing drawn from it.
+- [ ] VR: the dig and the beating on the gather hold (X); grip-and-pull is not built, so the hold stays on the button.
+- [ ] The lost hiker's Postkarte at a hut warden ("A hiker is lost near ..."): the hiker sits where the card says, talking is step 1, the walk to the hut step 2, the card pays; the postcard home ("A postcard of ...", take the photo of the famous view then post the card at a post office; a view already in the album still counts).
+- [ ] The Errands tab lists the cards near each party member; the Atlas shows "Errands: Bekannt (12 points)" under a canton heading.

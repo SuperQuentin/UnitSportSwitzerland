@@ -28,6 +28,8 @@ public partial class ClientWorld
         AddChild(new ErrandDialog(() => _onFoot ? LocalPlayer : null));
         ErrandsPage.Where = () => _onFoot ? LocalPlayer?.Global : null;
         ErrandsPage.Register();
+        if (WorldEventNetProbe.Role != null) AddChild(new WorldEventNetProbe(items));
+        if (WorldEventCheck.Requested) AddChild(new WorldEventCheck(items, () => LocalPlayer));
         if (ErrandCheck.Requested) AddChild(new ErrandCheck(items, () => LocalPlayer));
         if (ErrandNetProbe.Role != null) AddChild(new ErrandNetProbe(items));
     }

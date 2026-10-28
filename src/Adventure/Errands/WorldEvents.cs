@@ -25,7 +25,7 @@ namespace UnitSport.Adventure.Errands;
 public partial class WorldEvents : Node3D, IOriginContainer
 {
     public const string NodeName = "WorldEvents";
-    private const double TickS = 0.1, MoveEveryS = 0.25, CardHikerLifeS = 1800;
+    private const double TickS = 0.1, MoveEveryS = 0.25, CardHikerLifeS = 1800, CardUnheldS = 30;
 
     public static WorldEvents? Instance { get; private set; }
 
@@ -82,7 +82,11 @@ public partial class WorldEvents : Node3D, IOriginContainer
         public readonly Dictionary<long, Hold> Holds = new();
         public readonly HashSet<long> Informed = new();
         public bool Dirty;
-        public double LengthS => Card.Length > 0 ? CardHikerLifeS : WorldEventRules.LengthS(Kind);
+        /// <summary>A check's shorter life for a staged event; 0 = the rule's.</summary>
+        public double LifeS;
+        /// <summary>The last time somebody ran this card's hiker card: a hiker nobody holds for 30 s goes home.</summary>
+        public double Held;
+        public double LengthS => LifeS > 0 ? LifeS : Card.Length > 0 ? CardHikerLifeS : WorldEventRules.LengthS(Kind);
         public (double E, double N) At => Cow is { } c ? (c.E, c.N) : Hiker is { } h ? (h.E, h.N) : (E, N);
     }
 
@@ -98,6 +102,8 @@ public partial class WorldEvents : Node3D, IOriginContainer
     /// <summary><c>--worldevent cow,hiker,avalanche,fire</c> (checks): one of each in turn, near the first player, season and slot aside.</summary>
     private readonly List<WorldEventKind> _forced = new();
     private int _forcedCount;
+    /// <summary><c>--worldevent-players n</c> (net checks): the forced events wait until n adventuring players are there.</summary>
+    private readonly int _forcedPlayers = int.TryParse(CmdArgs.Value("--worldevent-players"), out int n) && n > 0 ? n : 1;
 
     /// <summary>A check's stand-in for the cover raster: which points burn.</summary>
     public Func<double, double, bool>? ForestOverride { get; set; }
@@ -121,6 +127,8 @@ public partial class WorldEvents : Node3D, IOriginContainer
     {
         foreach (string word in (CmdArgs.Value("--worldevent") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
             if (ParseKind(word.Trim()) is { } kind) _forced.Add(kind);
+        // a net check's server has no forest raster on its flat fixture: a checkerboard of 16 m squares burns instead
+        if (CmdArgs.Has("--worldevent-forest")) ForestOverride = (e, n) => ((long)Math.Floor(e / 16) + (long)Math.Floor(n / 16)) % 2 == 0;
         if (Authority) _adventure.Loaded += peer => _informIn = 0;
         GD.Print($"[worldevents] {(_server ? "server" : _networked ? "client" : "offline")}: mode {Mode}");
         if (Visual) ReadyDraw();
@@ -207,7 +215,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
     private void Plan(double now)
     {
         if (_humans.Count == 0) return;
-        bool forcedDue = _forcedCount < _forced.Count && _live.Count == 0;
+        bool forcedDue = _forcedCount < _forced.Count && _live.Count == 0 && _humans.Count >= _forcedPlayers;
         if (forcedDue)
         {
             var who = _humans[0];
@@ -234,7 +242,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
             double hour = World.WorldClock.CurrentHour;
             foreach (var kind in WorldEventRules.Order(seed))
             {
-                if (!WorldEventRules.InSeason(kind, DateTime.UtcNow.Month, at.Alt) || !WorldEventRules.Passes(kind, hour, seed)) continue;
+                if (!WorldEventRules.InSeason(kind, ErrandService.Today / 100 % 100, at.Alt) || !WorldEventRules.Passes(kind, hour, seed)) continue;
                 if (TryPlan(kind, seed, at, ce, cn, now, forced: false) is not { } ev) continue;
                 Start(ev, now);
                 break;
@@ -298,7 +306,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
                 {
                     double e = near.E + Math.Sin(U(10 + i * 2) * Math.Tau) * (300 + 600 * U(11 + i * 2)), n = near.N + Math.Cos(U(10 + i * 2) * Math.Tau) * (300 + 600 * U(11 + i * 2));
                     if (GroundOf(e, n) is not { } g || g < 1500 && !forced) continue;
-                    if (SlopeDeg(e, n) is not { } slope || slope is < 28 or > 45) continue;
+                    if (!forced && (SlopeDeg(e, n) is not { } slope || slope is < 28 or > 45)) continue;
                     var ev = Make(e, n, g);
                     ev.Avalanche = new AvalancheSim(e, n, seed);
                     return ev;
@@ -382,21 +390,72 @@ public partial class WorldEvents : Node3D, IOriginContainer
         Start(ev, GameClock.Now);
     }
 
+    // ---- checks ---------------------------------------------------------------------------------------------------
+
+    /// <summary>A check's event of <paramref name="kind"/> staged at an LV95 point now (anchors, season and slot aside). Returns its id.</summary>
+    public int Stage(WorldEventKind kind, double e, double n, uint seed = 1, double goalE = double.NaN, double goalN = double.NaN, double lifeS = 0)
+    {
+        var (ce, cn) = WorldEventRules.Cell(e, n);
+        int id = WorldEventRules.Id(ce, cn, 900000 + _live.Count + _forcedCount, kind) ^ (int)seed;
+        var ev = new Live { Id = id, Kind = kind, Start = GameClock.Now, E = e, N = n, Seed = seed, Cell = (ce, cn), Canton = CantonAt(e, n), Ground = GroundOf(e, n) ?? 0, LifeS = lifeS };
+        switch (kind)
+        {
+            case WorldEventKind.RunawayCow: ev.Cow = new CowSim(e, n, ErrandHash.Unit(ErrandHash.Of(seed, 1))); break;
+            case WorldEventKind.LostHiker: ev.Hiker = new HikerSim(e, n, double.IsNaN(goalE) ? e + 150 : goalE, double.IsNaN(goalN) ? n : goalN); ev.Near = "the check"; break;
+            case WorldEventKind.Avalanche: ev.Avalanche = new AvalancheSim(e, n, seed); break;
+            default: ev.Fire = new FireSim(e, n, seed, (a, b) => Forest(e + a * FireSim.CellM, n + b * FireSim.CellM)); break;
+        }
+        Start(ev, GameClock.Now);
+        return id;
+    }
+
+    /// <summary>A check asks for the next planned event to be of this kind (the <c>--worldevent</c> list, later).</summary>
+    public void Force(WorldEventKind kind) => _forced.Add(kind);
+
+    /// <summary>What a check reads of a running event; null when it is over.</summary>
+    public readonly record struct Probe(WorldEventKind Kind, double E, double N, bool Found, int Count, float Progress);
+
+    public Probe? ProbeOf(int id)
+    {
+        if (!_live.TryGetValue(id, out var ev)) return null;
+        var (e, n) = ev.At;
+        return new Probe(ev.Kind, e, n, ev.Hiker?.Found ?? false, ev.Fire?.Count ?? ev.Avalanche?.DugCount ?? 0, ev.Avalanche?.Progress[0] ?? 0f);
+    }
+
+    /// <summary>The burning cells of a fire and the buried spots of an avalanche (LV95), for a check to walk to.</summary>
+    public List<(int Key, double E, double N)> Targets(int id)
+    {
+        var list = new List<(int, double, double)>();
+        if (!_live.TryGetValue(id, out var ev)) return list;
+        if (ev.Fire is { } fire) foreach (int key in fire.Burning) { var (e, n) = fire.CellAt(key); list.Add((key, e, n)); }
+        if (ev.Avalanche is { } av) for (int i = 0; i < av.Buried; i++) if (!av.Dug(i)) list.Add((i, av.Spots[i].E, av.Spots[i].N));
+        return list;
+    }
+
     // ---- running an event ---------------------------------------------------------------------------------------
 
     private void Run(Live ev, double dt, double now)
     {
         if (ev.Cow == null && ev.Hiker == null && ev.Avalanche == null && ev.Fire == null) return;
         double age = now - ev.Start;
+        if (ev.Card.Length > 0)
+        {
+            bool held = false;
+            foreach (var (peer, _) in _humans)
+                if (_adventure.Progress(peer)?.Get(QuestsProgress.Section).Active.ContainsKey(ev.Card) == true) { held = true; break; }
+            if (held || ev.Held == 0) ev.Held = now;
+            else if (now - ev.Held > CardUnheldS) { End(ev, false); return; }
+        }
         switch (ev.Kind)
         {
             case WorldEventKind.RunawayCow when ev.Cow is { } cow:
-                cow.Step(dt, _spots);
+                if (cow.Step(dt, _spots)) Credit(ev, cow.E, cow.N, CowSim.PushM);
                 if (cow.IsHome) End(ev, true);
                 else if (age >= ev.LengthS) End(ev, false);
                 break;
             case WorldEventKind.LostHiker when ev.Hiker is { } hiker:
                 hiker.Step(dt, _spots);
+                if (hiker.Walking) Credit(ev, hiker.E, hiker.N, 10);
                 if (hiker.AtGoal && hiker.Found) End(ev, true);
                 else if (age >= ev.LengthS) End(ev, false);
                 break;
@@ -412,6 +471,13 @@ public partial class WorldEvents : Node3D, IOriginContainer
                 else if (fire.Overrun || age >= ev.LengthS) End(ev, false);
                 break;
         }
+    }
+
+    /// <summary>Everyone within <paramref name="within"/> m of a moving cow or hiker is helping: a push counts as an act.</summary>
+    private void Credit(Live ev, double e, double n, double within)
+    {
+        foreach (var (peer, spot) in _where)
+            if (Dist(spot, new Spot(e, n)) <= within) ev.Acted.Add(peer);
     }
 
     private readonly Dictionary<int, int> _tally = new();
@@ -478,8 +544,9 @@ public partial class WorldEvents : Node3D, IOriginContainer
                     GD.Print($"[worldevents] {ev.Id}: the hiker was found by {actor}");
                 }
                 ev.Acted.Add(actor);
-                if (_adventure.Progress(actor) is { } p && ev.Card.Length > 0)
-                    _adventure.Events.Raise(new Interacted(actor, p.Key, WorldEventRules.HikerEntity(ev.Card)));
+                if (ev.Card.Length > 0)
+                    foreach (long holder in HoldersNear(ev, hiker.E, hiker.N, actor))
+                        if (_adventure.Progress(holder) is { } p) _adventure.Events.Raise(new Interacted(holder, p.Key, WorldEventRules.HikerEntity(ev.Card)));
                 Tell(actor, "Hiker: \"Thank you! I will follow you.\"");
                 return null;
             case EventAct.DigStart when ev.Avalanche is { } av:
@@ -504,6 +571,16 @@ public partial class WorldEvents : Node3D, IOriginContainer
         }
     }
 
+    /// <summary>The adventuring peers within 150 m of a point who run the Postkarte card of a hiker (and the actor, who may hold it too).</summary>
+    private IEnumerable<long> HoldersNear(Live ev, double e, double n, long actor)
+    {
+        foreach (var (peer, at) in _humans)
+        {
+            if (peer != actor && Dist(new Spot(at.E, at.N), new Spot(e, n)) > WorldEventRules.PaidNearM) continue;
+            if (_adventure.Progress(peer)?.Get(QuestsProgress.Section).Active.ContainsKey(ev.Card) == true) yield return peer;
+        }
+    }
+
     // ---- the end ------------------------------------------------------------------------------------------------------
 
     private void End(Live ev, bool success)
@@ -511,6 +588,10 @@ public partial class WorldEvents : Node3D, IOriginContainer
         GD.Print($"[worldevents] {ev.Kind} {ev.Id} ends: {(success ? "helped through" : "the world solved it")}, {ev.Acted.Count} helped");
         var (e, n) = ev.At;
         if (success) Pay(ev, e, n);
+        // the card's escort step: everyone near who runs the card, whether or not they did an act
+        if (success && ev.Card.Length > 0)
+            foreach (long holder in HoldersNear(ev, e, n, -1))
+                if (_adventure.Progress(holder) is { } hp) _adventure.Events.Raise(new Escorted(holder, hp.Key, WorldEventRules.HikerEntity(ev.Card), "area:" + ev.Goal));
         foreach (long peer in ev.Informed) SendEnded(peer, ev.Id, success, success ? WorldEventRules.SuccessLine(ev.Kind) : WorldEventRules.TimeoutLine(ev.Kind));
         ev.Cow = null; ev.Hiker = null; ev.Avalanche = null; ev.Fire = null;
     }
@@ -524,11 +605,6 @@ public partial class WorldEvents : Node3D, IOriginContainer
             if (!_where.TryGetValue(actor, out var at) || Dist(at, new Spot(e, n)) > WorldEventRules.PaidNearM) continue;
             var errands = p.Get(ErrandsProgress.Section);
             bool card = ev.Card.Length > 0;
-            if (card)
-            {
-                // the card pays; the hiker's walk is what its escort step counts
-                _adventure.Events.Raise(new Escorted(actor, p.Key, WorldEventRules.HikerEntity(ev.Card), "area:" + ev.Goal));
-            }
             int chf = card ? 0 : WorldEventRules.Chf(ev.Kind);
             if (chf > 0) _adventure.Grant(actor, new Cash(chf), "event:" + ev.Kind);
             if (!card && ev.Canton.Length == 2) ErrandService.Instance?.AddRep(actor, p, ev.Canton, WorldEventRules.RepPoints);

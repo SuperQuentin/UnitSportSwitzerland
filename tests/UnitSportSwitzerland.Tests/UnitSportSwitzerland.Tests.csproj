@@ -248,6 +248,8 @@
     <Compile Include="..\..\src\Adventure\Errands\WorldEventRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\WorldEventSims.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\ErrandSteps.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- the givers stage (#1339): which tags make which giver, the thinning: pure -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\GiverPick.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />

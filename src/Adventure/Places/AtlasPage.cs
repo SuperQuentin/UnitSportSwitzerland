@@ -69,7 +69,7 @@ public partial class AtlasPage : Control
 
     private void OnSection(string id)
     {
-        if (id != PlacesProgress.Section.Id) return;
+        if (id != PlacesProgress.Section.Id && id != Errands.ErrandsProgress.Section.Id) return;
         Build();
         if (Card != null) ShowCard(Card);
     }
@@ -161,6 +161,12 @@ public partial class AtlasPage : Control
         var mine = Mine;
         var fog = places.MyFog;
         _right.AddChild(UiKit.Text($"{AtlasChapters.NameOf(code)} ({code})", UiTheme.FontHeading, UiTheme.Text, bold: true));
+        // what the errands made of the canton's givers' opinion of the player (#1339)
+        if (AdventureService.Instance?.Mine.Get(Errands.ErrandsProgress.Section) is { } errands && errands.Points(code) > 0)
+        {
+            int level = errands.Level(code);
+            _right.AddChild(UiKit.Text($"Errands: {Errands.Reputation.Name(level)} ({errands.Points(code)} points)", UiTheme.FontSmall, level >= 3 ? UiTheme.Amber : UiTheme.TextDim));
+        }
         var all = cat.InCanton(code);
         var landmarks = all.Where(cat.IsLandmark).OrderByDescending(p => mine.Has(p)).ThenBy(p => p.Name).ToList();
         if (landmarks.Count > 0)

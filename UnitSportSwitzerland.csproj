@@ -55,6 +55,8 @@
     <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
     <!-- every OSM venue (#1232, the preprocessor venue stage, docs/notes/terrain/entertainment-venues.md): ODbL, like Castles.List.cs -->
     <EmbeddedResource Include="src/Interiors/venues.tsv.gz" LogicalName="venues.tsv.gz" WithCulture="false" />
+    <!-- the errand givers OSM and the tiles know (#1339, the preprocessor givers stage): ODbL; left out until a build has written the file -->
+    <EmbeddedResource Include="src/Adventure/Errands/givers.tsv.gz" LogicalName="givers.tsv.gz" WithCulture="false" Condition="Exists('src/Adventure/Errands/givers.tsv.gz')" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
   </ItemGroup>
