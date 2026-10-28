@@ -245,6 +245,8 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 
 - [ ] E at a machine's front → the eye view over the lockdown bar, the backbox's display at the top; a game starts (the ball on the plunger). V → straight down; V → back.
 - [ ] Hold Space and let go → the ball goes up the shooter lane; soft → into the top lanes (the lit one: "SKILL SHOT"); hard → round the arch.
+- [ ] Left Shift flips only the left flipper, Right Shift only the right; Enter pulls the plunger and does not open the chat (Enter away from a machine still does).
+- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD); restart the server → still there.
 - [ ] A / D (and the arrows) flip; a ball rolling down an inlane can be cradled and aimed. Do the flippers feel strong enough, too strong? Can you make each ramp and orbit on purpose?
 - [ ] W nudges (Q / R to the sides): a few hard nudges → "DANGER", then TILT (flippers dead, the ball drains, no bonus).
 - [ ] Play a whole game on each of the four tables (Clockwork, Space Mission, Haunted Castle, Alpine Ski Race): the lit scoop starts a mission, its shots blink, the timer runs; lock lights, two locks → multiball; ball save; the bonus at the drain; GAME OVER and MATCH. Is it fun? Is any shot impossible or too easy?

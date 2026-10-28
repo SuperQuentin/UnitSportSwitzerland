@@ -111,7 +111,8 @@ public partial class PinballCabinet : Node3D
         c.AddChild(c._plunger);
         c.AddLamps();
         c.Display = PinballBackbox.Create(t);
-        c.Display.Position = new Vector3(0, t.Era == PinballEra.Reels ? 1.30f : 1.20f, BoxFront + 0.004f);
+        // over the speaker panel, proud of the backglass's picture layers nearest it
+        c.Display.Position = new Vector3(0, t.Era == PinballEra.Reels ? 1.30f : 1.18f + c.Display.Size.Y / 2, BoxFront + 0.02f);
         c.AddChild(c.Display);
         var title = new Label3D
         {
@@ -304,6 +305,8 @@ public partial class PinballCabinet : Node3D
             s.Plate(new Vector3(x0, y0, z), new Vector3(x0, y1, z), new Vector3(x1, y1, z), new Vector3(x1, y0, z), Vector3.Back, 0.009f * Level(dz), c);
         // a layer of the picture 9 mm proud of the one under it: closer would z-fight (8 mm, zfight)
         static int Level(float dz) => dz <= 0.0008f ? 1 : dz <= 0.001f ? 2 : dz <= 0.0014f ? 3 : 4;
+        // a star's place: a hash, so they do not line up as a low-discrepancy sequence does
+        static float Scatter(int i, int salt) => Mathf.PosMod(Mathf.Sin(i * 12.9898f + salt * 78.233f) * 43758.5453f, 1f);
         // the speaker panel at the bottom
         Flat(-0.33f, 1.10f, 0.33f, 1.16f, Black, 0.0005f);
         for (int i = 0; i < 9; i++) Flat(-0.30f + i * 0.068f, 1.115f, -0.27f + i * 0.068f, 1.145f, PinballMesh.Col(0.2f, 0.2f, 0.22f), 0.001f);
@@ -325,7 +328,7 @@ public partial class PinballCabinet : Node3D
                 // a starfield, a planet and a rocket
                 for (int i = 0; i < 40; i++)
                 {
-                    float x = -0.32f + (i * 0.6180339f % 1f) * 0.64f, y = 1.36f + (i * 0.7548777f % 1f) * 0.5f;
+                    float x = -0.32f + Scatter(i, 1) * 0.64f, y = 1.36f + Scatter(i, 2) * 0.5f;
                     Flat(x, y, x + 0.006f, y + 0.006f, PinballMesh.Lit(Colors.White), 0.0006f);
                 }
                 Flat(0.12f, 1.48f, 0.28f, 1.64f, b, 0.001f);

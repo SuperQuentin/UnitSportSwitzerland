@@ -33,7 +33,9 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   pressed by the player up's client (`Join`) so the add is in the log. Markers in the log: `LeftPress`,
   `RightPress` (lane change), `StartPress`, `SkipMark`.
 - **Playing** (`PinballPlay`): E / Y at the machine's front (`PinballTables.TryUse`), the eye view or straight down
-  (V / R3), flippers A / D / arrows / LB RB / LT RT, plunger Space / S / pad A / right stick back, nudge W / pad X
+  (V / R3), flippers A / D / arrows / Left and Right Shift (bound with a key location: one side each, the hint says
+  "Left Shift") / LB RB / LT RT, plunger Space / S / Enter (kept from the chat at a machine, `PinballPlay._Input`) /
+  pad A / right stick back, nudge W / pad X
   (Q / R or the left stick for the side), Start E / Y, Esc / B back. VR: the head stays the camera, grips and
   triggers flip (they are the pad's shoulders, `XrPad`). Sounds `PinballSounds` via `PinballCabinet.Audio`.
 - **`/pinball`** (offline): `list`, `play <n>`, `start`, `robot` (a robot at the flippers), `view`. BowlinGland
@@ -42,3 +44,11 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   `35.69,l2.05,15.80,-83.5,180` (a shot camera is not the play camera: shots take the queue's pose).
 - **Checks**: `--pinballcheck --systems ui` (cabinets played through their nodes: flippers, balls, drops, lamps,
   the backbox, no mesh rebuilt, the screen over the wire), `--zfightcheck Pinball`, `--sounds,check`.
+- **High scores** (`PinballHighScores`, `PinballScoreBook`, unit tested): the best five per machine, keyed like the
+  table choice (plan key, furniture index, and the table: a plan that puts another table there starts afresh), kept by
+  the server in `user://pinball_scores.json`. A game over offers every player's score under their own name (the
+  chat name, no initials), a new one is told to its player. The table rides the machine's `State` (and a peer walking
+  in gets every machine of the venue with scores, played or not); offline the local book goes onto the machines.
+  The backbox's attract cycle, 3 s a step: title or game over, press start or match, the high scores, each era its
+  way (reels turned to the best four with "HIGH SCORE TO DATE", the alphanumeric line naming each champion in turn,
+  the dot-matrix's list, the LCD's results board). Model viewer: Venues › Pinball attract.
