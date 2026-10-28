@@ -218,7 +218,12 @@ public static partial class InteriorGenerator
 
         // every room out to the facade, or cut by it (#1290): after the dining venues carve their rooms
         // (a carved room keeps a rectangle), before the furniture stands in them
-        if (outline != null) FitOutline(layout, outline);
+        if (outline != null)
+        {
+            FitOutline(layout, outline);
+            // a way in behind each street door no room is behind (#1304)
+            Vestibules(layout, fp, outline);
+        }
         _onCore = onCore;
 
         Furnish(layout, rng);

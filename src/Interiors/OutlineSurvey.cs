@@ -294,6 +294,10 @@ public static class OutlineSurvey
         foreach (var (k, n) in WingWhy.OrderByDescending(w => w.Value).Take(30))
             sb.AppendLine($"  {n,5}  {k}");
         sb.AppendLine();
+        sb.AppendLine($"vestibules behind doors with no room (#1304), in: {string.Join(", ", InteriorGenerator.VestibuleKeys.Distinct().Take(20))}");
+        foreach (var (k, n) in InteriorGenerator.VestibuleWhy.OrderByDescending(w => w.Value))
+            sb.AppendLine($"  {n,5}  {k}");
+        sb.AppendLine();
         sb.AppendLine("why a plan went back to rectangles:");
         foreach (var (name, x) in rows)
             foreach (var (why, n) in x.Why.OrderByDescending(w => w.Value).Take(8))
