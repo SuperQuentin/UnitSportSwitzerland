@@ -966,13 +966,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.Bank.Create(this, inventory);
         var items = new Items.ItemController(inventory, origin)
         {
-            ActivePlayer = () => _onFoot ? LocalPlayer : null,
+            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging ? LocalPlayer : null,
         };
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
         // the concert pogo (#1150): dancing at a show, jump on the beat
         AddChild(new Concert.PogoQte(() => _onFoot ? LocalPlayer : null));
+        // the Älplerfest's flag swingers (#1269 part 5): figures drawn on the beat at the festival's flag ground
+        AddChild(new Occasions.Festivals.Fahnen.FahnenGame(() => _onFoot ? LocalPlayer : null));
         // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
         var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
@@ -1170,7 +1172,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Occasions.Festivals.FestivalPage.Register();
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Fahnen.FahnenCheck.Requested) AddChild(new Occasions.Festivals.Fahnen.FahnenCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
+            if (Occasions.Festivals.Fahnen.FahnenNetProbe.Role != null) AddChild(new Occasions.Festivals.Fahnen.FahnenNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
             AddErrands(adventure, items);   // #1267, ClientWorld.Errands.cs

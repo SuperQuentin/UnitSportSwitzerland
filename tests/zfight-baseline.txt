@@ -1032,6 +1032,7 @@
 1.9	Motorbikes / Yamaha XT1200ZE Super Ténéré (2014-21)
 25.7	Motorbikes / Yamaha XT1200ZE Super Ténéré (2014-21) (parked)
 8.3	Motorbikes / Yamaha YZF-R3 (2016) (parked)
+1559.9	Occasions / Prop - FestivalFlagStage
 1608	Occasions / Prop - GiftBlue
 1824	Occasions / Prop - GiftGreen
 1788	Occasions / Prop - GiftRed

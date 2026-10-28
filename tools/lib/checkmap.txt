@@ -1015,6 +1015,9 @@ src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
 src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
 tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
+tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
+src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
