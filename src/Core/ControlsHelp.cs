@@ -98,6 +98,16 @@ public partial class ControlsHelp : CanvasLayer
             new("String: punch, punch, kick", Keys: "{fight_punch} {fight_punch} {fight_kick}", Pad: "{fight_punch} {fight_punch} {fight_kick}"),
             new("Finish them: down, down + kick", Keys: "{move_back} {move_back} + {fight_kick}", Pad: "{move_back} {move_back} + {fight_kick}"),
         }),
+        ("Schwingen (#1269, the Älplerfest ring, /schwing <player or bot>)", new Row[]
+        {
+            new("Join the ring's queue (at the sawdust ring), or give the place up", PlayerInput.InteractMount),
+            new("Lean (towards / away / round)", Keys: "{move_left} {move_right} {move_forward} {move_back}", Pad: "{move_right}"),
+            new("Throw (the lean picks which)", PlayerInput.FightPunch),
+            new("Leg hook (Gammen)", PlayerInput.FightKick),
+            new("Brace against a throw (hold), or lean its counter", PlayerInput.FightBlock),
+            new("On the ground: mash to pin or to get out", PlayerInput.FightPunch),
+            new("Leave: /schwing leave", Keys: "/schwing", Pad: "/schwing"),
+        }),
         ("Aura battle (#907, /aura <player>)", new Row[]
         {
             new("Planner: add the move picked", Keys: "click, or arrows + {ui_accept}", Pad: "{ui_accept}"),

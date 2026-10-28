@@ -241,6 +241,8 @@ public enum ItemId
     Zipfelmuetze = 466, Treichel = 467,
 
     // ---- Festivals (#1269, docs/notes/occasions/festival-framework.md); 500-539 are this plan's (adventure-phase3) ----
+    /// <summary>The wrestler's jute over-trousers (#1269 Schwingen): worn in the Bottom slot, from the Älplerfest's chests and stalls.</summary>
+    Schwingerhosen = 500,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }

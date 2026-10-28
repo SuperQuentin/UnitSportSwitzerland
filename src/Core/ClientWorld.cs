@@ -590,6 +590,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
             Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
+            Combat.SchwingRing.Create(this, _chunks, origin);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
         // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
@@ -1007,6 +1008,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
+        if (Combat.SchwingNetProbe.Role != null) AddChild(new Combat.SchwingNetProbe(items));
         if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -1782,6 +1784,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
         AddChild(new Combat.AuraWatchHud());
+        // Schwingen (#1269): the bout, its screen, and the Älplerfest's sawdust ring
+        AddChild(Combat.SchwingManager.CreateClient());
+        AddChild(new Combat.SchwingHud());
 
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
