@@ -588,6 +588,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.OccasionPrecip());
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
+            // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
+            Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
         // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
