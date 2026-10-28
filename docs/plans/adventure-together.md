@@ -593,4 +593,6 @@ declared in `TogetherProgress.cs`:
 - **Protocol**: 60 (58 is the cinema halls #1279, 59 the festival framework #1295).
 - **Pings fixed**: the synthesised ping's envelope broke at t = 0, which silenced the clink and the Prost sound; fixed after `--sounds,check` found it.
 - Not verified: a real glacier, hut or castle gate, a headset and a pad (see `tests/TO-TEST-BY-HUMAN.md`).
+- **Prompt bar**: the rope's let go / haul and the pot's seat are bar rows with no outlined thing; `InteractOutlineTests` lists them (#1286's rule).
+- **Z-fight baseline**: the nine Together garments have their own `Clothes /` rows; the garment rows sit after the Versteckis ones so their index stays put.
 
