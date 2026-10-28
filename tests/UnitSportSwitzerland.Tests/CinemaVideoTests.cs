@@ -108,6 +108,43 @@ public class CinemaVideoTests
     }
 
     [Fact]
+    public void A_showing_hall_draws_a_film_or_the_slides_among_them()
+    {
+        int films = CinemaVideo.OpenFilms.Length;
+        var drawn = Enumerable.Range(0, 2000).Select(i => CinemaVideo.PickShowing((uint)(i * 2654435761u), films)).ToList();
+        Assert.All(drawn, p => Assert.InRange(p, -1, films - 1));
+        // the slides one entry among the films: about one draw in films + 1
+        Assert.InRange(drawn.Count(p => p < 0), 2000 / (films + 1) / 2, 2000 / (films + 1) * 2);
+        Assert.Equal(films, drawn.Where(p => p >= 0).Distinct().Count());
+    }
+
+    [Fact]
+    public void A_showing_film_loops_on_the_shared_clock()
+    {
+        // a 600 s film phased at 100 s: started at 100, 700, 1300 ...
+        Assert.Equal(700, CinemaVideo.LoopStart(1000, 600, 100));
+        Assert.Equal(1300, CinemaVideo.LoopStart(1300, 600, 100));
+        Assert.Equal(100, CinemaVideo.LoopStart(699.9, 600, 100));
+        // before its first start: the loop before
+        Assert.Equal(-500, CinemaVideo.LoopStart(50, 600, 100));
+        // two peers at any moments of one loop share its start
+        Assert.Equal(CinemaVideo.LoopStart(800, 600, 100), CinemaVideo.LoopStart(1250, 600, 100));
+    }
+
+    [Fact]
+    public void The_open_films_are_web_links_that_loop()
+    {
+        Assert.NotEmpty(CinemaVideo.OpenFilms);
+        Assert.All(CinemaVideo.OpenFilms, f =>
+        {
+            Assert.True(CinemaVideo.Allowed(f.Link), f.Link);
+            Assert.True(f.Seconds > 60, f.Title);
+            Assert.False(string.IsNullOrWhiteSpace(f.Title));
+        });
+        Assert.Equal(CinemaVideo.OpenFilms.Length, CinemaVideo.OpenFilms.Select(f => f.Link).Distinct().Count());
+    }
+
+    [Fact]
     public void A_restart_leads_further_but_not_forever()
     {
         Assert.True(CinemaVideo.RestartLead(1) > CinemaVideo.StartLead);

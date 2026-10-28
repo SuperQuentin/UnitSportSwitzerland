@@ -28,6 +28,10 @@ namespace UnitSport.Interiors;
 /// must be on the clock with the sound due; A stops it and B sees the hall's link go. Then a video file from A's own disk
 /// (phase 4, <see cref="CinemaFileSource"/>): the test film again, streamed from A through the server, watched by both.
 /// </para>
+/// <para>
+/// And what the house's halls are showing by themselves (<c>CinemaBooths.Showings</c>): A says every hall's film and loop
+/// start but hall 1's (which the check works); B and C, C joining late, must draw the same with nothing sent.
+/// </para>
 /// </summary>
 public partial class CinemaNetProbe : ChatProbe
 {
@@ -79,6 +83,7 @@ public partial class CinemaNetProbe : ChatProbe
         {
             if (!await WalkIn(me, interiors, door)) return;
             string plan = interiors.Current!.Key;
+            Say($"showings {Showings(booths, plan)}");
             Expect(booths.StateOf(plan, 0) == CinemaBooths.Unpack(CinemaBooths.Default(plan, 0)), $"the hall starts as its seed says ({booths.StateOf(plan, 0)})");
             booths.Ask(plan, 0, Target(plan));
             Expect(await Until(() => booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), 10),
@@ -87,6 +92,7 @@ public partial class CinemaNetProbe : ChatProbe
             bool b = false, c = false;
             for (int t = 0; t < 150 && !(b && c); t++)
             {
+                Say($"showings {Showings(booths, plan)}");
                 Say($"set {plan}");
                 if (t == 0) GD.Print($"{Log} set {plan}");
                 await Until(() => _heard.Any(l => l.Contains("CN B done")) && _heard.Any(l => l.Contains("CN C done")), 2);
@@ -151,6 +157,14 @@ public partial class CinemaNetProbe : ChatProbe
             if (!await Heard("A", "set", 240)) { Fail("A never set anything"); return; }
             string line = _heard.Last(l => l.Contains("CN A set"));
             string plan = line[(line.IndexOf("CN A set", StringComparison.Ordinal) + "CN A set".Length)..].Trim();
+            // the films the halls show by themselves: the same here as at A, a late joiner too
+            if (_heard.LastOrDefault(l => l.Contains("CN A showings")) is { } shown)
+            {
+                string theirs = shown[(shown.IndexOf("CN A showings", StringComparison.Ordinal) + 13)..].Trim();
+                string mine = Showings(booths, plan);
+                Expect(mine == theirs, $"{_role} draws the halls' showings as A did ({mine} against {theirs})");
+            }
+            else Fail("A never said its showings");
             Expect(await Until(() => booths.StateOf(plan, 0) == CinemaBooths.Unpack(Target(plan)), 10),
                 $"{_role} sees {plan}'s hall as A set it, {CinemaBooths.Unpack(Target(plan))}");
             if (_role == "B")
@@ -215,6 +229,8 @@ public partial class CinemaNetProbe : ChatProbe
         double worst = 0;
         bool relayed = false;
         int heard = 0, listened = 0;
+        _lastLook = Core.RealClock.Now;
+        _firstShown = double.NaN;
         while (Net.ClockSync.ServerNow < until && stream is not { Failed: true } && stream is not { Ended: true })
         {
             double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, t0);
@@ -225,6 +241,19 @@ public partial class CinemaNetProbe : ChatProbe
             // what the screen's speaker does in a hall: say which sample is heard, so a decoder keeps reading ahead of it
             if (stream.SoundAt(pos, out long heardNow)) stream.Heard(heardNow);
             long m = (long)Math.Floor(Net.ClockSync.ServerNow / 2);
+            // the feed is pumped in the booth's own frame, after this one reads it: a frame of this peer that came long
+            // after the last (a stall of the machine, not of the video) reads it a stall late, and the first second of a
+            // feed is its start: neither is a mark of the clock
+            double wall = Core.RealClock.Now;
+            bool stalled = wall - _lastLook > 0.1;
+            _lastLook = wall;
+            if (stream.CurrentTime >= 0 && double.IsNaN(_firstShown)) _firstShown = pos;
+            bool settling = !double.IsNaN(_firstShown) && pos < _firstShown + 1.0;
+            if (m != mark && (stalled || settling) && stream.CurrentTime >= 0)
+            {
+                mark = m;
+                GD.Print($"{Log} mark {m} at {pos:F3} s skipped ({(stalled ? "this peer's frame stalled" : "the feed is starting")}): shows {stream.CurrentTime:F3} s");
+            }
             if (m != mark)
             {
                 mark = m;
@@ -253,6 +282,27 @@ public partial class CinemaNetProbe : ChatProbe
         Expect(heard >= listened - 1 && listened >= 3, $"{_role} has the sound due at {heard}/{listened} marks");
         Expect(relayed == (!CinemaVideoStream.CanDecode || CinemaVideo.IsLive(link)), $"{_role} plays it {(relayed ? "through the server" : "from the link itself")}");
         Expect(marks >= 3 && close == marks, $"{_role} on the shared clock at {close}/{marks} marks (worst {worst * 1000:F0} ms)");
+    }
+
+    private double _lastLook, _firstShown = double.NaN;
+
+    /// <summary>
+    /// Every hall's showing but hall 1's (the check works it): the film's place in the list ('-' the slides or the screen
+    /// off) and its loop's phase (start modulo length) to the tenth of a second, as one line to compare.
+    /// </summary>
+    private static string Showings(CinemaBooths booths, string plan)
+    {
+        var parts = new List<string>();
+        for (int h = 1; h < CinemaBooths.MaxHalls; h++)
+        {
+            var (link, t0) = booths.VideoOf(plan, h);
+            int film = Array.FindIndex(CinemaVideo.OpenFilms, f => f.Link == link);
+            // the loop's phase, not its start: the same whenever it is taken, across a loop
+            double len = film >= 0 ? CinemaVideo.OpenFilms[film].Seconds : 1;
+            double phase = ((t0 % len) + len) % len;
+            parts.Add(link.Length == 0 ? "-" : $"{film}@{phase.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}");
+        }
+        return string.Join(",", parts);
     }
 
     /// <summary>From just outside the door: open it unless it stands open, and walk through (as <see cref="LiftSyncProbe"/>).</summary>

@@ -22,6 +22,8 @@ public partial class CinemaVideoShot : Node3D
     private ICinemaFeed? _stream;
     private Camera3D _cam = null!;
     private double _t0, _shotAt = -1;
+    /// <summary>When the shot began (RealClock): a showing is mid-film, so its position says nothing of how long we waited.</summary>
+    private readonly double _began = Core.RealClock.Now;
     private int _step;
     private string _plan = "";
     private Vector3 _target, _booth;
@@ -57,8 +59,19 @@ public partial class CinemaVideoShot : Node3D
         _plan = layout.Key;
         _t0 = Net.ClockSync.ServerNow;
         booths.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+        // showing: the film the hall draws by itself, as a cinema first seen mid-showing (the cat slides one entry: a new
+        // showing until it draws a film)
+        if (_link == "showing")
+        {
+            for (int reel = 0; reel < 16 && booths.VideoOf(_plan, 0).Link.Length == 0; reel++)
+            {
+                booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, false));
+                booths.Serve(1, _plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+            }
+            GD.Print($"[cinemavideo] hall 1 is showing {booths.FilmTitle(booths.VideoOf(_plan, 0).Link)} ({booths.VideoOf(_plan, 0).Link})");
+        }
         // live:monitor, live:window, live:camera, live:test: this machine shares its first one (#1298 phase 3), sharp
-        if (CinemaVideo.IsLive(_link))
+        else if (CinemaVideo.IsLive(_link))
         {
             string kind = _link[CinemaVideo.LivePrefix.Length..];
             Task.Run(CinemaDevices.List).ContinueWith(found => Callable.From(() =>
@@ -86,7 +99,7 @@ public partial class CinemaVideoShot : Node3D
         // the hall's own start: a share's T0 is the server's, set once it granted it
         double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, CinemaBooths.Instance!.VideoOf(_plan, 0) is { Link.Length: > 0 } v ? v.T0 : _t0);
         _stream = CinemaBooths.Instance!.StreamOf(_plan, 0);
-        if (_stream is { Failed: true } || pos > 90) { Done($"FAILED ({_stream?.Status ?? "no feed"})"); return; }
+        if (_stream is { Failed: true } || Core.RealClock.Now - _began > 90) { Done($"FAILED ({_stream?.Status ?? "no feed"})"); return; }
         if (_stream == null || _stream.CurrentTime < 0) return;
         if (_shotAt < 0) _shotAt = pos + 2;
         if (pos < _shotAt) return;

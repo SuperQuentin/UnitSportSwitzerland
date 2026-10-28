@@ -83,6 +83,8 @@ public partial class CinemaBooths : Node
         world.AddChild(node);
         Instance = node;
         CinemaVideo.AllowLocal = LocalFiles;
+        // a server's own films for its showing halls (a client's copy is replaced by its server's on join)
+        node.LoadPool();
         return node;
     }
 
@@ -215,6 +217,7 @@ public partial class CinemaBooths : Node
             for (int h = 0; h < halls.Length; h++)
                 if (halls[h] != Default(plan, h)) RpcId(peer, MethodName.Set, plan, h, halls[h]);
         SendVideosTo(peer);
+        SendPool(peer);
     }
 
     // ---- client: showing it ----------------------------------------------------------------------

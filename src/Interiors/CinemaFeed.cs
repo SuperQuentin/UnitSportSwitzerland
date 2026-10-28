@@ -98,6 +98,52 @@ public static class CinemaLookup
     }
 
     /// <summary>
+    /// A film for a server's list (#1298): its title and length, from yt-dlp for a site's page or a playlist, from ffmpeg's
+    /// header for a file; null with <paramref name="why"/> for what cannot loop (a live stream, no length). Blocking.
+    /// </summary>
+    public static CinemaVideo.Film? Probe(string link, out string why)
+    {
+        why = "";
+        try
+        {
+            if (CinemaVideo.NeedsLookup(link))
+            {
+                var psi = new ProcessStartInfo(BundledTools.Resolve("yt-dlp")) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+                foreach (var a in BundledTools.YtDlpJsArgs().Concat(new[] { "--no-playlist", "--no-warnings", "--skip-download", "-O", "%(is_live)s|%(duration)s|%(title)s", link }))
+                    psi.ArgumentList.Add(a);
+                using var p = Process.Start(psi);
+                if (p == null) { why = "yt-dlp is missing on the server"; return null; }
+                _ = p.StandardError.ReadToEndAsync();
+                string line = p.StandardOutput.ReadToEnd().Trim();
+                p.WaitForExit();
+                var f = line.Split('|', 3);
+                if (p.ExitCode != 0 || f.Length < 3) { why = "the site would not give the video"; return null; }
+                if (f[0] == "True") { why = "a live stream has no end to loop"; return null; }
+                if (!double.TryParse(f[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double s) || s <= 0)
+                { why = "its length is unknown"; return null; }
+                return new CinemaVideo.Film(f[2].Length > 0 ? f[2] : CinemaVideo.Title(link), link, s);
+            }
+            var probe = new ProcessStartInfo(BundledTools.Resolve("ffmpeg")) { RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            foreach (var a in new[] { "-hide_banner", "-nostdin" }.Concat(Input(link, 0, false))) probe.ArgumentList.Add(a);
+            using var ff = Process.Start(probe);
+            if (ff == null) { why = "ffmpeg is missing on the server"; return null; }
+            string log = ff.StandardError.ReadToEnd();
+            ff.WaitForExit(15000);
+            int d = log.IndexOf("Duration: ", StringComparison.Ordinal);
+            if (d < 0) { why = "it is not a video"; return null; }
+            string value = log[(d + 10)..].Split(',')[0].Trim();
+            if (!TimeSpan.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var span) || span.TotalSeconds <= 0)
+            { why = "a live stream has no end to loop"; return null; }
+            return new CinemaVideo.Film(CinemaVideo.Title(link), link, span.TotalSeconds);
+        }
+        catch (Exception e)
+        {
+            why = e is System.ComponentModel.Win32Exception ? "yt-dlp or ffmpeg is missing on the server" : e.Message;
+            return null;
+        }
+    }
+
+    /// <summary>
     /// ffmpeg's input arguments: the web only (or a check's file), reconnecting, seeked to <paramref name="at"/>; a
     /// live playlist from near its edge.
     /// </summary>

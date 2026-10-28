@@ -48,9 +48,12 @@ public partial class CinemaBooths
     /// <summary>A shot's cinema to show <see cref="ProbeWatch"/>'s hall on (<see cref="CinemaVideoShot"/>), when no interior is current.</summary>
     public InteriorNode? ProbeNode { get; set; }
 
-    /// <summary>A hall's link ("" for none) and the shared-clock moment it started.</summary>
+    /// <summary>
+    /// A hall's link ("" for none) and the shared-clock moment it started: what someone chose, else the film it is showing
+    /// since the cinema was first seen (<see cref="ShowingOf"/>; never a player's file or share).
+    /// </summary>
     public (string Link, double T0) VideoOf(string plan, int hall) =>
-        hall >= 0 && hall < MaxHalls && _videos.TryGetValue(plan, out var v) && v[hall].Link != null ? (v[hall].Link, v[hall].T0) : ("", 0);
+        hall >= 0 && hall < MaxHalls && _videos.TryGetValue(plan, out var v) && v[hall].Link != null ? (v[hall].Link, v[hall].T0) : ShowingOf(plan, hall);
 
     /// <summary>Whether a hall's video goes through the server for everyone (its panel's switch).</summary>
     public bool RelayOf(string plan, int hall) =>
@@ -198,6 +201,8 @@ public partial class CinemaBooths
     {
         var parts = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length == 0 || !parts[0].Equals("/cinema", StringComparison.OrdinalIgnoreCase)) return null;
+        // the server's film list is the server's: the line goes on to it
+        if (parts.Length > 1 && parts[1].Equals("pool", StringComparison.OrdinalIgnoreCase)) return null;
         if (Instance is not { } booths) return "No cinemas here.";
         if (InteriorManager.Instance?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) return "Go into a cinema first.";
         var cam = booths.GetViewport().GetCamera3D();
@@ -228,7 +233,7 @@ public partial class CinemaBooths
                       + (stream == null ? "" : $" ({(stream is CinemaRelayFeed ? "through the server, " : "")}"
                           + $"{(stream.Status.Length > 0 ? stream.Status : "playing")}, frame at {stream.CurrentTime:F2} s, {stream.Restarts} restarts)");
             default:
-                return "Usage: /cinema play <link>  |  /cinema stop  |  /cinema relay on|off  |  /cinema";
+                return "Usage: /cinema play <link>  |  /cinema stop  |  /cinema relay on|off  |  /cinema pool  |  /cinema";
         }
     }
 

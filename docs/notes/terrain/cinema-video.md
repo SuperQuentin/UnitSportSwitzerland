@@ -104,6 +104,19 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   done. Tested: the 3D Big Buck Bunny (`mirrors.mit.edu/kodi/demo-files/BBB/bbb_sunflower_1080p_60fps_stereo_abl.mp4`;
   the 30 fps abl file there is broken, missing atoms; the mirror delivers 10 s of the 60 fps one in 16 s, so it falls
   behind and restarts: a slow mirror, not the decoder) and a synthetic top-and-bottom file through the relay (77 ms off).
+- **What a hall shows by itself** (the owner's, Oct 28: "randomly select from available sources, not client local";
+  `CinemaBooths.Showings.cs`): a hall whose screen is on and that nobody chose a video for (the 40 % the cinema starts
+  with mid-showing, `Default`) plays a film drawn from its seed and showing number (`PickShowing`) among the open films
+  (`CinemaVideo.OpenFilms`: Blender's open movies on Blender's YouTube channels, CC-BY, 480p through yt-dlp; append only)
+  and the server's own list, the cat slides one entry among them; never a player's file or share. The film loops on the
+  shared clock from the hall's own phase (`LoopStart`), so every peer, a joiner too, shows the same frame and starts it
+  again together, with nothing sent but the list. `VideoOf` falls back to it for a hall whose link was never set (a
+  chosen video, the slides or the screen off from the panel are kept, `""` included); the draw is cached per hall,
+  showing and list version (no string per frame). The server's list: `user://cinema_pool.json`, sent on join and on change
+  (`SetPool`); `/cinema pool` lists, an admin `add <link>` (title and length looked up on the server, `CinemaLookup.Probe`;
+  not a live stream) and `remove <n>`. The panel names a showing by its title. Checked: A, B and C (late) draw the same
+  film and loop phase for every hall (`cinemanetcheck`); `--cinemavideoshot showing,<prefix>` (Cosmos Laundromat 604 s in,
+  on the clock within 50 ms).
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`

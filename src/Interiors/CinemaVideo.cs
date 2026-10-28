@@ -122,6 +122,41 @@ public static class CinemaVideo
         return $"split[a][b];[a]{left},{unsqueeze},{fit}[l];[b]{right},{unsqueeze},{fit}[r];[l][r]hstack";
     }
 
+    /// <summary>A film a hall can be showing when the cinema is first seen: its title, its link, its length in seconds.</summary>
+    public readonly record struct Film(string Title, string Link, double Seconds);
+
+    /// <summary>
+    /// The open films every cinema can be showing (#1298, the owner's: "free open films"): Blender's open movies, CC-BY,
+    /// from Blender's own YouTube channels (yt-dlp takes them at 480p, light for every client). Lengths from yt-dlp,
+    /// Oct 2026. A server adds its own list (<c>/cinema pool</c>). Append only: the halls' picks are by index.
+    /// </summary>
+    public static readonly Film[] OpenFilms =
+    {
+        new("Sintel", "https://www.youtube.com/watch?v=eRsGyueVLvQ", 888),
+        new("Tears of Steel", "https://www.youtube.com/watch?v=R6MlUcmOul8", 734),
+        new("Spring", "https://www.youtube.com/watch?v=WhWc3b3KhnY", 464),
+        new("Cosmos Laundromat", "https://www.youtube.com/watch?v=Y-rmzh0PI3c", 731),
+        new("Agent 327: Operation Barbershop", "https://www.youtube.com/watch?v=mN0zPOpADL4", 232),
+        new("Big Buck Bunny", "https://www.youtube.com/watch?v=aqz-KE-bpKQ", 635),
+        new("Caminandes 3: Llamigos", "https://www.youtube.com/watch?v=SkVqJ1SGeL0", 150),
+        new("Sprite Fright", "https://www.youtube.com/watch?v=_cMxraX_5RE", 630),
+        new("Charge", "https://www.youtube.com/watch?v=UXqq0ZvbOnk", 263),
+    };
+
+    /// <summary>
+    /// What a showing hall plays from its seed: -1 the cat slides (one entry among the films, the owner's), else the index
+    /// of the film among <paramref name="films"/>.
+    /// </summary>
+    public static int PickShowing(uint seed, int films) => (int)(seed % (uint)(films + 1)) - 1;
+
+    /// <summary>
+    /// A looping film's start on the shared clock: the last start before <paramref name="now"/> of a film that starts
+    /// every <paramref name="seconds"/> from <paramref name="phase"/>. The same on every peer at any moment, so a hall
+    /// showing a film needs nothing sent; at the loop all peers start it again together.
+    /// </summary>
+    public static double LoopStart(double now, double seconds, double phase) =>
+        seconds <= 0 ? phase : phase + Math.Floor((now - phase) / seconds) * seconds;
+
     /// <summary>The longest link the server takes.</summary>
     public const int MaxLink = 1000;
 

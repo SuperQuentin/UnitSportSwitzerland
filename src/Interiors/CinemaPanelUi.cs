@@ -413,7 +413,7 @@ public partial class CinemaPanelUi : CanvasLayer
         _glasses.Visible = layout != CinemaVideo.Stereo.Mono && !XR.XrSession.Active;
         string now = !screen ? "The screen is off"
             : link.Length == 0 ? "Showing the cat slides"
-            : (CinemaVideo.IsLive(link) ? $"Live: {CinemaVideo.Title(link)}" : $"Playing {CinemaVideo.Title(link)}")
+            : (CinemaVideo.IsLive(link) ? $"Live: {CinemaVideo.Title(link)}" : $"Playing {(booths.FilmTitle(link) is { Length: > 0 } film ? film : CinemaVideo.Title(link))}")
               + (booths.StereoOf(_plan, _hall) != CinemaVideo.Stereo.Mono ? "  ·  3D" : "")
               + (stream is CinemaRelayFeed && !CinemaVideo.IsLive(link) ? "  ·  through the server" : "")
               + (stream is { Status.Length: > 0 } s ? $"  ·  {s.Status}" : "");
