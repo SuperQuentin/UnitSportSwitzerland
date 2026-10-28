@@ -87,6 +87,7 @@ public partial class LaneRig : Node3D
     /// <summary>A full rack of ten standing on lane <paramref name="lane"/>'s spots.</summary>
     public void SetRack(int lane)
     {
+        _pinsStill[lane] = true;
         var l = _lanes[lane];
         for (int i = 0; i < 10; i++)
         {
@@ -116,6 +117,7 @@ public partial class LaneRig : Node3D
         var l = _lanes[lane];
         l.Kind = kind;
         l.CycleStart = start;
+        _machineHeard[lane] = false;
         l.Picked = 0;
         for (int i = 0; i < 10; i++)
             if (l.State[i] == PinState.Standing) l.Picked |= (ushort)(1 << i);
@@ -134,8 +136,13 @@ public partial class LaneRig : Node3D
             if (double.IsNaN(l.CycleStart)) continue;
             float t = (float)(now - l.CycleStart);
             if (t < 0) { any = true; continue; }
+            if (!_machineHeard[lane])
+            {
+                _machineHeard[lane] = true;
+                DeckSound(lane, BowlingSounds.Machine, new Vector3(Geometry.LaneX(lane), 1f, Geometry.HeadPin), -6f);
+            }
             Step(lane, PinsetterCycle.At(Geometry, l.Kind, t));
-            if (t >= PinsetterCycle.Length(l.Kind)) l.CycleStart = double.NaN;
+            if (t >= PinsetterCycle.Length(l.Kind)) { l.CycleStart = double.NaN; _pinsStill[lane] = true; }
             else any = true;
         }
         bool replay = StepReplay(delta);
@@ -206,6 +213,11 @@ public partial class LaneRig : Node3D
         {
             ball = _rolling[lane] = new MeshInstance3D { Name = $"Rolling{lane}", MaterialOverride = _material };
             AddChild(ball);
+            if (Audible)
+            {
+                _rollVoice[lane] = new AudioStreamPlayer3D { Name = "Roll", Bus = Audio.SfxBus.Name, UnitSize = 6f, MaxDistance = 45f, VolumeDb = -4f };
+                ball.AddChild(_rollVoice[lane]);
+            }
         }
         if (_rollingColor[lane] != color)
         {
@@ -219,6 +231,45 @@ public partial class LaneRig : Node3D
     public void HideBall(int lane)
     {
         if (_rolling[lane] is { Visible: true } ball) ball.Visible = false;
+        if (_rollVoice[lane] is { Playing: true } voice) voice.Stop();
+        _lastBall[lane] = (double.NaN, Vector3.Zero);
+    }
+
+    // ---- sound ---------------------------------------------------------------------------------
+
+    private static bool Audible => DisplayServer.GetName() != "headless";
+    private readonly AudioStreamPlayer3D?[] _rollVoice = new AudioStreamPlayer3D?[2];
+    private readonly AudioStreamPlayer3D?[] _deckVoice = new AudioStreamPlayer3D?[2];
+    private AudioStreamPlayer3D? _hoodVoice;
+    private readonly (double At, Vector3 Pos)[] _lastBall = { (double.NaN, Vector3.Zero), (double.NaN, Vector3.Zero) };
+    /// <summary>Whether a lane's pins stand still on their spots: the first movement after is the crash.</summary>
+    private readonly bool[] _pinsStill = { true, true };
+    private readonly bool[] _machineHeard = { true, true };
+
+    /// <summary>The rolling ball's rumble (or the gutter's rattle), pitched by its speed.</summary>
+    private void RollSound(int lane, Vector3 at, bool gutter)
+    {
+        if (_rollVoice[lane] is not { } voice) return;
+        double now = Time.GetTicksMsec() / 1000.0;
+        var (was, from) = _lastBall[lane];
+        _lastBall[lane] = (now, at);
+        if (double.IsNaN(was) || now - was < 1e-3) return;
+        float speed = (at - from).Length() / (float)(now - was);
+        var stream = gutter ? BowlingSounds.Gutter : BowlingSounds.Roll;
+        if (voice.Stream != stream) { voice.Stream = stream; voice.Stop(); }
+        if (!voice.Playing && speed > 0.5f) voice.Play();
+        voice.PitchScale = Mathf.Clamp(0.6f + speed / 12f, 0.5f, 1.6f);
+    }
+
+    private void DeckSound(int lane, AudioStream stream, Vector3 at, float db = 0f)
+    {
+        if (!Audible) return;
+        var voice = _deckVoice[lane] ??= new AudioStreamPlayer3D { Name = $"Deck{lane}", Bus = Audio.SfxBus.Name, UnitSize = 8f, MaxDistance = 60f };
+        if (voice.GetParent() == null) AddChild(voice);
+        voice.Stream = stream;
+        voice.VolumeDb = db;
+        voice.Position = at;
+        voice.Play();
     }
 
     /// <summary>
@@ -233,6 +284,7 @@ public partial class LaneRig : Node3D
         float up = onDeck ? 1 : Mathf.SmoothStep(deck - 1f, deck, pos.Z);
         var at = new Vector3(g.LaneX(lane) + pos.X, LaneGeometry.LaneTop + up * (LaneGeometry.DeckTop - LaneGeometry.LaneTop) + pos.Y, g.Foul + pos.Z);
         RollingBall(lane, color).Transform = new Transform3D(new Basis(turn), at);
+        RollSound(lane, at, Mathf.Abs(pos.X) > LaneGeometry.HalfLane);
     }
 
     /// <summary>
@@ -248,6 +300,18 @@ public partial class LaneRig : Node3D
         if (ball.Origin.Y < -1f) HideBall(lane);
         else RollingBall(lane, color).Transform = ball with { Origin = ball.Origin + origin };
         var l = _lanes[lane];
+        if (_pinsStill[lane])
+        {
+            int moved = 0;
+            for (int i = 0; i < 10; i++)
+                if (l.State[i] == PinState.Standing && (Lerp(i + 1).Origin + origin).DistanceTo(l.Pins[i].Origin) > 0.03f) moved++;
+            if (moved > 0)
+            {
+                _pinsStill[lane] = false;
+                DeckSound(lane, moved >= 4 ? BowlingSounds.Crash : BowlingSounds.Light, new Vector3(g.LaneX(lane), 0.3f, g.HeadPin + 0.3f));
+            }
+        }
+        if (ball.Origin.Y > -1f) RollSound(lane, ball.Origin + origin, false);
         for (int i = 0; i < 10; i++)
         {
             var t = Lerp(i + 1);
@@ -261,6 +325,7 @@ public partial class LaneRig : Node3D
     /// <summary>Lane <paramref name="lane"/>'s pins at rest as <paramref name="standing"/> says: those on their spots, the rest gone.</summary>
     public void SetStanding(int lane, ushort standing)
     {
+        _pinsStill[lane] = true;
         var l = _lanes[lane];
         for (int i = 0; i < 10; i++)
         {
@@ -280,6 +345,12 @@ public partial class LaneRig : Node3D
     public void SetHoodBalls(IReadOnlyList<int> colors)
     {
         if (_hoodShown.SequenceEqual(colors)) return;
+        if (colors.Count > _hoodShown.Count && Audible)
+        {
+            _hoodVoice ??= new AudioStreamPlayer3D { Name = "Hood", Bus = Audio.SfxBus.Name, UnitSize = 5f, MaxDistance = 35f, Stream = BowlingSounds.Thunk, Position = Geometry.HoodLift };
+            if (_hoodVoice.GetParent() == null) AddChild(_hoodVoice);
+            _hoodVoice.Play();
+        }
         _hoodShown.Clear();
         _hoodShown.AddRange(colors);
         while (_balls.Count < colors.Count)
