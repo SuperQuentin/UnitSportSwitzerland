@@ -47,22 +47,94 @@ public partial class PinballBackbox : MeshInstance3D
     }
 
     /// <summary>Draws <paramref name="s"/> if the backbox would look any different; cheap to call every frame.</summary>
-    public void Show(PinballScreen s, double now = 0)
+    public void Show(PinballScreen s, double now = 0, PinballHighScores? highs = null)
     {
-        // the attract mode's text alternates every few seconds
-        bool blink = s.Phase != PinballRules.Phase.Playing && (int)(now / 3.0) % 2 == 1;
-        string key = s.DisplayKey() + blink;
+        // attract and game over cycle every 3 s: the title (or game over), press start (or match), the high scores
+        int cycle = s.Phase != PinballRules.Phase.Playing ? (int)(now / 3.0) % 3 : 0;
+        bool showHighs = cycle == 2 && highs is { Entries.Count: > 0 };
+        bool blink = cycle == 1;
+        string key = s.DisplayKey() + cycle + (showHighs ? string.Join(",", highs!.Entries) : "");
         if (key == _shown) return;
         _shown = key;
         _image.Fill(Colors.Black);
-        switch (_table.Era)
-        {
-            case PinballEra.Reels: Reels(s, blink); break;
-            case PinballEra.Segments: Segments(s, blink); break;
-            case PinballEra.DotMatrix: Dots(s, blink); break;
-            default: Lcd(s, blink); break;
-        }
+        if (showHighs)
+            switch (_table.Era)
+            {
+                case PinballEra.Reels: ReelsHighs(highs!); break;
+                case PinballEra.Segments: SegmentsHighs(highs!, now); break;
+                case PinballEra.DotMatrix: DotsHighs(highs!); break;
+                default: LcdHighs(highs!); break;
+            }
+        else
+            switch (_table.Era)
+            {
+                case PinballEra.Reels: Reels(s, blink); break;
+                case PinballEra.Segments: Segments(s, blink); break;
+                case PinballEra.DotMatrix: Dots(s, blink); break;
+                default: Lcd(s, blink); break;
+            }
         _texture.Update(_image);
+    }
+
+    /// <summary>The drawn picture's key (the check reads whether the high scores came up).</summary>
+    public string Shown => _shown;
+
+    // ---- the high scores, in each era's way --------------------------------------------------------
+
+    /// <summary>Electro-mechanical: the reels turn to the best four scores, "HIGH SCORE TO DATE" lit with the champion's name.</summary>
+    private void ReelsHighs(PinballHighScores h)
+    {
+        var shown = new PinballScreen { Phase = PinballRules.Phase.GameOver, Scores = h.Entries.Take(4).Select(e => e.Score).ToArray() };
+        Reels(shown, false);
+        Rect(0, 46, _w, _h, Colors.Black);
+        var lit = new Color(1f, 0.82f, 0.35f);
+        Text("HIGH SCORE TO DATE", 6, 48, 1, lit);
+        Text(h.Entries[0].Name.ToUpperInvariant(), 6, 57, 1, lit);
+    }
+
+    /// <summary>Solid state: the alphanumeric line names each champion in turn, the four windows their scores.</summary>
+    private void SegmentsHighs(PinballHighScores h, double now)
+    {
+        var shown = new PinballScreen { Phase = PinballRules.Phase.Playing, Scores = h.Entries.Take(4).Select(e => e.Score).ToArray() };
+        var e = h.Entries[(int)(now / 0.75) % Math.Min(4, h.Entries.Count)];
+        int rank = h.Entries.IndexOf(e) + 1;
+        shown.Message = $"{rank} {e.Name}";
+        Segments(shown, false);
+    }
+
+    /// <summary>The dot-matrix: "HIGH SCORES" and the best three, rank, name, score.</summary>
+    private void DotsHighs(PinballHighScores h)
+    {
+        var orange = new Color(1f, 0.45f, 0.08f);
+        Centered("HIGH SCORES", 0, 1, orange);
+        for (int i = 0; i < Math.Min(3, h.Entries.Count); i++)
+        {
+            var e = h.Entries[i];
+            string name = e.Name.Length > 8 ? e.Name[..8] : e.Name;
+            Text($"{i + 1} {name}".ToUpperInvariant(), 2, 9 + i * 8, 1, i == 0 ? orange : orange * 0.7f);
+            string score = Score(e.Score);
+            Text(score, 126 - PinballFont.Width(score), 9 + i * 8, 1, i == 0 ? orange : orange * 0.7f);
+        }
+    }
+
+    /// <summary>The LCD: a race's results board, the best five on alternating bars.</summary>
+    private void LcdHighs(PinballHighScores h)
+    {
+        var navy = new Color(0.02f, 0.08f, 0.25f);
+        var red = new Color(0.85f, 0.08f, 0.10f);
+        Rect(0, 0, _w, _h, navy);
+        Rect(0, 0, _w, 16, red);
+        Text("HIGH SCORES - BEST RUNS", 4, 4, 1, Colors.White);
+        for (int i = 0; i < h.Entries.Count; i++)
+        {
+            var e = h.Entries[i];
+            int y = 20 + i * 15;
+            Rect(4, y, _w - 4, y + 13, i % 2 == 0 ? new Color(0.95f, 0.97f, 1f) : new Color(0.80f, 0.88f, 1f));
+            var ink = i == 0 ? red : navy;
+            Text($"{i + 1}. {e.Name}".ToUpperInvariant(), 8, y + 3, 1, ink);
+            string score = Score(e.Score);
+            Text(score, _w - 8 - PinballFont.Width(score), y + 3, 1, ink);
+        }
     }
 
     private void Px(int x, int y, Color c)

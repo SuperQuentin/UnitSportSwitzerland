@@ -52,7 +52,7 @@ public partial class PinballTables
     // ---- what the server sends ---------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void State(string key, int index, int table, long[] players, long runner, byte[] screen)
+    private void State(string key, int index, int table, long[] players, long runner, byte[] screen, byte[] highs)
     {
         var m = MachineOf(key, index, table);
         if (Online && !Multiplayer.IsServer())
@@ -62,6 +62,7 @@ public partial class PinballTables
             m.Runner = runner;
         }
         m.Screen = screen;
+        m.Highs = PinballHighScores.Unpack(highs);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -131,6 +132,11 @@ public partial class PinballTables
         {
             _asked = here.Key;
             if (Online && !Multiplayer.IsServer()) RpcId(1, MethodName.RequestState, here.Key);
+            // offline this peer is the server: its saved high scores onto the machines nobody played yet
+            else
+                foreach (var (index, table, highs) in Book.In(here.Key).ToList())
+                    if (!Machines.ContainsKey((here.Key, index)))
+                        State(here.Key, index, table, Array.Empty<long>(), 0, PinballScreen.Idle(PinballLayouts.Get(table)).Pack(), highs.Pack());
         }
         if (im.BuiltNode(here.Key) is not { } node) return;
         double now = Core.RealClock.Now;
@@ -144,7 +150,7 @@ public partial class PinballTables
                 // unpacked only when it changed
                 if (!_screens.TryGetValue((key, index), out var shown) || !ReferenceEquals(shown.Bytes, m.Screen))
                     _screens[(key, index)] = shown = (m.Screen, PinballScreen.Unpack(m.Screen));
-                cabinet.ShowScreen(shown.Screen, now);
+                cabinet.ShowScreen(shown.Screen, now, m.Highs);
             }
             if (m.Runner == 0 || m.Now is not { } poses)
             {

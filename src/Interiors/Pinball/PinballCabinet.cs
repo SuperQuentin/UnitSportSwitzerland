@@ -29,6 +29,8 @@ public partial class PinballCabinet : Node3D
     public PinballTable Table { get; private set; } = null!;
     public int TableIndex { get; private set; }
     public PinballBackbox Display { get; private set; } = null!;
+    /// <summary>The machine's high scores as last sent (the backbox shows them in attract).</summary>
+    public PinballHighScores? Highs { get; set; }
 
     private Node3D _field = null!;
     private Node3D[] _flippers = null!;
@@ -160,9 +162,10 @@ public partial class PinballCabinet : Node3D
     }
 
     /// <summary>Lamps and backbox for <paramref name="s"/>; blinking lamps at 2.5 Hz on <paramref name="now"/>. Cheap when nothing changed.</summary>
-    public void ShowScreen(PinballScreen s, double now)
+    public void ShowScreen(PinballScreen s, double now, PinballHighScores? highs = null)
     {
-        Display.Show(s, now);
+        if (highs != null) Highs = highs;
+        Display.Show(s, now, Highs);
         bool blink = (int)(now * 5) % 2 == 0;
         bool same = s.Lamps.Length == _lampsShown.Length && blink == _blinkShown;
         if (same)

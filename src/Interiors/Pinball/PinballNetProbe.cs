@@ -94,6 +94,23 @@ public partial class PinballNetProbe : ChatProbe
             string counted = string.Join(",", mine.Players.Select(p => p.Score));
             Expect(counted == scores, $"the server scored what the last runner's rules counted ({counted} / {scores})");
         }
+
+        // the machine's high scores: both games on its table under the players' names, here and on the backbox
+        string Highs() => tables.HighsOf(key, index) is { } h ? string.Join(",", h.Entries.Select(x => $"{x.Name}:{x.Score}")) : "";
+        bool BothListed() => screen != null && screen.Scores.All(s => tables.HighsOf(key, index)?.Entries.Any(x => x.Score == s) == true)
+            && tables.HighsOf(key, index)!.Entries.Any(x => x.Name.StartsWith("PinNetA")) && tables.HighsOf(key, index)!.Entries.Any(x => x.Name.StartsWith("PinNetB"));
+        Expect(await Until(BothListed, 10), $"the high scores list both players ({Highs()})");
+        var cabinet = node.PinballOf(index);
+        Expect(await Until(() => cabinet != null && cabinet.Display.Shown.Contains("PinNet"), 12), "the backbox shows the high scores in attract");
+        if (_role == "B")
+        {
+            // as a late joiner: out of the venue (the client forgets it) and back in: the server sends the table again
+            play.QueueFree();
+            await Seconds(0.5);
+            if (!await WalkIn(me, interiors, door!.Value)) return;
+            Expect(await Until(BothListed, 15), $"walking in again, the high scores came with the machine ({Highs()})");
+        }
+        GD.Print($"{Log} high scores {Highs()}");
         await Finish(3);
     }
 

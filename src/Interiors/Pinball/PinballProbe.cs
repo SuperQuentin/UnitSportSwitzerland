@@ -90,6 +90,13 @@ public partial class PinballProbe : Node
             c.ShowScreen(shout, 1);
             c.ShowScreen(PinballScreen.Idle(t, new long[] { 1, 2 }), 4);
             Check(true, $"{name}: the {t.Era} display draws long words and four players");
+            // attract: the high scores come up every third turn of the cycle (3 s each), in the era's style
+            var highs = new PinballHighScores();
+            foreach (var (who, score) in new[] { ("Anna", 1_234_560L), ("Beat", 987_650L), ("Chantal Verylongname", 45_000L), ("Dario", 12_340L), ("Elsa", 990L) }) highs.Offer(who, score);
+            c.ShowScreen(PinballScreen.Idle(t), 6.5, highs);
+            Check(c.Display.Shown.Contains("Anna"), $"{name}: attract shows the high scores");
+            c.ShowScreen(PinballScreen.Idle(t), 0.5, highs);
+            Check(!c.Display.Shown.Contains("Anna"), $"{name}: and then the title again");
         }
         catch (Exception e)
         {

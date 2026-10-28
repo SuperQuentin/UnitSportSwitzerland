@@ -757,12 +757,13 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
-        // pinball (#1325): the flippers on A / D and the arrows, the pad's shoulders and triggers; the plunger on
+        // pinball (#1325): the flippers on A / D, the arrows and Left / Right Shift (each Shift its side), the pad's
+        // shoulders and triggers; the plunger on Enter too (PinballPlay keeps Enter from the chat while at a machine);
         // Space / S / down, pad A or the right stick pulled back; nudges W (forward), Q and R (sides), pad X with
         // the left stick for its side. Read only at a machine (PinballPlay), where walking is off.
-        Bind(PinballLeft, Keys(Key.A, Key.Left), Button(JoyButton.LeftShoulder), Axis(JoyAxis.TriggerLeft, 1));
-        Bind(PinballRight, Keys(Key.D, Key.Right), Button(JoyButton.RightShoulder), Axis(JoyAxis.TriggerRight, 1));
-        Bind(PinballPlunge, Keys(Key.Space, Key.S, Key.Down), Button(JoyButton.A), Axis(JoyAxis.RightY, 1));
+        Bind(PinballLeft, Keys(Key.A, Key.Left), KeyAt(Key.Shift, KeyLocation.Left), Button(JoyButton.LeftShoulder), Axis(JoyAxis.TriggerLeft, 1));
+        Bind(PinballRight, Keys(Key.D, Key.Right), KeyAt(Key.Shift, KeyLocation.Right), Button(JoyButton.RightShoulder), Axis(JoyAxis.TriggerRight, 1));
+        Bind(PinballPlunge, Keys(Key.Space, Key.S, Key.Down, Key.Enter), Button(JoyButton.A), Axis(JoyAxis.RightY, 1));
         Bind(PinballNudge, Keys(Key.W, Key.Up), Button(JoyButton.X));
         Bind(PinballNudgeLeft, Keys(Key.Q));
         Bind(PinballNudgeRight, Keys(Key.R));
@@ -824,6 +825,10 @@ public partial class PlayerInput : Node
 
     private static InputEvent[] Keys(params Key[] keys) =>
         keys.Select(k => (InputEvent)new InputEventKey { PhysicalKeycode = k }).ToArray();
+
+    /// <summary>One side's key of a pair (Left Shift, Right Shift): only that key, not the other.</summary>
+    private static InputEvent[] KeyAt(Key key, KeyLocation location) =>
+        new InputEvent[] { new InputEventKey { PhysicalKeycode = key, Location = location } };
 
     private static InputEvent[] Mouse(MouseButton b) =>
         new InputEvent[] { new InputEventMouseButton { ButtonIndex = b } };

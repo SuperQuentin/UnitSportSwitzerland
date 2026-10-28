@@ -41,6 +41,7 @@ public partial class PinballTables
         m.Players.Add(peer);
         m.Joining.Clear();
         m.Log.Clear();
+        m.Recorded = false;
         m.Runner = peer;
         m.LastFrame = Clock;
         GD.Print($"[pinball] peer {peer} starts a game of {PinballLayouts.Get(m.Table).Title} at {key} #{index}");
@@ -92,6 +93,11 @@ public partial class PinballTables
         if (rules.State != PinballRules.Phase.Playing)
         {
             if (m.Runner != 0) GD.Print($"[pinball] {key} #{index}: game over, {string.Join(", ", rules.Players.Select(p => p.Score))}");
+            if (rules.State == PinballRules.Phase.GameOver && !m.Recorded)
+            {
+                m.Recorded = true;
+                Record(key, index, m);
+            }
             m.Runner = 0;
             m.Joining.Clear();
             Changed(key, index, m);
@@ -200,15 +206,70 @@ public partial class PinballTables
         else if (peer > 0) RpcId(peer, method, args);
     }
 
-    /// <summary>A machine changed: its players, who is up, the backbox and lamps, to everyone inside.</summary>
+    /// <summary>A machine changed: its players, who is up, the backbox and lamps, its high scores, to everyone inside.</summary>
     private void Changed(string key, int index, Machine m)
     {
         var screen = m.Rules != null && (m.Rules.State != PinballRules.Phase.Attract)
             ? PinballScreen.Of(m.Rules).Pack() : PinballScreen.Idle(PinballLayouts.Get(m.Table)).Pack();
         var players = m.Players.ToArray();
+        var highs = Book.Of(key, index, m.Table).Pack();
         if (Online)
-            foreach (long peer in PeersInside(key)) RpcId(peer, MethodName.State, key, index, m.Table, players, m.Runner, screen);
-        if (!Online || !DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase)) State(key, index, m.Table, players, m.Runner, screen);
+            foreach (long peer in PeersInside(key)) RpcId(peer, MethodName.State, key, index, m.Table, players, m.Runner, screen, highs);
+        if (!Online || !DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase)) State(key, index, m.Table, players, m.Runner, screen, highs);
+    }
+
+    // ---- high scores -------------------------------------------------------------------------------
+
+    private const string ScoresFile = "user://pinball_scores.json";
+    private PinballScoreBook? _book;
+
+    /// <summary>The server's high scores of every machine, read from its saved state on first use.</summary>
+    private PinballScoreBook Book => _book ??= LoadBook();
+
+    private static PinballScoreBook LoadBook()
+    {
+        try
+        {
+            string path = ProjectSettings.GlobalizePath(ScoresFile);
+            if (File.Exists(path))
+            {
+                var book = PinballScoreBook.FromJson(File.ReadAllText(path));
+                GD.Print("[pinball] high scores read");
+                return book;
+            }
+        }
+        catch (Exception e) { GD.PushWarning($"[pinball] {ScoresFile} unreadable: {e.Message}"); }
+        return new PinballScoreBook();
+    }
+
+    private void SaveBook()
+    {
+        try
+        {
+            string path = ProjectSettings.GlobalizePath(ScoresFile);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, Book.ToJson());
+        }
+        catch (Exception e) { GD.PushWarning($"[pinball] {ScoresFile} not saved: {e.Message}"); }
+    }
+
+    /// <summary>A game over: each player's score offered to the machine's table, under their own name; a new one saved and told.</summary>
+    private void Record(string key, int index, Machine m)
+    {
+        var rules = m.Rules!;
+        var highs = Book.Of(key, index, m.Table);
+        bool any = false;
+        for (int i = 0; i < rules.Players.Count && i < m.Players.Count; i++)
+        {
+            long peer = m.Players[i];
+            int rank = highs.Offer(NameOf(peer), rules.Players[i].Score);
+            if (rank < 0) continue;
+            any = true;
+            GD.Print($"[pinball] {key} #{index}: high score #{rank + 1}, {NameOf(peer)} {rules.Players[i].Score}");
+            if (peer == MyId) Told?.Invoke($"New high score: #{rank + 1}!");
+            else if (Online && peer > 0) RpcId(peer, MethodName.Tell, $"New high score: #{rank + 1}!");
+        }
+        if (any) SaveBook();
     }
 
     private IEnumerable<long> PeersInside(string key)
@@ -247,7 +308,11 @@ public partial class PinballTables
         {
             if (k != key) continue;
             var screen = m.Rules != null ? PinballScreen.Of(m.Rules).Pack() : PinballScreen.Idle(PinballLayouts.Get(m.Table)).Pack();
-            RpcId(peer, MethodName.State, key, index, m.Table, m.Players.ToArray(), m.Runner, screen);
+            RpcId(peer, MethodName.State, key, index, m.Table, m.Players.ToArray(), m.Runner, screen, Book.Of(key, index, m.Table).Pack());
         }
+        // machines nobody played since the server started: their saved high scores
+        foreach (var (index, table, highs) in Book.In(key).ToList())
+            if (!Machines.ContainsKey((key, index)))
+                RpcId(peer, MethodName.State, key, index, table, Array.Empty<long>(), 0L, PinballScreen.Idle(PinballLayouts.Get(table)).Pack(), highs.Pack());
     }
 }

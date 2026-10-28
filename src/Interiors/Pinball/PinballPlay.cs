@@ -135,6 +135,12 @@ public partial class PinballPlay : CanvasLayer
         _toldUntil = _clock + 3;
     }
 
+    /// <summary>Enter is the plunger here: kept from the chat, which opens on it (the action still sees it).</summary>
+    public override void _Input(InputEvent e)
+    {
+        if (e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter }) GetViewport().SetInputAsHandled();
+    }
+
     public override void _Process(double delta)
     {
         _clock += delta;
@@ -277,8 +283,8 @@ public partial class PinballPlay : CanvasLayer
     private void UpdateHint()
     {
         string text = _game != null
-            ? $"{InputHints.Prompt(PlayerInput.PinballLeft, "")}{InputHints.Prompt(PlayerInput.PinballRight, "flippers")}   " +
-              $"{InputHints.Prompt(PlayerInput.PinballPlunge, "hold to pull the plunger")}   {InputHints.Prompt(PlayerInput.PinballNudge, "nudge")}\n" +
+            ? $"{InputHints.Prompt(PlayerInput.PinballLeft, "")}{InputHints.Prompt(PlayerInput.PinballRight, "flippers (or Left / Right Shift)")}   " +
+              $"{InputHints.Prompt(PlayerInput.PinballPlunge, "hold to pull the plunger (or Enter)")}   {InputHints.Prompt(PlayerInput.PinballNudge, "nudge")}\n" +
               $"{InputHints.Prompt(PlayerInput.CameraToggle, _top ? "player's view" : "top view")}   {InputHints.Prompt(PlayerInput.InteractMount, "start / add a player")}   " +
               $"{InputHints.Prompt("ui_cancel", "step back")}"
             : $"{InputHints.Prompt(PlayerInput.InteractMount, "start a game, or join this one")}   {InputHints.Prompt(PlayerInput.CameraToggle, _top ? "player's view" : "top view")}   " +

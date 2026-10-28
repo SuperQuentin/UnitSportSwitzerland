@@ -49,6 +49,10 @@ public partial class PinballTables : Node
         public double LastFrame;
         /// <summary>Client: the frames heard of this machine (the net check's).</summary>
         public int Frames;
+        /// <summary>The machine's high scores (the server's, or as it sent them).</summary>
+        public PinballHighScores Highs = new();
+        /// <summary>Server: this game's scores went to the high-score table.</summary>
+        public bool Recorded;
         /// <summary>What the backbox and lamps show (packed), and the poses of the last two frames with their times.</summary>
         public byte[] Screen = Array.Empty<byte>();
         public PinballGame.Poses? Now, Before;
@@ -104,6 +108,9 @@ public partial class PinballTables : Node
     public IReadOnlyList<long> PlayersOf(string key, int index) => Peek(key, index)?.Players ?? (IReadOnlyList<long>)Array.Empty<long>();
 
     /// <summary>What a machine's backbox shows as this peer knows it.</summary>
+    /// <summary>A machine's high scores as this peer knows them.</summary>
+    public PinballHighScores? HighsOf(string key, int index) => Peek(key, index)?.Highs;
+
     public PinballScreen? ScreenOf(string key, int index) =>
         Peek(key, index) is { Screen.Length: > 0 } m ? PinballScreen.Unpack(m.Screen) : null;
 }
