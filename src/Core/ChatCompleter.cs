@@ -64,6 +64,7 @@ public sealed class ChatCompleter
         ("go", false, true, "@E,N", "Travel", "teleport to coordinates (as /city)"),
         ("track", false, true, "@E,N [name] | off", "Travel", "point the way to coordinates"),
         ("map", false, true, "@E,N", "Travel", "show coordinates on the map"),
+        ("enter", false, true, "<venue name | building key>", "Travel", "go straight inside a building, no door (offline)"),
         ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]", "Travel", "the venues: what plays there, go to one"),
         ("tpa", false, false, "<player>", "Travel", "ask to go to a player"),
         ("tphere", false, false, "<player>", "Travel", "ask a player over"),

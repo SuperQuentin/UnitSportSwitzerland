@@ -227,6 +227,18 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] Reputation 10 / 30 / 60 / 100 points in one canton (many cards) → level-up toasts, the title "Ehrenbürger von ..." at the top. Judge the pace.
 - [ ] Giver models in the model viewer (`--models`, People › Errand givers) → eight figures with the Sennenkäppi, guide hat and vest; look right in Cartoon, PS1 and Realistic.
 
+## Venue patrons and ambience ([#1331](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1331))
+
+`--enter bowlingland --time 20` (BowlinGland, Gland), then `/enter "pathé galeries"`, `/enter "brasserie de montelly"`, `/enter hype club` (add `--patronhour 1` for the club, `12.5` for lunch). Walk about in each.
+
+- [ ] Look away from a full table and back, many times over a few minutes → guests change only while you were not looking; nobody pops in or out on screen.
+- [ ] Sit in a cinema seat a patron is in → the patron is gone as you sit; stand up and leave the hall, wait 15 minutes of play, come back → the audience may have changed, never while you were in it.
+- [ ] A queue at the kebab or the box office → it steps forward now and then, the served customer steps aside; nobody joins the back while you watch it.
+- [ ] The loops look right at a glance: eating, sipping, talking, the pool shot, darts, table football, the arcade sticks, the dancers, the cheers on the settees (no arm through a table or a head).
+- [ ] Sound: the murmur and the cutlery sit right under the venue's music, louder in a full room, gone in an empty one; the grinder, the tap, the jingles, the coin, the pool click, the dart and the cheer are not too loud or too often.
+- [ ] A terrace at lunch on a warm day (`/weather temp 20`) → most tables taken; at 23:00 or in snow → empty.
+- [ ] Perf on the Quest: a full multiplex hall and a full restaurant → note the frame time.
+
 ## Bowling ([#1328](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1328))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2510425,1140985 --time 22` (BowlinGland, Gland; its main door reads as locked, go in by the side door on the same wall, 34 m along).

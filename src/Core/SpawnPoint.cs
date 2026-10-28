@@ -62,18 +62,18 @@ public partial class SpawnPoint : Node
     /// <summary>
     /// Where this session starts, in LV95 metres: <c>--at E,N</c> wins (every probe and screenshot
     /// run depends on that), then the landing the player picked on the map screen (#515), then
-    /// Riddes.
+    /// Riddes. <c>--enter</c>'s building stands for a missing <c>--at</c> (#1244).
     /// </summary>
     public static (double E, double N) ParseTarget(WorldLaunch? launch = null) =>
-        ParseLv95("--at") ?? launch?.Landing ?? (DefaultLv95E, DefaultLv95N);
+        ParseLv95("--at") ?? Interiors.InteriorManager.EnterLv95() ?? launch?.Landing ?? (DefaultLv95E, DefaultLv95N);
 
     /// <summary>
     /// Reads an optional "--origin E,N" (LV95 metres) that pins the starting world origin, so
     /// screenshots and timings at fixed world coordinates stay put when the manifest's suggested
     /// origin moves. The floating origin (#185) still moves it from there; <c>ShotRunner</c> maps
-    /// its coordinates from this first frame.
+    /// its coordinates from this first frame. <c>--enter</c>'s building stands for a missing one (#1244).
     /// </summary>
-    public static (double E, double N)? ParseOrigin() => ParseLv95("--origin");
+    public static (double E, double N)? ParseOrigin() => ParseLv95("--origin") ?? Interiors.InteriorManager.EnterLv95();
 
     public static (double E, double N)? ParseLv95(string flag)
     {

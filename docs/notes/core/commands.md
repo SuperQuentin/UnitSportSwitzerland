@@ -24,6 +24,17 @@
   is, with a `[shot] ... not complete` warning). A settle of 0 is taken at once (queue `shift` lines).
 - Feature clip: `--clip name[,delay[,seconds]] [--clip-quit]` films the window to `test_output/clips/<name>.gif`
   (+ `.mp4`); `/clip start|stop` in the chat; `tools/record-clip.sh` (`general/feature-clips`).
+- Straight into a building, no door (#1244): `--enter <venue name | OSM id | building key>` (`--enter bowlingland`,
+  `--enter "pathé galeries"`, `--enter 2510_1140_26`) loads the world round it (it stands for a missing `--at` and
+  `--origin`), then builds its interior and puts the player just inside its main entrance, facing in; in a shot run the
+  free camera, and the queue's `l` lines work at once (they wait for it). `/enter <same>` in the chat does it mid-game,
+  anywhere in the country, and as a queue line (`/enter hype club`) moves the following `l` lines there. Offline only.
+  A name matches any part, any case, accents off; the whole name first, then the biggest kind (`[enter]` in the log).
+- Leaving the fly camera (T, Shift+T) puts the body on the first surface under the camera with room to stand
+  (`FootPlayer.StandingSpotBelow`): a floor, a stair, a canopy or roof, the ground; in a building, its floor and its
+  space (`InteriorManager.SetBodySpace`), from under its floor its lowest floor (`LowestFloorAbove`); the terrain's
+  height only where no collision is built yet (#1244: it used to drop you on the street over the building).
+  `--at 2510425,1140985 --enterspectatorcheck [venue]` checks the three cases (outdoors, in a building, under its floor).
 - Many screenshots, one launch: `<godot> --path . -- --shot-queue shots.txt [--nohud]` boots like
   `--shot`, then watches the file: one shot per line in the `--shot` syntax, taken in order,
   lines appended later picked up within 0.5 s; blank lines and `#` comments skipped, `quit`

@@ -145,6 +145,8 @@ public class ClockDisciplineTests
         ["src/Interiors/CinemaVideoSpeaker.cs"] = "presentation: the sample of a hall's video due now, on the shared clock (#1298)",
         ["src/Interiors/CinemaVideoShot.cs"] = "presentation: a shot's video plays on the clock as in a hall (#1298)",
         ["src/Audio/Tracker/TrackerSpeaker.cs"] = "presentation: where a venue's tracker playlist should be playing now, on the shared clock (#1244)",
+        ["src/Interiors/Patrons/VenuePatrons.cs"] = "presentation: which venue guests sit where and how they move, the same on every client from the shared clock; the game hour through WorldClock.HourAt (#1244)",
+        ["src/Interiors/VenueTerraces.cs"] = "presentation: --terracelog prints whether a terrace's guests are out at this moment of the shared clock (#1244)",
         ["src/Audio/Ambience.cs"] = "presentation: church bells strike on the machine's local hour (docs/notes/audio/audio.md)",
         ["src/Audio/Cd/CdLibrary.cs"] = "presentation: the library's burn progress readout",
         ["src/Audio/Surfaces.cs"] = "presentation: footstep surface sampling",

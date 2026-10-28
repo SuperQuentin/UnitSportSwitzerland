@@ -3152,6 +3152,40 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         return over + Vector3.Up * 0.2f;
     }
 
+    /// <summary>
+    /// The first solid surface under <paramref name="from"/> (within <paramref name="reach"/> m) with room for a standing
+    /// body on it: a floor, a stair, a roof, the ground (#1244, leaving the fly camera). A surface with too little room
+    /// over it (a table under a shelf, a ceiling's top) is passed through to the next one down. Null when there is none
+    /// (no collision built there yet).
+    /// </summary>
+    public Vector3? StandingSpotBelow(Vector3 from, float reach = 400f)
+    {
+        _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
+        var space = GetWorld3D().DirectSpaceState;
+        var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        var start = from;
+        var end = from + Vector3.Down * reach;
+        for (int i = 0; i < 16; i++)
+        {
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(start, end, CollisionMask, exclude));
+            if (hit.Count == 0) return null;
+            var at = (Vector3)hit["position"];
+            if (((Vector3)hit["normal"]).Y > 0.6f)
+            {
+                var query = new PhysicsShapeQueryParameters3D
+                {
+                    Shape = _standProbe,
+                    Transform = new Transform3D(Basis.Identity, at + Vector3.Up * (StandHeight * 0.5f + 0.1f)),
+                    CollisionMask = CollisionMask,
+                    Exclude = exclude,
+                };
+                if (space.IntersectShape(query, 1).Count == 0) return at + Vector3.Up * 0.05f;
+            }
+            start = at + Vector3.Down * 0.05f;
+        }
+        return null;
+    }
+
     /// <summary>Whether a player standing at <paramref name="feet"/> would be in one of the vehicle's own boxes.</summary>
     private bool InsideVehicle(Vector3 feet, Transform3D frame, Rideable? vehicle)
     {

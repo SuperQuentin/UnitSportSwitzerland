@@ -1476,6 +1476,7 @@ public partial class InteriorNode : Node3D
         AddLaneRigs(node, material);   // a bowling centre's pins, pinsetters and hood balls (#1323)
         AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
         VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
+        Patrons.VenuePatrons.AddTo(node); // its guests at the tables, the machines, in the queues and the halls (#1244)
         // an apartment block's elevator doors and flats' front doors (#557)
         AddLiftDoors(node, material);
         AddInnerDoors(node, material);
