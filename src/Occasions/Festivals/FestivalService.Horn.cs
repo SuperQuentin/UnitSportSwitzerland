@@ -8,7 +8,7 @@ namespace UnitSport.Occasions.Festivals;
 // The alphorn and yodel game (#1269): the server's side. The first player to sit down opens a song (a seed from the festival
 // instance and a count), whoever sits down within HornJoinSeconds plays the same chart (up to four, one voice each); each plays it on their own clock and sends the blows when
 // it is over, the server grades them and scores the harmony chart-relative (no clocks to align), then pays everyone together. Three RPCs
-// (protocol 61): a seat, the blows, the result. Bots take a seat through the same methods.
+// (protocol 67): a seat, the blows, the result. Bots take a seat through the same methods.
 public partial class FestivalService
 {
     /// <summary>Whoever sits down within this long of the first player joins that player's song; later, a new song opens.</summary>

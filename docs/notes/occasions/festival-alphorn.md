@@ -35,7 +35,7 @@
   `HornGame` calls it **once per blow** (never per frame) on `ChunkManager.TryGetHeight` (loaded tiles only: a wall on an unloaded tile does not answer) and replays the note from
   the wall (`AudioStreamPlayer3D`, four pooled, attenuation filter) after the delay; the held tone is stopped the same delay after the release.
 
-## The server (`FestivalService.Horn.cs`, protocol 61)
+## The server (`FestivalService.Horn.cs`, protocol 67)
 
 - Three RPCs on the festival service's node: `RequestHornStart()`, `RequestHornSong(string plays)` (client to server) and `TellHornSeat(seed, part, voices)`, `TellHornResult(...)` (server
   to the owner). Blows travel as `partial,on_ms,off_ms;...` (`HornWire`, strict: a bad string is refused whole; at most 140 blows, 4000 characters).
