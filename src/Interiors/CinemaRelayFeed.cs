@@ -27,6 +27,11 @@ public sealed class CinemaRelayFeed : ICinemaFeed
     public string Link { get; }
     public double T0 { get; }
     public CinemaVideo.Stereo Stereo { get; }
+
+    private readonly CinemaVideo.Shape _shape = new(CinemaVideo.RelayFps / 3);
+    private int _measured;
+    public float ContentWidth => _shape.Width;
+    public float ContentHeight => _shape.Height;
     private readonly int _width, _height;
     public string Status { get; private set; } = "Through the server…";
     public bool Failed { get; private set; }
@@ -107,6 +112,18 @@ public sealed class CinemaRelayFeed : ICinemaFeed
                 }
                 if (img.LoadJpgFromBuffer(jpeg) != Error.Ok) { _free.Add(img); continue; }
                 var tint = MeanColour(img);
+                // the picture's width before it is scaled (the JPEG's own pixels), every third frame, the left eye of a 3D one
+                if (_measured++ % 3 == 0)
+                {
+                    var im = img;
+                    int eye = Stereo == CinemaVideo.Stereo.Mono ? im.GetWidth() : im.GetWidth() / 2;
+                    var (w, h) = CinemaVideo.ContentSize(eye, im.GetHeight(), (x, y) =>
+                    {
+                        var c = im.GetPixel(x, y);
+                        return c.R + c.G + c.B > 3 * 0.1f;
+                    });
+                    _shape.Add(w, h);
+                }
                 if (img.GetFormat() != Image.Format.Rgba8) img.Convert(Image.Format.Rgba8);
                 if (img.GetWidth() != _width || img.GetHeight() != _height)
                     img.Resize(_width, _height, Image.Interpolation.Bilinear);

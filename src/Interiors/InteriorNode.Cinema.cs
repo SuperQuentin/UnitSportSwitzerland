@@ -118,6 +118,8 @@ public partial class InteriorNode
             var picture = Quad("CatScreen", CatMaterial());
             var hall = HallOf(layout, p);
             int no = CinemaBooths.HallAt(layout, p.X, p.Z);
+            // the side curtains, their own nodes: they close in over a narrower picture (#1298)
+            AddCurtains(node, p, no, half.X);
 
             // the beam from this hall's porthole: the nearest one to the screen
             var port = ports.MinBy(q => (q.X - p.X) * (q.X - p.X) + (q.Z - p.Z) * (q.Z - p.Z));
@@ -430,8 +432,9 @@ public partial class InteriorNode
         for (int i = 0; i < _screens.Count; i++)
         {
             var s = _screens[i];
-            // a 3D film keeps its pasted picture: a light carries one picture, not two eyes (#1298 phase 6)
-            bool on = On(s), thrown = on && _realShow && i == _projecting && !(_videoIs3d && s.No == _videoHall);
+            // a 3D film or a display other than the default keeps its pasted picture: a light carries the frame as
+            // decoded, one picture, not two eyes nor a crop (#1298)
+            bool on = On(s), thrown = on && _realShow && i == _projecting && !(_videoPastedOnly && s.No == _videoHall);
             s.Picture.Visible = on && !thrown;
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;
@@ -484,20 +487,38 @@ public partial class InteriorNode
         _hallMusic[s.No] = (music, reel);
     }
 
+    /// <summary>Where along the plain beam (0 the apex, 1 the screen) ring <paramref name="k"/> of <paramref name="rings"/> lies: closer near the lens, where its light changes fastest.</summary>
+    private static float BeamRing(int k, int rings) => (float)(k * k) / (rings * rings);
+
+    /// <summary>
+    /// The plain beam's haze at a share <paramref name="t"/> of the way from the apex to the screen: 0.10 at the lens, falling
+    /// with the square of the distance past the first sixteenth of the throw (the marched beam's 1/d², softened at the lens).
+    /// </summary>
+    internal static float BeamFade(float t) => 0.10f / (1f + (t / 0.06f) * (t / 0.06f));
+
     /// <summary>A light pyramid from a point to a rectangle: four faces, bright at the lens, faint at the screen.</summary>
     private static ArrayMesh Beam(Vector3 from, Vector3 centre, Vector3 right, Vector3 up)
     {
         var corners = new[] { centre - right - up, centre + right - up, centre + right + up, centre - right + up };
         var v = new List<Vector3>();
         var col = new List<Color>();
-        // bright at the lens, nothing left at the screen (#1279)
-        var at = new Color(1f, 0.96f, 0.86f, 0.06f);
+        // bright at the lens, nearly gone well before the screen, as the marched beam's light falls with the square of
+        // the distance from the lens (#1298, the owner's: "similar to the High one from afar"): rings along the cone,
+        // closer near the apex, each with that falloff in its vertex colour's alpha; nothing left at the screen
         var screen = new Color(1f, 0.96f, 0.86f, 0f);
+        const int rings = 10;
         for (int i = 0; i < 4; i++)
         {
-            v.Add(from); col.Add(at);
-            v.Add(corners[i]); col.Add(screen);
-            v.Add(corners[(i + 1) % 4]); col.Add(screen);
+            var a = corners[i] - from;
+            var b = corners[(i + 1) % 4] - from;
+            for (int k = 0; k < rings; k++)
+            {
+                float t0 = BeamRing(k, rings), t1 = BeamRing(k + 1, rings);
+                Color c0 = screen with { A = BeamFade(t0) }, c1 = screen with { A = k + 1 == rings ? 0f : BeamFade(t1) };
+                Vector3 p0 = from + a * t0, q0 = from + b * t0, p1 = from + a * t1, q1 = from + b * t1;
+                v.Add(p0); col.Add(c0); v.Add(p1); col.Add(c1); v.Add(q1); col.Add(c1);
+                v.Add(p0); col.Add(c0); v.Add(q1); col.Add(c1); v.Add(q0); col.Add(c0);
+            }
         }
         // the cone closed at the screen, 3 cm short of the picture (#1250): looking at the screen from inside
         // the beam, its haze is drawn from there back to the eye, over the picture

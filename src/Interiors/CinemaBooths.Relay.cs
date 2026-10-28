@@ -76,7 +76,7 @@ public partial class CinemaBooths
     /// </summary>
     public bool ServeWatch(long peer, string plan, int hall)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside || hall < 0 || hall >= MaxHalls || VideoOf(plan, hall).Link.Length == 0) return false;
         if (!_watchers.TryGetValue((plan, hall), out var peers)) _watchers[(plan, hall)] = peers = new();
         if (!peers.ContainsKey(peer)) GD.Print($"[cinema] peer {peer} watches hall {hall + 1} of {plan} through the server");

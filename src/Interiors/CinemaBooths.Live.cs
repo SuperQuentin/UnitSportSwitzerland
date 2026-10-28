@@ -129,7 +129,7 @@ public partial class CinemaBooths
     /// </summary>
     public bool ServeLive(long peer, string plan, int hall, string label, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside || hall < 0 || hall >= MaxHalls) { GD.Print($"[cinema] peer {peer} may not share on {plan}: not inside"); return false; }
         double wall = Core.RealClock.Now;
         if (_lastVideo.TryGetValue(peer, out double last) && wall - last < VideoCooldown) return false;
