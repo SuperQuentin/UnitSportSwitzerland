@@ -131,14 +131,14 @@ public static class LootTables
     /// <summary>Potatoes and carrots in a cellar, flour in a pantry (#494).</summary>
     private static readonly ItemId[] Roots = { ItemId.Potato, ItemId.Carrot, ItemId.Flour };
     /// <summary>Clothes to wear, plain, gothic and kawaii (#251): what a wardrobe mostly holds.</summary>
-    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial && g.Style is not (Avatar.GarmentStyle.Workwear or Avatar.GarmentStyle.Alpine)).Select(g => g.Item).ToArray();
+    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial && g.Style is not (Avatar.GarmentStyle.Workwear or Avatar.GarmentStyle.Alpine or Avatar.GarmentStyle.Together)).Select(g => g.Item).ToArray();
     /// <summary>A building site's hard hats and hi-vis vests (#822): only its office's rail and lockers give them.</summary>
     private static readonly ItemId[] Workwear = Avatar.Garments.All.Where(g => g.Style == Avatar.GarmentStyle.Workwear).Select(g => g.Item).ToArray();
     /// <summary>The rare ones with a finish that moves: rainbow, disco ball, galaxy…</summary>
     private static readonly ItemId[] Specials = Avatar.Garments.All.Where(g => g.IsSpecial).Select(g => g.Item).ToArray();
     /// <summary>What comes out of the wash: tees, shorts, socks.</summary>
     private static readonly ItemId[] Laundry = Avatar.Garments.All
-        .Where(g => !g.IsSpecial && g.Style != Avatar.GarmentStyle.Alpine && g.Shape is Avatar.GarmentShape.TShirt or Avatar.GarmentShape.Marcel
+        .Where(g => !g.IsSpecial && g.Style is not (Avatar.GarmentStyle.Alpine or Avatar.GarmentStyle.Together) && g.Shape is Avatar.GarmentShape.TShirt or Avatar.GarmentShape.Marcel
             or Avatar.GarmentShape.Shorts or Avatar.GarmentShape.KneeSock or Avatar.GarmentShape.ThighHigh
             or Avatar.GarmentShape.StripedThighHigh or Avatar.GarmentShape.Polo)
         .Select(g => g.Item).ToArray();

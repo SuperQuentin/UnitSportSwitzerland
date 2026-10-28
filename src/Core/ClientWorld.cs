@@ -1137,6 +1137,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
             AddNavigation(adventure, items, ground);
+            AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
         // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it
@@ -2337,6 +2338,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
+                // tied to a friend (#1266): hold to haul a hanging partner up, tap to let go
+                else if (Adventure.Together.TogetherService.Instance?.InteractPrompt(p) is { } together)
+                    yield return (PlayerInput.InteractMount, together);
                 if (Vehicles.VehicleReach.Current is { } at)
                 {
                     yield return (PlayerInput.InteractMount, at.Action);

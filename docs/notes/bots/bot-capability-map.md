@@ -59,6 +59,10 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | radio, camera, GPS, fishing, farm tools | — | — | — | — | n/a for a fighting bot (an ambient brain may want them) |
 | a radio's voice/music mix (#1153) | `RadioBody.Mix` / `FootPlayer.RadioMix` set directly | `RadioManager.SetMix` (server: set `Mix`) | — | — | n/a for a fighting bot; an ambient bot DJ could set it server-side |
 | a cinema's booth: each hall's house lights and screen (#1238, a panel per hall #1279) | none (a bot never stands at a panel to press it) | `CinemaBooths.Serve(peer, plan, hall, code)` (server: the bot must be inside that cinema, as a player; `HallAt` numbers the halls) | `CinemaBooths.StateOf(plan, hall)` | — | n/a for a fighting bot; an usher bot could dim the lights for a show |
+| hold hands, rope up, haul (#1266) | `WalkControls` goes through `Tether` in the body | `TogetherService.ServeLink(leader, bot, mode)`, `ServeUnlink`, `ServeHaul` | the link book | `Follow`: no input, the tether walks it | ok for a body led by a link; gap: no brain asks yet (a co-op brain, #837) |
+| sit at a pot, add, stir, dip, forfeit (#1266) | — | `ServeStart`, `ServeSit`, `ServeAdd`, `ServeStir`, `ServeDip`, `ServeForfeit` | `TogetherService.Pots` | — | gap: a social brain |
+| two-handle gate, leg-up, crevasses (#1266) | — | `ServeHandle` (body within 1.5 m) | — | — | gap: co-op brain; crevasses are client-only, a bot on a glacier never falls |
+| group yield, mentors, the punch card (#1266) | — | — | — | — | n/a: bots are never in parties, nothing gathered, session keys never count |
 | a venue terrace's tables, planters and menu board (#1243) | none (scenery) | none: built and solid on clients only, as trees (`VenueTerraces`) | none (no server collision: a bot walks through them, as through trees) | — | gap: server collision for terraces and trees together, if bots are ever to weave between tables |
 
 ## World, loot and vehicles

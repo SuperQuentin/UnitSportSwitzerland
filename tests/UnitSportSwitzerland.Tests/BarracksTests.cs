@@ -58,7 +58,10 @@ public class BarracksTests
         Assert.Equal(ItemId.DuctTape, kiosk[6].Id);
         Assert.Equal(ItemId.BeerBottle, kiosk[7].Id);
         var grocery = ShopTables.Catalogue(ShopType.Grocery);
-        Assert.Equal(ItemId.Flour, grocery[^2].Id);
-        Assert.Equal(ItemId.BeerBottle, grocery[^1].Id);
+        Assert.Equal(ItemId.Flour, grocery[^4].Id);
+        Assert.Equal(ItemId.BeerBottle, grocery[^3].Id);
+        // the fondue's wine and kirsch (#1266) are appended after the beer
+        Assert.Equal(ItemId.WhiteWine, grocery[^2].Id);
+        Assert.Equal(ItemId.Kirsch, grocery[^1].Id);
     }
 }

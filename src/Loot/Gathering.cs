@@ -247,6 +247,16 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             return;
         }
         var (id, count) = Yield(target);
+        // friends near (#1266, the together rule): +25 % each, rolled for this player alone; nothing is split
+        int together = Adventure.Together.TogetherService.LocalNear;
+        int bonus = 0;
+        if (together > 0 && count > 0)
+        {
+            int withFriends = Adventure.Together.TogetherRules.Yield(count, together, _rng.NextDouble());
+            bonus = withFriends - count;
+            count = withFriends;
+            GD.Print($"[together] yield n={together} {id} {count - bonus}+{bonus}");
+        }
         int fit = Math.Min(count, _items.Inventory.Room(id));
         if (fit <= 0)
         {
@@ -256,8 +266,17 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         _items.Inventory.Add(id, fit);
         bool fresh = !_taken.TryGetValue(target.Spot, out var t) || Now - t.Since >= RegrowSeconds;
         _taken[target.Spot] = fresh ? (1, Now) : (t.Count + 1, t.Since);
-        _items.Ui.Toast($"+{fit} {ItemDefs.Get(id)!.Name}");
+        _items.Ui.Toast($"+{fit} {ItemDefs.Get(id)!.Name}{Adventure.Together.TogetherRules.BonusText(Math.Min(bonus, fit))}");
         Play(SfxSynth.Chime, 1.3f);
+        // a rare find (#1266): stone high up now and then holds a rock crystal, likelier with friends
+        if (target.Kind == Resource.Stone && Adventure.AdventureService.Instance != null && !Core.Permissions.InMatch
+            && Eligible() is { } body && _rng.NextDouble() < Adventure.Together.TogetherRules.RareFindChance(together, body.Global.Alt)
+            && _items.Inventory.Room(ItemId.Bergkristall) > 0)
+        {
+            _items.Inventory.Add(ItemId.Bergkristall, 1);
+            _items.Ui.Toast(together > 0 ? "A Bergkristall in the rock! (together)" : "A Bergkristall in the rock!");
+            GD.Print($"[together] rare find n={together}");
+        }
     }
 
     private void Play(AudioStreamWav stream, float pitch)

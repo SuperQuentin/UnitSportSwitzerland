@@ -90,7 +90,8 @@ public partial class Handshake : Node
     /// 58: World/CinemaBooths AskSet and Set carry the hall (#1279: a panel per hall; 57 is main's).
     /// 59: World/Adventure/Festivals (#1269 part 1: RequestRing/TestDate; TellFestivals, TellBoard, TellConverted, TellRang, TellRefused),
     /// the <c>festivals</c> section, <c>OccasionFacets.Games</c> (1 &lt;&lt; 6) on the occasions wire.
-    public const int Protocol = 59;
+    /// 60: World/Together (#1266: Links, GateOpen, PotState, BreadLost, TellFeast, TellHaul, the Ask* requests), invite kinds rope and fondue.
+    public const int Protocol = 60;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

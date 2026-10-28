@@ -632,6 +632,8 @@ public partial class ItemController : Node
             case ItemUse.Share:
             {
                 if (_useBusy) break;
+                // at a burning fire it is the shared pot's caquelon (#1266): the table's session starts
+                if (Adventure.Together.TogetherService.Instance?.TryStartAtFire(player, slot) == true) break;
                 StartUse(player, slot, def, ViewPose.Mouth, 5.5f, 0.3f, 0.4f, () =>
                 {
                     _inventory.TakeOne(slot);
