@@ -1005,3 +1005,6 @@ tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
 tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
 src/Adventure/Together/ net tools/togethernetcheck.sh
+
+# #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
+src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure

@@ -21,5 +21,6 @@ public partial class ClientWorld
         AddChild(new ErrandDialog(() => _onFoot ? LocalPlayer : null));
         ErrandsPage.Where = () => _onFoot ? LocalPlayer?.Global : null;
         ErrandsPage.Register();
+        if (ErrandCheck.Requested) AddChild(new ErrandCheck(items, () => LocalPlayer));
     }
 }

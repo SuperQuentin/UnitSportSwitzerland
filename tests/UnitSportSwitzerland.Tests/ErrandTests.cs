@@ -246,4 +246,18 @@ public class ErrandTests
         Assert.Contains(changes, c => c.What == QuestChangeKind.Completed);
         Assert.True(p.Done.ContainsKey(offer.Id));
     }
+
+    [Fact]
+    public void GiversGreetByReputationInTheirLanguage()
+    {
+        var farmer = Givers.All.First(g => g.Kind == GiverKind.Farmer);
+        string stranger = ErrandLines.Greeting(farmer, 0, "Lea"), friend = ErrandLines.Greeting(farmer, 3, "Lea");
+        Assert.Contains("not from here", stranger);
+        Assert.DoesNotContain("Lea", stranger);
+        Assert.Contains("Ah, Lea!", friend);
+        Assert.Contains("friend", ErrandLines.Greeting(farmer, 1, ""));
+        var offer = Source().Cell(20261027, Cell.E, Cell.N).First();
+        Assert.Contains($"CHF {offer.Chf}", ErrandLines.Reward(offer));
+        Assert.Contains("+3 VS", ErrandLines.Reward(offer));
+    }
 }

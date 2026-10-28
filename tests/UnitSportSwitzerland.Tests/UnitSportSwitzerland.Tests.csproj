@@ -225,6 +225,7 @@
     <Compile Include="..\..\src\Adventure\Errands\Giver.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\GiverCatalogue.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\ErrandRewards.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\ErrandLines.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\Postkarte.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\PostkarteSource.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
