@@ -36,7 +36,18 @@ Playable lanes in every bowling centre (`bowling-centres` builds them). Plan: `d
 - **Rig** (`LaneRig`, per pair in a built interior): pins one MultiMesh (20), each lane's table and sweep,
   hood balls, the rolling ball; `PinsetterCycle` is a pure timeline (pick 7.8 s, reset 5.9 s); the sweep
   rests behind the masking's face. Headless, the MultiMesh's pins read at its origin: the centres' z-fight
-  baseline carries 200 places a pair for it.
+  baseline carries 200 places a pair for it. The sweep reaches down into both gutters to their floor (#1334). A pin it pushes
+  over the deck's end tumbles 0.45 m into the pit and is gone only then (`LaneRig.Step`, `PitDrop`): it used to vanish
+  at the edge, on players' lanes as on the decoration ones.
+- **Decoration bowlers** (`BowlingDeco`, #1334): frames of two balls as a real lane plays them (a first ball that
+  leaves pins: a pick and the second ball aimed at what stands, `BotRelease`; a strike or a second ball: a reset); the
+  deck drawn only while it moves, then the pinsetter has the pins (the finished deck used to be redrawn every frame,
+  and the next throw set a full rack at once). The figure (`DecoThrow`, pure): bends over the return and lifts the
+  ball, carries it to its stance, four steps and an underarm pendulum (push-away, down, backswing, forward 0.3 s to a
+  low release at the foul line, follow-through), the ball in its hand, then walks back; release 4.75 s into a turn of
+  23-29 s. The ball comes back up into the hood with its thunk `ReturnTime` after the run. `[bowling] decoration
+  bowler on pair ... at plan x,z` in the log says where to look; BowlinGland's pair 25 lane 0 from
+  `19.0,l1.7,-15.2,-14,-68` (after the door shot below).
 - **Screens** (`LaneRig.Screens`): the game as a `Label3D`, set on change; after each roll the deck's frames
   replayed at 0.35x in a `SubViewport` of its own world (deck, pins, ball, a low camera), rendered only while it plays.
 - **Playing**: E / Y (or a VR hand reaching out) at the counter, a rack (the ball reached for: across the
