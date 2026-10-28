@@ -312,6 +312,9 @@ public static class Garments
         new(ItemId.PolierHat, "Polier hat", WearSlot.Head, 43, GarmentShape.FeltHat, GarmentStyle.Together, new("f4f2ea"), new("2a2018"), new("c8202a")),
         // the tenth punch card's: the regular's felt hat with its little Swiss-cross pin
         new(ItemId.StammgastHat, "Stammgast felt hat", WearSlot.Head, 44, GarmentShape.FeltHat, GarmentStyle.Together, new("6a2a2a"), new("1c1a1a"), new("f4f2ea")),
+        // the hire shoes a bowling centre's counter lends (#1323): two-tone, red and cream with a blue heel; last,
+        // as every new row: a row's place picks its wearer in the model viewer (and the z-fight baseline)
+        new(ItemId.BowlingShoes, "Bowling shoes", WearSlot.Feet, 7, GarmentShape.Sneakers, GarmentStyle.Basic, new("b8202a"), new("efe6d2"), new("2a3c8c")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

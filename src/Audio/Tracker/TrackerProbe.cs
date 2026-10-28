@@ -7,13 +7,14 @@ namespace UnitSport.Audio.Tracker;
 /// <c>godot --headless --path . -- --trackercheck</c> (#1244): every module of the venues' playlists loads,
 /// lasts a song's length, plays sound (neither silent nor clipped), lands at the same place seeked as
 /// played, and the schedule runs on with the clock. Writes 20 s of each mood's first song to
-/// <c>test_output/tracker/</c>, to listen to.
+/// <c>test_output/tracker/</c>, to listen to. <c>--trackerwav &lt;file&gt;</c> (#1306) writes one module whole there
+/// instead (a film's soundtrack) and quits.
 /// </summary>
 public partial class TrackerProbe : Node
 {
     private bool _ok = true;
 
-    public static bool ParseArgs() => CmdArgs.All.Contains("--trackercheck");
+    public static bool ParseArgs() => CmdArgs.All.Contains("--trackercheck") || CmdArgs.Value("--trackerwav") != null;
 
     private void Check(bool condition, string what)
     {
@@ -25,6 +26,14 @@ public partial class TrackerProbe : Node
     {
         string dir = ProjectSettings.GlobalizePath("res://test_output/tracker");
         Directory.CreateDirectory(dir);
+        if (CmdArgs.Value("--trackerwav") is { } one)
+        {
+            var (song, seconds) = TrackerLibrary.Get(one);
+            if (song != null) Wav(Path.Combine(dir, Path.ChangeExtension(one, ".wav")), song, (int)Math.Ceiling(seconds));
+            GD.Print(song != null ? $"[tracker] {one}: {seconds:F0} s in {dir}" : $"[tracker] FAILED: no module {one}");
+            GetTree().Quit(song != null ? 0 : 1);
+            return;
+        }
         foreach (var mood in Enum.GetValues<VenueMood>())
             if (mood != VenueMood.None) Check(TrackerLibrary.Playlists.ContainsKey(mood), $"{mood} has a playlist");
 

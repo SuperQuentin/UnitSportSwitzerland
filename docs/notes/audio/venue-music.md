@@ -51,6 +51,8 @@ ffmpeg or internet), they play tracker modules on our own player, also the same 
 - **Same bar everywhere**: a mood's playlist runs round on `ClockSync.ServerNow`, shifted by a salt of the
   building's key, so a room and its door play the same and two cafés side by side do not
   (`TrackerLibrary.At`); a speaker re-seeks when it drifts over 1 s.
+- **A module whole**: `--trackerwav <file>` (#1306) writes one module, all of it, to `test_output/tracker/<name>.wav`
+  (22,050 Hz stereo) and quits: a film's soundtrack (`tools/cinema-showcase.py` uses `crusaders.xm`, 92 s).
 - **Checks**: `--trackercheck` (every module loads and lasts 69-316 s, plays neither silent nor clipped,
   seeking to 30 s sounds as playing to it, correlation 0.97-1.00; the schedule runs on with the clock;
   20 s of each mood written to `test_output/tracker/`). The sound player: "Venue music", 30 s of each.

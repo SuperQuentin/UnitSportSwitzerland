@@ -241,6 +241,22 @@ public static class ItemDefs
         Eat(ItemId.Popcorn, "Popcorn", 10, "#f4ecc8", "PC", 15, ItemCategory.Food, 8),
         Eat(ItemId.VegetableSoup, "Vegetable soup", 5, "#c87838", "VS", 55, ItemCategory.Food, 14),
         Eat(ItemId.Raclette, "Raclette", 3, "#f0d070", "RC", 75, ItemCategory.Food, 22),
+        // Adventure errands (#1267): cargo (no value, never sold) and the cantons' specialties
+        Cargo(ItemId.MailSack, "Mail sack", "PostBus mail, for a village stop. Hand it over there; the errand takes it back if it expires.", "#c8a050", "MS"),
+        Cargo(ItemId.FerryCrate, "Ferry crate", "A crate for another landing on the lake. Hand it over there.", "#8a6a40", "FC"),
+        Cargo(ItemId.SupplyPack, "Supply pack", "Provisions for a mountain hut. Hand it over there.", "#6a8a48", "SP"),
+        Cargo(ItemId.Postcard, "Postcard", "A blank postcard, stamped. Nothing to do with it but keep it.", "#e8e0c8", "PO"),
+        Eat(ItemId.RacletteCheese, "Raclette cheese", 5, "#f0d878", "RK", 30, ItemCategory.Food, 14),
+        Eat(ItemId.BaslerLaeckerli, "Basler Läckerli", 10, "#b8783c", "LK", 18, ItemCategory.Food, 10),
+        Eat(ItemId.EngadinerNusstorte, "Engadiner Nusstorte", 5, "#c89048", "NT", 35, ItemCategory.Food, 18),
+        Eat(ItemId.Marroni, "Marroni", 10, "#8a4a28", "MA", 20, ItemCategory.Food, 8),
+        Eat(ItemId.ZugerKirschtorte, "Zuger Kirschtorte", 5, "#e8b8b0", "ZK", 32, ItemCategory.Food, 16),
+        Eat(ItemId.Appenzeller, "Appenzeller", 5, "#e8c060", "AZ", 30, ItemCategory.Food, 13),
+        Eat(ItemId.TeteDeMoine, "Tête de Moine", 5, "#f0e098", "TM", 28, ItemCategory.Food, 15),
+        Eat(ItemId.StGallerBratwurst, "St. Galler Bratwurst", 5, "#e0b890", "BW", 40, ItemCategory.Food, 9),
+        Eat(ItemId.SaucissonVaudois, "Saucisson vaudois", 5, "#a85040", "SV", 38, ItemCategory.Food, 12),
+        Eat(ItemId.ZuercherTirggel, "Zürcher Tirggel", 10, "#c88850", "TG", 15, ItemCategory.Food, 8),
+        Eat(ItemId.Sbrinz, "Sbrinz", 5, "#f0d070", "SB", 30, ItemCategory.Food, 17),
         new(ItemId.Hoe, "Hoe", "{use_item} tills the ground ahead: stubble or grass turns to ploughed soil, ready to sow by hand.",
             ItemUse.Farm, 1, new Color("#8a6a40"), "HO", 0, ItemCategory.Gear, 25f),
         new(ItemId.Fertiliser, "Fertiliser", "{use_item} on a sown field cell: the crop there ripens sooner.",
@@ -259,6 +275,13 @@ public static class ItemDefs
             { Blurb = "A Valais white. {use_item} to drink a glass. At a shared pot, the fondue's wine: everyone at the table climbs warmer.", DrinkMl = 100f, Abv = 0.12f },
         Eat(ItemId.Kirsch, "Kirsch", 4, "#f2f0ea", "KI", 2, ItemCategory.Water, 14) with
             { Blurb = "Cherry spirit. {use_item} to drink a shot. At a shared pot, a dash in the fondue: everyone at the table gets their breath back faster.", DrinkMl = 20f, Abv = 0.40f },
+        // alcohol (#1271): the driver's beer and the two breathalyzers
+        Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
+            { Blurb = "{use_item} to drink. 0.5 %: the Swiss driver's choice.", DrinkMl = 330f, Abv = 0.005f },
+        new(ItemId.Breathalyzer, "Breathalyzer", "An electronic one. {use_item} blows into it for 5 s and its screen reads your per mille and mg/L; wait 15 min after a drink. {interact_mount} at a player offers them a test.",
+            ItemUse.Breath, 1, new Color("#38485a"), "BR", 0, ItemCategory.Gear, 120f),
+        new(ItemId.BreathTestSingle, "Breath test", "Single use. {use_item} blows into the crystal tube for 5 s: green under 0.5 per mille, amber over. Then it is used up.",
+            ItemUse.Breath, 4, new Color("#c8d8c0"), "BT", 0, ItemCategory.Gear, 4f),
         new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
             ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
         // the travel network (#1226): the travelcards; the server keeps who holds one (TravelBook), the card is its picture
@@ -355,6 +378,10 @@ public static class ItemDefs
         ItemCategory category, float value) =>
         new(id, name, $"{{use_item}} to {(category == ItemCategory.Water ? "drink" : category == ItemCategory.Medical ? "apply" : "eat")}. Restores {heal:F0} health.",
             ItemUse.Consume, stack, new Color(tint), glyph, heal, category, value);
+
+    /// <summary>Errand cargo (#1267): carried for a hand-over, worth nothing, never bought by a shop.</summary>
+    private static ItemDef Cargo(ItemId id, string name, string blurb, string tint, string glyph) =>
+        new(id, name, blurb, ItemUse.Material, 20, new Color(tint), glyph, 0, ItemCategory.Gear, 0f);
 
     private static ItemDef Hat(ItemId id, string name, string tint, string glyph) =>
         new(id, name, "{use_item} puts it on your head, in place of what was there. Others see you wearing it.",
@@ -685,7 +712,14 @@ public static class ItemDefs
                 BarracksMeshes.AppendChips(s);
                 break;
             case ItemId.BeerBottle:
+            case ItemId.BeerAlcoholFree:
                 BarracksMeshes.AppendBeer(s);
+                break;
+            case ItemId.Breathalyzer:
+                Adventure.Alcohol.AlcoholMeshes.AppendDevice(s);
+                break;
+            case ItemId.BreathTestSingle:
+                Adventure.Alcohol.AlcoholMeshes.AppendTube(s, Adventure.Alcohol.TubeColour.Clear);
                 break;
             case ItemId.Gamelle:
                 BarracksMeshes.AppendGamelle(s);

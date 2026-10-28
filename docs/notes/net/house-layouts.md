@@ -58,7 +58,7 @@
   - **Furnishing:** `Entrances` (extra doors) and `Furnish` run as usual.
   - **Fallback:** the result must pass `InteriorValidator`. If it fails or does not fit, the generated interior stays and the reason is logged (`[interior] house layout ... not used`).
   - **Freshness:** interiors live underground behind the door portal, so the drawing never has to meet the shell's walls. `InteriorLayout.House` holds the layout's hash and `Matches` compares it. An approval, a new version or a withdrawal therefore makes the stored plan stale. A plan already in memory stays until the server restarts. `House` and `Piece` are left out of a generated plan's JSON, which is byte for byte what it was (the door baseline hashes it).
-  - **Exact angled walls** are #1197.
+  - **Exact angled walls** (#1197): `MergePieces` makes each room cut into pieces one shaped room again, its walls as drawn (`terrain/interior-outlines`). A room holding a stair keeps its strips.
 - **Checks:**
   - `HouseLayoutTests` (unit tier): the frame, the rules on polygons, reachability, the export file, the cut (an L exact, a stair carved, rooms sharing an angled wall still meeting, a drawing a few cm off evened out).
   - `--houselayoutcheck` (quick tier):

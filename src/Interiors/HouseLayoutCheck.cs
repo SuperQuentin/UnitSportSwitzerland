@@ -140,7 +140,8 @@ public partial class HouseLayoutCheck : Node
 
     /// <summary>
     /// One storey drawn as polygons: a living room and a kitchen split by an angled wall with a door in it. The game
-    /// builds them from strips joined full height, so each stays one room to walk, and the door finds the wall.
+    /// builds each as one room with its walls as drawn (#1197, cut into strips only to plan it), and the door finds
+    /// the angled wall.
     /// </summary>
     private void Angled()
     {
@@ -174,15 +175,19 @@ public partial class HouseLayoutCheck : Node
         Check(drawn.Count == 0, $"angled: the drawn layout breaks the web's rules: {string.Join("; ", drawn)}");
         HouseLayouts.Set([layout]);
         _warned.Clear();
+        InteriorGenerator.OutlineFailure = null;
         var l = InteriorGenerator.Generate(tile, 0, null, null);
         if (l == null) { Check(false, "angled: no plan"); return; }
         Check(l.House == layout.Hash(), $"angled: planned without the drawn layout: {string.Join("; ", _warned)}");
         var rooms = l.Floors[0].Rooms;
-        Check(rooms.Count > 2 && rooms.All(r => r.Piece), $"angled: {rooms.Count} pieces, want the two rooms cut into strips");
-        Check(rooms.Count(r => r.Type == RoomType.Living) > 1 && rooms.Count(r => r.Type == RoomType.Kitchen) > 1, "angled: room types lost");
-        Check(rooms.Sum(r => r.Area) > 12 * 8 * 0.97, $"angled: the pieces cover {rooms.Sum(r => r.Area):F1} of 96 m²");
-        Check(rooms.Any(r => r.Openings.Any(x => x.Kind == OpeningKind.Door && x.Other >= 0 && rooms[x.Other].Type != r.Type)),
-            "angled: no door between the living room and the kitchen");
+        Check(rooms.Count == 2 && rooms.All(r => r.Shape != null && !r.Piece), $"angled: {rooms.Count} rooms ({rooms.Count(r => r.Shape != null)} shaped), want the two drawn, each one shaped room{(InteriorGenerator.OutlineFailure is { } why ? $": {why}" : "")}");
+        Check(rooms.Count(r => r.Type == RoomType.Living) == 1 && rooms.Count(r => r.Type == RoomType.Kitchen) == 1, "angled: room types lost");
+        Check(rooms.Sum(r => r.FloorArea) > 12 * 8 * 0.97, $"angled: the rooms cover {rooms.Sum(r => r.FloorArea):F1} of 96 m²");
+        // the angled wall drawn as one straight wall: an edge of each room neither along x nor along z
+        Check(rooms.All(r => r.Corners().Zip(r.Corners().Skip(1).Append(r.Corners()[0])).Any(e => Math.Abs(e.First.X - e.Second.X) > 0.5f && Math.Abs(e.First.Y - e.Second.Y) > 0.5f)),
+            "angled: the angled wall is not one straight wall");
+        Check(rooms.Any(r => r.Openings.Any(x => x.Kind == OpeningKind.Door && x.Edge != null && x.Other >= 0 && rooms[x.Other].Type != r.Type)),
+            "angled: no door in the angled wall between the living room and the kitchen");
         Check(l.Furniture.Count(f => f.Type == FurnitureType.Sofa) <= 1, "angled: the living room furnished once per piece");
         Check(l.Furniture.Count > 0, "angled: nothing furnished (no piece big enough to hold the furniture)");
         var problems = InteriorValidator.Validate(l);
@@ -190,7 +195,7 @@ public partial class HouseLayoutCheck : Node
         try { InteriorMeshBuilder.Build(l); }
         catch (Exception ex) { Check(false, $"angled: the mesh builder threw {ex.GetType().Name}: {ex.Message}"); }
         Svg("angled", l);
-        GD.Print($"[houselayout] angled: {rooms.Count} pieces, {l.Furniture.Count} pieces of furniture");
+        GD.Print($"[houselayout] angled: {rooms.Count} rooms, {l.Furniture.Count} pieces of furniture");
     }
 
     /// <summary>The house's layout in its outline's frame: x along its 12 m, z across its 8 m.</summary>

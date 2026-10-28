@@ -83,7 +83,8 @@ public static partial class InteriorGenerator
             for (int i = 0; i < rooms.Count; i++)
             {
                 var r = rooms[i];
-                if (taken.Contains(i) || r.Area < DiningMinArea(guest)) continue;
+                // a shaped room (#1197, a drawn one) is not carved: its kitchen would stand in its shape
+                if (taken.Contains(i) || r.Area < DiningMinArea(guest) || r.Shape != null) continue;
                 bool fits = apt ? r.Type == RoomType.Shop
                     : r.Type is RoomType.Shop or RoomType.Living or RoomType.Dining or RoomType.Office
                         or RoomType.Classroom or RoomType.Hall;

@@ -183,6 +183,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         _cinemaBooths = Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.BowlingLanes.Create(this);   // every bowling centre's games (#1323)
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
@@ -422,6 +423,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
             // climbs higher than the stamina rules allow, logged (#1225): no correction
             AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
             AddTogether(adventure);   // #1266, ServerWorld.Together.cs
+            AddAlcohol(adventure);    // #1271, ServerWorld.Alcohol.cs
+            AddErrands(adventure);   // #1267, ServerWorld.Errands.cs
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);

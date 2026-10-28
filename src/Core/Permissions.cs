@@ -82,6 +82,11 @@ public static class Permissions
     /// <summary>The server's air rises in thermals, ridge lift and updrafts (#1225); <c>--lift off</c> stills it.</summary>
     public static bool ServerLift { get; private set; } = true;
 
+    /// <summary>The server's <c>--alcohol off|mild|real</c> (#1271), as <c>Net/Arrival</c> carried it: 0, 1, 2.</summary>
+    public static int ServerAlcohol { get; private set; } = 2;
+
+    internal static void SetServerAlcohol(int mode) => ServerAlcohol = Math.Clamp(mode, 0, 2);
+
     internal static void SetServerBody(bool stamina, bool lift)
     {
         if (ServerStamina == stamina && ServerLift == lift) return;

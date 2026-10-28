@@ -51,6 +51,7 @@ public class ClockDisciplineTests
     /// </summary>
     private static readonly Dictionary<string, string> Allowed = new()
     {
+        ["src/Adventure/Alcohol/Bac.cs"] = "clock: blood alcohol runs on real time, so a player who logs off drunk comes back sober (#1271); pure, linked into tier 0",
         // ---- the clocks themselves ----
         ["src/Core/RealClock.cs"] = "clock: it is the wall clock",
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",
@@ -85,6 +86,7 @@ public class ClockDisciplineTests
         ["src/Net/ServerBook.cs"] = "plumbing: when a saved server was last played",
         ["src/Adventure/AdventureService.cs"] = "calendar: a quest's start and done dates, and a player's first and last visit, are real dates saved with its progress (#1223)",
         ["src/Adventure/Rewards/RewardService.cs"] = "presentation: seals' windows, a guide's legs and a trial's time are judged on the shared clock the player's client shows them on (#1227); calendar: a Luxurious chest's edition is the real year",
+        ["src/Adventure/Errands/ErrandService.cs"] = "calendar: the Swiss day of the daily Postkarten, and so what a card is, is the real Europe/Zurich date (#1267)",
         ["src/Adventure/Together/TogetherService.Pots.cs"] = "presentation: the raclette cheese bubbles on the shared clock the server stamps the pot with; the scrape window is judged on it (#1266)",
         ["src/Adventure/Together/TogetherService.Progress.cs"] = "calendar: the day and the ISO week of the punch card and the weekly chest are real dates, Europe/Zurich (#1266)",
         ["src/Adventure/Rewards/GuideNode.cs"] = "presentation: a guide's leg is played from its start on the shared clock the server stamped it with (#1227)",
@@ -119,6 +121,8 @@ public class ClockDisciplineTests
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
         ["src/Concert/ConcertService.Songs.cs"] = "presentation: /concert song reads where the setlist is on the shared clock the music plays to",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
+        ["src/Occasions/Festivals/Fahnen/FahnenGame.cs"] = "presentation: the flag swinger's figures are judged against a drum that plays on the shared clock in real time, like the pogo's beat",
+        ["src/Occasions/Festivals/FestivalService.Fahnen.cs"] = "clock: a routine's start, its stamps and its settlement are on the server's real clock (the drum's beat, 96 BPM), not the simulated one /speed scales",
         ["src/Concert/PogoQte.cs"] = "presentation: the pogo QTE judges a press against the beat of the music as heard, which plays on the shared clock in real time",
         ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
         ["src/Concert/Mvr/Mdns.cs"] = "plumbing: mDNS answers at most once a second, real time on its receive thread",
