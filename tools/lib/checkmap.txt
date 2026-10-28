@@ -167,8 +167,23 @@ src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
 src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
 src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
 src/Interiors/CinemaProbe   quick  --cinemacheck --systems ui
+# #1286: what E's outline draws (pieces alone, booth panel halves, lift buttons, the outline on and off)
+src/Items/InteractOutline   quick  --outlinecheck --systems ui
+src/Interiors/InteriorMeshBuilder quick  --outlinecheck --systems ui
+src/Interiors/InteriorManager.Interact quick  --outlinecheck --systems ui
 src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
 src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1285: public toilets, planned by every public building's generator
+src/Interiors/InteriorGenerator.Toilets quick --cinemacheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --bowlingcheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --arcadecheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --diningcheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --ikeacheck --systems ui
+src/Interiors/ToiletCheck   quick  --cinemacheck --systems ui
+src/Interiors/ToiletCheck   quick  --diningcheck --systems ui
+src/Interiors/ToiletSizing  quick  --cinemacheck --systems ui
+src/Interiors/InteriorMeshBuilder.Toilets quick --cinemacheck --systems ui
+src/Interiors/RoomLights    quick  --cinemacheck --systems ui
 # #1240: arcades planned in hand-made buildings
 src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
 src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
@@ -955,6 +970,18 @@ src/Player/Flight.cs           quick  --flycheck campfire --chunks fixture:crag
 src/Player/PigeonFlight        quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
 src/Net/Arrival                net    tools/climbnetcheck.sh
 src/Player/FootPlayer.Climb    net    tools/climbnetcheck.sh
+
+# #1268 Versteckis: the offline check on the hamlet, the two-client game, the bot game; Rounds and FollowCam keep BR whole
+src/Adventure/Versteckis/ quick  --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Terrain/Fixture/FixtureCourse quick --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Adventure/Versteckis/VersteckisManager net tools/versteckisnetcheck.sh
+src/Net/InterestService   net    tools/versteckisnetcheck.sh
+src/Bots/VersteckisBrain  net    tools/versteckisbotcheck.sh
+src/Adventure/Versteckis/VsTactics net tools/versteckisbotcheck.sh
+src/Core/Rounds           quick  --brcheck
+src/Ui/FollowCam          quick  --brcheck
+src/Core/Rounds           net    tools/brbotcheck.sh
+src/Ui/FollowCam          net    tools/brbotcheck.sh
 # /locate (#1277): the index, the lists and the garage doors offline on the garage course; the server's answers and /go
 src/World/Locate/          quick  --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
 src/Interiors/BuildingTypes quick --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui

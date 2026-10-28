@@ -37,6 +37,12 @@ What is inside the ~28,000 dining venues OSM knows (`entertainment-venues`). Res
   café. Counters are counter-high in the plan (the menu boards hang over the back line at their own
   height), so a shopfront's windows do not keep them off its walls; the cook line falls back to shorter
   lengths on inner walls.
+- **Toilets** (#1285, `public-toilets`), each venue's, in this order: at the end of the kitchen strip
+  walled off its room (the end with no doorway; a set the strip's length past a 2.4 m kitchen holds);
+  else a strip walled off a wall of its room with no doorway in or near it, as deep as its set needs,
+  the room keeping 4 m across and most of its floor (a Beiz its tables); else, for a bar or a club,
+  the store off its room (the set's first room takes the store's slot); else a WC the building
+  already has on its ground floor is adopted (a leaf, the sign). `InteriorLayout.CurrentVersion` 38.
 - **Staff**: bartender, cashier, the pastry case's server, the DJ (`InteriorNode.Staff`).
 - **Light**: a club's lamps tint 3 (violet), as an arcade's.
 - **Checks**: `--diningcheck --systems ui` (`DiningProbe`: a Beiz house, a café, a pizzeria, a bar, a

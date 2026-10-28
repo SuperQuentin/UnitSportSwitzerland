@@ -549,6 +549,11 @@ public partial class ItemController : Node
             case ItemUse.Readout:
                 break;
 
+            case ItemUse.Round:
+                // a Versteckis round tool (#1268): the game's server checks it all
+                Adventure.Versteckis.VersteckisManager.Instance?.UseTool(player, def.Id, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
             case ItemUse.Detector:
                 // the treasure detector (#1227): one strong ping, a direction for 3 s
                 Adventure.Rewards.RewardHud.Instance?.Ping();
@@ -849,9 +854,11 @@ public partial class ItemController : Node
         }
         else if (_throw.SinceRelease < 0.4f) player.ItemAction = 4;
 
-        Highlight.Point(usable && !_throw.Active && !_ui.IsOpen ? Highlight.Find(player) : null);
+        // what E would act on before them (a crate at the feet, a crane's ladder) keeps these borders off (#1286)
+        bool free = usable && !_throw.Active && !_ui.IsOpen;
+        Highlight.Point(free && InteractOutline.Outranks != Outranking.ItemAndVehicle ? Highlight.Find(player) : null);
         // a world item pointed at comes first; else the car door (or machine) the player is at (#261)
-        Vehicles.VehicleReach.Point(usable && !_throw.Active && !_ui.IsOpen && Highlight.Pointed == null
+        Vehicles.VehicleReach.Point(free && Highlight.Pointed == null && InteractOutline.Outranks == Outranking.None
             ? Vehicles.VehicleReach.Find(player) : null);
     }
 

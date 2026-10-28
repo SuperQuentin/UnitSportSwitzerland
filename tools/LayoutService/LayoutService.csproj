@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="MailKit" Version="4.18.2" />
     <PackageReference Include="Npgsql" Version="8.0.3" />
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
   </ItemGroup>

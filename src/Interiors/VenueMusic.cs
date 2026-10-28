@@ -16,6 +16,9 @@ public static class VenueMusic
     /// <summary>A room's speaker, and the one behind the door that the street hears.</summary>
     public const float RoomVolume = 0.5f, DoorVolume = 0.12f;
 
+    /// <summary>What a cinema hall plays while its screen is on (#1279): Radio Swiss Classic, the nearest the relay has to film music.</summary>
+    public const int FilmStation = 10;
+
     /// <summary>
     /// Which part of the country a tile lies in, for the stations that speak its language: Romandie
     /// west of about E 2'570'000, Ticino and the Italian valleys south of N 1'170'000 east of E 2'680'000.
@@ -125,6 +128,8 @@ public static class VenueMusic
                     Mood = MoodFor(r.Type),
                     Salt = (uint)Core.Fnv.Hash(l.Key),
                     Position = new Vector3((r.X0 + r.X1) / 2, l.FloorY(f) + Math.Min(2.3f, l.ClearOf(r) - 0.3f), (r.Z0 + r.Z1) / 2),
+                    // the whole room at full level, not only its middle (#1279)
+                    Spread = Math.Max(3f, new Vector2(r.Width, r.Depth).Length() / 2),
                 });
             }
     }

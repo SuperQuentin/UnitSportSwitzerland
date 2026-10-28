@@ -531,6 +531,8 @@ public static class BuildingFootprint
         // pedestrian doors, so a barn's pair and a garage's roll-up door gain a man-sized one.
         var extras = new List<DoorSpot>();
         int budget = DoorBudget.Total(kind, w, dpt);
+        // a cinema has its one way in (#1279, the owner's call): the extras landed in its halls' side walls, beside the seats
+        if (Venues.HallOf(map, index) == VenueType.Cinema) budget = 1;
 
         // ---- loading bays (#528) ----------------------------------------------------------
         // An industrial site's front wall is mostly bays, so they are placed before the generic

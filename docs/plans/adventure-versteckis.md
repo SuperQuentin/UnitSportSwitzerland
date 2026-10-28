@@ -3,7 +3,7 @@
 
 # Adventure Versteckis: hide-and-seek as village props
 
-Status: **planned**. Tracking issue: #1268 (phase 3: #1270).
+Status: **built** (PR #1273; what differs: "Built differently" at the end). Tracking issue: #1268 (phase 3: #1270).
 
 One of four Adventure plans for phase 3, "things friends do together", written in parallel:
 `adventure-errands` (NPC givers, daily errands, world events), `adventure-together` (group yield,
@@ -22,13 +22,13 @@ round gate is `AdventureService.InMatch`, which is wired to `BrManager.InRound` 
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Round host | planned | `Core/Rounds` (one "in a round" registry for BR and Versteckis), `VersteckisManager` at `World/Versteckis`, lobby, invite kind, phases, rotation, the `Ui/FollowCam` taken out of BR |
-| 2 Play area | planned | `VsArea.Pick` around a church or chapel POI of a `places.json` village, radius by head count, the boundary ring, `HidePlan` decor that hiders can blend into |
-| 3 Props and disguise | planned | `VsProps` (7 kinds), shared meshes in the model viewer, `VsDisguise` (a mesh swap on its own node, never a rebuild) |
-| 4 Tools and objectives | planned | Seeker: Tag, Sniff. Hiders: Decoy, Sprint, Moo. Objectives: church bell, Höhenfeuer, milk can |
-| 5 Score and rewards | planned | Per-round points, the results table, the `versteckis` section, titles, two cosmetics, a participation payout that never depends on winning |
-| 6 Bots | planned | `VersteckisBrain` for both roles, `VsTactics` (pure), top-up to 4-8 players |
-| 7 Checks and notes | planned | Unit tests, `--versteckischeck` on a new `fixture:hamlet` course, a two-client net check, a bot-filled check |
+| 1 Round host | built | `Core/Rounds` (one "in a round" registry for BR and Versteckis), `VersteckisManager` at `World/Versteckis`, lobby, invite kind, phases, rotation, the `Ui/FollowCam` taken out of BR |
+| 2 Play area | built | `VsArea.Pick` around a church or chapel POI of a `places.json` village, radius by head count, the boundary ring, `HidePlan` decor that hiders can blend into |
+| 3 Props and disguise | built | `VsProps` (7 kinds), shared meshes in the model viewer, `VsDisguise` (a mesh swap on its own node, never a rebuild) |
+| 4 Tools and objectives | built | Seeker: Tag, Sniff. Hiders: Decoy, Sprint, Moo. Objectives: church bell, Höhenfeuer, milk can |
+| 5 Score and rewards | built | Per-round points, the results table, the `versteckis` section, titles, two cosmetics, a participation payout that never depends on winning |
+| 6 Bots | built | `VersteckisBrain` for both roles, `VsTactics` (pure), top-up to 4-8 players |
+| 7 Checks and notes | built | Unit tests, `--versteckischeck` on a new `fixture:hamlet` course, a two-client net check, a bot-filled check |
 
 ## Goal
 
@@ -539,3 +539,31 @@ on `main` today, so it becomes whatever `main` holds + 1 at merge (the other pha
 7. **Cows**: may a hider join a real herd's graze? A real cow moves on the shared clock
    (`CowMotion`), so a still "cow" stands out. **Recommend**: yes, it is the skill ceiling. Bots get no
    herd-mimic step in v1.
+
+## Built differently (PR #1273)
+
+- **Names**: the objectives' enum is `VsSite`; the class that reads an area's tiles is `VsGround` (not a second `VsSite`).
+  `VsArea` has no `Pick`: `Candidates`, `Nearest`, `Here`, `Random`, `Named`, `Reject`.
+- **One message for every game**: `SetGames(json)` sends every game to every peer (the Activities list, each client's
+  own game, every body's prop to draw), instead of `SetState` to entrants plus a `Disguises` broadcast. No hider
+  position is in it before the round's pins.
+- **The area** is read once at Open at the largest radius (for the rejection), then planned again for the head count at
+  Gather. On a fixture course the server adds a "Fixture hamlet" town (no `places.json` there); the hamlet surrounds
+  the existing fixture chapel, so `PoiCatalogue.Fixture` is unchanged.
+- **Server checks**: the speed is judged over a one-second window (a 0.25 s window failed a 2 m/s walk: positions come
+  in bursts); a body half a metre inside a footprint, or in an interior, fails "not in a building". The seeker is put
+  back beyond 6 m of the door (3 m, doubled for the network). An out-of-reach tag is refused before the cooldown.
+  `--vsmin n` lets a check start a two-player game without bots.
+- **The quest** "Versteckis im Dorf" starts and ends with the first game played (`QuestStart.OnEvent`), not on first
+  seeing the tab.
+- **Offline**: no "Host a game" button; the tab and `/vs` say to host from the main menu (leaving the world mid-game was
+  not worth it).
+- **VR**: the objective's hold is Y through `XrPad`, or a grip near the site (`TryInteract(byHand)`); no tag by touching
+  a prop; no wrist silhouette; first person as recommended. Rows `new` in `xr/vr-action-map`.
+- **Not built yet**: the spectators' outline of the hiders and its colour setting (the counting tick is the one setting,
+  `GameSettings.VersteckisCounting`); the voiced count (a tick a second); the hiders' pins on a map (they are in the
+  round-end table); the bystander's "Join the next game" toast; the cow disguise's head turn; the carried can drawn on
+  the body; the decor's MultiMesh build on a worker (it is built on the main thread at Gather); the `--perf` and
+  `--serverstats` budget measurement.
+- **Cosmetics**: the Zipfelmütze and the Treichel reuse the `Beanie` and `BellCollar` garment shapes.
+

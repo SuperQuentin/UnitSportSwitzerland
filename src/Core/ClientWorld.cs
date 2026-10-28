@@ -239,6 +239,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.ProjectionPerfProbe { Name = "ProjectionPerfProbe" });
             return;
         }
+        // what E's outline draws, interiors planned in hand-made buildings (#1286)
+        if (Items.InteractOutlineCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Items.InteractOutlineCheck { Name = "InteractOutlineCheck" });
+            return;
+        }
         // cinemas planned in hand-made buildings (#1238)
         if (Interiors.CinemaProbe.ParseArgs())
         {
@@ -1134,6 +1141,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Adventure.Rewards.RewardStats.Requested) AddChild(new Adventure.Rewards.RewardStats());
             AddNavigation(adventure, items, ground);
         }
+        // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
+        // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it
+        var versteckis = Adventure.Versteckis.VersteckisManager.CreateClient(origin);
+        versteckis.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+        versteckis.Inventory = () => _items?.Inventory;
+        versteckis.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
+        versteckis.AddAnchor = node => _chunks?.AddAnchor(node);
+        versteckis.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
+        versteckis.Source = () => _chunks?.Source;
+        versteckis.GroundAt = p => _chunks != null && _chunks.TryGetSurface(p, out float h) ? h : null;
+        AddChild(versteckis);
+        if (Adventure.Versteckis.VersteckisCheck.Requested && _items != null) AddChild(new Adventure.Versteckis.VersteckisCheck(_items, () => LocalPlayer));
+        if (Adventure.Versteckis.VersteckisNetProbe.Role != null && _items != null) AddChild(new Adventure.Versteckis.VersteckisNetProbe(_items));
+        if (Adventure.Versteckis.VersteckisBotProbe.Requested && _items != null) AddChild(new Adventure.Versteckis.VersteckisBotProbe(_items));
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
         {
@@ -2182,11 +2203,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (p.LiftWait > 0) yield return (PlayerInput.InteractMount, $"Waiting for {name}: {p.LiftWait:0} s");
                 else if (drag) yield return (PlayerInput.InteractMount, $"Let go of {name}");
             }
-            else if (p.LiftInReach() is { } station)
-                yield return (PlayerInput.InteractMount, $"Take {World.Ropeways.RopewayService.Called(station)}");
+            else if (p.LiftStationInteraction() is { } take)
+                yield return (PlayerInput.InteractMount, take.Text);
             // a bus door's button in reach, inside or out (#162)
-            if (p.Vehicle == null && p.ButtonInReach() is { } button)
-                yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
+            if (p.DoorButtonInteraction() is { } button)
+                yield return (PlayerInput.InteractMount, button.Text);
             if (p.RidingAlong && p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
             // at a crane's controls (#618): the hook, the view, and letting go; the levers are in F1
             if (p.CraneWorking)
@@ -2295,16 +2316,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (Items.ItemController.Instance?.Inventory.Held.IsEmpty == true) yield return (PlayerInput.UseItem, "Take the radio");
                 yield return (PlayerInput.InteractMount, Items.RadioTap.Prompt);
             }
-            else if (Vehicles.VehicleReach.Current == null && Combat.FightManager.Client is { } fights
-                     && NetLink.Online(this) && p.PointedFighter() is { } rival && FootPlayer.NetId(rival.Name) is { } rivalId)
+            else if (p.FighterInteraction() is { } fight)
                 // another player looked at (#495): E challenges, or takes their challenge; an aura
                 // challenge from them comes first (#914)
-                yield return (PlayerInput.InteractMount, Combat.AuraManager.Client?.ChallengedBy(rivalId) == true
-                    ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
+                yield return (PlayerInput.InteractMount, fight.Text);
             else if (p.Indoors)
             {
-                // a cinema's booth (#1238): the lights or the screen, by the half of its panel you stand at
-                if (Interiors.CinemaBooths.Prompt(p) is { } booth) yield return (PlayerInput.InteractMount, booth);
+                // seated in a cinema (#1279): E stands up (the seat itself is offered by InteriorManager.Interacting)
+                if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))
@@ -2314,10 +2333,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else
             {
                 // a concert's light desk (#885), at its console
-                if (Concert.ConcertDeskUi.At(p) != null) yield return (PlayerInput.InteractMount, "Light desk");
+                if (p.LightDeskInteraction() is { } desk) yield return (PlayerInput.InteractMount, desk.Text);
                 // a stand's seat (#885), before the dance: E sits there first
                 else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
-                else if (p.SeatInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
+                else if (p.SeatInteraction() is { } seat) yield return (PlayerInput.InteractMount, seat.Text);
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");

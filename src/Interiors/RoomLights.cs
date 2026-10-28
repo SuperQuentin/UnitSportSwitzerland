@@ -48,6 +48,14 @@ public static class RoomLights
                     var (c, n) = WindowFrame(r, o, y0);
                     lights.Add(Light(c, 0, n.X, n.Z, o.Width / 2, (o.Top - o.Bottom) / 2, r, y0, top));
                 }
+                // a toilet stall (#1285) has no lamp of its own: the washroom's reaches over it, as a ceiling light does
+                // over the cubicles, so a row of them is not a light each
+                if (r.Type == RoomType.ToiletStall)
+                {
+                    for (int s = 0; s < Math.Max(1, r.Span) && f + s < floors; s++) byFloor[f + s].AddRange(lights);
+                    continue;
+                }
+                var box = StallsOf(l.Floors[f].Rooms, r);
                 // the lamps hang a little under the ceiling. One in the middle of an ordinary room;
                 // a works hall gets the grid of high bays it really has, because one lamp with a 30 m
                 // reach lights the middle of a shed and leaves its corners black (#497)
@@ -55,14 +63,14 @@ public static class RoomLights
                 int rows = Math.Clamp((int)(r.Depth / HighBaySpacing), 1, MaxHighBays);
                 float reach = cols * rows > 1
                     ? HighBaySpacing * 0.85f
-                    : Mathf.Max(3.5f, 0.75f * Mathf.Max(r.Width, r.Depth));
+                    : Mathf.Max(3.5f, 0.75f * Mathf.Max(box.Width, box.Depth));
                 for (int cx = 0; cx < cols; cx++)
                     for (int cz = 0; cz < rows; cz++)
                     {
                         var lamp = new Vector3(
                             r.X0 + r.Width * (cx + 0.5f) / cols, top - 0.3f,
                             r.Z0 + r.Depth * (cz + 0.5f) / rows);
-                        lights.Add(Light(lamp, 1, reach, windows ? 0 : 1, Tint(r.Type), 0, r, y0, top));
+                        lights.Add(Light(lamp, 1, reach, windows ? 0 : 1, Tint(r.Type), 0, box, y0, top));
                     }
                 for (int s = 0; s < Math.Max(1, r.Span) && f + s < floors; s++)
                     byFloor[f + s].AddRange(lights);
@@ -84,6 +92,20 @@ public static class RoomLights
             }
         }
         return new Table(ImageTexture.CreateFromImage(image), l.FloorY(0), l.StoreyHeight, floors);
+    }
+
+    /// <summary>A room's rectangle grown over the toilet stalls opening off it (#1285), which its lamp lights.</summary>
+    private static RoomPlan StallsOf(List<RoomPlan> rooms, RoomPlan r)
+    {
+        RoomPlan? box = null;
+        foreach (var o in r.Openings)
+        {
+            if (o.Kind != OpeningKind.Door || o.Other < 0 || o.Other >= rooms.Count || rooms[o.Other].Type != RoomType.ToiletStall) continue;
+            var st = rooms[o.Other];
+            box ??= new RoomPlan { X0 = r.X0, Z0 = r.Z0, X1 = r.X1, Z1 = r.Z1 };
+            (box.X0, box.Z0, box.X1, box.Z1) = (Math.Min(box.X0, st.X0), Math.Min(box.Z0, st.Z0), Math.Max(box.X1, st.X1), Math.Max(box.Z1, st.Z1));
+        }
+        return box ?? r;
     }
 
     /// <summary>

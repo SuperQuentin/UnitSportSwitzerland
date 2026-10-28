@@ -25,8 +25,8 @@ The generator for OSM's `leisure=bowling_alley` solids (`entertainment-venues`).
 - **Across u**: 3.50 m a pair, up to 13; a walkway of 0.8 m each side (2.2 m on the door's side when
   the door opens onto the lanes, along X), up to 12 m of games side past the last lane (pool tables);
   in a mall the programme hugs the door and a plain `Hall` takes the rest.
-- **Rooms**: a `Concourse` with a service column at its end away from the door (one or two `WC`, a
-  `Storage`, doors into the concourse), the `BowlingLanes` hall (`Span` 2 on two levels), the arch
+- **Rooms**: a `Concourse` with a service column at its end away from the door (the public toilets,
+  `public-toilets` #1285, and a `Storage`, doors into the concourse), the `BowlingLanes` hall (`Span` 2 on two levels), the arch
   between them over the whole width (the hall's side the full height, so the mezzanine looks over the
   lanes). On two levels: a straight stair along the concourse's end wall and a `Mezzanine` over the
   whole concourse, its lane-side wall an arch from 1.05 m (a parapet). `Mezzanine` gives up (one

@@ -13,7 +13,7 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   map, doors between rooms, stairs). `Corners()`, `Holds(x, z)`, `FloorArea`, `WallFrame(o)` read it.
   An opening on an angled edge names it (`OpeningPlan.Edge`, `Center` along the edge); others stay
   `Side` + `Center` on the rectangle's wall line, which an edge of the shape carries. Both fields are
-  left out of the JSON when unused, so a plain plan's JSON is what it was. Plan version 38.
+  left out of the JSON when unused, so a plain plan's JSON is what it was. Plan version 39.
 - **Never shaped**: a room with a stair, a hole over or under it, a landing, a lift, a ramp, a shelter
   or a vault (a floor with a hole in it is not drawn). Such a room may still get an arm's rooms off it.
 - **The outline** (`PlanOutline.FineGrid`, `Rings`): the roof laid flat on a 0.25 m grid in the plan

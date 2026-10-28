@@ -61,6 +61,8 @@ public sealed class StagePlan
     public readonly List<PaCab> Pa = new();
     /// <summary>The lighting desk on the front-of-house riser, stadium frame: where its screen opens.</summary>
     public Vector3 Desk { get; private set; }
+    /// <summary>The consoles' box at front of house: what E at <see cref="Desk"/> outlines (#1286).</summary>
+    public StageBox Console { get; private set; }
     /// <summary>The camera platform beside front of house: its deck's top middle, stadium frame (#985).</summary>
     public Vector3 FohCamera { get; private set; }
     /// <summary>The far camera tower's deck top, out on the floor facing the stage; null when the floor has no room for it (#985).</summary>
@@ -409,6 +411,7 @@ public sealed class StagePlan
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, Tent, solid: false);
         // the consoles, facing the stage
         Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);
+        Console = Boxes[^1];
         Desk = At(0, 1.2f, foh + 2.8f);
         foreach (float x in new[] { -4.8f, 4.8f })
             foreach (float z in new[] { foh + 0.2f, foh + 5.8f })
@@ -709,6 +712,7 @@ public sealed class StagePlan
         Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, tent);
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, tent, solid: false);
         Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);
+        Console = Boxes[^1];
         Desk = At(0, 1.2f, foh + 2.8f);
         CameraDeck(5.6f, 8.6f, foh + 1.5f, foh + 4.5f);
         Zone("front of house", -6.5f, 9.6f, foh - 1.5f, foh + 7.5f, true);

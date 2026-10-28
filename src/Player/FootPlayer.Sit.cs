@@ -29,7 +29,24 @@ public partial class FootPlayer
     // moving stands up only once the move that walked you there has been let go
     private bool _sitArmed;
 
-    /// <summary>The seat a press of E would sit on, here and now; null when there is none.</summary>
+    /// <summary>
+    /// A seat to sit on: the hip's place (world), how far under it the feet rest, the way it faces, and where
+    /// standing up puts the body. A stand's (#885) or a cinema's (#1279).
+    /// </summary>
+    public readonly record struct SitSpot(Vector3 Hip, float Drop, float Yaw, Vector3 Stand);
+
+    /// <summary>The seat a press of E would sit on, here and now, outdoors (a stand) or in a cinema; null when there is none.</summary>
+    public SitSpot? SitInReach()
+    {
+        if (Sitting || !CanEmote || _ride != null || RidingWith != 0 || Aboard || !IsOnFloor()) return null;
+        if (Indoors) return Interiors.CinemaSeats.At(this);
+        if (SeatInReach() is not { } seat || Origin is not { } origin) return null;
+        var at = origin.ToWorld(seat.E, seat.N, 0);
+        float hipY = GlobalPosition.Y + seat.Hip;
+        return new SitSpot(new Vector3(at.X, hipY, at.Z), seat.Drop, seat.Yaw, new Vector3(at.X, hipY - seat.Hip + 0.05f, at.Z));
+    }
+
+    /// <summary>The stand's seat a press of E would sit on, here and now; null when there is none.</summary>
     public global::UnitSport.Terrain.Stadiums.StadiumSeat? SeatInReach()
     {
         if (Sitting || !CanEmote || _ride != null || RidingWith != 0 || Aboard || Indoors || !IsOnFloor() || Origin is not { } origin) return null;
@@ -37,16 +54,14 @@ public partial class FootPlayer
         return global::UnitSport.Terrain.Stadiums.StadiumSeats.At(e, n);
     }
 
-    /// <summary>Sits on the seat in reach, if any: the body still, turned to the pitch, drawn seated.</summary>
+    /// <summary>Sits on the seat in reach, if any: the body still, turned to the pitch or the screen, drawn seated.</summary>
     public bool TrySit()
     {
-        if (SeatInReach() is not { } seat || Origin is not { } origin) return false;
-        var at = origin.ToWorld(seat.E, seat.N, 0);
-        float hipY = GlobalPosition.Y + seat.Hip;
-        _sitStand = new Vector3(at.X, hipY - seat.Hip + 0.05f, at.Z);
+        if (SitInReach() is not { } seat) return false;
+        _sitStand = seat.Stand;
         _sitDrop = seat.Drop;
         _sitYaw = seat.Yaw;
-        GlobalPosition = new Vector3(at.X, hipY - seat.Drop, at.Z);
+        GlobalPosition = seat.Hip - new Vector3(0, seat.Drop, 0);
         Velocity = Vector3.Zero;
         _viewYaw = _sitYaw;
         Rotation = new Vector3(0, _sitYaw, 0);

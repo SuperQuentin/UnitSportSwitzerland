@@ -89,6 +89,7 @@ public class ClockDisciplineTests
         ["src/Adventure/Rewards/TrialRunner.cs"] = "presentation: a trial's ghost and its 4 Hz samples run on the shared clock the server times the trial on (#1227)",
         ["src/Adventure/Rewards/RewardHud.cs"] = "presentation: a trial's clock on the HUD counts from the server's start stamp (#1227); calendar: the detector skips the Luxurious chests of this real year's edition already opened",
         ["src/Adventure/Rewards/RewardWorld.cs"] = "calendar: which Luxurious edition this player sees is the real year's (#1227)",
+        ["src/Adventure/Versteckis/VersteckisManager.Round.cs"] = "calendar: the francs count for five Versteckis games a real UTC day, kept in the player's progress (#1268)",
         ["src/Adventure/Places/PlacesProgress.cs"] = "calendar: a stamp's day is the real date the place was found, saved with the Atlas (#1224)",
         ["src/Adventure/Navigation/AdventureTravel.cs"] = "calendar: a trip's time and a pin's are saved with the progress (the 10 s rule across a reconnect), and the travelcards' price changes on the December timetable date (#1226)",
         ["src/Vehicles/VehicleState.cs"] = "plumbing: SpawnedAt is a Unix stamp that outlives the server on disk (#452)",

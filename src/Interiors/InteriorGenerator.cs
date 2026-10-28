@@ -1384,6 +1384,10 @@ public static partial class InteriorGenerator
                 }
                 foreach (var h in floor.Holes) blocked.Add(h);
 
+                // public toilets (#1285): their pieces were planned with the rooms, and a sign over a doorway into them
+                // stands in the room before it, first, so what is placed there keeps off it
+                if (PlaceToiletPieces(l, f, r, placed)) continue;
+
                 // a site hall or a shop floor is aisles or rows, not pieces scattered round its
                 // walls (#497, #501)
                 if (LaysItselfOut(r.Type))

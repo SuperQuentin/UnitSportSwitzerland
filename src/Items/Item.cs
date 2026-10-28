@@ -257,6 +257,19 @@ public static class ItemDefs
             ItemUse.Material, 1, new Color("#c8102e"), "GA", 0, ItemCategory.Gear, 0f),
         new(ItemId.HalfFare, "Half-fare travelcard", "Every fare of the travel network halved, cable cars included.",
             ItemUse.Material, 1, new Color("#c8102e"), "HT", 0, ItemCategory.Gear, 0f),
+        // Versteckis (#1268): the round kit, lent for a game only (the pack is put aside, as in a Battle Royale)
+        new(ItemId.VsTag, "Gfunde! (tag)", "{use_item} tags the prop the crosshair is on, within 2.5 m. A miss costs 4 s.",
+            ItemUse.Round, 1, new Color("#e8b020"), "TG", 0, ItemCategory.Gear, 0f),
+        new(ItemId.VsSniff, "Schnüffle (sniff)", "{use_item}: for 3 s every hider within 30 m gives off a puff of pollen, a few metres off. 3 charges, one back a minute.",
+            ItemUse.Round, 1, new Color("#e8d850"), "SN", 0, ItemCategory.Gear, 0f),
+        new(ItemId.VsDecoy, "Lockvogel (decoy)", "{use_item} leaves a still copy of your prop at your feet for 60 s. Once a round.",
+            ItemUse.Round, 1, new Color("#8a6a40"), "LV", 0, ItemCategory.Gear, 0f),
+        new(ItemId.VsSprint, "Gump (sprint)", "{use_item} or {sprint}: a 2 s burst, heard within 25 m. Back in 30 s.",
+            ItemUse.Round, 1, new Color("#c86a30"), "GU", 0, ItemCategory.Gear, 0f),
+        new(ItemId.VsMoo, "Muuh (voice)", "{use_item} makes your prop's sound, heard within 60 m: a point, five a round.",
+            ItemUse.Round, 1, new Color("#5a3a20"), "MU", 0, ItemCategory.Gear, 0f),
+        new(ItemId.VsDisguise, "Disguise", "{use_item} picks the prop you become; Aim + {use_item} copies the one you look at.",
+            ItemUse.Round, 1, new Color("#3f7a3a"), "DG", 0, ItemCategory.Gear, 0f),
     };
 
     private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>

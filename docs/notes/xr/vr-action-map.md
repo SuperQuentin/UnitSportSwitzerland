@@ -38,6 +38,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | radio on / off (#725) | tap E (pointed) or tap Use (held) / tap Y or the Use button; hold either for the panel | ok: poke the radio's red key with a controller tip (`XrHands.PokeRadio`); grip still opens the panel | keep |
 | elevator call / floor list (#557) | E / Y at the call button or in the cabin | ok: Y, or grip the call button or the cabin's panel; the list is a pointable panel (`XrUi`) | keep |
 | flat door, its lock (#557) | E / Y at the door | ok: Y, or grip the door; the dial on the stick | keep |
+| public toilet doors: washrooms, stalls, WCs (#1285) | E / Y at the door (the flat door's action) | ok: Y, or grip the door | keep |
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
@@ -193,6 +194,13 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | playtest_topview / _scrub (#844) | Shift+F12, Ctrl+F12 / panel › Top view | ok: the panel's Top view button toggles it on the XrUi screen; zoom and scrub (Shift/Ctrl + wheel): keyboard only, a tuning aid | — |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
+| Versteckis round tool: tag, sniff, decoy, sprint, moo, the Disguise radial (#1268) | LMB `use_item` / RB | new: trigger (the item seam); the radial by laser | tag by touching a prop with a hand + trigger |
+| Versteckis: copy a decor prop (#1268) | RMB + LMB / LB + RB | new: point the hand at it, trigger | keep |
+| Versteckis: sprint burst while disguised (#1268) | Shift `sprint` / L3 | new: left stick click | keep |
+| Versteckis: settle the prop (#1268) | Ctrl / C `crouch_slide` / B | new: B, or crouch for real | keep |
+| Versteckis: hold at the bell, the Höhenfeuer; take and set down the milk can (#1268) | hold E `interact_mount` / hold Y | new: hold Y through `XrPad`; a grip near the site (`TryInteract(byHand)`) starts it | grip the bell rope, the wood stack, the can (after a headset playtest) |
+| Versteckis: follow-cam next / previous (#1268, `Ui/FollowCam`) | ← / → / D-pad ← → | new: the D-pad through `XrPad` | the right stick |
+| Versteckis: open, join, leave (#1268) | Activities tab, `/vs` / quick menu › Activities | new: wrist menu › Activities | keep |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | partly (#1277): the quick menu's Chat wedge opens it with the "/" picker, the commands and their words as buttons the ray presses; free text still no keyboard | laser key grid on the `XrUi` panel, for free text |
 | chat coordinates: Teleport, Track, Show on map, Copy (#1277) | click a point's pin or coordinates; pad: focus its line, A | ok: the ray on the open chat (`XrUi` draws it) | keep |
