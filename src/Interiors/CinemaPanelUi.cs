@@ -173,6 +173,38 @@ public partial class CinemaPanelUi : CanvasLayer
         _share = UiKit.Button("Share", primary: true);
         _share.Pressed += ToggleShare;
         sound.AddChild(_share);
+        // a film on this computer (#1298 phase 4): streamed from here at the quality above, nothing stored on the server
+        var file = UiKit.Button("Play a video file…");
+        file.TooltipText = "A film on this computer (" + string.Join(" ", CinemaFileSource.Extensions)
+            + "), played for the hall from here at the quality above. It stops if you leave.";
+        file.Pressed += PickFile;
+        file.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        _shareBox.AddChild(file);
+    }
+
+    private FileDialog? _picker;
+
+    private void PickFile()
+    {
+        if (_picker == null)
+        {
+            _picker = new FileDialog
+            {
+                FileMode = FileDialog.FileModeEnum.OpenFile, Access = FileDialog.AccessEnum.Filesystem,
+                UseNativeDialog = true, Title = "A video to play in the hall",
+                Filters = new[] { string.Join(", ", CinemaFileSource.Extensions.Select(e => "*" + e)) + " ; Videos" },
+            };
+            _picker.FileSelected += path =>
+            {
+                if (CinemaBooths.Instance is not { } booths) return;
+                var (lights, _) = booths.StateOf(_plan, _hall);
+                booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, true));
+                booths.StartFile(_plan, _hall, path, (CinemaVideo.LiveQuality)_quality.GetSelectedId());
+                Status = "Starting the share…";
+            };
+            AddChild(_picker);
+        }
+        _picker.PopupCentered(new Vector2I(760, 520));
     }
 
     private VBoxContainer _shareBox = null!;

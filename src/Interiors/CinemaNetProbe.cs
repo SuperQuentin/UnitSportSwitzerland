@@ -25,7 +25,8 @@ namespace UnitSport.Interiors;
 /// <para>
 /// Then a live share (#1298 phase 3, with the video): A shares a test pattern with a tone (<see cref="CaptureKind.Test"/>)
 /// on the hall; B walks into the house; both watch it through the server (A its own share, as a streamer sees it) and
-/// must be on the clock with the sound due; A stops it and B sees the hall's link go.
+/// must be on the clock with the sound due; A stops it and B sees the hall's link go. Then a video file from A's own disk
+/// (phase 4, <see cref="CinemaFileSource"/>): the test film again, streamed from A through the server, watched by both.
 /// </para>
 /// </summary>
 public partial class CinemaNetProbe : ChatProbe
@@ -128,6 +129,21 @@ public partial class CinemaNetProbe : ChatProbe
                 await Watch(live, liveT0);
                 booths.StopSharing();
                 Expect(await Until(() => booths.VideoOf(plan, 0).Link.Length == 0, 10), "A stopped the share: the hall's link is gone");
+
+                // a video file from A's own disk, streamed from A (phase 4)
+                booths.StartFile(plan, 0, VideoLink, CinemaVideo.LiveQuality.Low);
+                Expect(await Until(() => booths.SharingIn(plan, 0), 10), "the server granted A's file");
+                var (file, fileT0) = booths.VideoOf(plan, 0);
+                Expect(CinemaVideo.LiveOf(file).Label.StartsWith("File: ", StringComparison.Ordinal), $"the hall shows A's file ({file})");
+                bool watching = false;
+                for (int t = 0; t < 30 && !watching; t++)
+                {
+                    Say("file");
+                    watching = await Until(() => _heard.Any(l => l.Contains("CN B filewatch")), 2);
+                }
+                Expect(watching, "B watches A's file");
+                await Watch(file, fileT0);
+                booths.StopSharing();
             }
         }
         else
@@ -171,6 +187,12 @@ public partial class CinemaNetProbe : ChatProbe
                     Expect(CinemaVideo.IsLive(live), $"B holds A's live share ({live})");
                     await Watch(live, liveT0);
                     Expect(await Until(() => booths.VideoOf(plan, 0).Link.Length == 0, 20), "B saw A's share end");
+                    if (!await Heard("A", "file", 60)) { Fail("A never played a file"); return; }
+                    Expect(await Until(() => CinemaVideo.LiveOf(booths.VideoOf(plan, 0).Link).Label.StartsWith("File: ", StringComparison.Ordinal), 10),
+                        "B holds A's file share");
+                    var (file, fileT0) = booths.VideoOf(plan, 0);
+                    Say("filewatch");
+                    await Watch(file, fileT0);
                 }
             }
         }

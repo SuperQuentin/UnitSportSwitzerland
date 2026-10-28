@@ -77,6 +77,12 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   on this process: every app but the game, so the hall's own sound never echoes; Windows 10 20348+ / 11), COM interop,
   48 kHz stereo 16-bit read on an MTA thread, averaged to 24 kHz mono; Linux PulseAudio's `@DEFAULT_MONITOR@` through
   ffmpeg; macOS: phase 7 (ScreenCaptureKit). Mixed with the microphone sample by sample.
+- **A video file** (phase 4, `CinemaFileSource`; owner: streamed from the streamer's game, nothing stored on the server):
+  the panel's **Play a video file…** (a native file dialog, `CinemaFileSource.Extensions`) shares `File: <name>` as a live
+  source whose frames come from the relay's own tap (`CinemaRelayTap`, now at any `LiveQuality`) run on the streamer's
+  machine on the local file: decoded from the hall's moment on the clock, stamped with video time, sent up to 2.5 s ahead,
+  restarted further on after a stall, the share stopped when the file ends. `ILiveSource` is what a share pushes from
+  (capture or file). The check plays the test film this way after the test pattern.
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`

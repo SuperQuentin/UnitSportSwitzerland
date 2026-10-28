@@ -38,6 +38,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Smooth on a game or a video → motion looks fluid; note the upload in Task Manager (about 6 Mbit/s).
 - [ ] Leave the cinema while sharing → after about 5 s the hall goes back to the slides; Stop sharing → at once.
 - [ ] Pad: D-pad through the share pickers (OptionButton popups), A to pick, Share. VR: the laser on the pickers and Share.
+- [ ] Play a video file… (an mp4 or mkv from your disk) → the hall plays it from the start, everyone at the same moment, its sound from the screen; at its end the slides come back. A file of several GB starts within a few seconds.
 - [ ] Linux (X11): a monitor share and the PC sound (PulseAudio monitor). macOS: a monitor and a camera share (screen-recording permission asked).
 
 ## What E acts on is outlined ([#1291](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1291))

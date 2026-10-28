@@ -6,6 +6,46 @@ using UnitSport.Core;
 
 namespace UnitSport.Interiors;
 
+/// <summary>
+/// A streamer's live source as the hall's share takes it (#1298 phases 3-4): a capture (<see cref="CinemaCapture"/>) or a
+/// file on their disk (<see cref="CinemaFileSource"/>). Main thread: what to send now, with each frame's and chunk's moment.
+/// </summary>
+public interface ILiveSource : IDisposable
+{
+    string Status { get; }
+    bool Failed { get; }
+
+    /// <summary>A file played to its end: the share stops.</summary>
+    bool Ended { get; }
+
+    void Pump(double position, List<(double Time, byte[] Jpeg)> frames, List<(long Index, byte[] MuLaw)> sound);
+}
+
+/// <summary>
+/// A video file on the streamer's disk (#1298 phase 4, the owner's choice: streamed from their game, nothing stored on the
+/// server): the relay's tap (<see cref="CinemaRelayTap"/>) on the file, at the quality they picked, decoded from where the
+/// hall is on the clock and stamped with its moments, sent through the server like a share. Seeks itself after a stall;
+/// ends with the file.
+/// </summary>
+public sealed class CinemaFileSource : ILiveSource
+{
+    private readonly CinemaRelayTap _tap;
+
+    public CinemaFileSource(string path, double t0, CinemaVideo.LiveQuality quality) => _tap = new CinemaRelayTap(path, t0, quality);
+
+    public string Status => _tap.Status;
+    public bool Failed => _tap.Failed;
+    public bool Ended => _tap.Ended;
+
+    public void Pump(double position, List<(double Time, byte[] Jpeg)> frames, List<(long Index, byte[] MuLaw)> sound) =>
+        _tap.Pump(position, frames, sound);
+
+    public void Dispose() => _tap.Dispose();
+
+    /// <summary>What the file picker offers: what ffmpeg reads well as a film.</summary>
+    public static readonly string[] Extensions = { ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".ogv", ".ts", ".mpg", ".wmv" };
+}
+
 /// <summary>What a streamer can share (#1298 phase 3): a monitor, a window, a webcam; a test pattern for the checks.</summary>
 public enum CaptureKind { Monitor, Window, Webcam, Test }
 
@@ -162,8 +202,10 @@ public static class CinemaDevices
 /// tap's way: sample n belongs to its moment, a source short of samples gives silence, one ahead is trimmed), so
 /// every peer, the streamer included, shows and plays it at the same moment. <see cref="Pump"/> hands out what to send.
 /// </summary>
-public sealed class CinemaCapture : IDisposable
+public sealed class CinemaCapture : ILiveSource
 {
+    public bool Ended => false;
+
     public CaptureSource Source { get; }
     public CinemaVideo.LiveQuality Quality { get; }
     public string Status { get; private set; } = "Starting…";

@@ -23,15 +23,15 @@ public partial class CinemaBooths
     private readonly Dictionary<(string Plan, int Hall), double> _ownerAway = new();
 
     /// <summary>Client: the share this machine runs, the hall and link it is for, and the one it asked for and awaits.</summary>
-    private CinemaCapture? _capture;
+    private ILiveSource? _capture;
     private (string Plan, int Hall) _captureHall;
     private string _captureLink = "";
-    private (string Plan, int Hall, CaptureSource Source, CinemaVideo.LiveQuality Quality, bool PcSound, string? Mic, double Asked)? _pendingShare;
+    private (string Plan, int Hall, string Label, Func<double, ILiveSource> Make, double Asked)? _pendingShare;
     private readonly List<(double Time, byte[] Jpeg)> _shareFrames = new();
     private readonly List<(long Index, byte[] MuLaw)> _shareSound = new();
 
     /// <summary>This machine's share, if any: for the panel.</summary>
-    public CinemaCapture? Sharing => _capture;
+    public ILiveSource? Sharing => _capture;
     public bool SharingIn(string plan, int hall) => _capture != null && _captureHall == (plan, hall);
 
     private long LiveId => Online ? Multiplayer.GetUniqueId() : MyId;
@@ -39,12 +39,22 @@ public partial class CinemaBooths
     // ---- the streamer ----------------------------------------------------------------------------
 
     /// <summary>Shares <paramref name="source"/> on a hall: asks the server, and starts capturing once it says so.</summary>
-    public void StartSharing(string plan, int hall, CaptureSource source, CinemaVideo.LiveQuality quality, bool pcSound, string? mic)
+    public void StartSharing(string plan, int hall, CaptureSource source, CinemaVideo.LiveQuality quality, bool pcSound, string? mic) =>
+        Share(plan, hall, source.Label, _ => new CinemaCapture(source, quality, pcSound, mic));
+
+    /// <summary>
+    /// Plays a video file of this machine on a hall (phase 4): streamed from here through the server, decoded on the clock
+    /// from the hall's start, at <paramref name="quality"/>.
+    /// </summary>
+    public void StartFile(string plan, int hall, string path, CinemaVideo.LiveQuality quality) =>
+        Share(plan, hall, $"File: {Path.GetFileName(path)}", t0 => new CinemaFileSource(path, t0, quality));
+
+    private void Share(string plan, int hall, string label, Func<double, ILiveSource> make)
     {
         StopSharing();
-        _pendingShare = (plan, hall, source, quality, pcSound, mic, Core.RealClock.Now);
-        if (Online) RpcId(1, MethodName.AskLiveRpc, plan, hall, source.Label);
-        else ServeLive(MyId, plan, hall, source.Label);
+        _pendingShare = (plan, hall, label, make, Core.RealClock.Now);
+        if (Online) RpcId(1, MethodName.AskLiveRpc, plan, hall, label);
+        else ServeLive(MyId, plan, hall, label);
     }
 
     /// <summary>Stops this machine's share, and the hall's screen goes back to the slides.</summary>
@@ -65,13 +75,13 @@ public partial class CinemaBooths
         if (_pendingShare is { } want)
         {
             var (link, t0) = VideoOf(want.Plan, want.Hall);
-            if (link == CinemaVideo.LiveLink(LiveId, want.Source.Label))
+            if (link == CinemaVideo.LiveLink(LiveId, want.Label))
             {
                 _pendingShare = null;
-                _capture = new CinemaCapture(want.Source, want.Quality, want.PcSound, want.Mic);
+                _capture = want.Make(t0);
                 _captureHall = (want.Plan, want.Hall);
                 _captureLink = link;
-                GD.Print($"[cinema] sharing {want.Source.Label} on hall {want.Hall + 1} ({want.Quality})");
+                GD.Print($"[cinema] sharing {want.Label} on hall {want.Hall + 1}");
             }
             else if (Core.RealClock.Now - want.Asked > 5) { GD.Print("[cinema] the server did not grant the share"); _pendingShare = null; }
         }
@@ -84,6 +94,13 @@ public partial class CinemaBooths
             _capture.Dispose();
             _capture = null;
             GD.Print($"[cinema] the share on hall {hall + 1} ended");
+            return;
+        }
+        if (_capture.Ended)
+        {
+            // a file played to its end: the hall back to its slides
+            GD.Print($"[cinema] {CinemaVideo.Title(_captureLink)} ended");
+            StopSharing();
             return;
         }
         _shareFrames.Clear();
