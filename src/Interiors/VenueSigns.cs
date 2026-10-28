@@ -104,7 +104,8 @@ public partial class VenueSigns : Node
         var sign = NeonSign.Make(Venues.NameOf(v), v.Type, v.Cuisine,
             letterHeight: Venues.IsHall(v.Type) ? 0.6f : front ? 0.3f : 0.42f,
             maxWidth: hall is { } f ? f.Width : front ? d.Span - 0.4f : Math.Max(3.2f, d.Width * 3.5f));
-        sign.Transform = frame.Translated(frame.Basis * new Vector3(0, nameY, front ? 0.14f : 0.10f));
+        // over a fascia: far enough out that the tubes' glow behind them clears it
+        sign.Transform = frame.Translated(frame.Basis * new Vector3(0, nameY, front ? 0.20f : 0.10f));
         root.AddChild(sign);
         // a hall's own word, big (#1235): near the roof of a building that is all hall (#1250), else
         // high over its door. What tells a bowling centre from a warehouse across the car park.

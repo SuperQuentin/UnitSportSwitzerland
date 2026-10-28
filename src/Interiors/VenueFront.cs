@@ -150,8 +150,9 @@ public static class VenueFront
         Box(0, top + FasciaH / 2, 0.03f, d.Span + 2 * m, FasciaH, 0.10f, Fascia(d));
         // the frame: the sill and head rails, the jambs at the ends and round the door, a mullion between each bay, the transom
         Box(0, top + m / 2 - 0.012f, mz, d.Span + m, m, md, Alu);
+        // the sill rails run into the jambs, so their ends never share a plane with the plinth's
         foreach (int side in new[] { -1, 1 })
-            Box(side * (edge + half) / 2, Sill, mz, half - edge, m, md, Alu);
+            Box(side * (edge + half) / 2, Sill, mz, half - edge + m, m, md, Alu);
         var bays = Bays(d);
         foreach (var (c, w) in bays)
             foreach (int end in new[] { -1, 1 })
