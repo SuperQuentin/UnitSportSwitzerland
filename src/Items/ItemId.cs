@@ -230,6 +230,10 @@ public enum ItemId
     VsDecoy = 462, VsSprint = 463, VsMoo = 464, VsDisguise = 465,
     /// <summary>Garments (Avatar.Garments), earned by playing: the gnome's Zipfelmütze (10 games) and the Treichel cowbell (30 rounds survived).</summary>
     Zipfelmuetze = 466, Treichel = 467,
+
+    // ---- Festivals (#1269, docs/notes/occasions/festival-framework.md); 500-539 are this plan's (adventure-phase3) ----
+    // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
+    // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

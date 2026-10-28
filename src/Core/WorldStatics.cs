@@ -33,6 +33,7 @@ public static class WorldStatics
         Audio.Hearing.Ground = null;
         Net.PlayerInfo.ResetEvents();
         Occasions.OccasionTowns.ResetEvents();
+        Occasions.Festivals.FestivalOccasion.ResetSites();
         Vehicles.Explosion.ResetEvents();
         Vehicles.PassengerService.ResetEvents();
         Vehicles.VehicleManager.ResetEvents();

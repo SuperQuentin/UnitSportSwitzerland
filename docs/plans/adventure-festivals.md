@@ -3,7 +3,7 @@
 
 # Adventure festivals: a festival framework on occasions, the Älplerfest, the Désalpe, the Swiss calendar
 
-Status: **planned**. Tracking issue: #1269 (phase 3: #1270).
+Status: **part 1 built** ([#1295](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1295), `docs/notes/occasions/festival-framework.md`); parts 2-9 planned. Tracking issue: #1269 (phase 3: #1270).
 
 One of four Adventure phase 3 plans ("things friends do together"), written in parallel:
 `adventure-errands` (NPC givers, daily errands, world events), `adventure-together` (group yield, the
@@ -42,17 +42,24 @@ day by day, a shared score for a party, festival tokens and a closing show.
   Unspunnen is in `Interiors/Castles.List.cs` (2632050 / 1168688).
 - **Items** 400-421 are taken (rewards, GA, half-fare); `Headwear` is 0-4 (witch hat .. antlers).
 
-| Part | PR | What it does |
-|---|---|---|
-| 1 Festival framework | 1 | `FestivalDef`, sites, day unlocks, the `festivals` section, Batzen tokens and their conversion, the party board, decorations, the Journal tab, two new schedule tokens |
-| 2 Fireworks and the closing show | 2 | `FireworkShow` (pure, seeded) and `Fireworks` (GPU particles, sound with distance delay); a festival's show is fireworks, a concert or both |
-| 3 Steinstossen | 3 | The 83.5 kg Unspunnen stone: lift, run-up, push; server-computed distance; bots throw |
-| 4 Alphorn and yodel | 4 | Natural-tone rhythm on the beat, harmony scored across players, an echo off the real valley wall |
-| 5 Fahnenschwingen | 5 | Flag figures on the beat, a high throw and the catch |
-| 6 Schwingen | 6 | Sawdust-ring wrestling on the fist fight's match shell, new grapple rules, a bot side |
-| 7 Désalpe | 7 | Decorated cows (headdress, Treichel), a driven herd down a real road, gates and strays, the decoration vote |
-| 8 Calendar festivals | 8-13 | 1 August, Fasnacht, Sechseläuten, Escalade, Chalandamarz, Christmas markets, one PR each |
-| 9 Checks and notes | each | Tier 0 per rule, quick probes, net checks, notes and index lines |
+| Part | PR | What it does | Status |
+|---|---|---|---|
+| 1 Festival framework | 1 | `FestivalDef`, sites, day unlocks, the `festivals` section, Batzen tokens and their conversion, the party board, decorations, the Journal tab, two new schedule tokens | built, protocol 59 |
+| 2 Fireworks and the closing show | 2 | `FireworkShow` (pure, seeded) and `Fireworks` (GPU particles, sound with distance delay); a festival's show is fireworks, a concert or both | planned |
+| 3 Steinstossen | 3 | The 83.5 kg Unspunnen stone: lift, run-up, push; server-computed distance; bots throw | planned |
+| 4 Alphorn and yodel | 4 | Natural-tone rhythm on the beat, harmony scored across players, an echo off the real valley wall | planned |
+| 5 Fahnenschwingen | 5 | Flag figures on the beat, a high throw and the catch | planned |
+| 6 Schwingen | 6 | Sawdust-ring wrestling on the fist fight's match shell, new grapple rules, a bot side | planned |
+| 7 Désalpe | 7 | Decorated cows (headdress, Treichel), a driven herd down a real road, gates and strays, the decoration vote | planned |
+| 8 Calendar festivals | 8-13 | 1 August, Fasnacht, Sechseläuten, Escalade, Chalandamarz, Christmas markets, one PR each | planned |
+| 9 Checks and notes | each | Tier 0 per rule, quick probes, net checks, notes and index lines | planned |
+
+**Part 1 as built** (deviations from the text below): the service is `World/Adventure/Festivals` (a child of the adventure service, so its RPCs
+share the adventure node's path), not `World/Festivals`; part 1 ships no real `FestivalDef` (the check-only `--festival test` one, the Älplerfest and
+the rest register with the parts that build their games); the decoration is a ring of flag poles (bunting, the beer tent and the game grounds come with the
+games); the festival stall (`FestivalShop`) and the quest step kinds `FestivalGameStep`/`FestivalShowStep` are not built (the events
+`FestivalOpened`, `FestivalGamePlayed` and `FestivalMilestoneReached` are raised, for the errands and quest plans); a party milestone pays outside the
+600-Batzen cap (a def's milestones total at most a quarter of it); an online player is paid as soon as the festival ends, and anyone else when their progress loads.
 
 **Order**: 1, then 2 (every festival ends on it), then the Älplerfest's games 3, 4, 5, 6 (cheapest first:
 Steinstossen needs no opponent; Schwingen needs the most new animation), then 7 (needs 1 and the herd

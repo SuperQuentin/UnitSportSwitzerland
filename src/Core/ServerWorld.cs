@@ -404,6 +404,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
             travel.IsAdmin = _chat.IsAdminPeer;
             travel.Racing = peer => race.RaceOf(peer) != 0;
             travel.GroundAt = ground;
+            // festivals (#1269): which festival runs and on which day, held where, Batzen and the party board
+            var festivals = Occasions.Festivals.FestivalService.Create(adventure, server: true, networked: true);
+            festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
+            festivals.PartyOf = rewards.PartyOf;
+            festivals.Start = () => SpawnPoint.ParseTarget();
             // climbs higher than the stamina rules allow, logged (#1225): no correction
             AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
         }

@@ -119,7 +119,7 @@ public partial class AdventureService : Node
             StaminaUpgrades.Attach(this);   // #1225: the owner's steps from the section sync
             return;
         }
-        if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested) AdventureCheck.ClearScratch();
+        if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested || Occasions.Festivals.FestivalCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -289,7 +289,8 @@ public partial class AdventureService : Node
         : Places.PlacesCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/placescheck")
         : Rewards.RewardCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/rewardcheck")
         : Navigation.NavCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/navcheck")
-        : Navigation.TravelCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/travelcheck") : null;
+        : Navigation.TravelCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/travelcheck")
+        : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));

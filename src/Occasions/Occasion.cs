@@ -117,7 +117,11 @@ public static class OccasionRegistry
     public static Occasion Get(string id)
     {
         if (Known.TryGetValue(id, out var o)) return o;
-        if (!Generic.TryGetValue(id, out o)) Generic[id] = o = new GenericOccasion(id);
+        if (!Generic.TryGetValue(id, out o))
+            // a festival (#1269) is an occasion with a site and a day table; the check-only one is known before its def is
+            Generic[id] = o = Festivals.FestivalCatalog.Get(id) != null || id == Festivals.FestivalCatalog.TestId
+                ? new Festivals.FestivalOccasion(id)
+                : new GenericOccasion(id);
         return o;
     }
 }
