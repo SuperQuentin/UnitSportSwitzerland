@@ -31,6 +31,21 @@ Status: **in progress** on `feat/1292-venue-own-door` (worktree `../UnitSportSwi
   (`room_behind`, `ps1_building` / cartoon), tinted toward the venue's palette and warm-lit at
   night. #1321 makes them see-through, both ways.
 
+### Settled while building (owner, 2026-10-28, from `--shopsurvey`)
+
+`--shopsurvey --chunks <dir>` (`ShopSurvey`): 17 tiles round Geneva and Lausanne, 252 mixed blocks, their
+street units median 9.8 m wide (p10 6.4, p90 24.2), 89 of 448 at 16 m or more (up to 41 m); 1,443 dining
+venues, 960 drawn, 785 of those in blocks of flats; 582 guest rooms had no wall on the street.
+
+- **Shop units: a unit wider than 14 m is cut into units of about 8 m**, one door and one glazed front
+  each; units stay between the stairwells as now.
+- **A venue in an office, a school, a house (anything not a block of flats): its span by kind**, capped
+  by its wall run: café, kebab and fast food 5 bays, restaurant, pub and bar 7, club 9. The street room
+  it takes is walled off to that span; what is left keeps its old use behind the new wall.
+- Fronts are dressed from the door alone (clients never see the plan), so the span is the footprint's.
+  On a block of flats the footprint asks the apartment planner where its units fall (as it already does
+  for the garage ramp, `PlansGarageRamp`), so the units and their doors agree by construction.
+
 ## Design
 
 1. **A venue door slot** (`BuildingFootprint`, #498's extras). The venue's point is tile data
