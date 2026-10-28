@@ -240,6 +240,7 @@
     <Compile Include="..\..\src\World\AirLift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\CinemaVideo.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\JoinLink.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\VrRefresh.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />

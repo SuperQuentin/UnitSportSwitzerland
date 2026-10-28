@@ -82,17 +82,35 @@ public partial class CinemaBooths : Node
         var node = new CinemaBooths { Name = NodeName };
         world.AddChild(node);
         Instance = node;
+        CinemaVideo.AllowLocal = LocalFiles;
+        // a server's own films for its showing halls (a client's copy is replaced by its server's on join)
+        node.LoadPool();
         return node;
     }
 
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        _stream?.Dispose();
+        _stream = null;
+        foreach (var tap in _taps.Values) tap.Dispose();
+        _capture?.Dispose();
+        _taps.Clear();
     }
 
     private bool Online => NetLink.Online(this);
 
     private long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
+
+    /// <summary>
+    /// Whether <paramref name="peer"/> is inside cinema <paramref name="plan"/>, where its booth may be worked: where the
+    /// server places their body; offline also the interior the camera is in (a free camera, a shot queue, has no body:
+    /// the one player is the only one there).
+    /// </summary>
+    private bool Inside(long peer, string plan) =>
+        plan.Length > 0 && (InteriorManager.Instance is { } im
+            ? im.SpaceOf(peer) == plan || !Online && im.Current?.Key == plan
+            : !Online);
 
     public static int Pack(Lights lights, bool screen) => (int)lights | (screen ? 4 : 0);
 
@@ -144,7 +162,7 @@ public partial class CinemaBooths : Node
         if (At(p) is not { } at || Instance is not { } booths) return null;
         var (lights, screen) = booths.StateOf(at.Plan, at.Hall);
         return at.Screen
-            ? screen ? "Screen off" : "Screen on"
+            ? "Projector: screen, slides or a video"
             : lights switch { Lights.Full => "Dim the lights", Lights.Dim => "Lights off", _ => "Lights up" };
     }
 
@@ -152,9 +170,10 @@ public partial class CinemaBooths : Node
     public static bool TryUse(FootPlayer p)
     {
         if (At(p) is not { } at || Instance is not { } booths) return false;
+        // the screen's half opens the hall's projector panel (#1298): off, the slides, or a video
+        if (at.Screen) { CinemaPanelUi.Open(p, at.Plan, at.Hall); return true; }
         var (lights, screen) = booths.StateOf(at.Plan, at.Hall);
-        int next = at.Screen ? Pack(lights, !screen) : Pack((Lights)(((int)lights + 1) % 3), screen);
-        booths.Ask(at.Plan, at.Hall, next);
+        booths.Ask(at.Plan, at.Hall, Pack((Lights)(((int)lights + 1) % 3), screen));
         return true;
     }
 
@@ -180,7 +199,7 @@ public partial class CinemaBooths : Node
     /// </summary>
     public bool Serve(long peer, string plan, int hall, int code)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside) { GD.Print($"[cinema] peer {peer} is not in {plan}: refused"); return false; }
         code &= 7;
         if ((code & 3) > 2 || hall < 0 || hall >= MaxHalls) return false;
@@ -207,15 +226,22 @@ public partial class CinemaBooths : Node
         foreach (var (plan, halls) in _states)
             for (int h = 0; h < halls.Length; h++)
                 if (halls[h] != Default(plan, h)) RpcId(peer, MethodName.Set, plan, h, halls[h]);
+        SendVideosTo(peer);
+        SendPool(peer);
+        SendDisplaysTo(peer);
     }
 
     // ---- client: showing it ----------------------------------------------------------------------
 
     public override void _Process(double delta)
     {
+        // the server's copy of each hall someone watches through it (#1298 phase 2)
+        if (ServerSide) PumpRelay(delta);
         if (NetworkManager.DedicatedServer) return;
+        // this machine's own share, if it runs one (CinemaBooths.Live): pushed wherever the player looks
+        PumpCapture();
         var im = InteriorManager.Instance;
-        if (im?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) { _appliedNode = null; return; }
+        if (im?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) { _appliedNode = null; PumpVideo(null, -1, 0); return; }
         // --cinemashow: every cinema dimmed with the cat on, for a shot (no panel to press in one)
         var halls = ShowAll ? null : HallsOf(node.Layout.Key);
         // the halls whose screens are on, a bit each; the house lights of the hall the camera is in or nearest
@@ -257,8 +283,16 @@ public partial class CinemaBooths : Node
             node.ShowCinema(Level(lights), mask, halls, screen, real, snap);
         }
         if (real && cam != null) node.ProjectFor(node.ToLocal(cam.GlobalPosition));
+        // the video of the hall the camera is in (#1298), decoded here; every hall playing one keeps its film music off
+        int shown = PumpVideo(node, here, mask);
+        int muted = shown;
+        if (halls != null)
+            for (int h = 0; h < MaxHalls; h++)
+                if ((mask >> h & 1) != 0 && h != here && VideoOf(node.Layout.Key, h).Link.Length > 0) muted |= 1 << h;
+        node.MuteFilmMusic(muted);
         // the seats let down under whoever sits, the house lights fading to their level (#1279)
         node.UpdateSeats();
         node.FadeHouse(delta);
+        node.MoveCurtains(delta);
     }
 }

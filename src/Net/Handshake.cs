@@ -91,7 +91,15 @@ public partial class Handshake : Node
     /// 59: World/Adventure/Festivals (#1269 part 1: RequestRing/TestDate; TellFestivals, TellBoard, TellConverted, TellRang, TellRefused),
     /// the <c>festivals</c> section, <c>OccasionFacets.Games</c> (1 &lt;&lt; 6) on the occasions wire.
     /// 60: World/Together (#1266: Links, GateOpen, PotState, BreadLost, TellFeast, TellHaul, the Ask* requests), invite kinds rope and fondue.
-    public const int Protocol = 61;
+    /// 61: World/CinemaBooths AskVideoRpc and SetVideo (#1298: a hall's video link and its start on the shared clock).
+    /// 62: World/CinemaBooths AskVideoRpc and SetVideo carry the hall's relay switch; WatchRelay, RelayFrame, RelaySound,
+    /// RelayStatus on channel 5 (#1298 phase 2: the hall's video through the server).
+    /// 63: World/CinemaBooths AskLiveRpc, PushFrame, PushSound (#1298 phase 3: a player's screen, window or webcam on a hall).
+    /// 64: World/CinemaBooths AskVideoRpc, AskLiveRpc and SetVideo carry the hall's 3D layout (#1298 phase 6).
+    /// 65: World/CinemaBooths SetPool (#1298: the server's own films a showing hall draws from).
+    /// 66: World/CinemaBooths AskDisplayRpc and SetDisplay (#1298: a hall's projector fit and ratio).
+    /// 67: World/Adventure/Festivals RequestFahneStart, RequestFahneRoutine, TellFahneStart, TellFahneResult (#1269 part 5: Fahnenschwingen).
+    public const int Protocol = 67;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
