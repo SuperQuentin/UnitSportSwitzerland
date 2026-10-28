@@ -168,10 +168,13 @@ public partial class AlcoholService : Node
 
     /// <summary>Authority: the level of <paramref name="peer"/> now (or at <paramref name="at"/>), per mille.</summary>
     public double LevelOf(long peer, double? at = null) =>
-        ProgressOf(peer) is { } p ? Bac.Level(p.Get(AlcoholProgress.Section).Drinks, at ?? AlcoholClock.Now, MassOf(peer)) : 0;
+        ProgressOf(peer) is { } p && LogOf(p) is { } log ? Bac.Level(log, at ?? AlcoholClock.Now, MassOf(peer)) : 0;
+
+    /// <summary>The drink log of a progress, or null when the player never drank: reading never adds the section to a fresh player.</summary>
+    private static List<Shot>? LogOf(PlayerProgress p) => p.Has(AlcoholProgress.Section.Id) ? p.Get(AlcoholProgress.Section).Drinks : null;
 
     /// <summary>Authority: seconds of mouth alcohol left for <paramref name="peer"/>.</summary>
-    public double MouthLeftOf(long peer) => ProgressOf(peer) is { } p ? Bac.MouthLeft(p.Get(AlcoholProgress.Section).Drinks, AlcoholClock.Now) : 0;
+    public double MouthLeftOf(long peer) => ProgressOf(peer) is { } p && LogOf(p) is { } log ? Bac.MouthLeft(log, AlcoholClock.Now) : 0;
 
     /// <summary>Authority: a server-run bot has no drink log: it reads 0.00 (a bot never drinks).</summary>
     private bool IsBot(long peer) => BodyOf?.Invoke(peer) is { Bot: true };
@@ -362,8 +365,8 @@ public partial class AlcoholService : Node
     {
         var me = Me?.Invoke();
         double kg = me != null ? MassOfBits(me.AppearanceBits) : Bac.DefaultKg;
-        var log = _adventure.Mine.Get(AlcoholProgress.Section).Drinks;
-        double level = LevelOverride ?? (log.Count == 0 ? 0 : Bac.Level(log, AlcoholClock.Now, kg));
+        var log = LogOf(_adventure.Mine);
+        double level = LevelOverride ?? (log == null || log.Count == 0 ? 0 : Bac.Level(log, AlcoholClock.Now, kg));
         var mode = Mode;
         Body.Fx = AlcoholRules.Effects(level, mode);
         Body.ViewEffects = GameSettings.Current.AlcoholViewEffects;
