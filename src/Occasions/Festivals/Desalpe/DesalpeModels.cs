@@ -94,14 +94,14 @@ public static class DesalpeModels
     private static ArrayMesh BuildTreichel()
     {
         var s = new MeshScratch();
-        s.Box(new Vector3(0, 0, 0), new Vector3(0.52f, 0.09f, 0.20f), Leather);
-        s.Box(new Vector3(0, 0, 0.105f), new Vector3(0.14f, 0.06f, 0.01f), White);
-        s.Box(new Vector3(0, 0, 0.112f), new Vector3(0.05f, 0.03f, 0.01f), Flower[0]);
+        s.Box(new Vector3(0, 0, 0), new Vector3(0.58f, 0.12f, 0.26f), Leather);
+        s.Box(new Vector3(0, 0, 0.13f), new Vector3(0.14f, 0.06f, 0.03f), White);
+        s.Box(new Vector3(0, 0, 0.145f), new Vector3(0.05f, 0.03f, 0.03f), Flower[0]);
         s.Tube(new Vector3(-0.17f, -0.03f, 0), new Vector3(-0.07f, -0.07f, 0), 0.012f, 0.012f, Leather, 4);
         s.Tube(new Vector3(0.17f, -0.03f, 0), new Vector3(0.07f, -0.07f, 0), 0.012f, 0.012f, Leather, 4);
         s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, -0.29f, 0), 0.085f, 0.145f, Brass, 8);
-        s.Tube(new Vector3(0, -0.28f, 0), new Vector3(0, -0.325f, 0), 0.152f, 0.158f, BrassDark, 8);
-        s.Tube(new Vector3(0, -0.2f, 0), new Vector3(0, -0.36f, 0), 0.016f, 0.025f, BrassDark, 5);
+        s.Tube(new Vector3(0, -0.25f, 0), new Vector3(0, -0.325f, 0), 0.152f, 0.158f, BrassDark, 8);
+        s.Tube(new Vector3(0, -0.2f, 0), new Vector3(0, -0.37f, 0), 0.016f, 0.025f, BrassDark, 5);
         return s.Build();
     }
 
@@ -115,15 +115,15 @@ public static class DesalpeModels
     private static ArrayMesh BuildSign()
     {
         var s = new MeshScratch();
-        s.Tube(new Vector3(-0.9f, 0, 0), new Vector3(-0.9f, 2.9f, 0), 0.09f, 0.08f, WoodDark, 6);
-        s.Tube(new Vector3(0.9f, 0, 0), new Vector3(0.9f, 2.9f, 0), 0.09f, 0.08f, WoodDark, 6);
+        s.Tube(new Vector3(-0.9f, 0, 0), new Vector3(-0.9f, 2.99f, 0), 0.09f, 0.08f, WoodDark, 6);
+        s.Tube(new Vector3(0.9f, 0, 0), new Vector3(0.9f, 2.99f, 0), 0.09f, 0.08f, WoodDark, 6);
         s.Box(new Vector3(0, 2.55f, 0), new Vector3(2.2f, 0.7f, 0.07f), Wood);
-        s.Box(new Vector3(0, 2.55f, 0.04f), new Vector3(2.0f, 0.5f, 0.02f), White);
+        s.Box(new Vector3(0, 2.55f, 0.04f), new Vector3(2.0f, 0.5f, 0.03f), White);
         // an arrow down the valley and a cow's head in red
-        s.Box(new Vector3(-0.35f, 2.55f, 0.06f), new Vector3(0.9f, 0.1f, 0.02f), Red);
-        s.Box(new Vector3(0.18f, 2.62f, 0.06f), new Vector3(0.1f, 0.1f, 0.02f), Red, new Basis(Vector3.Forward, 0.8f));
-        s.Box(new Vector3(0.18f, 2.48f, 0.06f), new Vector3(0.1f, 0.1f, 0.02f), Red, new Basis(Vector3.Forward, -0.8f));
-        s.Box(new Vector3(0.6f, 2.55f, 0.06f), new Vector3(0.34f, 0.28f, 0.02f), Red);
+        s.Box(new Vector3(-0.35f, 2.55f, 0.06f), new Vector3(0.9f, 0.1f, 0.03f), Red);
+        s.Box(new Vector3(0.18f, 2.62f, 0.06f), new Vector3(0.1f, 0.1f, 0.03f), Red, new Basis(Vector3.Forward, 0.8f));
+        s.Box(new Vector3(0.18f, 2.48f, 0.06f), new Vector3(0.1f, 0.1f, 0.03f), Red, new Basis(Vector3.Forward, -0.8f));
+        s.Box(new Vector3(0.6f, 2.55f, 0.06f), new Vector3(0.34f, 0.28f, 0.03f), Red);
         // a big Treichel hanging under the board
         s.Tube(new Vector3(0, 2.2f, 0), new Vector3(0, 1.8f, 0), 0.14f, 0.24f, Brass, 8);
         s.Tube(new Vector3(0, 1.81f, 0), new Vector3(0, 1.74f, 0), 0.25f, 0.26f, BrassDark, 8);
@@ -154,12 +154,12 @@ public static class DesalpeModels
             if (k % 3 == 0) s.Box(p + new Vector3(0, 1.32f, 0), new Vector3(0.14f, 0.12f, 0.14f), Flower[k % Flower.Length]);
         }
         // the notice board at the middle: two posts, a board with a row of coloured rosettes
-        s.Tube(new Vector3(-1.1f, 0, 0), new Vector3(-1.1f, 2.4f, 0), 0.07f, 0.065f, WoodDark, 5);
-        s.Tube(new Vector3(1.1f, 0, 0), new Vector3(1.1f, 2.4f, 0), 0.07f, 0.065f, WoodDark, 5);
+        s.Tube(new Vector3(-1.4f, 0, 0), new Vector3(-1.4f, 2.4f, 0), 0.07f, 0.065f, WoodDark, 5);
+        s.Tube(new Vector3(1.4f, 0, 0), new Vector3(1.4f, 2.4f, 0), 0.07f, 0.065f, WoodDark, 5);
         s.Box(new Vector3(0, 1.9f, 0), new Vector3(2.5f, 0.9f, 0.06f), Wood);
-        s.Box(new Vector3(0, 1.9f, 0.035f), new Vector3(2.3f, 0.7f, 0.02f), White);
+        s.Box(new Vector3(0, 1.9f, 0.03f), new Vector3(2.3f, 0.7f, 0.03f), White);
         for (int k = 0; k < 6; k++)
-            s.Box(new Vector3(-1.0f + k * 0.4f, 1.9f, 0.055f), new Vector3(0.22f, 0.22f, 0.025f), Flower[k]);
+            s.Box(new Vector3(-1.0f + k * 0.4f, 1.9f, 0.05f), new Vector3(0.22f, 0.22f, 0.03f), Flower[k]);
         return s.Build();
     }
 
@@ -245,7 +245,7 @@ public static class DesalpeModels
                 row.AddChild(new MeshInstance3D
                 {
                     Mesh = Headdress(DesalpeRules.Dress(shape, colour)), MaterialOverride = material,
-                    Position = new Vector3((colour - 2.5f) * 1.0f, 0, (shape - 2) * 1.2f), Scale = Vector3.One * 1.6f,
+                    Position = new Vector3((colour - 2.5f) * 1.5f, 0, (shape - 2) * 1.8f), Scale = Vector3.One * 1.6f,
                 });
         return row;
     }
