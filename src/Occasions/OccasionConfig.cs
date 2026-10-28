@@ -34,6 +34,7 @@ public sealed class FacetToggles
     public bool Loot { get; set; } = true;
     public bool Hunt { get; set; } = true;
     public bool Hats { get; set; } = true;
+    public bool Games { get; set; } = true;
 
     public OccasionFacets ToFlags() =>
         (Decorations ? OccasionFacets.Decorations : 0)
@@ -41,7 +42,8 @@ public sealed class FacetToggles
         | (Audio ? OccasionFacets.Audio : 0)
         | (Loot ? OccasionFacets.Loot : 0)
         | (Hunt ? OccasionFacets.Hunt : 0)
-        | (Hats ? OccasionFacets.Hats : 0);
+        | (Hats ? OccasionFacets.Hats : 0)
+        | (Games ? OccasionFacets.Games : 0);
 }
 
 /// <summary>
@@ -97,27 +99,42 @@ public static class OccasionConfig
     /// sightings on the first Friday of every month and the morning after (#863; the saucers only
     /// come at night, 21:00-05:00 game time, <see cref="SightingPlanner"/>).
     /// </summary>
-    public static List<OccasionEntry> Defaults() => new()
+    public static List<OccasionEntry> Defaults()
     {
-        new OccasionEntry
+        var entries = new List<OccasionEntry>
         {
-            Id = OccasionIds.Halloween, Priority = 10,
-            Schedule = { new DateWindow("09-01", "10-31") },
-        },
-        new OccasionEntry
-        {
-            Id = OccasionIds.Christmas, Priority = 10,
-            Schedule = { new DateWindow("11-01", "12-31") },
-        },
-        new OccasionEntry
-        {
-            // below the seasons: on a Halloween Friday, Halloween keeps its sky
-            Id = OccasionIds.Ufo, Priority = 5,
-            Schedule = { new DateWindow("fri#1", "+1") },
-            // no loot, no hunt, no hat: the saucers (Decorations), the green night, the wail
-            Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false },
-        },
-    };
+            new()
+            {
+                Id = OccasionIds.Halloween, Priority = 10,
+                Schedule = { new DateWindow("09-01", "10-31") },
+                Facets = new FacetToggles { Games = false },
+            },
+            new()
+            {
+                Id = OccasionIds.Christmas, Priority = 10,
+                Schedule = { new DateWindow("11-01", "12-31") },
+                Facets = new FacetToggles { Games = false },
+            },
+            new()
+            {
+                // below the seasons: on a Halloween Friday, Halloween keeps its sky
+                Id = OccasionIds.Ufo, Priority = 5,
+                Schedule = { new DateWindow("fri#1", "+1") },
+                // no loot, no hunt, no hat: the saucers (Decorations), the green night, the wail
+                Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false, Games = false },
+            },
+        };
+        // festivals (#1269): each part registers its own default entry here (priority 8: under the seasons for the sky, over the
+        // UFOs); part 1 ships none. The check-only festival exists only under --festival test
+        if (Festivals.FestivalCatalog.TestRequested)
+            entries.Add(new OccasionEntry
+            {
+                Id = Festivals.FestivalCatalog.TestId, Priority = 8,
+                Schedule = { new DateWindow("03-10", "03-14") },
+                Facets = new FacetToggles { Atmosphere = false, Audio = false, Loot = false, Hunt = false, Hats = false },
+            });
+        return entries;
+    }
 
     public static List<OccasionEntry> Load()
     {
@@ -163,7 +180,8 @@ public static class OccasionConfig
     {
         try
         {
-            Core.JsonStore.Save(File, new OccasionConfigFile { Occasions = entries }, JsonOptions);
+            // the check-only festival (--festival test) never lands in a player's file
+            Core.JsonStore.Save(File, new OccasionConfigFile { Occasions = entries.Where(e => e.Id != Festivals.FestivalCatalog.TestId).ToList() }, JsonOptions);
         }
         catch (Exception e)
         {

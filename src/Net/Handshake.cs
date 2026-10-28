@@ -88,6 +88,8 @@ public partial class Handshake : Node
     /// 57: World/Versteckis (#1268: RequestDisguise/Tag/Sniff/Decoy/Sprint/Moo/Objective; SetGames, Enter, Kit, PutAt, Release, Caught,
     /// Missed, Sniffed, Sounded), the <c>versteckis</c> invite kind, <c>InterestService.Withheld</c>, ItemId 460-467, ItemUse.Round.
     /// 58: World/CinemaBooths AskSet and Set carry the hall (#1279: a panel per hall; 57 is main's).
+    /// 59: World/Adventure/Festivals (#1269 part 1: RequestRing/TestDate; TellFestivals, TellBoard, TellConverted, TellRang, TellRefused),
+    /// the <c>festivals</c> section, <c>OccasionFacets.Games</c> (1 &lt;&lt; 6) on the occasions wire.
     /// 60: World/Together (#1266: Links, GateOpen, PotState, BreadLost, TellFeast, TellHaul, the Ask* requests), invite kinds rope and fondue.
     public const int Protocol = 60;
 

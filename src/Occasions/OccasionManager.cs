@@ -72,6 +72,22 @@ public partial class OccasionManager : Node
     /// <summary>The date the calendar is read at: today, <c>--date</c>, or a film's (<see cref="Core.Calendar"/>).</summary>
     public DateOnly Today => _dateOverride ?? Core.Calendar.Today;
 
+    /// <summary>
+    /// Checks only (the festival checks, #1269): reads the calendar on another day from now on, as <c>--date</c> does, and
+    /// re-evaluates at once. Null goes back to today's.
+    /// </summary>
+    public void OverrideDate(DateOnly? date)
+    {
+        _dateOverride = date;
+        EvaluateAuthority(force: true);
+    }
+
+    /// <summary>
+    /// Content that depends on the world, not the calendar, changed (a festival's site was resolved): everything that dresses
+    /// the world for the running occasions does it again.
+    /// </summary>
+    public static void NotifyContentChanged() => Changed?.Invoke();
+
     /// <summary>What crosses the wire: the authority's decision, not the content.</summary>
     private sealed record Wire(string Id, int Facets, int Priority, bool AllowOptOut, string Instance);
 

@@ -140,6 +140,8 @@ public static class MergedCore
             // a through move across the members: one S from mouth to mouth, as on one node (its legs would narrow onto the inner
             // street's lanes and widen again)
             if (legs.Count > 1 && centre.Count > 2 && Angle(centre[1] - centre[0], centre[^1] - centre[^2]) < CorePlanner.TurnAngle) Smooth(centre);
+            // legs that spliced away to nothing (#1279: a Bern block threw in Set): the junction is planned whole instead
+            if (centre.Count < 2) return null;
             var move = new Connector
             {
                 FromArm = c.FromArm, FromId = c.FromId, ToArm = c.ToArm, ToId = c.ToId, Move = c.Move, Kind = c.Kind, Width = c.Width, ToWidth = c.ToWidth,

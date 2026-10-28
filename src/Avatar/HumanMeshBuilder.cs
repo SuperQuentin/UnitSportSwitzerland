@@ -139,6 +139,7 @@ public enum Headwear
     PumpkinHead = 2,
     SantaHat = 3,
     ReindeerAntlers = 4,
+    // 5-20 are the festivals' (#1269): Fasnacht masks and the flower crown, added by the parts that draw them
 }
 
 /// <summary>
