@@ -797,6 +797,12 @@ public static partial class HumanMeshBuilder
     public static Vector3[] PoseJoints(HumanPose pose) => JointsOf(RigFor(pose));
 
     /// <summary>
+    /// The walking gait's joints at <paramref name="speed"/> m/s and <paramref name="phase"/> of its cycle (two steps),
+    /// author space: for a figure whose arms are set over its walk (a decoration bowler's approach, #1334).
+    /// </summary>
+    public static Vector3[] StrideJoints(float speed, float phase) => JointsOf(GaitRig(speed, phase));
+
+    /// <summary>
     /// A figure drawn from free joint points (a ragdoll): <paramref name="joints"/> in
     /// <see cref="Joint"/> order, author space. Bone lengths are whatever the points say.
     /// </summary>
