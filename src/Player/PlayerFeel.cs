@@ -574,6 +574,13 @@ public partial class PlayerFeel : Node3D
             float f = 22f;
             cam.HOffset = _noise.GetNoise2D(_time * f, 0f) * 0.22f * amp;
             cam.VOffset = _noise.GetNoise2D(0f, _time * f) * 0.22f * amp;
+            // drunk (#1271): a slow sway on top, off with the comfort setting and in VR
+            if (_player.Drunk is { } drunk)
+            {
+                var sway = drunk.Sway(dt);
+                cam.HOffset += sway.X;
+                cam.VOffset += sway.Y;
+            }
         }
 
         // the pad buzzes with the road, lightly, in short overlapping pulses

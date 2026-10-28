@@ -29,7 +29,7 @@ site, the `Games` facet, `FestivalOccasion.Decorate` for the ground. Other games
 - `SteinGround.Of(site)`: the stone lies 12 m to the left of the site's middle, thrown along one of eight compass directions picked by the site's coordinates; pure, so the server and
   every client agree with nothing sent.
 
-## The wire (`SteinService`, protocol 67): `World/Adventure/Festivals/Stein`
+## The wire (`SteinService`, protocol 72): `World/Adventure/Festivals/Stein`
 
 Client to server: `RequestBegin(class)`, `RequestThrow(attempt, stamps, pitch)`. Server to client: `TellBegin(id, seed, class, begun)`, `TellNo(why)`, `TellLanded(...)` (to the thrower
 and every peer within 300 m of the stone). Reliable, 8 requests a second per peer. Server methods carry the rules: `ServeBegin(peer, class)` (festival running and the stone open, an adventuring
@@ -60,7 +60,7 @@ a gap). Bots: `SteinService.ServeBot` takes the server path a client takes and e
 ## Deviations from the plan
 
 The player is not moved onto a run-up (the steps are beats, not strides; the server needs the body within 7.5 m of the stone); the push angle comes from the camera pitch and a technique band; the ground is
-not the flattest cell within 150 m but a fixed spot beside the site's middle; no ambient bots stand at the ground and `/stein <bot>` is not built; the Journal's per-game best is the framework's (points).
+not the flattest cell within 150 m but a fixed spot 12 m south of the site's middle (clear of the flag ground, the alphorn row and the wrestling ring); no ambient bots stand at the ground and `/stein <bot>` is not built; the Journal's per-game best is the framework's (points).
 
 ## How to check
 

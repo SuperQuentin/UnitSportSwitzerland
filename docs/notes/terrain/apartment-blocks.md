@@ -155,6 +155,9 @@ never from its shape.
   says why a wing plan fell back to the box.
 - **Street doors face out** (`BuildingFootprint`): a wall's outward side is the one without roof
   over it, not the one away from the box's centre (a courtyard wall faces the courtyard).
+- **Out to the facade** (#1290, `interior-outlines`): what the wings leave (an angled facade's
+  slivers, the corners no wing fits) is filled afterwards: each room on a facade grows out to the
+  outline, a deep stretch off a hall or a living room gets rooms of its own.
 
 ## The elevator (`InteriorManager.Lifts.cs`, `LiftRide`)
 

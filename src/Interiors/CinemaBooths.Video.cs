@@ -161,7 +161,9 @@ public partial class CinemaBooths
         bool relay = want && (RelayOf(plan, here) || CinemaVideo.IsLive(link) || !CinemaVideoStream.CanDecode || _failedHere == (link, t0));
         var stereo = StereoOf(plan, here);
         if (_stream != null && (!want || _streamPlan != plan || _streamHall != here || _stream.Link != link || _stream.T0 != t0
-                                || _stream is CinemaRelayFeed != relay || _stream.Stereo != stereo))
+                                || _stream is CinemaRelayFeed != relay || _stream.Stereo != stereo
+                                // the player's video quality changed (#1319): decoded again at the same clock moment
+                                || _stream is CinemaVideoStream { Quality: var q } && q != CinemaVideoStream.QualityHere))
         {
             _stream.Dispose();
             _stream = null;

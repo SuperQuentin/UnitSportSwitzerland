@@ -38,6 +38,8 @@ lane frame and rules (`bowling-centres`).
   table to a joiner (`ServerWorld` beside the church radios). E (pad interact, VR grip via
   `TryInteract(byHand)`) at the panel's left half cycles the lights, at its right half switches the
   screen; the prompt says what it will do. Bots: `Serve(peer, plan, code)` on the server.
+  From the chat (#1306, an admin's): `/cinema <hall 1..> [lights full|dim|off] [film on|off]` in the cinema the sender
+  is in, or offline the one the free camera is in (`CinemaBooths.Command`; the shot queue's films set halls with it).
 - **Showing it** (client, on change only): the interior material's `house_lights` (1, 0.3, 0) scales
   the tint-2 lamps (`RoomLights.Tint`); the cat (`InteriorNode.CatPicture`: a cartoon cat drawn by code,
   no image file) on every screen, 2 cm proud of it, and the projector's beam from each hall's porthole

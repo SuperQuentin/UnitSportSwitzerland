@@ -24,6 +24,17 @@
   is, with a `[shot] ... not complete` warning). A settle of 0 is taken at once (queue `shift` lines).
 - Feature clip: `--clip name[,delay[,seconds]] [--clip-quit]` films the window to `test_output/clips/<name>.gif`
   (+ `.mp4`); `/clip start|stop` in the chat; `tools/record-clip.sh` (`general/feature-clips`).
+- Straight into a building, no door (#1244): `--enter <venue name | OSM id | building key>` (`--enter bowlingland`,
+  `--enter "pathé galeries"`, `--enter 2510_1140_26`) loads the world round it (it stands for a missing `--at` and
+  `--origin`), then builds its interior and puts the player just inside its main entrance, facing in; in a shot run the
+  free camera, and the queue's `l` lines work at once (they wait for it). `/enter <same>` in the chat does it mid-game,
+  anywhere in the country, and as a queue line (`/enter hype club`) moves the following `l` lines there. Offline only.
+  A name matches any part, any case, accents off; the whole name first, then the biggest kind (`[enter]` in the log).
+- Leaving the fly camera (T, Shift+T) puts the body on the first surface under the camera with room to stand
+  (`FootPlayer.StandingSpotBelow`): a floor, a stair, a canopy or roof, the ground; in a building, its floor and its
+  space (`InteriorManager.SetBodySpace`), from under its floor its lowest floor (`LowestFloorAbove`); the terrain's
+  height only where no collision is built yet (#1244: it used to drop you on the street over the building).
+  `--at 2510425,1140985 --enterspectatorcheck [venue]` checks the three cases (outdoors, in a building, under its floor).
 - Many screenshots, one launch: `<godot> --path . -- --shot-queue shots.txt [--nohud]` boots like
   `--shot`, then watches the file: one shot per line in the `--shot` syntax, taken in order,
   lines appended later picked up within 0.5 s; blank lines and `#` comments skipped, `quit`
@@ -39,6 +50,11 @@
   as asked, carried into the rooms (`InteriorManager.OpenDoorForCamera`/`CameraInside`). Stand
   2-3 m from a house looking at it to look into its ground floor. The door is left open, so
   queue it last; it fails after 40 s without a door or an interior.
+  After it, `l1.6` lines (#1306) are points of that interior in its plan's own frame (x, z across the building, y over the
+  ground floor's level; pitch and yaw in that frame): stills and glides inside, one take through the rooms, the camera in
+  until a line that is not `l` (an `l` line with no `i` before it fails). The plan's rooms and pieces are in
+  `user://interiors/<tile>/<n>.json`. Inside, a still does not wait on the tiles (3 km over it, they never complete).
+  A `/clip start` line waits until the clip before is written, so one queue films take after take.
   A line whose path is `~ease`, `~lin`, `~in` or `~out` is a **glide**: the camera moves from the last line's pose to its
   own over its seconds (eased as named; yaw the short way round; a `g` height lerped above the ground), no picture, no wait
   for tiles: camera moves for a `--clip` (each logs `[glide] t=<RealClock ms>`, as `[clip] t=` logs the clip's start).

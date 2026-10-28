@@ -61,7 +61,7 @@ public static class CinemaLookup
     public readonly record struct Found(string Video, string Sound, bool Live, double Duration);
 
     /// <summary>The URLs of <paramref name="link"/>, or null with <paramref name="why"/> said.</summary>
-    public static Found? Run(string link, out string why)
+    public static Found? Run(string link, out string why, int tallest = 480)
     {
         why = "";
         if (!CinemaVideo.NeedsLookup(link)) return new Found(link, link, false, 0);
@@ -76,7 +76,7 @@ public static class CinemaLookup
             };
             foreach (var a in BundledTools.YtDlpJsArgs().Concat(new[]
                      {
-                         "--no-playlist", "--no-warnings", "-f", CinemaVideo.SiteFormat,
+                         "--no-playlist", "--no-warnings", "-f", CinemaVideo.SiteFormat(tallest),
                          "-O", "%(is_live)s %(duration)s", "-O", "urls", link,
                      })) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi);

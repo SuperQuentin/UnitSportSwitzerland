@@ -53,7 +53,11 @@ public partial class OccasionHats : Node
         if (_inventory.Worn == ItemId.None && OccasionManager.Instance?.Top(OccasionFacets.Hats) is { } top)
             hat = top.Content.Hat;
         if (p.HeadwearId != (int)hat) p.HeadwearId = (int)hat;
-        long outfit = _inventory.Outfit.Bits;
+        var worn = _inventory.Outfit;
+        // signed in at a bowling centre's counter: the hire shoes, whatever was on the feet (#1323)
+        if (Interiors.BowlingLanes.Instance?.WearsShoesHere() == true && Avatar.Garments.Get(ItemId.BowlingShoes) is { } shoes)
+            worn = worn.With(shoes.Slot, shoes.Code);
+        long outfit = worn.Bits;
         if (p.OutfitBits != outfit) p.OutfitBits = outfit;
     }
 }

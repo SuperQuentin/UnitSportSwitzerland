@@ -232,14 +232,15 @@ public readonly record struct SteinGround(double E, double N, double DirE, doubl
     /// <summary>The stone's distance from the site's middle, m.</summary>
     public const double OffsetM = 12;
 
-    /// <summary>Beside the middle (clear of the mortar rack 14 m west), thrown along one of eight compass directions picked by the site.</summary>
+    /// <summary>
+    /// 12 m south of the middle: clear of the mortar rack (14 m west), the flag ground (12 m east), the alphorn row (16 m east, 7 m
+    /// north) and the wrestling ring (20 m north). The stone is thrown south-west, south or south-east, one picked by the site.
+    /// </summary>
     public static SteinGround Of(ResolvedSite site)
     {
-        int k = (int)(((long)Math.Abs(site.E) + (long)Math.Abs(site.N)) % 8);
-        double a = k * Math.PI / 4;
-        double dirE = Math.Cos(a), dirN = Math.Sin(a);
-        // 12 m off the middle, to the left of the throw
-        return new SteinGround(site.E - dirN * OffsetM, site.N + dirE * OffsetM, dirE, dirN);
+        int k = (int)(((long)Math.Abs(site.E) + (long)Math.Abs(site.N)) % 3);
+        double a = (-135 + 45 * k) * Math.PI / 180;
+        return new SteinGround(site.E, site.N - OffsetM, Math.Cos(a), Math.Sin(a));
     }
 
     public double DistanceTo(double e, double n) => Math.Sqrt((e - E) * (e - E) + (n - N) * (n - N));

@@ -39,7 +39,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Commands
 
-- `commands` — Commands: --at, --chatcheck, --debugcheck, --debugview, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g and i heights, frame=), --clip / --clip-quit, --title, --wheelcheck, --wheellock, --wheelwatch
+- `commands` — Commands: --at, --chatcheck, --debugcheck, --debugview, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g, i and l heights, frame=), --clip / --clip-quit / --clip-hq, --title, --wheelcheck, --wheellock, --wheelwatch
 
 ## Gotchas
 

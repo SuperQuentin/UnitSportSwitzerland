@@ -29,8 +29,8 @@ public static partial class FestivalCatalog
     public static FestivalDef Test(double e, double n) => new(
         TestId, "Test festival",
         [new FestivalSite("the test field", e, n, 400)],
-        [new FestivalGame("bell", "Ring the bell", 100), new FestivalGame("gong", "Ring the gong", 100), new FestivalGame(SteinRules.GameId, "Steinstossen", 100)],
-        [new FestivalDay(1, ["bell"], "The bell is open."), new FestivalDay(3, ["gong"], "The gong joins in."),
+        [new FestivalGame("bell", "Ring the bell", 100), new FestivalGame("gong", "Ring the gong", 100), new FestivalGame(Horn.AlphornRules.GameId, "Alphorn and yodel", Horn.AlphornRules.DayCap), new FestivalGame(SteinRules.GameId, "Steinstossen", 100)],
+        [new FestivalDay(1, ["bell", Horn.AlphornRules.GameId], "The bell and the alphorn are open."), new FestivalDay(3, ["gong"], "The gong joins in."),
             new FestivalDay(5, [SteinRules.GameId], "The stone put (--steincheck) opens on the last day.")],
         ClosingShow.Fireworks,
         [("03-10", "03-14")],

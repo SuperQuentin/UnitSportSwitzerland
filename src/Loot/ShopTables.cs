@@ -156,6 +156,8 @@ public static class ShopTables
             L(ItemId.BeerBottle, 0.8f, 6, 18),
             // playing together (#1266): the fondue's wine and kirsch, after the beer
             L(ItemId.WhiteWine, 0.6f, 2, 6), L(ItemId.Kirsch, 0.4f, 1, 3),
+            // alcohol (#1271): the driver's beer
+            L(ItemId.BeerAlcoholFree, 0.6f, 4, 12),
         },
         // #501: the blue box. A Blåhaj, and the flat-pack and bits anyone actually leaves with.
         [ShopType.Ikea] = new[]
@@ -172,11 +174,15 @@ public static class ShopTables
             L(ItemId.DuctTape, 0.25f, 1, 2),
             // the barracks (#716): a beer, a deck of Jass cards and a bag of chips
             L(ItemId.BeerBottle, 0.6f, 2, 8), L(ItemId.PlayingCards, 0.55f, 1, 4), L(ItemId.PokerChips, 0.3f, 1, 3),
+            // alcohol (#1271): the petrol station's alcohol-free beer and single-use tests
+            L(ItemId.BeerAlcoholFree, 0.5f, 2, 6), L(ItemId.BreathTestSingle, 0.5f, 2, 2),
         },
         [ShopType.Pharmacy] = new[]
         {
             L(ItemId.Bandage, 0.95f, 4, 12), L(ItemId.FirstAidKit, 0.8f, 1, 4), L(ItemId.WaterBottle, 0.6f, 2, 6),
             L(ItemId.EnergyBar, 0.5f, 2, 6), L(ItemId.MineralWater, 0.5f, 2, 6),
+            // alcohol (#1271): the electronic breathalyzer, and the single-use test in packs of two
+            L(ItemId.Breathalyzer, 0.45f, 1, 2), L(ItemId.BreathTestSingle, 0.85f, 2, 2),
         },
         [ShopType.Hardware] = new[]
         {

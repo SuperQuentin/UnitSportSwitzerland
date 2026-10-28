@@ -241,6 +241,7 @@ public static class Garments
         new(ItemId.Jeans, "Jeans", WearSlot.Bottom, 8, GarmentShape.Pants, GarmentStyle.Basic, new("3a5a8a"), new("c8a060"), new("2e4a72")),
         new(ItemId.CargoPants, "Black cargo pants", WearSlot.Bottom, 9, GarmentShape.Cargo, GarmentStyle.Gothic, Charcoal, new("2a2a30"), Silver),
         new(ItemId.HoloSkirt, "Holo skirt", WearSlot.Bottom, 10, GarmentShape.PleatedSkirt, GarmentStyle.Special, White, White, White, Finish.Holo),
+        new(ItemId.Schwingerhosen, "Schwingerhosen", WearSlot.Bottom, 13, GarmentShape.Pants, GarmentStyle.Alpine, new("b89a68"), new("8a6e48"), new("a88a5a")),
         new(ItemId.TazTrousers, "TAZ 90 trousers", WearSlot.Bottom, 11, GarmentShape.Cargo, GarmentStyle.Basic, TazGreen, new("3a4428"), new("1f2418"), Finish.Camo),
 
         // ---- legs ----
@@ -311,6 +312,9 @@ public static class Garments
         new(ItemId.PolierHat, "Polier hat", WearSlot.Head, 43, GarmentShape.FeltHat, GarmentStyle.Together, new("f4f2ea"), new("2a2018"), new("c8202a")),
         // the tenth punch card's: the regular's felt hat with its little Swiss-cross pin
         new(ItemId.StammgastHat, "Stammgast felt hat", WearSlot.Head, 44, GarmentShape.FeltHat, GarmentStyle.Together, new("6a2a2a"), new("1c1a1a"), new("f4f2ea")),
+        // the hire shoes a bowling centre's counter lends (#1323): two-tone, red and cream with a blue heel; last,
+        // as every new row: a row's place picks its wearer in the model viewer (and the z-fight baseline)
+        new(ItemId.BowlingShoes, "Bowling shoes", WearSlot.Feet, 7, GarmentShape.Sneakers, GarmentStyle.Basic, new("b8202a"), new("efe6d2"), new("2a3c8c")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

@@ -163,6 +163,10 @@ tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
 src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
 src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
 src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+# #1323: playable bowling: the lane rig in every centre; balls rolled into the pins in their own physics space
+src/Interiors/Bowling/ quick --bowlingcheck --systems ui
+src/Interiors/Bowling/ quick --bowlingrollcheck --systems physics
+src/Interiors/Bowling/ net    tools/bowlingnetcheck.sh
 # #1238: cinemas planned in hand-made buildings; the booth over the network
 src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
 src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
@@ -196,6 +200,11 @@ src/Interiors/RoomLights    quick  --cinemacheck --systems ui
 src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
 src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
 src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
+# #1325: pinball: the four cabinets built and played through their nodes (the solver and rules: unit tests)
+src/Interiors/Pinball/ quick --pinballcheck --systems ui
+src/Interiors/Pinball/ quick --zfightcheck Pinball
+shaders/pinball_display quick --pinballcheck --systems ui
+src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
@@ -1011,6 +1020,9 @@ src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
 src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
 tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
+tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
+src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
@@ -1021,3 +1033,24 @@ src/Adventure/Together/ net tools/togethernetcheck.sh
 src/Occasions/Festivals/    quick  --steincheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/Festivals/    net    tools/steinnetcheck.sh
 tools/steinnetcheck.sh      net    tools/steinnetcheck.sh
+src/Combat/Schwing       net    tools/schwingnetcheck.sh
+src/Player/FootPlayer.Schwing net tools/schwingnetcheck.sh
+src/Avatar/HumanMeshBuilder.Schwing net tools/schwingnetcheck.sh
+
+# #1271: alcohol: the drink log, the curve, the effects on the intents, the climb gate, passing out, the two breathalyzers (offline quick probe; server + two clients)
+src/Adventure/Alcohol/  quick  --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Drunk quick --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/Alcohol/AlcoholNetProbe net tools/alcoholnetcheck.sh
+tools/alcoholnetcheck.sh  net  tools/alcoholnetcheck.sh
+src/Adventure/Alcohol/ net tools/alcoholnetcheck.sh
+# #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
+src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh
+tools/errandnetcheck.sh  net  tools/errandnetcheck.sh
+src/Adventure/Errands/ErrandService net tools/errandnetcheck.sh
+
+# #1269 the alphorn and yodel game: the offline check (a four-voice song, harmony, pay, forged and early songs refused, the valley echo) and the two-client check
+src/Occasions/Festivals/Horn/   quick  --hornscheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Horn   net  tools/hornnetcheck.sh
+src/Occasions/Festivals/Horn/   net    tools/hornnetcheck.sh
+tools/hornnetcheck.sh           net    tools/hornnetcheck.sh

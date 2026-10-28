@@ -40,8 +40,8 @@ public class FestivalFrameworkTests
         Assert.True(def.IsOpen("gong", 3));
         Assert.True(def.IsOpen("gong", 5));   // a late player meets every game at once
         Assert.False(def.IsOpen("nonsense", 5));
-        Assert.Equal(["bell"], def.OpenGames(2).Select(g => g.Id));
-        Assert.Equal(["bell", "gong"], def.OpenGames(4).Select(g => g.Id));
+        Assert.Equal(["bell", "alphorn"], def.OpenGames(2).Select(g => g.Id));   // the alphorn game (#1269 part 4) opens with the bell
+        Assert.Equal(["bell", "gong", "alphorn"], def.OpenGames(4).Select(g => g.Id));
         Assert.Equal(3, def.NextOpening(1));
         Assert.Equal(5, def.NextOpening(3));   // the stone put (--steincheck) opens on the last day
         Assert.Equal(0, def.NextOpening(5));
