@@ -281,9 +281,17 @@ public partial class BowlingLanes
     public static Transform3D PieceFrame(InteriorLayout l, FurniturePlan f) =>
         new(new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2), new Vector3(f.X, l.FloorY(f.Floor) + f.Lift, f.Z));
 
-    /// <summary>A body's place in a piece's own frame, or null when the server cannot see it (offline: allowed).</summary>
-    private Vector3? InPiece(long peer, InteriorLayout l, FurniturePlan f) =>
-        InteriorManager.Instance?.PlayerLocal(peer, l) is { } at ? PieceFrame(l, f).AffineInverse() * at : null;
+    /// <summary>
+    /// A body's place in a piece's own frame, or null when there is none to judge by: the server cannot
+    /// see it, or offline the one player's body is not in the building (a shot queue's free camera is).
+    /// </summary>
+    private Vector3? InPiece(long peer, InteriorLayout l, FurniturePlan f)
+    {
+        if (InteriorManager.Instance?.PlayerLocal(peer, l) is not { } at) return null;
+        // interiors stand kilometres under the world: a body outside is thousands of metres off the plan's floors
+        if (!Online && Mathf.Abs(at.Y) > 50f) return null;
+        return PieceFrame(l, f).AffineInverse() * at;
+    }
 
     private bool Near(long peer, InteriorLayout l, FurnitureType type)
     {
