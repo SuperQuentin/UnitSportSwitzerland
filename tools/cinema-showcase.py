@@ -104,6 +104,7 @@ HALL2_LENS = (0.8, 4.35, 14.0)
 # open films (#1298: a hall plays a web link on the shared clock; /cinema play acts on the hall the camera is in)
 BUNNY = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
 SINTEL = "https://www.youtube.com/watch?v=eRsGyueVLvQ"
+COFFEE_RUN = "https://www.youtube.com/watch?v=PVGeM40dABA"   # quick cuts, pink, teal, orange: the beam's colour moves
 SINTEL_TRAILER = "https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4"
 
 
@@ -140,8 +141,12 @@ def cinema_takes():
              [still((-13.1, 3.6, 3.5), (-13.1, 4.0, -7), 12, "films2")],
              [glide((-13.1, 2.6, -1.0), (-13.1, 4.2, -7), 4, "~ease")]),
         Take("beam", "Light thrown from the booth",
-             [still((5.0, 1.5, -6.0), HALL2_PORT, 1, "beam0")],
-             [glide((3.4, 3.4, 4.0), HALL2_PORT, 8, "~ease")]),
+             # hall 2 changes to a lively film, past its titles before the take
+             [still((5.0, 1.5, -6.0), HALL2_PORT, 0.3, "beam0"), "/cinema 2 lights off film on", f"/cinema play {COFFEE_RUN}",
+              still((5.0, 1.5, -6.0), HALL2_PORT, 22, "beam1")],
+             [glide((3.4, 3.0, 2.0), HALL2_PORT, 5, "~in"),
+              # turning round under the beam to the picture it throws
+              glide((3.2, 4.4, 10.0), (0.8, 3.6, -7), 5, "~out")]),
         Take("booth", "Up in the booth: a projector and a panel for each hall",
              [still((3.4, 4.6, 16.0), (2.6, 3.9, 13.9), 1, "booth0")],
              [glide((1.9, 4.5, 15.9), (0.8, 4.3, 14.2), 5, "~ease"),
