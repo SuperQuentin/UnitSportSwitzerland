@@ -89,7 +89,10 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   now at full bandwidth (`full`; a concert screen keeps the preview) and with NDI's audio (`recv_capture_v2`'s audio frame,
   planar floats, interleaved, freed with `recv_free_audio_v2`): the newest frame letterboxed and made a JPEG at the
   share's quality on a worker, the sound to the relay's mono, sent like any share. No PC sound on top (it would double).
-  **Not yet run against a runtime** (none on the dev PC, Oct 28; the owner chose to test later).
+  Tested Oct 28 against OBS's NDI output (NDI 6 Tools, `C:\Program Files\NDI\NDI 6 Tools\Runtime`): the source is
+  listed as `NDI: <MACHINE> (OBS PGM)`, `--capturecheck` receives 24 frames in 3 s at Sharp and its sound (13 of 15
+  chunks not silent), and `--cinemavideoshot live:ndi,<prefix>` shows it on a hall through the server 83-133 ms off the
+  clock. NDI Tools also installs "NDI Webcam" virtual cameras and mics: they show in the lists as ordinary cameras.
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`

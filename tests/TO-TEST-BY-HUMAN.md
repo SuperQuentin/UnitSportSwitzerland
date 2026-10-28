@@ -39,7 +39,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Leave the cinema while sharing → after about 5 s the hall goes back to the slides; Stop sharing → at once.
 - [ ] Pad: D-pad through the share pickers (OptionButton popups), A to pick, Share. VR: the laser on the pickers and Share.
 - [ ] Play a video file… (an mp4 or mkv from your disk) → the hall plays it from the start, everyone at the same moment, its sound from the screen; at its end the slides come back. A file of several GB starts within a few seconds.
-- [ ] **NDI** (needs NDI Tools from ndi.video): host a concert and `/concert ndi on`, then in a cinema's projector panel pick `NDI: … (PGM)` → the concert's program camera on the hall's screen. OBS with its NDI output (obs-ndi / DistroAV) playing a video → its picture and **sound** in the hall. Both at the same moment for two players. ([#1303](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1303))
+- [ ] **NDI** (needs NDI Tools from ndi.video; OBS's NDI output already checked by the scripts): host a concert and `/concert ndi on`, then in a cinema's projector panel pick `NDI: … (PGM)` → the concert's program camera on the hall's screen. With OBS: its sound heard in the hall, in sync with its picture, the same moment for two players. ([#1303](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1303))
 - [ ] Linux (X11): a monitor share and the PC sound (PulseAudio monitor). macOS: a monitor and a camera share (screen-recording permission asked).
 
 ## What E acts on is outlined ([#1291](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1291))
