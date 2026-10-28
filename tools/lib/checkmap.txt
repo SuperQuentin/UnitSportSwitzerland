@@ -1008,3 +1008,8 @@ tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
 tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
 src/Adventure/Together/ net tools/togethernetcheck.sh
+
+# #1269 part 3 Steinstossen: the offline check (prompt, attempt, perfect put, foul, forged put, bots, the day's three puts) and the two-client check
+src/Occasions/Festivals/    quick  --steincheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/    net    tools/steinnetcheck.sh
+tools/steinnetcheck.sh      net    tools/steinnetcheck.sh

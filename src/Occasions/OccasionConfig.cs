@@ -125,7 +125,13 @@ public static class OccasionConfig
             },
         };
         // festivals (#1269): each part registers its own default entry here (priority 8: under the seasons for the sky, over the
-        // UFOs); part 1 ships none. The check-only festival exists only under --festival test
+        // UFOs). The Älplerfest's stone put (part 3) is the first; the check-only festival exists only under --festival test
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.AelplerfestId, Priority = 8,
+            Schedule = { new DateWindow("08-14", "08-24") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         if (Festivals.FestivalCatalog.TestRequested)
             entries.Add(new OccasionEntry
             {

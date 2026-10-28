@@ -1146,6 +1146,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
     public bool JumpTaken { get; set; }
 
+    /// <summary>A festival game has the hands (the stone put, #1269): no item is used while it runs. Owner only; nothing is replicated.</summary>
+    public bool GameBusy { get; set; }
+
     /// <summary>
     /// A bot (#837): a body the dedicated server runs itself (authority 1), an <see cref="Npc"/> with
     /// no race driver. Set from the spawn data on every peer, before the node enters the tree: clients
@@ -2805,6 +2808,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Adventure.Rewards.RewardWorld.TryInteract(this)) return true;
         // a summit cross, a telescope or a stamp post at hand (#1224): look out, or stamp
         if (Adventure.Places.PoiMarkers.TryInteract(this)) return true;
+        // the stone of a festival's Steinstossen at hand (#1269): lift it
+        if (Occasions.Festivals.SteinGame.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
         if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
