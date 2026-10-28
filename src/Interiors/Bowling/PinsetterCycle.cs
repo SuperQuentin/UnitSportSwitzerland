@@ -49,8 +49,11 @@ public static class PinsetterCycle
     /// <summary>The table's underside when its pins stand on the deck.</summary>
     public static float TableDown => LaneGeometry.DeckTop + Grip;
     public static float SweepRest(LaneGeometry g) => g.MaskingBottom + 0.05f;
-    /// <summary>Where the sweep stands guard: in front of the head pin.</summary>
-    public static float SweepGuard(LaneGeometry g) => g.HeadPin - 0.35f * g.Scale;
+    /// <summary>
+    /// Where the sweep stands guard: in front of the head pin, behind the masking's face (its chevrons
+    /// 4 cm in, off the face), so that raised it is hidden in the masking unit.
+    /// </summary>
+    public static float SweepGuard(LaneGeometry g) => g.Masking + 0.08f;
     /// <summary>How far back the sweep goes: over the pit's edge.</summary>
     public static float SweepBack(LaneGeometry g) => g.LaneEnd + 0.25f * g.Scale;
 

@@ -48,6 +48,8 @@ public partial class LaneRig : Node3D
         _sweepMesh ??= Mesh(InteriorMeshBuilder.Sweep());
         if (!TableMeshes.TryGetValue(g.Mini, out var table))
             TableMeshes[g.Mini] = table = Mesh(InteriorMeshBuilder.PinTable(g.Scale));
+        // headless (the z-fight check) a MultiMesh's instances all read at its origin, on the hall's floor:
+        // the centres' baseline lines carry those 200 places a pair (zfight note); in game they stand on the deck
         rig._pins = new MultiMeshInstance3D
         {
             Name = "Pins",
