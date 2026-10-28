@@ -42,6 +42,12 @@ venues, 960 drawn, 785 of those in blocks of flats; 582 guest rooms had no wall 
 - **A venue in an office, a school, a house (anything not a block of flats): its span by kind**, capped
   by its wall run: café, kebab and fast food 5 bays, restaurant, pub and bar 7, club 9. The street room
   it takes is walled off to that span; what is left keeps its old use behind the new wall.
+- **A building with one door still gives its venue a door of its own** (Q3, replacing "that door is the
+  venue's"): the planner puts the stair, a lobby or a house's stair hall, behind the main door, so the café
+  beside it gets its own door and front; the main door stays the stair's. Every dining venue, one rule.
+- **Washrooms shrink where space is short** (Q4): a room per gender (a WC and a basin each), else a
+  vestibule with a basin and a stall per gender, else one WC, before the big gendered set squeezes the
+  room it serves (`ToiletSet.Pair`; the gendered set off a guest room only where it keeps 6 m across).
 - Fronts are dressed from the door alone (clients never see the plan), so the span is the footprint's.
   On a block of flats the footprint asks the apartment planner where its units fall (as it already does
   for the garage ramp, `PlansGarageRamp`), so the units and their doors agree by construction.

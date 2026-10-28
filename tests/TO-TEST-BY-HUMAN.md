@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Venues and shop units: their own door and a glazed front ([#1327](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1327))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499805,1117476` (Trois Verres, Geneva; `--venuecheck --venuedoors "Trois Verres"` prints its door).
+
+- [ ] Walk the street past a block with shops under flats → each shop has its own door and a glazed front of 1.1 m bays, a stone plinth, a fascia; no window of the facade's grid peeks round the glass.
+- [ ] Walk in by a café's or a restaurant's own door → straight into its guest room, no lobby; inside, its windows stand where the bays are outside.
+- [ ] Look through the panes by day and by night → a room behind, tinted to the venue, warm at night; the name sits on the fascia, an awning clears it.
+- [ ] Trois Verres → its door on the school's west wall; its room is narrower than its front (a known limit): judge how it reads.
+
 ## A video on a cinema hall's screen ([#1299](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1299))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (Cinémas du Grütli, Geneva), walk up to the booth. A dev build needs ffmpeg on PATH (yt-dlp too for YouTube); a release ships both.
