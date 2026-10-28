@@ -110,6 +110,7 @@ Geneva: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.
 - [ ] Walk round a block of flats → its doors are on the street front, each into its own stairwell lobby; no door on its ends or at the back.
 - [ ] Walk into a school or an office with a long wing → the wing has rooms and its own stair; its side doors open into them, and the wing joins the rest through an arch.
 - [ ] A works of several halls → each hall wing has a floor, and you walk from one to the next through an arch.
+- [ ] A side door on a stretch of facade no room reaches → it opens into a short corridor, square to the door, ending in an arch into the room behind; walk it both ways, no snag at its angled end.
 
 ## Cinemas: hall height, a panel per hall, aisles to the walls, the service door, film music ([#1280](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1280))
 

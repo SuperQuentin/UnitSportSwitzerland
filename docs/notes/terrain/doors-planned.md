@@ -28,6 +28,23 @@ walls alone (`BuildingFootprint.Compute`), before the plan, so #1304 works on bo
   (`Even`), and the main door goes to the nearest wing within 6 m (the rooms then grow to the facade, and
   `MoveEntries` takes the doorway to the door).
 - `Entrances` keys a plan's main doorway by its own door's slot: in a wing it may be door 3 or a link.
+- **A hall in pieces**: a hall-like kind (works, sheds, garages) peels its roof into up to 12 pieces of 4 m or more
+  (`PlanOutline.Pieces`), not 4 wings of 6 m; the slivers the peel leaves between two facing pieces (up to 1.5 m)
+  are closed (`Close`), or a piece touching none of the others is dropped as unreached. A works of several halls
+  round yards and an alley is one hall in pieces, its doors on the yards opening into them.
+- A restaurant or a bar in the building no longer keeps it off the wing plan (`DiningUnits` takes a room of
+  whichever plan); a hall venue (bowling, cinema, arcade), a landmark or a bank still does. A wing plan is only
+  kept if it validates no worse than the other, furnished (a machine across a piece's angled wall did not).
+
+## A way in behind the door (`Vestibules`)
+
+After `FitOutline`, every street door still without a doorway:
+- **A room right behind it** (0.6 m in): its doorway was never planned (the box's side had no room for it), so it
+  is fitted as `MoveEntries` fits the others (`FitDoorway`: never into a bedroom, a bathroom or a flat).
+- **No room behind it**: a vestibule 1.8 m wide, a four-sided shape square to the door, runs in to the wall of the
+  first room it meets, up to 20 m, that wall at most 60° off the door's, and opens into it through an arch: if the
+  room is one a street door may open into, the vestibule stays inside the outline and clear of every room, and its
+  1 m core square fits. Each is kept only if the plan validates no worse.
 
 ## Measure
 
@@ -37,14 +54,16 @@ before; `--svgkeys a,b` draws those plans to `test_output/survey-plans/` (the fi
 drawn both ways); `test_output/survey-locked/` holds examples of each locked kind, a magenta dot at the door.
 
 Oct 28, 4 tiles of Geneva and Lausanne: street doors 3,156 → 2,715 (flats 1,432 → 992: they lose their end and back
-doors), locked 1,388 → 891 (flats 716 → 313, civic 222 → 162, industrial 114 → 88), civic outline filled 65 → 75 %,
-a doorway more than 1 m off its door 453 → 437, invalid plans 0. 49 buildings planned wing by wing.
+doors), locked 1,388 → 688 (flats 716 → 307, civic 222 → 118, commercial 193 → 162, industrial 114 → 36, garages
+79 → 11), civic outline filled 65 → 77 %, ground floor outside the outline 28 → 20 %, a doorway more than 1 m off
+its door 453 → 434, turned more than 10° 133 → 179 (fitted doorways on angled walls), invalid plans 0. 105
+buildings planned wing by wing or in pieces; 95 doors fitted and 53 vestibules made (the three candidate plans
+counted). 296 → 309 ms a plan, the worst 8.4 s.
 
 ## Known limits
 
-- A works of separate halls under one outline (yards between them, not a courtyard): the wings do not touch, so
-  they cannot be linked, and the box hall stands over the yards with its doors deep inside it.
-- A door with no room behind it on a wing the plan leaves out (a civic block's far arm the peel misses, a flats
-  wing that does not plan), or on a set-back piece of a stepped front.
-- A building whose outline is not its box is planned up to three times (front rectangle, box, wings): 296 → 358 ms a
-  plan on the survey's tiles, the worst ~10 s (on a loaded machine).
+- A door whose room behind is a bedroom, a bathroom or a flat's own keeps locked: most of what is left.
+- A door with no room within 20 m (a wedge no wing or piece covers, a flats wing that does not plan), or on a
+  set-back piece of a stepped front.
+- A building whose outline is not its box is planned up to three times (front rectangle, box, wings), each
+  validated when compared: 296 → 309 ms a plan on the survey's tiles, the worst 8.4 s.

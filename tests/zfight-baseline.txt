@@ -1086,7 +1086,7 @@
 709075.2	Terrain / Building site - topped out, a house
 1957418	Terrain / Building site - topped out, a six-floor block
 91640	Terrain / Garage door - Sidewalk
-515456.5	Terrain / Garage ramp
+573652.1	Terrain / Garage ramp
 7741.9	Terrain / Landing - Jetty
 22402.7	Terrain / Landing - Pier
 6072	Terrain / Road prop - CartShelter

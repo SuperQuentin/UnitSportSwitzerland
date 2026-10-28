@@ -65,11 +65,14 @@ public static partial class InteriorGenerator
             if (OutlineScore(boxed, fp, b) > OutlineScore(plan, fp, b)) plan = boxed;
         }
         // planned wing by wing (#1304): a far wing gets rooms of its own, and its doors open into them;
-        // kept when it fills the outline and opens its street doors better, a door worth DoorWorth m²
+        // kept when it fills the outline and opens its street doors better, a door worth DoorWorth m², and
+        // validates no worse
         Winged = false;
         if (FollowOutlines && PlanWings && OutlineOf(fp, b) != null
             && Generate(fp, b, rural, type, null, venue, dining, out _, wings: true) is { } winged
-            && OutlineScore(winged, fp, b) + DoorWorth * Opened(winged) > OutlineScore(plan, fp, b) + DoorWorth * Opened(plan))
+            && OutlineScore(winged, fp, b) + DoorWorth * Opened(winged) > OutlineScore(plan, fp, b) + DoorWorth * Opened(plan)
+            // furnished, it still holds together (a machine across a piece's angled wall did not)
+            && InteriorValidator.Validate(winged).Count <= InteriorValidator.Validate(plan).Count)
         {
             Winged = true;
             return winged;
