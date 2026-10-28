@@ -221,3 +221,17 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] Sound: the murmur and the cutlery sit right under the venue's music, louder in a full room, gone in an empty one; the grinder, the tap, the jingles, the coin, the pool click, the dart and the cheer are not too loud or too often.
 - [ ] A terrace at lunch on a warm day (`/weather temp 20`) → most tables taken; at 23:00 or in snow → empty.
 - [ ] Perf on the Quest: a full multiplex hall and a full restaurant → note the frame time.
+
+## Bowling ([#1328](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1328))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2510425,1140985 --time 22` (BowlinGland, Gland; its main door reads as locked, go in by the side door on the same wall, 34 m along).
+
+- [ ] E at the shoe counter → signed in, the hire shoes on your feet (red and cream, blue heel); E again → shoes back.
+- [ ] E at a ball rack → the ball you face is in your hand (the lower row when looking down), its weight in the prompt.
+- [ ] E on your lane's approach → the bowling camera: A/D moves your spot, Space sets it, A/D turns the line, Space, hold Space and move the mouse sideways → the curve bends; let go → the ball rolls at once, the pins fall, the slow-motion replay plays on the screen, then the score. Does the hook feel right (too much, too little)? Does the swing's power feel controllable?
+- [ ] Shift in the bowling camera → the view down at the pins.
+- [ ] The ball comes back to the hood with a thunk after a few seconds; E at the hood → it is in your hand again.
+- [ ] Sound: the ball's rumble rising with speed, the crash, the machine, the gutter's rattle.
+- [ ] Pad: Y at the counter, rack, hood and approach; left stick and A for the steps, L3 to look at the pins, B steps back.
+- [ ] VR: grip at the counter and the rack; on the approach grip your ball, swing and let go → it rolls with your line and speed; twisting the wrist at the release hooks it.
+- [ ] Two players online on one lane → turns alternate; the other sees your ball roll and the same pins fall; a third who walks in later sees the score and the standing pins.

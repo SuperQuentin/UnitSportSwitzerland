@@ -178,6 +178,10 @@
     <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- bowling (#1323): the ball's run down the lane and the ten-frame score, Godot maths only -->
+    <Compile Include="..\..\src\Interiors\Bowling\BowlingSizes.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Bowling\BowlingBall.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Bowling\BowlingScore.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- traffic-light heads (#350): the lens layout, Godot maths only -->
     <Compile Include="..\..\src\Terrain\SignalBuilder.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\SignalBuilder.Gantry.cs" Link="Game\%(Filename)%(Extension)" />

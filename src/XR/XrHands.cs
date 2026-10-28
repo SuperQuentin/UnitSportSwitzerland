@@ -113,6 +113,8 @@ internal sealed class XrHands
                 hand.QuickWheel = false;
                 hand.AtLeftHip = -1f;
                 if (hand.OnWheel) LetGo(hand, buzz: false);
+                // a bowling ball held for a throw leaves the opening hand as it moved (#1323)
+                Interiors.XrBowling.LetGo(hand.Ctl);
                 if (hand.EmptySqueeze && hand.Speed > FlingSpeed && player is { Ride: RideKind.OnFoot, RidingWith: 0 }
                     && Core.MouseCapture.Mode == Input.MouseModeEnum.Captured)
                     XrPad.Tap(Core.PlayerInput.DropItem);
@@ -130,6 +132,7 @@ internal sealed class XrHands
                 }
             }
 
+            if (hand.Closed) Interiors.XrBowling.Follow(hand.Ctl);
             if (hand.OnWheel && grip == null) LetGo(hand, buzz: false);
             if (closing && !hand.Busy && !(hand == _left ? leftClaimed : rightClaimed)) TryTake(hand, player, grip);
         }
@@ -176,6 +179,13 @@ internal sealed class XrHands
             return;
         }
         if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 }) return;
+        // up at a bowling lane with the ball: the grip closes on it for a throw (#1323)
+        if (Interiors.XrBowling.Grip(player, hand.Ctl))
+        {
+            hand.Busy = true;
+            Buzz(hand, 0.4f, 0.05f);
+            return;
+        }
         if (player.TryToggleCarDoor(at) || Interiors.InteriorManager.Instance?.TryDoorByHand(player, at) == true
             || TakeAt(at) || AtHip(hand, at) || ReachingOut(player, at))
         {

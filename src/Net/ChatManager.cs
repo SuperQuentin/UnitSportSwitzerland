@@ -638,6 +638,10 @@ public partial class ChatManager : Node
                 Show(Interiors.CinemaBooths.Instance?.PoolCommand(1, string.Join(' ', parts[1..]), true, line => Show(line, ChatKind.Private))
                      ?? "No cinemas here.", ChatKind.Private);
                 return;
+            // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the player is in
+            case "bowl":
+                Show(Interiors.BowlingLanes.Instance?.Command(1, rest, Interiors.InteriorManager.Instance?.Current?.Key, "You") ?? "Bowling is not running.", ChatKind.Private);
+                return;
             // playing together (#1266): the rope and the shared pot
             case "rope" or "fondue":
                 Show(Adventure.Together.TogetherService.Instance?.Command(Adventure.AdventureService.LocalPeer, verb, rest) is { } said
@@ -1021,6 +1025,11 @@ public partial class ChatManager : Node
             case "cinema":
                 if (Interiors.CinemaBooths.Instance is not { } booths) ReplyTo(sender, "No cinemas on this server.", ChatKind.Error);
                 else ReplyTo(sender, booths.PoolCommand(sender, rest, IsAdmin(sender), line => ReplyTo(sender, line, ChatKind.Private)), ChatKind.Private);
+                return;
+            // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the sender is in
+            case "bowl":
+                if (Interiors.BowlingLanes.Instance is not { } bowling) ReplyTo(sender, "Bowling is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, bowling.Command(sender, rest, Interiors.InteriorManager.Instance?.SpaceOf(sender), NameOf(sender)), ChatKind.Private);
                 return;
             // playing together (#1266): the rope and the shared pot
             case "rope" or "fondue":

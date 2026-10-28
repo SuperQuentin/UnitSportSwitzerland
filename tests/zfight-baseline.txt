@@ -670,8 +670,8 @@
 144	Furniture / WaterTank
 100	Furniture / Workbench
 4149.2	Interiors / Arcade
-4600.6	Interiors / Bowling centre - Bowl bar
-9314	Interiors / Bowling centre - Two levels
+5747.1	Interiors / Bowling centre - Bowl bar
+12444	Interiors / Bowling centre - Two levels
 5357.4	Interiors / Cinema - Small
 7718.5	Interiors / Cinema - Town
 8447.8	Interiors / Dining - Bar
@@ -1185,3 +1185,8 @@
 199.6	People / Errand givers - Senn
 39.4	People / Errand givers - ShipMaster
 467.9	People / Errand givers - StationMaster
+96.1	Clothes / Bowling shoes
+3.4	Items / BowlingShoes
+2.8	Furniture / LanePair
+2.8	Bowling / Lane pair, pinsetters cycling
+2.8	Bowling / Mini lane pair, pinsetters cycling
