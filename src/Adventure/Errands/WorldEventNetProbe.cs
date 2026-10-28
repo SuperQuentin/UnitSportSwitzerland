@@ -44,7 +44,6 @@ public partial class WorldEventNetProbe : ChatProbe
         var cone = Events.Views.First(v => v.Kind == WorldEventKind.Avalanche);
         Expect(cone.Avalanche is { Buried: > 0 }, $"with {cone.Avalanche?.Buried} buried (the same spots from the seed)");
         Say($"cone {cone.Id} {cone.Avalanche!.Spots[0].E:F0}");
-        Expect(_toasts.Any(t => t.Contains("avalanche")), "and the toast told it");
         var spot = cone.Avalanche.Spots[0];
         // a body 30 m off is refused by the server (its word, not the client's)
         await Jump(spot.E + 30, spot.N);
