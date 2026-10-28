@@ -522,6 +522,32 @@ public sealed class PinballRules
         Say("GAME OVER", 6);
     }
 
+
+    /// <summary>
+    /// The player up is not there for their turn (left the venue): their remaining balls are forfeit, the
+    /// next player is up, or the game is over. The server decides it; it rides the event log as a skip.
+    /// </summary>
+    public void Skip(double at)
+    {
+        Advance(at);
+        if (State != Phase.Playing || Current is not { } p) return;
+        p.Ball = BallsPerGame + 1;
+        p.ExtraBalls = 0;
+        BallsInPlay = 0;
+        Multiball = false;
+        Mission = -1;
+        for (int k = 1; k <= Players.Count; k++)
+        {
+            int i = (Up + k) % Players.Count;
+            if (Players[i].Ball <= BallsPerGame)
+            {
+                Up = i;
+                StartBall();
+                return;
+            }
+        }
+        GameOver();
+    }
     /// <summary>The player up quits (left the cabinet, gave up): their game ends where it stands.</summary>
     public void Abandon(double at)
     {

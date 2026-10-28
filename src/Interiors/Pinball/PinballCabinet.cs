@@ -18,7 +18,7 @@ public partial class PinballCabinet : Node3D
     public static readonly Basis FieldTilt = new(Vector3.Right, Mathf.DegToRad(SlopeDeg));
     /// <summary>The cabinet: half width, front and back, the lockdown bar's height, the backbox.</summary>
     public const float HalfWidth = 0.28f, Front = 0.69f, Back = -0.62f, BarY = 0.92f, BoxBottom = 1.07f, BoxTop = 1.93f,
-        BoxFront = -0.47f, BoxBack = -0.70f, BoxHalf = 0.365f;
+        BoxFront = -0.47f, BoxBack = -0.695f, BoxHalf = 0.36f;
     public const int MaxBalls = 6;
 
     private sealed record Meshes(ArrayMesh Body, ArrayMesh Field, ArrayMesh Plastic, ArrayMesh Flipper, ArrayMesh Drop, ArrayMesh Spinner);

@@ -546,6 +546,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball machines, played and watched (#1325)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))

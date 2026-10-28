@@ -221,6 +221,16 @@ public partial class PlayerInput : Node
     public const string Phone = "phone";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
+    // --- pinball (#1325): read only while standing at a machine (Interiors.Pinball.PinballPlay) ---
+    /// <summary>The left and right flipper buttons: held, the flipper is up. On a pad the shoulders and triggers, as on a cabinet's sides.</summary>
+    public const string PinballLeft = "pinball_left";
+    public const string PinballRight = "pinball_right";
+    /// <summary>Held: the plunger pulled back (the longer, the harder); let go, it launches. Pad A, or the right stick pulled down.</summary>
+    public const string PinballPlunge = "pinball_plunge";
+    /// <summary>A shove on the cabinet, forward or to a side. Too hard or too often: tilt.</summary>
+    public const string PinballNudge = "pinball_nudge";
+    public const string PinballNudgeLeft = "pinball_nudge_left";
+    public const string PinballNudgeRight = "pinball_nudge_right";
     /// <summary>
     /// The replay buffer's last minutes into the movie studio (#638). Keyboard only: a pad and VR do it
     /// from the pause menu (Save clip), which they reach with Start / the menu button.
@@ -747,6 +757,15 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
+        // pinball (#1325): the flippers on A / D and the arrows, the pad's shoulders and triggers; the plunger on
+        // Space / S / down, pad A or the right stick pulled back; nudges W (forward), Q and R (sides), pad X with
+        // the left stick for its side. Read only at a machine (PinballPlay), where walking is off.
+        Bind(PinballLeft, Keys(Key.A, Key.Left), Button(JoyButton.LeftShoulder), Axis(JoyAxis.TriggerLeft, 1));
+        Bind(PinballRight, Keys(Key.D, Key.Right), Button(JoyButton.RightShoulder), Axis(JoyAxis.TriggerRight, 1));
+        Bind(PinballPlunge, Keys(Key.Space, Key.S, Key.Down), Button(JoyButton.A), Axis(JoyAxis.RightY, 1));
+        Bind(PinballNudge, Keys(Key.W, Key.Up), Button(JoyButton.X));
+        Bind(PinballNudgeLeft, Keys(Key.Q));
+        Bind(PinballNudgeRight, Keys(Key.R));
         // the phone (#889): Up, as in the games players know it from; no pad button is free on foot
         // (D-pad up is the emote wheel), so the pad takes it out from the quick menu
         Bind(Phone, Keys(Key.Up));

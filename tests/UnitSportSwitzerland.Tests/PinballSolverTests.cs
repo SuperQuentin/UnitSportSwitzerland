@@ -234,6 +234,32 @@ public class PinballSolverTests
         Assert.Equal(Play(), Play());
     }
 
+
+    /// <summary>Two players on one machine: when the turn passes, the next player's client rebuilds the game from the log.</summary>
+    [Fact]
+    public void A_turn_handed_over_resumes_from_the_log()
+    {
+        var t = PinballLayouts.Get(0);
+        var g = new PinballGame(t, 21);
+        g.Start();
+        g.Start();
+        var log = new List<PinballSolver.Event>();
+        for (int ms = 0; ms < 120_000 && g.Rules.Up == 0; ms++)
+        {
+            Robot(g, ms);
+            g.Run(1);
+            log.AddRange(g.TakeOutbox());
+        }
+        Assert.Equal(1, g.Rules.Up);
+        var next = new PinballGame(t, 21);
+        next.Resume(log);
+        Assert.Equal(g.Rules.Players.Count, next.Rules.Players.Count);
+        Assert.Equal(g.Rules.Players[0].Score, next.Rules.Players[0].Score);
+        Assert.Equal(1, next.Rules.Up);
+        Assert.Equal(1, next.Rules.BallsInPlay);
+        Assert.Single(next.Solver.Balls);
+        Assert.True(next.Solver.Step > log[^1].Step);
+    }
     [Fact]
     public void The_servers_mirror_scores_the_same_from_the_events()
     {
@@ -242,7 +268,6 @@ public class PinballSolverTests
             var g = new PinballGame(t, 11);
             g.Start();
             var mirror = new PinballRules(g.Table, 11);
-            mirror.Start(0);
             for (int ms = 0; ms < 90_000 && g.Rules.State == PinballRules.Phase.Playing; ms++)
             {
                 Robot(g, ms);

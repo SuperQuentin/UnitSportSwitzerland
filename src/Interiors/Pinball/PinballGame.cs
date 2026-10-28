@@ -38,15 +38,42 @@ public sealed class PinballGame
         {
             Rules.Flipped(side, Time);
             // a press is an event too: the server's mirror moves its lanes alike
-            Outbox.Add(new PinballSolver.Event(Solver.Step, PinballSolver.EventKind.Switch, -1 - side));
+            Outbox.Add(new PinballSolver.Event(Solver.Step, PinballSolver.EventKind.Switch, side == 0 ? LeftPress : RightPress));
         }
     }
 
+    /// <summary>The log's markers beside the switches: a flipper pressed (left, right), Start pressed, a player skipped.</summary>
+    public const int LeftPress = -1, RightPress = -2, StartPress = -3, SkipMark = -4;
+
+    /// <summary>Start pressed: a new game, or one more player during the first ball. Logged, so the mirror does the same.</summary>
     public bool Start()
     {
         bool ok = Rules.Start(Time);
+        if (ok) Outbox.Add(new PinballSolver.Event(Solver.Step, PinballSolver.EventKind.Switch, StartPress));
         Pump();
         return ok;
+    }
+
+    /// <summary>The server skipped the player up (gone): applied here too, and logged.</summary>
+    public void Skip()
+    {
+        Rules.Skip(Time);
+        Outbox.Add(new PinballSolver.Event(Solver.Step, PinballSolver.EventKind.Switch, SkipMark));
+        Pump();
+    }
+
+    /// <summary>
+    /// Takes over a game in progress from its log (a turn handed to this peer): the rules replayed to where
+    /// they stood, the clock just after, a fresh table with the balls the rules have in play on the plunger.
+    /// </summary>
+    public void Resume(IReadOnlyList<PinballSolver.Event> log)
+    {
+        if (log.Count == 0) return;
+        Mirror(Rules, log, log[^1].Time);
+        Solver.Step = log[^1].Step + 1;
+        Rules.Commands.Clear();
+        Solver.FlippersOn = !Rules.Tilted && Rules.State == PinballRules.Phase.Playing;
+        for (int i = 0; i < Rules.BallsInPlay; i++) Solver.Serve();
     }
 
     public void Nudge(Vector2 dv) => Solver.Nudge(dv);
@@ -124,7 +151,9 @@ public sealed class PinballGame
     {
         foreach (var e in events)
         {
-            if (e.Kind == PinballSolver.EventKind.Switch && e.Id < 0) rules.Flipped(-1 - e.Id, e.Time);
+            if (e.Kind == PinballSolver.EventKind.Switch && e.Id == StartPress) rules.Start(e.Time);
+            else if (e.Kind == PinballSolver.EventKind.Switch && e.Id == SkipMark) rules.Skip(e.Time);
+            else if (e.Kind == PinballSolver.EventKind.Switch && e.Id < 0) rules.Flipped(-1 - e.Id, e.Time);
             else rules.Apply(e);
         }
         rules.Advance(until);
@@ -184,6 +213,7 @@ public sealed class PinballGame
 
     public static List<PinballSolver.Event> UnpackEvents(byte[] data)
     {
+        if (data.Length < 2) return new List<PinballSolver.Event>();
         using var r = new BinaryReader(new MemoryStream(data));
         int n = r.ReadInt16();
         var list = new List<PinballSolver.Event>(n);

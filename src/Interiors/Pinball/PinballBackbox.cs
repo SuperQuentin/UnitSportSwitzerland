@@ -109,7 +109,7 @@ public partial class PinballBackbox : MeshInstance3D
                     float shade = 0.45f + 0.55f * Mathf.Sin(Mathf.Pi * (y + 0.5f) / 17f);
                     Rect(cx, wy + y, cx + 9, wy + y + 1, cream * shade);
                 }
-                if (p < s.Scores.Length) Text(digits[d].ToString(), cx + 2, wy + 5, 1, ink);
+                Text(digits[d].ToString(), cx + 2, wy + 5, 1, p < s.Scores.Length || p == 0 ? ink : ink * 0.6f + cream * 0.4f);
             }
             // the player up's window is lit round its edge
             if (s.Phase == PinballRules.Phase.Playing && p == s.Up)

@@ -182,6 +182,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         _cinemaBooths = Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball games: the score and the turn (#1325)
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
