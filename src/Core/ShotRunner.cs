@@ -342,6 +342,8 @@ public partial class ShotRunner : Node
             ReadQueue();
         }
         if (_pending.Count == 0) return false;
+        // the take before is still being encoded: the next one starts once it is written (#1306)
+        if (_pending.Peek() is { Command: { } clip } && clip.StartsWith("/clip start") && ClipRecorder.Busy) return false;
 
         var next = _pending.Dequeue();
         if (next is { Command: { } command })

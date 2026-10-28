@@ -49,6 +49,9 @@ public partial class ClipRecorder : Node
 
     private static readonly StringName ClipName = "ClipRecorder";
 
+    /// <summary>A clip is being filmed or encoded: another cannot start yet (the shot queue waits on it, #1306).</summary>
+    public static bool Busy => _instance is { _recording: true } or { _encoding: true };
+
     private static ClipRecorder? _instance;
     private static bool? _hasX264;
 
