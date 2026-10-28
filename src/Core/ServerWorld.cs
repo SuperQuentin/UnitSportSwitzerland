@@ -413,6 +413,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
             AddTogether(adventure);   // #1266, ServerWorld.Together.cs
             AddAlcohol(adventure);    // #1271, ServerWorld.Alcohol.cs
+            AddErrands(adventure);   // #1267, ServerWorld.Errands.cs
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);

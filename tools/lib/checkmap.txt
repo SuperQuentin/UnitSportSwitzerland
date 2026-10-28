@@ -173,6 +173,14 @@ src/Interiors/InteriorMeshBuilder quick  --outlinecheck --systems ui
 src/Interiors/InteriorManager.Interact quick  --outlinecheck --systems ui
 src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
 src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1298: a hall's video (link + T0 on the server, every client decodes it on the shared clock)
+src/Interiors/CinemaVideo   net    tools/cinemanetcheck.sh
+src/Interiors/InteriorNode.CinemaVideo net tools/cinemanetcheck.sh
+src/Interiors/CinemaRelay   net    tools/cinemanetcheck.sh
+src/Interiors/CinemaFeed    net    tools/cinemanetcheck.sh
+src/Interiors/CinemaCapture net    tools/cinemanetcheck.sh
+src/Interiors/CinemaBooths.Display net tools/cinemanetcheck.sh
+src/Interiors/PcSoundLoopback net  tools/cinemanetcheck.sh
 # #1285: public toilets, planned by every public building's generator
 src/Interiors/InteriorGenerator.Toilets quick --cinemacheck --systems ui
 src/Interiors/InteriorGenerator.Toilets quick --bowlingcheck --systems ui
@@ -1003,6 +1011,9 @@ src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
 src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
 tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
+tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
+src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
@@ -1015,3 +1026,8 @@ src/Player/FootPlayer.Drunk quick --alcoholcheck --chunks fixture:crag --systems
 src/Adventure/Alcohol/AlcoholNetProbe net tools/alcoholnetcheck.sh
 tools/alcoholnetcheck.sh  net  tools/alcoholnetcheck.sh
 src/Adventure/Alcohol/ net tools/alcoholnetcheck.sh
+# #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
+src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh
+tools/errandnetcheck.sh  net  tools/errandnetcheck.sh
+src/Adventure/Errands/ErrandService net tools/errandnetcheck.sh

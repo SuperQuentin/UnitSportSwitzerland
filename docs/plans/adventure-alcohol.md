@@ -178,7 +178,7 @@ What differs from the text above (the rest is as written):
 
 - **No `Level` message.** The `alcohol` section reaches its owner through the progress sync, so the owner computes its level from the
   same log on the same real clock; nothing else about a player's level is sent. The wire is `ReportDrank`, `RequestSelfTest`,
-  `RequestOffer` and `TellResult` (protocol 61), plus the `breath` invite kind.
+  `RequestOffer` and `TellResult` (protocol 69), plus the `breath` invite kind.
 - **The level is stepped**, not closed-form: the clipped elimination has no closed form (30 s steps over the log, at most 4 Hz).
 - **Settings**: there is no Accessibility tab, so "Alcohol view effects" and the offline mode sit under Settings > Gameplay > Alcohol.
 - **Bodies**: mass from the figure's build (open question 1, as recommended). Flying is not filtered yet (the ground ride and the boat are).

@@ -45,7 +45,8 @@ public partial class InteriorManager
         outranks = Outranking.Vehicle;
         if (p.CraneInteraction() is { } crane) return crane;
         if ((Farming.FarmSales.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
-            ?? Adventure.Places.PoiMarkers.InteractionFor(p)) is { } outdoors) return outdoors;
+            ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p)
+            ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p)) is { } outdoors) return outdoors;
         outranks = Outranking.None;
         if (Vehicles.VehicleReach.Current != null) return null;
         // a building site's skip or materials faced (#627), a building's door; then another player looked

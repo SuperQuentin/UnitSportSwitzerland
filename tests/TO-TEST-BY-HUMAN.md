@@ -7,6 +7,45 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## A video on a cinema hall's screen ([#1299](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1299))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (Cinémas du Grütli, Geneva), walk up to the booth. A dev build needs ffmpeg on PATH (yt-dlp too for YouTube); a release ships both.
+
+- [ ] E at the screen half of a hall's booth panel → the projector panel opens, low on the screen. Paste a YouTube link, Play → within a few seconds the hall's screen, the projector beam, the port and the lens glow show it; its sound comes from the screen and the film music stops.
+- [ ] Two players in the same hall (one online, one host) → the same picture at the same moment, the same sound; a third who joins later lands on the same moment.
+- [ ] Sound: does the video's level sit right against the hall (too loud, too quiet), and is it heard from the lobby through the door?
+- [ ] At High detail, walk into the beam → you wear the video and leave a shadow on the screen. Below High → the pasted picture.
+- [ ] Pad: Y at the screen half, D-pad to Paste / a recent link, A → it plays. B closes.
+- [ ] VR: grip the screen half → the panel on the VR panel, the laser picks Paste or a recent link.
+- [ ] A Twitch live channel and an `.m3u8` live stream → they play (the players a segment or so apart: expected until the relay).
+- [ ] Stop the video → the cat slides and the film music come back. Screen off → dark and silent.
+- [ ] Perf: F3 Detailed while a 480p video plays in the hall → note the frame time against the slides.
+
+## A cinema hall's video through the server ([#1298](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1298) phase 2)
+
+- [ ] On a server, tick **Through the server** in the projector panel while a video plays → every player's picture turns a little softer (the server's copy), it goes on at the same moment, nobody's restarts.
+- [ ] A phone (or the Quest) joins the hall → it shows the video and plays its sound through the server, on time with the desktops.
+- [ ] Block the video's domain on one PC (hosts file) and play it → that player gets it through the server after a few seconds; the others are unaffected.
+- [ ] A live Twitch channel through the server → every player on it sees the same moment (unlike each fetching it).
+- [ ] Server bandwidth: three players watching through the server → about 1.5-2 Mbit/s each in the server's stats; nothing when nobody watches.
+
+## Sharing a screen, a window or a webcam ([#1301](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1301))
+
+- [ ] Projector panel › Share from this computer › a monitor, Sharp → the hall shows your screen about 1.5 s later, for you and the others at the same moment; text on it reads from the middle rows.
+- [ ] Share a browser window playing a video, with **PC sound** → its picture (even while the game covers it) and its sound in the hall; the hall's own sound does not come back into it (no echo).
+- [ ] Add a microphone → your voice over the PC's sound, both in sync with the picture.
+- [ ] Share the webcam (with its mic) → your face on the screen, the mirror the right way for the audience?
+- [ ] Smooth on a game or a video → motion looks fluid; note the upload in Task Manager (about 6 Mbit/s).
+- [ ] Leave the cinema while sharing → after about 5 s the hall goes back to the slides; Stop sharing → at once.
+- [ ] Pad: D-pad through the share pickers (OptionButton popups), A to pick, Share. VR: the laser on the pickers and Share.
+- [ ] Play a video file… (an mp4 or mkv from your disk) → the hall plays it from the start, everyone at the same moment, its sound from the screen; at its end the slides come back. A file of several GB starts within a few seconds.
+- [ ] **NDI** (needs NDI Tools from ndi.video; OBS's NDI output already checked by the scripts): host a concert and `/concert ndi on`, then in a cinema's projector panel pick `NDI: … (PGM)` → the concert's program camera on the hall's screen. With OBS: its sound heard in the hall, in sync with its picture, the same moment for two players. ([#1303](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1303))
+- [ ] Walk into a cinema you never entered → some halls are mid-film: an open film (Sintel, Spring, …) or the cat slides, with its sound; a friend joining sees the same moment. `/cinema pool` lists the films; as an admin `/cinema pool add <a YouTube link>` → "Added …", and after a while new cinemas show it too.
+- [ ] Play a 16:9 video, then a scope (2.39:1) film → the side curtains glide in to frame the 16:9 picture and back out for the scope one, smoothly, no jump; a dark opening scene does not close them on the picture.
+- [ ] Projector panel › Display: Cover, then Stretch, then Contain with 4:3 and 1.85 → the screen, the beam (High detail) and the picture in the porthole's glass all show the same framing; the curtains glide to its edges; a friend in the hall sees the same.
+- [ ] **3D**: play a side-by-side or top-and-bottom film (a name with SBS / TB picks the layout, or the 3D picker) → with red-cyan glasses the screen has depth; untick Red-cyan glasses → the plain left picture. In a headset → each eye its own picture, real depth, no colour fringes. Does the depth feel right (eyes not swapped)? ([#1298](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1298) phase 6)
+- [ ] Linux (X11): a monitor share and the PC sound (PulseAudio monitor). macOS: a monitor and a camera share (screen-recording permission asked).
+
 ## What E acts on is outlined ([#1291](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1291))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7` (Cinémas du Grütli, Geneva), then walk in.
@@ -54,6 +93,15 @@ Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --a
 - [ ] Walk (no slide) into a house's open door, with the Adventure layer on → you go through, no climb up the facade. Push into a plain wall for a second → the climb still grabs it.
 - [ ] Walk past a café or bar, then into one → its music fades in as you near it (it wakes within ~15 m of its reach) and plays inside.
 - [ ] Settings › Audio › **Sound occlusion** off, stand behind a building from a playing car radio → heard as in the open; on → muffled again. Same row on a pad and in the VR panel.
+
+## Interiors follow the building's outline ([#1294](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1294))
+
+Generated world (the spawn's villages have an L, a U, a courtyard, a trapezoid and a bent block each within a few km: `--shapedcheck` prints where), or a real old town (Geneva above, Sion `--at 2594000,1120000`).
+
+- [ ] Walk into an L-shaped house → rooms in both arms (a hall down the far arm with rooms off it), none out in the yard.
+- [ ] Look out of a window on an angled wall → the day's light comes in through it like any other.
+- [ ] VR: walk into an angled room → the walls hold you (teleport into the corner too).
+- [ ] A house drawn on the web with an angled wall (`--house-layouts`, see `net/house-layouts`) → that wall is one straight wall in the game, its door in it.
 
 ## Cinemas: hall height, a panel per hall, aisles to the walls, the service door, film music ([#1280](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1280))
 
@@ -151,3 +199,28 @@ Offline is enough for most: `--systems ui,physics,adventure,terrain` on any map;
 - [ ] VR headset: stand at the field, look up → depth reads right; no particle sheet or flash light clips close to the eyes.
 - [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
 - [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
+
+## Älplerfest flag swinging, part 5 of the festivals ([#1316](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1316))
+
+The checks drive the stick and the use key from a script; what only a person can judge is the feel of the figures and the screen. Run with the Älplerfest on (a real date 17-24 August, or the operator's `occasions.json`, or `--festival test --date 2027-08-16`).
+- [ ] Mouse: at the flag stage press the interact key → "Getting in line", a drum, the ring closes on each beat; draw the figure with the mouse (up, a circle, an eight, a sideways sweep, down) → it is recognised without big sweeps, the camera does not turn, the flag in your hand follows the figure.
+- [ ] Pad: the same with the right stick (the stick's feel at 30 Hz sampling, the dead zone) and the use button for the throw.
+- [ ] VR headset (pad route): Y at the stage, the right stick draws the figures, the trigger throws; the HUD is readable at the bottom of the view, not in the way. Swinging the flag by hand is not built.
+- [ ] The high throw: hold, let go on the 1st, 2nd or 3rd beat → the flag flies as many beats as it was held plus one; catching on the beat it lands is fair at 96 BPM; a dropped flag ends the routine and the score.
+- [ ] Two people ask within a few seconds of each other → the same routine, "in step x1.3" when both land most figures; one alone gets no bonus.
+- [ ] Cartoon, PS1 and Realistic: the flag's cloth and the stage look right in each (the cloth is its own shader, it ignores the style).
+- [ ] The result panel and the Journal's Festival tab agree on the points and the Batzen; the daily cap of 100 Batzen stops the Batzen but not the points.
+- [ ] Real map: the Älplerfest at Interlaken's Höhematte (a western-region run moves it to the largest town); the stage stands on level ground there.
+
+## Adventure errands: givers, dialogue, daily Postkarten, canton reputation ([#1311](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1311))
+
+On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`) the eight givers stand within 350 m of the start; on a real map there are wardens at the huts, masters at the stations and the landings only (the OSM stage for post offices, farms and dairies is not built).
+
+- [ ] Walk up to a giver → a figure stands at its place with an amber card glyph over its head; within 3 m the prompt says "Talk to ..." and its outline shows. Judge the figure's height, the glyph's size and whether it reads from 20 m.
+- [ ] E (pad Y, VR: reach out and grip toward the giver) → the dialogue opens bottom centre with three choices. Pad: D-pad + A pick, B leaves, LB / RB switch cards. VR: laser + trigger on the panel. Judge the panel's size and distance in VR.
+- [ ] Take the mail run → three sacks in the pack, the card in the Journal's Quests tab and the tracker, a stamp toast and sound. Hand a sack over at each stop (Journal › Hand over) → CHF in the account, +3 reputation in the canton.
+- [ ] Take three cards, then ask a fourth → "Three cards a day". Wait for midnight in Switzerland (or `--errand-day-offset 2`) → the running cards expire, their cargo goes back, three new cards.
+- [ ] With a friend in a party: both take the same card (or Share with party in the Errands tab, the friend Joins) and finish it → both get "Together with ...: +CHF" and +1 reputation. Judge whether +50 % is felt.
+- [ ] Journal › Errands tab on a pad (LB / RB to it): cards, Track, Share, reputation. Judge the layout at 1080p and with `--mobile`.
+- [ ] Reputation 10 / 30 / 60 / 100 points in one canton (many cards) → level-up toasts, the title "Ehrenbürger von ..." at the top. Judge the pace.
+- [ ] Giver models in the model viewer (`--models`, People › Errand givers) → eight figures with the Sennenkäppi, guide hat and vest; look right in Cartoon, PS1 and Realistic.

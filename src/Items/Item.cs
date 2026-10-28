@@ -241,6 +241,22 @@ public static class ItemDefs
         Eat(ItemId.Popcorn, "Popcorn", 10, "#f4ecc8", "PC", 15, ItemCategory.Food, 8),
         Eat(ItemId.VegetableSoup, "Vegetable soup", 5, "#c87838", "VS", 55, ItemCategory.Food, 14),
         Eat(ItemId.Raclette, "Raclette", 3, "#f0d070", "RC", 75, ItemCategory.Food, 22),
+        // Adventure errands (#1267): cargo (no value, never sold) and the cantons' specialties
+        Cargo(ItemId.MailSack, "Mail sack", "PostBus mail, for a village stop. Hand it over there; the errand takes it back if it expires.", "#c8a050", "MS"),
+        Cargo(ItemId.FerryCrate, "Ferry crate", "A crate for another landing on the lake. Hand it over there.", "#8a6a40", "FC"),
+        Cargo(ItemId.SupplyPack, "Supply pack", "Provisions for a mountain hut. Hand it over there.", "#6a8a48", "SP"),
+        Cargo(ItemId.Postcard, "Postcard", "A blank postcard, stamped. Nothing to do with it but keep it.", "#e8e0c8", "PO"),
+        Eat(ItemId.RacletteCheese, "Raclette cheese", 5, "#f0d878", "RK", 30, ItemCategory.Food, 14),
+        Eat(ItemId.BaslerLaeckerli, "Basler Läckerli", 10, "#b8783c", "LK", 18, ItemCategory.Food, 10),
+        Eat(ItemId.EngadinerNusstorte, "Engadiner Nusstorte", 5, "#c89048", "NT", 35, ItemCategory.Food, 18),
+        Eat(ItemId.Marroni, "Marroni", 10, "#8a4a28", "MA", 20, ItemCategory.Food, 8),
+        Eat(ItemId.ZugerKirschtorte, "Zuger Kirschtorte", 5, "#e8b8b0", "ZK", 32, ItemCategory.Food, 16),
+        Eat(ItemId.Appenzeller, "Appenzeller", 5, "#e8c060", "AZ", 30, ItemCategory.Food, 13),
+        Eat(ItemId.TeteDeMoine, "Tête de Moine", 5, "#f0e098", "TM", 28, ItemCategory.Food, 15),
+        Eat(ItemId.StGallerBratwurst, "St. Galler Bratwurst", 5, "#e0b890", "BW", 40, ItemCategory.Food, 9),
+        Eat(ItemId.SaucissonVaudois, "Saucisson vaudois", 5, "#a85040", "SV", 38, ItemCategory.Food, 12),
+        Eat(ItemId.ZuercherTirggel, "Zürcher Tirggel", 10, "#c88850", "TG", 15, ItemCategory.Food, 8),
+        Eat(ItemId.Sbrinz, "Sbrinz", 5, "#f0d070", "SB", 30, ItemCategory.Food, 17),
         new(ItemId.Hoe, "Hoe", "{use_item} tills the ground ahead: stubble or grass turns to ploughed soil, ready to sow by hand.",
             ItemUse.Farm, 1, new Color("#8a6a40"), "HO", 0, ItemCategory.Gear, 25f),
         new(ItemId.Fertiliser, "Fertiliser", "{use_item} on a sown field cell: the crop there ripens sooner.",
@@ -362,6 +378,10 @@ public static class ItemDefs
         ItemCategory category, float value) =>
         new(id, name, $"{{use_item}} to {(category == ItemCategory.Water ? "drink" : category == ItemCategory.Medical ? "apply" : "eat")}. Restores {heal:F0} health.",
             ItemUse.Consume, stack, new Color(tint), glyph, heal, category, value);
+
+    /// <summary>Errand cargo (#1267): carried for a hand-over, worth nothing, never bought by a shop.</summary>
+    private static ItemDef Cargo(ItemId id, string name, string blurb, string tint, string glyph) =>
+        new(id, name, blurb, ItemUse.Material, 20, new Color(tint), glyph, 0, ItemCategory.Gear, 0f);
 
     private static ItemDef Hat(ItemId id, string name, string tint, string glyph) =>
         new(id, name, "{use_item} puts it on your head, in place of what was there. Others see you wearing it.",

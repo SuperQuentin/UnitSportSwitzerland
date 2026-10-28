@@ -123,6 +123,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
+        (() => Interiors.OutlineSurvey.Requested, Interiors.OutlineSurvey.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
         (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
@@ -159,7 +160,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         foreach (var (requested, run) in QuickChecks)
             if (requested())
             {
-                GetTree().Quit(run());
+                // a check that throws fails and quits, rather than leaving the game running headless
+                int code;
+                try { code = run(); }
+                catch (Exception ex)
+                {
+                    GD.PrintErr(ex.ToString());
+                    GD.Print("RESULT: FAILED (the check threw)");
+                    code = 1;
+                }
+                GetTree().Quit(code);
                 return;
             }
         if (OriginCheck.Requested)
@@ -227,6 +237,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.ProjectionPerfProbe { Name = "ProjectionPerfProbe" });
+            return;
+        }
+        // a video on a cinema hall's screen (#1298), windowed: shots of the picture, the projector light, the booth
+        if (Interiors.CinemaVideoShot.ParseArgs() is { } videoShot)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.CinemaVideoShot(videoShot[0], videoShot[1]) { Name = "CinemaVideoShot" });
+            return;
+        }
+        // what this machine can share in a cinema hall (#1298 phase 3), tried for real
+        if (Interiors.CinemaCaptureCheck.ParseArgs() is { } captureDir)
+        {
+            AddChild(new Interiors.CinemaCaptureCheck(captureDir) { Name = "CinemaCaptureCheck" });
             return;
         }
         // what E's outline draws, interiors planned in hand-made buildings (#1286)
@@ -936,13 +959,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.Bank.Create(this, inventory);
         var items = new Items.ItemController(inventory, origin)
         {
-            ActivePlayer = () => _onFoot ? LocalPlayer : null,
+            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging ? LocalPlayer : null,
         };
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
         // the concert pogo (#1150): dancing at a show, jump on the beat
         AddChild(new Concert.PogoQte(() => _onFoot ? LocalPlayer : null));
+        // the Älplerfest's flag swingers (#1269 part 5): figures drawn on the beat at the festival's flag ground
+        AddChild(new Occasions.Festivals.Fahnen.FahnenGame(() => _onFoot ? LocalPlayer : null));
         // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
         var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
@@ -1139,10 +1164,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Occasions.Festivals.FestivalPage.Register();
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Fahnen.FahnenCheck.Requested) AddChild(new Occasions.Festivals.Fahnen.FahnenCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
+            if (Occasions.Festivals.Fahnen.FahnenNetProbe.Role != null) AddChild(new Occasions.Festivals.Fahnen.FahnenNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
             AddAlcohol(adventure, items);    // #1271, ClientWorld.Alcohol.cs
+            AddErrands(adventure, items);   // #1267, ClientWorld.Errands.cs
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
         // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it

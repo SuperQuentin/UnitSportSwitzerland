@@ -1,0 +1,30 @@
+# Errands: givers, the dialogue, the daily Postkarten, canton reputation (#1267)
+
+Plan: `docs/plans/adventure-errands.md`. Code: `src/Adventure/Errands/`. Every server method checks `AdventureService.Active(peer)`, so none of it runs in a Battle Royale lobby or round.
+
+## What is in
+
+- **Givers** (`Giver`, `GiverCatalogue`, `GiverHost`): server-known figures, the same on every peer without a byte sent. Built from the POI catalogue: a `HutWarden` per hut, a `StationMaster` per rail station, a `ShipMaster` per landing (`GiverCatalogue.FromPois`); `--givers fixture` replaces them by eight fixture givers round the start (post office, farm, hut, station, landing, alp dairy, village dairy, Beiz; declared elevations, the ground is flat). `GiverHost` follows `PoiCatalogueHost.Changed`. Ids are `giver:<tag>:<hash of the POI>`. Not built yet: the `--givers` preprocessor stage (farms, alp and village dairies, post offices, Beizen from OSM and GWR, an embedded `givers.tsv.gz`).
+- **Figures** (`ErrandGivers`): a `SkinnedFigure` within 400 m, posed once (a garment by trade: Sennenkäppi, guide hat, hi-vis vest), turning to the player within 8 m at 10 Hz (a transform), no collision on any peer. A card glyph over a giver with an untaken card (amber), a green one where a hand-over waits. In the model viewer (`People`, `Errand givers`).
+- **Dialogue** (`ErrandDialog`, `ErrandLines`): E / Y / a VR hand within 3 m (`FootPlayer.TryInteract` after `PoiMarkers`, prompt "Talk to ..."). The card as a postcard (Left / Right, LB / RB between two), or "Hand over" where a running card's current step is at this giver; "What's on around here?" lists the cell's cards with Track; the farewell in the giver's language. Refusals come from the server into the status line. 1-3, Esc, B.
+- **Postkarten** (`Postkarte`, `PostkarteSource`, `ErrandRewards`): 8 cards per (Swiss day, 5 km cell), two per giver, rebuilt from the id `pk:<yyyymmdd>:<cellE>_<cellN>:<slot>` (`PostkarteSource.Resolve`). Templates built: alp cheese down, PostBus mail run (3 stops, 3 sacks), ferry crate, specialty delivery (10-90 km), hut supplies, farmer's request. Not built: the lost hiker (needs the world events' hiker) and the postcard home (needs the photo spots). Targets are `AreaTarget`s. Rewards come from `fares.json` (`ErrandRewards`: base + 1.5 x full fare + 0.05 x climb, rounded up to 5, clamped 20-180; at least the fare plus 15).
+- **Taking** (`ErrandService.Accept(peer, giverId, cardId)`): the server checks the card (today or yesterday), its giver, the body within 3 m + 5 m, and three a day (`ErrandsProgress.Taken`, reset by the Swiss day). `QuestEngine.CanStart` refuses a `QuestStart.Given` quest unless `given: true`, so the Journal's own `RequestStart` cannot start a card from anywhere. The cargo (`MailSack` 430, `FerryCrate` 431, `SupplyPack` 432, specialties 434-444; Gruyère is `ItemId.Cheese`) is granted on accept and taken back (`TookBack`) when the card is abandoned or expires (`AdventureService.Abandon` raises `QuestAbandoned`). A card lives until the end of the next Swiss day; `Sweep` (1 Hz, on login) abandons the rest and prunes records older than 30 days.
+- **Friend bonus, share, join**: the second party member to finish the same card within 10 minutes pays both +50 % cash (`ErrandRewards.Bonus`) and +1 reputation, once per card (`BonusPaid`); `ErrandDone` is raised with `With`. `Share(peer, cardId)` shows a running card to the party ("Shared by Lea"); `Join` takes it from anywhere (it counts as one of the three). Together's +10 % quest cash skips `quest:pk:`.
+- **Reputation** (`Reputation`, `ErrandsProgress.Rep`): levels at 10 / 30 / 60 / 100 (Bekannt, Geschätzt, Einheimisch, Ehrenbürger), computed. A card gives +3 in the giver's canton and +1 in a different destination canton. The `"rep"` reward kind (`VS:+5`, in `QuestCatalog.UnlockKinds`) lets any quest grant it. Level 3 records the canton flag as earned; level 4 grants the title "Ehrenbürger von ...". Not built: wearing the flag (`FootPlayer.CantonFlag`), the regional costume, the local recipes (`Recipe.Requires`).
+- **Errands tab** (`ErrandsPage`, order 15): today's cards in the player's cell with Track, running cards with Share, shared cards to Join, the reputation list.
+- **Sounds**: `ErrandSounds.Greeting`, `ErrandSounds.Stamp` (static, in the sound player).
+
+## Not built here (follow-ups)
+
+World events (runaway cow, lost hiker, avalanche rescue, forest fire), the hiker and postcard templates, the `--givers` OSM stage, wearing the flag, the costume and the recipes, the Atlas canton line, the cards of party members' cells.
+
+## Section and wire
+
+Section `errands` (`ErrandsProgress`): `day`, `taken`, `rep`, `together`, `done`, `bonusPaid`, `flags`, `flag`. Node `World/Errands` on the server and every client. Client to server: `RequestAccept`, `RequestShare`, `RequestJoin`; server to owner: `Accepted`, `Shared`, `TookBack`, `Told`. Offers are never sent.
+
+## Commands and checks
+
+- `--givers fixture` (with `--pois fixture`, `--world fixture`), `--errand-day-offset n` (the Swiss day moves n days on).
+- `--errandcheck` (quick): `--errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`.
+- `tools/errandnetcheck.sh` (net): server plus Lea and Tom (`--errandnet lead|follow`).
+- Tier 0: `ErrandTests`.

@@ -102,48 +102,58 @@ public static class ShapedCheck
 
             // the plan
             InteriorGenerator.WingFailure = null;
+            InteriorGenerator.OutlineFailure = null;
             var l = InteriorGenerator.Generate(t.Tile, index, null, null);
             string? why = InteriorGenerator.WingFailure;
             if (l == null) { Expect(false, $"{what}: no plan"); continue; }
-            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, $"{p.Shape}_{p.E:F0}_{p.N:F0}.svg"), InteriorValidator.ToSvg(l));
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, $"{p.Shape}_{p.E:F0}_{p.N:F0}.svg"), InteriorValidator.ToSvg(l, OutlineIn(l, rings)));
             var problems = InteriorValidator.Validate(l);
             Expect(problems.Count == 0, $"{what}: the plan ({l.Type}) validates{(problems.Count > 0 ? " — " + string.Join("; ", problems.Take(4)) : "")}");
 
-            // a block of flats follows the outline (#577): it may differ a little from it, never
-            // from its shape, so the ground floor is measured on a 0.5 m grid: how much of it
+            // every interior follows the outline (#577, #1290): it may differ a little from it,
+            // never from its shape, so the ground floor is measured on a 0.5 m grid: how much of it
             // stands outside the outline, how much of the outline it fills
-            float yaw = l.Yaw;
-            Vector2 World(float x, float z) => new(
-                l.CenterX + Mathf.Cos(yaw) * x + Mathf.Sin(yaw) * z,
-                l.CenterZ - Mathf.Sin(yaw) * x + Mathf.Cos(yaw) * z);
-            float outside = 0, used = 0;
-            foreach (var r in l.GroundFloor.Rooms)
-                for (float x = r.X0 + 0.25f; x < r.X1; x += 0.5f)
-                    for (float z = r.Z0 + 0.25f; z < r.Z1; z += 0.5f)
-                    {
-                        var c = World(x, z);
-                        if (Inside(rings, c)) used += 0.25f;
-                        else outside += 0.25f;
-                    }
+            var (used, outside) = Cover(l, rings, b);
             bool flats = l.Type is BuildingType.Apartments or BuildingType.MixedUse;
-            string inside = $"{what}: the ground floor fills {used:F0} of its {outline:F0} m² outline, {outside:F0} m² outside it";
-            if (flats)
+            string inside = $"{what}: the {l.Type} ground floor fills {used:F0} of its {outline:F0} m² outline ({used / outline:P0}), {outside:F0} m² outside it, {Shaped(l)} shaped room(s){(InteriorGenerator.OutlineFailure is { } owhy ? $"; outline: {owhy}" : "")}";
+            // a little outside where an outline's grid cell rounds; most of it filled, but for the
+            // stretches of a street door's wall kept straight and rooms that cannot grow (a
+            // stairwell on a facade)
+            bool follows = outside <= 0.03f * outline && used >= MinFill * outline;
+            Expect(follows, inside);
+            DoorsAt(l, what, Expect);
+            if (!follows && BuildingFootprint.Compute(t.Tile, index, null, null) is { } fp)
             {
-                // a box its roof covers PlanOutline.Boxy of is planned as the box, so up to the
-                // rest may stand outside (cut corners); an outline at other angles is planned as
-                // the largest rectangles inside it, so a bent bar fills a little over half of it
-                bool follows = outside <= (1 - PlanOutline.Boxy) * outline / PlanOutline.Boxy && used >= 0.55f * outline;
-                Expect(follows, inside);
-                if (!follows && BuildingFootprint.Compute(t.Tile, index, null, null) is { } fp)
-                {
-                    // what the outline was read as, to see why
-                    var wings = PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
-                    GD.Print($"[shapedcheck]      box {fp.Width:F1} x {fp.Depth:F1}, wings: "
-                        + (wings == null ? "none (the box)" : string.Join(" ", wings.Select(w => $"[{w.X0:F1},{w.Z0:F1}..{w.X1:F1},{w.Z1:F1}]")))
-                        + (why != null ? $"; planned as the box: {why}" : ""));
-                }
+                // what the outline was read as, to see why
+                var wings = PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+                GD.Print($"[shapedcheck]      box {fp.Width:F1} x {fp.Depth:F1}, wings: "
+                    + (wings == null ? "none (the box)" : string.Join(" ", wings.Select(w => $"[{w.X0:F1},{w.Z0:F1}..{w.X1:F1},{w.Z1:F1}]")))
+                    + (why != null ? $"; planned as the box: {why}" : ""));
             }
-            else GD.Print($"[shapedcheck] {inside} (a {l.Type} plan: not checked)");
+
+            // the same outline as every other kind of interior (#1290): a house or an office
+            // planned on its front rectangle and grown out, a barn's single hall cut by it
+            foreach (var kind in new[] { BuildingKind.House, BuildingKind.Commercial, BuildingKind.Agricultural })
+            {
+                if (kind == b.Kind) continue;
+                var copy = new Building { Kind = kind, Egid = b.Egid, YearBuilt = b.YearBuilt, Floors = Math.Min(b.Floors, (byte)2), MinY = b.MinY, MaxY = b.MaxY, Triangles = b.Triangles };
+                var list = new List<Building>(t.Tile.Buildings) { [index] = copy };
+                var tile = new BuildingTile { Id = t.Tile.Id, Buildings = list };
+                InteriorGenerator.OutlineFailure = null;
+                var kl = InteriorGenerator.Generate(tile, index, null, null);
+                string kwhat = $"{what} planned as a {kind}";
+                if (kl == null) { Expect(false, $"{kwhat}: no plan"); continue; }
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, $"{p.Shape}_{p.E:F0}_{p.N:F0}_{kind}.svg"), InteriorValidator.ToSvg(kl, OutlineIn(kl, rings)));
+                var kp = InteriorValidator.Validate(kl);
+                Expect(kp.Count == 0, $"{kwhat}: the plan ({kl.Type}) validates{(kp.Count > 0 ? " — " + string.Join("; ", kp.Take(4)) : "")}");
+                var (ku, ko) = Cover(kl, rings, copy);
+                // a house or an office round three or four wings reaches the far ones only part of the way (rooms
+                // grow out of the wing they are planned in, and arm rooms make no arms): a known limit
+                float min = p.Shape is "U" or "courtyard" ? MinFillWings : MinFill;
+                Expect(ko <= 0.03f * outline && ku >= min * outline,
+                    $"{kwhat}: the {kl.Type} ground floor fills {ku:F0} of {outline:F0} m² ({ku / outline:P0}), {ko:F0} m² outside, {Shaped(kl)} shaped room(s){(InteriorGenerator.OutlineFailure is { } kwhy ? $"; outline: {kwhy}" : "")}");
+                DoorsAt(kl, kwhat, Expect);
+            }
 
             // ramp first (#694): a block of flats whose wing takes a ramp, with every roll passing, has its garage door and
             // a ramp behind it that validates, in the wing the door is on
@@ -173,6 +183,96 @@ public static class ShapedCheck
     }
 
     private static double Sq(double v) => v * v;
+
+    /// <summary>
+    /// The generated shaped building of a shape nearest the default spawn, as built, its kind
+    /// changed if asked (<c>--flattour --block shaped:L:House</c>), or null.
+    /// </summary>
+    public static (BuildingTile Tile, int Index)? Pick(string shape, BuildingKind? kind)
+    {
+        double e0 = SpawnPoint.DefaultLv95E, n0 = SpawnPoint.DefaultLv95N;
+        var world = new ProceduralWorld(e0, n0);
+        foreach (var p in world.ShapedNear(e0, n0, Radius).Where(p => p.Shape == shape).OrderBy(p => Sq(p.E - e0) + Sq(p.N - n0)))
+        {
+            var id = TileId.FromLv95(p.E, p.N);
+            if (world.BuildBuildings(id) is not { } tile) continue;
+            var outer = p.Rings[0].Select(q => new Vector2((float)(q.E - id.MinE), (float)(id.MaxN - q.N))).ToArray();
+            int index = Find(tile, outer);
+            if (index < 0) continue;
+            if (kind is not { } k) return (tile, index);
+            var b = tile.Buildings[index];
+            var list = new List<Building>(tile.Buildings)
+            {
+                [index] = new Building { Kind = k, Egid = b.Egid, YearBuilt = b.YearBuilt, Floors = Math.Min(b.Floors, (byte)2), MinY = b.MinY, MaxY = b.MaxY, Triangles = b.Triangles },
+            };
+            return (new BuildingTile { Id = tile.Id, Buildings = list }, index);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// How much of its outline a plan's ground floor must fill (#1290): an angled facade is
+    /// followed, but a stairwell on a facade keeps its wall, and so does a street door's stretch.
+    /// </summary>
+    private const float MinFill = 0.85f;
+    /// <summary>The same for a house, an office or a barn round a U or a courtyard, which fills its near wings.</summary>
+    private const float MinFillWings = 0.7f;
+    /// <summary>How far a street doorway inside may stand from its door on the facade, m, and turn from it, degrees.</summary>
+    private const float DoorGapMax = 2.5f, DoorTurnMax = 20f;
+    /// <summary>The same gap for a block of flats, whose side doors open into their wing's stairwell lobby.</summary>
+    private const float FlatsDoorGapMax = 10f;
+
+    private static int Shaped(InteriorLayout l) => l.Floors.Sum(f => f.Rooms.Count(r => r.Shape != null));
+
+    /// <summary>The plan frame's point (x, z) in the tile's frame.</summary>
+    private static Vector2 World(InteriorLayout l, float x, float z) => new(
+        l.CenterX + Mathf.Cos(l.Yaw) * x + Mathf.Sin(l.Yaw) * z,
+        l.CenterZ - Mathf.Sin(l.Yaw) * x + Mathf.Cos(l.Yaw) * z);
+
+    /// <summary>
+    /// Every street door's doorway inside stands where the door is on the facade (#1290): within
+    /// <see cref="DoorGapMax"/> of it and turned no more than <see cref="DoorTurnMax"/> from it, so
+    /// stepping through lands where the facade has the door.
+    /// </summary>
+    private static void DoorsAt(InteriorLayout l, string what, Action<bool, string> expect)
+    {
+        var gaps = l.AllEntrances().Where(e => e.Level == 0).Select(e => (e, G: InteriorGenerator.DoorGap(l, e))).ToList();
+        // a wing of flats puts its stairwell where its plan wants it, and its side door opens into that lobby
+        // wherever it is along the facade: a known limit, bounded so a door never lands across the building
+        float most = l.Type is BuildingType.Apartments or BuildingType.MixedUse ? FlatsDoorGapMax : DoorGapMax;
+        expect(gaps.All(x => x.G.Gap <= most && x.G.Turn <= DoorTurnMax),
+            $"{what}: {gaps.Count} street doorway(s) at their doors: {string.Join(", ", gaps.Select(x => $"{x.G.Gap:F1} m {x.G.Turn:F0}°"
+                + (x.G.Gap > DoorGapMax ? $" ({x.e.Door} at {x.e.X:F1},{x.e.Z:F1} door {x.e.DoorX:F1},{x.e.DoorZ:F1} out {x.e.DoorOutX:F2},{x.e.DoorOutZ:F2}{(x.e.Vehicle ? " vehicle" : "")})" : "")))}");
+    }
+
+    /// <summary>The outline in the plan's own frame, for its drawing.</summary>
+    private static Vector2[][] OutlineIn(InteriorLayout l, Vector2[][] rings)
+    {
+        var c = new Vector2(l.CenterX, l.CenterZ);
+        var u = World(l, 1, 0) - c;
+        var v = World(l, 0, 1) - c;
+        return rings.Select(r => r.Select(p => new Vector2((p - c).Dot(u), (p - c).Dot(v))).ToArray()).ToArray();
+    }
+
+    /// <summary>
+    /// The ground floor on a 0.5 m grid: m² of the outline it fills, m² it stands outside it (outside the
+    /// outline as the plan traced it, <c>PlanOutline.Rings</c>: a cell rounded the other way is not outside).
+    /// </summary>
+    private static (float Used, float Outside) Cover(InteriorLayout l, Vector2[][] rings, Building b)
+    {
+        var c = new Vector2(l.CenterX, l.CenterZ);
+        var grid = PlanOutline.FineGrid(b, c, World(l, 1, 0) - c, l.Width, l.Depth);
+        var traced = grid == null ? null : InteriorGenerator.RingsFor(l, grid);
+        float used = 0, outside = 0;
+        for (float x = -l.Width / 2 + 0.25f; x < l.Width / 2; x += 0.5f)
+            for (float z = -l.Depth / 2 + 0.25f; z < l.Depth / 2; z += 0.5f)
+            {
+                if (!l.GroundFloor.Rooms.Any(r => r.Holds(x, z))) continue;
+                if (Inside(rings, World(l, x, z))) used += 0.25f;
+                else if (traced == null || !RoomShapes.Contains(traced, new Vector2(x, z))) outside += 0.25f;
+            }
+        return (used, outside);
+    }
 
     /// <summary>The building whose walls' extent is the outline's, or -1.</summary>
     private static int Find(BuildingTile tile, Vector2[] outer)

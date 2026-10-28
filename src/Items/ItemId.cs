@@ -239,6 +239,13 @@ public enum ItemId
     /// <summary>The half-fare travelcard: every fare halved (<c>TravelBook.HasHalfFare</c>).</summary>
     HalfFare = 421,
 
+    // ---- Adventure errands (#1267, docs/notes/adventure/errands.md); 430-459 are this plan's (adventure-phase3) ----
+    /// <summary>Cargo a Postkarte card hands out (never sold): the PostBus mail sack, the ferry crate, the hut supplies, a blank postcard.</summary>
+    MailSack = 430, FerryCrate = 431, SupplyPack = 432, Postcard = 433,
+    /// <summary>Cantonal specialties (<c>Adventure.Errands.Specialties</c>): food, eaten or sold; the cards' trade goods (Gruyère is <see cref="Cheese"/>).</summary>
+    RacletteCheese = 434, BaslerLaeckerli = 435, EngadinerNusstorte = 436, Marroni = 437, ZugerKirschtorte = 438, Appenzeller = 439,
+    TeteDeMoine = 440, StGallerBratwurst = 441, SaucissonVaudois = 442, ZuercherTirggel = 443, Sbrinz = 444,
+
     // ---- Versteckis (#1268, docs/notes/adventure/versteckis.md); 460-479 are this plan's (adventure-phase3) ----
     /// <summary>The round kit (<see cref="ItemUse.Round"/>), lent for a game only: the seeker's tag ("Gfunde!") and sniff ("Schnüffle").</summary>
     VsTag = 460, VsSniff = 461,

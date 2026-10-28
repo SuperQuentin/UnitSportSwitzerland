@@ -23,7 +23,7 @@ driving, an electronic and a single-use breathalyzer. Nothing in the game reward
   owner through the progress sync, so the owner computes its own level from the same log (no `Level` message, unlike the plan).
   Nobody else's level is sent anywhere.
 - `AlcoholService` at World/Alcohol on the server and every client. RPCs: `ReportDrank(item, fed)`, `RequestSelfTest(single)`,
-  `RequestOffer(target)` (client to server); `TellResult(tester, subject, centi, waitSeconds, kind)` (server to client). Protocol 61.
+  `RequestOffer(target)` (client to server); `TellResult(tester, subject, centi, waitSeconds, kind)` (server to client). Protocol 69.
 - `--alcohol off|mild|real` (default real) rides `Arrival.Rules` to `Permissions.ServerAlcohol`; offline it is
   `GameSettings.AlcoholMode` (Settings > Gameplay > Alcohol). Off: drinks log nothing, readings are 0.00. Mild: effects feel the half
   of the level and nobody passes out.

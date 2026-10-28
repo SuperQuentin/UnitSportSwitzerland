@@ -61,6 +61,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Journal: quests, birds, fish (tabs: Q / E)", PlayerInput.BirdJournal, Pad: "{quick_menu} (hold) › Journal; LB / RB for the tabs"),
+            new("Talk to an errand giver (a figure at a post office, hut, station or landing): take the day's cards, hand cargo over", PlayerInput.InteractMount),
             new("Character: your figure (on foot)", PlayerInput.CharacterMenu, Pad: "{quick_menu} (hold) › Character, or {menu} › Character"),
         }),
         ("Adventure: navigation and travel (#1226)", new Row[]
@@ -85,6 +86,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Strike when the float dips", PlayerInput.UseItem),
             new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
             new("Wind the line in; cancel a cast", PlayerInput.AimItem),
+        }),
+        ("Flag swinging at the Älplerfest (#1269)", new Row[]
+        {
+            new("Step onto the flag ground and swing the flag", PlayerInput.InteractMount),
+            new("Draw the figure shown (up, down, a sweep, a circle, an eight) before its last beat", Keys: "Mouse", Pad: "Right stick"),
+            new("High throw: hold, let go on a beat; catch on the beat it lands", PlayerInput.UseItem),
         }),
         ("Fist fight (#495)", new Row[]
         {

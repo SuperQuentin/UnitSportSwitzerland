@@ -221,6 +221,16 @@
     <Compile Include="..\..\src\Adventure\Together\TogetherProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Together\MentorRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Together\Crevasses.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- adventure errands (#1267): the givers, the daily Postkarten, their rewards, reputation -->
+    <Compile Include="..\..\src\Adventure\Errands\ErrandClock.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\Specialties.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\ErrandsProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\Giver.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\GiverCatalogue.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\ErrandRewards.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\ErrandLines.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\Postkarte.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\PostkarteSource.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
@@ -243,6 +253,7 @@
     <Compile Include="..\..\src\World\AirLift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\CinemaVideo.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\JoinLink.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\VrRefresh.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
@@ -261,6 +272,11 @@
     <Compile Include="..\..\src\Occasions\Festivals\FestivalBoard.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalEvents.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FireworkShow.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- Fahnenschwingen (#1269 part 5): gestures, routine and grading; pure -->
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Aelplerfest.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Fahnen\GestureRing.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Fahnen\FahnenRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Fahnen\FlagMotion.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
@@ -275,6 +291,7 @@
     <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\RoofOverhangs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\RoomShapes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- building sites (#606): the planner, Godot maths only -->
     <Compile Include="..\..\src\Terrain\Construction\ConstructionSite.cs" Link="Game\%(Filename)%(Extension)" />
