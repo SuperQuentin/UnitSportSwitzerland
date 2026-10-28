@@ -1000,6 +1000,8 @@ tools/locatenetcheck.sh    net    tools/locatenetcheck.sh
 # #1269 festival framework: the offline check (the test festival, Batzen, caps, the party board, the Journal tab, the conversion) and the two-client check
 src/Occasions/Festivals/    quick  --festivalcheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
+src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
+tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh

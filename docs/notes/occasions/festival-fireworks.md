@@ -60,6 +60,7 @@ reads this). Nothing is asked of the client.
   late join at 200 s fires at most 3 shells; the 40-shell finale fits the pools; the child count never changes; the player at the site has watched; the
   node falls silent at the end and for an ended festival. `Fireworks.Seek(t)` jumps through the show (checks only). Windowed it saves
   `test_output/fireworks_finale.png`.
+- Net: `tools/fireworksnetcheck.sh` (`FestivalNetProbe` role `show`, through `tools/lib/twoclient.sh`): a server on 14 March 2027 with its sky running; the REMOTE client sees no show in the morning, the admin sets `/time set 21:24`, the server's crossing of 21:30 fixes the show, its `ShowStart` and seed arrive in the client's running list, the client plans the same show and plays its first shell with its sounds, on the server's clock. (`tools/festivalnetcheck.sh` fails on `origin/main` itself at "A's party holds A and B", from before this PR.)
 - Not in a check: how it looks and sounds in each style (Cartoon, PS1, Realistic) and in VR: `tests/TO-TEST-BY-HUMAN.md`.
 
 ## Not built (still in the plan)
