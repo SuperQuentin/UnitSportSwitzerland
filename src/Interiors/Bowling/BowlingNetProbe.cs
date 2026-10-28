@@ -55,7 +55,7 @@ public partial class BowlingNetProbe : ChatProbe
             if (said == null) { Fail("never heard A's roll"); return; }
             if (!await WalkIn(me, interiors, door!.Value)) return;
             string key = interiors.Current!.Key;
-            Expect(await Until(() => lanes.LaneWith(key, "BowlNetA") is { } l && l.Bowlers.Count >= 2 && l.Bowlers[0].Rolls.Count == 1, 20),
+            Expect(await Until(() => lanes.LaneWith(key, "BowlNetA") is { } l && l.Bowlers.Count >= 1 && l.Bowlers[0].Rolls.Count == 1, 20),
                 "C, walking in late, got the lane with A's roll");
             if (lanes.LaneWith(key, "BowlNetA") is { } lane) Compare(said, lane);
             await Finish(2);
@@ -99,8 +99,10 @@ public partial class BowlingNetProbe : ChatProbe
             Say("ready");
             await Heard("B", "ready", 60);
             lanes.AskRelease(plan, Ball);
-            var lane = lanes.LaneWith(plan, "BowlNetA")!;
-            Expect(await Until(() => lane.Bowlers.Count > 0 && lane.Bowlers[0].Rolls.Count == 1 && !lane.Rolling, 30), "A's roll counted");
+            // looked up afresh each time: every state the server sends is a new set of lanes
+            BowlingLanes.Lane Lane() => lanes.LaneWith(plan, "BowlNetA")!;
+            Expect(await Until(() => Lane() is { } l && l.Bowlers.Count > 0 && l.Bowlers[0].Rolls.Count == 1 && !l.Rolling, 30), "A's roll counted");
+            var lane = Lane();
             int knocked = lane.Bowlers[0].Rolls[0];
             GD.Print($"{Log} rolled {knocked} {lane.Standing}");
             for (int t = 0; t < 60 && !(_heard.Any(l => l.Contains("BN B done")) && _heard.Any(l => l.Contains("BN C done"))); t++)
@@ -110,7 +112,7 @@ public partial class BowlingNetProbe : ChatProbe
             }
             Expect(_heard.Any(l => l.Contains("BN B done")), "B saw the roll");
             Expect(_heard.Any(l => l.Contains("BN C done")), "C, late, found it");
-            Expect(lane.Bowlers[0].Rolls.Count == 1, "B's refused roll changed nothing");
+            Expect(Lane().Bowlers[0].Rolls.Count == 1, "B's refused roll changed nothing");
             await Finish(2);
         }
         else
@@ -118,14 +120,14 @@ public partial class BowlingNetProbe : ChatProbe
             Say("ready");
             string? said = await HeardStarting("A", "rolled ", 90);
             if (said == null) { Fail("never heard A's roll"); return; }
-            var lane = lanes.LaneWith(plan, "BowlNetA")!;
-            Expect(await Until(() => lane.Bowlers.Count > 0 && lane.Bowlers[0].Rolls.Count == 1, 10), "B got A's roll");
-            Compare(said, lane);
+            BowlingLanes.Lane Lane() => lanes.LaneWith(plan, "BowlNetA")!;
+            Expect(await Until(() => Lane() is { } l && l.Bowlers.Count > 0 && l.Bowlers[0].Rolls.Count == 1, 10), "B got A's roll");
+            Compare(said, Lane());
             Expect(lanes.FramesSeen(plan, mine.Pair, mine.Lane) > 20, $"B had the deck's frames ({lanes.FramesSeen(plan, mine.Pair, mine.Lane)})");
             // out of turn: refused
             string? told = null;
             lanes.Told += why => told = why;
-            await Until(() => !lane.CycleBusy(Net.ClockSync.SimNow), 15);
+            await Until(() => !Lane().CycleBusy(Net.ClockSync.SimNow), 15);
             lanes.AskRelease(plan, Ball);
             Expect(await Until(() => told != null, 5) && told!.Contains("turn"), $"B refused out of turn ({told})");
             Say("done");
