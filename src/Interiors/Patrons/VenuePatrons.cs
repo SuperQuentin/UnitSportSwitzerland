@@ -86,6 +86,8 @@ public partial class VenuePatrons : Node3D
     private readonly Dictionary<(PatronPose, int), MultiMeshInstance3D> _stills = new();
     private readonly Dictionary<(PatronPose, int), List<Transform3D>> _stillWant = new();
     private Func<double, float> _weather = _ => 1f;
+    /// <summary>The spots' box grown by <see cref="AwakeRange"/>: a camera outside it wakes none of them (a tile's terraces).</summary>
+    private readonly Aabb _bounds;
     private double _nextTick;
     private bool _first = true;
     private Material? _material;
@@ -98,6 +100,9 @@ public partial class VenuePatrons : Node3D
         _pieces = pieces;
         _node = node;
         _seated = new Patron?[spots.Count];
+        _bounds = new Aabb(spots[0].At, Vector3.Zero);
+        foreach (var s in spots) _bounds = _bounds.Expand(s.At);
+        _bounds = _bounds.Grow(AwakeRange);
         for (int i = 0; i < spots.Count;)
         {
             var s = spots[i];
@@ -164,13 +169,13 @@ public partial class VenuePatrons : Node3D
         return Math.Clamp((w.TempAt(hour, TerraceAltitude) - 4f) / 10f, 0f, 1f);
     }
 
-    /// <summary>Patrons further than this from the camera are not looked at (a tile's terraces far off), m.</summary>
+    /// <summary>Patrons further than this from the camera than any of their spots are not looked at (a tile's terraces far off), m.</summary>
     private const float AwakeRange = 120f;
 
     public override void _Process(double delta)
     {
         if (GetViewport().GetCamera3D() is not { } camera) return;
-        if (_node == null && ToGlobal(_spots[0].At).DistanceSquaredTo(camera.GlobalPosition) > AwakeRange * AwakeRange)
+        if (_node == null && !_bounds.HasPoint(ToLocal(camera.GlobalPosition)))
         {
             if (_shown.Count > 0) Empty();
             return;

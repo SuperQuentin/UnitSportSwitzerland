@@ -275,7 +275,7 @@ public partial class VenueTerraces : Node
                 var o = d.Outward with { Y = 0 };
                 var probe = d.Position + o.Normalized() * 0.75f;
                 GD.Print($"[terrace] {Venues.NameOf(v)}: {items.Count} pieces; roads {(roads != null)}, carriageway {Carriageway(roads, probe):F1} m, "
-                    + $"floor {d.Position.Y:F2}, ground out front {Ground(probe)?.ToString("F2") ?? "?"}");
+                    + $"floor {d.Position.Y:F2}, ground out front {Ground(probe)?.ToString("F2") ?? "?"}, out front at {node.ToGlobal(probe)}");
             }
             if (items.Count == 0) continue;
             root ??= new Node3D { Name = NodeName };
@@ -308,6 +308,7 @@ public partial class VenueTerraces : Node
         root.AddChild(body!);
         // its guests (#1244): in when it is cold or snowing, and from 23:00
         if (Patrons.VenuePatrons.ForTerrace(guests, Patrons.VenuePatrons.TerraceWeather) is { } patrons) root.AddChild(patrons);
+        if (Log) GD.Print($"[terrace] {guests.Count} guest places, out now {Patrons.VenuePatrons.TerraceWeather(Net.ClockSync.ServerNow):F2}");
         node.AddChild(root);
     }
 }
