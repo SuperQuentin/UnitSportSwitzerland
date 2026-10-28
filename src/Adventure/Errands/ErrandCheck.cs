@@ -52,6 +52,9 @@ public partial class ErrandCheck : ChatProbe
         var toasts = new List<string>();
         svc.Toast = toasts.Add;
 
+        // the pack is saved between runs: start without cargo, so the counts below are this run's
+        foreach (var cargo in new[] { ItemId.MailSack, ItemId.FerryCrate, ItemId.SupplyPack }) _items.Inventory.TakePlain(cargo, 999);
+
         var post = GiverHost.Current.All.First(g => g.Kind == GiverKind.Postmaster);
         var farmer = GiverHost.Current.All.First(g => g.Kind == GiverKind.Farmer);
         var senn = GiverHost.Current.All.First(g => g.Kind == GiverKind.Senn);
