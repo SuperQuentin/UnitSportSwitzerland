@@ -50,9 +50,10 @@ public static class HornGround
         {
             float z = k * 1.5f;
             s.Tube(new Vector3(-1.9f, 1.05f, z), new Vector3(1.2f, 1.45f, z), 0.025f, 0.075f, Spruce, 8);
-            s.Tube(new Vector3(1.2f, 1.45f, z), new Vector3(1.9f, 1.95f, z), 0.075f, 0.19f, Spruce, 8);
-            s.Tube(new Vector3(1.88f, 1.93f, z), new Vector3(2.02f, 2.14f, z), 0.19f, 0.17f, Brass, 8);   // the bell's rim
-            s.Tube(new Vector3(-2.05f, 1.0f, z), new Vector3(-1.9f, 1.05f, z), 0.035f, 0.025f, Brass, 8);   // the mouthpiece
+            // each part starts a centimetre inside the one before it, so no two caps or sides share a plane (z-fight baseline)
+            s.Tube(new Vector3(1.19f, 1.446f, z), new Vector3(1.9f, 1.95f, z), 0.0745f, 0.19f, Spruce, 8);
+            s.Tube(new Vector3(1.86f, 1.92f, z), new Vector3(2.02f, 2.14f, z), 0.2f, 0.18f, Brass, 8);   // the bell's rim
+            s.Tube(new Vector3(-2.05f, 1.0f, z), new Vector3(-1.85f, 1.07f, z), 0.035f, 0.02f, Brass, 8);   // the mouthpiece
             for (int b = 0; b < 4; b++)
             {
                 float x = -1.2f + b * 0.8f;
