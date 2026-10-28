@@ -90,7 +90,22 @@ public partial class SteinCheck : ChatProbe
         Input.ActionPress(PlayerInput.Jump);
         await Seconds(0.1);
         Input.ActionRelease(PlayerInput.Jump);
+        await Seconds(0.1);
         Expect(await Until(() => game.State == SteinGame.Phase.Ready && game.Attempt is { Class: 1 }, 5), "jump changes the stone: the 40 kg one");
+        for (int want = 2, again = 0; again < 2; again++, want = (want + 1) % 3)
+        {
+            Input.ActionPress(PlayerInput.Jump);
+            await Seconds(0.1);
+            Input.ActionRelease(PlayerInput.Jump);
+            await Seconds(0.1);   // a frame between the release and the next press: the game reads edges per frame
+            int w = want;
+            Expect(await Until(() => game.State == SteinGame.Phase.Ready && game.Attempt is { } a && a.Class == w, 5), $"jump again cycles the stone to class {w}");
+        }
+        Input.ActionPress(PlayerInput.Jump);
+        await Seconds(0.1);
+        Input.ActionRelease(PlayerInput.Jump);
+        await Seconds(0.1);
+        Expect(await Until(() => game.State == SteinGame.Phase.Ready && game.Attempt is { Class: 1 }, 5), "and round to the 40 kg one for the put");
 
         // ---- a perfect put ---------------------------------------------------------------------------------
         game.PitchOverride = 41;

@@ -31,7 +31,7 @@ public static class SteinProps
         s.Box(new Vector3(0, 0.17f, 0), new Vector3(0.42f, 0.34f, 0.40f), Granite, new Basis(Vector3.Up, 0.35f));
         s.Box(new Vector3(0.02f, 0.20f, 0), new Vector3(0.40f, 0.30f, 0.38f), GraniteDark, new Basis(Vector3.Up, 0.9f));
         s.Box(new Vector3(0, 0.36f, 0.02f), new Vector3(0.30f, 0.12f, 0.28f), Granite, new Basis(Vector3.Up, 0.1f));
-        s.Tube(new Vector3(-0.13f, 0.40f, 0), new Vector3(0.13f, 0.40f, 0), 0.025f, Rope, 6);
+        s.Tube(new Vector3(-0.13f, 0.43f, 0), new Vector3(0.13f, 0.43f, 0), 0.025f, Rope, 6);
         return s.Build();
     }, candle: false);
 
@@ -55,8 +55,8 @@ public static class SteinProps
         var s = new MeshScratch();
         s.Box(new Vector3(0, 0.55f, 0), new Vector3(0.05f, 1.1f, 0.05f), Plank);
         s.Box(new Vector3(0.18f, 0.95f, 0), new Vector3(0.36f, 0.22f, 0.02f), Red);
-        s.Box(new Vector3(0.18f, 0.95f, 0), new Vector3(0.2f, 0.06f, 0.03f), White);
-        s.Box(new Vector3(0.18f, 0.95f, 0), new Vector3(0.06f, 0.2f, 0.03f), White);
+        s.Box(new Vector3(0.18f, 0.95f, 0), new Vector3(0.2f, 0.06f, 0.05f), White);
+        s.Box(new Vector3(0.18f, 0.95f, 0), new Vector3(0.06f, 0.2f, 0.056f), White);
         return s.Build();
     }, candle: false);
 
