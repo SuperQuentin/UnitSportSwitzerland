@@ -40,7 +40,9 @@ public static class DoorCheck
         new("a shed", BuildingKind.Annex, 4, 3, 2.6f, 1, 1),
         new("a barn", BuildingKind.Agricultural, 20, 10, 8, 2, 2),
         new("a garage", BuildingKind.Garage, 6, 6, 3.3f, 2, 2),
-        new("a block of flats", BuildingKind.Apartment, 30, 15, 15, 3, 3),
+        // a block of flats is entered by its stairwells, on its street front only, 22 m apart (#1304): one
+        // door on 30 m, three on the long block at the end of the street
+        new("a block of flats", BuildingKind.Apartment, 30, 15, 15, 1, 1),
         new("a 100 m shop front", BuildingKind.Commercial, 100, 20, 12, 5, DoorBudget.MaxPerBuilding),
         new("a works hall", BuildingKind.Industrial, 60, 30, 9, 3, DoorBudget.MaxPerBuilding),
         // low enough that the 2.8 m door of a works does not fit under its eave, tall enough that
@@ -50,6 +52,7 @@ public static class DoorCheck
         new("a low works", BuildingKind.Industrial, 12, 8, 3.4f, 1, 1),
         // turned to no axis, so a mirrored plan frame puts its doorways on visibly wrong walls
         new("a turned block", BuildingKind.Commercial, 48, 18, 12, 3, DoorBudget.MaxPerBuilding, Turn: 31f),
+        new("a long block of flats", BuildingKind.Apartment, 60, 15, 15, 3, 3),
     ];
 
     public static int Run()
