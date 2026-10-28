@@ -47,6 +47,8 @@ public partial class PinballTables : Node
         public readonly List<PinballSolver.Event> Log = new();
         public readonly Queue<long> Joining = new();
         public double LastFrame;
+        /// <summary>Client: the frames heard of this machine (the net check's).</summary>
+        public int Frames;
         /// <summary>What the backbox and lamps show (packed), and the poses of the last two frames with their times.</summary>
         public byte[] Screen = Array.Empty<byte>();
         public PinballGame.Poses? Now, Before;

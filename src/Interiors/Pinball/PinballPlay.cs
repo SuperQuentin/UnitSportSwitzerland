@@ -43,6 +43,12 @@ public partial class PinballPlay : CanvasLayer
 
     public bool TopView { get => _top; set => _top = value; }
 
+    /// <summary>The rules of the game this client last ran (the net check compares them with the server's).</summary>
+    public PinballRules? LastRules { get; private set; }
+
+    /// <summary>Whether this client runs the table now (it is up).</summary>
+    public bool Running => _game != null;
+
     public void PressStart() => PinballTables.Instance?.AskStart(_key, _index);
     private Camera3D? _cam, _own;
     private Label _hint = null!, _told = null!;
@@ -103,6 +109,7 @@ public partial class PinballPlay : CanvasLayer
     {
         if (key != _key || index != _index) return;
         _game = game;
+        LastRules = game.Rules;
         _acc = 0;
         _sendAt = 0;
         _heard = 0;

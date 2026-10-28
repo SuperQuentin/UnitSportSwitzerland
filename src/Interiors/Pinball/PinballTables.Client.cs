@@ -97,10 +97,11 @@ public partial class PinballTables
     private void Frame(string key, int index, byte[] poses, byte[] events)
     {
         if (!Machines.TryGetValue((key, index), out var m)) return;
+        m.Frames++;
         m.Before = m.Now;
         m.BeforeAt = m.NowAt;
         m.Now = PinballGame.UnpackPoses(poses);
-        m.NowAt = Time.GetTicksMsec() / 1000.0;
+        m.NowAt = Core.RealClock.Now;
         if (InteriorManager.Instance?.BuiltNode(key)?.PinballOf(index) is { } cabinet)
             foreach (var e in PinballGame.UnpackEvents(events)) cabinet.Hear(e);
     }
@@ -132,7 +133,7 @@ public partial class PinballTables
             if (Online && !Multiplayer.IsServer()) RpcId(1, MethodName.RequestState, here.Key);
         }
         if (im.BuiltNode(here.Key) is not { } node) return;
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.RealClock.Now;
         var mine = Running();
         foreach (var ((key, index), m) in Machines)
         {

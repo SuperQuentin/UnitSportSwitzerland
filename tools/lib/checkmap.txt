@@ -200,6 +200,7 @@ src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
 src/Interiors/Pinball/ quick --pinballcheck --systems ui
 src/Interiors/Pinball/ quick --zfightcheck Pinball
 shaders/pinball_display quick --pinballcheck --systems ui
+src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
