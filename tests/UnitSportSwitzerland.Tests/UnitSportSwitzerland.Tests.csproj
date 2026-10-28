@@ -258,6 +258,9 @@
     <Compile Include="..\..\src\Occasions\Festivals\FestivalBoard.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalEvents.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FireworkShow.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Horn\AlphornChart.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Horn\AlphornRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Horn\EchoFinder.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
