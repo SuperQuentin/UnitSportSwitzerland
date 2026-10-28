@@ -114,6 +114,9 @@ public partial class PlayerInput : Node
     /// <summary>Dig mode, the left stick: slew the house (X), run the stick out and in (Y).</summary>
     public const string ArmSlewLeft = "arm_slew_left";
     public const string ArmSlewRight = "arm_slew_right";
+    /// <summary>Bowling (#1336): turn your line on the lane while aiming (the spot moves on the move keys).</summary>
+    public const string BowlAimLeft = "bowl_aim_left";
+    public const string BowlAimRight = "bowl_aim_right";
     public const string ArmStickOut = "arm_stick_out";
     public const string ArmStickIn = "arm_stick_in";
     /// <summary>Dig mode, the right stick: raise and lower the boom (Y, back is up), curl and dump the bucket (X, left curls).</summary>
@@ -661,6 +664,8 @@ public partial class PlayerInput : Node
         Bind(DigMode, Keys(Key.C), Button(JoyButton.B));
         Bind(ArmSlewLeft, Keys(Key.A), Axis(JoyAxis.LeftX, -1));
         Bind(ArmSlewRight, Keys(Key.D), Axis(JoyAxis.LeftX, 1));
+        Bind(BowlAimLeft, Keys(Key.Left), Axis(JoyAxis.RightX, -1));
+        Bind(BowlAimRight, Keys(Key.Right), Axis(JoyAxis.RightX, 1));
         Bind(ArmStickOut, Keys(Key.W), Axis(JoyAxis.LeftY, -1));
         Bind(ArmStickIn, Keys(Key.S), Axis(JoyAxis.LeftY, 1));
         Bind(ArmBoomUp, Keys(Key.Up), Axis(JoyAxis.RightY, 1));

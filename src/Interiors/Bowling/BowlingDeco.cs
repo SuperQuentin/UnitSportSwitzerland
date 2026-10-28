@@ -34,19 +34,22 @@ public partial class BowlingDeco : Node3D
         public bool Settled;
         /// <summary>This throw's ball is back on the return.</summary>
         public bool Returned;
+        /// <summary>Where the bowler waits between turns, and where its ball waits on the return (#1336).</summary>
+        public DecoThrow.Turn Turn;
     }
 
-    /// <summary>How long a returned ball takes to rise into the hood, s.</summary>
+    /// <summary>How long a returned ball takes to rise out of the lift, s (the rig's rise).</summary>
     private const double ReturnRise = 0.35;
 
     private readonly List<Bowler> _bowlers = new();
-    private readonly Dictionary<long, SkinnedFigure> _partners = new();
+    private readonly Dictionary<long, Partner> _partners = new();
     private InteriorNode _node = null!;
     private Material? _figureMaterial;
+    private Material? _ballMaterial;
 
     public static BowlingDeco Create(InteriorNode node, Material material)
     {
-        var deco = new BowlingDeco { Name = "BowlingDeco", _node = node };
+        var deco = new BowlingDeco { Name = "BowlingDeco", _node = node, _ballMaterial = material };
         var l = node.Layout;
         foreach (var (pair, lane) in BowlingLanes.DecoLanes(l))
         {
@@ -102,7 +105,16 @@ public partial class BowlingDeco : Node3D
             if (throwNo != b.Throw)
             {
                 // the first turn seen starts a frame on a full rack; after that the pinsetter has set what stands
-                if (b.Throw < 0) { b.Rig.SetRack(b.Lane); (b.BallNo, b.Standing) = (1, BowlingLanes.Rack); }
+                if (b.Throw < 0)
+                {
+                    b.Rig.SetRack(b.Lane);
+                    (b.BallNo, b.Standing) = (1, BowlingLanes.Rack);
+                    // its ball on the return, queued with the others, the bowler beside it
+                    b.Rig.SetDecoBall(b.Lane, b.Color);
+                    b.Turn = DecoThrow.AtTheReturn(b.Rig.DecoBallAt(b.Lane) ?? g.HoodSlot(0), b.Lane);
+                }
+                // this turn: from where the last one left the bowler to its ball's place on the return now
+                else b.Turn = b.Turn with { Ball = b.Rig.DecoBallAt(b.Lane) ?? b.Turn.Ball };
                 b.Throw = throwNo;
                 b.Deck?.Dispose();
                 b.Deck = null;
@@ -110,24 +122,24 @@ public partial class BowlingDeco : Node3D
                 b.Returned = false;
                 b.Run = BowlingBall.Roll(g.Run, BowlingLanes.BotRelease(g.Run, b.Pair * 7 + b.Lane, throwNo, b.Standing));
             }
-            var frame = DecoThrow.At(g, b.Lane, t);
+            var frame = DecoThrow.At(g, b.Lane, t, b.Turn);
             b.Figure.Transform = b.Frame * new Transform3D(new Basis(Vector3.Up, frame.Face + Mathf.Pi), frame.Feet);
             HumanMeshBuilder.PoseJoints(b.Figure, frame.Joints);
-            // the ball: on the return, then in the hands until they let go, on its run, and back up through the
-            // return after the real lanes' time in the subway (#1334)
-            b.Ball.Visible = frame.Ball != null;
-            if (frame.Ball is { } held) { b.Ball.Position = b.Frame * held; continue; }
+            // the ball: on the return (the rig's, queued with the others) until the hands take it, in them until they let
+            // go, on its run, and back up through the return after the real lanes' time in the subway (#1334, #1336)
+            bool inHand = frame.Ball != null && t >= DecoThrow.Grab;
+            b.Ball.Visible = inHand;
+            if (frame.Ball != null)
+            {
+                b.Rig.SetDecoBall(b.Lane, inHand ? -1 : b.Color);
+                if (inHand) b.Ball.Position = b.Frame * frame.Ball.Value;
+                continue;
+            }
             float run = (float)(t - DecoThrow.Release);
             if (run < 0 || b.Run is not { } r) continue;
             double back = DecoThrow.Release + r.Time + BowlingLanes.ReturnTime;
-            if (t >= back - ReturnRise)
-            {
-                // pushed up into the hood from under it, with its thunk as it arrives
-                float up = (float)Math.Min(1, (t - (back - ReturnRise)) / ReturnRise);
-                b.Ball.Visible = true;
-                b.Ball.Position = b.Frame * (DecoThrow.HoodBall(g) + Vector3.Down * (0.3f * (1 - up)));
-                if (up >= 1 && !b.Returned) { b.Returned = true; b.Rig.HoodThunk(); }
-            }
+            // pushed up out of the lift with its thunk and rolling down behind the queue: the rig's doing
+            if (t >= back - ReturnRise && !b.Returned) { b.Returned = true; b.Rig.SetDecoBall(b.Lane, b.Color); }
             if (b.Settled) continue;
             if (run < r.Time) { var (pos, turn) = r.At(run); b.Rig.ShowBall(b.Lane, pos, turn, b.Color, false); continue; }
             if (r.Gutter) { Settle(b); continue; }
@@ -170,25 +182,62 @@ public partial class BowlingDeco : Node3D
         b.Deck = null;
     }
 
-    /// <summary>A figure beside the approach for each bot partner of a game in this centre, throwing as its ball leaves.</summary>
+    /// <summary>A bot partner's figure: where it waits, its last place on the return, when its turn began, its ball in hand.</summary>
+    private sealed class Partner
+    {
+        public SkinnedFigure Figure = null!;
+        public MeshInstance3D Ball = null!;
+        public DecoThrow.Turn Turn;
+        public int Slot;
+        public double Began = double.NaN;
+    }
+
+    /// <summary>
+    /// A figure for each bot partner of a game in this centre (#1336): it waits beside the approach; when the server hands
+    /// it its ball (the bot's <c>BallBack</c> is then its release, <see cref="DecoThrow.Release"/> on), it plays the
+    /// decoration bowlers' turn from that moment, its ball from its place on the return, released as the server rolls.
+    /// </summary>
     private void Partners(double now)
     {
         if (BowlingLanes.Instance is not { } lanes) return;
-        foreach (var (pair, lane, bowler, index, rolling) in lanes.BotsIn(_node.Layout.Key))
+        string key = _node.Layout.Key;
+        foreach (var (pair, lane, bowler, index, rolling) in lanes.BotsIn(key))
         {
-            if (!_partners.TryGetValue(bowler.Peer, out var fig))
+            var l = _node.Layout;
+            var f = l.Furniture[pair];
+            var g = LaneGeometry.Of(f);
+            var frame = BowlingLanes.PieceFrame(l, f);
+            if (!_partners.TryGetValue(bowler.Peer, out var p))
             {
-                var l = _node.Layout;
-                var f = l.Furniture[pair];
-                var g = LaneGeometry.Of(f);
-                // beside the approach, toward the settees, one step apart per bot
-                var at = BowlingLanes.PieceFrame(l, f) * new Vector3(g.LaneX(lane) + (lane == 0 ? -0.75f : 0.75f), 0, g.Front + 0.6f + index * 0.7f);
-                fig = _partners[bowler.Peer] = Figure(this, (int)(-bowler.Peer % 997), at, f.Turns, null!);
+                // waiting beside the approach, toward the settees, one step apart per bot
+                var home = new Vector3(g.LaneX(lane) + (lane == 0 ? -0.75f : 0.75f), 0, g.Front + 0.6f + index * 0.7f);
+                p = _partners[bowler.Peer] = new Partner
+                {
+                    Figure = Figure(this, (int)(-bowler.Peer % 997), frame * home, f.Turns, null!),
+                    Ball = new MeshInstance3D { Name = "PartnerBall", Mesh = LaneRig.BallMeshOf(bowler.Color), MaterialOverride = _ballMaterial, Visible = false },
+                    Turn = new DecoThrow.Turn(g.HoodSlot(0), home, 0f),
+                };
+                AddChild(p.Ball);
             }
-            // the underarm swing round the server's release (DecoThrow), the ball at the chest while it waits to bowl
-            double since = now - rolling;
-            if (!double.IsNaN(rolling) && since < 1.2) HumanMeshBuilder.PoseJoints(fig, DecoThrow.Swing(since));
-            else if (bowler.Ball == BowlingLanes.BallAt.Hand) HumanMeshBuilder.PoseJoints(fig, DecoThrow.Swing(-1));
+            if (lanes.ReturnSlotOf(key, pair, bowler.Peer) is int slot and >= 0) p.Slot = slot;
+            // the turn: from when the bot took its ball (its release less a whole turn), and on past the release
+            double t = double.NaN;
+            if (bowler.Ball == BowlingLanes.BallAt.Hand && double.IsNaN(rolling)) t = now - (bowler.BallBack - DecoThrow.Release);
+            else if (!double.IsNaN(rolling)) t = DecoThrow.Release + (now - rolling);
+            if (double.IsNaN(t) || t < 0 || t > DecoThrow.BackAt)
+            {
+                p.Ball.Visible = false;
+                var (feet, face) = (p.Turn.Home, p.Turn.HomeFace);
+                p.Figure.Transform = frame * new Transform3D(new Basis(Vector3.Up, face + Mathf.Pi), feet);
+                HumanMeshBuilder.PosePosed(p.Figure, HumanPose.Standing);
+                continue;
+            }
+            var turn = p.Turn with { Ball = g.HoodSlot(p.Slot) };
+            var fr = DecoThrow.At(g, lane, t, turn);
+            p.Figure.Transform = frame * new Transform3D(new Basis(Vector3.Up, fr.Face + Mathf.Pi), fr.Feet);
+            HumanMeshBuilder.PoseJoints(p.Figure, fr.Joints);
+            p.Ball.Visible = fr.Ball != null;
+            if (fr.Ball is { } held) p.Ball.Position = frame * held;
         }
     }
 

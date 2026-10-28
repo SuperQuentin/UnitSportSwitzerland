@@ -46,7 +46,9 @@ public partial class ControlsHelp : CanvasLayer
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
             new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
-            new("Bowling: move your spot, then your line; hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
+            new("Bowling: move your spot", PlayerInput.MoveLeft),
+            new("Bowling: turn your line", PlayerInput.BowlAimLeft),
+            new("Bowling: hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
         }),
         ("Items", new Row[]
         {

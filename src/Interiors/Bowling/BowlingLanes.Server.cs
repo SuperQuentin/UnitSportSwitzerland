@@ -68,8 +68,8 @@ public partial class BowlingLanes
     }
 
     /// <summary>
-    /// Server: a signed-in bowler takes a house ball from a rack (colour and weight as they choose), or,
-    /// when theirs waits on their pair's hood, takes it back from there.
+    /// Server: a signed-in bowler takes a house ball from a rack (colour and weight as they choose), off their pair's
+    /// return (a negative <paramref name="color"/>, #1336), or, when theirs waits on the return, takes it back from there.
     /// </summary>
     public bool ServeTakeBall(long peer, string key, int color, int weight)
     {
@@ -80,6 +80,17 @@ public partial class BowlingLanes
         if (b.Ball == BallAt.Hood)
         {
             if (!NearHood(peer, l, me.Pair)) return Refuse(peer, "Your ball is on the ball return.");
+            b.Ball = BallAt.Hand;
+        }
+        else if (b.Ball == BallAt.None && color < 0)
+        {
+            // a house ball off the pair's return (#1336): this lane's first, else the other lane's
+            if (!NearHood(peer, l, me.Pair)) return Refuse(peer, "Go to the ball return.");
+            var lanes = PairOf(key, me.Pair);
+            var from = lanes[me.Lane].House.Count > 0 ? lanes[me.Lane] : lanes[1 - me.Lane];
+            if (from.House.Count == 0) return Refuse(peer, "No house ball is left on the return: take one from a rack.");
+            (b.Color, b.Weight) = from.House[0];
+            from.House.RemoveAt(0);
             b.Ball = BallAt.Hand;
         }
         else if (b.Ball == BallAt.None)
@@ -249,6 +260,12 @@ public partial class BowlingLanes
         }
     }
 
+    /// <summary>A bowler leaving: their ball, if it waits on the return (or is on its way there), joins the house balls.</summary>
+    private static void Leave(Lane lane, Bowler b)
+    {
+        if (b.Ball is BallAt.Hood or BallAt.Return && lane.House.Count < LaneGeometry.HoodSlots / 2) lane.House.Add((b.Color, b.Weight));
+    }
+
     private void Remove(string key, int pair, int lane, long peer)
     {
         var l = PairOf(key, pair)[lane];
@@ -259,6 +276,8 @@ public partial class BowlingLanes
 
     private static void RemoveAt(Lane lane, int i)
     {
+        // a ball left waiting on the return stays there, a house ball for whoever comes next (#1336)
+        Leave(lane, lane.Bowlers[i]);
         lane.Bowlers.RemoveAt(i);
         if (lane.Turn > i || lane.Turn >= lane.Bowlers.Count) lane.Turn = lane.Bowlers.Count == 0 ? 0 : lane.Turn > i ? lane.Turn - 1 : 0;
         if (lane.Bowlers.Count == 0) lane.OverAt = double.NaN;
@@ -315,7 +334,7 @@ public partial class BowlingLanes
         var f = l.Furniture[pair];
         if (InPiece(peer, l, f) is not { } at) return !Online;
         var g = LaneGeometry.Of(f);
-        return Mathf.Abs(at.X) < 1.9f && at.Z < g.HoodZ + 1.2f + Reach && at.Z > g.Front - 4f;
+        return Mathf.Abs(at.X) < 1.9f && at.Z < g.HoodBack + Reach && at.Z > g.Front - 4f;
     }
 
     private bool OnApproach(long peer, InteriorLayout l, int pair, int lane)

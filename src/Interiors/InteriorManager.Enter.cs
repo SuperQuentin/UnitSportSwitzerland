@@ -92,7 +92,9 @@ public partial class InteriorManager
             _cache[layout.Key] = layout;
             _current = layout;
             BuildInterior(layout);
-            for (int i = 0; i < 600 && !_built.ContainsKey(layout.Key); i++)
+            // a big hall takes a while on a loaded machine (a whole bowling centre: seconds): a minute at most
+            double until = RealClock.Now + 60;
+            while (!_built.ContainsKey(layout.Key) && RealClock.Now < until)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (!_built.TryGetValue(layout.Key, out var node))
             {

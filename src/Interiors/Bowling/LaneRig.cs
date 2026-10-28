@@ -146,7 +146,8 @@ public partial class LaneRig : Node3D
             else any = true;
         }
         bool replay = StepReplay(delta);
-        if (!any && !replay) SetProcess(false);
+        bool hood = StepHood((float)delta);
+        if (!any && !replay && !hood) SetProcess(false);
     }
 
     private void Step(int lane, PinsetterCycle.Pose pose)
@@ -163,6 +164,7 @@ public partial class LaneRig : Node3D
             bool picked = (l.Picked & (1 << i)) != 0;
             if (pose.Carry == PinsetterCycle.Carry.Rack || (pose.Carry == PinsetterCycle.Carry.Standing && picked))
             {
+                // (a pin the sweep left on the deck is in the pit by now: the rack takes it)
                 // hanging from the table, its head in the grip
                 l.Pins[i] = new Transform3D(Basis.Identity, spot with { Y = pose.TableY - PinsetterCycle.Grip });
                 l.State[i] = PinState.Standing;
@@ -177,11 +179,13 @@ public partial class LaneRig : Node3D
             if (l.State[i] == PinState.Gone || !sweepLow) continue;
             // the deadwood (and on a reset, everything) pushed ahead of the sweep, into the pit
             var at = l.Pins[i];
-            float front = pose.SweepZ + LaneGeometry.PinRadius;
-            if (at.Origin.Z < front)
+            // pushed by its nearest point (#1336): either end of its body, its base or its top along its axis, a radius
+            // out; by its base alone, a pin lying along the lane poked its top through the board
+            float face = pose.SweepZ + SweepFace;
+            if (Nearest(at) < face)
             {
-                at.Origin = at.Origin with { Z = front };
                 if (l.State[i] == PinState.Standing) at.Basis = new Basis(Vector3.Right, Mathf.Pi / 2) * at.Basis;
+                at.Origin = at.Origin with { Z = at.Origin.Z + face - Nearest(at) };
                 l.State[i] = PinState.Down;
             }
             // over the deck's end it tumbles down into the pit, and is gone only once it is down there (#1334): it
@@ -196,6 +200,16 @@ public partial class LaneRig : Node3D
             l.Pins[i] = at;
         }
         Push(lane);
+    }
+
+    /// <summary>The sweep board's face toward the pins, past its position, m (its board 1 cm, its chevrons behind).</summary>
+    private const float SweepFace = 0.015f;
+
+    /// <summary>A pin's point nearest the sweep along the lane: the lower of its two ends, a radius out.</summary>
+    private static float Nearest(Transform3D pin)
+    {
+        float top = pin.Origin.Z + (pin.Basis.Y.Normalized() * LaneGeometry.PinHeight).Z;
+        return Mathf.Min(pin.Origin.Z, top) - LaneGeometry.PinRadius;
     }
 
     /// <summary>How far a pin pushed over the deck's end falls into the pit before it is gone, m (the pit's depth, under the masking).</summary>
@@ -358,30 +372,135 @@ public partial class LaneRig : Node3D
         _hoodVoice.Play();
     }
 
+    /// <summary>A waiting ball on the return: its colour, where it is along the track, and how far it has risen out of the lift (1 out).</summary>
+    private sealed class Queued
+    {
+        public int Color;
+        public float S, Rise = 1f;
+        public bool Heard = true;
+    }
+
+    private readonly List<Queued> _queue = new();
+
+    /// <summary>The balls waiting on the return now (the next one back takes the place after them).</summary>
+    public int HoodCount => _queue.Count;
+    /// <summary>A ball's roll down the track, m/s; its rise out of the lift, s; how far under the mouth it starts, m.</summary>
+    private const float RollSpeed = 1.1f, RiseTime = 0.35f, RiseFrom = 0.3f;
+
     /// <summary>
-    /// The balls waiting on the hood's rack: one per entry (a house ball's colour), in slot order.
-    /// Rebuilt only when the set changes.
+    /// The balls waiting on the return (#1336), in queue order from the stop: one per entry (a ball's colour). A ball
+    /// added at the end comes up out of the lift with its thunk and rolls down to its place; one taken leaves a gap the
+    /// balls behind roll down into. Anything else (a first show, a reordering) lays them at their places at once.
     /// </summary>
     public void SetHoodBalls(IReadOnlyList<int> colors)
     {
+        _served.Clear();
+        _served.AddRange(colors);
+        Lay();
+    }
+
+    /// <summary>
+    /// A decoration bowler's ball on the return (#1336), behind the game's balls, so all of them queue on the one track;
+    /// <paramref name="color"/> −1 when it is not on it (in a hand, rolling, under the lanes).
+    /// </summary>
+    public void SetDecoBall(int lane, int color)
+    {
+        if (_decoColor[lane] == color) return;
+        _decoColor[lane] = color;
+        Lay();
+    }
+
+    /// <summary>Where lane <paramref name="lane"/>'s decoration ball waits on the return now (the rig's frame), or null when it is not there yet.</summary>
+    public Vector3? DecoBallAt(int lane)
+    {
+        int k = _decoAt[lane];
+        if (k < 0 || k >= _queue.Count || _queue[k].Rise < 1) return null;
+        return Geometry.ReturnPoint(_queue[k].S);
+    }
+
+    private readonly List<int> _served = new(), _laid = new();
+    private readonly int[] _decoColor = { -1, -1 }, _decoAt = { -1, -1 };
+
+    /// <summary>The game's balls, then the decoration bowlers', onto the track.</summary>
+    private void Lay()
+    {
+        _laid.Clear();
+        _laid.AddRange(_served);
+        for (int lane = 0; lane < 2; lane++)
+        {
+            _decoAt[lane] = _decoColor[lane] < 0 ? -1 : _laid.Count;
+            if (_decoColor[lane] >= 0) _laid.Add(_decoColor[lane]);
+        }
+        Queue(_laid);
+    }
+
+    private void Queue(IReadOnlyList<int> colors)
+    {
         if (_hoodShown.SequenceEqual(colors)) return;
-        if (colors.Count > _hoodShown.Count) HoodThunk();
+        bool first = _hoodShown.Count == 0 && _queue.Count == 0;
+        // the common changes: arrivals at the end, or one ball taken from anywhere
+        int common = 0;
+        while (common < _queue.Count && common < colors.Count && _queue[common].Color == colors[common]) common++;
+        bool arrivals = common == _queue.Count && colors.Count > _queue.Count;
+        bool taken = colors.Count == _queue.Count - 1 && _queue.Where((q, k) => k != common).Select(q => q.Color).SequenceEqual(colors);
+        if (taken) _queue.RemoveAt(common);
+        else if (arrivals && !first)
+            for (int k = _queue.Count; k < colors.Count; k++)
+                // one after the other out of the lift
+                _queue.Add(new Queued { Color = colors[k], S = 0, Rise = -(k - common) * 1.2f, Heard = false });
+        else
+        {
+            _queue.Clear();
+            for (int k = 0; k < colors.Count; k++) _queue.Add(new Queued { Color = colors[k], S = Geometry.ReturnSlotAt(k) });
+        }
         _hoodShown.Clear();
         _hoodShown.AddRange(colors);
-        while (_balls.Count < colors.Count)
+        while (_balls.Count < _queue.Count)
         {
             var b = new MeshInstance3D { Name = $"Ball{_balls.Count}", MaterialOverride = _material };
             AddChild(b);
             _balls.Add(b);
         }
-        for (int i = 0; i < _balls.Count; i++)
+        for (int k = 0; k < _balls.Count; k++)
         {
-            bool shown = i < colors.Count && i < LaneGeometry.HoodSlots;
-            _balls[i].Visible = shown;
-            if (!shown) continue;
-            _balls[i].Mesh = BallMesh(colors[i]);
-            _balls[i].Position = Geometry.HoodSlot(i);
+            bool shown = k < _queue.Count && k < LaneGeometry.HoodSlots;
+            _balls[k].Visible = shown;
+            if (shown) _balls[k].Mesh = BallMesh(_queue[k].Color);
         }
+        StepHood(0);
+        SetProcess(true);
+    }
+
+    /// <summary>The return's balls a step on: rising out of the lift, then rolling down to their places. False once all rest.</summary>
+    private bool StepHood(float dt)
+    {
+        bool moving = false;
+        for (int k = 0; k < _queue.Count && k < LaneGeometry.HoodSlots; k++)
+        {
+            var q = _queue[k];
+            float target = Geometry.ReturnSlotAt(k);
+            if (q.Rise < 1)
+            {
+                q.Rise = Mathf.Min(1, q.Rise + dt / RiseTime);
+                moving = true;
+                _balls[k].Visible = q.Rise > 0;
+                _balls[k].Position = Geometry.HoodLift + Vector3.Down * (RiseFrom * (1 - Mathf.Max(0, q.Rise)));
+                if (q.Rise >= 1 && !q.Heard) { q.Heard = true; HoodThunk(); }
+                continue;
+            }
+            // rolling down the track: the ball turns as it goes
+            float was = q.S;
+            q.S = Mathf.MoveToward(q.S, target, RollSpeed * dt);
+            if (q.S != target) moving = true;
+            _balls[k].Visible = true;
+            var at = Geometry.ReturnPoint(q.S);
+            var ahead = Geometry.ReturnPoint(q.S + 0.01f) - at;
+            var axis = ahead.Cross(Vector3.Up);
+            if (q.S != was && axis.LengthSquared() > 1e-8f)
+                _balls[k].Basis = new Basis(axis.Normalized(), -(q.S - was) / LaneGeometry.BallRadius) * _balls[k].Basis;
+            _balls[k].Position = at;
+        }
+        return moving;
     }
 
     /// <summary>A house ball's mesh of colour <paramref name="color"/>, shared by every centre (the material goes on the instance).</summary>

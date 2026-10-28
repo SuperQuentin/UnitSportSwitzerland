@@ -2299,8 +2299,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The owner's figure from its eye or not (<see cref="Avatar.OwnBody"/>), after the pose: its shadow takes the mesh.</summary>
     private void SeeBodyFromEye(bool fromEye)
     {
-        if (_walker != null) Avatar.OwnBody.See(_walker, fromEye, ref _bodyShadow);
+        if (_walker != null) Avatar.OwnBody.See(_walker, fromEye && !SeenFromOutside, ref _bodyShadow);
     }
+
+    /// <summary>
+    /// Another camera shows this owner's body (the bowling camera behind the bowler, #1336): drawn as everyone sees it,
+    /// whole and with what it holds, even when the player plays in first person.
+    /// </summary>
+    public bool SeenFromOutside { get; set; }
 
     private void ApplyFootPose()
     {
