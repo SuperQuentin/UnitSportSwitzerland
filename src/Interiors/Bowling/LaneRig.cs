@@ -250,7 +250,7 @@ public partial class LaneRig : Node3D
     private void RollSound(int lane, Vector3 at, bool gutter)
     {
         if (_rollVoice[lane] is not { } voice) return;
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.RealClock.Now;
         var (was, from) = _lastBall[lane];
         _lastBall[lane] = (now, at);
         if (double.IsNaN(was) || now - was < 1e-3) return;

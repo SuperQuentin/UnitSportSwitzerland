@@ -1184,3 +1184,8 @@
 199.6	People / Errand givers - Senn
 39.4	People / Errand givers - ShipMaster
 467.9	People / Errand givers - StationMaster
+96.1	Clothes / Bowling shoes
+3.4	Items / BowlingShoes
+2.8	Furniture / LanePair
+2.8	Bowling / Lane pair, pinsetters cycling
+2.8	Bowling / Mini lane pair, pinsetters cycling

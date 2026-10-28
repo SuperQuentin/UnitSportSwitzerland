@@ -52,7 +52,7 @@ public static class XrBowling
     public static void Follow(XRController3D hand)
     {
         if (_holding != hand) return;
-        Track[_next] = (Time.GetTicksMsec() / 1000.0, hand.GlobalTransform);
+        Track[_next] = (Core.RealClock.Now, hand.GlobalTransform);
         _next = (_next + 1) % Samples;
         _count = Math.Min(_count + 1, Samples);
     }
