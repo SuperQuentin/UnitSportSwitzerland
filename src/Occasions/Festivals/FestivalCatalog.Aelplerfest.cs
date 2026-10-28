@@ -9,6 +9,11 @@ public static partial class FestivalCatalog
     /// <summary>The Fahnenschwingen game of the Älplerfest (#1269 part 5); the other games add themselves to the def in their own parts.</summary>
     public const string FahneGame = "fahne";
 
+    /// <summary>The flag ground: 12 m east of the site's middle (the mortar rack is 14 m west), and how far from it a body still counts as on it.</summary>
+    public const double FahneGroundRadius = 16, FahneGroundOffset = 12;
+
+    public static (double E, double N) FahneGround(ResolvedSite site) => (site.E + FahneGroundOffset, site.N);
+
     static FestivalCatalog() => Register(Aelplerfest());
 
     /// <summary>
