@@ -336,7 +336,7 @@ public partial class VenuePatrons : Node3D
             if (showing == h.Showing || !_first && Occupied(l, h.Floor, h.Room)) continue;
             h.Showing = showing;
             uint draw = PatronSchedule.Mix(hallKey, (uint)showing, (uint)(showing >> 32));
-            float fill = showing < 0 ? 0f : (float)(0.3 + 0.5 * PatronSchedule.Unit(draw, 2)) * PatronSchedule.Busy(PatronVenue.Cinema, HourAt(now)) / 0.85f;
+            float fill = showing < 0 ? 0f : (float)(0.25 + 0.45 * PatronSchedule.Unit(draw, 2)) * PatronSchedule.Busy(PatronVenue.Cinema, HourAt(now)) / 0.85f;
             foreach (var g in _groups)
             {
                 if (g.Hall != hall) continue;

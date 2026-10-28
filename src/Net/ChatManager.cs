@@ -508,6 +508,17 @@ public partial class ChatManager : Node
                 return;
             }
 
+            // straight into a building, no door (#1244): as --enter
+            case "enter":
+                if (rest.Length == 0) Show("/enter <venue name | building key>, e.g. /enter bowlingland or /enter 2510_1140_26", ChatKind.Error);
+                else if (Interiors.InteriorManager.Instance is not { } enterIn) Show("There are no interiors here.", ChatKind.Error);
+                else
+                {
+                    enterIn.Enter(rest, enterIn.LocalPlayer?.Invoke());
+                    Show($"Going inside {rest}...", ChatKind.System);
+                }
+                return;
+
             case "tp":
                 if (!AdminArgs.TryLv95(rest, out double tpE, out double tpN))
                     Show("Offline: /tp <E> <N> (LV95, e.g. /tp 2600000 1200000); '/tp <player>' needs a multiplayer game.", ChatKind.Error);

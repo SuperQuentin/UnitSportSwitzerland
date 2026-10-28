@@ -25,6 +25,9 @@ public partial class InteriorManager
 
     private bool _entering;
 
+    /// <summary>An <see cref="Enter"/> on its way in: the shot queue's <c>l</c> lines wait for it.</summary>
+    public bool Entering => _entering;
+
     /// <summary>Where <c>--enter</c>'s building is, LV95, to load the world round it; null without one or if not found.</summary>
     public static (double E, double N)? EnterLv95()
     {

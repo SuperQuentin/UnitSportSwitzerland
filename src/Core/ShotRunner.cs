@@ -63,6 +63,7 @@ public partial class ShotRunner : Node
 
     /// <summary>How long an "l" line has waited for <c>--enter</c> to put the camera in, s; -1 when none waits (#1244).</summary>
     private double _awaitEnter = -1;
+    private string? _enteredSeen;
 
     /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
@@ -225,7 +226,7 @@ public partial class ShotRunner : Node
         if (shot.Local)
         {
             // --enter still on its way in (#1244): the line waits for it
-            if (_plan == null && Interiors.InteriorManager.EnterTarget != null && Interiors.InteriorManager.Instance is { Entered: null })
+            if (Interiors.InteriorManager.Instance is { } going && (going.Entering || _plan == null && Interiors.InteriorManager.EnterTarget != null && going.Entered == null))
             {
                 _awaitEnter = 0;
                 return;
@@ -243,11 +244,12 @@ public partial class ShotRunner : Node
     /// </summary>
     private bool PlaceInside(Vector3 local, float pitchDeg, float yawDeg)
     {
-        // --enter put the camera in a building at launch (#1244): its plan, as an "i" line's
-        if (_plan == null && Interiors.InteriorManager.Instance?.Entered is { } entered)
+        // --enter or /enter put the camera in a building (#1244): its plan, as an "i" line's
+        if (Interiors.InteriorManager.Instance?.Entered is { } entered && entered != _enteredSeen)
         {
+            _enteredSeen = entered;
+            if (_plan == null) _outsideNear = _camera.Near;
             _plan = entered;
-            _outsideNear = _camera.Near;
             _camera.Near = InsideNear;
         }
         if (_plan == null || Interiors.InteriorManager.Instance?.BuiltNode(_plan) is not { } node)
@@ -284,7 +286,7 @@ public partial class ShotRunner : Node
         if (_awaitEnter >= 0)
         {
             _awaitEnter += delta;
-            if (Interiors.InteriorManager.Instance?.Entered == null && _awaitEnter < InsideTimeout * 3) return;
+            if (Interiors.InteriorManager.Instance is { } going && (going.Entering || going.Entered == null) && _awaitEnter < InsideTimeout * 3) return;
             _awaitEnter = -1;
             var s = _shot!.Value;
             if (!PlaceInside(s.Position, s.PitchDeg, s.YawDeg)) { _shot = null; return; }
