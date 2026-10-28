@@ -39,6 +39,11 @@
   as asked, carried into the rooms (`InteriorManager.OpenDoorForCamera`/`CameraInside`). Stand
   2-3 m from a house looking at it to look into its ground floor. The door is left open, so
   queue it last; it fails after 40 s without a door or an interior.
+  After it, `l1.6` lines (#1306) are points of that interior in its plan's own frame (x, z across the building, y over the
+  ground floor's level; pitch and yaw in that frame): stills and glides inside, one take through the rooms, the camera in
+  until a line that is not `l` (an `l` line with no `i` before it fails). The plan's rooms and pieces are in
+  `user://interiors/<tile>/<n>.json`. Inside, a still does not wait on the tiles (3 km over it, they never complete).
+  A `/clip start` line waits until the clip before is written, so one queue films take after take.
   A line whose path is `~ease`, `~lin`, `~in` or `~out` is a **glide**: the camera moves from the last line's pose to its
   own over its seconds (eased as named; yaw the short way round; a `g` height lerped above the ground), no picture, no wait
   for tiles: camera moves for a `--clip` (each logs `[glide] t=<RealClock ms>`, as `[clip] t=` logs the clip's start).
