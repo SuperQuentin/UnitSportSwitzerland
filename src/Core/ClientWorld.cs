@@ -123,6 +123,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
+        (() => Interiors.OutlineSurvey.Requested, Interiors.OutlineSurvey.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
         (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
@@ -159,7 +160,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         foreach (var (requested, run) in QuickChecks)
             if (requested())
             {
-                GetTree().Quit(run());
+                // a check that throws fails and quits, rather than leaving the game running headless
+                int code;
+                try { code = run(); }
+                catch (Exception ex)
+                {
+                    GD.PrintErr(ex.ToString());
+                    GD.Print("RESULT: FAILED (the check threw)");
+                    code = 1;
+                }
+                GetTree().Quit(code);
                 return;
             }
         if (OriginCheck.Requested)
@@ -1158,6 +1168,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Occasions.Festivals.Fahnen.FahnenNetProbe.Role != null) AddChild(new Occasions.Festivals.Fahnen.FahnenNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
+            AddErrands(adventure, items);   // #1267, ClientWorld.Errands.cs
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
         // met, its own game's HUD, decor and round kit; offline it draws only what a check gives it

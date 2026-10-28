@@ -61,6 +61,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Journal: quests, birds, fish (tabs: Q / E)", PlayerInput.BirdJournal, Pad: "{quick_menu} (hold) › Journal; LB / RB for the tabs"),
+            new("Talk to an errand giver (a figure at a post office, hut, station or landing): take the day's cards, hand cargo over", PlayerInput.InteractMount),
             new("Character: your figure (on foot)", PlayerInput.CharacterMenu, Pad: "{quick_menu} (hold) › Character, or {menu} › Character"),
         }),
         ("Adventure: navigation and travel (#1226)", new Row[]

@@ -37,10 +37,11 @@ public static partial class InteriorGenerator
     /// furnished as corridors, then given their type back (one room, one set of furniture).
     /// </summary>
     private static bool TryHouse(InteriorLayout l, Footprint fp, HouseLayout h, TileId tile, out string why,
-        out List<(RoomPlan Piece, RoomType Type)> extra)
+        out List<(RoomPlan Piece, RoomType Type)> extra, out List<DrawnFloor> drawnFloors)
     {
         why = "";
         extra = new();
+        drawnFloors = new();
         // the layout's axes in tile-local metres (X east, Z south): x is yaw from east, z a quarter clockwise of it
         double a = h.YawDeg * Math.PI / 180;
         var (ux, uz) = ((Math.Cos(a), -Math.Sin(a)), (Math.Sin(a), Math.Cos(a)));
@@ -108,6 +109,9 @@ public static partial class InteriorGenerator
             for (int room = 0; room < hf.Rooms.Count; room++)
                 if (!roomOf.Contains(room)) { why = $"a {hf.Rooms[room].Type} on floor {hf.Level} falls outside the building's box"; return false; }
             SnapOuterWalls(fl.Rooms, hw, hd);
+            // each piece's room, and every room as drawn, for MergePieces (#1197)
+            drawnFloors.Add(new DrawnFloor(fl.Rooms.Select((r, i) => (r, roomOf[i])).ToDictionary(x => x.r, x => x.Item2),
+                shapes.Select(s => s.Select(p => new Godot.Vector2((float)p.X, (float)p.Z)).ToArray()).ToList()));
 
             // one room cut into pieces: open between them, as tall as the room; the biggest keeps the furniture
             var pieces = fl.Rooms.Select((r, i) => new RoomPiece(roomOf[i], r.X0, r.Z0, r.X1, r.Z1)).ToList();
@@ -225,6 +229,110 @@ public static partial class InteriorGenerator
         });
         l.House = h.Hash();
         return true;
+    }
+
+    /// <summary>A drawn floor as <see cref="TryHouse"/> cut it: each piece's drawn room, and every room's polygon in the plan frame.</summary>
+    private sealed record DrawnFloor(Dictionary<RoomPlan, int> RoomOf, List<Godot.Vector2[]> Shapes);
+
+    /// <summary>
+    /// Each drawn room cut into pieces made one shaped room again (#1197): its polygon as drawn (an
+    /// angled wall straight, not stepped), its biggest piece its core. What was cut in the other
+    /// pieces' walls moves onto the polygon's edge it stands on; the openings between its own pieces
+    /// go. A room holding a stair or under a stair's hole keeps its pieces (a floor with a hole in it
+    /// is not drawn), and so does one whose cuts would not land on its outline. Kept only if the
+    /// plan still validates.
+    /// </summary>
+    private static void MergePieces(InteriorLayout l, List<DrawnFloor> drawn, List<(RoomPlan Piece, RoomType Type)> extra)
+    {
+        string saved = l.ToJson();
+        // the extra pieces by where they are, to find them again in the plan as it was
+        var extraAt = extra.Select(x =>
+        {
+            int f = l.Floors.FindIndex(fl => fl.Rooms.Contains(x.Piece));
+            return (F: f, I: l.Floors[f].Rooms.IndexOf(x.Piece), x.Type);
+        }).ToList();
+        int before = InteriorValidator.Validate(l).Count;
+        float hw = l.Width / 2, hd = l.Depth / 2;
+        bool merged = false;
+        for (int f = 0; f < l.Floors.Count && f < drawn.Count; f++)
+        {
+            var floor = l.Floors[f];
+            var (roomOf, shapes) = drawn[f];
+            var above = f + 1 < l.Floors.Count ? l.Floors[f + 1] : null;
+            for (int room = 0; room < shapes.Count; room++)
+            {
+                var pieces = floor.Rooms.Where(r => roomOf.TryGetValue(r, out int k) && k == room).ToList();
+                if (pieces.Count < 2) continue;
+                bool Holed(RoomPlan r)
+                {
+                    var rect = new RectPlan(r.X0, r.Z0, r.X1, r.Z1);
+                    return floor.Holes.Any(h => h.Overlaps(rect)) || floor.AllFlights().Any(fl => fl.Area().Overlaps(rect))
+                           || above != null && above.Holes.Any(h => h.Overlaps(rect));
+                }
+                if (pieces.Any(Holed)) { OutlineFailure += $" | {pieces[0].Type}: a stair in it"; continue; }
+                // the drawing, counter-clockwise and inside the box
+                var shape = RoomShapes.ClipToRect(shapes[room], -hw, -hd, hw, hd, out bool split);
+                if (split || shape.Count < 3) { OutlineFailure += $" | {pieces[0].Type}: its drawing leaves the box{(split ? " in two" : "")}"; continue; }
+                var main = pieces.OrderByDescending(r => r.Area).First();
+                // every cut of the other pieces onto the outline, by edge; one that will not land keeps the pieces
+                var moved = new List<(RoomPlan From, OpeningPlan O, OpeningPlan To)>();
+                bool lands = true;
+                foreach (var p in pieces)
+                    foreach (var o in p.Openings)
+                    {
+                        if (o.Other >= 0 && pieces.Contains(floor.Rooms[o.Other])) continue;
+                        var (at, _, along) = p.WallFrame(o);
+                        var a = at - along * (o.Width / 2);
+                        var b = at + along * (o.Width / 2);
+                        bool On(int k, Godot.Vector2 q) => RoomShapes.SegmentDistance(shape[k], shape[(k + 1) % shape.Count], q) < 0.05f;
+                        // on the outline as it is, or on the step an angled wall was cut into: the edge
+                        // nearest it, the cut put on the drawn line (both rooms either side land on one point)
+                        int exact = Enumerable.Range(0, shape.Count).FirstOrDefault(k => On(k, a) && On(k, b), -1);
+                        // an entry stays exactly where the door leads in, on the front wall as drawn
+                        if (o.Kind == OpeningKind.Entry && exact < 0) { lands = false; OutlineFailure += $" | {main.Type}: the entry is off its outline"; break; }
+                        if (p == main && exact >= 0) continue;
+                        int edge = Enumerable.Range(0, shape.Count).OrderBy(k => RoomShapes.SegmentDistance(shape[k], shape[(k + 1) % shape.Count], at)).First();
+                        var e0 = shape[edge];
+                        var e1 = shape[(edge + 1) % shape.Count];
+                        float len = e0.DistanceTo(e1), c = (at - e0).Dot((e1 - e0) / len);
+                        if (RoomShapes.SegmentDistance(e0, e1, at) > 0.35f || c < o.Width / 2 || c > len - o.Width / 2) { lands = false; OutlineFailure += $" | {main.Type}: a {o.Kind} {RoomShapes.SegmentDistance(e0, e1, at):F2} m off its drawn wall"; break; }
+                        moved.Add((p, o, new OpeningPlan
+                        {
+                            Edge = edge, Center = c, Width = o.Width, Bottom = o.Bottom, Top = o.Top, Kind = o.Kind, Other = o.Other, Open = o.Open,
+                        }));
+                    }
+                if (!lands) continue;
+                // the main piece takes the whole room; the others go, and every index into the floor with them
+                int mainIndex = floor.Rooms.IndexOf(main);
+                main.SetShape(shape);
+                main.Piece = false;
+                main.Openings.RemoveAll(o => o.Other >= 0 && pieces.Contains(floor.Rooms[o.Other]) || moved.Any(m => m.O == o));
+                main.Openings.AddRange(moved.Select(m => m.To));
+                var gone = pieces.Where(p => p != main).Select(p => floor.Rooms.IndexOf(p)).OrderByDescending(i => i).ToList();
+                // the rooms on the far side of a moved cut now open into the main piece
+                foreach (var r in floor.Rooms)
+                    foreach (var o in r.Openings)
+                        if (o.Other >= 0 && gone.Contains(o.Other)) o.Other = mainIndex;
+                foreach (int k in gone)
+                {
+                    floor.Rooms.RemoveAt(k);
+                    foreach (var r in floor.Rooms)
+                        foreach (var o in r.Openings)
+                            if (o.Other > k) o.Other--;
+                }
+                extra.RemoveAll(x => pieces.Contains(x.Piece));
+                merged = true;
+            }
+        }
+        if (!merged) return;
+        var after = InteriorValidator.Validate(l);
+        if (after.Count <= before && l.Floors.All(fl => fl.Rooms.All(Drawable))) return;
+        OutlineFailure += $" | merged, it does not validate: {string.Join("; ", after.Take(3))}";
+        // as it was: the pieces
+        var back = InteriorLayout.FromJson(saved)!;
+        l.Floors = back.Floors;
+        extra.Clear();
+        extra.AddRange(extraAt.Select(x => (l.Floors[x.F].Rooms[x.I], x.Type)));
     }
 
     /// <summary>Cuts an opening from <paramref name="lo"/> to <paramref name="hi"/> where two pieces meet, on both of them.</summary>

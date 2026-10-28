@@ -30,7 +30,7 @@ Swiss flag at each corner and a swag of pennants, model viewer under Occasions â
 - **`FlagMotion`**: the flag's pose (offset, roll, swing) per figure and phase, and the throw's parabola (1.1 m a beat of flight); the flag is a rigid node moved by this.
 - The wire format (`ToWire`/`FromWire`: four ints a figure and one byte string of sectors, refused when malformed) and `BotRoutine(routine, skill, seed)`.
 
-## The server (`FestivalService.Fahnen.cs`, protocol 67)
+## The server (`FestivalService.Fahnen.cs`, protocol 68)
 
 - `ServeFahneStart(peer)`: a running Ã„lplerfest, the game open, the body on the ground, an adventuring peer, 10 requests a second, not already swinging. Plans the routine from the slot
   and tells the peer `TellFahneStart(start, seed)`; the client plays the same routine from the shared clock (`ClockSync.ServerNow`).
