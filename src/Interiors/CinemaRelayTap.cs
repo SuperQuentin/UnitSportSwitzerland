@@ -55,12 +55,18 @@ public sealed class CinemaRelayTap : IDisposable
     /// A tap on <paramref name="link"/> from <paramref name="t0"/>: the server's relay at <see cref="CinemaVideo.LiveQuality.Low"/>,
     /// a streamer's own file (phase 4) at the quality they picked.
     /// </summary>
-    public CinemaRelayTap(string link, double t0, CinemaVideo.LiveQuality quality = CinemaVideo.LiveQuality.Low)
+    public CinemaRelayTap(string link, double t0, CinemaVideo.LiveQuality quality = CinemaVideo.LiveQuality.Low,
+        CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
         Link = link;
         T0 = t0;
         _size = CinemaVideo.SizeOf(quality);
+        _stereo = stereo;
     }
+
+    /// <summary>A 3D film's frames carry both eyes side by side, each the quality's size (phase 6).</summary>
+    private readonly CinemaVideo.Stereo _stereo;
+    public CinemaVideo.Stereo Stereo => _stereo;
 
     /// <summary>
     /// Main thread, each frame while anyone watches: the hall is at <paramref name="position"/>; adds the frames
@@ -164,8 +170,7 @@ public sealed class CinemaRelayTap : IDisposable
         _start = _live ? double.NaN : at;
         _soundStart = _live ? double.NaN : at;
         _restartAfter = position + lead + CinemaVideo.FallBehind;
-        string size = $"scale={_size.Width}:{_size.Height}:force_original_aspect_ratio=decrease,"
-            + $"pad={_size.Width}:{_size.Height}:(ow-iw)/2:(oh-ih)/2,fps={_size.Fps}";
+        string size = $"{CinemaVideo.StereoFit(_stereo, _size.Width, _size.Height)},fps={_size.Fps}";
         _video = CinemaLookup.Ffmpeg(CinemaLookup.Input(found.Video, at, _live).Concat(new[]
             { "-an", "-sn", "-vf", size, "-c:v", "mjpeg", "-q:v", _size.JpegQ.ToString(), "-f", "image2pipe", "-" }), false, Said);
         _audio = CinemaLookup.Ffmpeg(CinemaLookup.Input(found.Sound, at, _live).Concat(new[]

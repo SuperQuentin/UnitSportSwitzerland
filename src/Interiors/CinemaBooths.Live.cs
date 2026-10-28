@@ -46,15 +46,15 @@ public partial class CinemaBooths
     /// Plays a video file of this machine on a hall (phase 4): streamed from here through the server, decoded on the clock
     /// from the hall's start, at <paramref name="quality"/>.
     /// </summary>
-    public void StartFile(string plan, int hall, string path, CinemaVideo.LiveQuality quality) =>
-        Share(plan, hall, $"File: {Path.GetFileName(path)}", t0 => new CinemaFileSource(path, t0, quality));
+    public void StartFile(string plan, int hall, string path, CinemaVideo.LiveQuality quality, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono) =>
+        Share(plan, hall, $"File: {Path.GetFileName(path)}", t0 => new CinemaFileSource(path, t0, quality, stereo), stereo);
 
-    private void Share(string plan, int hall, string label, Func<double, ILiveSource> make)
+    private void Share(string plan, int hall, string label, Func<double, ILiveSource> make, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
         StopSharing();
         _pendingShare = (plan, hall, label, make, Core.RealClock.Now);
-        if (Online) RpcId(1, MethodName.AskLiveRpc, plan, hall, label);
-        else ServeLive(MyId, plan, hall, label);
+        if (Online) RpcId(1, MethodName.AskLiveRpc, plan, hall, label, (int)stereo);
+        else ServeLive(MyId, plan, hall, label, stereo);
     }
 
     /// <summary>Stops this machine's share, and the hall's screen goes back to the slides.</summary>
@@ -118,26 +118,26 @@ public partial class CinemaBooths
     // ---- the server ------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AskLiveRpc(string plan, int hall, string label)
+    private void AskLiveRpc(string plan, int hall, string label, int stereo)
     {
-        if (Multiplayer.IsServer()) ServeLive(Multiplayer.GetRemoteSenderId(), plan, hall, label);
+        if (Multiplayer.IsServer()) ServeLive(Multiplayer.GetRemoteSenderId(), plan, hall, label, (CinemaVideo.Stereo)Math.Clamp(stereo, 0, 2));
     }
 
     /// <summary>
     /// Server: <paramref name="peer"/> shares a live source labelled <paramref name="label"/> on a hall, from now, through
     /// the server for everyone. Inside that cinema only, at most one new source every <see cref="VideoCooldown"/> s.
     /// </summary>
-    public bool ServeLive(long peer, string plan, int hall, string label)
+    public bool ServeLive(long peer, string plan, int hall, string label, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside || hall < 0 || hall >= MaxHalls) { GD.Print($"[cinema] peer {peer} may not share on {plan}: not inside"); return false; }
         double wall = Core.RealClock.Now;
         if (_lastVideo.TryGetValue(peer, out double last) && wall - last < VideoCooldown) return false;
         _lastVideo[peer] = wall;
         string link = CinemaVideo.LiveLink(peer, label);
         double t0 = ClockSync.ServerNow;
-        SetVideo(plan, hall, link, t0, true);
-        if (Online) Rpc(MethodName.SetVideo, plan, hall, link, t0, true);
+        SetVideo(plan, hall, link, t0, true, (int)stereo);
+        if (Online) Rpc(MethodName.SetVideo, plan, hall, link, t0, true, (int)stereo);
         _pushed.Remove((plan, hall));
         _ownerAway.Remove((plan, hall));
         GD.Print($"[cinema] hall {hall + 1} of {plan} shows peer {peer}'s {CinemaVideo.LiveOf(link).Label}");
@@ -178,8 +178,8 @@ public partial class CinemaBooths
         if (away > OwnerGone)
         {
             GD.Print($"[cinema] peer {owner} left: hall {key.Hall + 1} of {key.Plan} stops their share");
-            SetVideo(key.Plan, key.Hall, "", 0, false);
-            if (Online) Rpc(MethodName.SetVideo, key.Plan, key.Hall, "", 0.0, false);
+            SetVideo(key.Plan, key.Hall, "", 0, false, 0);
+            if (Online) Rpc(MethodName.SetVideo, key.Plan, key.Hall, "", 0.0, false, 0);
             _pushed.Remove(key);
             _ownerAway.Remove(key);
             return false;
