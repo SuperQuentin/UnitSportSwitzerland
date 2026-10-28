@@ -207,7 +207,7 @@ public partial class ClipRecorder : Node
         _hasX264 ??= encoders.Contains("libx264") || encoders.Contains("libopenh264");
         string[] h264 = encoders.Contains("libx264")
             ? ["-c:v", "libx264", "-preset", HighQuality ? "slow" : "medium", "-crf", HighQuality ? "16" : "20"]
-            : ["-c:v", "libopenh264", "-b:v", "6M"];
+            : ["-c:v", "libopenh264", "-b:v", HighQuality ? "24M" : "6M"];
         // 128 colours a clip; the bayer dither finer in the lit styles (#1070): at PS1's scale 5,
         // Cartoon's sky gradients and the haze round the sun banded into rings (scale 3: ~13% more bytes)
         int bayer = Styles.StyleKit.Applied == Styles.VisualStyle.Ps1 ? 5 : 3;
