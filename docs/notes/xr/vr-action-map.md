@@ -54,6 +54,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
 | fight_block (#495, hold) | Shift L / B | ok: B (`XrPad.RightB`, not the crouch's B) | forearms raised in front of the face |
+| join the Älplerfest ring's queue (#1269) | E at the sawdust ring / Y | ok: the pad route through `XrPad` (Y at the ring); **gap**: gripping the ring's rope (after a headset playtest) | grip the rope |
+| Schwingen lean / brace / throw (#1269) | move keys (towards / away / round), Shift (`fight_block`), LMB (`fight_punch`) throw, RMB (`fight_kick`) leg hook / L stick, B, X RB, Y LB | ok: L stick (forward = towards the rival), B (`XrPad.RightB`), R / L trigger | **gap**: gripping the belt and trouser leg for real, hand speed for the throw (after a headset playtest) |
+| Schwingen Bodenarbeit (#1269, mash to pin) | LMB / RMB / X RB, Y LB | ok: the triggers | keep |
 | aura_next (#907, timed on the downbeat; #914 the waiter's straight face) | Space, LMB / A, RB | ok: R trigger (sends RB on foot), or **strike the next move's pose for real** (`AuraBody.Classify` on `VrHands`, #914) | keep |
 | aura planner: add / aura_remove / aura_lock / aura_suggest (#907) | click, arrows Enter / Backspace / F / G; A / X / Y / R3 | ok: stick + A / X / Y / R stick click | point at the cards with the laser |
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |

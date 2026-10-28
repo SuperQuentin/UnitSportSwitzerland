@@ -1445,6 +1445,10 @@ public static partial class HumanMeshBuilder
         AuraSixSeven, AuraLasso, AuraCutTheRope,
         // #914
         AuraLeadRival, AuraShush, AuraBow, AuraLaugh,
+        // #1269: Schwingen (HumanMeshBuilder.Schwing.cs); past FightStand, so no groove either
+        SchwingGrip, SchwingLeanIn, SchwingLeanOut, SchwingLeanLeft, SchwingLeanRight, SchwingBrace, SchwingDown,
+        SchwingGroundTop, SchwingGroundBottom, SchwingStumble, SchwingBrush, SchwingDusted,
+        SchwingKurz, SchwingUebersprung, SchwingHueften, SchwingBrienzer, SchwingGammen, SchwingWyberhaken,
     }
 
     /// <summary>
@@ -1575,6 +1579,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= SchwingMoves) return SchwingResolve(index - SchwingMoves);
         if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
@@ -1999,6 +2004,7 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case >= DanceMove.SchwingGrip: EvalSchwing(move, t, mv, ref ch); break;
             case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }

@@ -48,6 +48,8 @@ public partial class AuraManager : Node
 
     /// <summary>Server: the fist fights, so nobody is in a fight and a battle at once.</summary>
     public FightManager? Fights { get; set; }
+    /// <summary>Server: the Schwingen bouts (#1269), so nobody is in an aura battle and a bout at once.</summary>
+    public SchwingManager? Schwing { get; set; }
 
     // ---- server --------------------------------------------------------------------------
 
@@ -177,7 +179,8 @@ public partial class AuraManager : Node
 
     private string? Busy(long peer) =>
         _auraOf.ContainsKey(peer) ? "[aura] You are already in an aura battle."
-        : Fights?.InMatch(peer) == true ? "[aura] You are in a fist fight." : null;
+        : Fights?.InMatch(peer) == true ? "[aura] You are in a fist fight."
+        : Schwing?.InMatch(peer) == true ? "[aura] You are wrestling." : null;
 
     private string Accept(long sender, long challenger)
     {

@@ -874,6 +874,9 @@ public partial class ChatManager : Node
     /// <summary>Aura battles (<c>/aura</c>, #907), wired by ServerWorld.</summary>
     public Combat.AuraManager? Aura { get; set; }
 
+    /// <summary>Schwingen (<c>/schwing</c>, #1269), wired by ServerWorld.</summary>
+    public Combat.SchwingManager? Schwing { get; set; }
+
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
     /// <summary>Versteckis (#1268): <c>/vs …</c>, and the spectators' chat scope.</summary>
@@ -1064,6 +1067,12 @@ public partial class ChatManager : Node
                 if (Fight == null) ReplyTo(sender, "Fights are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId) ReplyTo(sender, "'/fight' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Fight.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "schwing":
+                if (Schwing == null) ReplyTo(sender, "Schwingen is not available on this server.", ChatKind.Error);
+                else if (sender == ConsolePeerId) ReplyTo(sender, "'/schwing' needs a player.", ChatKind.Error);
+                else ReplyTo(sender, Schwing.Command(sender, rest), ChatKind.Private);
                 return;
 
             case "aura":

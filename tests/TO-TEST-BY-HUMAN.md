@@ -7,6 +7,18 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Schwingen at the Älplerfest ([#1315](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1315))
+
+Online (a server and two clients), or `--festival test --date 2027-08-18 --world fixture`; the ring stands 20 m north of the festival's middle. `/schwing bot` works anywhere a bot is near.
+
+- [ ] Walk to the sawdust ring and look at it: the prompt says "Wrestle: Schwingen"; E (pad Y) joins the queue, E again leaves it. With nobody else, a bot joins after about 8 s.
+- [ ] In the bout: lean with the stick (screen-right is towards them, up and down lean round), throw with LMB (or X on a pad), hook a leg with RMB. Do the leans, the braced stance, each of the six throws and the thrown body read well from the side-on camera in Cartoon, PS1 and Realistic? Does the lying body sit in the sawdust, not float or sink?
+- [ ] When they throw, the banner names the throw and tells how to answer; hold Shift (pad B) and lean the named way, or lean the counter. Is the 0.35 s window fair on a pad and at 100 ms ping?
+- [ ] On the ground, mashing the punch key pins them or gets you out; do the winner's brush and the loser's dusting look right, and does the ring bell and thump sound good (sound player: Schwing*)?
+- [ ] A won bout pays Batzen and party points (chat line, the Journal's Festival tab); a bout under 20 s or a forfeit pays the forfeiter nothing.
+- [ ] VR: the stick leans (forward = towards the rival), B braces, the triggers throw; the head keeps its view. Gripping the belt for real is not built.
+- [ ] The Schwingerhosen (jute trousers, Alpine set) wear from the inventory and look right in the Bottom slot (they are not yet sold or found: `/give` one).
+
 ## A video on a cinema hall's screen ([#1299](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1299))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (Cinémas du Grütli, Geneva), walk up to the booth. A dev build needs ffmpeg on PATH (yt-dlp too for YouTube); a release ships both.

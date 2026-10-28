@@ -45,6 +45,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private BattleRoyale.BrManager? _br;
     private Adventure.Versteckis.VersteckisManager? _vs;
     private Combat.FightManager? _fight;
+    private Combat.SchwingManager? _schwing;
     private Combat.AuraManager? _aura;
     private InviteService? _invites;
     private Parties? _parties;
@@ -296,6 +297,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _fight.Aura = _aura;
         AddChild(_aura);
         _chat.Aura = _aura;
+
+        // Schwingen (#1269): World/Schwing, the server owns every bout and the ring's queue
+        _schwing = Combat.SchwingManager.CreateServer(_chat, _players);
+        _schwing.Fights = _fight;
+        _schwing.Auras = _aura;
+        _fight.Schwing = _schwing;
+        _aura.Schwing = _schwing;
+        AddChild(_schwing);
+        _chat.Schwing = _schwing;
 
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
@@ -730,6 +740,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _vs?.PeerLeft(id);
         _fight?.PeerLeft(id);
         _aura?.PeerLeft(id);
+        _schwing?.PeerLeft(id);
         _invites?.PeerLeft(id);
         _parties?.PeerLeft(id);
         _cranes?.PeerLeft(id);

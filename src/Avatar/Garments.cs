@@ -241,6 +241,7 @@ public static class Garments
         new(ItemId.Jeans, "Jeans", WearSlot.Bottom, 8, GarmentShape.Pants, GarmentStyle.Basic, new("3a5a8a"), new("c8a060"), new("2e4a72")),
         new(ItemId.CargoPants, "Black cargo pants", WearSlot.Bottom, 9, GarmentShape.Cargo, GarmentStyle.Gothic, Charcoal, new("2a2a30"), Silver),
         new(ItemId.HoloSkirt, "Holo skirt", WearSlot.Bottom, 10, GarmentShape.PleatedSkirt, GarmentStyle.Special, White, White, White, Finish.Holo),
+        new(ItemId.Schwingerhosen, "Schwingerhosen", WearSlot.Bottom, 13, GarmentShape.Pants, GarmentStyle.Alpine, new("b89a68"), new("8a6e48"), new("a88a5a")),
         new(ItemId.TazTrousers, "TAZ 90 trousers", WearSlot.Bottom, 11, GarmentShape.Cargo, GarmentStyle.Basic, TazGreen, new("3a4428"), new("1f2418"), Finish.Camo),
 
         // ---- legs ----

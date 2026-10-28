@@ -407,12 +407,11 @@
 79.2	Cars / ZN6 (parked)
 4.8	Cars / ZZW30 MR-S
 4.8	Cars / ZZW30 MR-S (parked)
-310.6	Clothes / Alpine knee socks
-115.4	Clothes / Alpine wool gloves
-1917.7	Clothes / Bee stockings
+444.1	Clothes / Alpine knee socks
+549	Clothes / Alpine wool gloves
+2645.9	Clothes / Bee stockings
 4.2	Clothes / Bell collar
-549	Clothes / Bergführer breeches
-128.1	Clothes / Bergführer cap
+172.5	Clothes / Bergführer cap
 409.1	Clothes / Big pink bow
 115.4	Clothes / Black band tee
 265.5	Clothes / Black beanie
@@ -423,42 +422,40 @@
 96.1	Clothes / Black shades
 115.4	Clothes / Black shorts
 557.1	Clothes / Black slit maxi skirt
-56.9	Clothes / Black thigh-highs
-2761.1	Clothes / Black-white thigh-highs
+171.5	Clothes / Black thigh-highs
+1917.7	Clothes / Black-white thigh-highs
 542.5	Clothes / Buckle corset
 22.5	Clothes / Bunny ears
 403.2	Clothes / Cat-ear headset
 115.4	Clothes / Chain crop top
 96.1	Clothes / Chain necklace
-287.7	Clothes / Combat boots
+190.4	Clothes / Combat boots
 96.1	Clothes / Devil horns
-115.4	Clothes / Disco platforms
+549	Clothes / Disco platforms
 96.1	Clothes / Disco-ball top
-703.9	Clothes / Edelweiss shirt
-110.1	Clothes / Erstbesteigung cap
-517.9	Clothes / Mitfahrer gloves
-517.9	Clothes / Fahrlehrer gloves
+287.5	Clothes / Edelweiss shirt
+172.5	Clothes / Erstbesteigung cap
+115.4	Clothes / Mitfahrer gloves
+115.4	Clothes / Fahrlehrer gloves
 6.5	Clothes / Fang mask
-76.1	Clothes / Fingerless gloves
-5689.4	Clothes / Fishnets
+34.6	Clothes / Fingerless gloves
+6095.3	Clothes / Fishnets
 115.4	Clothes / Galaxy hoodie
-104.6	Clothes / Gletscher scarf
+522.8	Clothes / Gletscher scarf
 99.1	Clothes / Glitch tee
 2.8	Clothes / Gothic round shades
 285.1	Clothes / Green polo
-97.2	Clothes / Hard hat
+154.1	Clothes / Hard hat
 66.3	Clothes / Heart choker
 391.5	Clothes / Heart shades
-337.1	Clothes / Hi-vis vest
+368.1	Clothes / Hi-vis vest
 117.9	Clothes / Holo skirt
 2.8	Clothes / Industrial bar and nose ring
 517.9	Clothes / Jeans
-444.1	Clothes / Kawaii knee socks
-549	Clothes / Lace arm warmers
+913.7	Clothes / Kawaii knee socks
 96.1	Clothes / Lava tee
-12.4	Clothes / Mountain guide's hat
+77.5	Clothes / Mountain guide's hat
 287.5	Clothes / Navy polo
-549	Clothes / Neon gloves
 405.8	Clothes / Neon headset
 549	Clothes / Olive army T-shirt
 40.7	Clothes / Pastel heart tee
@@ -467,41 +464,42 @@
 11.7	Clothes / Pink cat mask
 157.6	Clothes / Pink crop top
 3864.5	Clothes / Pink lolita dress
-12	Clothes / Pink paw gloves
+12.9	Clothes / Pink paw gloves
 118	Clothes / Pink pleated skirt
-18	Clothes / Pink sneakers
-2645.9	Clothes / Pink-white thigh-highs
-489.5	Clothes / Platform buckle boots
-12.4	Clothes / Polier hat
+1898.6	Clothes / Pink-white thigh-highs
+428.9	Clothes / Platform buckle boots
+77.5	Clothes / Polier hat
 3797.8	Clothes / Postal-doll jacket
 23.5	Clothes / Postal-doll skirt
 96.1	Clothes / Rainbow cat ears
-611.2	Clothes / Rainbow stockings
+168.3	Clothes / Rainbow stockings
 115.4	Clothes / Red tartan skirt
 2965.5	Clothes / Ruffled black mini
-99.8	Clothes / Seilschaft scarf
-100.4	Clothes / Sennenkäppi
-549	Clothes / Silver antennae
+522.8	Clothes / Seilschaft scarf
+267.7	Clothes / Sennenkäppi
+115.4	Clothes / Silver antennae
 99.1	Clothes / Silver hoops
-549	Clothes / Silver space suit
 113.2	Clothes / Skull mask
 179.4	Clothes / Spiked choker
-77.5	Clothes / Stammgast felt hat
+3.2	Clothes / Stammgast felt hat
 124.9	Clothes / Star glasses
-506.7	Clothes / Striped arm warmers
+1002.3	Clothes / Striped arm warmers
 2633.3	Clothes / Striped long-sleeve
 12.5	Clothes / Swirly A mask
 100.5	Clothes / Swirly OwO mask
 3.8	Clothes / Swiss-cross bandana
 483.5	Clothes / TAZ 90 jacket
-115.4	Clothes / Tall antennae
+549	Clothes / Tall antennae
 6.4	Clothes / Tongue-out mask
-167.1	Clothes / Treichel
+3.7	Clothes / Treichel
 99.1	Clothes / UwU mask
 115.4	Clothes / White marcel
 533.3	Clothes / Witch robe
-12.4	Clothes / Zimmermann hat
-292.3	Clothes / Zipfelmütze
+170.3	Clothes / Zimmermann hat
+199.6	Clothes / Zipfelmütze
+549	Clothes / Alien antennae
+115.4	Clothes / Mary Janes
+517.9	Clothes / TAZ 90 trousers
 418	Concert / Stage - Center: Remy Rossi (Pop, screens CenterAndSides)
 313.2	Concert / Stage - EndNorth: Silent Echoes (HipHop, screens None)
 281.6	Concert / Stage - EndSouth: Paper Foxes (Pop, screens Center)
@@ -859,6 +857,7 @@
 6.6	Items / Rubber
 2.3	Items / Rudd
 7.5	Items / RuffledMini
+3.7	Items / Schwingerhosen
 5.9	Items / SeedPotato
 3	Items / SeilschaftScarf
 3.1	Items / Sennenkaeppi
@@ -1082,6 +1081,19 @@
 483.9	Rides / Wheel loader (forks) (parked)
 513.1	Rides / Wheel loader (parked)
 9.5	Rides / Wingsuit
+403.1	Schwingen / Stance - Brace
+382.9	Schwingen / Stance - Dusted
+96.1	Schwingen / Stance - GroundBottom
+381.4	Schwingen / Stance - GroundTop
+381.4	Schwingen / Stance - LeanIn
+2.8	Schwingen / Stance - LeanLeft
+96.1	Schwingen / Stance - LeanRight
+403.1	Schwingen / Stance - Stumble
+2.8	Schwingen / Throw - Brienzer
+96.1	Schwingen / Throw - Gammen
+23.9	Schwingen / Throw - Hüfter
+403.1	Schwingen / Throw - Wyberhaken
+382.9	Schwingen / Throw - Übersprung
 295728	Terrain / Building site - a site office with its gallery, one stack (#827)
 591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
 157213.4	Terrain / Building site - foundations, a block of four floors
@@ -1188,7 +1200,6 @@
 199.6	People / Errand givers - Senn
 39.4	People / Errand givers - ShipMaster
 467.9	People / Errand givers - StationMaster
-96.1	Clothes / Bowling shoes
 3.4	Items / BowlingShoes
 2.8	Furniture / LanePair
 2.8	Bowling / Lane pair, pinsetters cycling
