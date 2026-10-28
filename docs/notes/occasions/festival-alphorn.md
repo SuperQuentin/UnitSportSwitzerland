@@ -6,8 +6,8 @@
 ## What the player does
 
 - At a running festival whose `alphorn` game is open, stand at the **alphorn row** (three horns on trestles, `HornGround.AlphornRow`, 16 m east and 7 m north of the site's
-  middle, 7 m reach): the prompt is "[E] Play the alphorn and yodel" (`HornGround.InteractionFor`, in the outdoors chain of `InteriorManager.Interact`; `TryInteract` in `FootPlayer.TryInteract`).
-- The server seats you in the **song of this 90 s slot** (`FestivalService.ServeHornStart`): everyone who sits down in the slot plays the same chart, in the order they sit:
+  middle: that is where you stand, at the mouthpiece end, the horns lie `HornsAheadM` = 3.2 m further east; 7 m reach): the prompt is "[E] Play the alphorn and yodel" (`HornGround.InteractionFor`, in the outdoors chain of `InteriorManager.Interact`; `TryInteract` in `FootPlayer.TryInteract`).
+- The server seats you in a song (`FestivalService.ServeHornStart`): the first player to sit down opens one, whoever sits down within 45 s joins it, and they play the same chart in the order they sit:
   I melody, II a voice below it, III the drone, IV the yodel. A fifth finds the row full.
 - `HornGame` (a CanvasLayer at the bottom, clear of the centre and the hotbar) scrolls the part's notes towards a line after a four-beat count-in. **Pick** the note (the part's
   partials are its lanes): mouse wheel, W / S, the right stick; **hold** blow (`use_item`, RT) from the note's start to its end; **yodel** (voice IV): tap `jump` on each beat.
@@ -40,7 +40,7 @@
 - Three RPCs on the festival service's node: `RequestHornStart()`, `RequestHornSong(string plays)` (client to server) and `TellHornSeat(seed, part, voices)`, `TellHornResult(...)` (server
   to the owner). Blows travel as `partial,on_ms,off_ms;...` (`HornWire`, strict: a bad string is refused whole; at most 140 blows, 4000 characters).
 - `ServeHornStart(peer, out seat)`: needs a running festival with the game open, an adventuring peer (a bot is exempt), the body within 12 m of the row, 10 requests a second at most.
-  The session is keyed by (instance, slot); the seed is `HornWire.SeedOf(instance, slot)`. A second request by the same peer drops its old voice.
+  The seed is `HornWire.SeedOf(instance, n)` for the instance's n-th song (a server count, so no two songs of a festival share one). A second request by the same peer drops its old voice.
 - `ServeHornSong(peer, plays)`: the seat must be 90 % of the song old (so a forged early song pays nothing), the body within 40 m of the row, plays well-formed. When all voices of the session
   have sent theirs the song is finished; otherwise `HornTick` (every 2 s) finishes it 25 s after the song would have ended for the last to sit down. The finish grades everyone, scores
   the harmony of the voices that played and calls `Award(peer, festival, batzen, why, "alphorn", points)` for each human; `HornPaid` keeps the results (checks).
@@ -58,8 +58,7 @@
 - Quick: `--hornscheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure`: no seat away from the row, E at it, three bots take the other
   voices, a forged and an early song refused, the whole song played frame by frame through `HornGame` (`Scripted`), a ring of walls a kilometre out echoes in 5.4-6.4 s, four voices graded and paid
   (the book, the board), then the yodel seat.
-- Net: `tools/hornnetcheck.sh` (Lea melody, Tom second voice, same seed, an early song refused, both results and books on the remote peers). The two seats must fall in one 90 s slot (a 1 in 90 chance of
-  straddling: run it again).
+- Net: `tools/hornnetcheck.sh` (Lea melody, Tom second voice, same seed, an early song refused, both results and books on the remote peers). Tom sits down within 45 s of Lea.
 
 ## Gaps
 

@@ -47,7 +47,7 @@ public partial class HornCheck : ChatProbe
         svc.Refused += why => refused.Add(why);
 
         // ---- away from the row: nothing to press -------------------------------------------------
-        Me!.GlobalPosition += new Vector3(-40f, 0.3f, 0f);
+        Me!.PlaceAt(Me.GlobalPosition + new Vector3(-40f, 0.3f, 0f), Me.Rotation.Y);
         Me.Velocity = Vector3.Zero;
         await Seconds(0.5);
         Expect(HornGround.At(Me) == null && HornGround.InteractionFor(Me) == null && !HornGround.TryInteract(Me), "away from the row there is no prompt");
@@ -57,7 +57,7 @@ public partial class HornCheck : ChatProbe
         // ---- at the row ------------------------------------------------------------------------------
         var (rowE, rowN) = HornGround.SpotOf(site);
         var g0 = Me.Global;
-        Me.GlobalPosition += new Vector3((float)(rowE - g0.E), 0.3f, (float)(g0.N - rowN));
+        Me.PlaceAt(Me.GlobalPosition + new Vector3((float)(rowE - g0.E), 0.3f, (float)(g0.N - rowN)), Me.Rotation.Y);
         Me.Velocity = Vector3.Zero;
         await Seconds(0.5);
         Expect(HornGround.At(Me) != null && HornGround.InteractionFor(Me) is { } hint && hint.Text.Contains("alphorn"), $"at the row the prompt says so ({HornGround.InteractionFor(Me)?.Text})");
@@ -121,7 +121,7 @@ public partial class HornCheck : ChatProbe
         Expect(r.Value.Harmony100 >= 130, $"four voices in tune earn a harmony bonus (x{r.Value.Harmony100 / 100.0:F2})");
         Expect(r.Value.Batzen > AlphornRules.BatzenPerSong && r.Value.BoardPoints > r.Value.Points, $"paid {r.Value.Batzen} Batzen and {r.Value.BoardPoints} party points");
         var inst = Svc.Mine.Instances.GetValueOrDefault("test-2027") ?? new FestivalInstance();
-        Expect(inst.Batzen == r.Value.Batzen && inst.Points == r.Value.BoardPoints && inst.Best.GetValueOrDefault(HornGround.GameId) == r.Value.BoardPoints, $"the book holds it ({inst.Batzen} Batzen, {inst.Points} points)");
+        Expect(inst.Earned == r.Value.Batzen && inst.Batzen == r.Value.Batzen + 60 && inst.Points == r.Value.BoardPoints && inst.Best.GetValueOrDefault(HornGround.GameId) == r.Value.BoardPoints, $"the book holds it: the song's Batzen, the Warm-up and Crowd milestones' 60 on top ({inst.Earned}/{inst.Batzen} Batzen, {inst.Points} points)");
         Expect(svc.BoardOf(FestivalCatalog.TestId) is { } board && board.Points == r.Value.BoardPoints, "the party board moved");
         Expect(svc.HornPaid.Count(p => p.Peer < 0) == 3 && svc.HornPaid.All(p => p.Peer > 0 || p.Result.Batzen == 0), "the bots made up the field and earned nothing");
         Expect(svc.HornVoices == 0, "the song is over");

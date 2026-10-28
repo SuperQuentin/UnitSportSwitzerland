@@ -52,13 +52,13 @@ public static class HornWire
         return [.. list];
     }
 
-    /// <summary>The seed of the song of a festival instance's time slot: the same for everyone in it, and another for the next slot.</summary>
-    public static int SeedOf(string instance, long slot)
+    /// <summary>The seed of a festival instance's n-th song: the same for everyone who joins it, another for the next song and the next year.</summary>
+    public static int SeedOf(string instance, long serial)
     {
         uint h = 2166136261;
         foreach (char c in instance) h = (h ^ c) * 16777619;
-        h = (h ^ (uint)slot) * 16777619;
-        h = (h ^ (uint)(slot >> 32)) * 16777619;
+        h = (h ^ (uint)serial) * 16777619;
+        h = (h ^ (uint)(serial >> 32)) * 16777619;
         return (int)(h & 0x7FFFFFFF);
     }
 }

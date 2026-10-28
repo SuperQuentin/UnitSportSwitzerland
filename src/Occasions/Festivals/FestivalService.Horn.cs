@@ -5,14 +5,14 @@ using UnitSport.Occasions.Festivals.Horn;
 
 namespace UnitSport.Occasions.Festivals;
 
-// The alphorn and yodel game (#1269): the server's side. The song is a seed per festival instance and time slot, so everyone who sits down
-// to the row in the same slot plays the same chart (up to four, one voice each); each plays it on their own clock and sends the blows when
+// The alphorn and yodel game (#1269): the server's side. The first player to sit down opens a song (a seed from the festival
+// instance and a count), whoever sits down within HornJoinSeconds plays the same chart (up to four, one voice each); each plays it on their own clock and sends the blows when
 // it is over, the server grades them and scores the harmony chart-relative (no clocks to align), then pays everyone together. Three RPCs
 // (protocol 61): a seat, the blows, the result. Bots take a seat through the same methods.
 public partial class FestivalService
 {
-    /// <summary>A time slot: everyone who starts within it plays the same song.</summary>
-    public const double HornSlotSeconds = 90;
+    /// <summary>Whoever sits down within this long of the first player joins that player's song; later, a new song opens.</summary>
+    public const double HornJoinSeconds = 45;
     /// <summary>The blows are accepted after this share of the song has gone by, and refused sooner.</summary>
     private const double HornMinShare = 0.9;
     /// <summary>A song is paid when all its voices are in, or this long after its last voice sat down plus the song.</summary>
@@ -29,12 +29,14 @@ public partial class FestivalService
     private sealed class HornSession
     {
         public string Festival = "", Instance = "";
-        public long Slot;
+        public long Serial;
+        public double OpenedAt;
         public AlphornChart Chart = null!;
         public readonly List<HornVoice> Voices = new();
     }
 
     private readonly List<HornSession> _horn = new();
+    private readonly Dictionary<string, long> _hornSongs = new();
 
     /// <summary>Server (checks, bots): every song paid so far, in order: the peer, its result.</summary>
     public List<(long Peer, HornResult Result)> HornPaid { get; } = new();
@@ -64,12 +66,13 @@ public partial class FestivalService
         if (peer > 0 && Connected(peer) && !Allowed(peer)) return "too fast";
 
         double now = GameClock.Now;
-        long slot = (long)(now / HornSlotSeconds);
         DropHornVoice(peer);
-        var session = _horn.FirstOrDefault(s => s.Instance == run.Instance && s.Slot == slot);
+        var session = _horn.LastOrDefault(s => s.Instance == run.Instance && now - s.OpenedAt <= HornJoinSeconds);
         if (session == null)
         {
-            session = new HornSession { Festival = run.Id, Instance = run.Instance, Slot = slot, Chart = AlphornChart.Make(HornWire.SeedOf(run.Instance, slot)) };
+            long serial = _hornSongs.GetValueOrDefault(run.Instance) + 1;
+            _hornSongs[run.Instance] = serial;
+            session = new HornSession { Festival = run.Id, Instance = run.Instance, Serial = serial, OpenedAt = now, Chart = AlphornChart.Make(HornWire.SeedOf(run.Instance, serial)) };
             _horn.Add(session);
         }
         if (session.Voices.Count >= AlphornRules.MaxVoices) return Tell(peer, "The row is full. Wait for the next song.");

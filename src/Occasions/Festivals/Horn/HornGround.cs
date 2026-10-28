@@ -9,7 +9,7 @@ using static UnitSport.Occasions.PropColors;
 namespace UnitSport.Occasions.Festivals.Horn;
 
 /// <summary>
-/// The alphorn row of a festival ground (#1269): three horns on trestles a few metres from the site's middle, the place E (Y on a pad, a
+/// The alphorn row of a festival ground (#1269): three horns on trestles a few metres from the site's middle, with a spot to stand at by their mouthpieces, the place E (Y on a pad, a
 /// hand in VR) starts a song. It is a point derived from the site, so the server and every client agree with nothing sent; the prop
 /// is dressed by <see cref="FestivalOccasion"/> like the flag poles (hashed per tile, shown in the model viewer under Occasions › Prop).
 /// </summary>
@@ -21,6 +21,8 @@ public static class HornGround
     public const double OffsetE = 16, OffsetN = 7;
     /// <summary>Within this of the row a player can start a song (the server allows a little more for lag).</summary>
     public const double ReachM = 7, ServerReachM = 12;
+    /// <summary>The prop's middle is this far east of the spot a player stands at: the mouthpieces are about a metre from it.</summary>
+    public const double HornsAheadM = 3.2;
 
     public static (double E, double N) SpotOf(ResolvedSite site) => (site.E + OffsetE, site.N + OffsetN);
 
@@ -55,7 +57,7 @@ public static class HornGround
             {
                 float x = -1.2f + b * 0.8f;
                 float y = 1.05f + (x + 1.9f) / 3.1f * 0.4f;
-                s.Box(new Vector3(x, y, z), new Vector3(0.06f, 0.22f, 0.22f), Strap);
+                s.Box(new Vector3(x, y, z), new Vector3(0.04f, 0.15f, 0.15f), Strap);
             }
             foreach (float tx in new[] { -1.0f, 0.9f })
             {
@@ -72,6 +74,7 @@ public static class HornGround
     {
         if (FestivalCatalog.Get(festival)?.Game(GameId) == null) return;
         var (e, n) = SpotOf(site);
+        e += HornsAheadM;   // the horns lie east of where the player stands, mouthpieces towards them
         if (TileId.FromLv95(e, n) != tile.Id) return;
         var local = tile.Local(e, n);
         if (tile.HeightAt(local) is not { } h) return;

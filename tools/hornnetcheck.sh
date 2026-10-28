@@ -3,7 +3,7 @@
 # calendar read as 11 March 2027 (day 2 of the check-only festival, --festival test). Everything is checked on the REMOTE peers: Lea and Tom walk to
 # the alphorn row and sit down to the same song (melody and second voice), a song sent too early is refused, both play it with the real game
 # screen, the server grades both and scores their harmony, and each peer is told its own result and holds its own Batzen. No terrain data needed.
-# The two seats must fall in the same 90 s slot of the server (about a 1 in 90 chance they straddle a boundary: run it again).
+# Tom sits down within 45 s of Lea, so he joins her song.
 #   GODOT=<exe> [PORT=] tools/hornnetcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" hornnet
 PORT=${PORT:-7971}

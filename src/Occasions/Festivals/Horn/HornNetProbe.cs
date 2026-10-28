@@ -38,17 +38,26 @@ public partial class HornNetProbe : ChatProbe
         // at the row
         var (rowE, rowN) = HornGround.SpotOf(site);
         var g0 = Me!.Global;
-        Me.GlobalPosition += new Vector3((float)(rowE - g0.E), 0.3f, (float)(g0.N - rowN));
+        Me.PlaceAt(Me.GlobalPosition + new Vector3((float)(rowE - g0.E), 0.3f, (float)(g0.N - rowN)), Me.Rotation.Y);
         Me.Velocity = Vector3.Zero;
         Expect(await Until(() => HornGround.At(Me) != null && HornGround.InteractionFor(Me) != null, 10), "at the row, with the prompt");
-        Say("ready");
-        Expect(await Heard(_role == "A" ? "B" : "A", "ready", 120), "the other player is at the row too");
+        Expect(await Handshake("ready", _role == "A" ? "B" : "A", "ready", 120), "the other player is at the row too");
 
         // A sits down first, then B: the same song, the next voice
         if (_role == "B") Expect(await Heard("A", "seated", 60), "A sat down first");
-        Expect(HornGround.TryInteract(Me), "E at the row asks for a seat");
-        Expect(await Until(() => game.State == HornGame.Phase.Playing, 20), "the server seated this player");
+        GD.Print($"{Log} asking at {Time.GetTicksMsec() / 1000.0:F1} s");
+        // the server learns where the body stands a moment after the teleport: ask again if it still says "go to the row"
+        bool asked = false;
+        for (int i = 0; i < 8 && game.State != HornGame.Phase.Playing; i++)
+        {
+            if (game.Idle) asked |= HornGround.TryInteract(Me);
+            await Until(() => game.State == HornGame.Phase.Playing || game.Idle, 6);
+            if (game.State != HornGame.Phase.Playing) await Seconds(1.5);
+        }
+        Expect(asked, "E at the row asks for a seat");
+        Expect(game.State == HornGame.Phase.Playing, "the server seated this player");
         Expect(game.Part == (_role == "A" ? HornPart.Melody : HornPart.Third), $"as voice {(_role == "A" ? "I" : "II")} ({game.Part})");
+        GD.Print($"{Log} seated at {Time.GetTicksMsec() / 1000.0:F1} s");
         Say("seated");
         Expect(await Heard(_role == "A" ? "B" : "A", "seated", 60), "both are seated in the same song");
         var seed = game.Chart.Seed;
@@ -70,6 +79,7 @@ public partial class HornNetProbe : ChatProbe
             await Frames(() => game.SongTime >= n.End * spb, 3000);
             game.Blow(false);
         }
+        GD.Print($"{Log} song played at {Time.GetTicksMsec() / 1000.0:F1} s, {game.Plays.Count} blows worth {AlphornRules.Grade(chart, game.Part, game.Plays).Points} here, fps {Engine.GetFramesPerSecond()}");
         Expect(await Until(() => game.Result != null, 60), "this remote peer was told its result");
         var r = game.Result;
         if (r != null)
@@ -78,13 +88,25 @@ public partial class HornNetProbe : ChatProbe
             Expect(r.Value.Points >= r.Value.Max * 0.9, $"{r.Value.Points} of {r.Value.Max}");
             Expect(r.Value.Harmony100 >= 115, $"the two voices earned a harmony bonus (x{r.Value.Harmony100 / 100.0:F2})");
             Expect(r.Value.Batzen > AlphornRules.BatzenPerSong * 0.5, $"{r.Value.Batzen} Batzen");
-            Expect(await Until(() => Mine.Batzen == r.Value.Batzen && Mine.Points == r.Value.BoardPoints, 10),
-                $"this peer's own book holds it ({Mine.Batzen} Batzen, {Mine.Points} points)");
+            Expect(await Until(() => Mine.Earned == r.Value.Batzen && Mine.Points == r.Value.BoardPoints, 10),
+                $"this peer's own book holds it ({Mine.Earned} earned of {Mine.Batzen} Batzen, {Mine.Points} points)");
             Expect(await Until(() => Svc.BoardOf(FestivalCatalog.TestId) is { Points: > 0 }, 10), "and the board moved");
         }
         Say("done");
         Expect(await Heard(_role == "A" ? "B" : "A", "done", 120), "the other player finished");
         await Finish(5.0);
+    }
+
+    /// <summary>Says <paramref name="say"/> again every few seconds until <paramref name="role"/> has said <paramref name="expected"/> (a line sent before the other peer joined chat is lost).</summary>
+    private async Task<bool> Handshake(string say, string role, string expected, double seconds)
+    {
+        double end = GameClock.Now + seconds;
+        while (GameClock.Now < end)
+        {
+            Say(say);
+            if (await Heard(role, expected, 3)) return true;
+        }
+        return false;
     }
 
     private async Task Frames(Func<bool> done, int max)

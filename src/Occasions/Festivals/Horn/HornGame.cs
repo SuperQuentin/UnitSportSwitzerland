@@ -116,7 +116,7 @@ public partial class HornGame : Node
 
     // ---- asking, being seated -------------------------------------------------------------------------
 
-    /// <summary>E at the row: asks the server for a seat in the song of this time slot.</summary>
+    /// <summary>E at the row: asks the server for a seat in the song being opened.</summary>
     public void Begin()
     {
         if (!Idle || Service() is not { } svc) return;
@@ -175,7 +175,7 @@ public partial class HornGame : Node
         _resultLines =
         [
             $"{r.Points} of {r.Max} points",
-            r.Voices > 1 ? $"Harmony x{r.Harmony100 / 100.0:F2} with {r.Voices} voices" : "Alone: no harmony. Sing with others!",
+            r.Voices > 1 ? $"Harmony x{(r.Harmony100 / 100.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} with {r.Voices} voices" : "Alone: no harmony. Sing with others!",
             r.Batzen > 0 ? $"+{r.Batzen} Batzen   +{r.BoardPoints} party points" : "No Batzen this time",
         ];
         State = Phase.Idle;
@@ -348,7 +348,7 @@ public partial class HornGame : Node
         var site = _svc?.RunningOf(_festival)?.Site;
         if (site == null || !HornGround.Near(site, g.E, g.N, 25) || !_scripted && Input.IsActionJustPressed("ui_cancel"))
         {
-            Abort(site == null ? "The festival is over." : "You left the row.");
+            Abort(site == null ? "The festival is over." : $"You left the row.");
             return;
         }
         if (!_scripted) ReadInput();
@@ -402,6 +402,7 @@ public partial class HornGame : Node
 
     private void Abort(string why)
     {
+        GD.Print($"[horn] song abandoned: {why}");
         if (_blowing) Release(SongTime);
         _tone.Stop();
         StopEchoes();
@@ -445,7 +446,7 @@ public partial class HornGame : Node
             if (g.State == Phase.Sent) { Line(g._message, box.GetCenter(), UiTheme.FontBody, UiTheme.Text, w); return; }
 
             double t = g.SongTime, spb = g._chart.SecondsPerBeat, beatNow = t / spb;
-            Line(g._header, box.Position + new Vector2(110f, 18f), UiTheme.FontSmall, UiTheme.TextDim, 200f);
+            Line(g._header, box.Position + new Vector2(110f, 20f), UiTheme.FontSmall, UiTheme.TextDim, 200f);
             float top = box.Position.Y + 34f, laneH = 118f / Mathf.Max(1, g._lanes.Length == 0 ? 3 : g._lanes.Length);
             float nowX = box.Position.X + 80f + (w - 100f) * 0.18f, pxBeat = (w - 100f) * 0.82f / 8f;
             // the lanes (the yodel has one: the tap)
@@ -490,7 +491,7 @@ public partial class HornGame : Node
             }
             float age = (float)(now - g._gradeAt);
             if (g._grade.Length > 0 && age < 0.6f)
-                Line(g._grade, new Vector2(nowX, top - 14f - age * 20f), UiTheme.FontHeading, new Color(g._gradeColour, 1f - age * 1.6f), 220f, bold: true);
+                Line(g._grade, new Vector2(box.GetCenter().X, box.Position.Y + 26f - age * 16f), UiTheme.FontHeading, new Color(g._gradeColour, 1f - age * 1.6f), 220f, bold: true);
             Line(Hint(), new Vector2(box.GetCenter().X, box.End.Y - 14f), UiTheme.FontSmall, UiTheme.TextDim, w - 20f);
         }
 
