@@ -1142,6 +1142,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Fahnen.FahnenCheck.Requested) AddChild(new Occasions.Festivals.Fahnen.FahnenCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
+            if (Occasions.Festivals.Fahnen.FahnenNetProbe.Role != null) AddChild(new Occasions.Festivals.Fahnen.FahnenNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
         }

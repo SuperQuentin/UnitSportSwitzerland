@@ -27,7 +27,7 @@ public partial class FahnenCheck : ChatProbe
 
     protected override FootPlayer? Me => _me();
 
-    private static Vector2 Drive(FahnenGame game)
+    internal static Vector2 Drive(FahnenGame game)
     {
         double t = game.Clock;
         foreach (var slot in game.Routine.Figures)
@@ -43,7 +43,7 @@ public partial class FahnenCheck : ChatProbe
         return Vector2.Zero;
     }
 
-    private static bool Hold(FahnenGame game)
+    internal static bool Hold(FahnenGame game)
     {
         double t = game.Clock, spb = FahnenRules.SecondsPerBeat;
         foreach (var slot in game.Routine.Figures)
