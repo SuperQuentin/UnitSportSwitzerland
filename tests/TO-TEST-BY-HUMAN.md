@@ -60,6 +60,7 @@ Offline is enough for most: `--chunks D:/UnitSportSwitzerland/terrain_chunks --a
 Generated world (the spawn's villages have an L, a U, a courtyard, a trapezoid and a bent block each within a few km: `--shapedcheck` prints where), or a real old town (Geneva above, Sion `--at 2594000,1120000`).
 
 - [ ] Walk into a building with an angled facade → the rooms along it have one straight angled wall with windows, not a staircase, and nothing pokes through it. Walk along it: no snag, no gap to fall through at the corners.
+- [ ] Walk in by a door on an angled or set-back facade (and by a side door) → you arrive just inside that door, in the room behind it, facing in; no corridor from somewhere else. Turn round with the door open → the street you came from, straight through it.
 - [ ] Walk into an L-shaped house → rooms in both arms (a hall down the far arm with rooms off it), none out in the yard.
 - [ ] Look out of a window on an angled wall → the day's light comes in through it like any other.
 - [ ] VR: walk into an angled room → the walls hold you (teleport into the corner too).

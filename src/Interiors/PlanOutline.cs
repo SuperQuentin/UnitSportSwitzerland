@@ -39,8 +39,6 @@ public static class PlanOutline
     public const float Tolerance = 0.3f;
     /// <summary>An outline covering this much of its box is the box: nothing to follow.</summary>
     public const float Boxlike = 0.97f;
-    /// <summary>The deepest vestibule a doorway on the box's side gets in to the building.</summary>
-    public const float MaxStub = 3.0f;
 
     /// <summary>
     /// The building's outline in its interior frame (#1290): rings, the outer counter-clockwise and
@@ -59,46 +57,8 @@ public static class PlanOutline
         return covered >= Boxlike * grid.Length ? null : grid;
     }
 
-    /// <summary>
-    /// The rings of a <see cref="FineGrid"/>, with a stub for each doorway: the stretch of the box's
-    /// side a way in stands on, from the side in to where the building is (<paramref name="doors"/>:
-    /// the side, the middle along it and the width). A plan keeps its doorways on the box's sides,
-    /// so a hall cut by a facade at an angle keeps the way in to its door: a short vestibule.
-    /// </summary>
-    public static List<Vector2[]> Rings(bool[,] fine, float width, float depth, IEnumerable<(Side Side, float At, float Width, bool Main)>? doors = null)
-    {
-        var grid = fine;
-        if (doors != null)
-        {
-            grid = (bool[,])fine.Clone();
-            int nx = grid.GetLength(0), nz = grid.GetLength(1);
-            foreach (var (side, at, w, main) in doors)
-            {
-                bool along = side is Side.Front or Side.Back;
-                int n = along ? nx : nz, deep = along ? nz : nx;
-                float half = (along ? width : depth) / 2;
-                int c0 = Math.Clamp((int)((at - w / 2 - 0.3f + half) / FineCell), 0, n - 1);
-                int c1 = Math.Clamp((int)((at + w / 2 + 0.3f + half) / FineCell), 0, n - 1);
-                // in from the side, row by row, until the whole band is building; another door than
-                // the main one no further than a vestibule goes (a door out in an L's yard gets none)
-                var rows = new List<int>();
-                bool reached = false;
-                for (int k = 0; k < (main ? deep / 2 : Math.Min(deep, (int)(MaxStub / FineCell))); k++)
-                {
-                    int row = side is Side.Front or Side.Left ? k : deep - 1 - k;
-                    bool full = true;
-                    for (int c = c0; c <= c1; c++) full &= along ? grid[c, row] : grid[row, c];
-                    if (full) { reached = true; break; }
-                    rows.Add(row);
-                }
-                if (!reached) continue;
-                foreach (int row in rows)
-                    for (int c = c0; c <= c1; c++)
-                        if (along) grid[c, row] = true; else grid[row, c] = true;
-            }
-        }
-        return RoomShapes.Trace(grid, FineCell, width, depth, Tolerance);
-    }
+    /// <summary>The rings of a <see cref="FineGrid"/>: the outline the rooms follow.</summary>
+    public static List<Vector2[]> Rings(bool[,] fine, float width, float depth) => RoomShapes.Trace(fine, FineCell, width, depth, Tolerance);
 
     /// <summary>
     /// The biggest rectangle of the outline that stands on the front wall and holds the stretch

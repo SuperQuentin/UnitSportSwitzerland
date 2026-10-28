@@ -121,6 +121,7 @@ public static class ShapedCheck
             // stairwell on a facade)
             bool follows = outside <= 0.03f * outline && used >= MinFill * outline;
             Expect(follows, inside);
+            DoorsAt(l, what, Expect);
             if (!follows && BuildingFootprint.Compute(t.Tile, index, null, null) is { } fp)
             {
                 // what the outline was read as, to see why
@@ -151,6 +152,7 @@ public static class ShapedCheck
                 float min = p.Shape is "U" or "courtyard" ? MinFillWings : MinFill;
                 Expect(ko <= 0.03f * outline && ku >= min * outline,
                     $"{kwhat}: the {kl.Type} ground floor fills {ku:F0} of {outline:F0} m² ({ku / outline:P0}), {ko:F0} m² outside, {Shaped(kl)} shaped room(s){(InteriorGenerator.OutlineFailure is { } kwhy ? $"; outline: {kwhy}" : "")}");
+                DoorsAt(kl, kwhat, Expect);
             }
 
             // ramp first (#694): a block of flats whose wing takes a ramp, with every roll passing, has its garage door and
@@ -215,6 +217,10 @@ public static class ShapedCheck
     private const float MinFill = 0.85f;
     /// <summary>The same for a house, an office or a barn round a U or a courtyard, which fills its near wings.</summary>
     private const float MinFillWings = 0.7f;
+    /// <summary>How far a street doorway inside may stand from its door on the facade, m, and turn from it, degrees.</summary>
+    private const float DoorGapMax = 2.5f, DoorTurnMax = 20f;
+    /// <summary>The same gap for a block of flats, whose side doors open into their wing's stairwell lobby.</summary>
+    private const float FlatsDoorGapMax = 10f;
 
     private static int Shaped(InteriorLayout l) => l.Floors.Sum(f => f.Rooms.Count(r => r.Shape != null));
 
@@ -222,6 +228,22 @@ public static class ShapedCheck
     private static Vector2 World(InteriorLayout l, float x, float z) => new(
         l.CenterX + Mathf.Cos(l.Yaw) * x + Mathf.Sin(l.Yaw) * z,
         l.CenterZ - Mathf.Sin(l.Yaw) * x + Mathf.Cos(l.Yaw) * z);
+
+    /// <summary>
+    /// Every street door's doorway inside stands where the door is on the facade (#1290): within
+    /// <see cref="DoorGapMax"/> of it and turned no more than <see cref="DoorTurnMax"/> from it, so
+    /// stepping through lands where the facade has the door.
+    /// </summary>
+    private static void DoorsAt(InteriorLayout l, string what, Action<bool, string> expect)
+    {
+        var gaps = l.AllEntrances().Where(e => e.Level == 0).Select(e => (e, G: InteriorGenerator.DoorGap(l, e))).ToList();
+        // a wing of flats puts its stairwell where its plan wants it, and its side door opens into that lobby
+        // wherever it is along the facade: a known limit, bounded so a door never lands across the building
+        float most = l.Type is BuildingType.Apartments or BuildingType.MixedUse ? FlatsDoorGapMax : DoorGapMax;
+        expect(gaps.All(x => x.G.Gap <= most && x.G.Turn <= DoorTurnMax),
+            $"{what}: {gaps.Count} street doorway(s) at their doors: {string.Join(", ", gaps.Select(x => $"{x.G.Gap:F1} m {x.G.Turn:F0}°"
+                + (x.G.Gap > DoorGapMax ? $" ({x.e.Door} at {x.e.X:F1},{x.e.Z:F1} door {x.e.DoorX:F1},{x.e.DoorZ:F1} out {x.e.DoorOutX:F2},{x.e.DoorOutZ:F2}{(x.e.Vehicle ? " vehicle" : "")})" : "")))}");
+    }
 
     /// <summary>The outline in the plan's own frame, for its drawing.</summary>
     private static Vector2[][] OutlineIn(InteriorLayout l, Vector2[][] rings)
@@ -233,21 +255,21 @@ public static class ShapedCheck
     }
 
     /// <summary>
-    /// The ground floor on a 0.5 m grid: m² of the outline it fills, m² it stands outside it (a
-    /// doorway's vestibule in from the box's side, as <c>PlanOutline.Rings</c> adds it, is not outside).
+    /// The ground floor on a 0.5 m grid: m² of the outline it fills, m² it stands outside it (outside the
+    /// outline as the plan traced it, <c>PlanOutline.Rings</c>: a cell rounded the other way is not outside).
     /// </summary>
     private static (float Used, float Outside) Cover(InteriorLayout l, Vector2[][] rings, Building b)
     {
         var c = new Vector2(l.CenterX, l.CenterZ);
         var grid = PlanOutline.FineGrid(b, c, World(l, 1, 0) - c, l.Width, l.Depth);
-        var stubbed = grid == null ? null : InteriorGenerator.RingsFor(l, grid);
+        var traced = grid == null ? null : InteriorGenerator.RingsFor(l, grid);
         float used = 0, outside = 0;
         for (float x = -l.Width / 2 + 0.25f; x < l.Width / 2; x += 0.5f)
             for (float z = -l.Depth / 2 + 0.25f; z < l.Depth / 2; z += 0.5f)
             {
                 if (!l.GroundFloor.Rooms.Any(r => r.Holds(x, z))) continue;
                 if (Inside(rings, World(l, x, z))) used += 0.25f;
-                else if (stubbed == null || !RoomShapes.Contains(stubbed, new Vector2(x, z))) outside += 0.25f;
+                else if (traced == null || !RoomShapes.Contains(traced, new Vector2(x, z))) outside += 0.25f;
             }
         return (used, outside);
     }

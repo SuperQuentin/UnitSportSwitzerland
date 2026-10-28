@@ -36,6 +36,8 @@ public static partial class InteriorGenerator
     private const float MaxReach = 60f;
     /// <summary>How far past a wall a point is tested as "outside" it.</summary>
     private const float Step = 0.02f;
+    /// <summary>A side street door whose doorway inside stands further than this from it, m, reads as locked.</summary>
+    private const float FarDoor = 3f;
 
     /// <summary>Off only for <c>--outlinesurvey --no-outlines</c>: plans as before #1290, to compare.</summary>
     internal static bool FollowOutlines = true;
@@ -44,17 +46,27 @@ public static partial class InteriorGenerator
     internal static bool[,]? OutlineOf(Footprint fp, Building b) =>
         PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
 
-    /// <summary>The outline's rings, a stub in to each of the plan's ways in from the box's side.</summary>
-    internal static List<Vector2[]> RingsFor(InteriorLayout l, bool[,] grid) =>
-        PlanOutline.Rings(grid, l.Width, l.Depth, l.AllEntrances().Select((e, i) =>
-        (
-            Side: e.InZ > 0.5f ? Side.Front : e.InZ < -0.5f ? Side.Back : e.InX > 0.5f ? Side.Left : Side.Right,
-            At: Math.Abs(e.InZ) > 0.5f ? e.X : e.Z,
-            e.Width,
-            Main: i == 0,
-            // only a doorway on the box's side needs a way in to the building
-            OnBox: e.Level == 0 && (Math.Abs(Math.Abs(e.Z) - l.Depth / 2) < 0.05f || Math.Abs(Math.Abs(e.X) - l.Width / 2) < 0.05f)
-        )).Where(d => d.OnBox).Select(d => (d.Side, d.At, d.Width, d.Main)));
+    /// <summary>The outline's rings in the plan's frame.</summary>
+    internal static List<Vector2[]> RingsFor(InteriorLayout l, bool[,] grid) => PlanOutline.Rings(grid, l.Width, l.Depth);
+
+    /// <summary>An entrance's real door in the plan's frame: where it stands on the facade and the way it faces out.</summary>
+    internal static (Vector2 At, Vector2 Out) DoorInPlan(InteriorLayout l, EntrancePlan e)
+    {
+        var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+        var v = new Vector2(-u.Y, u.X);
+        var d = new Vector2(e.DoorX - l.CenterX, e.DoorZ - l.CenterZ);
+        var o = new Vector2(e.DoorOutX, e.DoorOutZ);
+        return (new(d.Dot(u), d.Dot(v)), new Vector2(o.Dot(u), o.Dot(v)).Normalized());
+    }
+
+    /// <summary>How far an entrance's doorway stands from its real door, m, and how far it is turned from it, degrees.</summary>
+    internal static (float Gap, float Turn) DoorGap(InteriorLayout l, EntrancePlan e)
+    {
+        var (at, outward) = DoorInPlan(l, e);
+        var inward = new Vector2(e.InX, e.InZ).Normalized();
+        float cos = Math.Clamp(-inward.Dot(outward), -1, 1);
+        return (at.DistanceTo(new Vector2(e.X, e.Z)), MathF.Acos(cos) * 180 / MathF.PI);
+    }
 
     // ---- a cored plan on the biggest front rectangle --------------------------------------------
 
@@ -289,6 +301,7 @@ public static partial class InteriorGenerator
                 for (int g = f; g < Math.Min(l.Floors.Count, f + r.Span); g++) claims[g].Add(shape);
             }
         }
+        MoveEntries(l);
         EdgeWindows(l, rings, fresh);
         return true;
     }
@@ -337,15 +350,21 @@ public static partial class InteriorGenerator
 
         var lines = Lines(r);
         var reaches = new List<Reach>[4];
+        var freed = new List<(float Lo, float Hi)>[4];
         for (int s = 0; s < 4; s++)
         {
             var w = lines[s];
-            // a way in or out of the building keeps its wall: a recessed entrance
-            var keep = r.Openings
+            // a way in or out of the building keeps its wall (a recessed entrance), but for a street door
+            // standing out in front of it: the room grows over it out to the facade, where the doorway goes
+            // after (MoveEntries)
+            (float Lo, float Hi) Stretch(OpeningPlan o) => (Math.Min(w.U(o.Center - o.Width / 2), w.U(o.Center + o.Width / 2)) - 0.3f,
+                Math.Max(w.U(o.Center - o.Width / 2), w.U(o.Center + o.Width / 2)) + 0.3f);
+            var ways = r.Openings
                 .Where(o => o.Edge == null && o.Side == w.Side && (o.Kind == OpeningKind.Entry || o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other < 0))
-                .Select(o => (Lo: Math.Min(w.U(o.Center - o.Width / 2), w.U(o.Center + o.Width / 2)) - 0.3f,
-                              Hi: Math.Max(w.U(o.Center - o.Width / 2), w.U(o.Center + o.Width / 2)) + 0.3f))
                 .ToList();
+            bool alone = floor.Rooms.Count == 1 || HallLike(r.Type);
+            var keep = ways.Where(o => !DoorAhead(l, r, w, o, alone)).Select(Stretch).ToList();
+            freed[s] = ways.Where(o => DoorAhead(l, r, w, o, alone)).Select(Stretch).ToList();
             var cuts = new List<float> { 0, w.Length };
             foreach (var (lo, hi) in keep) { cuts.Add(lo); cuts.Add(hi); }
             // only what stands in front of this wall, out to the box's side, can be met (a big block has
@@ -411,6 +430,8 @@ public static partial class InteriorGenerator
                 foreach (var run in Runs(reaches[s]).ToList())
                 {
                     if (run.Max(x => Math.Max(x.D0, x.D1)) < DeepAt || run[^1].U1 - run[0].U0 < 2.6f) continue;
+                    // never rooms over the way in to a street door: it is this room's
+                    if (freed[s].Any(k => k.Lo < run[^1].U1 && k.Hi > run[0].U0)) continue;
                     var (bu0, bu1, bd) = RunCore(run);
                     added |= bd >= 2.4f && bu1 - bu0 >= 2.4f && Arm(l, f, index, lines[s], bu0, bu1, bd, fresh);
                 }
@@ -466,6 +487,182 @@ public static partial class InteriorGenerator
                                           && w.U(o.Center) + o.Width / 2 > x.U0 && w.U(o.Center) - o.Width / 2 < x.U1);
         }
         return shape.ToArray();
+    }
+
+    /// <summary>
+    /// Whether opening <paramref name="o"/> on wall <paramref name="w"/> is a street door's doorway whose real
+    /// door stands out in front of the wall, facing its way and near enough for the room to grow to it: the
+    /// wall then grows over it, and the doorway moves out to the door.
+    /// </summary>
+    private static bool DoorAhead(InteriorLayout l, RoomPlan r, WallLine w, OpeningPlan o, bool alone)
+    {
+        if (o.Kind != OpeningKind.Entry) return false;
+        var at = r.WallFrame(o).At;
+        if (EntranceOf(l, at) is not { } e) return false;
+        var (door, outward) = DoorInPlan(l, e);
+        float ahead = (door - at).Dot(w.Out), aside = Math.Abs((door - at).Dot(w.Along));
+        return outward.Dot(w.Out) > 0.5f && ahead > 0.1f && ahead <= (alone ? MaxReach : DeepAt) && aside <= o.Width / 2 + 1f;
+    }
+
+    /// <summary>The ground-floor entrance whose doorway is at <paramref name="at"/>, or null.</summary>
+    private static EntrancePlan? EntranceOf(InteriorLayout l, Vector2 at) =>
+        l.AllEntrances().FirstOrDefault(e => e.Level == 0 && Math.Abs(e.X - at.X) < 0.05f && Math.Abs(e.Z - at.Y) < 0.05f);
+
+    // ---- the doorways out to their doors -------------------------------------------------------
+
+    /// <summary>
+    /// Every ground-floor way in moved to where its real door stands on the facade: into the wall of
+    /// the room whose shape meets the outline there, as near the door as the wall allows, facing the way
+    /// the door faces. Stepping through the door from the street then lands where the facade has it,
+    /// not on the box's side behind it. A doorway already at its door stays. Then every doorway the fit
+    /// left off its room's walls, or still more than <see cref="FarDoor"/> from its door: another street
+    /// door than the main one loses it (it reads as locked, #498) unless that shuts off rooms; else its
+    /// room takes back its rectangle, whose wall still has it.
+    /// </summary>
+    private static void MoveEntries(InteriorLayout l)
+    {
+        if (l.Entrances.Count == 0) l.Entrances.AddRange(l.AllEntrances());
+        int gf = Math.Min(l.Below, l.Floors.Count - 1);
+        var rooms = l.Floors[gf].Rooms;
+        foreach (var e in l.Entrances)
+        {
+            if (e.Level != 0) continue;
+            var (from, cut) = EntryCut(rooms, new Vector2(e.X, e.Z));
+            // a garage door's doorway is where its ramp down is (#558): it stays
+            if (from == null || cut == null || from.Type == RoomType.Ramp) continue;
+            var (gap, turn) = DoorGap(l, e);
+            if (gap < 0.3f && turn < 5f) continue;
+            var (door, outward) = DoorInPlan(l, e);
+            if (!FitDoorway(l, gf, from, cut, door, outward, out var to, out int edge, out float u, out var at, out var normal)) continue;
+            from.Openings.Remove(cut);
+            // the windows it lands on go
+            to.Openings.RemoveAll(q => q.Kind == OpeningKind.Window && OnEdge(to, q, edge, u, cut.Width / 2 + 0.2f));
+            var moved = new OpeningPlan { Width = cut.Width, Bottom = cut.Bottom, Top = Math.Min(cut.Top, l.ClearOf(to) - 0.15f), Kind = OpeningKind.Entry };
+            var side = Facing(normal);
+            if (to.Shape != null) (moved.Edge, moved.Center) = (edge, u);
+            else (moved.Side, moved.Center) = (side, side is Side.Front or Side.Back ? at.X : at.Y);
+            to.Openings.Add(moved);
+            (e.X, e.Z, e.InX, e.InZ) = (at.X, at.Y, -normal.X, -normal.Y);
+        }
+
+        // a doorway the fit left off its room's walls, and another street door's still far from its door:
+        // a side door on a courtyard or an arm no room reaches would open onto the far side of the building,
+        // so it reads as locked (#498), unless it is the only way to some of it (a wing's stairwell)
+        int? unreached = null;
+        var locked = new HashSet<EntrancePlan>();
+        for (int i = l.Entrances.Count - 1; i >= 0; i--)
+        {
+            var e = l.Entrances[i];
+            if (e.Level != 0 || locked.Contains(e)) continue;
+            var (r, cut) = EntryCut(rooms, new Vector2(e.X, e.Z));
+            if (r?.Type == RoomType.Ramp) continue;
+            bool off = r != null && cut != null && r.Shape != null && cut.Edge == null && !OnShape(r, cut);
+            bool far = i > 0 && DoorGap(l, e).Gap > FarDoor;
+            if (!off && !far) continue;
+            if (i > 0)
+            {
+                unreached ??= Unreached(l);
+                r?.Openings.Remove(cut!);
+                l.Entrances.Remove(e);
+                if (Unreached(l) <= unreached) { locked.Add(e); continue; }
+                if (cut != null) r!.Openings.Add(cut);
+                l.Entrances.Insert(i, e);
+            }
+            // its room is its rectangle again, so the doorway is on its wall; a doorway moved onto the
+            // shape's edges goes, and its door reads as locked
+            if (!off) continue;
+            foreach (var q in r!.Openings.Where(q => q.Edge != null).ToList())
+            {
+                if (q.Kind == OpeningKind.Entry && EntranceOf(l, r.WallFrame(q).At) is { } other) locked.Add(other);
+                r.Openings.Remove(q);
+            }
+            r.Shape = null;
+        }
+        l.Entrances.RemoveAll(locked.Contains);
+    }
+
+    /// <summary>How many rooms of a plan no one can reach, as the validator counts them.</summary>
+    private static int Unreached(InteriorLayout l) => InteriorValidator.Unreachable(l).Count;
+
+    /// <summary>The ground-floor room and its street doorway at <paramref name="at"/>, or nulls.</summary>
+    private static (RoomPlan? Room, OpeningPlan? Cut) EntryCut(List<RoomPlan> rooms, Vector2 at)
+    {
+        foreach (var r in rooms)
+            foreach (var o in r.Openings)
+                if (o.Kind == OpeningKind.Entry && r.WallFrame(o).At.DistanceTo(at) < 0.05f) return (r, o);
+        return (null, null);
+    }
+
+    /// <summary>Whether an opening on a shaped room's rectangle's wall line stands on its shape's edges.</summary>
+    private static bool OnShape(RoomPlan r, OpeningPlan o)
+    {
+        var (at, _, along) = r.WallFrame(o);
+        var c = r.Corners();
+        return RoomShapes.EdgeDistance(c, at - along * (o.Width / 2)) < 0.03f && RoomShapes.EdgeDistance(c, at + along * (o.Width / 2)) < 0.03f;
+    }
+
+    /// <summary>Whether opening <paramref name="q"/> stands on edge <paramref name="edge"/> of <paramref name="r"/>, within <paramref name="half"/> of u along it.</summary>
+    private static bool OnEdge(RoomPlan r, OpeningPlan q, int edge, float u, float half)
+    {
+        var c = r.Corners();
+        var a = c[edge % c.Length];
+        var b = c[(edge + 1) % c.Length];
+        var along = (b - a).Normalized();
+        var at = r.WallFrame(q).At;
+        if (Math.Abs((at - a).Dot(new Vector2(along.Y, -along.X))) > 0.03f) return false;
+        return Math.Abs((at - a).Dot(along) - u) < half + q.Width / 2;
+    }
+
+    /// <summary>
+    /// Where a doorway as wide as <paramref name="cut"/> fits for the door at <paramref name="door"/> facing
+    /// <paramref name="outward"/>: on a facade edge (no room outside it) of a ground-floor room, facing
+    /// within 40° of the door, within 0.6 m of it and slid along at most 0.8 m, clear of the other ways
+    /// through that wall and of a stair, a hole, a landing or a lift just inside. Never into a room no one
+    /// walks in from the street (a bedroom, a bathroom: an arm's rooms are often those; in a block of flats
+    /// anything but the stairs' lobby, a corridor or a shop) but the one it was in, which wins a tie.
+    /// </summary>
+    private static bool FitDoorway(InteriorLayout l, int f, RoomPlan from, OpeningPlan cut, Vector2 door, Vector2 outward,
+        out RoomPlan to, out int edge, out float u, out Vector2 at, out Vector2 normal)
+    {
+        (to, edge, u, at, normal) = (null!, -1, 0, default, default);
+        var floor = l.Floors[f];
+        float w = cut.Width, best = float.MaxValue;
+        // in a block of flats a street door opens onto the stairs or a shop, never into a flat
+        bool flats = l.Type is BuildingType.Apartments or BuildingType.MixedUse;
+        foreach (var r in floor.Rooms)
+        {
+            if (r.Type is RoomType.Elevator or RoomType.Vault or RoomType.Shelter) continue;
+            if (r != from && (flats ? StreetRank(r) is < 0 or > 1
+                    : r.Type is RoomType.Bedroom or RoomType.GuestRoom or RoomType.Bathroom or RoomType.WC or RoomType.ToiletStall or RoomType.Laundry)) continue;
+            var c = r.Corners();
+            for (int k = 0; k < c.Length; k++)
+            {
+                var a = c[k];
+                var b = c[(k + 1) % c.Length];
+                float len = a.DistanceTo(b);
+                if (len < w + 0.5f) continue;
+                var along = (b - a) / len;
+                var n = new Vector2(along.Y, -along.X);
+                if (n.Dot(outward) < 0.76f) continue;
+                float off = Math.Abs((door - a).Dot(n));
+                float t = (door - a).Dot(along), tc = Math.Clamp(t, w / 2 + 0.25f, len - w / 2 - 0.25f);
+                if (off > 0.6f || Math.Abs(t - tc) > 0.8f) continue;
+                float score = off + Math.Abs(t - tc) + (r == from ? 0 : 0.3f);
+                if (score >= best) continue;
+                var p = a + along * tc;
+                // a facade: no room outside it
+                var probe = p + n * 0.2f;
+                if (floor.Rooms.Any(q => q != r && q.Holds(probe.X, probe.Y))) continue;
+                if (r.Openings.Any(q => q != cut && q.Kind != OpeningKind.Window && OnEdge(r, q, k, tc, w / 2 + 0.3f))) continue;
+                var inner = new[] { p - along * (w / 2), p + along * (w / 2), p - along * (w / 2) - n * 1.2f, p + along * (w / 2) - n * 1.2f };
+                var box = new RectPlan(inner.Min(q => q.X), inner.Min(q => q.Y), inner.Max(q => q.X), inner.Max(q => q.Y));
+                if (floor.AllFlights().Any(fl => fl.Area().Overlaps(box)) || floor.Holes.Any(h => h.Overlaps(box))
+                    || floor.Landings.Any(g => box.Overlaps(new RectPlan(g.X0, g.Z0, g.X1, g.Z1)))
+                    || l.Lifts.Any(lift => box.Overlaps(new RectPlan(lift.X0, lift.Z0, lift.X1, lift.Z1)))) continue;
+                (best, to, edge, u, at, normal) = (score, r, k, tc, p, n);
+            }
+        }
+        return to != null;
     }
 
     /// <summary>Distance along a ray to the line through a and b (not only the segment), or null if parallel.</summary>
@@ -686,7 +883,13 @@ public static partial class InteriorGenerator
             {
                 var r = l.Floors[f].Rooms[i];
                 if (RectInside(rings, r.X0, r.Z0, r.X1, r.Z1, 0.01f)) continue;
-                if (!Shapeable(l, f, r)) { Keep($"floor {f} {r.Type} holds a stair or a shaft and leaves the outline"); continue; }
+                if (!Shapeable(l, f, r))
+                {
+                    // it keeps a rectangle, but a smaller one inside the building if its stair still fits
+                    if (Shrink(l, f, r, rings, out bool inside)) changed = true;
+                    if (!inside) Keep($"floor {f} {r.Type} holds a stair or a shaft and leaves the outline");
+                    continue;
+                }
                 // a courtyard in the room: cutting it out would need a hole in the floor
                 if (holes.Any(h => h.Any(v => v.X > r.X0 && v.X < r.X1 && v.Y > r.Z0 && v.Y < r.Z1))) { Keep($"floor {f} {r.Type}: a courtyard inside it"); continue; }
                 var pieces = new List<List<Vector2>>();
@@ -707,26 +910,21 @@ public static partial class InteriorGenerator
                 }
                 if (pieces.Count != 1) { Keep($"floor {f} {r.Type}: cut in {pieces.Count}"); continue; }
                 var shape = pieces[0];
-                // every cut in its walls still on a wall: a window that is not goes, another street door
-                // than the main one loses its doorway (it reads as locked, #498), anything else keeps the rectangle
-                var off = new List<(OpeningPlan O, int Entrance, EntrancePlan? Way)>();
+                // every cut in its walls still on a wall: a window that is not goes, a street doorway moves
+                // out to its door after (MoveEntries), anything else keeps the rectangle
+                var off = new List<OpeningPlan>();
+                OpeningPlan? bad = null;
                 foreach (var o in r.Openings)
                 {
-                    if (o.Edge != null) continue;
+                    if (o.Edge != null || o.Kind == OpeningKind.Entry) continue;
                     var (at, _, along) = r.WallFrame(o);
                     if (RoomShapes.EdgeDistance(shape, at - along * (o.Width / 2)) < 0.03f
                         && RoomShapes.EdgeDistance(shape, at + along * (o.Width / 2)) < 0.03f) continue;
-                    int ei = o.Kind == OpeningKind.Entry && l.Entrances.Count > 1
-                        ? l.Entrances.FindIndex(e => new Vector2(e.X, e.Z).DistanceTo(at) < 0.05f) : -1;
-                    if (o.Kind != OpeningKind.Window && ei <= 0) { off.Clear(); off.Add((o, -2, null)); break; }
-                    off.Add((o, ei, ei > 0 ? l.Entrances[ei] : null));
+                    if (o.Kind != OpeningKind.Window) { bad = o; break; }
+                    off.Add(o);
                 }
-                if (off is [(var bad, -2, _)]) { Keep($"floor {f} {r.Type}: a {bad.Kind} off the outline"); continue; }
-                foreach (var (o, _, way) in off)
-                {
-                    r.Openings.Remove(o);
-                    if (way != null) l.Entrances.Remove(way);
-                }
+                if (bad != null) { Keep($"floor {f} {r.Type}: a {bad.Kind} off the outline"); continue; }
+                foreach (var o in off) r.Openings.Remove(o);
                 r.SetShape(shape);
                 changed = true;
             }
@@ -736,7 +934,80 @@ public static partial class InteriorGenerator
         }
         if (!changed) return Unfit(why ?? "nothing to cut");
         if (why != null) OutlineFailure = $"partly: {why}";
+        MoveEntries(l);
         EdgeWindows(l, rings);
+        return true;
+    }
+
+    /// <summary>
+    /// A room with a stair or a shaft (which keeps a rectangle: its floor or ceiling has a hole) that
+    /// leaves the outline, made a smaller rectangle inside it: each of its walls standing out of the
+    /// building steps in, 0.25 m at a time, as long as what it holds stays in it (its flights, the holes
+    /// in its floor and ceiling, landings, a lift), the doorways in its other walls stay on them, and no
+    /// wall with a door to another room moves. A street doorway moves with its wall, and its entrance;
+    /// the windows of a wall that moved go. As far in as it gets: <paramref name="inside"/> says whether
+    /// it is all inside now (a stair against a wall out of the building holds that wall). False, the
+    /// room untouched, if no wall could move.
+    /// </summary>
+    private static bool Shrink(InteriorLayout l, int f, RoomPlan r, List<Vector2[]> rings, out bool inside)
+    {
+        inside = false;
+        const float step = 0.25f;
+        var floor = l.Floors[f];
+        var rect = new RectPlan(r.X0, r.Z0, r.X1, r.Z1);
+        // what must stay inside it
+        var keep = new List<RectPlan>();
+        keep.AddRange(floor.AllFlights().Select(fl => fl.Area()).Where(a => a.Overlaps(rect)));
+        keep.AddRange(floor.Holes.Where(h => h.Overlaps(rect)));
+        if (f + r.Span < l.Floors.Count) keep.AddRange(l.Floors[f + r.Span].Holes.Where(h => h.Overlaps(rect)));
+        keep.AddRange(floor.Landings.Select(g => new RectPlan(g.X0, g.Z0, g.X1, g.Z1)).Where(g => g.Overlaps(rect)));
+        keep.AddRange(l.Lifts.Select(q => new RectPlan(q.X0, q.Z0, q.X1, q.Z1)).Where(q => q.Overlaps(rect)));
+        float kx0 = keep.Count > 0 ? keep.Min(k => k.X0) : r.X1, kx1 = keep.Count > 0 ? keep.Max(k => k.X1) : r.X0;
+        float kz0 = keep.Count > 0 ? keep.Min(k => k.Z0) : r.Z1, kz1 = keep.Count > 0 ? keep.Max(k => k.Z1) : r.Z0;
+        // a wall with a door to another room stays where it is
+        bool Fixed(Side side) => r.Openings.Any(o => o.Edge == null && o.Side == side && o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0)
+            || l.InnerDoors.Any(d => d.Floor == f && floor.Rooms.IndexOf(r) == d.Room && d.Side == side);
+        float x0 = r.X0, z0 = r.Z0, x1 = r.X1, z1 = r.Z1;
+        bool Out(Vector2 a, Vector2 b)
+        {
+            for (int i = 0; i <= 4; i++)
+                if (!RoomShapes.Contains(rings, a + (b - a) * (0.05f + 0.9f * i / 4))) return true;
+            return false;
+        }
+        for (int guard = 0; guard < 200 && !RectInside(rings, x0, z0, x1, z1, 0.01f); guard++)
+        {
+            bool moved = false;
+            const float e = 0.03f;
+            if (Out(new(x0 + e, z0 + e), new(x1 - e, z0 + e)) && !Fixed(Side.Front) && z0 + step <= Math.Min(kz0, z1 - 1.5f)) { z0 += step; moved = true; }
+            if (Out(new(x0 + e, z1 - e), new(x1 - e, z1 - e)) && !Fixed(Side.Back) && z1 - step >= Math.Max(kz1, z0 + 1.5f)) { z1 -= step; moved = true; }
+            if (Out(new(x0 + e, z0 + e), new(x0 + e, z1 - e)) && !Fixed(Side.Left) && x0 + step <= Math.Min(kx0, x1 - 1.5f)) { x0 += step; moved = true; }
+            if (Out(new(x1 - e, z0 + e), new(x1 - e, z1 - e)) && !Fixed(Side.Right) && x1 - step >= Math.Max(kx1, x0 + 1.5f)) { x1 -= step; moved = true; }
+            if (!moved) break;
+        }
+        if (x0 == r.X0 && z0 == r.Z0 && x1 == r.X1 && z1 == r.Z1) return false;
+        if (l.Entrances.Count == 0) l.Entrances.AddRange(l.AllEntrances());
+        // every doorway still on its wall's stretch
+        foreach (var o in r.Openings)
+        {
+            if (o.Edge != null || o.Kind == OpeningKind.Window) continue;
+            float lo = o.Side is Side.Front or Side.Back ? x0 : z0, hi = o.Side is Side.Front or Side.Back ? x1 : z1;
+            if (o.Center - o.Width / 2 < lo + 0.1f || o.Center + o.Width / 2 > hi - 0.1f) return false;
+        }
+        var moves = new[] { (Side.Front, z0 != r.Z0), (Side.Back, z1 != r.Z1), (Side.Left, x0 != r.X0), (Side.Right, x1 != r.X1) };
+        foreach (var (side, moved) in moves)
+        {
+            if (!moved) continue;
+            r.Openings.RemoveAll(o => o.Edge == null && o.Side == side && o.Kind == OpeningKind.Window);
+            // a street doorway goes with its wall
+            foreach (var o in r.Openings.Where(o => o.Edge == null && o.Side == side && o.Kind == OpeningKind.Entry))
+                if (EntranceOf(l, r.WallFrame(o).At) is { } e)
+                    (e.X, e.Z) = side switch { Side.Front => (e.X, z0), Side.Back => (e.X, z1), Side.Left => (x0, e.Z), _ => (x1, e.Z) };
+        }
+        // windows on the walls that stayed, but now past their ends
+        r.Openings.RemoveAll(o => o.Edge == null && o.Kind == OpeningKind.Window
+            && (o.Side is Side.Front or Side.Back ? o.Center - o.Width / 2 < x0 || o.Center + o.Width / 2 > x1 : o.Center - o.Width / 2 < z0 || o.Center + o.Width / 2 > z1));
+        (r.X0, r.Z0, r.X1, r.Z1) = (x0, z0, x1, z1);
+        inside = RectInside(rings, x0, z0, x1, z1, 0.01f);
         return true;
     }
 
@@ -802,7 +1073,7 @@ public static partial class InteriorGenerator
                             if (Blocked(r, side, coord, width)) continue;
                             r.Openings.Add(new OpeningPlan { Side = side, Center = coord, Width = width, Bottom = bottom, Top = top, Kind = OpeningKind.Window });
                         }
-                        else
+                        else if (!r.Openings.Any(q => q.Kind != OpeningKind.Window && OnEdge(r, q, k, len * (i + 0.5f) / count, width / 2 + 0.2f)))
                             r.Openings.Add(new OpeningPlan
                             {
                                 Edge = k, Center = len * (i + 0.5f) / count, Width = width, Bottom = bottom, Top = top, Kind = OpeningKind.Window,

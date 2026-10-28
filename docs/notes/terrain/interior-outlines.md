@@ -20,8 +20,7 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   frame (generated solids have no floor triangles, so not `BuildingOutline`'s floor boundary), traced
   (`RoomShapes.Trace`, a pinch keeps left so each part is its own ring) and simplified
   (Douglas-Peucker, 0.3 m), corners within a cell and a half of the box put on it. An outline covering
-  97 % of its box is the box: nothing changes. Each doorway standing on the box's side gets a stub in
-  to the building (`RingsFor`): the main door's as deep as it takes, another's at most 3 m.
+  97 % of its box is the box: nothing changes.
 - **Planned inside it** (`TryOnCore`): a house, an office (`TryCored`) or a single-room building
   (`SingleRoom`) is planned on the biggest rectangle of the outline behind the main door
   (`PlanOutline.FrontCore`; it may stand back from the box's front, a recessed entrance in a bent
@@ -31,7 +30,9 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   the building or meet another room or an earlier growth (`Grow`: rays from the wall, breakpoints at
   every corner seen and every edge crossing its line, so the depth is linear in between and an angled
   facade is exact). Where two walls grow and met the same ring, the corner follows the outline round
-  (`Round`). A way in (an entry, an outside door) keeps its stretch: a recess. Growth is capped at
+  (`Round`). A way in keeps its stretch (a recess), but for a street door standing in front of it,
+  facing its way, near enough to grow to (`DoorAhead`): the room grows over it, and no arm is made
+  there. Growth is capped at
   `DeepAt` (4 m), but for a hall (`HallLike`) or a room alone on its floor: no 25 m WC.
 - **Arms** (`Arm`): a growth deeper than 4 m off a room that may have rooms off it (`Splits`: in a
   block of flats only the connectors, #576; elsewhere all but wet rooms and shafts) gets rooms: under
@@ -40,9 +41,19 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   next wing as itself, through an arch up to 4 m wide. Arm rooms are bedrooms, studies or box rooms by
   size (offices off an office, storage under ground), grow out in their turn, and make no arms.
 - **Clip** (a plan on the box): each room is its rectangle cut by the outline (`ClipToRect`); a room
-  out in the yard goes (`Drop`, its doorways walled up, indices renumbered); another street door off
-  the outline loses its doorway (it reads as locked, #498); a courtyard inside a room, a cut in two, a
-  stair room leaving the outline or a door off it undoes the clip.
+  out in the yard goes (`Drop`, its doorways walled up, indices renumbered); a courtyard inside a room, a
+  cut in two or an inner door off it undoes the clip. A room with a stair or a shaft, which keeps a
+  rectangle, shrinks to fit (`Shrink`): each wall out of the building steps in while its flights, holes,
+  landings, lift and doors stay in it, and no wall with a door to another room moves; a wall the stair
+  runs up to stays out (a bent house's hall: 10 → 2 m² outside).
+- **Doorways to their doors** (`MoveEntries`, after the extend or the clip): every ground-floor street
+  doorway moves to where its real door stands on the facade (`DoorInPlan`: the door spot in the plan's
+  frame), onto the facade edge of whichever room meets the outline there, facing the door's way
+  (`FitDoorway`: within 40°, 0.6 m off the edge, slid at most 0.8 m, clear of other doors and of a stair
+  or a lift inside), and its `EntrancePlan` with it: a door on an angled facade opens into the room
+  behind it, not into a corridor from the box's side. A door the fit left off its room's walls: another
+  street door loses its doorway (locked, #498); the main one's room keeps its rectangle. `DoorGap`
+  measures what is left.
 - **Kept only if it validates as well as before** and every shape triangulates to its own area
   (`Drawable`); otherwise the plan goes back (JSON round trip). `InteriorGenerator.OutlineFailure`
   says why.
@@ -64,8 +75,8 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
 - `--shapedcheck` (quick): every generated shaped building as built and as a house, an office and a
   barn; each plan validates, no ground-floor room stands outside the outline (3 % slack, stubs not
   counted), and the ground floor fills at least 85 % of it (70 % for a house, office or barn round a U
-  or a courtyard: the far wings are reached only part of the way, the known limit). SVG plans with the
-  outline dashed in `test_output/shaped/`. Measured: flats on a bent bar 55 % → 96 %; houses on an L
+  or a courtyard: the far wings are reached only part of the way, the known limit), and every street
+  doorway within 2.5 m and 20° of its door (most are within 0.5 m; a hall with a stair keeps its rectangle, and so its doorway; a block of flats 10 m, see the limits). SVG plans with the outline dashed in `test_output/shaped/`. Measured: flats on a bent bar 55 % → 96 %; houses on an L
   or a bent bar ~100 %.
 - `--outlinesurvey[,out] --chunks D:/.../terrain_chunks [--tiles N] [--no-outlines]`: the real tiles round
   Geneva, Lausanne, Sion and Fribourg (N a town), every building planned, per kind: shaped, fallbacks and why,
@@ -74,6 +85,9 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   (as before); ground floor outside the outline 53 % → 29 % of its area, outline filled 95 % → 88 % (civic
   60 %, houses 85 %: the front rectangle grown leaves parts empty); 212 → 243 ms a plan, worst 4.4 → 5.2 s.
   It found dining venues carving shaped rooms (6 invalid plans) and a cubic growth pass (19 s a block).
+  Street doors (3,156): a doorway more than 1 m from its door 2,045 → 453, turned more than 10° 623 →
+  132, locked 186 → 1,388 (`FarDoor`; #1304). It also found wings of flats whose main entrance had no
+  door position: its portal stood at the tile's corner (fixed in `Wings`).
 - A house, an office or a barn planned on its front rectangle is planned on the box and cut too; the
   one whose ground floor fills more of the outline, less twice what stands outside, is kept (`OutlineScore`).
 - `--flattour,shot.png --block shaped:<shape>[:<kind>]` (windowed): photographs the most grown rooms.
@@ -86,5 +100,10 @@ straight angled wall. Close enough, not exact. Plan: `docs/plans/interior-outlin
   house or an office round a U or a courtyard fills its far wings only part of the way: arm rooms make
   no arms of their own.
 - A courtyard inside a box-planned single room keeps the box (no holed floors).
+- A street door whose room cannot take a shape (a hall with the stair) keeps its doorway on that room's
+  rectangle (shrunk to fit where it can), up to ~2 m from the door. A wing of flats plans its stairwell where its own plan wants it,
+  and the side door opens into that lobby up to ~9 m along the facade (as before #1290). Another side
+  door whose doorway would stand more than 3 m from it reads as locked: 1,388 of 3,156 on the survey's
+  tiles (186 before). Planning a way in behind every side door is #1304.
 - An upper floor set back from the ground floor's outline is planned to the roof's outline: the roof is
   all the outline there is.

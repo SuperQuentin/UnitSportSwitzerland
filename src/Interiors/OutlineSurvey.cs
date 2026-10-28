@@ -29,6 +29,9 @@ public static class OutlineSurvey
     private sealed class Row
     {
         public int Plans, Shaped, Fallback, Invalid, Boxlike;
+        // the street doors of the plans whose outline is not their box: how many, with no doorway inside,
+        // with one more than a metre off the real door, and turned more than 10° from it
+        public int Doors, Locked, Off, Turned;
         public double Used, Outside, Area, Ms, MaxMs;
         public readonly Dictionary<string, int> Why = new();
     }
@@ -103,6 +106,22 @@ public static class OutlineSurvey
                             key = key.Length > 90 ? key[..90] : key;
                             row.Why[key] = row.Why.GetValueOrDefault(key) + 1;
                         }
+                        var entrances = l.AllEntrances().Where(e => e.Level == 0).ToList();
+                        int doorCount = fp.Doors.Count(d => d.Level == 0);
+                        int off = 0, turned = 0;
+                        foreach (var e in entrances)
+                        {
+                            var (gap, turn) = InteriorGenerator.DoorGap(l, e);
+                            if (gap > 1) off++;
+                            if (turn > 10) turned++;
+                        }
+                        foreach (var x in new[] { row, total })
+                        {
+                            x.Doors += doorCount;
+                            x.Locked += Math.Max(0, doorCount - entrances.Count);
+                            x.Off += off;
+                            x.Turned += turned;
+                        }
                         var rings = PlanOutline.Rings(grid, fp.Width, fp.Depth);
                         var (used, outside, area) = Cover(l, rings);
                         foreach (var x in new[] { row, total }) { x.Used += used; x.Outside += outside; x.Area += area; }
@@ -113,12 +132,14 @@ public static class OutlineSurvey
 
         var sb = new StringBuilder();
         sb.AppendLine($"outline survey ({(InteriorGenerator.FollowOutlines ? "outlines followed" : "--no-outlines: as before #1290")}), {tiles} tiles round {string.Join(", ", Towns.Select(t => t.Name))}");
-        sb.AppendLine("kind           plans  boxlike  shaped  fallback  invalid   fill  outside   ms avg  ms max");
+        sb.AppendLine("kind           plans  boxlike  shaped  fallback  invalid   fill  outside   ms avg  ms max   doors  locked  off>1m  turned");
         void Line(string name, Row x) => sb.AppendLine(
-            $"{name,-14}{x.Plans,6}{x.Boxlike,9}{x.Shaped,8}{x.Fallback,10}{x.Invalid,9}{(x.Area > 0 ? x.Used / x.Area : 0),7:P0}{(x.Area > 0 ? x.Outside / x.Area : 0),9:P0}{(x.Plans > 0 ? x.Ms / x.Plans : 0),9:F1}{x.MaxMs,8:F0}");
+            $"{name,-14}{x.Plans,6}{x.Boxlike,9}{x.Shaped,8}{x.Fallback,10}{x.Invalid,9}{(x.Area > 0 ? x.Used / x.Area : 0),7:P0}{(x.Area > 0 ? x.Outside / x.Area : 0),9:P0}{(x.Plans > 0 ? x.Ms / x.Plans : 0),9:F1}{x.MaxMs,8:F0}"
+            + $"{x.Doors,8}{x.Locked,8}{x.Off,8}{x.Turned,8}");
         foreach (var (name, x) in rows) Line(name, x);
         Line("all", total);
         sb.AppendLine("fill and outside: of the outline's area, over the plans whose outline is not their box");
+        sb.AppendLine("doors: their ground-floor street doors; locked: no doorway inside; off>1m: the doorway inside more than 1 m from the real door; turned: more than 10° from it");
         sb.AppendLine();
         sb.AppendLine("why a plan went back to rectangles:");
         foreach (var (name, x) in rows)

@@ -106,52 +106,7 @@ public static class InteriorValidator
             }
         }
 
-        // reachability from the ways in, through doorways, up and down the stairs and in the
-        // elevators: a block of flats' upper floors are several stairwells that never meet (#557)
-        var reached = new HashSet<(int F, int R)>();
-        var queue = new Queue<(int F, int R)>();
-        void Reach(int f, int r)
-        {
-            if (f >= 0 && f < l.Floors.Count && r >= 0 && r < l.Floors[f].Rooms.Count && reached.Add((f, r))) queue.Enqueue((f, r));
-        }
-        var groundRooms = l.GroundFloor.Rooms;
-        for (int i = 0; i < groundRooms.Count; i++)
-            if (groundRooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry)) Reach(l.Below, i);
-        // a raised door (#827) is a way in to the room its doorway is cut in, on its floor
-        foreach (var e in l.Entrances)
-        {
-            int ef = l.EntranceFloor(e);
-            if (e.Level == 0 || ef < 0 || ef >= l.Floors.Count) continue;
-            var rooms = l.Floors[ef].Rooms;
-            for (int i = 0; i < rooms.Count; i++)
-                if (rooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(rooms[i], o, e.X, e.Z))) Reach(ef, i);
-        }
-        if (reached.Count == 0) Reach(l.Below, 0);
-        while (queue.Count > 0)
-        {
-            var (f, a) = queue.Dequeue();
-            var floor = l.Floors[f];
-            var room = floor.Rooms[a];
-            foreach (var o in room.Openings)
-                if (o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0) Reach(f, o.Other);
-            // a stair from this room's floor, starting in it, lands in the room over its top: one
-            // flight, or two round a half landing (#571)
-            foreach (var (first, last) in Stairs(floor))
-                if (Inside(room, first.Bottom.X, first.Bottom.Z) && f + 1 < l.Floors.Count)
-                    Reach(f + 1, RoomAt(l.Floors[f + 1], last.TopEnd.X, last.TopEnd.Z));
-            // and back down one arriving here
-            if (f > 0)
-                foreach (var (first, last) in Stairs(l.Floors[f - 1]))
-                    if (Inside(room, last.TopEnd.X, last.TopEnd.Z)) Reach(f - 1, RoomAt(l.Floors[f - 1], first.Bottom.X, first.Bottom.Z));
-            if (room.Type == RoomType.Elevator)
-                foreach (var lift in l.Lifts)
-                    if (lift.Contains((room.X0 + room.X1) / 2, (room.Z0 + room.Z1) / 2))
-                        for (int g = lift.Bottom; g <= lift.Top; g++)
-                            Reach(g, RoomAt(l.Floors[g], (lift.X0 + lift.X1) / 2, (lift.Z0 + lift.Z1) / 2));
-        }
-        for (int f = 0; f < l.Floors.Count; f++)
-            for (int i = 0; i < l.Floors[f].Rooms.Count; i++)
-                if (!reached.Contains((f, i))) errors.Add($"floor {f} room {i} {l.Floors[f].Rooms[i].Type} unreachable");
+        errors.AddRange(Unreachable(l));
 
         // elevators: a cabin room on every floor they serve, and a doorway out of it
         foreach (var lift in l.Lifts)
@@ -311,6 +266,61 @@ public static class InteriorValidator
         return -1;
     }
 
+    /// <summary>
+    /// The rooms no one can reach from the ways in, through doorways, up and down the stairs and in the
+    /// elevators, as errors (what <see cref="Validate"/> reports; alone, it is cheap enough to ask often).
+    /// </summary>
+    internal static List<string> Unreachable(InteriorLayout l)
+    {
+        var errors = new List<string>();
+        // a block of flats' upper floors are several stairwells that never meet (#557)
+        var reached = new HashSet<(int F, int R)>();
+        var queue = new Queue<(int F, int R)>();
+        void Reach(int f, int r)
+        {
+            if (f >= 0 && f < l.Floors.Count && r >= 0 && r < l.Floors[f].Rooms.Count && reached.Add((f, r))) queue.Enqueue((f, r));
+        }
+        var groundRooms = l.GroundFloor.Rooms;
+        for (int i = 0; i < groundRooms.Count; i++)
+            if (groundRooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry)) Reach(l.Below, i);
+        // a raised door (#827) is a way in to the room its doorway is cut in, on its floor
+        foreach (var e in l.Entrances)
+        {
+            int ef = l.EntranceFloor(e);
+            if (e.Level == 0 || ef < 0 || ef >= l.Floors.Count) continue;
+            var rooms = l.Floors[ef].Rooms;
+            for (int i = 0; i < rooms.Count; i++)
+                if (rooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(rooms[i], o, e.X, e.Z))) Reach(ef, i);
+        }
+        if (reached.Count == 0) Reach(l.Below, 0);
+        while (queue.Count > 0)
+        {
+            var (f, a) = queue.Dequeue();
+            var floor = l.Floors[f];
+            var room = floor.Rooms[a];
+            foreach (var o in room.Openings)
+                if (o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0) Reach(f, o.Other);
+            // a stair from this room's floor, starting in it, lands in the room over its top: one
+            // flight, or two round a half landing (#571)
+            foreach (var (first, last) in Stairs(floor))
+                if (Inside(room, first.Bottom.X, first.Bottom.Z) && f + 1 < l.Floors.Count)
+                    Reach(f + 1, RoomAt(l.Floors[f + 1], last.TopEnd.X, last.TopEnd.Z));
+            // and back down one arriving here
+            if (f > 0)
+                foreach (var (first, last) in Stairs(l.Floors[f - 1]))
+                    if (Inside(room, last.TopEnd.X, last.TopEnd.Z)) Reach(f - 1, RoomAt(l.Floors[f - 1], first.Bottom.X, first.Bottom.Z));
+            if (room.Type == RoomType.Elevator)
+                foreach (var lift in l.Lifts)
+                    if (lift.Contains((room.X0 + room.X1) / 2, (room.Z0 + room.Z1) / 2))
+                        for (int g = lift.Bottom; g <= lift.Top; g++)
+                            Reach(g, RoomAt(l.Floors[g], (lift.X0 + lift.X1) / 2, (lift.Z0 + lift.Z1) / 2));
+        }
+        for (int f = 0; f < l.Floors.Count; f++)
+            for (int i = 0; i < l.Floors[f].Rooms.Count; i++)
+                if (!reached.Contains((f, i))) errors.Add($"floor {f} room {i} {l.Floors[f].Rooms[i].Type} unreachable");
+        return errors;
+    }
+
     /// <summary>Whether an opening's middle is at (x, z) on its room's wall line.</summary>
     private static bool OnWall(RoomPlan r, OpeningPlan o, float x, float z)
     {
@@ -413,6 +423,13 @@ public static class InteriorValidator
             // the building's real outline, when the check has it
             foreach (var ring in outline ?? [])
                 sb.Append($"<polygon points=\"{string.Join(" ", ring.Select(p => $"{N(X(p.X))},{N(Y(p.Y))}"))}\" fill=\"none\" stroke=\"#c40\" stroke-width=\"1.5\" stroke-dasharray=\"6 3\"/>");
+            // with it, the real street doors on the facade (#1290): a doorway inside should stand at its ring
+            if (outline != null)
+                foreach (var e in l.AllEntrances().Where(e => l.EntranceFloor(e) == f))
+                {
+                    var (door, _) = InteriorGenerator.DoorInPlan(l, e);
+                    sb.Append($"<circle cx=\"{N(X(door.X))}\" cy=\"{N(Y(door.Y))}\" r=\"5\" fill=\"none\" stroke=\"#d11\" stroke-width=\"2\"/>");
+                }
             foreach (var h in floor.Holes)
                 sb.Append($"<rect x=\"{N(X(h.X0))}\" y=\"{N(Y(h.Z1))}\" width=\"{N((h.X1 - h.X0) * S)}\" height=\"{N((h.Z1 - h.Z0) * S)}\" fill=\"#333\" fill-opacity=\"0.5\"/>");
             foreach (var g in floor.Landings)
