@@ -287,8 +287,10 @@ public partial class ErrandService : Node
     {
         if (!_adventure.Active(peer) || _adventure.Progress(peer) is not { } p) return;
         int today = Today;
-        var errands = p.Get(ErrandsProgress.Section);
         var quests = p.Get(QuestsProgress.Section);
+        // a player who never touched the errands has no section to roll or prune (and gets none from this)
+        if (!p.Has(ErrandsProgress.Section.Id) && !quests.Active.Keys.Any(Postkarte.IsCard)) return;
+        var errands = p.Get(ErrandsProgress.Section);
         if (errands.Day == today && !quests.Active.Keys.Any(k => Postkarte.IsCard(k) && Postkarte.DayOf(k) is { } d && !ErrandClock.Alive(d, today))) return;
         if (errands.Roll(today)) p.Touch(ErrandsProgress.Section);
         foreach (string id in quests.Active.Keys.Where(Postkarte.IsCard).ToList())

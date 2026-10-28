@@ -60,7 +60,7 @@ public partial class ErrandNetProbe : ChatProbe
 
     private async Task Lead()
     {
-        Expect(await Heard("FOLLOW", "ready", 90), "Tom is on");
+        Expect(await Heard("FOLLOW", "ready", 150), "Tom is on");
         string hash = OffersHash();
         Expect(Svc.CardsIn(Cell.E, Cell.N).Count >= 4, $"the cell has cards ({hash})");
         Say("offers " + hash);
@@ -93,9 +93,9 @@ public partial class ErrandNetProbe : ChatProbe
 
     private async Task Follow()
     {
-        Say("ready");
-        await Seconds(1.0);
-        string theirs = (await HeardStarting("LEAD", "offers ", 90)) ?? "";
+        // Lea may join the chat after the first line: say it again until she answers
+        for (int i = 0; i < 40 && !await Heard("LEAD", "offers ", 3); i++) Say("ready");
+        string theirs = (await HeardStarting("LEAD", "offers ", 30)) ?? "";
         Expect(theirs.StartsWith("offers ") && theirs["offers ".Length..] == OffersHash(), $"the same cards on the remote peer ({OffersHash()} / {theirs})");
         Expect(await Until(() => InviteService.Client?.Incoming.Any(v => v.Kind == Parties.Kind) == true, 90), "Tom is invited to Lea's party");
         if (InviteService.Client?.Incoming.FirstOrDefault(v => v.Kind == Parties.Kind) is { } party) InviteService.Client.Accept(party.Id);
