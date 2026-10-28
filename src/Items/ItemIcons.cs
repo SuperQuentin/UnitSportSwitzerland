@@ -11,7 +11,7 @@ public enum IconShape { Box, Can, Bottle, Pouch, Scrap, Tool }
 /// (<see cref="Generic"/>: category silhouette + tint + a 3x5 pixel glyph). See
 /// <c>docs/notes/items/pixel-icons.md</c>.
 /// </summary>
-public static class ItemIcons
+public static partial class ItemIcons
 {
     public const int Size = 16;
 
@@ -1998,6 +1998,8 @@ public static class ItemIcons
             p.Disc(7.5f, 7f, 6f, 1.6f, 'o', 'o', 'O');
             p.Set(5, 6, 'e'); p.Set(9, 7, 'e'); p.Set(7, 6, 'y'); p.Set(11, 6, 'y');
         });
+
+        AddErrandIcons(d);   // #1267
 
         d[ItemId.Raclette] = new[]
         {
