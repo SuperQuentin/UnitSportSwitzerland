@@ -87,6 +87,8 @@ public partial class AlcoholNetProbe : ChatProbe
         Expect(await Until(() => _items.Inventory[3].IsEmpty, 10), "Lea drank a beer");
         await Seconds(1.0);
         Say("beer");
+        Expect(await Until(() => InviteService.Client is { IncomingCount: > 0 }, 60), "Tom's second offer reached Lea");
+        Chat.Send("/accept");
         Expect(await Heard("TEST", "waited", 90), "Tom's second test said WAIT");
         Expect(Svc.Level >= own - 0.05, "her own level did not fall for a beer");
     }
@@ -95,7 +97,12 @@ public partial class AlcoholNetProbe : ChatProbe
 
     private async Task Test()
     {
-        Say("ready");
+        // Lea may not be listening yet when the first line goes out: say it again until she answers
+        for (int i = 0; i < 45 && !_heard.Any(l => l.Contains("AL DRINK drunk")); i++)
+        {
+            Say("ready");
+            await Seconds(2.0);
+        }
         Expect(await Heard("DRINK", "drunk", 90), "Lea drank");
         Expect(Svc.Level == 0 && Adventure.Mine.Get(AlcoholProgress.Section).Drinks.Count == 0 && Svc.LastResult == null,
             "Lea's drinks never reached Tom: no log, no level, no screen");
@@ -120,7 +127,7 @@ public partial class AlcoholNetProbe : ChatProbe
         Expect(await Until(() => InviteService.Client != null, 5), "invites run");
         await Seconds(0.5);
         Say("offered2");
-        Expect(await Until(() => Svc.LastResult is { Kind: BreathKind.Friend, WaitSeconds: > 0 } && Svc.LastResult.Value.Level != r.Level || Svc.LastResult is { WaitSeconds: > 0 }, 40),
+        Expect(await Until(() => Svc.LastResult is { Kind: BreathKind.Friend, WaitSeconds: > 0 }, 40),
             "a minute after a beer the test says WAIT (mouth alcohol)");
         Expect(Hud?.Shown.StartsWith("WAIT") == true, $"on the screen: '{Hud?.Shown}'");
         Say("waited");
