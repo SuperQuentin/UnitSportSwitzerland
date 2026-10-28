@@ -183,6 +183,13 @@
     <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- pinball (#1325): the table as data, the ball's solver and the rules, Godot maths only -->
+    <Compile Include="..\..\src\Interiors\Pinball\PinballTable.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballLayouts.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballSolver.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballHighScores.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- bowling (#1323): the ball's run down the lane and the ten-frame score, Godot maths only -->
     <Compile Include="..\..\src\Interiors\Bowling\BowlingSizes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Bowling\BowlingBall.cs" Link="Game\%(Filename)%(Extension)" />

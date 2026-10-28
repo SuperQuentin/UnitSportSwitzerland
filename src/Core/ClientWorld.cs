@@ -225,6 +225,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.DiningProbe { Name = "DiningProbe" });
             return;
         }
+        // the four pinball tables built and played through their nodes (#1325)
+        if (Interiors.Pinball.PinballProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
+            return;
+        }
         // arcades planned in hand-made buildings (#1240)
         if (Interiors.ArcadeProbe.ParseArgs())
         {
@@ -553,6 +560,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball machines, played and watched (#1325)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
@@ -973,7 +981,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -1008,6 +1016,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
         if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
+        if (Interiors.Pinball.PinballNetProbe.Role != null) AddChild(new Interiors.Pinball.PinballNetProbe(items, origin));
         if (Interiors.BowlingNetProbe.Role != null) AddChild(new Interiors.BowlingNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));

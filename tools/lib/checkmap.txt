@@ -200,6 +200,11 @@ src/Interiors/RoomLights    quick  --cinemacheck --systems ui
 src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
 src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
 src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
+# #1325: pinball: the four cabinets built and played through their nodes (the solver and rules: unit tests)
+src/Interiors/Pinball/ quick --pinballcheck --systems ui
+src/Interiors/Pinball/ quick --zfightcheck Pinball
+shaders/pinball_display quick --pinballcheck --systems ui
+src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
