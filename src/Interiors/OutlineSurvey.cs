@@ -36,6 +36,50 @@ public static class OutlineSurvey
         public readonly Dictionary<string, int> Why = new();
     }
 
+    /// <summary>Locked street doors (#1304), by the plan's type, the wall they are on and the room behind them.</summary>
+    private static readonly Dictionary<string, int> LockedBy = new();
+
+    /// <summary>
+    /// Why a street door has no doorway, in words that count together: the plan's type, which wall of the plan box
+    /// the door is on (front: the main door's), and the ground-floor room 0.6 m in from it ("none": no room there).
+    /// </summary>
+    private static string LockedKey(InteriorLayout l, DoorSpot d)
+    {
+        var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+        var v = new Vector2(-u.Y, u.X);
+        var rel = new Vector2(d.Position.X - l.CenterX, d.Position.Z - l.CenterZ);
+        var o = new Vector2(d.Outward.X, d.Outward.Z);
+        var at = new Vector2(rel.Dot(u), rel.Dot(v));
+        var outward = new Vector2(o.Dot(u), o.Dot(v)).Normalized();
+        string wall = outward.Y < -0.7f ? "front" : outward.Y > 0.7f ? "back" : "side";
+        var p = at - outward * 0.6f;
+        var room = l.GroundFloor.Rooms.FirstOrDefault(r => r.Holds(p.X, p.Y));
+        if (room == null) return $"{l.Type,-12} {wall,-5} none";
+        // how far the room's own wall stands from the door, and whether it took a shape: a door a room is
+        // behind but whose wall is far off (a rectangle kept inside the outline) is a fitting problem, not a planning one
+        float gap = float.MaxValue;
+        var cs = room.Corners();
+        for (int i = 0; i < cs.Length; i++) gap = Math.Min(gap, SegDist(at, cs[i], cs[(i + 1) % cs.Length]));
+        string far = gap < 0.6f ? "<0.6" : gap < 2f ? "<2" : ">2";
+        return $"{l.Type,-12} {wall,-5} {room.Type} {(room.Shape != null ? "shaped" : "rect")} wall{far}m";
+    }
+
+    /// <summary>A door's place on the facade in the plan's frame.</summary>
+    private static Vector2 InPlan(InteriorLayout l, DoorSpot d)
+    {
+        var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+        var v = new Vector2(-u.Y, u.X);
+        var rel = new Vector2(d.Position.X - l.CenterX, d.Position.Z - l.CenterZ);
+        return new Vector2(rel.Dot(u), rel.Dot(v));
+    }
+
+    private static float SegDist(Vector2 p, Vector2 a, Vector2 b)
+    {
+        var ab = b - a;
+        float t = ab.LengthSquared() < 1e-9f ? 0 : Math.Clamp((p - a).Dot(ab) / ab.LengthSquared(), 0, 1);
+        return p.DistanceTo(a + ab * t);
+    }
+
     /// <summary>At most this many tiles a town (<c>--tiles N</c>), for a quicker look.</summary>
     private static int MaxTiles => int.TryParse(CmdArgs.Value("--tiles"), out int n) ? n : int.MaxValue;
 
@@ -108,6 +152,23 @@ public static class OutlineSurvey
                         }
                         var entrances = l.AllEntrances().Where(e => e.Level == 0).ToList();
                         int doorCount = fp.Doors.Count(d => d.Level == 0);
+                        foreach (var d in fp.Doors.Where(d => d.Level == 0 && d.Width > 0))
+                        {
+                            string door = new DoorKey(fp.Key, d.Slot).ToString();
+                            if (entrances.Any(e => e.Door == door)) continue;
+                            string k = $"{b.Kind,-12} " + LockedKey(l, d);
+                            LockedBy[k] = LockedBy.GetValueOrDefault(k) + 1;
+                            if (LockedBy[k] <= 2)
+                            {
+                                // the plan with its outline, red circles at its doors: test_output/survey-locked/
+                                System.IO.Directory.CreateDirectory("test_output/survey-locked");
+                                var g = PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+                                string name = System.Text.RegularExpressions.Regex.Replace(k.Trim(), @"[^A-Za-z0-9<>]+", "_").Replace("<", "lt").Replace(">", "gt");
+                                System.IO.File.WriteAllText($"test_output/survey-locked/{name}__{fp.Key}_{d.Slot}.svg",
+                                    InteriorValidator.ToSvg(l, g == null ? null : InteriorGenerator.RingsFor(l, g), [InPlan(l, d)]));
+                                GD.Print($"[outlinesurvey]   locked: {fp.Key} slot {d.Slot}: {k}; why the plan kept rectangles: {InteriorGenerator.OutlineFailure ?? "-"}");
+                            }
+                        }
                         int off = 0, turned = 0;
                         foreach (var e in entrances)
                         {
@@ -140,6 +201,10 @@ public static class OutlineSurvey
         Line("all", total);
         sb.AppendLine("fill and outside: of the outline's area, over the plans whose outline is not their box");
         sb.AppendLine("doors: their ground-floor street doors; locked: no doorway inside; off>1m: the doorway inside more than 1 m from the real door; turned: more than 10° from it");
+        sb.AppendLine();
+        sb.AppendLine("locked doors by kind, plan type, wall (front: the main door's) and the room behind (#1304):");
+        foreach (var (k, n) in LockedBy.OrderByDescending(w => w.Value).Take(40))
+            sb.AppendLine($"  {n,5}  {k}");
         sb.AppendLine();
         sb.AppendLine("why a plan went back to rectangles:");
         foreach (var (name, x) in rows)
