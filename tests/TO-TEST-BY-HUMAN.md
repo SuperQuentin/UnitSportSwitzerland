@@ -21,6 +21,14 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Stop the video → the cat slides and the film music come back. Screen off → dark and silent.
 - [ ] Perf: F3 Detailed while a 480p video plays in the hall → note the frame time against the slides.
 
+## A cinema hall's video through the server ([#1298](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1298) phase 2)
+
+- [ ] On a server, tick **Through the server** in the projector panel while a video plays → every player's picture turns a little softer (the server's copy), it goes on at the same moment, nobody's restarts.
+- [ ] A phone (or the Quest) joins the hall → it shows the video and plays its sound through the server, on time with the desktops.
+- [ ] Block the video's domain on one PC (hosts file) and play it → that player gets it through the server after a few seconds; the others are unaffected.
+- [ ] A live Twitch channel through the server → every player on it sees the same moment (unlike each fetching it).
+- [ ] Server bandwidth: three players watching through the server → about 1.5-2 Mbit/s each in the server's stats; nothing when nobody watches.
+
 ## What E acts on is outlined ([#1291](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1291))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7` (Cinémas du Grütli, Geneva), then walk in.

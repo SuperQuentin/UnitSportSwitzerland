@@ -40,13 +40,30 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   the hall's screen above it): Screen off, Cat slides / Stop the video, a link box with Paste and Play, the
   last six links played (`user://cinema_links.txt`). `/cinema play <link>`, `/cinema stop`, `/cinema`
   (status: position, the frame shown, restarts) in the chat (`CinemaBooths.RunLocal`, before the server).
-- **Phones and Quest**: no ffmpeg: the slides (the panel says so); the relay (phase 2) is their way in.
+- **Through the server** (phase 2, `CinemaBooths.Relay.cs`, `CinemaRelayTap.cs`, `CinemaRelayFeed.cs`, protocol 60):
+  who: a hall whose panel has **Through the server** on (`/cinema relay on|off`; the switch keeps T0), a client that
+  cannot decode (phones, Quest, `--cinemanodecode`), a client whose own decoder failed for that link and T0
+  (`_failedHere`: a blocked domain). Such a client says `WatchRelay` every 2 s; the server accepts it only from inside
+  that cinema while the hall plays, keeps one `CinemaRelayTap` per watched hall (closed 10 s after the last watcher
+  left, or when the link changes) and sends each watcher its frames (`RelayFrame`, unreliable: a lost one is skipped),
+  sound (`RelaySound`, reliable) and status on ENet channel 5 (the radio has 3, the concert 4); its own client and an
+  offline game directly. The tap: yt-dlp and ffmpeg on the server, JPEG 480x200 @ 15 fps (`-q:v 7`, split on the
+  FFD8/FFD9 markers), mono 24 kHz µ-law in 4800-sample chunks on a fixed grid, each stamped with its moment of the
+  video and sent up to 2.5 s ahead (a live stream's moments are the server's: a frame 3 s after it came, so everyone
+  on the relay is on one clock even live). The feed keeps the small JPEGs as they came and decodes each 0.3 s before it
+  is due (into eight pooled images, scaled to 854x358); the first version decoded on arrival and starved its pool
+  (frames 1.9 s late). Measured: on the clock at 7/7 marks, worst 26-54 ms, sound due at every mark.
+- **One feed for both ways**: `ICinemaFeed` (`CinemaFeed.cs`, with `CinemaLookup`: yt-dlp, ffmpeg arguments, process
+  start and stop for the decoder and the tap): `Picture` (an `Image`), `Tint`, `Pump`, `SoundAt`/`Sample`/`Heard`.
+- **Phones and Quest**: no ffmpeg: through the server (the panel says so).
 - **Sources tested** (Oct 2026): YouTube `aqz-KE-bpKQ` (Big Buck Bunny), `download.blender.org/durian/trailer/
   sintel_trailer-480p.mp4`, `test-streams.mux.dev/x36xhzz/x36xhzz.m3u8` (HLS VOD), ireplay's live HLS. Dead:
   the gtv-videos-bucket sample (403), Akamai's `cph-p2p-msl` live test (404).
-- **Checks**: tier 0 `--filter CinemaVideo`; net `tools/cinemanetcheck.sh` (a 60 s test film made with ffmpeg
-  in `%TEMP%`, never under the project; `VIDEO=<link>` for a web one, `VIDEO=none` to skip): A plays it, B
-  outside is refused, A, B, C hold the same link and T0, A and B decode and must be within two frames at 7
-  marks (C only checks the state: a third ffmpeg pair hit the RAM floor on a 16 GB machine). Windowed shots:
-  `--cinemavideoshot <link>,<prefix>` (Town cinema: `_pasted`, `_thrown`, `_booth`, `_panel`.png).
+- **Checks**: tier 0 `--filter CinemaVideo`; net `tools/cinemanetcheck.sh` (a 60 s test film with a 440 Hz tone
+  made with ffmpeg in `%TEMP%`, never under the project; `VIDEO=<link>` for a web one, `VIDEO=none` to skip): A plays
+  it, B outside is refused, A, B, C hold the same link and T0; A (`--cinemanodecode`) watches through the server, B
+  decodes it, both through the booth's own feed (`CinemaBooths.ProbeWatch`) and within two of their frames of the clock
+  with the sound due at every mark (the probe reports the heard sample as a speaker does). C only checks the state: a
+  third ffmpeg pair hit the RAM floor on a 16 GB machine. Windowed shots: `--cinemavideoshot <link>,<prefix>` (Town
+  cinema: `_pasted`, `_thrown`, `_booth`, `_panel`.png), `--cinemanodecode` for the relay (this process its own server).
   Without ffmpeg on PATH (a dev build has no `bin/`), put the release's `test_output/release/tools/<os>` first.

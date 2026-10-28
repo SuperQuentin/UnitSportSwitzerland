@@ -6,8 +6,9 @@ namespace UnitSport.Interiors;
 
 /// <summary>
 /// <c>godot --path . -- --cinemavideoshot &lt;link&gt;,&lt;out prefix&gt;</c> (#1298, windowed): a video on a real hall's screen.
-/// The model viewer's Town cinema, lights dimmed, the camera in the seats facing the screen; the link decoded as in
-/// the game (<see cref="CinemaVideoStream"/>, from now on the clock) and shown through <see cref="InteriorNode.ShowVideo"/>.
+/// The model viewer's Town cinema, lights dimmed, the camera in the seats facing the screen; the link played as in the
+/// game, by the booth's own feed (<see cref="CinemaBooths.ProbeWatch"/>, from now on the clock) and shown through
+/// <see cref="InteriorNode.ShowVideo"/>; with <c>--cinemanodecode</c> through the relay, this process its own server.
 /// Takes <c>&lt;prefix&gt;_pasted.png</c> once frames come, then <c>&lt;prefix&gt;_thrown.png</c> with the projector light
 /// (High detail's way) and <c>&lt;prefix&gt;_booth.png</c> from the booth's side, printing where the video is against the
 /// clock at each, and <c>&lt;prefix&gt;_panel.png</c> with the hall's projector panel open over it (<see cref="CinemaPanelUi"/>).
@@ -18,7 +19,7 @@ public partial class CinemaVideoShot : Node3D
 
     private readonly string _link, _prefix;
     private InteriorNode _node = null!;
-    private CinemaVideoStream _stream = null!;
+    private ICinemaFeed? _stream;
     private Camera3D _cam = null!;
     private double _t0, _shotAt = -1;
     private int _step;
@@ -52,19 +53,22 @@ public partial class CinemaVideoShot : Node3D
         AddChild(_cam);
         _cam.LookAtFromPosition(_target + facing * 12f + new Vector3(0, 0.6f, 0), _target, Vector3.Up);
 
-        if (CinemaBooths.Instance == null) CinemaBooths.Create(this);
+        var booths = CinemaBooths.Instance ?? CinemaBooths.Create(this);
         _plan = layout.Key;
         _t0 = Net.ClockSync.ServerNow;
-        _stream = new CinemaVideoStream(_link, _t0);
+        booths.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
+        booths.SetVideoForShot(_plan, 0, _link, _t0);
+        booths.ProbeWatch = (_plan, 0);
+        booths.ProbeNode = _node;
         GD.Print($"[cinemavideo] {_link} on hall {CinemaBooths.HallAt(layout, screen.X, screen.Z) + 1}");
     }
 
     public override void _Process(double delta)
     {
         double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, _t0);
-        if (_stream.Pump(pos) && _stream.Picture is { } frame) _node.ShowVideo(0, frame, _stream.Tint, _stream);
-        if (_stream.Failed || pos > 90) { Done($"FAILED ({_stream.Status})"); return; }
-        if (_stream.CurrentTime < 0) return;
+        _stream = CinemaBooths.Instance!.StreamOf(_plan, 0);
+        if (_stream is { Failed: true } || pos > 90) { Done($"FAILED ({_stream?.Status ?? "no feed"})"); return; }
+        if (_stream == null || _stream.CurrentTime < 0) return;
         if (_shotAt < 0) _shotAt = pos + 2;
         if (pos < _shotAt) return;
         string[] names = { "pasted", "thrown", "booth", "panel" };
@@ -75,8 +79,6 @@ public partial class CinemaVideoShot : Node3D
         if (_step == 3)
         {
             // the panel as a player sees it while the hall plays: the link the server would hold, and this decoder's state
-            CinemaBooths.Instance!.Ask(_plan, 0, CinemaBooths.Pack(CinemaBooths.Lights.Off, true));
-            CinemaBooths.Instance!.SetVideoForShot(_plan, 0, _link, _t0);
             CinemaPanelUi.Open(null, _plan, 0);
         }
         if (_step < 4) { _node.ProjectFor(_node.ToLocal(_cam.GlobalPosition)); _shotAt = pos + 2; return; }
@@ -87,12 +89,13 @@ public partial class CinemaVideoShot : Node3D
     {
         var img = GetViewport().GetTexture().GetImage();
         img.SavePng(path);
-        GD.Print($"[cinemavideo] {path}: the hall at {pos:F2} s shows {_stream.CurrentTime:F2} s (off {(pos - _stream.CurrentTime) * 1000:F0} ms, restarts {_stream.Restarts})");
+        GD.Print($"[cinemavideo] {path}: the hall at {pos:F2} s shows {_stream!.CurrentTime:F2} s (off {(pos - _stream.CurrentTime) * 1000:F0} ms, "
+            + $"restarts {_stream.Restarts}{(_stream is CinemaRelayFeed ? ", through the server" : "")})");
     }
 
     private void Done(string result)
     {
-        _stream.Dispose();
+        if (CinemaBooths.Instance is { } booths) booths.ProbeWatch = null;
         GD.Print($"[cinemavideo] RESULT: {result}");
         GetTree().Quit(result == "ok" ? 0 : 1);
         SetProcess(false);

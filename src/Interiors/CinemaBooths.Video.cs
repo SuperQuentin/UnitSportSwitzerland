@@ -45,6 +45,9 @@ public partial class CinemaBooths
     /// </summary>
     public (string Plan, int Hall)? ProbeWatch { get; set; }
 
+    /// <summary>A shot's cinema to show <see cref="ProbeWatch"/>'s hall on (<see cref="CinemaVideoShot"/>), when no interior is current.</summary>
+    public InteriorNode? ProbeNode { get; set; }
+
     /// <summary>A hall's link ("" for none) and the shared-clock moment it started.</summary>
     public (string Link, double T0) VideoOf(string plan, int hall) =>
         hall >= 0 && hall < MaxHalls && _videos.TryGetValue(plan, out var v) && v[hall].Link != null ? (v[hall].Link, v[hall].T0) : ("", 0);
@@ -136,7 +139,11 @@ public partial class CinemaBooths
     {
         string plan = node?.Layout.Key ?? "";
         bool on = node != null && here >= 0 && (screens >> here & 1) != 0;
-        if (ProbeWatch is { } probe) (plan, here, on) = (probe.Plan, probe.Hall, true);
+        if (ProbeWatch is { } probe)
+        {
+            (plan, here, on) = (probe.Plan, probe.Hall, true);
+            node ??= ProbeNode;
+        }
         var (link, t0) = on ? VideoOf(plan, here) : ("", 0);
         bool want = link.Length > 0 && !NetworkManager.DedicatedServer;
         bool relay = want && (RelayOf(plan, here) || !CinemaVideoStream.CanDecode || _failedHere == (link, t0));

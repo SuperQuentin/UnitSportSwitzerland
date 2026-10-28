@@ -41,6 +41,7 @@ public partial class CinemaPanelUi : CanvasLayer
     private string _plan = "";
     private int _hall = -1;
     private double _since;
+    private float _fitFor;
     private string _shown = "\0";
 
     public bool IsOpen => _panel != null && _panel.Visible;
@@ -157,7 +158,7 @@ public partial class CinemaPanelUi : CanvasLayer
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Callable.From(() => { Fit(); _paste.GrabFocus(); }).CallDeferred();
-        if (!CinemaVideoStream.CanDecode) Status = "This device cannot play videos: the others in the hall see it, you see the slides.";
+        if (!CinemaVideoStream.CanDecode) Status = "This device gets videos through the server: a smaller picture than the others'.";
     }
 
     public void Close()
@@ -172,7 +173,7 @@ public partial class CinemaPanelUi : CanvasLayer
     private void Fit()
     {
         var screen = GetViewport().GetVisibleRect().Size;
-        float w = Mathf.Min(Width, screen.X - 2 * Gutter), h = _panel.GetCombinedMinimumSize().Y;
+        float w = Mathf.Min(Width, screen.X - 2 * Gutter), h = _fitFor = _panel.GetCombinedMinimumSize().Y;
         // on a short screen it would reach the middle: down to the bottom gutter instead
         float lift = screen.Y - Lift - h >= screen.Y / 2 ? Lift : Gutter;
         _panel.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
@@ -232,6 +233,9 @@ public partial class CinemaPanelUi : CanvasLayer
         if (_since < 0.2) return;
         _since = 0;
         Refresh();
+        // a wrapped line knows its height only once laid out: fit again when it changes
+        float h = _panel.GetCombinedMinimumSize().Y;
+        if (h != _fitFor) Fit();
     }
 
     /// <summary>The header and the buttons from the hall's state and this client's decoder, on change only.</summary>
