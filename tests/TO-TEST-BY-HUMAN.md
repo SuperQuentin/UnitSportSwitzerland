@@ -214,6 +214,19 @@ Offline is enough for most: `--systems ui,physics,adventure,terrain` on any map;
 - [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
 - [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
 
+## Steinstossen, the Älplerfest's stone put (part 3 of [#1269](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1269), [PR #1318](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1318))
+
+Offline on the check-only festival: `<godot> --path . -- --festival test --date 2027-03-14 --systems ui,physics,occasions,adventure --world fixture --chunks fixture:flat` (its stone opens on day 5). The real Älplerfest runs 14-24 August at Interlaken, Schwägalp or Schwarzsee, or in the region's largest town: `--date 2027-08-16` with the real map.
+
+- [ ] Find the grey stone on the sawdust lane (12 m south of the site's middle, clear of the flags, the horns and the wrestling ring) → a prompt "Put the stone (3 of 3 today)" and a box round the stone; E (keyboard) / Y (pad) takes it. Does the stone read as a stone, the lane as a lane, in Cartoon, PS1 and Realistic?
+- [ ] Hold LMB / RB, watch the meter rise and fall, let go on the peak → the effort sound; is the meter easy to read, the peak band clear, a heavier stone slower? Then press LMB / RB on each of the four drum beats → PERFECT / GOOD / MISS flashes, a drum you can follow. Does it feel fair at 90 BPM with a pad and with the mouse?
+- [ ] Look up to about 40 degrees at the fourth beat (the push) → the stone flies its arc and lands; the distance, Batzen and points show beside the body, a stake with your name and the distance stands 90 s. Does a perfect put near 4 m feel right for the real Unspunnen stone, and how much further does the 40 kg and the 18 kg one go (Space while lifting changes the stone)?
+- [ ] Let go of the lift at the bottom of the meter → "The stone slipped from your hands", nothing paid, it still counts as a put. Walk, jump, a held weapon and the hotbar do nothing during an attempt; E again puts the stone down and gives them back.
+- [ ] Three puts, then the prompt says the stone rests until tomorrow; the Journal's Festival tab shows the Batzen and the best score.
+- [ ] Two players (or a second client) near the stone → the other sees your stone fly and the stake with your name; pay and score are yours alone, and the party board gains your points.
+- [ ] Walking away from the stone mid-attempt (it is locked: try the game menu or Esc) → nothing breaks; after 90 s without a lift the attempt expires.
+- [ ] VR headset (pad route): E at the stone is the grip / Y, the trigger is `use_item`; judge whether the meter and the lamps are readable in the headset (they sit beside the body). The real two-handed lift and push by hand speed is not built.
+- [ ] Real map, dev region, `--date 2027-08-16`: the Älplerfest relocates to the region's largest town ("held this year in ..."), with the poles, the stone and the lane at its middle.
 ## Älplerfest flag swinging, part 5 of the festivals ([#1316](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1316))
 
 The checks drive the stick and the use key from a script; what only a person can judge is the feel of the figures and the screen. Run with the Älplerfest on (a real date 17-24 August, or the operator's `occasions.json`, or `--festival test --date 2027-08-16`).

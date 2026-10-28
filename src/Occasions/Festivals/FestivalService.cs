@@ -316,6 +316,12 @@ public partial class FestivalService : Node
     public int BatzenOf(long peer, string festival) =>
         RunningOf(festival) is { } run && _adventure.Progress(peer) is { } p ? p.Get(FestivalBook.Section).Of(run.Instance, run.Id).Batzen : 0;
 
+    /// <summary>Authority: how many plays of <paramref name="game"/> a player has made today (the festival's day) in a running festival.</summary>
+    public int PlaysToday(long peer, string festival, string game) =>
+        RunningOf(festival) is { } run && _adventure.Progress(peer) is { } p
+            ? p.Get(FestivalBook.Section).Of(run.Instance, run.Id).Played.GetValueOrDefault(FestivalRules.PlayKey(game, run.Day))
+            : 0;
+
     /// <summary>The party score of the crew a peer plays with now, on a running festival.</summary>
     public int CrewPoints(long peer, string festival)
     {

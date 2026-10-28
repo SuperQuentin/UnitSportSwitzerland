@@ -301,6 +301,7 @@ public partial class AdventureService : Node
         : Errands.ErrandCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/errandcheck")
         : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck")
         : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck")
+        : Occasions.Festivals.SteinCheck.Requested ? Occasions.Festivals.SteinCheck.Scratch
         : Occasions.Festivals.Fahnen.FahnenCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fahnecheck")
         : Occasions.Festivals.Horn.HornCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/hornscheck") : null;
 

@@ -1146,6 +1146,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
     public bool JumpTaken { get; set; }
 
+    /// <summary>A festival game has the hands (the stone put, #1269): no item is used while it runs. Owner only; nothing is replicated.</summary>
+    public bool GameBusy { get; set; }
     /// <summary>The look (mouse and right stick) belongs to something else this frame (the flag swinger's figures, #1269): the camera stays. Owner only.</summary>
     public bool LookTaken { get; set; }
 
@@ -2813,6 +2815,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Adventure.Rewards.RewardWorld.TryInteract(this)) return true;
         // a summit cross, a telescope or a stamp post at hand (#1224): look out, or stamp
         if (Adventure.Places.PoiMarkers.TryInteract(this)) return true;
+        // the stone of a festival's Steinstossen at hand (#1269): lift it
+        if (Occasions.Festivals.SteinGame.TryInteract(this)) return true;
         // an errand giver at hand (#1267): talk to them
         if (Adventure.Errands.ErrandGivers.TryInteract(this)) return true;
         // the Älplerfest's flag ground (#1269): swing the flag

@@ -117,6 +117,9 @@ public class ClockDisciplineTests
         ["src/Player/FootPlayer.Aura.cs"] = "presentation: which move of the combo the shared beat is on, and the Griddy's beat",
         ["src/Combat/AuraManager.Bots.cs"] = "presentation: a bot battler's laugh on the aura battle's shared beat (#914)",
         ["src/Combat/AuraManager.Music.cs"] = "presentation: a radio's CD position, which an aura battle takes its beat from (#914)",
+        // the stone put (#1269 part 3): the stamps of its presses are server time, checked against the arrival like an aura battle's
+        ["src/Occasions/Festivals/SteinGame.cs"] = "presentation: the lift meter and the run-up drum, on the attempt's server time, and the stamps of the presses",
+        ["src/Occasions/Festivals/SteinService.cs"] = "plumbing: the attempt's start and the arrival of its stamps are server time, as an aura battle's are",
         ["src/Combat/AuraWatchHud.cs"] = "presentation: the move a watched aura battle is on, on its shared beat (#914)",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
         ["src/Concert/ConcertService.Songs.cs"] = "presentation: /concert song reads where the setlist is on the shared clock the music plays to",

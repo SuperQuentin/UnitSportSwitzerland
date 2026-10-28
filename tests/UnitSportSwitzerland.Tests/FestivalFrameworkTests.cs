@@ -43,7 +43,8 @@ public class FestivalFrameworkTests
         Assert.Equal(["bell", "alphorn"], def.OpenGames(2).Select(g => g.Id));   // the alphorn game (#1269 part 4) opens with the bell
         Assert.Equal(["bell", "gong", "alphorn"], def.OpenGames(4).Select(g => g.Id));
         Assert.Equal(3, def.NextOpening(1));
-        Assert.Equal(0, def.NextOpening(3));
+        Assert.Equal(5, def.NextOpening(3));   // the stone put (--steincheck) opens on the last day
+        Assert.Equal(0, def.NextOpening(5));
         Assert.Equal(1, def.DayRow(2)!.From);
         Assert.Equal(3, def.DayRow(4)!.From);
     }

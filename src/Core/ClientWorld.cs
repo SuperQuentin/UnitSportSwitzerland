@@ -1201,6 +1201,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
             festivals.Start = () => _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
             Occasions.Festivals.FestivalPage.Register();
+            // Steinstossen (#1269 part 3): the attempt's wire, the stone, its arc and its stakes
+            Occasions.Festivals.SteinService.Create(festivals, adventure, server: false, networked: Launch.Networked);
+            if (_worldOrigin is { } steinOrigin)
+                Occasions.Festivals.SteinGame.Create(this, () => LocalPlayer, steinOrigin, p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null);
+            if (Occasions.Festivals.SteinCheck.Requested) AddChild(new Occasions.Festivals.SteinCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.SteinNetProbe.Role != null) AddChild(new Occasions.Festivals.SteinNetProbe(items));
             AddChild(new Occasions.Festivals.Horn.HornGame(() => LocalPlayer, () => _worldOrigin, () => _chunks));
             if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));

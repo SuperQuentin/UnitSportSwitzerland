@@ -21,7 +21,7 @@ public static partial class FestivalCatalog
 
     /// <summary>
     /// The Älplerfest, 14 to 24 August: Interlaken's Höhematte, then Schwägalp and Schwarzsee when the region lacks it. The flag swingers
-    /// open on day 3 (the plan's day table); the stone, the horns and the wrestling come with their parts.
+    /// open on day 3 (the plan's day table); the alphorn, the stone and the wrestling are in.
     /// </summary>
     public static FestivalDef Aelplerfest() => new(
         AelplerfestId, "Älplerfest",
@@ -30,9 +30,9 @@ public static partial class FestivalCatalog
             new FestivalSite("Schwägalp", 2740500, 1232900, 140),
             new FestivalSite("Schwarzsee", 2588600, 1169400, 140),
         ],
-        [new FestivalGame(FahneGame, "Fahnenschwingen", 100), new FestivalGame(SchwingGame, "Schwingen", 120), new FestivalGame(Horn.AlphornRules.GameId, "Alphorn and yodel", Horn.AlphornRules.DayCap)],
+        [new FestivalGame(FahneGame, "Fahnenschwingen", 100), new FestivalGame(SchwingGame, "Schwingen", 120), new FestivalGame(Horn.AlphornRules.GameId, "Alphorn and yodel", Horn.AlphornRules.DayCap), new FestivalGame(SteinRules.GameId, "Steinstossen", 100)],
         [
-            new FestivalDay(1, [Horn.AlphornRules.GameId], "The flags go up on the meadow, and the alphorns are out: play the song with others and the valley answers."),
+            new FestivalDay(1, [Horn.AlphornRules.GameId, SteinRules.GameId], "The flags go up on the meadow, the alphorns are out and the Unspunnen stone lies on the lane: three puts a day."),
             new FestivalDay(3, [FahneGame], "The flag swingers take the meadow: swing the Fahne on the march."),
             new FestivalDay(5, [SchwingGame], "The Anschwingen: step into the sawdust ring. From day 9 the bouts are the Schlussgang."),
         ],

@@ -124,8 +124,7 @@ public static class OccasionConfig
                 Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false, Games = false },
             },
         };
-        // festivals (#1269): each part registers its own default entry here (priority 8: under the seasons for the sky, over the
-        // UFOs); part 1 ships none. The check-only festival exists only under --festival test
+        // festivals (#1269): the check-only festival exists only under --festival test; the Älplerfest's entry is below
         if (Festivals.FestivalCatalog.TestRequested)
             entries.Add(new OccasionEntry
             {
