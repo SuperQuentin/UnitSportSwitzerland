@@ -21,7 +21,8 @@ namespace UnitSport.Interiors;
 /// </summary>
 public sealed class CinemaRelayTap : IDisposable
 {
-    private const int FrameRing = CinemaVideo.RelayFps * 4;
+    /// <summary>Frames waiting at most: four seconds at the fastest quality.</summary>
+    private const int FrameRing = 20 * 4;
     private const double LiveDelay = CinemaVideo.RelayAhead + 0.5;
     private const int SoundRing = CinemaVideo.RelaySoundRate * 12;
 
@@ -48,11 +49,24 @@ public sealed class CinemaRelayTap : IDisposable
     private double _start = double.NaN, _soundStart = double.NaN, _restartAfter;
     private long _lastIndex = -1, _nextIndex;
 
-    public CinemaRelayTap(string link, double t0)
+    private readonly (int Width, int Height, int Fps, int JpegQ) _size;
+
+    /// <summary>
+    /// A tap on <paramref name="link"/> from <paramref name="t0"/>: the server's relay at <see cref="CinemaVideo.LiveQuality.Low"/>,
+    /// a streamer's own file (phase 4) at the quality they picked.
+    /// </summary>
+    public CinemaRelayTap(string link, double t0, CinemaVideo.LiveQuality quality = CinemaVideo.LiveQuality.Low,
+        CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
         Link = link;
         T0 = t0;
+        _size = CinemaVideo.SizeOf(quality);
+        _stereo = stereo;
     }
+
+    /// <summary>A 3D film's frames carry both eyes side by side, each the quality's size (phase 6).</summary>
+    private readonly CinemaVideo.Stereo _stereo;
+    public CinemaVideo.Stereo Stereo => _stereo;
 
     /// <summary>
     /// Main thread, each frame while anyone watches: the hall is at <paramref name="position"/>; adds the frames
@@ -73,7 +87,7 @@ public sealed class CinemaRelayTap : IDisposable
         {
             while (_frames.TryPeek(out var f))
             {
-                double at = _start + f.Index / (double)CinemaVideo.RelayFps;
+                double at = _start + f.Index / (double)_size.Fps;
                 if (at > position + CinemaVideo.RelayAhead) break;
                 _frames.TryDequeue(out f);
                 _room.Release();
@@ -82,7 +96,7 @@ public sealed class CinemaRelayTap : IDisposable
                 if (at >= position - 0.2) frames.Add((at, f.Jpeg));
                 if (Status.Length > 0) Status = "";
             }
-            double next = _start + (_frames.TryPeek(out var n) ? n.Index : _lastIndex + 1) / (double)CinemaVideo.RelayFps;
+            double next = _start + (_frames.TryPeek(out var n) ? n.Index : _lastIndex + 1) / (double)_size.Fps;
             bool late = next < position - CinemaVideo.FallBehind;
             if (!_live && late && position > _restartAfter && !_videoDone) Begin(position, CinemaVideo.RestartLead(++Restarts), found);
         }
@@ -156,10 +170,9 @@ public sealed class CinemaRelayTap : IDisposable
         _start = _live ? double.NaN : at;
         _soundStart = _live ? double.NaN : at;
         _restartAfter = position + lead + CinemaVideo.FallBehind;
-        string size = $"scale={CinemaVideo.RelayWidth}:{CinemaVideo.RelayHeight}:force_original_aspect_ratio=decrease,"
-            + $"pad={CinemaVideo.RelayWidth}:{CinemaVideo.RelayHeight}:(ow-iw)/2:(oh-ih)/2,fps={CinemaVideo.RelayFps}";
+        string size = $"{CinemaVideo.StereoFit(_stereo, _size.Width, _size.Height)},fps={_size.Fps}";
         _video = CinemaLookup.Ffmpeg(CinemaLookup.Input(found.Video, at, _live).Concat(new[]
-            { "-an", "-sn", "-vf", size, "-c:v", "mjpeg", "-q:v", "7", "-f", "image2pipe", "-" }), false, Said);
+            { "-an", "-sn", "-vf", size, "-c:v", "mjpeg", "-q:v", _size.JpegQ.ToString(), "-f", "image2pipe", "-" }), false, Said);
         _audio = CinemaLookup.Ffmpeg(CinemaLookup.Input(found.Sound, at, _live).Concat(new[]
             { "-vn", "-sn", "-ac", "1", "-ar", CinemaVideo.RelaySoundRate.ToString(), "-f", "s16le", "-" }), false, Said);
         if (_video == null) { Fail("ffmpeg is missing on the server"); return; }
@@ -178,48 +191,16 @@ public sealed class CinemaRelayTap : IDisposable
         if (!string.IsNullOrWhiteSpace(line) && !_disposed) GD.Print($"[cinema] relay ffmpeg: {line}");
     }
 
-    /// <summary>
-    /// JPEGs out of ffmpeg's pipe, one after the other: each from its start marker (FF D8) to its end marker (FF D9),
-    /// which no entropy-coded byte can form (a coded FF is always followed by 00).
-    /// </summary>
     private void ReadFrames(Stream stdout, int gen, SemaphoreSlim room)
     {
-        var buf = new byte[64 * 1024];
-        var frame = new MemoryStream();
         long index = 0;
-        bool inFrame = false;
-        byte prev = 0;
-        try
+        CinemaLookup.ReadJpegs(stdout, () => !_disposed && gen == _generation, jpeg =>
         {
-            while (!_disposed && gen == _generation)
-            {
-                int n = stdout.Read(buf, 0, buf.Length);
-                if (n <= 0) break;
-                for (int i = 0; i < n; i++)
-                {
-                    byte b = buf[i];
-                    if (!inFrame)
-                    {
-                        if (prev == 0xFF && b == 0xD8) { inFrame = true; frame.SetLength(0); frame.WriteByte(0xFF); frame.WriteByte(0xD8); }
-                    }
-                    else
-                    {
-                        frame.WriteByte(b);
-                        if (prev == 0xFF && b == 0xD9)
-                        {
-                            inFrame = false;
-                            room.Wait();
-                            if (_disposed || gen != _generation) return;
-                            _frames.Enqueue((index, frame.ToArray()));
-                            _lastIndex = index++;
-                            b = 0;
-                        }
-                    }
-                    prev = b;
-                }
-            }
-        }
-        catch (Exception) { /* killed */ }
+            room.Wait();
+            if (_disposed || gen != _generation) return;
+            _frames.Enqueue((index, jpeg));
+            _lastIndex = index++;
+        });
         if (gen == _generation) _videoDone = true;
     }
 

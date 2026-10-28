@@ -16,6 +16,8 @@ shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
 
 uniform sampler2D picture : source_color, filter_linear_mipmap, repeat_disable;
+// a video framed as the hall's projector is set (#1298): the beam carries what the screen shows, no light outside it
+#include "res://shaders/cinema_display.gdshaderinc"
 uniform float density = 0.35;
 uniform float haze_mip = 3.5;
 // forward scattering of the dust, and the share of light scattered evenly
@@ -63,7 +65,11 @@ vec4 lit_by(vec3 q, vec3 n, float plane) {
 	if (abs(u) > 1.0 || abs(v) > 1.0) {
 		return vec4(0.0);
 	}
-	return vec4(textureLod(picture, vec2(u * 0.5 + 0.5, 0.5 - v * 0.5), haze_mip).rgb, 1.0);
+	vec2 at;
+	if (!display_at(vec2(u * 0.5 + 0.5, 0.5 - v * 0.5), at)) {
+		return vec4(0.0);
+	}
+	return vec4(textureLod(picture, at, haze_mip).rgb, 1.0);
 }
 
 // whether a body stands between the lens and q: the segment's nearest point to the capsule's axis, across

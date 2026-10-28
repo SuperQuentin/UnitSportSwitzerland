@@ -36,6 +36,8 @@ public partial class CinemaPanelUi : CanvasLayer
     private Button _paste = null!;
     /// <summary>The hall's video through the server for everyone (#1298 phase 2): for a link some players cannot reach.</summary>
     private CheckBox _relay = null!;
+    private OptionButton _stereo = null!, _fit = null!, _ratio = null!;
+    private CheckBox _glasses = null!;
     private VBoxContainer _recent = null!;
     private UnitSport.Player.FootPlayer? _me;
     private string _plan = "";
@@ -92,7 +94,11 @@ public partial class CinemaPanelUi : CanvasLayer
         _slides.Pressed += () => Ask(screen: true, link: "");
         shows.AddChild(_slides);
         _stop = UiKit.Button("Stop the video");
-        _stop.Pressed += () => Ask(screen: true, link: "");
+        _stop.Pressed += () =>
+        {
+            if (CinemaBooths.Instance is { } booths && booths.SharingIn(_plan, _hall)) booths.StopSharing();
+            else Ask(screen: true, link: "");
+        };
         shows.AddChild(_stop);
 
         box.AddChild(UiKit.Line());
@@ -128,9 +134,56 @@ public partial class CinemaPanelUi : CanvasLayer
         {
             if (CinemaBooths.Instance is not { } booths) return;
             var (playing, _) = booths.VideoOf(_plan, _hall);
-            if (playing.Length > 0 && booths.RelayOf(_plan, _hall) != on) booths.AskVideo(_plan, _hall, playing, on);
+            if (playing.Length > 0 && booths.RelayOf(_plan, _hall) != on) booths.AskVideo(_plan, _hall, playing, on, booths.StereoOf(_plan, _hall));
         };
-        box.AddChild(_relay);
+        // 2D or a 3D film's layout (#1298 phase 6): guessed from a link's name, the same for a file
+        var how = UiKit.HBox(10);
+        box.AddChild(how);
+        _stereo = new OptionButton { FocusMode = Control.FocusModeEnum.All };
+        _stereo.AddItem("2D", (int)CinemaVideo.Stereo.Mono);
+        _stereo.AddItem("3D side by side", (int)CinemaVideo.Stereo.SideBySide);
+        _stereo.AddItem("3D top and bottom", (int)CinemaVideo.Stereo.TopBottom);
+        _stereo.TooltipText = "A 3D film's two pictures, left and right or one above the other. In a headset each eye sees its own; on a screen, red-cyan glasses.";
+        _stereo.ItemSelected += _ =>
+        {
+            if (CinemaBooths.Instance is not { } booths) return;
+            var (playing, _) = booths.VideoOf(_plan, _hall);
+            var want = (CinemaVideo.Stereo)_stereo.GetSelectedId();
+            if (playing.Length > 0 && !CinemaVideo.IsLive(playing) && booths.StereoOf(_plan, _hall) != want)
+                booths.AskVideo(_plan, _hall, playing, booths.RelayOf(_plan, _hall), want);
+        };
+        how.AddChild(_stereo);
+        how.AddChild(_relay);
+        _glasses = new CheckBox
+        {
+            Text = "Red-cyan glasses",
+            FocusMode = Control.FocusModeEnum.All,
+            ButtonPressed = InteriorNode.Anaglyph,
+            TooltipText = "Off: the left picture alone, for watching a 3D film without glasses. A headset shows each eye its own.",
+            Visible = false,
+        };
+        _glasses.Toggled += on => InteriorNode.Anaglyph = on;
+        how.AddChild(_glasses);
+        // the projector's display (#1298): how every video is fitted on this hall's screen; the curtains frame it
+        var shown = UiKit.HBox(10);
+        box.AddChild(shown);
+        shown.AddChild(UiKit.Text("Display", UiTheme.FontSmall, UiTheme.TextDim));
+        _fit = new OptionButton { FocusMode = Control.FocusModeEnum.All };
+        _fit.AddItem("Contain", (int)CinemaVideo.Fit.Contain);
+        _fit.AddItem("Cover", (int)CinemaVideo.Fit.Cover);
+        _fit.AddItem("Stretch", (int)CinemaVideo.Fit.Stretch);
+        _fit.TooltipText = "Contain: all of the picture, black bars where its shape differs. Cover: it fills the frame, cropped. Stretch: it fills the frame, distorted.";
+        _fit.ItemSelected += _ => AskDisplay();
+        shown.AddChild(_fit);
+        _ratio = new OptionButton { FocusMode = Control.FocusModeEnum.All, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        for (int i = 0; i < CinemaVideo.Ratios.Length; i++) _ratio.AddItem(CinemaVideo.Ratios[i].Name, i);
+        _ratio.TooltipText = "The frame the picture is fitted into, centred on the screen; the curtains close to it.";
+        _ratio.ItemSelected += _ => AskDisplay();
+        shown.AddChild(_ratio);
+        _link.TextChanged += text =>
+        {
+            if (CinemaVideo.Guess(text.Trim()) is var g && g != CinemaVideo.Stereo.Mono) _stereo.Select((int)g);
+        };
         _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
         _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _status.Visible = false;
@@ -138,6 +191,127 @@ public partial class CinemaPanelUi : CanvasLayer
 
         _recent = UiKit.VBox(4);
         box.AddChild(_recent);
+
+        // sharing from this computer (#1298 phase 3): a desktop only (ffmpeg)
+        _shareBox = UiKit.VBox(8);
+        _shareBox.Visible = Platform.CanSpawnProcesses;
+        box.AddChild(_shareBox);
+        _shareBox.AddChild(UiKit.Line());
+        _shareBox.AddChild(UiKit.Section("Share from this computer"));
+        var what = UiKit.HBox(10);
+        _shareBox.AddChild(what);
+        // a window's title can be long: the picker keeps the panel's width, not its longest item's
+        _source = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.All, ClipText = true, FitToLongestItem = false };
+        _source.TooltipText = "A monitor, a window, a webcam, or an NDI source on the network (OBS, a vision mixer, a concert's program camera)";
+        what.AddChild(_source);
+        _quality = new OptionButton { FocusMode = Control.FocusModeEnum.All };
+        _quality.AddItem("Low (light)", (int)CinemaVideo.LiveQuality.Low);
+        _quality.AddItem("Sharp (text)", (int)CinemaVideo.LiveQuality.High);
+        _quality.AddItem("Smooth (motion)", (int)CinemaVideo.LiveQuality.Smooth);
+        _quality.Select(1);
+        _quality.TooltipText = "Low: 480x200, 15 a second. Sharp: 960x400, 10 a second (text reads from the seats). Smooth: 960x400, 20 a second (twice the data).";
+        what.AddChild(_quality);
+        var sound = UiKit.HBox(10);
+        _shareBox.AddChild(sound);
+        _pcSound = new CheckBox { Text = "PC sound", ButtonPressed = true, FocusMode = Control.FocusModeEnum.All,
+            TooltipText = "What your computer plays (every app but the game), for a screen or a window" };
+        sound.AddChild(_pcSound);
+        _mic = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.All, ClipText = true, FitToLongestItem = false };
+        _mic.TooltipText = "A microphone mixed in, to talk over it";
+        sound.AddChild(_mic);
+        _share = UiKit.Button("Share", primary: true);
+        _share.Pressed += ToggleShare;
+        sound.AddChild(_share);
+        // a film on this computer (#1298 phase 4): streamed from here at the quality above, nothing stored on the server
+        var file = UiKit.Button("Play a video file…");
+        file.TooltipText = "A film on this computer (" + string.Join(" ", CinemaFileSource.Extensions)
+            + "), played for the hall from here at the quality above. It stops if you leave.";
+        file.Pressed += PickFile;
+        file.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
+        _shareBox.AddChild(file);
+    }
+
+    private FileDialog? _picker;
+
+    private void PickFile()
+    {
+        if (_picker == null)
+        {
+            _picker = new FileDialog
+            {
+                FileMode = FileDialog.FileModeEnum.OpenFile, Access = FileDialog.AccessEnum.Filesystem,
+                UseNativeDialog = true, Title = "A video to play in the hall",
+                Filters = new[] { string.Join(", ", CinemaFileSource.Extensions.Select(e => "*" + e)) + " ; Videos" },
+            };
+            _picker.FileSelected += path =>
+            {
+                if (CinemaBooths.Instance is not { } booths) return;
+                var (lights, _) = booths.StateOf(_plan, _hall);
+                booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, true));
+                if (CinemaVideo.Guess(path) is var g && g != CinemaVideo.Stereo.Mono) _stereo.Select((int)g);
+                booths.StartFile(_plan, _hall, path, (CinemaVideo.LiveQuality)_quality.GetSelectedId(), (CinemaVideo.Stereo)_stereo.GetSelectedId());
+                Status = "Starting the share…";
+            };
+            AddChild(_picker);
+        }
+        _picker.PopupCentered(new Vector2I(760, 520));
+    }
+
+    private VBoxContainer _shareBox = null!;
+    private OptionButton _source = null!, _quality = null!, _mic = null!;
+    private CheckBox _pcSound = null!;
+    private Button _share = null!;
+    private CinemaDevices.Found? _devices;
+    private readonly List<CaptureSource> _sources = new();
+    private bool _listing;
+
+    /// <summary>What this computer can share, listed on a worker the first time the panel opens (ffmpeg takes a moment).</summary>
+    private void ListDevices()
+    {
+        if (_listing || !Platform.CanSpawnProcesses) return;
+        _listing = true;
+        _source.Clear();
+        _source.AddItem("Looking for screens and cameras…");
+        _source.Disabled = true;
+        Task.Run(() =>
+        {
+            var found = CinemaDevices.List();
+            Callable.From(() => ShowDevices(found)).CallDeferred();
+        });
+    }
+
+    private void ShowDevices(CinemaDevices.Found found)
+    {
+        _listing = false;
+        _devices = found;
+        _sources.Clear();
+        _sources.AddRange(found.Monitors);
+        _sources.AddRange(found.Windows);
+        _sources.AddRange(found.Cameras);
+        if (CinemaVideo.AllowLocal) _sources.Add(new CaptureSource(CaptureKind.Test, "Test pattern", "test"));
+        _source.Clear();
+        foreach (var s in _sources)
+            _source.AddItem(s.Kind switch { CaptureKind.Window => $"Window: {s.Label}", CaptureKind.Webcam => $"Camera: {s.Label}", _ => s.Label });
+        _source.Disabled = _sources.Count == 0;
+        if (_sources.Count == 0) _source.AddItem("Nothing to share found");
+        _pcSound.Visible = found.PcSound;
+        _mic.Clear();
+        _mic.AddItem("No microphone");
+        foreach (string m in found.Mics) _mic.AddItem(m);
+        Callable.From(Fit).CallDeferred();
+    }
+
+    private void ToggleShare()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        if (booths.SharingIn(_plan, _hall)) { booths.StopSharing(); Refresh(true); return; }
+        int i = _source.Selected;
+        if (i < 0 || i >= _sources.Count) { Status = "Nothing to share was found on this computer."; return; }
+        var (lights, _) = booths.StateOf(_plan, _hall);
+        booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, true));
+        string? mic = _mic.Selected > 0 && _devices != null ? _devices.Mics[_mic.Selected - 1] : null;
+        booths.StartSharing(_plan, _hall, _sources[i], (CinemaVideo.LiveQuality)_quality.GetSelectedId(), _pcSound.Visible && _pcSound.ButtonPressed, mic);
+        Status = "Starting the share…";
     }
 
     public override void _ExitTree()
@@ -153,7 +327,8 @@ public partial class CinemaPanelUi : CanvasLayer
         _link.Text = "";
         _shown = "\0";
         Rebuild();
-        Refresh();
+        Refresh(true);
+        if (_devices == null) ListDevices();
         _panel.Visible = true;
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
@@ -202,10 +377,19 @@ public partial class CinemaPanelUi : CanvasLayer
     {
         string link = _link.Text.Trim();
         if (!CinemaVideo.Allowed(link)) { Status = "That is not a web link (https://…)."; return; }
+        if (CinemaVideo.Guess(link) is var guess && guess != CinemaVideo.Stereo.Mono) _stereo.Select((int)guess);
         Remember(link);
         Ask(screen: true, link);
         _link.Text = "";
         Rebuild();
+    }
+
+    /// <summary>The hall's display from the two pickers: everyone in the hall sees it.</summary>
+    private void AskDisplay()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        int display = CinemaVideo.PackDisplay((CinemaVideo.Fit)_fit.GetSelectedId(), _ratio.GetSelectedId());
+        if (display != booths.DisplayOf(_plan, _hall)) booths.AskDisplay(_plan, _hall, display);
     }
 
     private void Ask(bool screen, string link)
@@ -213,7 +397,7 @@ public partial class CinemaPanelUi : CanvasLayer
         if (CinemaBooths.Instance is not { } booths) return;
         var (lights, _) = booths.StateOf(_plan, _hall);
         booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, screen));
-        booths.AskVideo(_plan, _hall, screen ? link : "", _relay.ButtonPressed);
+        booths.AskVideo(_plan, _hall, screen ? link : "", _relay.ButtonPressed, (CinemaVideo.Stereo)_stereo.GetSelectedId());
         Status = link.Length > 0 ? "Starting…" : "";
     }
 
@@ -239,17 +423,29 @@ public partial class CinemaPanelUi : CanvasLayer
     }
 
     /// <summary>The header and the buttons from the hall's state and this client's decoder, on change only.</summary>
-    private void Refresh()
+    private void Refresh(bool force = false)
     {
         if (CinemaBooths.Instance is not { } booths) return;
+        if (force) _shown = "\0";
         var (_, screen) = booths.StateOf(_plan, _hall);
         var (link, _) = booths.VideoOf(_plan, _hall);
         var stream = booths.StreamOf(_plan, _hall);
         if (link.Length > 0) _relay.SetPressedNoSignal(booths.RelayOf(_plan, _hall));
+        var (fit, ratio) = CinemaVideo.UnpackDisplay(booths.DisplayOf(_plan, _hall));
+        if (_fit.GetSelectedId() != (int)fit) _fit.Select((int)fit);
+        if (_ratio.GetSelectedId() != ratio) _ratio.Select(ratio);
+        var layout = booths.StereoOf(_plan, _hall);
+        if (link.Length > 0) _stereo.Select((int)layout);
+        // the glasses are this viewer's: offered while a 3D film plays on a flat screen
+        _glasses.Visible = layout != CinemaVideo.Stereo.Mono && !XR.XrSession.Active;
         string now = !screen ? "The screen is off"
             : link.Length == 0 ? "Showing the cat slides"
-            : $"Playing {CinemaVideo.Title(link)}" + (stream is CinemaRelayFeed ? "  ·  through the server" : "")
+            : (CinemaVideo.IsLive(link) ? $"Live: {CinemaVideo.Title(link)}" : $"Playing {(booths.FilmTitle(link) is { Length: > 0 } film ? film : CinemaVideo.Title(link))}")
+              + (booths.StereoOf(_plan, _hall) != CinemaVideo.Stereo.Mono ? "  ·  3D" : "")
+              + (stream is CinemaRelayFeed && !CinemaVideo.IsLive(link) ? "  ·  through the server" : "")
               + (stream is { Status.Length: > 0 } s ? $"  ·  {s.Status}" : "");
+        bool sharing = booths.SharingIn(_plan, _hall);
+        now += sharing ? "  ·  you share it" + (booths.Sharing is { Status.Length: > 0 } c ? $" ({c.Status})" : "") : "";
         if (now == _shown) return;
         _shown = now;
         _now.Text = now;
@@ -259,8 +455,13 @@ public partial class CinemaPanelUi : CanvasLayer
         _slides.Disabled = screen;
         _slides.TooltipText = screen ? "The slides are showing already" : "The cat slides, with the hall's film music";
         _stop.Visible = link.Length > 0;
+        _stop.Text = CinemaVideo.IsLive(link) ? "Stop the share" : "Stop the video";
+        _share.Text = sharing ? "Stop sharing" : "Share";
+        _relay.Visible = !CinemaVideo.IsLive(link);
+        if (sharing && _status.Text == "Starting the share…") Status = "";
         if (stream is { Failed: true }) Status = stream.Status;
         else if (_status.Text == "Starting…" && link.Length > 0) Status = "";
+        if (booths.Sharing is { Failed: true } failed && sharing) Status = failed.Status;
     }
 
     // ---- the links played before -----------------------------------------------------------------

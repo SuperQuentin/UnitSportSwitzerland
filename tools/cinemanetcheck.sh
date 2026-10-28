@@ -32,10 +32,10 @@ elif [ "$VIDEO" != none ]; then
 fi
 # C starts on A's "set" line: never on an earlier run's log
 rm -f "$OUT"/cinemanet_A.log "$OUT"/cinemanet_B.log "$OUT"/cinemanet_C.log
-tc_server 420 120 "$OUT/cinemanet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" ${VARGS[@]+"${VARGS[@]}"}
+tc_server 560 120 "$OUT/cinemanet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" ${VARGS[@]+"${VARGS[@]}"}
 # A cannot decode (a phone's way): its video comes through the server's relay (#1298 phase 2); B decodes the link
-tc_client 360 "$OUT/cinemanet_A.log" --connect 127.0.0.1:$PORT --name CinemaA $WORLD --cinemanet A ${VARGS[@]+"${VARGS[@]}" --cinemanodecode} & A=$!
-tc_client 360 "$OUT/cinemanet_B.log" --connect 127.0.0.1:$PORT --name CinemaB $WORLD --cinemanet B ${VARGS[@]+"${VARGS[@]}"} & B=$!
+tc_client 480 "$OUT/cinemanet_A.log" --connect 127.0.0.1:$PORT --name CinemaA $WORLD --cinemanet A ${VARGS[@]+"${VARGS[@]}" --cinemanodecode} & A=$!
+tc_client 480 "$OUT/cinemanet_B.log" --connect 127.0.0.1:$PORT --name CinemaB $WORLD --cinemanet B ${VARGS[@]+"${VARGS[@]}"} & B=$!
 # C joins late: once A's ask was granted
 for i in $(seq 1 600); do
   grep -q "\[cinema A\] set" "$OUT/cinemanet_A.log" 2>/dev/null && break

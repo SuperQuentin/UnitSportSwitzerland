@@ -15,14 +15,26 @@ public interface ICinemaFeed : IDisposable
     string Link { get; }
     double T0 { get; }
 
+    /// <summary>2D, or a 3D film whose <see cref="Picture"/> holds both eyes side by side (phase 6).</summary>
+    CinemaVideo.Stereo Stereo { get; }
+
     /// <summary>What it is doing, for the panel ("" once it plays), or why it cannot.</summary>
     string Status { get; }
     bool Failed { get; }
     bool Ended { get; }
 
-    /// <summary>The frame shown now (<see cref="CinemaVideo.Width"/> x <see cref="CinemaVideo.Height"/>, RGBA8), null before the first.</summary>
+    /// <summary>
+    /// The frame shown now (<see cref="CinemaVideo.Width"/> x <see cref="CinemaVideo.Height"/>, RGBA8; twice as wide for a 3D
+    /// film, <see cref="CinemaVideo.PackedSize"/>), null before the first.
+    /// </summary>
     Image? Picture { get; }
     Color Tint { get; }
+
+    /// <summary>The share of the screen's width the picture fills (1 a scope film, 0.74 a 16:9 one), measured from its frames: the curtains frame it.</summary>
+    float ContentWidth { get; }
+
+    /// <summary>The share of the frame's height the picture fills (below 1 only for a picture wider than the screen).</summary>
+    float ContentHeight { get; }
 
     /// <summary>The moment of the video the frame shown is of, s (-1 before the first); for the checks.</summary>
     double CurrentTime { get; }
@@ -92,6 +104,52 @@ public static class CinemaLookup
     }
 
     /// <summary>
+    /// A film for a server's list (#1298): its title and length, from yt-dlp for a site's page or a playlist, from ffmpeg's
+    /// header for a file; null with <paramref name="why"/> for what cannot loop (a live stream, no length). Blocking.
+    /// </summary>
+    public static CinemaVideo.Film? Probe(string link, out string why)
+    {
+        why = "";
+        try
+        {
+            if (CinemaVideo.NeedsLookup(link))
+            {
+                var psi = new ProcessStartInfo(BundledTools.Resolve("yt-dlp")) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+                foreach (var a in BundledTools.YtDlpJsArgs().Concat(new[] { "--no-playlist", "--no-warnings", "--skip-download", "-O", "%(is_live)s|%(duration)s|%(title)s", link }))
+                    psi.ArgumentList.Add(a);
+                using var p = Process.Start(psi);
+                if (p == null) { why = "yt-dlp is missing on the server"; return null; }
+                _ = p.StandardError.ReadToEndAsync();
+                string line = p.StandardOutput.ReadToEnd().Trim();
+                p.WaitForExit();
+                var f = line.Split('|', 3);
+                if (p.ExitCode != 0 || f.Length < 3) { why = "the site would not give the video"; return null; }
+                if (f[0] == "True") { why = "a live stream has no end to loop"; return null; }
+                if (!double.TryParse(f[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double s) || s <= 0)
+                { why = "its length is unknown"; return null; }
+                return new CinemaVideo.Film(f[2].Length > 0 ? f[2] : CinemaVideo.Title(link), link, s);
+            }
+            var probe = new ProcessStartInfo(BundledTools.Resolve("ffmpeg")) { RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            foreach (var a in new[] { "-hide_banner", "-nostdin" }.Concat(Input(link, 0, false))) probe.ArgumentList.Add(a);
+            using var ff = Process.Start(probe);
+            if (ff == null) { why = "ffmpeg is missing on the server"; return null; }
+            string log = ff.StandardError.ReadToEnd();
+            ff.WaitForExit(15000);
+            int d = log.IndexOf("Duration: ", StringComparison.Ordinal);
+            if (d < 0) { why = "it is not a video"; return null; }
+            string value = log[(d + 10)..].Split(',')[0].Trim();
+            if (!TimeSpan.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var span) || span.TotalSeconds <= 0)
+            { why = "a live stream has no end to loop"; return null; }
+            return new CinemaVideo.Film(CinemaVideo.Title(link), link, span.TotalSeconds);
+        }
+        catch (Exception e)
+        {
+            why = e is System.ComponentModel.Win32Exception ? "yt-dlp or ffmpeg is missing on the server" : e.Message;
+            return null;
+        }
+    }
+
+    /// <summary>
     /// ffmpeg's input arguments: the web only (or a check's file), reconnecting, seeked to <paramref name="at"/>; a
     /// live playlist from near its edge.
     /// </summary>
@@ -134,6 +192,48 @@ public static class CinemaLookup
             GD.Print($"[cinema] cannot start ffmpeg: {e.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// JPEGs out of an ffmpeg <c>image2pipe</c> (mjpeg), one after the other, each handed to <paramref name="frame"/>
+    /// (which may block: ffmpeg waits): from its start marker (FF D8) to its end marker (FF D9), which no entropy-coded
+    /// byte can form (a coded FF is always followed by 00). Returns when the pipe ends or <paramref name="go"/> says stop.
+    /// </summary>
+    public static void ReadJpegs(Stream stdout, Func<bool> go, Action<byte[]> frame)
+    {
+        var buf = new byte[64 * 1024];
+        var current = new MemoryStream();
+        bool inFrame = false;
+        byte prev = 0;
+        try
+        {
+            while (go())
+            {
+                int n = stdout.Read(buf, 0, buf.Length);
+                if (n <= 0) return;
+                for (int i = 0; i < n; i++)
+                {
+                    byte b = buf[i];
+                    if (!inFrame)
+                    {
+                        if (prev == 0xFF && b == 0xD8) { inFrame = true; current.SetLength(0); current.WriteByte(0xFF); current.WriteByte(0xD8); }
+                    }
+                    else
+                    {
+                        current.WriteByte(b);
+                        if (prev == 0xFF && b == 0xD9)
+                        {
+                            inFrame = false;
+                            if (!go()) return;
+                            frame(current.ToArray());
+                            b = 0;
+                        }
+                    }
+                    prev = b;
+                }
+            }
+        }
+        catch (Exception) { /* killed */ }
     }
 
     /// <summary>Kills a process it started, by its own handle (never by name), and lets it go.</summary>

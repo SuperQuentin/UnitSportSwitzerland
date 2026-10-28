@@ -76,7 +76,7 @@ public partial class CinemaBooths
     /// </summary>
     public bool ServeWatch(long peer, string plan, int hall)
     {
-        bool inside = plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        bool inside = Inside(peer, plan);
         if (!inside || hall < 0 || hall >= MaxHalls || VideoOf(plan, hall).Link.Length == 0) return false;
         if (!_watchers.TryGetValue((plan, hall), out var peers)) _watchers[(plan, hall)] = peers = new();
         if (!peers.ContainsKey(peer)) GD.Print($"[cinema] peer {peer} watches hall {hall + 1} of {plan} through the server");
@@ -87,11 +87,13 @@ public partial class CinemaBooths
     /// <summary>Server, every frame: each watched hall's tap pumped and what is due sent to its watchers; the rest closed.</summary>
     private void PumpRelay(double delta)
     {
-        if (_watchers.Count == 0 && _taps.Count == 0) return;
+        if (_watchers.Count == 0 && _taps.Count == 0 && _pushed.Count == 0) return;
         double now = Core.RealClock.Now;
         _relayKeys.Clear();
         _relayKeys.AddRange(_watchers.Keys);
         foreach (var key in _taps.Keys) if (!_watchers.ContainsKey(key)) _relayKeys.Add(key);
+        // a live hall nobody watches still checks its owner is there (CinemaBooths.Live)
+        foreach (var key in _pushed.Keys) if (!_relayKeys.Contains(key)) _relayKeys.Add(key);
         foreach (var key in _relayKeys)
         {
             var (link, t0) = VideoOf(key.Plan, key.Hall);
@@ -106,13 +108,19 @@ public partial class CinemaBooths
                     foreach (var gone in peers.Keys.Except(_relayPeers).ToList()) peers.Remove(gone);
             }
             _taps.TryGetValue(key, out var tap);
-            if (tap != null && (tap.Link != link || tap.T0 != t0))
+            if (tap != null && (tap.Link != link || tap.T0 != t0 || tap.Stereo != StereoOf(key.Plan, key.Hall)))
             {
                 tap.Dispose();
                 _taps.Remove(key);
                 _tapSaid.Remove(key);
                 tap = null;
             }
+            _relayFrames.Clear();
+            _relaySound.Clear();
+            bool live = CinemaVideo.IsLive(link);
+            // a player's live source: what its owner pushed, no tap (CinemaBooths.Live)
+            if (live && !TakePushed(key, link, delta, _relayFrames, _relaySound)) continue;
+            if (!live) _pushed.Remove(key);
             if (_relayPeers.Count == 0)
             {
                 if (tap != null && (tap.Unwanted += delta) > CloseAfter)
@@ -124,16 +132,17 @@ public partial class CinemaBooths
                 }
                 continue;
             }
-            if (tap == null)
+            if (tap == null && !live)
             {
-                _taps[key] = tap = new CinemaRelayTap(link, t0);
+                _taps[key] = tap = new CinemaRelayTap(link, t0, CinemaVideo.LiveQuality.Low, StereoOf(key.Plan, key.Hall));
                 GD.Print($"[cinema] relay of hall {key.Hall + 1} of {key.Plan} opened: {link}");
             }
-            tap.Unwanted = 0;
-            _relayFrames.Clear();
-            _relaySound.Clear();
-            tap.Pump(CinemaVideo.PositionAt(ClockSync.ServerNow, t0), _relayFrames, _relaySound);
-            var said = (tap.Status, tap.Failed, tap.Ended);
+            if (tap != null)
+            {
+                tap.Unwanted = 0;
+                tap.Pump(CinemaVideo.PositionAt(ClockSync.ServerNow, t0), _relayFrames, _relaySound);
+            }
+            (string Status, bool Failed, bool Ended) said = tap != null ? (tap.Status, tap.Failed, tap.Ended) : ("", false, false);
             bool tell = !_tapSaid.TryGetValue(key, out var was) || was != said;
             _tapSaid[key] = said;
             foreach (long peer in _relayPeers)

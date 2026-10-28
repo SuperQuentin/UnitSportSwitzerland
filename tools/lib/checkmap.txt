@@ -178,6 +178,9 @@ src/Interiors/CinemaVideo   net    tools/cinemanetcheck.sh
 src/Interiors/InteriorNode.CinemaVideo net tools/cinemanetcheck.sh
 src/Interiors/CinemaRelay   net    tools/cinemanetcheck.sh
 src/Interiors/CinemaFeed    net    tools/cinemanetcheck.sh
+src/Interiors/CinemaCapture net    tools/cinemanetcheck.sh
+src/Interiors/CinemaBooths.Display net tools/cinemanetcheck.sh
+src/Interiors/PcSoundLoopback net  tools/cinemanetcheck.sh
 # #1285: public toilets, planned by every public building's generator
 src/Interiors/InteriorGenerator.Toilets quick --cinemacheck --systems ui
 src/Interiors/InteriorGenerator.Toilets quick --bowlingcheck --systems ui
