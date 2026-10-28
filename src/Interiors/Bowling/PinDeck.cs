@@ -234,8 +234,13 @@ public sealed class PinDeck : IDisposable
         (0.2286f, 0.0416f), (0.27f, 0.026f), (0.3302f, 0.0315f), (0.3683f, 0.022f), (0.381f, 0f),
     };
 
+    private bool _disposed;
+
+    /// <summary>Frees the space and its bodies; its <see cref="Record"/> stays readable. Safe to call again.</summary>
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         var ps = PhysicsServer3D.Singleton;
         foreach (var rid in _rids) ps.FreeRid(rid);
         foreach (var rid in _shapes) ps.FreeRid(rid);
