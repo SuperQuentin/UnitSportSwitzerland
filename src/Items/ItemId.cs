@@ -217,6 +217,15 @@ public enum ItemId
     BottledGust = 403,
     /// <summary>Garments (Avatar.Garments): the Alpine set, found in chests only.</summary>
     Sennenkaeppi = 404, EdelweissShirt = 405, GuideHat = 406, GuideBreeches = 407, CrossBandana = 408, AlpineSocks = 409, AlpineGloves = 410,
+    // ---- playing together (#1266, docs/notes/adventure/together.md); 480-499 are this plan's, 486-488 the alcohol plan's (#1271) ----
+    /// <summary>A bottle of Fendant (Valais white wine), a glass a drink: the shared pot's <c>Warm</c> (<see cref="ItemDef.DrinkMl"/>, <see cref="ItemDef.Abv"/>).</summary>
+    WhiteWine = 480,
+    /// <summary>Kirsch, a shot a drink: the shared pot's <c>Hearty</c>.</summary>
+    Kirsch = 481,
+    /// <summary>Garments (Avatar.Garments, <c>GarmentStyle.Together</c>): a mentored newcomer's first summit, glacier, ride and build.</summary>
+    ErstbesteigungCap = 482, GletscherScarf = 483, MitfahrerGloves = 484, ZimmermannCap = 485,
+    /// <summary>Garments: the mentor's own for each milestone, and the tenth punch card's felt hat.</summary>
+    BergfuehrerCap = 489, SeilschaftScarf = 490, FahrlehrerGloves = 491, PolierHat = 492, StammgastHat = 493,
     // ---- the travel network (#1226, docs/notes/adventure/fares.md); 400-419 belong to the rewards plan ----
     /// <summary>The GA travelcard: rail, bus and ship trips free, cable cars half, travel from anywhere. The server trusts <c>TravelBook.HasGa</c>; the item is its picture.</summary>
     GaCard = 420,

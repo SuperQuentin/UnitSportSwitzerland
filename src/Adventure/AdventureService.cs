@@ -69,6 +69,8 @@ public partial class AdventureService : Node
     public Func<long, string>? NameOf { get; set; }
     /// <summary>Server: <c>acct:&lt;user id&gt;</c> on a <c>--accounts required</c> server, else null (the key is then the proven PlayerKey).</summary>
     public Func<long, string?>? AccountKey { get; set; }
+    /// <summary>Friends counted round a peer by the together rule (#1266, <c>TogetherService.Near</c>), set by that service.</summary>
+    public Func<long, int>? TogetherNear { get; set; }
 
     // ---- the owner's side -------------------------------------------------------------------------
 
@@ -119,7 +121,9 @@ public partial class AdventureService : Node
             StaminaUpgrades.Attach(this);   // #1225: the owner's steps from the section sync
             return;
         }
-        if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested || Occasions.Festivals.FestivalCheck.Requested) AdventureCheck.ClearScratch();
+        if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested
+            || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
+            || Occasions.Festivals.FireworksCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -290,7 +294,10 @@ public partial class AdventureService : Node
         : Rewards.RewardCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/rewardcheck")
         : Navigation.NavCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/navcheck")
         : Navigation.TravelCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/travelcheck")
-        : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck") : null;
+        : Together.TogetherCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/togethercheck")
+        : Together.FondueCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fonduecheck")
+        : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck")
+        : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));
@@ -393,7 +400,11 @@ public partial class AdventureService : Node
         switch (reward)
         {
             case Cash cash:
-                Bank.Instance?.Credit(peer, cash.Chf, why);
+                // a catalog quest's cash with friends near (#1266): +10 % a friend; Postkarte cards pay their own
+                int bonus = Together.TogetherRules.PaysTogetherCash(why) && TogetherNear?.Invoke(peer) is int n and > 0
+                    ? Together.TogetherRules.CashBonus(cash.Chf, n) : 0;
+                if (bonus > 0) GD.Print($"[together] {Short(p.Key)} quest cash +{bonus} ({why})");
+                Bank.Instance?.Credit(peer, cash.Chf + bonus, why);
                 break;
             case Item item:
                 if (Connected(peer)) RpcId(peer, MethodName.Granted, (int)item.Id, item.Count, why);

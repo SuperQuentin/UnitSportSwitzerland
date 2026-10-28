@@ -173,6 +173,14 @@ src/Interiors/InteriorMeshBuilder quick  --outlinecheck --systems ui
 src/Interiors/InteriorManager.Interact quick  --outlinecheck --systems ui
 src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
 src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1298: a hall's video (link + T0 on the server, every client decodes it on the shared clock)
+src/Interiors/CinemaVideo   net    tools/cinemanetcheck.sh
+src/Interiors/InteriorNode.CinemaVideo net tools/cinemanetcheck.sh
+src/Interiors/CinemaRelay   net    tools/cinemanetcheck.sh
+src/Interiors/CinemaFeed    net    tools/cinemanetcheck.sh
+src/Interiors/CinemaCapture net    tools/cinemanetcheck.sh
+src/Interiors/CinemaBooths.Display net tools/cinemanetcheck.sh
+src/Interiors/PcSoundLoopback net  tools/cinemanetcheck.sh
 # #1285: public toilets, planned by every public building's generator
 src/Interiors/InteriorGenerator.Toilets quick --cinemacheck --systems ui
 src/Interiors/InteriorGenerator.Toilets quick --bowlingcheck --systems ui
@@ -970,6 +978,15 @@ src/Player/Flight.cs           quick  --flycheck campfire --chunks fixture:crag
 src/Player/PigeonFlight        quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
 src/Net/Arrival                net    tools/climbnetcheck.sh
 src/Player/FootPlayer.Climb    net    tools/climbnetcheck.sh
+# #1266: playing together: the together rule, links (hands, the rope, the tether, belays), the shared pot (offline quick probes; server + two clients)
+src/Adventure/Together/  quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Player/FootPlayer.Together quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Avatar/HumanMeshBuilder quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Adventure/Together/Fondue quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Together/Pot  quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Together/TogetherService.Pots quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Together/Stir quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Rewards/Seals.cs quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
 
 # #1268 Versteckis: the offline check on the hamlet, the two-client game, the bot game; Rounds and FollowCam keep BR whole
 src/Adventure/Versteckis/ quick  --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
@@ -991,5 +1008,11 @@ tools/locatenetcheck.sh    net    tools/locatenetcheck.sh
 # #1269 festival framework: the offline check (the test festival, Batzen, caps, the party board, the Journal tab, the conversion) and the two-client check
 src/Occasions/Festivals/    quick  --festivalcheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
+src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
+tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
+src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
+src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
+tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
+src/Adventure/Together/ net tools/togethernetcheck.sh

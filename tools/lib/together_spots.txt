@@ -1,0 +1,4 @@
+# #1266: --rewardspots for --togethercheck and tools/togethernetcheck.sh (lines: kind tier seal dE dN from the start):
+# a rope team's chest and a two-handle gate's chest, east of the fixture start
+chest Fine Roped 40 0
+chest Fine Gate 40 30

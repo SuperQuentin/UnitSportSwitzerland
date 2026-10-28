@@ -60,6 +60,36 @@ public static partial class InteriorMeshBuilder
         return (new Vector3(0, bottom + h / 2, -p.D / 2 + 0.12f), new Vector2(w, h / 2));
     }
 
+    private static readonly Color CurtainRed = new(0.56f, 0.04f, 0.08f);
+
+    /// <summary>How far a screen's side curtain reaches in from the stage's edge, drawn back: its four folds.</summary>
+    public const float CurtainReach = 0.64f;
+
+    /// <summary>A screen's side curtain's outer edge in its piece's frame (x; -1 the left side, +1 the right).</summary>
+    public static float CurtainEdge(FurniturePlan p, int side) => side * (p.W / 2 - 0.015f);
+
+    /// <summary>
+    /// One side's curtain of a screen (#1298), drawn back: four folds from the stage's edge inward, alternating front and
+    /// back so two never share a plane, in the interior's own frame (the room lights are looked up by it). Its node
+    /// stretches it from its outer edge to close in over a narrower picture (<see cref="InteriorNode"/>): built once.
+    /// </summary>
+    public static MeshData Curtain(FurniturePlan p, float y0, int side)
+    {
+        const float sink = 0.012f;
+        var s = new Scratch();
+        var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
+        var at = new Vector3(p.X, y0, p.Z);
+        float d = p.D / 2, H = p.H, fold = CurtainReach / 4;
+        var dark = (CurtainRed * 0.82f) with { A = 1 };
+        for (int i = 0; i < 4; i++)
+        {
+            float x0 = side < 0 ? CurtainEdge(p, side) + i * fold : CurtainEdge(p, side) - (i + 1) * fold;
+            float z = -d + 0.12f + (i % 2) * 0.115f;
+            s.Box(at + new Vector3(x0, 0.35f - sink, z), at + new Vector3(x0 + fold, H - 0.25f, z + 0.1f), i % 2 == 0 ? CurtainRed : dark, false, basis, at);
+        }
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
+    }
+
     // Every part below keeps clear of a flicker (`zfight`: interiors draw both sides of every face): a part
     // stacked on another sinks 1.2 cm into it, faces of two colours side by side stand 1.2 cm and more
     // apart, a decal straddles its surface and stands 1.2 cm proud of it.
@@ -131,22 +161,13 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.MovieScreen:
             {
-                // a low stage, the black masking on it, the picture, the red curtains drawn back each side
+                // a low stage, the black masking on it, the picture, the valance; the side curtains are their own
+                // meshes (Curtain), drawn in over a narrower picture (#1298)
                 var (c, half) = ScreenPicture(p);
                 B(-w, 0, -d, w, 0.35f, d, darkWood, true);
                 B(-w + 0.015f, 0.35f - sink, -d + 0.015f, w - 0.015f, H, -d + 0.08f, dark);
                 B(c.X - half.X, c.Y - half.Y, -d + 0.065f, c.X + half.X, c.Y + half.Y, -d + 0.095f, C(0.86f, 0.87f, 0.90f));
-                var red = C(0.56f, 0.04f, 0.08f);
-                var fold = (red * 0.82f) with { A = 1 };
-                foreach (float side in new[] { -1f, 1f })
-                    for (int i = 0; i < 4; i++)
-                    {
-                        // the folds alternate front and back, their depths apart, so two never share a plane
-                        float x0 = side < 0 ? -w + 0.015f + i * 0.16f : w - 0.015f - (i + 1) * 0.16f;
-                        float z = -d + 0.12f + (i % 2) * 0.115f;
-                        B(x0, 0.35f - sink, z, x0 + 0.16f, H - 0.25f, z + 0.1f, i % 2 == 0 ? red : fold);
-                    }
-                B(-w, H - 0.35f, -d + 0.1f, w, H - 0.15f, -d + 0.35f, red);
+                B(-w, H - 0.35f, -d + 0.1f, w, H - 0.15f, -d + 0.35f, CurtainRed);
                 break;
             }
             case FurnitureType.ExitSign:

@@ -87,6 +87,8 @@ public sealed class ChatCompleter
         ("fight", false, false, "<player> | accept | decline | leave", "Activities", "a fist fight"),
         ("aura", false, false, "<player> | accept | decline | leave", "Activities", "an aura battle"),
         ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
+        ("rope", false, false, "[<player> | hands <player> | off]", "Activities", "rope up or hold hands with a party member"),
+        ("fondue", false, false, "[invite <player> | leave | forfeit 1|2|3]", "Activities", "the shared pot at your table"),
         // invites (#840)
         ("invites", false, false, "", "Activities", "invites open to you and from you"),
         ("accept", false, false, "[player | kind | #id]", "Activities", "accept an invite"),
@@ -365,6 +367,10 @@ public sealed class ChatCompleter
 
             case "fight" or "aura":
                 options = argIndex == 0 ? [.. PlayerNames(), "accept", "decline", "leave"] : [];
+                break;
+
+            case "rope":
+                options = argIndex == 0 ? [.. PlayerNames(), "hands", "off"] : argIndex == 1 && words[1].ToLowerInvariant() == "hands" ? PlayerNames() : [];
                 break;
 
             case "race":

@@ -8,7 +8,10 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Occasions.Festivals;
 
 /// <summary>A festival that runs now, as the server sees it and tells every client.</summary>
-public sealed record RunningFestival(string Id, string Instance, string Title, int Day, int Length, DateOnly Start, DateOnly End, ResolvedSite? Site);
+/// <param name="ShowStart">Server time (<c>ClockSync.SimNow</c>) the closing show's first second falls at, or 0 when no show is on the books.</param>
+/// <param name="ShowSeed">The seed the show is planned from (<see cref="FireworkShow.Plan"/>): every peer plans the same one.</param>
+public sealed record RunningFestival(string Id, string Instance, string Title, int Day, int Length, DateOnly Start, DateOnly End, ResolvedSite? Site,
+    double ShowStart = 0, int ShowSeed = 0);
 
 /// <summary>One member's points on the board, for the Journal.</summary>
 public sealed record BoardMember(string Name, int Points);
@@ -46,6 +49,9 @@ public partial class FestivalService : Node
 
     /// <summary>Authority: the peers in the same party as a peer, itself included; null when none.</summary>
     public Func<long, IReadOnlyList<long>?>? PartyOf { get; set; }
+
+    /// <summary>The game hour the closing show waits for (the sky clock; a check sets its own).</summary>
+    public Func<double> Hour { get; set; } = () => UnitSport.World.WorldClock.CurrentHour;
 
     /// <summary>The fixture course's start, where the check-only festival is held.</summary>
     public Func<(double E, double N)> Start { get; set; } = () => (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
@@ -87,6 +93,10 @@ public partial class FestivalService : Node
     private readonly Dictionary<string, ResolvedSite?> _sites = new(StringComparer.OrdinalIgnoreCase);
     private readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private string _runningSignature = "-", _siteKey = "";
+    private double? _lastHour;
+    private readonly Dictionary<string, (double Start, int Seed, int Count)> _shows = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(long Peer, string Instance), double> _watched = new();
+    private readonly HashSet<(long Peer, string Instance)> _watchPaid = new();
     private double _nextEvaluate, _nextBoardSave, _nextCrewCheck;
     private bool _evaluated, _sitesStale;
 
@@ -161,6 +171,7 @@ public partial class FestivalService : Node
         {
             _nextCrewCheck = now + CrewCheckEvery;
             CheckCrews();
+            CheckShow();
         }
         if (now >= _nextBoardSave && _boardsDirty.Count > 0)
         {
@@ -175,6 +186,7 @@ public partial class FestivalService : Node
         _evaluated = true;
         var om = OccasionManager.Instance;
         var list = new List<RunningFestival>();
+        double hour = Hour(), serverNow = Net.ClockSync.SimNow;
         if (om != null)
             foreach (var def in FestivalCatalog.All)
             {
@@ -185,10 +197,13 @@ public partial class FestivalService : Node
                 var span = SpanFor(windows, year) ?? new FestivalSpan(om.Today, om.Today);
                 // started by hand outside its dates: the nearest day
                 int day = Math.Clamp(span.Day(om.Today), 1, Math.Max(1, span.Length));
-                list.Add(new RunningFestival(def.Id, active.Instance, def.Title, day, span.Length, span.Start, span.End, SiteOf(def)));
+                var site = SiteOf(def);
+                var (showStart, showSeed) = ShowOf(def, active.Instance, day, span.Length, site, hour, serverNow);
+                list.Add(new RunningFestival(def.Id, active.Instance, def.Title, day, span.Length, span.Start, span.End, site, showStart, showSeed));
             }
 
-        string signature = list.Count == 0 ? "-" : string.Join(";", list.Select(r => $"{r.Instance}:{r.Day}:{r.Site}"));
+        _lastHour = hour;
+        string signature = list.Count == 0 ? "-" : string.Join(";", list.Select(r => $"{r.Instance}:{r.Day}:{r.Site}:{r.ShowStart}"));
         if (signature == _runningSignature) return;
         var before = Running;
         _runningSignature = signature;
@@ -199,7 +214,7 @@ public partial class FestivalService : Node
         foreach (var r in list) dress |= FestivalOccasion.SetSite(r.Id, r.Site);
         foreach (var r in before)
             if (list.All(x => x.Id != r.Id)) dress = true;
-        GD.Print($"[festival] running: {(list.Count == 0 ? "none" : string.Join(", ", list.Select(r => $"{r.Id} day {r.Day}/{r.Length} at {r.Site?.Name ?? "nowhere"}{(r.Site?.Relocated == true ? " (relocated)" : "")}")))}");
+        GD.Print($"[festival] running: {(list.Count == 0 ? "none" : string.Join(", ", list.Select(r => $"{r.Id} day {r.Day}/{r.Length} at {r.Site?.Name ?? "nowhere"}{(r.Site?.Relocated == true ? " (relocated)" : "")}{(r.ShowStart > 0 ? $", closing show from {r.ShowStart:F0}" : "")}")))}");
         Changed?.Invoke();
         if (dress) OccasionManager.NotifyContentChanged();
         if (_networked)
@@ -217,6 +232,26 @@ public partial class FestivalService : Node
         }
         foreach (long peer in _adventure.Peers.ToArray())
             if (peer > 0) ConvertFor(peer);
+    }
+
+    /// <summary>
+    /// The closing show of a festival's last real day (#1269 part 2): on every game evening of that day, when the sky clock crosses
+    /// <see cref="FestivalShows.StartHour"/>, the server fixes a start a few seconds ahead and a seed, and tells everyone with the running
+    /// list. Returns the show on the books (start 0 when none is). A site that is not held in the region has no show.
+    /// </summary>
+    private (double Start, int Seed) ShowOf(FestivalDef def, string instance, int day, int length, ResolvedSite? site, double hour, double now)
+    {
+        if (!FestivalShows.HasFireworks(def.Show) || site == null) return (0, 0);
+        var (start, seed, count) = _shows.GetValueOrDefault(instance);
+        if (day >= length && FestivalShows.Starts(_lastHour, hour) && !FestivalShows.Active(start, seed, now))
+        {
+            count++;
+            start = now + FestivalShows.StartLead;
+            seed = FestivalShows.SeedOf(instance, count);
+            _shows[instance] = (start, seed, count);
+            GD.Print($"[festival] {def.Id}: the closing show #{count} starts in {FestivalShows.StartLead:F0} s (game hour {hour:F2}), {FireworkShow.DurationOf(seed) / 60:F0} minutes");
+        }
+        return FestivalShows.Active(start, seed, now) ? (start, seed) : (0, 0);
     }
 
     private static (string From, string To)[] WindowsOf(FestivalDef def, OccasionEntry entry) =>
@@ -386,6 +421,35 @@ public partial class FestivalService : Node
     }
 
     /// <summary>Re-tells each peer its crew's standing when its party changed (a crew is who plays together, not a session id).</summary>
+    /// <summary>
+    /// While a closing show plays, every adventuring peer within <see cref="FestivalShows.WatchRadiusM"/> of the site for
+    /// <see cref="FestivalShows.WatchSeconds"/> of it has watched it: <see cref="FestivalShowWatched"/> goes on the bus once per
+    /// player and festival instance (the errands plan's "watch the show" step). The server reads positions; nothing is asked of a client.
+    /// </summary>
+    private void CheckShow()
+    {
+        double now = Net.ClockSync.SimNow;
+        foreach (var run in Running)
+        {
+            if (run.ShowStart <= 0 || now < run.ShowStart || run.Site is not { } site) continue;
+            foreach (long peer in _adventure.Peers.ToArray())
+            {
+                var key = (peer, run.Instance);
+                if (peer <= 0 || _watchPaid.Contains(key) || !_adventure.Active(peer) || _adventure.Progress(peer) is not { } p) continue;
+                if (_adventure.PositionOf?.Invoke(peer) is not { } at || site.DistanceTo(at.E, at.N) > FestivalShows.WatchRadiusM) continue;
+                double seen = _watched.GetValueOrDefault(key) + CrewCheckEvery;
+                _watched[key] = seen;
+                if (seen < FestivalShows.WatchSeconds) continue;
+                _watchPaid.Add(key);
+                GD.Print($"[festival] {Short(p.Key)} watched the closing show of {run.Id}");
+                _adventure.Events.Raise(new FestivalShowWatched(peer, p.Key, run.Id));
+            }
+        }
+    }
+
+    /// <summary>Authority: the peers that have watched the closing show of an instance (checks).</summary>
+    public int WatchersOf(string instance) => _watchPaid.Count(k => k.Instance == instance);
+
     private void CheckCrews()
     {
         foreach (var key in _sentCrew.Keys.ToArray())

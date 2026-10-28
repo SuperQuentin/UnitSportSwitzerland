@@ -1,0 +1,23 @@
+using UnitSport.Adventure.Together;
+
+namespace UnitSport.Core;
+
+public partial class ServerWorld
+{
+    /// <summary>
+    /// Playing together (#1266): the together rule, the links, the shared pots, the week and the mentors, kept
+    /// here for every adventuring peer, from the proxies' published state and the parties.
+    /// </summary>
+    private void AddTogether(Adventure.AdventureService adventure)
+    {
+        var together = TogetherService.Create(adventure, server: true, networked: true);
+        var parties = _parties;
+        together.PartyOf = peer => parties?.Of(peer)?.Members;
+        together.BodyOf = peer => _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
+        together.PlacedSource = () => _placed;
+        if (_chat is { } chat) together.NameOf = chat.NameOfPeer;
+        // the cover raster is kept near players: enough for the glacier under a roped pair
+        together.GlacierAt = g => _chunks != null && _origin is { } o && _chunks.TryGetCover(o.ToWorld(g), out var cover)
+            ? cover is Terrain.Format.CoverClass.Glacier or Terrain.Format.CoverClass.Snowfield : null;
+    }
+}
