@@ -45,7 +45,7 @@ day by day, a shared score for a party, festival tokens and a closing show.
 | Part | PR | What it does | Status |
 |---|---|---|---|
 | 1 Festival framework | 1 | `FestivalDef`, sites, day unlocks, the `festivals` section, Batzen tokens and their conversion, the party board, decorations, the Journal tab, two new schedule tokens | built, protocol 59 |
-| 2 Fireworks and the closing show | 2 | `FireworkShow` (pure, seeded) and `Fireworks` (GPU particles, sound with distance delay); a festival's show is fireworks, a concert or both | planned |
+| 2 Fireworks and the closing show | 2 | `FireworkShow` (pure, seeded) and `Fireworks` (GPU particles, sound with distance delay); a festival's show is fireworks, a concert or both | fireworks built (the concert half is not), no protocol bump |
 | 3 Steinstossen | 3 | The 83.5 kg Unspunnen stone: lift, run-up, push; server-computed distance; bots throw | planned |
 | 4 Alphorn and yodel | 4 | Natural-tone rhythm on the beat, harmony scored across players, an echo off the real valley wall | planned |
 | 5 Fahnenschwingen | 5 | Flag figures on the beat, a high throw and the catch | planned |
@@ -60,6 +60,8 @@ the rest register with the parts that build their games); the decoration is a ri
 games); the festival stall (`FestivalShop`) and the quest step kinds `FestivalGameStep`/`FestivalShowStep` are not built (the events
 `FestivalOpened`, `FestivalGamePlayed` and `FestivalMilestoneReached` are raised, for the errands and quest plans); a party milestone pays outside the
 600-Batzen cap (a def's milestones total at most a quarter of it); an online player is paid as soon as the festival ends, and anyone else when their progress loads.
+
+**Part 2 as built** (deviations from section 2): `FireworkShow` plans from a seed alone and the server sends only `ShowStart` and `ShowSeed` inside the running list it already sends, so no new RPC and no protocol bump; a show starts on every game evening of the festival's last real day when the sky clock crosses 21:30 (`FestivalShows.Starts`), 15 s after the server decides; `Fireworks` is one node with pools (32 bursts of 150 stars, 12 climbs, 4 flashes, 10 voices; no trail sub-emitters: the climbing spark is its own pool, the willow's trail is its long droop); the launch line is the site's middle with a mortar rack (`FestivalOccasion.MortarRack`), not yet a lake's shore; watching is counted by the server (`FestivalShowWatched`, 1.5 km for 20 s), the quest step kind `FestivalShowStep` is not built; **the concert half of `Both` is not built** (`Both` plays the fireworks alone). Notes: `docs/notes/occasions/festival-fireworks.md`.
 
 **Order**: 1, then 2 (every festival ends on it), then the Älplerfest's games 3, 4, 5, 6 (cheapest first:
 Steinstossen needs no opponent; Schwingen needs the most new animation), then 7 (needs 1 and the herd

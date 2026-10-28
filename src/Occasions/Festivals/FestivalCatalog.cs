@@ -31,7 +31,7 @@ public static partial class FestivalCatalog
         [new FestivalSite("the test field", e, n, 400)],
         [new FestivalGame("bell", "Ring the bell", 100), new FestivalGame("gong", "Ring the gong", 100)],
         [new FestivalDay(1, ["bell"], "The bell is open."), new FestivalDay(3, ["gong"], "The gong joins in.")],
-        ClosingShow.Bonfires,
+        ClosingShow.Fireworks,
         [("03-10", "03-14")],
         [new FestivalMilestone(150, 20, "Warm-up"), new FestivalMilestone(400, 40, "Crowd"), new FestivalMilestone(800, 80, "Whole village")]);
 
