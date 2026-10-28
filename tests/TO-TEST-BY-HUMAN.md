@@ -121,3 +121,18 @@ Nothing is player-facing yet but the Journal tab and the poles: the check-only f
 - [ ] Walk round the spawn → a ring of 16 red Swiss-flag poles stands about 60 m out. Settings › Occasions › the test festival › Off → the poles go, while the Journal's Festival tab and the score stay.
 - [ ] Real map, dev region, a dedicated server with the same flags → the log says `[festival] running: test day 2/5 at the test field`; join with a client and open the Journal → the same tab, with the same day.
 - [ ] Real map: a real festival site outside the region relocates to the largest town ("held this year in Bulle"): needs a real festival, so this waits for part 3 (Älplerfest); the rule is unit-tested only.
+
+## Alcohol: a real blood alcohol level and two breathalyzers ([#1309](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1309))
+
+Offline is enough for most: `--systems ui,physics,adventure,terrain` on any map; `--alcohol-clock 30` makes the half-hours pass faster, `/alcohol test drink 4 40` logs four beers drunk 40 min ago, `/give` the Breathalyzer and the Breath test (or buy them at a pharmacy).
+
+- [ ] Drink three beers within a few minutes, wait (or `--alcohol-clock 30`) → around half an hour in the view starts to sway a little; at about 0.5 per mille driving a car, the steering answers a beat late. Judge whether the sway is subtle, not nauseating, and whether the lag is fair rather than frustrating.
+- [ ] At 0.8 and over (`/alcohol test drink 6 30`) → the screen edges blur, walking drifts slowly to the side, and the view feels drunk. Judge the blur strength in the Cartoon, PS1 and Realistic styles and the drift's size.
+- [ ] At 1.5 and over (`/alcohol test drink 10 30`) → you stumble now and then (flat for a second), a climbable wall will not be grabbed, and the toast says "Not in this state". Over 2.5 you pass out for a minute and wake. Judge how often the stumble comes and whether passing out feels fair.
+- [ ] Settings > Gameplay > Alcohol: **View effects** off → no sway and no blur, the input lag stays. Mode **Off** → drinks carry nothing; **Mild** → half the effects, nobody passes out.
+- [ ] VR: drunk, the head does not sway; a soft vignette comes instead, and the lag is the same. Judge the comfort on a headset.
+- [ ] Hold Use with the electronic Breathalyzer in hand → 5 s of rising tone in the view pose at the mouth, two beeps, then its screen low in the view: `0.62 ‰ · 0.31 mg/L` and `> 0.5 ‰: do not drive`. Within 15 min of a drink it says `WAIT 12 min`. Pad: RT; VR: RT (bringing it to the mouth by hand is not built). Judge the screen's size and how long it stays (8 s).
+- [ ] With a friend online: hold the device out (E, pad Y, or a VR grip near them) → they get an invite, accept with F2 / the invites panel, and both screens read the same number. A server-run bot accepts at once and reads 0.00.
+- [ ] The single-use Breath test: blow 5 s, a tube on screen turns green (under 0.5) or amber, then it is used up. Judge whether the colours read clearly and whether "no number" feels right.
+- [ ] The glass icon left of the stamina ring appears above 0.3 per mille and nowhere else shows the level. Judge its place against the Together chip and in VR.
+- [ ] Models: the Breathalyzer and the Breath test tubes (clear, green, amber) in the model viewer, category Adventure, and in the hand in first and third person → they look right; the sounds are in the sound player under `AlcoholSounds`.

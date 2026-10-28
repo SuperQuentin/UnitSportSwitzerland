@@ -61,6 +61,9 @@ public partial class AlcoholCheck : ChatProbe
         if (!await Until(() => me.Terrain != null && me.Terrain.HasCollisionAt(At(me, Crag.WallX + 10, 0)), 90)) { Fail("the crag never loaded"); return; }
         for (int i = 0; i < Inventory.Size; i++) _kept[i] = _items.Inventory[i];
         me.WalkControls = () => (_wish, false);
+        // the scratch folder keeps the last run's log: start from a sober player
+        DrinkLog.Clear();
+        AdventureService.Instance!.Mine.Touch(AlcoholProgress.Section);
 
         await Drinks(me);
         Curve();
