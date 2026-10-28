@@ -593,12 +593,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     GetTree().CreateTimer(3.0).Timeout += () => interiors.Enter(enter, null);
                 else
                 {
+                    // once the body stands in the world (the spawn settled, on foot): the camera alone after a minute
+                    double waited = 0;
                     void Go()
                     {
-                        Teleporter.Arrived -= Go;
-                        interiors.Enter(enter, _onFoot ? LocalPlayer : null);
+                        if (_onFoot && LocalPlayer is { } me && !SpawnPending) interiors.Enter(enter, me);
+                        else if ((waited += 0.5) < 60) GetTree().CreateTimer(0.5).Timeout += Go;
+                        else interiors.Enter(enter, null);
                     }
-                    Teleporter.Arrived += Go;
+                    GetTree().CreateTimer(0.5).Timeout += Go;
                 }
             }
             var chunksForDoors = _chunks;
@@ -932,6 +935,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
         if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
+        if (EnterSpectatorCheck.Requested) AddChild(new EnterSpectatorCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -2635,9 +2639,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!inPlace)
         {
             var pos = _spectator!.GlobalPosition;
-            float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
-            player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
+            // the first floor, stair, roof or ground under the camera with room to stand (#1244): in a building that
+            // is its floor, not the street 3 km over it; the terrain's height when no collision is there yet
+            // under a building's floor (flown through it into the void): onto its lowest floor there
+            if ((player.StandingSpotBelow(pos) ?? (Interiors.InteriorManager.Instance?.LowestFloorAbove(pos) is { } floor
+                    ? player.StandingSpotBelow(floor) : null)) is { } spot)
+                player.GlobalPosition = spot;
+            else
+            {
+                float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
+                player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
+            }
             player.Velocity = Vector3.Zero;
+            Interiors.InteriorManager.Instance?.SetBodySpace(player, player.GlobalPosition);
         }
         player.Camera.Current = true;
         _chunks!.RemoveAnchor(_spectator!);

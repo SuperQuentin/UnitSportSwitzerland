@@ -126,6 +126,41 @@ public partial class InteriorManager
         finally { _entering = false; }
     }
 
+    /// <summary>
+    /// The body put down at <paramref name="at"/> with no door walked through (leaving the fly camera, #1244): in the
+    /// space of the built interior holding that point, or out of any interior it was in. Offline only.
+    /// </summary>
+    public void SetBodySpace(FootPlayer player, Vector3 at)
+    {
+        if (Online) return;
+        var node = InInteriorSpace(at) ? InteriorNode.Containing(_built.Values, at) : null;
+        string? key = node?.Layout.Key;
+        if (player.InteriorKey == key) return;
+        player.CrossDoor(key, at, 0f, Basis.Identity);
+        SetPlayerSpace(MyId, key ?? "");
+        _current = node?.Layout;
+        Maintain();
+        GD.Print($"[interior] put down {(key != null ? $"inside {key}" : "outside")}");
+    }
+
+    /// <summary>
+    /// A point 1 m over the lowest floor of the built interior whose footprint holds <paramref name="at"/> when
+    /// <paramref name="at"/> is under it, in the void under the interiors (a fly camera through a floor); null otherwise.
+    /// </summary>
+    public Vector3? LowestFloorAbove(Vector3 at)
+    {
+        if (!InInteriorSpace(at)) return null;
+        foreach (var node in _built.Values)
+        {
+            if (!node.IsInsideTree()) continue;
+            var local = node.ToLocal(at);
+            var l = node.Layout;
+            if (Math.Abs(local.X) > l.Width / 2 || Math.Abs(local.Z) > l.Depth / 2 || local.Y > l.FloorY(0)) continue;
+            return node.ToGlobal(local with { Y = l.FloorY(0) + 1f });
+        }
+        return null;
+    }
+
     /// <summary>The building a target names: a building key as it is, or the building holding the venue.</summary>
     private async Task<BuildingKey?> BuildingOf(string target)
     {
