@@ -110,6 +110,9 @@
     <Compile Include="..\..\src\Adventure\Versteckis\HidePlan.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Versteckis\VsTactics.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Versteckis\VersteckisProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- alcohol (#1271): the blood alcohol model, its effects and readings -->
+    <Compile Include="..\..\src\Adventure\Alcohol\Bac.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Alcohol\AlcoholRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishCatalog.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
