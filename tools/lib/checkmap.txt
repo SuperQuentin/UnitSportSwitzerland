@@ -1008,3 +1008,6 @@ src/Adventure/Together/ net tools/togethernetcheck.sh
 
 # #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
 src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh
+tools/errandnetcheck.sh  net  tools/errandnetcheck.sh
+src/Adventure/Errands/ErrandService net tools/errandnetcheck.sh

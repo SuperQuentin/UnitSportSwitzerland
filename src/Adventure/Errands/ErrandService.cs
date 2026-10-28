@@ -349,6 +349,7 @@ public partial class ErrandService : Node
     private void Accepted(string cardId)
     {
         Toast?.Invoke($"Stamped: {Source.Find(cardId)?.Quest.Title ?? "a card"}");
+        ErrandSounds.Play(this, ErrandSounds.Stamp);
         CardAccepted?.Invoke(cardId);
     }
 

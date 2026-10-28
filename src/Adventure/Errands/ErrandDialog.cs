@@ -105,6 +105,7 @@ public sealed partial class ErrandDialog : CanvasLayer
             MouseCapture.Mode = Input.MouseModeEnum.Visible;
         }
         Rebuild();
+        ErrandSounds.Play(this, ErrandSounds.Greeting);
         GD.Print($"[errands] talking to {giver.Id}");
     }
 
