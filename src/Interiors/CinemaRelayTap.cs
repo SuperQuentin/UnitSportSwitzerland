@@ -178,48 +178,16 @@ public sealed class CinemaRelayTap : IDisposable
         if (!string.IsNullOrWhiteSpace(line) && !_disposed) GD.Print($"[cinema] relay ffmpeg: {line}");
     }
 
-    /// <summary>
-    /// JPEGs out of ffmpeg's pipe, one after the other: each from its start marker (FF D8) to its end marker (FF D9),
-    /// which no entropy-coded byte can form (a coded FF is always followed by 00).
-    /// </summary>
     private void ReadFrames(Stream stdout, int gen, SemaphoreSlim room)
     {
-        var buf = new byte[64 * 1024];
-        var frame = new MemoryStream();
         long index = 0;
-        bool inFrame = false;
-        byte prev = 0;
-        try
+        CinemaLookup.ReadJpegs(stdout, () => !_disposed && gen == _generation, jpeg =>
         {
-            while (!_disposed && gen == _generation)
-            {
-                int n = stdout.Read(buf, 0, buf.Length);
-                if (n <= 0) break;
-                for (int i = 0; i < n; i++)
-                {
-                    byte b = buf[i];
-                    if (!inFrame)
-                    {
-                        if (prev == 0xFF && b == 0xD8) { inFrame = true; frame.SetLength(0); frame.WriteByte(0xFF); frame.WriteByte(0xD8); }
-                    }
-                    else
-                    {
-                        frame.WriteByte(b);
-                        if (prev == 0xFF && b == 0xD9)
-                        {
-                            inFrame = false;
-                            room.Wait();
-                            if (_disposed || gen != _generation) return;
-                            _frames.Enqueue((index, frame.ToArray()));
-                            _lastIndex = index++;
-                            b = 0;
-                        }
-                    }
-                    prev = b;
-                }
-            }
-        }
-        catch (Exception) { /* killed */ }
+            room.Wait();
+            if (_disposed || gen != _generation) return;
+            _frames.Enqueue((index, jpeg));
+            _lastIndex = index++;
+        });
         if (gen == _generation) _videoDone = true;
     }
 

@@ -92,6 +92,7 @@ public partial class CinemaBooths : Node
         _stream?.Dispose();
         _stream = null;
         foreach (var tap in _taps.Values) tap.Dispose();
+        _capture?.Dispose();
         _taps.Clear();
     }
 
@@ -223,6 +224,8 @@ public partial class CinemaBooths : Node
         // the server's copy of each hall someone watches through it (#1298 phase 2)
         if (ServerSide) PumpRelay(delta);
         if (NetworkManager.DedicatedServer) return;
+        // this machine's own share, if it runs one (CinemaBooths.Live): pushed wherever the player looks
+        PumpCapture();
         var im = InteriorManager.Instance;
         if (im?.CurrentNode is not { } node || node.Layout.Type != BuildingType.Cinema) { _appliedNode = null; PumpVideo(null, -1, 0); return; }
         // --cinemashow: every cinema dimmed with the cat on, for a shot (no panel to press in one)

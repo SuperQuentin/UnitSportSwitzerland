@@ -31,6 +31,49 @@ public static class CinemaVideo
     /// <summary>The relay's sample index of a moment of the video (video time × rate), and back.</summary>
     public static long RelaySampleAt(double videoTime) => (long)Math.Floor(videoTime * RelaySoundRate);
 
+    /// <summary>
+    /// A live source (phase 3: a screen, a window, a webcam; phase 4 a file, phase 5 NDI) is no link but a player's: the
+    /// server writes it as <c>live:&lt;peer&gt;:&lt;label&gt;</c> in the hall's link, never taken from a player as a link
+    /// (<see cref="Allowed"/> refuses the scheme), and every client watches it through the server.
+    /// </summary>
+    public const string LivePrefix = "live:";
+
+    public static bool IsLive(string link) => link.StartsWith(LivePrefix, StringComparison.Ordinal);
+
+    /// <summary>The hall's link for <paramref name="peer"/>'s live source, its label cut to printable and short.</summary>
+    public static string LiveLink(long peer, string label)
+    {
+        var clean = new System.Text.StringBuilder();
+        foreach (char c in label)
+            if (c >= ' ' && c != 0x7f && clean.Length < 80) clean.Append(c);
+        return $"{LivePrefix}{peer}:{clean}";
+    }
+
+    /// <summary>Whose a live link is (0 for none) and what it shows.</summary>
+    public static (long Peer, string Label) LiveOf(string link)
+    {
+        if (!IsLive(link)) return (0, "");
+        int colon = link.IndexOf(':', LivePrefix.Length);
+        if (colon < 0 || !long.TryParse(link.AsSpan(LivePrefix.Length, colon - LivePrefix.Length), out long peer)) return (0, "");
+        return (peer, link[(colon + 1)..]);
+    }
+
+    /// <summary>A live source's picture: the streamer's choice (owner, Oct 2026). Text on a shared screen wants High.</summary>
+    public enum LiveQuality { Low, High, Smooth }
+
+    public static (int Width, int Height, int Fps, int JpegQ) SizeOf(LiveQuality q) => q switch
+    {
+        LiveQuality.Low => (RelayWidth, RelayHeight, RelayFps, 7),
+        LiveQuality.Smooth => (960, 400, 20, 6),
+        _ => (960, 400, 10, 5),
+    };
+
+    /// <summary>
+    /// How long after its capture a live frame or sample is shown, s, on every peer, the streamer included: the way up to
+    /// the server and down to the hall, with room for a stall.
+    /// </summary>
+    public const double LiveDelay = 1.5;
+
     /// <summary>The longest link the server takes.</summary>
     public const int MaxLink = 1000;
 
@@ -63,6 +106,7 @@ public static class CinemaVideo
         if (link.Length is 0 or > MaxLink) return false;
         foreach (char c in link)
             if (c < ' ' || c == 0x7f) return false;
+        if (IsLive(link)) return false;
         if (AllowLocal && File.Exists(link)) return true;
         if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return false;
         return uri.Scheme is "https" or "http" && uri.Host.Length > 0;
@@ -115,6 +159,7 @@ public static class CinemaVideo
     public static string Title(string link)
     {
         if (link.Length == 0) return "";
+        if (IsLive(link)) return LiveOf(link).Label;
         if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return Path.GetFileName(link);
         string last = uri.Segments.Length > 1 ? Uri.UnescapeDataString(uri.Segments[^1].TrimEnd('/')) : "";
         string host = uri.Host.StartsWith("www.", StringComparison.Ordinal) ? uri.Host[4..] : uri.Host;

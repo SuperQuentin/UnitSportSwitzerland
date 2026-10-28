@@ -146,7 +146,7 @@ public partial class CinemaBooths
         }
         var (link, t0) = on ? VideoOf(plan, here) : ("", 0);
         bool want = link.Length > 0 && !NetworkManager.DedicatedServer;
-        bool relay = want && (RelayOf(plan, here) || !CinemaVideoStream.CanDecode || _failedHere == (link, t0));
+        bool relay = want && (RelayOf(plan, here) || CinemaVideo.IsLive(link) || !CinemaVideoStream.CanDecode || _failedHere == (link, t0));
         if (_stream != null && (!want || _streamPlan != plan || _streamHall != here || _stream.Link != link || _stream.T0 != t0
                                 || _stream is CinemaRelayFeed != relay))
         {

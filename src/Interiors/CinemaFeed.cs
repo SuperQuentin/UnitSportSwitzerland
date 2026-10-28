@@ -136,6 +136,48 @@ public static class CinemaLookup
         }
     }
 
+    /// <summary>
+    /// JPEGs out of an ffmpeg <c>image2pipe</c> (mjpeg), one after the other, each handed to <paramref name="frame"/>
+    /// (which may block: ffmpeg waits): from its start marker (FF D8) to its end marker (FF D9), which no entropy-coded
+    /// byte can form (a coded FF is always followed by 00). Returns when the pipe ends or <paramref name="go"/> says stop.
+    /// </summary>
+    public static void ReadJpegs(Stream stdout, Func<bool> go, Action<byte[]> frame)
+    {
+        var buf = new byte[64 * 1024];
+        var current = new MemoryStream();
+        bool inFrame = false;
+        byte prev = 0;
+        try
+        {
+            while (go())
+            {
+                int n = stdout.Read(buf, 0, buf.Length);
+                if (n <= 0) return;
+                for (int i = 0; i < n; i++)
+                {
+                    byte b = buf[i];
+                    if (!inFrame)
+                    {
+                        if (prev == 0xFF && b == 0xD8) { inFrame = true; current.SetLength(0); current.WriteByte(0xFF); current.WriteByte(0xD8); }
+                    }
+                    else
+                    {
+                        current.WriteByte(b);
+                        if (prev == 0xFF && b == 0xD9)
+                        {
+                            inFrame = false;
+                            if (!go()) return;
+                            frame(current.ToArray());
+                            b = 0;
+                        }
+                    }
+                    prev = b;
+                }
+            }
+        }
+        catch (Exception) { /* killed */ }
+    }
+
     /// <summary>Kills a process it started, by its own handle (never by name), and lets it go.</summary>
     public static void Stop(Process? p)
     {
