@@ -110,6 +110,9 @@
     <Compile Include="..\..\src\Adventure\Versteckis\HidePlan.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Versteckis\VsTactics.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Versteckis\VersteckisProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- alcohol (#1271): the blood alcohol model, its effects and readings -->
+    <Compile Include="..\..\src\Adventure\Alcohol\Bac.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Alcohol\AlcoholRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishCatalog.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
@@ -128,6 +131,8 @@
     <Compile Include="..\..\src\Avatar\Face\DanceFace.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\SchwingRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\SchwingBot.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\AuraRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\AuraMatch.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\AuraBody.cs" Link="Game\%(Filename)%(Extension)" />
@@ -137,6 +142,7 @@
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Patrons\PatronSchedule.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\RunSeeds.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Calendar.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\McpProtocol.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
@@ -184,6 +190,10 @@
     <Compile Include="..\..\src\Interiors\Pinball\PinballRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Pinball\PinballGame.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Pinball\PinballHighScores.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- bowling (#1323): the ball's run down the lane and the ten-frame score, Godot maths only -->
+    <Compile Include="..\..\src\Interiors\Bowling\BowlingSizes.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Bowling\BowlingBall.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Bowling\BowlingScore.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- traffic-light heads (#350): the lens layout, Godot maths only -->
     <Compile Include="..\..\src\Terrain\SignalBuilder.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\SignalBuilder.Gantry.cs" Link="Game\%(Filename)%(Extension)" />
@@ -272,12 +282,12 @@
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCalendar.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalSites.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Aelplerfest.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalBook.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalBoard.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalEvents.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FireworkShow.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <!-- Fahnenschwingen (#1269 part 5): gestures, routine and grading; pure -->
-    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Aelplerfest.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\Fahnen\GestureRing.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\Fahnen\FahnenRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\Fahnen\FlagMotion.cs" Link="Game\Festivals\%(Filename)%(Extension)" />

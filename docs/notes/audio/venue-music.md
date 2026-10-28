@@ -70,5 +70,12 @@ ffmpeg or internet), they play tracker modules on our own player, also the same 
 - **Even across a hall** (#1279): a source's `Spread` is its speakers' `UnitSize` (a car stereo's 3 m); a cinema
   hall's is its half-diagonal, 3 m up, so the whole hall hears it at full level, not only its middle; every venue
   room's (lobby, lanes, guest rooms) the same.
-- **Next**: venue ambience (chatter, cutlery, balls and pins, coin drops) in the sound player, quiet hours
-  for terraces, IT modules (most of the archive's free ones) if a playlist wants them.
+- **Ambience** (#1244, `Audio/VenueAmbience`, in the sound player): a room's murmur (seven formant voices in phrases)
+  and its bed (cutlery where guests eat, the popcorn machine in a cinema lobby) loop as loud as the room is full
+  (-26 dB at one guest, +4 dB a doubling, eased); a terrace's murmur follows its guests; a table football rattles while
+  played; on 35 s windows of the shared clock a café's grinder or steamer, a bar's tap, an arcade's jingle; on the
+  guests' own moves (`PatronPoser.EventIn`) the pool shot and a dart, a coin as an arcade player starts, a settee's
+  cheer. Played in the interior, so heard only inside (no `Hearing`); the street has the door's music. Terraces are
+  quiet because empty from 23:00 (`venue-patrons`). `--sounds,check --soundswav venueambience` writes them as WAVs.
+- **Next**: IT modules (most of the archive's free ones) if a playlist wants them; the ambience heard through an open
+  door by `Hearing`.

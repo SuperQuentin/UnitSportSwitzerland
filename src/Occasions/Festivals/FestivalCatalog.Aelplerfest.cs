@@ -9,6 +9,9 @@ public static partial class FestivalCatalog
     /// <summary>The Fahnenschwingen game of the Älplerfest (#1269 part 5); the other games add themselves to the def in their own parts.</summary>
     public const string FahneGame = "fahne";
 
+    /// <summary>The Schwingen game of the Älplerfest (#1269 part 6): the sawdust ring's Anschwingen from day 5, the Schlussgang from day 9.</summary>
+    public const string SchwingGame = "schwingen";
+
     /// <summary>The flag ground: 12 m east of the site's middle (the mortar rack is 14 m west), and how far from it a body still counts as on it.</summary>
     public const double FahneGroundRadius = 16, FahneGroundOffset = 12;
 
@@ -27,10 +30,11 @@ public static partial class FestivalCatalog
             new FestivalSite("Schwägalp", 2740500, 1232900, 140),
             new FestivalSite("Schwarzsee", 2588600, 1169400, 140),
         ],
-        [new FestivalGame(FahneGame, "Fahnenschwingen", 100)],
+        [new FestivalGame(FahneGame, "Fahnenschwingen", 100), new FestivalGame(SchwingGame, "Schwingen", 120)],
         [
             new FestivalDay(1, [], "The flags go up on the meadow."),
             new FestivalDay(3, [FahneGame], "The flag swingers take the meadow: swing the Fahne on the march."),
+            new FestivalDay(5, [SchwingGame], "The Anschwingen: step into the sawdust ring. From day 9 the bouts are the Schlussgang."),
         ],
         ClosingShow.Fireworks,
         [("08-14", "08-24")],

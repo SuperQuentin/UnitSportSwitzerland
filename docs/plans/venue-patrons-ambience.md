@@ -3,8 +3,12 @@
 
 # Venue patrons and ambience (#1244, part 6 of #1232)
 
-Status: **planned, not started.** Branch `feat/1244-patrons-ambience` in a worktree
-(`../UnitSportSwitzerland-1244`). The music half of #1244 is merged (#1247 radio relay, #1248 tracker
+Status: **built** (phases 1-6) on `feat/1244-patrons-ambience`, PR #1331; what was built is in
+`docs/notes/terrain/venue-patrons.md`. Different from the plan: the bowling settees' guests do not wait for #1328 (every
+settee in a lanes room has them, cheering on a timer, not on the deco bowlers' rolls); stays run on shared-clock seconds,
+not game minutes; a cinema hall's audience is drawn per 15-minute showing and changes only while nobody is in the hall
+(the owner's rule, added during planning); `--enter` / `/enter` were added to look inside any building without a door
+(the owner's ask); no `[Showcase("Patrons")]` set: the guests show in the viewer's whole-venue interiors. The music half of #1244 is merged (#1247 radio relay, #1248 tracker
 player); this is the rest: patrons, the ambience they make, and quiet terraces at night.
 
 ## Decisions (owner, 2026-10-28)

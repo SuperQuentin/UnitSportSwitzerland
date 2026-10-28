@@ -4,7 +4,7 @@ using UnitSport.Occasions.Festivals.Fahnen;
 
 namespace UnitSport.Occasions.Festivals;
 
-// Fahnenschwingen on the festival service (#1269 part 5, protocol 67): the server plans a routine from the slot a request falls in
+// Fahnenschwingen on the festival service (#1269 part 5, protocol 68): the server plans a routine from the slot a request falls in
 // (so players who ask together swing together), the client plays it and sends what it did (stamps and gesture sectors), the server
 // grades it with the same pure rules, settles the whole slot a moment after it ended (the in-step bonus needs everyone's grades) and pays
 // through Award. Bots take the same two server methods; they make up the field and earn nothing.

@@ -823,6 +823,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             }
         }
         target *= Core.GameSettings.Current.VrVignette;
+        // drunk (#1271): a soft vignette instead of the sway, whatever the comfort setting says of the motion one
+        target = Mathf.Max(target, Adventure.Alcohol.AlcoholService.VrVignette);
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;

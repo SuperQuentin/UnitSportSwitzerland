@@ -64,6 +64,7 @@ public sealed class ChatCompleter
         ("go", false, true, "@E,N", "Travel", "teleport to coordinates (as /city)"),
         ("track", false, true, "@E,N [name] | off", "Travel", "point the way to coordinates"),
         ("map", false, true, "@E,N", "Travel", "show coordinates on the map"),
+        ("enter", false, true, "<venue name | building key>", "Travel", "go straight inside a building, no door (offline)"),
         ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]", "Travel", "the venues: what plays there, go to one"),
         ("tpa", false, false, "<player>", "Travel", "ask to go to a player"),
         ("tphere", false, false, "<player>", "Travel", "ask a player over"),
@@ -89,6 +90,7 @@ public sealed class ChatCompleter
         ("aura", false, false, "<player> | accept | decline | leave", "Activities", "an aura battle"),
         ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
         ("rope", false, false, "[<player> | hands <player> | off]", "Activities", "rope up or hold hands with a party member"),
+        ("alcohol", false, false, "", "Activities", "what alcohol does here; measure your level with a breathalyzer"),
         ("fondue", false, false, "[invite <player> | leave | forfeit 1|2|3]", "Activities", "the shared pot at your table"),
         // invites (#840)
         ("invites", false, false, "", "Activities", "invites open to you and from you"),

@@ -264,6 +264,7 @@ public partial class VenueTerraces : Node
         }
         Node3D? root = null;
         StaticBody3D? body = null;
+        var guests = new List<Patrons.PatronSpot>();
         foreach (var d in doors)
         {
             if (d.Venue <= 0) continue;
@@ -274,13 +275,15 @@ public partial class VenueTerraces : Node
                 var o = d.Outward with { Y = 0 };
                 var probe = d.Position + o.Normalized() * 0.75f;
                 GD.Print($"[terrace] {Venues.NameOf(v)}: {items.Count} pieces; roads {(roads != null)}, carriageway {Carriageway(roads, probe):F1} m, "
-                    + $"floor {d.Position.Y:F2}, ground out front {Ground(probe)?.ToString("F2") ?? "?"}");
+                    + $"floor {d.Position.Y:F2}, ground out front {Ground(probe)?.ToString("F2") ?? "?"}, out front at {node.ToGlobal(probe)}");
             }
             if (items.Count == 0) continue;
             root ??= new Node3D { Name = NodeName };
             body ??= new StaticBody3D { Name = "Solid", CollisionLayer = World.TreeColliders.Layer, CollisionMask = 0 };
+            var venue = Patrons.VenuePatrons.VenueOf(VenueMusic.MoodFor(v.Type, v.Cuisine));
             foreach (var it in items)
             {
+                if (venue is { } pv) Patrons.PatronSpots.OfTerrace(it, pv, guests.Count, guests);
                 var basis = new Basis(Vector3.Up, it.Yaw);
                 // MeshScratch hands its meshes back turned half round, (-x, y, -z), as a figure faces:
                 // turned back here, so a piece's +Z is the street as authored (its collision box needs no turn)
@@ -303,6 +306,9 @@ public partial class VenueTerraces : Node
         }
         if (root == null) return;
         root.AddChild(body!);
+        // its guests (#1244): in when it is cold or snowing, and from 23:00
+        if (Patrons.VenuePatrons.ForTerrace(guests, Patrons.VenuePatrons.TerraceWeather) is { } patrons) root.AddChild(patrons);
+        if (Log) GD.Print($"[terrace] {guests.Count} guest places, out now {Patrons.VenuePatrons.TerraceWeather(Net.ClockSync.ServerNow):F2}");
         node.AddChild(root);
     }
 }

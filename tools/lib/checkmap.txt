@@ -163,6 +163,10 @@ tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
 src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
 src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
 src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+# #1323: playable bowling: the lane rig in every centre; balls rolled into the pins in their own physics space
+src/Interiors/Bowling/ quick --bowlingcheck --systems ui
+src/Interiors/Bowling/ quick --bowlingrollcheck --systems physics
+src/Interiors/Bowling/ net    tools/bowlingnetcheck.sh
 # #1238: cinemas planned in hand-made buildings; the booth over the network
 src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
 src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
@@ -1024,7 +1028,16 @@ tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
 tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
 src/Adventure/Together/ net tools/togethernetcheck.sh
+src/Combat/Schwing       net    tools/schwingnetcheck.sh
+src/Player/FootPlayer.Schwing net tools/schwingnetcheck.sh
+src/Avatar/HumanMeshBuilder.Schwing net tools/schwingnetcheck.sh
 
+# #1271: alcohol: the drink log, the curve, the effects on the intents, the climb gate, passing out, the two breathalyzers (offline quick probe; server + two clients)
+src/Adventure/Alcohol/  quick  --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Drunk quick --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/Alcohol/AlcoholNetProbe net tools/alcoholnetcheck.sh
+tools/alcoholnetcheck.sh  net  tools/alcoholnetcheck.sh
+src/Adventure/Alcohol/ net tools/alcoholnetcheck.sh
 # #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
 src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
 src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh

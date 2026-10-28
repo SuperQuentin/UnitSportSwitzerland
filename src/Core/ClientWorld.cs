@@ -273,6 +273,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.CinemaProbe { Name = "CinemaProbe" });
             return;
         }
+        // balls rolled into the pins, each deck in its own physics space (#1323)
+        if (Interiors.BowlingRollProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.BowlingRollProbe { Name = "BowlingRollProbe" });
+            return;
+        }
         // bowling centres planned in hand-made buildings (#1235)
         if (Interiors.BowlingProbe.ParseArgs())
         {
@@ -554,6 +561,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball machines, played and watched (#1325)
+        Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
@@ -586,6 +594,24 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
             interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+            // --enter: straight into a building once spawned, or at once for a shot run's free camera (#1244)
+            if (Interiors.InteriorManager.EnterTarget is { } enter)
+            {
+                if (CmdArgs.Has("--shot-queue") || CmdArgs.Has("--shot"))
+                    GetTree().CreateTimer(3.0).Timeout += () => interiors.Enter(enter, null);
+                else
+                {
+                    // once the body stands in the world (the spawn settled, on foot): the camera alone after a minute
+                    double waited = 0;
+                    void Go()
+                    {
+                        if (_onFoot && LocalPlayer is { } me && !SpawnPending) interiors.Enter(enter, me);
+                        else if ((waited += 0.5) < 60) GetTree().CreateTimer(0.5).Timeout += Go;
+                        else interiors.Enter(enter, null);
+                    }
+                    GetTree().CreateTimer(0.5).Timeout += Go;
+                }
+            }
             var chunksForDoors = _chunks;
             interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
             interiors.OccupancySink = chunksForDoors.SetOccupancy;
@@ -621,6 +647,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
             Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
+            Combat.SchwingRing.Create(this, _chunks, origin);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
         // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
@@ -917,6 +944,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
         if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
+        if (EnterSpectatorCheck.Requested) AddChild(new EnterSpectatorCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -951,8 +979,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
+            || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -988,6 +1017,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
         if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
         if (Interiors.Pinball.PinballNetProbe.Role != null) AddChild(new Interiors.Pinball.PinballNetProbe(items, origin));
+        if (Interiors.BowlingNetProbe.Role != null) AddChild(new Interiors.BowlingNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
@@ -1041,6 +1071,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
+        if (Combat.SchwingNetProbe.Role != null) AddChild(new Combat.SchwingNetProbe(items));
         if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -1177,6 +1208,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Occasions.Festivals.Fahnen.FahnenNetProbe.Role != null) AddChild(new Occasions.Festivals.Fahnen.FahnenNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
+            AddAlcohol(adventure, items);    // #1271, ClientWorld.Alcohol.cs
             AddErrands(adventure, items);   // #1267, ClientWorld.Errands.cs
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
@@ -1819,6 +1851,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
         AddChild(new Combat.AuraWatchHud());
+        // Schwingen (#1269): the bout, its screen, and the Älplerfest's sawdust ring
+        AddChild(Combat.SchwingManager.CreateClient());
+        AddChild(new Combat.SchwingHud());
 
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
@@ -2620,9 +2655,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!inPlace)
         {
             var pos = _spectator!.GlobalPosition;
-            float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
-            player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
+            // the first floor, stair, roof or ground under the camera with room to stand (#1244): in a building that
+            // is its floor, not the street 3 km over it; the terrain's height when no collision is there yet
+            // under a building's floor (flown through it into the void): onto its lowest floor there
+            if ((player.StandingSpotBelow(pos) ?? (Interiors.InteriorManager.Instance?.LowestFloorAbove(pos) is { } floor
+                    ? player.StandingSpotBelow(floor) : null)) is { } spot)
+                player.GlobalPosition = spot;
+            else
+            {
+                float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
+                player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
+            }
             player.Velocity = Vector3.Zero;
+            Interiors.InteriorManager.Instance?.SetBodySpace(player, player.GlobalPosition);
         }
         player.Camera.Current = true;
         _chunks!.RemoveAnchor(_spectator!);

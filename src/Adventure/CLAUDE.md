@@ -28,7 +28,8 @@ touches its topic; search with `grep -ril <word> docs/notes/adventure`.
 - `links` — hands and the rope (`LinkBook`, `Tether`, belays, `ArmHold`, `RopeNode`), the leg-up, two-handle gates, roped chests, hidden crevasses (stumble fallback)
 - `fondue` — the shared pot: spots, ingredients, la huit, dips, the lost bread and its forfeit, `--forfeits`, `--fondueseed`
 - `mentors` — milestones, newcomer and veteran, the eight `GarmentStyle.Together` cosmetics, titles
+- `alcohol` — a real blood alcohol level (#1271): `Bac` (grams, absorption, Widmark, elimination), the `alcohol` section, effects on the intents (lag, drift, stumbles, no climbing, passing out), the electronic and single-use breathalyzers, `--alcohol off|mild|real`, protocol 61
 
 ## Commands
 
-- `commands` — `--systems ...,adventure`, `--adventure-test`, `--adventure-dir`, `--journal`; `--adventurecheck` (quick) and `tools/adventurenetcheck.sh` (net); `--pois fixture|<file>`, `--placescheck` (quick) and `tools/placesnetcheck.sh` (net); `--adventure-travel`, `/travel`, `/pin`, `--navcheck` and `--travelcheck` (quick), `tools/navnetcheck.sh` (net); `--rewardspots fixture|<file>`, `--rewardcheck` (quick) and `tools/rewardnetcheck.sh` (net); `--givers fixture`, `--errandcheck` (quick) and `tools/errandnetcheck.sh` (net)
+- `commands` — `--systems ...,adventure`, `--adventure-test`, `--adventure-dir`, `--journal`; `--adventurecheck` (quick) and `tools/adventurenetcheck.sh` (net); `--pois fixture|<file>`, `--placescheck` (quick) and `tools/placesnetcheck.sh` (net); `--adventure-travel`, `/travel`, `/pin`, `--navcheck` and `--travelcheck` (quick), `tools/navnetcheck.sh` (net); `--rewardspots fixture|<file>`, `--rewardcheck` (quick) and `tools/rewardnetcheck.sh` (net); `--givers fixture`, `--errandcheck` (quick) and `tools/errandnetcheck.sh` (net); `--alcoholcheck` (quick) and `tools/alcoholnetcheck.sh` (net)

@@ -712,7 +712,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DeviceKind", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DeviceKind", ".:DanceId", ".:FightPose", ".:AuraPose", ".:SchwingPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
 
     // --- figure animation ---
     private Avatar.SkinnedFigure? _walker;
@@ -1368,6 +1368,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:FightPose");
         replication.AddProperty(".:AuraPose");
+        replication.AddProperty(".:SchwingPose");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
         replication.AddProperty(".:Down");
@@ -1804,6 +1805,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (FightView(dt)) return;
             // an aura battle (#907): the phone-filmed view over the waiting battler's shoulder
             if (AuraView(dt)) return;
+            // Schwingen (#1269): side-on over the grip
+            if (SchwingView(dt)) return;
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -2117,7 +2120,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // rather than the figure shrinking.
         float squash = Mathf.Clamp(-_landingDip * 1.2f, 0f, 0.22f);
         // thrown, stunned or knocked out: flat on the ground
-        float down = (_stunTimer > 0 || Downed || FightPose == (int)Combat.FightStance.Down) && IsOnFloor() ? -1.45f : 0f;   // downed (#475): crawling, flat; floored in a fight (#495)
+        float down = (_stunTimer > 0 || Downed || FightPose == (int)Combat.FightStance.Down || Combat.SchwingRules.Lying(SchwingPose)) && IsOnFloor() ? -1.45f : 0f;   // downed (#475): crawling, flat; floored in a fight (#495)
         _downRot = Mathf.Lerp(_downRot, down, MathX.Damp(10f, dt));
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
@@ -2317,7 +2320,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
-        var dance = DrawnDance = StepFightPose(dt) ?? StepAuraPose(dt) ?? danced;
+        var dance = DrawnDance = StepFightPose(dt) ?? StepAuraPose(dt) ?? StepSchwingPose(dt) ?? danced;
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
@@ -2768,6 +2771,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (_ride == null && interiors?.TryInside(this) == true) return true;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
+            if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
             if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
@@ -2829,6 +2833,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a building's door in reach beats the dance: music next door must not lock you out
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
         // another player looked at, on foot: challenge them to a fist fight, or take their challenge (#495)
+        // the sawdust ring of the Älplerfest (#1269): the queue for a bout
+        if (TryJoinRing()) return true;
         if (TryEngageFighter()) return true;
         // a concert's light desk (#885): its screen, at the front-of-house console, by hand too
         if (IsOnFloor() && Concert.ConcertDeskUi.TryOpen(this)) return true;
@@ -3150,6 +3156,40 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 return candidate + Vector3.Up * 0.1f;
         }
         return over + Vector3.Up * 0.2f;
+    }
+
+    /// <summary>
+    /// The first solid surface under <paramref name="from"/> (within <paramref name="reach"/> m) with room for a standing
+    /// body on it: a floor, a stair, a roof, the ground (#1244, leaving the fly camera). A surface with too little room
+    /// over it (a table under a shelf, a ceiling's top) is passed through to the next one down. Null when there is none
+    /// (no collision built there yet).
+    /// </summary>
+    public Vector3? StandingSpotBelow(Vector3 from, float reach = 400f)
+    {
+        _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
+        var space = GetWorld3D().DirectSpaceState;
+        var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        var start = from;
+        var end = from + Vector3.Down * reach;
+        for (int i = 0; i < 16; i++)
+        {
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(start, end, CollisionMask, exclude));
+            if (hit.Count == 0) return null;
+            var at = (Vector3)hit["position"];
+            if (((Vector3)hit["normal"]).Y > 0.6f)
+            {
+                var query = new PhysicsShapeQueryParameters3D
+                {
+                    Shape = _standProbe,
+                    Transform = new Transform3D(Basis.Identity, at + Vector3.Up * (StandHeight * 0.5f + 0.1f)),
+                    CollisionMask = CollisionMask,
+                    Exclude = exclude,
+                };
+                if (space.IntersectShape(query, 1).Count == 0) return at + Vector3.Up * 0.05f;
+            }
+            start = at + Vector3.Down * 0.05f;
+        }
+        return null;
     }
 
     /// <summary>Whether a player standing at <paramref name="feet"/> would be in one of the vehicle's own boxes.</summary>
@@ -3869,6 +3909,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (SwimPhysics(dt, onFloor)) return;
         // in a fist fight (#495, FootPlayer.Fight.cs)
         if (FightPhysics(dt, onFloor)) return;
+        // in a Schwingen bout (#1269, FootPlayer.Schwing.cs)
+        if (SchwingPhysics(dt, onFloor)) return;
         // in a UFO's tractor beam (#861, FootPlayer.Ufo.cs)
         if (BeamPhysics(dt, onFloor)) return;
         // in an aura battle (#907, FootPlayer.Aura.cs)
@@ -3938,6 +3980,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             moveAmount = Mathf.Min(walk.Wish.Length(), 1f);
             direction = moveAmount > 0.01f ? walk.Wish.Normalized() : Vector3.Zero;
             running = walk.Run;
+        }
+        // drunk (#1271): the intent lags and drifts, whatever made it
+        if (Drunk is { } drunk)
+        {
+            var w = drunk.Walk(direction * moveAmount, dt);
+            moveAmount = Mathf.Min(w.Length(), 1f);
+            direction = moveAmount > 0.01f ? w.Normalized() : Vector3.Zero;
         }
         // holding hands or roped (#1266): the soft follow constraint, on the intent (a bot's too)
         if (Tethered?.Invoke((direction * moveAmount, running)) is { } tied)
@@ -4740,6 +4789,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
         if (_ride is { WheelLock: > 0f } && XR.XrSession.Active && RideControls == null && !float.IsNaN(XR.XrSession.WheelAngle))
             input = input with { WheelAngle = XR.XrSession.WheelAngle };
+        // drunk (#1271): the same lag and noise whatever made the input (keys, pad, wheel, VR hands)
+        if (Drunk is { } drunk) input = drunk.Ride(input, dt);
 
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);

@@ -21,7 +21,7 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
 - **Links**: http(s) only (no `file:`, `concat:`, devices: every client hands it to ffmpeg, as one argument,
   with `-protocol_whitelist`); `--cinemavideolocal` lets the checks play a local file (server and clients).
   A site's page (YouTube, Twitch, Vimeo, Dailymotion) and any `.m3u8` / `.mpd` go through yt-dlp first
-  (`NeedsLookup`): `SiteFormat` picks H.264 at most 480p + best sound, prints `is_live` and the duration; a
+  (`NeedsLookup`): `SiteFormat(lines)` picks H.264 at most the quality's lines (below) + best sound, prints `is_live` and the duration; a
   YouTube link gives separate video and sound URLs. Each client looks it up itself (the URLs are per client).
 - **Live**: from yt-dlp's `is_live` (or ffmpeg's `Duration: N/A` for a plain link): no seek, an HLS playlist from
   `-live_start_index -2`, frames shown a second after the first arrives. Clients are a segment or so apart,
@@ -149,6 +149,26 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   than the default (or a 3D film) keeps the pasted screen at every detail. The slides are not touched. Shots:
   `--cinemadisplay <fit>,<ratio>` with `--cinemavideoshot` (and `--cinemashotcurtains`, `--cinemashotport` for the
   porthole's glass from 2.5 m).
+- **Video quality** (#1319, the owner's: "a video quality setting", after asking why 854x358): what this machine decodes
+  itself, `CinemaVideo.Quality` / `DecodeSize`: Low 480p sources at 854x358 (the phase-1 size, 37 MB/s of frames), Medium
+  720p at 1280x536 (the default, 82 MB/s), High 1080p at 1920x804 (185 MB/s, a 10-frame ring of 6 MB frames).
+  Settings › Video › **Cinema video**; **VR cinema video** in the VR rows, High by default (the screen fills much more of
+  the view); `CinemaVideoStream.QualityHere`, `--cinemaquality low|medium|high` for the checks. A change restarts the
+  hall's decoder at the clock's moment (`PumpVideo`). The relay (480x200, scaled to 854x358) and the live and file shares
+  keep their sizes. A picture taller than Low keeps the pasted screen at High detail (the light's would be its atlas's
+  blur) and the light gets a nearest-scaled 854-wide copy (`_videoSmall`) for the room and whoever stands in the beam;
+  the frozen-light check needs `--cinemaquality low`. The picture's shape ignores a frame lit only in a small part
+  both ways (`Shape.Add`: a title card's letters on black were measured as the picture and zoomed to the whole screen).
+- **VR sharp cinema screen** (#1319, the owner's: "the movie screen at full resolution in VR, in another layer, like the
+  menus"; `InteriorNode.CinemaLayer.cs`, Settings › VR sharp cinema screen, on by default): in a real headset a 2D film's
+  screen is an `OpenXRCompositionLayerQuad` (child of the tracking origin, `SortOrder` -3, behind `XrUi`'s -2 and the
+  watch's -1) whose `SubViewport` (the frame's size) draws the frame through the hall's display
+  (`shaders/cinema_layer.gdshader`, the same `cinema_display` mapping); the compositor samples it at the headset's own
+  resolution, where the mesh screen is resampled into the eye picture first. The screen's mesh becomes a hole
+  (`cinema_hole.gdshader`: colour and alpha multiplied by 0, depth-tested), so heads, seats, the curtains and hands stay
+  in front, as the menus' hole. Placed again every frame (`HoldLayer`, from `CinemaBooths`: the origin moves with the
+  player). Not for 3D (a quad layer shows both eyes one picture), `--xrsim`, or a runtime without quad layers
+  (`IsNativelySupported`, asked once a run). Untested in a headset when written (TO-TEST-BY-HUMAN).
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`

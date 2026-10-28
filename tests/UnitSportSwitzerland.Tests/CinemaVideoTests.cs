@@ -23,6 +23,23 @@ public class CinemaVideoTests
     [InlineData("not a link")]
     public void Allowed_refuses_the_rest(string link) => Assert.False(CinemaVideo.Allowed(link));
 
+    [Theory]
+    [InlineData(CinemaVideo.Quality.Low, 480)]
+    [InlineData(CinemaVideo.Quality.Medium, 720)]
+    [InlineData(CinemaVideo.Quality.High, 1080)]
+    public void DecodeSize_keeps_the_screen_shape_and_asks_sources_that_tall(CinemaVideo.Quality q, int lines)
+    {
+        var (w, h, tallest) = CinemaVideo.DecodeSize(q);
+        Assert.Equal(lines, tallest);
+        Assert.InRange(w / (float)h, 2.37f, 2.41f);
+        Assert.True(w % 2 == 0 && h % 2 == 0);
+        Assert.Contains($"height<={lines}]", CinemaVideo.SiteFormat(tallest));
+    }
+
+    [Fact]
+    public void DecodeSize_Low_is_the_screen_size_the_relay_scales_to() =>
+        Assert.Equal((CinemaVideo.Width, CinemaVideo.Height), (CinemaVideo.DecodeSize(CinemaVideo.Quality.Low).Width, CinemaVideo.DecodeSize(CinemaVideo.Quality.Low).Height));
+
     [Fact]
     public void Allowed_refuses_a_link_too_long() =>
         Assert.False(CinemaVideo.Allowed("https://example.org/" + new string('a', CinemaVideo.MaxLink)));
@@ -172,6 +189,21 @@ public class CinemaVideoTests
         Assert.Equal(0.74f, shape.Width, 3);
         shape.Add(0.9f);
         Assert.Equal(0.9f, shape.Width, 3);
+    }
+
+    [Fact]
+    public void A_title_card_says_nothing_of_the_picture_shape()
+    {
+        var shape = new CinemaVideo.Shape(6);
+        // a film first seen on its end card: a line of lit letters on black, 40 % wide and 10 % tall
+        for (int i = 0; i < 20; i++) shape.Add(0.4f, 0.1f);
+        Assert.Equal((1f, 1f), (shape.Width, shape.Height));
+        // a 16:9 picture fitted at the frame's full height, and one with bars burned in both ways, do count
+        for (int i = 0; i < 9; i++) shape.Add(0.74f, 1f);
+        Assert.Equal(0.74f, shape.Width, 3);
+        var burned = new CinemaVideo.Shape(6);
+        for (int i = 0; i < 9; i++) burned.Add(0.74f, 0.74f);
+        Assert.Equal((0.74f, 0.74f), (burned.Width, burned.Height));
     }
 
     [Fact]

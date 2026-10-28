@@ -797,6 +797,12 @@ public static partial class HumanMeshBuilder
     public static Vector3[] PoseJoints(HumanPose pose) => JointsOf(RigFor(pose));
 
     /// <summary>
+    /// The walking gait's joints at <paramref name="speed"/> m/s and <paramref name="phase"/> of its cycle (two steps),
+    /// author space: for a figure whose arms are set over its walk (a decoration bowler's approach, #1334).
+    /// </summary>
+    public static Vector3[] StrideJoints(float speed, float phase) => JointsOf(GaitRig(speed, phase));
+
+    /// <summary>
     /// A figure drawn from free joint points (a ragdoll): <paramref name="joints"/> in
     /// <see cref="Joint"/> order, author space. Bone lengths are whatever the points say.
     /// </summary>
@@ -1439,6 +1445,10 @@ public static partial class HumanMeshBuilder
         AuraSixSeven, AuraLasso, AuraCutTheRope,
         // #914
         AuraLeadRival, AuraShush, AuraBow, AuraLaugh,
+        // #1269: Schwingen (HumanMeshBuilder.Schwing.cs); past FightStand, so no groove either
+        SchwingGrip, SchwingLeanIn, SchwingLeanOut, SchwingLeanLeft, SchwingLeanRight, SchwingBrace, SchwingDown,
+        SchwingGroundTop, SchwingGroundBottom, SchwingStumble, SchwingBrush, SchwingDusted,
+        SchwingKurz, SchwingUebersprung, SchwingHueften, SchwingBrienzer, SchwingGammen, SchwingWyberhaken,
     }
 
     /// <summary>
@@ -1569,6 +1579,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= SchwingMoves) return SchwingResolve(index - SchwingMoves);
         if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
@@ -1993,6 +2004,7 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case >= DanceMove.SchwingGrip: EvalSchwing(move, t, mv, ref ch); break;
             case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }

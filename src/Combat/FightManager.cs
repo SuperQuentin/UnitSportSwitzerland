@@ -37,6 +37,9 @@ public partial class FightManager : Node
     /// <summary>Server: the aura battles (#907), so nobody is in a fight and a battle at once.</summary>
     public AuraManager? Aura { get; set; }
 
+    /// <summary>Server: the Schwingen bouts (#1269), so nobody is in a fight and a bout at once.</summary>
+    public SchwingManager? Schwing { get; set; }
+
     /// <summary>Server: whether <paramref name="peer"/> is in a fight.</summary>
     public bool InMatch(long peer) => _fightOf.ContainsKey(peer);
 
@@ -171,6 +174,7 @@ public partial class FightManager : Node
     private string? Refusal(long a, long b)
     {
         if (Aura?.InMatch(a) == true || Aura?.InMatch(b) == true) return "[fight] Not during an aura battle.";
+        if (Schwing?.InMatch(a) == true || Schwing?.InMatch(b) == true) return "[fight] Not during a Schwingen bout.";
         var pa = Body(a);
         var pb = Body(b);
         if (pa == null || pb == null) return "[fight] That player is not here.";

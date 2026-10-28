@@ -222,6 +222,13 @@ public enum ItemId
     WhiteWine = 480,
     /// <summary>Kirsch, a shot a drink: the shared pot's <c>Hearty</c>.</summary>
     Kirsch = 481,
+    // ---- alcohol (#1271, docs/notes/adventure/alcohol.md) ----
+    /// <summary>An electronic breathalyzer, reusable: blow for 5 s and its screen reads the per mille and mg/L (<see cref="ItemUse.Breath"/>); held out to a player, it tests them if they agree.</summary>
+    Breathalyzer = 486,
+    /// <summary>A single-use crystal-tube test: one blow, green (under 0.5 per mille) or amber (over), then used up (<see cref="ItemUse.Breath"/>).</summary>
+    BreathTestSingle = 487,
+    /// <summary>An alcohol-free beer (0.5 %), the driver's choice: drunk like a beer.</summary>
+    BeerAlcoholFree = 488,
     /// <summary>Garments (Avatar.Garments, <c>GarmentStyle.Together</c>): a mentored newcomer's first summit, glacier, ride and build.</summary>
     ErstbesteigungCap = 482, GletscherScarf = 483, MitfahrerGloves = 484, ZimmermannCap = 485,
     /// <summary>Garments: the mentor's own for each milestone, and the tenth punch card's felt hat.</summary>
@@ -247,7 +254,13 @@ public enum ItemId
     /// <summary>Garments (Avatar.Garments), earned by playing: the gnome's Zipfelmütze (10 games) and the Treichel cowbell (30 rounds survived).</summary>
     Zipfelmuetze = 466, Treichel = 467,
 
+    // ---- bowling (#1323, docs/notes/terrain/bowling-play.md) ----
+    /// <summary>Hire shoes (Avatar.Garments): worn while signed in at a bowling centre's shoe counter, never owned.</summary>
+    BowlingShoes = 540,
+
     // ---- Festivals (#1269, docs/notes/occasions/festival-framework.md); 500-539 are this plan's (adventure-phase3) ----
+    /// <summary>The wrestler's jute over-trousers (#1269 Schwingen): worn in the Bottom slot, from the Älplerfest's chests and stalls.</summary>
+    Schwingerhosen = 500,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }
@@ -311,4 +324,6 @@ public enum ItemUse
     Gust,
     /// <summary>A Versteckis round tool (#1268): Use asks the game's server for it (tag, sniff, decoy, sprint, moo, the Disguise radial).</summary>
     Round,
+    /// <summary>Use blows into it for 5 s (#1271): the electronic breathalyzer is kept, the single-use test is used up.</summary>
+    Breath,
 }
