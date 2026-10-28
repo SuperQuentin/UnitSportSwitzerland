@@ -15,12 +15,18 @@ public interface ICinemaFeed : IDisposable
     string Link { get; }
     double T0 { get; }
 
+    /// <summary>2D, or a 3D film whose <see cref="Picture"/> holds both eyes side by side (phase 6).</summary>
+    CinemaVideo.Stereo Stereo { get; }
+
     /// <summary>What it is doing, for the panel ("" once it plays), or why it cannot.</summary>
     string Status { get; }
     bool Failed { get; }
     bool Ended { get; }
 
-    /// <summary>The frame shown now (<see cref="CinemaVideo.Width"/> x <see cref="CinemaVideo.Height"/>, RGBA8), null before the first.</summary>
+    /// <summary>
+    /// The frame shown now (<see cref="CinemaVideo.Width"/> x <see cref="CinemaVideo.Height"/>, RGBA8; twice as wide for a 3D
+    /// film, <see cref="CinemaVideo.PackedSize"/>), null before the first.
+    /// </summary>
     Image? Picture { get; }
     Color Tint { get; }
 

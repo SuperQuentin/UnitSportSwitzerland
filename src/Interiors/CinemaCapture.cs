@@ -31,7 +31,8 @@ public sealed class CinemaFileSource : ILiveSource
 {
     private readonly CinemaRelayTap _tap;
 
-    public CinemaFileSource(string path, double t0, CinemaVideo.LiveQuality quality) => _tap = new CinemaRelayTap(path, t0, quality);
+    public CinemaFileSource(string path, double t0, CinemaVideo.LiveQuality quality, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono) =>
+        _tap = new CinemaRelayTap(path, t0, quality, stereo);
 
     public string Status => _tap.Status;
     public bool Failed => _tap.Failed;

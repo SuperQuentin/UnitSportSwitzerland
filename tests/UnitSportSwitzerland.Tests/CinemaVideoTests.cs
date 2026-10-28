@@ -84,6 +84,29 @@ public class CinemaVideoTests
         Assert.True(label.Length <= 80);
     }
 
+    [Theory]
+    [InlineData("https://mirrors.mit.edu/kodi/demo-files/BBB/bbb_sunflower_1080p_60fps_stereo_abl.mp4", CinemaVideo.Stereo.TopBottom)]
+    [InlineData("https://example.org/films/Avatar.2009.HSBS.1080p.mkv", CinemaVideo.Stereo.SideBySide)]
+    [InlineData(@"D:\films\trip [3D] (SBS).mp4", CinemaVideo.Stereo.SideBySide)]
+    [InlineData("C:/films/concert_HOU.mp4", CinemaVideo.Stereo.TopBottom)]
+    [InlineData("https://www.youtube.com/watch?v=aqz-KE-bpKQ", CinemaVideo.Stereo.Mono)]
+    [InlineData("https://example.org/sbsx/lr-kit.mp4", CinemaVideo.Stereo.SideBySide)]
+    public void Guess_reads_a_3D_film_from_its_name(string link, CinemaVideo.Stereo expected) =>
+        Assert.Equal(expected, CinemaVideo.Guess(link));
+
+    [Fact]
+    public void A_3D_film_decodes_both_eyes_side_by_side()
+    {
+        Assert.Equal((854, 358), CinemaVideo.PackedSize(CinemaVideo.Stereo.Mono, 854, 358));
+        Assert.Equal((1708, 358), CinemaVideo.PackedSize(CinemaVideo.Stereo.TopBottom, 854, 358));
+        Assert.DoesNotContain("hstack", CinemaVideo.StereoFit(CinemaVideo.Stereo.Mono, 854, 358));
+        string sbs = CinemaVideo.StereoFit(CinemaVideo.Stereo.SideBySide, 854, 358);
+        Assert.Contains("crop=iw/2:ih:0:0", sbs);
+        Assert.Contains("crop=iw/2:ih:iw/2:0", sbs);
+        Assert.EndsWith("hstack", sbs);
+        Assert.Contains("crop=iw:ih/2:0:ih/2", CinemaVideo.StereoFit(CinemaVideo.Stereo.TopBottom, 854, 358));
+    }
+
     [Fact]
     public void A_restart_leads_further_but_not_forever()
     {

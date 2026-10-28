@@ -26,7 +26,9 @@ namespace UnitSport.Interiors;
 /// </summary>
 public sealed class CinemaVideoStream : ICinemaFeed
 {
-    public const int FrameBytes = CinemaVideo.Width * CinemaVideo.Height * 4;
+    /// <summary>A frame's size: the screen's, twice as wide for a 3D film (both eyes side by side).</summary>
+    private readonly int _width, _height, _frameBytes;
+    public CinemaVideo.Stereo Stereo { get; }
 
     /// <summary>Frames decoded ahead at most (12 MB); the sound ahead at most, s, of a ring twice that.</summary>
     private const int Ring = 10;
@@ -50,7 +52,7 @@ public sealed class CinemaVideoStream : ICinemaFeed
     /// <summary>Past its end: the hall goes back to its slides.</summary>
     public bool Ended { get; private set; }
 
-    /// <summary>The frame shown now (RGBA, <see cref="FrameBytes"/>), null before the first; its mean colour; its index.</summary>
+    /// <summary>The frame shown now (RGBA), null before the first; its mean colour; its index.</summary>
     public byte[]? Current { get; private set; }
 
     /// <summary>The frame shown now as an image (one, refilled on change): what the screen uploads.</summary>
@@ -83,10 +85,13 @@ public sealed class CinemaVideoStream : ICinemaFeed
     private long _lastIndex = -1;
     private volatile bool _videoDone;
 
-    public CinemaVideoStream(string link, double t0)
+    public CinemaVideoStream(string link, double t0, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
         Link = link;
         T0 = t0;
+        Stereo = stereo;
+        (_width, _height) = CinemaVideo.PackedSize(stereo, CinemaVideo.Width, CinemaVideo.Height);
+        _frameBytes = _width * _height * 4;
     }
 
     /// <summary>
@@ -130,8 +135,8 @@ public sealed class CinemaVideoStream : ICinemaFeed
             if (changed)
             {
                 Status = "";
-                Picture ??= Image.CreateEmpty(CinemaVideo.Width, CinemaVideo.Height, false, Image.Format.Rgba8);
-                Picture.SetData(CinemaVideo.Width, CinemaVideo.Height, false, Image.Format.Rgba8, Current!);
+                Picture ??= Image.CreateEmpty(_width, _height, false, Image.Format.Rgba8);
+                Picture.SetData(_width, _height, false, Image.Format.Rgba8, Current!);
             }
             // fallen behind: the next frame it has (or would have) is long past due
             long next = _frames.TryPeek(out var n) ? n.Index : _lastIndex + 1;
@@ -218,8 +223,7 @@ public sealed class CinemaVideoStream : ICinemaFeed
         _start = Live ? double.NaN : at;
         _soundStart = Live ? double.NaN : at;
         _restartAfter = position + lead + CinemaVideo.FallBehind;
-        string size = $"scale={CinemaVideo.Width}:{CinemaVideo.Height}:force_original_aspect_ratio=decrease,"
-            + $"pad={CinemaVideo.Width}:{CinemaVideo.Height}:(ow-iw)/2:(oh-ih)/2,fps={CinemaVideo.Fps}";
+        string size = $"{CinemaVideo.StereoFit(Stereo, CinemaVideo.Width, CinemaVideo.Height)},fps={CinemaVideo.Fps}";
         _video = CinemaLookup.Ffmpeg(CinemaLookup.Input(_videoUrl, at, Live).Concat(new[] { "-an", "-sn", "-vf", size, "-f", "rawvideo", "-pix_fmt", "rgba", "-" }),
             info: true, line => Said(line, true));
         _audio = CinemaLookup.Ffmpeg(CinemaLookup.Input(_audioUrl, at, Live).Concat(new[] { "-vn", "-sn", "-ac", "2", "-ar", CinemaVideo.AudioRate.ToString(), "-f", "s16le", "-" }),
@@ -260,15 +264,15 @@ public sealed class CinemaVideoStream : ICinemaFeed
             {
                 room.Wait();
                 if (_disposed || gen != _generation) break;
-                if (!_free.TryTake(out var pixels)) pixels = new byte[FrameBytes];
+                if (!_free.TryTake(out var pixels)) pixels = new byte[_frameBytes];
                 int got = 0;
-                while (got < FrameBytes)
+                while (got < _frameBytes)
                 {
-                    int n = stdout.Read(pixels, got, FrameBytes - got);
+                    int n = stdout.Read(pixels, got, _frameBytes - got);
                     if (n <= 0) break;
                     got += n;
                 }
-                if (got < FrameBytes) { _free.Add(pixels); break; }
+                if (got < _frameBytes) { _free.Add(pixels); break; }
                 if (gen != _generation) { _free.Add(pixels); break; }
                 _frames.Enqueue(new Frame(index, pixels, MeanColour(pixels)));
                 _lastIndex = index++;
@@ -313,13 +317,14 @@ public sealed class CinemaVideoStream : ICinemaFeed
     }
 
     /// <summary>A frame's mean colour, from a sparse grid of its pixels: what the beam, the glow and the hall's wash take.</summary>
-    private static Color MeanColour(byte[] p)
+    private Color MeanColour(byte[] p)
     {
         long r = 0, g = 0, b = 0, count = 0;
-        for (int y = 8; y < CinemaVideo.Height; y += 24)
+        // the left eye's half of a 3D film: the same colour as the right
+        for (int y = 8; y < _height; y += 24)
             for (int x = 8; x < CinemaVideo.Width; x += 24)
             {
-                int at = (y * CinemaVideo.Width + x) * 4;
+                int at = (y * _width + x) * 4;
                 r += p[at]; g += p[at + 1]; b += p[at + 2];
                 count++;
             }

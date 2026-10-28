@@ -36,6 +36,8 @@ public partial class CinemaPanelUi : CanvasLayer
     private Button _paste = null!;
     /// <summary>The hall's video through the server for everyone (#1298 phase 2): for a link some players cannot reach.</summary>
     private CheckBox _relay = null!;
+    private OptionButton _stereo = null!;
+    private CheckBox _glasses = null!;
     private VBoxContainer _recent = null!;
     private UnitSport.Player.FootPlayer? _me;
     private string _plan = "";
@@ -132,9 +134,40 @@ public partial class CinemaPanelUi : CanvasLayer
         {
             if (CinemaBooths.Instance is not { } booths) return;
             var (playing, _) = booths.VideoOf(_plan, _hall);
-            if (playing.Length > 0 && booths.RelayOf(_plan, _hall) != on) booths.AskVideo(_plan, _hall, playing, on);
+            if (playing.Length > 0 && booths.RelayOf(_plan, _hall) != on) booths.AskVideo(_plan, _hall, playing, on, booths.StereoOf(_plan, _hall));
         };
-        box.AddChild(_relay);
+        // 2D or a 3D film's layout (#1298 phase 6): guessed from a link's name, the same for a file
+        var how = UiKit.HBox(10);
+        box.AddChild(how);
+        _stereo = new OptionButton { FocusMode = Control.FocusModeEnum.All };
+        _stereo.AddItem("2D", (int)CinemaVideo.Stereo.Mono);
+        _stereo.AddItem("3D side by side", (int)CinemaVideo.Stereo.SideBySide);
+        _stereo.AddItem("3D top and bottom", (int)CinemaVideo.Stereo.TopBottom);
+        _stereo.TooltipText = "A 3D film's two pictures, left and right or one above the other. In a headset each eye sees its own; on a screen, red-cyan glasses.";
+        _stereo.ItemSelected += _ =>
+        {
+            if (CinemaBooths.Instance is not { } booths) return;
+            var (playing, _) = booths.VideoOf(_plan, _hall);
+            var want = (CinemaVideo.Stereo)_stereo.GetSelectedId();
+            if (playing.Length > 0 && !CinemaVideo.IsLive(playing) && booths.StereoOf(_plan, _hall) != want)
+                booths.AskVideo(_plan, _hall, playing, booths.RelayOf(_plan, _hall), want);
+        };
+        how.AddChild(_stereo);
+        how.AddChild(_relay);
+        _glasses = new CheckBox
+        {
+            Text = "Red-cyan glasses",
+            FocusMode = Control.FocusModeEnum.All,
+            ButtonPressed = InteriorNode.Anaglyph,
+            TooltipText = "Off: the left picture alone, for watching a 3D film without glasses. A headset shows each eye its own.",
+            Visible = false,
+        };
+        _glasses.Toggled += on => InteriorNode.Anaglyph = on;
+        how.AddChild(_glasses);
+        _link.TextChanged += text =>
+        {
+            if (CinemaVideo.Guess(text.Trim()) is var g && g != CinemaVideo.Stereo.Mono) _stereo.Select((int)g);
+        };
         _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
         _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _status.Visible = false;
@@ -199,7 +232,8 @@ public partial class CinemaPanelUi : CanvasLayer
                 if (CinemaBooths.Instance is not { } booths) return;
                 var (lights, _) = booths.StateOf(_plan, _hall);
                 booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, true));
-                booths.StartFile(_plan, _hall, path, (CinemaVideo.LiveQuality)_quality.GetSelectedId());
+                if (CinemaVideo.Guess(path) is var g && g != CinemaVideo.Stereo.Mono) _stereo.Select((int)g);
+                booths.StartFile(_plan, _hall, path, (CinemaVideo.LiveQuality)_quality.GetSelectedId(), (CinemaVideo.Stereo)_stereo.GetSelectedId());
                 Status = "Starting the share…";
             };
             AddChild(_picker);
@@ -327,6 +361,7 @@ public partial class CinemaPanelUi : CanvasLayer
     {
         string link = _link.Text.Trim();
         if (!CinemaVideo.Allowed(link)) { Status = "That is not a web link (https://…)."; return; }
+        if (CinemaVideo.Guess(link) is var guess && guess != CinemaVideo.Stereo.Mono) _stereo.Select((int)guess);
         Remember(link);
         Ask(screen: true, link);
         _link.Text = "";
@@ -338,7 +373,7 @@ public partial class CinemaPanelUi : CanvasLayer
         if (CinemaBooths.Instance is not { } booths) return;
         var (lights, _) = booths.StateOf(_plan, _hall);
         booths.Ask(_plan, _hall, CinemaBooths.Pack(lights, screen));
-        booths.AskVideo(_plan, _hall, screen ? link : "", _relay.ButtonPressed);
+        booths.AskVideo(_plan, _hall, screen ? link : "", _relay.ButtonPressed, (CinemaVideo.Stereo)_stereo.GetSelectedId());
         Status = link.Length > 0 ? "Starting…" : "";
     }
 
@@ -372,9 +407,14 @@ public partial class CinemaPanelUi : CanvasLayer
         var (link, _) = booths.VideoOf(_plan, _hall);
         var stream = booths.StreamOf(_plan, _hall);
         if (link.Length > 0) _relay.SetPressedNoSignal(booths.RelayOf(_plan, _hall));
+        var layout = booths.StereoOf(_plan, _hall);
+        if (link.Length > 0) _stereo.Select((int)layout);
+        // the glasses are this viewer's: offered while a 3D film plays on a flat screen
+        _glasses.Visible = layout != CinemaVideo.Stereo.Mono && !XR.XrSession.Active;
         string now = !screen ? "The screen is off"
             : link.Length == 0 ? "Showing the cat slides"
             : (CinemaVideo.IsLive(link) ? $"Live: {CinemaVideo.Title(link)}" : $"Playing {CinemaVideo.Title(link)}")
+              + (booths.StereoOf(_plan, _hall) != CinemaVideo.Stereo.Mono ? "  ·  3D" : "")
               + (stream is CinemaRelayFeed && !CinemaVideo.IsLive(link) ? "  ·  through the server" : "")
               + (stream is { Status.Length: > 0 } s ? $"  ·  {s.Status}" : "");
         bool sharing = booths.SharingIn(_plan, _hall);

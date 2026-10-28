@@ -430,7 +430,8 @@ public partial class InteriorNode
         for (int i = 0; i < _screens.Count; i++)
         {
             var s = _screens[i];
-            bool on = On(s), thrown = on && _realShow && i == _projecting;
+            // a 3D film keeps its pasted picture: a light carries one picture, not two eyes (#1298 phase 6)
+            bool on = On(s), thrown = on && _realShow && i == _projecting && !(_videoIs3d && s.No == _videoHall);
             s.Picture.Visible = on && !thrown;
             if (s.Lit != null) s.Lit.Visible = thrown;
             if (s.Projector != null) s.Projector.Visible = thrown;

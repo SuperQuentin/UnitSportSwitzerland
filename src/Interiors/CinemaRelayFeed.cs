@@ -26,6 +26,8 @@ public sealed class CinemaRelayFeed : ICinemaFeed
 
     public string Link { get; }
     public double T0 { get; }
+    public CinemaVideo.Stereo Stereo { get; }
+    private readonly int _width, _height;
     public string Status { get; private set; } = "Through the server…";
     public bool Failed { get; private set; }
     public bool Ended { get; private set; }
@@ -47,10 +49,12 @@ public sealed class CinemaRelayFeed : ICinemaFeed
     private readonly long[] _chunkOf = new long[Slots];
     private bool _anySound;
 
-    public CinemaRelayFeed(string link, double t0)
+    public CinemaRelayFeed(string link, double t0, CinemaVideo.Stereo stereo = CinemaVideo.Stereo.Mono)
     {
         Link = link;
         T0 = t0;
+        Stereo = stereo;
+        (_width, _height) = CinemaVideo.PackedSize(stereo, CinemaVideo.Width, CinemaVideo.Height);
         Array.Fill(_chunkOf, -1);
         new Thread(Decode) { IsBackground = true, Name = "cinema-relay-jpeg" }.Start();
     }
@@ -104,8 +108,8 @@ public sealed class CinemaRelayFeed : ICinemaFeed
                 if (img.LoadJpgFromBuffer(jpeg) != Error.Ok) { _free.Add(img); continue; }
                 var tint = MeanColour(img);
                 if (img.GetFormat() != Image.Format.Rgba8) img.Convert(Image.Format.Rgba8);
-                if (img.GetWidth() != CinemaVideo.Width || img.GetHeight() != CinemaVideo.Height)
-                    img.Resize(CinemaVideo.Width, CinemaVideo.Height, Image.Interpolation.Bilinear);
+                if (img.GetWidth() != _width || img.GetHeight() != _height)
+                    img.Resize(_width, _height, Image.Interpolation.Bilinear);
                 _decoded.Enqueue((time, img, tint));
             }
         }

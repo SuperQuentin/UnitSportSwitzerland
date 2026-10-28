@@ -75,7 +75,7 @@ public partial class CinemaVideoShot : Node3D
                 booths.StartSharing(_plan, 0, source, CinemaVideo.LiveQuality.High, f.PcSound, null);
             }).CallDeferred());
         }
-        else booths.SetVideoForShot(_plan, 0, _link, _t0);
+        else booths.SetVideoForShot(_plan, 0, _link, _t0, CinemaVideo.Guess(_link));
         booths.ProbeWatch = (_plan, 0);
         booths.ProbeNode = _node;
         GD.Print($"[cinemavideo] {_link} on hall {CinemaBooths.HallAt(layout, screen.X, screen.Z) + 1}");

@@ -74,6 +74,54 @@ public static class CinemaVideo
     /// </summary>
     public const double LiveDelay = 1.5;
 
+    /// <summary>
+    /// A stereo film's layout (#1298 phase 6), per hall: 2D, the two eyes side by side (left eye left), or one above the
+    /// other (left eye on top). Each client decodes either into one picture with both eyes side by side, each fitted to the
+    /// screen on its own (<see cref="StereoFit"/>), which the screen's shader shows per eye or as anaglyph.
+    /// </summary>
+    public enum Stereo : byte { Mono = 0, SideBySide = 1, TopBottom = 2 }
+
+    /// <summary>The layout a link's name suggests (SBS, HSBS, LR, 3D; TB, OU, HOU, ABL as Blender's 3D releases), for the panel's default: 2D otherwise.</summary>
+    public static Stereo Guess(string link)
+    {
+        string name = (Uri.TryCreate(link, UriKind.Absolute, out var uri) && uri.Scheme.StartsWith("http", StringComparison.Ordinal)
+            ? Uri.UnescapeDataString(uri.AbsolutePath) : Path.GetFileName(link)).ToUpperInvariant();
+        var words = name.Split(new[] { '.', '_', '-', ' ', '/', '(', ')', '[', ']' }, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Any(w => w is "TB" or "OU" or "HOU" or "HTB" or "TAB" or "ABL" or "OVERUNDER")) return Stereo.TopBottom;
+        if (words.Any(w => w is "SBS" or "SBSL" or "HSBS" or "FSBS" or "LR" or "3D" or "SIDEBYSIDE")) return Stereo.SideBySide;
+        return Stereo.Mono;
+    }
+
+    /// <summary>The picture a client decodes to for a layout: twice as wide for a stereo film (both eyes side by side).</summary>
+    public static (int Width, int Height) PackedSize(Stereo stereo, int width, int height) =>
+        stereo == Stereo.Mono ? (width, height) : (width * 2, height);
+
+    /// <summary>
+    /// ffmpeg's filter fitting a picture into <paramref name="width"/> x <paramref name="height"/> with black bars: for a stereo
+    /// film each eye cut out and fitted on its own, then the two side by side. A "half" layout (each eye squeezed into half
+    /// the frame, the common kind) is stretched back: an eye narrower than 1.2:1 side by side, or wider than 2.5:1 one above
+    /// the other, is doubled across or down; a full one (each eye its true shape) is kept.
+    /// </summary>
+    public static string StereoFit(Stereo stereo, int width, int height)
+    {
+        string fit = $"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1";
+        if (stereo == Stereo.Mono) return fit;
+        string left, right, unsqueeze;
+        if (stereo == Stereo.SideBySide)
+        {
+            left = "crop=iw/2:ih:0:0";
+            right = "crop=iw/2:ih:iw/2:0";
+            unsqueeze = "scale='if(lt(iw/ih,1.2),iw*2,iw)':ih";
+        }
+        else
+        {
+            left = "crop=iw:ih/2:0:0";
+            right = "crop=iw:ih/2:0:ih/2";
+            unsqueeze = "scale=iw:'if(gt(iw/ih,2.5),ih*2,ih)'";
+        }
+        return $"split[a][b];[a]{left},{unsqueeze},{fit}[l];[b]{right},{unsqueeze},{fit}[r];[l][r]hstack";
+    }
+
     /// <summary>The longest link the server takes.</summary>
     public const int MaxLink = 1000;
 

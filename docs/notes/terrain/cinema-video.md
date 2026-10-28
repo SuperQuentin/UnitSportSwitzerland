@@ -90,6 +90,20 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   planar floats, interleaved, freed with `recv_free_audio_v2`): the newest frame letterboxed and made a JPEG at the
   share's quality on a worker, the sound to the relay's mono, sent like any share. No PC sound on top (it would double).
   **Not yet run against a runtime** (none on the dev PC, Oct 28; the owner chose to test later).
+- **3D** (phase 6, the owner's: anaglyph on flat displays, each eye its own picture in VR): a hall's video carries a
+  `CinemaVideo.Stereo` (2D, side by side, top and bottom; protocol 62: `AskVideoRpc`, `AskLiveRpc`, `SetVideo`), picked in
+  the panel and guessed from a link's or a file's name (`Guess`: SBS, HSBS, LR, 3D; TB, OU, HOU, ABL as Blender's 3D Big
+  Buck Bunny). Every decoder (`CinemaVideoStream`, the relay's tap, a file share) packs both eyes side by side, each
+  fitted to the screen on its own (`StereoFit`: crop, a half layout unsqueezed when an eye is narrower than 1.2:1 or
+  wider than 2.5:1, letterbox, `hstack`), so a 3D picture is twice as wide (`PackedSize`). The pasted picture is then
+  `shaders/cinema_stereo.gdshader`: in a headset `VIEW_INDEX` picks each eye's half; on a flat display red-cyan anaglyph
+  with Dubois' matrices, or the left eye alone (**Red-cyan glasses** in the panel, the viewer's own, `user://cinema.cfg`).
+  The projector light, the beam and the port take the left eye (a second texture); a 3D hall is never thrown by the light
+  at High detail (one picture per light), it keeps its pasted screen. "Proper separation on supported displays" beyond VR:
+  Godot 4 has no quad-buffer stereo output, so a 3D TV or monitor would need the whole game rendered side by side, not
+  done. Tested: the 3D Big Buck Bunny (`mirrors.mit.edu/kodi/demo-files/BBB/bbb_sunflower_1080p_60fps_stereo_abl.mp4`;
+  the 30 fps abl file there is broken, missing atoms; the mirror delivers 10 s of the 60 fps one in 16 s, so it falls
+  behind and restarts: a slow mirror, not the decoder) and a synthetic top-and-bottom file through the relay (77 ms off).
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`
