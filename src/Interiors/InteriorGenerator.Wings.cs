@@ -55,9 +55,15 @@ public static partial class InteriorGenerator
     /// same <see cref="Below"/> under its <see cref="Above"/>; <see cref="Plan"/> fills the wing's own layout from its footprint (its main
     /// door, and every other door, the links to the next wings among them, as an extra) and cuts a doorway
     /// for each, or says no. <see cref="BackLanding"/>: a link on a wing's side meets its back landing's
-    /// corridor, which only flats run.
+    /// corridor, which only flats run. <see cref="Loose"/>: a wing too shallow for a stair may stay one
+    /// storey under the others' upper floors, and the main door goes to the nearest wing within
+    /// <see cref="LooseDoor"/> (the rooms grow out to the facade after, and its doorway to the door); flats keep
+    /// every wing the same storeys and a door on its wing's edge.
     /// </summary>
-    private sealed record WingPlanner(int Above, int Below, Func<InteriorLayout, Footprint, AptOptions, Random, bool> Plan, bool BackLanding);
+    private sealed record WingPlanner(int Above, int Below, Func<InteriorLayout, Footprint, AptOptions, Random, bool> Plan, bool BackLanding, bool Loose = false);
+
+    /// <summary>How far off its wing's edge the main door may stand in a <see cref="WingPlanner.Loose"/> plan (#1304).</summary>
+    private const float LooseDoor = 6f;
 
     /// <summary>The planner's door: the building's real outline if it has wings (#577), else the box.</summary>
     internal static bool TryApartments(InteriorLayout l, Footprint fp, Building b, BuildingKind kind, int above, BuildingType type, Random rng)
@@ -111,7 +117,7 @@ public static partial class InteriorGenerator
             // always: the plan's own fallback entrance names door 0, and a wing's main door may be another
             Entrances(sl, sub);
             return true;
-        }, BackLanding: false);
+        }, BackLanding: false, Loose: true);
         return TryWings(l, fp, site, rects, planner);
     }
 
@@ -236,7 +242,7 @@ public static partial class InteriorGenerator
             // slanted walls it stands: the wing's own wall facing the same way is its doorway
             bool lone = wings.Count == 1;
             // the garage door (#694) is on the facade's own wall, which a stepped facade can leave up to 4 m off the wing's simplified edge
-            float bestD = lone ? float.MaxValue : d.Vehicle && d.Link.Any ? 4.0f : 2.0f;
+            float bestD = lone ? float.MaxValue : d.Vehicle && d.Link.Any ? 4.0f : planner.Loose && d.Slot == fp.Door.Slot ? LooseDoor : 2.0f;
             foreach (var w in wings)
             {
                 var R = w.R;
@@ -406,11 +412,12 @@ public static partial class InteriorGenerator
             if (!planner.Plan(sl, sub, opts, new Random(StableHash(l.Key + "|wing" + w.Index)))) return Fail($"wing {w.Index} ({w.W:F1} x {w.D:F1}, front {w.Front}) does not plan");
             w.Sub = sl;
         }
+        if (planner.Loose) Even(wings);
         if (wings.Select(w => w.Sub.Floors.Count).Distinct().Count() != 1) return Fail("wings of different floor counts");
 
         // ---- merged into the building's frame ----------------------------------------------------
         l.Type = type;
-        l.Below = below;
+        l.Below = wings[0].Sub.Below;
         l.Floors.Clear();
         l.Lifts.Clear();
         l.InnerDoors.Clear();
@@ -467,6 +474,26 @@ public static partial class InteriorGenerator
         // a plan that does not hold together is dropped: the caller plans the box instead
         var errs = InteriorValidator.Validate(l);
         return errs.Count == 0 || Fail("invalid: " + string.Join("; ", errs.Take(3)));
+    }
+
+    /// <summary>
+    /// Wings of different storeys made the same count (#1304): a wing with fewer cellars or upper floors gets
+    /// empty floors there, its ground floor level with the others'. Its upper floors stay unplanned: no room,
+    /// no stair, nothing to reach, as the box's corners were before #1290.
+    /// </summary>
+    private static void Even(List<WingPlan> wings)
+    {
+        int below = wings.Max(w => w.Sub.Below), above = wings.Max(w => w.Sub.Floors.Count - w.Sub.Below);
+        foreach (var w in wings)
+        {
+            var s = w.Sub;
+            int low = below - s.Below;
+            for (int i = 0; i < low; i++) s.Floors.Insert(0, new FloorPlan());
+            foreach (var d in s.InnerDoors) d.Floor += low;
+            foreach (var lift in s.Lifts) { lift.Bottom += low; lift.Top += low; }
+            s.Below = below;
+            while (s.Floors.Count < below + above) s.Floors.Add(new FloorPlan());
+        }
     }
 
     /// <summary>One wing's plan, turned and moved into the building's frame, its rooms after those already there.</summary>
