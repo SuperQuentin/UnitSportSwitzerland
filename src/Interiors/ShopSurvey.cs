@@ -37,6 +37,11 @@ public static class ShopSurvey
         var perFront = new List<(float Run, int Shops, int Wells, int FrontDoors)>();
         var venueRows = new Dictionary<string, (int Venues, int Drawn, List<float> Widths, List<float> Areas)>();
         int mixed = 0, tiles = 0, multi = 0;
+        // #1292: every door of its own, whether it opens into its unit, and how its room's street wall compares with its front
+        int ownDoors = 0, ownVenue = 0, ownLocked = 0, ownWrongRoom = 0, glazed = 0, narrower = 0;
+        var shortBy = new List<float>();
+        double planMs = 0;
+        int plans = 0;
         foreach (var town in Towns)
         {
             var c = TileId.FromLv95(town.E, town.N);
@@ -58,9 +63,28 @@ public static class ShopSurvey
                         if (dining.Count == 0 && b.Kind != BuildingKind.Commercial) continue;
                         if (BuildingFootprint.Compute(tile, index, roads, null) is not { } fp || fp.Door.Width <= 0) continue;
                         InteriorLayout l;
+                        var watch = System.Diagnostics.Stopwatch.StartNew();
                         try { l = InteriorGenerator.Generate(tile, index, roads, null); }
                         catch (Exception ex) { GD.PrintErr($"[shopsurvey] {id} #{index}: {ex.Message}"); continue; }
+                        planMs += watch.Elapsed.TotalMilliseconds;
+                        plans++;
                         var ground = l.GroundFloor;
+                        foreach (var own in fp.Doors.Where(x => x.Unit))
+                        {
+                            ownDoors++;
+                            if (own.Venue > 0) ownVenue++;
+                            var e = l.EntranceOf(new DoorKey(fp.Key, own.Slot).ToString());
+                            int? ri = e == null ? null : InteriorGenerator.EntryRoom(ground.Rooms, e);
+                            if (ri is not int k) { ownLocked++; continue; }
+                            var room = ground.Rooms[k];
+                            bool right = own.Venue > 0 ? InteriorGenerator.DiningRoom(room.Type) : room.Type == RoomType.Shop;
+                            if (!right) ownWrongRoom++;
+                            if (!VenueFront.Has(own)) continue;
+                            glazed++;
+                            var entry = room.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Entry && o.Edge == null);
+                            float wall = entry == null ? 0 : entry.Side is Side.Front or Side.Back ? room.X1 - room.X0 : room.Z1 - room.Z0;
+                            if (entry != null && wall < own.Span - 1f) { narrower++; shortBy.Add(own.Span - wall); }
+                        }
                         float hd = l.Depth / 2;
                         if (l.Type == BuildingType.MixedUse)
                         {
@@ -114,6 +138,9 @@ public static class ShopSurvey
         head.Append(Hist(shopW, 2f, 20f));
         head.AppendLine($"  street front per shop unit: {Q(perFront.Where(p => p.Shops > 0).Select(p => p.Run / p.Shops).ToList())}");
         head.AppendLine($"  blocks with no shop on the street: {perFront.Count(p => p.Shops == 0)}");
+        head.AppendLine($"doors of their own (#1292): {ownDoors} ({ownVenue} a venue's); no doorway inside {ownLocked}; into a room not theirs {ownWrongRoom}");
+        head.AppendLine($"  glazed: {glazed}; the room's street wall more than 1 m narrower than its front: {narrower}, short by {Q(shortBy)}");
+        head.AppendLine($"  {(plans > 0 ? planMs / plans : 0):F0} ms a plan over {plans} plans");
         head.AppendLine($"dining venues: {venueRows.Values.Sum(r => r.Venues)} ({multi} buildings hold several)");
         head.AppendLine("  building (kind/plan)          venues  drawn  facade width of the guest room          area");
         foreach (var (k, r) in venueRows.OrderByDescending(v => v.Value.Venues))

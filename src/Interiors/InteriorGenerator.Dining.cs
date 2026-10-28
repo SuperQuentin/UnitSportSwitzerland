@@ -177,7 +177,7 @@ public static partial class InteriorGenerator
         or RoomType.Classroom or RoomType.Hall;
 
     /// <summary>The ground-floor room a street doorway is cut in, or null.</summary>
-    private static int? EntryRoom(List<RoomPlan> rooms, EntrancePlan e)
+    internal static int? EntryRoom(List<RoomPlan> rooms, EntrancePlan e)
     {
         for (int i = 0; i < rooms.Count; i++)
             foreach (var o in rooms[i].Openings)

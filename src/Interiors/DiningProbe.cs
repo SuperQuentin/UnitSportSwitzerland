@@ -51,6 +51,13 @@ public partial class DiningProbe : Node
         // gendered set needs more wall than its room has (the owner's call: compact washrooms where space is short)
         new("hall", 18, 24, 4.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "regional") },
             new[] { RoomType.Gaststube, RoomType.GastroKitchen }, new[] { FurnitureType.CookLine }, Toilets: ToiletSet.Pair),
+        // #1292: a venue in a school, in an office block, in a block of flats with one door, each by its own street door
+        new("school", 30, 14, 10, BuildingKind.Civic, new[] { new Spot(VenueType.Cafe, "") },
+            new[] { RoomType.CafeRoom }, new[] { FurnitureType.PastryCase }, Toilets: ToiletSet.Single),
+        new("office", 24, 14, 7, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "regional") },
+            new[] { RoomType.Gaststube }, new[] { FurnitureType.BarCounter }, Toilets: ToiletSet.Gendered, Accessible: true),
+        new("flats-one-door", 12, 11, 10, BuildingKind.Apartment, new[] { new Spot(VenueType.Bar, "") },
+            new[] { RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true, Toilets: ToiletSet.Shared),
         // a kiosk: no room big enough, the ordinary rules furnish it
         new("too-small", 3f, 3.5f, 3, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "") },
             Array.Empty<RoomType>(), Array.Empty<FurnitureType>()),
@@ -121,6 +128,28 @@ public partial class DiningProbe : Node
         }
         if (c.FlatsAbove)
             Check(l.Floors.Skip(l.Below + 1).Any(f => f.Rooms.Any(r => r.Type == RoomType.Living)), $"{what}: flats above");
+
+        // #1292: each venue straight in from a street door of its own into its guest room, its windows at the front's bays
+        var fp = BuildingFootprint.Compute(tile, 0, null, null)!;
+        for (int i = 0; i < c.Venues.Length; i++)
+        {
+            var door = fp.Doors.FirstOrDefault(d => d.Venue == i + 1);
+            if (door.Width <= 0 || !door.Unit) { Check(false, $"{what}: venue {i} has a door of its own"); continue; }
+            var e = l.EntranceOf(new DoorKey(fp.Key, door.Slot).ToString());
+            int? ri = e == null ? null : InteriorGenerator.EntryRoom(ground, e);
+            Check(ri is int k && InteriorGenerator.DiningRoom(ground[k].Type),
+                $"{what}: venue {i}'s door (slot {door.Slot}) opens into its guest room ({(ri is int k2 ? ground[k2].Type.ToString() : "nothing")})");
+            if (ri is not int gi || !VenueFront.Has(door)) continue;
+            var g = ground[gi];
+            var entry = g.Openings.First(o => o.Kind == OpeningKind.Entry);
+            var windows = g.Openings.Where(o => o.Kind == OpeningKind.Window && o.Side == entry.Side).ToList();
+            var o2 = new Vector2(door.Outward.X, door.Outward.Z).Normalized();
+            var foot = new Vector2(door.Position.X, door.Position.Z) - fp.Center;
+            bool alongX = entry.Side is Side.Front or Side.Back;
+            var bays = VenueFront.Bays(door).Select(b => (foot + new Vector2(o2.Y, -o2.X) * b.Center) is var q ? (alongX ? q.Dot(fp.AxisU) : q.Dot(fp.AxisV)) : 0).ToList();
+            Check(windows.Count > 0 && windows.All(w => bays.Any(b => Math.Abs(b - w.Center) < 0.05f) && Math.Abs(w.Bottom - VenueFront.Sill) < 0.01f),
+                $"{what}: venue {i}'s windows on its front wall stand at the front's bays ({windows.Count} of {bays.Count} bays, front {door.Span:F1} m)");
+        }
 
         var mesh = InteriorMeshBuilder.Build(l);
         Check(mesh.Vertices.Length > 0 && mesh.Collision.Length > 0, $"{what}: meshes ({mesh.Vertices.Length} vertices) with collision");

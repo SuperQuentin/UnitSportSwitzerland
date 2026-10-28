@@ -123,6 +123,7 @@ public static partial class InteriorGenerator
             // a room cut into pieces is furnished once, in its biggest piece
             foreach (var (piece, _) in extra) piece.Type = RoomType.Corridor;
             DiningUnits(layout, fp, dining);
+            FrontWindows(layout, fp);
             Furnish(layout, rng);
             foreach (var (piece, t) in extra) piece.Type = t;
             return layout;
@@ -182,9 +183,49 @@ public static partial class InteriorGenerator
         // (a carved room keeps a rectangle), before the furniture stands in them
         if (outline != null) FitOutline(layout, outline);
         _onCore = onCore;
+        FrontWindows(layout, fp);
 
         Furnish(layout, rng);
         return layout;
+    }
+
+    /// <summary>
+    /// The room behind a glazed front (#1292, <see cref="VenueFront"/>) takes its windows on that wall from the front:
+    /// one per bay, at the bay's place, sill and top, so inside and outside line up (#60's way: the plan follows the
+    /// facade). A door the plan opens on a shaped room's angled edge keeps that room's own windows.
+    /// </summary>
+    private static void FrontWindows(InteriorLayout l, Footprint fp)
+    {
+        var rooms = l.GroundFloor.Rooms;
+        foreach (var d in fp.Doors)
+        {
+            if (!VenueFront.Has(d) || l.EntranceOf(new DoorKey(fp.Key, d.Slot).ToString()) is not { Level: 0 } e) continue;
+            if (EntryRoom(rooms, e) is not int ri) continue;
+            var r = rooms[ri];
+            var entry = r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Entry && o.Edge == null
+                && WallPoint(r, o.Side, o.Center) is var (x, z) && Math.Abs(x - e.X) < 0.05f && Math.Abs(z - e.Z) < 0.05f);
+            if (entry == null) continue;
+            var side = entry.Side;
+            bool alongX = side is Side.Front or Side.Back;
+            float lo = alongX ? r.X0 : r.Z0, hi = alongX ? r.X1 : r.Z1;
+            float top = Math.Min(d.FrontTop, l.ClearOf(r) - 0.15f);
+            if (top - VenueFront.Sill < 0.6f) continue;
+            // the wall along the door's frame: +X of the frame, into the plan's frame
+            var o = new Godot.Vector2(d.Outward.X, d.Outward.Z).Normalized();
+            var along = new Godot.Vector2(o.Y, -o.X);
+            var foot = new Godot.Vector2(d.Position.X, d.Position.Z) - fp.Center;
+            r.Openings.RemoveAll(w => w.Kind == OpeningKind.Window && w.Side == side && w.Edge == null);
+            foreach (var (c, w) in VenueFront.Bays(d))
+            {
+                var p = foot + along * c;
+                float at = alongX ? p.Dot(fp.AxisU) : p.Dot(fp.AxisV);
+                float width = w - 0.1f;
+                if (at - width / 2 < lo + 0.1f || at + width / 2 > hi - 0.1f) continue;
+                // never over the doorway or another door in that wall
+                if (r.Openings.Any(x => x.Kind != OpeningKind.Window && x.Side == side && Math.Abs(x.Center - at) < (x.Width + width) / 2 + 0.02f)) continue;
+                r.Openings.Add(new OpeningPlan { Side = side, Center = at, Width = width, Bottom = VenueFront.Sill, Top = top, Kind = OpeningKind.Window });
+            }
+        }
     }
 
     /// <summary>

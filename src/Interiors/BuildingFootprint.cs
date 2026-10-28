@@ -945,10 +945,11 @@ public static class BuildingFootprint
                 float half = Math.Min(want, c.S1 - c.S0 - 0.6f) / 2;
                 float s0 = Mathf.Clamp(t.Dot(p), c.S0 + half + 0.3f, Math.Max(c.S0 + half + 0.3f, c.S1 - half - 0.3f));
                 DoorSpot? d = null;
-                int slides = 2 * (int)MathF.Ceiling((c.S1 - c.S0) / VenueFront.Bay);
+                // a quarter metre at a time either way, nearest first, over the whole run
+                int slides = 2 * (int)MathF.Ceiling((c.S1 - c.S0) / SlideStep);
                 for (int k = 0; k <= slides && d == null; k++)
                 {
-                    float s = s0 + (k % 2 == 1 ? 1 : -1) * ((k + 1) / 2) * VenueFront.Bay;
+                    float s = s0 + (k % 2 == 1 ? 1 : -1) * ((k + 1) / 2) * SlideStep;
                     d = At(c, s, want);
                 }
                 if (d is not { } door) continue;
@@ -958,6 +959,9 @@ public static class BuildingFootprint
         }
         return extra;
     }
+
+    /// <summary>How far a venue's door slides at a time along its wall to clear the doors already there, m.</summary>
+    private const float SlideStep = 0.25f;
 
     /// <summary>How much nearer than the street front another wall must be to a venue's point to take its door, m.</summary>
     private const float StreetPull = 4f;
