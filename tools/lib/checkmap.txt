@@ -1043,3 +1043,9 @@ src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --gi
 src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh
 tools/errandnetcheck.sh  net  tools/errandnetcheck.sh
 src/Adventure/Errands/ErrandService net tools/errandnetcheck.sh
+
+# #1269 the alphorn and yodel game: the offline check (a four-voice song, harmony, pay, forged and early songs refused, the valley echo) and the two-client check
+src/Occasions/Festivals/Horn/   quick  --hornscheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Horn   net  tools/hornnetcheck.sh
+src/Occasions/Festivals/Horn/   net    tools/hornnetcheck.sh
+tools/hornnetcheck.sh           net    tools/hornnetcheck.sh

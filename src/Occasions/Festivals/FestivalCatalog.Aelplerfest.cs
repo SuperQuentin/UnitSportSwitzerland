@@ -30,9 +30,9 @@ public static partial class FestivalCatalog
             new FestivalSite("Schwägalp", 2740500, 1232900, 140),
             new FestivalSite("Schwarzsee", 2588600, 1169400, 140),
         ],
-        [new FestivalGame(FahneGame, "Fahnenschwingen", 100), new FestivalGame(SchwingGame, "Schwingen", 120)],
+        [new FestivalGame(FahneGame, "Fahnenschwingen", 100), new FestivalGame(SchwingGame, "Schwingen", 120), new FestivalGame(Horn.AlphornRules.GameId, "Alphorn and yodel", Horn.AlphornRules.DayCap)],
         [
-            new FestivalDay(1, [], "The flags go up on the meadow."),
+            new FestivalDay(1, [Horn.AlphornRules.GameId], "The flags go up on the meadow, and the alphorns are out: play the song with others and the valley answers."),
             new FestivalDay(3, [FahneGame], "The flag swingers take the meadow: swing the Fahne on the march."),
             new FestivalDay(5, [SchwingGame], "The Anschwingen: step into the sawdust ring. From day 9 the bouts are the Schlussgang."),
         ],

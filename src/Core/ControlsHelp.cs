@@ -52,6 +52,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Pinball: the player's view or straight down on the playfield", PlayerInput.CameraToggle),
             new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
             new("Bowling: move your spot, then your line; hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
+            new("Festival alphorn row: sit down to the song; blow, pick the note, yodel", Keys: "{interact_mount}, hold {use_item}, wheel or {move_forward} / {move_back}, {jump}", Pad: "{interact_mount}, hold {use_item}, right stick ↑ ↓, {jump}"),
         }),
         ("Items", new Row[]
         {

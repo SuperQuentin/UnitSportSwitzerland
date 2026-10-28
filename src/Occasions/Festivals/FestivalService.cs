@@ -175,6 +175,7 @@ public partial class FestivalService : Node
             _nextCrewCheck = now + CrewCheckEvery;
             CheckCrews();
             CheckShow();
+            HornTick(now);
         }
         if (now >= _nextBoardSave && _boardsDirty.Count > 0)
         {
