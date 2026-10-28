@@ -44,8 +44,8 @@ public static class FahnenRules
     /// <summary>The count-in, before the first figure.</summary>
     public const int CountInBeats = 4;
     public const int GestureBeats = 4, ThrowBeats = 8;
-    /// <summary>Half windows round the beat, s.</summary>
-    public const double PerfectWindow = 0.15, GoodWindow = 0.30, OffWindow = 0.50, ThrowPerfect = 0.12, ThrowGood = 0.25, ThrowOff = 0.40;
+    /// <summary>Half windows round the beat, s. A throw's stay under half a beat (0.3125 s): the release is read as the nearest beat.</summary>
+    public const double PerfectWindow = 0.15, GoodWindow = 0.30, OffWindow = 0.50, ThrowPerfect = 0.12, ThrowGood = 0.22, ThrowOff = 0.30;
     public const double SyncBonus = 1.3;
     /// <summary>Share of the figures two players both land Good or better that counts as swinging in step.</summary>
     public const double SyncShare = 0.6;

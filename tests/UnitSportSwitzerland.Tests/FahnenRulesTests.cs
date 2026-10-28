@@ -88,13 +88,13 @@ public class FahnenRulesTests
 
     // ---- the windows and the score ---------------------------------------------------------------
 
-    private static FigureInput[] Swing(FahnenRoutine r, int jitterMs = 0, int held = 2)
+    private static FigureInput[] Swing(FahnenRoutine r, int jitterMs = 0, int held = 2, int? throwJitterMs = null)
     {
         var list = new List<FigureInput>();
         foreach (var f in r.Figures)
         {
             if (f.Kind == FahnenFigure.Hochwurf)
-                list.Add(new(Ms(FahnenRules.Seconds(f.StartBeat)), Ms(FahnenRules.Seconds(f.StartBeat + held)) + jitterMs, Ms(FahnenRules.Seconds(f.StartBeat + held + held + 1)) + jitterMs, []));
+                list.Add(new(Ms(FahnenRules.Seconds(f.StartBeat)), Ms(FahnenRules.Seconds(f.StartBeat + held)) + (throwJitterMs ?? jitterMs), Ms(FahnenRules.Seconds(f.StartBeat + held + held + 1)) + (throwJitterMs ?? jitterMs), []));
             else
                 list.Add(new(Ms(FahnenRules.Seconds(f.StartBeat + f.Beats)) + jitterMs, 0, 0, GestureRing.Ideal(FahnenRules.StrokeFor(f.Kind))));
         }
@@ -113,7 +113,7 @@ public class FahnenRulesTests
         var good = FahnenRules.Grade(r, Swing(r, 200, 3));
         Assert.All(good.Grades, g => Assert.Equal(FahnenGrade.Good, g));
         Assert.InRange(good.Score, 600, 750);
-        var late = FahnenRules.Grade(r, Swing(r, 350, 3));
+        var late = FahnenRules.Grade(r, Swing(r, 400, 3, 280));
         Assert.All(late.Grades, g => Assert.Equal(FahnenGrade.Off, g));
         Assert.True(late.Score < good.Score);
         Assert.Equal(FahnenRules.MaxScore / FahnenRules.BatzenDivisor, FahnenRules.BatzenFor(perfect.Score));
