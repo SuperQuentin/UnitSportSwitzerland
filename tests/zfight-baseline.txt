@@ -495,10 +495,12 @@
 483.5	Clothes / TAZ 90 jacket
 115.4	Clothes / Tall antennae
 6.4	Clothes / Tongue-out mask
+167.1	Clothes / Treichel
 99.1	Clothes / UwU mask
 115.4	Clothes / White marcel
 533.3	Clothes / Witch robe
 12.4	Clothes / Zimmermann hat
+292.3	Clothes / Zipfelmütze
 418	Concert / Stage - Center: Remy Rossi (Pop, screens CenterAndSides)
 313.2	Concert / Stage - EndNorth: Silent Echoes (HipHop, screens None)
 281.6	Concert / Stage - EndSouth: Paper Foxes (Pop, screens Center)
@@ -647,7 +649,7 @@
 5142.5	Furniture / Rack
 4397.2	Furniture / Safe
 441	Furniture / SafetySign
-1172.3	Furniture / SeatingBank
+669.9	Furniture / SeatingBank
 1284.9	Furniture / Shelf
 50.4	Furniture / ShoeCounter
 12000	Furniture / ShopCounter
@@ -667,11 +669,11 @@
 20	Furniture / WashingMachine
 144	Furniture / WaterTank
 100	Furniture / Workbench
-6296.3	Interiors / Arcade
+4149.2	Interiors / Arcade
 4600.6	Interiors / Bowling centre - Bowl bar
-11180.3	Interiors / Bowling centre - Two levels
-5342.2	Interiors / Cinema - Small
-7835.6	Interiors / Cinema - Town
+9314	Interiors / Bowling centre - Two levels
+5357.4	Interiors / Cinema - Small
+7718.5	Interiors / Cinema - Town
 8447.8	Interiors / Dining - Bar
 9241.1	Interiors / Dining - Café
 8447.8	Interiors / Dining - Club
@@ -679,7 +681,7 @@
 9241.1	Interiors / Dining - Kebab
 8823.8	Interiors / Dining - Pizzeria
 8830.2	Interiors / Dining - Pub
-4463.8	Interiors / Public toilets - Gendered
+2900.4	Interiors / Public toilets - Gendered
 2079.5	Interiors / Public toilets - Shared
 1557.2	Interiors / Public toilets - Single
 2.3	Items / Agone
@@ -877,8 +879,15 @@
 3.7	Items / TazTrousers
 7	Items / ToastedBread
 4.7	Items / Trampoline
+4.7	Items / Treichel
 5.9	Items / VegetableSeeds
 2.3	Items / VegetableSoup
+7	Items / VsDecoy
+7	Items / VsDisguise
+7	Items / VsMoo
+7	Items / VsSniff
+7	Items / VsSprint
+7	Items / VsTag
 2.5	Items / Wels
 3.9	Items / Wheat
 5.9	Items / WheatSeed
@@ -891,6 +900,7 @@
 5.6	Items / WoodPlanks
 2.5	Items / Zander
 3	Items / ZimmermannCap
+3.1	Items / Zipfelmuetze
 1.5	Motorbikes / Honda CB500 (1994-03)
 1.5	Motorbikes / Honda CB500 Hornet (2024-26)
 1.5	Motorbikes / Honda CB500F (2013-15)
@@ -1070,8 +1080,8 @@
 9.5	Rides / Wingsuit
 295728	Terrain / Building site - a site office with its gallery, one stack (#827)
 591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
-157094	Terrain / Building site - foundations, a block of four floors
-153956.6	Terrain / Building site - foundations, a house
+157213.4	Terrain / Building site - foundations, a block of four floors
+153750.4	Terrain / Building site - foundations, a house
 152483.6	Terrain / Building site - shell, a block of four floors
 709075.2	Terrain / Building site - topped out, a house
 1957418	Terrain / Building site - topped out, a six-floor block
@@ -1155,13 +1165,3 @@
 4.3	Unlisted / SteamerMeshBuilder.LeverMesh
 408.9	Unlisted / SteamerMeshBuilder.WheelMesh
 30	World / Ropeways - T-bar
-292.3	Clothes / Zipfelmütze
-167.1	Clothes / Treichel
-7	Items / VsTag
-7	Items / VsSniff
-7	Items / VsDecoy
-7	Items / VsSprint
-7	Items / VsMoo
-7	Items / VsDisguise
-3.1	Items / Zipfelmuetze
-4.7	Items / Treichel

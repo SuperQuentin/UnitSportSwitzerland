@@ -124,24 +124,26 @@ public static class RoomLights
         _ => 0,
     };
 
-    private static float[] Light(Vector3 c, float kind, float a, float b, float d, float e, RoomPlan r, float y0, float top) =>
-    [
-        c.X, c.Y, c.Z, kind,
-        a, b, d, e,
-        r.X0 - 0.01f, r.Z0 - 0.01f, r.X1 + 0.01f, r.Z1 + 0.01f,
-        y0 - 0.05f, top + 0.05f, 0, 0,
-    ];
+    private static float[] Light(Vector3 c, float kind, float a, float b, float d, float e, RoomPlan r, float y0, float top)
+    {
+        // a shaped room (#1290) is lit over all of it, not only its core
+        var (x0, z0, x1, z1) = (r.X0, r.Z0, r.X1, r.Z1);
+        if (r.Shape != null)
+            foreach (var p in r.Corners()) { x0 = Math.Min(x0, p.X); z0 = Math.Min(z0, p.Y); x1 = Math.Max(x1, p.X); z1 = Math.Max(z1, p.Y); }
+        return
+        [
+            c.X, c.Y, c.Z, kind,
+            a, b, d, e,
+            x0 - 0.01f, z0 - 0.01f, x1 + 0.01f, z1 + 0.01f,
+            y0 - 0.05f, top + 0.05f, 0, 0,
+        ];
+    }
 
     /// <summary>A window's centre in the wall's plane, and the unit normal into the room.</summary>
     private static (Vector3 Center, Vector3 Inward) WindowFrame(RoomPlan r, OpeningPlan o, float y0)
     {
         float y = y0 + (o.Bottom + o.Top) / 2;
-        return o.Side switch
-        {
-            Side.Front => (new Vector3(o.Center, y, r.Z0), Vector3.Back),
-            Side.Back => (new Vector3(o.Center, y, r.Z1), Vector3.Forward),
-            Side.Left => (new Vector3(r.X0, y, o.Center), Vector3.Right),
-            _ => (new Vector3(r.X1, y, o.Center), Vector3.Left),
-        };
+        var (at, outward, _) = r.WallFrame(o);
+        return (new Vector3(at.X, y, at.Y), new Vector3(-outward.X, 0, -outward.Y));
     }
 }
