@@ -52,6 +52,8 @@ public partial class VenuePatrons : Node3D
         public SkinnedFigure? Figure;
         public double PosedAt = -1;
         public float Dist;
+        /// <summary>When its moves were last listened to (<see cref="SoundOf"/>), -1 not yet.</summary>
+        public double SoundT = -1;
     }
 
     /// <summary>A table, a stool, a queue: places that fill together.</summary>
@@ -213,9 +215,14 @@ public partial class VenuePatrons : Node3D
                 Seat(i, look);
             }
             if (g.Activity == PatronActivity.Settee && now >= g.CheerAt)
+            {
+                // the cheer just given, heard where the friends sit
+                if (g.CheerAt > 0 && _seated[g.First] is { } friend) SoundAt(PatronActivity.Settee, _spots[friend.Spot].At);
                 g.CheerAt = now + 14 + 20 * PatronSchedule.Unit(g.Key, (uint)now);
+            }
         }
         Audiences(now);
+        SoundTick(now);
     }
 
     /// <summary>Puts person <paramref name="look"/> on spot <paramref name="i"/> (-1 empties it).</summary>
@@ -227,6 +234,8 @@ public partial class VenuePatrons : Node3D
         var p = new Patron { Spot = i, Look = look };
         _seated[i] = p;
         _shown.Add(p);
+        // an arcade player's coin as the game starts
+        if (!_first && _spots[i].Activity == PatronActivity.Arcade) SoundAt(PatronActivity.Arcade, _spots[i].At);
     }
 
     /// <summary>Everyone gone at once (far off, nobody to see it); read afresh on the next look.</summary>
@@ -399,6 +408,7 @@ public partial class VenuePatrons : Node3D
                 if (spot.Activity == PatronActivity.Settee && GroupOf(p.Spot) is { } g)
                     cheer = (float)Math.Clamp(1 - Math.Abs(now - g.CheerAt + 1.2) / 1.2, 0, 1);
                 PatronPoser.Pose(f, spot, _pieces[p.Spot], p.Look, now, cheer);
+                SoundOf(p, now);
                 continue;
             }
             if (p.Figure != null) Release(p);
@@ -407,6 +417,7 @@ public partial class VenuePatrons : Node3D
             want.Add(Frame(p));
         }
         Stills();
+        SoundFrame(delta);
     }
 
     private Group? GroupOf(int spot)

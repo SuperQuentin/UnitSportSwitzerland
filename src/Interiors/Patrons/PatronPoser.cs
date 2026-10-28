@@ -256,6 +256,29 @@ public static class PatronPoser
         Head(j, -0.05f, 0);
     }
 
+    /// <summary>What a patron's move sounds like, at its moment (<see cref="EventIn"/>).</summary>
+    public enum Sound { None, PoolShot, Dart }
+
+    /// <summary>
+    /// The sound of a move whose moment falls in (<paramref name="t0"/>, <paramref name="t1"/>]: the pool shot at the
+    /// foot of the table, a dart reaching the board. The same timing as <see cref="Pool"/> and <see cref="Darts"/>.
+    /// </summary>
+    public static Sound EventIn(PatronActivity a, int place, int who, double t0, double t1)
+    {
+        if (place != 0 || t1 <= t0 || t1 - t0 > 1) return Sound.None;
+        float s = who / 997f;
+        if (a == PatronActivity.Pool && Crossed((t0 + s * 30) % 14, (t1 + s * 30) % 14, 8.45)) return Sound.PoolShot;
+        if (a == PatronActivity.Darts)
+        {
+            double k0 = (t0 + s * 20) % 12, k1 = (t1 + s * 20) % 12;
+            if (k1 < 7.5 && k1 >= k0 && Crossed(k0 % 2.5, k1 % 2.5, 1.72)) return Sound.Dart;
+        }
+        return Sound.None;
+    }
+
+    /// <summary>Whether a phase went past <paramref name="at"/> from <paramref name="a"/> to <paramref name="b"/> (not across a wrap).</summary>
+    private static bool Crossed(double a, double b, double at) => a < at && b >= at && b >= a;
+
     // —— pieces ——
 
     /// <summary>0 before <paramref name="a"/>, up to 1 by <paramref name="b"/>, held to <paramref name="c"/>, down to 0 by <paramref name="d"/> (eased).</summary>
