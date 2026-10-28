@@ -36,6 +36,8 @@ public sealed record ItemObtained(long Peer, string Key, ItemId Item, int Count,
 public sealed record ItemDelivered(long Peer, string Key, ItemId Item, int Count, string TargetId) : AdventureEvent(Peer, Key);
 /// <summary>An interactable used: raised by the interactable's own server method, never by a quest.</summary>
 public sealed record Interacted(long Peer, string Key, string TargetId) : AdventureEvent(Peer, Key);
+/// <summary>A running quest was given up (#1267): the step and the count it had reached, so its cargo can be taken back.</summary>
+public sealed record QuestAbandoned(long Peer, string Key, string QuestId, int Step, int Count) : AdventureEvent(Peer, Key);
 /// <summary>A quest finished (raised by the service itself, so quests chain).</summary>
 public sealed record QuestCompleted(long Peer, string Key, string QuestId) : AdventureEvent(Peer, Key);
 

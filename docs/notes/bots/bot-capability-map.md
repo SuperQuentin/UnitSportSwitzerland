@@ -129,6 +129,10 @@ gives one progress for the session, never saved.
 | reach a quest's area | `WalkControls` | the server's 2 Hz reach check (`PositionOf` reads the body) | the step's `Target` (`QuestEngine.Locate`) | `MoveTo` | n/a phase 1 |
 | hand a delivery over | — | `AdventureService.Deliver(peer, id, step)` | the step's target | `MoveTo` + `Deliver` | gap: a co-op brain; a bot's pack is its own (`BotHands`), the client's `DeliverOk` take has no bot side |
 | adventure progress, rewards | — | `SessionFor(peer)`, `Grant` | — | — | n/a: no identity, never saved; cash goes to the bank by name (`Bank.Credit` skips the RPC for a bot id) |
+| talk to a giver, take a card (#1267) | — | `ErrandService.Offers(peer, giverId)`, `Accept(peer, giverId, cardId)` (the RPC calls it; the body must stand within 8 m) | `GiverHost.Current.Near`, `ErrandService.CardsOf` | `MoveTo` + `Accept` + `Deliver` | gap: a free-roam errand brain; the server path exists (session progress via `SessionFor`) |
+| hand over at a giver or a stop (#1267) | — | `AdventureService.Deliver(peer, id, step)` (exists) | the step's `AreaTarget` | `MoveTo` + `Deliver` | gap as today (a bot's pack is its own, `BotHands`) |
+| share / join a card (#1267) | — | `ErrandService.Share`, `Join` | — | — | n/a: bots are never in parties (`InviteService` skips them) |
+| walk through a giver (#1267) | — | none: givers have no collision on any peer | — | — | ok |
 | open a chest (#1227) | — | `RewardService.ServeOpen(peer, id)` (checks the body, not the input) | `RewardService.Map` (the server's own placement) | `MoveTo` + open | n/a: a player's progression |
 | pick an edelweiss, add a cairn stone (#1227) | — | `ServePick(peer, id)` | the same placement | `MoveTo` + pick | n/a |
 | a seal's step: a stack, a bell, a ring, a plate (#1227) | — | `ServeSealStep(peer, chestId, step)` (body at the prop) | `Map.LayoutOf(chest)` | `MoveTo` | n/a; a bot's **body on a pressure plate** counts as a weight for a player (`Occupied`): ok, nothing to build |

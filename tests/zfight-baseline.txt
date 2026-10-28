@@ -1165,3 +1165,22 @@
 4.3	Unlisted / SteamerMeshBuilder.LeverMesh
 408.9	Unlisted / SteamerMeshBuilder.WheelMesh
 30	World / Ropeways - T-bar
+5.9	Items / Appenzeller
+9.4	Items / BaslerLaeckerli
+1.2	Items / EngadinerNusstorte
+9.4	Items / FerryCrate
+10.9	Items / Postcard
+5.9	Items / RacletteCheese
+3.9	Items / SaucissonVaudois
+5.9	Items / Sbrinz
+9.4	Items / StGallerBratwurst
+9.4	Items / ZuercherTirggel
+2.3	Items / ZugerKirschtorte
+425.2	People / Errand givers - Dairy
+37.9	People / Errand givers - Farmer
+96.1	People / Errand givers - Host
+77.8	People / Errand givers - HutWarden
+18	People / Errand givers - Postmaster
+199.6	People / Errand givers - Senn
+39.4	People / Errand givers - ShipMaster
+467.9	People / Errand givers - StationMaster
