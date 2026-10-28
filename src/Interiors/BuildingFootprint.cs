@@ -778,6 +778,12 @@ public static class BuildingFootprint
                     };
                     if (!DoorOnWall(b, spot)) continue;
                     if (placed.Any(q => TooClose(q, spot))) continue;
+                    // a block of flats is entered by its stairwells (#1304), and the planner builds one behind each
+                    // front door far enough from the next: so its doors are on the main door's facade, a street
+                    // front's spacing apart however the TIN breaks that facade up; on an end or at the back, or
+                    // closer, a door would open into a flat
+                    if (kind == BuildingKind.Apartment && (main != null && c.Normal.Dot(main.Normal) < 0.95f
+                            || placed.Any(q => SameFacade(q, spot) && Flat(q).DistanceTo(xz) < DoorBudget.Spacing - 1f))) continue;
                     // a front-wall entrance (and its stairwell) keeps clear of the ramp's lane and car park (#694), any other door of the garage door
                     if (garage != null && planX != null && c.Normal.Dot(main!.Normal) > 0.9f && (garageLeft ? planX(xz) < keepX - 0.01f : planX(xz) > keepX + 0.01f)) continue;
                     if (placed.Any(q => q.Link.Any && new Vector2(q.Position.X, q.Position.Z).DistanceTo(xz) < GarageRule.StairClear)) continue;
@@ -823,6 +829,19 @@ public static class BuildingFootprint
     {
         var d = new Vector2(a.Position.X - b.Position.X, a.Position.Z - b.Position.Z);
         return d.Length() < a.Width / 2 + b.Width / 2 + gap;
+    }
+
+    private static Vector2 Flat(DoorSpot d) => new(d.Position.X, d.Position.Z);
+
+    /// <summary>
+    /// Whether two doors are on one facade (#1304): facing the same way, their walls within a step of each
+    /// other. A facade the TIN breaks into slightly offset pieces is still one street front, and its doors
+    /// keep <see cref="DoorBudget.Spacing"/> apart as they do along one run.
+    /// </summary>
+    private static bool SameFacade(DoorSpot a, DoorSpot b)
+    {
+        var n = new Vector2(a.Outward.X, a.Outward.Z);
+        return n.Dot(new Vector2(b.Outward.X, b.Outward.Z)) > 0.95f && Math.Abs((Flat(a) - Flat(b)).Dot(n)) < 1.5f;
     }
 
     /// <summary>Where a triangle crosses the horizontal plane at <paramref name="y"/>, in plan (x, z).</summary>
