@@ -175,7 +175,7 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("Build the piece shown", PlayerInput.UseItem),
             new("Take back your own piece", Keys: "{aim_item} + {use_item}", Pad: "{aim_item} + {use_item}"),
-            new("Next piece", Keys: "{aim_item} + {next_item}", Pad: "{aim_item} + {next_item}"),
+            new("Next piece", Keys: "{aim_item} + wheel", Pad: "{aim_item} + {next_item}"),
             new("Turn the piece", PlayerInput.BuildTurn),
             new("Change the material", Keys: "{aim_item} + {build_turn}", Pad: "{aim_item} + {build_turn}"),
         }),

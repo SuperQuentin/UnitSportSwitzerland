@@ -362,7 +362,8 @@ public partial class ItemController : Node
         if (UsablePlayer is not { } player) return;
 
         // a click that is not aimed at the world (a released pointer over a menu) is not a use
-        if (e is InputEventMouseButton && MouseCapture.Mode != Input.MouseModeEnum.Captured) return;
+        if (e is InputEventMouseButton { ButtonIndex: not (MouseButton.WheelUp or MouseButton.WheelDown) }
+            && MouseCapture.Mode != Input.MouseModeEnum.Captured) return;
 
         if (e.IsActionPressed(PlayerInput.UseItem))
         {

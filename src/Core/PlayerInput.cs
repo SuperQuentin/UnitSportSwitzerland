@@ -156,7 +156,7 @@ public partial class PlayerInput : Node
     public const string SwapShoulder = "swap_shoulder";
     /// <summary>
     /// On foot in third person: the camera arm in and out (#1149), from far off down to the face.
-    /// Shift + wheel (the plain wheel is the hotbar), = / -; a pad holds R3 and pushes the right stick.
+    /// The plain wheel (Alt + wheel is the hotbar, #1369), = / -; a pad holds R3 and pushes the right stick.
     /// </summary>
     public const string ViewZoomIn = "view_zoom_in";
     public const string ViewZoomOut = "view_zoom_out";

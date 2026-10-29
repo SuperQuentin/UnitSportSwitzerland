@@ -3623,12 +3623,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         // the on-foot camera's zoom (#1149, #1369): the plain wheel, whatever else is held (Shift is sprint), = / -.
-        // Not Alt + wheel (the hotbar's), not a wheel the held item owns (ItemController.WheelClaimed), and not a
-        // wheel over a released pointer (a panel, the map)
+        // Not Alt + wheel (the hotbar's), not a wheel the held item owns (ItemController.WheelClaimed); a panel,
+        // the quick wheel or the map hold UiFocus (above) or swallow the wheel themselves
         if (ZoomsView && (@event.IsActionPressed(PlayerInput.ViewZoomIn, true) || @event.IsActionPressed(PlayerInput.ViewZoomOut, true))
             && (@event is not InputEventMouseButton
-                || (!PlayerInput.IsHotbarWheel(@event) && !UnitSport.Items.ItemController.WheelClaimed
-                    && UnitSport.Core.MouseCapture.Mode == Input.MouseModeEnum.Captured)))
+                || (!PlayerInput.IsHotbarWheel(@event) && !UnitSport.Items.ItemController.WheelClaimed)))
         {
             ZoomView(@event.IsActionPressed(PlayerInput.ViewZoomIn, true) ? 1f : -1f);
             GetViewport().SetInputAsHandled();

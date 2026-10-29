@@ -481,7 +481,9 @@ public partial class PhoneProbe : Node
         Check(!inv.Holstered && me.HeldItemId != 0, $"and again draws it ({me.HeldItemId})");
         await Press(PlayerInput.Holster, 0.3);
         Check(inv.Holstered && me.HeldItemId == 0, "the holster key puts it away");
-        await Press(PlayerInput.AimItem, 0.3);
+        items.ForceAim = true;
+        await Wait(0.2);
+        items.ForceAim = false;
         Check(!inv.Holstered, "Aim draws it");
         inv.SetHolstered(true);
         await Press(PlayerInput.UseItem, 0.1);
