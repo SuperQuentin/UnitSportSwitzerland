@@ -110,7 +110,8 @@ public partial class Handshake : Node
     /// 76: World/Adventure/Festivals RequestMarket, TellMarket (#1348: the Christmas market's stalls and Samichlaus), ItemId 501-502.
     /// 77: World/Adventure/Festivals RequestEscalade, TellEscalade (#1351: the Escalade's Marmite, soup pot and Course), ItemId 503-504.
     /// 78: Interiors/CinemaBooths SetPool carries each film's place in the halls' rotation (#1367).
-    public const int Protocol = 78;
+    /// 79: World/Adventure/Festivals RequestChalanda, TellChalanda (#1356: the Chalandamarz's procession and its stamped Treichel rings), ItemId 515.
+    public const int Protocol = 79;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

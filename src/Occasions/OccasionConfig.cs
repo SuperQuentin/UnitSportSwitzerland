@@ -160,6 +160,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("12-sat#2", "+1") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the Chalandamarz (#1356): 1 March, the children's procession in an Engadin village (relocated to the region's largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ChalandaId, Priority = 8,
+            Schedule = { new DateWindow("03-01", "03-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 

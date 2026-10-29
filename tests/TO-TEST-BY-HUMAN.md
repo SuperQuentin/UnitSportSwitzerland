@@ -7,6 +7,16 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Chalandamarz ([#1361](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1361))
+
+`--festival test --date 2027-03-01 --world fixture` (the Treichel stand is 45 m west of the fixture's start, the loop of seven stations round it), or online on the western map on 1 March (Scuol, Zuoz or Guarda, else the region's largest town).
+
+- [ ] Look at the loop: the Treichel stand (wooden frame with five brass Treicheln, a blue board, a straw doll) and seven pennant banners on a ring of 45 m. Cartoon, PS1 and Realistic: do they read well?
+- [ ] E (pad Y) at the stand begins; then ring with E (pad Y) on the beat while walking: does the drum at 120 BPM and the closing ring on the HUD feel like the same beat as the Treichel you hear when you press? Is it fair with real latency (Perfect 70 ms, Good 140 ms around the server's beat)? Is walking at a child's pace (1.4 m/s) comfortable while pressing every step?
+- [ ] Two people in a party ringing on the same beats: "In step with <name>! +2" and the chime; do both see it, does the party's total on the Journal's Festival tab add up?
+- [ ] Is "Keep walking!" / "Back onto the loop!" clear when ringing on the spot or in the square?
+- [ ] VR: a grip at the stand begins and a grip on each beat rings (pad route through `XrPad`); swinging the hand like a cowbell is not built.
+
 ## Cinema panel: the cinema's films, stars, the server's films ([#1368](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1368))
 
 At a cinema booth's panel (E at the screen half), online on a server where you are admin and one where you are not.

@@ -102,6 +102,10 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At the Marmite: smash it (the party's youngest and oldest both press); at the soup pot: ladle a bowl for the party; at the start line: begin the Course de l'Escalade", PlayerInput.InteractMount),
         }),
+        ("Festivals: the Chalandamarz (#1356)", new Row[]
+        {
+            new("At the Treichel stand: begin the procession; then, walking the village loop, ring the Treichel on the march beat (the drum and the HUD's pulse); rings in step with a party member score extra", PlayerInput.InteractMount),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

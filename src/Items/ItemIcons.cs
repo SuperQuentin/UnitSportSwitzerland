@@ -1012,6 +1012,13 @@ public static partial class ItemIcons
             p.Set(5, 8, 'r'); p.Set(9, 9, 'N'); p.Set(8, 7, 'l');
         });
 
+        d[ItemId.ChalandaTreichel] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 5.4f, 4.6f, 'y', 'o', 'O');
+            p.Rect(7, 3, 8, 6, 'N');
+            p.Rect(5, 3, 10, 3, 'R');
+        });
+
         d[ItemId.ChristmasBauble] = Round(p =>
         {
             p.Disc(7.5f, 9f, 5.2f, 4.8f, 'q', 'r', 'R');
