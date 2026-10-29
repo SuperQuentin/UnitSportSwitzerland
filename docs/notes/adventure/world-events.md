@@ -16,5 +16,5 @@ Plan: `docs/plans/adventure-errands.md` part 6. Code: `src/Adventure/Errands/Wor
 ## Checks
 
 - Tier 0: `WorldEventTests` (rolls, seasons, the four simulations, the steps, the hiker and postcard cards), `GiverPickTests`.
-- Quick: `--worldeventcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`: each event staged and driven to its end through `AskHelp`, paid, a busy player gets none, a lonely event ends alone, the hiker's Postkarte end to end.
+- Quick: `--worldeventcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`: each event staged and driven to its end through `AskHelp`, paid, a busy player gets none, a lonely event ends alone, the hiker's Postkarte end to end. Its progress lives in `test_output/worldeventcheck` (emptied each run), never the real save, so it passes run after run (#1346).
 - Net: `tools/worldeventnetcheck.sh`: server plus two clients; the remote one sees the plan, digs, and is paid.

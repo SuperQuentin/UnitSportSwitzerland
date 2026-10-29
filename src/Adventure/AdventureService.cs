@@ -122,7 +122,7 @@ public partial class AdventureService : Node
             return;
         }
         if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested
-            || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
+            || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Errands.WorldEventCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
             || Occasions.Festivals.FireworksCheck.Requested
             || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested
             || Occasions.Festivals.Desalpe.DesalpeCheck.Requested) AdventureCheck.ClearScratch();
@@ -300,6 +300,7 @@ public partial class AdventureService : Node
         : Alcohol.AlcoholCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/alcoholcheck")
         : Together.FondueCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fonduecheck")
         : Errands.ErrandCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/errandcheck")
+        : Errands.WorldEventCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/worldeventcheck")
         : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck")
         : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck")
         : Occasions.Festivals.SteinCheck.Requested ? Occasions.Festivals.SteinCheck.Scratch
