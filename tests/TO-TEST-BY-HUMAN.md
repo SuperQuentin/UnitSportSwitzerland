@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Account management on the website ([#1360](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1360))
+
+After the deploy with `--setup` (the new Caddyfile), on https://unitsport.infrack.ch.
+
+- [ ] The site's header, signed in: the name is a link to `account.html`. Change the name there → the header and the page show the new name; a taken name says "That name is taken".
+- [ ] `account.html` → Email me a link: the reset mail arrives and its link opens `reset.html` (no 404).
+- [ ] The dashboard: open an account, Rename it → the list and the detail show the new name.
+- [ ] The game, signed in to the official server: Account screen → Manage your account on the website opens the page in the browser. Rename there, come back to the game → the Account screen shows the new name. With a pad: the button takes focus and A opens it.
+
 ## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
 
 `--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).
