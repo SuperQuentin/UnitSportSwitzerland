@@ -984,6 +984,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
             || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested || Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null
+            || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
             || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
@@ -1234,6 +1235,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.Festivals.Chalanda.ChalandaGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Chalanda.ChalandaCheck.Requested) AddChild(new Occasions.Festivals.Chalanda.ChalandaCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null) AddChild(new Occasions.Festivals.Chalanda.ChalandaNetProbe(items));
+            // the 1 August (#1355): the lampion stand, the fireworks stand and the walk's post on E, the Höhenfeuer on the summits, a box of fireworks on the use key
+            AddChild(new Occasions.Festivals.August1.August1Game(() => _onFoot ? LocalPlayer : null));
+            AddChild(new Occasions.Festivals.August1.Hoehenfeuer(() => _worldOrigin, () => GetViewport().GetCamera3D()));
+            if (Occasions.Festivals.August1.August1Check.Requested) AddChild(new Occasions.Festivals.August1.August1Check(items, () => LocalPlayer));
+            if (Occasions.Festivals.August1.August1NetProbe.Role != null) AddChild(new Occasions.Festivals.August1.August1NetProbe(items));
             if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));

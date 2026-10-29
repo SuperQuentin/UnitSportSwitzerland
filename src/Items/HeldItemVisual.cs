@@ -385,7 +385,7 @@ void fragment() {{
         }
         else _inHand.Visible = false;
         StepSparkles(_inHand.Visible, dt);
-        StepTorch(id == ItemId.Torch && any, dt);
+        StepTorch((id == ItemId.Torch || id == ItemId.Lampion) && any, dt, id == ItemId.Lampion);
 
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
@@ -466,7 +466,7 @@ void fragment() {{
     /// A torch in the hand lights the world round it (#272), on every copy of the player: it follows
     /// the replicated <see cref="FootPlayer.HeldItemId"/>, so others see it with no extra state.
     /// </summary>
-    private void StepTorch(bool lit, float dt)
+    private void StepTorch(bool lit, float dt, bool lampion = false)
     {
         if (lit && _torchLight == null)
         {
@@ -481,10 +481,12 @@ void fragment() {{
         _torchLight.Visible = lit;
         if (!lit) return;
         _torchT += dt;
-        _torchLight.LightEnergy = 1.4f + 0.25f * Mathf.Sin(_torchT * 13f) + 0.15f * Mathf.Sin(_torchT * 29f);
+        // a lampion (#1355, the 1 August) is the same light, softer, redder and a little lower in the hand
+        _torchLight.LightColor = lampion ? new Color(1f, 0.5f, 0.3f) : new Color(1f, 0.66f, 0.32f);
+        _torchLight.LightEnergy = lampion ? 0.9f + 0.08f * Mathf.Sin(_torchT * 7f) : 1.4f + 0.25f * Mathf.Sin(_torchT * 13f) + 0.15f * Mathf.Sin(_torchT * 29f);
         // at the flame on the figure's hand; with no figure drawn, about where a hand would hold it up
         _torchLight.GlobalPosition = _inHand.Visible && _inHand.IsInsideTree()
-            ? _inHand.GlobalTransform * new Vector3(0, 0.42f, 0)
+            ? _inHand.GlobalTransform * new Vector3(0, lampion ? 0.14f : 0.42f, 0)
             : _player.GlobalPosition + Vector3.Up * 1.7f;
     }
 

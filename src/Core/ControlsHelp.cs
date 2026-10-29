@@ -111,6 +111,11 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At the Treichel stand: begin the procession; then, walking the village loop, ring the Treichel on the march beat (the drum and the HUD's pulse); rings in step with a party member score extra", PlayerInput.InteractMount),
         }),
+        ("Festivals: the 1 August (#1355)", new Row[]
+        {
+            new("At the lampion stand: a lampion; at the fireworks stand: a box for Batzen; at the lampion post at night: begin the lampion walk with your party", PlayerInput.InteractMount),
+            new("With a box of fireworks in hand, at night: light it", PlayerInput.UseItem),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
