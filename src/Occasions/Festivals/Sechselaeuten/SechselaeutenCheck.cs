@@ -41,6 +41,12 @@ public partial class SechselaeutenCheck : ChatProbe
 
     private double _hour = 12;
 
+    /// <summary>A teleport is a crash to the body (a jump of metres in a frame): it is up again at once, where it stands, so it never revives at its last safe spot.</summary>
+    public override void _PhysicsProcess(double delta)
+    {
+        if (Me is { } m && (m.Health <= 0 || m.Down > 0)) m.Respawn(m.GlobalPosition);
+    }
+
     /// <summary>The sky crosses 18:00 now (from 17:00, one look of the tick between).</summary>
     private async Task Evening()
     {
@@ -84,7 +90,7 @@ public partial class SechselaeutenCheck : ChatProbe
         var weibel = SechselaeutenRules.WeibelAt(site);
 
         // ---- away from everything: nothing offered, forged uses refused ---------------------------------------
-        Teleport(pyre, 90);
+        Teleport(pyre, 30);
         await Seconds(0.4);
         Expect(SechseGame.InteractionFor(Me!) == null && !SechseGame.TryInteract(Me!) && !SechseGame.TakesUse, "no prompt away from the ground, E does nothing, the items keep Use");
         foreach (var (kind, what) in new[] { (FestivalService.SechseBet, "Go to the pyre"), (FestivalService.SechseGrill, "Go to the embers"), (FestivalService.SechsePurse, "Go to the Zunft") })
@@ -127,7 +133,7 @@ public partial class SechselaeutenCheck : ChatProbe
         Expect(await Until(() => Mine.Batzen == SechselaeutenRules.PurseBatzen - SechselaeutenRules.Stake, 5), $"the stake left the purse ({Mine.Batzen})");
         Expect(await Until(() => Svc.SechseView is { Mine: 4, Bets: 1, Pool: 10 }, 5), $"the round knows the bet ({Svc.SechseView})");
         Expect(Mine.Earned == SechselaeutenRules.PurseBatzen, "a stake is spent, not earned: the cap still counts the purse only");
-        Expect(!game.Betting && !SechseGame.TakesUse && SechseGame.InteractionFor(Me!) == null, "with a bet placed the picker lets go of Use and nothing is offered");
+        Expect(await Until(() => !game.Betting && !SechseGame.TakesUse && SechseGame.InteractionFor(Me!) == null, 5), "with a bet placed the picker lets go of Use and nothing is offered");
         refused = null;
         Expect(Svc.ServeSechse(local, FestivalService.SechseBet, 5) != null && refused?.Contains("You have bet") == true, $"a second bet is refused ({refused})");
         Expect(Svc.ServeSechse(-5, FestivalService.SechseBet, 3) == null && Svc.ServeSechse(-6, FestivalService.SechseBet, 9) == null, "two bots bet for the crowd");
@@ -151,7 +157,6 @@ public partial class SechselaeutenCheck : ChatProbe
         Expect(Svc.SechseLights == 1 && Svc.SechseView!.LitAt > 0, "lit once, the light's time is public");
         refused = null;
         Expect(Svc.ServeSechse(-8, FestivalService.SechseBet, 2) != null, "bets are closed for a bot");
-        Teleport(pyre, 40);
         Teleport(pyre, 6);
         Expect(await Until(() => game.NearTarget == 0, 5), "back at the pyre");
         Expect(Svc.ServeSechse(local, FestivalService.SechseGrill, 0) != null, "the fire is too hot to grill");

@@ -134,7 +134,7 @@ public partial class SechseGame : CanvasLayer
         {
             var g = p.Global;
             _distance = SechselaeutenRules.Dist(g.E, g.N, SechselaeutenRules.PyreAt(m.Site));
-            target = SechselaeutenRules.NearPyre(m.Site, g.E, g.N) ? 0 : SechselaeutenRules.NearWeibel(m.Site, g.E, g.N) ? FestivalService.SechsePurse : -1;
+            target = SechselaeutenRules.NearWeibel(m.Site, g.E, g.N) ? FestivalService.SechsePurse : SechselaeutenRules.NearPyre(m.Site, g.E, g.N) ? 0 : -1;
         }
         else _lastMine = 0;
         _target = target;
@@ -241,7 +241,7 @@ public partial class SechseGame : CanvasLayer
             case BooggPhase.Burning:
                 return _lines = ["The Böögg burns", $"Bets are closed: {v.Bets} bets, pool {v.Pool} Batzen." + (v.Mine > 0 ? $" You bet {SechselaeutenRules.Label(v.Mine)}." : ""), "Who guessed the minute the head will burst?"];
             default:
-                var lines = new List<string> { "BANG!", $"The head burst after {v.Minutes:F1} minutes ({SechselaeutenRules.Label(SechselaeutenRules.BucketOf(v.Minutes))}). Pool {v.Pool} Batzen." };
+                var lines = new List<string> { "BANG!", $"The head burst after {FestivalService.Num(v.Minutes)} minutes ({SechselaeutenRules.Label(SechselaeutenRules.BucketOf(v.Minutes))}). Pool {v.Pool} Batzen." };
                 if (v.Mine > 0) lines.Add($"You bet {SechselaeutenRules.Label(v.Mine)}: {v.Won} Batzen from the pool.");
                 for (int i = 0; i < Math.Min(3, v.Board.Length); i++)
                     lines.Add($"{i + 1}. {v.Board[i].Name}{(v.Board[i].Bot ? " (bot)" : "")}  {SechselaeutenRules.Label(v.Board[i].Bucket)}  {v.Board[i].Won} Batzen");

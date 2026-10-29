@@ -35,6 +35,12 @@ public partial class SechselaeutenNetProbe : ChatProbe
         p.Velocity = Vector3.Zero;
     }
 
+    /// <summary>A teleport is a crash to the body (a jump of metres in a frame): it is up again at once, where it stands, so it never revives at its last safe spot.</summary>
+    public override void _PhysicsProcess(double delta)
+    {
+        if (Me is { } m && (m.Health <= 0 || m.Down > 0)) m.Respawn(m.GlobalPosition);
+    }
+
     public override async void _Ready()
     {
         _role = Role ?? "A";

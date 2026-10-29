@@ -28,6 +28,9 @@ public partial class FestivalService
     /// <summary>Check seam, never set in the game: replaces the draw of the burn time (the seed in, minutes out); <c>--sechsedraw M</c> fixes it on a check's server.</summary>
     public static Func<int, double>? SechseDraw { get; set; } = ArgNumber("--sechsedraw") is { } fixedMinutes ? _ => fixedMinutes : null;
 
+    /// <summary>A number with one decimal and a point, whatever the machine's locale (every line a player or a check reads).</summary>
+    internal static string Num(double v) => v.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+
     private static double? ArgNumber(string flag) =>
         CmdArgs.Value(flag) is { } s && double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : null;
 
@@ -164,7 +167,7 @@ public partial class FestivalService
             int seed = Random.Shared.Next();
             current.Light(sim, seed, SechseSecondsPerMinute, SechseDraw);
             SechseLights++;
-            GD.Print($"[festival] {SechselaeutenRules.FestivalId}: round {current.Number}: the Böögg is lit at {hour:F2} with {current.Bets.Count} bets, pool {current.Pool}");
+            GD.Print($"[festival] {SechselaeutenRules.FestivalId}: round {current.Number}: the Böögg is lit at {Num(hour)} with {current.Bets.Count} bets, pool {current.Pool}");
             BroadcastSechse(current);
         }
     }
@@ -194,12 +197,12 @@ public partial class FestivalService
                 Award(peer, SechselaeutenRules.FestivalId, SechselaeutenRules.PlayBatzen, $"a bet on the Böögg, {share} from the pool", SechselaeutenRules.BetGame,
                     SechselaeutenRules.PlayPoints + share);
         }
-        GD.Print($"[festival] {SechselaeutenRules.FestivalId}: round {round.Number}: the head burst after {minutes:F1} min (bucket {SechselaeutenRules.BucketOf(minutes)}); " +
+        GD.Print($"[festival] {SechselaeutenRules.FestivalId}: round {round.Number}: the head burst after {Num(minutes)} min (bucket {SechselaeutenRules.BucketOf(minutes)}); " +
             $"pool {round.Pool} shared: {(lines.Count == 0 ? "no bets" : string.Join(", ", lines))}");
         BroadcastSechse(round, msgFor: key =>
         {
             var bet = round.BetOf(key);
-            string head = $"The head burst after {minutes:F1} minutes.";
+            string head = $"The head burst after {Num(minutes)} minutes.";
             return bet is not { Bot: false } b ? $"{head} You did not bet."
                 : $"{head} You bet {SechselaeutenRules.Label(b.Bucket)}: +{round.Shares.GetValueOrDefault(key)} Batzen from the pool of {round.Pool}.";
         });
