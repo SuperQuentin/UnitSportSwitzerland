@@ -14,6 +14,8 @@ namespace UnitSport.Items;
 public static class SwordBlade
 {
     public const int Count = 16;
+    /// <summary>The centre of the closed palm, in the hand mount's frame: the sword node is placed by it (<see cref="SwordPoses.GripSocket"/>).</summary>
+    public static readonly Vector3 SocketOffset = new(SwordPoses.GripSocket.X, SwordPoses.GripSocket.Y, SwordPoses.GripSocket.Z);
     /// <summary>The hilt and the tip along the blade, in the item mesh's units.</summary>
     public const float HiltAt = 0.06f, TipAt = 0.89f;
 
@@ -55,11 +57,9 @@ public static class SwordBlade
             var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
             var basis = mounts.HandBasis;
             // the item node as the game places it (HeldItemVisual), then the blade's whip at the wrist (FootPlayer.SwordArcNow)
-            var node = new Transform3D(basis, hand + basis * new Vector3(0, -0.05f, -0.03f));
-            float tBlade = Mathf.Max(0f, p - SwordPoses.BladeLag / total);
-            var (yaw, pitch, roll, fwd) = SwordRules.Arc(move, tBlade);
-            float k = move is SwordMove.Plunge ? 1f : 0.5f;
-            var full = node * new Transform3D(Basis.FromEuler(new Vector3(pitch * k, yaw * k, roll * k)), new Vector3(0, 0, fwd * k));
+            var node = new Transform3D(basis, hand + basis * SocketOffset);
+            var (pitch, yaw, roll, fwd) = SwordPoses.Wrist(move, p);
+            var full = node * new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll)), new Vector3(0, 0, fwd));
             hilt[i] = full * new Vector3(0, 0, sign * HiltAt);
             tip[i] = full * new Vector3(0, 0, sign * TipAt);
             reach = Mathf.Max(reach, new Vector2(tip[i].X, tip[i].Z).Length());

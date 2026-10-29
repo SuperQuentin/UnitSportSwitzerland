@@ -483,28 +483,25 @@ public partial class FootPlayer
     }
 
     /// <summary>
-    /// The blade's pose this frame, in the hand's frame: (yaw, pitch, roll) radians about the grip and the metres it reaches
-    /// forward. False when the sword is at rest. <c>HeldItemVisual</c> turns the rigid node with it.
+    /// The sword's angle on the hand this frame (every peer): the neutral cock and the wrist's whip, from <see cref="SwordPoses.Wrist"/> at the
+    /// progress of the move being drawn: (pitch, yaw, roll) radians and the metres forward. The same function the blade's hit samples and the
+    /// trail are built with. A copy's finished blow clears itself here.
     /// </summary>
-    public bool SwordArcNow(out float yaw, out float pitch, out float roll, out float forward)
+    public void SwordWristNow(out float pitch, out float yaw, out float roll, out float forward)
     {
-        yaw = pitch = roll = forward = 0f;
-        if (!SwordDrawn || SwordShown is SwordMove.None or SwordMove.Dodge) return false;
-        var d = SwordRules.Def(SwordShown);
-        float t = SwordShown == SwordMove.Charge ? 0f : (float)Math.Max(0.0, GameClock.Now - _swordShownAt - _swordShownHold - SwordPoses.BladeLag) / Math.Max(0.01f, d.Total);
-        if (t > 1.02f)
+        var move = SwordDrawn ? SwordShown : SwordMove.None;
+        float p = 0f;
+        if (move != SwordMove.None && move != SwordMove.Charge)
         {
-            // a copy's blow is over (the owner's machine ends its own)
-            if (!IsMultiplayerAuthority()) SwordShown = SwordMove.None;
-            return false;
+            float total = move == SwordMove.Dodge ? 0.45f : Math.Max(0.01f, SwordRules.Def(move).Total);
+            p = (float)Math.Max(0.0, GameClock.Now - _swordShownAt - _swordShownHold) / total;
+            if (p > 1.02f)
+            {
+                if (!IsMultiplayerAuthority()) SwordShown = SwordMove.None;
+                move = SwordMove.None;
+            }
         }
-        (yaw, pitch, roll, forward) = SwordRules.Arc(SwordShown, t);
-        // the hand carries the arc now (the pose): the blade only whips a little at the wrist, but held down for a plunge
-        if (SwordShown is >= SwordMove.Slash1 and <= SwordMove.Slash5 or SwordMove.Charged)
-        {
-            yaw *= 0.5f; pitch *= 0.5f; roll *= 0.5f; forward *= 0.5f;
-        }
-        return true;
+        (pitch, yaw, roll, forward) = SwordPoses.Wrist(move, Math.Min(p, 1f));
     }
 
     /// <summary>

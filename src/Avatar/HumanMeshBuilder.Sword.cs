@@ -53,10 +53,12 @@ public static partial class HumanMeshBuilder
         var mounts = MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
         var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
         var basis = mounts.HandBasis;
+        var (wp, wy, wr, wf) = SwordPoses.Wrist(move, progress);
         node.AddChild(new MeshInstance3D
         {
             Mesh = Items.ItemDefs.HandMesh(Items.ItemId.Sword), MaterialOverride = Items.ItemDefs.Material,
-            Transform = new Transform3D(basis, hand + basis * new Vector3(0, -0.05f, -0.03f)),
+            Transform = new Transform3D(basis, hand + basis * Items.SwordBlade.SocketOffset)
+                * new Transform3D(Basis.FromEuler(new Vector3(wp, wy, wr)), new Vector3(0, 0, wf)),
         });
         return node;
     }

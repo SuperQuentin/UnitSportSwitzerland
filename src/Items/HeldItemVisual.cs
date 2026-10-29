@@ -465,7 +465,7 @@ void fragment() {{
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
             var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
-            _inHand.Transform = new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f))
+            _inHand.Transform = new Transform3D(basis, hand.Origin + basis * (id == ItemId.Sword ? SwordBlade.SocketOffset : new Vector3(0, -0.05f, -0.03f)))
                 * RadioBounce(0.7f) * SwordSwing();
         }
         else _inHand.Visible = false;
@@ -598,8 +598,8 @@ void fragment() {{
     /// </summary>
     private Transform3D SwordSwing()
     {
-        if (_shown != ItemId.Sword || _player == null || !_player.SwordArcNow(out float yaw, out float pitch, out float roll, out float forward))
-            return Transform3D.Identity;
+        if (_shown != ItemId.Sword || _player == null) return Transform3D.Identity;
+        _player.SwordWristNow(out float pitch, out float yaw, out float roll, out float forward);
         return new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll)), new Vector3(0, 0, forward));
     }
 

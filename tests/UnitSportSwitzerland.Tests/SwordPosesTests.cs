@@ -285,4 +285,93 @@ public class SwordPosesTests
                 Assert.InRange(swing, 60f, 100f);
             }
     }
+
+    private static readonly SwordMove[] AllMoves = { SwordMove.Slash1, SwordMove.Slash2, SwordMove.Slash3, SwordMove.Slash4, SwordMove.Slash5, SwordMove.Charged, SwordMove.Plunge, SwordMove.Dodge };
+
+    [Fact]
+    public void The_off_hand_stays_in_its_comfort_box_and_never_snaps_except_for_the_reach_to_the_handle()
+    {
+        foreach (var move in AllMoves)
+            for (int v = 0; v < (move == SwordMove.Dodge ? 4 : 2); v++)
+            {
+                var last = SwordPoses.Sample(move, v, 5, 0f);
+                for (float p = 1f / 120f; p <= 1f; p += 1f / 120f)
+                {
+                    var o = SwordPoses.Sample(move, v, 5, p);
+                    if (!SwordPoses.TwoHanded(move, v))
+                    {
+                        // in front of and beside the body, at waist to chest height: never through the torso, never above the head, never behind the hip
+                        Assert.InRange(o.Ox, -0.101f, 0.501f);
+                        Assert.InRange(o.Oy, -0.501f, 0.051f);
+                        Assert.InRange(o.Oz, -0.151f, 0.451f);
+                    }
+                    // the speed of the hand, in metres a second (the sampling is 120 Hz): a counterweight does not snap
+                    float speed = MathF.Sqrt(MathF.Pow(o.Ox - last.Ox, 2) + MathF.Pow(o.Oy - last.Oy, 2) + MathF.Pow(o.Oz - last.Oz, 2)) * 120f;
+                    if (SwordPoses.TwoHanded(move, v)) { last = o; continue; }   // glued to the sword hand through the strike
+                    Assert.True(speed < 8f, $"{move} v{v} p {p:F2}: the off hand moves {speed:F1} m/s");
+                    last = o;
+                }
+            }
+    }
+
+    [Fact]
+    public void The_off_hand_moves_against_the_sword_hand_and_pulls_back_on_the_thrust()
+    {
+        // a diagonal cut: the sword hand goes across to the left, so the loose hand goes the other way, by a fraction of it
+        var coil = SwordPoses.Sample(SwordMove.Slash1, 0, 5, 0.34f);
+        var end = SwordPoses.Sample(SwordMove.Slash1, 0, 5, 0.7f);
+        float sword = end.Hx - coil.Hx, off = end.Ox - coil.Ox;
+        Assert.True(sword < -0.3f && off < 0f, "the off hand goes the other way (its outward reach shrinks as the sword hand crosses)");
+        Assert.True(Math.Abs(off) < Math.Abs(sword) * 0.5f, "by a fraction of the sword hand's travel");
+        // the thrust: the hand is drawn to the hip as the sword arm extends
+        Span<float> kt = stackalloc float[9];
+        SwordPoses.KeyTimes(SwordMove.Slash4, 5, kt);
+        var thrust = SwordPoses.Sample(SwordMove.Slash4, 0, 5, kt[5]);
+        Assert.True(thrust.Oy < -0.35f && thrust.Oz < 0.05f, "the hikite");
+    }
+
+    [Fact]
+    public void The_off_hand_goes_to_the_handle_in_the_anticipation_and_leaves_it_in_the_recovery_without_a_jump()
+    {
+        foreach (var move in new[] { SwordMove.Slash5, SwordMove.Charged })
+        {
+            Span<float> kt = stackalloc float[9];
+            SwordPoses.KeyTimes(move, 5, kt);
+            // on the handle at the end of the moving hold: a hand's width from the sword hand's own place, 0.36 m across the shoulders
+            var hold = SwordPoses.Sample(move, 0, 5, kt[2]);
+            float across = Math.Abs((0.18f + hold.Hx) - (-0.18f - hold.Ox));
+            Assert.True(across < 0.12f, $"{move}: the off hand is on the handle ({across:F2} m off)");
+            // never a jump: the biggest step over the move at 120 Hz is a hand's speed
+            var last = SwordPoses.Sample(move, 0, 5, 0f);
+            for (float p = 1f / 120f; p <= 1f; p += 1f / 120f)
+            {
+                var o = SwordPoses.Sample(move, 0, 5, p);
+                if (p > kt[2] && p < kt[5]) { last = o; continue; }   // on the handle through the strike: it goes where the sword hand goes
+                float step = MathF.Sqrt(MathF.Pow(o.Ox - last.Ox, 2) + MathF.Pow(o.Oy - last.Oy, 2) + MathF.Pow(o.Oz - last.Oz, 2));
+                Assert.True(step < 0.10f, $"{move}: off hand jumped {step:F3} m at {p:F2}");
+                last = o;
+            }
+        }
+    }
+
+    [Fact]
+    public void The_grip_socket_is_inside_the_closed_hand_and_the_wrist_keeps_the_blade_off_the_forearm()
+    {
+        var (x, y, z) = SwordPoses.GripSocket;
+        var (hx, hy, hz) = SwordPoses.HandHalfExtents;
+        // the hand's centre is 0.042 m along the hand from the wrist (the mount): the socket sits inside the palm and fingers' box
+        Assert.InRange(MathF.Abs(x), 0f, hx);
+        Assert.InRange(MathF.Abs(y), 0f, hy);
+        Assert.InRange(MathF.Abs(z + 0.042f), 0f, hz);
+        // neutral: forward and up 30 to 45 degrees off the forearm, the wrist cocked
+        Assert.InRange(SwordPoses.CockPitch * 180f / MathF.PI, 30f, 45f);
+        foreach (var move in AllMoves)
+            for (float p = 0f; p <= 1f; p += 0.02f)
+            {
+                var w = SwordPoses.Wrist(move, p);
+                Assert.True(float.IsFinite(w.Pitch + w.Yaw + w.Roll + w.Forward));
+                // the whip never turns the blade a full half turn off the grip
+                Assert.InRange(MathF.Abs(w.Yaw), 0f, 1.6f);
+            }
+    }
 }

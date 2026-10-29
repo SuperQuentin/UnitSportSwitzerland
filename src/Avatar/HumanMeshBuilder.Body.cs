@@ -467,7 +467,7 @@ public static partial class HumanMeshBuilder
                 // pointing (#889), the hand bends at the wrist along its own way: it is drawn as from an
                 // elbow straight behind it on that line
                 bool point = !left && r.PointDirR != Vector3.Zero;
-                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point);
+                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point, r.Fist);
             }
         }
         if (!head) return fit;
@@ -666,7 +666,7 @@ public static partial class HumanMeshBuilder
     /// forward when the arm hangs. The palm faces the body. <paramref name="point"/>: the index
     /// straight on along the hand, the others curled into the palm (a finger on a screen, #889).
     /// </summary>
-    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false)
+    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false, bool fist = false)
     {
         var h = HandFrameOf(elbow, wrist, side, scale);
         var (dir, thumbSide, n, k) = (h.Along, h.Thumb, h.Inward, scale);
@@ -679,7 +679,8 @@ public static partial class HumanMeshBuilder
         for (int i = 0; i < 4; i++)
         {
             // pointing: the index straight, the rest folded into the palm
-            float bend = !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
+            // a closed fist (#1371, a sword in the hand): every finger curled right round into the palm
+            float bend = fist ? 1.38f : !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
             var curl = (dir * Mathf.Cos(bend) + n * Mathf.Sin(bend)).Normalized();
             var fingerBasis = new Basis(thumbSide, curl, thumbSide.Cross(curl));
             float across = (1.5f - i) * 0.0168f * k;
@@ -696,7 +697,8 @@ public static partial class HumanMeshBuilder
         }
 
         var thumbRoot = wrist + dir * 0.022f * k + thumbSide * 0.028f * k;
-        var thumbDir = (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
+        var thumbDir = fist ? (dir * 0.45f + n * 0.55f - thumbSide * 0.40f).Normalized()   // over the curled fingers
+            : (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
         s.Tube(thumbRoot, thumbRoot + thumbDir * 0.055f * k, 0.013f * k, 0.009f * k, fingers, 5);
     }
 

@@ -81,7 +81,7 @@ public static class SwordPoses
     public static readonly SwordPose Ready = new()
     {
         Psi = -0.25f, Theta = 0.12f, Py = -0.06f, Neck = -0.04f,
-        Hx = 0.12f, Hy = -0.12f, Hz = 0.28f, Ox = 0.18f, Oy = -0.10f, Oz = 0.12f,
+        Hx = 0.12f, Hy = -0.12f, Hz = 0.28f, Ox = 0.10f, Oy = -0.30f, Oz = 0.20f,
         LeadX = -0.13f, LeadY = H, LeadZ = 0.17f, RearX = 0.14f, RearY = H, RearZ = -0.15f,
     };
 
@@ -211,6 +211,32 @@ public static class SwordPoses
         float from = tA * 0.4f, to = tS;   // arrives with the blow: done by the end of the strike
         float x = Math.Clamp((progress - from) / Math.Max(0.001f, to - from), 0f, 1f);
         return x * x * (3f - 2f * x);
+    }
+
+    /// <summary>
+    /// Where the sword is held: the centre of the closed palm (a point on the hand's frame, metres: across, up, along the hand's direction as the
+    /// mount has it), the handle running diagonally through the fist. The sword node is placed by this socket, not by the wrist or a fingertip.
+    /// </summary>
+    public static readonly (float X, float Y, float Z) GripSocket = (0f, -0.035f, -0.045f);
+
+    /// <summary>The palm and the closed fingers as a box round the socket (half-extents across, up, along), for the grip check.</summary>
+    public static readonly (float X, float Y, float Z) HandHalfExtents = (0.045f, 0.045f, 0.07f);
+
+    /// <summary>The neutral wrist: cocked so the blade points forward and up about 35 degrees off the forearm, the handle diagonal across the palm.</summary>
+    public const float CockPitch = 0.62f, CockRoll = 0.25f;
+
+    /// <summary>
+    /// The sword's angle on the hand through a move: the neutral cock, plus the wrist's whip (the blade trailing the hand by <see cref="BladeLag"/>),
+    /// as (pitch, yaw, roll) in radians and the metres it reaches forward. The only rotation of the sword node: the blade, the trail and the hit
+    /// capsule all follow the hand through it.
+    /// </summary>
+    public static (float Pitch, float Yaw, float Roll, float Forward) Wrist(SwordMove move, float progress)
+    {
+        if (move is SwordMove.None or SwordMove.Charge or SwordMove.Dodge) return (CockPitch, 0f, CockRoll, 0f);
+        float total = Math.Max(0.0001f, SwordRules.Def(move).Total);
+        var (yaw, pitch, roll, fwd) = SwordRules.Arc(move, Math.Max(0f, progress - BladeLag / total));
+        float k = move == SwordMove.Plunge ? 1f : 0.5f;
+        return (CockPitch + pitch * k, yaw * k, CockRoll + roll * k, fwd * k);
     }
 
     /// <summary>The span of the move (progress) a trail covers: from just before the blade goes live to just after the strike ends.</summary>
@@ -358,8 +384,12 @@ public static class SwordPoses
         r.Spin = Math.Clamp(r.Spin, Math.Min(0f, over.Spin), Math.Max(0f, over.Spin));
         r.Psi = chest.Psi; r.Theta = chest.Theta; r.Phi = chest.Phi;
         r.Hx = arm.Hx; r.Hy = arm.Hy; r.Hz = arm.Hz;
-        r.Neck = head.Neck; r.HeadYaw = head.HeadYaw; r.Ox = head.Ox; r.Oy = head.Oy; r.Oz = head.Oz;
-
+        r.Neck = head.Neck; r.HeadYaw = head.HeadYaw;
+        // the off hand is derived, not keyframed on its own: it follows the sword arm's swing the other way at a quarter of its size, lagging by the head's
+        // 0.10 s (overlapping action), loose at the waist in front of the body; the finisher and the charged cut bring it to the handle and let go; the
+        // thrust pulls it to the hip; a roll or a landing throws it out to the side a little
+        var off = OffHand(move, variant, head, Lag(HeadLag), total, kt, k);
+        r.Ox = off.X; r.Oy = off.Y; r.Oz = off.Z;
         if (move is >= SwordMove.Slash1 and <= SwordMove.Slash5 or SwordMove.Charged)
         {
             // the weight over the front foot on the strike, back in the recovery: the pelvis drops and moves to the front (left) foot, the back heel
@@ -371,6 +401,46 @@ public static class SwordPoses
         }
         return r;
     }
+
+    private static readonly SwordPose Loose = new() { Ox = 0.10f, Oy = -0.30f, Oz = 0.20f };
+
+    /// <summary>The moves whose off hand is on the handle for the anticipation and the strike: the standing finisher and the charged cut.</summary>
+    public static bool TwoHanded(SwordMove move, int variant) => move == SwordMove.Charged || move == SwordMove.Slash5 && variant == 0;
+
+    private static (float X, float Y, float Z) OffHand(SwordMove move, int variant, in SwordPose armAtLag, float p, float total, ReadOnlySpan<float> kt, ReadOnlySpan<SwordPose> keys)
+    {
+        // quiet: the sword hand's displacement from its stance, a quarter of it, the other way (the off shoulder is the mirror, so lateral flips)
+        float dx = armAtLag.Hx - Ready.Hx, dy = armAtLag.Hy - Ready.Hy, dz = armAtLag.Hz - Ready.Hz;
+        float ox = Loose.Ox + 0.25f * dx, oy = Loose.Oy - 0.25f * dy, oz = Loose.Oz - 0.25f * dz;
+        if (move == SwordMove.Slash4 || move == SwordMove.Slash5 && variant == 1)
+        {
+            // the hikite: as the sword arm extends, the off hand is pulled back to the hip
+            float w = Math.Clamp((p - kt[2]) / Math.Max(0.001f, kt[3] - kt[2]), 0f, 1f) * (1f - Math.Clamp((p - kt[5]) / Math.Max(0.001f, kt[7] - kt[5]), 0f, 1f));
+            w = w * w * (3f - 2f * w);
+            ox = Mathf3(ox, 0.12f, w); oy = Mathf3(oy, -0.46f, w); oz = Mathf3(oz, -0.08f, w);
+        }
+        else if (move == SwordMove.Dodge || move == SwordMove.Plunge)
+        {
+            // balancing: out to the side a little through the roll or the landing
+            float w = MathF.Sin(MathF.PI * Math.Clamp(move == SwordMove.Dodge ? p / 0.9f : (p - kt[2]) / Math.Max(0.001f, kt[6] - kt[2]), 0f, 1f));
+            ox = Mathf3(ox, 0.42f, w); oy = Mathf3(oy, -0.12f, w); oz = Mathf3(oz, 0.05f, w);
+        }
+        if (TwoHanded(move, variant))
+        {
+            // to the handle in the anticipation, off it in the recovery: smooth both ways. The grip is the sword hand's own place, a hand's width below it
+            float into = Math.Clamp(p / Math.Max(0.001f, kt[1]), 0f, 1f);
+            float outOf = Math.Clamp((p - kt[5]) / Math.Max(0.001f, kt[7] - kt[5]), 0f, 1f);
+            float w = into * into * (3f - 2f * into) * (1f - outOf * outOf * (3f - 2f * outOf));
+            float hx = armAtLag.Hx, hy = armAtLag.Hy, hz = armAtLag.Hz;
+            // the sword hand is on the right shoulder's frame, the off hand on the left's: 0.36 m across; a hand's width down the handle
+            ox = Mathf3(ox, -(0.36f + hx) + 0.02f, w); oy = Mathf3(oy, hy - 0.06f, w); oz = Mathf3(oz, hz + 0.02f, w);
+        }
+        // a comfort box in front of and beside the body, except the reach to the handle
+        if (!TwoHanded(move, variant)) { ox = Math.Clamp(ox, -0.10f, 0.50f); oy = Math.Clamp(oy, -0.50f, 0.05f); oz = Math.Clamp(oz, -0.15f, 0.45f); }
+        return (ox, oy, oz);
+    }
+
+    private static float Mathf3(float a, float b, float t) => a + (b - a) * t;
 
     private static float Bump(float p, float from, float to)
     {

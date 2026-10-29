@@ -2369,7 +2369,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float phase = PoseKind == PoseFall ? _flailClock : _stridePhase;
         // a hand held by a friend's (#1266, ArmHold): keyed to 2 cm, the item hand stays the item's
         var hold = PoseKind == PoseStride && dance == null && vr == null ? HoldPose(armed) : null;
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold);
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold, SwordDrawn);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2393,7 +2393,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _poseKey = key;
             _poseWait = 0f;
             // a new look (clothes, hat, style, a finger out to point) is the only thing that builds a mesh
-            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat, Point: point != null) { Smooth = smooth });
+            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat, Point: point != null, Fist: SwordDrawn) { Smooth = smooth });
             switch (PoseKind)
             {
                 case PoseTucked: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Tucked, arm, blend, wind); break;
@@ -2429,7 +2429,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
         bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null, Vector3 Wind = default,
-        Avatar.HumanMeshBuilder.HandHold? Hold = null);
+        Avatar.HumanMeshBuilder.HandHold? Hold = null, bool Fist = false);
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
