@@ -1033,6 +1033,13 @@ src/Occasions/Festivals/FestivalService.Christmas quick  --christmascheck --fest
 src/Occasions/Festivals/Christmas/ net    tools/christmasnetcheck.sh
 src/Occasions/Festivals/FestivalService.Christmas net    tools/christmasnetcheck.sh
 tools/christmasnetcheck.sh    net    tools/christmasnetcheck.sh
+# #1351: the Escalade: the Marmite's pair, the soup pot, the Course's gates and pay (offline quick probe; server + two clients)
+src/Occasions/Festivals/Escalade/ quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Escalade/ net    tools/escaladenetcheck.sh
+src/Occasions/Festivals/FestivalService.Escalade net    tools/escaladenetcheck.sh
+tools/escaladenetcheck.sh    net    tools/escaladenetcheck.sh
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
