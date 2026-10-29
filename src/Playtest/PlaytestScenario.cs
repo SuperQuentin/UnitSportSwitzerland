@@ -40,6 +40,13 @@ public sealed class PlaytestScenario
     /// <summary>The fixture course it needs (<c>junction</c>, <c>hairpin</c>...), or null for any open ground.</summary>
     public string? Course { get; init; }
 
+    /// <summary>
+    /// Launch flags the scenario needs, as <c>--flag value</c> pairs in one list (<c>["--festival", "test", ...]</c>): when the
+    /// running game lacks one, the director relaunches with it, as for <see cref="Course"/> (the adv3 set needs the adventure systems
+    /// and the check-only festival).
+    /// </summary>
+    public string[]? Flags { get; init; }
+
     /// <summary>Knobs Claude may turn live (<c>set_param</c>), with their defaults; read them in <see cref="Setup"/> with <see cref="PlaytestContext.Param"/>.</summary>
     public Dictionary<string, double> Params { get; init; } = [];
 

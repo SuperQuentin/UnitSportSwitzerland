@@ -833,6 +833,7 @@ src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Playtest/Scenarios/Adv3 quick --playtest --playtest-smoke --world fixture --chunks fixture:flat --festival test --systems terrain,npcs,birds,physics,audio,network,sky,interiors,loot,occasions,ui,build,airports,farming,containers,snow,lifts,adventure --pois fixture --givers fixture --crevasses on --adventure-dir res://test_output/playtest/adv3
 # the playtest recorder (#844): a 20 s recorded session read back (trace, note, report, top view)
 src/Playtest/            quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Movie/ReplayWatch    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
