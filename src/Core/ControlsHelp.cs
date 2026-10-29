@@ -98,6 +98,11 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At a market stall: the day's free taste (the stall-hop), then buy its ware for Batzen; at the Samichlaus on 6 December: his bag", PlayerInput.InteractMount),
         }),
+        ("Festivals: the Zibelemärit (#1373)", new Row[]
+        {
+            new("At an onion market stall: the day's free taste (the stall-hop), then buy its ware for Batzen", PlayerInput.InteractMount),
+            new("Confetti egg or Räppli in hand: throw it over the square (every fifth throw pays)", PlayerInput.UseItem),
+        }),
         ("Festivals: the Escalade (#1351)", new Row[]
         {
             new("At the Marmite: smash it (the party's youngest and oldest both press); at the soup pot: ladle a bowl for the party; at the start line: begin the Course de l'Escalade", PlayerInput.InteractMount),

@@ -287,6 +287,15 @@ public enum ItemId
     Lampion = 520,
     /// <summary>A box of fireworks from the 1 August stand, bought with Batzen: Use lights a 40 s volley of your own, at night.</summary>
     FireworkBox = 521,
+    // ---- the Zibelemärit (#1373, docs/notes/occasions/festival-zibelemaerit.md; 525-529 are its block) ----
+    /// <summary>A braid of onions, bought at the Zwiebelzopf stall: worth nothing but the look in the hand.</summary>
+    Zwiebelzopf = 525,
+    /// <summary>The Zibelechueche, Bern's onion tart from the pie stall: food.</summary>
+    Zibelechueche = 526,
+    /// <summary>The Mehlsuppe, the market's flour soup from the kettle: food, warm for 3 minutes.</summary>
+    Mehlsuppe = 527,
+    /// <summary>A confetti egg from the Konfetti stall: Use throws it like a handful of Räppli (<see cref="ItemUse.Confetti"/>), the Zibelemärit's confetti fight.</summary>
+    Konfettiei = 528,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }

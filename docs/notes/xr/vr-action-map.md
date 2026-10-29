@@ -275,3 +275,6 @@ work (#437, #438); 8 fixed by #435.
 | Alphorn: blow (hold from a note's start to its end) | LMB `use_item` / RB or RT | new: the trigger (replays as the pad's RT through `XrPad`) | raise the horn to the mouth and blow (a later target) |
 | Alphorn: choose the note (partial) | wheel, W / S / R stick up-down | new: the right stick up-down through `XrPad` | keep |
 | Yodel: tap on the beat | Space `jump` / A | new: A | keep |
+| Zibelemärit: taste at a stall (the day's stamp), buy its ware (#1373) | `interact_mount` E within 5.5 m of a stall (`ZibeleGame.TryInteract`) | new: Y through `XrPad`; a grip at the stall | grip a braid off the awning or the kettle's ladle (`gap`: the pad route works) |
+| Zibelemärit: throw a confetti egg or Räppli on the square (#1373) | `use_item` LMB with the egg in hand (`ItemUse.Confetti`) | X / the trigger through `XrPad` | toss it by hand (`gap`: the pad route works) |
+| Zibelemärit: eat the tart or the soup (#1373) | `use_item` LMB (`ItemController`, like any food) | X / the trigger through `XrPad` | bring it to the mouth (the eat pose) |

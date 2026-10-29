@@ -145,6 +145,8 @@ public partial class FestivalService : Node
                 FestivalCatalog.Register(sechse with { Sites = [new FestivalSite("the test field", e, n, 120)] });
             if (FestivalCatalog.Get(FestivalCatalog.ChalandaId) is { } chalanda)
                 FestivalCatalog.Register(chalanda with { Sites = [new FestivalSite("the test field", e, n, 100)] });
+            if (FestivalCatalog.Get(FestivalCatalog.ZibelemaeritId) is { } zibele)
+                FestivalCatalog.Register(zibele with { Sites = [new FestivalSite("the test field", e, n, 100)] });
             if (FestivalCatalog.Get(FestivalCatalog.August1Id) is { } august1)
                 FestivalCatalog.Register(august1 with { Sites = [new FestivalSite("the test field", e, n, 120)] });
         }
@@ -514,6 +516,7 @@ public partial class FestivalService : Node
         SendFestivals(peer);
         DesalpeWelcome(peer);
         MarketWelcome(peer);
+        ZibeleWelcome(peer);
         SechseWelcome(peer);
         foreach (var run in Running)
         {
