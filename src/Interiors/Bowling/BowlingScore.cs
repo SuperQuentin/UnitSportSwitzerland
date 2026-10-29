@@ -47,6 +47,81 @@ public static class BowlingScore
         return last == 10 || prev != 10 && prev + last == 10;
     }
 
+    /// <summary>
+    /// What the lane's screen calls the last roll at the end of its replay, Wii Sports style (#1336): STRIKE, DOUBLE,
+    /// TURKEY and n-BAGGER for strikes in a row (PERFECT GAME at twelve), SPARE, SPLIT for a first ball that leaves a
+    /// split (<paramref name="standing"/>: the pins left, bit i pin i+1), GUTTER for a first ball that takes none; null
+    /// when there is nothing to say.
+    /// </summary>
+    public static string? Word(IReadOnlyList<int> rolls, ushort standing)
+    {
+        if (rolls.Count == 0) return null;
+        var before = new List<int>(rolls.Count);
+        for (int i = 0; i < rolls.Count - 1; i++) before.Add(rolls[i]);
+        int last = rolls[^1];
+        if (FreshRack(before))
+        {
+            if (last == 10)
+            {
+                // strikes in a row: each at a full rack
+                int n = 0;
+                for (int k = rolls.Count; k > 0; k--)
+                {
+                    var upTo = new List<int>(k - 1);
+                    for (int i = 0; i < k - 1; i++) upTo.Add(rolls[i]);
+                    if (rolls[k - 1] != 10 || !FreshRack(upTo)) break;
+                    n++;
+                }
+                return n >= 12 ? "PERFECT GAME!" : n switch { 1 => "STRIKE!", 2 => "DOUBLE!", 3 => "TURKEY!", _ => $"{n}-BAGGER!" };
+            }
+            if (last == 0) return "GUTTER";
+            return IsSplit(standing) ? "SPLIT" : null;
+        }
+        return last == Standing(before) ? "SPARE!" : null;
+    }
+
+    /// <summary>
+    /// A split: the head pin down and the pins left standing in two or more groups with a gap between them (pins are
+    /// together when they stand side by side in a row, or one diagonally behind the other).
+    /// </summary>
+    public static bool IsSplit(ushort standing)
+    {
+        if ((standing & 1) != 0 || standing == 0) return false;
+        // each pin's place: its row, and across in half pin spacings
+        static (int Row, int X) At(int pin)
+        {
+            int row = pin < 1 ? 0 : pin < 3 ? 1 : pin < 6 ? 2 : 3;
+            int i = pin - row * (row + 1) / 2;
+            return (row, row - 2 * i);
+        }
+        int groups = 0;
+        ushort seen = 0;
+        for (int p = 0; p < 10; p++)
+        {
+            if ((standing & (1 << p)) == 0 || (seen & (1 << p)) != 0) continue;
+            groups++;
+            var stack = new Stack<int>();
+            stack.Push(p);
+            seen |= (ushort)(1 << p);
+            while (stack.Count > 0)
+            {
+                var a = At(stack.Pop());
+                for (int q = 0; q < 10; q++)
+                {
+                    if ((standing & (1 << q)) == 0 || (seen & (1 << q)) != 0) continue;
+                    var b = At(q);
+                    int dr = Math.Abs(a.Row - b.Row), dx = Math.Abs(a.X - b.X);
+                    if (dr == 0 && dx == 2 || dr == 1 && dx == 1)
+                    {
+                        seen |= (ushort)(1 << q);
+                        stack.Push(q);
+                    }
+                }
+            }
+        }
+        return groups >= 2;
+    }
+
     /// <summary>The pins still standing before the next ball: what it can knock down at most.</summary>
     public static int Standing(IReadOnlyList<int> rolls) => FreshRack(rolls) ? 10 : 10 - rolls[^1];
 

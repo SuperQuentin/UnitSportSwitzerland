@@ -11,7 +11,7 @@ public partial class BowlingLanes
 {
     private const float UseReach = 1.2f;
 
-    private enum Use { SignIn, SignOut, AddBot, Rack, Hood, Bowl }
+    private enum Use { SignIn, SignOut, AddBot, Rack, Hood, Bowl, Return }
 
     private (Use Use, InteriorNode Node, int Piece, int Tier, int Slot)? At(FootPlayer p)
     {
@@ -27,6 +27,16 @@ public partial class BowlingLanes
             return (open ? Use.AddBot : Use.SignOut, node, counter, 0, 0);
         }
         if (me == null) return null;
+        if (me.Value.Bowler.Ball == BallAt.None && me.Value.Key == layout.Key)
+        {
+            // a house ball off the pair's return, at it (#1336)
+            var mine = layout.Furniture[me.Value.Pair];
+            var gr = LaneGeometry.Of(mine);
+            var near = PieceFrame(layout, mine).AffineInverse() * node.ToLocal(p.GlobalPosition);
+            var lanes = PairOf(layout.Key, me.Value.Pair);
+            if (Mathf.Abs(near.X) < 1.2f && near.Z > gr.Front - 1f && near.Z < gr.HoodBack + 0.6f && lanes.Any(ln => ln.House.Count > 0))
+                return (Use.Return, node, me.Value.Pair, 0, 0);
+        }
         if (me.Value.Bowler.Ball == BallAt.None)
         {
             int rack = Loot.LootService.NearestOf(p, layout, node, t => t == FurnitureType.BallRack, UseReach);
@@ -69,6 +79,7 @@ public partial class BowlingLanes
                 return $"Take the {pounds} lb ball";
             }
             case Use.Hood: return "Take your ball";
+            case Use.Return: return "Take a house ball";
             default: return "Bowl";
         }
     }
@@ -80,11 +91,13 @@ public partial class BowlingLanes
     /// <summary>A counter or rack whole; at a lane pair (26 m long) only its hood, where the ball is and the bowler stands.</summary>
     private static Outline OutlineOf((Use Use, InteriorNode Node, int Piece, int Tier, int Slot) at)
     {
-        if (at.Use is not (Use.Hood or Use.Bowl)) return Outline.Piece(at.Node, at.Piece, 0);
+        if (at.Use is not (Use.Hood or Use.Bowl or Use.Return)) return Outline.Piece(at.Node, at.Piece, 0);
         var l = at.Node.Layout;
         var g = LaneGeometry.Of(l.Furniture[at.Piece]);
-        var hood = PieceFrame(l, l.Furniture[at.Piece]) * new Transform3D(Basis.Identity, new Vector3(0, 0.42f, g.HoodZ + 0.6f));
-        return Outline.Box(at.Node, hood, new Vector3(0.8f, 0.84f, 1.25f));
+        // the ball return whole (#1336): its curled track and its hood
+        float near = g.ReturnBend - LaneGeometry.ReturnRun - 0.12f;
+        var hood = PieceFrame(l, l.Furniture[at.Piece]) * new Transform3D(Basis.Identity, new Vector3(0, 0.53f, (near + g.HoodBack) / 2));
+        return Outline.Box(at.Node, hood, new Vector3(0.62f, 1.06f, g.HoodBack - near));
     }
 
     /// <summary>E in a bowling centre: true when it did something here.</summary>
@@ -108,6 +121,9 @@ public partial class BowlingLanes
                 break;
             case Use.Hood:
                 b.AskTakeBall(key, 0, 0);
+                break;
+            case Use.Return:
+                b.AskTakeBall(key, -1, 0);
                 break;
             case Use.Bowl:
                 BowlingAim.Begin(p, key, at.Piece);

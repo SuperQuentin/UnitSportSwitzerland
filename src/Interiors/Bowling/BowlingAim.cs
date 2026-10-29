@@ -6,17 +6,18 @@ namespace UnitSport.Interiors;
 
 /// <summary>
 /// Stepping up to bowl, Wii Sports style (#1323), on keyboard and pad: a camera behind the bowler over
-/// their lane, then three steps. <b>Spot</b>: left and right along the foul line. <b>Line</b>: turn the
-/// arrow on the lane. <b>Swing</b>: hold to swing, the power swelling and ebbing while held; moving
-/// sideways during the swing (mouse or stick, like twisting the remote) puts hook on it, the curve on the
-/// lane showing it; let go to roll. Sprint held looks down the lane at the pins; Cancel steps back.
+/// their lane, then two steps. <b>Aim</b> (#1336): the move keys (A/D, the left stick) walk the spot along
+/// the foul line, the aim keys (the arrows, the right stick) turn the line, the line drawn on the lane
+/// (straight: the hook is not shown, it is the player's to judge). <b>Swing</b>: hold to swing, the power
+/// swelling and ebbing while held; moving sideways during the swing (A/D, the stick, the mouse, like
+/// twisting the remote) puts hook on it; let go to roll. Sprint held looks down the lane at the pins; Cancel steps back.
 /// Everything goes out as one <see cref="BowlingBall.Release"/> (<see cref="BowlingLanes.AskRelease"/>).
 /// In VR the same steps run through <c>XrPad</c> (the stick and the trigger), or the ball is thrown for
 /// real (<c>XrBowling</c>).
 /// </summary>
 public partial class BowlingAim : CanvasLayer
 {
-    private enum Step { Spot, Line, Swing }
+    private enum Step { Aim, Swing }
 
     public static BowlingAim? Current { get; private set; }
 
@@ -32,6 +33,8 @@ public partial class BowlingAim : CanvasLayer
     private Step _step;
     private float _spot, _line, _power, _hook, _held;
     private bool _swinging;
+    /// <summary>The roll is watched (<see cref="BowlingWatch"/> has the camera): leaving does not give it back.</summary>
+    private bool _watched;
     private Camera3D? _cam, _own;
     private MeshInstance3D _curve = null!;
     private ImmediateMesh _curveMesh = null!;
@@ -41,7 +44,8 @@ public partial class BowlingAim : CanvasLayer
     private Step _shownStep = (Step)255;
 
     private static readonly StringName ActLeft = PlayerInput.MoveLeft, ActRight = PlayerInput.MoveRight,
-        ActGo = PlayerInput.Jump, ActZoom = PlayerInput.Sprint, ActCancel = "ui_cancel";
+        ActGo = PlayerInput.Jump, ActZoom = PlayerInput.Sprint, ActCancel = "ui_cancel",
+        ActTurnLeft = PlayerInput.BowlAimLeft, ActTurnRight = PlayerInput.BowlAimRight;
 
     /// <summary>The local player steps up to their lane of pair <paramref name="pair"/>.</summary>
     public static void Begin(FootPlayer p, string key, int pair)
@@ -77,6 +81,8 @@ public partial class BowlingAim : CanvasLayer
             _cam = new Camera3D { Name = "BowlingCamera", Fov = 55f, Near = 0.05f, Far = own.Far, Environment = own.Environment, Attributes = own.Attributes, CullMask = own.CullMask };
             _node.AddChild(_cam);
             _cam.MakeCurrent();
+            // the bowler as the others see them, the ball in their hand, not the first person's body (#1336)
+            _player.SeenFromOutside = true;
         }
         PlaceBowler();
     }
@@ -85,7 +91,8 @@ public partial class BowlingAim : CanvasLayer
     {
         if (Current == this) Current = null;
         UiFocus.Set(this, false);
-        if (_own != null && IsInstanceValid(_own)) _own.MakeCurrent();
+        if (_own != null && IsInstanceValid(_own) && !_watched) _own.MakeCurrent();
+        if (IsInstanceValid(_player)) _player.SeenFromOutside = false;
         if (_cam != null && IsInstanceValid(_cam)) _cam.QueueFree();
         if (IsInstanceValid(_curve)) _curve.QueueFree();
     }
@@ -99,21 +106,19 @@ public partial class BowlingAim : CanvasLayer
         float dt = (float)delta;
         if (Input.IsActionJustPressed(ActCancel))
         {
-            if (_step == Step.Spot) { QueueFree(); return; }
+            if (_step == Step.Aim) { QueueFree(); return; }
             _step--;
             _swinging = false;
         }
         float steer = Input.GetActionStrength(ActRight) - Input.GetActionStrength(ActLeft);
+        float turn = Input.GetActionStrength(ActTurnRight) - Input.GetActionStrength(ActTurnLeft);
         switch (_step)
         {
-            case Step.Spot:
+            case Step.Aim:
                 // right on screen is the bowler's right: −x in the lane's frame
                 _spot = Mathf.Clamp(_spot - steer * SpotSpeed * dt, -BowlingSizes.HalfLane + 0.12f, BowlingSizes.HalfLane - 0.12f);
+                _line = Mathf.Clamp(_line - turn * LineSpeed * dt, -0.08f, 0.08f);
                 if (steer != 0) PlaceBowler();
-                if (Input.IsActionJustPressed(ActGo)) _step = Step.Line;
-                break;
-            case Step.Line:
-                _line = Mathf.Clamp(_line - steer * LineSpeed * dt, -0.08f, 0.08f);
                 if (Input.IsActionJustPressed(ActGo)) { _step = Step.Swing; _swinging = false; }
                 break;
             case Step.Swing:
@@ -145,6 +150,12 @@ public partial class BowlingAim : CanvasLayer
     private void Roll()
     {
         BowlingLanes.Instance?.AskRelease(_key, Release());
+        // the camera stays on the lane, then looks at its screen's replay (#1336)
+        if (_cam != null && _own != null && _node.LaneRigOf(_pair) is { } rig)
+        {
+            BowlingWatch.Begin(_node, _own, rig, _lane, _cam.GlobalTransform);
+            _watched = true;
+        }
         QueueFree();
     }
 
@@ -192,8 +203,7 @@ public partial class BowlingAim : CanvasLayer
             _shownStep = _step;
             _text.Text = _step switch
             {
-                Step.Spot => $"Where to stand  ·  {InputHints.Prompt(PlayerInput.MoveLeft, "")}{InputHints.Prompt(PlayerInput.MoveRight, "move")}   {InputHints.Prompt(PlayerInput.Jump, "set")}   {InputHints.Prompt(PlayerInput.Sprint, "look at the pins")}",
-                Step.Line => $"Your line  ·  {InputHints.Prompt(PlayerInput.MoveLeft, "")}{InputHints.Prompt(PlayerInput.MoveRight, "turn")}   {InputHints.Prompt(PlayerInput.Jump, "set")}",
+                Step.Aim => $"Aim  ·  {InputHints.Prompt(PlayerInput.MoveLeft, "")}{InputHints.Prompt(PlayerInput.MoveRight, "move")}   {InputHints.Prompt(PlayerInput.BowlAimLeft, "")}{InputHints.Prompt(PlayerInput.BowlAimRight, "turn")}   {InputHints.Prompt(PlayerInput.Jump, "set")}   {InputHints.Prompt(PlayerInput.Sprint, "look at the pins")}",
                 _ => $"Swing  ·  hold {InputHints.Prompt(PlayerInput.Jump, "")}, move sideways for hook, let go to roll",
             };
             _bar.Visible = _step == Step.Swing;
@@ -205,16 +215,19 @@ public partial class BowlingAim : CanvasLayer
         }
     }
 
-    /// <summary>The ball's path on the lane as it would go now, redrawn only when the spot, line or hook changes.</summary>
+    /// <summary>
+    /// The line the ball starts on, from the spot and the line alone (#1336: no hook in it, judging the hook is the game),
+    /// redrawn only when they change.
+    /// </summary>
     private void UpdateCurve()
     {
-        var now = (_spot, _line, _hook);
+        var now = (_spot, _line, 0f);
         if (now == _drawn) return;
         _drawn = now;
-        var run = BowlingBall.Roll(_g.Run, new BowlingBall.Release(_spot, _line, 7.5f, 16f + Mathf.Abs(_hook) * 26f, _hook * 0.75f));
+        var run = BowlingBall.Roll(_g.Run, new BowlingBall.Release(_spot, _line, 7.5f, 16f, 0f));
         _curveMesh.ClearSurfaces();
         _curveMesh.SurfaceBegin(Mesh.PrimitiveType.Triangles);
-        var col = _step == Step.Swing ? new Color(0.4f, 0.9f, 1f, 0.7f) : new Color(1f, 1f, 1f, 0.55f);
+        var col = new Color(1f, 1f, 1f, 0.55f);
         int stride = 12;
         for (int i = 0; i + stride < run.Pos.Count; i += stride)
         {

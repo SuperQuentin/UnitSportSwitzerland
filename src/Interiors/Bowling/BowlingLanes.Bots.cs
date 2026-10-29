@@ -43,6 +43,7 @@ public partial class BowlingLanes
         // no players left on the lane: its bots go too
         if (lane.Bowlers.Count > 0 && lane.Bowlers.All(b => IsBot(b.Peer)))
         {
+            foreach (var bot in lane.Bowlers) Leave(lane, bot);
             lane.Bowlers.Clear();
             lane.Turn = 0;
             return true;
@@ -51,7 +52,8 @@ public partial class BowlingLanes
         if (up.Ball is BallAt.Hood or BallAt.None)
         {
             up.Ball = BallAt.Hand;
-            up.BallBack = now + 2.5;   // when it bowls: a moment to step up
+            // when it bowls: a whole turn on, so every client plays it from the return to the release (DecoThrow, #1336)
+            up.BallBack = now + DecoThrow.Release;
             return true;
         }
         if (up.Ball != BallAt.Hand || now < up.BallBack) return false;

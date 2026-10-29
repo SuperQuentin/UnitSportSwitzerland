@@ -122,4 +122,46 @@ public class BowlingTests
         Assert.Equal((9, 2), BowlingScore.Next(nine.Append(6).Append(4).ToArray()));
         Assert.Equal((10, 0), BowlingScore.Next(nine.Append(6).Append(3).ToArray()));
     }
+
+    // ---- what the screen calls a roll (#1336) ----
+
+    private const ushort FullRack = 0x3FF;
+
+    private static ushort Pins(params int[] numbers)
+    {
+        ushort m = 0;
+        foreach (int n in numbers) m |= (ushort)(1 << (n - 1));
+        return m;
+    }
+
+    [Fact]
+    public void TheWordForStrikesInARow()
+    {
+        Assert.Equal("STRIKE!", BowlingScore.Word(new[] { 10 }, FullRack));
+        Assert.Equal("DOUBLE!", BowlingScore.Word(new[] { 10, 10 }, FullRack));
+        Assert.Equal("TURKEY!", BowlingScore.Word(new[] { 10, 10, 10 }, FullRack));
+        Assert.Equal("4-BAGGER!", BowlingScore.Word(new[] { 10, 10, 10, 10 }, FullRack));
+        // a strike after a spare starts the count again
+        Assert.Equal("STRIKE!", BowlingScore.Word(new[] { 10, 6, 4, 10 }, FullRack));
+        // a spare's second ball taking all ten is no strike
+        Assert.Equal("SPARE!", BowlingScore.Word(new[] { 0, 10 }, FullRack));
+        Assert.Equal("PERFECT GAME!", BowlingScore.Word(Enumerable.Repeat(10, 12).ToArray(), FullRack));
+    }
+
+    [Fact]
+    public void TheWordForSparesSplitsAndGutters()
+    {
+        Assert.Equal("SPARE!", BowlingScore.Word(new[] { 7, 3 }, FullRack));
+        Assert.Null(BowlingScore.Word(new[] { 7, 2 }, FullRack));
+        Assert.Equal("GUTTER", BowlingScore.Word(new[] { 0 }, FullRack));
+        // the 7-10 and the 4-6 are splits; the 4-5, a pocket leave with the head pin standing, a single pin are not
+        Assert.Equal("SPLIT", BowlingScore.Word(new[] { 8 }, Pins(7, 10)));
+        Assert.True(BowlingScore.IsSplit(Pins(4, 6)));
+        Assert.True(BowlingScore.IsSplit(Pins(2, 7)));
+        Assert.False(BowlingScore.IsSplit(Pins(4, 5)));
+        Assert.False(BowlingScore.IsSplit(Pins(1, 7, 10)));
+        Assert.False(BowlingScore.IsSplit(Pins(10)));
+        Assert.False(BowlingScore.IsSplit(Pins(2, 4, 5, 8)));
+        Assert.Null(BowlingScore.Word(new[] { 9 }, Pins(7)));
+    }
 }

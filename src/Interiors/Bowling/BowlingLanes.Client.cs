@@ -190,7 +190,8 @@ public partial class BowlingLanes
                 var lane = lanes?[i];
                 Show(rig, here.Key, pair, i, lane, now);
             }
-            Hood(rig, lanes);
+            // a pair nobody has bowled at yet has no state: its return shows the house balls it starts with (#1336)
+            Hood(rig, lanes ?? Fresh(here.Key, pair));
             if (lanes != null && _scoresShown.GetValueOrDefault((here.Key, pair), -1) != _version)
             {
                 _scoresShown[(here.Key, pair)] = _version;
@@ -238,6 +239,15 @@ public partial class BowlingLanes
             else if (_holding.Contains(peer) && IsInstanceValid(ball) && !ball.Visible) ball.Visible = true;
     }
 
+    /// <summary>What the screen calls the lane's last roll (#1336), from its roller's rolls and the pins it left.</summary>
+    private static string? WordOf(Lane? lane)
+    {
+        if (lane == null) return null;
+        foreach (var b in lane.Bowlers)
+            if (b.Peer == lane.Roller) return BowlingScore.Word(b.Rolls, lane.Standing);
+        return null;
+    }
+
     private Player.FootPlayer? BodyOf(long peer) =>
         peer == MyId ? InteriorManager.Instance?.LocalPlayer?.Invoke()
             : GetParent()?.GetNodeOrNull<Node>("Players")?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
@@ -276,7 +286,7 @@ public partial class BowlingLanes
             {
                 play.Ended = true;
                 // the impact again on the lane's screen, slowly
-                rig.PlayReplay(i, play.Frames, play.Color);
+                rig.PlayReplay(i, play.Frames, play.Color, WordOf(lane));
             }
             return;
         }
@@ -297,16 +307,47 @@ public partial class BowlingLanes
         }
     }
 
+    /// <summary>
+    /// Where <paramref name="peer"/>'s ball waits in the queue on pair <paramref name="pair"/>'s return (#1336), in the
+    /// order <see cref="Hood"/> lays it: after the house balls, by when each came back; -1 when it is not there.
+    /// </summary>
+    public int ReturnSlotOf(string key, int pair, long peer)
+    {
+        if (!Centres.TryGetValue(key, out var pairs) || !pairs.TryGetValue(pair, out var lanes)) return -1;
+        int slot = 0;
+        double mine = double.NaN;
+        foreach (var lane in lanes)
+        {
+            slot += lane.House.Count;
+            foreach (var b in lane.Bowlers)
+                if (b.Peer == peer && b.Ball == BallAt.Hood) mine = b.BallBack;
+        }
+        if (double.IsNaN(mine)) return -1;
+        foreach (var lane in lanes)
+            foreach (var b in lane.Bowlers)
+                if (b.Peer != peer && b.Ball == BallAt.Hood && b.BallBack < mine) slot++;
+        return slot;
+    }
+
     /// <summary>The balls waiting on a pair's hood: both lanes' bowlers whose ball is back.</summary>
     private readonly List<int> _hood = new();
+    private readonly List<(double At, int Color)> _back = new();
 
     private void Hood(LaneRig rig, Lane[]? lanes)
     {
         _hood.Clear();
+        _back.Clear();
         if (lanes != null)
+        {
+            // the house balls were there first, at the stop; the bowlers' balls queue behind them as they came back
+            foreach (var lane in lanes)
+                foreach (var (c, _) in lane.House) _hood.Add(c);
             foreach (var lane in lanes)
                 foreach (var b in lane.Bowlers)
-                    if (b.Ball == BallAt.Hood) _hood.Add(b.Color);
+                    if (b.Ball == BallAt.Hood) _back.Add((b.BallBack, b.Color));
+            _back.Sort((a, b) => a.At.CompareTo(b.At));
+            foreach (var (_, c) in _back) _hood.Add(c);
+        }
         rig.SetHoodBalls(_hood);
     }
 }

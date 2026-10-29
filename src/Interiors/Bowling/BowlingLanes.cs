@@ -27,6 +27,8 @@ public partial class BowlingLanes : Node
     public const ushort Rack = 0x3FF;
     /// <summary>Bowlers on one lane at most.</summary>
     public const int MaxBowlers = 6;
+    /// <summary>House balls each lane keeps on the pair's return at the start (#1336): four on a return.</summary>
+    public const int HouseStart = 2;
     /// <summary>How long a ball takes from the pit, through the subway, up into the hood [E: 6-10 s].</summary>
     public const double ReturnTime = 6.5;
     /// <summary>The pinsetter starts this long after the pins settle.</summary>
@@ -67,6 +69,11 @@ public partial class BowlingLanes : Node
         public Transform3D[]? Rest;
         /// <summary>When everyone's game ended (a new one starts a while after).</summary>
         public double OverAt = double.NaN;
+        /// <summary>
+        /// House balls this lane keeps on the pair's return (#1336): anyone signed in on the pair without a ball takes one
+        /// there. Colour and weight each; two at the start.
+        /// </summary>
+        public readonly List<(byte Color, byte Weight)> House = new();
 
         public bool Rolling => !double.IsNaN(ReleaseAt);
         public Bowler? Up => Turn >= 0 && Turn < Bowlers.Count ? Bowlers[Turn] : null;
@@ -100,7 +107,32 @@ public partial class BowlingLanes : Node
     protected Lane[] PairOf(string key, int pair)
     {
         if (!Centres.TryGetValue(key, out var pairs)) Centres[key] = pairs = new();
-        if (!pairs.TryGetValue(pair, out var lanes)) pairs[pair] = lanes = new[] { new Lane(), new Lane() };
+        if (!pairs.TryGetValue(pair, out var lanes)) pairs[pair] = lanes = NewPair(key, pair);
+        return lanes;
+    }
+
+    private readonly Dictionary<(string, int), Lane[]> _fresh = new();
+
+    /// <summary>
+    /// How a pair nobody has bowled at yet looks, for showing (#1336): never changed, never sent. A client shows its
+    /// return's house balls before the server has a state for the pair.
+    /// </summary>
+    protected Lane[] Fresh(string key, int pair)
+    {
+        if (!_fresh.TryGetValue((key, pair), out var lanes)) _fresh[(key, pair)] = lanes = NewPair(key, pair);
+        return lanes;
+    }
+
+    /// <summary>A pair as the centre opens it: two empty lanes, and the house balls on the return, the same on every peer (#1336).</summary>
+    private static Lane[] NewPair(string key, int pair)
+    {
+        var lanes = new[] { new Lane(), new Lane() };
+        for (int i = 0; i < 2; i++)
+            for (int k = 0; k < HouseStart; k++)
+            {
+                uint h = (uint)Core.Fnv.Hash($"{key}#{pair}#{i}#{k}");
+                lanes[i].House.Add(((byte)(h % InteriorMeshBuilder.BallColorCount), (byte)(10 + h / 7 % 5)));
+            }
         return lanes;
     }
 
@@ -148,6 +180,8 @@ public partial class BowlingLanes : Node
                     foreach (int v in lane.Release.Pack()) w.Write(v);
                     w.Write(lane.Rest != null);
                     if (lane.Rest != null) WritePoses(w, lane.Rest);
+                    w.Write((byte)lane.House.Count);
+                    foreach (var (c, wt) in lane.House) { w.Write(c); w.Write(wt); }
                     w.Write((byte)lane.Bowlers.Count);
                     foreach (var b in lane.Bowlers)
                     {
@@ -187,6 +221,8 @@ public partial class BowlingLanes : Node
                 for (int i = 0; i < 5; i++) rel[i] = r.ReadInt32();
                 lane.Release = BowlingBall.Release.Unpack(rel);
                 if (r.ReadBoolean()) lane.Rest = ReadPoses(r);
+                int house = r.ReadByte();
+                for (int k = 0; k < house; k++) lane.House.Add((r.ReadByte(), r.ReadByte()));
                 int n = r.ReadByte();
                 for (int i = 0; i < n; i++)
                 {

@@ -330,16 +330,55 @@ public static partial class InteriorMeshBuilder
         B(-w, 0, foul + 0.012f, -w + 0.115f, 0.1f, laneEnd - 0.025f, Capping, false);
         B(w - 0.115f, 0, foul + 0.012f, w, 0.1f, laneEnd - 0.025f, Capping, false);
 
-        // the ball return's hood at the head of the approach, three balls waiting on it
-        float hz = z0 + 0.15f;
-        var hood = Masking[(int)(Hash(p, 11) * Masking.Length) % Masking.Length].A;
-        B(-0.38f, 0, hz, 0.38f, 0.62f, hz + 0.72f, C(0.14f, 0.14f, 0.18f), true);
-        B(-0.32f, 0.61f, hz + 0.05f, 0.32f, 0.76f, hz + 0.67f, hood, false);
-        // the rack the balls wait on (the balls are the lane rig's, LaneRig): two chrome rails, rows of three
-        // the rack's box behind the hood (its top the dark tray), the rails set into it, ends inset: no shared face
-        B(-0.36f, 0, hz + 0.73f, 0.36f, 0.5f, hz + 1.2f, C(0.08f, 0.08f, 0.10f), true);
-        foreach (float rx in new[] { -0.3f, 0.3f })
-            B(rx - 0.015f, 0.45f, hz + 0.75f, rx + 0.015f, 0.6f, hz + 1.18f, Chrome, false);
+        // the ball return (#1336): the hood over the lift on the pin side, the double-rail track curling from it toward the
+        // bowlers and back (LaneGeometry.ReturnPoint); the balls on it are the lane rig's (LaneRig.SetHoodBalls)
+        var hoodCol = Masking[(int)(Hash(p, 11) * Masking.Length) % Masking.Length].A;
+        var dark = C(0.12f, 0.12f, 0.15f);
+        float hf = g.HoodFront, hb = g.HoodBack, run = LaneGeometry.ReturnRun;
+        B(-0.3f, 0, hf, 0.3f, 0.92f, hb, dark, true);
+        B(-0.27f, 0.92f, hf + 0.03f, 0.27f, 1.0f, hb - 0.03f, hoodCol, false);
+        B(-0.2f, 1.0f, hf + 0.09f, 0.2f, 1.05f, hb - 0.09f, hoodCol, false);
+        // the lift's mouth over the track's start, a dark opening on the hood's face
+        B(run - 0.13f, LaneGeometry.ReturnTop - 0.03f, hf - 0.014f, run + 0.13f, LaneGeometry.ReturnTop + 0.25f, hf - 0.004f, C(0.02f, 0.02f, 0.03f), false);
+        // the plinth under the track
+        const float baseTop = 0.55f, wall = 0.07f;
+        float near = g.ReturnBend - run - wall - 0.05f;
+        B(-run - wall - 0.05f, 0, near, run + wall + 0.05f, baseTop, hf, dark, true);
+        // the rails: two thin tubes either side of the ball's path, falling with the track, on posts down to the plinth;
+        // the bend a curve of short pieces
+        const float tube = 0.012f;
+        float length = g.ReturnLength;
+        for (float a = 0; a < length - 1e-3f; a += 0.03f)
+        {
+            float b = Mathf.Min(length, a + 0.035f);
+            float rail = LaneGeometry.ReturnTop - LaneGeometry.ReturnSlope * a;
+            var pa = g.ReturnPoint(a);
+            var pb = g.ReturnPoint(b);
+            var along = (pb - pa) with { Y = 0 };
+            if (along.LengthSquared() < 1e-8f) continue;
+            var across = new Vector3(along.Z, 0, -along.X).Normalized() * wall;
+            foreach (var side in new[] { across, -across })
+            {
+                var c0 = pa + side;
+                var c1 = pb + side;
+                B(Mathf.Min(c0.X, c1.X) - tube, rail - 2 * tube, Mathf.Min(c0.Z, c1.Z) - tube,
+                    Mathf.Max(c0.X, c1.X) + tube, rail, Mathf.Max(c0.Z, c1.Z) + tube, Chrome, false);
+            }
+        }
+        for (float a = 0.1f; a < length; a += 0.4f)
+        {
+            float rail = LaneGeometry.ReturnTop - LaneGeometry.ReturnSlope * a;
+            var pa = g.ReturnPoint(a);
+            var along = (g.ReturnPoint(a + 0.02f) - pa) with { Y = 0 };
+            var across = new Vector3(along.Z, 0, -along.X).Normalized() * wall;
+            foreach (var side in new[] { across, -across })
+            {
+                var c = pa + side;
+                B(c.X - 0.008f, baseTop, c.Z - 0.008f, c.X + 0.008f, rail - 2 * tube, c.Z + 0.008f, Chrome, false);
+            }
+        }
+        // the stop at the end of the run back
+        B(-run - wall, baseTop, g.ReturnStop + 0.01f, -run + wall, LaneGeometry.ReturnTop - LaneGeometry.ReturnSlope * g.ReturnLength + 0.05f, g.ReturnStop + 0.04f, dark, false);
 
         // the score screens over the approach, facing back at the settees, on poles to the ceiling
         float sy = g.ScreenY, sz = g.ScreenZ;

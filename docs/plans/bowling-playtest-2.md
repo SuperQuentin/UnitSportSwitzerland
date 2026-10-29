@@ -3,7 +3,7 @@
 
 # Bowling, playtest 2 (#1336)
 
-Status: **planned, not started.** Branch `feat/1336-bowling-playtest-2`, worktree `../UnitSportSwitzerland-1336`.
+Status: **built** on `feat/1336-bowling-playtest-2`, PR #1337. Different from the plan: the house balls are kept per lane (2 each, `HouseStart`); a player who leaves keeps their waiting ball on the return as a house ball; the third-person body is dithered see-through (`see_through`) while aiming so the line stays visible; protocol 75.
 Follows #1323 (playable bowling) and #1334 (decoration bowlers, the pinsetter).
 
 ## Decisions (owner, 2026-10-28)
