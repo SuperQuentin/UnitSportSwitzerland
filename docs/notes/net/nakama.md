@@ -46,7 +46,9 @@
     JSON body.
   - **Names are never stored in a record** (#1359). With `accountId` (a signed-in rider, checked by the race server's
     `AccountGate`) the record is that account's; without, it is the PlayerKey fingerprint's user, whose display name
-    holds the offline rider's plain name, one copy refreshed by each result. Records carry `account: true|false`.
+    holds the offline rider's plain name, one copy refreshed by each result. Records carry `account: true|false`. Each
+    record also keeps `metadata.name`, the name it was set under: a backup shown only once its user is gone (a deleted
+    account).
   - `scoreboard {course, limit?, cursor?}` reads a board with every name looked up now: the account's username, or
     the offline user's display name (a record from before #1359, without the flag, falls back to the name stored in
     it). **Read boards through it**, not `GET /v2/leaderboard`, whose record usernames are Nakama's copy from the write.

@@ -36,11 +36,12 @@ function rpcHealthcheck(ctx, logger, nk, payload) {
 // A finished race, posted by the race server with the runtime http key (server to server). A player's session never
 // may: the race server is the one that checked the checkpoints and timed the finish. Body:
 // { course, playerKey, accountId?, name?, timeMs, avgWatts?, event? } -> { leaderboard, rank, best }
-// Names are never stored in a record (#1359): `scoreboard` looks each one up when the board is read.
+// Names are never what a record goes by (#1359): `scoreboard` looks each one up when the board is read.
 // - accountId: a signed-in rider's Nakama user id, which the race server checked (AccountGate). The record is that
 //   account's, and shows its name as it is now, renames included.
 // - otherwise an offline rider: the PlayerKey fingerprint's own user, whose display name holds the plain name the
 //   rider plays under, one copy kept up to date by each result.
+// Each record also keeps the name it was set under (metadata.name), a backup shown only once its user is gone.
 function rpcSubmitResult(ctx, logger, nk, payload) {
   if (ctx.userId) throw { message: 'results come from race servers only', code: Code.PERMISSION_DENIED };
   var r;
@@ -55,7 +56,7 @@ function rpcSubmitResult(ctx, logger, nk, payload) {
 
   var owner;
   if (r.accountId) {
-    try { nk.accountGetId(r.accountId); } catch (e) { bad('accountId: no such account'); }
+    try { name = nk.accountGetId(r.accountId).user.username; } catch (e) { bad('accountId: no such account'); }
     owner = r.accountId;
   } else {
     // an offline rider: their PlayerKey fingerprint is the custom id, created on their first result
@@ -67,7 +68,7 @@ function rpcSubmitResult(ctx, logger, nk, payload) {
   // authoritative: only the server writes; ascending + best: a rider's fastest time stands. Existing boards are kept.
   nk.leaderboardCreate(board, true, 'ascending', 'best', null, { course: r.course }, true);
   var rec = nk.leaderboardRecordWrite(board, owner, undefined, r.timeMs, 0,
-    { avgWatts: r.avgWatts === undefined ? null : r.avgWatts, event: r.event || null, account: !!r.accountId });
+    { avgWatts: r.avgWatts === undefined ? null : r.avgWatts, event: r.event || null, account: !!r.accountId, name: name || null });
   logger.info('result %s %s %d ms', board, owner, r.timeMs);
   return JSON.stringify({ leaderboard: board, rank: rec.rank, best: rec.score });
 }
@@ -90,8 +91,10 @@ function rpcScoreboard(ctx, logger, nk, payload) {
   return JSON.stringify({
     records: records.map(function (x) {
       var m = x.metadata || {}, u = users[x.ownerId] || {};
-      // a record from before #1359 has no flag: an offline one, whose name was stored in the record itself
+      // a record from before #1359 has no flag: an offline one, whose name was stored in the record itself;
+      // the backup (metadata.name) only once the user is gone (a deleted account)
       var name = !('account' in m) ? u.displayName || x.username : m.account ? u.username : u.displayName;
+      if (!users[x.ownerId]) name = m.name || x.username;
       return { rank: x.rank, timeMs: x.score, avgWatts: m.avgWatts === undefined ? null : m.avgWatts,
         event: m.event || null, account: !!m.account, name: name || 'Rider' };
     }),

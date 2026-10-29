@@ -76,11 +76,16 @@ public sealed class PlayerIds
         return 0;
     }
 
-    /// <summary>The name to show for an id: the online player's own, else the last one seen, else "Rider".</summary>
-    public string NameOfId(string id)
+    /// <summary>
+    /// The name to show for an id: the online player's own, else the last one seen, else <paramref name="backup"/> (the
+    /// name a system kept beside the id, for an id nothing here knows any more: a deleted account, a lost cache), else
+    /// "Rider".
+    /// </summary>
+    public string NameOfId(string id, string? backup = null)
     {
         if (PeerOf(id) is not 0 and var peer && NameOf(peer) is { Length: > 0 } now) return now;
-        return _lastName.TryGetValue(id, out var last) ? last : "Rider";
+        if (_lastName.TryGetValue(id, out var last)) return last;
+        return backup is { Length: > 0 } ? backup : "Rider";
     }
 
     /// <summary>Server: a peer proved its key, or chose or changed its name. Keeps the cache, raises <see cref="Identified"/> once.</summary>

@@ -58,6 +58,19 @@ public class PlayerIdsTests
     }
 
     [Fact]
+    public void A_backup_name_shows_only_for_an_id_nothing_knows_any_more()
+    {
+        var (ids, names, keys, _) = Server();
+        keys[5] = "KEY5"; names[5] = "Anna";
+        Assert.Equal("Anna", ids.NameOfId("KEY5", "Old"));            // online wins
+        ids.Refresh(5);
+        names.Remove(5); keys.Remove(5);
+        Assert.Equal("Anna", ids.NameOfId("KEY5", "Old"));            // the cache wins
+        Assert.Equal("Heidi", ids.NameOfId("acct:deleted", "Heidi")); // a deleted account: the backup
+        Assert.Equal("Rider", ids.NameOfId("acct:deleted", ""));
+    }
+
+    [Fact]
     public void Identified_once_both_id_and_name_are_known_and_again_next_session()
     {
         var (ids, names, keys, _) = Server();
