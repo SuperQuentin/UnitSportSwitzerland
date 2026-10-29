@@ -87,6 +87,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | drink with alcohol (beer, wine, kirsch; #1271) | `use_item` with the drink in hand (the mouth pose) | RT | ok: the pad route (RT); **gap**: bringing the bottle to the mouth by hand |
 | breathalyzer: blow into it for 5 s (#1271) | `use_item` with it in hand | RT | ok: the pad route (RT); **gap**: bringing it to the mouth by hand |
 | breathalyzer: offer a test to a player (#1271) | `interact_mount` E at them with the electronic device in hand (shown by `InputHints`, outlined) | Y | ok: the pad route (Y) or a grip at them (`TryInteract(byHand)`) |
+| fall into a hidden crevasse; climb the ice wall out; be hauled (#1372) | nothing to press: the fall happens; push W into the ice wall (free climb, as any face); the partner holds E 2 s | the stick into the wall (free climb); the partner holds Y | ok: the pad route and the hand climb (`XrClimb`: the wall is an ordinary static face); the partner's haul is the hold-Y route below; **gap**: pulling the rope hand over hand | keep |
 | haul a roped partner (#1266) | hold E 2 s at the rope | hold Y | ok: the pad route (hold Y); **gap**: pulling the rope hand over hand |
 | talk to an errand giver (#1267) | E / Y within 3 m of the figure (a prompt "Talk to ...") | ok: Y, or reach out and grip toward the giver (`TryInteract(byHand)`) | keep |
 | errand dialogue: choose, next card, leave (#1267) | 1-3, Enter, Left / Right, Esc / D-pad, A, LB / RB, B | ok: laser + trigger on the panel, the pad's route | keep |

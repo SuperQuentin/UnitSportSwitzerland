@@ -107,14 +107,14 @@ public partial class CrevasseNetProbe : ChatProbe
         Say("out");
         Expect(await Heard("FOLLOW", "saw-out", 30), "Tom saw her stand on the ground again");
 
-        // 2. roped
-        Chat.Send("/rope Tom");
-        Expect(await Until(() => Svc.Links.Count == 1 && Svc.Links.ModeOf(Multiplayer.GetUniqueId()) == LinkMode.Rope, 30), "roped up with Tom");
-        Say("roped");
+        // 2. roped: both stand by the second strip first, then the rope (a teleport while tied would be pulled back)
         Expect(await Heard("FOLLOW", "at1", 60), "Tom stands by the second strip");
         me.DebugLaunch(Side(cells[1]), Vector3.Zero);
         await Until(() => me.IsOnFloor(), 5);
         await Seconds(0.8);
+        Chat.Send("/rope Tom");
+        Expect(await Until(() => Svc.Links.Count == 1 && Svc.Links.ModeOf(Multiplayer.GetUniqueId()) == LinkMode.Rope, 30), "roped up with Tom");
+        Say("roped");
         surface = me.GlobalPosition.Y;
         int caught = Svc.CrevassesCaught;
         _wish = _across;
@@ -167,15 +167,15 @@ public partial class CrevasseNetProbe : ChatProbe
         Say("saw-out");
 
         // 2. roped
-        await Heard("LEAD", "roped", 60);
-        Expect(await Until(() => InviteService.Client?.Incoming.Any(v => v.Kind == TogetherService.RopeKind) == true, 60), "Lea asks to rope up");
-        if (InviteService.Client?.Incoming.FirstOrDefault(v => v.Kind == TogetherService.RopeKind) is { } rope) InviteService.Client.Accept(rope.Id);
-        Expect(await Until(() => Svc.Links.Count == 1, 20), "the rope link is in Tom's book");
         me.DebugLaunch(Partner(cells[1]), Vector3.Zero);
         await Until(() => me.IsOnFloor(), 5);
         await Seconds(1.0);
         ground = me.GlobalPosition.Y;
         Say("at1");
+        Expect(await Until(() => InviteService.Client?.Incoming.Any(v => v.Kind == TogetherService.RopeKind) == true, 60), "Lea asks to rope up");
+        if (InviteService.Client?.Incoming.FirstOrDefault(v => v.Kind == TogetherService.RopeKind) is { } rope) InviteService.Client.Accept(rope.Id);
+        Expect(await Until(() => Svc.Links.Count == 1, 20), "the rope link is in Tom's book");
+        await Heard("LEAD", "roped", 30);
         Expect(await Until(() => Svc.Body(lea) is { PoseKind: FootPlayer.PoseCrevasse }, 40), "Tom sees Lea fall into the second crevasse");
         Expect(await Heard("LEAD", "hanging", 30), "Lea hangs");
         Expect(await Until(() => Svc.Body(lea) is { } b && ground - b.GlobalPosition.Y is > 1.5f and < 4.5f, 10),

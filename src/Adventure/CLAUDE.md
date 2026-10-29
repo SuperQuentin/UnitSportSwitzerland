@@ -26,7 +26,8 @@ touches its topic; search with `grep -ril <word> docs/notes/adventure`.
 - `together` — the together rule (party, 60 m, cap 3), the group yield (gathering, harvest, fishing, rare finds, quest cash), the week's chest and the punch card (#1266)
 - `errands` — errand givers at huts, stations and landings, the dialogue, the daily Postkarten (8 per 5 km cell per Swiss day, 3 a day), the friend bonus, canton reputation (#1267)
 - `world-events` — a cow loose, a lost hiker, an avalanche burial, a small forest fire (#1339): `WorldEvents` planned by the server near players, `Help` as the one server path (players and bots), rewards and titles, the hiker's Postkarte, `--world-events off|rare|normal`, `--worldevent`
-- `links` — hands and the rope (`LinkBook`, `Tether`, belays, `ArmHold`, `RopeNode`), the leg-up, two-handle gates, roped chests, hidden crevasses (stumble fallback)
+- `links` — hands and the rope (`LinkBook`, `Tether`, belays, `ArmHold`, `RopeNode`), the leg-up, two-handle gates, roped chests, hidden crevasses (see `crevasses`)
+- `crevasses` — the hidden crevasse (#1372): `Crevasses.At`, the owner-only `CrevasseNode` slot with its own collision layer, the terrain layer out of the body's mask, `PoseKind` 9 (`PoseCrevasse`), the rope catch over the lip and the haul, climbing out, the rescue, `StaminaWatch` skipping it, `--crevasses off|on`, `--crevassecheck`, `tools/crevassenetcheck.sh`
 - `fondue` — the shared pot: spots, ingredients, la huit, dips, the lost bread and its forfeit, `--forfeits`, `--fondueseed`
 - `mentors` — milestones, newcomer and veteran, the eight `GarmentStyle.Together` cosmetics, titles
 - `alcohol` — a real blood alcohol level (#1271): `Bac` (grams, absorption, Widmark, elimination), the `alcohol` section, effects on the intents (lag, drift, stumbles, no climbing, passing out), the electronic and single-use breathalyzers, `--alcohol off|mild|real`, protocol 61
