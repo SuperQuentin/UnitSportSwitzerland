@@ -183,8 +183,8 @@ What differs from the text above (the rest is as written):
 - **Settings**: there is no Accessibility tab, so "Alcohol view effects" and the offline mode sit under Settings > Gameplay > Alcohol.
 - **Bodies**: mass from the figure's build (open question 1, as recommended). Flying is not filtered yet (the ground ride and the boat are).
 - **Fondue and Gluehwein**: `AlcoholRules.FondueWineGrams` / `FondueKirschGrams` and `GluehweinGrams` are data and
-  `AlcoholService.ServeGrams` / `ServeDrink` are the hooks; the pot calls them when it feeds the table, the festivals' item will call the
-  second. The wine and kirsch items (together's) drink as 1 dl and 2 cl.
+  `AlcoholService.ServeGrams` / `ServeDrink` are the hooks; the pot calls them when it feeds the table, the festivals' item (the Christmas
+  market's `ItemId.GluehweinMug`, #1348, built) calls the second through its `ItemDef`. The wine and kirsch items (together's) drink as 1 dl and 2 cl.
 - **Test seam**: `--alcohol-clock N` and `Skip` speed the clock; `/alcohol test drink <beers> <minutes ago>` back-dates a drink (a server
   needs `--alcohol-test`).
 - Open questions 2 to 4 stay as recommended: no police checks, no age gate, no passenger warning.
