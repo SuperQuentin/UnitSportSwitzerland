@@ -117,6 +117,7 @@ public sealed class FestivalOccasion : Occasion
         // the game grounds: the stone put's stone and lane (#1269 part 3)
         if (FestivalCatalog.Get(Id) is { } stein && stein.Game(SteinRules.GameId) != null) SteinProps.Decorate(site, tile, into);
         Horn.HornGround.Decorate(Id, site, tile, into);   // the alphorn row of the alphorn and yodel game
+        if (string.Equals(Id, FestivalCatalog.DesalpeId, StringComparison.OrdinalIgnoreCase)) Desalpe.DesalpeModels.Decorate(site, tile, into);   // the alp sign and the fair's ring
         // the closing show's launch point: the rack at the site's middle, its tubes leaning away from where the shells fan out
         if (FestivalCatalog.Get(Id) is { } def && FestivalShows.HasFireworks(def.Show) && TileId.FromLv95(site.E - RackOffset, site.N) == tile.Id)
         {

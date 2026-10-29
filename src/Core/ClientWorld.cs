@@ -995,7 +995,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.Bank.Create(this, inventory);
         var items = new Items.ItemController(inventory, origin)
         {
-            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging ? LocalPlayer : null,
+            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging && !Occasions.Festivals.Desalpe.DesalpeGame.TakesUse ? LocalPlayer : null,
         };
         AddChild(items);
         _items = items;
@@ -1208,6 +1208,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Occasions.Festivals.SteinCheck.Requested) AddChild(new Occasions.Festivals.SteinCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.SteinNetProbe.Role != null) AddChild(new Occasions.Festivals.SteinNetProbe(items));
             AddChild(new Occasions.Festivals.Horn.HornGame(() => LocalPlayer, () => _worldOrigin, () => _chunks));
+            // the Désalpe's herd and its game (#1269 part 7): dress the cows, drive them down, vote at the fair
+            AddChild(new Occasions.Festivals.Desalpe.DesalpeHerd(() => _worldOrigin, () => _chunks));
+            AddChild(new Occasions.Festivals.Desalpe.DesalpeGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Desalpe.DesalpeCheck.Requested) AddChild(new Occasions.Festivals.Desalpe.DesalpeCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Desalpe.DesalpeNetProbe.Role != null) AddChild(new Occasions.Festivals.Desalpe.DesalpeNetProbe(items));
             if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));

@@ -44,4 +44,5 @@
   herd's tile goes is set down where it is. Drawn lifted: wriggling, head tossing.
 - **Director** (#866): `Shot.Herds` (`Cows(Spot, Count, Breed, Radius)`) stages a herd round a spot
   (`Herds.Stage`, negative keys, never on the wire), taken away at the next shot.
+- **Désalpe** (#1269 part 7): the festival's herd is not a field herd; it draws the same meshes (`CowMeshBuilder.BodyWithoutBell` leaves out the little cowbell, a Treichel replaces it) in its own MultiMeshes, driven by the server (`festival-desalpe`).
 - **Bots**: n/a (a cow is scenery a bot walks past; nothing to do with one yet).

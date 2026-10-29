@@ -87,6 +87,11 @@ public partial class ControlsHelp : CanvasLayer
             new("Lift: hold, let go on the meter's peak; then once on each beat of the drum, the last is the push (look up to about 40 degrees)", PlayerInput.UseItem),
             new("Another stone while you are lifting it", PlayerInput.Jump),
         }),
+        ("Festivals: the Désalpe cow drive (#1269)", new Row[]
+        {
+            new("At a cow of the herd on the alp: put on the next headdress shape (the alp sign starts the drive, the fair's ring gives the vote)", PlayerInput.InteractMount),
+            new("At a cow: the next colour; in the fair's ring: the next herd to vote for", PlayerInput.UseItem),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

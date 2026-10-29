@@ -131,6 +131,8 @@ public partial class FestivalService : Node
             // the Älplerfest's games are checked at the same field (on a date inside its real dates, --date 2027-08-16)
             if (FestivalCatalog.Get(FestivalCatalog.AelplerfestId) is { } alp)
                 FestivalCatalog.Register(alp with { Sites = [new FestivalSite("the test field", e, n, 400)] });
+            if (FestivalCatalog.Get(FestivalCatalog.DesalpeId) is { } desalpe)
+                FestivalCatalog.Register(desalpe with { Sites = [new FestivalSite("the test field", e, n, 400)] });
         }
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
@@ -487,6 +489,7 @@ public partial class FestivalService : Node
         SettleOwed(peer, p);
         ConvertFor(peer);
         SendFestivals(peer);
+        DesalpeWelcome(peer);
         foreach (var run in Running)
         {
             SendBoard(peer, run);

@@ -138,6 +138,7 @@ public partial class FestivalService
 
     public override void _PhysicsProcess(double delta)
     {
+        if (Authority) DesalpeTick(delta);
         if (!Authority || Net.ClockSync.ServerNow < _nextFahneTick) return;
         _nextFahneTick = Net.ClockSync.ServerNow + 0.25;
         FahneTick();
