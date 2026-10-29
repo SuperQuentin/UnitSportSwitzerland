@@ -50,7 +50,7 @@ public static class ZibeleModels
         s.Box(new Vector3(0, 0.5f, 1.22f), new Vector3(3.1f, 1.0f, 0.08f), Wood);
         s.Box(new Vector3(0, 0.5f, 0.8f), new Vector3(3.0f, 1.0f, 0.06f), WoodDark);
         // a flat roof with a front board carrying the stall's colour
-        s.Box(new Vector3(0, 2.55f, 0.1f), new Vector3(3.5f, 0.08f, 2.7f), WoodDark);
+        s.Box(new Vector3(0, 2.55f, 0.1f), new Vector3(3.5f, 0.08f, 2.5f), WoodDark);   // its front stops short of the front board (no coplanar faces)
         s.Box(new Vector3(0, 2.8f, 1.42f), new Vector3(3.3f, 0.45f, 0.06f), kind switch { ZibeleStallKind.Zopf => Onion, ZibeleStallKind.Chueche => Crust, ZibeleStallKind.Mehlsuppe => OnionRed, _ => Red });
         s.Box(new Vector3(0, 2.8f, 1.46f), new Vector3(2.4f, 0.14f, 0.03f), White);
         // the striped awning (red and black, Bern's colours) over the counter
