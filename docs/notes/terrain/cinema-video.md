@@ -37,7 +37,7 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   `MusicFocus`; samples pushed by index on the clock as `WebRadioSpeaker` does (50 ms tolerance). Every hall
   showing a video has its film music off (`MuteFilmMusic`).
 - **Picking**: E / pad Y / VR grip at the booth panel's screen half opens `CinemaPanelUi` (low on the screen,
-  the hall's screen above it): Screen off, Cat slides / Stop the video, the cinema's films (open films + the server's list, `FilmCount`/`FilmAt`) in a drop-down with Play the film (#1367, from the start, 2D), a link box with Paste and Play, the
+  the hall's screen above it): Screen off, Cat slides / Stop the video, the cinema's films (open films + the server's list, `FilmCount`/`FilmAt`) in a drop-down with Play the film (#1367, from the start, 2D), then this player's starred links (the star by Stop for a web link playing, `user://cinema_starred.txt`); an admin's **Server's films…** window (name, In the halls' rotation, Add/Save/Remove) sends `/cinema pool add|set|remove` through the chat, the server checks the rights; a link box with Paste and Play, the
   last six links played (`user://cinema_links.txt`). `/cinema play <link>`, `/cinema stop`, `/cinema`
   (status: position, the frame shown, restarts) in the chat (`CinemaBooths.RunLocal`, before the server).
 - **Through the server** (phase 2, `CinemaBooths.Relay.cs`, `CinemaRelayTap.cs`, `CinemaRelayFeed.cs`, protocol 60):
@@ -117,7 +117,9 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   chosen video, the slides or the screen off from the panel are kept, `""` included); the draw is cached per hall,
   showing and list version (no string per frame). The server's list: `user://cinema_pool.json`, sent on join and on change
   (`SetPool`); `/cinema pool` lists, an admin `add <link>` (title and length looked up on the server, `CinemaLookup.Probe`;
-  not a live stream) and `remove <n>`. The panel names a showing by its title. Checked: A, B and C (late) draw the same
+  not a live stream; `add <link> [norotation] [title]`), `set <n> [rotation|norotation] [title]` and `remove <n>`. A film out of the
+  halls' rotation (`Film.Rotation`, #1367; protocol 78: `SetPool` carries it) is only picked at the panel: halls draw from
+  the rotation alone (`Rotation()`, cached per list version). The panel names a showing by its title. Checked: A, B and C (late) draw the same
   film and loop phase for every hall (`cinemanetcheck`); `--cinemavideoshot showing,<prefix>` (Cosmos Laundromat 604 s in,
   on the clock within 50 ms).
 - **Side curtains frame the picture** (the owner's, Oct 28: "open and close to adapt to the streamed ratio", smoothly;

@@ -109,7 +109,8 @@ public partial class Handshake : Node
     /// 75: Interiors/Bowling lanes state carries each pair's house balls on the return (#1336).
     /// 76: World/Adventure/Festivals RequestMarket, TellMarket (#1348: the Christmas market's stalls and Samichlaus), ItemId 501-502.
     /// 77: World/Adventure/Festivals RequestEscalade, TellEscalade (#1351: the Escalade's Marmite, soup pot and Course), ItemId 503-504.
-    public const int Protocol = 77;
+    /// 78: Interiors/CinemaBooths SetPool carries each film's place in the halls' rotation (#1367).
+    public const int Protocol = 78;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

@@ -7,6 +7,17 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Cinema panel: the cinema's films, stars, the server's films ([#1368](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1368))
+
+At a cinema booth's panel (E at the screen half), online on a server where you are admin and one where you are not.
+
+- [ ] On a phone: pick a film in the drop-down, Play the film → the hall plays it from its start, through the server.
+- [ ] Pad (D-pad, A) and the VR laser: open the drop-down, pick, Play the film; reach the star and Server's films….
+- [ ] Play a web link, press the star → it fills; the drop-down ends with "Starred: …"; close and reopen the panel, play it from there; press the star again → gone.
+- [ ] As an admin, Server's films… → a window: a name and In the halls' rotation; Add → the chat says it was added with that name; the drop-down lists it for every player. As a non-admin the button is not there.
+- [ ] Rotation off for a film, then restart the showings (screen off and on in a few halls) → halls never pick it by themselves; on → they may.
+- [ ] Server's films… on a film already listed → Save renames it, Remove takes it off for everyone.
+
 ## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
 
 `--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).
