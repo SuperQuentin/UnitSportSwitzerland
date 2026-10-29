@@ -12,6 +12,12 @@
 #                                      and only that, if it overruns (124) or if free RAM falls under
 #                                      GUARD_MIN_FREE_MB, or if cmd's own memory passes GUARD_MAX_MB
 #                                      (137). Otherwise returns cmd's exit code.
+#   guard_test_userdata <dir>          the Godots started after it get a fresh, quiet user:// in <dir> (#1378):
+#                                      APPDATA / XDG_DATA_HOME exported; on macOS prefix the Godot run with
+#                                      ${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} (HOME, never exported)
+#   guard_quiet_godot <root>           writes test_window.cfg in the user:// that <root> gives as APPDATA /
+#                                      XDG_DATA_HOME / HOME: project.godot's settings override, read before
+#                                      the window exists, so a test window never takes focus and is silent
 #   guard_watch <pid> [min_free_mb]    background RAM watchdog for a process you started yourself
 #                                      (not through guard_run): kills that PID's tree, and only it,
 #                                      when free RAM falls under the floor. Prints the watchdog's PID.
@@ -53,6 +59,31 @@ _guard_have_lock=0
 _guard_beat_pid=
 
 _guard_windows() { [ -n "${WINDIR:-}" ] || [ -n "${windir:-}" ]; }
+
+# A test's Godot window (#1378): project.godot points application/config/project_settings_override at
+# user://test_window.cfg, which only a test's own user:// holds. no_focus: the window is made without
+# taking focus and never takes it later; the Dummy driver still mixes (as headless), nothing is heard.
+guard_quiet_godot() {
+  local ud
+  case "$(uname -s)" in
+    Darwin) ud="$1/Library/Application Support/Godot/app_userdata/UnitSportSwitzerland" ;;
+    MINGW*|MSYS*|CYGWIN*) ud="$1/Godot/app_userdata/UnitSportSwitzerland" ;;
+    *) ud="$1/godot/app_userdata/UnitSportSwitzerland" ;;
+  esac
+  mkdir -p "$ud"
+  printf '[display]\n\nwindow/size/no_focus=true\n\n[audio]\n\ndriver/driver="Dummy"\n' > "$ud/test_window.cfg"
+}
+
+GUARD_GODOT_ENV=()
+guard_test_userdata() {
+  local d
+  mkdir -p "$1" && d=$(cd "$1" && pwd) || return 1
+  find "$d" -mindepth 1 -delete
+  if _guard_windows; then export APPDATA="$(cygpath -w "$d")"
+  elif [ "$(uname)" = Darwin ]; then GUARD_GODOT_ENV=(env HOME="$d")
+  else export XDG_DATA_HOME="$d"; fi
+  guard_quiet_godot "$d"
+}
 
 # free RAM in whole MB
 guard_free_mb() {
