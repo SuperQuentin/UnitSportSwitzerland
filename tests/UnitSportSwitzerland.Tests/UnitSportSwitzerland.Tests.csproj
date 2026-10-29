@@ -76,6 +76,7 @@
     <Compile Include="..\..\src\World\ClockSave.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\JoinCache.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the server's admin API (#1211) and the loopback transport it shares with the playtest MCP endpoint -->
     <Compile Include="..\..\src\Net\AdminApi.cs" Link="Game\%(Filename)%(Extension)" />

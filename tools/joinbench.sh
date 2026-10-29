@@ -8,7 +8,7 @@
 PORT=${PORT:-7890}
 ROUNDS=${ROUNDS:-3}
 : "${CHUNKS:?set CHUNKS to the real terrain folder}"
-tc_server 1800 240 "$OUT/joinbench_server.log" --server --port $PORT "${CH[@]}"
+tc_server 1800 240 "$OUT/joinbench_server.log" --server --port $PORT --stream-bandwidth ${BW:-50} "${CH[@]}"
 ready() { grep -ah "\[world\] ready after" "$1" | awk '{ sub(/.*ready after /, ""); sub(/ s .*/, ""); gsub(/,/, "."); print }'; }
 median() { sort -n | awk '{a[NR]=$1} END{ if(NR==0) print "n/a"; else print a[int((NR+1)/2)] }'; }
 join() { # <cache> <log>
