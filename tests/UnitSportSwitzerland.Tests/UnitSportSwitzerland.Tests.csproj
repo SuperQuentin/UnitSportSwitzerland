@@ -183,6 +183,13 @@
     <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- pinball (#1325): the table as data, the ball's solver and the rules, Godot maths only -->
+    <Compile Include="..\..\src\Interiors\Pinball\PinballTable.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballLayouts.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballSolver.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Pinball\PinballHighScores.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- bowling (#1323): the ball's run down the lane and the ten-frame score, Godot maths only -->
     <Compile Include="..\..\src\Interiors\Bowling\BowlingSizes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Bowling\BowlingBall.cs" Link="Game\%(Filename)%(Extension)" />
@@ -238,6 +245,11 @@
     <Compile Include="..\..\src\Adventure\Errands\ErrandLines.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\Postkarte.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Errands\PostkarteSource.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\WorldEventRules.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\WorldEventSims.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Adventure\Errands\ErrandSteps.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
+    <!-- the givers stage (#1339): which tags make which giver, the thinning: pure -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\GiverPick.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- adventure navigation (#1226): the travel network, fares, pins, compass and marker maths -->
     <Compile Include="..\..\src\Adventure\Navigation\TravelBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Navigation\PinBook.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
@@ -280,10 +292,23 @@
     <Compile Include="..\..\src\Occasions\Festivals\FestivalBoard.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalEvents.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FireworkShow.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\SteinRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <!-- Fahnenschwingen (#1269 part 5): gestures, routine and grading; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Fahnen\GestureRing.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\Fahnen\FahnenRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\Fahnen\FlagMotion.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Horn\AlphornChart.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Horn\AlphornRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Horn\EchoFinder.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Horn\HornWire.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- the Désalpe (#1269 part 7): route, herd steering, run, score, wire, vote; pure -->
+    <Compile Include="..\..\src\Occasions\Festivals\Desalpe\DesalpeRoute.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Desalpe\HerdFlock.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Desalpe\DesalpeRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Desalpe\DesalpeRun.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Desalpe\DesalpeWire.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Desalpe\DesalpeVote.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Desalpe.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />

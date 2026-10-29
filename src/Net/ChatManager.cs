@@ -638,6 +638,10 @@ public partial class ChatManager : Node
                 Show(Interiors.CinemaBooths.Instance?.PoolCommand(1, string.Join(' ', parts[1..]), true, line => Show(line, ChatKind.Private))
                      ?? "No cinemas here.", ChatKind.Private);
                 return;
+            // pinball (#1325): the venue's machines; step up to one, a robot at the flippers, the top view
+            case "pinball":
+                Show(Interiors.Pinball.PinballTables.Instance?.Command(rest, Interiors.InteriorManager.Instance?.Current?.Key, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "Pinball is not running.", ChatKind.Private);
+                return;
             // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the player is in
             case "bowl":
                 Show(Interiors.BowlingLanes.Instance?.Command(1, rest, Interiors.InteriorManager.Instance?.Current?.Key, "You") ?? "Bowling is not running.", ChatKind.Private);

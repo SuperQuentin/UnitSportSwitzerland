@@ -183,6 +183,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         _cinemaBooths = Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball games: the score and the turn (#1325)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games (#1323)
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
@@ -420,6 +421,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
             festivals.PartyOf = rewards.PartyOf;
             festivals.Start = () => SpawnPoint.ParseTarget();
+            Occasions.Festivals.SteinService.Create(festivals, adventure, server: true, networked: true);   // Steinstossen (#1269 part 3)
             // climbs higher than the stamina rules allow, logged (#1225): no correction
             AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
             AddTogether(adventure);   // #1266, ServerWorld.Together.cs

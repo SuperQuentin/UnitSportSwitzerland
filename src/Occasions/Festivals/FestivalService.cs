@@ -131,6 +131,8 @@ public partial class FestivalService : Node
             // the Älplerfest's games are checked at the same field (on a date inside its real dates, --date 2027-08-16)
             if (FestivalCatalog.Get(FestivalCatalog.AelplerfestId) is { } alp)
                 FestivalCatalog.Register(alp with { Sites = [new FestivalSite("the test field", e, n, 400)] });
+            if (FestivalCatalog.Get(FestivalCatalog.DesalpeId) is { } desalpe)
+                FestivalCatalog.Register(desalpe with { Sites = [new FestivalSite("the test field", e, n, 400)] });
         }
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
@@ -175,6 +177,7 @@ public partial class FestivalService : Node
             _nextCrewCheck = now + CrewCheckEvery;
             CheckCrews();
             CheckShow();
+            HornTick(now);
         }
         if (now >= _nextBoardSave && _boardsDirty.Count > 0)
         {
@@ -314,6 +317,12 @@ public partial class FestivalService : Node
     /// <summary>The Batzen a player holds in the instance of a running festival (checks, the shop later), or 0.</summary>
     public int BatzenOf(long peer, string festival) =>
         RunningOf(festival) is { } run && _adventure.Progress(peer) is { } p ? p.Get(FestivalBook.Section).Of(run.Instance, run.Id).Batzen : 0;
+
+    /// <summary>Authority: how many plays of <paramref name="game"/> a player has made today (the festival's day) in a running festival.</summary>
+    public int PlaysToday(long peer, string festival, string game) =>
+        RunningOf(festival) is { } run && _adventure.Progress(peer) is { } p
+            ? p.Get(FestivalBook.Section).Of(run.Instance, run.Id).Played.GetValueOrDefault(FestivalRules.PlayKey(game, run.Day))
+            : 0;
 
     /// <summary>The party score of the crew a peer plays with now, on a running festival.</summary>
     public int CrewPoints(long peer, string festival)
@@ -480,6 +489,7 @@ public partial class FestivalService : Node
         SettleOwed(peer, p);
         ConvertFor(peer);
         SendFestivals(peer);
+        DesalpeWelcome(peer);
         foreach (var run in Running)
         {
             SendBoard(peer, run);

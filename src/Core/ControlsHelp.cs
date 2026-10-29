@@ -45,10 +45,16 @@ public partial class ControlsHelp : CanvasLayer
             new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
+            new("Pinball: E at a machine steps up to it and presses Start (again to add a player in the first ball); Esc steps back", PlayerInput.InteractMount),
+            new("Pinball: the flippers (A / D, the arrows, or Left / Right Shift)", Keys: "{pinball_left} / {pinball_right}", Pad: "LB / RB (or LT / RT)"),
+            new("Pinball: hold to pull the plunger, let go to launch (Space, S or Enter)", PlayerInput.PinballPlunge),
+            new("Pinball: nudge the cabinet (too hard, too often: tilt); Q / R to the sides, the pad's left stick sideways", PlayerInput.PinballNudge),
+            new("Pinball: the player's view or straight down on the playfield", PlayerInput.CameraToggle),
             new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
             new("Bowling: move your spot", PlayerInput.MoveLeft),
             new("Bowling: turn your line", PlayerInput.BowlAimLeft),
             new("Bowling: hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
+            new("Festival alphorn row: sit down to the song; blow, pick the note, yodel", Keys: "{interact_mount}, hold {use_item}, wheel or {move_forward} / {move_back}, {jump}", Pad: "{interact_mount}, hold {use_item}, right stick ↑ ↓, {jump}"),
         }),
         ("Items", new Row[]
         {
@@ -76,6 +82,17 @@ public partial class ControlsHelp : CanvasLayer
             new("Map: place a pin / edit a pin", Keys: "RMB", Pad: "X at the centre cross"),
             new("Map: pin icon", Keys: "1–6", Pad: "D-pad, A"),
             new("Map: track a place, a pin, a travel point", Keys: "Track (click)", Pad: "A on it, then Track"),
+        }),
+        ("Festivals: the Älplerfest's stone put (#1269)", new Row[]
+        {
+            new("Put the stone at its ground (an open Älplerfest): lift it", PlayerInput.InteractMount),
+            new("Lift: hold, let go on the meter's peak; then once on each beat of the drum, the last is the push (look up to about 40 degrees)", PlayerInput.UseItem),
+            new("Another stone while you are lifting it", PlayerInput.Jump),
+        }),
+        ("Festivals: the Désalpe cow drive (#1269)", new Row[]
+        {
+            new("At a cow of the herd on the alp: put on the next headdress shape (the alp sign starts the drive, the fair's ring gives the vote)", PlayerInput.InteractMount),
+            new("At a cow: the next colour; in the fair's ring: the next herd to vote for", PlayerInput.UseItem),
         }),
         ("Quick menu and invites (#840)", new Row[]
         {

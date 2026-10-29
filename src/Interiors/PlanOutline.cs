@@ -134,20 +134,103 @@ public static class PlanOutline
     }
 
     /// <summary>
+    /// The courtyards of a roof grid (#1304): its empty cells no path of empty cells joins to the grid's
+    /// border, so the roof closes round them. A door on a wall facing one opens where no one from the
+    /// street can stand.
+    /// </summary>
+    public static bool[,] Enclosed(bool[,] grid)
+    {
+        int nx = grid.GetLength(0), nz = grid.GetLength(1);
+        var open = new bool[nx, nz];
+        var todo = new Stack<(int, int)>();
+        void Seed(int i, int j)
+        {
+            if (grid[i, j] || open[i, j]) return;
+            open[i, j] = true;
+            todo.Push((i, j));
+        }
+        for (int i = 0; i < nx; i++) { Seed(i, 0); Seed(i, nz - 1); }
+        for (int j = 0; j < nz; j++) { Seed(0, j); Seed(nx - 1, j); }
+        while (todo.Count > 0)
+        {
+            var (i, j) = todo.Pop();
+            if (i > 0) Seed(i - 1, j);
+            if (i < nx - 1) Seed(i + 1, j);
+            if (j > 0) Seed(i, j - 1);
+            if (j < nz - 1) Seed(i, j + 1);
+        }
+        var shut = new bool[nx, nz];
+        for (int i = 0; i < nx; i++)
+            for (int j = 0; j < nz; j++)
+                shut[i, j] = !grid[i, j] && !open[i, j];
+        return shut;
+    }
+
+    /// <summary>
     /// The rectangles of a covered grid, biggest first (pure; the shaped blocks of `--flatcheck`): null when the grid is
     /// nearly full or no wing fits.
     /// </summary>
-    public static List<RectPlan>? Peel(bool[,] grid, float width, float depth)
+    public static List<RectPlan>? Peel(bool[,] grid, float width, float depth) => Peel(grid, width, depth, MaxWings, MinWing, 0.1f);
+
+    /// <summary>
+    /// A hall's pieces (#1304): its roof peeled into up to <see cref="MaxPieces"/> rectangles of at least
+    /// <see cref="MinPiece"/>, until all but 5 % of it is taken. A works of several halls round yards and an alley
+    /// is one hall in pieces, each joined to the next; a block of flats or an office keeps <see cref="Wings"/>, whose
+    /// every wing has to hold a stairwell and rooms.
+    /// </summary>
+    public static List<RectPlan>? Pieces(Building b, Vector2 center, Vector2 axisU, float width, float depth) =>
+        Grid(b, center, axisU, width, depth, Cell) is { } grid && Peel(grid, width, depth, MaxPieces, MinPiece, 0.05f) is { } pieces
+            ? Close(pieces) : null;
+
+    /// <summary>The widest gap between two pieces that <see cref="Close"/> shuts: a sliver too thin to be a piece of its own.</summary>
+    public const float Sliver = 1.5f;
+
+    /// <summary>
+    /// Pieces that face each other across a sliver (up to <see cref="Sliver"/>, at least 3.5 m of them facing) made
+    /// to touch (#1304): the nearer wall moves across, unless that runs into a third piece. The peel leaves such
+    /// slivers between the rectangles it takes, and a piece that touches none of the others cannot be joined to them.
+    /// </summary>
+    public static List<RectPlan> Close(List<RectPlan> pieces)
+    {
+        bool Overlaps(RectPlan r, int not1, int not2)
+        {
+            for (int k = 0; k < pieces.Count; k++)
+            {
+                if (k == not1 || k == not2) continue;
+                var o = pieces[k];
+                if (r.X0 < o.X1 - 0.01f && o.X0 < r.X1 - 0.01f && r.Z0 < o.Z1 - 0.01f && o.Z0 < r.Z1 - 0.01f) return true;
+            }
+            return false;
+        }
+        for (int i = 0; i < pieces.Count; i++)
+            for (int j = 0; j < pieces.Count; j++)
+            {
+                if (i == j) continue;
+                var a = pieces[i];
+                var b = pieces[j];
+                float alongZ = Math.Min(a.Z1, b.Z1) - Math.Max(a.Z0, b.Z0), alongX = Math.Min(a.X1, b.X1) - Math.Max(a.X0, b.X0);
+                RectPlan? grown = null;
+                if (alongZ >= 3.5f && b.X0 - a.X1 > 0.01f && b.X0 - a.X1 <= Sliver) grown = new RectPlan(a.X0, a.Z0, b.X0, a.Z1);
+                else if (alongX >= 3.5f && b.Z0 - a.Z1 > 0.01f && b.Z0 - a.Z1 <= Sliver) grown = new RectPlan(a.X0, a.Z0, a.X1, b.Z0);
+                if (grown is { } g && !Overlaps(g, i, j)) pieces[i] = g;
+            }
+        return pieces;
+    }
+
+    public const int MaxPieces = 12;
+    public const float MinPiece = 4f;
+
+    private static List<RectPlan>? Peel(bool[,] grid, float width, float depth, int most, float least, float rest)
     {
         int nx = grid.GetLength(0), nz = grid.GetLength(1);
         int covered = 0;
         foreach (bool g in grid) if (g) covered++;
         if (covered >= Boxy * nx * nz) return null;
         var left = (bool[,])grid.Clone();
-        int min = (int)MathF.Ceiling(MinWing / Cell);
+        int min = (int)MathF.Ceiling(least / Cell);
         var wings = new List<RectPlan>();
         int taken = 0;
-        while (wings.Count < MaxWings)
+        while (wings.Count < most)
         {
             var r = Largest(left, min);
             if (r is not { } w) break;
@@ -157,7 +240,7 @@ public static class PlanOutline
             taken += (w.I1 - w.I0) * (w.J1 - w.J0);
             wings.Add(new RectPlan(w.I0 * Cell - width / 2, w.J0 * Cell - depth / 2,
                 Math.Min(w.I1 * Cell, width) - width / 2, Math.Min(w.J1 * Cell, depth) - depth / 2));
-            if (covered - taken < 0.1f * covered) break;
+            if (covered - taken < rest * covered) break;
         }
         if (wings.Count == 0) return null;
         // a wing within a cell of the box's edge is on it: the facade, not a sliver short of it

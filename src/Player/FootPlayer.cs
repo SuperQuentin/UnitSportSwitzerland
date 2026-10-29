@@ -1146,6 +1146,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
     public bool JumpTaken { get; set; }
 
+    /// <summary>A festival game has the hands (the stone put, #1269): no item is used while it runs. Owner only; nothing is replicated.</summary>
+    public bool GameBusy { get; set; }
     /// <summary>The look (mouse and right stick) belongs to something else this frame (the flag swinger's figures, #1269): the camera stays. Owner only.</summary>
     public bool LookTaken { get; set; }
 
@@ -2792,6 +2794,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
             if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
+            if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
@@ -2832,10 +2835,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Adventure.Rewards.RewardWorld.TryInteract(this)) return true;
         // a summit cross, a telescope or a stamp post at hand (#1224): look out, or stamp
         if (Adventure.Places.PoiMarkers.TryInteract(this)) return true;
+        // the stone of a festival's Steinstossen at hand (#1269): lift it
+        if (Occasions.Festivals.SteinGame.TryInteract(this)) return true;
         // an errand giver at hand (#1267): talk to them
         if (Adventure.Errands.ErrandGivers.TryInteract(this)) return true;
+        // a lost hiker at hand (#1339): talk to them, and they follow
+        if (Adventure.Errands.WorldEvents.TryInteract(this)) return true;
         // the Älplerfest's flag ground (#1269): swing the flag
         if (Occasions.Festivals.Fahnen.FahnenGame.TryInteract(this)) return true;
+        // the Désalpe's herd, alp sign or fair ring (#1269 part 7): dress a cow, start the drive, vote
+        if (Occasions.Festivals.Desalpe.DesalpeGame.TryInteract(this)) return true;
+        // the festival ground's alphorn row (#1269): a seat in the song
+        if (Occasions.Festivals.Horn.HornGround.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
         if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"

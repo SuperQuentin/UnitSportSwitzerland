@@ -124,8 +124,7 @@ public static class OccasionConfig
                 Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false, Games = false },
             },
         };
-        // festivals (#1269): each part registers its own default entry here (priority 8: under the seasons for the sky, over the
-        // UFOs); part 1 ships none. The check-only festival exists only under --festival test
+        // festivals (#1269): the check-only festival exists only under --festival test; the Älplerfest's entry is below
         if (Festivals.FestivalCatalog.TestRequested)
             entries.Add(new OccasionEntry
             {
@@ -138,6 +137,13 @@ public static class OccasionConfig
         {
             Id = Festivals.FestivalCatalog.AelplerfestId, Priority = 8,
             Schedule = { new DateWindow("08-14", "08-24") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the cow drive (#1269 part 7): 20 September to 5 October, the herd, the sign and the fair's ring
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.DesalpeId, Priority = 8,
+            Schedule = { new DateWindow("09-20", "10-05") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
         return entries;

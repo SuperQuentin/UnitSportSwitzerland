@@ -102,7 +102,11 @@ public partial class Handshake : Node
     /// 68: World/Adventure/Festivals RequestFahneStart, RequestFahneRoutine, TellFahneStart, TellFahneResult (#1269 part 5: Fahnenschwingen).
     /// 69: World/Alcohol (#1271: ReportDrank, RequestSelfTest, RequestOffer; TellResult), World/Arrival Rules carries <c>--alcohol</c>, the <c>breath</c> invite kind, ItemId 486-488, ItemUse.Breath.
     /// 70: World/Schwing (#1269 Schwingen: RequestJoin/RequestLeave/Act/Tug; Begin, State, Thrown, Ended, TellQueue), the <c>schwing</c> invite kind, FootPlayer.SchwingPose, ItemId 500.
-    public const int Protocol = 70;
+    /// 71: World/Adventure/Festivals alphorn game (#1269 part 4: RequestHornStart/Song; TellHornSeat, TellHornResult).
+    /// 72: World/Adventure/Festivals/Stein RequestBegin, RequestThrow, TellBegin, TellNo, TellLanded (#1269 part 3: the stone put).
+    /// 73: World/Adventure/Festivals Désalpe RequestDesalpeDress/Start/Vote, TellDesalpe, TellDesalpeSnap, TellDesalpeResult, TellDesalpeVoted (#1269 part 7).
+    /// 74: World/WorldEvents (#1339: RequestHelp; PlanOut, MovedOut, StateOut, EndedOut, Told), the <c>errands</c> section's <c>events</c> count.
+    public const int Protocol = 74;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

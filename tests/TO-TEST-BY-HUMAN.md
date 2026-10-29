@@ -117,6 +117,15 @@ Generated world (the spawn's villages have an L, a U, a courtyard, a trapezoid a
 - [ ] VR: walk into an angled room → the walls hold you (teleport into the corner too).
 - [ ] A house drawn on the web with an angled wall (`--house-layouts`, see `net/house-layouts`) → that wall is one straight wall in the game, its door in it.
 
+## Doors placed where the plan has a way in ([#1329](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1329))
+
+Geneva: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7`; `--outlinesurvey --key E_N_I` names a building's doors.
+
+- [ ] Walk round a block of flats → its doors are on the street front, each into its own stairwell lobby; no door on its ends or at the back.
+- [ ] Walk into a school or an office with a long wing → the wing has rooms and its own stair; its side doors open into them, and the wing joins the rest through an arch.
+- [ ] A works of several halls → each hall wing has a floor, and you walk from one to the next through an arch.
+- [ ] A side door on a stretch of facade no room reaches → it opens into a short corridor, square to the door, ending in an arch into the room behind; walk it both ways, no snag at its angled end.
+
 ## Cinemas: hall height, a panel per hall, aisles to the walls, the service door, film music ([#1280](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1280))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499896.6,1117463.7 --detail high` (outside Cinémas du Grütli, Geneva).
@@ -214,6 +223,19 @@ Offline is enough for most: `--systems ui,physics,adventure,terrain` on any map;
 - [ ] The player at the site for 20 s of the show → the server log says `watched the closing show of test` once.
 - [ ] Real map: a real festival site is not part of this PR (the Älplerfest comes with its games); the real launch line (a lake's shore) is not built.
 
+## Steinstossen, the Älplerfest's stone put (part 3 of [#1269](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1269), [PR #1318](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1318))
+
+Offline on the check-only festival: `<godot> --path . -- --festival test --date 2027-03-14 --systems ui,physics,occasions,adventure --world fixture --chunks fixture:flat` (its stone opens on day 5). The real Älplerfest runs 14-24 August at Interlaken, Schwägalp or Schwarzsee, or in the region's largest town: `--date 2027-08-16` with the real map.
+
+- [ ] Find the grey stone on the sawdust lane (12 m south of the site's middle, clear of the flags, the horns and the wrestling ring) → a prompt "Put the stone (3 of 3 today)" and a box round the stone; E (keyboard) / Y (pad) takes it. Does the stone read as a stone, the lane as a lane, in Cartoon, PS1 and Realistic?
+- [ ] Hold LMB / RB, watch the meter rise and fall, let go on the peak → the effort sound; is the meter easy to read, the peak band clear, a heavier stone slower? Then press LMB / RB on each of the four drum beats → PERFECT / GOOD / MISS flashes, a drum you can follow. Does it feel fair at 90 BPM with a pad and with the mouse?
+- [ ] Look up to about 40 degrees at the fourth beat (the push) → the stone flies its arc and lands; the distance, Batzen and points show beside the body, a stake with your name and the distance stands 90 s. Does a perfect put near 4 m feel right for the real Unspunnen stone, and how much further does the 40 kg and the 18 kg one go (Space while lifting changes the stone)?
+- [ ] Let go of the lift at the bottom of the meter → "The stone slipped from your hands", nothing paid, it still counts as a put. Walk, jump, a held weapon and the hotbar do nothing during an attempt; E again puts the stone down and gives them back.
+- [ ] Three puts, then the prompt says the stone rests until tomorrow; the Journal's Festival tab shows the Batzen and the best score.
+- [ ] Two players (or a second client) near the stone → the other sees your stone fly and the stake with your name; pay and score are yours alone, and the party board gains your points.
+- [ ] Walking away from the stone mid-attempt (it is locked: try the game menu or Esc) → nothing breaks; after 90 s without a lift the attempt expires.
+- [ ] VR headset (pad route): E at the stone is the grip / Y, the trigger is `use_item`; judge whether the meter and the lamps are readable in the headset (they sit beside the body). The real two-handed lift and push by hand speed is not built.
+- [ ] Real map, dev region, `--date 2027-08-16`: the Älplerfest relocates to the region's largest town ("held this year in ..."), with the poles, the stone and the lane at its middle.
 ## Älplerfest flag swinging, part 5 of the festivals ([#1316](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1316))
 
 The checks drive the stick and the use key from a script; what only a person can judge is the feel of the figures and the screen. Run with the Älplerfest on (a real date 17-24 August, or the operator's `occasions.json`, or `--festival test --date 2027-08-16`).
@@ -225,6 +247,21 @@ The checks drive the stick and the use key from a script; what only a person can
 - [ ] Cartoon, PS1 and Realistic: the flag's cloth and the stage look right in each (the cloth is its own shader, it ignores the style).
 - [ ] The result panel and the Journal's Festival tab agree on the points and the Batzen; the daily cap of 100 Batzen stops the Batzen but not the points.
 - [ ] Real map: the Älplerfest at Interlaken's Höhematte (a western-region run moves it to the largest town); the stage stands on level ground there.
+
+## Désalpe, the cow drive, part 7 of the festivals ([#1341](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1341))
+
+The checks script the keys and the walk behind the herd; what only a person can judge is how it looks and feels. `--festival test --date 2027-09-24 --world fixture --chunks fixture:flat` puts the Désalpe at the fixture start (a 45 m route); on a real date (20 September to 5 October) at Charmey (a western-region run moves it to the largest town) the route is 700 m.
+
+- [ ] On the alp, walk up to a cow: the prompt says "Dress the cow: wreath" with the outline round it; E (pad Y) turns the shape (wreath, straw hat, fan crown, bare), LMB (pad X) turns the colour. Do the three headdresses read from 5 m in Cartoon, PS1 and Realistic, and do the six colours differ? Does the Leitkuh's big Treichel look right on every cow's neck (dressed and bare)?
+- [ ] Look at the dressed herd from the side, front and a distance of 60 m: headdress on the head when the head is down grazing and up walking; the Treichel swings with the stride. Any flicker (z-fight) on the headdresses or the collar?
+- [ ] At the alp sign: E (pad Y) starts the Alpabzug, the herder's call plays. Walk behind the herd: do the cows stay together, go on when you are behind them and back off when you come at them from the front? Is the 5 m flight zone right on foot and the 9 m mounted (bike, quad, tractor)? Do the cows stop when you leave them?
+- [ ] At a junction a cow or two wander into the field: does the panel say so ("wandered off: go round them from the field side"), and does it take the right feel to bring them back? Are they lost (150 m) too easily?
+- [ ] Alone, farmhands make up the flanks: do they read as help (not as cheating) and is the herd still lost cows to a careless player? With a bot beside you?
+- [ ] Sounds (sound player: Treichel big / middle / small, herder call): the bells ring from the walking cows near you, deeper on the Leitkuh, the call at the start. Level against the field herds' moos and the alp ambience.
+- [ ] At the fair the herd stands in the ring (the round fence, the board of rosettes). On day 4 (`--date 2027-09-24`) walk into the ring: E (pad Y) gives the vote to the herd shown, LMB (pad X) picks the next one; your own herd is refused. Online with a friend: they vote for yours, you see the count.
+- [ ] The result panel, the chat line and the Journal's Festival tab agree on the points and the Batzen; the daily cap of 120 stops the Batzen but not the points.
+- [ ] VR (pad route): Y at a cow, the sign and the ring, the trigger for the colour and the pick; the panel readable at the bottom of the view. Dressing by holding a headdress to the cow's head is not built.
+- [ ] Real map: the Désalpe at Charmey's fair: the alp (700 m up the valley, in the seeded direction) and the fair's ring stand on level ground and the herd does not walk through houses or off a cliff (the route is not the real road yet).
 
 ## Adventure errands: givers, dialogue, daily Postkarten, canton reputation ([#1311](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1311))
 
@@ -239,6 +276,23 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] Reputation 10 / 30 / 60 / 100 points in one canton (many cards) → level-up toasts, the title "Ehrenbürger von ..." at the top. Judge the pace.
 - [ ] Giver models in the model viewer (`--models`, People › Errand givers) → eight figures with the Sennenkäppi, guide hat and vest; look right in Cartoon, PS1 and Realistic.
 
+## Pinball ([#1333](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1333))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2510425,1140985` (BowlinGland, Gland: its main door reads as locked, go in by the side door; two pinballs by the arcade corner). Any arcade or bar with pinballs works.
+
+- [ ] E at a machine's front → the eye view over the lockdown bar, the backbox's display at the top; a game starts (the ball on the plunger). V → straight down; V → back.
+- [ ] Hold Space and let go → the ball goes up the shooter lane; soft → into the top lanes (the lit one: "SKILL SHOT"); hard → round the arch.
+- [ ] Left Shift flips only the left flipper, Right Shift only the right; Enter pulls the plunger and does not open the chat (Enter away from a machine still does).
+- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD); restart the server → still there.
+- [ ] A / D (and the arrows) flip; a ball rolling down an inlane can be cradled and aimed. Do the flippers feel strong enough, too strong? Can you make each ramp and orbit on purpose?
+- [ ] W nudges (Q / R to the sides): a few hard nudges → "DANGER", then TILT (flippers dead, the ball drains, no bonus).
+- [ ] Play a whole game on each of the four tables (Clockwork, Space Mission, Haunted Castle, Alpine Ski Race): the lit scoop starts a mission, its shots blink, the timer runs; lock lights, two locks → multiball; ball save; the bonus at the drain; GAME OVER and MATCH. Is it fun? Is any shot impossible or too easy?
+- [ ] The backbox per era readable from the player's eye and from 3 m away: reels (Clockwork), segments (Space), orange dots (Castle), LCD (Alpine).
+- [ ] Sounds: flippers, bumpers, slings, drops, spinner, plunger, drain, knocker; Clockwork's chimes; the jingles on the others; the ball's roll and the wire forms.
+- [ ] Pad: LB / RB and LT / RT flip, A holds the plunger (and the right stick pulled back), X nudges (left stick for the side), R3 the top view, Y Start, B steps back.
+- [ ] VR: reach out and grip at the machine; the head stays the view; the grips and triggers flip, A plunges, X nudges with a buzz.
+- [ ] Two players online in the same venue: one plays, the other watches the balls, flippers, lamps and backbox move a little behind; the watcher presses E at the machine during ball 1 → joins as player 2; at the drain the table passes to them (their client runs it), scores on the backbox for both.
+- [ ] The player up walks out of the venue mid-ball → their ball is skipped, the next player is up (or GAME OVER alone).
 ## Venue patrons and ambience ([#1331](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1331))
 
 `--enter bowlingland --time 20` (BowlinGland, Gland), then `/enter "pathé galeries"`, `/enter "brasserie de montelly"`, `/enter hype club` (add `--patronhour 1` for the club, `12.5` for lunch). Walk about in each.
@@ -264,3 +318,33 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] Pad: Y at the counter, rack, hood and approach; left stick and A for the steps, L3 to look at the pins, B steps back.
 - [ ] VR: grip at the counter and the rack; on the approach grip your ball, swing and let go → it rolls with your line and speed; twisting the wrist at the release hooks it.
 - [ ] Two players online on one lane → turns alternate; the other sees your ball roll and the same pins fall; a third who walks in later sees the score and the standing pins.
+## Älplerfest alphorn and yodel ([#1317](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1317))
+
+The Älplerfest runs 14-24 August (Interlaken; a region without it moves it to its largest town). Try it any day with the check-only festival: `<godot> --path . -- --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure`, or with the real map and `--date 2027-08-18` near Interlaken or the relocated town.
+
+- [ ] Walk to the three horns on trestles, 16 m east and 7 m north of the festival's middle → the prompt "Play the alphorn and yodel" appears; E starts a four-beat count-in. Judge the look of the horns (Cartoon, PS1, Realistic) and whether the row is easy to find.
+- [ ] Play the melody with the mouse (wheel to pick the note, hold left button from a note's start to its end) → the word PERFECT / GOOD / MISS shows on each press, the breath bar drains while blowing and refills in rests, the note sounds like an alphorn. Is the bottom panel readable at 1080p and with `--mobile`, and does it stay clear of the hotbar?
+- [ ] Same on a pad (R stick up / down to pick, RT or RB to blow, A for the yodel) and in a headset (right stick, trigger, A through the pad route) → the same song plays; the prompts name the right buttons. VR gap: raising a horn to the mouth is not built.
+- [ ] With the real map in a wide valley (Interlaken), blow facing a mountain face → the note comes back a few seconds later from the wall, duller and quieter; facing the open lake or a flat plain → no echo. Does the delay feel like the distance?
+- [ ] Two or three players sit down within 45 s of each other (the first opens the song, the others join it) → they get melody, second voice and drone, play the same song, and each is told the harmony multiplier (up to x1.6) and the Batzen; the Journal's Festival tab and the party board show the points. Does the harmony reward feel fair? Does a late joiner understand they play the same chart?
+- [ ] Press Esc or walk away mid-song → the song ends with nothing paid and a message; a fifth player is told the row is full.
+- [ ] Others near the row do not hear the blower (a known gap): is that too strange for a festival? A bot taking a seat is a server-side call; there is no bot spawner for it in the game yet.
+
+## Errands part 2: world events, the hiker and postcard cards ([#1340](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1340))
+
+A windowed offline game on real terrain with the adventure on. `--worldevent cow,hiker,avalanche,fire` plans one of each in turn near you (season and chance aside); `--world-events rare|off` changes how often they come on their own. A fire needs forest cover under you, an avalanche steep ground (the forced ones relax the height and the slope).
+
+- [ ] The cow: a Simmental cow stands 45 m off and walks away from its pasture; stand on its far side within 7 m and it turns home at a walking pace. Does it read as a stray cow, and does the bell clank carry?
+- [ ] The lost hiker: a compass diamond ("Last seen near ...") and a map letter H; find them (a figure standing by a peak or pass), E / Y talks, they follow you to the hut or stop. Does the walking figure look right behind you, and the call carry?
+- [ ] The avalanche: a heap of snow blocks on a slope; within 60 m a beep quickens as you near ("Signal 25 m"), hold G (pad X) at the spot: the bar fills in about eight seconds, a probe pole marks the place. Is the cone well set into the slope (no floating or buried rim)?
+- [ ] The fire: flames and rising smoke at a forest edge; beat a cell out by holding G (pad X) next to it for two seconds; the smoke dims the view up close but never hurts. Do the flames flicker well, is the smoke too heavy or too light, does it spread too fast (one cell in 15 s)?
+- [ ] Two players: both see the same event, dig it out in half the time, and both are paid (a toast "CHF 60, +5 VS"); five of one kind give a title in the Journal.
+- [ ] Walk into a Versteckis game or a Battle Royale round near an event: no toast, no pay, nothing drawn from it.
+- [ ] VR: the dig and the beating on the gather hold (X); grip-and-pull is not built, so the hold stays on the button.
+- [ ] The lost hiker's Postkarte at a hut warden ("A hiker is lost near ..."): the hiker sits where the card says, talking is step 1, the walk to the hut step 2, the card pays; the postcard home ("A postcard of ...", take the photo of the famous view then post the card at a post office; a view already in the album still counts).
+- [ ] The Errands tab lists the cards near each party member; the Atlas shows "Errands: Bekannt (12 points)" under a canton heading.
+
+## Teleport on foot lands outside buildings ([#1342](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1342))
+
+- [ ] On foot, click a house in a dense town on the adventure map (and the XR hand map, `/goto` onto a footprint) → you land on the nearest open ground beside it, never inside; the travel curtain lifts only once you stand there.
+- [ ] Teleport into a forest → you end up in the nearest clearing (up to 150 m); is that acceptable?

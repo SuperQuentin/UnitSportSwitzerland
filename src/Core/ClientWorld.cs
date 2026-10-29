@@ -225,6 +225,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.DiningProbe { Name = "DiningProbe" });
             return;
         }
+        // the four pinball tables built and played through their nodes (#1325)
+        if (Interiors.Pinball.PinballProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
+            return;
+        }
         // arcades planned in hand-made buildings (#1240)
         if (Interiors.ArcadeProbe.ParseArgs())
         {
@@ -553,6 +560,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball machines, played and watched (#1325)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
@@ -973,7 +981,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -987,7 +995,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.Bank.Create(this, inventory);
         var items = new Items.ItemController(inventory, origin)
         {
-            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging ? LocalPlayer : null,
+            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging && !Occasions.Festivals.Desalpe.DesalpeGame.TakesUse ? LocalPlayer : null,
         };
         AddChild(items);
         _items = items;
@@ -1008,6 +1016,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
         if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
+        if (Interiors.Pinball.PinballNetProbe.Role != null) AddChild(new Interiors.Pinball.PinballNetProbe(items, origin));
         if (Interiors.BowlingNetProbe.Role != null) AddChild(new Interiors.BowlingNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
@@ -1192,6 +1201,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
             festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
             festivals.Start = () => _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
             Occasions.Festivals.FestivalPage.Register();
+            // Steinstossen (#1269 part 3): the attempt's wire, the stone, its arc and its stakes
+            Occasions.Festivals.SteinService.Create(festivals, adventure, server: false, networked: Launch.Networked);
+            if (_worldOrigin is { } steinOrigin)
+                Occasions.Festivals.SteinGame.Create(this, () => LocalPlayer, steinOrigin, p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null);
+            if (Occasions.Festivals.SteinCheck.Requested) AddChild(new Occasions.Festivals.SteinCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.SteinNetProbe.Role != null) AddChild(new Occasions.Festivals.SteinNetProbe(items));
+            AddChild(new Occasions.Festivals.Horn.HornGame(() => LocalPlayer, () => _worldOrigin, () => _chunks));
+            // the Désalpe's herd and its game (#1269 part 7): dress the cows, drive them down, vote at the fair
+            AddChild(new Occasions.Festivals.Desalpe.DesalpeHerd(() => _worldOrigin, () => _chunks));
+            AddChild(new Occasions.Festivals.Desalpe.DesalpeGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Desalpe.DesalpeCheck.Requested) AddChild(new Occasions.Festivals.Desalpe.DesalpeCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Desalpe.DesalpeNetProbe.Role != null) AddChild(new Occasions.Festivals.Desalpe.DesalpeNetProbe(items));
+            if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Fahnen.FahnenCheck.Requested) AddChild(new Occasions.Festivals.Fahnen.FahnenCheck(items, () => LocalPlayer));

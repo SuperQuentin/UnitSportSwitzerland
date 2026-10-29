@@ -36,6 +36,53 @@ public static class OutlineSurvey
         public readonly Dictionary<string, int> Why = new();
     }
 
+    /// <summary>Locked street doors (#1304), by the plan's type, the wall they are on and the room behind them.</summary>
+    private static readonly Dictionary<string, int> LockedBy = new();
+
+    /// <summary>Why a plan wing by wing was not taken (#1304), by kind: its failure, or "not better" when it planned.</summary>
+    private static readonly Dictionary<string, int> WingWhy = new();
+
+    /// <summary>
+    /// Why a street door has no doorway, in words that count together: the plan's type, which wall of the plan box
+    /// the door is on (front: the main door's), and the ground-floor room 0.6 m in from it ("none": no room there).
+    /// </summary>
+    private static string LockedKey(InteriorLayout l, DoorSpot d)
+    {
+        var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+        var v = new Vector2(-u.Y, u.X);
+        var rel = new Vector2(d.Position.X - l.CenterX, d.Position.Z - l.CenterZ);
+        var o = new Vector2(d.Outward.X, d.Outward.Z);
+        var at = new Vector2(rel.Dot(u), rel.Dot(v));
+        var outward = new Vector2(o.Dot(u), o.Dot(v)).Normalized();
+        string wall = outward.Y < -0.7f ? "front" : outward.Y > 0.7f ? "back" : "side";
+        var p = at - outward * 0.6f;
+        var room = l.GroundFloor.Rooms.FirstOrDefault(r => r.Holds(p.X, p.Y));
+        if (room == null) return $"{l.Type,-12} {wall,-5} none";
+        // how far the room's own wall stands from the door, and whether it took a shape: a door a room is
+        // behind but whose wall is far off (a rectangle kept inside the outline) is a fitting problem, not a planning one
+        float gap = float.MaxValue;
+        var cs = room.Corners();
+        for (int i = 0; i < cs.Length; i++) gap = Math.Min(gap, SegDist(at, cs[i], cs[(i + 1) % cs.Length]));
+        string far = gap < 0.6f ? "<0.6" : gap < 2f ? "<2" : ">2";
+        return $"{l.Type,-12} {wall,-5} {room.Type} {(room.Shape != null ? "shaped" : "rect")} wall{far}m";
+    }
+
+    /// <summary>A door's place on the facade in the plan's frame.</summary>
+    private static Vector2 InPlan(InteriorLayout l, DoorSpot d)
+    {
+        var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+        var v = new Vector2(-u.Y, u.X);
+        var rel = new Vector2(d.Position.X - l.CenterX, d.Position.Z - l.CenterZ);
+        return new Vector2(rel.Dot(u), rel.Dot(v));
+    }
+
+    private static float SegDist(Vector2 p, Vector2 a, Vector2 b)
+    {
+        var ab = b - a;
+        float t = ab.LengthSquared() < 1e-9f ? 0 : Math.Clamp((p - a).Dot(ab) / ab.LengthSquared(), 0, 1);
+        return p.DistanceTo(a + ab * t);
+    }
+
     /// <summary>At most this many tiles a town (<c>--tiles N</c>), for a quicker look.</summary>
     private static int MaxTiles => int.TryParse(CmdArgs.Value("--tiles"), out int n) ? n : int.MaxValue;
 
@@ -46,6 +93,10 @@ public static class OutlineSurvey
         string outPath = arg.Contains(',') ? arg[(arg.IndexOf(',') + 1)..] : "test_output/outlinesurvey.txt";
         var src = new LocalChunkSource(CmdArgs.Value("--chunks") ?? "terrain_chunks");
         InteriorGenerator.FollowOutlines = !CmdArgs.Has("--no-outlines");
+        InteriorGenerator.PlanWings = !CmdArgs.Has("--no-wings");
+        // --svgkeys E_N_I,...: those buildings' plans drawn to test_output/survey-plans/, outline and locked doors in
+        var svgKeys = (CmdArgs.Value("--svgkeys") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+        var winged = new List<string>();
         var rows = new SortedDictionary<string, Row>();
         var total = new Row();
         int tiles = 0;
@@ -72,6 +123,7 @@ public static class OutlineSurvey
                         if (BuildingFootprint.Compute(tile, index, roads, null) is not { } fp) continue;
                         var row = rows.TryGetValue(b.Kind.ToString(), out var r) ? r : rows[b.Kind.ToString()] = new Row();
                         InteriorGenerator.OutlineFailure = null;
+                        InteriorGenerator.WingFailure = "one wing";
                         var watch = Stopwatch.StartNew();
                         InteriorLayout? l;
                         try { l = InteriorGenerator.Generate(tile, index, roads, null); }
@@ -107,7 +159,99 @@ public static class OutlineSurvey
                             row.Why[key] = row.Why.GetValueOrDefault(key) + 1;
                         }
                         var entrances = l.AllEntrances().Where(e => e.Level == 0).ToList();
+                        if (InteriorGenerator.Winged) winged.Add($"{fp.Key} {b.Kind}");
+                        // the first dozen planned wing by wing, drawn both ways: as planned, and as they were before #1304
+                        if (InteriorGenerator.Winged && (winged.Count <= 12 || svgKeys.Contains(fp.Key.ToString())))
+                        {
+                            svgKeys.Add(fp.Key.ToString());
+                            InteriorGenerator.PlanWings = false;
+                            var old = InteriorGenerator.Generate(tile, index, roads, null);
+                            InteriorGenerator.PlanWings = true;
+                            if (old != null)
+                            {
+                                System.IO.Directory.CreateDirectory("test_output/survey-plans");
+                                var og = PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+                                var oe = old.AllEntrances().Where(e => e.Level == 0).ToList();
+                                var oshut = fp.Doors.Where(d => d.Level == 0 && d.Width > 0 && !oe.Any(e => e.Door == new DoorKey(fp.Key, d.Slot).ToString()))
+                                    .Select(d => InPlan(old, d)).ToList();
+                                System.IO.File.WriteAllText($"test_output/survey-plans/{fp.Key}_before.svg",
+                                    InteriorValidator.ToSvg(old, og == null ? null : InteriorGenerator.RingsFor(old, og), oshut));
+                            }
+                        }
+                        if (svgKeys.Contains(fp.Key.ToString()))
+                        {
+                            System.IO.Directory.CreateDirectory("test_output/survey-plans");
+                            var g = PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+                            var shut = fp.Doors.Where(d => d.Level == 0 && d.Width > 0 && !entrances.Any(e => e.Door == new DoorKey(fp.Key, d.Slot).ToString()))
+                                .Select(d => InPlan(l, d)).ToList();
+                            System.IO.File.WriteAllText($"test_output/survey-plans/{fp.Key}{(InteriorGenerator.PlanWings ? "" : "_before")}.svg",
+                                InteriorValidator.ToSvg(l, g == null ? null : InteriorGenerator.RingsFor(l, g), shut));
+                        }
+                        if (InteriorGenerator.WingFailure != "one wing" && InteriorGenerator.WingFailure?.StartsWith("not for it") != true && !(InteriorGenerator.WingFailure == null && l.Type is BuildingType.Apartments or BuildingType.MixedUse))
+                        {
+                            string ww = InteriorGenerator.WingFailure == null ? "planned (taken, or not better)"
+                                : System.Text.RegularExpressions.Regex.Replace(InteriorGenerator.WingFailure, @"[-\d.,]+|\(.*?\)", "#");
+                            string wk = $"{b.Kind,-12} {(ww.Length > 80 ? ww[..80] : ww)}";
+                            WingWhy[wk] = WingWhy.GetValueOrDefault(wk) + 1;
+                        }
+                        // --key E_N_I: that building's doors and doorways in the plan's frame, to see why one locks
+                        if (CmdArgs.Value("--key") == fp.Key.ToString())
+                        {
+                            GD.Print($"[outlinesurvey] {fp.Key} {b.Kind} {l.Type} {l.Width:F1}x{l.Depth:F1} m, entry x {l.EntryX:F1}, wings: {InteriorGenerator.WingFailure ?? "planned"}");
+                            // the roof on a 2 m grid, the back at the top: # roof, . open, D a street door
+                            if (PlanOutline.Grid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth, 2f) is { } map)
+                                for (int j = map.GetLength(1) - 1; j >= 0; j--)
+                                {
+                                    var mapRow = new StringBuilder("[outlinesurvey]   ");
+                                    for (int i = 0; i < map.GetLength(0); i++)
+                                    {
+                                        bool isDoor = fp.Doors.Any(d =>
+                                        {
+                                            var q = new Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y);
+                                            return (int)((q.Dot(fp.AxisU) + fp.Width / 2) / 2f) == i && (int)((q.Dot(fp.AxisV) + fp.Depth / 2) / 2f) == j;
+                                        });
+                                        mapRow.Append(isDoor ? 'D' : map[i, j] ? '#' : '.');
+                                    }
+                                    GD.Print(mapRow.ToString());
+                                }
+                            foreach (var wr in PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) ?? [])
+                                GD.Print($"[outlinesurvey]   wing x {wr.X0:F1}..{wr.X1:F1} z {wr.Z0:F1}..{wr.Z1:F1}");
+                            foreach (var rm in l.GroundFloor.Rooms)
+                                GD.Print($"[outlinesurvey]   room {rm.Type} x {rm.X0:F1}..{rm.X1:F1} z {rm.Z0:F1}..{rm.Z1:F1}{(rm.Shape != null ? " shaped" : "")}");
+                            foreach (var wr in PlanOutline.Pieces(b, fp.Center, fp.AxisU, fp.Width, fp.Depth) ?? [])
+                                GD.Print($"[outlinesurvey]   piece x {wr.X0:F1}..{wr.X1:F1} z {wr.Z0:F1}..{wr.Z1:F1}");
+                            foreach (var d in fp.Doors.Where(d => d.Level == 0))
+                            {
+                                var at = InPlan(l, d);
+                                var o = new Vector2(d.Outward.X, d.Outward.Z);
+                                var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+                                var ol = new Vector2(o.Dot(u), o.Dot(new Vector2(-u.Y, u.X)));
+                                string door = new DoorKey(fp.Key, d.Slot).ToString();
+                                var e = entrances.FirstOrDefault(e => e.Door == door);
+                                GD.Print($"[outlinesurvey]   slot {d.Slot}: at ({at.X:F1}, {at.Y:F1}) out ({ol.X:F2}, {ol.Y:F2}) w {d.Width:F1}{(d.Vehicle ? " vehicle" : "")}"
+                                    + (e == null ? " LOCKED" : $" -> doorway ({e.X:F1}, {e.Z:F1})"));
+                            }
+                            foreach (var rm in l.GroundFloor.Rooms.Where(q => q.Type is RoomType.Lobby or RoomType.Landing or RoomType.Stairwell))
+                                GD.Print($"[outlinesurvey]   {rm.Type} x {rm.X0:F1}..{rm.X1:F1} z {rm.Z0:F1}..{rm.Z1:F1}");
+                        }
                         int doorCount = fp.Doors.Count(d => d.Level == 0);
+                        foreach (var d in fp.Doors.Where(d => d.Level == 0 && d.Width > 0))
+                        {
+                            string door = new DoorKey(fp.Key, d.Slot).ToString();
+                            if (entrances.Any(e => e.Door == door)) continue;
+                            string k = $"{b.Kind,-12} " + LockedKey(l, d);
+                            LockedBy[k] = LockedBy.GetValueOrDefault(k) + 1;
+                            if (LockedBy[k] <= 2)
+                            {
+                                // the plan with its outline, red circles at its doors: test_output/survey-locked/
+                                System.IO.Directory.CreateDirectory("test_output/survey-locked");
+                                var g = PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+                                string name = System.Text.RegularExpressions.Regex.Replace(k.Trim(), @"[^A-Za-z0-9<>]+", "_").Replace("<", "lt").Replace(">", "gt");
+                                System.IO.File.WriteAllText($"test_output/survey-locked/{name}__{fp.Key}_{d.Slot}.svg",
+                                    InteriorValidator.ToSvg(l, g == null ? null : InteriorGenerator.RingsFor(l, g), [InPlan(l, d)]));
+                                GD.Print($"[outlinesurvey]   locked: {fp.Key} slot {d.Slot}: {k}; why the plan kept rectangles: {InteriorGenerator.OutlineFailure ?? "-"}");
+                            }
+                        }
                         int off = 0, turned = 0;
                         foreach (var e in entrances)
                         {
@@ -140,6 +284,19 @@ public static class OutlineSurvey
         Line("all", total);
         sb.AppendLine("fill and outside: of the outline's area, over the plans whose outline is not their box");
         sb.AppendLine("doors: their ground-floor street doors; locked: no doorway inside; off>1m: the doorway inside more than 1 m from the real door; turned: more than 10° from it");
+        sb.AppendLine();
+        sb.AppendLine("locked doors by kind, plan type, wall (front: the main door's) and the room behind (#1304):");
+        foreach (var (k, n) in LockedBy.OrderByDescending(w => w.Value).Take(40))
+            sb.AppendLine($"  {n,5}  {k}");
+        sb.AppendLine();
+        sb.AppendLine($"planned wing by wing (#1304): {winged.Count}: {string.Join(", ", winged.Take(60))}");
+        sb.AppendLine("wing by wing (#1304), by kind: why not, or planned:");
+        foreach (var (k, n) in WingWhy.OrderByDescending(w => w.Value).Take(30))
+            sb.AppendLine($"  {n,5}  {k}");
+        sb.AppendLine();
+        sb.AppendLine($"vestibules behind doors with no room (#1304), in: {string.Join(", ", InteriorGenerator.VestibuleKeys.Distinct().Take(20))}");
+        foreach (var (k, n) in InteriorGenerator.VestibuleWhy.OrderByDescending(w => w.Value))
+            sb.AppendLine($"  {n,5}  {k}");
         sb.AppendLine();
         sb.AppendLine("why a plan went back to rectangles:");
         foreach (var (name, x) in rows)

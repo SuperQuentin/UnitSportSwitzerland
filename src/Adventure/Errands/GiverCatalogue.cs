@@ -99,6 +99,24 @@ public sealed class GiverCatalogue
         }
     }
 
+    /// <summary>The givers of <c>givers.tsv.gz</c> (the preprocessor's farms, dairies, post offices and Beizen); a row of a kind this build does not know is skipped.</summary>
+    public static IEnumerable<Giver> FromRecords(IEnumerable<GiverRecord> rows)
+    {
+        foreach (var r in rows)
+            if (r.Kind is >= (int)GiverKind.Farmer and <= (int)GiverKind.Host)
+                yield return new Giver(r.Id, (GiverKind)r.Kind, r.E, r.N, r.Heading, r.Canton, r.Elevation, r.Name, r.Source);
+    }
+
+    /// <summary>The embedded list, empty when the build has none (a data step, not a code one: <c>docs/notes/adventure/errands.md</c>).</summary>
+    public static IEnumerable<Giver> FromEmbedded(System.Reflection.Assembly assembly)
+    {
+        using var s = assembly.GetManifestResourceStream(ResourceName);
+        if (s == null) return Array.Empty<Giver>();
+        return FromRecords(GiverFormat.Read(s)).ToList();
+    }
+
+    public const string ResourceName = "givers.tsv.gz";
+
     public static string Tag(GiverKind kind) => kind switch
     {
         GiverKind.HutWarden => "hut", GiverKind.StationMaster => "station", GiverKind.ShipMaster => "ship", GiverKind.Farmer => "farm",
