@@ -11,21 +11,30 @@ ROUNDS=${ROUNDS:-3}
 tc_server 1800 240 "$OUT/joinbench_server.log" --server --port $PORT --stream-bandwidth ${BW:-50} "${CH[@]}"
 ready() { grep -ah "\[world\] ready after" "$1" | awk '{ sub(/.*ready after /, ""); sub(/ s .*/, ""); gsub(/,/, "."); print }'; }
 median() { sort -n | awk '{a[NR]=$1} END{ if(NR==0) print "n/a"; else print a[int((NR+1)/2)] }'; }
-join() { # <cache> <log>
+join() { # <cache> <log> <settle>: settle = stay on after ready until the horizon passes saved their caches (the cold run)
   : > "$2"
-  tc_client 200 "$2" --connect 127.0.0.1:$PORT --name Bench "${NOTERRAIN[@]}" --cache "$1" &
+  tc_client 300 "$2" --connect 127.0.0.1:$PORT --name Bench "${NOTERRAIN[@]}" --cache "$1" &
   local pid=$! i
-  for i in $(seq 1 900); do
+  for i in $(seq 1 1500); do
     grep -q "\[world\] ready after\|RESULT: FAILED\|connection failed" "$2" 2>/dev/null && break
     kill -0 "$pid" 2>/dev/null || break
     guard_nap 0.2
   done
+  if [ "${3:-}" = settle ]; then
+    # the passes of the generated horizon save their cache when they end: the second one follows horizon.bin
+    for i in $(seq 1 600); do
+      [ "$(grep -ac "^\[fallback\] horizon" "$2")" -ge 2 ] && grep -aq "horizon received" "$2" && break
+      kill -0 "$pid" 2>/dev/null || break
+      guard_nap 0.2
+    done
+    guard_nap 4
+  fi
   tc_stop "$pid"
 }
 COLD=(); WARM=()
 for r in $(seq 1 "$ROUNDS"); do
   cache="$PWD/$OUT/joinbench_cache_$r"; rm -rf "$cache"; mkdir -p "$cache"
-  join "$cache" "$OUT/joinbench_cold_$r.log"; c=$(ready "$OUT/joinbench_cold_$r.log")
+  join "$cache" "$OUT/joinbench_cold_$r.log" settle; c=$(ready "$OUT/joinbench_cold_$r.log")
   join "$cache" "$OUT/joinbench_warm_$r.log"; w=$(ready "$OUT/joinbench_warm_$r.log")
   echo "[joinbench] round $r: cold ${c:-?} s, warm ${w:-?} s"
   COLD+=("${c:-}"); WARM+=("${w:-}")
