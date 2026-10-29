@@ -44,6 +44,12 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   (Gland): `--origin 2510000,1140000`, shot `429.1,i1.6,-978.3,-5,43.4,3,<png>`, then machines #7 and #8 at plan
   x 39.16 / 35.69, z 16.02, turned 2: the eye pose `35.69,l1.5,14.93,-21.5,180`, straight down
   `35.69,l2.05,15.80,-83.5,180` (a shot camera is not the play camera: shots take the queue's pose).
+- **Showcase film**: `python tools/pinball-showcase.py stills|film|cut|all` (the cinema showcase's way,
+  `trailer/cinema-showcase`): the four tables in three venues, a robot at the flippers (`/pinball play`, `start`,
+  `robot`), the shot camera the queue's; one launch per venue, and a second machine stepped up to in the same launch
+  took the Start but stayed in attract, so BowlinGland's two tables are two launches. Each launch runs on a user:// of its
+  own (APPDATA) seeded with high scores. `stills` keeps the HUD (`/pinball`'s list names the live indices: the plans
+  regenerate, so check them before filming). ~25 min to film, a minute to cut, 93 s at 1080p.
 - **Checks**: `--pinballcheck --systems ui` (cabinets played through their nodes: flippers, balls, drops, lamps,
   the backbox, no mesh rebuilt, the screen over the wire), `--zfightcheck Pinball`, `--sounds,check`.
 - **High scores** (`PinballHighScores`, `PinballScoreBook`, unit tested): the best five per machine, keyed like the
