@@ -284,6 +284,9 @@ public static class ItemDefs
             { Blurb = "{use_item} to eat. A shard of the Marmite's chocolate shell, smashed at the Escalade." },
         Eat(ItemId.SoupeEscalade, "Soupe de l'Escalade", 5, "#d89a4a", "SE", 45, ItemCategory.Food, 4) with
             { Blurb = "{use_item} to eat. The Escalade's vegetable soup, a bowl from the pot: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
+        // the Chalandamarz (#1356): the first march's hand bell (the procession's tart is the existing Engadiner Nusstorte)
+        new(ItemId.ChalandaTreichel, "Chalanda Treichel", "A child's hand Treichel from the Chalandamarz procession. Worth nothing but the sound.",
+            ItemUse.Material, 5, new Color("#c99a3a"), "CT", 0, ItemCategory.Cosmetic, 8f),
         new(ItemId.ChristmasBauble, "Christmas bauble", "A glass bauble from the market. Worth nothing but the look in the hand.",
             ItemUse.Material, 10, new Color("#c81e24"), "XB", 0, ItemCategory.Cosmetic, 12f),
         Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
@@ -737,6 +740,11 @@ public static class ItemDefs
             case ItemId.SoupeEscalade:
                 s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
                 s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.85f, 0.6f, 0.28f), 10);
+                break;
+            case ItemId.ChalandaTreichel:
+                s.Tube(new Vector3(0, -0.07f, 0), new Vector3(0, 0.05f, 0), 0.075f, 0.04f, new Color(0.79f, 0.6f, 0.23f), 10);
+                s.Tube(new Vector3(0, 0.05f, 0), new Vector3(0, 0.1f, 0), 0.012f, 0.012f, new Color(0.23f, 0.14f, 0.09f), 5);
+                s.Box(new Vector3(0, 0.1f, 0), new Vector3(0.1f, 0.03f, 0.03f), new Color(0.78f, 0.12f, 0.16f));
                 break;
             case ItemId.ChristmasBauble:
                 s.Tube(new Vector3(0, -0.06f, 0), new Vector3(0, 0.06f, 0), 0.055f, 0.055f, new Color(0.78f, 0.12f, 0.14f), 10);
