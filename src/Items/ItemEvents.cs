@@ -36,6 +36,8 @@ public enum ItemEventKind
     FishEnd = 10,
     /// <summary>A bottled gust landed (#1227). Position = where; an updraft column for 20 s on every peer (<c>Adventure.Rewards.GustFx.OnGust</c>).</summary>
     Gust = 11,
+    /// <summary>A handful of Räppli thrown (#1357). Position = the hand; direction = the aim; paper on every peer (<c>Occasions.Festivals.Fasnacht.RaeppliFx.OnConfetti</c>).</summary>
+    Confetti = 12,
 }
 
 /// <summary>
@@ -91,6 +93,7 @@ public partial class ItemEvents : Node
         [ItemEventKind.FishCast] = Fishing.FishingVisuals.OnCast,
         [ItemEventKind.FishEnd] = Fishing.FishingVisuals.OnEnd,
         [ItemEventKind.Gust] = Adventure.Rewards.GustFx.OnGust,
+        [ItemEventKind.Confetti] = Occasions.Festivals.Fasnacht.RaeppliFx.OnConfetti,
     };
 
     /// <summary>

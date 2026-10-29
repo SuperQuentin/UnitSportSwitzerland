@@ -138,6 +138,9 @@ public partial class FestivalService : Node
                 FestivalCatalog.Register(market with { Sites = [new FestivalSite("the test field", e, n, 90)] });
             if (FestivalCatalog.Get(FestivalCatalog.EscaladeId) is { } escalade)
                 FestivalCatalog.Register(escalade with { Sites = [new FestivalSite("the test field", e, n, 100)] });
+            foreach (string fasnacht in new[] { FestivalCatalog.FasnachtId, FestivalCatalog.BaslerFasnachtId })
+                if (FestivalCatalog.Get(fasnacht) is { } fd)
+                    FestivalCatalog.Register(fd with { Sites = [new FestivalSite("the test field", e, n, 90)] });
             if (FestivalCatalog.Get(FestivalCatalog.SechselaeutenId) is { } sechse)
                 FestivalCatalog.Register(sechse with { Sites = [new FestivalSite("the test field", e, n, 120)] });
             if (FestivalCatalog.Get(FestivalCatalog.ChalandaId) is { } chalanda)
@@ -186,6 +189,7 @@ public partial class FestivalService : Node
             foreach (long peer in peers) Welcome(peer);
         }
         EscaladeTick(now);
+        GuggenTick(now);
         SechseTick(now);
         ChalandaTick(now);
         August1Tick(now);

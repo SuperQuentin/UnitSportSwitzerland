@@ -23,6 +23,25 @@ public sealed class FestivalOccasion : Occasion
 
     public override string Title => FestivalCatalog.Get(Id)?.Title ?? (Id.Length == 0 ? Id : char.ToUpperInvariant(Id[0]) + Id[1..]);
 
+    /// <summary>The Fasnacht's own mask while it runs (the Hats facet, #1357): Luzern's Fritschi, Basel's Ueli; nothing for the other festivals.</summary>
+    public override Headwear Hat => Id switch
+    {
+        FestivalCatalog.FasnachtId => Headwear.LarveFritschi,
+        FestivalCatalog.BaslerFasnachtId => Headwear.LarveUeli,
+        _ => Headwear.None,
+    };
+
+    private static readonly OccasionAtmosphere MorgestraichDark = new() { Lamps = 0f };
+
+    /// <summary>
+    /// Basel's Morgestraich (#1357): between 04:00 and 05:30 on the festival's first day the street lamps and lit windows are out (<c>world_lamps</c> 0), the
+    /// lanterns of <see cref="Fasnacht.FasnachtModels"/> still shine. Null (an ordinary day) the rest of the time; read every frame by <c>DayNight</c>, so the cheap hour test
+    /// goes first.
+    /// </summary>
+    public override OccasionAtmosphere? Atmosphere =>
+        Id == FestivalCatalog.BaslerFasnachtId && World.DayNight.Instance is { } sky && Fasnacht.FasnachtRules.Morgestraich(Id, 1, sky.Hour)
+            && FestivalService.Instance?.RunningOf(Id) is { Day: 1 } ? MorgestraichDark : null;
+
     // ---- the site ------------------------------------------------------------------------------
 
     /// <summary>The place this festival is held, once resolved (null: not held in this region).</summary>
@@ -120,6 +139,7 @@ public sealed class FestivalOccasion : Occasion
         if (string.Equals(Id, FestivalCatalog.DesalpeId, StringComparison.OrdinalIgnoreCase)) Desalpe.DesalpeModels.Decorate(site, tile, into);   // the alp sign and the fair's ring
         if (string.Equals(Id, FestivalCatalog.ChristmasMarketId, StringComparison.OrdinalIgnoreCase)) Christmas.ChristmasModels.Decorate(site, tile, into);   // the stalls, the Samichlaus and the tree
         if (string.Equals(Id, FestivalCatalog.EscaladeId, StringComparison.OrdinalIgnoreCase)) Escalade.EscaladeModels.Decorate(site, tile, into);   // the marmite, the soup pot, the start arch and the gates' torches
+        if (Fasnacht.FasnachtRules.IsFasnacht(Id)) Fasnacht.FasnachtModels.Decorate(Id, site, tile, into);   // the Larven stall, the Guggenmusik stage and Basel's lantern
         if (string.Equals(Id, FestivalCatalog.SechselaeutenId, StringComparison.OrdinalIgnoreCase)) Sechselaeuten.SechselaeutenModels.Decorate(site, tile, into);   // the Zunft's Weibel and the guild banners (the pyre is the stage's)
         if (string.Equals(Id, FestivalCatalog.ChalandaId, StringComparison.OrdinalIgnoreCase)) Chalanda.ChalandaModels.Decorate(site, tile, into);   // the Treichel stand and the stations' banners
         if (string.Equals(Id, FestivalCatalog.August1Id, StringComparison.OrdinalIgnoreCase)) August1.August1Models.Decorate(site, tile, into);   // the lampion stand, the fireworks stand, the walk's post, the village fire   // the marmite, the soup pot, the start arch and the gates' torches
