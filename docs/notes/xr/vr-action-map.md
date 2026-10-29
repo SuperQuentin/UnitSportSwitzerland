@@ -72,7 +72,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
 | drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
-| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
+| next / prev_item, slot_1-6 | Alt + wheel (the plain wheel zooms, #1369), 1-6 / D-pad → (tap) | ok: R stick ↓, a short grip at the right / left hip (#437) | slots shown at the hip |
+| holster_item (#1369) | `,`, the number of the slot in hand / hold D-pad → | ok: hold the grip at the right hip (0.35 s, a buzz): puts the item away, again draws it (`XrHands.AtHip`, `Gesture`) | keep |
 | inventory | I, Tab / Back (tap; opens on the release) | ok: Menu hold | keep |
 | quick_menu (#840) | hold F2 / hold Back | ok: wrist menu Activities + Invites entries; a ring opened by Back is aimed by the right hand | a hold of Menu longer than the inventory's pulse |
 | invite_decline (#840) | Shift+F2 / — | ok: wrist menu › Invites › Decline (laser), or Menu tap › Activities | keep |

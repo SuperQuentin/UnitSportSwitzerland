@@ -7,6 +7,21 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Wheel zoom, holster, fading hotbar, hand chip (PR for [#1369](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1369))
+
+On foot in third person, anywhere (`--world fixture` does).
+
+- [ ] Sprint (Shift) and turn the wheel: the camera zooms in and out, the hotbar does not move. Alt + wheel steps the slot; releasing Alt after a wheel step does not free the cursor (a lone Alt tap still does).
+- [ ] Press the number of the slot in hand, and `,`: the item leaves the hand and comes back. Does the chip (bottom right) read well dimmed as "holstered", and "Empty hand" on an empty slot, over snow and over a dark scene?
+- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Every item goes away, the hammer, rod and detector too; aiming, a camera held up and a cast line do not.
+- [ ] Start sprinting (Shift / L3) with an item in hand: it goes in the pocket at once and stays there after the sprint; Use draws it on the run, and a new sprint start holsters again. Does it feel right (not annoying when you want the item while running)?
+- [ ] Pad: tap D-pad right steps the slot; hold it (about half a second, a tick) holsters or draws. Does the tap feel late now (it fires on release)?
+- [ ] VR: hold the grip at the right hip for a third of a second (buzz): the item goes away, again it comes out. A quick squeeze there still steps to the next slot.
+- [ ] Settings › Gameplay › Hotbar: Always, Fade out (default), Hidden. In Fade, change slot / holster / use an item / open the quick wheel: the bar shows for about 3 s then fades smoothly. Is 3 s right?
+- [ ] A second player sees your hand empty when you holster and the item come back when you draw.
+- [ ] Touch (phone, or `--mobile`): the hotbar stays always visible and there is no chip.
+
+
 ## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
 
 `--festival test --date 2027-02-04 --world fixture` (Luzern's: the Larven stall 9 m west of the fixture's start, the Guggenmusik stage 14 m east and 6 m north); `--date 2027-02-15` and the clock at 04:30 (`--time 4.5`) for Basel's Morgestraich with its lantern 11 m north; or online on the western map in the real dates (easter-52 for six days, easter-41 for three, relocated to the region's largest town).
@@ -18,6 +33,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Basel's Morgestraich at 04:00 of day 1: do the street lamps and lit windows really go out (houses, street lamps, props) while the lanterns shine, is it dark enough to be an event, and does the drum roll with the saying land? At 05:30 do the lamps come back?
 - [ ] The stage, the stall and the lantern as props at night and by day (Cartoon, PS1, Realistic): readable, not z-fighting.
 - [ ] VR: a grip at the stall, the lantern or the stage works through the pad route; tapping the notes with the trigger; striking a drum by hand and tossing Räppli by hand are not built.
+
 ## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
 
 `--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).

@@ -156,7 +156,7 @@ public partial class PlayerInput : Node
     public const string SwapShoulder = "swap_shoulder";
     /// <summary>
     /// On foot in third person: the camera arm in and out (#1149), from far off down to the face.
-    /// Shift + wheel (the plain wheel is the hotbar), = / -; a pad holds R3 and pushes the right stick.
+    /// The plain wheel (Alt + wheel is the hotbar, #1369), = / -; a pad holds R3 and pushes the right stick.
     /// </summary>
     public const string ViewZoomIn = "view_zoom_in";
     public const string ViewZoomOut = "view_zoom_out";
@@ -261,7 +261,10 @@ public partial class PlayerInput : Node
     public const string AuraSuggest = "aura_suggest";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
+    /// <summary>Next hotbar slot: Alt + wheel down (the plain wheel zooms the camera, #1369), D-pad right on a pad.</summary>
     public const string NextItem = "next_item";
+    /// <summary>Puts the item in hand away, or takes it out again (#1369): comma on the keyboard (selection kept); a pad holds D-pad right, VR holds the grip at the right hip.</summary>
+    public const string Holster = "holster_item";
     /// <summary>Hotbar slots 1-6 (#391): select on foot, swap the hovered slot in the inventory, pick in the quick wheel. Same keys as the truck's gates, never at the same time.</summary>
     public static readonly StringName[] Slots = { "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6" };
     public const string PrevItem = "prev_item";
@@ -721,10 +724,10 @@ public partial class PlayerInput : Node
         Bind(CamCut, Keys(Key.Enter), Button(JoyButton.X));
         // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
         Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
-        // the on-foot camera's zoom (#1149): Shift + wheel, since the plain wheel is the hotbar's
-        // (Ctrl is crouch, Alt the free cursor; Shift standing still does nothing)
-        Bind(ViewZoomIn, Keys(Key.Equal), ShiftWheel(MouseButton.WheelUp));
-        Bind(ViewZoomOut, Keys(Key.Minus), ShiftWheel(MouseButton.WheelDown));
+        // the on-foot camera's zoom (#1149, #1369): the plain wheel, whatever is held (Shift is sprint);
+        // the hotbar is on Alt + wheel
+        Bind(ViewZoomIn, Keys(Key.Equal), Mouse(MouseButton.WheelUp));
+        Bind(ViewZoomOut, Keys(Key.Minus), Mouse(MouseButton.WheelDown));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
         Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
@@ -796,9 +799,10 @@ public partial class PlayerInput : Node
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
-        Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
+        Bind(NextItem, AltWheel(MouseButton.WheelDown), Button(JoyButton.DpadRight));
+        Bind(Holster, Keys(Key.Comma));
         for (int s = 0; s < Slots.Length; s++) Bind(Slots[s], Keys(Key.Key1 + s));
-        Bind(PrevItem, Mouse(MouseButton.WheelUp));
+        Bind(PrevItem, AltWheel(MouseButton.WheelUp));
         Bind(BirdJournal, Keys(Key.J));
         // the Character menu (#1127): P on foot (in a vehicle it is the radio's previous station, so the world reads it
         // only on foot); no pad button is free on foot, so a pad and VR open it from the quick menu or the pause menu
@@ -838,15 +842,15 @@ public partial class PlayerInput : Node
     private static InputEvent[] Mouse(MouseButton b) =>
         new InputEvent[] { new InputEventMouseButton { ButtonIndex = b } };
 
-    private static InputEvent[] ShiftWheel(MouseButton b) =>
-        new InputEvent[] { new InputEventMouseButton { ButtonIndex = b, ShiftPressed = true } };
+    private static InputEvent[] AltWheel(MouseButton b) =>
+        new InputEvent[] { new InputEventMouseButton { ButtonIndex = b, AltPressed = true } };
 
     /// <summary>
-    /// Shift + wheel: the on-foot camera's zoom (#1149), not a hotbar step. The wheel's own actions
-    /// still match it (Godot matches a modifier-less binding whatever is held), so the hotbar asks.
+    /// Alt + wheel: the hotbar's step (#1369). A modifier-less binding matches whatever is held, so the
+    /// plain wheel's zoom asks first: Alt is the only modifier that moves the wheel to the hotbar.
     /// </summary>
-    public static bool IsZoomWheel(InputEvent e) =>
-        e is InputEventMouseButton { ShiftPressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown };
+    public static bool IsHotbarWheel(InputEvent e) =>
+        e is InputEventMouseButton { AltPressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown };
 
     private static InputEvent[] Button(JoyButton b) =>
         new InputEvent[] { new InputEventJoypadButton { ButtonIndex = b, Device = -1 } };
