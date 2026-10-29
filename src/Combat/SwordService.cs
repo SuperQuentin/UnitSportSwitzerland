@@ -473,7 +473,10 @@ public partial class SwordService : Node
 
     private static long Key(SwordTargetKind kind, long id) => kind == SwordTargetKind.Dummy ? -1_000_000 - id : id;
 
-    private FootPlayer? BodyOf(long id) => GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(id));
+    private FootPlayer? BodyOf(long id) =>
+        // offline the one body is the one the camera rides (its node is not named after a peer)
+        !Online && id == 1 ? GetViewport().GetCamera3D()?.GetParent() as FootPlayer
+            : GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(id));
 
     private bool Sees(long viewer, long target) =>
         GetNodeOrNull<InterestService>("../" + InterestService.NodeName)?.ServerSees(viewer, target) != false;

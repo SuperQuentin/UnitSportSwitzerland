@@ -19,31 +19,47 @@ public static partial class HumanMeshBuilder
     public const int SwordMoves = 7000;
 
     /// <summary>Packs a move, a variant (0..3) and a seed (0..15) into <see cref="DanceParams.Bar"/>.</summary>
-    public static int SwordCode(SwordMove move, int variant, int seed) => (int)move | ((variant & 3) << 4) | ((seed & 15) << 6);
+    public static int SwordCode(SwordMove move, int variant, int seed, int chain = 0) => (int)move | ((variant & 3) << 4) | ((seed & 15) << 6) | (chain << 10);
 
     private static void EvalSword(in Beat t, bool mv, ref DanceCh ch)
     {
         int code = t.Bar;
         var move = (SwordMove)(code & 15);
         int variant = (code >> 4) & 3, seed = (code >> 6) & 15;
-        var pose = move == SwordMove.Charge
-            ? SwordPoses.Charging(t.R * (float)SwordRules.ChargeMax, 0.025f * Mathf.Sin(t.R * 70f))
-            : SwordPoses.Sample(move, variant, seed, t.R);
+        // the swing it flows out of (a combo never returns to the stance between swings), in the bits above the move's own
+        var pose = SwordPoses.SampleChain(move, variant, seed, t.R, SwordPoses.UnpackChain(code >> 10));
+        if (move == SwordMove.Charge) pose.Psi += 0.025f * Mathf.Sin(t.R * 70f);
         ch.Psi = pose.Psi; ch.Theta = pose.Theta; ch.Phi = pose.Phi;
         ch.Py = pose.Py; ch.Px = pose.Px; ch.Pz = pose.Pz;
         ch.ThN = pose.Neck; ch.PhH = pose.HeadYaw;
         Aim(ref ch, 1f, pose.Hx, pose.Hy, pose.Hz, Elbow(1f));
         Aim(ref ch, -1f, pose.Ox, pose.Oy, pose.Oz, Elbow(-1f));
-        Foot(ref ch, -1f, pose.LeadX, pose.LeadY, pose.LeadZ, 0.1f, pose.LeadY > AnkleHeight + 0.05f ? 1f : 0f);
+        // a spin slash turns from the feet: the toes lead the body round
+        Foot(ref ch, -1f, pose.LeadX, pose.LeadY, pose.LeadZ, 0.1f + 0.5f * Mathf.Sin(pose.Spin), pose.LeadY > AnkleHeight + 0.05f ? 1f : 0f);
         Foot(ref ch, 1f, pose.RearX, pose.RearY, pose.RearZ, 0.5f, pose.RearY > AnkleHeight + 0.05f ? 1f : 0f);
         // on the move the legs keep the gait and the swing is the upper body's
         if (mv) MovingScale(ref ch, 0.8f, 1f);
     }
 
     /// <summary>One frame of a sword move for the model viewer's contact sheet: <paramref name="progress"/> of the way through it.</summary>
-    private static ArrayMesh SwordFrame(SwordMove move, int variant, float progress) =>
-        BuildStride(HumanPalette.ForRider((int)move), 0f, 0f,
-            dance: new DanceParams(Audio.Cd.MusicStyle.Pop, SwordMoves, 0f, Mathf.Min(progress, 0.999f), SwordCode(move, variant, 3), 1f));
+    private static DanceParams SwordDance(SwordMove move, int variant, float progress) =>
+        new(Audio.Cd.MusicStyle.Pop, SwordMoves, 0f, Mathf.Min(progress, 0.999f), SwordCode(move, variant, 3), 1f);
+
+    /// <summary>The figure at that frame with the sword in its hand, placed from the same mounts the game's held item uses.</summary>
+    private static Node3D SwordFigure(SwordMove move, int variant, float progress)
+    {
+        var dance = SwordDance(move, variant, progress);
+        var node = Figure(BuildStride(HumanPalette.ForRider((int)move), 0f, 0f, dance: dance));
+        var mounts = MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
+        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        var basis = mounts.HandBasis;
+        node.AddChild(new MeshInstance3D
+        {
+            Mesh = Items.ItemDefs.HandMesh(Items.ItemId.Sword), MaterialOverride = Items.ItemDefs.Material,
+            Transform = new Transform3D(basis, hand + basis * new Vector3(0, -0.05f, -0.03f)),
+        });
+        return node;
+    }
 
     [Core.Showcase("Sword poses")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseSword()
@@ -56,13 +72,13 @@ public static partial class HumanMeshBuilder
                     {
                         float p = frames[f];
                         var mv = move; int vv = v;
-                        yield return ($"{mv} set{vv} f{f}", () => Figure(SwordFrame(mv, vv, p)));
+                        yield return ($"{mv} set{vv} f{f}", () => SwordFigure(mv, vv, p));
                     }
         for (int v = 0; v < 4; v++)
             for (int f = 0; f < frames.Length; f++)
             {
                 float p = frames[f]; int vv = v;
-                yield return ($"Dodge v{vv} f{f}", () => Figure(SwordFrame(SwordMove.Dodge, vv, p)));
+                yield return ($"Dodge v{vv} f{f}", () => SwordFigure(SwordMove.Dodge, vv, p));
             }
         yield return ("Charging", () => Figure(BuildStride(HumanPalette.ForRider(9), 0f, 0f,
             dance: new DanceParams(Audio.Cd.MusicStyle.Pop, SwordMoves, 0f, 0.6f, SwordCode(SwordMove.Charge, 0, 0), 1f))));

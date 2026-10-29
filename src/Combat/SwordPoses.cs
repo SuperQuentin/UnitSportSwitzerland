@@ -200,13 +200,23 @@ public static class SwordPoses
         };
     }
 
-    /// <summary>The fraction (0..1) of the lunge done by <paramref name="progress"/> of the move: over the wind-up's end and the strike, eased out.</summary>
+    /// <summary>
+    /// The fraction (0..1) of the lunge done by <paramref name="progress"/> of the move: eased in and out (a smoothstep) over the
+    /// anticipation's second half, the strike and the start of the follow-through, so the body travels as it winds up and arrives with the blow.
+    /// </summary>
     public static float LungeDone(SwordMove move, float progress)
     {
         var (_, tA, tS, _) = Times(move, 0);
-        float from = tA * 0.6f, to = tS + (1f - tS) * 0.2f;
+        float from = tA * 0.4f, to = tS + (1f - tS) * 0.3f;
         float x = Math.Clamp((progress - from) / Math.Max(0.001f, to - from), 0f, 1f);
-        return 1f - (1f - x) * (1f - x);
+        return x * x * (3f - 2f * x);
+    }
+
+    /// <summary>The span of the move (progress) a trail covers: from just before the blade goes live to just after the strike ends.</summary>
+    public static (float From, float To) TrailWindow(SwordMove move, int seed)
+    {
+        var (_, tA, tS, _) = Times(move, seed);
+        return (Math.Max(0f, tA * 0.92f), Math.Min(0.98f, tS + 0.03f));
     }
 
     /// <summary>The moves' phase marks as fractions of the move: (ready 0, end of the anticipation, end of the strike, the follow-through's peak).</summary>
@@ -238,17 +248,6 @@ public static class SwordPoses
         return (h & 0xFFFF) / 32767.5f - 1f;
     }
 
-    private static float EaseIn(float x) => x * x;
-    private static float EaseOutFast(float x) => 1f - (1f - x) * (1f - x) * (1f - x);
-    private static float EaseOut(float x) => 1f - (1f - x) * (1f - x);
-    /// <summary>Ease-out with a slight overshoot past 1 and back.</summary>
-    private static float EaseOutBack(float x)
-    {
-        const float c1 = 1.0f, c3 = c1 + 1f;
-        float y = x - 1f;
-        return 1f + c3 * y * y * y + c1 * y * y;
-    }
-
     private static Move Table(SwordMove move, int variant) => move switch
     {
         >= SwordMove.Slash1 and <= SwordMove.Slash5 => Slashes[(int)move - 1][Math.Clamp(variant, 0, Variants - 1)],
@@ -258,10 +257,21 @@ public static class SwordPoses
         _ => new Move(Ready, Ready, Ready),
     };
 
+    private const int KeyCount = 6;
+
+    // How much later than the hips each part of the body follows (seconds): overlapping action. The hips lead, the chest a moment
+    // after, then the shoulder and arm, the head and the off arm last (they also settle with the spline's overshoot).
+    public const float ChestLag = 0.04f, ArmLag = 0.06f, HeadLag = 0.10f;
+    /// <summary>The blade trails the hand by this much more: the whip of the wrist.</summary>
+    public const float BladeLag = 0.05f;
+
     /// <summary>
     /// The pose <paramref name="progress"/> (0..1) of the way through <paramref name="move"/>, in <paramref name="variant"/>, jittered by
-    /// <paramref name="seed"/>. The wind-up eases in to the coil, the strike eases out fast to the end of the blow, the follow-through
-    /// eases out to its peak and the settle overshoots a little back to the stance. A plunge starts in its tucked fall.
+    /// <paramref name="seed"/>. The keys (the stance, the coil as the blade goes live, the end of the blow, the follow-through's peak, a
+    /// small undershoot past the stance, the stance) are joined by a cubic Hermite spline with Catmull-Rom tangents: the velocity is
+    /// continuous through every key, and only the true ends (rest at both) stop. Each part of the body reads the spline a little later than
+    /// the hips (<see cref="ChestLag"/>, <see cref="ArmLag"/>, <see cref="HeadLag"/>), and the weight shifts over the front foot on the strike
+    /// and comes back in the recovery. A plunge starts in its tucked fall.
     /// </summary>
     public static SwordPose Sample(SwordMove move, int variant, int seed, float progress)
     {
@@ -278,17 +288,124 @@ public static class SwordPoses
         strike.Theta += 0.04f * b; over.Theta += 0.04f * b;
         coil.Psi -= 0.05f * b;
         var start = move == SwordMove.Plunge ? coil : Ready;
+        // a small undershoot past the stance, on the far side of the follow-through, then home
+        var under = SwordPose.Lerp(over, start, 1.08f);
+        float tU = tF + (1f - tF) * 0.55f;
+
+        Span<SwordPose> k = stackalloc SwordPose[KeyCount];
+        Span<float> kt = stackalloc float[KeyCount];
+        // a spin slash's turn stays turned through the settle (the facing at the end is the same one): never unwound backwards
+        under.Spin = over.Spin;
+        var end = start;
+        end.Spin = over.Spin;
+        k[0] = start; k[1] = coil; k[2] = strike; k[3] = over; k[4] = under; k[5] = end;
+        kt[0] = 0f; kt[1] = tA; kt[2] = tS; kt[3] = tF; kt[4] = tU; kt[5] = 1f;
+        // keep the times strictly increasing (a plunge's coil is at 0)
+        for (int i = 1; i < KeyCount; i++) if (kt[i] <= kt[i - 1]) kt[i] = kt[i - 1] + 0.001f;
+
         float p = Math.Clamp(progress, 0f, 1f);
-        if (p < tA) return SwordPose.Lerp(start, coil, tA <= 0f ? 1f : EaseIn(p / tA));
-        if (p < tS) return SwordPose.Lerp(coil, strike, EaseOutFast((p - tA) / Math.Max(0.0001f, tS - tA)));
-        if (p < tF) return SwordPose.Lerp(strike, over, EaseOut((p - tS) / Math.Max(0.0001f, tF - tS)));
-        return SwordPose.Lerp(over, Ready, EaseOutBack((p - tF) / Math.Max(0.0001f, 1f - tF)));
+        float total = Math.Max(0.0001f, move == SwordMove.Dodge ? 0.45f : SwordRules.Def(move).Total);
+        // the lags fade out over the last stretch so every part is home together at the end
+        float fade = Math.Clamp((1f - p) / 0.15f, 0f, 1f);
+        float Lag(float seconds) => Math.Max(0f, p - seconds / total * fade);
+
+        var hips = Spline(k, kt, p);
+        var chest = Spline(k, kt, Lag(ChestLag));
+        var arm = Spline(k, kt, Lag(ArmLag));
+        var head = Spline(k, kt, Lag(HeadLag));
+        var r = hips;
+        r.Spin = Math.Clamp(r.Spin, Math.Min(0f, over.Spin), Math.Max(0f, over.Spin));
+        r.Psi = chest.Psi; r.Theta = chest.Theta; r.Phi = chest.Phi;
+        r.Hx = arm.Hx; r.Hy = arm.Hy; r.Hz = arm.Hz;
+        r.Neck = head.Neck; r.HeadYaw = head.HeadYaw; r.Ox = head.Ox; r.Oy = head.Oy; r.Oz = head.Oz;
+
+        if (move is >= SwordMove.Slash1 and <= SwordMove.Slash5 or SwordMove.Charged)
+        {
+            // the weight over the front foot on the strike, back in the recovery: the pelvis drops and moves to the front (left) foot, the back heel
+            // lifts, and the front foot, which steps, is off the floor while it travels and planted when it lands
+            float w = Bump(p, tA * 0.6f, tU);
+            r.Px -= 0.06f * w; r.Py -= 0.05f * w; r.RearY += 0.05f * w;
+            float step = Math.Abs(strike.LeadZ - coil.LeadZ);
+            r.LeadY += Math.Clamp(step * 0.4f, 0f, 0.14f) * Bump(p, tA * 0.8f, tS + (tF - tS) * 0.5f);
+        }
+        return r;
+    }
+
+    private static float Bump(float p, float from, float to)
+    {
+        float x = Math.Clamp((p - from) / Math.Max(0.001f, to - from), 0f, 1f);
+        return MathF.Sin(MathF.PI * x);
+    }
+
+    /// <summary>Cubic Hermite through the keys with Catmull-Rom tangents (non-uniform), rest (zero velocity) at the two ends.</summary>
+    private static SwordPose Spline(ReadOnlySpan<SwordPose> k, ReadOnlySpan<float> t, float p)
+    {
+        int n = k.Length, i = 0;
+        while (i < n - 2 && p >= t[i + 1]) i++;
+        float h = t[i + 1] - t[i];
+        float s = Math.Clamp((p - t[i]) / h, 0f, 1f);
+        float s2 = s * s, s3 = s2 * s;
+        float h00 = 2f * s3 - 3f * s2 + 1f, h10 = s3 - 2f * s2 + s, h01 = -2f * s3 + 3f * s2, h11 = s3 - s2;
+        SwordPose r = default;
+        var fr = MemoryMarshal.Cast<SwordPose, float>(MemoryMarshal.CreateSpan(ref r, 1));
+        var f0 = MemoryMarshal.Cast<SwordPose, float>(k.Slice(i, 1));
+        var f1 = MemoryMarshal.Cast<SwordPose, float>(k.Slice(i + 1, 1));
+        var fp = i > 0 ? MemoryMarshal.Cast<SwordPose, float>(k.Slice(i - 1, 1)) : f0;
+        var fn = i + 2 < n ? MemoryMarshal.Cast<SwordPose, float>(k.Slice(i + 2, 1)) : f1;
+        float dp = i > 0 ? t[i + 1] - t[i - 1] : 0f, dn = i + 2 < n ? t[i + 2] - t[i] : 0f;
+        for (int c = 0; c < fr.Length; c++)
+        {
+            float m0 = i > 0 ? (f1[c] - fp[c]) / dp : 0f;
+            float m1 = i + 2 < n ? (fn[c] - f0[c]) / dn : 0f;
+            fr[c] = h00 * f0[c] + h10 * h * m0 + h01 * f1[c] + h11 * h * m1;
+        }
+        return r;
+    }
+
+    /// <summary>The swing a new one chains from: its move, variant, seed and how far through it was when the new one began.</summary>
+    public readonly record struct Chain(SwordMove Move, int Variant, int Seed, float Progress)
+    {
+        public static readonly Chain None = new(SwordMove.None, 0, 0, 0f);
+    }
+
+    /// <summary>Packs a <see cref="Chain"/> into 16 bits (move 4, variant 2, seed 4, progress 6).</summary>
+    public static int PackChain(in Chain c) =>
+        c.Move == SwordMove.None ? 0 : (int)c.Move | ((c.Variant & 3) << 4) | ((c.Seed & 15) << 6) | ((int)Math.Round(Math.Clamp(c.Progress, 0f, 1f) * 63f) << 10);
+
+    public static Chain UnpackChain(int bits) =>
+        (bits & 15) == 0 ? Chain.None : new Chain((SwordMove)(bits & 15), (bits >> 4) & 3, (bits >> 6) & 15, ((bits >> 10) & 63) / 63f);
+
+    /// <summary>
+    /// The pose of <paramref name="move"/> at <paramref name="progress"/> when it began while <paramref name="prev"/> was still settling: the
+    /// previous swing goes on along its own spline while the new one's takes over, a smoothstep over the wind-up. The body never returns
+    /// to the stance between the swings of a combo; only the last swing, or a pause, settles.
+    /// </summary>
+    public static SwordPose SampleChain(SwordMove move, int variant, int seed, float progress, in Chain prev)
+    {
+        var cur = move == SwordMove.Charge ? Charging(progress * (float)SwordRules.ChargeMax, 0f) : Sample(move, variant, seed, progress);
+        if (prev.Move == SwordMove.None) return cur;
+        float curTotal = move == SwordMove.Charge ? (float)SwordRules.ChargeMax : move == SwordMove.Dodge ? 0.45f : SwordRules.Def(move).Total;
+        float seconds = progress * curTotal;
+        float blend = Math.Max(0.14f, move == SwordMove.Charge ? 0.3f : move == SwordMove.Dodge ? 0.12f : SwordRules.Def(move).Startup * 0.95f);
+        float x = seconds / blend;
+        if (x >= 1f) return cur;
+        SwordPose old;
+        if (prev.Move == SwordMove.Charge) old = Charging(prev.Progress * (float)SwordRules.ChargeMax, 0f);
+        else
+        {
+            float prevTotal = prev.Move == SwordMove.Dodge ? 0.45f : SwordRules.Def(prev.Move).Total;
+            old = Sample(prev.Move, prev.Variant, prev.Seed, Math.Min(1f, prev.Progress + seconds / Math.Max(0.01f, prevTotal)));
+        }
+        float w = x * x * (3f - 2f * x);
+        var r = SwordPose.Lerp(old, cur, w);
+        r.Spin = cur.Spin;
+        return r;
     }
 
     /// <summary>The held charge: the stance drawn in to the crouched wind-up over its first third of a second, then held with a tremble.</summary>
     public static SwordPose Charging(float seconds, float shake)
     {
-        var pose = SwordPose.Lerp(Ready, ChargedMove.Coil, EaseOut(Math.Clamp(seconds / 0.3f, 0f, 1f)));
+        var pose = SwordPose.Lerp(Ready, ChargedMove.Coil, Math.Clamp(seconds / 0.3f, 0f, 1f) is var u ? u * u * (3f - 2f * u) : 0f);
         pose.Psi += shake;
         pose.Py += shake * 0.1f;
         return pose;

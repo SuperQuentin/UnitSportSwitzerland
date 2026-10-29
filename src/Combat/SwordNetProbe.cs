@@ -71,9 +71,9 @@ public partial class SwordNetProbe : ChatProbe
         for (int i = 0; i < 3; i++)
         {
             await Tap(PlayerInput.UseItem);
-            await Seconds(0.26);
+            await Seconds(0.64);
         }
-        await Until(() => _landed.Count >= before + 3, 3);
+        await Until(() => _landed.Count >= before + 3, 5);
         var moves = _landed.Skip(before).Where(s => s.Kind == SwordTargetKind.Dummy).Select(s => s.Move).ToList();
         GD.Print($"{Log} combo landed {string.Join(",", moves)}; dummy hp {dummy.Hp}");
         Expect(moves.Count >= 3 && moves[0] == SwordMove.Slash1 && moves[1] == SwordMove.Slash2 && moves[2] == SwordMove.Slash3, "the first three swings of the combo land in order");
@@ -134,7 +134,7 @@ public partial class SwordNetProbe : ChatProbe
         for (int i = 0; i < 2; i++)
         {
             await Tap(PlayerInput.UseItem);
-            await Seconds(0.3);
+            await Seconds(0.66);
         }
         await Until(() => _landed.Skip(before).Any(s => s.Kind == SwordTargetKind.Body), 4);
         Expect(_landed.Skip(before).Any(s => s.Kind == SwordTargetKind.Body), "with PvP on a blow lands on B");
@@ -149,7 +149,7 @@ public partial class SwordNetProbe : ChatProbe
         for (int i = 0; i < 3; i++)
         {
             await Tap(PlayerInput.UseItem);
-            await Seconds(0.3);
+            await Seconds(0.66);
         }
         await Seconds(1.0);
         Expect(!_landed.Skip(before).Any(s => s.Kind == SwordTargetKind.Body), "with PvP off a blow does not land on B");

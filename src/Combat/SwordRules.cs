@@ -98,18 +98,18 @@ public static class SwordRules
 {
     public const int ComboLength = 5;
     /// <summary>A swing's next press continues the combo when it comes this soon after the last one ended; later it starts over.</summary>
-    public const double ComboGrace = 0.35;
+    public const double ComboGrace = 0.45;
     /// <summary>A press this long before the cancel window opens is kept and used when it does.</summary>
-    public const double BufferWindow = 0.22;
+    public const double BufferWindow = 0.32;
     /// <summary>Held this long after a swing, the attack is a charge; letting go earlier than <see cref="ChargeMin"/> does nothing.</summary>
     public const double ChargeMin = 0.45, ChargeMax = 1.2;
     public const float DodgeCost = 20f, ChargedCost = 25f;
     /// <summary>The dodge's untouchable window, seconds from its start.</summary>
-    public const float IFramesFrom = 0.03f, IFramesTo = 0.27f;
+    public const float IFramesFrom = 0.04f, IFramesTo = 0.30f;
     /// <summary>Metres per second of a dodge, along the stick (or back when it is still).</summary>
     public const float DodgeSpeed = 9f;
     /// <summary>A pause before the next dodge, seconds from the end of the last.</summary>
-    public const double DodgeGap = 0.12;
+    public const double DodgeGap = 0.15;
     /// <summary>The longest a plunge dives before it gives up (nothing to land on).</summary>
     public const double PlungeMax = 2.5;
     /// <summary>Downward speed of the dive, m/s.</summary>
@@ -133,14 +133,16 @@ public static class SwordRules
     {
         //                          move             startup active recov cancel reach cone dmg  knock stop cost lunge
         new(SwordMove.None,         0f,    0f,    0f,   0f,   0f,  0f,  0f,  0f,  0f,  0f,   0f),
-        new(SwordMove.Slash1,       0.10f, 0.08f, 0.16f, 0.20f, 2.3f, 55f, 12f, 3.5f, 0.05f, 0f, 2.5f),
-        new(SwordMove.Slash2,       0.10f, 0.08f, 0.16f, 0.20f, 2.3f, 55f, 13f, 3.5f, 0.05f, 0f, 2.5f),
-        new(SwordMove.Slash3,       0.12f, 0.08f, 0.18f, 0.22f, 2.4f, 60f, 15f, 4.5f, 0.06f, 0f, 2.5f),
-        new(SwordMove.Slash4,       0.12f, 0.10f, 0.20f, 0.24f, 2.4f, 60f, 16f, 5.0f, 0.06f, 0f, 3.0f),
-        new(SwordMove.Slash5,       0.18f, 0.12f, 0.34f, 0.40f, 2.7f, 75f, 24f, 9.0f, 0.10f, 0f, 3.5f),
-        new(SwordMove.Charged,      0.15f, 0.12f, 0.45f, 0.50f, 3.0f, 85f, 40f, 11f, 0.13f, ChargedCost, 4.0f),
-        new(SwordMove.Plunge,       0.00f, 0.12f, 0.40f, 0.30f, 2.8f, 180f, 30f, 9.0f, 0.10f, 0f, 0f),
-        new(SwordMove.Dodge,        0.00f, 0.00f, 0.38f, 0.26f, 0f,  0f,  0f,  0f,  0f,   DodgeCost, 0f),
+        // semi-realistic timing (#1371 round 2): the wind-up (startup) 0.24-0.30, the strike (active) 0.16-0.18, the follow-through and
+        // settle (recovery) 0.42-0.52; the cancel opens late in the follow-through so a chain flows. The pose tables (SwordPoses) use the same marks.
+        new(SwordMove.Slash1,       0.24f, 0.16f, 0.42f, 0.60f, 2.3f, 55f, 12f, 3.5f, 0.05f, 0f, 2.5f),
+        new(SwordMove.Slash2,       0.24f, 0.16f, 0.42f, 0.60f, 2.3f, 55f, 13f, 3.5f, 0.05f, 0f, 2.5f),
+        new(SwordMove.Slash3,       0.28f, 0.16f, 0.46f, 0.64f, 2.4f, 60f, 15f, 4.5f, 0.06f, 0f, 2.5f),
+        new(SwordMove.Slash4,       0.24f, 0.16f, 0.42f, 0.60f, 2.4f, 60f, 16f, 5.0f, 0.06f, 0f, 3.0f),
+        new(SwordMove.Slash5,       0.52f, 0.18f, 0.50f, 0.95f, 2.7f, 75f, 24f, 9.0f, 0.10f, 0f, 3.5f),
+        new(SwordMove.Charged,      0.26f, 0.16f, 0.46f, 0.62f, 3.0f, 85f, 40f, 11f, 0.13f, ChargedCost, 4.0f),
+        new(SwordMove.Plunge,       0.00f, 0.16f, 0.52f, 0.45f, 2.8f, 180f, 30f, 9.0f, 0.10f, 0f, 0f),
+        new(SwordMove.Dodge,        0.00f, 0.00f, 0.45f, 0.30f, 0f,  0f,  0f,  0f,  0f,   DodgeCost, 0f),
         new(SwordMove.Charge,       0f,    0f,    0f,   0f,   0f,  0f,  0f,  0f,  0f,  0f,   0f),
     };
 

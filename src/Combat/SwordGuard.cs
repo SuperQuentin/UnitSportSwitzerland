@@ -15,7 +15,7 @@ public enum SwordVerdict { Ok, BadMove, TooSoon, NoStamina }
 public sealed class SwordGuard
 {
     /// <summary>The server's slack for a client's own clock and the network's jitter, seconds.</summary>
-    public const double Jitter = 0.06;
+    public const double Jitter = 0.08;
     /// <summary>Stamina points it forgives: the client's meter runs a little ahead of this one.</summary>
     public const float StaminaLeeway = 12f;
     /// <summary>Targets one blow can reach.</summary>

@@ -49,7 +49,7 @@ public partial class FootPlayer
     public bool SwordFaceSnap { get; private set; }
 
     private readonly SwordMachine _sword = new();
-    private int _swordVariant, _swordSeed, _swordCount, _swordCode;
+    private int _swordVariant, _swordSeed, _swordCount, _swordCode, _swordChain;
     private SwordMove _swordPoseMove;
     private float _swordWeight, _swordLungeDone;
     private double _swordShownAt;
@@ -152,6 +152,7 @@ public partial class FootPlayer
     private void SwordBegan(double now)
     {
         var move = _sword.Move;
+        CaptureSwordChain(now);
         _swordSeed = _swordCount++ & 15;
         _swordLungeDone = 0f;
         // the set a combo swing is drawn from: the advancing one on the move, the planted one standing
@@ -349,6 +350,26 @@ public partial class FootPlayer
         if (knock.Length() >= 5f && !Bot && (_sword.Busy || _sword.Charging)) SwordPutAway();
     }
 
+    /// <summary>
+    /// A new move begins: the swing still settling (not yet home) is the one it flows out of. Kept as bits for the pose
+    /// (<see cref="SwordPoses.Chain"/>); the same on the owner and on a copy, from each one's own clock.
+    /// </summary>
+    private void CaptureSwordChain(double now)
+    {
+        _swordChain = 0;
+        var m = _swordPoseMove;
+        if (m == SwordMove.None || _swordWeight < 0.05f) return;
+        float progress;
+        if (m == SwordMove.Charge) progress = Mathf.Clamp((float)((now - _swordShownAt) / SwordRules.ChargeMax), 0f, 1f);
+        else
+        {
+            float total = m == SwordMove.Dodge ? 0.45f : SwordRules.Def(m).Total;
+            progress = (float)(now - _swordShownAt - _swordShownHold) / Mathf.Max(0.01f, total);
+            if (progress >= 0.99f) return;
+        }
+        _swordChain = SwordPoses.PackChain(new SwordPoses.Chain(m, _swordVariant, _swordSeed, Mathf.Max(0f, progress)));
+    }
+
     /// <summary>A dash (a bot's dodge): <paramref name="velocity"/> in metres per second along the ground, eased out like a push, with no stagger.</summary>
     public void SwordDash(Vector3 velocity) => _swordPush += new Vector3(velocity.X, 0, velocity.Z);
 
@@ -372,6 +393,7 @@ public partial class FootPlayer
     /// </summary>
     public void SwordSeen(SwordMove move, float yaw, int code = 0)
     {
+        if (move != SwordMove.None) CaptureSwordChain(GameClock.Now);
         SwordShown = move;
         if (move != SwordMove.None) { _swordPoseMove = move; _swordCode = code; _swordVariant = SwordPoses.VariantOf(code); _swordSeed = SwordPoses.SeedOf(code); }
         _swordShownAt = GameClock.Now;
@@ -391,7 +413,7 @@ public partial class FootPlayer
         yaw = pitch = roll = forward = 0f;
         if (!SwordDrawn || SwordShown is SwordMove.None or SwordMove.Dodge) return false;
         var d = SwordRules.Def(SwordShown);
-        float t = SwordShown == SwordMove.Charge ? 0f : (float)Math.Max(0.0, GameClock.Now - _swordShownAt - _swordShownHold) / Math.Max(0.01f, d.Total);
+        float t = SwordShown == SwordMove.Charge ? 0f : (float)Math.Max(0.0, GameClock.Now - _swordShownAt - _swordShownHold - SwordPoses.BladeLag) / Math.Max(0.01f, d.Total);
         if (t > 1.02f)
         {
             // a copy's blow is over (the owner's machine ends its own)
@@ -402,30 +424,31 @@ public partial class FootPlayer
         // the hand carries the arc now (the pose): the blade only whips a little at the wrist, but held down for a plunge
         if (SwordShown is >= SwordMove.Slash1 and <= SwordMove.Slash5 or SwordMove.Charged)
         {
-            yaw *= 0.4f; pitch *= 0.4f; roll *= 0.4f; forward *= 0.4f;
+            yaw *= 0.5f; pitch *= 0.5f; roll *= 0.5f; forward *= 0.5f;
         }
         return true;
     }
 
     /// <summary>
-    /// 0..1: how bright the blade's trail is now. Only through a blow's active frames and a little after, on every peer; the
-    /// shape (mirrored for a backhand, upright for an overhead blow) is <c>HeldItemVisual</c>'s.
+    /// The blade's trail now (every peer): the swing being drawn, how far along the arc it is revealed (0..1 over the active frames) and its
+    /// fade (1, then 0 over <see cref="Items.SwordTrails.FadeSeconds"/> after the strike). False when there is nothing to show.
     /// </summary>
-    public float SwordTrailNow(out SwordMove move)
+    public bool SwordTrailState(out SwordMove move, out int variant, out int seed, out float reveal, out float fade)
     {
-        move = SwordShown;
-        if (!SwordDrawn || !SwordRules.IsBlow(SwordShown) || SwordShown == SwordMove.Plunge && GameClock.Now - _swordShownAt - _swordShownHold < 0) return 0f;
-        var d = SwordRules.Def(SwordShown);
-        float p = (float)Math.Max(0.0, GameClock.Now - _swordShownAt - _swordShownHold) / Math.Max(0.01f, d.Total);
-        var (_, tA, tS, _) = SwordPoses.Times(SwordShown, _swordSeed);
-        float to = tS + (1f - tS) * 0.25f;
-        if (p < tA || p > to) return 0f;
-        float x = (p - tA) / Math.Max(0.001f, to - tA);
-        return Mathf.Sin(Mathf.Pi * Mathf.Min(1f, x * 0.9f + 0.05f));
+        move = SwordShown; variant = _swordVariant; seed = _swordSeed; reveal = 0f; fade = 0f;
+        if (!SwordDrawn || !SwordRules.IsBlow(SwordShown)) return false;
+        float total = Math.Max(0.01f, SwordRules.Def(SwordShown).Total);
+        float p = (float)(GameClock.Now - _swordShownAt - _swordShownHold) / total;
+        if (p < 0f) return false;
+        var (r0, r1) = SwordPoses.TrailWindow(SwordShown, _swordSeed);
+        reveal = Mathf.Clamp((p - r0) / Mathf.Max(0.001f, r1 - r0), 0f, 1f);
+        fade = p <= r1 ? 1f : Mathf.Clamp(1f - (p - r1) * total / Items.SwordTrails.FadeSeconds, 0f, 1f);
+        return reveal > 0f && fade > 0f;
     }
 
     /// <summary>The variant of the swing being drawn (the trail's mirror, the probes).</summary>
     public int SwordVariantShown => _swordVariant;
+    public int SwordSeedShown => _swordSeed;
 
     /// <summary>
     /// The sword's whole-body pose (every peer): the move being drawn, its variant and seed, how far through it. Blends in over a
@@ -449,6 +472,6 @@ public partial class FootPlayer
             if (!IsMultiplayerAuthority() && p >= 0.999f) SwordShown = SwordMove.None;
         }
         return new Avatar.DanceParams(Audio.Cd.MusicStyle.Pop, Avatar.HumanMeshBuilder.SwordMoves, 0f, p,
-            Avatar.HumanMeshBuilder.SwordCode(move, _swordVariant, _swordSeed), _swordWeight);
+            Avatar.HumanMeshBuilder.SwordCode(move, _swordVariant, _swordSeed, _swordChain), _swordWeight);
     }
 }

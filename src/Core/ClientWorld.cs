@@ -1080,6 +1080,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Combat.SchwingNetProbe.Role != null) AddChild(new Combat.SchwingNetProbe(items));
         if (Combat.SwordNetProbe.Role != null) AddChild(new Combat.SwordNetProbe(items));   // #1371
+        if (Combat.SwordClipProbe.Scenario != null) AddChild(new Combat.SwordClipProbe(items));
         if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));

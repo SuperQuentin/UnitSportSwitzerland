@@ -310,91 +310,60 @@ void fragment() {{
         AddChild(_inHand);
         _handFore = NewForeEnd();
         _inHand.AddChild(_handFore);
-        // the sword's trail: one fixed crescent, shown and faded through a blow's active frames (SwordTrailNow); never rebuilt
-        _trail = new MeshInstance3D
-        {
-            Name = "Trail", Mesh = TrailMesh(), MaterialOverride = TrailMaterial(), Visible = false, Transparency = 1f,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
-        _inHand.AddChild(_trail);
     }
 
-    private MeshInstance3D? _trail;
-    private SwordMove _trailMove = SwordMove.None;
-    private float _trailAlpha = -1f;
-    private static ArrayMesh? _trailMesh;
-    private static StandardMaterial3D? _trailMaterial;
+    private MeshInstance3D? _ribbon;
+    private ShaderMaterial? _ribbonMat;
+    private int _ribbonKey = -1;
+    private float _ribbonReveal = -1f, _ribbonFade = -1f;
+    private bool _ribbonPinned;
 
     /// <summary>
-    /// The crescent a blade leaves (#1371): a sector of the plane the blade sweeps, 1.1 radians behind its edge, from the grip's
-    /// reach to the tip, fading to nothing at its tail. Built once; the blade's own motion sweeps it round.
+    /// The blade's trail (#1371, <see cref="SwordTrails"/>): the ribbon of the swing being drawn, pinned in the world at the strike's start and
+    /// revealed along the arc through the active frames, faded over 0.15 s. Only a mesh swap when the swing changes and shader parameters when
+    /// they change; nothing is rebuilt per frame.
     /// </summary>
-    [Showcase("Combat", "Sword trail")]
-    public static ArrayMesh TrailMesh()
-    {
-        if (_trailMesh != null) return _trailMesh;
-        const int steps = 10;
-        var verts = new Vector3[(steps + 1) * 2];
-        var cols = new Color[verts.Length];
-        var idx = new List<int>();
-        for (int i = 0; i <= steps; i++)
-        {
-            float a = 1.1f * i / steps;   // behind the edge: towards -X from +Z
-            var dir = new Vector3(-Mathf.Sin(a), 0, Mathf.Cos(a));
-            verts[i * 2] = dir * 0.45f;
-            verts[i * 2 + 1] = dir * 0.92f;
-            float fade = 1f - (float)i / steps;
-            cols[i * 2] = new Color(1f, 1f, 1f, 0f);
-            cols[i * 2 + 1] = new Color(1f, 0.97f, 0.88f, 0.85f * fade * fade);
-        }
-        for (int i = 0; i < steps; i++)
-        {
-            int a = i * 2;
-            idx.AddRange(new[] { a, a + 1, a + 2, a + 1, a + 3, a + 2 });
-        }
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = verts;
-        arrays[(int)Mesh.ArrayType.Color] = cols;
-        arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        return _trailMesh = mesh;
-    }
-
-    private static StandardMaterial3D TrailMaterial() => _trailMaterial ??= new StandardMaterial3D
-    {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true,
-        Transparency = BaseMaterial3D.TransparencyEnum.Alpha, BlendMode = BaseMaterial3D.BlendModeEnum.Add,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled, NoDepthTest = false,
-    };
-
-    /// <summary>The trail's brightness and shape for this frame: only through a blow's active frames, on every peer.</summary>
     private void StepTrail()
     {
-        if (_trail == null) return;
-        float a = _shown == ItemId.Sword && _player != null ? _player.SwordTrailNow(out var move) : 0f;
-        if (a <= 0.001f)
+        bool on = _shown == ItemId.Sword && _player != null
+            && _player.SwordTrailState(out var move, out int variant, out int seed, out float reveal, out float fade);
+        if (!on)
         {
-            if (_trail.Visible) { _trail.Visible = false; _trailAlpha = -1f; }
+            if (_ribbon != null && _ribbon.Visible) _ribbon.Visible = false;
+            _ribbonPinned = false;
             return;
         }
-        _player!.SwordTrailNow(out var m);
-        if (m != _trailMove)
+        _player!.SwordTrailState(out var m, out int v, out int sd, out float rev, out float fd);
+        if (_ribbon == null)
         {
-            _trailMove = m;
-            // a backhand sweeps the other way; an overhead blow, a thrust and a plunge swing in the upright plane
-            bool upright = m is SwordMove.Slash5 or SwordMove.Plunge;
-            float side = m == SwordMove.Slash2 ? -1f : 1f;
-            _trail.Basis = new Basis(Vector3.Forward, upright ? Mathf.Pi * 0.5f : 0f) * Basis.FromScale(new Vector3(side, 1f, 1f));
+            _ribbonMat = SwordTrails.NewMaterial();
+            _ribbon = new MeshInstance3D
+            {
+                Name = "SwordTrail", TopLevel = true, MaterialOverride = _ribbonMat, Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, ExtraCullMargin = 3f,
+            };
+            AddChild(_ribbon);
         }
-        if (!_trail.Visible) _trail.Visible = true;
-        if (Mathf.Abs(a - _trailAlpha) > 0.01f)
+        int key = (int)m | (v << 4) | (sd << 6);
+        if (key != _ribbonKey)
         {
-            _trailAlpha = a;
-            _trail.Transparency = 1f - a;
+            _ribbonKey = key;
+            _ribbon.Mesh = SwordTrails.Get(m, v, sd);
+            _ribbonPinned = false;
         }
+        if (!_ribbonPinned)
+        {
+            // where the body stands as the strike begins: the ribbon stays there while it follows through
+            var t = _player.GlobalTransform;
+            _ribbon.GlobalTransform = new Transform3D(t.Basis.Orthonormalized(), t.Origin);
+            _ribbonPinned = true;
+        }
+        if (!_ribbon.Visible) _ribbon.Visible = true;
+        if (Mathf.Abs(rev - _ribbonReveal) > 0.004f) { _ribbonReveal = rev; _ribbonMat!.SetShaderParameter(RevealParam, rev); }
+        if (Mathf.Abs(fd - _ribbonFade) > 0.004f) { _ribbonFade = fd; _ribbonMat!.SetShaderParameter(FadeParam, fd); }
     }
+
+    private static readonly StringName RevealParam = "reveal", FadeParam = "fade";
 
     private static MeshInstance3D NewForeEnd() => new()
     {

@@ -43,7 +43,7 @@ public class SwordRulesTests
         var active = new List<SwordMove>();
         double t = Run(m, 0, 0.05, Press(), began, active);
         t = Run(m, t, Dt, Press(attack: true), began, active);
-        t = Run(m, t, 0.6, Press(), began, active);
+        t = Run(m, t, 1.0, Press(), began, active);
         Assert.Equal(new[] { SwordMove.Slash1 }, began);
         Assert.Equal(new[] { SwordMove.Slash1 }, active);
         Assert.Equal(SwordMove.None, m.Move);
@@ -88,10 +88,10 @@ public class SwordRulesTests
         var m = new SwordMachine();
         var began = new List<SwordMove>();
         double t = Run(m, 0, Dt, Press(attack: true), began);
-        t = Run(m, t, 0.04, Press(), began);
-        t = Run(m, t, Dt, Press(attack: true), began);   // too early for the 0.20 s window
+        t = Run(m, t, 0.34, Press(), began);
+        t = Run(m, t, Dt, Press(attack: true), began);   // too early for the 0.60 s window, inside the 0.32 s buffer of it
         Assert.Equal(new[] { SwordMove.Slash1 }, began);
-        t = Run(m, t, 0.3, Press(), began);
+        t = Run(m, t, 0.4, Press(), began);
         Assert.Equal(new[] { SwordMove.Slash1, SwordMove.Slash2 }, began);
     }
 
@@ -123,7 +123,7 @@ public class SwordRulesTests
         var m = new SwordMachine();
         var began = new List<SwordMove>();
         var active = new List<SwordMove>();
-        double t = Run(m, 0, 0.8, Press(attack: true), began, active);   // pressed and held
+        double t = Run(m, 0, 1.0, Press(attack: true), began, active);   // pressed and held
         Assert.True(m.Charging);
         Assert.Equal(new[] { SwordMove.Slash1 }, began);
         float before = m.Stamina.Points;
@@ -140,7 +140,7 @@ public class SwordRulesTests
     public void A_short_hold_lets_go_without_a_blow_or_a_cost()
     {
         var m = new SwordMachine();
-        double t = Run(m, 0, 0.5, Press(attack: true));
+        double t = Run(m, 0, 0.9, Press(attack: true));
         Assert.True(m.Charging);
         t = Run(m, t, 0.1, Press(attack: true));
         t = Run(m, t, Dt, Press());
@@ -154,7 +154,7 @@ public class SwordRulesTests
     {
         var m = new SwordMachine();
         m.Stamina.TrySpend(SwordStamina.Max - 10f);   // 10 left, and the pause before it refills running
-        Run(m, 0, 0.9, Press(attack: true));
+        Run(m, 0, 1.0, Press(attack: true));
         Assert.False(m.Charging);
     }
 
@@ -169,12 +169,12 @@ public class SwordRulesTests
         Assert.False(m.Invulnerable(start + 0.01));
         t = Run(m, t, 0.1, Press());
         Assert.True(m.Invulnerable(t));
-        t = Run(m, t, 0.3, Press());
+        t = Run(m, t, 0.4, Press());
         Assert.False(m.Invulnerable(t));
         Assert.Equal(SwordMove.None, m.Move);
 
         // the meter runs dry: no dodge, and it says so
-        m.Stamina.Points = SwordRules.DodgeCost - 1f;
+        m.Stamina.Points = 5f;
         t = Run(m, t + 1, Dt, Press(dodge: true));
         Assert.Equal(SwordMove.None, m.Move);
         Assert.True(m.Refused);
@@ -186,10 +186,18 @@ public class SwordRulesTests
         var m = new SwordMachine();
         double t = Run(m, 0, Dt, Press(attack: true));
         t = Run(m, t, 0.05, Press());
-        t = Run(m, t, Dt, Press(dodge: true));   // inside the startup: buffered, not taken
+        t = Run(m, t, Dt, Press(dodge: true));   // inside the wind-up: buffered, then too old when the window opens
+        t = Run(m, t, 0.5, Press());
         Assert.Equal(SwordMove.Slash1, m.Move);
-        t = Run(m, t, 0.25, Press());
-        Assert.Equal(SwordMove.Dodge, m.Move);
+        t = Run(m, t, 0.2, Press());
+        Assert.Equal(SwordMove.Slash1, m.Move);
+        // a press late in the follow-through is taken the moment the window opens
+        var n = new SwordMachine();
+        double u = Run(n, 0, Dt, Press(attack: true));
+        u = Run(n, u, 0.52, Press());
+        u = Run(n, u, Dt, Press(dodge: true));
+        u = Run(n, u, 0.2, Press());
+        Assert.Equal(SwordMove.Dodge, n.Move);
     }
 
     [Fact]
@@ -247,8 +255,8 @@ public class SwordRulesTests
         Run(a, 0, Dt, Press(attack: true));
         Run(b, 0, Dt, Press(attack: true));
         a.Freeze(Dt, 0.2);
-        Run(a, Dt, 0.35, Press());
-        Run(b, Dt, 0.35, Press());
+        Run(a, Dt, 0.95, Press());
+        Run(b, Dt, 0.95, Press());
         Assert.Equal(SwordMove.Slash1, a.Move);   // delayed by the freeze
         Assert.Equal(SwordMove.None, b.Move);
     }
@@ -328,8 +336,8 @@ public class SwordRulesTests
         int taken = 0;
         for (int i = 0; i < 100; i++)
             if (g.TryAct(7, SwordMove.Slash1, 50 + i * 0.01) == SwordVerdict.Ok) taken++;
-        // a second of 100 swings a second: at most one every cancel window (0.20 s), about 5-6
-        Assert.InRange(taken, 1, 7);
+        // a second of 100 swings a second: at most one every cancel window (0.60 s), about two
+        Assert.InRange(taken, 1, 3);
     }
 
     [Fact]
