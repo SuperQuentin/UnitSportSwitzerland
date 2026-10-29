@@ -529,6 +529,12 @@ public partial class ItemController : Node
                 UseBreath(player, slot, def);
                 break;
 
+            case ItemUse.Firework:
+                // a box of the 1 August stand's fireworks (#1355): the server decides, the box is used up when it may be lit
+                if (Occasions.Festivals.August1.August1Game.TryLight(player, out string? why)) _inventory.TakeOne(slot);
+                else _ui.Toast(why ?? "Not now.");
+                break;
+
             case ItemUse.Photo:
                 // the picture is what the viewfinder frames: the camera shoots from the eye only
                 if (_ui.Scope != ItemUse.Photo)

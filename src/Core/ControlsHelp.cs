@@ -102,6 +102,11 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At the Marmite: smash it (the party's youngest and oldest both press); at the soup pot: ladle a bowl for the party; at the start line: begin the Course de l'Escalade", PlayerInput.InteractMount),
         }),
+        ("Festivals: the 1 August (#1355)", new Row[]
+        {
+            new("At the lampion stand: a lampion; at the fireworks stand: a box for Batzen; at the lampion post at night: begin the lampion walk with your party", PlayerInput.InteractMount),
+            new("With a box of fireworks in hand, at night: light it", PlayerInput.UseItem),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

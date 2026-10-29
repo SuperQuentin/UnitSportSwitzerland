@@ -160,6 +160,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("12-sat#2", "+1") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the 1 August (#1355): 31 July and 1 August, the Höhenfeuer, the lake fireworks, the lampion walk (held in the first lake town the region has, else its largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.August1Id, Priority = 8,
+            Schedule = { new DateWindow("07-31", "08-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 

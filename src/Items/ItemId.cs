@@ -271,6 +271,11 @@ public enum ItemId
     MarmiteChocolate = 503,
     /// <summary>A bowl of the Escalade's vegetable soup from the pot that feeds the party: warm for 3 minutes.</summary>
     SoupeEscalade = 504,
+    // ---- the 1 August (#1355, docs/notes/occasions/festival-august1.md; 520-524 are its block) ----
+    /// <summary>A paper lantern on a stick, from the lampion stand: held, it is a light everyone sees; the lampion walk needs one.</summary>
+    Lampion = 520,
+    /// <summary>A box of fireworks from the 1 August stand, bought with Batzen: Use lights a 40 s volley of your own, at night.</summary>
+    FireworkBox = 521,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }
@@ -336,4 +341,6 @@ public enum ItemUse
     Round,
     /// <summary>Use blows into it for 5 s (#1271): the electronic breathalyzer is kept, the single-use test is used up.</summary>
     Breath,
+    /// <summary>Use lights a box of fireworks where you stand (<see cref="ItemId.FireworkBox"/>, #1355): at night in a running 1 August, once in 25 s.</summary>
+    Firework,
 }

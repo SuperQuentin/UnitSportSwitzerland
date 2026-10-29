@@ -1040,6 +1040,14 @@ src/Occasions/Festivals/FestivalService.Escalade quick  --escaladecheck --escala
 src/Occasions/Festivals/Escalade/ net    tools/escaladenetcheck.sh
 src/Occasions/Festivals/FestivalService.Escalade net    tools/escaladenetcheck.sh
 tools/escaladenetcheck.sh    net    tools/escaladenetcheck.sh
+# #1355: the 1 August: the lampion, the stands, the lampion walk, the volleys, the lake show, the Höhenfeuer (offline quick probe; server + two clients)
+src/Occasions/Festivals/August1/ quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+shaders/hoehenfeuer quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/August1/ net    tools/august1netcheck.sh
+src/Occasions/Festivals/FestivalService.August1 net    tools/august1netcheck.sh
+tools/august1netcheck.sh    net    tools/august1netcheck.sh
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
