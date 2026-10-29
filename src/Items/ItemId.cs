@@ -276,6 +276,17 @@ public enum ItemId
     Raeppli = 505,
     /// <summary>The Larven (masks) the stall hands out, worn on the head: the Waggis, the Alti Dante, the Harlekin and the Teufel (Headwear 5-8).</summary>
     LarveWaggis = 506, LarveDante = 507, LarveHarlekin = 508, LarveTeufel = 509,
+    // ---- the Sechseläuten (#1358, docs/notes/occasions/festival-sechselaeuten.md); 510-514 are this festival's ----
+    /// <summary>A Cervelat grilled on the embers of the Böögg's pyre, once the head has burst: food, warm for 2 minutes.</summary>
+    BooggCervelat = 510,
+    // ---- the Chalandamarz (#1356, docs/notes/occasions/festival-chalandamarz.md): 515-519 (the procession's Nusstorte is the existing 436) ----
+    /// <summary>A child's hand Treichel from the Chalandamarz, the first march of the day: worth nothing but the sound (the worn Treichel is <see cref="Treichel"/>).</summary>
+    ChalandaTreichel = 515,
+    // ---- the 1 August (#1355, docs/notes/occasions/festival-august1.md; 520-524 are its block) ----
+    /// <summary>A paper lantern on a stick, from the lampion stand: held, it is a light everyone sees; the lampion walk needs one.</summary>
+    Lampion = 520,
+    /// <summary>A box of fireworks from the 1 August stand, bought with Batzen: Use lights a 40 s volley of your own, at night.</summary>
+    FireworkBox = 521,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }
@@ -341,6 +352,8 @@ public enum ItemUse
     Round,
     /// <summary>Use blows into it for 5 s (#1271): the electronic breathalyzer is kept, the single-use test is used up.</summary>
     Breath,
+    /// <summary>Use lights a box of fireworks where you stand (<see cref="ItemId.FireworkBox"/>, #1355): at night in a running 1 August, once in 25 s.</summary>
+    Firework,
     /// <summary>Use throws a handful of Räppli: confetti on every peer near, one used up (<see cref="ItemId.Raeppli"/>, #1357).</summary>
     Confetti,
 }

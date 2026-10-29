@@ -2851,6 +2851,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Occasions.Festivals.Escalade.EscaladeGame.TryInteract(this)) return true;
         // the Fasnacht's Larven stall, Basel's Morgestraich lantern and the Guggenmusik stage (#1357)
         if (Occasions.Festivals.Fasnacht.FasnachtGame.TryInteract(this)) return true;
+        // the Sechseläuten's pyre and Weibel (#1358)
+        if (Occasions.Festivals.Sechselaeuten.SechseGame.TryInteract(this)) return true;
+        // the Chalandamarz's Treichel stand and the ring on the march beat (#1356)
+        if (Occasions.Festivals.Chalanda.ChalandaGame.TryInteract(this)) return true;
+        // the 1 August's lampion stand, fireworks stand and walk post (#1355)
+        if (Occasions.Festivals.August1.August1Game.TryInteract(this)) return true;
         // the festival ground's alphorn row (#1269): a seat in the song
         if (Occasions.Festivals.Horn.HornGround.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)

@@ -533,6 +533,7 @@
 96.1	Emotes / Twerk
 2.8	Emotes / Wave
 381.4	Emotes / YMCA
+65.0	Festivals / Böögg embers
 52.6	Festivals / Désalpe - Dressed cow: wreath
 219.3	Festivals / Désalpe - Dressed cow: straw hat
 382.9	Fights / Move - Finisher

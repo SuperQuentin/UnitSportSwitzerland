@@ -109,8 +109,12 @@ public partial class Handshake : Node
     /// 75: Interiors/Bowling lanes state carries each pair's house balls on the return (#1336).
     /// 76: World/Adventure/Festivals RequestMarket, TellMarket (#1348: the Christmas market's stalls and Samichlaus), ItemId 501-502.
     /// 77: World/Adventure/Festivals RequestEscalade, TellEscalade (#1351: the Escalade's Marmite, soup pot and Course), ItemId 503-504.
-    /// 78: World/Adventure/Festivals RequestFasnacht, TellFasnacht, RequestGuggenStart, RequestGuggenSong, TellGuggenSeat, TellGuggenResult (#1357: the Fasnacht's Larven stall, Räppli, Morgestraich and Guggenmusik), ItemEventKind.Confetti 12, ItemUse.Confetti, Headwear 5-10, ItemId 505-509.
-    public const int Protocol = 78;
+    /// 78: Interiors/CinemaBooths SetPool carries each film's place in the halls' rotation (#1367).
+    /// 79: World/Adventure/Festivals RequestChalanda, TellChalanda (#1356: the Chalandamarz's procession and its stamped Treichel rings), ItemId 515.
+    /// 80: World/Adventure/Festivals RequestSechse, TellSechse (#1358: the Sechseläuten's bet on the Böögg, the purse, the Cervelat), ItemId 510.
+    /// 81: World/Adventure/Festivals RequestAugust1, TellAugust1, ShowOwn (#1355: the 1 August's stands, lampion walk and own fireworks), ItemId 520-521, ItemUse.Firework.
+    /// 82: World/Adventure/Festivals RequestFasnacht, TellFasnacht, RequestGuggenStart, RequestGuggenSong, TellGuggenSeat, TellGuggenResult (#1357: the Fasnacht's Larven stall, Räppli, Morgestraich and Guggenmusik), ItemEventKind.Confetti 12, ItemUse.Confetti, Headwear 5-10, ItemId 505-509.
+    public const int Protocol = 82;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

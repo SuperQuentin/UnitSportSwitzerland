@@ -108,6 +108,20 @@ public partial class ControlsHelp : CanvasLayer
             new("In the Guggenmusik song: tap on every note (drum, trumpet, sousaphone), loud and in step", PlayerInput.UseItem),
             new("Räppli in hand: throw a handful of confetti", PlayerInput.UseItem),
         }),
+        ("Festivals: the Sechseläuten (#1358)", new Row[]
+        {
+            new("At the Böögg's pyre before it is lit: change the minute you bet on", PlayerInput.UseItem),
+            new("At the pyre: place your bet; after the bang: grill a Cervelat on the embers; at the Zunft's Weibel: take the day's purse", PlayerInput.InteractMount),
+        }),
+        ("Festivals: the Chalandamarz (#1356)", new Row[]
+        {
+            new("At the Treichel stand: begin the procession; then, walking the village loop, ring the Treichel on the march beat (the drum and the HUD's pulse); rings in step with a party member score extra", PlayerInput.InteractMount),
+        }),
+        ("Festivals: the 1 August (#1355)", new Row[]
+        {
+            new("At the lampion stand: a lampion; at the fireworks stand: a box for Batzen; at the lampion post at night: begin the lampion walk with your party", PlayerInput.InteractMount),
+            new("With a box of fireworks in hand, at night: light it", PlayerInput.UseItem),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

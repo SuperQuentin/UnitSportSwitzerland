@@ -1012,6 +1012,38 @@ public static partial class ItemIcons
             p.Set(5, 8, 'r'); p.Set(9, 9, 'N'); p.Set(8, 7, 'l');
         });
 
+        d[ItemId.BooggCervelat] = Round(p =>
+        {
+            p.Rect(2, 7, 13, 11, 'R');
+            p.Rect(3, 8, 12, 10, 'O');
+            p.Set(5, 8, 'N'); p.Set(8, 9, 'N'); p.Set(11, 8, 'N');
+            p.Rect(13, 6, 15, 6, 'a');
+        });
+
+        d[ItemId.ChalandaTreichel] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 5.4f, 4.6f, 'y', 'o', 'O');
+            p.Rect(7, 3, 8, 6, 'N');
+            p.Rect(5, 3, 10, 3, 'R');
+        });
+
+        d[ItemId.Lampion] = Round(p =>
+        {
+            p.Rect(7, 1, 8, 15, 'N');
+            p.Rect(5, 1, 10, 1, 'N');
+            p.Disc(7.5f, 7f, 3.8f, 4.4f, 'q', 'r', 'R');
+            p.Rect(6, 5, 9, 9, 'Y');
+            p.Set(7, 13, 'k'); p.Set(8, 13, 'k');
+        });
+
+        d[ItemId.FireworkBox] = Round(p =>
+        {
+            p.Rect(2, 6, 13, 13, 'R');
+            p.Rect(2, 6, 13, 7, 'w');
+            p.Rect(5, 9, 10, 11, 'Y');
+            p.Rect(4, 2, 4, 5, 'w'); p.Set(4, 1, 'Y'); p.Set(3, 0, 'O');
+        });
+
         d[ItemId.ChristmasBauble] = Round(p =>
         {
             p.Disc(7.5f, 9f, 5.2f, 4.8f, 'q', 'r', 'R');

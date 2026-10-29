@@ -127,7 +127,9 @@ public partial class AdventureService : Node
             || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested
             || Occasions.Festivals.Desalpe.DesalpeCheck.Requested || Occasions.Festivals.Christmas.ChristmasCheck.Requested
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested
-            || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested) AdventureCheck.ClearScratch();
+            || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Chalanda.ChalandaCheck.Requested
+            || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested
+            || Occasions.Festivals.August1.August1Check.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -310,6 +312,9 @@ public partial class AdventureService : Node
         : Occasions.Festivals.Desalpe.DesalpeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/desalpecheck")
         : Occasions.Festivals.Escalade.EscaladeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/escaladecheck")
         : Occasions.Festivals.Fasnacht.FasnachtCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fasnachtcheck")
+        : Occasions.Festivals.August1.August1Check.Requested ? ProjectSettings.GlobalizePath("res://test_output/august1check")
+        : Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/sechsecheck")
+        : Occasions.Festivals.Chalanda.ChalandaCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/chalandacheck")
         : Occasions.Festivals.Christmas.ChristmasCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/christmascheck")
         : Occasions.Festivals.Horn.HornCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/hornscheck") : null;
 

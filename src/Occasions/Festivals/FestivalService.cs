@@ -3,6 +3,7 @@ using Godot;
 using UnitSport.Adventure;
 using UnitSport.Core;
 using UnitSport.Items;
+using UnitSport.Occasions.Festivals.August1;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Occasions.Festivals;
@@ -140,7 +141,15 @@ public partial class FestivalService : Node
             foreach (string fasnacht in new[] { FestivalCatalog.FasnachtId, FestivalCatalog.BaslerFasnachtId })
                 if (FestivalCatalog.Get(fasnacht) is { } fd)
                     FestivalCatalog.Register(fd with { Sites = [new FestivalSite("the test field", e, n, 90)] });
+            if (FestivalCatalog.Get(FestivalCatalog.SechselaeutenId) is { } sechse)
+                FestivalCatalog.Register(sechse with { Sites = [new FestivalSite("the test field", e, n, 120)] });
+            if (FestivalCatalog.Get(FestivalCatalog.ChalandaId) is { } chalanda)
+                FestivalCatalog.Register(chalanda with { Sites = [new FestivalSite("the test field", e, n, 100)] });
+            if (FestivalCatalog.Get(FestivalCatalog.August1Id) is { } august1)
+                FestivalCatalog.Register(august1 with { Sites = [new FestivalSite("the test field", e, n, 120)] });
         }
+        // a check's sky: --august1hour 22.5 holds the server's game hour (a dedicated server without a sky reads noon)
+        if (CmdArgs.Value("--august1hour") is { } fixedHour && double.TryParse(fixedHour, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double h1)) Hour = () => h1;
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
         OccasionManager.Changed += OnOccasionsChanged;
@@ -181,6 +190,9 @@ public partial class FestivalService : Node
         }
         EscaladeTick(now);
         GuggenTick(now);
+        SechseTick(now);
+        ChalandaTick(now);
+        August1Tick(now);
         if (now >= _nextCrewCheck)
         {
             _nextCrewCheck = now + CrewCheckEvery;
@@ -256,9 +268,10 @@ public partial class FestivalService : Node
     /// </summary>
     private (double Start, int Seed) ShowOf(FestivalDef def, string instance, int day, int length, ResolvedSite? site, double hour, double now)
     {
-        if (!FestivalShows.HasFireworks(def.Show) || site == null) return (0, 0);
+        bool lakes = def.Id == August1Rules.FestivalId;   // the 1 August (#1355): a show over the lake on every game evening of both days, at 22:00
+        if (!(FestivalShows.HasFireworks(def.Show) || lakes) || site == null) return (0, 0);
         var (start, seed, count) = _shows.GetValueOrDefault(instance);
-        if (day >= length && FestivalShows.Starts(_lastHour, hour) && !FestivalShows.Active(start, seed, now))
+        if ((lakes ? August1Rules.ShowStarts(_lastHour, hour) : day >= length && FestivalShows.Starts(_lastHour, hour)) && !FestivalShows.Active(start, seed, now))
         {
             count++;
             start = now + FestivalShows.StartLead;
@@ -462,6 +475,7 @@ public partial class FestivalService : Node
                 _watched[key] = seen;
                 if (seen < FestivalShows.WatchSeconds) continue;
                 _watchPaid.Add(key);
+                if (run.Id == August1Rules.FestivalId) WatchedAugust1(peer, p, run);
                 GD.Print($"[festival] {Short(p.Key)} watched the closing show of {run.Id}");
                 _adventure.Events.Raise(new FestivalShowWatched(peer, p.Key, run.Id));
             }
@@ -500,6 +514,7 @@ public partial class FestivalService : Node
         SendFestivals(peer);
         DesalpeWelcome(peer);
         MarketWelcome(peer);
+        SechseWelcome(peer);
         foreach (var run in Running)
         {
             SendBoard(peer, run);

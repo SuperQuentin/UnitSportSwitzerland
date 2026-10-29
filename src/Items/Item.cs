@@ -291,6 +291,17 @@ public static class ItemDefs
         Hat(ItemId.LarveDante, "Larve: Alti Dante", "#d8b8a0", "LD"),
         Hat(ItemId.LarveHarlekin, "Larve: Harlekin", "#e8e0e0", "LH"),
         Hat(ItemId.LarveTeufel, "Larve: Teufel", "#c82020", "LT"),
+        // the Sechseläuten (#1358): a Cervelat grilled on the Böögg's embers
+        Eat(ItemId.BooggCervelat, "Grilled Cervelat", 14, "#b0502e", "CV", 40, ItemCategory.Food, 3) with
+            { Blurb = "{use_item} to eat. A Cervelat grilled on the embers of the Böögg's pyre, the Zürich way: warm for 2 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 120f },
+        // the Chalandamarz (#1356): the first march's hand bell (the procession's tart is the existing Engadiner Nusstorte)
+        new(ItemId.ChalandaTreichel, "Chalanda Treichel", "A child's hand Treichel from the Chalandamarz procession. Worth nothing but the sound.",
+            ItemUse.Material, 5, new Color("#c99a3a"), "CT", 0, ItemCategory.Cosmetic, 8f),
+        // the 1 August (#1355): the lampion is a held light like the torch; the box of fireworks is lit with Use, at night
+        new(ItemId.Lampion, "Lampion", "A paper lantern on a stick: a soft light in your hand that everyone sees. Take one at the 1 August lampion stand; the lampion walk needs it.",
+            ItemUse.Readout, 1, new Color("#d8402a"), "LA", 0, ItemCategory.Gear, 5f),
+        new(ItemId.FireworkBox, "Box of fireworks", "{use_item} lights it where you stand: a 40 s volley of your own, at night during the 1 August. Bought at the 1 August fireworks stand for Batzen.",
+            ItemUse.Firework, 1, new Color("#c0302a"), "FW", 0, ItemCategory.Gear, 9f),
         new(ItemId.ChristmasBauble, "Christmas bauble", "A glass bauble from the market. Worth nothing but the look in the hand.",
             ItemUse.Material, 10, new Color("#c81e24"), "XB", 0, ItemCategory.Cosmetic, 12f),
         Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
@@ -745,6 +756,33 @@ public static class ItemDefs
             case ItemId.SoupeEscalade:
                 s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
                 s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.85f, 0.6f, 0.28f), 10);
+                break;
+            case ItemId.BooggCervelat:
+                s.Tube(new Vector3(-0.1f, 0, 0), new Vector3(0.1f, 0, 0), 0.032f, 0.032f, new Color(0.69f, 0.31f, 0.18f), 8);
+                s.Box(new Vector3(0.0f, 0.032f, 0.0f), new Vector3(0.12f, 0.006f, 0.02f), new Color(0.3f, 0.12f, 0.07f));   // the char of the grill
+                s.Tube(new Vector3(0.1f, 0, 0), new Vector3(0.2f, 0.03f, 0), 0.008f, 0.008f, new Color(0.45f, 0.32f, 0.2f), 5);   // the stick
+                break;
+            case ItemId.ChalandaTreichel:
+                s.Tube(new Vector3(0, -0.07f, 0), new Vector3(0, 0.05f, 0), 0.075f, 0.04f, new Color(0.79f, 0.6f, 0.23f), 10);
+                s.Tube(new Vector3(0, 0.04f, 0), new Vector3(0, 0.1f, 0), 0.012f, 0.012f, new Color(0.23f, 0.14f, 0.09f), 5);
+                s.Box(new Vector3(0, 0.1f, 0), new Vector3(0.1f, 0.03f, 0.05f), new Color(0.78f, 0.12f, 0.16f));
+                break;
+            case ItemId.Lampion:
+            {
+                // a stick with a paper lantern hung from a crossbar: ribbed red paper, a glowing candle inside
+                s.Tube(new Vector3(0, -0.14f, 0), new Vector3(0, 0.30f, 0), 0.012f, 0.012f, new Color(0.45f, 0.29f, 0.15f), 6);
+                s.Box(new Vector3(0, 0.30f, 0), new Vector3(0.14f, 0.015f, 0.015f), new Color(0.45f, 0.29f, 0.15f));
+                s.Tube(new Vector3(0.05f, 0.18f, 0), new Vector3(0.05f, 0.30f, 0), 0.003f, 0.003f, new Color(0.2f, 0.2f, 0.2f), 3);
+                s.Tube(new Vector3(0.05f, 0.08f, 0), new Vector3(0.05f, 0.19f, 0), 0.045f, 0.06f, new Color(0.85f, 0.25f, 0.16f), 10);
+                s.Box(new Vector3(0.05f, 0.135f, 0), new Vector3(0.05f, 0.07f, 0.05f), new Color(1f, 0.78f, 0.35f));
+                s.Tube(new Vector3(0.05f, 0.07f, 0), new Vector3(0.05f, 0.085f, 0), 0.03f, 0.03f, new Color(0.3f, 0.2f, 0.12f), 8);
+                break;
+            }
+            case ItemId.FireworkBox:
+                s.Box(new Vector3(0, 0, 0), new Vector3(0.22f, 0.12f, 0.14f), new Color(0.75f, 0.17f, 0.15f));
+                s.Box(new Vector3(0, 0.061f, 0), new Vector3(0.23f, 0.012f, 0.15f), new Color(0.95f, 0.9f, 0.8f));
+                s.Box(new Vector3(0, 0.0f, 0.071f), new Vector3(0.1f, 0.06f, 0.006f), new Color(0.95f, 0.8f, 0.2f));
+                s.Tube(new Vector3(-0.06f, 0.06f, 0), new Vector3(-0.06f, 0.15f, 0), 0.012f, 0.01f, new Color(0.9f, 0.85f, 0.7f), 6);
                 break;
             case ItemId.ChristmasBauble:
                 s.Tube(new Vector3(0, -0.06f, 0), new Vector3(0, 0.06f, 0), 0.055f, 0.055f, new Color(0.78f, 0.12f, 0.14f), 10);

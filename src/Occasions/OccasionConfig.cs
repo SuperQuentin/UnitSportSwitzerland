@@ -174,6 +174,27 @@ public static class OccasionConfig
             Schedule = { new DateWindow("easter-41", "+2") },
             Facets = new FacetToggles { Atmosphere = true, Loot = false, Hunt = false, Hats = true },
         });
+        // the Sechseläuten (#1358): the third Monday of April, Zürich's Sechseläutenplatz (relocated to the region's largest town); the sky is the season's
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.SechselaeutenId, Priority = 8,
+            Schedule = { new DateWindow("04-mon#3", "+0") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Chalandamarz (#1356): 1 March, the children's procession in an Engadin village (relocated to the region's largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ChalandaId, Priority = 8,
+            Schedule = { new DateWindow("03-01", "03-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the 1 August (#1355): 31 July and 1 August, the Höhenfeuer, the lake fireworks, the lampion walk (held in the first lake town the region has, else its largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.August1Id, Priority = 8,
+            Schedule = { new DateWindow("07-31", "08-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 
