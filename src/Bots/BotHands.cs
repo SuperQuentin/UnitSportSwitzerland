@@ -188,7 +188,7 @@ public static class BotHands
                 body.LookYaw = yaw;
                 body.SquareToView = true;
                 bot.SwordTraced = false;
-                svc?.ServerAct(bot.Id, m.Move, yaw);
+                svc?.ServerAct(bot.Id, m.Move, yaw, SwordPoses.Code(0, (int)m.Move + bot.SwordSwings++));
             }
         }
         if (svc != null && SwordRules.IsBlow(m.Move))

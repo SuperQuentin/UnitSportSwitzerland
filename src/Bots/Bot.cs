@@ -75,6 +75,7 @@ public sealed class Bot
     public double SwordWantUntil, DodgeWantUntil;
     public Vector3 SwordTarget, DodgeAway;
     public bool SwordPulse, SwordTraced;
+    public int SwordSwings;
     public float Heat;
     public double HeatAt;
     /// <summary>What it perceives (<see cref="BotSenses"/>): the only way its brain learns about the world.</summary>

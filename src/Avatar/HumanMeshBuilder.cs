@@ -1563,6 +1563,8 @@ public static partial class HumanMeshBuilder
         SchwingGrip, SchwingLeanIn, SchwingLeanOut, SchwingLeanLeft, SchwingLeanRight, SchwingBrace, SchwingDown,
         SchwingGroundTop, SchwingGroundBottom, SchwingStumble, SchwingBrush, SchwingDusted,
         SchwingKurz, SchwingUebersprung, SchwingHueften, SchwingBrienzer, SchwingGammen, SchwingWyberhaken,
+        // #1371: the sword's whole-body poses (HumanMeshBuilder.Sword.cs), the move in DanceParams.Bar; past FightStand, so no groove either
+        SwordPose,
     }
 
     /// <summary>
@@ -1693,6 +1695,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= SwordMoves) return DanceMove.SwordPose;
         if (index >= SchwingMoves) return SchwingResolve(index - SchwingMoves);
         if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
@@ -1744,10 +1747,11 @@ public static partial class HumanMeshBuilder
     private readonly struct Beat
     {
         public readonly float C, B, R, D, E;
-        public readonly int K, Par;
+        public readonly int K, Par, Bar;
 
         public Beat(float barPhase, int bar)
         {
+            Bar = bar;
             R = barPhase - Mathf.Floor(barPhase);
             C = R * 4f;
             K = Mathf.Clamp((int)C, 0, 3);
@@ -2118,6 +2122,7 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case DanceMove.SwordPose: EvalSword(t, mv, ref ch); break;
             case >= DanceMove.SchwingGrip: EvalSchwing(move, t, mv, ref ch); break;
             case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;

@@ -2342,7 +2342,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
-        var dance = DrawnDance = StepFightPose(dt) ?? StepAuraPose(dt) ?? StepSchwingPose(dt) ?? danced;
+        var dance = DrawnDance = StepSwordPose(dt) ?? StepFightPose(dt) ?? StepAuraPose(dt) ?? StepSchwingPose(dt) ?? danced;
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
@@ -4436,7 +4436,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // swinging the sword, or locked on to a target (#1371): face where the blow goes
         if (SwordFaceYaw is { } swordYaw)
         {
-            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, swordYaw, MathX.Damp(26f, dt)), 0);
+            Rotation = new Vector3(0, SwordFaceSnap ? swordYaw : Mathf.LerpAngle(Rotation.Y, swordYaw, MathX.Damp(26f, dt)), 0);
             return;
         }
         if (_throwBlend > 0.05f || SquareToView)

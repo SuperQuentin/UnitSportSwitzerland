@@ -133,24 +133,24 @@ public partial class SwordService : Node
     /// Owner side: this body starts <paramref name="move"/> facing <paramref name="yaw"/>. The server checks it; the peers that
     /// see the body draw it.
     /// </summary>
-    public void SendAct(SwordMove move, float yaw)
+    public void SendAct(SwordMove move, float yaw, int code = 0)
     {
-        if (!Online) { ServerAct(1, move, yaw); return; }
-        RpcId(1, MethodName.Act, (int)move, yaw);
+        if (!Online) { ServerAct(1, move, yaw, code); return; }
+        RpcId(1, MethodName.Act, (int)move, yaw, code);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Act(int move, float yaw)
+    private void Act(int move, float yaw, int code)
     {
         if (!_server || !float.IsFinite(yaw) || move is < 0 or > 255) return;
-        ServerAct(Multiplayer.GetRemoteSenderId(), (SwordMove)move, yaw);
+        ServerAct(Multiplayer.GetRemoteSenderId(), (SwordMove)move, yaw, code & 0x3F);
     }
 
     /// <summary>
     /// Server (and a bot's hands, and offline): <paramref name="who"/> starts <paramref name="move"/>. Taken when its body is up
     /// and the guard allows it (rate, stamina); then relayed. Returns whether it was taken.
     /// </summary>
-    public bool ServerAct(long who, SwordMove move, float yaw)
+    public bool ServerAct(long who, SwordMove move, float yaw, int code = 0)
     {
         if (!Authority) return false;
         var body = BodyOf(who);
@@ -166,15 +166,15 @@ public partial class SwordService : Node
             return true;
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != who && Sees(peer, who))
-                RpcId(peer, MethodName.Acted, who, (int)move, yaw);
+                RpcId(peer, MethodName.Acted, who, (int)move, yaw, code);
         return true;
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Acted(long who, int move, float yaw)
+    private void Acted(long who, int move, float yaw, int code)
     {
         if (BodyOf(who) is not { } body) return;
-        body.SwordSeen((SwordMove)move, yaw);
+        body.SwordSeen((SwordMove)move, yaw, code);
         Swung?.Invoke(who, (SwordMove)move);
     }
 

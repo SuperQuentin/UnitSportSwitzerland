@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using UnitSport.Combat;
 using UnitSport.Player;
 using UnitSport.Core;
 
@@ -309,6 +310,90 @@ void fragment() {{
         AddChild(_inHand);
         _handFore = NewForeEnd();
         _inHand.AddChild(_handFore);
+        // the sword's trail: one fixed crescent, shown and faded through a blow's active frames (SwordTrailNow); never rebuilt
+        _trail = new MeshInstance3D
+        {
+            Name = "Trail", Mesh = TrailMesh(), MaterialOverride = TrailMaterial(), Visible = false, Transparency = 1f,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        _inHand.AddChild(_trail);
+    }
+
+    private MeshInstance3D? _trail;
+    private SwordMove _trailMove = SwordMove.None;
+    private float _trailAlpha = -1f;
+    private static ArrayMesh? _trailMesh;
+    private static StandardMaterial3D? _trailMaterial;
+
+    /// <summary>
+    /// The crescent a blade leaves (#1371): a sector of the plane the blade sweeps, 1.1 radians behind its edge, from the grip's
+    /// reach to the tip, fading to nothing at its tail. Built once; the blade's own motion sweeps it round.
+    /// </summary>
+    [Showcase("Combat", "Sword trail")]
+    public static ArrayMesh TrailMesh()
+    {
+        if (_trailMesh != null) return _trailMesh;
+        const int steps = 10;
+        var verts = new Vector3[(steps + 1) * 2];
+        var cols = new Color[verts.Length];
+        var idx = new List<int>();
+        for (int i = 0; i <= steps; i++)
+        {
+            float a = 1.1f * i / steps;   // behind the edge: towards -X from +Z
+            var dir = new Vector3(-Mathf.Sin(a), 0, Mathf.Cos(a));
+            verts[i * 2] = dir * 0.45f;
+            verts[i * 2 + 1] = dir * 0.92f;
+            float fade = 1f - (float)i / steps;
+            cols[i * 2] = new Color(1f, 1f, 1f, 0f);
+            cols[i * 2 + 1] = new Color(1f, 0.97f, 0.88f, 0.85f * fade * fade);
+        }
+        for (int i = 0; i < steps; i++)
+        {
+            int a = i * 2;
+            idx.AddRange(new[] { a, a + 1, a + 2, a + 1, a + 3, a + 2 });
+        }
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = verts;
+        arrays[(int)Mesh.ArrayType.Color] = cols;
+        arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        return _trailMesh = mesh;
+    }
+
+    private static StandardMaterial3D TrailMaterial() => _trailMaterial ??= new StandardMaterial3D
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha, BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled, NoDepthTest = false,
+    };
+
+    /// <summary>The trail's brightness and shape for this frame: only through a blow's active frames, on every peer.</summary>
+    private void StepTrail()
+    {
+        if (_trail == null) return;
+        float a = _shown == ItemId.Sword && _player != null ? _player.SwordTrailNow(out var move) : 0f;
+        if (a <= 0.001f)
+        {
+            if (_trail.Visible) { _trail.Visible = false; _trailAlpha = -1f; }
+            return;
+        }
+        _player!.SwordTrailNow(out var m);
+        if (m != _trailMove)
+        {
+            _trailMove = m;
+            // a backhand sweeps the other way; an overhead blow, a thrust and a plunge swing in the upright plane
+            bool upright = m is SwordMove.Slash5 or SwordMove.Plunge;
+            float side = m == SwordMove.Slash2 ? -1f : 1f;
+            _trail.Basis = new Basis(Vector3.Forward, upright ? Mathf.Pi * 0.5f : 0f) * Basis.FromScale(new Vector3(side, 1f, 1f));
+        }
+        if (!_trail.Visible) _trail.Visible = true;
+        if (Mathf.Abs(a - _trailAlpha) > 0.01f)
+        {
+            _trailAlpha = a;
+            _trail.Transparency = 1f - a;
+        }
     }
 
     private static MeshInstance3D NewForeEnd() => new()
@@ -385,6 +470,7 @@ void fragment() {{
         }
         else _inHand.Visible = false;
         StepSparkles(_inHand.Visible, dt);
+        StepTrail();
         StepTorch((id == ItemId.Torch || id == ItemId.Lampion) && any, dt, id == ItemId.Lampion);
 
         // --- in front of the local camera ---
