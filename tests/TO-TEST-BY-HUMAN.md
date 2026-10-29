@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
+
+On the Android phone (a test APK).
+
+- [ ] Walk up to a building's door, a shop counter, a loot cupboard: a cyan pill names it ("Open the door") on the right edge; a tap does it.
+- [ ] In a bowling centre: the shoe counter, a ball rack and the approach each show their pill. Step up: the overlay stays, with Bowl, Back and Pins; the stick walks the spot, a drag turns the line; Bowl sets it, then hold Bowl to swing and slide the thumb sideways for hook, let go to roll. Back steps back. Is a whole frame comfortable?
+- [ ] II (pause) on a phone held sideways: every entry down to Quit can be reached (it scrolls when it does not fit), Leave to main menu works.
+
 ## Christmas market ([#1349](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1349))
 
 `--festival test --date 2027-11-30 --world fixture` (the market stands at the fixture's start; `--date 2027-12-06` for the Samichlaus's day), or online on the western map in the real dates (Montreux, Grand-Rue).
