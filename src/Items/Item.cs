@@ -636,8 +636,8 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0, -0.185f), new Vector3(0.04f, 0.04f, 0.04f), gold);                       // pommel
                 s.Box(new Vector3(0, 0, 0.062f), new Vector3(0.20f, 0.026f, 0.03f), gold);                       // crossguard
                 s.Box(new Vector3(0, 0, 0.45f), new Vector3(0.010f, 0.046f, 0.80f), steel);                      // blade
-                s.Box(new Vector3(0, 0, 0.45f), new Vector3(0.012f, 0.010f, 0.78f), new Color(0.62f, 0.66f, 0.72f));   // fuller
-                s.Box(new Vector3(0, 0, 0.87f), new Vector3(0.010f, 0.033f, 0.033f), steel, new Basis(Vector3.Right, Mathf.Pi / 4f));   // point
+                s.Box(new Vector3(0, 0, 0.45f), new Vector3(0.0125f, 0.010f, 0.76f), new Color(0.62f, 0.66f, 0.72f));   // fuller
+                s.Box(new Vector3(0, 0, 0.87f), new Vector3(0.0092f, 0.033f, 0.033f), steel, new Basis(Vector3.Right, Mathf.Pi / 4f));   // point
                 break;
             }
             case ItemId.Alphorn:
