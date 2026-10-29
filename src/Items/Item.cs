@@ -284,6 +284,9 @@ public static class ItemDefs
             { Blurb = "{use_item} to eat. A shard of the Marmite's chocolate shell, smashed at the Escalade." },
         Eat(ItemId.SoupeEscalade, "Soupe de l'Escalade", 5, "#d89a4a", "SE", 45, ItemCategory.Food, 4) with
             { Blurb = "{use_item} to eat. The Escalade's vegetable soup, a bowl from the pot: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
+        // the Sechseläuten (#1358): a Cervelat grilled on the Böögg's embers
+        Eat(ItemId.BooggCervelat, "Grilled Cervelat", 14, "#b0502e", "CV", 40, ItemCategory.Food, 3) with
+            { Blurb = "{use_item} to eat. A Cervelat grilled on the embers of the Böögg's pyre, the Zürich way: warm for 2 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 120f },
         // the Chalandamarz (#1356): the first march's hand bell (the procession's tart is the existing Engadiner Nusstorte)
         new(ItemId.ChalandaTreichel, "Chalanda Treichel", "A child's hand Treichel from the Chalandamarz procession. Worth nothing but the sound.",
             ItemUse.Material, 5, new Color("#c99a3a"), "CT", 0, ItemCategory.Cosmetic, 8f),
@@ -740,6 +743,11 @@ public static class ItemDefs
             case ItemId.SoupeEscalade:
                 s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
                 s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.85f, 0.6f, 0.28f), 10);
+                break;
+            case ItemId.BooggCervelat:
+                s.Tube(new Vector3(-0.1f, 0, 0), new Vector3(0.1f, 0, 0), 0.032f, 0.032f, new Color(0.69f, 0.31f, 0.18f), 8);
+                s.Box(new Vector3(0.0f, 0.032f, 0.0f), new Vector3(0.12f, 0.006f, 0.02f), new Color(0.3f, 0.12f, 0.07f));   // the char of the grill
+                s.Tube(new Vector3(0.1f, 0, 0), new Vector3(0.2f, 0.03f, 0), 0.008f, 0.008f, new Color(0.45f, 0.32f, 0.2f), 5);   // the stick
                 break;
             case ItemId.ChalandaTreichel:
                 s.Tube(new Vector3(0, -0.07f, 0), new Vector3(0, 0.05f, 0), 0.075f, 0.04f, new Color(0.79f, 0.6f, 0.23f), 10);

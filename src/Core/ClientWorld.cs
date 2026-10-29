@@ -647,6 +647,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
             Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
+            Occasions.Festivals.Sechselaeuten.BooggStage.Create(this, _chunks, origin);
             Combat.SchwingRing.Create(this, _chunks, origin);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
@@ -982,6 +983,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
+            || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested || Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null
             || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
@@ -998,7 +1000,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.Bank.Create(this, inventory);
         var items = new Items.ItemController(inventory, origin)
         {
-            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging && !Occasions.Festivals.Desalpe.DesalpeGame.TakesUse ? LocalPlayer : null,
+            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging && !Occasions.Festivals.Desalpe.DesalpeGame.TakesUse && !Occasions.Festivals.Sechselaeuten.SechseGame.TakesUse ? LocalPlayer : null,
         };
         AddChild(items);
         _items = items;
@@ -1224,6 +1226,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.Festivals.Escalade.EscaladeGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Escalade.EscaladeCheck.Requested) AddChild(new Occasions.Festivals.Escalade.EscaladeCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null) AddChild(new Occasions.Festivals.Escalade.EscaladeNetProbe(items));
+            // the Sechseläuten (#1358): E at the pyre bets (Use steps the minute) or grills, at the Weibel takes the purse
+            AddChild(new Occasions.Festivals.Sechselaeuten.SechseGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested) AddChild(new Occasions.Festivals.Sechselaeuten.SechselaeutenCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null) AddChild(new Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe(items));
             // the Chalandamarz (#1356): E at the stand begins the procession, E on the march beat rings the Treichel
             AddChild(new Occasions.Festivals.Chalanda.ChalandaGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Chalanda.ChalandaCheck.Requested) AddChild(new Occasions.Festivals.Chalanda.ChalandaCheck(items, () => LocalPlayer));

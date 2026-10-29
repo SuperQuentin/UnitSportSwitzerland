@@ -111,7 +111,8 @@ public partial class Handshake : Node
     /// 77: World/Adventure/Festivals RequestEscalade, TellEscalade (#1351: the Escalade's Marmite, soup pot and Course), ItemId 503-504.
     /// 78: Interiors/CinemaBooths SetPool carries each film's place in the halls' rotation (#1367).
     /// 79: World/Adventure/Festivals RequestChalanda, TellChalanda (#1356: the Chalandamarz's procession and its stamped Treichel rings), ItemId 515.
-    public const int Protocol = 79;
+    /// 80: World/Adventure/Festivals RequestSechse, TellSechse (#1358: the Sechseläuten's bet on the Böögg, the purse, the Cervelat), ItemId 510.
+    public const int Protocol = 80;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
