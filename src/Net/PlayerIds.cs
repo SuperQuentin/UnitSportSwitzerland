@@ -59,11 +59,20 @@ public sealed class PlayerIds
         return KeyOf(peer) is { Length: > 0 } key ? key : null;
     }
 
-    /// <summary>The connected peer with this id, or 0.</summary>
+    /// <summary>
+    /// True for an id as <see cref="IdOf"/> makes them (<c>acct:</c>, <c>bot:</c>, a 32-hex fingerprint), false for a
+    /// name: a name is at most 20 letters, digits, <c>_</c> and <c>-</c> (<see cref="PlayerRegistry.Sanitize"/>), so a
+    /// file older than #1359 tells its name keys apart by this.
+    /// </summary>
+    public static bool IsId(string key) =>
+        key.StartsWith("acct:", StringComparison.Ordinal) || key.StartsWith("bot:", StringComparison.Ordinal)
+        || (key.Length == 32 && key.All(Uri.IsHexDigit));
+
+    /// <summary>The connected peer with this id (or with this PlayerKey, as sleepers keep it), or 0.</summary>
     public long PeerOf(string id)
     {
         foreach (long peer in Online())
-            if (IdOf(peer) == id) return peer;
+            if (IdOf(peer) == id || KeyOf(peer) == id) return peer;
         return 0;
     }
 
@@ -78,11 +87,15 @@ public sealed class PlayerIds
     public void Refresh(long peer)
     {
         if (IdOf(peer) is not { } id || NameOf(peer) is not { Length: > 0 } name) return;
-        if (!id.StartsWith("bot:", StringComparison.Ordinal) && (!_lastName.TryGetValue(id, out var was) || was != name))
+        // under the id, and under the PlayerKey too when an account is the id (sleepers are keyed by the PlayerKey)
+        bool changed = false;
+        foreach (string key in new[] { id, KeyOf(peer) ?? id })
         {
-            _lastName[id] = name;
-            _save?.Invoke(_lastName);
+            if (key.StartsWith("bot:", StringComparison.Ordinal) || (_lastName.TryGetValue(key, out var was) && was == name)) continue;
+            _lastName[key] = name;
+            changed = true;
         }
+        if (changed) _save?.Invoke(_lastName);
         if (_identified.Add(peer)) Identified?.Invoke(peer, id, name);
     }
 
