@@ -102,6 +102,11 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At the Marmite: smash it (the party's youngest and oldest both press); at the soup pot: ladle a bowl for the party; at the start line: begin the Course de l'Escalade", PlayerInput.InteractMount),
         }),
+        ("Festivals: the Sechseläuten (#1358)", new Row[]
+        {
+            new("At the Böögg's pyre before it is lit: change the minute you bet on", PlayerInput.UseItem),
+            new("At the pyre: place your bet; after the bang: grill a Cervelat on the embers; at the Zunft's Weibel: take the day's purse", PlayerInput.InteractMount),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

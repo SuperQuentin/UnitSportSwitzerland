@@ -160,6 +160,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("12-sat#2", "+1") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the Sechseläuten (#1358): the third Monday of April, Zürich's Sechseläutenplatz (relocated to the region's largest town); the sky is the season's
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.SechselaeutenId, Priority = 8,
+            Schedule = { new DateWindow("04-mon#3", "+0") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 

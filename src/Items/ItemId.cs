@@ -271,6 +271,9 @@ public enum ItemId
     MarmiteChocolate = 503,
     /// <summary>A bowl of the Escalade's vegetable soup from the pot that feeds the party: warm for 3 minutes.</summary>
     SoupeEscalade = 504,
+    // ---- the Sechseläuten (#1358, docs/notes/occasions/festival-sechselaeuten.md); 510-514 are this festival's ----
+    /// <summary>A Cervelat grilled on the embers of the Böögg's pyre, once the head has burst: food, warm for 2 minutes.</summary>
+    BooggCervelat = 510,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }

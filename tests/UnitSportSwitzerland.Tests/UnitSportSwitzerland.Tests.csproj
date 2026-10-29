@@ -315,6 +315,10 @@
     <!-- the Escalade (#1351): the Marmite's pair, the Course's gates and pay, the soup; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Escalade\EscaladeRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Escalade.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- the Sechseläuten (#1358): the Böögg round, the draw from the real burns, the pool shared by closeness; pure -->
+    <Compile Include="..\..\src\Occasions\Festivals\Sechselaeuten\SechselaeutenRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Sechselaeuten\BooggRound.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Sechselaeuten.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
