@@ -1040,6 +1040,13 @@ src/Occasions/Festivals/FestivalService.Escalade quick  --escaladecheck --escala
 src/Occasions/Festivals/Escalade/ net    tools/escaladenetcheck.sh
 src/Occasions/Festivals/FestivalService.Escalade net    tools/escaladenetcheck.sh
 tools/escaladenetcheck.sh    net    tools/escaladenetcheck.sh
+# #1357: the Fasnacht: Larven stall, Raeppli, Guggenmusik, Basel's Morgestraich (offline quick probe; server + two clients)
+src/Occasions/Festivals/Fasnacht/ quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalCatalog.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalService.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/Fasnacht/ net    tools/fasnachtnetcheck.sh
+src/Occasions/Festivals/FestivalService.Fasnacht net    tools/fasnachtnetcheck.sh
+tools/fasnachtnetcheck.sh    net    tools/fasnachtnetcheck.sh
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh

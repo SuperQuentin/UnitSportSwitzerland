@@ -181,7 +181,9 @@ public partial class FasnachtCheck : ChatProbe
         var result = game.Result!.Value;
         Expect(result.Voices == 3 && result.Sync100 >= 90 && result.Din100 >= 150, $"three voices in step: sync {result.Sync100} %, din {result.Din100 / 100.0:F2} ({result.Voices} voices)");
         Expect(result.Batzen > 0 && result.Batzen <= GuggenRules.BatzenMax, $"paid {result.Batzen} Batzen");
-        Expect(await Until(() => Mine(Id).Batzen == before + result.Batzen && Mine(Id).Points == points + result.BoardPoints, 5), $"in the book: Batzen {Mine(Id).Batzen - before}, points {Mine(Id).Points - points}");
+        // the song's points (640) take the party past the first milestone (300), which pays its 20 Batzen on top, outside the cap
+        Expect(await Until(() => Mine(Id).Batzen == before + result.Batzen + 20 && Mine(Id).Points == points + result.BoardPoints, 5), $"in the book: Batzen {Mine(Id).Batzen - before}, points {Mine(Id).Points - points}");
+        Expect(Mine(Id).Milestones.SequenceEqual([0]) && Mine(Id).Paid.GetValueOrDefault("guggen:1") == result.Batzen, "the first milestone paid, and the song's own Batzen are inside the game's day cap");
         Expect(Svc.GuggenPaid.Count(p => p.Peer < 0) == 2 && Svc.GuggenPaid.Where(p => p.Peer < 0).All(p => p.Result.Batzen == 0), "the two bots were graded and paid nothing");
         Expect(game.Taps.Count > 0 && FasnachtSounds.Snare.Variants.Length > 0 && FasnachtSounds.Trumpet.Variants.Length > 0, "the instruments sound");
         if (DisplayServer.GetName() != "headless") GD.Print($"[fasnachtcheck] shot {Shot("guggen")}");

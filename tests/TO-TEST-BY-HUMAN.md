@@ -7,6 +7,18 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
+
+`--festival test --date 2027-02-04 --world fixture` (Luzern's: the Larven stall 9 m west of the fixture's start, the Guggenmusik stage 14 m east and 6 m north); `--date 2027-02-15` and the clock at 04:30 (`--time 4.5`) for Basel's Morgestraich with its lantern 11 m north; or online on the western map in the real dates (easter-52 for six days, easter-41 for three, relocated to the region's largest town).
+
+- [ ] Look at the six Larven on a figure (Waggis, Alti Dante, Harlekin, Teufel, Fritschi, Ueli: model viewer Figures / Hat - Larve...), in Cartoon, PS1 and Realistic: do they read as faces at game distance, is the Waggis's nose funny and not scary?
+- [ ] The Larven stall: E takes a mask and a bag of Räppli once a day; the mask goes on from the pack; others see it. With nothing on the head, the festival's own mask (Fritschi in Luzern's window, Ueli in Basel's) is worn.
+- [ ] Räppli: Use with the bag in hand throws a handful; does the paper look and fall like confetti in all three styles, does a second player near see it, is the toss sound good? Ten handfuls pay 3 Batzen.
+- [ ] The Guggenmusik: E at the stage, the count-in, tap on every note (LMB, pad RT, VR trigger). Is 120-140 BPM playable on the drum (40 notes in 15 s) on the pad and with the VR trigger? Do the snare, bass drum, trumpet and sousaphone sound like a Gugge (loud, a bit sour)? With two friends on the other voices, does "in sync" feel earned (the din's result line)? Esc leaves; walking away ends the song.
+- [ ] Basel's Morgestraich at 04:00 of day 1: do the street lamps and lit windows really go out (houses, street lamps, props) while the lanterns shine, is it dark enough to be an event, and does the drum roll with the saying land? At 05:30 do the lamps come back?
+- [ ] The stage, the stall and the lantern as props at night and by day (Cartoon, PS1, Realistic): readable, not z-fighting.
+- [ ] VR: a grip at the stall, the lantern or the stage works through the pad route; tapping the notes with the trigger; striking a drum by hand and tossing Räppli by hand are not built.
+
 ## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
 
 `--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).

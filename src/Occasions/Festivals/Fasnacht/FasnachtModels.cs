@@ -46,13 +46,12 @@ public static class FasnachtModels
         s.Box(new Vector3(0, 1.02f, 0), new Vector3(3.3f, 0.06f, 1.0f), WoodDark);
         foreach (float x in new[] { -1.55f, 1.55f })
             s.Tube(new Vector3(x, 0, -0.5f), new Vector3(x, 2.7f, -0.5f), 0.06f, 0.05f, WoodDark, 6);
-        s.Box(new Vector3(0, 2.0f, -0.5f), new Vector3(3.2f, 1.8f, 0.05f), Cloth);   // the back wall
-        // the awning: eight stripes sloping forward
-        for (int k = 0; k < 8; k++)
-        {
-            float x = -1.4f + k * 0.4f;
-            s.Box(new Vector3(x, 2.65f, 0.0f), new Vector3(0.4f, 0.05f, 1.5f), k % 2 == 0 ? Red : White, new Basis(Vector3.Right, 0.18f));
-        }
+        s.Box(new Vector3(0, 2.0f, -0.5f), new Vector3(3.1f, 1.8f, 0.05f), Cloth);   // the back wall, a hand narrower than the counter so no two end faces share a plane
+        // the awning: a white sheet sloping forward, four red stripes a centimetre proud of it on both sides
+        var slope = new Basis(Vector3.Right, 0.18f);
+        s.Box(new Vector3(0, 2.65f, 0.0f), new Vector3(3.4f, 0.05f, 1.5f), White, slope);
+        for (int k = 0; k < 4; k++)
+            s.Box(new Vector3(-1.488f + k * 0.85f, 2.65f, 0.0f), new Vector3(0.4f, 0.07f, 1.52f), Red, slope);
         // six masks on pegs: a face shell, two dark eyes, a nose and a colour each
         Color[] tones = [Skin, Matte(0.92f, 0.82f, 0.72f), White, Red, Matte(0.93f, 0.62f, 0.52f), Matte(0.94f, 0.80f, 0.66f)];
         for (int k = 0; k < 6; k++)
@@ -95,9 +94,9 @@ public static class FasnachtModels
         s.Tube(new Vector3(-1.2f, 0.78f, 0.6f), new Vector3(-1.2f, 0.92f, 0.6f), 0.26f, 0.26f, Red, 10);
         s.Tube(new Vector3(-1.2f, 0.91f, 0.6f), new Vector3(-1.2f, 0.94f, 0.6f), 0.24f, 0.24f, White, 10);
         // the trumpet's stand: a music stand with a banner, a trumpet leaning on it
-        s.Tube(new Vector3(0.2f, 0.22f, 0.3f), new Vector3(0.2f, 1.5f, 0.3f), 0.03f, 0.03f, Black, 5);
+        s.Tube(new Vector3(0.2f, 0.22f, 0.3f), new Vector3(0.2f, 1.3f, 0.3f), 0.03f, 0.03f, Black, 5);
         s.Box(new Vector3(0.2f, 1.6f, 0.3f), new Vector3(0.7f, 0.5f, 0.04f), White);
-        s.Box(new Vector3(0.2f, 1.6f, 0.33f), new Vector3(0.5f, 0.06f, 0.02f), Red);
+        s.Box(new Vector3(0.2f, 1.6f, 0.34f), new Vector3(0.5f, 0.06f, 0.02f), Red);
         s.Tube(new Vector3(0.7f, 0.9f, 0.4f), new Vector3(1.2f, 1.15f, 0.4f), 0.02f, 0.02f, Brass, 6);
         s.Tube(new Vector3(1.15f, 1.12f, 0.4f), new Vector3(1.4f, 1.3f, 0.4f), 0.03f, 0.12f, Brass, 8);
         // the sousaphone: a coiled brass body and a wide bell over the player's head
@@ -132,10 +131,11 @@ public static class FasnachtModels
         foreach (float x in new[] { -0.95f, 0.95f })
             s.Tube(new Vector3(x - 0.04f, 0.36f, 0), new Vector3(x + 0.04f, 0.36f, 0), 0.36f, 0.36f, WoodDark, 10);
         s.Box(new Vector3(0, 0.9f, 0), new Vector3(1.5f, 0.82f, 1.15f), Wood);                               // the cart's chest
+        s.Box(new Vector3(0, 1.33f, 0), new Vector3(1.6f, 0.05f, 1.25f), Black);                            // the frame's base plate, wider than the chest
         // the lantern: a black frame round four lit panes, a roof with a point
         foreach (float x in new[] { -0.7f, 0.7f })
             foreach (float z in new[] { -0.55f, 0.55f })
-                s.Tube(new Vector3(x, 1.3f, z), new Vector3(x, 3.5f, z), 0.04f, 0.04f, Black, 5);
+                s.Tube(new Vector3(x, 1.34f, z), new Vector3(x, 3.5f, z), 0.04f, 0.04f, Black, 5);
         s.Box(new Vector3(0, 2.4f, 0.54f), new Vector3(1.32f, 2.0f, 0.04f), Lantern(1f, 0.72f, 0.30f));      // the front pane, warm
         s.Box(new Vector3(0, 2.4f, -0.54f), new Vector3(1.32f, 2.0f, 0.04f), Lantern(0.5f, 0.66f, 1f));       // the back pane, blue and white
         s.Box(new Vector3(-0.68f, 2.4f, 0), new Vector3(0.04f, 2.0f, 1.04f), Lantern(1f, 0.55f, 0.35f));

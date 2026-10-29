@@ -1012,7 +1012,7 @@ public static partial class HumanMeshBuilder
                 // the Alti Dante: round glasses, a grey bun, a hat with a flower
                 var rim = new Color(0.22f, 0.20f, 0.20f);
                 foreach (float sgn in stackalloc[] { -1f, 1f })
-                    s.Box(face + (up * 0.04f + side * sgn * 0.055f + fwd * 0.012f) * k, new Vector3(0.075f, 0.065f, 0.012f) * k, rim, frame);
+                    s.Box(face + (up * 0.04f + side * sgn * 0.065f + fwd * 0.03f) * k, new Vector3(0.075f, 0.065f, 0.012f) * k, rim, frame);
                 s.Box(face - up * 0.015f * k + fwd * 0.02f * k, new Vector3(0.03f, 0.05f, 0.05f) * k, skin, frame);
                 s.Tube(c - fwd * 0.13f * k + up * 0.06f * k, c - fwd * 0.2f * k + up * 0.08f * k, 0.07f * k, 0.07f * k, new Color(0.78f, 0.78f, 0.80f), 7);
                 s.Tube(c + up * 0.15f * k, c + up * 0.19f * k, 0.15f * k, 0.12f * k, new Color(0.35f, 0.22f, 0.45f), 8);
@@ -1028,8 +1028,8 @@ public static partial class HumanMeshBuilder
                 s.Box(face + up * 0.1f * k, new Vector3(0.05f, 0.05f, 0.02f) * k, dark, diamond);
                 var red = new Color(0.85f, 0.12f, 0.15f);
                 var yellow = new Color(0.95f, 0.78f, 0.15f);
-                s.Tube(c + up * 0.1f * k, c + up * 0.2f * k + side * 0.16f * k, 0.11f * k, 0.03f, red, 6);
-                s.Tube(c + up * 0.1f * k, c + up * 0.2f * k - side * 0.16f * k, 0.11f * k, 0.03f, yellow, 6);
+                s.Tube(c + (up * 0.1f + side * 0.075f) * k, c + up * 0.2f * k + side * 0.18f * k, 0.065f * k, 0.03f, red, 6);
+                s.Tube(c + (up * 0.1f - side * 0.075f) * k, c + up * 0.2f * k - side * 0.18f * k, 0.065f * k, 0.03f, yellow, 6);
                 break;
             }
             case Headwear.LarveTeufel:

@@ -11,7 +11,7 @@ namespace UnitSport.Occasions.Festivals.Fasnacht;
 
 /// <summary>
 /// <c>--fasnachtnet a|b</c> with <c>--connect --festival test --time 4.5</c> (driven by <c>tools/fasnachtnetcheck.sh</c>, #1357): Basel's Fasnacht over a dedicated
-/// server whose calendar reads 15 February 2027 (day 1 of 3, held at the fixture start) and whose clock stands at half past four, so the Morgestraich is on. Everything is
+/// server whose calendar reads 15 February 2027 (day 1 of 3, held at the fixture start) and whose clock Lea, as admin, stops at half past four, so the Morgestraich is on. Everything is
 /// asserted on the REMOTE peers. Both clients see the street lamps out (<c>Lamps</c> 0) and hear the Morgestraich. Tom (B), 150 m away first, is refused the stall, the
 /// lantern and a seat by the server. Both take their Larve and Räppli at the stall (each in its own section), put the Larve on, and each sees the other's mask arrive on the
 /// replicated body (Headwear 5-8). Both light the lantern and are paid 40 Batzen. Lea throws a handful of Räppli and Tom's own machine shows the paper (the event relayed by
@@ -77,8 +77,14 @@ public partial class FasnachtNetProbe : ChatProbe
         var told = new List<(FestivalService.FasnachtEvent What, int A, string Text)>();
         Svc.FasnachtTold += (w, a, t) => told.Add((w, a, t));
 
-        // the Morgestraich is on: the street lamps are out here, and the roll was heard
-        Expect(await Until(() => OccasionManager.Instance?.Atmosphere is { Atmosphere.Lamps: 0f }, 30), $"the street lamps are out at {DayNight.Instance?.Clock}");
+        // the server's clock starts at ten and a dedicated server reads no --time: Lea, as admin, stops it at half past four, so the Morgestraich is on
+        if (_role == "A")
+        {
+            if (!await LogIn("test")) return;
+            Chat!.Send("/time speed 0");
+            Chat.Send("/time set 04:30");
+        }
+        Expect(await Until(() => OccasionManager.Instance?.Atmosphere is { Atmosphere.Lamps: 0f }, 60), $"the street lamps are out at {DayNight.Instance?.Clock}");
         Expect(await Until(() => game.Morgestraichs >= 1, 10), "the Morgestraich's roll and saying were heard here");
 
         if (_role == "A")
@@ -189,7 +195,9 @@ public partial class FasnachtNetProbe : ChatProbe
         if (game.Result is not { } r) return;
         Expect(r.Voices == 2 && r.Sync100 >= 90 && r.Din100 >= 125, $"two voices in step: sync {r.Sync100} %, din {r.Din100 / 100.0:F2} ({r.Voices} voices)");
         Expect(r.Batzen > 0 && r.Points >= r.Max * 0.95, $"{r.Points} of {r.Max} points, +{r.Batzen} Batzen");
-        Expect(await Until(() => Mine.Batzen == before + r.Batzen && Mine.Points == points + r.BoardPoints, 10), $"paid in this peer's own section (+{Mine.Batzen - before} Batzen, +{Mine.Points - points} points)");
+        // the milestones this song's points crossed pay their Batzen on top, outside the cap
+        int bonus = FestivalCatalog.Get(Id)!.Milestones.Where(m => points < m.Points && m.Points <= points + r.BoardPoints).Sum(m => m.Batzen);
+        Expect(await Until(() => Mine.Batzen == before + r.Batzen + bonus && Mine.Points == points + r.BoardPoints, 10), $"paid in this peer's own section (+{Mine.Batzen - before} Batzen with {bonus} of milestones, +{Mine.Points - points} points)");
         Expect(Svc.Mine.Instances.ContainsKey($"{Id}-2027"), "the book holds the instance");
         game.Scripted = false;
     }

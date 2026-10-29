@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Basel's Fasnacht over loopback (#1357, src/Occasions/Festivals/Fasnacht/FasnachtNetProbe.cs): a dedicated server on the fixture, its calendar read as 15 February
-# 2027 (day 1 of 3, held at the fixture start under --festival test) and its clock fixed at 04:30 so the Morgestraich is on. Everything is checked on the REMOTE
+# 2027 (day 1 of 3, held at the fixture start under --festival test); Lea, as admin, stops its clock at 04:30 so the Morgestraich is on. Everything is checked on the REMOTE
 # peers: both see the street lamps out; Tom is refused the stall, the lantern and a seat from 150 m; both take a Larve and Räppli (each in its own section), put the Larve on
 # and see the other's mask on the replicated body; both light the lantern; Lea throws and the paper flies on Tom's machine (relayed); Lea sits first (the drum), Tom second
 # (the trumpet), each taps the whole part, the server grades both, scores the din and pays each. No terrain data needed.
@@ -8,8 +8,8 @@
 . "$(dirname "$0")/lib/twoclient.sh" fasnachtnet
 PORT=${PORT:-7976}
 WORLD="--world fixture --chunks fixture:flat --festival test"
-SARGS=(--server --port $PORT $WORLD --date 2027-02-15 --time 4.5 --systems network,occasions,adventure)
-CLIENT="--systems network,physics,ui,occasions,adventure,sky --time 4.5"
+SARGS=(--server --port $PORT $WORLD --date 2027-02-15 --admin-password test --systems network,occasions,adventure)
+CLIENT="--systems network,physics,ui,occasions,adventure,sky"
 for f in A B server; do : > "$OUT/fasnachtnet_$f.log"; done
 B_UD="$OUT/userdata_fasnachtnet_B"; rm -rf "$B_UD"; mkdir -p "$B_UD"
 tc_server 600 120 "$OUT/fasnachtnet_server.log" "${SARGS[@]}"
