@@ -1026,6 +1026,13 @@ src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-
 src/Occasions/Festivals/Desalpe/ net    tools/desalpenetcheck.sh
 tools/desalpenetcheck.sh    net    tools/desalpenetcheck.sh
 src/Occasions/Festivals/Desalpe/ quick  --desalpecheck --festival test --date 2027-09-24 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+# #1348: the Christmas market: stalls, the taste and the ware, the Glühwein mug and its alcohol, the Samichlaus (offline quick probe; server + two clients)
+src/Occasions/Festivals/Christmas/ quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Christmas quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Christmas quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Christmas/ net    tools/christmasnetcheck.sh
+src/Occasions/Festivals/FestivalService.Christmas net    tools/christmasnetcheck.sh
+tools/christmasnetcheck.sh    net    tools/christmasnetcheck.sh
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
