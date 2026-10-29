@@ -29,6 +29,17 @@ public static class BuildPolicy
 /// </summary>
 public sealed class BuildScheduler : TaskScheduler
 {
+    /// <summary>The scheduler of the build running this async flow (it follows awaits, even <c>ConfigureAwait(false)</c> ones); null elsewhere.</summary>
+    public static readonly AsyncLocal<BuildScheduler?> Ambient = new();
+
+    /// <summary>
+    /// <c>Task.Run</c> that stays on the build threads when called from a build, so a source's decode
+    /// does not escape to the pool at Normal priority.
+    /// </summary>
+    public static Task<T> Run<T>(Func<T> work, CancellationToken ct) => Ambient.Value is { } s
+        ? Task.Factory.StartNew(work, ct, TaskCreationOptions.DenyChildAttach, s)
+        : Task.Run(work, ct);
+
     private readonly BlockingCollection<Task> _queue = new();
     private readonly Thread[] _threads;
 

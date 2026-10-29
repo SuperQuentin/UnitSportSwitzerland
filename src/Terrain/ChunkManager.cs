@@ -2167,8 +2167,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var detail = Detail;
 
         // BelowNormal dedicated threads on a desktop (#1381); the pool for video export and phones
+        bool onBuildThreads = !OfflineMode && !Platform.IsMobile;
         Func<Task> work = async () =>
         {
+            if (onBuildThreads) BuildScheduler.Ambient.Value = BuildThreads.Value;
             try
             {
                 var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -2601,7 +2603,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 if (fine) Interlocked.Decrement(ref _fineBuildsInFlight);
             }
         };
-        if (OfflineMode || Platform.IsMobile) Task.Run(work);
+        if (!onBuildThreads) Task.Run(work);
         else Task.Factory.StartNew(work, CancellationToken.None, TaskCreationOptions.DenyChildAttach, BuildThreads.Value);
     }
 }
