@@ -47,6 +47,17 @@ public partial class SechselaeutenCheck : ChatProbe
         if (Me is { } m && (m.Health <= 0 || m.Down > 0)) m.Respawn(m.GlobalPosition);
     }
 
+    /// <summary>A shot of the pyre from 18 m south of it, the camera looking north at it (windowed runs); the body goes back to the pyre's side after.</summary>
+    private async Task<string> ShotFromSouth(string name, (double E, double N) pyre, double wait)
+    {
+        Teleport(pyre, -18);
+        await Seconds(wait);
+        string path = Shot(name);
+        Teleport(pyre, 6);
+        await Until(() => SechseGame.Instance!.NearTarget == 0, 5);
+        return path;
+    }
+
     /// <summary>The sky crosses 18:00 now (from 17:00, one look of the tick between).</summary>
     private async Task Evening()
     {
@@ -142,7 +153,7 @@ public partial class SechselaeutenCheck : ChatProbe
         if (DisplayServer.GetName() != "headless")
         {
             await Seconds(1.0);
-            GD.Print($"[sechscheck] shot {Shot("pyre_bets")}");
+            GD.Print($"[sechscheck] shot {await ShotFromSouth("pyre_bets", pyre, 0.5)}");
         }
 
         // ---- before the light: no secret anywhere --------------------------------------------------------------
@@ -169,7 +180,7 @@ public partial class SechselaeutenCheck : ChatProbe
         if (DisplayServer.GetName() != "headless")
         {
             await Seconds(2.0);
-            GD.Print($"[sechscheck] shot {Shot("pyre_burning")}");
+            GD.Print($"[sechscheck] shot {await ShotFromSouth("pyre_burning", pyre, 0.5)}");
         }
 
         // ---- the bang ---------------------------------------------------------------------------------------------------------
@@ -188,7 +199,7 @@ public partial class SechselaeutenCheck : ChatProbe
         if (DisplayServer.GetName() != "headless")
         {
             await Seconds(0.15);
-            GD.Print($"[sechscheck] shot {Shot("pyre_bang")}");
+            GD.Print($"[sechscheck] shot {await ShotFromSouth("pyre_bang", pyre, 0.05)}");
         }
 
         // ---- the embers: a Cervelat -----------------------------------------------------------------------------------------

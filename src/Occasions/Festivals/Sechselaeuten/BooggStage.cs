@@ -238,6 +238,24 @@ public partial class BooggStage : Node3D, IOriginContainer
         };
     }
 
+    private static ImageTexture? _disc;
+
+    /// <summary>A round soft spot (white, fading to clear at the rim) for the blast's sparks, made once.</summary>
+    private static ImageTexture SoftDisc()
+    {
+        if (_disc != null) return _disc;
+        const int N = 64;
+        var image = Image.CreateEmpty(N, N, false, Image.Format.Rgba8);
+        for (int y = 0; y < N; y++)
+            for (int x = 0; x < N; x++)
+            {
+                float d = new Vector2(x + 0.5f - N / 2f, y + 0.5f - N / 2f).Length() / (N / 2f);
+                float a = Mathf.Clamp(1f - d, 0f, 1f);
+                image.SetPixel(x, y, new Color(1, 1, 1, a * a * (3f - 2f * a)));
+            }
+        return _disc = ImageTexture.CreateFromImage(image);
+    }
+
     private static CpuParticles3D Blast()
     {
         var gradient = new Gradient();
@@ -250,6 +268,7 @@ public partial class BooggStage : Node3D, IOriginContainer
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
             BlendMode = BaseMaterial3D.BlendModeEnum.Add,
             VertexColorUseAsAlbedo = true,
+            AlbedoTexture = SoftDisc(),
             BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
             BillboardKeepScale = true,
             DisableFog = true,

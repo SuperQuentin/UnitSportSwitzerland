@@ -1040,6 +1040,14 @@ src/Occasions/Festivals/FestivalService.Escalade quick  --escaladecheck --escala
 src/Occasions/Festivals/Escalade/ net    tools/escaladenetcheck.sh
 src/Occasions/Festivals/FestivalService.Escalade net    tools/escaladenetcheck.sh
 tools/escaladenetcheck.sh    net    tools/escaladenetcheck.sh
+# #1358: the Sechseläuten: the purse, the bet on the Böögg, the light, the bang and the shares, the stage (offline quick probe; server + two clients)
+src/Occasions/Festivals/Sechselaeuten/ quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+shaders/sechse_flame quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Sechselaeuten/ net    tools/sechsenetcheck.sh
+src/Occasions/Festivals/FestivalService.Sechselaeuten net    tools/sechsenetcheck.sh
+tools/sechsenetcheck.sh    net    tools/sechsenetcheck.sh
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh

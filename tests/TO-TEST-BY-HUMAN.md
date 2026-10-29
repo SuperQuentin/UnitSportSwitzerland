@@ -7,6 +7,17 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
+
+`--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).
+
+- [ ] Look at the square: a ten metre pyre of crossed logs with a cotton-wool snowman on top (blue and white sash, a broom, red firecracker fuses round the head, a pointed hat), the Zunft Weibel with his staff and six guild banners. Cartoon, PS1 and Realistic: does it read well, and is the pyre not floating or sunk on a slope?
+- [ ] At the Weibel E (pad Y) takes the purse once; at the pyre Use (pad X, VR trigger) steps the minute and E places the bet: is the picker readable, does the coin sound land, is it clear that the panel changes after you bet?
+- [ ] The light at 18:00: the whoosh and bell, flames rising over about fifteen seconds with smoke, the glow on the square at night. Do the flames look like fire in each style, and are the billboards not clipping the logs too visibly?
+- [ ] The bang: flash, the burst of sparks and the boom, the head vanishing, the pyre falling to glowing embers. Is it a satisfying moment, loud but not harsh? Is a bet on the right minute worth the wait (a median burn is 78 s)?
+- [ ] After the bang E at the pyre grills a Cervelat; eat it (LMB, pad X): warm for 2 minutes. With two players: the board names both bets and the shares are fair by closeness.
+- [ ] VR: a grip at the pyre or the Weibel works through the pad route; dropping a coin or stepping a dial by hand is not built.
+
 ## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
 
 `--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).

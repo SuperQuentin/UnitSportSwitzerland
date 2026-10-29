@@ -24,6 +24,8 @@ public partial class SechselaeutenNetProbe : ChatProbe
     public SechselaeutenNetProbe(ItemController items) : base(items, "sechsenet", "SN", "sechsenet_") { }
     public SechselaeutenNetProbe() : this(null!) { }
 
+    private string? refused;
+
     private static FestivalService Svc => FestivalService.Instance!;
     private static AdventureService Adv => AdventureService.Instance!;
     private static FestivalInstance Mine => Svc.Mine.Instances.GetValueOrDefault("sechselaeuten-2027") ?? new FestivalInstance();
@@ -35,11 +37,6 @@ public partial class SechselaeutenNetProbe : ChatProbe
         p.Velocity = Vector3.Zero;
     }
 
-    /// <summary>A teleport is a crash to the body (a jump of metres in a frame): it is up again at once, where it stands, so it never revives at its last safe spot.</summary>
-    public override void _PhysicsProcess(double delta)
-    {
-        if (Me is { } m && (m.Health <= 0 || m.Down > 0)) m.Respawn(m.GlobalPosition);
-    }
 
     public override async void _Ready()
     {
@@ -56,7 +53,6 @@ public partial class SechselaeutenNetProbe : ChatProbe
         var stage = BooggStage.Instance!;
         var pyre = SechselaeutenRules.PyreAt(site);
         var weibel = SechselaeutenRules.WeibelAt(site);
-        string? refused = null;
         Svc.Refused += why => refused = why;
         var raw = new List<string>();
         Svc.SechseRaw += json => raw.Add(json);
@@ -65,7 +61,6 @@ public partial class SechselaeutenNetProbe : ChatProbe
 
         if (_role == "A")
         {
-            Expect(await Heard("B", "ready", 120), "B is on");
             Expect(await Heard("B", "refused", 150), "B was refused from afar");
             Teleport(weibel.E, weibel.N + 1.5);
             Expect(await Until(() => game.NearTarget == FestivalService.SechsePurse, 10), "A stands at the Weibel");
@@ -89,7 +84,7 @@ public partial class SechselaeutenNetProbe : ChatProbe
             Say("lit");
             await WatchBurn(stage, raw);
             Expect(await Until(() => Svc.SechseView is { Phase: 2 }, 60), "the head bursts");
-            await AfterBang(stage, Mine, 3);
+            await AfterBang(stage, 3);
             Say("banged");
             Expect(await Heard("B", "banged", 60), "B saw it too");
             Expect(game.NearTarget == 0, "A is still at the pyre");
@@ -101,12 +96,18 @@ public partial class SechselaeutenNetProbe : ChatProbe
         }
         else
         {
-            Say("ready");
             // forged: from 150 m away
             Teleport(pyre.E + 150, pyre.N + 150);
             await Seconds(1.0);
-            Svc.AskSechse(FestivalService.SechseBet, 3);
-            Expect(await Until(() => refused?.Contains("Go to the pyre") == true, 10), $"the bet from 150 m away is refused ({refused})");
+            // the server learns where the body is from the movement packets: until it has, an empty purse is what refuses the bet (and no bet is placed either way)
+            for (int i = 0; i < 12 && refused?.Contains("Go to the pyre") != true; i++)
+            {
+                refused = null;
+                Svc.AskSechse(FestivalService.SechseBet, 3);
+                await Until(() => refused != null, 5);
+                if (refused?.Contains("Go to the pyre") != true) await Seconds(0.5);
+            }
+            Expect(refused?.Contains("Go to the pyre") == true, $"the bet from 150 m away is refused ({refused})");
             refused = null;
             Svc.AskSechse(FestivalService.SechsePurse);
             Expect(await Until(() => refused?.Contains("Zunft's Weibel") == true, 10), $"and so is the purse ({refused})");
@@ -132,7 +133,7 @@ public partial class SechselaeutenNetProbe : ChatProbe
             Expect(await Until(() => refused != null, 10), $"the fire is too hot to grill ({refused})");
             await WatchBurn(stage, raw);
             Expect(await Until(() => Svc.SechseView is { Phase: 2 }, 60), "the head bursts");
-            await AfterBang(stage, Mine, 10);
+            await AfterBang(stage, 10);
             Say("banged");
             Expect(await Heard("A", "banged", 60), "A saw it too");
             Expect(await Until(() => SechseGame.InteractionFor(Me!) is { } g && g.Text.Contains("Grill a Cervelat"), 10), "the embers offer B a Cervelat");
@@ -157,10 +158,10 @@ public partial class SechselaeutenNetProbe : ChatProbe
         Expect(await Until(() => stage.Ramp > 0.1f || stage.BlastsPlayed > 0, 10), "the flames rise on this client");
     }
 
-    private string? refused;
+
 
     /// <summary>After the bang: the time is told, the board names both bets, each is paid its share as the rules compute it, the stage blasted.</summary>
-    private async Task AfterBang(BooggStage stage, FestivalInstance mine, int bucket)
+    private async Task AfterBang(BooggStage stage, int bucket)
     {
         var view = Svc.SechseView!;
         Expect(view.Minutes == 8 && view.DoneAt > 0, $"now the burn time is told ({view.Minutes})");
@@ -172,8 +173,8 @@ public partial class SechselaeutenNetProbe : ChatProbe
         Expect(view.Board.Sum(r => r.Won) == 2 * SechselaeutenRules.Stake, "the shares add up to the pool");
         Expect(view.Board.First(r => r.Bucket == 3).Won > view.Board.First(r => r.Bucket == 10).Won, "the nearer bet won more");
         int want = SechselaeutenRules.PurseBatzen - SechselaeutenRules.Stake + view.Won + SechselaeutenRules.PlayBatzen;
-        Expect(await Until(() => mine.Batzen == want, 10), $"paid in its own section: purse - stake + share + the play's pay ({mine.Batzen}, expected {want})");
-        Expect(mine.Earned == SechselaeutenRules.PurseBatzen + SechselaeutenRules.PlayBatzen, $"only the purse and the play count as earned ({mine.Earned})");
+        Expect(await Until(() => Mine.Batzen == want, 10), $"paid in its own section: purse - stake + share + the play's pay ({Mine.Batzen}, expected {want})");
+        Expect(Mine.Earned == SechselaeutenRules.PurseBatzen + SechselaeutenRules.PlayBatzen, $"only the purse and the play count as earned ({Mine.Earned})");
         Expect(await Until(() => stage.BlastsPlayed == 1 && !stage.HeadOn && stage.EmbersShown, 10), $"the head burst on this client's stage ({stage.BlastsPlayed})");
         Expect(view.Msg.Contains("burst after 8.0 minutes"), $"the line told to this player ({view.Msg})");
     }

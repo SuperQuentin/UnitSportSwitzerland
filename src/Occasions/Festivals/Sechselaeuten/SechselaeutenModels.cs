@@ -51,13 +51,13 @@ public static class SechselaeutenModels
                 s.Tube(a, b, 0.15f, 0.14f, colour, 6);
             }
         }
-        s.Tube(new Vector3(0, 0, 0), new Vector3(0, 7.5f, 0), 0.2f, 0.16f, LogDark, 6);   // the pole the Böögg is tied to
+        s.Tube(new Vector3(0, 0.01f, 0), new Vector3(0, 7.5f, 0), 0.2f, 0.16f, LogDark, 6);   // the pole the Böögg is tied to
         for (int k = 0; k < 10; k++)
         {
             float a = k * MathF.Tau / 10f;
-            s.Box(new Vector3(MathF.Cos(a) * 2.9f, 0.3f, MathF.Sin(a) * 2.9f), new Vector3(0.7f, 0.6f, 0.7f), Straw, new Basis(Vector3.Up, -a));
+            s.Box(new Vector3(MathF.Cos(a) * 2.9f, 0.345f, MathF.Sin(a) * 2.9f), new Vector3(0.7f, 0.6f, 0.7f), Straw, new Basis(Vector3.Up, -a));
         }
-        s.Box(new Vector3(0, 0.02f, 0), new Vector3(6.4f, 0.04f, 6.4f), Ash);
+        s.Box(new Vector3(0, 0.015f, 0), new Vector3(6.4f, 0.03f, 6.4f), Ash);
         return s.Build();
     }
 
@@ -154,12 +154,12 @@ public static class SechselaeutenModels
             var c = new Vector3(MathF.Cos(a) * r, 0.14f + (k % 3) * 0.1f, MathF.Sin(a) * r);
             s.Tube(c - new Vector3(MathF.Cos(a + 1.1f) * 0.9f, 0, MathF.Sin(a + 1.1f) * 0.9f), c + new Vector3(MathF.Cos(a + 1.1f) * 0.9f, 0.05f, MathF.Sin(a + 1.1f) * 0.9f), 0.13f, 0.12f, Coal, 6);
         }
-        s.Tube(new Vector3(0, 0, 0), new Vector3(0.1f, 1.4f, 0.05f), 0.2f, 0.12f, Coal, 6);   // the stump of the pole
+        s.Tube(new Vector3(0, 0.02f, 0), new Vector3(0.1f, 1.4f, 0.05f), 0.2f, 0.12f, Coal, 6);   // the stump of the pole
         for (int k = 0; k < 9; k++)
         {
             float a = k * MathF.Tau / 9f + 0.5f;
             float r = 0.4f + (k % 3) * 0.9f;
-            s.Box(new Vector3(MathF.Cos(a) * r, 0.2f, MathF.Sin(a) * r), new Vector3(0.5f, 0.12f, 0.4f), Ember, new Basis(Vector3.Up, a));
+            s.Box(new Vector3(MathF.Cos(a) * r, 0.2f + 0.015f * k, MathF.Sin(a) * r), new Vector3(0.5f, 0.12f + 0.011f * k, 0.4f), Ember, new Basis(Vector3.Up, a));
         }
         return s.Build();
     }
@@ -179,10 +179,10 @@ public static class SechselaeutenModels
         for (int k = 0; k < 6; k++)
         {
             float a = k * MathF.Tau / 6f;
-            s.Box(new Vector3(MathF.Cos(a) * 0.27f, 1.0f, MathF.Sin(a) * 0.27f), new Vector3(0.08f, 0.5f, 0.16f), k % 2 == 0 ? Blue : White, new Basis(Vector3.Up, -a));
+            s.Box(new Vector3(MathF.Cos(a) * 0.27f, 1.02f, MathF.Sin(a) * 0.27f), new Vector3(0.08f, 0.44f, 0.16f), k % 2 == 0 ? Blue : White, new Basis(Vector3.Up, -a));
         }
         s.Box(new Vector3(0.22f, 0.9f, 0.18f), new Vector3(0.14f, 0.16f, 0.1f), Gold);              // the purse
-        s.Tube(new Vector3(0, 1.45f, 0), new Vector3(0, 1.7f, 0), 0.12f, 0.1f, Skin, 8);              // the head
+        s.Tube(new Vector3(0, 1.46f, 0), new Vector3(0, 1.7f, 0), 0.12f, 0.1f, Skin, 8);              // the head
         s.Tube(new Vector3(0, 1.66f, 0), new Vector3(0, 1.74f, 0), 0.22f, 0.22f, Coal, 10);          // the hat's brim
         s.Tube(new Vector3(0, 1.72f, 0), new Vector3(0, 1.86f, 0), 0.13f, 0.12f, Coal, 10);
         s.Tube(new Vector3(0.4f, 0, 0.1f), new Vector3(0.4f, 2.0f, 0.1f), 0.03f, 0.03f, Pole, 5);   // the staff
@@ -201,7 +201,7 @@ public static class SechselaeutenModels
         s.Tube(new Vector3(0, -0.03f, 0), new Vector3(0, 4.5f, 0), 0.06f, 0.045f, Pole, 6);
         s.Box(new Vector3(0, 4.62f, 0), new Vector3(0.14f, 0.14f, 0.14f), Gold);
         s.Box(new Vector3(0.45f, 3.7f, 0), new Vector3(0.82f, 1.4f, 0.03f), Blue);
-        s.Box(new Vector3(0.45f, 3.7f, 0.02f), new Vector3(0.4f, 1.4f, 0.03f), White);
+        s.Box(new Vector3(0.45f, 3.7f, 0.02f), new Vector3(0.4f, 1.36f, 0.03f), White);
         s.Box(new Vector3(0.45f, 3.05f, 0.04f), new Vector3(0.82f, 0.14f, 0.03f), Red);
         s.Box(new Vector3(0.45f, 3.7f, 0.05f), new Vector3(0.14f, 0.3f, 0.02f), Gold);   // the guild's mark
         return s.Build();

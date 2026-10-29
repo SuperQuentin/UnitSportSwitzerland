@@ -92,7 +92,7 @@ public partial class SechseGame : CanvasLayer
 
     private void OnTold(BooggView view)
     {
-        if (view.Msg.Length > 0) Say(view.Msg);
+        if (view.Msg.Length > 0 && !view.Msg.StartsWith("The head burst", StringComparison.Ordinal)) Say(view.Msg);   // the panel already shows the result
         if (view.Mine > 0 && _lastMine == 0) Play(SechselaeutenSounds.CoinStake);
         _lastMine = view.Mine;
         _view.QueueRedraw();
@@ -270,8 +270,9 @@ public partial class SechseGame : CanvasLayer
                 int filled = 0;
                 foreach (string l in lines) if (l.Length > 0) filled++;
                 float height = 36 + 22 * Math.Max(0, filled - 1) + (message ? 20 : 0);
-                DrawRect(new Rect2(c.X - 400, c.Y - 28, 800, height), new Color(0, 0, 0, 0.45f), true);
-                float y = c.Y - 6;
+                float top = c.Y + 52 - height;   // the panel grows upward from a fixed bottom, clear of the hotbar
+                DrawRect(new Rect2(c.X - 400, top, 800, height), new Color(0, 0, 0, 0.45f), true);
+                float y = top + 22;
                 for (int i = 0; i < lines.Length; i++)
                 {
                     if (lines[i].Length == 0) continue;
