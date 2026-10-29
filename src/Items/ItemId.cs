@@ -261,6 +261,11 @@ public enum ItemId
     // ---- Festivals (#1269, docs/notes/occasions/festival-framework.md); 500-539 are this plan's (adventure-phase3) ----
     /// <summary>The wrestler's jute over-trousers (#1269 Schwingen): worn in the Bottom slot, from the Älplerfest's chests and stalls.</summary>
     Schwingerhosen = 500,
+    // ---- the Christmas markets (#1348, docs/notes/occasions/festival-christmas.md) ----
+    /// <summary>The market's mulled wine in a mug, bought with Batzen: 2 dl, 10 % (<see cref="ItemDef.DrinkMl"/>, <see cref="ItemDef.Abv"/>), warm for 4 minutes. The found <see cref="Gluehwein"/> stays an alcohol-free treat.</summary>
+    GluehweinMug = 501,
+    /// <summary>A glass Christmas bauble, bought at the ornaments stall: worth nothing but the look in the hand.</summary>
+    ChristmasBauble = 502,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }

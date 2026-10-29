@@ -276,6 +276,11 @@ public static class ItemDefs
         Eat(ItemId.Kirsch, "Kirsch", 4, "#f2f0ea", "KI", 2, ItemCategory.Water, 14) with
             { Blurb = "Cherry spirit. {use_item} to drink a shot. At a shared pot, a dash in the fondue: everyone at the table gets their breath back faster.", DrinkMl = 20f, Abv = 0.40f },
         // alcohol (#1271): the driver's beer and the two breathalyzers
+        // the Christmas markets (#1348): the stalls' mulled wine (2 dl, 10 %, through AlcoholService.ServeDrink when drunk) and the ornaments stall's bauble
+        Eat(ItemId.GluehweinMug, "Glühwein (mug)", 3, "#8a1a2a", "GM", 20, ItemCategory.Water, 5) with
+            { Blurb = "{use_item} to drink. Mulled red wine, 2 dl at 10 %: warm for 4 minutes (climbing costs a quarter less). Bought at the Christmas market.", DrinkMl = 200f, Abv = 0.10f, Buff = Player.StaminaBuff.Warm, BuffSeconds = 240f },
+        new(ItemId.ChristmasBauble, "Christmas bauble", "A glass bauble from the market. Worth nothing but the look in the hand.",
+            ItemUse.Material, 10, new Color("#c81e24"), "XB", 0, ItemCategory.Cosmetic, 12f),
         Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
             { Blurb = "{use_item} to drink. 0.5 %: the Swiss driver's choice.", DrinkMl = 330f, Abv = 0.005f },
         new(ItemId.Breathalyzer, "Breathalyzer", "An electronic one. {use_item} blows into it for 5 s and its screen reads your per mille and mg/L; wait 15 min after a drink. {interact_mount} at a player offers them a test.",
@@ -714,6 +719,15 @@ public static class ItemDefs
             case ItemId.BeerBottle:
             case ItemId.BeerAlcoholFree:
                 BarracksMeshes.AppendBeer(s);
+                break;
+            case ItemId.GluehweinMug:
+                s.Tube(new Vector3(0, -0.08f, 0), new Vector3(0, 0.07f, 0), 0.05f, 0.058f, new Color(0.92f, 0.9f, 0.84f), 10);
+                s.Tube(new Vector3(0, 0.07f, 0), new Vector3(0, 0.086f, 0), 0.046f, 0.046f, new Color(0.55f, 0.1f, 0.16f), 10);   // the wine, a skin proud of the rim
+                s.Box(new Vector3(0.075f, 0, 0), new Vector3(0.03f, 0.08f, 0.02f), new Color(0.92f, 0.9f, 0.84f));
+                break;
+            case ItemId.ChristmasBauble:
+                s.Tube(new Vector3(0, -0.06f, 0), new Vector3(0, 0.06f, 0), 0.055f, 0.055f, new Color(0.78f, 0.12f, 0.14f), 10);
+                s.Box(new Vector3(0, 0.075f, 0), new Vector3(0.04f, 0.03f, 0.04f), new Color(0.85f, 0.7f, 0.25f));
                 break;
             case ItemId.Breathalyzer:
                 Adventure.Alcohol.AlcoholMeshes.AppendDevice(s);

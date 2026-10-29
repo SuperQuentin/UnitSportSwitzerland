@@ -27,6 +27,8 @@ driving, an electronic and a single-use breathalyzer. Nothing in the game reward
 - `--alcohol off|mild|real` (default real) rides `Arrival.Rules` to `Permissions.ServerAlcohol`; offline it is
   `GameSettings.AlcoholMode` (Settings > Gameplay > Alcohol). Off: drinks log nothing, readings are 0.00. Mild: effects feel the half
   of the level and nobody passes out.
+- The Christmas market's Glühwein mug (`ItemId.GluehweinMug` 501, #1348) is that hook: 2 dl at 10 % on its `ItemDef`, so drinking it logs `GluehweinGrams` (15.8 g) like a beer; `--alcohol off` makes it carry none
+  (`occasions/festival-christmas`). The found Christmas-loot Glühwein (`ItemId.Gluehwein` 45) stays alcohol-free.
 - Chat: `/alcohol` (the mode), `/alcohol test drink <beers> <minutes ago>` (checks; on a server it needs `--alcohol-test`).
 
 ## Effects (`AlcoholBody` on `FootPlayer.Drunk`, set on the local body only)

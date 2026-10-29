@@ -146,6 +146,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("09-20", "10-05") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the Christmas markets (#1348): 25 November to 23 December inside the Christmas season, which keeps the sky; the stalls, the tree and the Samichlaus
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ChristmasMarketId, Priority = 8,
+            Schedule = { new DateWindow("11-25", "12-23") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 

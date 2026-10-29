@@ -94,6 +94,10 @@ public partial class ControlsHelp : CanvasLayer
             new("At a cow of the herd on the alp: put on the next headdress shape (the alp sign starts the drive, the fair's ring gives the vote)", PlayerInput.InteractMount),
             new("At a cow: the next colour; in the fair's ring: the next herd to vote for", PlayerInput.UseItem),
         }),
+        ("Festivals: the Christmas market (#1348)", new Row[]
+        {
+            new("At a market stall: the day's free taste (the stall-hop), then buy its ware for Batzen; at the Samichlaus on 6 December: his bag", PlayerInput.InteractMount),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

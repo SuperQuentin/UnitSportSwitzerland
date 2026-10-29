@@ -7,6 +7,17 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Christmas market ([#1349](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1349))
+
+`--festival test --date 2027-11-30 --world fixture` (the market stands at the fixture's start; `--date 2027-12-06` for the Samichlaus's day), or online on the western map in the real dates (Montreux, Grand-Rue).
+
+- [ ] Walk into the market's lane: two rows of four stalls with the tree at one end and the Samichlaus at the other. At night do the lanterns, garlands and baubles glow warm? Cartoon, PS1 and Realistic: do the stalls, the tree and the Samichlaus read well?
+- [ ] E (pad Y) at a stall: "Taste at the Glühwein stall (free)" pays 8 Batzen with a ting; E again buys the mug for 4 Batzen with a clink. Is the prompt readable and the outline round the stall right? Does a stall's counter face the lane on both rows?
+- [ ] Drink the Glühwein mug (LMB, pad X): the mouth pose and the gulp look right; Settings > Gameplay > Alcohol off: no glass icon and no effects; real: a mug is 15.8 g, so a few mugs climb the glass icon.
+- [ ] Taste at all eight stalls in a day: the last shows "Marktgang!" and the day's stall-hop has paid 80 Batzen; the Journal's Festival tab shows the Batzen and the party's points.
+- [ ] 6 December: the Samichlaus's prompt reads "Take the Samichlaus's bag" and the sleigh bells play; the day before it says he comes on 6 December.
+- [ ] VR: a grip at a stall tastes and buys (through the pad route); holding the mug to the mouth drinks it. Grabbing the mug off the counter by hand is not built.
+
 ## Schwingen at the Älplerfest ([#1315](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1315))
 
 Online (a server and two clients), or `--festival test --date 2027-08-18 --world fixture`; the ring stands 20 m north of the festival's middle. `/schwing bot` works anywhere a bot is near.
