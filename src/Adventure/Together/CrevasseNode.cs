@@ -33,19 +33,22 @@ public sealed partial class CrevasseNode : Node3D
         var ice = new Color("7ab8d8");
         var deep = new Color("1a3a58");
         var snow = new Color("f2f6fa");
-        s.Box(new Vector3(-w - 0.1f, -Depth / 2, 0), new Vector3(0.2f, Depth, Length), ice);
-        s.Box(new Vector3(w + 0.1f, -Depth / 2, 0), new Vector3(0.2f, Depth, Length), ice);
+        // no two faces on one plane (the z-fight baseline): the walls stand on the floor's edge, the ends overlap the walls by a
+        // centimetre, the snow lips start a centimetre into the walls
+        const float wallH = Depth - 0.2f;
+        s.Box(new Vector3(-w - 0.1f, -wallH / 2, 0), new Vector3(0.2f, wallH, Length), ice);
+        s.Box(new Vector3(w + 0.1f, -wallH / 2, 0), new Vector3(0.2f, wallH, Length), ice);
         s.Box(new Vector3(0, -Depth + 0.1f, 0), new Vector3(w * 2, 0.2f, Length), deep);
         s.Box(new Vector3(0, -Depth * 0.5f, 0), new Vector3(w * 1.6f, 0.05f, Length * 0.9f), new Color(deep, 0.6f));
         // the ends, so the slot is a closed pit in the ice
-        s.Box(new Vector3(0, -Depth / 2, -Length / 2 - 0.1f), new Vector3(w * 2 + 0.4f, Depth, 0.2f), ice);
-        s.Box(new Vector3(0, -Depth / 2, Length / 2 + 0.1f), new Vector3(w * 2 + 0.4f, Depth, 0.2f), ice);
+        s.Box(new Vector3(0, -wallH / 2, -Length / 2 - 0.095f), new Vector3(w * 2 + 0.4f, wallH, 0.21f), ice);
+        s.Box(new Vector3(0, -wallH / 2, Length / 2 + 0.095f), new Vector3(w * 2 + 0.4f, wallH, 0.21f), ice);
         // the broken bridge's lips, ragged slabs of snow at the edges
         for (int i = 0; i < 7; i++)
         {
             float z = -Length / 2 + (i + 0.5f) * Length / 7;
-            s.Box(new Vector3(-w - 0.25f, 0.02f, z), new Vector3(0.5f, 0.12f, 1.8f), snow);
-            s.Box(new Vector3(w + 0.25f, 0.02f, z + 0.5f), new Vector3(0.5f, 0.12f, 1.6f), snow);
+            s.Box(new Vector3(-w - 0.26f, 0.02f, z), new Vector3(0.5f, 0.12f, 1.8f), snow);
+            s.Box(new Vector3(w + 0.26f, 0.02f, z + 0.5f), new Vector3(0.5f, 0.12f, 1.6f), snow);
         }
         return _mesh = s.Build();
     }
