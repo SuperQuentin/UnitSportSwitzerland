@@ -13,7 +13,8 @@ On foot in third person, anywhere (`--world fixture` does).
 
 - [ ] Sprint (Shift) and turn the wheel: the camera zooms in and out, the hotbar does not move. Alt + wheel steps the slot; releasing Alt after a wheel step does not free the cursor (a lone Alt tap still does).
 - [ ] Press the number of the slot in hand, and `,`: the item leaves the hand and comes back. Does the chip (bottom right) read well dimmed as "holstered", and "Empty hand" on an empty slot, over snow and over a dark scene?
-- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Aim, a camera held up, the GPS, the hammer and the rod must never holster on their own.
+- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Every item goes away, the hammer, rod and detector too; aiming, a camera held up and a cast line do not.
+- [ ] Start sprinting (Shift / L3) with an item in hand: it goes in the pocket at once and stays there after the sprint; Use draws it on the run, and a new sprint start holsters again. Does it feel right (not annoying when you want the item while running)?
 - [ ] Pad: tap D-pad right steps the slot; hold it (about half a second, a tick) holsters or draws. Does the tap feel late now (it fires on release)?
 - [ ] VR: hold the grip at the right hip for a third of a second (buzz): the item goes away, again it comes out. A quick squeeze there still steps to the next slot.
 - [ ] Settings › Gameplay › Hotbar: Always, Fade out (default), Hidden. In Fade, change slot / holster / use an item / open the quick wheel: the bar shows for about 3 s then fades smoothly. Is 3 s right?

@@ -499,6 +499,42 @@ public partial class PhoneProbe : Node
         double idle = GameClock.Now - t0;
         Check(inv.Holstered && idle is > 7.0 and < 10.0, $"left alone, it is holstered after about 8 s ({idle:F1} s)");
         Check(me.HeldItemId == 0, "and replicated as an empty hand");
+        // no item type is exempt: a hammer left alone goes away too
+        var keep = inv[slot];
+        int hamSlot = (slot + 1) % Items.Inventory.HotbarSize;
+        var keepHam = inv[hamSlot];
+        inv.Put(hamSlot, new Items.ItemStack(Items.ItemId.Hammer, 1));
+        inv.Select(hamSlot);
+        await Wait(0.3);
+        t0 = GameClock.Now;
+        while (!inv.Holstered && GameClock.Now - t0 < 12) await Wait(0.2);
+        idle = GameClock.Now - t0;
+        Check(inv.Holstered && idle is > 7.0 and < 10.0, $"a hammer (once exempt) is holstered after about 8 s too ({idle:F1} s)");
+
+        // a new sprint start holsters at once; drawing on the run stays out; the next sprint holsters again
+        inv.Select(hamSlot);
+        await Wait(0.3);
+        Check(!inv.Holstered, "hammer in hand before the sprint");
+        Input.ActionPress(PlayerInput.MoveForward);
+        Input.ActionPress(PlayerInput.Sprint);
+        for (double w0 = GameClock.Now; !me.SprintIntent && GameClock.Now - w0 < 2;) await Wait(0.1);
+        await Wait(0.3);
+        Check(me.SprintIntent && inv.Holstered && me.HeldItemId == 0, "starting a sprint puts the item in the pocket");
+        await Wait(0.5);
+        Check(inv.Holstered, "and it is not drawn back by itself");
+        await Press(PlayerInput.UseItem, 0.1);
+        await Wait(0.5);
+        Check(!inv.Holstered && me.SprintIntent, "Use draws it on the run, and it stays out while the sprint goes on");
+        Input.ActionRelease(PlayerInput.Sprint);
+        await Wait(0.3);
+        Input.ActionPress(PlayerInput.Sprint);
+        await Wait(0.4);
+        Check(inv.Holstered, "a NEW sprint holsters again");
+        Input.ActionRelease(PlayerInput.Sprint);
+        Input.ActionRelease(PlayerInput.MoveForward);
+        inv.Put(hamSlot, keepHam);
+        inv.Put(slot, keep);
+
         GameSettings.Current.AutoHolster = false;
         inv.Select(slot);
         t0 = GameClock.Now;

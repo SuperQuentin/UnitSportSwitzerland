@@ -1135,6 +1135,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="RideControls"/>.
     /// </summary>
     public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
+    /// <summary>On foot, on the ground, moving with the run intent (Shift, pad L3, a bot's Run): the item holsters on its start (#1369).</summary>
+    public bool SprintIntent { get; private set; }
 
     /// <summary>
     /// Jump and crouch for a body that reads no keys (an <see cref="Npc"/>, a server-run bot, #837),
@@ -4042,6 +4044,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             running = tied.Run;
         }
         if (_slideCooldown > 0) _slideCooldown -= dt;
+        SprintIntent = running && moveAmount > 0.1f && onFloor;
         // sprinting in a fight costs stamina (#1225); out of one it is free. Empty or winded: a run is a walk
         if (running && moveAmount > 0.1f && onFloor && InCombat && !SpendStamina(StaminaKind.SprintCombat, dt)) running = false;
 

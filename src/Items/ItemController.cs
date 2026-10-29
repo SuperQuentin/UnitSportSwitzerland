@@ -70,6 +70,7 @@ public partial class ItemController : Node
     /// <summary>A pad's D-pad right held this long holsters or draws; a tap steps the hotbar (#1369).</summary>
     public const double PadHolsterHold = 0.45;
     private double _lastActive;
+    private bool _wasSprinting;
     private double _padNextAt = -1;
     private bool _padNextDone;
 
@@ -483,19 +484,17 @@ public partial class ItemController : Node
             }
         }
 
-        // what must stay out or is being used: the clock restarts
-        var def = ItemDefs.Get(_inventory.HeldId);
-        bool stays = def != null
-            && (def.Use is ItemUse.Readout or ItemUse.Build or ItemUse.Gadget or ItemUse.Detector or ItemUse.Farm
-                    or ItemUse.TrafficTool or ItemUse.Place or ItemUse.Round
-                || _inventory.HeldId is ItemId.SmartBinoculars or ItemId.FishingRod or ItemId.Hammer);
+        // being used or aimed, a throw, a cast, a phone, a menu: the clock restarts (no item type is exempt)
         bool busy = !usable || !GameSettings.Current.AutoHolster || _inventory.Holstered || _inventory.Held.IsEmpty
-                    || _inventory.InMatch || stays || _useBusy || _planting || _throw.Active || _aimingScope || _aimingPhoto
+                    || _inventory.InMatch || _useBusy || _planting || _throw.Active || _aimingScope || _aimingPhoto
                     || _ui.IsOpen || _ui.WheelOpen || _photoUi.Blocking || UiFocus.TextEntryActive || player.PhoneState != 0
                     || _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle
                     || PlayerInput.Held(PlayerInput.UseItem) || PlayerInput.Held(PlayerInput.AimItem) || ForceUse || _forceAim;
+        // a NEW sprint start puts the item in the pocket at once (Genshin-style); drawing on the run is allowed and stays out
+        bool sprintStart = player.SprintIntent && !_wasSprinting;
+        _wasSprinting = player.SprintIntent;
         if (busy) _lastActive = now;
-        else if (now - _lastActive >= AutoHolsterSeconds) _inventory.SetHolstered(true);
+        else if (sprintStart || now - _lastActive >= AutoHolsterSeconds) _inventory.SetHolstered(true);
     }
 
     /// <summary>A sound in the player's ears (the item channel): the rod's reel and its plop (#493).</summary>

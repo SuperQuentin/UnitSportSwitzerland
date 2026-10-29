@@ -77,6 +77,7 @@ public partial class HandFarmCheck : Node
     private async Task Run(FootPlayer me, FarmField farm, HandFarming hand, Loot.Gathering gathering, PlacedObjects placed,
         HashSet<long> before, double se, double sn)
     {
+        UnitSport.Core.GameSettings.Current.AutoHolster = false;   // long idle waits and runs: the holster is PhoneProbe's (#1369)
         // 0. the lent pack is empty; the farm kit comes in the way a find or a purchase does
         int held = 0;
         for (int i = 0; i < Inventory.Size; i++) if (!Inv[i].IsEmpty) held++;
