@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Faster rejoin ([#1387](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1387))
+
+The real server (unitsport.infrack.ch, HTTP mirror and Linux deploy), which loopback cannot stand in for: join it twice from the same install, the cache kept between.
+
+- [ ] First join, then leave and join again: the log shows `index of the last visit to this server merged at boot`, `the copy from the last visit is still the server's` for the horizon and places, and one `[horizon]` line, not two. Is the second spawn clearly faster, and does the horizon fill in behind you instead of holding the loading screen?
+- [ ] After the server is updated (new tiles or a new `horizon.bin`), join again: the log says the index changed and the files stream, nothing stale is drawn.
+- [ ] Join an older server (no `AssetKind.Digest`): it joins as before, one "not available on the server" line for the digest.
+
 ## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
 
 `--festival test --date 2027-02-04 --world fixture` (Luzern's: the Larven stall 9 m west of the fixture's start, the Guggenmusik stage 14 m east and 6 m north); `--date 2027-02-15` and the clock at 04:30 (`--time 4.5`) for Basel's Morgestraich with its lantern 11 m north; or online on the western map in the real dates (easter-52 for six days, easter-41 for three, relocated to the region's largest town).
