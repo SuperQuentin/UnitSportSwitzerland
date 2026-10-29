@@ -37,7 +37,7 @@ internal static class Adv3
 
     /// <summary>The whole feature's code, minus its checks and probes: what a verdict on it is about.</summary>
     public static string[] Dir(params string[] dirs) =>
-        dirs.SelectMany(d => d.EndsWith(".cs", StringComparison.Ordinal) ? new[] { d } : [d + "/**"])
+        dirs.SelectMany(d => Path.HasExtension(d) ? new[] { d } : [d + "/**"])
             .Concat(["!**/*Check.cs", "!**/*NetProbe.cs", "!**/*Probe.cs"]).ToArray();
 
     public static void OnClear(PlaytestContext c, Action undo) => c.Own(new PlaytestUndo(undo));
