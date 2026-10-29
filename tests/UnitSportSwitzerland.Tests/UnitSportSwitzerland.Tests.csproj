@@ -319,6 +319,9 @@
     <Compile Include="..\..\src\Occasions\Festivals\Sechselaeuten\SechselaeutenRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\Sechselaeuten\BooggRound.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Sechselaeuten.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- the Chalandamarz (#1356): the march beat and its grading, the loop and its stations, the pay; pure -->
+    <Compile Include="..\..\src\Occasions\Festivals\Chalanda\ChalandaRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Chalanda.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />

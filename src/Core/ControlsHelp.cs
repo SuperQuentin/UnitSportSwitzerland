@@ -107,6 +107,10 @@ public partial class ControlsHelp : CanvasLayer
             new("At the Böögg's pyre before it is lit: change the minute you bet on", PlayerInput.UseItem),
             new("At the pyre: place your bet; after the bang: grill a Cervelat on the embers; at the Zunft's Weibel: take the day's purse", PlayerInput.InteractMount),
         }),
+        ("Festivals: the Chalandamarz (#1356)", new Row[]
+        {
+            new("At the Treichel stand: begin the procession; then, walking the village loop, ring the Treichel on the march beat (the drum and the HUD's pulse); rings in step with a party member score extra", PlayerInput.InteractMount),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

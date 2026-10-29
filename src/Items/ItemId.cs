@@ -274,6 +274,9 @@ public enum ItemId
     // ---- the Sechseläuten (#1358, docs/notes/occasions/festival-sechselaeuten.md); 510-514 are this festival's ----
     /// <summary>A Cervelat grilled on the embers of the Böögg's pyre, once the head has burst: food, warm for 2 minutes.</summary>
     BooggCervelat = 510,
+    // ---- the Chalandamarz (#1356, docs/notes/occasions/festival-chalandamarz.md): 515-519 (the procession's Nusstorte is the existing 436) ----
+    /// <summary>A child's hand Treichel from the Chalandamarz, the first march of the day: worth nothing but the sound (the worn Treichel is <see cref="Treichel"/>).</summary>
+    ChalandaTreichel = 515,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }

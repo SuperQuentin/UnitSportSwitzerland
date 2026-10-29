@@ -139,6 +139,8 @@ public partial class FestivalService : Node
                 FestivalCatalog.Register(escalade with { Sites = [new FestivalSite("the test field", e, n, 100)] });
             if (FestivalCatalog.Get(FestivalCatalog.SechselaeutenId) is { } sechse)
                 FestivalCatalog.Register(sechse with { Sites = [new FestivalSite("the test field", e, n, 120)] });
+            if (FestivalCatalog.Get(FestivalCatalog.ChalandaId) is { } chalanda)
+                FestivalCatalog.Register(chalanda with { Sites = [new FestivalSite("the test field", e, n, 100)] });
         }
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
@@ -180,6 +182,7 @@ public partial class FestivalService : Node
         }
         EscaladeTick(now);
         SechseTick(now);
+        ChalandaTick(now);
         if (now >= _nextCrewCheck)
         {
             _nextCrewCheck = now + CrewCheckEvery;

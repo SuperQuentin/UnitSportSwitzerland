@@ -51,6 +51,7 @@ public partial class InteriorManager
             ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p) ?? Occasions.Festivals.Desalpe.DesalpeGame.InteractionFor(p)
             ?? Occasions.Festivals.Christmas.ChristmasGame.InteractionFor(p) ?? Occasions.Festivals.Escalade.EscaladeGame.InteractionFor(p)
             ?? Occasions.Festivals.Sechselaeuten.SechseGame.InteractionFor(p)
+            ?? Occasions.Festivals.Christmas.ChristmasGame.InteractionFor(p) ?? Occasions.Festivals.Escalade.EscaladeGame.InteractionFor(p) ?? Occasions.Festivals.Chalanda.ChalandaGame.InteractionFor(p)
             ?? Occasions.Festivals.Horn.HornGround.InteractionFor(p) ?? Occasions.Festivals.SteinGame.InteractionFor(p)) is { } outdoors) return outdoors;
         outranks = Outranking.None;
         if (Vehicles.VehicleReach.Current != null) return null;
