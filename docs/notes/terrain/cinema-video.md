@@ -35,7 +35,7 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   off them. Ended or failed: the hall's slides and music back.
 - **Sound**: `CinemaVideoSpeaker` at the screen, spread over the hall's half-diagonal, the music bus, in
   `MusicFocus`; samples pushed by index on the clock as `WebRadioSpeaker` does (50 ms tolerance). Every hall
-  showing a video has its film music off (`MuteFilmMusic`). The speaker stands 3 m into the hall, not on the screen (there `Hearing`'s rays hit the screen and wall: muffled, #1365), and a hall's audience whispers, 24 dB under a bar's murmur (`VenuePatrons.HallHush`): a full hall chattered over the film at +0 dB. Recorded with `--write-movie <wav or avi> -- --fixed-fps --cinemashotcurtains --cinemavideoshot <tone file>,<prefix> --cinemavideolocal` (a 440 Hz tone: its share of the mix says what else plays).
+  showing a video has its film music off (`MuteFilmMusic`). The speaker stands 3 m into the hall, not on the screen (there `Hearing`'s rays hit the screen and wall: muffled, #1365), and a hall's audience is silent (`VenuePatrons` sound: an `Auditorium` room never murmurs; it has patrons only while its screen is on): a full hall chattered over the film at +0 dB. Recorded with `--write-movie <wav or avi> -- --fixed-fps --cinemashotcurtains --cinemavideoshot <tone file>,<prefix> --cinemavideolocal` (a 440 Hz tone: its share of the mix says what else plays).
 - **Picking**: E / pad Y / VR grip at the booth panel's screen half opens `CinemaPanelUi` (low on the screen,
   the hall's screen above it): Screen off, Cat slides / Stop the video, a link box with Paste and Play, the
   last six links played (`user://cinema_links.txt`). `/cinema play <link>`, `/cinema stop`, `/cinema`

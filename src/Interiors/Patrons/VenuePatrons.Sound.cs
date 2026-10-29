@@ -15,8 +15,6 @@ public partial class VenuePatrons
 {
     /// <summary>A room's murmur at one guest and how much louder each doubling makes it, dB.</summary>
     private const float MurmurOne = -26f, MurmurPerDoubling = 4f;
-    /// <summary>How much quieter a cinema hall's audience is than a bar's, dB: they whisper through the film (#1365).</summary>
-    private const float HallHush = 24f;
     /// <summary>How far a guest's one-shot carries, m; how many play at once.</summary>
     private const float ShotRange = 18f;
     private const int ShotVoices = 4;
@@ -53,7 +51,8 @@ public partial class VenuePatrons
         }
         foreach (var (key, r) in _rooms)
         {
-            r.Target = r.Count == 0 ? -80f : MurmurOne + MurmurPerDoubling * MathF.Log2(r.Count) - (r.Hall ? HallHush : 0f);
+            // a cinema hall's audience is there only while its screen is on: silent through the showing (#1365)
+            r.Target = r.Count == 0 || r.Hall ? -80f : MurmurOne + MurmurPerDoubling * MathF.Log2(r.Count);
             // a terrace's murmur follows its guests; a room's stays in its middle
             if (key < 0 && r.Count > 0) r.Murmur.Position = r.Sum / r.Count + Vector3.Up;
             if (r.Count == 0) continue;
