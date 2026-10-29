@@ -314,3 +314,8 @@ The Älplerfest runs 14-24 August (Interlaken; a region without it moves it to i
 - [ ] Two or three players sit down within 45 s of each other (the first opens the song, the others join it) → they get melody, second voice and drone, play the same song, and each is told the harmony multiplier (up to x1.6) and the Batzen; the Journal's Festival tab and the party board show the points. Does the harmony reward feel fair? Does a late joiner understand they play the same chart?
 - [ ] Press Esc or walk away mid-song → the song ends with nothing paid and a message; a fifth player is told the row is full.
 - [ ] Others near the row do not hear the blower (a known gap): is that too strange for a festival? A bot taking a seat is a server-side call; there is no bot spawner for it in the game yet.
+
+## Teleport on foot lands outside buildings ([#1342](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1342))
+
+- [ ] On foot, click a house in a dense town on the adventure map (and the XR hand map, `/goto` onto a footprint) → you land on the nearest open ground beside it, never inside; the travel curtain lifts only once you stand there.
+- [ ] Teleport into a forest → you end up in the nearest clearing (up to 150 m); is that acceptable?
