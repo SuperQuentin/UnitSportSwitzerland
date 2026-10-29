@@ -55,6 +55,8 @@ public partial class PlaytestRecorder : Node
     public bool Ended => _finished is { Task.IsCompleted: true };
     /// <summary>The report's path from the repo root, as the player tells it to Claude.</summary>
     public string ReportPath => Path.GetRelativePath(PlaytestDirector.Root, Path.Combine(Dir, SessionReport.ReportFile)).Replace('\\', '/');
+    /// <summary>The movie studio records the session too (its 3D replay is saved at the end).</summary>
+    public bool Movie => _movie;
     /// <summary>Notes in the session so far, those of earlier launches included.</summary>
     public int NoteCount => _noteCount;
     /// <summary>A note was saved (its id) or the recording stopped or finished stopping (0): the playtest panel's confirmations (#1383). Main thread.</summary>

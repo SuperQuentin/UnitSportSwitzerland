@@ -425,7 +425,7 @@ public partial class PlaytestPanel : CanvasLayer
         _cardRec.AddChild(StateRow(dot, state, flash, UiTheme.FontTiny));
         Confirmation = string.Join(" | ", new[] { state, flash, ended ? rec.ReportPath : "" }.Where(t => t.Length > 0));
         if (!ended) return;
-        _rec.AddChild(UiKit.Text("✔ Saved: the notes, report.md, the trace and the 3D replay", UiTheme.FontSmall, UiTheme.Good, wrap: true));
+        _rec.AddChild(UiKit.Text($"✔ Saved: the notes, report.md, the trace{(rec.Movie ? " and the 3D replay" : "")}", UiTheme.FontSmall, UiTheme.Good, wrap: true));
         _rec.AddChild(UiKit.Text(rec.ReportPath, UiTheme.FontSmall, UiTheme.Text, wrap: true));
         _rec.AddChild(UiKit.Text("The game keeps running, unrecorded. Tell Claude to read the report: it fixes what you noted.",
             UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
