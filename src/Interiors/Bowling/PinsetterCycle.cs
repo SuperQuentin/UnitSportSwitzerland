@@ -11,7 +11,7 @@ namespace UnitSport.Interiors;
 /// the table comes down and lifts the standing pins, the sweep pushes the deadwood into the pit and
 /// comes back, the table sets the pins down on their spots and goes up, the sweep rises.</item>
 /// <item><see cref="Kind.Reset"/> (after a strike or a second ball): the sweep drops and clears the
-/// whole deck, the table comes down with a new rack of ten.</item>
+/// whole deck into the pit, then the table comes down with a new rack of ten (carried only from then on).</item>
 /// </list>
 /// Heights are in the lane's frame (<see cref="LaneGeometry"/>); the sweep's z runs from its guard
 /// spot before the head pin to the pit.
@@ -86,7 +86,9 @@ public static class PinsetterCycle
         {
             if (t >= ResetEnd) return Rest(g);
             float table = rest;
-            var carry = Carry.Rack;
+            // the new rack hangs in the machine out of sight until the table comes down for it: till then the ten
+            // pins are the deadwood the sweep pushes into the pit (#1336)
+            var carry = t >= ResetForth ? Carry.Rack : Carry.None;
             bool placed = false;
             if (t >= SweepDown && t < ResetBack) sweepZ = Mathf.Lerp(guard, back, Ease((t - SweepDown) / (ResetBack - SweepDown)));
             else if (t >= ResetBack && t < ResetForth) sweepZ = Mathf.Lerp(back, guard, Ease((t - ResetBack) / (ResetForth - ResetBack)));

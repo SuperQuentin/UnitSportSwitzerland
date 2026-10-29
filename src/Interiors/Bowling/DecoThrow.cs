@@ -13,8 +13,15 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class DecoThrow
 {
-    /// <summary>The moments of a turn, s: picked up, at the stance, the approach's start, the release, standing, back.</summary>
-    public const double Grab = 0.9, Lifted = 1.5, AtStance = 2.6, Start = 3.2, Release = 4.75, Followed = 5.5, BackFrom = 5.8, BackAt = 8.5;
+    /// <summary>
+    /// The moments of a turn, s: beside the ball on the return (#1336: balls queue along its track), picked up, at the
+    /// stance, the approach's start, the release, standing, back home.
+    /// </summary>
+    public const double ToBall = 0.9, Grab = ToBall + 0.9, Lifted = ToBall + 1.5, AtStance = ToBall + 2.6, Start = ToBall + 3.2,
+        Release = ToBall + 4.75, Followed = ToBall + 5.5, BackFrom = ToBall + 5.8, BackAt = ToBall + 8.5;
+
+    /// <summary>A turn's places: the ball where it waits on the return, and where the bowler waits between turns (and faces).</summary>
+    public readonly record struct Turn(Vector3 Ball, Vector3 Home, float HomeFace);
 
     private const float Upper = 0.270f, Fore = 0.245f, Reach = 0.50f;
     private const float WalkSpeed = 1.3f, ApproachSpeed = 2.2f;
@@ -24,16 +31,20 @@ public static class DecoThrow
     /// <summary>The bowler at one moment: where its feet are, which way it faces (0 the pins), its joints, the ball (null once rolled).</summary>
     public readonly record struct Frame(Vector3 Feet, float Face, Vector3[] Joints, Vector3? Ball);
 
-    /// <summary>Where the bowler waits beside the return, facing it.</summary>
-    public static (Vector3 Feet, float Face) Waiting(LaneGeometry g, int lane)
+    /// <summary>Where a bowler stands to take a ball off the return: beside it on the lane's side, facing the return.</summary>
+    public static (Vector3 Feet, float Face) Beside(Vector3 ball, int lane)
     {
         float side = lane == 0 ? -1 : 1;
-        // facing the return, toward the pair's middle (a figure facing angle a looks along (sin a, 0, cos a))
-        return (new Vector3(side * 0.6f, 0, g.HoodLift.Z), -side * Mathf.Pi / 2);
+        // a figure facing angle a looks along (sin a, 0, cos a)
+        return (new Vector3(ball.X + side * 0.45f, 0, ball.Z), -side * Mathf.Pi / 2);
     }
 
-    /// <summary>The ball on the return's lift, where it is picked from.</summary>
-    public static Vector3 HoodBall(LaneGeometry g) => g.HoodLift;
+    /// <summary>A decoration bowler's turn: it waits beside its own ball on the return.</summary>
+    public static Turn AtTheReturn(Vector3 ball, int lane)
+    {
+        var (feet, face) = Beside(ball, lane);
+        return new Turn(ball, feet, face);
+    }
 
     /// <summary>The stance: four steps back from the slide's end, in line with the lane, clear of the return.</summary>
     private static Vector3 Stance(LaneGeometry g, int lane) => new(g.LaneX(lane) + 0.12f, 0, Mathf.Max(g.Front + 0.6f, End(g, lane).Z - 3.4f));
@@ -41,24 +52,36 @@ public static class DecoThrow
     /// <summary>Where the slide ends, just behind the foul line.</summary>
     private static Vector3 End(LaneGeometry g, int lane) => new(g.LaneX(lane) + 0.12f, 0, g.Foul - 0.35f);
 
-    /// <summary>The bowler <paramref name="t"/> s into its turn.</summary>
-    public static Frame At(LaneGeometry g, int lane, double t)
+    /// <summary>The bowler <paramref name="t"/> s into its turn <paramref name="turn"/>.</summary>
+    public static Frame At(LaneGeometry g, int lane, double t, Turn turn)
     {
-        var (wait, waitFace) = Waiting(g, lane);
+        var (wait, waitFace) = Beside(turn.Ball, lane);
         var stance = Stance(g, lane);
         var end = End(g, lane);
         var j = new Vector3[Standing.Length];
         Standing.CopyTo(j, 0);
 
+        if (t < ToBall)
+        {
+            // from where it waited to beside its ball, the ball still on the return
+            float u = (float)(t / ToBall);
+            var d = wait - turn.Home;
+            if (d.LengthSquared() < 0.01f) return new Frame(wait, waitFace, j, turn.Ball);
+            var feet = turn.Home.Lerp(wait, Ease(u));
+            float face = Mathf.LerpAngle(Mathf.LerpAngle(turn.HomeFace, Mathf.Atan2(d.X, d.Z), Smooth(0, 0.3, u)), waitFace, Smooth(0.7, 1.0, u));
+            Walk(j, WalkSpeed, (float)t * HumanMeshBuilder.Cadence(WalkSpeed) / 2);
+            return new Frame(feet, face, j, turn.Ball);
+        }
         if (t < Lifted)
         {
             // bent over the return, the ball in both hands from Grab, lifted to the chest
-            float bend = Smooth(0.2, 0.7, t) * (1 - Smooth(Grab, Lifted, t));
+            double bt = t - ToBall;
+            float bend = Smooth(0.2, 0.7, bt) * (1 - Smooth(Grab, Lifted, t));
             Lean(j, 0.75f * bend);
-            var ball = t < Grab ? Local(HoodBall(g), wait, waitFace) : Vector3.Zero;
+            var ball = Local(turn.Ball, wait, waitFace);
             var chest = new Vector3(0, 1.12f, 0.34f);
-            var held = t < Grab ? ball : Local(HoodBall(g), wait, waitFace).Lerp(chest, Smooth(Grab, Lifted, t));
-            float reach = Smooth(0.2, 0.8, t);
+            var held = t < Grab ? ball : ball.Lerp(chest, Smooth(Grab, Lifted, t));
+            float reach = Smooth(0.2, 0.8, bt);
             TwoHands(j, Lerp(Rest(j, true), held, reach), Lerp(Rest(j, false), held, reach));
             return new Frame(wait, waitFace, j, World(held, wait, waitFace));
         }
@@ -111,11 +134,11 @@ public static class DecoThrow
         }
         if (t < BackFrom) return new Frame(end, 0, j, null);
         {
-            // walking back to the return
+            // walking back to where it waits
             float u = (float)Math.Min(1, (t - BackFrom) / (BackAt - BackFrom));
-            var feet = end.Lerp(wait, Ease(u));
-            float face = u < 1 ? Mathf.Atan2(wait.X - end.X, wait.Z - end.Z) : waitFace;
-            face = Mathf.LerpAngle(face, waitFace, Smooth(0.85, 1.0, u));
+            var feet = end.Lerp(turn.Home, Ease(u));
+            float face = u < 1 ? Mathf.Atan2(turn.Home.X - end.X, turn.Home.Z - end.Z) : turn.HomeFace;
+            face = Mathf.LerpAngle(face, turn.HomeFace, Smooth(0.85, 1.0, u));
             if (u < 1) Walk(j, WalkSpeed, (float)((t - BackFrom) * HumanMeshBuilder.Cadence(WalkSpeed) / 2));
             return new Frame(feet, face, j, null);
         }

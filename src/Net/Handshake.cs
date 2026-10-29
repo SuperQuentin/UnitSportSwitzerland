@@ -106,8 +106,9 @@ public partial class Handshake : Node
     /// 72: World/Adventure/Festivals/Stein RequestBegin, RequestThrow, TellBegin, TellNo, TellLanded (#1269 part 3: the stone put).
     /// 73: World/Adventure/Festivals Désalpe RequestDesalpeDress/Start/Vote, TellDesalpe, TellDesalpeSnap, TellDesalpeResult, TellDesalpeVoted (#1269 part 7).
     /// 74: World/WorldEvents (#1339: RequestHelp; PlanOut, MovedOut, StateOut, EndedOut, Told), the <c>errands</c> section's <c>events</c> count.
-    /// 75: World/Adventure/Festivals RequestMarket, TellMarket (#1348: the Christmas market's stalls and Samichlaus), ItemId 501-502.
-    public const int Protocol = 75;
+    /// 75: Interiors/Bowling lanes state carries each pair's house balls on the return (#1336).
+    /// 76: World/Adventure/Festivals RequestMarket, TellMarket (#1348: the Christmas market's stalls and Samichlaus), ItemId 501-502.
+    public const int Protocol = 76;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

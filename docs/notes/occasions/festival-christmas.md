@@ -28,7 +28,7 @@ Milestones 400/1000/2000 points pay 20/40/80. Under `--festival test` the def is
 - **The Samichlaus**: on 6 December only, once a player: 30 Batzen, 80 points, a Grittibänz and two mandarins. Before the day he says he comes on 6 December, after it that he has gone.
 - `FestivalRules.Spend(inst, n)` (in `FestivalBook.cs`): takes held Batzen, never from `Earned` (what the cap counts), refuses more than held.
 
-## The server (`FestivalService.Christmas.cs`, protocol 75)
+## The server (`FestivalService.Christmas.cs`, protocol 76)
 
 One request, `RequestMarket(target)` (0-7 a stall, `FestivalService.MarketSamichlaus` = 100); `ServeMarket(peer, target)` is the server method. It needs the market running, an adventuring human (a Battle Royale
 round has none), the body within `StallReach` (5.5 m) of that stall (from `AdventureService.PositionOf`, which the server reads from the movement packets) and 10 requests a second at most. A stall not stamped

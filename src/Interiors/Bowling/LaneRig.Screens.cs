@@ -50,16 +50,27 @@ public partial class LaneRig
     private List<(float Time, Transform3D[] Bodies)>? _replayFrames;
     private int _replayLane = -1;
     private float _replayT;
+    /// <summary>The roll's word (STRIKE!...) swept over the replay near its end, Wii Sports style (#1336); null for none.</summary>
+    private Label? _replayWord;
+    private string? _replayWordText;
+    /// <summary>The word comes in this long before the replay ends, and takes this long to sweep in [s].</summary>
+    private const float WordLead = 2.3f, WordSweep = 0.35f;
+
+    /// <summary>The lane whose screen plays a replay now, -1 for none (a camera watching it, #1336).</summary>
+    public int ReplayLane => _replayLane;
 
     /// <summary>
     /// Plays a slow-motion replay of a roll on lane <paramref name="lane"/>'s screen: the deck's
     /// <paramref name="frames"/> (the ball first, then the pins, in the deck's frame) from the moment
     /// the ball reached it.
     /// </summary>
-    public void PlayReplay(int lane, List<(float Time, Transform3D[] Bodies)> frames, int color)
+    public void PlayReplay(int lane, List<(float Time, Transform3D[] Bodies)> frames, int color, string? word = null)
     {
         if (frames.Count < 2) return;
         EnsureReplayScene();
+        _replayWordText = word;
+        _replayWord!.Visible = false;
+        if (word != null) _replayWord.Text = word;
         if (_replayLane >= 0 && _replayLane != lane && _replayQuads[_replayLane] is { } was) was.Visible = false;
         _replayLane = lane;
         _replayFrames = frames;
@@ -86,6 +97,19 @@ public partial class LaneRig
             _replayFrames = null;
             _replayLane = -1;
             return false;
+        }
+        // the word: sweeping in from the right over the last seconds, a little too big and settling
+        if (_replayWordText != null && _replayWord != null)
+        {
+            float left = (end + 0.4f - _replayT) / ReplaySpeed;
+            float u = Mathf.Clamp((WordLead - left) / WordSweep, 0, 1);
+            _replayWord.Visible = u > 0;
+            if (u > 0)
+            {
+                float ease = 1 - (1 - u) * (1 - u);
+                _replayWord.Position = new Vector2(Mathf.Lerp(_replayView!.Size.X, 0, ease), 0);
+                _replayWord.Scale = Vector2.One * (1.25f - 0.25f * ease);
+            }
         }
         int k = frames.FindLastIndex(f => f.Time <= _replayT);
         if (k < 0) k = 0;
@@ -148,6 +172,18 @@ public partial class LaneRig
         root.AddChild(_replayPins);
         _replayBall = new MeshInstance3D { MaterialOverride = plain };
         root.AddChild(_replayBall);
+        // the roll's word over the picture: big, bright, outlined, centred
+        _replayWord = new Label
+        {
+            Name = "Word", Visible = false, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Size = new Vector2(_replayView.Size.X, _replayView.Size.Y), PivotOffset = new Vector2(_replayView.Size.X, _replayView.Size.Y) / 2,
+            LabelSettings = new LabelSettings
+            {
+                FontSize = 54, FontColor = new Color(1f, 0.86f, 0.2f), OutlineSize = 10, OutlineColor = new Color(0.25f, 0.05f, 0.35f),
+                ShadowSize = 4, ShadowColor = new Color(0, 0, 0, 0.6f), ShadowOffset = new Vector2(3, 3),
+            },
+        };
+        _replayView.AddChild(_replayWord);
         // low, a little off to the side, as a lane's pin camera looks
         var cam = new Camera3D { Fov = 40f, Current = true };
         root.AddChild(cam);

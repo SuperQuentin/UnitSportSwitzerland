@@ -6,7 +6,7 @@ using UnitSport.Occasions.Festivals.Christmas;
 
 namespace UnitSport.Occasions.Festivals;
 
-// The Christmas market on the festival service (#1348, protocol 75, docs/notes/occasions/festival-christmas.md): one request, "use the stall
+// The Christmas market on the festival service (#1348, protocol 76, docs/notes/occasions/festival-christmas.md): one request, "use the stall
 // (or the Samichlaus) I stand at". At a stall the first use of the day is a free taste (a stamp: Batzen and party points through Award, the
 // Marktgang when all eight are stamped), every later use buys the stall's ware for Batzen (the book's Spend, the item through Grant). The Glühwein
 // mug carries its alcohol on its ItemDef (2 dl, 10 %), so drinking it reaches AlcoholService.ServeDrink by the same path as a beer. On 6 December
