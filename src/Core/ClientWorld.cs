@@ -1588,18 +1588,36 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // The horizon's lattice is generated at boot (or read from its cache) while the steps
-        // above run; its blocks then stream nearest first.
+        // The horizon is not needed to spawn (#1380): once the ring-0 tile is playable and the body is
+        // grounded (the gates above), a joining player goes in and the lattice finishes behind the
+        // screen. Its blocks stream nearest first, and the safety timeout above still applies.
+        // Command-line solo runs keep waiting for it: their shots and probes expect it drawn.
         var horizon = _chunks.Horizon?.Progress();
-        if (!timedOut && horizon == null)
+        bool nearReady = total > 0 && done >= total;
+        bool horizonBehind = Launch.Mode == GameMode.Multiplayer || !Launch.FromCommandLine;
+        if (horizonBehind)
         {
-            Report(LoadStage.DrawingHorizon, 0.6f);
-            return;
+            // only when nothing near is ready and the horizon is still unknown is there nothing to show yet
+            if (!timedOut && horizon == null && !nearReady)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
         }
-        if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+        else
         {
-            Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
-            return;
+            // The horizon's lattice is generated at boot (or read from its cache) while the steps
+            // above run; its blocks then stream nearest first.
+            if (!timedOut && horizon == null)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
+            if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
+                return;
+            }
         }
 
         Stage = LoadStage.Ready;
