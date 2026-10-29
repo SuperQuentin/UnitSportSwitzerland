@@ -452,3 +452,10 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] Walk out beyond 900 m and back, once while the show is on and once after it has ended: the crowd is gone when the show is off, and the rig comes back lit.
 - [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
 - [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.
+## Playtest panel confirmations ([#1388](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1388))
+
+`tools/playtest.sh batch` (or `--playtest --playtest-batch --playtest-record`).
+
+- [ ] Pad: L3+R3 opens the panel, Note → "✔ Note N saved" beside "Recording · N notes" for 4 s, and on the card once the panel is closed. End session → "Saving the session…", then "Not recording: session ended", the report's path and "Claude reads it next"; Note and End session go grey and the focus lands on Top view, not nowhere.
+- [ ] VR: the same Note and End session on the XrUi panel through XrPad: the confirmations are readable at the panel's distance.
+- [ ] With the movie on (no `--playtest-nomovie`): End session waits on "Saving…" while the replay is saved, then the "Saved" line names the 3D replay.
