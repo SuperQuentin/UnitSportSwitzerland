@@ -109,6 +109,7 @@ public partial class LoadingScreen : CanvasLayer
         NextJoke(instant: true);
         _root.Visible = true;
         Active = true;
+        CapFps();
         _root.Modulate = Colors.White;
         _cancel.CallDeferred(Control.MethodName.GrabFocus);
     }
@@ -127,6 +128,7 @@ public partial class LoadingScreen : CanvasLayer
         _target = 1;
         _cancel.Disabled = true;
         Active = false;
+        RestoreFps();
         var tw = CreateTween().SetIgnoreTimeScale(true);
         tw.TweenInterval(0.25f);
         tw.TweenProperty(_root, "modulate:a", 0f, 0.45f);
@@ -137,6 +139,29 @@ public partial class LoadingScreen : CanvasLayer
     {
         _root.Visible = false;
         Active = false;
+        RestoreFps();
+    }
+
+    private static int _savedFps = -1;
+
+    /// <summary>
+    /// A loading screen free-running at 90+ fps pins a core for nothing (#1381): 60 Hz, or the
+    /// monitor's rate if lower, until the world is ready; the player's own limit comes back after.
+    /// </summary>
+    private static void CapFps()
+    {
+        if (_savedFps >= 0 || UnitSport.Core.GameClock.Fixed) return;
+        _savedFps = Engine.MaxFps;
+        int hz = (int)Math.Round(DisplayServer.ScreenGetRefreshRate());
+        int cap = hz > 0 ? Math.Min(60, hz) : 60;
+        if (Engine.MaxFps == 0 || Engine.MaxFps > cap) Engine.MaxFps = cap;
+    }
+
+    private static void RestoreFps()
+    {
+        if (_savedFps < 0) return;
+        Engine.MaxFps = _savedFps;
+        _savedFps = -1;
     }
 
     public override void _Process(double delta)

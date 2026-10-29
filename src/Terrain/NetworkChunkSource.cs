@@ -57,6 +57,8 @@ public sealed class NetworkChunkSource : IChunkSource
     private readonly SemaphoreSlim _slots = new(6, 6);
 
     private readonly object _gate = new();
+    private bool _trimming;
+    private DateTime _lastTrim = DateTime.MinValue;
     private long _cacheBytes;
 
     public NetworkChunkSource(
@@ -498,9 +500,17 @@ public sealed class NetworkChunkSource : IChunkSource
     {
         lock (_gate)
         {
-            if (_cacheBytes <= MaxCacheBytes) return;
+            if (!CacheTrimPolicy.ShouldTrim(_cacheBytes, MaxCacheBytes, _trimming,
+                    (DateTime.UtcNow - _lastTrim).TotalSeconds)) return;
+            _trimming = true;
         }
 
+        // off the write path (#1381): the scan sorts the whole directory, and writes arrive in bursts
+        Task.Run(Trim);
+    }
+
+    private void Trim()
+    {
         try
         {
             var files = new DirectoryInfo(_cacheDirectory)
@@ -531,6 +541,14 @@ public sealed class NetworkChunkSource : IChunkSource
         catch (Exception e)
         {
             GD.PushWarning($"[stream] cache eviction failed: {e.Message}");
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _lastTrim = DateTime.UtcNow;
+                _trimming = false;
+            }
         }
     }
 

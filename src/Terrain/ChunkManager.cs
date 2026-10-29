@@ -133,6 +133,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
 
     /// <summary>
+    /// Desktop ceiling on builds outside video export (#1381): two cores stay free for the OS and the
+    /// main thread. Unbounded on a phone, which has its own cap above. Read by the caps below.
+    /// </summary>
+    private static readonly int DesktopBuildCeiling = Platform.IsMobile ? int.MaxValue
+        : BuildPolicy.Ceiling(System.Environment.ProcessorCount);
+
+    /// <summary>The BelowNormal threads builds run on (desktop, not video export); made on first use.</summary>
+    private static readonly Lazy<BuildScheduler> BuildThreads = new(() => new BuildScheduler(DesktopBuildCeiling));
+    private bool _capLogged;
+
+    /// <summary>
     /// Tile builds allowed to run concurrently. Local disk could take far more, but the
     /// per-frame commit budget is the real limiter there, so a small number costs nothing
     /// locally and is what makes streaming usable.
@@ -150,11 +161,23 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
 
     /// <summary>Never below one: with no slot, nothing is ever built or even fetched.</summary>
-    private int MaxConcurrentBuilds => Math.Max(1,
-        OfflineMode ? OfflineMaxConcurrentBuilds
-        : MaxConcurrentBuildsOverride > 0 ? MaxConcurrentBuildsOverride
-        : Streaming?.Invoke() == true ? PlayMaxConcurrentBuilds
-        : LocalMaxConcurrentBuilds);
+    private int MaxConcurrentBuilds
+    {
+        get
+        {
+            if (OfflineMode) return Math.Max(1, OfflineMaxConcurrentBuilds);
+            int cap = MaxConcurrentBuildsOverride > 0 ? MaxConcurrentBuildsOverride
+                : Streaming?.Invoke() == true ? PlayMaxConcurrentBuilds
+                : LocalMaxConcurrentBuilds;
+            cap = BuildPolicy.Clamp(cap, DesktopBuildCeiling, out bool clamped);
+            if (clamped && MaxConcurrentBuildsOverride > 0 && !_capLogged)
+            {
+                _capLogged = true;
+                GD.Print($"[terrain] {MaxConcurrentBuildsOverride} parallel builds asked, held to {cap} to keep the PC responsive");
+            }
+            return Math.Max(1, cap);
+        }
+    }
 
     private int _buildsInFlight;
 
@@ -2143,7 +2166,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var landings = World.Landings.Current;
         var detail = Detail;
 
-        Task.Run(async () =>
+        // BelowNormal dedicated threads on a desktop (#1381); the pool for video export and phones
+        Func<Task> work = async () =>
         {
             try
             {
@@ -2576,6 +2600,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Interlocked.Decrement(ref _buildsInFlight);
                 if (fine) Interlocked.Decrement(ref _fineBuildsInFlight);
             }
-        });
+        };
+        if (OfflineMode || Platform.IsMobile) Task.Run(work);
+        else Task.Factory.StartNew(work, CancellationToken.None, TaskCreationOptions.DenyChildAttach, BuildThreads.Value);
     }
 }
