@@ -65,6 +65,17 @@ r=$(signin player@check.example check-pass-1 false); echo "banned sign-in: ${r:0
 r=$(srpc "$AT" admin_ban "{\"id\":\"$PID\",\"ban\":false}"); [[ $r == 200* ]] || fail "unban: $r"
 r=$(signin player@check.example check-pass-1 false); [[ $r == 200* ]] || fail "an unbanned player cannot sign in: $r"
 
+# ---- names (#1359): a player renames their own account, an admin renames anyone ----
+r=$(signin player@check.example check-pass-1 false); PT=$(token)
+r=$(call PUT /v2/account '{"username":"PlayerRenamed"}' -H "Authorization: Bearer $PT"); echo "own rename: ${r:0:60}"; [[ $r == 200* ]] || fail "own rename: $r"
+r=$(srpc "$PT" me '{}'); [[ $r == 200*'"username":"PlayerRenamed"'* ]] || fail "own rename not kept: $r"
+r=$(call PUT /v2/account '{"username":"TheAdmin"}' -H "Authorization: Bearer $PT"); echo "taken own rename: ${r:0:70}"; [[ $r == 409* ]] || fail "a taken name was not refused with 409: $r"
+r=$(srpc "$PT" admin_rename "{\"id\":\"$PID\",\"username\":\"Sneaky\"}"); [[ $r == 403* ]] || fail "a player used admin_rename: $r"
+r=$(srpc "$AT" admin_rename "{\"id\":\"$PID\",\"username\":\"bad name!\"}"); [[ $r == 400* ]] || fail "an invalid name was accepted: $r"
+r=$(srpc "$AT" admin_rename "{\"id\":\"$PID\",\"username\":\"TheAdmin\"}"); echo "taken admin rename: ${r:0:70}"; [[ $r == 409* ]] || fail "admin_rename took a taken name: $r"
+r=$(srpc "$AT" admin_rename "{\"id\":\"$PID\",\"username\":\"PlayerOne\"}"); [[ $r == 200* ]] || fail "admin_rename: $r"
+r=$(srpc "$PT" me '{}'); [[ $r == 200*'"username":"PlayerOne"'* ]] || fail "admin rename not kept: $r"
+
 # ---- forgotten passwords (#1257) ----
 r=$(signin player@check.example check-pass-1 false); PT=$(token)   # the ban ended the old session
 r=$(srpc "$PT" password_reset_issue '{"email":"player@check.example"}'); echo "client issue: ${r:0:50}"; [[ $r == 403* ]] || fail "a player's session issued a reset token: $r"
