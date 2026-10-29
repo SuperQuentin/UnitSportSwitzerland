@@ -334,3 +334,10 @@ The Älplerfest runs 14-24 August (Interlaken; a region without it moves it to i
 
 - [ ] On foot, click a house in a dense town on the adventure map (and the XR hand map, `/goto` onto a footprint) → you land on the nearest open ground beside it, never inside; the travel curtain lifts only once you stand there.
 - [ ] Teleport into a forest → you end up in the nearest clearing (up to 150 m); is that acceptable?
+
+## City main-thread hot spots ([#1345](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1345))
+
+- [ ] Walk up to a stadium during a show (`--concert 1`, or a venue with an event today): the rig, the LED wall and the crowd are lit and moving as you cross 900 m, with no frozen beams or black screens on the first frames, and the beams swing in from their DMX position rather than from a stale one.
+- [ ] Walk out beyond 900 m and back, once while the show is on and once after it has ended: the crowd is gone when the show is off, and the rig comes back lit.
+- [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
+- [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.
