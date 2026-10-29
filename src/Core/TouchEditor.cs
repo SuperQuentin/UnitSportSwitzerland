@@ -319,7 +319,7 @@ public partial class TouchEditor : Control
         if (_drag == Drag.Move)
         {
             var c = at - _grab;
-            o.X = (_left ? c.X - _safe.Position.X : _safe.End.X - c.X) / _k;
+            o.X = (TouchLayout.FromLeft(key, _left) ? c.X - _safe.Position.X : _safe.End.X - c.X) / _k;
             o.Y = (key.Corner == TouchCorner.TopRight ? c.Y - _safe.Position.Y : _safe.End.Y - c.Y) / _k;
         }
         else

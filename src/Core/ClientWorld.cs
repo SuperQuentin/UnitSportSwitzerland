@@ -2281,6 +2281,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             foreach (var row in bowling.Prompts()) yield return row;
             yield break;
         }
+        if (Interiors.Pinball.PinballPlay.Current is { } pinball)
+        {
+            foreach (var row in pinball.Prompts()) yield return row;
+            yield break;
+        }
         // what E acts on, where the screen says it in a floating line (a door, a counter, a rack, loot):
         // a phone needs it as a row too, for its button (#1353)
         if (TouchControls.Shown && Interiors.InteriorManager.Instance?.Floating is { } floating)
@@ -2474,6 +2479,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private TouchState TouchNow()
     {
         if (Interiors.BowlingAim.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
+        if (Interiors.Pinball.PinballPlay.Current != null) return new TouchState(TouchMode.Pinball, TouchFlags.None);
         if (Viewer is not { } p || !IsInstanceValid(p))
         {
             var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
