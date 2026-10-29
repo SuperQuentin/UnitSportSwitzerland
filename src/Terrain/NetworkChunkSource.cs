@@ -58,7 +58,7 @@ public sealed class NetworkChunkSource : IChunkSource
 
     private readonly object _gate = new();
     private bool _trimming;
-    private DateTime _lastTrim = DateTime.MinValue;
+    private long _lastTrim = -1;   // Stopwatch timestamp of the last trim, -1 = never
     private long _cacheBytes;
 
     public NetworkChunkSource(
@@ -501,7 +501,7 @@ public sealed class NetworkChunkSource : IChunkSource
         lock (_gate)
         {
             if (!CacheTrimPolicy.ShouldTrim(_cacheBytes, MaxCacheBytes, _trimming,
-                    (DateTime.UtcNow - _lastTrim).TotalSeconds)) return;
+                    _lastTrim < 0 ? double.MaxValue : System.Diagnostics.Stopwatch.GetElapsedTime(_lastTrim).TotalSeconds)) return;
             _trimming = true;
         }
 
@@ -546,7 +546,7 @@ public sealed class NetworkChunkSource : IChunkSource
         {
             lock (_gate)
             {
-                _lastTrim = DateTime.UtcNow;
+                _lastTrim = System.Diagnostics.Stopwatch.GetTimestamp();
                 _trimming = false;
             }
         }
