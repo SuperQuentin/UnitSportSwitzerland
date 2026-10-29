@@ -37,7 +37,7 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   `MusicFocus`; samples pushed by index on the clock as `WebRadioSpeaker` does (50 ms tolerance). Every hall
   showing a video has its film music off (`MuteFilmMusic`).
 - **Picking**: E / pad Y / VR grip at the booth panel's screen half opens `CinemaPanelUi` (low on the screen,
-  the hall's screen above it): Screen off, Cat slides / Stop the video, a link box with Paste and Play, the
+  the hall's screen above it): Screen off, Cat slides / Stop the video, the cinema's films (open films + the server's list, `FilmCount`/`FilmAt`) in a drop-down with Play the film (#1367, from the start, 2D), a link box with Paste and Play, the
   last six links played (`user://cinema_links.txt`). `/cinema play <link>`, `/cinema stop`, `/cinema`
   (status: position, the frame shown, restarts) in the chat (`CinemaBooths.RunLocal`, before the server).
 - **Through the server** (phase 2, `CinemaBooths.Relay.cs`, `CinemaRelayTap.cs`, `CinemaRelayFeed.cs`, protocol 60):

@@ -31,9 +31,13 @@ public partial class CinemaBooths
     /// <summary>Per cinema, per hall: the code and list the pick was drawn for, the pick (-1 the slides), the loop's phase.</summary>
     private readonly Dictionary<string, (int Code, int Version, int Pick, double Phase)[]> _showings = new();
 
-    private int FilmCount => CinemaVideo.OpenFilms.Length + _pool.Count;
+    /// <summary>The cinema's films, the open ones then the server's (the panel's picker, #1367).</summary>
+    public int FilmCount => CinemaVideo.OpenFilms.Length + _pool.Count;
 
-    private CinemaVideo.Film FilmAt(int i) => i < CinemaVideo.OpenFilms.Length ? CinemaVideo.OpenFilms[i] : _pool[i - CinemaVideo.OpenFilms.Length];
+    /// <summary>The server's list changes this (a client's copy too): the panel fills its picker again.</summary>
+    public int PoolVersion => _poolVersion;
+
+    public CinemaVideo.Film FilmAt(int i) => i < CinemaVideo.OpenFilms.Length ? CinemaVideo.OpenFilms[i] : _pool[i - CinemaVideo.OpenFilms.Length];
 
     /// <summary>
     /// The film a hall nobody chose for shows now, and its loop's start on the shared clock; ("", 0) for the slides, the

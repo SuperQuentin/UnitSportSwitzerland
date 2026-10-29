@@ -10,7 +10,8 @@ namespace UnitSport.Interiors;
 /// Screen off, the cat slides, or a video: a link pasted or typed (a YouTube, Twitch or Vimeo page, or a
 /// video's own URL: mp4, webm, an HLS .m3u8), played for the whole hall from now on the shared clock. The links
 /// this player played before are one press away (kept in <c>user://cinema_links.txt</c>): a pad or a VR laser
-/// picks one, Paste takes the clipboard, so nobody has to type a link without a keyboard.
+/// picks one, Paste takes the clipboard, so nobody has to type a link without a keyboard. The cinema's own films (the
+/// ones a hall shows by itself: the open films and the server's list, #1367) are a drop-down and a Play button.
 ///
 /// <para>
 /// Nothing here plays or keeps state: it asks <see cref="CinemaBooths"/> (the server decides, every client plays)
@@ -36,7 +37,9 @@ public partial class CinemaPanelUi : CanvasLayer
     private Button _paste = null!;
     /// <summary>The hall's video through the server for everyone (#1298 phase 2): for a link some players cannot reach.</summary>
     private CheckBox _relay = null!;
-    private OptionButton _stereo = null!, _fit = null!, _ratio = null!;
+    private OptionButton _stereo = null!, _fit = null!, _ratio = null!, _films = null!;
+    /// <summary>The server's list the film picker was filled from (-1: not yet).</summary>
+    private int _filmsFor = -1;
     private CheckBox _glasses = null!;
     private VBoxContainer _recent = null!;
     private UnitSport.Player.FootPlayer? _me;
@@ -103,6 +106,20 @@ public partial class CinemaPanelUi : CanvasLayer
 
         box.AddChild(UiKit.Line());
         box.AddChild(UiKit.Section("Play a video"));
+        // the cinema's own films (#1367): what a phone, with no keyboard or clipboard, can play
+        var films = UiKit.HBox(10);
+        box.AddChild(films);
+        _films = new OptionButton
+        {
+            FocusMode = Control.FocusModeEnum.All,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            ClipText = true,
+            TooltipText = "The films this cinema shows by itself, and the server's own list. Played for the hall from the start.",
+        };
+        films.AddChild(_films);
+        var playFilm = UiKit.Button("Play the film", primary: true);
+        playFilm.Pressed += PlayFilm;
+        films.AddChild(playFilm);
         var row = UiKit.HBox(10);
         box.AddChild(row);
         _link = new LineEdit
@@ -324,6 +341,7 @@ public partial class CinemaPanelUi : CanvasLayer
         _plan = plan;
         _hall = hall;
         _title.Text = $"Hall {hall + 1} projector";
+        _filmsFor = -1;
         _link.Text = "";
         _shown = "\0";
         Rebuild();
@@ -384,6 +402,32 @@ public partial class CinemaPanelUi : CanvasLayer
         Rebuild();
     }
 
+    /// <summary>The picked film of the cinema's list, from its start, for the whole hall: a 2D film.</summary>
+    private void PlayFilm()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        int i = _films.GetSelectedId();
+        if (i < 0 || i >= booths.FilmCount) return;
+        _stereo.Select((int)CinemaVideo.Stereo.Mono);
+        Ask(screen: true, booths.FilmAt(i).Link);
+    }
+
+    /// <summary>The film picker from the cinema's list, on opening and when the server's list changes; the hall's film selected.</summary>
+    private void FillFilms(CinemaBooths booths, string playing)
+    {
+        if (_filmsFor == booths.PoolVersion) return;
+        _filmsFor = booths.PoolVersion;
+        _films.Clear();
+        int pick = 0;
+        for (int i = 0; i < booths.FilmCount; i++)
+        {
+            var f = booths.FilmAt(i);
+            _films.AddItem($"{f.Title}  ({Math.Max(1, (int)Math.Round(f.Seconds / 60))} min)", i);
+            if (f.Link == playing) pick = i;
+        }
+        if (booths.FilmCount > 0) _films.Select(pick);
+    }
+
     /// <summary>The hall's display from the two pickers: everyone in the hall sees it.</summary>
     private void AskDisplay()
     {
@@ -429,6 +473,7 @@ public partial class CinemaPanelUi : CanvasLayer
         if (force) _shown = "\0";
         var (_, screen) = booths.StateOf(_plan, _hall);
         var (link, _) = booths.VideoOf(_plan, _hall);
+        FillFilms(booths, link);
         var stream = booths.StreamOf(_plan, _hall);
         if (link.Length > 0) _relay.SetPressedNoSignal(booths.RelayOf(_plan, _hall));
         var (fit, ratio) = CinemaVideo.UnpackDisplay(booths.DisplayOf(_plan, _hall));
