@@ -743,8 +743,8 @@ public static class ItemDefs
                 break;
             case ItemId.ChalandaTreichel:
                 s.Tube(new Vector3(0, -0.07f, 0), new Vector3(0, 0.05f, 0), 0.075f, 0.04f, new Color(0.79f, 0.6f, 0.23f), 10);
-                s.Tube(new Vector3(0, 0.05f, 0), new Vector3(0, 0.1f, 0), 0.012f, 0.012f, new Color(0.23f, 0.14f, 0.09f), 5);
-                s.Box(new Vector3(0, 0.1f, 0), new Vector3(0.1f, 0.03f, 0.03f), new Color(0.78f, 0.12f, 0.16f));
+                s.Tube(new Vector3(0, 0.04f, 0), new Vector3(0, 0.1f, 0), 0.012f, 0.012f, new Color(0.23f, 0.14f, 0.09f), 5);
+                s.Box(new Vector3(0, 0.1f, 0), new Vector3(0.1f, 0.03f, 0.05f), new Color(0.78f, 0.12f, 0.16f));
                 break;
             case ItemId.ChristmasBauble:
                 s.Tube(new Vector3(0, -0.06f, 0), new Vector3(0, 0.06f, 0), 0.055f, 0.055f, new Color(0.78f, 0.12f, 0.14f), 10);

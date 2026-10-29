@@ -43,8 +43,8 @@ public static class ChalandaModels
             float top = 3.0f, x = x2[k];
             s.Box(new Vector3(x, top, 0.0f), new Vector3(0.06f, 0.36f, 0.04f), Leather);
             s.Tube(new Vector3(x, top - 0.18f, 0), new Vector3(x, top - 0.18f - h[k], 0), r[k] * 0.62f, r[k], Brass, 8);
-            s.Tube(new Vector3(x, top - 0.18f - h[k] + 0.07f, 0), new Vector3(x, top - 0.18f - h[k] - 0.03f, 0), r[k] * 1.05f, r[k] * 1.07f, BrassDark, 8);
-            s.Tube(new Vector3(x, top - 0.2f - h[k], 0), new Vector3(x, top - 0.3f - h[k], 0), 0.015f, 0.025f, BrassDark, 5);   // the clapper
+            s.Tube(new Vector3(x, top - 0.18f - h[k] + 0.06f, 0), new Vector3(x, top - 0.18f - h[k] - 0.04f, 0), r[k] * 1.25f, r[k] * 1.25f, BrassDark, 8);   // the lip, proud below the body
+            s.Tube(new Vector3(x, top - 0.19f - h[k], 0), new Vector3(x, top - 0.3f - h[k], 0), 0.015f, 0.025f, BrassDark, 5);   // the clapper
         }
         // the board
         s.Box(new Vector3(0, 1.75f, 0.02f), new Vector3(2.6f, 0.7f, 0.06f), Blue);
