@@ -5563,6 +5563,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _camera.Fov = Mathf.Lerp(_camera.Fov, zoom, MathX.Damp(14f, dt));
             return;
         }
-        _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, MathX.Damp(5f, dt));
+        // a finisher's or a full charge's hit punches the view in a few degrees and back (#1371, SwordFovKick)
+        if (SwordFovKick > 0f) _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov - SwordFovKick, MathX.Damp(30f, dt));
+        else _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, MathX.Damp(5f, dt));
     }
 }

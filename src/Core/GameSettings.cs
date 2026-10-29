@@ -342,6 +342,9 @@ public sealed class GameSettings
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
 
+    /// <summary>The sword's impact frame (#1371): a brief flash with speed lines on a finisher's or a full charge's hit. Off for photosensitivity.</summary>
+    public bool ImpactFrames { get; set; } = true;
+
     /// <summary>Radial streaks at the screen edge at speed.</summary>
     public bool SpeedLines { get; set; } = true;
 

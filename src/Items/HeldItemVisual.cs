@@ -350,6 +350,7 @@ void fragment() {{
             _ribbonKey = key;
             _ribbon.Mesh = SwordTrails.Get(m, v, sd);
             _ribbonPinned = false;
+            _ribbonMat!.SetShaderParameter(GainParam, m is SwordMove.Slash5 or SwordMove.Charged ? 1.5f : 1f);
         }
         if (!_ribbonPinned)
         {
@@ -363,7 +364,37 @@ void fragment() {{
         if (Mathf.Abs(fd - _ribbonFade) > 0.004f) { _ribbonFade = fd; _ribbonMat!.SetShaderParameter(FadeParam, fd); }
     }
 
-    private static readonly StringName RevealParam = "reveal", FadeParam = "fade";
+    private static readonly StringName RevealParam = "reveal", FadeParam = "fade", GainParam = "gain";
+
+    // the glint at full charge: a small star at the tip, shown only while the charge is full
+    private MeshInstance3D? _glint;
+    private bool _glintOn;
+
+    private void StepGlint()
+    {
+        bool full = _shown == ItemId.Sword && _player != null && _player.SwordShown == SwordMove.Charge && _player.SwordState.Charging
+            && _player.SwordState.ChargeShare(GameClock.Now) >= 0.99f;
+        if (full == _glintOn) return;
+        _glintOn = full;
+        if (_glint == null)
+        {
+            var aabb = ItemDefs.HandMesh(ItemId.Sword)!.GetAabb();
+            float sign = aabb.End.Z > -aabb.Position.Z ? 1f : -1f;
+            _glint = new MeshInstance3D
+            {
+                Name = "Glint", Mesh = new QuadMesh { Size = new Vector2(0.28f, 0.28f) }, Position = new Vector3(0, 0, sign * 0.86f),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = false,
+                MaterialOverride = new StandardMaterial3D
+                {
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha, BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+                    AlbedoColor = new Color(1f, 0.97f, 0.85f, 0.9f),
+                },
+            };
+            _inHand.AddChild(_glint);
+        }
+        _glint.Visible = full;
+    }
 
     private static MeshInstance3D NewForeEnd() => new()
     {
@@ -440,6 +471,7 @@ void fragment() {{
         else _inHand.Visible = false;
         StepSparkles(_inHand.Visible, dt);
         StepTrail();
+        StepGlint();
         StepTorch((id == ItemId.Torch || id == ItemId.Lampion) && any, dt, id == ItemId.Lampion);
 
         // --- in front of the local camera ---

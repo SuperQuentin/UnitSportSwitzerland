@@ -48,7 +48,7 @@ public partial class SwordClipProbe : Node
         await Wait(0.5);
         GD.Print($"[swordclip] {Scenario} go t={(long)(RealClock.Now * 1000)}");
         string what = Scenario ?? "combo";
-        if (what is "combo" or "charged") GD.Print("[swordclip] " + SwordService.Instance!.Command(1, ""));
+        if (what is "combo" or "charged" or "hit" or "miss") GD.Print("[swordclip] " + SwordService.Instance!.Command(1, ""));
         for (int pass = 1; pass <= 2; pass++)
         {
             _view = pass;
@@ -61,6 +61,8 @@ public partial class SwordClipProbe : Node
                 case "charged": await Charged(); break;
                 case "plunge": await Plunge(); break;
                 case "dodge": await Dodge(); break;
+                case "hit": await Hit(false); break;
+                case "miss": await Hit(true); break;
             }
             await Wait(1.2);
         }
@@ -77,6 +79,24 @@ public partial class SwordClipProbe : Node
             await Wait(i == 4 ? 1.4 : 0.64);
         }
         Input.ActionRelease(PlayerInput.MoveForward);
+    }
+
+    /// <summary>Two swings at the dummy, from where the lunge brings the blade onto it, or from 4 m back where nothing can touch it (the debug draw shows the shapes).</summary>
+    private async Task Hit(bool far)
+    {
+        if (far)
+        {
+            Input.ActionPress(PlayerInput.MoveBack);
+            await Wait(1.1);
+            Input.ActionRelease(PlayerInput.MoveBack);
+            await Wait(0.5);
+        }
+        for (int i = 0; i < 2; i++)
+        {
+            await Tap(PlayerInput.UseItem);
+            await Wait(0.9);
+        }
+        await Wait(0.8);
     }
 
     private async Task Charged()

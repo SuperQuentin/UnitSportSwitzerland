@@ -36,6 +36,9 @@ public partial class FootPlayer
     /// <summary>Camera shake added by a landed blow, scaled by the screen-shake setting (decays by itself).</summary>
     public float SwordShake { get; private set; }
 
+    /// <summary>Degrees the view is punched in by a landed finisher or full charge (decays by itself, 0.2 s).</summary>
+    public float SwordFovKick { get; private set; }
+
     /// <summary>When a dodge or a charge was last refused for want of stamina (game clock): the HUD blinks.</summary>
     public double SwordRefusedAt { get; private set; } = double.NegativeInfinity;
 
@@ -75,6 +78,7 @@ public partial class FootPlayer
         if (Bot || _camera == null) return;
 
         SwordShake = Mathf.MoveToward(SwordShake, 0f, dt * 0.12f);
+        SwordFovKick = Mathf.MoveToward(SwordFovKick, 0f, dt * 25f);
         _swordStagger = Mathf.Max(0f, _swordStagger - dt);
         bool drawn = SwordDrawn && !Downed && !KnockedOut && !InDuel && !Eliminated;
         if (!drawn)
@@ -283,9 +287,11 @@ public partial class FootPlayer
                 to.Y = 0;
                 // retarget while it winds up: turn to the target (the facing damps in well inside the wind-up) and aim the step at it
                 if (_sword.Phase(now) == SwordPhase.Startup && to.LengthSquared() > 0.01f) _swordYaw = Mathf.Atan2(-to.X, -to.Z);
-                float reach = Items.SwordBlade.Get(_sword.Move, _swordVariant, _swordSeed).Reach;
-                // spin slashes are a circle round the body: any target inside the reach is touched
-                want = Mathf.Clamp(to.Length() - 0.30f - reach * 0.85f, 0f, 1.2f);
+                // the move's own forward reach (the thrust reaches furthest), to the target's surface: its radius is the dummy's torso or a body's
+                var track = Items.SwordBlade.Get(_sword.Move, _swordVariant, _swordSeed);
+                float radius = _swordAimKind == SwordTargetKind.Dummy ? 0.28f : SwordSweep.BodyRadius;
+                float reach = _swordVariant == 1 && _sword.Move == SwordMove.Slash3 ? track.Reach : track.Forward;   // the spin is a circle round the body
+                want = Mathf.Clamp(_swordLungeMoved + to.Length() - radius - reach * 0.70f, 0f, 1.2f);   // what is left to close, on top of what was stepped
             }
             if (_swordLungeDone < 0.999f)
             {
@@ -338,9 +344,10 @@ public partial class FootPlayer
         float p1 = _sword.Progress(now);
         var track = Items.SwordBlade.Get(move, _swordVariant, _swordSeed);
         var (_, tA, tS, _) = SwordPoses.Times(move, _swordSeed);
-        if (p1 < tA) return;
-        float end = Mathf.Min(p1, tS + 0.03f);
-        float p0 = _swordSweepP < 0f ? tA : _swordSweepP;
+        if (p1 < track.From) return;
+        float end = Mathf.Min(p1, track.To);
+        float p0 = _swordSweepP < 0f ? track.From : _swordSweepP;
+        _ = tS;
         if (end <= p0) return;
         _swordSweepP = end;
         _swordReach.Clear();
@@ -373,6 +380,7 @@ public partial class FootPlayer
             ha = hb;
             ta = tb;
         }
+        if (_swordReach.Count > 0 && CmdArgs.Has("--swordtrace")) GD.Print($"[swordtrace] {move} p {p0:F2}-{end:F2} hilt {ha} tip {ta} target {_swordReach[0].Position} me {GlobalPosition}");
         SwordBladeLast = (ha, ta, touched || SwordBladeLast.Touched && now - SwordBladeLast.At < 0.25, now);
     }
 
@@ -447,6 +455,12 @@ public partial class FootPlayer
         _sword.Freeze(GameClock.Now, d.HitStop * (down ? 1.6f : 1f));
         SwordShake = Mathf.Max(SwordShake, (0.004f + d.Damage * 0.0005f) * (move is SwordMove.Slash5 or SwordMove.Plunge ? 1.7f : 1f));
         Core.PlayerInput.Rumble(0.3f + d.Damage * 0.01f, 0.2f + d.Damage * 0.015f, 0.06f + d.HitStop);
+        // the impact frame: the finisher's and the charged blow's hits only (the setting and VR decide inside)
+        if (move is SwordMove.Slash5 or SwordMove.Charged && Core.GameSettings.Current.ImpactFrames && !XR.XrSession.Active)
+        {
+            SwordImpact.Instance?.Flash();
+            SwordFovKick = 5f;
+        }
     }
 
     // ---- drawing, every peer -----------------------------------------------------------------------------------

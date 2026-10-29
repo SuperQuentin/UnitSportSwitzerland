@@ -26,6 +26,8 @@ shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never;
 uniform float reveal = 0.0;
 uniform float fade = 1.0;
+/* brighter on the finisher and the charged cut */
+uniform float gain = 1.0;
 uniform vec3 tint = vec3(1.0, 0.96, 0.84);
 void fragment() {
     float u = UV.x;
@@ -34,8 +36,9 @@ void fragment() {
     float age = clamp((reveal - u) / 0.75, 0.0, 1.0);
     float tail = 1.0 - age * age;
     float width = smoothstep(0.0, 0.4, v) * (1.0 - 0.5 * smoothstep(0.88, 1.0, v));
-    ALBEDO = tint;
-    ALPHA = inside * tail * width * fade * 0.85;
+    float edge = smoothstep(0.90, 0.985, v);
+    ALBEDO = tint * (1.0 + edge * 0.6);
+    ALPHA = clamp(inside * tail * (width + edge * 0.7) * fade * 0.85 * gain, 0.0, 1.0);
 }";
 
     /// <summary>A material of its own for one fighter's ribbon (the parameters are set per frame, only when they change).</summary>
@@ -69,7 +72,9 @@ void fragment() {
             float p = Mathf.Lerp(track.From, track.To, i / (float)(n - 1));
             var turn = new Basis(Vector3.Up, SwordPoses.Sample(move, variant, seed, p).Spin - spin0);
             var step = Vector3.Forward * (lunge * (SwordPoses.LungeDone(move, p) - lunge0));
-            verts[i * 2] = turn * track.Hilt[i].Lerp(track.Tip[i], 0.42f) + step;
+            // a wider ribbon (it starts nearer the hilt) on the finisher and the charged cut
+            float inner = move is SwordMove.Slash5 or SwordMove.Charged ? 0.18f : 0.42f;
+            verts[i * 2] = turn * track.Hilt[i].Lerp(track.Tip[i], inner) + step;
             verts[i * 2 + 1] = turn * track.Tip[i] + step;
             float u = i / (float)(n - 1);
             uvs[i * 2] = new Vector2(u, 0f);

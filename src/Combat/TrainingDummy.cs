@@ -39,7 +39,7 @@ public partial class TrainingDummy : Node3D
     // the lean: a damped spring about the axis across the push
     private Vector3 _dir = Vector3.Forward;
     private float _angle, _velocity, _rest;
-    private float _wobbleScale = 1f;
+    private float _wobbleScale = 1f, _squash;
 
     private static ArrayMesh? _mesh;
 
@@ -95,6 +95,13 @@ public partial class TrainingDummy : Node3D
         if (Mathf.Abs(_angle) < 1e-4f && Mathf.Abs(_velocity) < 1e-3f) { _angle = 0f; _velocity = 0f; }
         var axis = new Vector3(_dir.Z, 0, -_dir.X);
         _pivot.Basis = axis.LengthSquared() > 1e-6f && Mathf.Abs(_angle) > 1e-5f ? new Basis(axis.Normalized(), _angle) : Basis.Identity;
+        // the squash: flattened a touch and fattened, back in 0.15 s
+        if (_squash > 0f)
+        {
+            _squash = Mathf.Max(0f, _squash - dt / 0.15f);
+            _pivot.Scale = new Vector3(1f + 0.10f * _squash, 1f - 0.12f * _squash, 1f + 0.10f * _squash);
+            if (_squash <= 0f) _pivot.Scale = Vector3.One;
+        }
         // the readout forgets the last combo after a quiet moment
         if (_total > 0f && (_quiet += dt) > 4f)
         {
@@ -111,6 +118,7 @@ public partial class TrainingDummy : Node3D
     public void Struck(Vector3 knock, float damage, float hp, bool down)
     {
         _hp = hp;
+        _squash = damage >= 20f ? 1f : 0.6f;   // a squash on the hit: the heavier, the more
         _last = damage;
         _total += damage;
         _quiet = 0f;

@@ -24,6 +24,8 @@ public static class SwordBlade
         public float From, To;
         /// <summary>The farthest the tip gets from the body's axis along the ground over the window, plus the blade's thickness: the swing's real reach.</summary>
         public float Reach;
+        /// <summary>The farthest the tip gets straight ahead of the body (along its facing), within 0.45 m of its centre line, over the window: what a lunge has to bring a target within.</summary>
+        public float Forward;
     }
 
     private static readonly Dictionary<int, Track> Cache = new();
@@ -43,7 +45,7 @@ public static class SwordBlade
         float sign = aabb.End.Z > -aabb.Position.Z ? 1f : -1f;
         var hilt = new Vector3[Count];
         var tip = new Vector3[Count];
-        float reach = 0f;
+        float reach = 0f, forward = 0f;
         for (int i = 0; i < Count; i++)
         {
             float p = Mathf.Lerp(r0, r1, i / (float)(Count - 1));
@@ -61,8 +63,9 @@ public static class SwordBlade
             hilt[i] = full * new Vector3(0, 0, sign * HiltAt);
             tip[i] = full * new Vector3(0, 0, sign * TipAt);
             reach = Mathf.Max(reach, new Vector2(tip[i].X, tip[i].Z).Length());
+            if (Mathf.Abs(tip[i].X) < 0.45f) forward = Mathf.Max(forward, -tip[i].Z);   // where the cut crosses in front of the body
         }
-        return new Track { Hilt = hilt, Tip = tip, From = r0, To = r1, Reach = reach + SwordSweep.BladeRadius };
+        return new Track { Hilt = hilt, Tip = tip, From = r0, To = r1, Reach = reach + SwordSweep.BladeRadius, Forward = forward + SwordSweep.BladeRadius };
     }
 
     /// <summary>The blade at <paramref name="progress"/> of the move (clamped to the window), by interpolating the samples.</summary>

@@ -13,7 +13,7 @@ WORLD="--world fixture"
 AT=2583250,1113250
 AT_B=2583253,1113250   # never on top of A: two bodies spawned in one place throw each other kilometres
 tc_server 260 120 $OUT/swordnet_server.log --server --port $PORT $WORLD --admin-password swordnet
-tc_client 240 $OUT/swordnet_A.log --connect 127.0.0.1:$PORT --name SwordA $WORLD --at $AT --swordnet A &
+tc_client 240 $OUT/swordnet_A.log --connect 127.0.0.1:$PORT --name SwordA $WORLD --at $AT --swordnet A ${A_EXTRA:-} &
 A=$!
 WIN=; [ -n "${SHOTS:-}" ] && WIN=--windowed
 STYLE_ARG=; [ -n "${STYLE:-}" ] && STYLE_ARG="--style $STYLE"

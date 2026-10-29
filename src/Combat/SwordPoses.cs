@@ -137,10 +137,10 @@ public static class SwordPoses
         new[]
         {
             new Move(P(-0.50f, 0.10f, 0.00f, -0.18f, 0.25f, -0.05f, -0.15f, 0.20f, 0.15f, 0.30f, 0.10f, -0.25f),
-                     P(0.15f, 0.40f, 0.00f, -0.30f, 0.05f, 0.00f, 0.55f, 0.15f, 0.12f, 0.40f, 0.62f, -0.40f, pz: 0.10f, neck: 0.05f),
-                     P(0.12f, 0.36f, 0.00f, -0.30f, 0.05f, 0.02f, 0.52f, 0.15f, 0.12f, 0.38f, 0.62f, -0.40f, pz: 0.10f, neck: 0.05f)),
+                     P(0.35f, 0.50f, 0.00f, -0.30f, 0.05f, 0.00f, 0.55f, 0.15f, 0.12f, 0.40f, 0.62f, -0.40f, pz: 0.20f, neck: 0.05f),
+                     P(0.32f, 0.46f, 0.00f, -0.30f, 0.05f, 0.02f, 0.52f, 0.15f, 0.12f, 0.38f, 0.62f, -0.40f, pz: 0.20f, neck: 0.05f)),
             new Move(P(-0.45f, 0.14f, 0.00f, -0.22f, 0.25f, -0.05f, -0.15f, 0.20f, 0.15f, 0.30f, 0.14f, -0.27f),
-                     P(0.10f, 0.46f, 0.00f, -0.36f, 0.05f, 0.00f, 0.55f, 0.15f, 0.12f, 0.40f, 0.72f, -0.46f, pz: 0.12f, neck: 0.06f),
+                     P(0.30f, 0.55f, 0.00f, -0.36f, 0.05f, 0.00f, 0.55f, 0.15f, 0.12f, 0.40f, 0.72f, -0.46f, pz: 0.22f, neck: 0.06f),
                      P(0.08f, 0.42f, 0.00f, -0.36f, 0.05f, 0.02f, 0.52f, 0.15f, 0.12f, 0.38f, 0.72f, -0.46f, pz: 0.12f, neck: 0.06f)),
         },
         // 5: standing: shomen / kiri-oroshi, a jump, both hands on the grip overhead, a vertical drop-cut into a low kneeling zanshin, then the chiburi flick;
@@ -208,7 +208,7 @@ public static class SwordPoses
     public static float LungeDone(SwordMove move, float progress)
     {
         var (_, tA, tS, _) = Times(move, 0);
-        float from = tA * 0.4f, to = tS + (1f - tS) * 0.3f;
+        float from = tA * 0.4f, to = tS;   // arrives with the blow: done by the end of the strike
         float x = Math.Clamp((progress - from) / Math.Max(0.001f, to - from), 0f, 1f);
         return x * x * (3f - 2f * x);
     }
@@ -217,7 +217,9 @@ public static class SwordPoses
     public static (float From, float To) TrailWindow(SwordMove move, int seed)
     {
         var (_, tA, tS, _) = Times(move, seed);
-        return (Math.Max(0f, tA * 0.92f), Math.Min(0.98f, tS + 0.03f));
+        // the body's parts follow the hips a little late (the arm, then the blade's whip): the blade is still travelling that long after the table's strike
+        float total = move == SwordMove.Dodge ? 0.45f : Math.Max(0.0001f, SwordRules.Def(move).Total);
+        return (Math.Max(0f, tA * 0.92f), Math.Min(0.98f, tS + (ArmLag + BladeLag + 0.05f) / total));
     }
 
     /// <summary>The moves' phase marks as fractions of the move: (ready 0, end of the anticipation, end of the strike, the follow-through's peak).</summary>

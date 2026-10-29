@@ -332,7 +332,7 @@ public partial class BotDirector : Node
                     if (!bot.Alive || !BotHands.HasSword(bot)) continue;
                     var side = (swinger.GlobalPosition - goal) with { Y = 0 };
                     side = side.LengthSquared() > 0.01f ? side.Normalized() : Vector3.Right;
-                    bot.Body.GlobalPosition = goal + side * 1.7f + Vector3.Up * 0.1f;
+                    bot.Body.GlobalPosition = goal + side * 1.15f + Vector3.Up * 0.1f;
                     bot.SwordWantUntil = Clock + 2.5;
                     bot.SwordTarget = goal + Vector3.Up * 1.1f;
                     swung++;

@@ -38,9 +38,26 @@ public partial class SwordNetProbe : ChatProbe
         SwordService.Landed += s => _landed.Add(s);
         SwordService.Swung += (who, move) => _swung.Add((who, move));
         if (!await Joined(150, () => SwordService.Instance != null)) { await Finish(0); return; }
-        if (_role == "A") await RunA(Me!); else await RunB(Me!);
+        if (_role == "A") { Geometry(); await RunA(Me!); } else await RunB(Me!);
         Release();
         await Finish(3.0);
+    }
+
+    /// <summary>The blade's real reach per move, and the trail drawn from the very samples the hits are decided on.</summary>
+    private void Geometry()
+    {
+        foreach (var move in new[] { SwordMove.Slash1, SwordMove.Slash2, SwordMove.Slash3, SwordMove.Slash4, SwordMove.Slash5, SwordMove.Charged, SwordMove.Plunge })
+            for (int v = 0; v < 2; v++)
+            {
+                var t = Items.SwordBlade.Get(move, v, 3);
+                GD.Print($"{Log} reach {move} set{v}: {t.Reach:F2} m from the body's axis, {t.Forward:F2} m straight ahead (window {t.From:F2}-{t.To:F2})");
+                // the ribbon's tip edge is the blade's tip at each sample, pinned: the first vertex pair is exactly the first sample
+                var mesh = Items.SwordTrails.Get(move, v, 3);
+                var verts = mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                Expect(verts.Length == Items.SwordBlade.Count * 2 && verts[1].IsEqualApprox(t.Tip[0]), $"the {move} set{v} trail starts on the blade's tip sample");
+            }
+        Expect(Items.SwordBlade.Get(SwordMove.Slash4, 0, 3).Forward > Items.SwordBlade.Get(SwordMove.Slash1, 0, 3).Forward, "the thrust reaches further than the diagonal slash");
+        Expect(Items.SwordBlade.Get(SwordMove.Slash4, 1, 3).Forward > Items.SwordBlade.Get(SwordMove.Slash2, 1, 3).Forward, "the thrust reaches further than the backhand");
     }
 
     // ---- A: the swinger ---------------------------------------------------------------------------------------
@@ -111,6 +128,32 @@ public partial class SwordNetProbe : ChatProbe
         Expect(_landed.Count == dodges, "a hit no swing announced is refused");
         Say("forged");
         await Seconds(1.5);
+
+        // out of the blade's reach: backed off 4 m from the dummy, a swing is a clean miss (the lunge is capped at 1.2 m), and a forged act and hit are refused
+        Input.ActionPress(PlayerInput.MoveBack);
+        await Seconds(1.2);
+        Input.ActionRelease(PlayerInput.MoveBack);
+        await Seconds(0.4);
+        float away = (dummy.GlobalPosition - me.GlobalPosition).Length();
+        GD.Print($"{Log} {away:F1} m from the dummy");
+        Expect(away > 3.2f, $"A stands out of reach ({away:F1} m)");
+        me.LookYaw = Mathf.Atan2(-(dummy.GlobalPosition.X - me.GlobalPosition.X), -(dummy.GlobalPosition.Z - me.GlobalPosition.Z));
+        before = _landed.Count;
+        Say("far");
+        for (int i = 0; i < 2; i++)
+        {
+            await Tap(PlayerInput.UseItem);
+            await Seconds(0.66);
+        }
+        await Seconds(0.6);
+        Expect(_landed.Count == before, "a swing that cannot touch the dummy lands nothing");
+        Svc.SendAct(SwordMove.Slash1, me.Rotation.Y, 0);
+        Svc.SendHit(SwordMove.Slash1, SwordTargetKind.Dummy, dummy.Id);
+        await Seconds(1.0);
+        Expect(_landed.Count == before, "a forged hit from 3 m is refused");
+        Say("missdone");
+        await Seconds(1.0);
+        await WalkTo(me, 2.0f, dummy.GlobalPosition);
 
         // a server-run bot with a sword swings at the dummy
         Chat.Send("/bot add 1");
@@ -196,6 +239,11 @@ public partial class SwordNetProbe : ChatProbe
         GD.Print($"{Log} {forged} of 10 forged dodges came through");
         Expect(forged < 10, $"the server's stamina refused some of ten dodges in a frame (took {forged})");
 
+        int landedBefore = 0;
+        if (!await Heard("A", "far", 60)) { Fail("A never backed off"); return; }
+        landedBefore = _landed.Count;
+        if (!await Heard("A", "missdone", 60)) { Fail("A never finished the misses"); return; }
+        Expect(_landed.Count == landedBefore, "B saw no blow land while A swung out of reach and forged a hit");
         if (!await Heard("A", "bot", 60)) { Fail("A never saw the bot"); return; }
         Expect(_landed.Any(s => s.Attacker < 0 && s.Kind == SwordTargetKind.Dummy), "B saw the bot's blow on the dummy");
 
@@ -226,12 +274,12 @@ public partial class SwordNetProbe : ChatProbe
     }
 
     /// <summary>Walks towards the other player's copy until within <paramref name="metres"/>, facing it.</summary>
-    private async Task WalkTo(FootPlayer me, float metres)
+    private async Task WalkTo(FootPlayer me, float metres, Vector3? at = null)
     {
         for (int i = 0; i < 120; i++)
         {
-            if (Copy() is not { } other) break;
-            var d = other.GlobalPosition - me.GlobalPosition;
+            if (at == null && Copy() is not { } other) break;
+            var d = (at ?? Copy()!.GlobalPosition) - me.GlobalPosition;
             d.Y = 0;
             me.LookYaw = Mathf.Atan2(-d.X, -d.Z);
             if (d.Length() <= metres) break;
