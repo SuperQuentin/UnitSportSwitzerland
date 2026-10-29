@@ -119,6 +119,7 @@ public sealed class FestivalOccasion : Occasion
         Horn.HornGround.Decorate(Id, site, tile, into);   // the alphorn row of the alphorn and yodel game
         if (string.Equals(Id, FestivalCatalog.DesalpeId, StringComparison.OrdinalIgnoreCase)) Desalpe.DesalpeModels.Decorate(site, tile, into);   // the alp sign and the fair's ring
         if (string.Equals(Id, FestivalCatalog.ChristmasMarketId, StringComparison.OrdinalIgnoreCase)) Christmas.ChristmasModels.Decorate(site, tile, into);   // the stalls, the Samichlaus and the tree
+        if (string.Equals(Id, FestivalCatalog.EscaladeId, StringComparison.OrdinalIgnoreCase)) Escalade.EscaladeModels.Decorate(site, tile, into);   // the marmite, the soup pot, the start arch and the gates' torches
         // the closing show's launch point: the rack at the site's middle, its tubes leaning away from where the shells fan out
         if (FestivalCatalog.Get(Id) is { } def && FestivalShows.HasFireworks(def.Show) && TileId.FromLv95(site.E - RackOffset, site.N) == tile.Id)
         {

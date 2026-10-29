@@ -266,6 +266,11 @@ public enum ItemId
     GluehweinMug = 501,
     /// <summary>A glass Christmas bauble, bought at the ornaments stall: worth nothing but the look in the hand.</summary>
     ChristmasBauble = 502,
+    // ---- the Escalade (#1351, docs/notes/occasions/festival-escalade.md) ----
+    /// <summary>A shard of the Marmite's chocolate shell, handed round when it is smashed: sweet food.</summary>
+    MarmiteChocolate = 503,
+    /// <summary>A bowl of the Escalade's vegetable soup from the pot that feeds the party: warm for 3 minutes.</summary>
+    SoupeEscalade = 504,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }

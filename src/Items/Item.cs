@@ -279,6 +279,11 @@ public static class ItemDefs
         // the Christmas markets (#1348): the stalls' mulled wine (2 dl, 10 %, through AlcoholService.ServeDrink when drunk) and the ornaments stall's bauble
         Eat(ItemId.GluehweinMug, "Glühwein (mug)", 3, "#8a1a2a", "GM", 20, ItemCategory.Water, 5) with
             { Blurb = "{use_item} to drink. Mulled red wine, 2 dl at 10 %: warm for 4 minutes (climbing costs a quarter less). Bought at the Christmas market.", DrinkMl = 200f, Abv = 0.10f, Buff = Player.StaminaBuff.Warm, BuffSeconds = 240f },
+        // the Escalade (#1351): chocolate from the smashed Marmite and the pot's soup
+        Eat(ItemId.MarmiteChocolate, "Marmite chocolate", 10, "#4a2a18", "MC", 30, ItemCategory.Food, 3) with
+            { Blurb = "{use_item} to eat. A shard of the Marmite's chocolate shell, smashed at the Escalade." },
+        Eat(ItemId.SoupeEscalade, "Soupe de l'Escalade", 5, "#d89a4a", "SE", 45, ItemCategory.Food, 4) with
+            { Blurb = "{use_item} to eat. The Escalade's vegetable soup, a bowl from the pot: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
         new(ItemId.ChristmasBauble, "Christmas bauble", "A glass bauble from the market. Worth nothing but the look in the hand.",
             ItemUse.Material, 10, new Color("#c81e24"), "XB", 0, ItemCategory.Cosmetic, 12f),
         Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
@@ -724,6 +729,14 @@ public static class ItemDefs
                 s.Tube(new Vector3(0, -0.08f, 0), new Vector3(0, 0.07f, 0), 0.05f, 0.058f, new Color(0.92f, 0.9f, 0.84f), 10);
                 s.Tube(new Vector3(0, 0.07f, 0), new Vector3(0, 0.086f, 0), 0.046f, 0.046f, new Color(0.55f, 0.1f, 0.16f), 10);   // the wine, a skin proud of the rim
                 s.Box(new Vector3(0.075f, 0, 0), new Vector3(0.03f, 0.08f, 0.02f), new Color(0.92f, 0.9f, 0.84f));
+                break;
+            case ItemId.MarmiteChocolate:
+                s.Box(new Vector3(-0.03f, 0, 0), new Vector3(0.16f, 0.05f, 0.11f), new Color(0.29f, 0.16f, 0.09f), new Basis(Vector3.Up, 0.3f));
+                s.Box(new Vector3(0.05f, 0.03f, 0.03f), new Vector3(0.1f, 0.05f, 0.09f), new Color(0.36f, 0.2f, 0.11f), new Basis(Vector3.Up, -0.5f));
+                break;
+            case ItemId.SoupeEscalade:
+                s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
+                s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.85f, 0.6f, 0.28f), 10);
                 break;
             case ItemId.ChristmasBauble:
                 s.Tube(new Vector3(0, -0.06f, 0), new Vector3(0, 0.06f, 0), 0.055f, 0.055f, new Color(0.78f, 0.12f, 0.14f), 10);

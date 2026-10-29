@@ -108,7 +108,8 @@ public partial class Handshake : Node
     /// 74: World/WorldEvents (#1339: RequestHelp; PlanOut, MovedOut, StateOut, EndedOut, Told), the <c>errands</c> section's <c>events</c> count.
     /// 75: Interiors/Bowling lanes state carries each pair's house balls on the return (#1336).
     /// 76: World/Adventure/Festivals RequestMarket, TellMarket (#1348: the Christmas market's stalls and Samichlaus), ItemId 501-502.
-    public const int Protocol = 76;
+    /// 77: World/Adventure/Festivals RequestEscalade, TellEscalade (#1351: the Escalade's Marmite, soup pot and Course), ItemId 503-504.
+    public const int Protocol = 77;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

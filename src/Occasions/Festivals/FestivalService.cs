@@ -135,6 +135,8 @@ public partial class FestivalService : Node
                 FestivalCatalog.Register(desalpe with { Sites = [new FestivalSite("the test field", e, n, 400)] });
             if (FestivalCatalog.Get(FestivalCatalog.ChristmasMarketId) is { } market)
                 FestivalCatalog.Register(market with { Sites = [new FestivalSite("the test field", e, n, 90)] });
+            if (FestivalCatalog.Get(FestivalCatalog.EscaladeId) is { } escalade)
+                FestivalCatalog.Register(escalade with { Sites = [new FestivalSite("the test field", e, n, 100)] });
         }
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
@@ -174,6 +176,7 @@ public partial class FestivalService : Node
             _pending.Clear();
             foreach (long peer in peers) Welcome(peer);
         }
+        EscaladeTick(now);
         if (now >= _nextCrewCheck)
         {
             _nextCrewCheck = now + CrewCheckEvery;

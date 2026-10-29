@@ -98,6 +98,10 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At a market stall: the day's free taste (the stall-hop), then buy its ware for Batzen; at the Samichlaus on 6 December: his bag", PlayerInput.InteractMount),
         }),
+        ("Festivals: the Escalade (#1351)", new Row[]
+        {
+            new("At the Marmite: smash it (the party's youngest and oldest both press); at the soup pot: ladle a bowl for the party; at the start line: begin the Course de l'Escalade", PlayerInput.InteractMount),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),

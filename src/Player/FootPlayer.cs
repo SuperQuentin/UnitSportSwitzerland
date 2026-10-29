@@ -2847,6 +2847,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Occasions.Festivals.Desalpe.DesalpeGame.TryInteract(this)) return true;
         // the Christmas market's stalls and the Samichlaus (#1348): a taste, a ware, his bag
         if (Occasions.Festivals.Christmas.ChristmasGame.TryInteract(this)) return true;
+        // the Escalade's Marmite, soup pot and start line (#1351)
+        if (Occasions.Festivals.Escalade.EscaladeGame.TryInteract(this)) return true;
         // the festival ground's alphorn row (#1269): a seat in the song
         if (Occasions.Festivals.Horn.HornGround.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)

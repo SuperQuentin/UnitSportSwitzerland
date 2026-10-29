@@ -125,7 +125,8 @@ public partial class AdventureService : Node
             || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Errands.WorldEventCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
             || Occasions.Festivals.FireworksCheck.Requested
             || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested
-            || Occasions.Festivals.Desalpe.DesalpeCheck.Requested || Occasions.Festivals.Christmas.ChristmasCheck.Requested) AdventureCheck.ClearScratch();
+            || Occasions.Festivals.Desalpe.DesalpeCheck.Requested || Occasions.Festivals.Christmas.ChristmasCheck.Requested
+            || Occasions.Festivals.Escalade.EscaladeCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -306,6 +307,7 @@ public partial class AdventureService : Node
         : Occasions.Festivals.SteinCheck.Requested ? Occasions.Festivals.SteinCheck.Scratch
         : Occasions.Festivals.Fahnen.FahnenCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fahnecheck")
         : Occasions.Festivals.Desalpe.DesalpeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/desalpecheck")
+        : Occasions.Festivals.Escalade.EscaladeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/escaladecheck")
         : Occasions.Festivals.Christmas.ChristmasCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/christmascheck")
         : Occasions.Festivals.Horn.HornCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/hornscheck") : null;
 

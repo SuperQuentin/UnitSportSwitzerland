@@ -997,6 +997,21 @@ public static partial class ItemIcons
 
         d[ItemId.GluehweinMug] = d[ItemId.Gluehwein];
 
+        d[ItemId.MarmiteChocolate] = Round(p =>
+        {
+            p.Rect(3, 5, 12, 11, 'R');
+            p.Rect(4, 6, 11, 10, 'O');
+            p.Rect(5, 7, 7, 8, 'Y');
+            p.Rect(9, 9, 10, 9, 'R');
+        });
+
+        d[ItemId.SoupeEscalade] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 6f, 3.2f, 'w', 'w', 'a');
+            p.Disc(7.5f, 8.5f, 4.8f, 1.8f, 'y', 'o', 'O');
+            p.Set(5, 8, 'r'); p.Set(9, 9, 'N'); p.Set(8, 7, 'l');
+        });
+
         d[ItemId.ChristmasBauble] = Round(p =>
         {
             p.Disc(7.5f, 9f, 5.2f, 4.8f, 'q', 'r', 'R');

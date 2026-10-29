@@ -153,6 +153,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("11-25", "12-23") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the Escalade (#1351): the second Saturday of December and the Sunday after it, Geneva's old town (relocated to the region's largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.EscaladeId, Priority = 8,
+            Schedule = { new DateWindow("12-sat#2", "+1") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 
