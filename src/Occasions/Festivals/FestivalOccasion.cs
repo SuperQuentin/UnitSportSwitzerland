@@ -138,6 +138,7 @@ public sealed class FestivalOccasion : Occasion
         Horn.HornGround.Decorate(Id, site, tile, into);   // the alphorn row of the alphorn and yodel game
         if (string.Equals(Id, FestivalCatalog.DesalpeId, StringComparison.OrdinalIgnoreCase)) Desalpe.DesalpeModels.Decorate(site, tile, into);   // the alp sign and the fair's ring
         if (string.Equals(Id, FestivalCatalog.ChristmasMarketId, StringComparison.OrdinalIgnoreCase)) Christmas.ChristmasModels.Decorate(site, tile, into);   // the stalls, the Samichlaus and the tree
+        if (string.Equals(Id, FestivalCatalog.ZibelemaeritId, StringComparison.OrdinalIgnoreCase)) Zibelemaerit.ZibeleModels.Decorate(site, tile, into);   // the four stalls
         if (string.Equals(Id, FestivalCatalog.EscaladeId, StringComparison.OrdinalIgnoreCase)) Escalade.EscaladeModels.Decorate(site, tile, into);   // the marmite, the soup pot, the start arch and the gates' torches
         if (Fasnacht.FasnachtRules.IsFasnacht(Id)) Fasnacht.FasnachtModels.Decorate(Id, site, tile, into);   // the Larven stall, the Guggenmusik stage and Basel's lantern
         if (string.Equals(Id, FestivalCatalog.SechselaeutenId, StringComparison.OrdinalIgnoreCase)) Sechselaeuten.SechselaeutenModels.Decorate(site, tile, into);   // the Zunft's Weibel and the guild banners (the pyre is the stage's)

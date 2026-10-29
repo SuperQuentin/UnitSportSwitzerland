@@ -312,6 +312,9 @@
     <!-- the Christmas market (#1348): stalls, wares, prices, the Samichlaus; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Christmas\ChristmasRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Christmas.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- the Zibelemaerit (#1373): stalls, wares, the stall-hop and the confetti fight; pure -->
+    <Compile Include="..\..\src\Occasions\Festivals\Zibelemaerit\ZibeleRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Zibelemaerit.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <!-- the Escalade (#1351): the Marmite's pair, the Course's gates and pay, the soup; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Escalade\EscaladeRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Escalade.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
