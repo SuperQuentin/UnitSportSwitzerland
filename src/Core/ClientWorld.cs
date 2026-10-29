@@ -2275,6 +2275,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private IEnumerable<(string, string)> Prompts()
     {
         if (MenuOpen?.Invoke() == true || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
+        // stepped up to bowl (#1353): its own steps label the phone's keys
+        if (Interiors.BowlingAim.Current is { } bowling)
+        {
+            foreach (var row in bowling.Prompts()) yield return row;
+            yield break;
+        }
+        // what E acts on, where the screen says it in a floating line (a door, a counter, a rack, loot):
+        // a phone needs it as a row too, for its button (#1353)
+        if (TouchControls.Shown && Interiors.InteriorManager.Instance?.Floating is { } floating)
+            yield return (PlayerInput.InteractMount, floating);
 
         var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
         var viewer = Viewer;
@@ -2463,6 +2473,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private TouchState TouchNow()
     {
+        if (Interiors.BowlingAim.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
         if (Viewer is not { } p || !IsInstanceValid(p))
         {
             var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();

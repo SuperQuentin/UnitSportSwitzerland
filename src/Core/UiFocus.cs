@@ -27,6 +27,9 @@ public static class UiFocus
         TextEntryActive = Owners.Count > 0;
     }
 
+    /// <summary>Whether <paramref name="owner"/> is the one capture held (a chat opened over it is another).</summary>
+    public static bool HeldOnlyBy(object? owner) => owner != null && Owners.Count == 1 && Owners.Contains(owner);
+
     /// <summary>Drops every capture. Used when a mode tears its UI down.</summary>
     public static void Clear()
     {

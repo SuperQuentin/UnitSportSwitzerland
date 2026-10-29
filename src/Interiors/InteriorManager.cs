@@ -1143,6 +1143,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return best;
     }
 
+    /// <summary>
+    /// What E acts on now when the floating line says it (the bar's own rows aside), its key tag cut off, or null:
+    /// the phone's overlay makes its button from it (#1353, <c>ClientWorld.Prompts</c>).
+    /// </summary>
+    public string? Floating { get; private set; }
+    private string? _floatingRaw;
+
+    /// <summary>"[E] Open the door" without its "[E] ": the overlay's button names the key itself.</summary>
+    private static string Untagged(string text)
+    {
+        string tag = InputHints.Tag(PlayerInput.InteractMount) + " ";
+        return text.StartsWith(tag, StringComparison.Ordinal) ? text[tag.Length..] : text;
+    }
+
     private void UpdatePrompt(double delta)
     {
         if (_prompt == null) return;
@@ -1160,6 +1174,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
             hit = Interacting(p, out outranks);
         PointOutline(hit, outranks);
+        string? floatingNow = hit is { InBar: false } shown ? shown.Text : null;
+        if (floatingNow != _floatingRaw)
+        {
+            _floatingRaw = floatingNow;
+            Floating = floatingNow == null ? null : Untagged(floatingNow);
+        }
         if (hint) return;
         // a bar row's words are in the prompt bar (ClientWorld.Prompts), from the same call
         string? text = hit is { InBar: false } floating ? floating.Text : null;

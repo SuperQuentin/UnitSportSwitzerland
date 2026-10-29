@@ -19,6 +19,8 @@ public enum TouchMode
     Passenger,
     Fight,
     Aura,
+    /// <summary>Stepped up to bowl (#1353): the stick walks the spot and hooks, Bowl held swings.</summary>
+    Bowl,
 }
 
 /// <summary>What else changes the layout within a mode.</summary>
@@ -273,6 +275,12 @@ public static class TouchLayout
             case TouchMode.Aura:
                 round("next", "Next move", TouchSend.Pad(JoyButton.A), new Vector2(21f, 21f), 20f, TouchFeel.Primary);
                 break;
+            case TouchMode.Bowl:
+                // held through the swing; the thumb sliding off it sideways is the hook (a look drag)
+                round("bowl", "Bowl", TouchSend.Pad(JoyButton.A), Main, MainD, TouchFeel.Primary | TouchFeel.DragLook);
+                round("back", "Back", TouchSend.Pad(JoyButton.B), Second, SecondD);
+                round("pins", "Pins", TouchSend.Pad(JoyButton.LeftStick), Fourth, FourthD);
+                break;
         }
 
         // the top bar: rare and deliberate, a stretch away on purpose (action names as PlayerInput
@@ -389,6 +397,7 @@ public static class TouchLayout
         TouchMode.Passenger => "passenger",
         TouchMode.Fight => "fist fight",
         TouchMode.Aura => "aura battle",
+        TouchMode.Bowl => "bowling",
         _ => mode.ToString(),
     };
 
@@ -404,6 +413,7 @@ public static class TouchLayout
         TouchMode.Crane => "Slew / trolley",
         TouchMode.Fly => "Pitch / roll",
         TouchMode.Fight => "Step",
+        TouchMode.Bowl => "Spot / hook",
         TouchMode.Spectator or TouchMode.CreativeFly => "Fly",
         _ => "Move",
     };
