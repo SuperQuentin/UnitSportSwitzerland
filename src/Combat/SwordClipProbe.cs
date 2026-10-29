@@ -86,10 +86,9 @@ public partial class SwordClipProbe : Node
     {
         if (far)
         {
-            Input.ActionPress(PlayerInput.MoveBack);
-            await Wait(1.1);
-            Input.ActionRelease(PlayerInput.MoveBack);
-            await Wait(0.5);
+            // 3.5 m back from where it stands: out of what a lunge and the blade can cover
+            _me!.GlobalPosition += new Vector3(Mathf.Sin(_yaw), 0, Mathf.Cos(_yaw)) * 3.5f;
+            await Wait(0.8);
         }
         for (int i = 0; i < 2; i++)
         {
