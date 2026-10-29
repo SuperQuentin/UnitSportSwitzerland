@@ -7,6 +7,37 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
+
+`--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).
+
+- [ ] Look at the square: a ten metre pyre of crossed logs with a cotton-wool snowman on top (blue and white sash, a broom, red firecracker fuses round the head, a pointed hat), the Zunft Weibel with his staff and six guild banners. Cartoon, PS1 and Realistic: does it read well, and is the pyre not floating or sunk on a slope?
+- [ ] At the Weibel E (pad Y) takes the purse once; at the pyre Use (pad X, VR trigger) steps the minute and E places the bet: is the picker readable, does the coin sound land, is it clear that the panel changes after you bet?
+- [ ] The light at 18:00: the whoosh and bell, flames rising over about fifteen seconds with smoke, the glow on the square at night. Do the flames look like fire in each style, and are the billboards not clipping the logs too visibly?
+- [ ] The bang: flash, the burst of sparks and the boom, the head vanishing, the pyre falling to glowing embers. Is it a satisfying moment, loud but not harsh? Is a bet on the right minute worth the wait (a median burn is 78 s)?
+- [ ] After the bang E at the pyre grills a Cervelat; eat it (LMB, pad X): warm for 2 minutes. With two players: the board names both bets and the shares are fair by closeness.
+- [ ] VR: a grip at the pyre or the Weibel works through the pad route; dropping a coin or stepping a dial by hand is not built.
+## Chalandamarz ([#1361](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1361))
+
+`--festival test --date 2027-03-01 --world fixture` (the Treichel stand is 45 m west of the fixture's start, the loop of seven stations round it), or online on the western map on 1 March (Scuol, Zuoz or Guarda, else the region's largest town).
+
+- [ ] Look at the loop: the Treichel stand (wooden frame with five brass Treicheln, a blue board, a straw doll) and seven pennant banners on a ring of 45 m. Cartoon, PS1 and Realistic: do they read well?
+- [ ] E (pad Y) at the stand begins; then ring with E (pad Y) on the beat while walking: does the drum at 120 BPM and the closing ring on the HUD feel like the same beat as the Treichel you hear when you press? Is it fair with real latency (Perfect 70 ms, Good 140 ms around the server's beat)? Is walking at a child's pace (1.4 m/s) comfortable while pressing every step?
+- [ ] Two people in a party ringing on the same beats: "In step with <name>! +2" and the chime; do both see it, does the party's total on the Journal's Festival tab add up?
+- [ ] Is "Keep walking!" / "Back onto the loop!" clear when ringing on the spot or in the square?
+- [ ] VR: a grip at the stand begins and a grip on each beat rings (pad route through `XrPad`); swinging the hand like a cowbell is not built.
+
+## Cinema panel: the cinema's films, stars, the server's films ([#1368](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1368))
+
+At a cinema booth's panel (E at the screen half), online on a server where you are admin and one where you are not.
+
+- [ ] On a phone: pick a film in the drop-down, Play the film → the hall plays it from its start, through the server.
+- [ ] Pad (D-pad, A) and the VR laser: open the drop-down, pick, Play the film; reach the star and Server's films….
+- [ ] Play a web link, press the star → it fills; the drop-down ends with "Starred: …"; close and reopen the panel, play it from there; press the star again → gone.
+- [ ] As an admin, Server's films… → a window: a name and In the halls' rotation; Add → the chat says it was added with that name; the drop-down lists it for every player. As a non-admin the button is not there.
+- [ ] Rotation off for a film, then restart the showings (screen off and on in a few halls) → halls never pick it by themselves; on → they may.
+- [ ] Server's films… on a film already listed → Save renames it, Remove takes it off for everyone.
+
 ## 1 August ([#1362](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1362))
 
 `--festival test --date 2027-07-31 --world fixture --pois fixture --august1hour 22.5` on a server, or online on the western map in the real dates (31 July and 1 August; held in Genève, else Lausanne or the largest town). `/time set 22:30` for the night.
@@ -381,3 +412,10 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 
 - [ ] On foot, click a house in a dense town on the adventure map (and the XR hand map, `/goto` onto a footprint) → you land on the nearest open ground beside it, never inside; the travel curtain lifts only once you stand there.
 - [ ] Teleport into a forest → you end up in the nearest clearing (up to 150 m); is that acceptable?
+
+## City main-thread hot spots ([#1345](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1345))
+
+- [ ] Walk up to a stadium during a show (`--concert 1`, or a venue with an event today): the rig, the LED wall and the crowd are lit and moving as you cross 900 m, with no frozen beams or black screens on the first frames, and the beams swing in from their DMX position rather than from a stale one.
+- [ ] Walk out beyond 900 m and back, once while the show is on and once after it has ended: the crowd is gone when the show is off, and the rig comes back lit.
+- [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
+- [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.

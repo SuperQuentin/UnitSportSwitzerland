@@ -10,7 +10,11 @@ namespace UnitSport.Interiors;
 /// Screen off, the cat slides, or a video: a link pasted or typed (a YouTube, Twitch or Vimeo page, or a
 /// video's own URL: mp4, webm, an HLS .m3u8), played for the whole hall from now on the shared clock. The links
 /// this player played before are one press away (kept in <c>user://cinema_links.txt</c>): a pad or a VR laser
-/// picks one, Paste takes the clipboard, so nobody has to type a link without a keyboard.
+/// picks one, Paste takes the clipboard, so nobody has to type a link without a keyboard. The cinema's own films (the
+/// ones a hall shows by itself: the open films and the server's list, #1367) are a drop-down and a Play button; a link
+/// playing can be starred (this player's own, <c>user://cinema_starred.txt</c>, at the end of the drop-down) and an admin
+/// puts it on the server's list in a small window (its name, whether halls show it by themselves; <c>/cinema pool add</c>
+/// and <c>set</c>, the server checks the rights).
 ///
 /// <para>
 /// Nothing here plays or keeps state: it asks <see cref="CinemaBooths"/> (the server decides, every client plays)
@@ -25,18 +29,35 @@ public partial class CinemaPanelUi : CanvasLayer
     private const float Width = 620, Gutter = 16, Lift = 96;
     private const int MaxRecent = 6;
     private const string RecentFile = "user://cinema_links.txt";
+    private const string StarFile = "user://cinema_starred.txt";
+    private const int MaxStarred = 50;
+    /// <summary>A starred link's id in the film picker: after the cinema's films.</summary>
+    private const int StarredIds = 100000;
 
     public static CinemaPanelUi? Instance { get; private set; }
 
     private PanelContainer _panel = null!;
     private Label _title = null!, _now = null!, _status = null!;
-    private Button _off = null!, _slides = null!, _stop = null!, _play = null!;
+    private Button _off = null!, _slides = null!, _stop = null!, _play = null!, _star = null!, _toServer = null!;
+    /// <summary>What the star and the server's-list buttons were last set for: the link, starred, its place in the list, admin.</summary>
+    private (string Link, bool Starred, int InPool, bool Admin) _starFor = ("\0", false, 0, false);
+    /// <summary>An admin's window over the panel: the link playing on the server's list, its name and rotation.</summary>
+    private PanelContainer _server = null!;
+    private Label _serverTitle = null!;
+    private LineEdit _serverName = null!;
+    private CheckButton _serverRotation = null!;
+    private Button _serverSave = null!, _serverRemove = null!;
+    /// <summary>The link the window is for, and its place on the server's list (0: not on it).</summary>
+    private string _serverLink = "";
+    private int _serverAt;
     private LineEdit _link = null!;
     /// <summary>Where focus lands on opening: a pad or a VR laser starts on a button, never in the text box.</summary>
     private Button _paste = null!;
     /// <summary>The hall's video through the server for everyone (#1298 phase 2): for a link some players cannot reach.</summary>
     private CheckBox _relay = null!;
-    private OptionButton _stereo = null!, _fit = null!, _ratio = null!;
+    private OptionButton _stereo = null!, _fit = null!, _ratio = null!, _films = null!;
+    /// <summary>The server's list the film picker was filled from (-1: not yet).</summary>
+    private int _filmsFor = -1;
     private CheckBox _glasses = null!;
     private VBoxContainer _recent = null!;
     private UnitSport.Player.FootPlayer? _me;
@@ -100,9 +121,30 @@ public partial class CinemaPanelUi : CanvasLayer
             else Ask(screen: true, link: "");
         };
         shows.AddChild(_stop);
+        // the link playing kept (#1367): starred for this player, or on the server's list for everyone (an admin)
+        _star = UiKit.IconButton(Icons.Star, "Star it: it stays in your films list");
+        _star.Pressed += ToggleStar;
+        shows.AddChild(_star);
+        _toServer = UiKit.Button("Server's films…");
+        _toServer.Pressed += ToggleServer;
+        shows.AddChild(_toServer);
 
         box.AddChild(UiKit.Line());
         box.AddChild(UiKit.Section("Play a video"));
+        // the cinema's own films (#1367): what a phone, with no keyboard or clipboard, can play
+        var films = UiKit.HBox(10);
+        box.AddChild(films);
+        _films = new OptionButton
+        {
+            FocusMode = Control.FocusModeEnum.All,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            ClipText = true,
+            TooltipText = "The films this cinema shows by itself, and the server's own list. Played for the hall from the start.",
+        };
+        films.AddChild(_films);
+        var playFilm = UiKit.Button("Play the film", primary: true);
+        playFilm.Pressed += PlayFilm;
+        films.AddChild(playFilm);
         var row = UiKit.HBox(10);
         box.AddChild(row);
         _link = new LineEdit
@@ -198,6 +240,7 @@ public partial class CinemaPanelUi : CanvasLayer
         box.AddChild(_shareBox);
         _shareBox.AddChild(UiKit.Line());
         _shareBox.AddChild(UiKit.Section("Share from this computer"));
+        BuildServerWindow();
         var what = UiKit.HBox(10);
         _shareBox.AddChild(what);
         // a window's title can be long: the picker keeps the panel's width, not its longest item's
@@ -324,6 +367,7 @@ public partial class CinemaPanelUi : CanvasLayer
         _plan = plan;
         _hall = hall;
         _title.Text = $"Hall {hall + 1} projector";
+        _filmsFor = -1;
         _link.Text = "";
         _shown = "\0";
         Rebuild();
@@ -339,6 +383,7 @@ public partial class CinemaPanelUi : CanvasLayer
     public void Close()
     {
         if (!IsOpen) return;
+        CloseServer();
         _panel.Visible = false;
         _link.ReleaseFocus();
         UiFocus.Set(this, false);
@@ -382,6 +427,191 @@ public partial class CinemaPanelUi : CanvasLayer
         Ask(screen: true, link);
         _link.Text = "";
         Rebuild();
+    }
+
+    /// <summary>The picked film from its start for the whole hall: one of the cinema's (2D) or one this player starred.</summary>
+    private void PlayFilm()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        int id = _films.GetSelectedId();
+        if (id >= StarredIds)
+        {
+            var starred = Starred();
+            if (id - StarredIds >= starred.Count) return;
+            string link = starred[id - StarredIds];
+            _stereo.Select((int)CinemaVideo.Guess(link));
+            Ask(screen: true, link);
+            return;
+        }
+        if (id < 0 || id >= booths.FilmCount) return;
+        _stereo.Select((int)CinemaVideo.Stereo.Mono);
+        Ask(screen: true, booths.FilmAt(id).Link);
+    }
+
+    private void ToggleStar()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        var (link, _) = booths.VideoOf(_plan, _hall);
+        if (link.Length == 0) return;
+        var all = Starred();
+        if (!all.Remove(link)) all.Insert(0, link);
+        try
+        {
+            using var f = Godot.FileAccess.Open(StarFile, Godot.FileAccess.ModeFlags.Write);
+            f?.StoreString(string.Join('\n', all.Take(MaxStarred)));
+        }
+        catch (Exception) { /* a read-only profile: no stars */ }
+        _filmsFor = -1;
+        Refresh(true);
+    }
+
+    /// <summary>The admin's window: a name, the halls' rotation, Save, Remove (once on the list), Cancel.</summary>
+    private void BuildServerWindow()
+    {
+        _server = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
+        _server.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(1f, 12, 18));
+        AddChild(_server);
+        var box = UiKit.VBox(12);
+        _server.AddChild(box);
+        _serverTitle = UiKit.Text("", UiTheme.FontHeading, UiTheme.Text, bold: true);
+        box.AddChild(_serverTitle);
+        _serverName = UiKit.FormField(box, "Name", "", "The video's own title", "as the projector lists it");
+        _serverName.MaxLength = 80;
+        _serverName.TextSubmitted += _ => SaveServer();
+        _serverRotation = new CheckButton
+        {
+            Text = "In the halls' rotation",
+            FocusMode = Control.FocusModeEnum.All,
+            TooltipText = "On: halls show it by themselves too. Off: only picked here, at the projector.",
+        };
+        box.AddChild(_serverRotation);
+        var buttons = UiKit.HBox(10);
+        box.AddChild(buttons);
+        _serverRemove = UiKit.Button("Remove from the list");
+        _serverRemove.Pressed += () =>
+        {
+            if (_serverAt > 0) SendChat($"/cinema pool remove {_serverAt}");
+            CloseServer();
+        };
+        buttons.AddChild(_serverRemove);
+        buttons.AddChild(UiKit.Spacer(expand: true));
+        var cancel = UiKit.Button("Cancel");
+        cancel.Pressed += CloseServer;
+        buttons.AddChild(cancel);
+        _serverSave = UiKit.Button("Save", primary: true);
+        _serverSave.Pressed += SaveServer;
+        buttons.AddChild(_serverSave);
+    }
+
+    /// <summary>An admin's: the window for the link playing, filled from its place on the server's list.</summary>
+    private void ToggleServer()
+    {
+        if (CinemaBooths.Instance is not { } booths) return;
+        var (link, _) = booths.VideoOf(_plan, _hall);
+        if (link.Length == 0) return;
+        _serverLink = link;
+        _serverAt = booths.PoolIndexOf(link);
+        var film = _serverAt > 0 ? booths.FilmAt(CinemaVideo.OpenFilms.Length + _serverAt - 1) : default;
+        _serverTitle.Text = _serverAt > 0 ? "On the server's films" : "Add to the server's films";
+        _serverName.Text = _serverAt > 0 ? film.Title : "";
+        _serverRotation.ButtonPressed = _serverAt == 0 || film.Rotation;
+        _serverRemove.Visible = _serverAt > 0;
+        _serverSave.Text = _serverAt > 0 ? "Save" : "Add";
+        _server.Visible = true;
+        Callable.From(() =>
+        {
+            var screen = GetViewport().GetVisibleRect().Size;
+            var size = _server.GetCombinedMinimumSize();
+            float w = Mathf.Min(Mathf.Max(size.X, 520), screen.X - 2 * Gutter);
+            _server.SetAnchorsPreset(Control.LayoutPreset.Center);
+            _server.OffsetLeft = -w / 2;
+            _server.OffsetRight = w / 2;
+            _server.OffsetTop = -size.Y / 2;
+            _server.OffsetBottom = size.Y / 2;
+            _serverSave.GrabFocus();
+        }).CallDeferred();
+    }
+
+    /// <summary>The window's choice to the server as the chat command an admin would type (the server checks the rights).</summary>
+    private void SaveServer()
+    {
+        string name = _serverName.Text.Trim().Replace('\n', ' ');
+        string rotation = _serverRotation.ButtonPressed ? "rotation" : "norotation";
+        SendChat(_serverAt > 0 ? $"/cinema pool set {_serverAt} {rotation} {name}".TrimEnd()
+            : $"/cinema pool add {_serverLink} {rotation} {name}".TrimEnd());
+        if (_serverAt == 0) Status = "Looking it up on the server: the chat says when it is on the list.";
+        CloseServer();
+    }
+
+    private void CloseServer()
+    {
+        if (!_server.Visible) return;
+        _server.Visible = false;
+        _serverName.ReleaseFocus();
+        Callable.From(() => _toServer.GrabFocus()).CallDeferred();
+    }
+
+    private void SendChat(string line)
+    {
+        if (GetTree().Root.FindChild(Net.ChatManager.NodeName, true, false) is Net.ChatManager chat) chat.Send(line);
+    }
+
+    /// <summary>The links this player starred, newest first.</summary>
+    private static List<string> Starred()
+    {
+        try
+        {
+            if (!Godot.FileAccess.FileExists(StarFile)) return new();
+            using var f = Godot.FileAccess.Open(StarFile, Godot.FileAccess.ModeFlags.Read);
+            return f.GetAsText().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(CinemaVideo.Allowed).Take(MaxStarred).ToList();
+        }
+        catch (Exception) { return new(); }
+    }
+
+    /// <summary>The links starred, read once per opening and on a star (the buttons ask every refresh).</summary>
+    private List<string>? _starred;
+
+    /// <summary>The star and the server's-list buttons for the link playing, on change only: a web link that is no open film.</summary>
+    private void StarButtons(CinemaBooths booths, string link)
+    {
+        bool admin = !Net.NetLink.Online(this) || Permissions.IsAdmin;
+        _starred ??= Starred();
+        var key = (link, link.Length > 0 && _starred.Contains(link), booths.PoolIndexOf(link), admin);
+        if (key == _starFor) return;
+        _starFor = key;
+        bool open = Array.Exists(CinemaVideo.OpenFilms, f => f.Link == link);
+        bool keepable = link.Length > 0 && !CinemaVideo.IsLive(link) && !open && CinemaVideo.Allowed(link);
+        _star.Visible = keepable && key.Item3 == 0;
+        _star.Icon = key.Item2 ? Icons.StarFilled : Icons.Star;
+        _star.TooltipText = key.Item2 ? "Starred: in your films list. Press to unstar." : "Star it: it stays in your films list";
+        _toServer.Visible = keepable && admin;
+        _toServer.TooltipText = key.Item3 > 0 ? "On the server's list: its name, the halls' rotation, or off the list"
+            : "On the server's list, for everyone: a name, and whether halls show it by themselves";
+    }
+
+    /// <summary>The film picker from the cinema's list, on opening and when the server's list changes; the hall's film selected.</summary>
+    private void FillFilms(CinemaBooths booths, string playing)
+    {
+        if (_filmsFor == booths.PoolVersion) return;
+        _filmsFor = booths.PoolVersion;
+        _starred = Starred();
+        _films.Clear();
+        int pick = 0;
+        for (int i = 0; i < booths.FilmCount; i++)
+        {
+            var f = booths.FilmAt(i);
+            _films.AddItem($"{f.Title}  ({Math.Max(1, (int)Math.Round(f.Seconds / 60))} min)", i);
+            if (f.Link == playing) pick = _films.ItemCount - 1;
+        }
+        // this player's starred links after them (one on the server's list shows there already)
+        for (int j = 0; j < _starred.Count; j++)
+        {
+            if (booths.FilmTitle(_starred[j]).Length > 0) continue;
+            _films.AddItem($"Starred: {CinemaVideo.Title(_starred[j])}", StarredIds + j);
+            if (_starred[j] == playing) pick = _films.ItemCount - 1;
+        }
+        if (_films.ItemCount > 0) _films.Select(pick);
     }
 
     /// <summary>The hall's display from the two pickers: everyone in the hall sees it.</summary>
@@ -429,6 +659,8 @@ public partial class CinemaPanelUi : CanvasLayer
         if (force) _shown = "\0";
         var (_, screen) = booths.StateOf(_plan, _hall);
         var (link, _) = booths.VideoOf(_plan, _hall);
+        FillFilms(booths, link);
+        StarButtons(booths, link);
         var stream = booths.StreamOf(_plan, _hall);
         if (link.Length > 0) _relay.SetPressedNoSignal(booths.RelayOf(_plan, _hall));
         var (fit, ratio) = CinemaVideo.UnpackDisplay(booths.DisplayOf(_plan, _hall));
@@ -514,7 +746,14 @@ public partial class CinemaPanelUi : CanvasLayer
         if (!IsOpen || !e.IsPressed() || e.IsEcho()) return;
         bool typing = GetViewport().GuiGetFocusOwner() is LineEdit;
         bool outside = e is InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } click
-                       && !_panel.GetGlobalRect().HasPoint(click.Position);
+                       && !_panel.GetGlobalRect().HasPoint(click.Position)
+                       && !(_server.Visible && _server.GetGlobalRect().HasPoint(click.Position));
+        if (_server.Visible && (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)))
+        {
+            CloseServer();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         bool openingKey = e is InputEventKey && e.IsActionPressed(PlayerInput.InteractMount) && !typing;
         if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu) || outside || openingKey)
         {

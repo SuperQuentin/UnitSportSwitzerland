@@ -2849,6 +2849,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Occasions.Festivals.Christmas.ChristmasGame.TryInteract(this)) return true;
         // the Escalade's Marmite, soup pot and start line (#1351)
         if (Occasions.Festivals.Escalade.EscaladeGame.TryInteract(this)) return true;
+        // the Sechseläuten's pyre and Weibel (#1358)
+        if (Occasions.Festivals.Sechselaeuten.SechseGame.TryInteract(this)) return true;
+        // the Chalandamarz's Treichel stand and the ring on the march beat (#1356)
+        if (Occasions.Festivals.Chalanda.ChalandaGame.TryInteract(this)) return true;
         // the 1 August's lampion stand, fireworks stand and walk post (#1355)
         if (Occasions.Festivals.August1.August1Game.TryInteract(this)) return true;
         // the festival ground's alphorn row (#1269): a seat in the song
