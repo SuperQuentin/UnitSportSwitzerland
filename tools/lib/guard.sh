@@ -62,7 +62,8 @@ _guard_windows() { [ -n "${WINDIR:-}" ] || [ -n "${windir:-}" ]; }
 
 # A test's Godot window (#1378): project.godot points application/config/project_settings_override at
 # user://test_window.cfg, which only a test's own user:// holds. no_focus: the window is made without
-# taking focus and never takes it later; the Dummy driver still mixes (as headless), nothing is heard.
+# taking focus and never takes it later; the Dummy driver still mixes (as headless), nothing is heard;
+# unitsport/test_window: the game never captures the pointer (MouseCapture.TestWindow), whatever the probe.
 guard_quiet_godot() {
   local ud
   case "$(uname -s)" in
@@ -71,7 +72,7 @@ guard_quiet_godot() {
     *) ud="$1/godot/app_userdata/UnitSportSwitzerland" ;;
   esac
   mkdir -p "$ud"
-  printf '[display]\n\nwindow/size/no_focus=true\n\n[audio]\n\ndriver/driver="Dummy"\n' > "$ud/test_window.cfg"
+  printf '[display]\n\nwindow/size/no_focus=true\n\n[audio]\n\ndriver/driver="Dummy"\n\n[unitsport]\n\ntest_window=true\n' > "$ud/test_window.cfg"
 }
 
 GUARD_GODOT_ENV=()

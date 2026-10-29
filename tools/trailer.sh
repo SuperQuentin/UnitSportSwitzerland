@@ -118,8 +118,8 @@ if [ "$PINS" = 1 ]; then
     *) envrun=(env XDG_DATA_HOME="$profile"); userdir="$profile/godot/app_userdata/UnitSportSwitzerland" ;;
   esac
   mkdir -p "$userdir"
-  # project.godot's settings override (#1378, as guard_quiet_godot): the window never takes focus, no sound
-  printf '[display]\n\nwindow/size/no_focus=true\n\n[audio]\n\ndriver/driver="Dummy"\n' > "$userdir/test_window.cfg"
+  # project.godot's settings override (#1378, as guard_quiet_godot): the window never takes focus or the pointer, no sound
+  printf '[display]\n\nwindow/size/no_focus=true\n\n[audio]\n\ndriver/driver="Dummy"\n\n[unitsport]\n\ntest_window=true\n' > "$userdir/test_window.cfg"
   for c in shader_cache vulkan; do [ -d "$caches/$c" ] && cp -R "$caches/$c" "$userdir/"; done
 else
   pins+=(--trailer-unpinned)

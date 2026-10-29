@@ -3,9 +3,9 @@ using Godot;
 namespace UnitSport.Core;
 
 /// <summary>
-/// The one way the game grabs the mouse. <c>--nocapture</c> turns it off, and so does any probe or
-/// tool run (<c>ClientWorld</c> sets <see cref="Disabled"/>): an automated check running in a
-/// window must not take the pointer from whoever is using the machine meanwhile.
+/// The one way the game grabs the mouse. <c>--nocapture</c> turns it off, and so does a test's
+/// window (<see cref="TestWindow"/>, #1378) and the probes <c>ClientWorld</c> lists: an automated
+/// check running in a window must not take the pointer from whoever is using the machine meanwhile.
 ///
 /// <para>
 /// <see cref="Mode"/> is the pointer mode as the game set it, read and written instead of
@@ -18,7 +18,14 @@ namespace UnitSport.Core;
 /// </summary>
 public static class MouseCapture
 {
-    public static bool Disabled { get; set; } = CmdArgs.Has("--nocapture");
+    /// <summary>
+    /// A test's run (#1378): its user:// holds test_window.cfg (tools/lib/guard.sh, guard_quiet_godot), the
+    /// settings override that also keeps its window from taking focus and silent. Every probe under it,
+    /// listed in ClientWorld or not, leaves the pointer alone; a player's user:// never has the file.
+    /// </summary>
+    public static readonly bool TestWindow = ProjectSettings.GetSetting("unitsport/test_window", false).AsBool();
+
+    public static bool Disabled { get; set; } = CmdArgs.Has("--nocapture") || TestWindow;
 
     private static readonly bool Android = OS.GetName() == "Android";
     private static Input.MouseModeEnum _mode = Input.MouseModeEnum.Visible;
