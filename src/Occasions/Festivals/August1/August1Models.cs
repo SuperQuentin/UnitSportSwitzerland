@@ -31,8 +31,9 @@ public static class August1Models
     private static void Flag(MeshScratch s, Vector3 at, float size)
     {
         s.Box(at, new Vector3(size, size, 0.02f), Red);
-        s.Box(at + new Vector3(0, 0, 0.012f), new Vector3(size * 0.62f, size * 0.2f, 0.012f), White);
-        s.Box(at + new Vector3(0, 0, 0.012f), new Vector3(size * 0.2f, size * 0.62f, 0.012f), White);
+        // the cross in two layers 1.5 cm apart (and 1.5 cm over the red), so no two faces of it are coplanar
+        s.Box(at + new Vector3(0, 0, 0.02f), new Vector3(size * 0.62f, size * 0.2f, 0.01f), White);
+        s.Box(at + new Vector3(0, 0, 0.035f), new Vector3(size * 0.2f, size * 0.62f, 0.01f), White);
     }
 
     /// <summary>A paper lantern hanging from <paramref name="top"/>: a thread, a ribbed paper body and a glowing candle.</summary>
@@ -55,12 +56,12 @@ public static class August1Models
         var s = new MeshScratch();
         foreach (float x in new[] { -1.2f, 1.2f })
             foreach (float z in new[] { -0.7f, 0.7f })
-                s.Tube(new Vector3(x, -0.03f, z), new Vector3(x, 2.2f, z), 0.06f, 0.05f, Wood, 6);
-        s.Box(new Vector3(0, 0.55f, 0.55f), new Vector3(2.5f, 0.12f, 0.8f), Wood);         // the counter
+                s.Tube(new Vector3(x, -0.03f, z), new Vector3(x, 2.25f, z), 0.06f, 0.05f, Wood, 6);
+        s.Box(new Vector3(0, 0.55f, 0.55f), new Vector3(2.6f, 0.12f, 0.8f), Wood);         // the counter
         s.Box(new Vector3(0, 0.28f, 0.55f), new Vector3(2.4f, 0.55f, 0.7f), WoodDark);     // its front
         s.Box(new Vector3(0, 1.15f, -0.72f), new Vector3(2.4f, 2.1f, 0.05f), WoodDark);    // the back wall
         for (int k = 0; k < 8; k++)                                                          // the striped roof
-            s.Box(new Vector3(-1.4f + k * 0.4f, 2.32f, 0), new Vector3(0.4f, 0.06f, 1.9f), k % 2 == 0 ? Red : White, new Basis(Vector3.Forward, 0.08f));
+            s.Box(new Vector3(-1.4f + k * 0.4f, 2.32f, 0), new Vector3(0.41f, k % 2 == 0 ? 0.06f : 0.05f, k % 2 == 0 ? 1.9f : 1.92f), k % 2 == 0 ? Red : White, new Basis(Vector3.Forward, 0.08f));   // overlapping slats of two thicknesses: no coplanar faces
         for (int k = 0; k < 6; k++)                                                          // the string of lanterns along the front
             Lantern(s, new Vector3(-1.0f + k * 0.4f, 2.15f, 0.8f), 0.2f, k % 2);
         for (int k = 0; k < 5; k++)                                                          // lanterns for sale on the counter
@@ -81,8 +82,8 @@ public static class August1Models
         var s = new MeshScratch();
         foreach (float x in new[] { -1.2f, 1.2f })
             foreach (float z in new[] { -0.7f, 0.7f })
-                s.Tube(new Vector3(x, -0.03f, z), new Vector3(x, 2.2f, z), 0.06f, 0.05f, WoodDark, 6);
-        s.Box(new Vector3(0, 0.55f, 0.55f), new Vector3(2.5f, 0.12f, 0.8f), Wood);
+                s.Tube(new Vector3(x, -0.03f, z), new Vector3(x, 2.25f, z), 0.06f, 0.05f, WoodDark, 6);
+        s.Box(new Vector3(0, 0.55f, 0.55f), new Vector3(2.6f, 0.12f, 0.8f), Wood);
         s.Box(new Vector3(0, 0.28f, 0.55f), new Vector3(2.4f, 0.55f, 0.7f), Blue);
         s.Box(new Vector3(0, 1.15f, -0.72f), new Vector3(2.4f, 2.1f, 0.05f), WoodDark);
         s.Box(new Vector3(0, 2.3f, 0), new Vector3(2.8f, 0.08f, 1.9f), Black, new Basis(Vector3.Forward, 0.06f));
@@ -113,8 +114,8 @@ public static class August1Models
         for (int k = 0; k < 7; k++) Lantern(s, new Vector3(-1.2f + k * 0.4f, 3.25f, 0), 0.24f, k % 2);
         Flag(s, new Vector3(0.35f, 3.2f + 0.45f, 0.07f), 0.5f);
         s.Box(new Vector3(0, 0.01f, 0), new Vector3(3.0f, 0.03f, 0.22f), White);
-        s.Box(new Vector3(0, 0.9f, 0.1f), new Vector3(0.5f, 0.3f, 0.03f), Red);    // a plaque
-        s.Box(new Vector3(0, 0.9f, 0.115f), new Vector3(0.3f, 0.06f, 0.01f), White);
+        s.Box(new Vector3(0, 0.9f, 0.12f), new Vector3(0.5f, 0.3f, 0.03f), Red);    // a plaque
+        s.Box(new Vector3(0, 0.9f, 0.14f), new Vector3(0.3f, 0.06f, 0.01f), White);
         return s.Build();
     }
 
