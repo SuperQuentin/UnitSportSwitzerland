@@ -317,6 +317,9 @@ public partial class FootPlayer
         if (knock.Length() >= 5f && !Bot && (_sword.Busy || _sword.Charging)) SwordPutAway();
     }
 
+    /// <summary>A dash (a bot's dodge): <paramref name="velocity"/> in metres per second along the ground, eased out like a push, with no stagger.</summary>
+    public void SwordDash(Vector3 velocity) => _swordPush += new Vector3(velocity.X, 0, velocity.Z);
+
     /// <summary>
     /// This body's blow landed (the server's word on the swinger's machine): the hands stop for the move's hit-stop, the screen
     /// shakes with the damage and the pad rumbles.

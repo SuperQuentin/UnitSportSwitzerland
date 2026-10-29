@@ -71,7 +71,7 @@ public partial class SwordService : Node
     private readonly Dictionary<int, TrainingDummy> _dummies = new();
 
     /// <summary>The dummies drawn here, for a swing's trace and the probes.</summary>
-    public IReadOnlyDictionary<int, TrainingDummy> Dummies => _dummies;
+    public Dictionary<int, TrainingDummy> Dummies => _dummies;   // concrete: a swing's per-frame scan allocates no enumerator
 
     public static SwordService Create(Node world, WorldOrigin origin, bool server)
     {
@@ -407,6 +407,43 @@ public partial class SwordService : Node
     // ================================================================================================
     // what the swinger's client asks
     // ================================================================================================
+
+    /// <summary>Server: the standing dummy nearest <paramref name="world"/> (this origin's world space), or null.</summary>
+    public Vector3? NearestDummy(Vector3 world)
+    {
+        Vector3? best = null;
+        float bestD = float.MaxValue;
+        foreach (var d in _dummyData.Values)
+        {
+            var p = _origin.ToWorld(d.Pos);
+            float dist = p.DistanceTo(world);
+            if (d.Hp > 0f && dist < bestD) { bestD = dist; best = p; }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Server (a bot's blade gone live): <paramref name="who"/>'s <paramref name="move"/> against every dummy and body the server holds
+    /// within its reach and cone, each through <see cref="ServerHit"/> (the same checks as a player's named hit). The number landed.
+    /// </summary>
+    public int ServerTrace(long who, SwordMove move, float yaw)
+    {
+        if (!Authority || BodyOf(who) is not { } attacker || !SwordRules.IsBlow(move)) return 0;
+        var def = SwordRules.Def(move);
+        var from = attacker.Global;
+        float fx = -Mathf.Sin(yaw), fz = -Mathf.Cos(yaw);
+        int landed = 0;
+        bool Reaches(GlobalPos to) =>
+            SwordRules.InCone(0, 0, fx, fz, (float)(to.E - from.E), (float)(from.N - to.N), def.Reach, def.ConeDeg, out _)
+            && SwordRules.InHeight((float)(to.Alt - from.Alt));
+        foreach (var d in _dummyData.Values.ToArray())
+            if (d.Hp > 0f && Reaches(d.Pos) && !_guard.Reached(who, Key(SwordTargetKind.Dummy, d.Id)) && ServerHit(who, move, SwordTargetKind.Dummy, d.Id)) landed++;
+        if (GetNodeOrNull("../Players") is { } players)
+            foreach (var n in players.GetChildren())
+                if (n is FootPlayer p && p != attacker && (p.Bot || !p.Npc) && p.Down != 1 && Reaches(p.Global)
+                    && FootPlayer.NetId(p.Name) is { } id && !_guard.Reached(who, Key(SwordTargetKind.Body, id)) && ServerHit(who, move, SwordTargetKind.Body, id)) landed++;
+        return landed;
+    }
 
     /// <summary>A target a trace may reach, as this peer sees it.</summary>
     public readonly record struct Reach(SwordTargetKind Kind, long Id, Vector3 Position);

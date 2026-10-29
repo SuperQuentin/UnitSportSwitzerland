@@ -287,9 +287,9 @@ public enum ItemId
     Lampion = 520,
     /// <summary>A box of fireworks from the 1 August stand, bought with Batzen: Use lights a 40 s volley of your own, at night.</summary>
     FireworkBox = 521,
-    // ---- the action-RPG combat (#1370; 540-549 are its block) ----
+    // ---- the action-RPG combat (#1370; 600-619 are its block) ----
     /// <summary>The sword (#1371): held, the combat controls are on (<see cref="ItemUse.Sword"/>, <c>docs/notes/combat/sword-combat.md</c>).</summary>
-    Sword = 540,
+    Sword = 600,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }

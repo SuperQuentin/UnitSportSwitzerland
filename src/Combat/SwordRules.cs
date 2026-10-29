@@ -44,6 +44,11 @@ public struct SwordInput
     public bool Attack;
     /// <summary>The dodge button is down now.</summary>
     public bool Dodge;
+    /// <summary>
+    /// The attack is a press, never a hold: it does not turn into a charge when it is still down after a swing (a bot's hands
+    /// pulse the button and must never charge by accident).
+    /// </summary>
+    public bool Tap;
     /// <summary>The body is off the ground.</summary>
     public bool Airborne;
     /// <summary>The body is falling (or gliding) fast enough for a plunge.</summary>
@@ -386,7 +391,7 @@ public sealed class SwordMachine
                 bool wasSlash = Move is >= SwordMove.Slash1 and <= SwordMove.Slash5;
                 End(now);
                 // still holding the button after a swing: the hands draw back for a charge
-                if (wasSlash && input.Attack && Stamina.Points >= SwordRules.ChargedCost) BeginCharge(now);
+                if (wasSlash && input.Attack && !input.Tap && Stamina.Points >= SwordRules.ChargedCost) BeginCharge(now);
             }
             return;
         }

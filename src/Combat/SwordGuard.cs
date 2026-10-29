@@ -99,6 +99,9 @@ public sealed class SwordGuard
         return true;
     }
 
+    /// <summary>The peer's last swing already reached <paramref name="target"/> (a bot's second pass over the same blow skips it).</summary>
+    public bool Reached(long peer, long target) => _peers.TryGetValue(peer, out var p) && p.Hit.Contains(target);
+
     /// <summary>The peer is inside a dodge's untouchable window now: a blow on it is refused.</summary>
     public bool Invulnerable(long peer, double now) => _peers.TryGetValue(peer, out var p) && now >= p.DodgeFrom && now <= p.DodgeTo;
 }

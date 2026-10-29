@@ -18,6 +18,9 @@ public partial class TrainingDummy : Node3D
     /// <summary>Up, and a target. A dummy that is down cannot be hit until it stands.</summary>
     public bool Standing => _hp > 0f;
 
+    /// <summary>Health left, as the server last said.</summary>
+    public float Hp => _hp;
+
     /// <summary>How far it is leaning now, radians (the probes read the knockback off it).</summary>
     public float Lean => _angle;
 

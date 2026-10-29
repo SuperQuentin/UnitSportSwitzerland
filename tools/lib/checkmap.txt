@@ -705,6 +705,11 @@ shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
+# the sword (#1371): moves, hits, dummies and bots between two clients
+src/Combat/Sword         net    tools/swordnetcheck.sh
+src/Combat/TrainingDummy net    tools/swordnetcheck.sh
+src/Player/FootPlayer.Sword net tools/swordnetcheck.sh
+src/Bots/BotHands        net    tools/swordnetcheck.sh
 # aura battles (#907): plan, cut on the beat, the server grades
 src/Combat/Aura          net    tools/auranetcheck.sh
 src/Player/FootPlayer.Aura net  tools/auranetcheck.sh

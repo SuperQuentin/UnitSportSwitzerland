@@ -132,6 +132,9 @@ public partial class BotDirector : Node
     /// </list>
     /// </summary>
     public static double Clock { get; private set; }
+
+    /// <summary>The sword's service (#1371): what a bot's hands call for the moves and hits.</summary>
+    public Combat.SwordService? Swords => GetParent()?.GetNodeOrNull<Combat.SwordService>(Combat.SwordService.NodeName);
     private static double Now => Clock;
     private InterestService? Interest => GetParent()?.GetNodeOrNull<InterestService>(InterestService.NodeName);
 
@@ -227,7 +230,9 @@ public partial class BotDirector : Node
             else bot.Body.SquareToView = false;
             // the hands: a shot when the brain asks for one and the weapon is ready; a use runs its time
             BotHands.Tick(bot, now);
-            if (bot.Intent.FireAt is { } target) BotHands.Fire(bot, target);
+            if (bot.Intent.DodgeFrom is { } away) BotHands.Dodge(bot, away);
+            if (bot.Intent.SwordAt is { } swing) BotHands.Swing(bot, swing);
+            else if (bot.Intent.FireAt is { } target) BotHands.Fire(bot, target);
             else if (bot.Body.ItemAction == 1 && now >= bot.NextShotAt + 1.5) bot.Body.ItemAction = 0;   // arms down after a while
         }
         // a body freed under us (a teardown, a kick of the node): forget it
@@ -296,8 +301,8 @@ public partial class BotDirector : Node
             {
                 // /bot arm <weapon> [rounds]: every bot takes it (a check, a test of the hands)
                 string name = args.Length > 1 ? args[1] : "pistol";
-                if (!Enum.TryParse<Items.ItemId>(name, true, out var weapon) || Items.Weapons.Get(weapon) == null)
-                    return $"'{name}' is not a weapon (pistol, rifle, huntingrifle, shotgun, knife).";
+                if (!Enum.TryParse<Items.ItemId>(name, true, out var weapon) || Items.Weapons.Get(weapon) == null && weapon != Items.ItemId.Sword)
+                    return $"'{name}' is not a weapon (pistol, rifle, huntingrifle, shotgun, knife, sword).";
                 int rounds = args.Length > 2 && int.TryParse(args[2], out int r) ? Math.Clamp(r, 0, 300) : 30;
                 foreach (var bot in _bots.Values) BotHands.Arm(bot, weapon, rounds);
                 return $"{_bots.Count} bot(s) armed with a {weapon}.";
@@ -313,6 +318,26 @@ public partial class BotDirector : Node
                         && BotHands.Fire(bot, target.GlobalPosition + Vector3.Up * 1.2f))
                         fired++;
                 return $"{fired} bot(s) fired.";
+            }
+            case "swing":
+            {
+                // /bot swing: every bot with a sword steps up to the sender's nearest dummy (else the sender) and swings the combo
+                // at it: a check of the sword's hands (#1371), the server's own path the way a brain's would take it
+                if (bodyOf(sender) is not { } swinger) return "'/bot swing' needs your body in the world.";
+                var dummyAt = Swords?.NearestDummy(swinger.GlobalPosition);
+                var goal = dummyAt ?? swinger.GlobalPosition;
+                int swung = 0;
+                foreach (var bot in _bots.Values)
+                {
+                    if (!bot.Alive || !BotHands.HasSword(bot)) continue;
+                    var side = (swinger.GlobalPosition - goal) with { Y = 0 };
+                    side = side.LengthSquared() > 0.01f ? side.Normalized() : Vector3.Right;
+                    bot.Body.GlobalPosition = goal + side * 1.7f + Vector3.Up * 0.1f;
+                    bot.SwordWantUntil = Clock + 2.5;
+                    bot.SwordTarget = goal + Vector3.Up * 1.1f;
+                    swung++;
+                }
+                return $"{swung} bot(s) swing at {(dummyAt != null ? "the dummy" : "you")}.";
             }
             case "drive":
             {
