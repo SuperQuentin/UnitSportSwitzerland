@@ -118,6 +118,7 @@ public partial class HandFarmCheck : Node
         Expect(hand.Readout == "Wheat — stubble", $"the readout: \"{hand.Readout}\"");
 
         // 3. the hoe from the hotbar: its prompt, then Use tills the stubble
+        if (Inv.Selected == hoe) Inv.Select((hoe + 1) % Inventory.HotbarSize);   // the slot in hand would holster (#1369)
         await PressSlot(hoe);
         Expect(Inv.Selected == hoe && Inv.HeldId == ItemId.Hoe, $"slot {hoe + 1} picks the hoe ({Inv.HeldId})");
         await Seconds(0.3);

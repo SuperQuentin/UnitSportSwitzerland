@@ -25,7 +25,7 @@
   draw (`Inventory.Holstered`: the selection stays, `HeldId` reads `None`, so the hand is empty to every user and the
   replicated `HeldItemId` is 0; Use draws and uses at once, Aim draws, any slot pick draws; **auto holster** after
   `ItemController.AutoHolsterSeconds` (8 s) idle, `GameSettings.AutoHolster`, never while aiming, scoped, photo, mid-use,
-  a throw, fishing, a phone, in a match, or with a readout / build / gadget item (GPS, hammer, rod, smart binoculars)).
+  a throw, fishing, a phone, in a match, or with an item that works while held: readout, build, gadget, detector, farm tool, traffic tool, placeable, round tool, hammer, rod, smart binoculars).
   The hotbar follows `GameSettings.Hotbar` (Always / Fade: 3 s after a change then a tween fade / Hidden; touch always);
   the item in hand is always in the `HandChip` bottom right (icon, name, slot, holster key; dimmed when holstered),
   **hold X / D-pad ←** **hold X / D-pad ←** radial quick wheel

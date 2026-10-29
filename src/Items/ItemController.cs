@@ -486,7 +486,8 @@ public partial class ItemController : Node
         // what must stay out or is being used: the clock restarts
         var def = ItemDefs.Get(_inventory.HeldId);
         bool stays = def != null
-            && (def.Use is ItemUse.Readout or ItemUse.Build or ItemUse.Gadget
+            && (def.Use is ItemUse.Readout or ItemUse.Build or ItemUse.Gadget or ItemUse.Detector or ItemUse.Farm
+                    or ItemUse.TrafficTool or ItemUse.Place or ItemUse.Round
                 || _inventory.HeldId is ItemId.SmartBinoculars or ItemId.FishingRod or ItemId.Hammer);
         bool busy = !usable || !GameSettings.Current.AutoHolster || _inventory.Holstered || _inventory.Held.IsEmpty
                     || _inventory.InMatch || stays || _useBusy || _planting || _throw.Active || _aimingScope || _aimingPhoto
