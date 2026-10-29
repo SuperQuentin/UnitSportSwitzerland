@@ -256,6 +256,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         ids.Online = () => playerList.Players.Select(p => p.PeerId);
         _chat.NameAssigned += ids.Refresh;
         _registry.Ids = ids;
+        ids.Identified += (peer, id, name) => GD.Print($"[ids] peer {peer} is {name} ({id})");
         // /locate (#1277): every list the server holds, and an index of its buildings built now on workers
         // (from the tiles themselves, not the 32 MB cache the rest shares) or read back from user://cache
         AddChild(new World.Locate.LocateService(local, manifest, () => places, origin,

@@ -64,9 +64,15 @@ public sealed class PlayerIds
     /// name: a name is at most 20 letters, digits, <c>_</c> and <c>-</c> (<see cref="PlayerRegistry.Sanitize"/>), so a
     /// file older than #1359 tells its name keys apart by this.
     /// </summary>
-    public static bool IsId(string key) =>
-        key.StartsWith("acct:", StringComparison.Ordinal) || key.StartsWith("bot:", StringComparison.Ordinal)
-        || (key.Length == 32 && key.All(Uri.IsHexDigit));
+    public static bool IsId(string key)
+    {
+        if (key.StartsWith("acct:", StringComparison.Ordinal) || key.StartsWith("bot:", StringComparison.Ordinal)) return true;
+        // a fingerprint, or a second copy of the same install (Sleepers: KEY:2)
+        int colon = key.IndexOf(':');
+        string fingerprint = colon < 0 ? key : key[..colon];
+        return fingerprint.Length == 32 && fingerprint.All(Uri.IsHexDigit)
+            && (colon < 0 || (key.Length > colon + 1 && key[(colon + 1)..].All(char.IsDigit)));
+    }
 
     /// <summary>The connected peer with this id (or with this PlayerKey, as sleepers keep it), or 0.</summary>
     public long PeerOf(string id)

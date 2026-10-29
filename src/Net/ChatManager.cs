@@ -156,7 +156,7 @@ public partial class ChatManager : Node
             : "You are no longer an admin.", ChatKind.System);
     }
 
-    /// <summary>Server: a peer's name was set or changed — the key of its bank account.</summary>
+    /// <summary>Server: a peer's name was set or changed (shown only: saved data is keyed by its id, <see cref="PlayerIds"/>).</summary>
     public event Action<long>? NameAssigned;
 
     /// <summary>Server: operator rights for the other server-side systems (vehicle spawning).</summary>

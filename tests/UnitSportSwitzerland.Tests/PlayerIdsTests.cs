@@ -110,6 +110,8 @@ public class PlayerIdsTests
     [InlineData("acct:3f2a", true)]
     [InlineData("bot:Heidi", true)]
     [InlineData("0123456789ABCDEF0123456789ABCDEF", true)]
+    [InlineData("0123456789ABCDEF0123456789ABCDEF:2", true)]
+    [InlineData("0123456789ABCDEF0123456789ABCDEF:", false)]
     [InlineData("Anna", false)]
     [InlineData("Rider12", false)]
     [InlineData("ABCDEF0123456789ABCD", false)]

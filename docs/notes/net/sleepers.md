@@ -11,7 +11,8 @@
   client answers `Prove(publicKey, signature)` over `"unitsport-identity-v1:" + nonce`; a good one makes
   `PlayerKey.Fingerprint` (128 bits of SHA-256, hex) that peer's identity for the session. One nonce per
   join (no replays). A peer that never proves (old client, bot) leaves no sleeper; a key already in use
-  by a connected peer (two clients on one `user://`) gets no identity.
+  by a connected peer (two clients on one `user://`) is that install's next copy, `KEY:2`, `KEY:3`... (#1359,
+  `net/player-ids`): a player of its own, with its own sleeper and saved data.
 - **Server**: `SleeperBook` (pure, unit tested in `SleeperTests`) keeps one sleeper per key, saved to
   `user://sleepers/server.json` through `JsonStore.SaveAsync`, so they survive a restart. The key never
   goes to clients; they know a sleeper by its `Id`. `ServerWorld.OnPeerDisconnected` calls `PeerLeft`

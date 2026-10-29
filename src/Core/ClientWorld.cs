@@ -973,7 +973,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // does; the probes started further down are listed.
         var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null || Net.IdsNetProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
@@ -1025,6 +1025,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
         if (Interiors.HallCarProbe.Role != null) AddChild(new Interiors.HallCarProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
+        if (Net.IdsNetProbe.Role != null) AddChild(new Net.IdsNetProbe(items));
         if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));

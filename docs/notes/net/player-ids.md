@@ -10,6 +10,9 @@
   - `IdOf(peer)`: `acct:<user id>` when the server checked the player's account (`AccountGate`, optional or required),
     else the proven PlayerKey fingerprint (`net/sleepers`), else `bot:<name>` for a server-run bot. **Null while a
     player is not proven yet**: a system saves nothing under it and refuses the action for that moment.
+  - **The same install connected twice** (two windows, or two test clients sharing one `user://`): the second copy is
+    proven as `KEY:2` (then `:3`...), a player of its own with its own saved data. Before this, it was never proven,
+    and every action keyed by id refused it. `IsId` takes these.
   - `NameOfId(id, backup)`: the online player's name now, else the last one seen, else the system's backup, else
     "Rider". It also takes a raw PlayerKey (sleepers are keyed by it), found for a signed-in player too.
   - **Every record keeps a backup name beside its id** (refreshed when its player acts or is identified), shown only

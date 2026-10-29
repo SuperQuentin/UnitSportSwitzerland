@@ -120,10 +120,14 @@ public partial class Sleepers : Node
             return;
         }
         string key = PlayerKey.Fingerprint(publicKey);
+        // the same install connected twice (two windows, two test clients on one user://): the next copy is a player
+        // of its own, KEY:2, KEY:3..., so it keeps its own saved data apart from the first (#1359)
         if (_keyOf.ContainsValue(key))
         {
-            GD.Print($"[sleepers] peer {peer}: identity {key[..8]} already connected, no sleeper for it");
-            return;
+            int copy = 2;
+            while (_keyOf.ContainsValue($"{key}:{copy}")) copy++;
+            GD.Print($"[sleepers] peer {peer}: identity {key[..8]} already connected, this copy is {key[..8]}:{copy}");
+            key = $"{key}:{copy}";
         }
         _keyOf[peer] = key;
         GD.Print($"[sleepers] peer {peer} is {key[..8]}");
