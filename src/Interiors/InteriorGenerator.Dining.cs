@@ -107,8 +107,9 @@ public static partial class InteriorGenerator
             rooms[best].Type = guest;
             taken.Add(best);
             // the room walled off to its front's span, what is left of it keeping its use (#1292, the owner's call)
+            var parts = new List<int>();
             if (behind && !apt && fp.Doors.FirstOrDefault(x => x.Venue > 0 && Venues.At(x.Venue - 1) == v) is { Span: > 0 } front)
-                foreach (int part in WallToSpan(l, rooms, best, own, front.Span, was)) taken.Remove(part);
+                foreach (int part in WallToSpan(l, rooms, best, own, front.Span, was)) { taken.Remove(part); parts.Add(part); }
             // through its doors: the first kitchen, store or pantry becomes its kitchen, a dining room its Säli
             bool kitchen = false;
             int store = -1;
@@ -166,6 +167,9 @@ public static partial class InteriorGenerator
                     break;
                 }
             }
+            // entered by its own street door, it keeps no door into the building's rooms (a school's classroom, #1292
+            // playtest): each walled up where that room is still reached some other way
+            if (behind && !apt) SealOff(l, rooms, best, r => taken.Contains(r) || parts.Contains(r) || ToiletRoom(rooms[r].Type) || rooms[r].Type == RoomType.WC);
         }
         // the shop counter a shop building is promised goes to its shop, never into a restaurant
         if (taken.Count > 0 && l.Shop != Loot.ShopType.None && !l.Floors.Any(fl => fl.Rooms.Any(r => r.Type == RoomType.Shop)))
@@ -188,6 +192,32 @@ public static partial class InteriorGenerator
                 if (Math.Abs(at.X - e.X) < 0.05f && Math.Abs(at.Y - e.Z) < 0.05f) return i;
             }
         return null;
+    }
+
+    /// <summary>
+    /// Walls up guest room <paramref name="gi"/>'s doors and arches into rooms not its venue's (<paramref name="ours"/>
+    /// false), both sides and the leaf, where that room is still reached without the guest room.
+    /// </summary>
+    private static void SealOff(InteriorLayout l, List<RoomPlan> rooms, int gi, Func<int, bool> ours)
+    {
+        int f = l.Floors.FindIndex(fl => fl.Rooms == rooms);
+        foreach (var o in rooms[gi].Openings.ToList())
+        {
+            if (o.Kind is not (OpeningKind.Door or OpeningKind.Arch) || o.Other < 0 || o.Other >= rooms.Count || ours(o.Other)) continue;
+            int other = o.Other;
+            var back = rooms[other].Openings.FirstOrDefault(b => b.Other == gi && b.Side == Opposite(o.Side) && Math.Abs(b.Center - o.Center) < 0.01f);
+            rooms[gi].Openings.Remove(o);
+            if (back != null) rooms[other].Openings.Remove(back);
+            if (ReachedWithout(rooms, other, gi))
+            {
+                l.InnerDoors.RemoveAll(d => d.Floor == f && Math.Abs(d.Center - o.Center) < 0.01f
+                    && (d.Room == gi && d.Side == o.Side || d.Room == other && d.Side == Opposite(o.Side)));
+                continue;
+            }
+            // the only way to it: the door stays
+            rooms[gi].Openings.Add(o);
+            if (back != null) rooms[other].Openings.Add(back);
+        }
     }
 
     /// <summary>A part walled off a guest room must be at least this wide to be a room of its own, m; less stays the venue's.</summary>
