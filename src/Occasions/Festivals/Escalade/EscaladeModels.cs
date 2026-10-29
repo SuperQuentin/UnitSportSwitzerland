@@ -63,9 +63,9 @@ public static class EscaladeModels
         s.Box(new Vector3(0.14f, 1.62f, -0.1f), new Vector3(0.09f, 0.09f, 0.09f), Pea);
         s.Box(new Vector3(0.0f, 1.8f, 0.0f), new Vector3(0.22f, 0.04f, 0.1f), Leaf, new Basis(Vector3.Up, 0.6f));
         // the little flag of Geneva on a stick: a red and yellow half-and-half (an eagle and a key are beyond a low-poly flag)
-        s.Tube(new Vector3(0.0f, 1.56f, -0.3f), new Vector3(0.0f, 2.3f, -0.3f), 0.025f, 0.02f, WoodDark, 5);
+        s.Tube(new Vector3(-0.3f, 1.56f, -0.3f), new Vector3(-0.3f, 2.3f, -0.3f), 0.025f, 0.02f, WoodDark, 5);
         s.Box(new Vector3(0.0f, 2.1f, -0.31f), new Vector3(0.5f, 0.32f, 0.02f), Gold);
-        s.Box(new Vector3(-0.125f, 2.1f, -0.325f), new Vector3(0.25f, 0.32f, 0.02f), Red);
+        s.Box(new Vector3(-0.12f, 2.1f, -0.31f), new Vector3(0.22f, 0.24f, 0.06f), Red);
         return s.Build();
     }
 
@@ -95,9 +95,9 @@ public static class EscaladeModels
         // the cauldron
         s.Tube(new Vector3(0, 0.78f, 0), new Vector3(0, 1.3f, 0), 0.5f, 0.68f, Copper, 12);
         s.Tube(new Vector3(0, 1.28f, 0), new Vector3(0, 1.34f, 0), 0.72f, 0.72f, IronLight, 12);   // the rim
-        s.Tube(new Vector3(0, 1.3f, 0), new Vector3(0, 1.345f, 0), 0.62f, 0.62f, Soup, 12);       // the soup, a skin proud of the rim
-        s.Box(new Vector3(0.18f, 1.36f, 0.1f), new Vector3(0.1f, 0.06f, 0.1f), Carrot);
-        s.Box(new Vector3(-0.2f, 1.36f, -0.08f), new Vector3(0.1f, 0.06f, 0.1f), Leaf);
+        s.Tube(new Vector3(0, 1.3f, 0), new Vector3(0, 1.36f, 0), 0.62f, 0.62f, Soup, 12);         // the soup, a skin proud of the rim
+        s.Box(new Vector3(0.18f, 1.38f, 0.1f), new Vector3(0.1f, 0.06f, 0.1f), Carrot);
+        s.Box(new Vector3(-0.2f, 1.38f, -0.08f), new Vector3(0.1f, 0.06f, 0.1f), Leaf);
         // the ladle laid across the rim
         s.Tube(new Vector3(-0.2f, 1.42f, 0.7f), new Vector3(0.5f, 1.55f, 0.1f), 0.02f, 0.02f, Iron, 4);
         s.Tube(new Vector3(0.5f, 1.52f, 0.1f), new Vector3(0.55f, 1.46f, 0.05f), 0.07f, 0.05f, Iron, 6);

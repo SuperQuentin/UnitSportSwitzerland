@@ -7,6 +7,16 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
+
+`--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).
+
+- [ ] Look at the square: a cast-iron Marmite with a chocolate lid and a red-and-white band, marzipan vegetables and a little flag; a copper soup pot over a fire; the start arch; six torch posts on a ring of 55 m. Cartoon, PS1 and Realistic: do they read well, and do the fire, torches and lanterns glow at night?
+- [ ] Two people in a party at the Marmite: E (pad Y) as the first says "You hold the Marmite", the other gets "take the other side now!"; the second's E smashes it. Is the saying readable, the crash and crumbs a good sound, the chocolate in both packs? A third party member near it is paid but cannot smash.
+- [ ] The soup pot: one E feeds everyone of the party within 12 m; the others see "<name> ladles you a bowl of soupe". Eat the soupe (LMB, pad X): warm for 3 minutes.
+- [ ] The Course: E at the start arch begins it with the horn; the panel counts the time and shows the next gate with its distance and compass point; the torch posts are easy to find; a bell rings at each gate and at the line. Is par (a good jog) fair, are the gate rings of 6 m forgiving?
+- [ ] VR: a grip at the Marmite, the pot or the start line works through the pad route; gripping the lid or the ladle by hand is not built.
+
 ## Christmas market ([#1349](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1349))
 
 `--festival test --date 2027-11-30 --world fixture` (the market stands at the fixture's start; `--date 2027-12-06` for the Samichlaus's day), or online on the western map in the real dates (Montreux, Grand-Rue).

@@ -142,8 +142,10 @@ public partial class EscaladeCheck : ChatProbe
         var done = told.Last(t => t.What == FestivalService.EscaladeEvent.CourseDone);
         int expected = EscaladeRules.CoursePay(done.Ms / 1000.0, par);
         Expect(expected == EscaladeRules.CourseBatzen + EscaladeRules.SpeedBatzen, $"a teleporting run is the fastest the pay knows ({expected})");
-        Expect(await Until(() => Mine.Batzen == before + expected, 5), $"the run paid {expected} Batzen ({Mine.Batzen - before})");
-        Expect(Mine.Earned == earned + expected && Mine.Paid.GetValueOrDefault("course:1") == expected, "inside the game's day cap");
+        // the run's points (180) take the party past the first milestone (250), which pays its 10 Batzen on top, outside the cap
+        Expect(await Until(() => Mine.Earned == earned + expected, 5), $"the run earned {expected} Batzen ({Mine.Earned - earned})");
+        Expect(Mine.Batzen == before + expected + 10 && Mine.Milestones.SequenceEqual([0]), $"and the first milestone paid its 10 on top ({Mine.Batzen - before})");
+        Expect(Mine.Paid.GetValueOrDefault("course:1") == expected, "inside the game's day cap");
         Expect(done.Text.Contains("Course de l'Escalade"), $"the finish is told ({done.Text})");
 
         // a run that is too fast for a body is no run
@@ -156,9 +158,10 @@ public partial class EscaladeCheck : ChatProbe
         {
             Teleport(path[k]);
             await Until(() => game.NextGate == k + 1 || !game.Running, 8);
+            await Seconds(0.5);
         }
         before = Mine.Batzen;
-        Expect(await Until(() => told.Any(t => t.What == FestivalService.EscaladeEvent.CourseLost && t.Text.Contains("not a run")), 8), "a teleport at sprint limit is told it was not a run");
+        Expect(await Until(() => told.Any(t => t.What == FestivalService.EscaladeEvent.CourseLost && t.Text.Contains("not a run")), 8), $"a teleport at sprint limit is told it was not a run ({string.Join(", ", told.TakeLast(4).Select(t => t.What + ":" + t.A))}; gate {game.NextGate}, running {game.Running})");
         Expect(Mine.Batzen == before && Svc.EscaladeFinished == 1, "and pays nothing");
         FestivalService.EscaladeSpeedLimit = 1e9;
 
