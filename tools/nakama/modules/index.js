@@ -8,7 +8,7 @@ var PLAYER_KEY = /^[A-Za-z0-9_-]{6,128}$/; // a PlayerKey fingerprint (base64url
 var MAX_TIME_MS = 24 * 3600 * 1000;
 var MAX_WATTS = 3000;
 
-var Code = { INVALID_ARGUMENT: 3, NOT_FOUND: 5, PERMISSION_DENIED: 7, UNAUTHENTICATED: 16 };
+var Code = { INVALID_ARGUMENT: 3, NOT_FOUND: 5, ALREADY_EXISTS: 6, PERMISSION_DENIED: 7, UNAUTHENTICATED: 16 };
 var ADMINS = 'admins';   // the Nakama group of the admins (#1207) // gRPC codes; Nakama maps them to HTTP 400 and 403
 
 function InitModule(ctx, logger, nk, initializer) {
@@ -20,6 +20,7 @@ function InitModule(ctx, logger, nk, initializer) {
   initializer.registerRpc('admin_user', rpcAdminUser);
   initializer.registerRpc('admin_set_admin', rpcAdminSetAdmin);
   initializer.registerRpc('admin_ban', rpcAdminBan);
+  initializer.registerRpc('admin_rename', rpcAdminRename);
   // forgotten passwords (#1257): the layout service mails the link, these two hold and spend the token
   initializer.registerRpc('password_reset_issue', rpcPasswordResetIssue);
   initializer.registerRpc('password_reset_apply', rpcPasswordResetApply);
@@ -187,6 +188,25 @@ function rpcAdminBan(ctx, logger, nk, payload) {
   if (r.ban === true) nk.usersBanId([id]); else nk.usersUnbanId([id]);
   logger.info('admin %s set ban=%s on %s', ctx.userId, r.ban === true, id);
   return JSON.stringify({ id: id, banned: r.ban === true });
+}
+
+// { id, username }: rename an account (#1359), the rule of account creation (2 to 20 letters, digits, - and _).
+// A player renames their own account through Nakama itself (PUT /v2/account, account.html).
+var NAME_RULE = /^[A-Za-z0-9_-]{2,20}$/;
+function rpcAdminRename(ctx, logger, nk, payload) {
+  requireAdmin(ctx, nk);
+  var r = parse(payload);
+  var id = String(r.id || ''), name = String(r.username || '').trim();
+  if (!id) throw { message: 'invalid id', code: Code.INVALID_ARGUMENT };
+  if (!NAME_RULE.test(name)) throw { message: 'the name: 2 to 20 letters, digits, - and _', code: Code.INVALID_ARGUMENT };
+  var old;
+  try { old = nk.accountGetId(id).user.username; } catch (e) { throw { message: 'no such account', code: Code.NOT_FOUND }; }
+  if (old !== name) {
+    try { nk.accountUpdateId(id, name, null, null, null, null, null, null); }
+    catch (e) { throw { message: 'that name is taken', code: Code.ALREADY_EXISTS }; }
+  }
+  logger.info('admin %s renamed %s from %s to %s', ctx.userId, id, old, name);
+  return JSON.stringify({ id: id, username: name });
 }
 
 // ---- forgotten passwords (#1257) -------------------------------------------------------------------------------------

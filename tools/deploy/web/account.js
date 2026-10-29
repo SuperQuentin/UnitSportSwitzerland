@@ -1,8 +1,8 @@
 // The website's accounts (#1207, docs/plans/web-dashboard.md): sign in or create an account on Nakama, the same accounts as
 // the game, through /nakama/ (Caddy). The server key comes from nakama.json, which the deploy writes; it is not a secret.
 // The session (Nakama's token and refresh token) is kept in localStorage and renewed before it runs out.
-// A page puts <div data-account></div> where the account control goes and loads this file; admin.html uses
-// window.UnitSportAccount (ready, me, rpc, signOut) for its calls.
+// A page puts <div data-account></div> where the account control goes and loads this file; admin.html and account.html
+// use window.UnitSportAccount (ready, me, rpc, rename, signOut) for their calls.
 (function () {
   "use strict";
   var KEY = "unitsport.session";
@@ -73,6 +73,22 @@
       .then(function (m) { current = m; listeners.forEach(function (f) { f(m); }); render(); return m; });
   }
 
+  // the signed-in player's own new name (#1359), the rule of account creation; Nakama answers 409 for a taken one
+  function rename(name) {
+    return token().then(function (t) {
+      if (!t) { var e = new Error("Sign in first."); e.status = 401; throw e; }
+      return call("/v2/account", { method: "PUT", headers: { "Authorization": "Bearer " + t, "Content-Type": "application/json" },
+        body: JSON.stringify({ username: name }) });
+    }).then(refreshMe);
+  }
+
+  // asks the site to mail a link to reset.html (#1257); resolves to null, or what went wrong
+  function forgotPassword(email) {
+    return fetch("/api/password/forgot", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "houses" }, body: JSON.stringify({ email: email }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return r.ok ? null : j.error || "Could not send the email."; }); },
+        function () { return "The server does not answer."; });
+  }
+
   function signOut() {
     var s = session;
     save(null); current = null;
@@ -123,7 +139,7 @@
       '<label>Email<input id="acct-email" name="email" type="email" autocomplete="email" required></label>' +
       '<label>Password<input id="acct-password" name="password" type="password" autocomplete="current-password" minlength="8" required></label>' +
       '<label class="newonly">Name in the game<input id="acct-name" name="name" type="text" maxlength="20" autocomplete="nickname" placeholder="Heidi_92"></label>' +
-      '<div class="hint newonly">8 characters or more. The same account works in the game (Settings, Account).</div>' +
+      '<div class="hint newonly">8 characters or more. The same account works in the game (the account button on its title screen).</div>' +
       '<button class="forgot linkish" type="button">Forgot your password?</button>' +
       '<div class="err" role="alert"></div>' +
       '<button class="go" type="submit">Sign in</button>' +
@@ -151,13 +167,10 @@
       if (mode === "forgot") {
         if (!email) { err.textContent = "Type the email of your account."; return; }
         go.disabled = true; err.textContent = "";
-        fetch("/api/password/forgot", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "houses" }, body: JSON.stringify({ email: email }) })
-          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
-          .then(function (x) {
-            if (!x.ok) { err.textContent = x.j.error || "Could not send the email."; return; }
-            err.style.color = "var(--ok,#4fe08a)"; err.textContent = "If an account has this email, a link to choose a new password is on its way (30 minutes).";
-          }, function () { err.textContent = "The server does not answer."; })
-          .then(function () { go.disabled = false; });
+        forgotPassword(email).then(function (why) {
+          if (why) { err.textContent = why; return; }
+          err.style.color = "var(--ok,#4fe08a)"; err.textContent = "If an account has this email, a link to choose a new password is on its way (30 minutes).";
+        }).then(function () { go.disabled = false; });
         return;
       }
       if (!email || pw.length < 8) { err.textContent = "An email and a password of 8 characters or more."; return; }
@@ -179,7 +192,9 @@
       host.className = "acct";
       host.textContent = "";
       if (current) {
-        var who = document.createElement("span"); who.className = "who"; who.textContent = current.username; host.appendChild(who);
+        // the name opens the account page (#1359): change the name or the password
+        var who = document.createElement("a"); who.className = "who"; who.href = "account.html"; who.title = "Your account";
+        who.textContent = current.username; host.appendChild(who);
         if (current.admin) { var a = document.createElement("a"); a.className = "dash"; a.href = "admin.html"; a.textContent = "Dashboard"; host.appendChild(a); }
         var out = document.createElement("button"); out.type = "button"; out.textContent = "Sign out"; out.addEventListener("click", signOut); host.appendChild(out);
       } else {
@@ -198,6 +213,9 @@
     me: function () { return current; },
     onChange: function (f) { listeners.push(f); },
     rpc: rpc,
+    rename: rename,
+    forgotPassword: forgotPassword,
+    refresh: refreshMe,
     token: token,
     signOut: signOut,
     open: open,

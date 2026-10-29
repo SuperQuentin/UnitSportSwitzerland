@@ -37,7 +37,7 @@
 	}
 	handle {
 		root * @WEB_DIR@
-		@hidden not path / /index.html /status.json /media/* /map.html /players.json /antennas-4g.json /houses.html /admin.html /account.js /nakama.json
+		@hidden not path / /index.html /status.json /media/* /map.html /players.json /antennas-4g.json /houses.html /admin.html /account.html /reset.html /account.js /nakama.json
 		respond @hidden 404
 		header /status.json Cache-Control "no-store"
 		header /nakama.json Cache-Control "no-store"

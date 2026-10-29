@@ -196,6 +196,7 @@ web_accounts() {
   rq "cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
   rq "cat > $(qd "$WEB/admin.html")" < tools/deploy/web/admin.html
   rq "cat > $(qd "$WEB/reset.html")" < tools/deploy/web/reset.html
+  rq "cat > $(qd "$WEB/account.html")" < tools/deploy/web/account.html
 }
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
@@ -370,7 +371,7 @@ if [ $S_NAKAMA = 1 ]; then
       printf '{"url":"/nakama","serverKey":"%s"}
 ' "$key" | rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/nakama.json")"
       web_accounts
-      echo "  website accounts: nakama.json, account.js, admin.html and reset.html in $WEB; first admins: ${NAKAMA_ADMIN_EMAILS:-none}"
+      echo "  website accounts: nakama.json, account.js, admin.html, account.html and reset.html in $WEB; first admins: ${NAKAMA_ADMIN_EMAILS:-none}"
     fi
     echo "  official server of a build: put both in assets/account-server.json (url, serverKey) before releasing"
     echo "  admin console: ssh -L 7351:127.0.0.1:7351 -p $DEPLOY_PORT_SSH $DEPLOY_HOST, then http://127.0.0.1:7351 (login in $NAKAMA_DIR/.env)"
