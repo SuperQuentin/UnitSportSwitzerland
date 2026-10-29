@@ -113,7 +113,7 @@ public partial class August1NetProbe : ChatProbe
             Expect(await Until(() => fw.PlayingOwn, 30), "A plays B's volley");
             Expect(fw.ShowSeed == August1Rules.OwnSeed(run.Instance, 1), $"from the seed the server chose ({fw.ShowSeed})");
             Expect(await Until(() => fw.BurstsFired >= 1, 30), $"its first shell bursts here ({fw.BurstsFired})");
-            int points = 2 * (August1Rules.ShowPoints + pay * August1Rules.PointsPerBatzen);
+            int points = 2 * pay * August1Rules.PointsPerBatzen;   // the show was watched before the party formed: its points are no party's
             Expect(await Until(() => Svc.BoardOf(Id)?.Points == points, 15), $"A's board holds the party's {points} points ({Svc.BoardOf(Id)?.Points})");
             Say("done");
         }

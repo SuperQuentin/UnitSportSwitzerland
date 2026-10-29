@@ -7,6 +7,18 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## 1 August ([#1362](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1362))
+
+`--festival test --date 2027-07-31 --world fixture --pois fixture --august1hour 22.5` on a server, or online on the western map in the real dates (31 July and 1 August; held in Genève, else Lausanne or the largest town). `/time set 22:30` for the night.
+
+- [ ] The ground: a lampion stand (striped roof, a string of paper lanterns), a fireworks stand, a village fire (log pyramid with a flame), the lampion post with its lanterns and a Swiss flag, a stop lantern at each of ten stops on a ring. Cartoon, PS1 and Realistic: do they read, and do the lanterns and flames glow at night?
+- [ ] Höhenfeuer: from the village or a summit at night, flame billboards on the peaks round you out to the horizon (about one in four peaks under 2 500 m). Do they flicker, stay readable at 10 km and not pop when you walk? Does a paraglider over one of them climb?
+- [ ] Lake fireworks at 22:00 game time: at Genève, Lausanne-Ouchy, Montreux, Neuchâtel, Zürich, Luzern and Lugano do the shells lie over the water, not over the town? (The quays and bearings are read off the map by eye: report any that are wrong.)
+- [ ] The lampion: take one at the stand, hold it; others see its red light. Is it a pleasant light in each style and in VR?
+- [ ] The walk with friends: two or three in a party at the post at night, E (pad Y) starts it; the HUD shows the stop, its distance and compass point; lag behind and the party is told to wait. Is the loop's length (565 m, ten stops) and the 30 m rule fair?
+- [ ] Own fireworks: buy a box (20 Batzen) at the stand, light it at night with the use key (LMB, pad X, the VR trigger): the fuse hiss and a 40 s volley; others within sight play it too; is it loud and big enough but safe for the frame time on a Quest?
+- [ ] VR: a grip at a stand or the post works through the pad route; lighting by hand is not built.
+
 ## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
 
 `--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).
