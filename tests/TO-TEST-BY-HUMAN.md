@@ -7,6 +7,19 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Wheel zoom, holster, fading hotbar, hand chip (PR for [#1369](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1369))
+
+On foot in third person, anywhere (`--world fixture` does).
+
+- [ ] Sprint (Shift) and turn the wheel: the camera zooms in and out, the hotbar does not move. Alt + wheel steps the slot; releasing Alt after a wheel step does not free the cursor (a lone Alt tap still does).
+- [ ] Press the number of the slot in hand, and `,`: the item leaves the hand and comes back. Does the chip (bottom right) read well dimmed as "holstered", and "Empty hand" on an empty slot, over snow and over a dark scene?
+- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Aim, a camera held up, the GPS, the hammer and the rod must never holster on their own.
+- [ ] Pad: tap D-pad right steps the slot; hold it (about half a second, a tick) holsters or draws. Does the tap feel late now (it fires on release)?
+- [ ] VR: hold the grip at the right hip for a third of a second (buzz): the item goes away, again it comes out. A quick squeeze there still steps to the next slot.
+- [ ] Settings › Gameplay › Hotbar: Always, Fade out (default), Hidden. In Fade, change slot / holster / use an item / open the quick wheel: the bar shows for about 3 s then fades smoothly. Is 3 s right?
+- [ ] A second player sees your hand empty when you holster and the item come back when you draw.
+- [ ] Touch (phone, or `--mobile`): the hotbar stays always visible and there is no chip.
+
 ## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
 
 `--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).

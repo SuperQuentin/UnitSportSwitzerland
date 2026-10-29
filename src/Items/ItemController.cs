@@ -59,6 +59,20 @@ public partial class ItemController : Node
     private bool _aimingPhoto;
     private bool _aimingScope;   // Aim held on a scoped item (optic / camera / gun): the wheel belongs to it
 
+    /// <summary>
+    /// The mouse wheel is the held item's this frame (hammer + Aim: the piece; Aim on a camera or scope: the focal
+    /// length): the camera does not zoom with it (#1369). A flag, so the two <c>_UnhandledInput</c>s need no order.
+    /// </summary>
+    public static bool WheelClaimed { get; private set; }
+
+    /// <summary>Idle seconds in hand before the item is put away (<see cref="GameSettings.AutoHolster"/>, #1369).</summary>
+    public const double AutoHolsterSeconds = 8.0;
+    /// <summary>A pad's D-pad right held this long holsters or draws; a tap steps the hotbar (#1369).</summary>
+    public const double PadHolsterHold = 0.45;
+    private double _lastActive;
+    private double _padNextAt = -1;
+    private bool _padNextDone;
+
     // the Polaroid: the print coming out and developing (DevelopSeconds), then the Photo item
     public const float DevelopSeconds = 3f;
     private PhotoUi _photoUi = null!;
@@ -132,6 +146,8 @@ public partial class ItemController : Node
         AddChild(_sfx);
         _ui = new InventoryUi(this) { Name = "InventoryUi" };
         AddChild(_ui);
+        _lastActive = GameClock.Now;
+        _inventory.HandChanged += () => _lastActive = GameClock.Now;
         _photoUi = new PhotoUi(this) { Name = "PhotoUi" };
         AddChild(_photoUi);
         _catalogue = new CatalogueUi(this) { Name = "CatalogueUi" };
@@ -260,8 +276,13 @@ public partial class ItemController : Node
             _useBusy = false;
         }
 
-        var def = ItemDefs.Get(_inventory.HeldId);
         bool usable = UsablePlayer != null;
+        // Aim puts a holstered item in the hand (#1369), before anything below reads what is held
+        if (usable && _inventory.Holstered && !_inventory.Held.IsEmpty && !_ui.IsOpen && !UiFocus.TextEntryActive
+            && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim))
+            DrawHeld(player);
+        StepHolster(player, usable);
+        var def = ItemDefs.Get(_inventory.HeldId);
         bool aiming = usable && !UiFocus.TextEntryActive
                       && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim)
                       && def?.Use is ItemUse.Optic or ItemUse.Photo or ItemUse.Shoot;
@@ -270,6 +291,8 @@ public partial class ItemController : Node
         // switching item or getting on a bike all fall back to normal without a special case
         _aimingPhoto = aiming && def!.Use == ItemUse.Photo;
         _aimingScope = aiming;
+        WheelClaimed = _aimingPhoto || _aimingScope
+                       || (_inventory.HeldId == ItemId.Hammer && PlayerInput.Held(PlayerInput.AimItem));
         _ui.PhotoFocalMm = _focalMm;
         // binoculars breathe: a slow tiny zoom drift, and the overlay drifts with it
         float breath = (float)Time.GetTicksMsec() / 1000f;
@@ -364,35 +387,44 @@ public partial class ItemController : Node
             Click();
             GetViewport().SetInputAsHandled();
         }
-        else if (_inventory.HeldId == ItemId.Hammer && PlayerInput.Held(PlayerInput.AimItem)
-                 && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        else if (_inventory.HeldId == ItemId.Hammer && PlayerInput.Held(PlayerInput.AimItem) && (StepNext(e) || StepPrev(e)))
         {
-            // Aim + wheel: the next piece instead of the next hotbar slot
-            _build.CyclePiece(e.IsActionPressed(PlayerInput.NextItem) ? 1 : -1);
+            // Aim + wheel: the next piece instead of the camera's zoom
+            _build.CyclePiece(StepNext(e) ? 1 : -1);
             Click();
             GetViewport().SetInputAsHandled();
         }
-        else if (_aimingPhoto && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        else if (_aimingPhoto && (StepNext(e) || StepPrev(e)))
         {
-            // aiming the camera, the wheel / D-pad zoom instead of cycling the hotbar: wheel up = in
-            bool next = e.IsActionPressed(PlayerInput.NextItem);
+            // aiming the camera, the wheel / D-pad set its focal length (not the view's zoom): wheel up = in
+            bool next = StepNext(e);
             bool pad = e is InputEventJoypadButton;
             if (pad && next && _focalMm >= FocalMax - 0.5f) _focalMm = FocalMin;   // the pad has one key: wrap
             else _focalMm = Mathf.Clamp(_focalMm * (next == pad ? ZoomStep : 1f / ZoomStep), FocalMin, FocalMax);
             GetViewport().SetInputAsHandled();
         }
-        else if (_aimingScope && e is InputEventMouseButton && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        else if (_aimingScope && e is InputEventMouseButton && (StepNext(e) || StepPrev(e)))
         {
-            // aiming an optic or gun: the wheel is not a hotbar scroll, but it is still not left to leak elsewhere
+            // aiming an optic or gun: the wheel is not the camera's zoom, but it is still not left to leak elsewhere
             GetViewport().SetInputAsHandled();
         }
-        else if (PlayerInput.IsZoomWheel(e))
+        else if (e is InputEventJoypadButton && e.IsActionPressed(PlayerInput.NextItem))
         {
-            // Shift + wheel is the camera's zoom (#1149): left for the player
+            // a tap steps the hotbar when it lets go, a hold holsters (StepHolster, #1369)
+            _padNextAt = GameClock.Now;
+            _padNextDone = false;
+            GetViewport().SetInputAsHandled();
         }
         else if (e.IsActionPressed(PlayerInput.NextItem))
         {
+            // Alt + wheel (#1369): the plain wheel is the camera's zoom (FootPlayer)
             _inventory.Cycle(+1);
+            Click();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (e.IsActionPressed(PlayerInput.Holster))
+        {
+            if (!_inventory.Held.IsEmpty) _inventory.ToggleHolster();
             Click();
             GetViewport().SetInputAsHandled();
         }
@@ -404,14 +436,65 @@ public partial class ItemController : Node
         }
         else if (PlayerInput.SlotPressed(e) is var slot and >= 0 && slot < Inventory.HotbarSize)
         {
-            // the slot_1..6 actions (physical keys: the same keys on AZERTY; rebindable, #391)
-            _inventory.Select(slot);
+            // the slot_1..6 actions (physical keys: the same keys on AZERTY; rebindable, #391);
+            // the slot already in hand puts the item away or takes it out (#1369)
+            if (slot == _inventory.Selected && !_inventory.Held.IsEmpty) _inventory.ToggleHolster();
+            else _inventory.Select(slot);
             Click();
             GetViewport().SetInputAsHandled();
         }
     }
 
     private void Click() => Play(SfxSynth.Tick, 1.4f);
+
+    private static bool StepNext(InputEvent e) =>
+        e.IsActionPressed(PlayerInput.NextItem) || e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelDown };
+
+    private static bool StepPrev(InputEvent e) =>
+        e.IsActionPressed(PlayerInput.PrevItem) || e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp };
+
+    /// <summary>Takes a holstered item out: Use, Aim, a slot pick (#1369). Remote peers see it through the replicated HeldItemId.</summary>
+    private void DrawHeld(FootPlayer player)
+    {
+        _inventory.SetHolstered(false);
+        player.HeldItemId = player.PhoneState != 0 ? 0 : (int)_inventory.HeldId;
+    }
+
+    /// <summary>
+    /// A pad's D-pad right (tap: next slot, hold: holster) and the auto holster (#1369): the item in hand goes away
+    /// after <see cref="AutoHolsterSeconds"/> without being used, aimed or picked, unless something needs it out.
+    /// </summary>
+    private void StepHolster(FootPlayer player, bool usable)
+    {
+        double now = GameClock.Now;
+        if (_padNextAt >= 0)
+        {
+            if (!Input.IsActionPressed(PlayerInput.NextItem))
+            {
+                if (!_padNextDone) { _inventory.Cycle(+1); Click(); }
+                _padNextAt = -1;
+            }
+            else if (!_padNextDone && now - _padNextAt >= PadHolsterHold)
+            {
+                _padNextDone = true;
+                if (!_inventory.Held.IsEmpty) _inventory.ToggleHolster();
+                Click();
+            }
+        }
+
+        // what must stay out or is being used: the clock restarts
+        var def = ItemDefs.Get(_inventory.HeldId);
+        bool stays = def != null
+            && (def.Use is ItemUse.Readout or ItemUse.Build or ItemUse.Gadget
+                || _inventory.HeldId is ItemId.SmartBinoculars or ItemId.FishingRod or ItemId.Hammer);
+        bool busy = !usable || !GameSettings.Current.AutoHolster || _inventory.Holstered || _inventory.Held.IsEmpty
+                    || _inventory.InMatch || stays || _useBusy || _planting || _throw.Active || _aimingScope || _aimingPhoto
+                    || _ui.IsOpen || _ui.WheelOpen || _photoUi.Blocking || UiFocus.TextEntryActive || player.PhoneState != 0
+                    || _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle
+                    || PlayerInput.Held(PlayerInput.UseItem) || PlayerInput.Held(PlayerInput.AimItem) || ForceUse || _forceAim;
+        if (busy) _lastActive = now;
+        else if (now - _lastActive >= AutoHolsterSeconds) _inventory.SetHolstered(true);
+    }
 
     /// <summary>A sound in the player's ears (the item channel): the rod's reel and its plop (#493).</summary>
     internal void PlaySound(AudioStream stream, float pitch = 1f) => Play(stream, pitch);
@@ -429,6 +512,10 @@ public partial class ItemController : Node
 
     internal void UseHeld(FootPlayer player)
     {
+        // Use on a holstered item draws it and uses it on the same press (#1369)
+        if (_inventory.Holstered) DrawHeld(player);
+        _lastActive = GameClock.Now;
+        _ui.PulseHotbar();
         // aiming a throw: Use winds it up, letting go throws (StepThrow)
         if (_throw.Active)
         {

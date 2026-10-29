@@ -20,7 +20,15 @@
   mounting needs no special case. **Items work on foot only** — the shoulders they use (RB use,
   LB aim) are trick/boost when mounted. `HeldItemVisual` draws the item: a swaying viewmodel on the
   camera in first person, else on `FootPlayer.HandLocal` (the wrist from the same rig the body is
-  posed from). Controls: **1–6** / wheel / D-pad → select, **hold X / D-pad ←** radial quick wheel
+  posed from). Controls: **1–6** / **Alt + wheel** / D-pad → select (the plain wheel zooms the camera, #1369),
+  **`,`** / the number of the slot in hand / **hold D-pad →** / VR: hold the grip at the right hip → holster and
+  draw (`Inventory.Holstered`: the selection stays, `HeldId` reads `None`, so the hand is empty to every user and the
+  replicated `HeldItemId` is 0; Use draws and uses at once, Aim draws, any slot pick draws; **auto holster** after
+  `ItemController.AutoHolsterSeconds` (8 s) idle, `GameSettings.AutoHolster`, never while aiming, scoped, photo, mid-use,
+  a throw, fishing, a phone, in a match, or with a readout / build / gadget item (GPS, hammer, rod, smart binoculars)).
+  The hotbar follows `GameSettings.Hotbar` (Always / Fade: 3 s after a change then a tween fade / Hidden; touch always);
+  the item in hand is always in the `HandChip` bottom right (icon, name, slot, holster key; dimmed when holstered),
+  **hold X / D-pad ←** **hold X / D-pad ←** radial quick wheel
   (aim with mouse or right stick, release), **I / Tab / Back** inventory (a pad's Back opens it on the release: a hold is the quick menu,
   `ui/quick-menu`; Minecraft-style: see
   the `cursor-inventory` note; money: the `cash-account` note). Something new that does not fit (a developed photo, a flag picked up, `/spawn`, a radio picked up, the hunting-season gun) goes through `ItemController.Give`: the rest is dropped on the ground in front of you instead of lost. Screenshot with `--ride foot,5,out.png` plus
