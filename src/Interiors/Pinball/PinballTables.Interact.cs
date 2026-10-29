@@ -22,7 +22,7 @@ public partial class PinballTables
 
     private string Text((InteriorNode Node, int Index) at)
     {
-        var title = PinballLayouts.Get(TableOf(at.Node.Layout.Furniture[at.Index])).Title;
+        var title = PinballLayouts.Get(TableOf(at.Node.Layout, at.Index)).Title;
         var m = Peek(at.Node.Layout.Key, at.Index);
         if (m != null && m.Players.Contains(MyId) && m.Runner != 0) return $"Back to {title}";
         if (m is { Runner: not 0 }) return $"Watch {title}, or join";

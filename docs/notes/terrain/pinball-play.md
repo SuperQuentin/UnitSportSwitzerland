@@ -23,7 +23,9 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   (`PinballBackbox`) an image drawn on change through `shaders/pinball_display.gdshader` (reels, segments,
   round dots, LCD). Decals are thin plates, never quads on a surface; the backglass art 9 mm a layer (zfight).
   Headless, the lamps' MultiMesh instances read at the playfield's origin: most of the tables' z-fight baseline.
-  The table of a piece: `PinballTables.TableOf` (its place in the plan); the room's mesh draws nothing for it.
+  The table of a piece: `PinballTables.TableOf` (`PinballLayouts.TableIn`: the venue's machines in a row by x then z take
+  the tables in turn from one the first machine's place picks, so up to four are all different and neighbours never
+  match); the room's mesh draws nothing for it.
 - **Net** (`PinballTables`, `World/Pinball`): the player up's client runs the table (`PinballPlay`) and sends
   20 frames a second (events + poses); the server mirrors the rules from the events (`PinballGame.Mirror`: same
   events, same score), keeps the log, hands the table to the next player's client (`Run` with the log,
@@ -42,6 +44,12 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   (Gland): `--origin 2510000,1140000`, shot `429.1,i1.6,-978.3,-5,43.4,3,<png>`, then machines #7 and #8 at plan
   x 39.16 / 35.69, z 16.02, turned 2: the eye pose `35.69,l1.5,14.93,-21.5,180`, straight down
   `35.69,l2.05,15.80,-83.5,180` (a shot camera is not the play camera: shots take the queue's pose).
+- **Showcase film**: `python tools/pinball-showcase.py stills|film|cut|all` (the cinema showcase's way,
+  `trailer/cinema-showcase`): the four tables in three venues, a robot at the flippers (`/pinball play`, `start`,
+  `robot`), the shot camera the queue's; one launch per venue, and a second machine stepped up to in the same launch
+  took the Start but stayed in attract, so BowlinGland's two tables are two launches. Each launch runs on a user:// of its
+  own (APPDATA) seeded with high scores. `stills` keeps the HUD (`/pinball`'s list names the live indices: the plans
+  regenerate, so check them before filming). ~25 min to film, a minute to cut, 93 s at 1080p.
 - **Checks**: `--pinballcheck --systems ui` (cabinets played through their nodes: flippers, balls, drops, lamps,
   the backbox, no mesh rebuilt, the screen over the wire), `--zfightcheck Pinball`, `--sounds,check`.
 - **High scores** (`PinballHighScores`, `PinballScoreBook`, unit tested): the best five per machine, keyed like the

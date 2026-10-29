@@ -50,7 +50,7 @@ public partial class PinballNetProbe : ChatProbe
         string key = layout.Key;
         int index = layout.Furniture.FindIndex(f => f.Type == FurnitureType.Pinball);
         if (index < 0) { Fail($"{key} has no pinball machine"); return; }
-        GD.Print($"{Log} in {key}, machine #{index}: {PinballLayouts.Get(PinballTables.TableOf(layout.Furniture[index])).Title}");
+        GD.Print($"{Log} in {key}, machine #{index}: {PinballLayouts.Get(PinballTables.TableOf(layout, index)).Title}");
         Stand(me, node, layout, index, _role == "A" ? -0.1f : 0.5f);
         await Seconds(1.0);
 

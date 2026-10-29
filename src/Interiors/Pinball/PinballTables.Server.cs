@@ -23,7 +23,7 @@ public partial class PinballTables
     {
         if (Plan(peer, key) is not { } l || index < 0 || index >= l.Furniture.Count || l.Furniture[index].Type != FurnitureType.Pinball) return false;
         if (!Near(peer, l, index)) return Refuse(peer, "Step up to the machine.");
-        var m = MachineOf(key, index, TableOf(l.Furniture[index]));
+        var m = MachineOf(key, index, TableOf(l, index));
         if (m.Rules is { State: PinballRules.Phase.Playing } r)
         {
             if (m.Players.Contains(peer) || m.Joining.Contains(peer)) return false;

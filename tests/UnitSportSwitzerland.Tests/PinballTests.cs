@@ -14,6 +14,25 @@ public class PinballTests
     private readonly ITestOutputHelper _out;
     public PinballTests(ITestOutputHelper output) => _out = output;
 
+    [Fact]
+    public void A_venues_machines_are_all_different_up_to_four_and_neighbours_never_match()
+    {
+        for (int venue = 0; venue < 200; venue++)
+        {
+            float z = venue * 3.17f - 40f;
+            for (int n = 1; n <= 7; n++)
+            {
+                // a row along x, listed right to left
+                var machines = Enumerable.Range(0, n).Select(i => (X: 5f + venue * 0.41f + (n - 1 - i) * 0.76f, Z: z)).ToList();
+                var tables = Enumerable.Range(0, n).Select(k => PinballLayouts.TableIn(machines, k)).ToList();
+                Assert.All(tables, t => Assert.InRange(t, 0, PinballLayouts.Count - 1));
+                if (n <= PinballLayouts.Count) Assert.Equal(n, tables.Distinct().Count());
+                var row = Enumerable.Range(0, n).OrderBy(k => machines[k].X).Select(k => tables[k]).ToList();
+                for (int i = 1; i < n; i++) Assert.NotEqual(row[i - 1], row[i]);
+            }
+        }
+    }
+
     /// <summary>
     /// A ball rolling down <paramref name="side"/>'s inlane, that flipper pressed <paramref name="delayMs"/> after,
     /// held 0.3 s: the switches the ball closes in the next 3 s (until it comes back past the slings).

@@ -18,7 +18,7 @@ public partial class PinballTables
             case "play" when parts.Length > 1 && int.TryParse(parts[1], out int index):
                 if (index < 0 || index >= l.Furniture.Count || l.Furniture[index].Type != FurnitureType.Pinball) return $"No pinball machine #{index} here.";
                 PinballPlay.Begin(player, key, index);
-                return $"At {PinballLayouts.Get(TableOf(l.Furniture[index])).Title} (#{index}).";
+                return $"At {PinballLayouts.Get(TableOf(l, index)).Title} (#{index}).";
             case "robot":
                 if (PinballPlay.Current is not { } play) return "Step up to a machine first (/pinball play <n>).";
                 play.Robot = !play.Robot;
@@ -40,7 +40,7 @@ public partial class PinballTables
                     var m = Peek(key, i);
                     string state = m?.Rules is { } r ? $"{r.State}, {string.Join(" / ", r.Players.Select(x => PinballRules.Fmt(x.Score)))}"
                         : ScreenOf(key, i) is { } s ? $"{s.Phase}, {string.Join(" / ", s.Scores.Select(PinballRules.Fmt))}" : "idle";
-                    lines.Add($"#{i} {PinballLayouts.Get(TableOf(l.Furniture[i])).Title}: {state}");
+                    lines.Add($"#{i} {PinballLayouts.Get(TableOf(l, i)).Title}: {state}");
                 }
                 return lines.Count == 0 ? "No pinball machines here." : string.Join("\n", lines);
             }

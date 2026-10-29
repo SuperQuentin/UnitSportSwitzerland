@@ -79,9 +79,23 @@ public partial class PinballTables : Node
         if (Instance == this) Instance = null;
     }
 
-    /// <summary>A pinball piece's table: one of the four, from its place in the plan, the same on every peer.</summary>
-    public static int TableOf(FurniturePlan f) =>
-        (int)(Occasions.OccasionHash.Unit((int)(f.X * 100), (int)(f.Z * 100), 1325, (uint)f.Type) * PinballLayouts.Count) % PinballLayouts.Count;
+    /// <summary>
+    /// The table of pinball piece <paramref name="index"/>: one of the four, from the venue's machines in the plan
+    /// (<see cref="PinballLayouts.TableIn"/>: all different up to four, never two alike side by side), the same on every peer.
+    /// </summary>
+    public static int TableOf(InteriorLayout l, int index)
+    {
+        var machines = new List<(float X, float Z)>();
+        int k = 0;
+        for (int i = 0; i < l.Furniture.Count; i++)
+        {
+            var f = l.Furniture[i];
+            if (f.Type != FurnitureType.Pinball) continue;
+            if (i == index) k = machines.Count;
+            machines.Add((f.X, f.Z));
+        }
+        return machines.Count == 0 ? 0 : PinballLayouts.TableIn(machines, k);
+    }
 
     /// <summary>A piece's frame in its plan: turned, on its floor.</summary>
     public static Transform3D PieceFrame(InteriorLayout l, FurniturePlan f) =>
