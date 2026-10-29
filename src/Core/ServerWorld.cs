@@ -33,6 +33,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private World.TrafficGenerators? _trafficEndpoints;
     private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
+    private Net.PlayerIds? _ids;
     private Adventure.AdventureService? _adventure;
     private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
@@ -246,6 +247,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword(), PlayerRegistry.ParseHostToken());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
+        // who a peer is apart from its name (#1359): saved data is keyed by these ids, names looked up when shown
+        var playerList = _registry;
+        var ids = _ids = Net.PlayerIds.Server = Net.PlayerIdsCache.Create(persist: !Items.Bank.Scratch);
+        ids.AccountOf = peer => _accountGate?.Of(peer)?.UserId;
+        ids.KeyOf = peer => _sleepers?.KeyOf(peer);
+        ids.NameOf = peer => _chat?.NameOfPeer(peer) is { Length: > 0 } n && n != $"Rider{peer}" ? n : null;
+        ids.Online = () => playerList.Players.Select(p => p.PeerId);
+        _chat.NameAssigned += ids.Refresh;
+        _registry.Ids = ids;
         // /locate (#1277): every list the server holds, and an index of its buildings built now on workers
         // (from the tiles themselves, not the 32 MB cache the rest shares) or read back from user://cache
         AddChild(new World.Locate.LocateService(local, manifest, () => places, origin,
@@ -370,6 +380,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // players who left, asleep where they were (#644)
         _sleepers = Net.Sleepers.Create(this, origin, server: true);
         _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+        _sleepers.Proven += (peer, _) => ids.Refresh(peer);
         // the Adventure layer (#1223): progress per proven identity (an account on --accounts required), quests;
         // off for a player in a Battle Royale round
         if (Systems.On(Systems.Adventure))
@@ -732,6 +743,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // before the registry forgets its name and the body is freed: it lies down where it was (#644)
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _adventure?.PeerLeft(id);
+        _ids?.Left(id);
         Adventure.Places.PlacesService.Instance?.PeerLeft(id);
         Adventure.Rewards.RewardService.Instance?.PeerLeft(id);
         Adventure.Navigation.AdventureTravel.Instance?.PeerLeft(id);
