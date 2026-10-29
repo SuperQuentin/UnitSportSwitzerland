@@ -77,6 +77,7 @@ public partial class HandFarmCheck : Node
     private async Task Run(FootPlayer me, FarmField farm, HandFarming hand, Loot.Gathering gathering, PlacedObjects placed,
         HashSet<long> before, double se, double sn)
     {
+        UnitSport.Core.GameSettings.Current.AutoHolster = false;   // long idle waits and runs: the holster is PhoneProbe's (#1369)
         // 0. the lent pack is empty; the farm kit comes in the way a find or a purchase does
         int held = 0;
         for (int i = 0; i < Inventory.Size; i++) if (!Inv[i].IsEmpty) held++;
@@ -118,6 +119,7 @@ public partial class HandFarmCheck : Node
         Expect(hand.Readout == "Wheat — stubble", $"the readout: \"{hand.Readout}\"");
 
         // 3. the hoe from the hotbar: its prompt, then Use tills the stubble
+        if (Inv.Selected == hoe) Inv.Select((hoe + 1) % Inventory.HotbarSize);   // the slot in hand would holster (#1369)
         await PressSlot(hoe);
         Expect(Inv.Selected == hoe && Inv.HeldId == ItemId.Hoe, $"slot {hoe + 1} picks the hoe ({Inv.HeldId})");
         await Seconds(0.3);

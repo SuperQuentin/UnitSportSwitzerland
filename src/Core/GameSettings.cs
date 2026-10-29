@@ -40,6 +40,15 @@ public enum AntiAliasing
     Msaa8x = 4,
 }
 
+/// <summary>When the hotbar is drawn on foot (#1369): the current item is always in the corner chip.</summary>
+public enum HotbarMode
+{
+    Always = 0,
+    /// <summary>Shown for a few seconds after a slot change, a holster or draw, a use or the quick wheel, then faded out.</summary>
+    Fade = 1,
+    Hidden = 2,
+}
+
 /// <summary>What the on-screen performance overlay shows (F3 cycles it).</summary>
 public enum PerfOverlayMode
 {
@@ -359,6 +368,13 @@ public sealed class GameSettings
 
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
+
+    /// <summary>The hotbar on foot (#1369). Touch controls keep it always, their taps need it.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public HotbarMode Hotbar { get; set; } = HotbarMode.Fade;
+
+    /// <summary>The item in hand is put away after a few idle seconds (#1369, <see cref="Items.ItemController.AutoHolsterSeconds"/>).</summary>
+    public bool AutoHolster { get; set; } = true;
 
     /// <summary>The on-foot camera over the left shoulder instead of the right; <c>swap_shoulder</c> flips it in game (#460).</summary>
     public bool LeftShoulder { get; set; }
