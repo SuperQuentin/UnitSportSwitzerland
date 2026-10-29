@@ -41,3 +41,20 @@ the same cache again; `[world] ready after N s`).
 - **Not a blocker:** the generated horizon's first pass runs on a pool thread (`HorizonLayer.Reload`),
   it never held "connecting" (the client logs `connected` before the pass ends); only its CPU use
   mattered, and a warm cache makes it ~1 s.
+
+## Measured (Oct 2026, `tools/joinbench.sh`, 3 rounds, medians; Windows, busy machine)
+
+Loopback server with the real terrain (6,699 tiles, `--stream-bandwidth 50`), client with no terrain of its
+own and a scratch `--cache`; the cold run stays on until the horizon passes saved their caches.
+`[world] ready after`:
+
+| | Before (main) | After |
+|---|---|---|
+| Cold (empty cache) | 30.1 s (14.9-33.0) | 24.2 s (16.9-29.0) |
+| Warm (same cache) | 15.2 s (10.8-19.2) | 1.3 s (0.8-1.5) |
+
+Cold is dominated by the streaming and the CPU shared with the server on loopback, so its spread is
+wider than the change. Warm: the index and region files come from the cache, the horizon is read once,
+and the screen no longer waits for the lattice. Server side, `OnPeerAccepted` costs 2-3 ms
+(`rules sent at 0 ms, ... state sent at 3 ms`): moving the rules first was free to do but is not where
+the time went.
