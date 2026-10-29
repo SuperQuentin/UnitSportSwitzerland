@@ -15,6 +15,8 @@ public partial class VenuePatrons
 {
     /// <summary>A room's murmur at one guest and how much louder each doubling makes it, dB.</summary>
     private const float MurmurOne = -26f, MurmurPerDoubling = 4f;
+    /// <summary>How much quieter a cinema hall's audience is than a bar's, dB: they whisper through the film (#1365).</summary>
+    private const float HallHush = 24f;
     /// <summary>How far a guest's one-shot carries, m; how many play at once.</summary>
     private const float ShotRange = 18f;
     private const int ShotVoices = 4;
@@ -27,7 +29,7 @@ public partial class VenuePatrons
         public float Db = -80f, Target = -80f;
         public int Count;
         public Vector3 Sum;
-        public bool Dining, Lobby, Cafe, Bar, Arcade;
+        public bool Dining, Lobby, Hall, Cafe, Bar, Arcade;
         public Vector3? Counter, Tap, Cabinet;
     }
 
@@ -51,7 +53,7 @@ public partial class VenuePatrons
         }
         foreach (var (key, r) in _rooms)
         {
-            r.Target = r.Count == 0 ? -80f : MurmurOne + MurmurPerDoubling * MathF.Log2(r.Count);
+            r.Target = r.Count == 0 ? -80f : MurmurOne + MurmurPerDoubling * MathF.Log2(r.Count) - (r.Hall ? HallHush : 0f);
             // a terrace's murmur follows its guests; a room's stays in its middle
             if (key < 0 && r.Count > 0) r.Murmur.Position = r.Sum / r.Count + Vector3.Up;
             if (r.Count == 0) continue;
@@ -107,6 +109,7 @@ public partial class VenuePatrons
                 middle = new Vector3((rp.X0 + rp.X1) / 2, l.FloorY(piece.Floor) + 1.6f, (rp.Z0 + rp.Z1) / 2);
                 var type = rp.Type;
                 room.Lobby = type == RoomType.CinemaLobby;
+                room.Hall = type == RoomType.Auditorium;
                 room.Arcade = type == RoomType.ArcadeHall;
                 room.Cafe = type == RoomType.CafeRoom;
                 room.Bar = type is RoomType.BarRoom or RoomType.PubRoom or RoomType.ClubRoom or RoomType.Gaststube or RoomType.Concourse;
