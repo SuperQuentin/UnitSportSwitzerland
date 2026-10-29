@@ -111,7 +111,9 @@ public partial class GameShell : Node
     /// <see cref="Direct"/>.
     /// </summary>
     public static bool PlayAt(string[] args) =>
-        args.Contains("--at") && UseTitle(args.Where(a => a != "--at").ToArray());
+        args.Contains("--at") && UseTitle(args.Where(a => a != "--at" && !a.StartsWith("--playtest", StringComparison.Ordinal)).ToArray());
+    // (a playtest at a spawn point, #1292: the suite's own flags do not make it a tool run; without --at a playtest
+    // still boots straight into its fixture course, so they stay off the harmless list)
 
     public override void _Ready()
     {
