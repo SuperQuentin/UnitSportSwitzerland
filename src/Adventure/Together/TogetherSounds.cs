@@ -11,7 +11,7 @@ namespace UnitSport.Adventure.Together;
 /// </summary>
 public static class TogetherSounds
 {
-    private static AudioStreamWav? _clink, _zip, _haul, _hiss, _scrape, _plop, _prost, _yodel;
+    private static AudioStreamWav? _clink, _zip, _haul, _hiss, _scrape, _plop, _prost, _yodel, _crack, _thud;
     private static readonly AudioStreamWav?[] Bubbles = new AudioStreamWav?[4];
 
     /// <summary>A screwgate carabiner clicking shut on the harness: two bright metal ticks.</summary>
@@ -129,6 +129,37 @@ public static class TogetherSounds
             float into = t - notes[k].At;
             float env = Mathf.Min(1, into * 30) * (t > 2.1f ? Mathf.Max(0, (2.4f - t) / 0.3f) : 1f);
             s[i] = wave * env * 0.45f;
+        }
+        return Clip(s);
+    });
+
+    /// <summary>A snow bridge giving way (#1372): a dry crack, then the slab's low rumble as it drops into the ice.</summary>
+    public static AudioStreamWav Crack => _crack ??= Dsp.OneShot(1.1f, 12690, (rng, n) =>
+    {
+        var low = Dsp.BandPass(Dsp.Noise(rng, n), Dsp.Coef(60f), Dsp.Coef(420f));
+        var hiss = Dsp.HighPass(Dsp.Noise(rng, n), Dsp.Coef(1800f));
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = i / (float)Dsp.Rate;
+            float snap = t < 0.05f ? hiss[i] * (1 - t / 0.05f) * 1.1f : 0f;
+            float rumble = low[i] * Mathf.Min(1, t * 20) * Mathf.Exp(-t * 3.2f) * 2.2f;
+            s[i] = snap + rumble;
+        }
+        return Clip(s);
+    });
+
+    /// <summary>A body landing on the crevasse's ice floor (#1372): a dull thud with a short ring of the ice.</summary>
+    public static AudioStreamWav Thud => _thud ??= Dsp.OneShot(0.8f, 12691, (_, n) =>
+    {
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = i / (float)Dsp.Rate;
+            float f = Mathf.Max(40f, 120f - 160f * t);
+            float body = Mathf.Sin(Mathf.Tau * f * t) * Mathf.Exp(-t * 12f) * Mathf.Min(1, t * 500) * 0.9f;
+            float ring = Mathf.Sin(Mathf.Tau * 1870f * t) * Mathf.Exp(-t * 9f) * 0.12f;
+            s[i] = body + ring;
         }
         return Clip(s);
     });

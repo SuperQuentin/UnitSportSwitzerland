@@ -122,7 +122,7 @@ public partial class AdventureService : Node
             return;
         }
         if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested
-            || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Errands.WorldEventCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
+            || Together.TogetherCheck.Requested || Together.CrevasseCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Errands.WorldEventCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
             || Occasions.Festivals.FireworksCheck.Requested
             || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested
             || Occasions.Festivals.Desalpe.DesalpeCheck.Requested || Occasions.Festivals.Christmas.ChristmasCheck.Requested
@@ -301,6 +301,7 @@ public partial class AdventureService : Node
         : Navigation.NavCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/navcheck")
         : Navigation.TravelCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/travelcheck")
         : Together.TogetherCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/togethercheck")
+        : Together.CrevasseCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/crevassecheck")
         : Alcohol.AlcoholCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/alcoholcheck")
         : Together.FondueCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fonduecheck")
         : Errands.ErrandCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/errandcheck")
