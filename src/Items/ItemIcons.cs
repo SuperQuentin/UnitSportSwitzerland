@@ -995,6 +995,16 @@ public static partial class ItemIcons
             "....kkkkkkkk....",
         };
 
+        d[ItemId.GluehweinMug] = d[ItemId.Gluehwein];
+
+        d[ItemId.ChristmasBauble] = Round(p =>
+        {
+            p.Disc(7.5f, 9f, 5.2f, 4.8f, 'q', 'r', 'R');
+            p.Set(5, 7, 'w'); p.Set(6, 6, 'w');
+            p.Rect(6, 3, 9, 4, 'Y');
+            p.Set(7, 2, 'k'); p.Set(8, 2, 'k'); p.Set(7, 1, 'k'); p.Set(8, 1, 'k');
+        });
+
         d[ItemId.WitchHat] = new[]
         {
             ".......kk.......",

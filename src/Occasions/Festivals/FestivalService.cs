@@ -133,6 +133,8 @@ public partial class FestivalService : Node
                 FestivalCatalog.Register(alp with { Sites = [new FestivalSite("the test field", e, n, 400)] });
             if (FestivalCatalog.Get(FestivalCatalog.DesalpeId) is { } desalpe)
                 FestivalCatalog.Register(desalpe with { Sites = [new FestivalSite("the test field", e, n, 400)] });
+            if (FestivalCatalog.Get(FestivalCatalog.ChristmasMarketId) is { } market)
+                FestivalCatalog.Register(market with { Sites = [new FestivalSite("the test field", e, n, 90)] });
         }
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
@@ -490,6 +492,7 @@ public partial class FestivalService : Node
         ConvertFor(peer);
         SendFestivals(peer);
         DesalpeWelcome(peer);
+        MarketWelcome(peer);
         foreach (var run in Running)
         {
             SendBoard(peer, run);
