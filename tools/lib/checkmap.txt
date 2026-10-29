@@ -995,6 +995,7 @@ src/Adventure/Together/Fondue quick --fonduecheck --world fixture --systems ui,t
 src/Adventure/Together/Pot  quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/TogetherService.Pots quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/Stir quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Interiors/PotTables     quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Rewards/Seals.cs quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
 
 # #1268 Versteckis: the offline check on the hamlet, the two-client game, the bot game; Rounds and FollowCam keep BR whole

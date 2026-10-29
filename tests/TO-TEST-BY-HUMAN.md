@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Fondue at a table ([#1384](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1384))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva), adventuring on.
+
+- [ ] Walk the street past restaurants → no "Start a fondue" prompt anywhere but at a table.
+- [ ] Stand at a terrace table, E → the caquelon stands on that table; a friend's E there sits them at it.
+- [ ] Inside the restaurant, at a table, E → the same; at the bar or in the doorway → no prompt.
+- [ ] Pad and VR: the same interaction where E works (the pot's existing button).
+
 ## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
 
 `--festival test --date 2027-02-04 --world fixture` (Luzern's: the Larven stall 9 m west of the fixture's start, the Guggenmusik stage 14 m east and 6 m north); `--date 2027-02-15` and the clock at 04:30 (`--time 4.5`) for Basel's Morgestraich with its lantern 11 m north; or online on the western map in the real dates (easter-52 for six days, easter-41 for three, relocated to the region's largest town).
