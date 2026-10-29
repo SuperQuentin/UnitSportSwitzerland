@@ -1075,3 +1075,10 @@ src/Occasions/Festivals/Horn/   quick  --hornscheck --festival test --date 2027-
 src/Occasions/Festivals/FestivalService.Horn   net  tools/hornnetcheck.sh
 src/Occasions/Festivals/Horn/   net    tools/hornnetcheck.sh
 tools/hornnetcheck.sh           net    tools/hornnetcheck.sh
+# #1356: the Chalandamarz: the march beat, the Treichel rings graded by stamp, the loop's stations, the pay (offline quick probe; server + two clients)
+src/Occasions/Festivals/Chalanda/ quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Chalanda/ net    tools/chalandanetcheck.sh
+src/Occasions/Festivals/FestivalService.Chalanda net    tools/chalandanetcheck.sh
+tools/chalandanetcheck.sh    net    tools/chalandanetcheck.sh
