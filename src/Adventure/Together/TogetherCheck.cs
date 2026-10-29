@@ -12,7 +12,7 @@ namespace UnitSport.Adventure.Together;
 /// way <c>BotProbe</c> drives a body). The together count and its chip; holding hands (both wrists posed to one point);
 /// the partner walking away 20 m held by the tether and the hands paying out to a rope; back side by side to hands, then
 /// led along the leader's trail with no input; a roped fall off a platform caught at the rope's length, hanging, and
-/// hauled up; the company's regen; letting go. Windowed it saves <c>test_output/together_hands.png</c> and
+/// hauled up (the crevasse slot has its own check, <c>--crevassecheck</c>); the company's regen; letting go. Windowed it saves <c>test_output/together_hands.png</c> and
 /// <c>together_rope.png</c>. Progress in <c>test_output/togethercheck</c>, a scratch bank.
 /// </summary>
 public partial class TogetherCheck : ChatProbe
@@ -72,10 +72,6 @@ public partial class TogetherCheck : ChatProbe
         await Fall(me);
         await LegUp(me);
         if (Rewards.RewardService.Instance is { Map.Fixed.Count: > 0 }) await Seals(me);
-        // the fixture has no ice: a glacier box round the player for this part alone (it would turn hands into a rope earlier)
-        TogetherService.GlacierBox ??= (me.Global.E, me.Global.N, 120);
-        await Crevasse(me, TogetherService.GlacierBox!.Value);
-
         Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
         Expect(await Until(() => Svc.Links.Count == 0 && me.HandHold == null && _partner.HandHold == null, 3), "let go: no links, no held hands");
         me.WalkControls = null;
@@ -238,51 +234,6 @@ public partial class TogetherCheck : ChatProbe
         me.DebugLaunch(At(gate.E - 1.5, gate.N, 1f), Vector3.Zero);
         await Seconds(0.8);
         Expect(await rewards.ServeOpen(AdventureService.LocalPeer, Open(gate)) == null, "the chest behind the gate opens");
-    }
-
-    private async Task Crevasse(FootPlayer me, (double E, double N, double R) box)
-    {
-        // two crevasse cells inside the check's glacier box: one crossed unroped, one roped to the partner
-        var found = new List<(double E, double N, double Angle)>();
-        for (double e = box.E - box.R * 0.7; e < box.E + box.R * 0.7 && found.Count < 2; e += Crevasses.Cell)
-            for (double n = box.N - box.R * 0.7; n < box.N + box.R * 0.7 && found.Count < 2; n += Crevasses.Cell)
-                if (Crevasses.InCell(e, n) is { } c && (found.Count == 0 || Math.Abs(found[0].E - c.E) + Math.Abs(found[0].N - c.N) > 30)) found.Add(c);
-        if (found.Count < 2) { Expect(false, "two crevasses in the glacier box"); return; }
-        var origin = me.Origin!;
-        // 3 m to the side of the strip, then straight across it
-        (Vector3 From, Vector3 To) Sides((double E, double N, double Angle) c)
-        {
-            double se = -Math.Sin(c.Angle), sn = Math.Cos(c.Angle);
-            return (origin.ToWorld(c.E - se * 3, c.N - sn * 3, me.Global.Alt) + Vector3.Up * 0.5f, origin.ToWorld(c.E + se * 3, c.N + sn * 3, me.Global.Alt));
-        }
-        async Task Cross(Vector3 to)
-        {
-            var dir = (to - me.GlobalPosition) with { Y = 0 };
-            _myWish = dir.Normalized();
-            await Seconds(3);
-            _myWish = Vector3.Zero;
-            await Seconds(0.5);
-        }
-        Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
-        int broken = Svc.CrevassesBroken;
-        var (from0, to0) = Sides(found[0]);
-        me.DebugLaunch(from0, Vector3.Zero);
-        await Seconds(0.6);
-        await Cross(to0);
-        Expect(Svc.CrevassesBroken == broken + 1, $"unroped, a hidden crevasse's bridge breaks: winded at the lip ({Svc.CrevassesBroken - broken})");
-        Expect(GetParent().FindChild("Crevasse", true, false) != null || Svc.GetNodeOrNull("Crevasse") != null, "the slot opens");
-        // roped: the partner stands 5 m off along the strip, the rope catches
-        var c2 = found[1];
-        var (from1, to1) = Sides(c2);
-        _partner!.DebugLaunch(origin.ToWorld(c2.E - Math.Cos(c2.Angle) * 5 - Math.Sin(c2.Angle) * 3, c2.N - Math.Sin(c2.Angle) * 5 + Math.Cos(c2.Angle) * 3, me.Global.Alt) + Vector3.Up * 0.5f, Vector3.Zero);
-        me.DebugLaunch(from1, Vector3.Zero);
-        await Seconds(0.8);
-        string? tied = Svc.ServeLink(AdventureService.LocalPeer, Pal, LinkMode.Rope);
-        Expect(tied == null, $"roped up on the glacier ({tied})");
-        int caught = Svc.CrevassesCaught;
-        await Cross(to1);
-        Expect(Svc.CrevassesCaught == caught + 1, "roped, the partner holds: caught at the lip");
-        Svc.ServeUnlink(AdventureService.LocalPeer, "the check");
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();

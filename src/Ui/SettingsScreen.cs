@@ -155,7 +155,7 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Fondue stirring guide", s.StirGuide, on => GameSettings.Current.StirGuide = on,
                 "The faint figure-eight behind your trace while you stir a shared pot");
             UiKit.ToggleRow(rows, "Crevasses", s.Crevasses, on => GameSettings.Current.Crevasses = on,
-                "Hidden crevasses on glaciers: unroped, a snow bridge may give way under you");
+                "Hidden crevasses on glaciers: a snow bridge may give way and drop you into the ice; roped to a friend, they hold you. A server's --crevasses off wins");
             // alcohol (#1271)
             rows.AddChild(UiKit.Spacer(6));
             rows.AddChild(UiKit.Section("Alcohol"));

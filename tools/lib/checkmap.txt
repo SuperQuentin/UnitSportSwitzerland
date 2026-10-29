@@ -1112,3 +1112,11 @@ src/Occasions/Festivals/FestivalService.Chalanda quick  --chalandacheck --chalan
 src/Occasions/Festivals/Chalanda/ net    tools/chalandanetcheck.sh
 src/Occasions/Festivals/FestivalService.Chalanda net    tools/chalandanetcheck.sh
 tools/chalandanetcheck.sh    net    tools/chalandanetcheck.sh
+# #1372: the hidden crevasse's slot: fall, climb out, rescue, rope and haul (offline quick probe)
+src/Adventure/Together/CrevasseCheck quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNode quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/TogetherService.Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNetProbe net tools/crevassenetcheck.sh
+tools/crevassenetcheck.sh  net  tools/crevassenetcheck.sh
+src/Net/StaminaWatch net tools/crevassenetcheck.sh
