@@ -381,7 +381,7 @@ void fragment() {{
             _inHand.Scale = Vector3.One * ItemScale;
             var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
             _inHand.Transform = new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f))
-                * RadioBounce(0.7f);
+                * RadioBounce(0.7f) * SwordSwing();
         }
         else _inHand.Visible = false;
         StepSparkles(_inHand.Visible, dt);
@@ -444,6 +444,7 @@ void fragment() {{
         _viewmodel.Position = (pos + _sway * swayScale + new Vector3(rc * 0.012f, -lowered + rc * 0.03f, Kick * 0.06f + rc * 0.13f)) * ViewScale;
         _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f + rc * 0.22f, rc * 0.03f, rc * 0.07f);
         if (_shown == ItemId.Radio) _viewmodel.Transform *= RadioBounce(0.45f);
+        else if (_shown == ItemId.Sword) _viewmodel.Transform *= SwordSwing();
 
         if (_print != null && IsInstanceValid(_print))
         {
@@ -502,6 +503,17 @@ void fragment() {{
         }
         if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles { Layers = _inHand.Layers });
         _sparkles.Step(true, RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow), dt);
+    }
+
+    /// <summary>
+    /// The sword's swing (#1371): the rigid node turned about the grip along the move's arc (<c>SwordRules.Arc</c>), on every peer
+    /// from its replicated state; identity when the sword is at rest or not in the hand. Nothing is rebuilt.
+    /// </summary>
+    private Transform3D SwordSwing()
+    {
+        if (_shown != ItemId.Sword || _player == null || !_player.SwordArcNow(out float yaw, out float pitch, out float roll, out float forward))
+            return Transform3D.Identity;
+        return new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll)), new Vector3(0, 0, forward));
     }
 
     /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>

@@ -2614,12 +2614,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
         var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
-        if (CameraShake > 0f)
+        float shake = CameraShake + SwordShake * GameSettings.Current.ScreenShake;   // a landed blow (#1371) adds to it
+        if (shake > 0f)
         {
             // two incommensurate wobbles per axis: a tremble, not a wave
             float now = (float)Time.GetTicksMsec() / 1000f;
-            view = view * new Basis(Vector3.Right, CameraShake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
-                        * new Basis(Vector3.Up, CameraShake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
+            view = view * new Basis(Vector3.Right, shake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
+                        * new Basis(Vector3.Up, shake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
         }
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
@@ -3615,6 +3616,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (UnitSport.Core.UiFocus.TextEntryActive) return;
 
+        // the sword in the hand (#1371): the lock-on takes the middle button and R3 before the shoulder swap and the view switch
+        if (SwordDrawn && IsMultiplayerAuthority() && !@event.IsEcho() && @event.IsActionPressed(PlayerInput.SwordLock))
+        {
+            SwordToggleLock();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // the other shoulder (#460): its own key, or R3 on a pad while a gun is shouldered
         if (_ride == null && !@event.IsEcho() && (@event.IsActionPressed(PlayerInput.SwapShoulder)
             || (GunAim && @event is InputEventJoypadButton && @event.IsActionPressed(PlayerInput.CameraToggle))))
@@ -3905,6 +3914,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float dt = (float)delta;
         // inside another player (a shared spawn): ease apart rather than be shoved out (#203)
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Separate, Bot)) SeparateFromPlayers(dt);
+        // the sword in the hand (#1371, FootPlayer.Sword.cs): its machine, the dodge and lunge steps, a blow's push
+        SwordStep(dt, IsOnFloor());
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Health, Bot))
@@ -3988,6 +3999,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         bool running = sprintDown || _sprintLatch;
         bool crouchHeld = keys ? PlayerInput.Held(PlayerInput.CrouchSlide) : acts.Crouch;
+        // a sword in hand: the pad's B is the dodge (#1371), so the pad's crouch and slide wait until it is put away
+        if (keys && SwordDrawn && PlayerInput.LastDevice == InputDevice.Gamepad) crouchHeld = false;
         // a prop (#1268): walks at its cap, never runs, jumps or slides (the Sprint key is its burst, PropWalk's answer)
         float? propWalk = PropWalk?.Invoke(this);
         if (propWalk != null) running = sprintDown = _sprintLatch = crouchHeld = false;
@@ -4420,6 +4433,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void FaceTravel(float dt, Vector3 moveDirection)
     {
         // winding up a throw: square up to where the view points, whatever the feet do
+        // swinging the sword, or locked on to a target (#1371): face where the blow goes
+        if (SwordFaceYaw is { } swordYaw)
+        {
+            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, swordYaw, MathX.Damp(26f, dt)), 0);
+            return;
+        }
         if (_throwBlend > 0.05f || SquareToView)
         {
             Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, MathX.Damp(18f, dt)), 0);

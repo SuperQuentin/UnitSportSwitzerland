@@ -318,6 +318,10 @@ public partial class ItemController : Node
         _ui.Scope = scoped ? (poseSettled ? ItemUse.Optic : null)
             : aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def!.Use : null;
         StepThrow(player, def, usable, aiming, (float)delta);
+        // the sword (#1371): the held buttons are its intent; the body's machine acts on them (FootPlayer.Sword)
+        player.SwordIntent = usable && !UiFocus.TextEntryActive && !_ui.IsOpen && _inventory.HeldId == ItemId.Sword
+            ? new Combat.SwordInput { Attack = PlayerInput.Held(PlayerInput.UseItem) || ForceUse, Dodge = PlayerInput.Held(PlayerInput.SwordDodge) }
+            : default;
         // the rod (#493): put away, in a menu or off foot, the line comes in
         bool fishing = usable && _inventory.HeldId == ItemId.FishingRod && !_ui.IsOpen && !UiFocus.TextEntryActive;
         _fishing.Step(fishing ? player : null, PlayerInput.Held(PlayerInput.UseItem) || ForceUse,

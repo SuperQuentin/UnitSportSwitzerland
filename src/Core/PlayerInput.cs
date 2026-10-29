@@ -251,6 +251,13 @@ public partial class PlayerInput : Node
     /// <summary>Held: the guard (high standing, low crouching).</summary>
     public const string FightBlock = "fight_block";
     /// <summary>
+    /// With a sword in hand only (#1371, <c>Combat/SwordRules</c>): the dodge. A press is the dodge, held on it carries on as the
+    /// sprint it also is. Attacking is <see cref="UseItem"/> (LMB, RB; VR's right trigger).
+    /// </summary>
+    public const string SwordDodge = "sword_dodge";
+    /// <summary>With a sword in hand only (#1371): locks onto the target nearest the view, again lets it go.</summary>
+    public const string SwordLock = "sword_lock";
+    /// <summary>
     /// In an aura battle only (#907): its own context like the fight, the walk and the items are off.
     /// Next cuts to the following move of the combo being performed (timed on the downbeat); the
     /// planner's lock in, take back the last move, and suggest.
@@ -785,6 +792,11 @@ public partial class PlayerInput : Node
         Bind(FightPunch, Mouse(MouseButton.Left), Keys(Key.J), Button(JoyButton.X), Button(JoyButton.RightShoulder));
         Bind(FightKick, Mouse(MouseButton.Right), Keys(Key.K), Button(JoyButton.Y), Button(JoyButton.LeftShoulder));
         Bind(FightBlock, Keys(Key.Shift, Key.L), Button(JoyButton.B));
+        // the sword (#1371): its own context while it is in the hand. The dodge shares Shift (it is also the sprint: a press
+        // dodges, holding on runs) and the pad's B (VR's B too; the pad's crouch gives way to it); the lock shares the middle
+        // button and R3 (the sword in hand takes them first, FootPlayer.Sword) and Z, free on foot
+        Bind(SwordDodge, Keys(Key.Shift), Button(JoyButton.B));
+        Bind(SwordLock, Mouse(MouseButton.Middle), Keys(Key.Z), Button(JoyButton.RightStick));
         // an aura battle (#907): its own context too, the walk locked and the items off, so Next is
         // the jump's Space / A, or the left click, or RB (which VR's right trigger sends on foot); the
         // planner's lock in, take back and suggest are F / Y, Backspace / X, G / R3 (VR: the same buttons)
