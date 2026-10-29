@@ -496,7 +496,7 @@ public static class PoiStage
 
     // ---- towns, cantons, cards ---------------------------------------------------------------------
 
-    private static List<Place> ReadTowns(string outDir)
+    internal static List<Place> ReadTowns(string outDir)
     {
         string path = Path.Combine(outDir, PlaceIndex.FileName);
         if (!File.Exists(path))
@@ -520,7 +520,7 @@ public static class PoiStage
     }
 
     /// <summary>The canton of the nearest town within 5 km (the GWR's <c>GDEKT</c>), "" when none.</summary>
-    private static string NearestTownCanton(List<Place> towns, double e, double n) =>
+    internal static string NearestTownCanton(List<Place> towns, double e, double n) =>
         NearestTown(towns, e, n) is { Canton.Length: 2 } t ? t.Canton : "";
 
     /// <summary>

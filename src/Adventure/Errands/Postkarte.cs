@@ -14,7 +14,14 @@ public enum CardTemplate : byte { AlpCheese = 1, MailRun = 2, LostHiker = 3, Fer
 
 /// <summary>One card of a day and a cell: its quest, who gives it, what it hands out when taken and what it pays.</summary>
 public sealed record Offer(string Id, int Day, int CellE, int CellN, int Slot, CardTemplate Template, Giver Giver, QuestDef Quest,
-    ItemId? Cargo, int CargoCount, int Chf, int Hash, string DestCanton);
+    ItemId? Cargo, int CargoCount, int Chf, int Hash, string DestCanton)
+{
+    /// <summary>The lost hiker's card (#1339): where the hiker sits and where the hut is. Null for every other template.</summary>
+    public HikerSpot? Hiker { get; init; }
+}
+
+/// <summary>Where a card's hiker waits (<see cref="Near"/> names the peak, pass or cross they were last seen by) and where they are brought to.</summary>
+public sealed record HikerSpot(double E, double N, string Near, double GoalE, double GoalN);
 
 /// <summary>
 /// The daily Postkarten (#1267 part 4): <see cref="Offers"/> picks the day's cards of a 5 km cell from its givers, the same on
@@ -87,14 +94,14 @@ public static class Postkarte
     /// <summary>The templates a kind of giver can give (before their routes are tried).</summary>
     public static CardTemplate[] TemplatesOf(Giver g) => g.Kind switch
     {
-        GiverKind.HutWarden => new[] { CardTemplate.Specialty },
-        GiverKind.StationMaster => g.Elevation <= 1200 ? new[] { CardTemplate.Specialty, CardTemplate.HutSupplies } : new[] { CardTemplate.Specialty },
-        GiverKind.ShipMaster => new[] { CardTemplate.FerryRun },
+        GiverKind.HutWarden => new[] { CardTemplate.Specialty, CardTemplate.LostHiker, CardTemplate.PostcardHome },
+        GiverKind.StationMaster => g.Elevation <= 1200 ? new[] { CardTemplate.Specialty, CardTemplate.HutSupplies, CardTemplate.PostcardHome } : new[] { CardTemplate.Specialty, CardTemplate.PostcardHome },
+        GiverKind.ShipMaster => new[] { CardTemplate.FerryRun, CardTemplate.PostcardHome },
         GiverKind.Farmer => new[] { CardTemplate.FarmerRequest },
         GiverKind.Senn => g.Elevation >= 1200 ? new[] { CardTemplate.AlpCheese, CardTemplate.Specialty } : new[] { CardTemplate.Specialty },
         GiverKind.Dairy => new[] { CardTemplate.Specialty },
-        GiverKind.Postmaster => g.Elevation <= 1200 ? new[] { CardTemplate.MailRun, CardTemplate.HutSupplies } : new[] { CardTemplate.MailRun },
-        _ => new[] { CardTemplate.Specialty },
+        GiverKind.Postmaster => g.Elevation <= 1200 ? new[] { CardTemplate.MailRun, CardTemplate.HutSupplies, CardTemplate.PostcardHome } : new[] { CardTemplate.MailRun, CardTemplate.PostcardHome },
+        _ => new[] { CardTemplate.Specialty, CardTemplate.PostcardHome },
     };
 
     private static Offer? Build(CardTemplate t, int day, int cellE, int cellN, int slot, Giver from, GiverCatalogue givers, PoiCatalogue pois, TravelRules rules, List<Giver> temp)
@@ -193,6 +200,41 @@ public static class Postkarte
                 blurb = $"{fromName} needs {count} {Pretty(item)}. Grow them, buy them, and bring them here.";
                 return Make(t, id, day, cellE, cellN, slot, from, seed, title, blurb, steps, null, 0, ErrandRewards.For(t, 0, 0, item, count, rules), destCanton);
             }
+            case CardTemplate.LostHiker:
+            {
+                // a hiker sitting 20-80 m off a peak, pass or cross 400-1 500 m from the hut: found, then brought down to it
+                var by = HikerPlace(from, pois, seed);
+                if (by == null) return null;
+                var (poi, he, hn) = by.Value;
+                string entity = WorldEventRules.HikerEntity(id);
+                var hut = new AreaTarget(from.Name, from.E, from.N, HikerSim.GoalM);
+                steps = new Step[]
+                {
+                    new InteractStep(entity) { Text = $"Find the lost hiker, last seen near {poi.Name}", Reveal = true },
+                    new EscortStep(entity, hut),
+                };
+                km = Km(from, poi.E, poi.N); climb = Math.Max(0, poi.Elevation - from.Elevation);
+                dest = from.Name; destCanton = from.Canton;
+                title = $"A hiker is lost near {poi.Name}";
+                blurb = $"A hiker did not come back. Find them near {poi.Name} and bring them to {fromName}.";
+                var offer = Make(t, id, day, cellE, cellN, slot, from, seed, title, blurb, steps, null, 0, ErrandRewards.For(t, km, climb, null, 0, rules), destCanton);
+                return offer with { Hiker = new HikerSpot(he, hn, poi.Name, from.E, from.N) };
+            }
+            case CardTemplate.PostcardHome:
+            {
+                // a photo of a famous view within 10 km, then the postcard to a post office
+                var spot = PostcardSpot(from, seed);
+                if (spot == null) return null;
+                var post = Pick(givers.Trade, seed, g => g.Kind == GiverKind.Postmaster && Km(g, spot.StandE, spot.StandN) <= 15);
+                if (post == null) return null;
+                item = ItemId.Postcard;
+                cargo = item; cargoCount = 1;
+                steps = new Step[] { new PostcardStep(spot.Id, spot.Target), new DeliverStep(item, At(post)) };
+                km = Km(from, post); dest = post.Name; destCanton = post.Canton;
+                title = $"A postcard of {spot.Target}";
+                blurb = $"Take a good photo: {spot.Name}. Then post the card at {dest}.";
+                break;
+            }
             default:
                 return null;
         }
@@ -212,6 +254,48 @@ public static class Postkarte
     }
 
     private static AreaTarget At(Giver g) => new(g.Name, g.E, g.N, 6f);
+
+    private static double Km(Giver a, double e, double n) => Math.Sqrt((e - a.E) * (e - a.E) + (n - a.N) * (n - a.N)) / 1000;
+
+    private static readonly PoiKind[] HikerKinds = { PoiKind.Peak, PoiKind.Pass, PoiKind.SummitCross };
+
+    /// <summary>The peak, pass or cross 400-1 500 m from a hut that the hash picks, and the hiker's seat 20-80 m from it.</summary>
+    private static (Poi Poi, double E, double N)? HikerPlace(Giver hut, PoiCatalogue pois, long seed)
+    {
+        Poi? best = null;
+        ulong bestScore = ulong.MaxValue;
+        var near = new List<Poi>();
+        foreach (var kind in HikerKinds)
+        {
+            pois.Near(hut.E, hut.N, 1500, near, kind);
+            foreach (var p in near)
+            {
+                double d = Math.Sqrt((p.E - hut.E) * (p.E - hut.E) + (p.N - hut.N) * (p.N - hut.N));
+                if (d < 400 || p.Name.Length == 0) continue;
+                ulong score = ErrandHash.Of(seed, (long)p.Hash);
+                if (score < bestScore) { bestScore = score; best = p; }
+            }
+        }
+        if (best == null) return null;
+        var (e, n) = WorldEventRules.Offset(best.E, best.N, ErrandHash.Unit(ErrandHash.Of(seed, 0x4B)), 20 + 60 * ErrandHash.Unit(ErrandHash.Of(seed, 0x4C)));
+        return (best, e, n);
+    }
+
+    /// <summary>The famous view whose standing place is within 10 km of the giver that the hash picks.</summary>
+    private static Rewards.PhotoSpot? PostcardSpot(Giver from, long seed)
+    {
+        Rewards.PhotoSpot? best = null;
+        ulong bestScore = ulong.MaxValue;
+        void Try(Rewards.PhotoSpot s)
+        {
+            if (Km(from, s.StandE, s.StandN) > 10) return;
+            ulong score = ErrandHash.Of(seed, (long)ErrandHash.Of(s.Id));
+            if (score < bestScore) { bestScore = score; best = s; }
+        }
+        foreach (var s in Rewards.PhotoSpots.Curated) Try(s);
+        foreach (var s in Rewards.PhotoSpots.Extra) Try(s);
+        return best;
+    }
 
     private static double Km(Giver a, Giver b) => Math.Sqrt((b.E - a.E) * (b.E - a.E) + (b.N - a.N) * (b.N - a.N)) / 1000;
 

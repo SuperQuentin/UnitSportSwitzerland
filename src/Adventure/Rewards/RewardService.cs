@@ -468,7 +468,9 @@ public partial class RewardService : Node
     {
         if (Claimant(peer, spotId) is not { } p) return "inactive";
         if (PhotoSpots.Resolve(spotId, PoiCatalogueHost.Current) is not { } spot) return Refuse(peer, spotId, PhotoJudge.Why(PhotoVerdict.Unknown));
-        if (p.Get(PhotosProgress.Section).Taken.Contains(spot.Id)) return "taken";
+        bool already = p.Get(PhotosProgress.Section).Taken.Contains(spot.Id);
+        // a photo in the album already still counts for a running Postkarte (the postcard home, #1339): judged again, no new reward
+        if (already && !p.Get(QuestsProgress.Section).Active.Keys.Any(k => k.StartsWith("pk:", StringComparison.Ordinal))) return "taken";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Refuse(peer, spotId, "No body.");
         if (!float.IsFinite(yawDeg) || !float.IsFinite(pitchDeg) || fovDeg is < 1 or > 120) return Refuse(peer, spotId, "No such photo.");
         var ground = await Map.SightGround(at.E, at.N, spot.TargetE, spot.TargetN);
@@ -481,10 +483,16 @@ public partial class RewardService : Node
             else if (!_networked) TellPhoto(spot.Id, false, PhotoJudge.Why(verdict));
             return PhotoJudge.Why(verdict);
         }
+        if (already)
+        {
+            _adventure.Events.Raise(new Errands.PhotoSeen(peer, p.Key, spot.Id));
+            return "taken";
+        }
         p.Get(PhotosProgress.Section).Taken.Add(spot.Id);
         p.Touch(PhotosProgress.Section);
         GD.Print($"[rewards] {Short(p.Key)} took the photo {spot.Id}");
         _adventure.Events.Raise(new PhotoTaken(peer, p.Key, spot.Id, spot.PoiId));
+        _adventure.Events.Raise(new Errands.PhotoSeen(peer, p.Key, spot.Id));
         if (Connected(peer)) RpcId(peer, MethodName.TellPhoto, spot.Id, true, "");
         else if (!_networked) TellPhoto(spot.Id, true, "");
         var (lines, francs, note) = RollAndGrant(peer, p, ChestTier.Fine, "photo:" + spot.Id, "photo:" + spot.Id);

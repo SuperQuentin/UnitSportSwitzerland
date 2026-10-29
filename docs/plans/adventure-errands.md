@@ -3,7 +3,7 @@
 
 # Adventure errands: errand givers, daily Postkarten, world events, canton reputation
 
-Status: **in progress**. Tracking issue: #1267 (phase 3: #1270). First slice in PR #1311: parts 1-5, 7 and 8 without the OSM giver stage, the hiker and postcard templates, the flag, the costume and the recipes (`docs/notes/adventure/errands.md`). Part 6 (world events) is a follow-up PR.
+Status: **built, with the leftovers listed below**. Tracking issue: #1267 (phase 3: #1270). First slice in PR #1311 (parts 1-5, 7 and 8 without the OSM giver stage, the hiker and postcard templates, the flag, the costume and the recipes). Part 2 in issue #1339: the world events (part 6), the hiker and postcard templates, the `--givers` stage and the party cells and Atlas line (`docs/notes/adventure/errands.md`, `docs/notes/adventure/world-events.md`). Still to do: wearing the canton flag, the regional costume, the local recipes (`Recipe.Requires`), running `--givers` nationwide and shipping the file.
 
 This is one of the four phase 3 plans ("things friends do together"), written alongside `adventure-together`,
 `adventure-versteckis` and `adventure-festivals`. It builds on phases 1-2 (`adventure-overview`, whose
@@ -22,13 +22,13 @@ server's part (peer 1, key `local`).
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Giver places | partial: POI-derived givers and the fixture; the OSM/GWR stage is a follow-up | A `--givers` preprocessor stage writes `givers.tsv.gz` (farms, alp dairies, village dairies, post offices, Beizen). It is embedded like `venues.tsv.gz`, and huts, stations and ship landings come from `pois.bin` |
+| 1 Giver places | built (#1339): POI-derived givers, the fixture, and the `--givers` stage (`GiverPick`, `GiverStage`, `GiverFormat`: post offices, dairies, Beizen, farms; an embedded `givers.tsv.gz` is loaded when the build has one, not yet run nationwide) | A `--givers` preprocessor stage writes `givers.tsv.gz` (farms, alp dairies, village dairies, post offices, Beizen). It is embedded like `venues.tsv.gz`, and huts, stations and ship landings come from `pois.bin` |
 | 2 Giver figures | built (PR #1311) | `ErrandGivers`: posed `SkinnedFigure`s within 400 m, a name and a canton, a card icon when the giver has errands today |
 | 3 Dialogue | built (PR #1311) | `Ui/ErrandDialog`: a greeting and 2-3 choices on keyboard, pad, touch and VR (`XrUi` panel); hand-overs go through it too |
-| 4 Postkarten | built without the hiker and postcard templates (PR #1311) | `PostkarteSource : IQuestSource`: 8 cards per 5 km cell per Swiss day, the same for everyone; a player takes 3 a day; rewards are worked out from `fares.json` |
+| 4 Postkarten | built, all eight templates (PR #1311 and #1339: the hiker and the postcard home) | `PostkarteSource : IQuestSource`: 8 cards per 5 km cell per Swiss day, the same for everyone; a player takes 3 a day; rewards are worked out from `fares.json` |
 | 5 Friend bonus | built (PR #1311) | Doing the same card with a party member: +50 % cash and +1 reputation for both; a card can be shared inside a party |
-| 6 World events | planned (follow-up PR) | `WorldEvents` (like `UfoSightings`): avalanche rescue, runaway cow, lost hiker, small forest fire; planned by the server near players; anyone within reach helps |
-| 7 Canton reputation | partial: levels, titles, the rep reward, the flag earned; wearing it, the costume and the recipes are follow-ups | Points per canton, 4 levels; they unlock a local recipe, the canton flag and a regional piece of costume, plus a title |
+| 6 World events | built (#1339): `WorldEvents`, four kinds, server-run, bots may help; unbuilt: scorch marks, the water bottle, a Rega flyby | `WorldEvents` (like `UfoSightings`): avalanche rescue, runaway cow, lost hiker, small forest fire; planned by the server near players; anyone within reach helps |
+| 7 Canton reputation | partial: levels, titles, the rep reward, the flag earned, the Atlas line (#1339); wearing it, the costume and the recipes are follow-ups | Points per canton, 4 levels; they unlock a local recipe, the canton flag and a regional piece of costume, plus a title |
 | 8 Checks and notes | built: tier 0, `--errandcheck`, `tools/errandnetcheck.sh`, the notes (PR #1311) | Tier 0 books and economy, fixture probes, `tools/errandnetcheck.sh`, notes and index lines |
 
 ## Goal

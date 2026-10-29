@@ -91,6 +91,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | talk to an errand giver (#1267) | E / Y within 3 m of the figure (a prompt "Talk to ...") | ok: Y, or reach out and grip toward the giver (`TryInteract(byHand)`) | keep |
 | errand dialogue: choose, next card, leave (#1267) | 1-3, Enter, Left / Right, Esc / D-pad, A, LB / RB, B | ok: laser + trigger on the panel, the pad's route | keep |
 | hand a delivery over at a giver (#1267) | E / Y, then "Hand over" in the dialogue (the Journal's button still works) | ok: Y, or the laser on the choice; **closes the gap** of "hand over a delivery" for givers | keep |
+| talk to a lost hiker (#1339) | E / Y within 3 m of the hiker (a prompt "Talk to the lost hiker"), then they follow | ok: Y, or reach out and grip (`TryInteract(byHand)`) | keep |
+| dig out an avalanche burial, beat out a forest fire (#1339) | hold G / X within 3 m of the spot or the burning cell (the prompt "Hold to dig out the person" / "beat out the flames"; `gather` is the one hold) | ok: hold X | **grip and pull** the snow, like gather |
 | Errands tab: Share with party, Join, Track (#1267) | J, then Q / E; click | ok: LB / RB for the tab, laser + trigger on the buttons | keep |
 | leg-up, two-handle gate (#1266) | crouch at a wall / jump onto the crouched friend; hold E at a wheel | B / A; hold Y | real crouch (`XrPad.RealCrouch`) / A; the wheel by the pad route (hold Y); **gap**: gripping and turning it |
 | sit at the pot, add, stir, dip, forfeit (#1266) | E at a table or hut; panel chips 1-4; hold LMB and trace an eight; LMB dip; 1-3 forfeit | Y; D-pad + A; right stick; RB; D-pad + A | ok: the panel by the ray, stir with the stick; **gap**: the real fork over the pot |

@@ -1048,6 +1048,10 @@ tools/alcoholnetcheck.sh  net  tools/alcoholnetcheck.sh
 src/Adventure/Alcohol/ net tools/alcoholnetcheck.sh
 # #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
 src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/WorldEvent  quick  --worldeventcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/WorldEventNetProbe net tools/worldeventnetcheck.sh
+tools/worldeventnetcheck.sh  net  tools/worldeventnetcheck.sh
+src/Adventure/Errands/WorldEvents.cs net tools/worldeventnetcheck.sh
 src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh
 tools/errandnetcheck.sh  net  tools/errandnetcheck.sh
 src/Adventure/Errands/ErrandService net tools/errandnetcheck.sh

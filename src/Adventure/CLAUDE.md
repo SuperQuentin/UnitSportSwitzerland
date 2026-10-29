@@ -25,6 +25,7 @@ touches its topic; search with `grep -ril <word> docs/notes/adventure`.
 - `versteckis` — hide-and-seek as village props (#1268): `VersteckisManager` (lobby, rounds, rotation, Serve* paths, 4 Hz checks with a 1 s speed window, `InterestService.Withheld` in Hide, equal pay), `VsGround`/`HidePlan` decor and objectives from the tiles, `VsDisguise` mesh swap, `VsHud`, protocol 57, `--versteckischeck`, `tools/versteckisnetcheck.sh`, `tools/versteckisbotcheck.sh`
 - `together` — the together rule (party, 60 m, cap 3), the group yield (gathering, harvest, fishing, rare finds, quest cash), the week's chest and the punch card (#1266)
 - `errands` — errand givers at huts, stations and landings, the dialogue, the daily Postkarten (8 per 5 km cell per Swiss day, 3 a day), the friend bonus, canton reputation (#1267)
+- `world-events` — a cow loose, a lost hiker, an avalanche burial, a small forest fire (#1339): `WorldEvents` planned by the server near players, `Help` as the one server path (players and bots), rewards and titles, the hiker's Postkarte, `--world-events off|rare|normal`, `--worldevent`
 - `links` — hands and the rope (`LinkBook`, `Tether`, belays, `ArmHold`, `RopeNode`), the leg-up, two-handle gates, roped chests, hidden crevasses (stumble fallback)
 - `fondue` — the shared pot: spots, ingredients, la huit, dips, the lost bread and its forfeit, `--forfeits`, `--fondueseed`
 - `mentors` — milestones, newcomer and veteran, the eight `GarmentStyle.Together` cosmetics, titles

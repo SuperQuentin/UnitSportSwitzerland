@@ -136,10 +136,17 @@ public partial class ErrandService : Node
         errands.Taken.Add(offer.Id);
         p.Touch(ErrandsProgress.Section);
         if (offer.Cargo is { } cargo && offer.CargoCount > 0) _adventure.Grant(peer, new Item(cargo, offer.CargoCount), "errand:" + offer.Id);
+        HostHiker(offer);
         GD.Print($"[errands] {Short(p.Key)} takes {offer.Id} ({offer.Template}, CHF {offer.Chf}) from {offer.Giver.Id}");
         if (Connected(peer)) RpcId(peer, MethodName.Accepted, offer.Id);
         else if (!_networked) Accepted(offer.Id);
         return null;
+    }
+
+    /// <summary>The lost hiker's card: the hiker sits where the card says while anyone holds it (#1339).</summary>
+    private static void HostHiker(Offer offer)
+    {
+        if (offer.Hiker is { } hiker) WorldEvents.Instance?.HostCard(offer.Id, hiker, offer.Giver.Canton, offer.Giver.Name);
     }
 
     // ---- sharing a card inside a party ----------------------------------------------------------------------
@@ -288,6 +295,9 @@ public partial class ErrandService : Node
         if (!_adventure.Active(peer) || _adventure.Progress(peer) is not { } p) return;
         int today = Today;
         var quests = p.Get(QuestsProgress.Section);
+        // a running hiker card has its hiker (again after a restart or the hiker's own timeout)
+        foreach (string key in quests.Active.Keys)
+            if (Postkarte.IsCard(key) && Source.Find(key) is { Hiker: not null } held) HostHiker(held);
         // a player who never touched the errands has no section to roll or prune (and gets none from this)
         if (!p.Has(ErrandsProgress.Section.Id) && !quests.Active.Keys.Any(Postkarte.IsCard)) return;
         var errands = p.Get(ErrandsProgress.Section);

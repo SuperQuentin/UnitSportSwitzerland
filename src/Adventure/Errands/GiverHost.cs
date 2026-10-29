@@ -19,6 +19,23 @@ public static class GiverHost
 
     public static event Action? Changed;
 
+    private static IReadOnlyList<Giver>? _embedded;
+
+    /// <summary>The farms, dairies, post offices and Beizen embedded in the game (<c>givers.tsv.gz</c>), read once; none when the build has no such file.</summary>
+    private static IReadOnlyList<Giver> Embedded
+    {
+        get
+        {
+            if (_embedded != null) return _embedded;
+            try { return _embedded = GiverCatalogue.FromEmbedded(typeof(GiverHost).Assembly).ToList(); }
+            catch (Exception e) when (e is InvalidDataException or FormatException)
+            {
+                Godot.GD.PushWarning($"[errands] {GiverCatalogue.ResourceName}: {e.Message}");
+                return _embedded = Array.Empty<Giver>();
+            }
+        }
+    }
+
     /// <summary>Starts following the POI catalogue; <paramref name="fixtureStart"/> is where the fixture givers stand round.</summary>
     public static void Configure((double E, double N) fixtureStart)
     {
@@ -33,7 +50,7 @@ public static class GiverHost
 
     private static void Rebuild()
     {
-        Current = FixtureRequested ? GiverCatalogue.Fixture(_start.E, _start.N) : new GiverCatalogue(GiverCatalogue.FromPois(PoiCatalogueHost.Current));
+        Current = FixtureRequested ? GiverCatalogue.Fixture(_start.E, _start.N) : new GiverCatalogue(GiverCatalogue.FromPois(PoiCatalogueHost.Current).Concat(Embedded));
         Changed?.Invoke();
     }
 }

@@ -68,6 +68,23 @@ public partial class ErrandsPage : Control
             foreach (var card in cards) _list.AddChild(CardRow(card, ErrandService.StateOf(mine, card.Id)));
         }
         else _list.AddChild(UiKit.Text("Step out of your vehicle to see the cards around you.", UiTheme.FontSmall, UiTheme.TextFaint));
+        // near the friends: the cards of every party member's cell (a card is still taken at its giver; "go to where Lea is" is a plan)
+        if (Net.Parties.Client is { InParty: true } party && Navigation.AdventureCompass.PeerAt != null)
+        {
+            long self = Multiplayer.GetUniqueId();
+            var seen = new HashSet<(int, int)>();
+            if (Where?.Invoke() is { } here) seen.Add(Postkarte.CellOf(here.E, here.N));
+            foreach (var (peer, name) in party.Members)
+            {
+                if (peer == self || Navigation.AdventureCompass.PeerAt(peer) is not { } far) continue;
+                var cell = Postkarte.CellOf(far.E, far.N);
+                if (!seen.Add(cell)) continue;
+                var theirs = svc.CardsIn(cell.E, cell.N);
+                if (theirs.Count == 0) continue;
+                _list.AddChild(UiKit.Section($"Near {name}"));
+                foreach (var card in theirs) _list.AddChild(CardRow(card, ErrandService.StateOf(mine, card.Id)));
+            }
+        }
 
         _list.AddChild(UiKit.Section("Running"));
         int running = 0;
