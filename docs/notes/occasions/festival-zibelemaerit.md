@@ -63,7 +63,7 @@ round of throws). A refusal goes through `Tell` (`TellRefused`), a throw refused
 - Tier 0: `ZibeleTests` (def, dates in three years, Bern, stalls, wares and prices, the stamps, the cap, the square).
 - Quick: `--zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure` (own scratch folder `test_output/zibelecheck`, never the real saves):
   forged uses and a far throw refused, the taste and the braid at stall 0 through the real game (prompt, outline, Batzen, points, the pack), the other three stalls and the Marktgang (36 Batzen, 140 points), the wares at their
-  prices, six eggs thrown with the item's Use (every fifth pays), the day cap of 16 holding under 50 forged throws, two throws in one instant, a bot, the dates.
+  prices, six eggs thrown with the item's Use (every fifth pays), the game day cap of 16 holding under ten more paid rounds, two throws in one instant, a bot, the dates.
 - Net: `tools/zibelenetcheck.sh`: Lea tastes at the Konfetti stall, buys six eggs and throws five (the server counts them from her position, the fifth pays in her own section); Tom tastes at the braid stall with a stamp of
   his own, is refused a stall from 150 m and buys his own braid. Everything is asserted on the remote peers.
 - z-fight: `--zfightcheck Zibele` (filtered; the full run crashes, #1338).

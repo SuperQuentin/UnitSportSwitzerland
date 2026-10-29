@@ -42,6 +42,13 @@ public partial class ZibeleCheck : ChatProbe
         Teleport(st.E, st.N - 2.0);
     }
 
+    /// <summary>Game time, not the engine's timer: the server's throw gap reads <see cref="GameClock"/>, which runs fast under --fixed-fps.</summary>
+    private async Task Gap(double s)
+    {
+        double end = GameClock.Now + s;
+        await Until(() => GameClock.Now >= end, s + 2);
+    }
+
     private int Count(ItemId id)
     {
         int n = 0;
@@ -146,18 +153,15 @@ public partial class ZibeleCheck : ChatProbe
         for (int k = 0; k < 5; k++)
         {
             _items.UseSlot(Me!, egg);
-            await Seconds(0.4);
+            await Gap(0.4);
         }
         Expect(Count(ItemId.Konfettiei) == 1, $"five eggs thrown ({Count(ItemId.Konfettiei)} left)");
         Expect(await Until(() => Mine.Paid.GetValueOrDefault("konfetti:1") == ZibeleRules.ThrowBatzen, 5) && Mine.Batzen == batzen + ZibeleRules.ThrowBatzen,
             $"the fifth throw paid {ZibeleRules.ThrowBatzen} Batzen ({Mine.Batzen})");
         Expect(Svc.ZibeleThrows >= 5 && Mine.Points == points + ZibeleRules.ThrowPoints, $"and {ZibeleRules.ThrowPoints} points ({Mine.Points})");
-        // forged throws on the square, past the day's cap: the cap holds
-        for (int k = 0; k < 5 * 10; k++)
-        {
-            Svc.ServeZibele(local, FestivalService.ZibeleThrow);
-            await Seconds(0.3);
-        }
+        // more paid rounds than the day allows (the throws' own pay is Award, so the game's cap is what holds; a long loop of throws would run the game clock past midnight)
+        for (int k = 0; k < 10; k++)
+            Svc.Award(local, Id, ZibeleRules.ThrowBatzen, "a round of confetti", ZibeleRules.ConfettiGame, ZibeleRules.ThrowPoints);
         Expect(Mine.Paid.GetValueOrDefault("konfetti:1") == ZibeleRules.ConfettiDayCap, $"the confetti game's day cap holds ({Mine.Paid.GetValueOrDefault("konfetti:1")} of {ZibeleRules.ConfettiDayCap})");
         Expect(Mine.Earned == ZibeleRules.TokenCap, $"the festival's cap is reached, not passed ({Mine.Earned} of {ZibeleRules.TokenCap})");
         // two throws in the same instant: the second is too fast
