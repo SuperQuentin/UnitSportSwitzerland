@@ -5,7 +5,7 @@ namespace UnitSport.Interiors;
 
 /// <summary>
 /// A venue's pinball machines (#1325): a <see cref="PinballCabinet"/> per <see cref="FurnitureType.Pinball"/>,
-/// found by the piece's furniture index. The machine's table is the piece's own (<see cref="PinballTables.TableOf"/>),
+/// found by the piece's furniture index. The machine's table comes from the venue's machines (<see cref="PinballTables.TableOf"/>),
 /// so every peer sees the same table on the same machine.
 /// </summary>
 public partial class InteriorNode
@@ -22,7 +22,7 @@ public partial class InteriorNode
         {
             var f = l.Furniture[i];
             if (f.Type != FurnitureType.Pinball) continue;
-            var cabinet = PinballCabinet.Create(PinballTables.TableOf(f), material);
+            var cabinet = PinballCabinet.Create(PinballTables.TableOf(l, i), material);
             cabinet.Name = $"Pinball{i}";
             cabinet.Transform = PinballTables.PieceFrame(l, f);
             node.AddChild(cabinet);

@@ -27,6 +27,28 @@ public static class PinballLayouts
         for (int i = 0; i < Count; i++) yield return Get(i);
     }
 
+    /// <summary>
+    /// The table of machine <paramref name="k"/> among a venue's <paramref name="machines"/> (plan x, z each): the
+    /// machines in a row (by x, then z) take the tables in turn from one the venue's first machine picks, so up to
+    /// <see cref="Count"/> machines are all different and neighbours never match. Pure, the same on every peer.
+    /// </summary>
+    public static int TableIn(IReadOnlyList<(float X, float Z)> machines, int k)
+    {
+        int rank = 0;
+        var me = machines[k];
+        for (int i = 0; i < machines.Count; i++)
+        {
+            var o = machines[i];
+            if (o.X < me.X || (o.X == me.X && (o.Z < me.Z || (o.Z == me.Z && i < k)))) rank++;
+        }
+        unchecked
+        {
+            uint h = (uint)(int)(machines[0].X * 100) * 0x85EBCA6Bu ^ (uint)(int)(machines[0].Z * 100) * 0xC2B2AE35u ^ 1325u;
+            h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
+            return (int)((h % Count + (uint)rank) % Count);
+        }
+    }
+
     private static PinballTable Make(int index) => index switch
     {
         0 => Clockwork(),

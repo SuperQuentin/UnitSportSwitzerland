@@ -23,7 +23,9 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   (`PinballBackbox`) an image drawn on change through `shaders/pinball_display.gdshader` (reels, segments,
   round dots, LCD). Decals are thin plates, never quads on a surface; the backglass art 9 mm a layer (zfight).
   Headless, the lamps' MultiMesh instances read at the playfield's origin: most of the tables' z-fight baseline.
-  The table of a piece: `PinballTables.TableOf` (its place in the plan); the room's mesh draws nothing for it.
+  The table of a piece: `PinballTables.TableOf` (`PinballLayouts.TableIn`: the venue's machines in a row by x then z take
+  the tables in turn from one the first machine's place picks, so up to four are all different and neighbours never
+  match); the room's mesh draws nothing for it.
 - **Net** (`PinballTables`, `World/Pinball`): the player up's client runs the table (`PinballPlay`) and sends
   20 frames a second (events + poses); the server mirrors the rules from the events (`PinballGame.Mirror`: same
   events, same score), keeps the log, hands the table to the next player's client (`Run` with the log,
