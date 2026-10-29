@@ -1033,6 +1033,13 @@ src/Occasions/Festivals/FestivalService.Christmas quick  --christmascheck --fest
 src/Occasions/Festivals/Christmas/ net    tools/christmasnetcheck.sh
 src/Occasions/Festivals/FestivalService.Christmas net    tools/christmasnetcheck.sh
 tools/christmasnetcheck.sh    net    tools/christmasnetcheck.sh
+# #1373: the Zibelemaerit: four onion-market stalls (taste, buy), the Marktgang, the confetti fight's pay and cap (offline quick probe; server + two clients)
+src/Occasions/Festivals/Zibelemaerit/ quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Zibelemaerit/ net    tools/zibelenetcheck.sh
+src/Occasions/Festivals/FestivalService.Zibelemaerit net    tools/zibelenetcheck.sh
+tools/zibelenetcheck.sh    net    tools/zibelenetcheck.sh
 # #1351: the Escalade: the Marmite's pair, the soup pot, the Course's gates and pay (offline quick probe; server + two clients)
 src/Occasions/Festivals/Escalade/ quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/Festivals/FestivalCatalog.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure

@@ -80,7 +80,7 @@ public partial class ZibeleCheck : ChatProbe
         Expect(ItemDefs.Get(ItemId.Konfettiei)!.Use == ItemUse.Confetti, "the confetti egg throws confetti like the Räppli");
 
         // ---- away from the stalls: nothing offered, a forged use refused ---------------------------------
-        Teleport(site.E + 70, site.N + 70);
+        Teleport(site.E + 100, site.N + 100);
         await Seconds(0.4);
         string? refused = null;
         Svc.Refused += why => refused = why;
@@ -88,7 +88,7 @@ public partial class ZibeleCheck : ChatProbe
         Expect(Svc.ServeZibele(local, 0) != null && refused?.Contains("Go to the stall") == true, $"a use from afar is refused ({refused})");
         Expect(Svc.ServeZibele(local, 55) != null, "a stall that does not exist is refused");
         int throws = Svc.ZibeleThrows;
-        Expect(Svc.ServeZibele(local, FestivalService.ZibeleThrow) != null && Svc.ZibeleThrows == throws, "a throw from 100 m out of the square does not count");
+        Expect(Svc.ServeZibele(local, FestivalService.ZibeleThrow) != null && Svc.ZibeleThrows == throws, "a throw from 140 m out of the square does not count");
         Expect(Mine.Batzen == 0, "nothing was paid");
 
         // ---- the first stall: a free taste, then the ware --------------------------------------------------
@@ -114,7 +114,8 @@ public partial class ZibeleCheck : ChatProbe
             Expect(ZibeleGame.TryInteract(Me!), $"E tastes at stall {i}");
             Expect(await Until(() => ZibeleRules.Stamped(Svc.ZibeleStampsToday(1), i), 5), $"stall {i} is stamped");
         }
-        Expect(Mine.Batzen == ZibeleRules.DayMax - 6 && Mine.Earned == ZibeleRules.DayMax, $"four tastes and the Marktgang earned {ZibeleRules.DayMax} Batzen, a braid spent 6 ({Mine.Batzen} held, {Mine.Earned} earned)");
+        // the first two milestones (50 and 120 points) were crossed on the way: 3 + 4 Batzen, outside the cap
+        Expect(Mine.Batzen == ZibeleRules.DayMax - 6 + 7 && Mine.Earned == ZibeleRules.DayMax && Mine.Milestones.Count == 2, $"four tastes and the Marktgang earned {ZibeleRules.DayMax} Batzen, a braid spent 6, two milestones paid 7 ({Mine.Batzen} held, {Mine.Earned} earned, {Mine.Milestones.Count} milestones)");
         Expect(Mine.Paid.GetValueOrDefault("zibelemarkt:1") == ZibeleRules.DayMax, "that is the stall-hop's whole day cap");
         int points = ZibeleRules.StampPoints * ZibeleRules.Stalls + ZibeleRules.MarktgangPoints;
         Expect(Mine.Points == points && Svc.ZibeleStampsToday(1) == ZibeleRules.AllStamps, $"{points} points, every stall stamped ({Mine.Points})");
