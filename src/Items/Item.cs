@@ -722,7 +722,7 @@ public static class ItemDefs
                 break;
             case ItemId.GluehweinMug:
                 s.Tube(new Vector3(0, -0.08f, 0), new Vector3(0, 0.07f, 0), 0.05f, 0.058f, new Color(0.92f, 0.9f, 0.84f), 10);
-                s.Tube(new Vector3(0, 0.055f, 0), new Vector3(0, 0.07f, 0), 0.046f, 0.046f, new Color(0.55f, 0.1f, 0.16f), 10);
+                s.Tube(new Vector3(0, 0.07f, 0), new Vector3(0, 0.086f, 0), 0.046f, 0.046f, new Color(0.55f, 0.1f, 0.16f), 10);   // the wine, a skin proud of the rim
                 s.Box(new Vector3(0.075f, 0, 0), new Vector3(0.03f, 0.08f, 0.02f), new Color(0.92f, 0.9f, 0.84f));
                 break;
             case ItemId.ChristmasBauble:

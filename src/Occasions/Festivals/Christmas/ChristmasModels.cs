@@ -48,7 +48,7 @@ public static class ChristmasModels
         var s = new MeshScratch();
         foreach (float x in new[] { -1.55f, 1.55f })
             foreach (float z in new[] { -1.0f, 1.0f })
-                s.Tube(new Vector3(x, 0, z), new Vector3(x, 2.45f, z), 0.07f, 0.07f, WoodDark, 5);
+                s.Tube(new Vector3(x, -0.03f, z), new Vector3(x, 2.45f, z), 0.07f, 0.07f, WoodDark, 5);   // a little foot below the walls' bottom faces
         s.Box(new Vector3(0, 1.25f, -1.0f), new Vector3(3.1f, 2.5f, 0.08f), Wood);
         s.Box(new Vector3(-1.55f, 1.25f, 0), new Vector3(0.08f, 2.5f, 2.0f), Wood);
         s.Box(new Vector3(1.55f, 1.25f, 0), new Vector3(0.08f, 2.5f, 2.0f), Wood);
@@ -133,12 +133,13 @@ public static class ChristmasModels
     // ---- the Samichlaus --------------------------------------------------------------------------------------
 
     /// <summary>The Samichlaus: a red robe with white fur, a white beard, the bishop's mitre, a staff and the jute sack. Authored facing +Z.</summary>
-    public static ArrayMesh Samichlaus() => _samichlaus ??= BuildSamichlaus();
+    [Showcase("Festivals", "Samichlaus")]
+    public static ArrayMesh Samichlaus() => _samichlaus ??= BuildSamichlaus(true);
 
-    private static ArrayMesh BuildSamichlaus()
+    private static ArrayMesh BuildSamichlaus(bool unused = true)
     {
         var s = new MeshScratch();
-        s.Tube(new Vector3(0, 0, 0), new Vector3(0, 1.35f, 0), 0.42f, 0.26f, Red, 10);
+        s.Tube(new Vector3(0, 0.1f, 0), new Vector3(0, 1.35f, 0), 0.41f, 0.26f, Red, 10);
         s.Tube(new Vector3(0, 0, 0), new Vector3(0, 0.1f, 0), 0.44f, 0.44f, White, 10);   // the fur hem
         s.Box(new Vector3(0, 1.0f, 0.22f), new Vector3(0.12f, 0.9f, 0.05f), White);       // the fur front
         s.Tube(new Vector3(0, 0.95f, 0), new Vector3(0, 1.0f, 0), 0.34f, 0.34f, WoodDark, 10);   // the belt
@@ -151,13 +152,13 @@ public static class ChristmasModels
         s.Box(new Vector3(0, 1.97f, 0.1f), new Vector3(0.16f, 0.05f, 0.02f), Gold);
         s.Tube(new Vector3(-0.38f, 1.3f, 0.05f), new Vector3(-0.5f, 0.82f, 0.18f), 0.07f, 0.06f, Red, 6);   // the arms
         s.Tube(new Vector3(0.38f, 1.3f, 0.05f), new Vector3(0.5f, 0.82f, 0.18f), 0.07f, 0.06f, Red, 6);
-        s.Box(new Vector3(-0.5f, 0.78f, 0.2f), new Vector3(0.1f, 0.1f, 0.1f), White);
-        s.Box(new Vector3(0.5f, 0.78f, 0.2f), new Vector3(0.1f, 0.1f, 0.1f), White);
+        s.Box(new Vector3(-0.5f, 0.82f, 0.18f), new Vector3(0.15f, 0.15f, 0.15f), White);   // a cuff round each arm's end, so no cap is flush with a face
+        s.Box(new Vector3(0.5f, 0.82f, 0.18f), new Vector3(0.15f, 0.15f, 0.15f), White);
         // the crook in his right hand
         s.Tube(new Vector3(0.55f, 0, 0.22f), new Vector3(0.55f, 2.0f, 0.22f), 0.03f, 0.03f, Gold, 5);
         s.Tube(new Vector3(0.55f, 2.0f, 0.22f), new Vector3(0.43f, 2.12f, 0.22f), 0.03f, 0.03f, Gold, 5);
         // the sack at his feet, tied with a cord, a lantern at its top
-        s.Tube(new Vector3(-0.7f, 0, 0.1f), new Vector3(-0.7f, 0.7f, 0.1f), 0.32f, 0.16f, Matte(0.62f, 0.5f, 0.34f), 9);
+        s.Tube(new Vector3(-0.7f, 0.02f, 0.1f), new Vector3(-0.7f, 0.7f, 0.1f), 0.32f, 0.16f, Matte(0.62f, 0.5f, 0.34f), 9);
         s.Tube(new Vector3(-0.7f, 0.68f, 0.1f), new Vector3(-0.7f, 0.74f, 0.1f), 0.1f, 0.1f, Red, 6);
         s.Box(new Vector3(0.0f, 1.05f, 0.4f), new Vector3(0.12f, 0.16f, 0.12f), Lamp(1f, 0.78f, 0.42f));
         return s.Build();
@@ -166,9 +167,10 @@ public static class ChristmasModels
     // ---- the market's tree -----------------------------------------------------------------------------------
 
     /// <summary>A 7 m fir in four tiers with gold and red baubles (which shine at night) and a star: the market's landmark.</summary>
-    public static ArrayMesh Tree() => _tree ??= BuildTree();
+    [Showcase("Festivals", "Christmas market tree")]
+    public static ArrayMesh Tree() => _tree ??= BuildTree(true);
 
-    private static ArrayMesh BuildTree()
+    private static ArrayMesh BuildTree(bool unused = true)
     {
         var s = new MeshScratch();
         s.Tube(new Vector3(0, 0, 0), new Vector3(0, 1.4f, 0), 0.22f, 0.18f, WoodDark, 6);
@@ -223,10 +225,4 @@ public static class ChristmasModels
 
     [Showcase("Festivals", "Christmas stall: Ornaments")]
     private static ArrayMesh OrnamentsStall() => Stall(StallKind.Ornaments);
-
-    [Showcase("Festivals", "Samichlaus")]
-    private static ArrayMesh SamichlausModel() => Samichlaus();
-
-    [Showcase("Festivals", "Christmas market tree")]
-    private static ArrayMesh TreeModel() => Tree();
 }
