@@ -575,6 +575,19 @@ public partial class ItemController : Node
                 Adventure.Rewards.RewardHud.Instance?.Ping();
                 break;
 
+            case ItemUse.Confetti:
+            {
+                // a handful of Räppli (#1357): paper on every peer near, one used up; at a Fasnacht the server counts the throw
+                if (Core.GameClock.Now < _nextShotAt) break;
+                _nextShotAt = Core.GameClock.Now + 0.35;
+                var (eye, aim) = AimFrom(player, 2f);
+                _inventory.TakeOne(slot);
+                Kick(player);
+                ItemEvents.Instance?.Send(ItemEventKind.Confetti, eye + aim * 0.6f - Vector3.Up * 0.25f, aim);
+                if (Occasions.Festivals.FestivalService.Instance is { } fest && fest.FasnachtNow() != null) fest.AskFasnacht(Occasions.Festivals.FestivalService.FasnachtRaeppli);
+                break;
+            }
+
             case ItemUse.Gust:
             {
                 // a bottled gust (#1227): thrown ahead like the smoke, an updraft where it lands

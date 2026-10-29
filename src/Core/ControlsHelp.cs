@@ -102,6 +102,12 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At the Marmite: smash it (the party's youngest and oldest both press); at the soup pot: ladle a bowl for the party; at the start line: begin the Course de l'Escalade", PlayerInput.InteractMount),
         }),
+        ("Festivals: the Fasnacht (#1357)", new Row[]
+        {
+            new("At the Larven stall: a mask and Räppli; at Basel's lantern at 04:00 on day 1: the Morgestraich; at the Guggenmusik stage: sit down in the band", PlayerInput.InteractMount),
+            new("In the Guggenmusik song: tap on every note (drum, trumpet, sousaphone), loud and in step", PlayerInput.UseItem),
+            new("Räppli in hand: throw a handful of confetti", PlayerInput.UseItem),
+        }),
         ("Festivals: the Sechseläuten (#1358)", new Row[]
         {
             new("At the Böögg's pyre before it is lit: change the minute you bet on", PlayerInput.UseItem),

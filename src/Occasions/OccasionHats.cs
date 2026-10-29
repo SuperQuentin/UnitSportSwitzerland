@@ -39,6 +39,10 @@ public partial class OccasionHats : Node
         ItemId.PumpkinHead => Headwear.PumpkinHead,
         ItemId.SantaHat => Headwear.SantaHat,
         ItemId.ReindeerAntlers => Headwear.ReindeerAntlers,
+        ItemId.LarveWaggis => Headwear.LarveWaggis,
+        ItemId.LarveDante => Headwear.LarveDante,
+        ItemId.LarveHarlekin => Headwear.LarveHarlekin,
+        ItemId.LarveTeufel => Headwear.LarveTeufel,
         _ => Headwear.None,
     };
 

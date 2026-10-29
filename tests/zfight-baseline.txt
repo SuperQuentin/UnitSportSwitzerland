@@ -843,6 +843,7 @@
 160.5	Items / Radio
 169.3	Items / Radio backpack
 8.8	Items / Radio backpack straps
+3.3	Items / Raeppli
 3.1	Items / RainbowCatEars
 2	Items / RainbowStockings
 2.9	Items / RainbowTee
