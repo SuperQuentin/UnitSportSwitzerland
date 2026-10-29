@@ -61,6 +61,16 @@ At a cinema booth's panel (E at the screen half), online on a server where you a
 - [ ] Own fireworks: buy a box (20 Batzen) at the stand, light it at night with the use key (LMB, pad X, the VR trigger): the fuse hiss and a 40 s volley; others within sight play it too; is it loud and big enough but safe for the frame time on a Quest?
 - [ ] VR: a grip at a stand or the post works through the pad route; lighting by hand is not built.
 
+## Zibelemärit ([#1376](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1376))
+
+`--festival test --date 2027-11-22 --world fixture` (four stalls in a row 4 m north of the fixture's start), or online on the western map in the real dates (fourth Monday of November, relocated to the region's largest town).
+
+- [ ] Look at the lane: four booths with red-and-black awnings, onion braids hanging at one, tarts on a rack, an iron kettle with a glowing lid, crates of eggs under a bunting. At night do the lanterns glow warm? Cartoon, PS1 and Realistic: do they read well?
+- [ ] E (pad Y) at a stall: "Taste at the Onion braid stall (free)" pays 6 Batzen with a bell; E again buys the braid for 6 Batzen with a paper rustle. Is the prompt readable and the outline round the stall right? All four stalls in a day pay the Marktgang.
+- [ ] Buy six confetti eggs at the Konfetti stall and throw them (LMB, pad X, the VR trigger): is the burst of paper like the Räppli, does every fifth throw pay with the crack sound, is 16 Batzen a day fair?
+- [ ] Eat the Zibelechueche and the Mehlsuppe (LMB, pad X): the soup warms for 3 minutes.
+- [ ] VR: a grip at a stall works through the pad route; grabbing a braid or throwing an egg by hand is not built.
+
 ## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
 
 `--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).

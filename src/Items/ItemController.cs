@@ -585,6 +585,7 @@ public partial class ItemController : Node
                 Kick(player);
                 ItemEvents.Instance?.Send(ItemEventKind.Confetti, eye + aim * 0.6f - Vector3.Up * 0.25f, aim);
                 if (Occasions.Festivals.FestivalService.Instance is { } fest && fest.FasnachtNow() != null) fest.AskFasnacht(Occasions.Festivals.FestivalService.FasnachtRaeppli);
+                else if (Occasions.Festivals.FestivalService.Instance is { } zf && zf.ZibeleNow() != null) zf.AskZibele(Occasions.Festivals.FestivalService.ZibeleThrow);   // the Zibelemärit's confetti fight (#1373)
                 break;
             }
 
