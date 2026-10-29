@@ -78,12 +78,20 @@ public partial class BankCounterUi : CanvasLayer
         _status.AddThemeColorOverride("font_color", new Color(0.65f, 0.67f, 0.7f));
         box.AddChild(_status);
 
-        if (Bank.Instance is { } bank) bank.BalanceChanged += OnBalanceChanged;
+        if (Bank.Instance is { } bank)
+        {
+            bank.BalanceChanged += OnBalanceChanged;
+            bank.Refusal += OnRefusal;
+        }
     }
 
     public override void _ExitTree()
     {
-        if (Bank.Instance is { } bank) bank.BalanceChanged -= OnBalanceChanged;
+        if (Bank.Instance is { } bank)
+        {
+            bank.BalanceChanged -= OnBalanceChanged;
+            bank.Refusal -= OnRefusal;
+        }
         UiFocus.Set(this, false);
     }
 
@@ -112,6 +120,12 @@ public partial class BankCounterUi : CanvasLayer
     {
         if (IsOpen && deposited > 0) _status.Text = $"Deposited {Chf(deposited)}. Your money is safe here.";
         Refresh();
+    }
+
+    /// <summary>The server moved no money (an identity not proven yet, #1359): says why.</summary>
+    private void OnRefusal(string why)
+    {
+        if (IsOpen) _status.Text = why;
     }
 
     private void Refresh()

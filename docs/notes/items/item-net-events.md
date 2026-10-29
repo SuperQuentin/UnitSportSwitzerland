@@ -50,7 +50,8 @@ to every peer, whatever their origin (#185); `o.WorldTransform(placed.Origin)` c
   print, fetched through `PhotoTransfer`: the `polaroid` note). A dedicated server builds no visuals.
 - Persistence: `user://placed/server.json` (server), `user://placed/offline.json` (offline client;
   not loaded with `--connect`). System.Text.Json (culture-invariant), kind saved by name, written
-  atomically on every change.
+  atomically on every change. The owner is the placer's id (#1359; `Identified` moves an old name-keyed owner's
+  objects to its id, `PlacedObjects.ClaimLegacy`); clients are sent the owner's current name, never the id; `OwnerNames` in the file is a fallback name per id.
 - Flags (`ItemController.PlaceOrPickUpFlag`): the flag leaves the pack at once and comes back on a
   refusal; pickup checks room first and adds the flag on the grant.
 

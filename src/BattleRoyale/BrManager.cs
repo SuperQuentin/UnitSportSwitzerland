@@ -106,11 +106,13 @@ public partial class BrManager : Node
             case "stats":
             {
                 string who = words.Length > 1 ? string.Join(' ', words[1..]) : player ? _chat?.NameOfPeer(sender) ?? "" : "";
-                return Stats.Find(who) is { } r ? $"{r.Name}: {r.Line()}" : $"No Battle Royale played by '{who}' yet.";
+                var r = words.Length == 1 && player && PlayerIds.Server?.IdOf(sender) is { } me ? Stats.Find(me) : null;
+                r ??= Stats.FindByName(who, StatName);
+                return r != null ? $"{(words.Length == 1 && player ? who : StatName(Stats.Players.First(p => p.Value == r).Key, r.Name))}: {r.Line()}" : $"No Battle Royale played by '{who}' yet.";
             }
             case "top":
             {
-                var board = Stats.Board(10).ToList();
+                var board = Stats.Board(10, StatName).ToList();
                 return board.Count == 0 ? "Nobody has finished a Battle Royale yet." : "Battle Royale leaderboard:\n" + string.Join("\n", board);
             }
             case "join":
@@ -235,7 +237,7 @@ public partial class BrManager : Node
             TeamSize = team,
             Bots = _botTarget,   // #837
             BotLevel = (int)_botLevel,
-            Leaders = Stats.Board(3).ToList(),   // shown in the lobby (#479)
+            Leaders = Stats.Board(3, StatName).ToList(),   // shown in the lobby (#479)
         };
         double minutes = new ZoneSchedule(seed, area.Side, pace).Duration / 60.0;
         _horizon ??= _source?.LoadHorizonAsync();   // for the plane's altitude at GO
@@ -877,6 +879,26 @@ public partial class BrManager : Node
 
     private BrStats Stats => _stats ??= LoadStats();
 
+    /// <summary>The name to show for a career's key (#1359): the player's name now.</summary>
+    private static string StatName(string id, string? backup) => PlayerIds.Server?.NameOfId(id, backup) ?? backup ?? "Rider";
+
+    private PlayerIds? _claimIds;
+
+    public override void _EnterTree()
+    {
+        if (!_server || PlayerIds.Server is not { } ids) return;
+        _claimIds = ids;
+        ids.Identified += ClaimLegacy;
+    }
+
+    /// <summary>A career saved under the player's name (before #1359) moves to their id, once (see <see cref="PlayerIds"/>).</summary>
+    private void ClaimLegacy(long peer, string id, string name)
+    {
+        if (!Stats.ClaimLegacy(id, name)) return;
+        GD.Print($"[br] stats: claimed the career of '{name}' for {id}");
+        Core.JsonStore.SaveAsync(StatsFile, Stats, Core.JsonStore.Indented, ex => GD.PushWarning($"[br] stats: {ex.Message}"));
+    }
+
     private static BrStats LoadStats()
     {
         try
@@ -895,11 +917,14 @@ public partial class BrManager : Node
     /// <summary>The match just ended goes into everyone's record, saved off the main thread; each entrant hears theirs.</summary>
     private void RecordStats()
     {
-        // bots have no career (#837); a player's kills of them count, and show
-        Stats.Add(_state.Entrants.Where(e => !e.Bot).Select(e => (e.Name, e.Place, e.Kills, e.BotKills, e.Damage, e.Survived)));
+        // bots have no career (#837); a player's kills of them count, and show. A career hangs on the player's id (#1359):
+        // an entrant not proven yet has none this time.
+        var ids = PlayerIds.Server;
+        Stats.Add(_state.Entrants.Where(e => !e.Bot && ids?.IdOf(e.Peer) != null)
+            .Select(e => (ids!.IdOf(e.Peer)!, e.Name, e.Place, e.Kills, e.BotKills, e.Damage, e.Survived)));
         Core.JsonStore.SaveAsync(StatsFile, Stats, Core.JsonStore.Indented, ex => GD.PushWarning($"[br] stats: {ex.Message}"));
         foreach (var e in _state.Entrants)
-            if (Stats.Find(e.Name) is { } r && Multiplayer.GetPeers().Contains((int)e.Peer))
+            if (ids?.IdOf(e.Peer) is { } id && Stats.Find(id) is { } r && Multiplayer.GetPeers().Contains((int)e.Peer))
                 _chat?.Tell(e.Peer, $"Your Battle Royale record: {r.Line()}.", ChatKind.Private);
         GD.Print($"[br] stats: {Stats.Players.Count} players on record");
     }

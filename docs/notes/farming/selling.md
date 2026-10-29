@@ -84,7 +84,7 @@ peer's own body position, not the claim). Only goods they buy; others: "takes on
   factor (1 + buildings/20, max 3) × 2 for cooked dishes; at most 10 days caught up (a contract or stand time beyond any order is a save from before the world clock and is dropped or reset). Price `FarmPrices.Stand`.
   Stockable: harvests but hay, and flour .. raclette.
 - **Requests** (`AskOp`: stock, take back, buy, collect → `Answer`): server checks the peer's body is
-  within 6.5 m (LV95), the owner (by display name, like placed objects) for stock / take / collect;
+  within 6.5 m (LV95), the owner (by player id, `Net/PlayerIds`, #1359; an old name key is claimed on `Identified`; clients get the name as it is now, `OwnerName` is the fallback) for stock / take / collect;
   anyone else buys, the money goes into the owner's box. Pack and pocket are the client's: it takes
   the items or pays once the server agreed.
 - **Replication**: every change goes to every peer (`State`, with `mine` per peer), and a joining peer
@@ -103,7 +103,7 @@ peer's own body position, not the claim). Only goods they buy; others: "takes on
 - Filled by deliveries of that item **to that co-op**: counter sales (`ShopService.ServeSell` →
   `FarmSales.Counted`) and loads (`PriceLoad`). Deliveries are paid as usual; complete, the server
   pays the bonus `(multiplier − 1) × count × value` (`Note` RPC, the client adds the cash). Past the
-  deadline (sweep every 2 s) it lapses with a note. Kept per player name in `user://farm/contracts.json`
+  deadline (sweep every 2 s) it lapses with a note. Kept per player id, `OwnerName` on each contract as the fallback name (an old name key moves to the id on `Identified` if the id has none; unproven peers are refused) in `user://farm/contracts.json`
   (offline `contracts_offline.json`).
 
 ## Controls (keyboard / pad / VR)

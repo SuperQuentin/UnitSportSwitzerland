@@ -3,6 +3,7 @@
 - `Net/Sleepers` at `World/Sleepers` (server and every client). A player who disconnects stays as a body
   lying on its back (the knocked-out angle, -1.45 rad about X), in its outfit, figure and hat, with a
   billboard `Name (asleep)` tag (drawn to 60 m). Look only: nothing can be done to it. On reconnecting,
+- **Tag name** (#1359): sent as `PlayerIds.NameOfId(Key, Name)`, the player's name now; the stored `Name` is only the backup.
   that player wakes there (`WakeAt` -> `Teleporter.TeleportTo`, the `/tp` path: it settles on the
   **terrain**, so a sleeper on a bridge or a deck wakes on the ground under it).
 - **Identity is a key, not the name** (names are a request anyone can make): `Net/PlayerKey`, ECDSA

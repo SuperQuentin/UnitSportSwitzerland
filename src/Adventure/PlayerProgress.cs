@@ -34,8 +34,12 @@ public sealed class PlayerProgress
 
     /// <summary>The identity: a <c>PlayerKey</c> fingerprint, <c>acct:&lt;user id&gt;</c>, <c>local</c> offline, <c>peer:&lt;id&gt;</c> unsaved.</summary>
     public string Key { get; }
-    /// <summary>The name last used (admin tools only, never an identity).</summary>
+    /// <summary>The name last used: a cache for when the key's name is not known (#1359), never an identity.</summary>
     public string LastName { get; set; } = "";
+
+    /// <summary>The name to show: the player's own now from their key (<paramref name="nameOf"/>, for a key that is an id), else <see cref="LastName"/>.</summary>
+    public string NameShown(Func<string, string?, string>? nameOf) =>
+        nameOf != null && Net.PlayerIds.IsId(Key) ? nameOf(Key, LastName) : LastName;
     /// <summary>Unix seconds.</summary>
     public long Created { get; set; }
     /// <summary>Unix seconds, the last join.</summary>

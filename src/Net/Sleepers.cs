@@ -95,7 +95,7 @@ public partial class Sleepers : Node
         var list = _book.All.OrderBy(s => s.Id).ToList();
         RpcId(peer, MethodName.Snapshot,
             list.Select(s => s.Id).ToArray(),
-            list.Select(s => s.Name).ToArray(),
+            list.Select(s => s.NameShown(PlayerIds.Server)).ToArray(),
             list.SelectMany(s => new[] { s.E, s.N, s.Alt }).ToArray(),
             list.Select(s => s.Yaw).ToArray(),
             list.Select(s => s.Rider).ToArray(),
@@ -169,7 +169,7 @@ public partial class Sleepers : Node
     private void Show(Sleeper s)
     {
         foreach (int p in Multiplayer.GetPeers())
-            RpcId(p, MethodName.Add, s.Id, s.Name, s.E, s.N, s.Alt, s.Yaw, s.Rider, s.Outfit, s.Appearance, s.Headwear);
+            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), s.E, s.N, s.Alt, s.Yaw, s.Rider, s.Outfit, s.Appearance, s.Headwear);
     }
 
     private void Unshow(long id)

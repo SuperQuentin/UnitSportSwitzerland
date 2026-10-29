@@ -579,7 +579,7 @@ public partial class FestivalService : Node
         var crew = board.Find(keys);
         var view = new BoardView(run.Id, run.Instance, crew?.Points ?? 0, crew?.Taken.ToArray() ?? [],
             crew == null ? [] : crew.Contributed.OrderByDescending(c => c.Value)
-                .Select(c => new BoardMember(crew.Names.GetValueOrDefault(c.Key, "?"), c.Value)).ToArray());
+                .Select(c => new BoardMember(crew.NameOf(c.Key, Net.PlayerIds.Server is { } ids ? ids.NameOfId : null), c.Value)).ToArray());
         _sentCrew[(peer, run.Id)] = FestivalBoard.CrewKey(keys);
         string json = JsonSerializer.Serialize(view, _json);
         if (Connected(peer)) RpcId(peer, MethodName.TellBoard, json);

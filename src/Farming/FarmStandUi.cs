@@ -96,7 +96,7 @@ public partial class FarmStandUi : CanvasLayer
         _inventory = _stands.Items?.Inventory;
         _stands.Changed += OnChanged;
         if (_inventory != null) _inventory.Changed += Rebuild;
-        _title.Text = _stands.IsMine(o.Id) ? "Your farm stand" : $"{o.Owner}'s farm stand";
+        _title.Text = _stands.IsMine(o.Id) ? "Your farm stand" : $"{_stands.OwnerLabel(o)}'s farm stand";
         _status.Text = _stands.IsMine(o.Id)
             ? "Passers-by buy over time and pay into the honesty box. Shift-click stocks the whole stack."
             : "Self-service: take what you want and pay into the box. Shift-click buys 5.";

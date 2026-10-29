@@ -59,7 +59,7 @@
   bots take 80-140 s from the ramp to the ground, so a check with bots runs at the real pace (`bots/commands`).
   `user://br/history.json` holds the last 5 region centres.
 - **Careers** (#479, `BrStats`, plain C#, unit-tested): at `End` the server folds every entrant into
-  `user://br/stats.json` (by display name, any case: matches, wins, top 5s, kills, damage, best place,
+  `user://br/stats.json` (by player id, #1359 `net/player-ids`; the name shows live, `Name` is the backup; an old name-keyed record is claimed on `Identified`: matches, wins, top 5s, kills, damage, best place,
   time survived; saved with `JsonStore.SaveAsync`) and tells each entrant their record in a private line.
   `/br stats [name]`, `/br top` (10 by wins, then kills, then fewest matches). `BrState.Leaders` (top 3
   when the lobby opens) shows on the lobby HUD. Names are not accounts: a renamed player starts afresh.

@@ -87,6 +87,8 @@ public partial class BrManager
     {
         if (Instance == this) Instance = null;
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
+        if (_claimIds != null) _claimIds.Identified -= ClaimLegacy;
+        _claimIds = null;
         FootPlayer.StayDown = null;
         FootPlayer.FlightFence = null;
         FootPlayer.CanBeDowned = null;

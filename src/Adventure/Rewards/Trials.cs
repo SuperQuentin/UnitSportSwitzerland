@@ -184,7 +184,7 @@ public sealed class TrialsProgress
     public Dictionary<string, TrialBest> Best { get; set; } = new(StringComparer.Ordinal);
 }
 
-/// <summary>One row of a trial's board.</summary>
+/// <summary>One row of a trial's board. <c>Name</c> is a cache of the name at the run; the board shows the live one (<see cref="TrialBoard.NamesOf"/>).</summary>
 public sealed record TrialEntry(string Key, string Name, double Seconds, long When);
 
 /// <summary>
@@ -198,6 +198,14 @@ public sealed class TrialBoard
     private readonly Dictionary<string, List<TrialEntry>> _boards = new(StringComparer.Ordinal);
 
     public IReadOnlyList<TrialEntry> Of(string trialId) => _boards.TryGetValue(trialId, out var l) ? l : Array.Empty<TrialEntry>();
+
+    /// <summary>
+    /// The names to show for a board's rows (#1359): <paramref name="nameOf"/> gives a player's name now from their key
+    /// (an id: a PlayerKey fingerprint or <c>acct:</c>); any other key (<c>local</c>, <c>peer:</c>) keeps the stored name,
+    /// which is the backup name.
+    /// </summary>
+    public string[] NamesOf(string trialId, Func<string, string?, string>? nameOf) =>
+        Of(trialId).Select(r => nameOf != null && Net.PlayerIds.IsId(r.Key) ? nameOf(r.Key, r.Name) : r.Name).ToArray();
 
     /// <summary>A finished run: kept if it is the player's best and in the top 10. Returns its rank (0 first) or -1.</summary>
     public int Submit(string trialId, string key, string name, double seconds, long when)

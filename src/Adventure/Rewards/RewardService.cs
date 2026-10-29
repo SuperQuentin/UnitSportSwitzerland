@@ -3,6 +3,7 @@ using Godot;
 using UnitSport.Adventure.Places;
 using UnitSport.Core;
 using UnitSport.Items;
+using UnitSport.Net;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
 
@@ -578,7 +579,7 @@ public partial class RewardService : Node
         best.Runs++;
         trials.Best[def.Id] = best;
         p.Touch(TrialsProgress.Section);
-        string name = p.LastName.Length > 0 ? p.LastName : "Player";
+        string name = p.NameShown(PlayerIds.Server is { } ids ? ids.NameOfId : null) is { Length: > 0 } shown ? shown : "Player";
         int rank = _board.Submit(def.Id, p.Key, name, Math.Round(seconds, 2), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         if (rank >= 0) SaveBoard();
         if (pb) _ghostDue[p.Key] = (def.Id, Now + 120);
@@ -629,7 +630,8 @@ public partial class RewardService : Node
     private void SendBoard(long peer, string trialId)
     {
         var rows = _board.Of(trialId);
-        string[] names = rows.Select(r => r.Name).ToArray();
+        // the name now, from the player's id (#1359); the stored one is a cache, and all a local or peer key has
+        string[] names = _board.NamesOf(trialId, PlayerIds.Server is { } ids ? ids.NameOfId : null);
         double[] secs = rows.Select(r => r.Seconds).ToArray();
         if (Connected(peer)) RpcId(peer, MethodName.TellBoard, trialId, names, secs);
         else if (!_networked) TellBoard(trialId, names, secs);

@@ -30,6 +30,7 @@
   `CannotPlace` (slot free, material allowed, stands). The builder pays first (`TakePlain`) and is refunded on a
   refusal. Free-roam structures saved to `user://structures/server.json` (offline `offline.json`), kinds and
   materials by name; match ones in memory, swept 2 s after `BrState.Running` ends.
+  Owners are player ids (`Net/PlayerIds`, #1359): clients get the name as it is now (`OwnerName` beside the id is only a fallback); an old name-keyed save is re-owned on `Identified` (`ClaimLegacy`); an unproven peer is refused.
 - **Damage**: the shooter's own ray (`BuildTool.TryHit`, from `ItemController.Shoot` and the knife) meets a
   piece first → `SendHit` with `DamageAt × pellets × 0.8` (pellets mostly land that close). Server: capped at
   the weapon's `MaxHit` (shotgun 121.5), the owner may always, others only with `/pvp on`; in a match any

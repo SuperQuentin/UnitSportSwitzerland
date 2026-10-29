@@ -16,6 +16,8 @@ public sealed class Structure
     public double E, N, Altitude;
     public float Yaw;
     public string Owner = "";
+    /// <summary>The owner's name when it was last seen (#1359): only a fallback for an id that no longer resolves.</summary>
+    public string OwnerName = "";
     public bool Match;
     public readonly Dictionary<Slot, Placed> Pieces = new();
 
@@ -30,6 +32,7 @@ public sealed class Placed
 {
     public Piece Piece;
     public string Owner = "";
+    public string OwnerName = "";
     public float Damage;
     public double BuiltAt;
 
@@ -62,7 +65,7 @@ public partial class Structures : Node
 
     public static Structures? Instance { get; private set; }
 
-    /// <summary>Server: the display name of a peer (set from the chat), the owner of what it builds.</summary>
+    /// <summary>Server: the display name of a peer (set from the chat); only the fallback when no <see cref="PlayerIds"/> runs (#1359).</summary>
     public Func<long, string>? NameOf { get; set; }
     /// <summary>Server: whether a peer is a living entrant of a running match (BrManager.Playing).</summary>
     public Func<long, bool>? InMatch { get; set; }
@@ -116,6 +119,8 @@ public partial class Structures : Node
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        if (_claim != null && PlayerIds.Server is { } ids) ids.Identified -= _claim;
+        _claim = null;
     }
 
     private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
@@ -346,12 +351,12 @@ public partial class Structures : Node
     {
         if (!_known.TryGetValue(peer, out var known)) _known[peer] = known = new HashSet<long>();
         known.Add(s.Id);
-        RpcId(peer, MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, s.Owner, s.Match);
+        RpcId(peer, MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, DisplayOwner(s.Owner, s.OwnerName), s.Match);
         // undamaged pieces of one owner in one go (a prefab is dozens); the rest one by one
-        foreach (var group in s.Pieces.Values.Where(p => p.Damage == 0).GroupBy(p => p.Owner))
-            RpcId(peer, MethodName.AddPieces, s.Id, group.SelectMany(p => Pack(p.Piece)).ToArray(), group.Key, group.Min(p => p.BuiltAt));
+        foreach (var group in s.Pieces.Values.Where(p => p.Damage == 0).GroupBy(p => (p.Owner, p.OwnerName)))
+            RpcId(peer, MethodName.AddPieces, s.Id, group.SelectMany(p => Pack(p.Piece)).ToArray(), DisplayOwner(group.Key.Owner, group.Key.OwnerName), group.Min(p => p.BuiltAt));
         foreach (var p in s.Pieces.Values.Where(p => p.Damage != 0))
-            RpcId(peer, MethodName.AddPiece, s.Id, Pack(p.Piece), p.Owner, p.Damage, p.BuiltAt, false);
+            RpcId(peer, MethodName.AddPiece, s.Id, Pack(p.Piece), DisplayOwner(p.Owner, p.OwnerName), p.Damage, p.BuiltAt, false);
     }
 
     /// <summary>Where a peer's body is, in LV95 (what it published), or null if it has none.</summary>
@@ -455,12 +460,57 @@ public partial class Structures : Node
     private void AskHit(long structure, int[] slot, float damage, int weapon) =>
         ServeHit(Multiplayer.GetRemoteSenderId(), structure, slot, damage, weapon);
 
-    private string OwnerName(long peer) => Online ? NameOf?.Invoke(peer) ?? $"Rider{peer}" : "local";
+    /// <summary>
+    /// What a peer's pieces are saved under (#1359): its player id, "local" offline, null while an online player is not
+    /// proven yet (it builds and removes nothing then).
+    /// </summary>
+    private string? OwnerId(long peer) =>
+        !Online ? "local"
+        : PlayerIds.Server is { } ids ? ids.IdOf(peer)
+        : NameOf?.Invoke(peer) ?? $"Rider{peer}";
+
+    /// <summary>The owner to show a client: the name as it is now, resolved at send time (an old name key stays as it is).</summary>
+    private string DisplayOwner(string owner, string backup) =>
+        Online && PlayerIds.Server is { } ids && PlayerIds.IsId(owner) ? ids.NameOfId(owner, backup) : owner;
+
+    private const string UnprovenMessage = "Your identity is not confirmed yet, try again in a moment.";
+
+    /// <summary>The name to keep beside an owner id as a fallback: the peer's own now.</summary>
+    private string NameNow(long peer, string id) => !Online ? id : PlayerIds.Server is { } ids ? ids.NameOfId(id) : NameOf?.Invoke(peer) ?? id;
+
+    private Action<long, string, string>? _claim;
+
+    public override void _EnterTree()
+    {
+        if (!_server || PlayerIds.Server is not { } ids) return;
+        _claim = ClaimLegacy;
+        ids.Identified += _claim;
+    }
+
+    /// <summary>
+    /// Server: a peer has its id and name. Every structure and piece still saved under that name (before #1359) is
+    /// theirs now, on the id, and saved so.
+    /// </summary>
+    private void ClaimLegacy(long peer, string id, string name)
+    {
+        int pieces = 0;
+        foreach (var s in _structures.Values)
+        {
+            if (s.Owner.Equals(name, StringComparison.OrdinalIgnoreCase)) { s.Owner = id; s.OwnerName = name; }
+            foreach (var p in s.Pieces.Values)
+                if (p.Owner.Equals(name, StringComparison.OrdinalIgnoreCase)) { p.Owner = id; p.OwnerName = name; pieces++; }
+        }
+        if (pieces == 0) return;
+        GD.Print($"[build] {name} claimed {pieces} legacy piece(s) as {id}");
+        Save();
+    }
     private bool PeerInMatch(long peer) => Online && InMatch?.Invoke(peer) == true;
 
     private void ServeBuild(long peer, int req, long structure, double e, double n, double alt, float yaw, int[] packed)
     {
-        string owner = OwnerName(peer);
+        string? owner = OwnerId(peer);
+        if (owner == null) { Reply(peer, req, UnprovenMessage); return; }
+        string ownerName = NameNow(peer, owner);
         bool match = PeerInMatch(peer);
         var piece = Unpack(packed);
         Structure? s = null;
@@ -489,13 +539,15 @@ public partial class Structures : Node
 
         if (s == null)
         {
-            s = new Structure { Id = _nextId++, E = e, N = n, Altitude = alt, Yaw = yaw, Owner = owner, Match = match };
+            s = new Structure { Id = _nextId++, E = e, N = n, Altitude = alt, Yaw = yaw, Owner = owner, OwnerName = ownerName, Match = match };
             PutStructure(s);
             Introduce(s);
         }
-        var placed = new Placed { Piece = piece!.Value, Owner = owner, BuiltAt = Now };
+        var placed = new Placed { Piece = piece!.Value, Owner = owner, OwnerName = ownerName, BuiltAt = Now };
+        if (s.Owner == owner) s.OwnerName = ownerName;
+        foreach (var q in s.Pieces.Values) if (q.Owner == owner) q.OwnerName = ownerName;   // refreshed whenever they build
         PutPiece(s, placed, live: true);
-        ToKnowers(s.Id, MethodName.AddPiece, s.Id, Pack(placed.Piece), placed.Owner, 0f, placed.BuiltAt, true);
+        ToKnowers(s.Id, MethodName.AddPiece, s.Id, Pack(placed.Piece), DisplayOwner(placed.Owner, placed.OwnerName), 0f, placed.BuiltAt, true);
         // a structure of ten pieces (#1266): the Adventure's build milestone (mentors), raised once per structure
         if (!s.Match && s.Pieces.Count == StructureBuilt.Pieces && Adventure.AdventureService.Instance is { } adventure
             && adventure.Progress(Online ? peer : Adventure.AdventureService.LocalPeer) is { } progress)
@@ -509,7 +561,8 @@ public partial class Structures : Node
         var slot = UnpackSlot(slotArr);
         Placed? p = null;
         string? refused = !_structures.TryGetValue(structure, out var s) || !s.Pieces.TryGetValue(slot, out p) ? "It is not there any more."
-            : p.Owner != OwnerName(peer) ? "That is not yours."
+            : OwnerId(peer) is not { } me ? UnprovenMessage
+            : p.Owner != me ? "That is not yours."
             : !InReach(peer, CentreGlobal(s, p.Piece)) ? "Too far away."
             : null;
         if (refused != null)
@@ -528,7 +581,7 @@ public partial class Structures : Node
         var def = Weapons.Get((ItemId)weapon);
         if (def == null || !float.IsFinite(damage) || damage <= 0 || damage > def.MaxHit) return;
         // offline there is no match: whoever plays alone may break a match structure (the prefab probe)
-        bool may = s.Match ? !Online || PeerInMatch(peer) : p.Owner == OwnerName(peer) || Combat.PvpRules.Enabled;
+        bool may = s.Match ? !Online || PeerInMatch(peer) : (OwnerId(peer) is { } me && p.Owner == me) || Combat.PvpRules.Enabled;
         if (!may || !InReach(peer, CentreGlobal(s, p.Piece), def.Range + 8f)) return;
 
         p.Damage += damage;
@@ -616,6 +669,7 @@ public partial class Structures : Node
         public double Altitude { get; set; }
         public float Yaw { get; set; }
         public string Owner { get; set; } = "";
+        public string OwnerName { get; set; } = "";
         public List<SavedPiece> Pieces { get; set; } = new();
     }
 
@@ -627,8 +681,12 @@ public partial class Structures : Node
         public string Material { get; set; } = "";
         public bool Grounded { get; set; }
         public string Owner { get; set; } = "";
+        public string OwnerName { get; set; } = "";
         public float Damage { get; set; }
     }
+
+    /// <summary>A save older than #1359 has no backup name: its owner key is the name.</summary>
+    private static string BackupOf(string owner, string saved) => saved.Length > 0 ? saved : PlayerIds.IsId(owner) ? "" : owner;
 
     private void Load(string path)
     {
@@ -639,7 +697,7 @@ public partial class Structures : Node
             var store = System.Text.Json.JsonSerializer.Deserialize<Store>(File.ReadAllText(_storePath)) ?? new Store();
             foreach (var ss in store.Structures)
             {
-                var s = new Structure { Id = ss.Id, E = ss.E, N = ss.N, Altitude = ss.Altitude, Yaw = ss.Yaw, Owner = ss.Owner };
+                var s = new Structure { Id = ss.Id, E = ss.E, N = ss.N, Altitude = ss.Altitude, Yaw = ss.Yaw, Owner = ss.Owner, OwnerName = BackupOf(ss.Owner, ss.OwnerName) };
                 PutStructure(s);
                 foreach (var sp in ss.Pieces)
                 {
@@ -648,7 +706,7 @@ public partial class Structures : Node
                         || !Enum.TryParse<BuildMaterial>(sp.Material, out var mat)) continue;
                     var piece = new Piece(UnpackSlot(sp.Slot), kind, sp.Dir, mat, sp.Grounded);
                     // built long ago: grown
-                    PutPiece(s, new Placed { Piece = piece, Owner = sp.Owner, Damage = sp.Damage, BuiltAt = double.MinValue / 4 }, false);
+                    PutPiece(s, new Placed { Piece = piece, Owner = sp.Owner, OwnerName = BackupOf(sp.Owner, sp.OwnerName), Damage = sp.Damage, BuiltAt = double.MinValue / 4 }, false);
                 }
                 if (s.Pieces.Count == 0) DropStructure(s.Id);
             }
@@ -668,11 +726,11 @@ public partial class Structures : Node
                 Next = _nextId,
                 Structures = _structures.Values.Where(s => !s.Match).OrderBy(s => s.Id).Select(s => new SavedStructure
                 {
-                    Id = s.Id, E = s.E, N = s.N, Altitude = s.Altitude, Yaw = s.Yaw, Owner = s.Owner,
+                    Id = s.Id, E = s.E, N = s.N, Altitude = s.Altitude, Yaw = s.Yaw, Owner = s.Owner, OwnerName = s.OwnerName,
                     Pieces = s.Pieces.Values.Select(p => new SavedPiece
                     {
                         Slot = PackSlot(p.Piece.Slot), Kind = p.Piece.Kind.ToString(), Dir = p.Piece.Dir,
-                        Material = p.Piece.Material.ToString(), Grounded = p.Piece.Grounded, Owner = p.Owner, Damage = p.Damage,
+                        Material = p.Piece.Material.ToString(), Grounded = p.Piece.Grounded, Owner = p.Owner, OwnerName = p.OwnerName, Damage = p.Damage,
                     }).ToList(),
                 }).ToList(),
             };

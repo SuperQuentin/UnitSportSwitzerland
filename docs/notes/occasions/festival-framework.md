@@ -91,3 +91,5 @@ Schwingen (part 6, built: `combat/schwingen`) is the model for a game with an op
 Register the festival's def (`FestivalCatalog.Register`) and its `OccasionEntry` default; call `Award` from the game's server method after checking the body
 is at the ground; a game's day goes in `Days`. Every new `ItemId` of a festival is in 500-539 and every `Headwear` in 5-20 (reserved in the enums).
 The closing show (part 2, built: `festival-fireworks`) reads `FestivalDef.Show` and the last day; a def with `ClosingShow.Fireworks` gets it for free.
+
+- Crew names (#1359): `CrewEntry.NameOf` shows a member's live name from the progress key (`PlayerIds.NameOfId(key, backup)`); `Names` is refreshed at each score and is only the backup. `PlayerProgress.LastName` likewise (`NameShown`).

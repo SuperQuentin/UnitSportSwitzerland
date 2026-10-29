@@ -21,6 +21,7 @@ the trial part of `RewardService`.
 - **Par**: gold = a run at 4.5 m/s on the flat + 0.35 m/s up (a glide 13 m/s), + 5 s; silver 25 % and bronze 60 % slower.
   A first finish gives a Fine roll, a first gold a Precious one; `TrialFinished(peer, key, id, seconds, medal)`.
 - **Personal best** in the `trials` section (seconds, best medal, runs). **Board**: per server (decided Oct 2026), top 10,
+- Board rows are keyed by the player key; the board sent shows the live name (`TrialBoard.NamesOf`, #1359), `TrialEntry.Name` only the backup (`local`/`peer:` keys keep it).
   one row per player, `user://adventure/trials.json` (the check's folder under a check); sent to the runner on a start
   and to every adventuring peer when a run enters it; `RequestBoard` asks. The Collection tab's Trials page shows it.
 - **Ghosts**: the client samples its run at 4 Hz (`GhostTrack`, ~4 KB a minute, 64 KB at most); after a personal best it

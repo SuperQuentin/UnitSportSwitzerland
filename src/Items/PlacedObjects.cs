@@ -39,6 +39,8 @@ public enum PlacedKind
 /// <summary>
 /// One object in the world. The position is LV95 plus altitude, not world space, so it survives an
 /// origin rebase and a server restart with another origin; <see cref="WorldTransform"/> converts.
+/// <see cref="Owner"/> is the placing player's id on a server (#1359), "local" offline, <see cref="PlacedObjects.MatchOwner"/>
+/// for a match's; what a client holds is the owner's name as the server sent it, for display only.
 /// </summary>
 public sealed record PlacedObject(long Id, PlacedKind Kind, string Owner, double E, double N, double Altitude,
     Quaternion Rotation, string Payload)
@@ -137,7 +139,7 @@ public partial class PlacedObjects : Node
         return null;
     }
 
-    /// <summary>Server: the display name of a peer, the owner recorded on what it places (set from the chat).</summary>
+    /// <summary>Unused since #1359 (owners are ids); the server's wiring still sets it.</summary>
     public Func<long, string>? NameOf { get; set; }
 
     public IReadOnlyDictionary<long, PlacedObject> All => _objects;
@@ -153,6 +155,9 @@ public partial class PlacedObjects : Node
     public static event Action<long, PlacedObject, bool>? ServedByPeer;
 
     private bool _server;
+    private PlayerIds? _claimFrom;
+    /// <summary>Server: the last name seen for each owner id, saved beside the objects as a fallback for an id that no longer resolves (#1359).</summary>
+    private readonly Dictionary<string, string> _ownerNames = new(StringComparer.Ordinal);
 
     /// <summary>This client will join a server (title screen's Multiplayer, or --connect), so the offline objects stay on disk.</summary>
 
@@ -178,6 +183,7 @@ public partial class PlacedObjects : Node
         if (_server)
         {
             Load("user://placed/server.json");
+            if (PlayerIds.Server is { } ids) { _claimFrom = ids; ids.Identified += ClaimLegacy; }
             return;
         }
         // a client that is going to connect shows the server's list, not the offline one
@@ -187,6 +193,8 @@ public partial class PlacedObjects : Node
 
     public override void _ExitTree()
     {
+        if (_claimFrom != null) _claimFrom.Identified -= ClaimLegacy;
+        _claimFrom = null;
         if (Instance == this) Instance = null;
     }
 
@@ -324,7 +332,7 @@ public partial class PlacedObjects : Node
         RpcId(peer, MethodName.Snapshot,
             list.Select(o => o.Id).ToArray(),
             list.Select(o => (int)o.Kind).ToArray(),
-            list.Select(o => o.Owner).ToArray(),
+            list.Select(o => OwnerShown(o.Owner)).ToArray(),
             list.SelectMany(o => new[] { o.E, o.N, o.Altitude }).ToArray(),
             list.SelectMany(o => new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }).ToArray(),
             list.Select(o => o.Payload).ToArray());
@@ -337,11 +345,45 @@ public partial class PlacedObjects : Node
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AskRemove(int req, long id) => ServeRemove(Multiplayer.GetRemoteSenderId(), req, id);
 
-    private string OwnerName(long peer) => Online ? NameOf?.Invoke(peer) ?? $"Rider{peer}" : "local";
+    /// <summary>The owner recorded on what a peer places: its id (null while it is not proven), "local" offline.</summary>
+    private string? OwnerKey(long peer) => Online ? PlayerIds.Server?.IdOf(peer) : "local";
+
+    /// <summary>The owner to show: an id's name as it is now (an old file's name key and the match's owner show as they are).</summary>
+    private string OwnerShown(string owner) =>
+        PlayerIds.Server is { } ids && PlayerIds.IsId(owner) ? ids.NameOfId(owner, _ownerNames.GetValueOrDefault(owner)) : owner;
+
+    /// <summary>Keeps the name an owner id is known by now (saved by the caller).</summary>
+    private bool RememberOwner(string id)
+    {
+        if (!PlayerIds.IsId(id) || id.StartsWith("bot:", StringComparison.Ordinal) || PlayerIds.Server is not { } ids) return false;
+        long peer = ids.PeerOf(id);
+        if (peer == 0 || ids.NameOf(peer) is not { Length: > 0 } name || (_ownerNames.TryGetValue(id, out var was) && was == name)) return false;
+        _ownerNames[id] = name;
+        return true;
+    }
+
+    private const string Unproven = "Your identity is not confirmed yet: try again in a moment.";
+
+    /// <summary>Server: a player got its id; what is still kept under its name becomes its own, unless the id already owns something (#1359).</summary>
+    private void ClaimLegacy(long peer, string id, string name)
+    {
+        bool named = RememberOwner(id);
+        if (_objects.Values.Any(o => o.Owner == id)) { if (named) Save(); return; }
+        var mine = _objects.Values.Where(o => o.Owner != MatchOwner && !PlayerIds.IsId(o.Owner)
+            && o.Owner.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (mine.Count == 0) { if (named) Save(); return; }
+        foreach (var o in mine) _objects[o.Id] = o with { Owner = id };
+        Save();
+        GD.Print($"[placed] {mine.Count} object(s) of {name} now kept under {id}");
+    }
 
     private void ServePlace(long peer, int req, int kind, double e, double n, double alt, Quaternion rot, string payload)
     {
-        string owner = OwnerName(peer);
+        if (OwnerKey(peer) is not { } owner)
+        {
+            Reply(peer, req, 0, Unproven);
+            return;
+        }
         string? refused =
             !Enum.IsDefined((PlacedKind)kind) || kind == 0 ? "Unknown object."
             : payload.Length > MaxPayload ? "Too much data."
@@ -362,13 +404,14 @@ public partial class PlacedObjects : Node
         // a campfire is lit now, by the server's clock: what the client sent does not count
         if ((PlacedKind)kind == PlacedKind.Campfire) payload = Crafting.CampfireClock.Lit(World.WorldClock.EnvNow);
         var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, e, n, alt, rot.Normalized(), payload);
+        RememberOwner(owner);
         Spawned(Put(o));   // offline the client plays the server's part; a dedicated server has no visual, so it is a no-op there
         Save();
         ServedByPeer?.Invoke(peer, o, true);
-        GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {owner} at LV95 {e:F1}/{n:F1}"));
+        GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {OwnerShown(owner)} at LV95 {e:F1}/{n:F1}"));
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
-                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, o.Owner, o.E, o.N, o.Altitude, o.Rotation, o.Payload);
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), o.E, o.N, o.Altitude, o.Rotation, o.Payload);
         Reply(peer, req, o.Id, "");
     }
 
@@ -380,7 +423,7 @@ public partial class PlacedObjects : Node
         if (owner != MatchOwner) Save();
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
-                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, o.Owner, o.E, o.N, o.Altitude, o.Rotation, o.Payload);
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), o.E, o.N, o.Altitude, o.Rotation, o.Payload);
         return o;
     }
 
@@ -398,8 +441,10 @@ public partial class PlacedObjects : Node
 
     private void ServeRemove(long peer, int req, long id)
     {
+        string? key = OwnerKey(peer);
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
-            : !AnyoneMayRemove(o) && o.Owner != OwnerName(peer) ? "That is not yours."
+            : !AnyoneMayRemove(o) && key == null ? Unproven
+            : !AnyoneMayRemove(o) && o.Owner != key ? "That is not yours."
             : !InReachOfEnd(peer, o.Kind, o.E, o.N, o.Altitude, o.Payload) ? "Too far away."
             : Farming.FarmStands.RemoveProblem(o);
         if (refused != null)
@@ -409,9 +454,10 @@ public partial class PlacedObjects : Node
         }
 
         Drop(id);
+        if (key != null) RememberOwner(key);
         Save();
         ServedByPeer?.Invoke(peer, o!, false);
-        GD.Print($"[placed] {o!.Kind} #{id} removed by {OwnerName(peer)}");
+        GD.Print($"[placed] {o!.Kind} #{id} removed by {(key != null ? OwnerShown(key) : peer.ToString())}");
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
                 RpcId(p, MethodName.Remove, id);
@@ -457,7 +503,7 @@ public partial class PlacedObjects : Node
     private void ServeBurn(long peer, long id)
     {
         if (!_objects.TryGetValue(id, out var o) || o.Kind != PlacedKind.HayHideout || !InReach(peer, o.E, o.N, o.Altitude, BurnReach)) return;
-        GD.Print($"[placed] HayHideout #{id} set alight by {OwnerName(peer)}");
+        GD.Print($"[placed] HayHideout #{id} set alight by {(OwnerKey(peer) is { } who ? OwnerShown(who) : peer.ToString())}");
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
                 RpcId(p, MethodName.Burnt, id);
@@ -479,6 +525,8 @@ public partial class PlacedObjects : Node
     {
         public long Next { get; set; } = 1;
         public List<Entry> Objects { get; set; } = new();
+        /// <summary>Owner id to the last name seen with it: only a fallback for an id that no longer resolves.</summary>
+        public Dictionary<string, string> OwnerNames { get; set; } = new();
     }
 
     private sealed class Entry
@@ -508,6 +556,7 @@ public partial class PlacedObjects : Node
                 Put(new PlacedObject(en.Id, kind, en.Owner, en.E, en.N, en.Altitude,
                     new Quaternion(en.Rotation[0], en.Rotation[1], en.Rotation[2], en.Rotation[3]), en.Payload));
             }
+            foreach (var (id, name) in store.OwnerNames) _ownerNames[id] = name;
             _nextId = Math.Max(store.Next, _objects.Count > 0 ? _objects.Keys.Max() + 1 : 1);
             GD.Print($"[placed] loaded {_objects.Count} object(s) from {_storePath}");
         }
@@ -522,6 +571,7 @@ public partial class PlacedObjects : Node
             var store = new Store
             {
                 Next = _nextId,
+                OwnerNames = _ownerNames.Where(n => _objects.Values.Any(o => o.Owner == n.Key)).ToDictionary(n => n.Key, n => n.Value),
                 Objects = _objects.Values.Where(o => o.Owner != MatchOwner).OrderBy(o => o.Id).Select(o => new Entry
                 {
                     Id = o.Id, Kind = o.Kind.ToString(), Owner = o.Owner, E = o.E, N = o.N, Altitude = o.Altitude,

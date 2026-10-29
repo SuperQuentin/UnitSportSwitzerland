@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Net;
 
 namespace UnitSport.Interiors.Pinball;
 
@@ -212,7 +213,7 @@ public partial class PinballTables
         var screen = m.Rules != null && (m.Rules.State != PinballRules.Phase.Attract)
             ? PinballScreen.Of(m.Rules).Pack() : PinballScreen.Idle(PinballLayouts.Get(m.Table)).Pack();
         var players = m.Players.ToArray();
-        var highs = Book.Of(key, index, m.Table).Pack();
+        var highs = Book.Of(key, index, m.Table).Pack(NameOfId);
         if (Online)
             foreach (long peer in PeersInside(key)) RpcId(peer, MethodName.State, key, index, m.Table, players, m.Runner, screen, highs);
         if (!Online || !DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase)) State(key, index, m.Table, players, m.Runner, screen, highs);
@@ -253,7 +254,19 @@ public partial class PinballTables
         catch (Exception e) { GD.PushWarning($"[pinball] {ScoresFile} not saved: {e.Message}"); }
     }
 
-    /// <summary>A game over: each player's score offered to the machine's table, under their own name; a new one saved and told.</summary>
+    /// <summary>The name an id has now (the online player's own, else the last seen); only a server resolves ids.</summary>
+    private static string NameOfId(string id, string? backup) => PlayerIds.Server?.NameOfId(id, backup) ?? backup ?? "Rider";
+
+    /// <summary>Server: a player got its id; the scores still under its name become its own (#1359).</summary>
+    private void ClaimLegacy(long peer, string id, string name)
+    {
+        int n = Book.ClaimLegacy(name, id);   // also refreshes the backup name of the id's own scores
+        SaveBook();
+        if (n == 0) return;
+        GD.Print($"[pinball] {n} high score(s) of {name} now kept under {id}");
+    }
+
+    /// <summary>A game over: each player's score offered to the machine's table, under their id; a new one saved and told.</summary>
     private void Record(string key, int index, Machine m)
     {
         var rules = m.Rules!;
@@ -262,7 +275,18 @@ public partial class PinballTables
         for (int i = 0; i < rules.Players.Count && i < m.Players.Count; i++)
         {
             long peer = m.Players[i];
-            int rank = highs.Offer(NameOf(peer), rules.Players[i].Score);
+            // on a server a score hangs on the player's id; offline there is only this machine's player
+            string id = "";
+            if (Online && PlayerIds.Server is { } ids)
+            {
+                if (ids.IdOf(peer) is not { } proven)
+                {
+                    GD.Print($"[pinball] {key} #{index}: score of peer {peer} not kept, identity not confirmed");
+                    continue;
+                }
+                id = proven;
+            }
+            int rank = highs.OfferId(id, NameOf(peer), rules.Players[i].Score);
             if (rank < 0) continue;
             any = true;
             GD.Print($"[pinball] {key} #{index}: high score #{rank + 1}, {NameOf(peer)} {rules.Players[i].Score}");
@@ -308,11 +332,11 @@ public partial class PinballTables
         {
             if (k != key) continue;
             var screen = m.Rules != null ? PinballScreen.Of(m.Rules).Pack() : PinballScreen.Idle(PinballLayouts.Get(m.Table)).Pack();
-            RpcId(peer, MethodName.State, key, index, m.Table, m.Players.ToArray(), m.Runner, screen, Book.Of(key, index, m.Table).Pack());
+            RpcId(peer, MethodName.State, key, index, m.Table, m.Players.ToArray(), m.Runner, screen, Book.Of(key, index, m.Table).Pack(NameOfId));
         }
         // machines nobody played since the server started: their saved high scores
         foreach (var (index, table, highs) in Book.In(key).ToList())
             if (!Machines.ContainsKey((key, index)))
-                RpcId(peer, MethodName.State, key, index, table, Array.Empty<long>(), 0L, PinballScreen.Idle(PinballLayouts.Get(table)).Pack(), highs.Pack());
+                RpcId(peer, MethodName.State, key, index, table, Array.Empty<long>(), 0L, PinballScreen.Idle(PinballLayouts.Get(table)).Pack(), highs.Pack(NameOfId));
     }
 }
