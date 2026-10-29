@@ -51,7 +51,7 @@ public partial class FootPlayer
     private readonly SwordMachine _sword = new();
     private int _swordVariant, _swordSeed, _swordCount, _swordCode, _swordChain;
     private SwordMove _swordPoseMove;
-    private float _swordWeight, _swordLungeDone;
+    private float _swordWeight, _swordLungeDone, _swordLungeMoved;
     private double _swordShownAt;
     private float _swordShownHold;
     private float _swordYaw;
@@ -114,13 +114,8 @@ public partial class FootPlayer
         }
         else if (!_sword.Charging) SwordShown = SwordMove.None;
 
-        // the blow: traced when its blade goes live, and once more late in the window against what moved into it
-        if (_sword.ActiveBegan) { _swordGather2 = false; SwordTrace(_sword.Move); }
-        else if (_sword.Live(now) && !_swordGather2 && _sword.Into(now) >= SwordRules.Def(_sword.Move).Startup + SwordRules.Def(_sword.Move).Active * 0.6)
-        {
-            _swordGather2 = true;
-            SwordTrace(_sword.Move);
-        }
+        // the blow: the blade's capsule swept through this frame's span of the swing against the targets' own shapes (a hit is the blade touching)
+        if (_sword.Busy) SwordSweepStep(now);
 
         // the body turns to the blow's yaw while the hands are busy; the lock keeps it facing its target
         SwordFaceSnap = false;
@@ -155,6 +150,8 @@ public partial class FootPlayer
         CaptureSwordChain(now);
         _swordSeed = _swordCount++ & 15;
         _swordLungeDone = 0f;
+        _swordLungeMoved = 0f;
+        _swordSweepP = -1f;
         // the set a combo swing is drawn from: the advancing one on the move, the planted one standing
         _swordVariant = SwordPoses.VariantFor(MathX.FlatLength(Velocity) > 2f || Core.PlayerInput.Move.LengthSquared() > 0.09f);
         if (move is SwordMove.Charged or SwordMove.Plunge) _swordVariant = 0;
@@ -194,7 +191,14 @@ public partial class FootPlayer
     private float SwordAim(SwordMove move)
     {
         float view = _viewYaw;
-        if (_swordLockSet && SwordLockYaw() is { } locked) return locked;
+        _swordAimSet = false;
+        if (_swordLockSet && SwordLockYaw() is { } locked)
+        {
+            _swordAimSet = true;
+            _swordAimKind = _swordLockKind;
+            _swordAimId = _swordLockId;
+            return locked;
+        }
         if (SwordService.Instance is not { } svc) return view;
         _swordReach.Clear();
         svc.Targets(this, _swordReach);
@@ -205,7 +209,11 @@ public partial class FootPlayer
         int best = SwordRules.Best(CollectionsMarshal.AsSpan(_swordCands), GlobalPosition.X, GlobalPosition.Z, fx, fz,
             SwordRules.SoftRange, SwordRules.SoftConeDeg);
         if (best < 0) return view;
-        var p = _swordReach[(int)_swordCands[best].Id].Position;
+        var near = _swordReach[(int)_swordCands[best].Id];
+        _swordAimSet = true;
+        _swordAimKind = near.Kind;
+        _swordAimId = near.Id;
+        var p = near.Position;
         return Mathf.Atan2(-(p.X - GlobalPosition.X), -(p.Z - GlobalPosition.Z));
     }
 
@@ -264,10 +272,26 @@ public partial class FootPlayer
         }
         else if (SwordPoses.Lunge(_sword.Move, _swordVariant) is var metres and > 0f)
         {
-            // a step per swing, 0.3 to 1.2 m, eased out over the strike, never into a target already at arm's length
+            // the step, at most 1.2 m, eased over the wind-up and the strike. With a target in view it is as long as it takes to bring the blade's
+            // real reach (this move's: the thrust reaches further, the spin is a circle) onto it, no more: the body never glides across the map
             float done = SwordPoses.LungeDone(_sword.Move, _sword.Progress(now));
             var fwd = new Vector3(-Mathf.Sin(_swordYaw), 0, -Mathf.Cos(_swordYaw));
-            if (done > _swordLungeDone && !SwordTargetClose(fwd)) step = fwd * (metres * (done - _swordLungeDone));
+            float want = metres;
+            if (_swordAimSet && SwordService.Instance?.PositionOf(_swordAimKind, _swordAimId) is { } at)
+            {
+                var to = at - GlobalPosition;
+                to.Y = 0;
+                // retarget while it winds up: turn to the target (the facing damps in well inside the wind-up) and aim the step at it
+                if (_sword.Phase(now) == SwordPhase.Startup && to.LengthSquared() > 0.01f) _swordYaw = Mathf.Atan2(-to.X, -to.Z);
+                float reach = Items.SwordBlade.Get(_sword.Move, _swordVariant, _swordSeed).Reach;
+                // spin slashes are a circle round the body: any target inside the reach is touched
+                want = Mathf.Clamp(to.Length() - 0.30f - reach * 0.85f, 0f, 1.2f);
+            }
+            if (_swordLungeDone < 0.999f)
+            {
+                float next = (want - _swordLungeMoved) * (done - _swordLungeDone) / (1f - _swordLungeDone);
+                if (next > 0f) { step = fwd * next; _swordLungeMoved += next; }
+            }
             _swordLungeDone = Mathf.Max(_swordLungeDone, done);
         }
         else if (_sword.Move == SwordMove.Plunge && _sword.Phase(now) == SwordPhase.Startup)
@@ -294,22 +318,62 @@ public partial class FootPlayer
         return false;
     }
 
-    /// <summary>Traces a blow whose blade is live against the targets this peer draws and names each one reached.</summary>
-    private void SwordTrace(SwordMove move)
+    private float _swordSweepP = -1f;
+    private SwordTargetKind _swordAimKind;
+    private long _swordAimId;
+    private bool _swordAimSet;
+    /// <summary>The blade's own geometry, for the debug draw: the last frame's swept capsule (world) and whether it touched.</summary>
+    public (Vector3 Hilt, Vector3 Tip, bool Touched, double At) SwordBladeLast { get; private set; }
+
+    /// <summary>
+    /// A hit is the blade reaching the body (#1371): through the blow's active frames, each physics frame sweeps the blade's capsule (hilt to tip,
+    /// 5 cm thick, <see cref="SwordBlade"/>'s samples turned and moved by where this body really is) from where it was last frame to where it is
+    /// now, in substeps, against the body shape of each target this peer sees (the dummy's own parts, a body's cylinder). A target touched is named
+    /// to the server once per swing, at the moment of contact.
+    /// </summary>
+    private void SwordSweepStep(double now)
     {
+        var move = _sword.Move;
         if (!SwordRules.IsBlow(move) || SwordService.Instance is not { } svc) return;
-        var d = SwordRules.Def(move);
+        float p1 = _sword.Progress(now);
+        var track = Items.SwordBlade.Get(move, _swordVariant, _swordSeed);
+        var (_, tA, tS, _) = SwordPoses.Times(move, _swordSeed);
+        if (p1 < tA) return;
+        float end = Mathf.Min(p1, tS + 0.03f);
+        float p0 = _swordSweepP < 0f ? tA : _swordSweepP;
+        if (end <= p0) return;
+        _swordSweepP = end;
         _swordReach.Clear();
         svc.Targets(this, _swordReach);
-        float fx = -Mathf.Sin(_swordYaw), fz = -Mathf.Cos(_swordYaw);
-        foreach (var r in _swordReach)
+        var xf = GlobalTransform;
+        float step = (track.To - track.From) / (Items.SwordBlade.Count - 1);
+        int n = Mathf.Max(1, Mathf.CeilToInt((end - p0) / step));
+        System.Span<Combat.Capsule> shape = stackalloc Combat.Capsule[4];
+        Items.SwordBlade.At(track, p0, out var h0, out var t0);
+        var ha = xf * h0;
+        var ta = xf * t0;
+        bool touched = false;
+        for (int i = 1; i <= n; i++)
         {
-            if (_swordHit.Count >= SwordGuard.MaxTargets) break;
-            var rel = r.Position - GlobalPosition;
-            if (!SwordRules.InCone(0, 0, fx, fz, rel.X, rel.Z, d.Reach, d.ConeDeg, out _) || !SwordRules.InHeight(rel.Y)) continue;
-            long key = r.Kind == SwordTargetKind.Dummy ? -1_000_000 - r.Id : r.Id;
-            if (_swordHit.Add(key)) svc.SendHit(move, r.Kind, r.Id);
+            Items.SwordBlade.At(track, Mathf.Lerp(p0, end, i / (float)n), out var h1, out var t1);
+            var hb = xf * h1;
+            var tb = xf * t1;
+            foreach (var r in _swordReach)
+            {
+                if (_swordHit.Count >= SwordGuard.MaxTargets) break;
+                long key = r.Kind == SwordTargetKind.Dummy ? -1_000_000 - r.Id : r.Id;
+                if (_swordHit.Contains(key)) continue;
+                var feet = new System.Numerics.Vector3(r.Position.X, r.Position.Y, r.Position.Z);
+                int count = r.Kind == SwordTargetKind.Dummy ? SwordSweep.DummyShape(feet, r.Yaw, shape) : SwordSweep.BodyShape(feet, shape);
+                if (!SwordSweep.Sweep(new(ha.X, ha.Y, ha.Z), new(ta.X, ta.Y, ta.Z), new(hb.X, hb.Y, hb.Z), new(tb.X, tb.Y, tb.Z), shape[..count], 0f, out _, out _)) continue;
+                _swordHit.Add(key);
+                touched = true;
+                svc.SendHit(move, r.Kind, r.Id);
+            }
+            ha = hb;
+            ta = tb;
         }
+        SwordBladeLast = (ha, ta, touched || SwordBladeLast.Touched && now - SwordBladeLast.At < 0.25, now);
     }
 
     /// <summary>The sword is put away (or the body went down): the hands let go of everything.</summary>

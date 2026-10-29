@@ -133,15 +133,15 @@ public static class SwordRules
     {
         //                          move             startup active recov cancel reach cone dmg  knock stop cost lunge
         new(SwordMove.None,         0f,    0f,    0f,   0f,   0f,  0f,  0f,  0f,  0f,  0f,   0f),
-        // semi-realistic timing (#1371 round 2): the wind-up (startup) 0.24-0.30, the strike (active) 0.16-0.18, the follow-through and
-        // settle (recovery) 0.42-0.52; the cancel opens late in the follow-through so a chain flows. The pose tables (SwordPoses) use the same marks.
-        new(SwordMove.Slash1,       0.24f, 0.16f, 0.42f, 0.60f, 2.3f, 55f, 12f, 3.5f, 0.05f, 0f, 2.5f),
-        new(SwordMove.Slash2,       0.24f, 0.16f, 0.42f, 0.60f, 2.3f, 55f, 13f, 3.5f, 0.05f, 0f, 2.5f),
-        new(SwordMove.Slash3,       0.28f, 0.16f, 0.46f, 0.64f, 2.4f, 60f, 15f, 4.5f, 0.06f, 0f, 2.5f),
-        new(SwordMove.Slash4,       0.24f, 0.16f, 0.42f, 0.60f, 2.4f, 60f, 16f, 5.0f, 0.06f, 0f, 3.0f),
-        new(SwordMove.Slash5,       0.52f, 0.18f, 0.50f, 0.95f, 2.7f, 75f, 24f, 9.0f, 0.10f, 0f, 3.5f),
-        new(SwordMove.Charged,      0.26f, 0.16f, 0.46f, 0.62f, 3.0f, 85f, 40f, 11f, 0.13f, ChargedCost, 4.0f),
-        new(SwordMove.Plunge,       0.00f, 0.16f, 0.52f, 0.45f, 2.8f, 180f, 30f, 9.0f, 0.10f, 0f, 0f),
+        // manga timing (#1371 round 3): the wind-up (startup) is a moving hold, the strike (active) is explosive, 0.10-0.12 s, then the overshoot
+        // snap, the zanshin hold (0.12-0.30 s, nearly still) and the settle in the recovery; the cancel opens inside the hold so a chain stays responsive.
+        new(SwordMove.Slash1,       0.24f, 0.10f, 0.48f, 0.52f, 2.3f, 55f, 12f, 3.5f, 0.05f, 0f, 2.5f),
+        new(SwordMove.Slash2,       0.24f, 0.10f, 0.48f, 0.52f, 2.3f, 55f, 13f, 3.5f, 0.05f, 0f, 2.5f),
+        new(SwordMove.Slash3,       0.28f, 0.10f, 0.52f, 0.56f, 2.4f, 60f, 15f, 4.5f, 0.06f, 0f, 2.5f),
+        new(SwordMove.Slash4,       0.24f, 0.10f, 0.48f, 0.52f, 2.4f, 60f, 16f, 5.0f, 0.06f, 0f, 3.0f),
+        new(SwordMove.Slash5,       0.52f, 0.12f, 0.56f, 0.86f, 2.7f, 75f, 24f, 9.0f, 0.12f, 0f, 3.5f),
+        new(SwordMove.Charged,      0.26f, 0.10f, 0.52f, 0.60f, 3.0f, 85f, 40f, 11f, 0.13f, ChargedCost, 4.0f),
+        new(SwordMove.Plunge,       0.00f, 0.12f, 0.56f, 0.45f, 2.8f, 180f, 30f, 9.0f, 0.10f, 0f, 0f),
         new(SwordMove.Dodge,        0.00f, 0.00f, 0.45f, 0.30f, 0f,  0f,  0f,  0f,  0f,   DodgeCost, 0f),
         new(SwordMove.Charge,       0f,    0f,    0f,   0f,   0f,  0f,  0f,  0f,  0f,  0f,   0f),
     };

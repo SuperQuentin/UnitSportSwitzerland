@@ -54,6 +54,11 @@ public partial class SwordService : Node
     private WorldOrigin _origin = null!;
     private readonly SwordGuard _guard = new();
     private readonly Dictionary<long, float> _yaw = new();
+    private readonly Dictionary<long, int> _code = new();
+    /// <summary>How far past the blade's capsule the server lets a claimed hit be (the two bodies' positions are a moment old), metres.</summary>
+    public const float GeometrySlack = 0.30f;
+    /// <summary>The window of the swing's progress, in seconds either side of when the hit arrives, the server sweeps the blade over.</summary>
+    public const double WindowSeconds = 0.10;
 
     // server and offline: the dummies' truth
     private sealed class DummyData
@@ -162,6 +167,7 @@ public partial class SwordService : Node
             return false;
         }
         _yaw[who] = yaw;
+        _code[who] = code;
         if (!Online)
             return true;
         foreach (int peer in Multiplayer.GetPeers())
@@ -200,17 +206,12 @@ public partial class SwordService : Node
     /// Server (a bot's hands, offline): <paramref name="who"/>'s <paramref name="move"/> reached the target. Returns whether it
     /// landed. Refusals log <c>[sword] refused ...</c>.
     /// </summary>
-    public bool ServerHit(long who, SwordMove move, SwordTargetKind kind, long id)
+    public bool ServerHit(long who, SwordMove move, SwordTargetKind kind, long id, bool quiet = false)
     {
         if (!Authority || !SwordRules.IsBlow(move)) return false;
         var attacker = BodyOf(who);
         if (attacker == null || attacker.Down != 0 || attacker.Eliminated) return false;
         double now = RealClock.Now;
-        if (!_guard.TryHit(who, move, Key(kind, id), now))
-        {
-            GD.Print(FormattableString.Invariant($"[sword] refused {who}: a {move} hit on {kind} {id} out of turn"));
-            return false;
-        }
         var def = SwordRules.Def(move);
         var from = attacker.Global;
         GlobalPos to;
@@ -237,12 +238,21 @@ public partial class SwordService : Node
         float dx = (float)(to.E - from.E), dz = (float)(from.N - to.N);
         float yaw = _yaw.GetValueOrDefault(who, attacker.Rotation.Y);
         float fx = -Mathf.Sin(yaw), fz = -Mathf.Cos(yaw);
-        if (!SwordRules.InCone(0, 0, fx, fz, dx, dz, def.Reach + SwordRules.LagSlack, Mathf.Min(180f, def.ConeDeg + SwordRules.ConeSlackDeg), out float dist)
-            || !SwordRules.InHeight((float)(to.Alt - from.Alt)))
+        // the blow lands only where the blade is: its capsule swept over the swing's window around now (the server's clock since the move began,
+        // 100 ms either side) against the target's own shape, from the two bodies as the server has them, with 0.30 m of slack for their age
+        double since = _guard.SinceAct(who, now, out var announced);
+        if (announced != move || !Reaches(who, move, yaw, dx, (float)(to.Alt - from.Alt), dz, kind == SwordTargetKind.Dummy ? dummy!.Yaw : 0f,
+                kind, since, out var contact))
         {
-            GD.Print(FormattableString.Invariant($"[sword] refused {who}: {kind} {id} out of reach ({dist:F1} m, {move})"));
+            if (!quiet) GD.Print(FormattableString.Invariant($"[sword] refused {who}: the {move} blade never reached {kind} {id} ({Mathf.Sqrt(dx * dx + dz * dz):F1} m away, {since:F2} s into it)"));
             return false;
         }
+        if (!_guard.TryHit(who, move, Key(kind, id), now))
+        {
+            if (!quiet) GD.Print(FormattableString.Invariant($"[sword] refused {who}: a {move} hit on {kind} {id} out of turn"));
+            return false;
+        }
+        float dist = Mathf.Sqrt(dx * dx + dz * dz);
         var flat = new Vector3(dx, 0, dz);
         var dir = flat.LengthSquared() > 1e-4f ? flat.Normalized() : new Vector3(fx, 0, fz);
         var knock = dir * SwordRules.KnockAt(move, dist);
@@ -263,7 +273,8 @@ public partial class SwordService : Node
             hp = victim.Health;
         }
         GD.Print(FormattableString.Invariant($"[sword] {who} hit {kind} {id} for {def.Damage:F0} ({move})"));
-        var at = new GlobalPos(to.E, to.N, to.Alt + 1.2);
+        // where the blade touched: a point of the blade, relative to the attacker, put back in the world
+        var at = new GlobalPos(from.E + contact.X, from.N - contact.Z, from.Alt + contact.Y);
         var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, knock, _origin.ToWorld(at), down);
         if (victim != null && !victim.Bot) PvpRules.RaiseHit(who, id, def.Damage);
         BroadcastStruck(strike, at, victim != null && !victim.Bot ? id : 0);
@@ -423,30 +434,68 @@ public partial class SwordService : Node
     }
 
     /// <summary>
-    /// Server (a bot's blade gone live): <paramref name="who"/>'s <paramref name="move"/> against every dummy and body the server holds
-    /// within its reach and cone, each through <see cref="ServerHit"/> (the same checks as a player's named hit). The number landed.
+    /// Whether the <paramref name="move"/>'s blade, swept over the window of the swing around <paramref name="since"/> seconds into it, touches a target
+    /// at (<paramref name="dx"/>, <paramref name="dy"/>, <paramref name="dz"/>) from the attacker (world axes). The attacker is turned as the owner
+    /// turns it through the move (the yaw it announced plus the move's own spin). <paramref name="contact"/> is the touching point on the blade.
+    /// </summary>
+    private bool Reaches(long who, SwordMove move, float yaw, float dx, float dy, float dz, float dummyYaw, SwordTargetKind kind, double since,
+        out Vector3 contact)
+    {
+        contact = default;
+        int code = _code.GetValueOrDefault(who);
+        int variant = SwordPoses.VariantOf(code), seed = SwordPoses.SeedOf(code);
+        var track = Items.SwordBlade.Get(move, variant, seed);
+        float total = Mathf.Max(0.01f, SwordRules.Def(move).Total);
+        float lo = Mathf.Max(track.From, (float)((since - WindowSeconds) / total)), hi = Mathf.Min(track.To, (float)((since + WindowSeconds) / total));
+        if (lo > hi) return false;
+        System.Span<Capsule> shape = stackalloc Capsule[4];
+        var feet = new System.Numerics.Vector3(dx, dy, dz);
+        int n = kind == SwordTargetKind.Dummy ? SwordSweep.DummyShape(feet, dummyYaw, shape) : SwordSweep.BodyShape(feet, shape);
+        int steps = Mathf.Max(2, Mathf.CeilToInt((hi - lo) / ((track.To - track.From) / (Items.SwordBlade.Count - 1))));
+        float spin0 = SwordPoses.Sample(move, variant, seed, lo).Spin;
+        System.Numerics.Vector3 a0 = default, b0 = default;
+        for (int i = 0; i <= steps; i++)
+        {
+            float p = Mathf.Lerp(lo, hi, i / (float)steps);
+            Items.SwordBlade.At(track, p, out var hilt, out var tip);
+            var turn = new Basis(Vector3.Up, yaw + SwordPoses.Sample(move, variant, seed, p).Spin);
+            var h = turn * hilt;
+            var t = turn * tip;
+            var a1 = new System.Numerics.Vector3(h.X, h.Y, h.Z);
+            var b1 = new System.Numerics.Vector3(t.X, t.Y, t.Z);
+            if (i == 0) { a0 = a1; b0 = b1; }
+            if (SwordSweep.Sweep(a0, b0, a1, b1, shape[..n], GeometrySlack, out var c, out _))
+            {
+                contact = new Vector3(c.X, c.Y, c.Z);
+                return true;
+            }
+            a0 = a1; b0 = b1;
+        }
+        _ = spin0;
+        return false;
+    }
+
+    /// <summary>
+    /// Server (a bot's blade gone live): <paramref name="who"/>'s <paramref name="move"/> offered to every dummy and body the server holds near
+    /// it, each through <see cref="ServerHit"/> (the blade's own geometry decides: no reach-and-cone test). The number landed.
     /// </summary>
     public int ServerTrace(long who, SwordMove move, float yaw)
     {
         if (!Authority || BodyOf(who) is not { } attacker || !SwordRules.IsBlow(move)) return 0;
-        var def = SwordRules.Def(move);
         var from = attacker.Global;
-        float fx = -Mathf.Sin(yaw), fz = -Mathf.Cos(yaw);
         int landed = 0;
-        bool Reaches(GlobalPos to) =>
-            SwordRules.InCone(0, 0, fx, fz, (float)(to.E - from.E), (float)(from.N - to.N), def.Reach, def.ConeDeg, out _)
-            && SwordRules.InHeight((float)(to.Alt - from.Alt));
+        bool Near(GlobalPos to) => Mathf.Abs((float)(to.E - from.E)) < 4f && Mathf.Abs((float)(to.N - from.N)) < 4f;
         foreach (var d in _dummyData.Values.ToArray())
-            if (d.Hp > 0f && Reaches(d.Pos) && !_guard.Reached(who, Key(SwordTargetKind.Dummy, d.Id)) && ServerHit(who, move, SwordTargetKind.Dummy, d.Id)) landed++;
+            if (d.Hp > 0f && Near(d.Pos) && !_guard.Reached(who, Key(SwordTargetKind.Dummy, d.Id)) && ServerHit(who, move, SwordTargetKind.Dummy, d.Id, quiet: true)) landed++;
         if (GetNodeOrNull("../Players") is { } players)
             foreach (var n in players.GetChildren())
-                if (n is FootPlayer p && p != attacker && (p.Bot || !p.Npc) && p.Down != 1 && Reaches(p.Global)
-                    && FootPlayer.NetId(p.Name) is { } id && !_guard.Reached(who, Key(SwordTargetKind.Body, id)) && ServerHit(who, move, SwordTargetKind.Body, id)) landed++;
+                if (n is FootPlayer p && p != attacker && (p.Bot || !p.Npc) && p.Down != 1 && Near(p.Global)
+                    && FootPlayer.NetId(p.Name) is { } id && !_guard.Reached(who, Key(SwordTargetKind.Body, id)) && ServerHit(who, move, SwordTargetKind.Body, id, quiet: true)) landed++;
         return landed;
     }
 
     /// <summary>A target a trace may reach, as this peer sees it.</summary>
-    public readonly record struct Reach(SwordTargetKind Kind, long Id, Vector3 Position);
+    public readonly record struct Reach(SwordTargetKind Kind, long Id, Vector3 Position, float Yaw = 0f);
 
     /// <summary>
     /// Every target near <paramref name="attacker"/> as this peer draws it: the dummies standing and the other bodies up (bots,
@@ -455,11 +504,14 @@ public partial class SwordService : Node
     public void Targets(FootPlayer attacker, List<Reach> into)
     {
         foreach (var d in _dummies.Values)
-            if (d.Standing) into.Add(new Reach(SwordTargetKind.Dummy, d.Id, d.GlobalPosition));
-        foreach (var n in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (n is FootPlayer p && p != attacker && p.IsInsideTree() && (p.Bot || !p.Npc && FootPlayer.NetId(p.Name) is > 0)
-                && p.Down != 1 && !p.Eliminated && p.Ride == RideKind.OnFoot)
-                into.Add(new Reach(SwordTargetKind.Body, FootPlayer.NetId(p.Name) ?? 0, p.GlobalPosition));
+            if (d.Standing) into.Add(new Reach(SwordTargetKind.Dummy, d.Id, d.GlobalPosition, d.Rotation.Y));
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+        {
+            var p = s.Player;
+            if (p != attacker && p.IsInsideTree() && (p.Bot || !p.Npc && FootPlayer.NetId(p.Name) is > 0)
+                && p.Down != 1 && !p.Eliminated && s.Ride == RideKind.OnFoot)
+                into.Add(new Reach(SwordTargetKind.Body, FootPlayer.NetId(p.Name) ?? 0, s.Pos));
+        }
     }
 
     /// <summary>Where a target is drawn now, or null when it is gone (a lock lets go).</summary>

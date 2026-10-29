@@ -99,6 +99,14 @@ public sealed class SwordGuard
         return true;
     }
 
+    /// <summary>Seconds since the peer's last announced move began (the server's clock), and which move it was.</summary>
+    public double SinceAct(long peer, double now, out SwordMove move)
+    {
+        if (_peers.TryGetValue(peer, out var p)) { move = p.Move; return now - p.At; }
+        move = SwordMove.None;
+        return double.PositiveInfinity;
+    }
+
     /// <summary>The peer's last swing already reached <paramref name="target"/> (a bot's second pass over the same blow skips it).</summary>
     public bool Reached(long peer, long target) => _peers.TryGetValue(peer, out var p) && p.Hit.Contains(target);
 

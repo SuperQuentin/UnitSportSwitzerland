@@ -123,43 +123,44 @@ public static class SwordPoses
                      P(-0.55f, 0.05f, 0.14f, -0.12f, 0.46f, 0.52f, 0.20f, 0.48f, 0.28f, -0.05f, 0.46f, -0.24f, pz: 0.05f, yaw: -0.2f),
                      P(-0.75f, -0.02f, 0.16f, -0.11f, 0.52f, 0.60f, 0.10f, 0.54f, 0.34f, -0.10f, 0.48f, -0.24f, pz: 0.05f, yaw: -0.25f)),
         },
-        // 3: a horizontal slash that turns the whole body once round
+        // 3: yoko-giri, a horizontal cut with a pivot step (standing); the moving set turns the whole body once round
         new[]
         {
             new Move(P(-1.00f, 0.15f, 0.05f, -0.22f, 0.55f, 0.05f, -0.30f, 0.45f, 0.10f, 0.00f, 0.14f, -0.22f, yaw: -0.3f),
-                     P(0.30f, 0.10f, -0.05f, -0.20f, 0.55f, 0.00f, 0.30f, 0.30f, 0.05f, 0.10f, 0.20f, -0.24f, spin: Turn, yaw: 0.2f),
-                     P(0.60f, 0.10f, -0.05f, -0.18f, -0.10f, -0.10f, 0.45f, 0.20f, -0.10f, 0.10f, 0.22f, -0.22f, spin: Turn, yaw: 0.3f)),
+                     P(0.65f, 0.10f, -0.05f, -0.20f, -0.30f, 0.00f, 0.42f, 0.30f, 0.05f, 0.10f, 0.30f, -0.26f, yaw: 0.2f),
+                     P(0.90f, 0.10f, -0.05f, -0.18f, -0.42f, -0.05f, 0.40f, 0.20f, -0.10f, 0.10f, 0.32f, -0.24f, yaw: 0.3f)),
             new Move(P(-0.90f, 0.20f, 0.05f, -0.26f, 0.55f, 0.08f, -0.28f, 0.45f, 0.10f, 0.00f, 0.18f, -0.24f, yaw: -0.3f),
                      P(0.25f, 0.14f, -0.05f, -0.24f, 0.55f, 0.02f, 0.30f, 0.30f, 0.05f, 0.10f, 0.26f, -0.26f, spin: Turn, yaw: 0.2f),
-                     P(0.55f, 0.14f, -0.05f, -0.22f, -0.08f, -0.08f, 0.45f, 0.20f, -0.10f, 0.10f, 0.28f, -0.24f, spin: Turn, yaw: 0.3f)),
+                     P(0.30f, 0.14f, -0.05f, -0.22f, 0.40f, 0.00f, 0.38f, 0.25f, 0.00f, 0.10f, 0.28f, -0.24f, spin: Turn, yaw: 0.3f)),
         },
-        // 4: a thrust, the sword drawn to the hip and driven out behind a lunge step
+        // 4: tsuki, a straight thrust at chest height behind a deep lunge, the off hand forward
         new[]
         {
-            new Move(P(-0.50f, 0.10f, 0.00f, -0.18f, 0.25f, -0.05f, -0.15f, 0.40f, 0.15f, 0.10f, 0.10f, -0.25f),
-                     P(0.15f, 0.40f, 0.00f, -0.30f, 0.05f, 0.00f, 0.55f, 0.50f, 0.20f, -0.10f, 0.62f, -0.40f, pz: 0.10f, neck: 0.05f),
-                     P(0.12f, 0.36f, 0.00f, -0.30f, 0.05f, 0.02f, 0.52f, 0.52f, 0.22f, -0.12f, 0.62f, -0.40f, pz: 0.10f, neck: 0.05f)),
-            new Move(P(-0.45f, 0.14f, 0.00f, -0.22f, 0.25f, -0.05f, -0.15f, 0.40f, 0.15f, 0.10f, 0.14f, -0.27f),
-                     P(0.10f, 0.46f, 0.00f, -0.36f, 0.05f, 0.00f, 0.55f, 0.52f, 0.20f, -0.10f, 0.72f, -0.46f, pz: 0.12f, neck: 0.06f),
-                     P(0.08f, 0.42f, 0.00f, -0.36f, 0.05f, 0.02f, 0.52f, 0.54f, 0.22f, -0.12f, 0.72f, -0.46f, pz: 0.12f, neck: 0.06f)),
+            new Move(P(-0.50f, 0.10f, 0.00f, -0.18f, 0.25f, -0.05f, -0.15f, 0.20f, 0.15f, 0.30f, 0.10f, -0.25f),
+                     P(0.15f, 0.40f, 0.00f, -0.30f, 0.05f, 0.00f, 0.55f, 0.15f, 0.12f, 0.40f, 0.62f, -0.40f, pz: 0.10f, neck: 0.05f),
+                     P(0.12f, 0.36f, 0.00f, -0.30f, 0.05f, 0.02f, 0.52f, 0.15f, 0.12f, 0.38f, 0.62f, -0.40f, pz: 0.10f, neck: 0.05f)),
+            new Move(P(-0.45f, 0.14f, 0.00f, -0.22f, 0.25f, -0.05f, -0.15f, 0.20f, 0.15f, 0.30f, 0.14f, -0.27f),
+                     P(0.10f, 0.46f, 0.00f, -0.36f, 0.05f, 0.00f, 0.55f, 0.15f, 0.12f, 0.40f, 0.72f, -0.46f, pz: 0.12f, neck: 0.06f),
+                     P(0.08f, 0.42f, 0.00f, -0.36f, 0.05f, 0.02f, 0.52f, 0.15f, 0.12f, 0.38f, 0.72f, -0.46f, pz: 0.12f, neck: 0.06f)),
         },
-        // 5: a jump and an overhead slam
+        // 5: standing: shomen / kiri-oroshi, a jump, both hands on the grip overhead, a vertical drop-cut into a low kneeling zanshin, then the chiburi flick;
+        //    moving: an iai-style dash cut (nukitsuke), a low drawn-back stance and a horizontal cut through the pass, held after it
         new[]
         {
-            new Move(P(-0.30f, -0.10f, 0.00f, 0.06f, 0.15f, 0.62f, -0.05f, 0.30f, 0.55f, 0.00f, 0.10f, -0.12f, leadY: 0.34f, rearY: 0.30f, neck: -0.1f),
-                     P(0.10f, 0.55f, 0.00f, -0.34f, 0.05f, -0.45f, 0.50f, 0.20f, -0.30f, 0.30f, 0.45f, -0.30f, pz: 0.08f, neck: 0.1f),
-                     P(0.10f, 0.50f, 0.00f, -0.36f, 0.05f, -0.50f, 0.46f, 0.18f, -0.32f, 0.28f, 0.46f, -0.30f, pz: 0.08f, neck: 0.1f)),
-            new Move(P(-0.30f, -0.12f, 0.00f, 0.08f, 0.15f, 0.64f, -0.05f, 0.30f, 0.55f, 0.00f, 0.14f, -0.14f, leadY: 0.40f, rearY: 0.36f, neck: -0.1f),
-                     P(0.10f, 0.60f, 0.00f, -0.38f, 0.05f, -0.46f, 0.52f, 0.20f, -0.30f, 0.30f, 0.60f, -0.34f, pz: 0.12f, neck: 0.12f),
-                     P(0.10f, 0.55f, 0.00f, -0.40f, 0.05f, -0.52f, 0.48f, 0.18f, -0.32f, 0.28f, 0.62f, -0.34f, pz: 0.12f, neck: 0.12f)),
+            new Move(P(-0.30f, -0.10f, 0.00f, 0.06f, 0.15f, 0.62f, -0.05f, -0.38f, 0.60f, -0.05f, 0.10f, -0.12f, leadY: 0.34f, rearY: 0.30f, neck: -0.1f),
+                     P(0.10f, 0.55f, 0.00f, -0.34f, 0.05f, -0.45f, 0.50f, -0.20f, -0.40f, 0.50f, 0.45f, -0.30f, pz: 0.08f, neck: 0.1f),
+                     P(0.10f, 0.52f, 0.00f, -0.50f, 0.20f, -0.40f, 0.40f, -0.10f, -0.35f, 0.42f, 0.38f, -0.40f, pz: 0.08f, neck: 0.12f, rearY: 0.14f)),
+            new Move(P(-1.10f, 0.50f, 0.00f, -0.36f, 0.30f, -0.10f, -0.35f, 0.40f, 0.20f, 0.10f, 0.12f, -0.30f, yaw: -0.3f),
+                     P(0.70f, 0.30f, -0.05f, -0.26f, -0.35f, -0.05f, 0.45f, 0.30f, 0.10f, 0.10f, 0.62f, -0.40f, pz: 0.10f, yaw: 0.3f),
+                     P(0.85f, 0.32f, -0.05f, -0.30f, -0.45f, -0.08f, 0.40f, 0.25f, 0.00f, 0.10f, 0.66f, -0.42f, pz: 0.10f, yaw: 0.35f)),
         },
     };
 
     /// <summary>The charged blow: crouched and wound up, released into a full turn.</summary>
     private static readonly Move ChargedMove =
-        new(P(-1.00f, 0.35f, 0.05f, -0.35f, 0.55f, 0.05f, -0.35f, 0.40f, 0.20f, 0.20f, 0.10f, -0.26f, yaw: -0.3f),
-            P(0.80f, 0.10f, -0.08f, -0.22f, 0.60f, 0.00f, 0.30f, 0.30f, 0.05f, 0.10f, 0.35f, -0.28f, spin: Turn, yaw: 0.25f),
-            P(1.00f, 0.12f, -0.08f, -0.20f, -0.30f, -0.30f, 0.40f, 0.20f, -0.10f, 0.10f, 0.36f, -0.26f, spin: Turn, yaw: 0.3f));
+        new(P(-1.10f, 0.50f, 0.05f, -0.40f, 0.30f, -0.10f, -0.35f, 0.40f, 0.15f, 0.10f, 0.10f, -0.30f, yaw: -0.3f),
+            P(0.90f, 0.20f, -0.08f, -0.26f, -0.30f, -0.05f, 0.50f, 0.30f, 0.05f, 0.10f, 0.45f, -0.34f, pz: 0.08f, yaw: 0.25f),
+            P(1.10f, 0.20f, -0.08f, -0.26f, -0.45f, -0.08f, 0.40f, 0.25f, 0.00f, 0.10f, 0.48f, -0.34f, pz: 0.08f, yaw: 0.3f));
 
     /// <summary>The plunge: the coil is the tucked fall, the strike a kneel on the landing.</summary>
     private static readonly Move PlungeMove =
@@ -234,8 +235,35 @@ public static class SwordPoses
         // a few per cent of timing, by the seed: the wind-up a little longer or shorter, never past the strike
         float j = Jitter(seed, 2);
         tA = Math.Clamp(tA * (1f + 0.04f * j), 0f, Math.Max(0f, tS - 0.02f));
-        float tF = tS + (1f - tS) * 0.45f;
+        // the zanshin hold begins 0.13 s after the end of the strike (after the overshoot snap)
+        float total2 = move == SwordMove.Dodge ? 0.45f : Math.Max(0.0001f, SwordRules.Def(move).Total);
+        float tF = Math.Min(tS + 0.13f / total2, tS + (1f - tS) * 0.5f);
         return (0f, tA, tS, tF);
+    }
+
+    /// <summary>
+    /// The nine key times of a move's spline, as fractions: the stance, the coil reached (about 0.15 s into the wind-up), the end of the moving hold
+    /// (the blade goes live), the end of the strike, the overshoot snap, the start and the end of the zanshin hold (0.18 s, the finisher 0.30 s), the
+    /// undershoot of the settle, the stance. Strictly increasing.
+    /// </summary>
+    public static void KeyTimes(SwordMove move, int seed, Span<float> kt)
+    {
+        var (_, tA, tS, _) = Times(move, seed);
+        float total = move == SwordMove.Dodge ? 0.45f : Math.Max(0.0001f, SwordRules.Def(move).Total);
+        float rest = Math.Max(0.02f, (1f - tS) * total);
+        float hold = move == SwordMove.Slash5 ? 0.30f : 0.18f;
+        float s1 = Math.Min(0.05f, rest * 0.15f), s2 = Math.Min(0.13f, rest * 0.30f), s3 = Math.Min(0.13f + hold, rest * 0.68f);
+        float s4 = s3 + (rest - s3) * 0.5f;
+        kt[0] = 0f;
+        kt[2] = tA;
+        kt[1] = Math.Max(0.001f, tA - Math.Min(0.11f / total, tA * 0.6f));
+        kt[3] = tS;
+        kt[4] = tS + s1 / total;
+        kt[5] = tS + s2 / total;
+        kt[6] = tS + s3 / total;
+        kt[7] = tS + s4 / total;
+        kt[8] = 1f;
+        for (int i = 1; i < kt.Length; i++) if (kt[i] <= kt[i - 1]) kt[i] = kt[i - 1] + 0.001f;
     }
 
     /// <summary>A deterministic number in -1..1 from the seed and a channel: the same on every peer.</summary>
@@ -257,7 +285,7 @@ public static class SwordPoses
         _ => new Move(Ready, Ready, Ready),
     };
 
-    private const int KeyCount = 6;
+    private const int KeyCount = 9;
 
     // How much later than the hips each part of the body follows (seconds): overlapping action. The hips lead, the chest a moment
     // after, then the shoulder and arm, the head and the off arm last (they also settle with the spline's overshoot).
@@ -288,20 +316,31 @@ public static class SwordPoses
         strike.Theta += 0.04f * b; over.Theta += 0.04f * b;
         coil.Psi -= 0.05f * b;
         var start = move == SwordMove.Plunge ? coil : Ready;
-        // a small undershoot past the stance, on the far side of the follow-through, then home
+        // the moving hold: past the coil it drifts a few degrees further into the wind-up, still pointing at where the cut starts
+        var drift = coil;
+        drift.Psi += (coil.Psi - Ready.Psi) * 0.08f;
+        drift.Hx += (coil.Hx - strike.Hx) * 0.04f;
+        drift.Hy += 0.03f;
+        // the snap: the blow goes past the end of its arc by about a tenth of it (5-10 degrees), and springs back to the held pose
+        var snap = SwordPose.Lerp(coil, strike, 1.10f);
+        snap.Spin = strike.Spin;
+        snap.Py = strike.Py; snap.LeadZ = strike.LeadZ; snap.RearZ = strike.RearZ;
+        // the zanshin: the held finish, nearly still (it settles by a hair), then the undershoot past the stance and home
+        var hold = over;
+        var hold2 = SwordPose.Lerp(over, start, 0.04f);
+        hold2.Spin = over.Spin;
         var under = SwordPose.Lerp(over, start, 1.08f);
-        float tU = tF + (1f - tF) * 0.55f;
-
-        Span<SwordPose> k = stackalloc SwordPose[KeyCount];
-        Span<float> kt = stackalloc float[KeyCount];
-        // a spin slash's turn stays turned through the settle (the facing at the end is the same one): never unwound backwards
         under.Spin = over.Spin;
         var end = start;
         end.Spin = over.Spin;
-        k[0] = start; k[1] = coil; k[2] = strike; k[3] = over; k[4] = under; k[5] = end;
-        kt[0] = 0f; kt[1] = tA; kt[2] = tS; kt[3] = tF; kt[4] = tU; kt[5] = 1f;
-        // keep the times strictly increasing (a plunge's coil is at 0)
-        for (int i = 1; i < KeyCount; i++) if (kt[i] <= kt[i - 1]) kt[i] = kt[i - 1] + 0.001f;
+
+        Span<SwordPose> k = stackalloc SwordPose[KeyCount];
+        Span<float> kt = stackalloc float[KeyCount];
+        k[0] = start; k[1] = coil; k[2] = drift; k[3] = strike; k[4] = snap; k[5] = hold; k[6] = hold2; k[7] = under; k[8] = end;
+        KeyTimes(move, seed, kt);
+        var tU = kt[7];
+        var tFz = kt[5];
+        _ = tFz;
 
         float p = Math.Clamp(progress, 0f, 1f);
         float total = Math.Max(0.0001f, move == SwordMove.Dodge ? 0.45f : SwordRules.Def(move).Total);

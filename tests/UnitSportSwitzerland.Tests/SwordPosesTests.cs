@@ -98,8 +98,8 @@ public class SwordPosesTests
             for (int j = i + 1; j < 5; j++)
                 Assert.NotEqual(Floats(SwordPoses.Sample(Blows[i], 0, 2, 0.4f)), Floats(SwordPoses.Sample(Blows[j], 0, 2, 0.4f)));
         // the spin slash and the charged release turn the body once round
-        Assert.Equal(MathF.PI * 2f, SwordPoses.Sample(SwordMove.Slash3, 0, 2, 0.5f).Spin, 1);
-        Assert.Equal(MathF.PI * 2f, SwordPoses.Sample(SwordMove.Charged, 0, 2, 0.5f).Spin, 1);
+        Assert.Equal(MathF.PI * 2f, SwordPoses.Sample(SwordMove.Slash3, 1, 2, 0.5f).Spin, 1);   // the moving set turns once round, the standing yoko-giri pivots
+        Assert.Equal(0f, SwordPoses.Sample(SwordMove.Slash3, 0, 2, 0.5f).Spin);
         Assert.Equal(0f, SwordPoses.Sample(SwordMove.Slash1, 0, 2, 0.5f).Spin);
         // the finisher jumps (the hips above the stance) before it slams down below it
         Assert.True(SwordPoses.Sample(SwordMove.Slash5, 0, 2, 0.15f).Py > SwordPoses.Ready.Py);
@@ -149,46 +149,77 @@ public class SwordPosesTests
     private static readonly SwordMove[] Swings = { SwordMove.Slash1, SwordMove.Slash2, SwordMove.Slash3, SwordMove.Slash4, SwordMove.Slash5, SwordMove.Charged };
 
     [Fact]
-    public void The_new_timing_is_semi_realistic_and_the_blade_is_live_inside_the_strike()
+    public void The_manga_timing_has_a_moving_hold_an_explosive_strike_and_a_zanshin_hold_the_cancel_opens_in()
     {
         foreach (var move in Swings.Where(m => m != SwordMove.Charged))
         {
             var d = SwordRules.Def(move);
-            if (move == SwordMove.Slash5) { Assert.InRange(d.Total, 1.1f, 1.3f); Assert.InRange(d.Startup, 0.45f, 0.6f); }
-            else { Assert.InRange(d.Total, 0.78f, 0.92f); Assert.InRange(d.Startup, 0.22f, 0.32f); }
-            Assert.InRange(d.Active, 0.12f, 0.18f);
-            Assert.InRange(d.Recovery, 0.40f, 0.55f);
-            // the cancel opens late in the follow-through: past the end of the strike by a good part of the recovery, before it ends
-            Assert.InRange(d.Cancel, d.Startup + d.Active + d.Recovery * 0.4f, d.Total - 0.05f);
+            if (move == SwordMove.Slash5) { Assert.InRange(d.Total, 1.1f, 1.3f); Assert.InRange(d.Startup, 0.45f, 0.6f); Assert.InRange(d.Active, 0.06f, 0.12f); }
+            else { Assert.InRange(d.Total, 0.78f, 0.92f); Assert.InRange(d.Startup, 0.22f, 0.32f); Assert.InRange(d.Active, 0.06f, 0.10f); }
+            Assert.InRange(d.Recovery, 0.45f, 0.60f);
+            // the cancel opens inside the zanshin hold: after the snap, before the hold's end
+            Span<float> kt = stackalloc float[9];
+            SwordPoses.KeyTimes(move, 3, kt);
+            Assert.InRange(d.Cancel / d.Total, kt[4], kt[7]);
         }
-        // the charged blow, with its minimum hold, is about 1.3 s
         var c = SwordRules.Def(SwordMove.Charged);
         Assert.InRange(c.Total + SwordRules.ChargeMin, 1.25, 1.45);
+        Assert.InRange(c.Active, 0.06f, 0.10f);
     }
 
     [Fact]
-    public void Velocity_is_continuous_through_every_key_so_nothing_stops_mid_move()
+    public void Each_swing_has_a_moving_hold_a_fast_strike_an_overshoot_snap_and_a_still_zanshin()
     {
-        foreach (var move in Swings.Append(SwordMove.Plunge).Append(SwordMove.Dodge))
+        foreach (var move in Swings)
             for (int v = 0; v < 2; v++)
             {
-                var (_, tA, tS, tF) = SwordPoses.Times(move, 3);
-                float tU = tF + (1f - tF) * 0.55f;
-                foreach (float key in new[] { tA, tS, tF, tU })
-                {
-                    if (key < 0.02f) continue;
-                    const float e = 0.002f;
-                    var before = Floats(SwordPoses.Sample(move, v, 3, key - e));
-                    var at = Floats(SwordPoses.Sample(move, v, 3, key));
-                    var after = Floats(SwordPoses.Sample(move, v, 3, key + e));
-                    for (int i = 0; i < at.Length - 1; i++)   // Spin is the body's own turn, clamped
-                    {
-                        float vl = (at[i] - before[i]) / e, vr = (after[i] - at[i]) / e;
-                        // the speed on both sides agrees (the lags and the weight shift are smooth too): no kink, no stop-and-start
-                        Assert.True(Math.Abs(vl - vr) < 0.25f * Math.Max(1f, Math.Abs(vl) + Math.Abs(vr)) + 0.6f, $"{move} v{v} key {key:F2} field {i}: {vl} vs {vr}");
-                    }
-                }
+                Span<float> kt = stackalloc float[9];
+                SwordPoses.KeyTimes(move, 3, kt);
+                float total = SwordRules.Def(move).Total;
+                // the moving hold: the coil is reached 0.08-0.15 s before the blade goes live, and the pose drifts a little over it
+                float hold = (kt[2] - kt[1]) * total;
+                Assert.InRange(hold, 0.08f, 0.15f);
+                var coil = SwordPoses.Sample(move, v, 3, kt[1]);
+                var end = SwordPoses.Sample(move, v, 3, kt[2]);
+                float drift = Math.Abs(end.Psi - coil.Psi) + Math.Abs(end.Hy - coil.Hy);
+                Assert.InRange(drift, 0.001f, 0.9f);
+                // the strike takes at most 0.12 s
+                Assert.True((kt[3] - kt[2]) * total <= 0.125f);
+                // the snap: just after the strike's end the blow has gone past it
+                var strike = SwordPoses.Sample(move, v, 3, kt[3]);
+                var snap = SwordPoses.Sample(move, v, 3, kt[4]);
+                float arc = Math.Abs(strike.Psi - end.Psi) + Math.Abs(strike.Hx - end.Hx) + Math.Abs(strike.Hy - end.Hy) + Math.Abs(strike.Hz - end.Hz);
+                float past = Math.Abs(snap.Psi - end.Psi) + Math.Abs(snap.Hx - end.Hx) + Math.Abs(snap.Hy - end.Hy) + Math.Abs(snap.Hz - end.Hz);
+                Assert.True(past > arc, $"{move} v{v}: the snap goes past the end of the arc");
+                // the zanshin: nearly still through the hold (the body's twist and the sword hand move less than 1.5 rad-or-metres a second, against ten or more in the strike)
+                float h0 = kt[5], h1 = kt[6];
+                var a = SwordPoses.Sample(move, v, 3, h0);
+                var b = SwordPoses.Sample(move, v, 3, h1);
+                float speed = (Math.Abs(b.Psi - a.Psi) + Math.Abs(b.Hx - a.Hx) + Math.Abs(b.Hy - a.Hy)) / ((h1 - h0) * total);
+                Assert.True(speed < 1.5f, $"{move} v{v}: the hold is still ({speed:F2}/s)");
             }
+    }
+
+    [Fact]
+    public void The_wind_up_points_to_the_side_the_cut_starts_from()
+    {
+        // the hand at the end of the moving hold is on the far side of where the cut ends: a diagonal from the right, a backhand from the left, a thrust drawn back,
+        // an overhead cut from above, a wide cut from behind
+        SwordPose Coil(SwordMove m, int v) { Span<float> kt = stackalloc float[9]; SwordPoses.KeyTimes(m, 3, kt); return SwordPoses.Sample(m, v, 3, kt[2]); }
+        SwordPose Strike(SwordMove m, int v) { Span<float> kt = stackalloc float[9]; SwordPoses.KeyTimes(m, 3, kt); return SwordPoses.Sample(m, v, 3, kt[5]); }
+        for (int v = 0; v < 2; v++)
+        {
+            Assert.True(Coil(SwordMove.Slash1, v).Hx > Strike(SwordMove.Slash1, v).Hx + 0.4f, "kesa-giri winds up on the right");
+            Assert.True(Coil(SwordMove.Slash2, v).Hx < Strike(SwordMove.Slash2, v).Hx - 0.4f, "gyaku kesa winds up on the left");
+            Assert.True(Coil(SwordMove.Slash4, v).Hz < Strike(SwordMove.Slash4, v).Hz - 0.4f, "tsuki draws back");
+            Assert.True(Coil(SwordMove.Slash5, v).Hy > Strike(SwordMove.Slash5, v).Hy + 0.3f || v == 1, "the finisher winds up overhead");
+            Assert.True(Coil(SwordMove.Charged, v).Psi < Strike(SwordMove.Charged, v).Psi - 1f, "the charged cut winds up from behind");
+        }
+        Assert.True(Coil(SwordMove.Slash3, 0).Hx > Strike(SwordMove.Slash3, 0).Hx + 0.4f, "yoko-giri winds up on the right");
+        // the iai dash: a low drawn-back stance
+        Assert.True(Coil(SwordMove.Slash5, 1).Py < SwordPoses.Ready.Py - 0.2f);
+        // the finisher is two-handed: the off hand comes over to the grip
+        Assert.True(Coil(SwordMove.Slash5, 0).Ox < -0.3f);
     }
 
     [Fact]
