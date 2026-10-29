@@ -25,7 +25,7 @@ public static class BuildPolicy
 /// <summary>
 /// A few dedicated BelowNormal threads that run tile builds instead of the shared ThreadPool. An
 /// <c>await</c> in a build captures this scheduler, so the CPU stages that follow an IO wait come
-/// back here too; only the source's own reads and decodes (their <c>Task.Run</c>) stay on the pool.
+/// back here too; a source's reads and decodes called from a build run inline (<see cref="Run{T}"/>).
 /// </summary>
 public sealed class BuildScheduler : TaskScheduler
 {
@@ -33,12 +33,20 @@ public sealed class BuildScheduler : TaskScheduler
     public static readonly AsyncLocal<BuildScheduler?> Ambient = new();
 
     /// <summary>
-    /// <c>Task.Run</c> that stays on the build threads when called from a build, so a source's decode
-    /// does not escape to the pool at Normal priority.
+    /// <c>Task.Run</c> that, from a build, runs the work inline on the calling (BelowNormal) thread and
+    /// returns a finished task: no hop to the pool at Normal priority, and no queue behind the build
+    /// threads, which would deadlock a caller that blocks on the result (sync-over-async callers such as
+    /// <c>FallbackChunkSource.StageWalls</c> or <c>SitePlans</c>). Cancelled or thrown work gives the same
+    /// cancelled or faulted task <c>Task.Run</c> would.
     /// </summary>
-    public static Task<T> Run<T>(Func<T> work, CancellationToken ct) => Ambient.Value is { } s
-        ? Task.Factory.StartNew(work, ct, TaskCreationOptions.DenyChildAttach, s)
-        : Task.Run(work, ct);
+    public static Task<T> Run<T>(Func<T> work, CancellationToken ct)
+    {
+        if (Ambient.Value == null) return Task.Run(work, ct);
+        if (ct.IsCancellationRequested) return Task.FromCanceled<T>(ct);
+        try { return Task.FromResult(work()); }
+        catch (OperationCanceledException e) when (e.CancellationToken == ct) { return Task.FromCanceled<T>(ct); }
+        catch (Exception e) { return Task.FromException<T>(e); }
+    }
 
     private readonly BlockingCollection<Task> _queue = new();
     private readonly Thread[] _threads;

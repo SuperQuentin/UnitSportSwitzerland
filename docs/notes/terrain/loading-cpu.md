@@ -8,7 +8,9 @@
 - **Priority**: builds run on `BuildScheduler`, dedicated BelowNormal threads (`Core`-free, `Terrain/BuildPolicy.cs`),
   not on the ThreadPool; video export and phones still use `Task.Run`. An `await` in the build captures the
   scheduler, so the CPU stages after an IO wait return to it. `LocalChunkSource` decodes go through
-  `BuildScheduler.Run` (an `AsyncLocal` says "inside a build"), so they stay on those threads too.
+  `BuildScheduler.Run` (an `AsyncLocal` says "inside a build"): from a build it runs the work inline and returns a
+  finished task. Never queue it on the build threads: sync-over-async callers (`FallbackChunkSource.StageWalls`,
+  `SitePlans`) block a build thread on it and would deadlock the scheduler.
   **Not covered**: `FallbackChunkSource` (generated fill, its `Task.Run` and `Parallel.For`) and the horizon
   still use the pool at Normal priority; they are bounded by the builds in flight.
 - **Frame cap**: `LoadingScreen.Begin` sets `Engine.MaxFps` to min(60, monitor Hz) (only if the user's limit is

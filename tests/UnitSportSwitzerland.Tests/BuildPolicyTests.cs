@@ -47,4 +47,34 @@ public class BuildPolicyTests
         Assert.False(CacheTrimPolicy.ShouldTrim(101, max, false, 1));
         Assert.False(CacheTrimPolicy.ShouldTrim(101, max, true, 999));
     }
+
+    [Fact]
+    public async Task A_build_that_blocks_on_a_source_read_does_not_hang_a_one_thread_scheduler()
+    {
+        var scheduler = new BuildScheduler(1);
+        var build = Task.Factory.StartNew(() =>
+        {
+            BuildScheduler.Ambient.Value = scheduler;
+            return BuildScheduler.Run(() => 42, CancellationToken.None).GetAwaiter().GetResult();
+        }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, scheduler);
+        Assert.Same(build, await Task.WhenAny(build, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Equal(42, build.Result);
+    }
+
+    [Fact]
+    public async Task Inline_work_reports_cancel_and_fault_like_Task_Run()
+    {
+        var scheduler = new BuildScheduler(1);
+        var (cancelled, faulted) = await Task.Factory.StartNew(() =>
+        {
+            BuildScheduler.Ambient.Value = scheduler;
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            var c = BuildScheduler.Run(() => 1, cts.Token);
+            var f = BuildScheduler.Run<int>(() => throw new InvalidOperationException("x"), CancellationToken.None);
+            return (c.IsCanceled, f.IsFaulted);
+        }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, scheduler);
+        Assert.True(cancelled);
+        Assert.True(faulted);
+    }
 }
