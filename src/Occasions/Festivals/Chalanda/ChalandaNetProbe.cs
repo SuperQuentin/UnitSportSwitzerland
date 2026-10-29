@@ -70,6 +70,9 @@ public partial class ChalandaNetProbe : ChatProbe
         // the march: ring on 14 beats of the shared clock, stamped with the beat, walking along the first leg of the loop
         async Task MarchRings()
         {
+            // step off first: the server counts a ring only for a body it has seen move within the last second and a half
+            Teleport(stand.E + (path[0].E - stand.E) * 0.3 / leg, stand.N + (path[0].N - stand.N) * 0.3 / leg);
+            await Seconds(0.6);
             long beat = ChalandaRules.NextBeat(ClockSync.ServerNow) + 2;
             for (int k = 0; k < Rings; k++, beat++)
             {
