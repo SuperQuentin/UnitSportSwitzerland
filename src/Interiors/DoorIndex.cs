@@ -172,7 +172,14 @@ public static class DoorIndex
         All().Where(e => kind == null || e.Kind == kind)
             .Select(e =>
             {
-                var (distance, rejected) = Measure(e, at);
+                var (distance, rule) = Measure(e, at);
+                // the text is made here, for a probe's log, not for every door of every search
+                string? rejected = rule switch
+                {
+                    Rule.Storey => $"{Mathf.Abs((at - e.World).Y):F0} m {((at - e.World).Y > 0 ? "below" : "above")} us",
+                    Rule.Behind => "behind its wall",
+                    _ => null,
+                };
                 return (Door: e, Distance: distance, Rejected: rejected);
             })
             .OrderBy(c => c.Distance);
@@ -215,11 +222,13 @@ public static class DoorIndex
         // faced before not, and within each, at the player's level before not (#827)
         Entry? facedLevel = null, faced = null, level = null, any = null;
         float facedLevelD = reach, facedD = reach, levelD = reach, anyD = reach;
-        foreach (var doors in Tiles.Values)
+        foreach (var (id, doors) in Tiles)
+        {
+            if (!MayReach(id, at, reach)) continue;
             foreach (var e in doors)
             {
                 var (d, rejected) = Measure(e, at, deeper);
-                if (rejected != null) continue;
+                if (rejected != Rule.None) continue;
                 bool atLevel = AtLevel(e, at);
                 // facing into it: the look against the door's outward normal
                 bool isFaced = look.X * e.Outward.X + look.Z * e.Outward.Z < 0f;
@@ -228,6 +237,7 @@ public static class DoorIndex
                 if (isFaced && d < facedD) { facedD = d; faced = e; }
                 if (isFaced && atLevel && d < facedLevelD) { facedLevelD = d; facedLevel = e; }
             }
+        }
         return facedLevel ?? faced ?? level ?? any;
     }
 
@@ -269,7 +279,7 @@ public static class DoorIndex
             {
                 if (!wanted(e)) continue;
                 var (d, rejected) = Measure(e, at, deeper);
-                if (rejected != null) continue;
+                if (rejected != Rule.None) continue;
                 if (AtLevel(e, at))
                 {
                     if (d >= bestD) continue;
@@ -291,12 +301,12 @@ public static class DoorIndex
 
     /// <summary>
     /// How far <paramref name="at"/> is from a door's opening, and what rules the door out from
-    /// there: it is a storey away, or the player stands behind its wall. A null reason means the
+    /// there: it is a storey away, or the player stands behind its wall. <see cref="Rule.None"/> means the
     /// door is usable and only the caller's reach can still rule it out. Shared by
     /// <see cref="Nearest(Vector3, float, Func{Entry, bool}, Func{Entry, float})"/> and
     /// <see cref="Candidates"/>, so a probe explains a miss by the rule that caused it.
     /// </summary>
-    private static (float Distance, string? Rejected) Measure(Entry e, Vector3 at, Func<Entry, float>? deeper = null)
+    private static (float Distance, Rule Rejected) Measure(Entry e, Vector3 at, Func<Entry, float>? deeper = null)
     {
         var rel = at - e.World;
         var t = new Vector3(-e.Outward.Z, 0, e.Outward.X);
@@ -305,8 +315,11 @@ public static class DoorIndex
         float depth = Mathf.Max(0, outward - (deeper?.Invoke(e) ?? 0f));
         float d = Mathf.Sqrt(along * along + depth * depth);
         // rel is the player relative to the door, so a positive Y means the door is the lower one
-        if (Mathf.Abs(rel.Y) > MaxRise) return (d, $"{Mathf.Abs(rel.Y):F0} m {(rel.Y > 0 ? "below" : "above")} us");
-        if (outward < -0.3f) return (d, "behind its wall");
-        return (d, null);
+        if (Mathf.Abs(rel.Y) > MaxRise) return (d, Rule.Storey);
+        if (outward < -0.3f) return (d, Rule.Behind);
+        return (d, Rule.None);
     }
+
+    /// <summary>What rules a door out in <see cref="Measure"/>: a code, so the hot searches build no text.</summary>
+    private enum Rule { None, Storey, Behind }
 }
