@@ -981,6 +981,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
+            || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null
             || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
@@ -1223,6 +1224,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.Festivals.Escalade.EscaladeGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Escalade.EscaladeCheck.Requested) AddChild(new Occasions.Festivals.Escalade.EscaladeCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null) AddChild(new Occasions.Festivals.Escalade.EscaladeNetProbe(items));
+            // the Fasnacht (#1357): E at the Larven stall, the Morgestraich lantern or the Guggenmusik stage; Räppli with the item's Use
+            AddChild(new Occasions.Festivals.Fasnacht.FasnachtGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Fasnacht.FasnachtCheck.Requested) AddChild(new Occasions.Festivals.Fasnacht.FasnachtCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null) AddChild(new Occasions.Festivals.Fasnacht.FasnachtNetProbe(items));
             if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));

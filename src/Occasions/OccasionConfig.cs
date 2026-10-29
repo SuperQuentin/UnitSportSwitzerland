@@ -160,6 +160,20 @@ public static class OccasionConfig
             Schedule = { new DateWindow("12-sat#2", "+1") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the Fasnacht (#1357): Luzern's from the Schmutziger Donnerstag for six days, Basel's three days from the Monday after Ash Wednesday. The Hats facet is the
+        // festival's own mask (Fritschi, Ueli); Basel's Atmosphere is the Morgestraich (street lamps out at 04:00 on day 1), and only that: the sky is the season's
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.FasnachtId, Priority = 8,
+            Schedule = { new DateWindow("easter-52", "+5") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = true },
+        });
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.BaslerFasnachtId, Priority = 8,
+            Schedule = { new DateWindow("easter-41", "+2") },
+            Facets = new FacetToggles { Atmosphere = true, Loot = false, Hunt = false, Hats = true },
+        });
         return entries;
     }
 

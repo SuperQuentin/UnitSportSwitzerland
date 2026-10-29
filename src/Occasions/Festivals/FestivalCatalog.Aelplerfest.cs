@@ -17,7 +17,7 @@ public static partial class FestivalCatalog
 
     public static (double E, double N) FahneGround(ResolvedSite site) => (site.E + FahneGroundOffset, site.N);
 
-    static FestivalCatalog() { Register(Aelplerfest()); RegisterDesalpe(); RegisterChristmas(); RegisterEscalade(); }
+    static FestivalCatalog() { Register(Aelplerfest()); RegisterDesalpe(); RegisterChristmas(); RegisterEscalade(); RegisterFasnacht(); }
 
     /// <summary>
     /// The Älplerfest, 14 to 24 August: Interlaken's Höhematte, then Schwägalp and Schwarzsee when the region lacks it. The flag swingers

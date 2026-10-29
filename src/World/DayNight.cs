@@ -290,7 +290,7 @@ public partial class DayNight : Node
     private float _appliedDisco = -1f;
 
     // set every frame: a string would convert to a new StringName each call (#221)
-    private static readonly StringName GLights = "world_lights", GMistColor = "world_mist_color",
+    private static readonly StringName GLights = "world_lights", GLamps = "world_lamps", GMistColor = "world_mist_color",
         GMistDensity = "world_mist_density", GMistTop = "world_mist_top", GNight = "world_night", GSky = "world_sky",
         GSnow = "world_snow", GSunDir = "world_sun_dir", GTint = "world_tint";
     private (Color, Color, float, float)? _applied;
@@ -310,6 +310,7 @@ public partial class DayNight : Node
         OccasionSnow = atmo?.Snow ?? 0f;
         RenderingServer.GlobalShaderParameterSet(GSnow, OccasionSnow);
         RenderingServer.GlobalShaderParameterSet(GLights, atmo?.Lights ?? 0f);
+        RenderingServer.GlobalShaderParameterSet(GLamps, atmo?.Lamps ?? 1f);
 
         float density = atmo == null ? 0f : Mathf.Lerp(atmo.MistDay, atmo.MistNight, Night);
         if (density > 0f && TrackMistTop(atmo!.MistHeight, delta))

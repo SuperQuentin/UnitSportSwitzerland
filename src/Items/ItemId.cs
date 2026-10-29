@@ -271,6 +271,11 @@ public enum ItemId
     MarmiteChocolate = 503,
     /// <summary>A bowl of the Escalade's vegetable soup from the pot that feeds the party: warm for 3 minutes.</summary>
     SoupeEscalade = 504,
+    // ---- the Fasnacht (#1357, docs/notes/occasions/festival-fasnacht.md): 505-509 ----
+    /// <summary>A bag of Räppli, the Fasnacht's confetti: Use throws a handful on every peer near (<see cref="ItemUse.Confetti"/>).</summary>
+    Raeppli = 505,
+    /// <summary>The Larven (masks) the stall hands out, worn on the head: the Waggis, the Alti Dante, the Harlekin and the Teufel (Headwear 5-8).</summary>
+    LarveWaggis = 506, LarveDante = 507, LarveHarlekin = 508, LarveTeufel = 509,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }
@@ -336,4 +341,6 @@ public enum ItemUse
     Round,
     /// <summary>Use blows into it for 5 s (#1271): the electronic breathalyzer is kept, the single-use test is used up.</summary>
     Breath,
+    /// <summary>Use throws a handful of Räppli: confetti on every peer near, one used up (<see cref="ItemId.Raeppli"/>, #1357).</summary>
+    Confetti,
 }

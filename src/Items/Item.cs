@@ -284,6 +284,13 @@ public static class ItemDefs
             { Blurb = "{use_item} to eat. A shard of the Marmite's chocolate shell, smashed at the Escalade." },
         Eat(ItemId.SoupeEscalade, "Soupe de l'Escalade", 5, "#d89a4a", "SE", 45, ItemCategory.Food, 4) with
             { Blurb = "{use_item} to eat. The Escalade's vegetable soup, a bowl from the pot: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
+        // the Fasnacht (#1357): the Räppli to throw and the Larven (masks) from the stall
+        new(ItemId.Raeppli, "Räppli", "{use_item} throws a handful of confetti. Everyone near sees it; thrown at the Fasnacht it also counts towards the party's score.",
+            ItemUse.Confetti, 99, new Color("#e8a020"), "RP", 0, ItemCategory.Cosmetic, 1f),
+        Hat(ItemId.LarveWaggis, "Larve: Waggis", "#e8d8b0", "LW"),
+        Hat(ItemId.LarveDante, "Larve: Alti Dante", "#d8b8a0", "LD"),
+        Hat(ItemId.LarveHarlekin, "Larve: Harlekin", "#e8e0e0", "LH"),
+        Hat(ItemId.LarveTeufel, "Larve: Teufel", "#c82020", "LT"),
         new(ItemId.ChristmasBauble, "Christmas bauble", "A glass bauble from the market. Worth nothing but the look in the hand.",
             ItemUse.Material, 10, new Color("#c81e24"), "XB", 0, ItemCategory.Cosmetic, 12f),
         Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
@@ -696,7 +703,8 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.20f, 0.035f), new Vector3(0.22f, 0.12f, 0.02f), new Color(0.22f, 0.25f, 0.18f));  // plate pocket
                 break;
             }
-            case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers:
+            case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers
+                or ItemId.LarveWaggis or ItemId.LarveDante or ItemId.LarveHarlekin or ItemId.LarveTeufel:
                 // the real hat, the one a figure wears
                 HumanMeshBuilder.AppendHat(s, UnitSport.Occasions.OccasionHats.ForItem(id), new Vector3(0, -0.02f, 0), Vector3.Up * 0.2f);
                 break;

@@ -315,6 +315,10 @@
     <!-- the Escalade (#1351): the Marmite's pair, the Course's gates and pay, the soup; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Escalade\EscaladeRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Escalade.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- the Fasnacht (#1357): the stall, the Morgestraich's window, the Guggenmusik's chart, grading and din; pure -->
+    <Compile Include="..\..\src\Occasions\Festivals\Fasnacht\FasnachtRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\Fasnacht\GuggenChart.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Fasnacht.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
