@@ -690,12 +690,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private void OnPeerAccepted(long id)
     {
         GD.Print($"[server] peer {id} speaks protocol {Handshake.Protocol}");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // The rules first (#1380): the joining client's loading screen waits for them, and nothing
+        // below is needed to read them. Still before Sleepers.WakeAt, which is sent further down on
+        // the same ordered channel (net/arrival).
+        _arrival?.SendTo(id);
+        long rulesMs = clock.ElapsedMilliseconds;
         _registry?.Add(id);
 
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
             _chunks!.AddAnchor(player, collision: false);   // a proxy: height queries only, no collision (#837)
-        _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
         _cinemaBooths?.SendTo(id);
@@ -722,6 +727,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat?.SendWorldTimeTo(id);
         _chat?.SendWorldSpeedTo(id);
         _chat?.SendSeaStateTo(id);
+        GD.Print($"[server] peer {id} accepted: rules sent at {rulesMs} ms, player spawned and state sent at {clock.ElapsedMilliseconds} ms");
     }
 
     private void OnPeerDisconnected(long id)
