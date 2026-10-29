@@ -139,6 +139,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("08-14", "08-24") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the cow drive (#1269 part 7): 20 September to 5 October, the herd, the sign and the fair's ring
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.DesalpeId, Priority = 8,
+            Schedule = { new DateWindow("09-20", "10-05") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 

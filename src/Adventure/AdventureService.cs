@@ -124,7 +124,8 @@ public partial class AdventureService : Node
         if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested
             || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
             || Occasions.Festivals.FireworksCheck.Requested
-            || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested) AdventureCheck.ClearScratch();
+            || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested
+            || Occasions.Festivals.Desalpe.DesalpeCheck.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -303,6 +304,7 @@ public partial class AdventureService : Node
         : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck")
         : Occasions.Festivals.SteinCheck.Requested ? Occasions.Festivals.SteinCheck.Scratch
         : Occasions.Festivals.Fahnen.FahnenCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fahnecheck")
+        : Occasions.Festivals.Desalpe.DesalpeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/desalpecheck")
         : Occasions.Festivals.Horn.HornCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/hornscheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>

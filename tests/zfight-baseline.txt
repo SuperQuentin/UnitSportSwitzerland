@@ -533,6 +533,8 @@
 96.1	Emotes / Twerk
 2.8	Emotes / Wave
 381.4	Emotes / YMCA
+52.6	Festivals / Désalpe - Dressed cow: wreath
+219.3	Festivals / Désalpe - Dressed cow: straw hat
 382.9	Fights / Move - Finisher
 102.9	Fights / Move - JumpKick
 388.1	Fights / Move - Kick
@@ -1103,7 +1105,7 @@
 709075.2	Terrain / Building site - topped out, a house
 1957418	Terrain / Building site - topped out, a six-floor block
 91640	Terrain / Garage door - Sidewalk
-515456.5	Terrain / Garage ramp
+573652.1	Terrain / Garage ramp
 7741.9	Terrain / Landing - Jetty
 22402.7	Terrain / Landing - Pier
 6072	Terrain / Road prop - CartShelter

@@ -31,6 +31,7 @@ public partial class SpawnPoint : Node
     private readonly float _arrivalHeight;
     private bool _settled;
     private double _waited;
+    private GroundStart? _clear;
 
     /// <param name="target">Node to move — a camera, or a body.</param>
     /// <param name="chunks">Streamer, asked for the ground height.</param>
@@ -94,6 +95,12 @@ public partial class SpawnPoint : Node
 
     public override void _Process(double delta)
     {
+        // a body on foot is then moved clear of any house or lake it fell into (#1342)
+        if (_clear != null)
+        {
+            if (_clear.Step(delta)) Finish();
+            return;
+        }
         if (_settled) return;
         _waited += delta;
 
@@ -104,8 +111,8 @@ public partial class SpawnPoint : Node
             if (_target is CharacterBody3D body) body.Velocity = Vector3.Zero;
             _settled = true;
             GD.Print($"[spawn] settled at ground {ground:F0} m + {_arrivalHeight:F0} m");
-            QueueFree();
-            Teleporter.RaiseArrived();
+            if (_target is UnitSport.Player.FootPlayer { Indoors: false } walker) _clear = new GroundStart(_chunks, walker);
+            else Finish();
         }
         else if (_waited > 15.0)
         {
@@ -117,5 +124,11 @@ public partial class SpawnPoint : Node
             QueueFree();
             Teleporter.RaiseArrived();
         }
+    }
+
+    private void Finish()
+    {
+        QueueFree();
+        Teleporter.RaiseArrived();
     }
 }
