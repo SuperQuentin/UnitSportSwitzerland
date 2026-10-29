@@ -7,6 +7,7 @@ var COURSE_ID = /^[a-z0-9_-]{1,64}$/;   // a course id as the race server names 
 var PLAYER_KEY = /^[A-Za-z0-9_-]{6,128}$/; // a PlayerKey fingerprint (base64url), Nakama's custom-id length limits
 var MAX_TIME_MS = 24 * 3600 * 1000;
 var MAX_WATTS = 3000;
+var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;   // a Nakama user id
 
 var Code = { INVALID_ARGUMENT: 3, NOT_FOUND: 5, ALREADY_EXISTS: 6, PERMISSION_DENIED: 7, UNAUTHENTICATED: 16 };
 var ADMINS = 'admins';   // the Nakama group of the admins (#1207) // gRPC codes; Nakama maps them to HTTP 400 and 403
@@ -14,6 +15,7 @@ var ADMINS = 'admins';   // the Nakama group of the admins (#1207) // gRPC codes
 function InitModule(ctx, logger, nk, initializer) {
   initializer.registerRpc('healthcheck', rpcHealthcheck);
   initializer.registerRpc('submit_result', rpcSubmitResult);
+  initializer.registerRpc('scoreboard', rpcScoreboard);
   // the website's accounts and the admin dashboard (#1207, docs/plans/web-dashboard.md)
   initializer.registerRpc('me', rpcMe);
   initializer.registerRpc('admin_users', rpcAdminUsers);
@@ -33,7 +35,12 @@ function rpcHealthcheck(ctx, logger, nk, payload) {
 
 // A finished race, posted by the race server with the runtime http key (server to server). A player's session never
 // may: the race server is the one that checked the checkpoints and timed the finish. Body:
-// { course, playerKey, name?, timeMs, avgWatts?, event? } -> { leaderboard, rank, best }
+// { course, playerKey, accountId?, name?, timeMs, avgWatts?, event? } -> { leaderboard, rank, best }
+// Names are never stored in a record (#1359): `scoreboard` looks each one up when the board is read.
+// - accountId: a signed-in rider's Nakama user id, which the race server checked (AccountGate). The record is that
+//   account's, and shows its name as it is now, renames included.
+// - otherwise an offline rider: the PlayerKey fingerprint's own user, whose display name holds the plain name the
+//   rider plays under, one copy kept up to date by each result.
 function rpcSubmitResult(ctx, logger, nk, payload) {
   if (ctx.userId) throw { message: 'results come from race servers only', code: Code.PERMISSION_DENIED };
   var r;
@@ -43,17 +50,53 @@ function rpcSubmitResult(ctx, logger, nk, payload) {
   if (!isInt(r.timeMs) || r.timeMs <= 0 || r.timeMs > MAX_TIME_MS) bad('timeMs: 1..' + MAX_TIME_MS);
   if (r.avgWatts !== undefined && (!isInt(r.avgWatts) || r.avgWatts < 0 || r.avgWatts > MAX_WATTS)) bad('avgWatts: 0..' + MAX_WATTS);
   if (r.event !== undefined && (typeof r.event !== 'string' || !COURSE_ID.test(r.event))) bad('event: [a-z0-9_-]{1,64}');
-  var name = typeof r.name === 'string' ? r.name.substring(0, 32) : '';
+  if (r.accountId !== undefined && (typeof r.accountId !== 'string' || !UUID.test(r.accountId))) bad('accountId: a user id');
+  var name = typeof r.name === 'string' ? r.name.trim().substring(0, 32) : '';
 
-  // The rider's account: their PlayerKey fingerprint is the custom id, created on their first result
-  var account = nk.authenticateCustom(r.playerKey, undefined, true);
+  var owner;
+  if (r.accountId) {
+    try { nk.accountGetId(r.accountId); } catch (e) { bad('accountId: no such account'); }
+    owner = r.accountId;
+  } else {
+    // an offline rider: their PlayerKey fingerprint is the custom id, created on their first result
+    owner = nk.authenticateCustom(r.playerKey, undefined, true).userId;
+    var current = nk.accountGetId(owner).user.displayName || '';
+    if (name && name !== current) nk.accountUpdateId(owner, null, name, null, null, null, null, null);
+  }
   var board = 'course:' + r.course;
   // authoritative: only the server writes; ascending + best: a rider's fastest time stands. Existing boards are kept.
   nk.leaderboardCreate(board, true, 'ascending', 'best', null, { course: r.course }, true);
-  var rec = nk.leaderboardRecordWrite(board, account.userId, name || undefined, r.timeMs, 0,
-    { avgWatts: r.avgWatts === undefined ? null : r.avgWatts, event: r.event || null });
-  logger.info('result %s %s %d ms', board, account.userId, r.timeMs);
+  var rec = nk.leaderboardRecordWrite(board, owner, undefined, r.timeMs, 0,
+    { avgWatts: r.avgWatts === undefined ? null : r.avgWatts, event: r.event || null, account: !!r.accountId });
+  logger.info('result %s %s %d ms', board, owner, r.timeMs);
   return JSON.stringify({ leaderboard: board, rank: rec.rank, best: rec.score });
+}
+
+// A course's board with every name as it is now: { course, limit? (1..100, 20), cursor? } ->
+// { records: [{ rank, name, timeMs, avgWatts, event, account }], next }. An account's record shows the account's
+// name; an offline rider's, the plain name of their last result. Open to players and race servers alike.
+function rpcScoreboard(ctx, logger, nk, payload) {
+  var r;
+  try { r = JSON.parse(payload || '{}'); } catch (e) { throw { message: 'body is not JSON', code: Code.INVALID_ARGUMENT }; }
+  if (typeof r.course !== 'string' || !COURSE_ID.test(r.course)) bad('course: [a-z0-9_-]{1,64}');
+  var limit = r.limit === undefined ? 20 : r.limit;
+  if (!isInt(limit) || limit < 1 || limit > 100) bad('limit: 1..100');
+  var list;
+  try { list = nk.leaderboardRecordsList('course:' + r.course, null, limit, r.cursor || null, 0); }
+  catch (e) { return JSON.stringify({ records: [], next: null }); }   // nobody has ridden it yet
+  var records = (list && list.records) || [];
+  var users = {};
+  if (records.length) nk.usersGetId(records.map(function (x) { return x.ownerId; })).forEach(function (u) { users[u.userId] = u; });
+  return JSON.stringify({
+    records: records.map(function (x) {
+      var m = x.metadata || {}, u = users[x.ownerId] || {};
+      // a record from before #1359 has no flag: an offline one, whose name was stored in the record itself
+      var name = !('account' in m) ? u.displayName || x.username : m.account ? u.username : u.displayName;
+      return { rank: x.rank, timeMs: x.score, avgWatts: m.avgWatts === undefined ? null : m.avgWatts,
+        event: m.event || null, account: !!m.account, name: name || 'Rider' };
+    }),
+    next: (list && list.nextCursor) || null,
+  });
 }
 
 function bad(what) { throw { message: 'invalid ' + what, code: Code.INVALID_ARGUMENT }; }

@@ -34,8 +34,14 @@ r=$(rpc submit_result '{"course":"Bad Course!","playerKey":"'"$KEY"'","timeMs":1
 r=$(call POST '/v2/account/authenticate/device?create=true' "{\"id\":\"device-$(rand 8)\"}" -u "$SERVER_KEY:")
 [[ $r == 200* ]] || fail "device auth: $r"
 TOKEN=$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$OUT/body")
-r=$(call GET '/v2/leaderboard/course%3Acheck?limit=10' '' -H "Authorization: Bearer $TOKEN"); echo "board: $r"
-[[ $r == 200*'"score":"55000"'* && $r == *'"username":"Checker"'* ]] || fail "board does not hold the best time: $r"
+# the board through the scoreboard RPC (#1359): names looked up when read, never stored in a record
+board() { call POST '/v2/rpc/scoreboard?unwrap' "{\"course\":\"$1\"}" -H "Authorization: Bearer $TOKEN"; }
+r=$(board check); echo "board: $r"
+[[ $r == 200*'"timeMs":55000'* && $r == *'"name":"Checker"'* && $r == *'"account":false'* ]] || fail "board does not hold the best time: $r"
+r=$(rpc submit_result "{\"course\":\"check\",\"playerKey\":\"$KEY\",\"name\":\"Checker2\",\"timeMs\":90000}")
+r=$(board check); echo "offline new name: ${r:0:120}"
+[[ $r == *'"name":"Checker2"'* && $r == *'"timeMs":55000'* ]] || fail "an offline rider's new name did not show on the old best: $r"
+r=$(board nobody-rode-this); [[ $r == 200*'"records":[]'* ]] || fail "an unridden course: $r"
 r=$(call POST '/v2/rpc/submit_result?unwrap' "{\"course\":\"check\",\"playerKey\":\"$KEY\",\"timeMs\":1}" -H "Authorization: Bearer $TOKEN")
 echo "client submit: $r"
 [[ $r == 403* ]] || fail "a player's session wrote a result: $r"
@@ -75,6 +81,13 @@ r=$(srpc "$AT" admin_rename "{\"id\":\"$PID\",\"username\":\"bad name!\"}"); [[ 
 r=$(srpc "$AT" admin_rename "{\"id\":\"$PID\",\"username\":\"TheAdmin\"}"); echo "taken admin rename: ${r:0:70}"; [[ $r == 409* ]] || fail "admin_rename took a taken name: $r"
 r=$(srpc "$AT" admin_rename "{\"id\":\"$PID\",\"username\":\"PlayerOne\"}"); [[ $r == 200* ]] || fail "admin_rename: $r"
 r=$(srpc "$PT" me '{}'); [[ $r == 200*'"username":"PlayerOne"'* ]] || fail "admin rename not kept: $r"
+# a signed-in rider's result is the account's, and shows the account's name as it is now
+r=$(rpc submit_result "{\"course\":\"names\",\"playerKey\":\"$KEY\",\"accountId\":\"$PID\",\"name\":\"Ignored\",\"timeMs\":61000}"); [[ $r == 200* ]] || fail "account result: $r"
+r=$(board names); echo "account board: ${r:0:120}"; [[ $r == *'"name":"PlayerOne"'* && $r == *'"account":true'* ]] || fail "account result name: $r"
+r=$(call PUT /v2/account '{"username":"PlayerTwo"}' -H "Authorization: Bearer $PT"); [[ $r == 200* ]] || fail "rename for the board: $r"
+r=$(board names); echo "after rename: ${r:0:120}"; [[ $r == *'"name":"PlayerTwo"'* ]] || fail "the board kept the old name: $r"
+r=$(rpc submit_result "{\"course\":\"names\",\"playerKey\":\"$KEY\",\"accountId\":\"00000000-0000-4000-8000-000000000001\",\"timeMs\":61000}"); [[ $r == 400* ]] || fail "an unknown accountId was accepted: $r"
+r=$(srpc "$AT" admin_rename "{\"id\":\"$PID\",\"username\":\"PlayerOne\"}"); [[ $r == 200* ]] || fail "rename back: $r"
 
 # ---- forgotten passwords (#1257) ----
 r=$(signin player@check.example check-pass-1 false); PT=$(token)   # the ban ended the old session
