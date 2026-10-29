@@ -54,7 +54,9 @@ public sealed class PlayerInfo
 ///
 /// Admins are bootstrapped one of two ways:
 /// <list type="bullet">
-/// <item>a persisted name list in <c>user://admins.json</c>, granted automatically on join;</item>
+/// <item>a persisted list in <c>user://admins.json</c>, granted on join (#1359: by the player's id, <see cref="PlayerIds"/>,
+/// never by a name anyone can type; a name left from an older file is claimed once, by the next proven player who joins
+/// under it);</item>
 /// <item><c>/login &lt;password&gt;</c>, where the password comes from <c>--admin-password</c>
 /// on the server command line. Without that argument the command is disabled entirely, so a
 /// server that never sets one cannot be elevated by guessing.</item>
@@ -70,8 +72,23 @@ public sealed class PlayerRegistry
     private const string AdminFile = "user://admins.json";
 
     private readonly Dictionary<long, PlayerInfo> _players = new();
-    private readonly HashSet<string> _persistentAdmins =
-        new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The persisted admins' ids (<see cref="PlayerIds.IdOf"/>).</summary>
+    private readonly HashSet<string> _adminIds = new(StringComparer.Ordinal);
+    /// <summary>Admins from a file older than #1359, still by name until their player is next seen.</summary>
+    private readonly HashSet<string> _legacyAdminNames = new(StringComparer.OrdinalIgnoreCase);
+    private PlayerIds? _ids;
+
+    /// <summary>The server's ids: admins are granted when a peer is identified.</summary>
+    public PlayerIds? Ids
+    {
+        get => _ids;
+        set
+        {
+            if (_ids != null) _ids.Identified -= OnIdentified;
+            _ids = value;
+            if (_ids != null) _ids.Identified += OnIdentified;
+        }
+    }
 
     private readonly string? _adminPassword;
     private readonly string? _hostToken;
@@ -87,7 +104,7 @@ public sealed class PlayerRegistry
         GD.Print(_adminPassword is null
             ? "[admin] no --admin-password set; /login is disabled"
             : "[admin] /login enabled");
-        GD.Print($"[admin] {_persistentAdmins.Count} persisted admin name(s)");
+        GD.Print($"[admin] {_adminIds.Count} persisted admin(s), {_legacyAdminNames.Count} by name until seen");
     }
 
     /// <summary>Everyone currently connected.</summary>
@@ -96,8 +113,10 @@ public sealed class PlayerRegistry
     /// <summary>Everyone with a body in the world: the console's players (<see cref="PlayerInfo.Bodiless"/>) left out.</summary>
     public IEnumerable<PlayerInfo> InWorld => _players.Values.Where(p => !p.Bodiless);
 
-    /// <summary>Names that are granted admin automatically on join.</summary>
-    public IReadOnlyCollection<string> PersistentAdmins => _persistentAdmins;
+    /// <summary>The persisted admins as names, looked up now; a name not yet claimed by its player says so.</summary>
+    public IReadOnlyCollection<string> PersistentAdmins =>
+        _adminIds.Select(id => _ids?.NameOfId(id) ?? id)
+            .Concat(_legacyAdminNames.Select(n => n + " (by name, not seen since)")).ToList();
 
     /// <summary>True when the server was started with a password, so /login can work.</summary>
     public bool LoginEnabled => _adminPassword is not null;
@@ -152,7 +171,6 @@ public sealed class PlayerRegistry
         }
 
         player.Name = unique;
-        if (_persistentAdmins.Contains(unique)) player.IsAdmin = true;
         return unique;
     }
 
@@ -182,29 +200,65 @@ public sealed class PlayerRegistry
         return true;
     }
 
-    /// <summary>Adds a name to the persisted admin list and elevates them if online.</summary>
-    public bool GrantAdmin(string name)
+    /// <summary>
+    /// Adds a player to the persisted admins by their id, and elevates them if online. The name finds an online player,
+    /// else the only player last seen under it. Null on success, else why not.
+    /// </summary>
+    public string? GrantAdmin(string name)
     {
-        string clean = Sanitize(name);
-        if (clean.Length == 0) return false;
-
-        if (!_persistentAdmins.Add(clean)) return false;
+        if (Resolve(name, out string? id, out string shown) is { } why) return why;
+        if (!_adminIds.Add(id!)) return $"{shown} is already an operator.";
         SaveAdmins();
-
-        if (FindByName(clean) is { } online) online.IsAdmin = true;
-        GD.Print($"[admin] granted to {clean}");
-        return true;
+        if (_ids?.PeerOf(id!) is long peer and not 0 && Find(peer) is { } online) online.IsAdmin = true;
+        GD.Print($"[admin] granted to {shown} ({id})");
+        return null;
     }
 
-    /// <summary>Removes a name from the persisted list and drops their session privilege.</summary>
-    public bool RevokeAdmin(string name)
+    /// <summary>Removes a player from the persisted admins and drops their session privilege. Null on success, else why not.</summary>
+    public string? RevokeAdmin(string name)
     {
-        string clean = Sanitize(name);
-        bool removed = _persistentAdmins.Remove(clean);
-        if (removed) SaveAdmins();
+        string shown = Sanitize(name);
+        bool removed = _legacyAdminNames.Remove(shown);
+        if (Resolve(name, out string? id, out string found) is null)
+        {
+            shown = found;
+            removed |= _adminIds.Remove(id!);
+            if (_ids?.PeerOf(id!) is long peer and not 0 && Find(peer) is { } online) online.IsAdmin = false;
+        }
+        if (!removed) return $"{shown} was not an operator.";
+        SaveAdmins();
+        return null;
+    }
 
-        if (FindByName(clean) is { } online) online.IsAdmin = false;
-        return removed;
+    /// <summary>The id behind a typed name: an online player's (once proven), else the one id last seen under it. Null when found, else why not.</summary>
+    private string? Resolve(string name, out string? id, out string shown)
+    {
+        id = null;
+        shown = Sanitize(name);
+        if (shown.Length == 0) return "Usage: /admin add <name>";
+        if (_ids is null) return "Admins are kept by player id, which this server does not track.";
+        if (FindByName(shown) is { } online)
+        {
+            shown = online.Name;
+            id = _ids.IdOf(online.PeerId);
+            return id is null ? $"{shown} is not identified yet: try again in a moment." : null;
+        }
+        string typed = shown;
+        var seen = _ids.LastNames.Where(p => string.Equals(p.Value, typed, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        if (seen.Count == 1) { id = seen[0].Key; shown = seen[0].Value; return null; }
+        return seen.Count == 0 ? $"Nobody called {shown} has played here." : $"Several players went by {shown}: grant it while they are online.";
+    }
+
+    /// <summary>A peer has its id and name: a persisted admin gets their rights; an admin by name from an old file is claimed.</summary>
+    private void OnIdentified(long peer, string id, string name)
+    {
+        if (_legacyAdminNames.Remove(name))
+        {
+            _adminIds.Add(id);
+            SaveAdmins();
+            GD.Print($"[admin] the admin rights of {name} now follow their id ({id})");
+        }
+        if (_adminIds.Contains(id) && Find(peer) is { } player) player.IsAdmin = true;
     }
 
     /// <summary>
@@ -237,8 +291,15 @@ public sealed class PlayerRegistry
 
             using var file = Godot.FileAccess.Open(AdminFile, Godot.FileAccess.ModeFlags.Read);
             string json = file.GetAsText();
-            var names = JsonSerializer.Deserialize<string[]>(json) ?? [];
-            foreach (string name in names) _persistentAdmins.Add(name);
+            using var doc = JsonDocument.Parse(json);
+            // before #1359 the file was an array of names: kept by name until each player is next seen
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                Strings(doc.RootElement, _legacyAdminNames);
+            else
+            {
+                if (doc.RootElement.TryGetProperty("ids", out var ids)) Strings(ids, _adminIds);
+                if (doc.RootElement.TryGetProperty("names", out var names)) Strings(names, _legacyAdminNames);
+            }
         }
         catch (Exception e)
         {
@@ -250,13 +311,23 @@ public sealed class PlayerRegistry
     {
         try
         {
-            Core.JsonStore.Save(AdminFile, _persistentAdmins.ToArray());
+            Core.JsonStore.Save(AdminFile, new AdminList(_adminIds.ToArray(), _legacyAdminNames.ToArray()), Core.JsonStore.Indented);
         }
         catch (Exception e)
         {
             GD.PushWarning($"[admin] could not write {AdminFile}: {e.Message}");
         }
     }
+
+    private static void Strings(JsonElement array, HashSet<string> into)
+    {
+        if (array.ValueKind != JsonValueKind.Array) return;
+        foreach (var item in array.EnumerateArray())
+            if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s) into.Add(s);
+    }
+
+    /// <summary><c>user://admins.json</c> since #1359: ids, and the names an older file left until their player is seen.</summary>
+    private sealed record AdminList(string[] ids, string[] names);
 
     /// <summary>Reads "--admin-password &lt;pw&gt;" from the server command line.</summary>
     public static string? ParseAdminPassword() => CmdArgs.Value("--admin-password");

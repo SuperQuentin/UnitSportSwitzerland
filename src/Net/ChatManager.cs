@@ -1288,17 +1288,14 @@ public partial class ChatManager : Node
                 return;
 
             case "add" when name.Length > 0:
-                if (_registry.GrantAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} is already an operator.", ChatKind.Error);
+                // by the player's id (#1359): a name only finds them
+                if (_registry.GrantAdmin(name) is { } notGranted) ReplyTo(sender, notGranted, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
                 return;
 
             case "remove" when name.Length > 0:
-                if (_registry.RevokeAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} was not an operator.", ChatKind.Error);
+                if (_registry.RevokeAdmin(name) is { } notRevoked) ReplyTo(sender, notRevoked, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
                 return;
 
             default:
