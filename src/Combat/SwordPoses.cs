@@ -223,7 +223,7 @@ public static class SwordPoses
     public static readonly (float X, float Y, float Z) HandHalfExtents = (0.045f, 0.045f, 0.07f);
 
     /// <summary>The neutral wrist: cocked so the blade points forward and up about 35 degrees off the forearm, the handle diagonal across the palm.</summary>
-    public const float CockPitch = 0.62f, CockRoll = 0.25f;
+    public const float CockPitch = 0.62f, CockRoll = 0.25f, CockYaw = 0f;
 
     /// <summary>
     /// The sword's angle on the hand through a move: the neutral cock, plus the wrist's whip (the blade trailing the hand by <see cref="BladeLag"/>),
@@ -232,11 +232,11 @@ public static class SwordPoses
     /// </summary>
     public static (float Pitch, float Yaw, float Roll, float Forward) Wrist(SwordMove move, float progress)
     {
-        if (move is SwordMove.None or SwordMove.Charge or SwordMove.Dodge) return (CockPitch, 0f, CockRoll, 0f);
+        if (move is SwordMove.None or SwordMove.Charge or SwordMove.Dodge) return (CockPitch, CockYaw, CockRoll, 0f);
         float total = Math.Max(0.0001f, SwordRules.Def(move).Total);
         var (yaw, pitch, roll, fwd) = SwordRules.Arc(move, Math.Max(0f, progress - BladeLag / total));
         float k = move == SwordMove.Plunge ? 1f : 0.5f;
-        return (CockPitch + pitch * k, yaw * k, CockRoll + roll * k, fwd * k);
+        return (CockPitch + pitch * k, CockYaw + yaw * k, CockRoll + roll * k, fwd * k);
     }
 
     /// <summary>The span of the move (progress) a trail covers: from just before the blade goes live to just after the strike ends.</summary>

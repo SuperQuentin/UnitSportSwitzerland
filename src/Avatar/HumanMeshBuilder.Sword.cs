@@ -51,7 +51,7 @@ public static partial class HumanMeshBuilder
         var dance = SwordDance(move, variant, progress);
         var node = Figure(BuildStride(HumanPalette.ForRider((int)move), 0f, 0f, dance: dance));
         var mounts = MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
-        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        var hand = mounts.HandR;
         var basis = mounts.HandBasis;
         var (wp, wy, wr, wf) = SwordPoses.Wrist(move, progress);
         node.AddChild(new MeshInstance3D
@@ -72,7 +72,7 @@ public static partial class HumanMeshBuilder
         try { node = Figure(BuildStride(HumanPalette.ForRider(4), 0f, 0f, dance: dance)); }
         finally { ForceFist = false; }
         var mounts = MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
-        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        var hand = mounts.HandR;
         GD.Print($"[swordgrip] {move} hand at {hand.X:F3},{hand.Y:F3},{hand.Z:F3}");
         var basis = mounts.HandBasis;
         var (wp, wy, wr, wf) = SwordPoses.Wrist(move, progress);

@@ -81,7 +81,11 @@ public partial class SwordNetProbe : ChatProbe
         var dummy = Svc.Dummies.Values.First();
         me.LookYaw = me.Rotation.Y;
         Say("dummy");
-        await Seconds(0.6);
+        // the dummy stands 2.6 m off: a swing's lunge (at most 1.2 m) and the blade's reach cannot cover that, so step up first (a miss from there is the point of the far test below)
+        Input.ActionPress(PlayerInput.MoveForward);
+        await Seconds(0.55);
+        Input.ActionRelease(PlayerInput.MoveForward);
+        await Seconds(0.5);
 
         // three taps, in the rhythm: the first three swings of the combo
         int before = _landed.Count;

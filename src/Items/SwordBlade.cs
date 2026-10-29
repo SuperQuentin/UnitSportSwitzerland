@@ -54,7 +54,7 @@ public static class SwordBlade
             var dance = new DanceParams(Audio.Cd.MusicStyle.Pop, HumanMeshBuilder.SwordMoves, 0f, Mathf.Min(p, 0.999f),
                 HumanMeshBuilder.SwordCode(move, variant, seed), 1f);
             var mounts = HumanMeshBuilder.MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
-            var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+            var hand = mounts.HandR;   // the sword hand: the mount's R, never picked by position (the off hand crosses to the handle)
             var basis = mounts.HandBasis;
             // the item node as the game places it (HeldItemVisual), then the blade's whip at the wrist (FootPlayer.SwordArcNow)
             var node = new Transform3D(basis, hand + basis * SocketOffset);
@@ -63,7 +63,13 @@ public static class SwordBlade
             hilt[i] = full * new Vector3(0, 0, sign * HiltAt);
             tip[i] = full * new Vector3(0, 0, sign * TipAt);
             reach = Mathf.Max(reach, new Vector2(tip[i].X, tip[i].Z).Length());
-            if (Mathf.Abs(tip[i].X) < 0.45f) forward = Mathf.Max(forward, -tip[i].Z);   // where the cut crosses in front of the body
+            if (i >= Count / 3)
+            {
+                // where the cut crosses the line straight ahead of the body: the blade's point on it, else the tip's own forward reach
+                float hx = hilt[i].X, tx = tip[i].X;
+                if (hx * tx < 0f) forward = Mathf.Max(forward, -(hilt[i].Z + (tip[i].Z - hilt[i].Z) * (hx / (hx - tx))));
+                else forward = Mathf.Max(forward, Mathf.Abs(tx) < 0.3f ? -tip[i].Z : 0f);
+            }
         }
         return new Track { Hilt = hilt, Tip = tip, From = r0, To = r1, Reach = reach + SwordSweep.BladeRadius, Forward = forward + SwordSweep.BladeRadius };
     }

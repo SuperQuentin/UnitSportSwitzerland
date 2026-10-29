@@ -291,7 +291,7 @@ public partial class FootPlayer
                 var track = Items.SwordBlade.Get(_sword.Move, _swordVariant, _swordSeed);
                 float radius = _swordAimKind == SwordTargetKind.Dummy ? 0.28f : SwordSweep.BodyRadius;
                 float reach = _swordVariant == 1 && _sword.Move == SwordMove.Slash3 ? track.Reach : track.Forward;   // the spin is a circle round the body
-                want = Mathf.Clamp(_swordLungeMoved + to.Length() - radius - reach * 0.70f, 0f, 1.2f);   // what is left to close, on top of what was stepped
+                want = Mathf.Clamp(_swordLungeMoved + to.Length() - radius - Mathf.Clamp(reach * 0.6f, 0.45f, 0.7f), 0f, 1.2f);   // what is left to close, on top of what was stepped
             }
             if (_swordLungeDone < 0.999f)
             {

@@ -2003,7 +2003,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // seated on a stand (#885): the hands rest in the lap, holding nothing
         if (_walker == null || PoseKind == PoseSit) { HandLocal = null; return; }
         // mounts are already turned to face -Z, where the figure's right is +X
-        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        var hand = SwordDrawn ? mounts.HandR : mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;   // a sword is in the right hand even when the off hand crosses to the handle
         HandLocal = _walker.Transform * new Transform3D(mounts.HandBasis, hand);
     }
 
