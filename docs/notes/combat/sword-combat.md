@@ -106,3 +106,22 @@ when it carries a sword and no gun and the target is in reach. Not done: a brain
   takes B's pictures.
 - `--models,<dir> --modelsonly "Sword poses" --modelsyaw 90 --style cartoon|ps1`, then `tools/sword-sheet.py <dir> <png>`: a contact sheet of
   every move, both sets, from the side.
+
+## Round 3: blade-contact hits, manga timing, grip, off hand
+
+- **Hits are the blade touching** (`Combat/SwordSweep`, `Items/SwordBlade`): the blade is a 5 cm capsule from hilt to tip, sampled through the
+  move's spline pose and the wrist (`SwordPoses.Wrist`) at 16 moments of the strike window, in character space; the trail is built from the
+  same samples. The owner's client sweeps it every physics frame against each target's own shape (a body: capsule r 0.42, 1.85 m; the dummy: post,
+  torso, head, arms) and names a target at the moment of contact, once a swing. The server sweeps the same capsule over the swing's window (100 ms
+  either side of the hit's arrival, from the announced yaw plus the move's spin and the two bodies' positions) with 0.30 m of slack; a forged hit
+  from 3 m is refused (`[sword] refused ... the Slash1 blade never reached ...`). Removed: the reach-and-cone test (`InCone` with `LagSlack` and
+  `ConeSlackDeg`) on the client and the server, and the height check. Soft lock and the lunge bring a target in reach: the lunge is as long as it
+  takes to bring the move's forward reach onto the target (at most 1.2 m), the body turns to it through the wind-up.
+- **Manga timing** (frame data): wind-up 0.24-0.28 s (a moving hold: the coil is reached about 0.11 s before the blade goes live and drifts), the strike
+  0.10 s (finisher 0.12), an overshoot snap, a zanshin hold (0.18 s, finisher 0.30 s), the settle; the cancel opens inside the hold.
+- **Grip**: both hands are built closed when a sword is equipped (`FigureLook.Fist`, once, on equip); the sword node is placed by the palm-centre
+  socket (`SwordPoses.GripSocket`), its angle is the neutral wrist cock plus the wrist's whip from `SwordPoses.Wrist` only.
+- **Off hand**: derived from the sword arm (a quarter of its swing, the other way, lagging 0.10 s), the hikite on the thrust, to the handle for the
+  finisher and the charged cut, out to the side in a roll or landing; always inside a comfort box.
+- **Accents**: impact frame and 5 degree punch-in on a finisher's or full charge's hit (`SwordImpact`, setting "Impact frames", never in VR), a squash
+  on the dummy, a glint on the blade at full charge, a wider brighter trail with an edge line on the finisher. `--sworddebug` draws the capsules.

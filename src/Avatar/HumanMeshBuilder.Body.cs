@@ -666,8 +666,12 @@ public static partial class HumanMeshBuilder
     /// forward when the arm hangs. The palm faces the body. <paramref name="point"/>: the index
     /// straight on along the hand, the others curled into the palm (a finger on a screen, #889).
     /// </summary>
+    /// <summary>The viewer's close-ups of the grip build the unposed figure with closed fists (the game's is <c>FigureLook.Fist</c>).</summary>
+    [ThreadStatic] private static bool ForceFist;
+
     private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false, bool fist = false)
     {
+        fist |= ForceFist;
         var h = HandFrameOf(elbow, wrist, side, scale);
         var (dir, thumbSide, n, k) = (h.Along, h.Thumb, h.Inward, scale);
         var basis = new Basis(thumbSide, dir, thumbSide.Cross(dir));

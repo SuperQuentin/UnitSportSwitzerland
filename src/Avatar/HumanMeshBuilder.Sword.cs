@@ -63,6 +63,28 @@ public static partial class HumanMeshBuilder
         return node;
     }
 
+    private static Node3D GripFigure(SwordMove move, float progress)
+    {
+        // the figure is built with closed fists, as when a sword is equipped (FigureLook.Fist)
+        var dance = SwordDance(move, 0, progress);
+        ForceFist = true;
+        Node3D node;
+        try { node = Figure(BuildStride(HumanPalette.ForRider(4), 0f, 0f, dance: dance)); }
+        finally { ForceFist = false; }
+        var mounts = MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
+        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        GD.Print($"[swordgrip] {move} hand at {hand.X:F3},{hand.Y:F3},{hand.Z:F3}");
+        var basis = mounts.HandBasis;
+        var (wp, wy, wr, wf) = SwordPoses.Wrist(move, progress);
+        node.AddChild(new MeshInstance3D
+        {
+            Mesh = Items.ItemDefs.HandMesh(Items.ItemId.Sword), MaterialOverride = Items.ItemDefs.Material,
+            Transform = new Transform3D(basis, hand + basis * Items.SwordBlade.SocketOffset)
+                * new Transform3D(Basis.FromEuler(new Vector3(wp, wy, wr)), new Vector3(0, 0, wf)),
+        });
+        return node;
+    }
+
     [Core.Showcase("Sword poses")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseSword()
     {
@@ -82,6 +104,9 @@ public static partial class HumanMeshBuilder
                 float p = frames[f]; int vv = v;
                 yield return ($"Dodge v{vv} f{f}", () => SwordFigure(SwordMove.Dodge, vv, p));
             }
+        // the grip, for the close-ups: the stance with the sword in the closed fist, and the charged cut's two-handed hold
+        yield return ("Grip - one-handed", () => GripFigure(SwordMove.Slash1, 0f));
+        yield return ("Grip - two-handed", () => GripFigure(SwordMove.Charged, SwordPoses.KeyTimesOf(SwordMove.Charged)[2]));
         yield return ("Charging", () => Figure(BuildStride(HumanPalette.ForRider(9), 0f, 0f,
             dance: new DanceParams(Audio.Cd.MusicStyle.Pop, SwordMoves, 0f, 0.6f, SwordCode(SwordMove.Charge, 0, 0), 1f))));
     }

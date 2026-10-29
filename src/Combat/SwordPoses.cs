@@ -269,6 +269,14 @@ public static class SwordPoses
         return (0f, tA, tS, tF);
     }
 
+    /// <summary>The nine key times as a new array (tests, tools).</summary>
+    public static float[] KeyTimesOf(SwordMove move, int seed = 3)
+    {
+        var kt = new float[9];
+        KeyTimes(move, seed, kt);
+        return kt;
+    }
+
     /// <summary>
     /// The nine key times of a move's spline, as fractions: the stance, the coil reached (about 0.15 s into the wind-up), the end of the moving hold
     /// (the blade goes live), the end of the strike, the overshoot snap, the start and the end of the zanshin hold (0.18 s, the finisher 0.30 s), the

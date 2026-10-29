@@ -18,6 +18,9 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] The blade's trail through the active frames: visible and not distracting, in Cartoon and PS1; the backhand mirrors it.
 - [ ] Lock-on: Middle button / Z / R3 locks the target nearest the view, the camera eases round, the body faces it; does a soft lock turn a swing to a target a little off the aim?
 - [ ] Pad: RB swing, B dodge (the pad's crouch and slide are off while the sword is drawn), R3 lock (the view switch is off). VR: trigger swing, B dodge, R3 lock, and the stamina bar is missing there.
+- [ ] Hits are the blade touching: does a hit ever count when the blade visibly misses, or a visible touch not count (try the edge of the reach, a moving target, a dummy and a player)? `--sworddebug` shows the capsules.
+- [ ] Impact frame: a finisher and a full charge flash the screen with speed lines and punch the view in; Settings > Impact frames turns it off. In VR there is none (only the hit-stop and the spark): is that enough?
+- [ ] The grip: the handle sits in the closed fist, no sliding or popping through the combo; the free hand is a quiet counterweight, goes to the handle on the finisher and the charged cut and back without a pop.
 - [ ] With a friend: they see your swings and the same variants, the dummy's hits, your knockback on them; a dodge in time avoids a blow.
 
 ## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))

@@ -140,9 +140,30 @@ public partial class SwordClipProbe : Node
     {
         if (_me == null || _view == 0 || _me.CameraOrNull is not { } cam) return;
         var anchor = _me.GlobalPosition;
+        string zoom = CmdArgs.Value("--swordclipview") ?? "";
         var fwd = new Vector3(-Mathf.Sin(_yaw), 0, -Mathf.Cos(_yaw));
         var right = new Vector3(Mathf.Cos(_yaw), 0, -Mathf.Sin(_yaw));
         var at = anchor + Vector3.Up * 1.0f;
+        if (zoom == "hand" && _me.HandLocal is { } hand)
+        {
+            // close on the sword hand: the grip never slides or pops in the fist
+            at = _me.GlobalTransform * hand.Origin;
+            var posH = _view == 1 ? at + right * 0.85f + Vector3.Up * 0.15f : at + fwd * 0.7f + right * 0.55f + Vector3.Up * 0.35f;
+            var zh = (posH - at).Normalized();
+            var xh = Vector3.Up.Cross(zh).Normalized();
+            cam.GlobalTransform = new Transform3D(new Basis(xh, zh.Cross(xh), zh), posH);
+            return;
+        }
+        if (zoom == "off")
+        {
+            // the off arm: the upper body from its own side, then three-quarter from behind
+            at = anchor + Vector3.Up * 1.15f;
+            var posO = _view == 1 ? at - right * 2.0f + Vector3.Up * 0.1f : at - right * 1.4f - fwd * 1.3f + Vector3.Up * 0.3f;   // the off (left) side, then from behind it: the dummy stands in front
+            var zo = (posO - at).Normalized();
+            var xo = Vector3.Up.Cross(zo).Normalized();
+            cam.GlobalTransform = new Transform3D(new Basis(xo, zo.Cross(xo), zo), posO);
+            return;
+        }
         var pos = _view == 1 ? anchor + right * 2.9f + Vector3.Up * 1.15f : anchor + fwd * 2.4f + right * 1.7f + Vector3.Up * 1.5f;
         var z = (pos - at).Normalized();
         var x = Vector3.Up.Cross(z).Normalized();
