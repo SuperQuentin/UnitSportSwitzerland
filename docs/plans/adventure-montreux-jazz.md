@@ -29,8 +29,8 @@ indoor stages, paid tickets, a playable instrument (the jazz-jam follow-up is in
   The row's final E/N and `AzimuthDeg` come from the #948 recipe: fit the quay outline on swissimage and the lake edge from
   swissTLM3D, drawn over the aerial and looked at, stage on the land side with the audience facing the water. Confidence is
   low-medium until fitted (the real stages move each year; we pin one plausible, inspected place).
-- **Found while planning**: the Christmas market's Montreux site (`FestivalCatalog.Christmas`, `Grand-Rue, Montreux`,
-  2562650 / 1145250) is about 4 km east-north-east of the same town on the same formula (the town centre is near 2559400 / 1142400).
+- **Found while planning**: the Christmas market's Montreux site (`FestivalCatalog.Christmas`, `Grand-Rue, Montreux`, was
+  2562650 / 1145250, fixed in the first commit to the swisstopo address Grand-Rue 1, 2559396 / 1142356) was about 4 km east-north-east of the same town on the same formula (the town centre is near 2559400 / 1142400).
   Verify against the swisstopo reverse geocoder before this PR and fix it in the same PR if confirmed (its own commit).
 - **A season window**: the other 33 venues play every night. Montreux's stage stands only while the festival runs, so
   `StadiumSpec` gets an optional `Season` (an `OccasionSchedule` token, `07-fri#1+15`); outside it `ConcertDirector` builds no
