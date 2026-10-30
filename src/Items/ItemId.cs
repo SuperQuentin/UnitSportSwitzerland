@@ -287,6 +287,10 @@ public enum ItemId
     Lampion = 520,
     /// <summary>A box of fireworks from the 1 August stand, bought with Batzen: Use lights a 40 s volley of your own, at night.</summary>
     FireworkBox = 521,
+    // ---- the action-RPG combat (#1370; 600-619 are its block) ----
+    /// <summary>The sword (#1371): held, the combat controls are on (<see cref="ItemUse.Sword"/>, <c>docs/notes/combat/sword-combat.md</c>).</summary>
+    Sword = 600,
+
     // ---- the Zibelemärit (#1373, docs/notes/occasions/festival-zibelemaerit.md; 525-529 are its block) ----
     /// <summary>A braid of onions, bought at the Zwiebelzopf stall: worth nothing but the look in the hand.</summary>
     Zwiebelzopf = 525,
@@ -365,4 +369,6 @@ public enum ItemUse
     Firework,
     /// <summary>Use throws a handful of Räppli: confetti on every peer near, one used up (<see cref="ItemId.Raeppli"/>, #1357).</summary>
     Confetti,
+    /// <summary>Held, the combat controls are on: Use swings (a combo; held after a swing, a charged blow), the dodge and the lock-on have their own keys (<see cref="ItemId.Sword"/>, #1371).</summary>
+    Sword,
 }

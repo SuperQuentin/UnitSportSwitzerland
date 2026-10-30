@@ -51,6 +51,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | phone › Training app (#901): import, search, connect, start / stop | the phone's own navigation (Enter, Esc) / D-pad A B | ok: the phone's poke and ray, as every app (the OS file picker shows on the desktop) | keep |
 | training: the next junction's road left / right (#901) | A D / left stick | ok: the stick, as steering; the Training app's Left / Right by poke | keep |
 | training: ride_rejoin, ride_uturn, ride_erg, ride_power_up / down (#901) | PgUp PgDn \ ] [ / the Training app's buttons (no pad button is free on a bike) | ok: the Training app's Rejoin, Turn round, ERG, ±10 W by poke | a wrist-menu row if riders want it without the phone |
+| sword swing, combo, charged, plunge (#1371) | LMB / RB | ok: R trigger (RB on foot) | **swing for real** (hand speed) |
+| sword_dodge (#1371) | Shift / B | ok: B (`XrPad.RightB`) | a step or a dodge by body movement |
+| sword_lock (#1371) | Middle button, Z / R3 | ok: R3 | grip-pointing at a target; the stamina bar has no VR display yet (**gap**: wrist display) |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |

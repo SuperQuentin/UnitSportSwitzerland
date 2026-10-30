@@ -55,6 +55,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | knife | `BotIntent.FireAt` | `BotHands.Fire` (`PlayerHits.Stab`) | — | `Engage` | ok |
 | bandage, first-aid kit | — | `BotHands.Use` (2.2 s / 5.6 s, spent at the end, a shot cancels) | its own health | `BrBrain` heal (safe 4 s) | ok |
 | armour vest | — | `BotHands.Use` → `FootPlayer.AddArmor` | its own armour | `BrBrain` vest | ok |
+| sword (#1371): combo, dodge | `BotIntent.SwordAt` / `DodgeFrom` (`BotHands.Swing` / `Dodge`, a `SwordMachine` per bot) | `SwordService.ServerAct` / `ServerHit` / `ServerTrace`: the same `SwordGuard` as a player's | the target in reach (`BrBrain.Engage`) | `Engage` swings at arm's length when carrying a sword and no gun | ok; gap: no brain dodges, charges or plunges |
+| training dummy (#1371) | none | `SwordService.Command` (`/dummy`); a bot's blows hit it through `ServerTrace` | `/bot swing` aims at it | none | n/a: a target, not a bot's business |
 | flare gun, binoculars, horn, smoke | — | — | — | — | gap: later, as a mode needs them |
 | hammer, structure pieces, gadgets | — | `Build/` (client RPCs) | — | `Build` | gap: phase 2+ (building is a follow-up issue) |
 | thrown items (bonk) | — | `ItemEvents.RelayBonk` (client sender) | — | — | gap: later |

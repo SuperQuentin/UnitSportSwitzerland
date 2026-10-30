@@ -342,6 +342,10 @@ public partial class ItemController : Node
         _ui.Scope = scoped ? (poseSettled ? ItemUse.Optic : null)
             : aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def!.Use : null;
         StepThrow(player, def, usable, aiming, (float)delta);
+        // the sword (#1371): the held buttons are its intent; the body's machine acts on them (FootPlayer.Sword)
+        player.SwordIntent = usable && !UiFocus.TextEntryActive && !_ui.IsOpen && _inventory.HeldId == ItemId.Sword
+            ? new Combat.SwordInput { Attack = PlayerInput.Held(PlayerInput.UseItem) || ForceUse, Dodge = PlayerInput.Held(PlayerInput.SwordDodge) }
+            : default;
         // the rod (#493): put away, in a menu or off foot, the line comes in
         bool fishing = usable && _inventory.HeldId == ItemId.FishingRod && !_ui.IsOpen && !UiFocus.TextEntryActive;
         _fishing.Step(fishing ? player : null, PlayerInput.Held(PlayerInput.UseItem) || ForceUse,
@@ -489,9 +493,11 @@ public partial class ItemController : Node
                     || _inventory.InMatch || _useBusy || _planting || _throw.Active || _aimingScope || _aimingPhoto
                     || _ui.IsOpen || _ui.WheelOpen || _photoUi.Blocking || UiFocus.TextEntryActive || player.PhoneState != 0
                     || _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle
-                    || PlayerInput.Held(PlayerInput.UseItem) || PlayerInput.Held(PlayerInput.AimItem) || ForceUse || _forceAim;
+                    || PlayerInput.Held(PlayerInput.UseItem) || PlayerInput.Held(PlayerInput.AimItem) || ForceUse || _forceAim
+                    || player.SwordShown != Combat.SwordMove.None;   // a sword mid-blow, charge or dodge (#1371)
         // a NEW sprint start puts the item in the pocket at once (Genshin-style); drawing on the run is allowed and stays out
-        bool sprintStart = player.SprintIntent && !_wasSprinting;
+        // (not with a sword: its dodge shares the sprint's Shift, and a dodge must not put the blade away, #1371)
+        bool sprintStart = player.SprintIntent && !_wasSprinting && _inventory.HeldId != ItemId.Sword;
         _wasSprinting = player.SprintIntent;
         if (busy) _lastActive = now;
         else if (sprintStart || now - _lastActive >= AutoHolsterSeconds) _inventory.SetHolstered(true);

@@ -7,6 +7,23 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Sword combat ([#1374](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1374))
+
+`/spawn sword` (admin), put it on the hotbar, `/dummy`; on a server also `/pvp on` with a friend, `/bot add 1`, `/bot arm sword`, `/bot swing`.
+
+- [ ] Feel of the combo: five taps in the rhythm chain the five distinct swings (diagonal, backhand rising, spin, thrust with a lunge, jump and slam). Does each read as its own move from behind in Cartoon and PS1, are the wind-up, the whip and the settle readable, is the lunge a good size and stopped at the target?
+- [ ] Standing still versus walking forward gives two sets; do the repeats look varied, not looped? Does the body blend in and out of walking without a snap?
+- [ ] Charged blow (hold after a swing, let go after about half a second): crouched wind-up and spinning release; plunge from a ledge: tucked fall and the kneel; dodge in each direction (roll forward, backstep, sidestep).
+- [ ] Hit feel: hit-stop, shake (try the screen-shake setting), pad rumble, damage numbers and the dummy's recoil; is the finisher's weight right, is it too much on repeat?
+- [ ] The blade's trail through the active frames: visible and not distracting, in Cartoon and PS1; the backhand mirrors it.
+- [ ] Lock-on: Middle button / Z / R3 locks the target nearest the view, the camera eases round, the body faces it; does a soft lock turn a swing to a target a little off the aim?
+- [ ] Pad: RB swing, B dodge (the pad's crouch and slide are off while the sword is drawn), R3 lock (the view switch is off). VR: trigger swing, B dodge, R3 lock, and the stamina bar is missing there.
+- [ ] Hits are the blade touching: does a hit ever count when the blade visibly misses, or a visible touch not count (try the edge of the reach, a moving target, a dummy and a player)? `--sworddebug` shows the capsules.
+- [ ] Impact frame: a finisher and a full charge flash the screen with speed lines and punch the view in; Settings > Impact frames turns it off. In VR there is none (only the hit-stop and the spark): is that enough?
+- [ ] The grip: the handle sits in the closed fist, no sliding or popping through the combo; the free hand is a quiet counterweight, goes to the handle on the finisher and the charged cut and back without a pop.
+- [ ] Auto-holster (#1369) with the sword: it is not put away by a dodge (Shift shares the sprint) nor mid-blow; after about 8 idle seconds it is holstered and Aim or comma draws it again.
+- [ ] With a friend: they see your swings and the same variants, the dummy's hits, your knockback on them; a dodge in time avoids a blow.
+
 ## Wheel zoom, holster, fading hotbar, hand chip (PR for [#1369](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1369))
 
 On foot in third person, anywhere (`--world fixture` does).

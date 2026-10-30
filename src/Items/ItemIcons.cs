@@ -1193,6 +1193,27 @@ public static partial class ItemIcons
             ".kkk.kkk........",
         };
 
+        // the sword (#1371): a long blade up to the right, a gold guard, a leather grip
+        d[ItemId.Sword] = new[]
+        {
+            "..............kk",
+            ".............kwk",
+            "............kwak",
+            "...........kwak.",
+            "..........kwak..",
+            ".........kwak...",
+            "........kwak....",
+            "..k....kwak.....",
+            "..kYk.kwak......",
+            "...kYkwak.......",
+            "....kYYk........",
+            "...kNkYYk.......",
+            "..kNnk.kYk......",
+            "..kNk....k......",
+            "...k............",
+            "................",
+        };
+
         d[ItemId.Knife] = new[]
         {
             "................",

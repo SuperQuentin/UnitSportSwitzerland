@@ -341,6 +341,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, origin, server: true);
+        Combat.SwordService.Create(this, origin, server: true);   // #1371
 
         // the birds everybody shares (#143): simulated here around every player, sent to those near
         var birds = new Birds.BirdLife(_chunks, origin, null)
