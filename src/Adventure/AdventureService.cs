@@ -126,7 +126,7 @@ public partial class AdventureService : Node
             || Occasions.Festivals.FireworksCheck.Requested
             || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested
             || Occasions.Festivals.Desalpe.DesalpeCheck.Requested || Occasions.Festivals.Christmas.ChristmasCheck.Requested
-            || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested
+            || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.MontreuxJazz.JazzCheck.Requested
             || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Chalanda.ChalandaCheck.Requested
             || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested
             || Occasions.Festivals.August1.August1Check.Requested) AdventureCheck.ClearScratch();
@@ -312,6 +312,7 @@ public partial class AdventureService : Node
         : Occasions.Festivals.Fahnen.FahnenCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fahnecheck")
         : Occasions.Festivals.Desalpe.DesalpeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/desalpecheck")
         : Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/zibelecheck")
+        : Occasions.Festivals.MontreuxJazz.JazzCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/montreuxcheck")
         : Occasions.Festivals.Escalade.EscaladeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/escaladecheck")
         : Occasions.Festivals.Fasnacht.FasnachtCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fasnachtcheck")
         : Occasions.Festivals.August1.August1Check.Requested ? ProjectSettings.GlobalizePath("res://test_output/august1check")

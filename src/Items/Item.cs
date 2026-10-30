@@ -303,6 +303,9 @@ public static class ItemDefs
             { Blurb = "{use_item} to eat. The Zibelemärit's flour soup from the kettle: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
         new(ItemId.Konfettiei, "Confetti egg", "{use_item} throws it as a burst of confetti. Everyone near sees it; thrown at the Zibelemärit it counts towards the party's score.",
             ItemUse.Confetti, 30, new Color("#f0e0b0"), "KE", 0, ItemCategory.Cosmetic, 1f),
+        // Montreux Jazz (#1394): the festival wristband, given on the first song heard
+        new(ItemId.JazzPass, "Jazz pass", "The Montreux Jazz wristband, given for the first song you heard at the lake stage. Worth nothing but the look in the hand.",
+            ItemUse.Material, 1, new Color("#e0a030"), "JP", 0, ItemCategory.Cosmetic, 2f),
         // the Chalandamarz (#1356): the first march's hand bell (the procession's tart is the existing Engadiner Nusstorte)
         new(ItemId.ChalandaTreichel, "Chalanda Treichel", "A child's hand Treichel from the Chalandamarz procession. Worth nothing but the sound.",
             ItemUse.Material, 5, new Color("#c99a3a"), "CT", 0, ItemCategory.Cosmetic, 8f),
@@ -792,6 +795,12 @@ public static class ItemDefs
                 s.Tube(new Vector3(-0.1f, 0, 0), new Vector3(0.1f, 0, 0), 0.032f, 0.032f, new Color(0.69f, 0.31f, 0.18f), 8);
                 s.Box(new Vector3(0.0f, 0.032f, 0.0f), new Vector3(0.12f, 0.006f, 0.02f), new Color(0.3f, 0.12f, 0.07f));   // the char of the grill
                 s.Tube(new Vector3(0.1f, 0, 0), new Vector3(0.2f, 0.03f, 0), 0.008f, 0.008f, new Color(0.45f, 0.32f, 0.2f), 5);   // the stick
+                break;
+            case ItemId.JazzPass:
+                // a wristband: an amber loop with a dark clasp and a stripe of the festival's blue
+                s.Tube(new Vector3(0, -0.02f, 0), new Vector3(0, 0.02f, 0), 0.07f, 0.07f, new Color(0.88f, 0.63f, 0.19f), 14);
+                s.Tube(new Vector3(0, -0.005f, 0), new Vector3(0, 0.005f, 0), 0.0725f, 0.0725f, new Color(0.12f, 0.2f, 0.7f), 14);
+                s.Box(new Vector3(0, 0.0f, 0.07f), new Vector3(0.05f, 0.05f, 0.012f), new Color(0.12f, 0.12f, 0.14f));
                 break;
             case ItemId.ChalandaTreichel:
                 s.Tube(new Vector3(0, -0.07f, 0), new Vector3(0, 0.05f, 0), 0.075f, 0.04f, new Color(0.79f, 0.6f, 0.23f), 10);

@@ -2851,6 +2851,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Occasions.Festivals.Desalpe.DesalpeGame.TryInteract(this)) return true;
         // the Christmas market's stalls and the Samichlaus (#1348): a taste, a ware, his bag
         if (Occasions.Festivals.Christmas.ChristmasGame.TryInteract(this)) return true;
+        // Montreux Jazz (#1394): E at the stage-front rail marks the listener
+        if (Occasions.Festivals.MontreuxJazz.JazzGame.TryInteract(this)) return true;
         // the Zibelemärit's stalls (#1373): a taste, a ware
         if (Occasions.Festivals.Zibelemaerit.ZibeleGame.TryInteract(this)) return true;
         // the Escalade's Marmite, soup pot and start line (#1351)
