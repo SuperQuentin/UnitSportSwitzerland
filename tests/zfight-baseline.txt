@@ -1324,3 +1324,4 @@
 167444.1	Venues / Pinball attract - Haunted Castle, high scores
 174635.9	Venues / Pinball attract - Space Mission, high scores
 30	World / Ropeways - T-bar
+1.1	Items / Zwiebelzopf
