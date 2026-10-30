@@ -10,6 +10,7 @@
   |---|---|---|
   | The boulevard (Y -20), north side | bowling "Strike City", cinema "Laser Palace", arcade "Pixel Paradise", "Café Miami" and "Sunset Diner" (terraces), "Club Turbo" | course blocks + `FixtureCourse.Venues` → `Interiors.Venues.Override` |
   | West | race track (two 14 m halves of an oval, one loop for `RaceRoute`), kart loop (8 m) in its infield, 12 80s-90s cars in a pit row, 8 karts | Major / Minor roads with `RoadWidths`, `FixtureCourse.Fleet` |
+  | All round | the grand circuit (`FunCourse.CircuitCorners` filleted by `Circuit()`): ~9 km, 12 m, anticlockwise, one closed edge of its own; a chicane and a dip on the south main straight, a sweeper, esses and a crest on the east, a chicane and a crest on the north, the bus stop on the west; a 10-car grid behind the start | a Major road on the ground function + `Swells` |
   | North | runway (Y 690, 1.4 km), apron with five small planes and a helicopter; the air rings start over it | cover + fleet; `FunRings` |
   | North-west | snow hill (110 m over 400 m), a groomed slope, a T-bar up its east edge | the ground function, `FixtureCourse.Slopes` → `PisteTile`s, a `SkiLift` road |
   | North-east | "Neon Arena", its stage always playing | `FunCourse.ArenaAt` → `StadiumCatalog.UseWorld`, `ConcertDirector.WorldSeed` |

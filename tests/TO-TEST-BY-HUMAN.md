@@ -14,6 +14,7 @@ Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
 - [ ] The look: violet sky with stars, the striped retro sun on the western horizon, wireframe mountains all round, the grid floor beyond the course, neon edges on the roads and venues, palms and lamp posts. In Cartoon, PS1 and Realistic (`/style`): anything washed out, too dark or flickering (the floor's edge at the course's border)?
 - [ ] Venues: enter Strike City (bowl a frame), Laser Palace (a showing on), Pixel Paradise (pinball), Café Miami and Sunset Diner (terrace tables), Club Turbo.
 - [ ] Race track: take a pit car, `/race start` near the track; the kart loop with a kart. Is the 14 m track width right, do the neon edges help or distract?
+- [ ] Grand circuit (all round the course): take a car from the grid on the south straight, `/race start` there: does the race follow the whole lap, are the chicanes, the esses and the crests fun at speed, is anything too tight for its radius?
 - [ ] Airfield: take a small plane from the apron, fly the air rings from the runway's west end: does the next ring read (pink, larger), is the panel on the right readable, does the time stop at the last ring? On a pad, and in VR (the panel is not shown there).
 - [ ] Snow hill: skis or snowboard on the slope, the T-bar up.
 - [ ] Neon Arena: the concert plays whenever you come.

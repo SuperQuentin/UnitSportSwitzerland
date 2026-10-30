@@ -73,6 +73,38 @@ public class FunCourseTests
     }
 
     [Fact]
+    public void The_grand_circuit_is_a_closed_lap_round_everything_else()
+    {
+        var lap = FunCourse.Circuit();
+        Assert.Equal(lap[0].X, lap[^1].X, 3);
+        Assert.Equal(lap[0].Y, lap[^1].Y, 3);
+        double length = 0, turned = 0;
+        for (int i = 1; i < lap.Count; i++)
+        {
+            double step = Math.Sqrt(Math.Pow(lap[i].X - lap[i - 1].X, 2) + Math.Pow(lap[i].Y - lap[i - 1].Y, 2));
+            Assert.InRange(step, 0.05, FixtureCourse.Pen.Step + 0.01);   // no jump where a corner was too tight for its radius
+            length += step;
+            if (i < 2) continue;
+            double a0 = Math.Atan2(lap[i - 1].Y - lap[i - 2].Y, lap[i - 1].X - lap[i - 2].X), a1 = Math.Atan2(lap[i].Y - lap[i - 1].Y, lap[i].X - lap[i - 1].X);
+            turned += Math.IEEERemainder(a1 - a0, 2 * Math.PI);
+        }
+        Assert.InRange(length, 8000, 11000);
+        Assert.Equal(2 * Math.PI, turned, 1);   // once round, anticlockwise, never crossing itself back
+        // clear of every other area by more than its half width
+        var others = Course.Roads.Where(r => r.Class != RoadClass.SkiLift && r.Points.Count != lap.Count).SelectMany(r => r.Points).ToList();
+        var (px0, py0, px1, py1) = FunCourse.PvpBox;
+        foreach (var (x, y, _) in lap.Where((_, i) => i % 5 == 0))
+        {
+            Assert.True(double.IsNaN(FunCourse.Water(x, y).Level), $"in the lake at {x:F0}/{y:F0}");
+            Assert.DoesNotContain(Course.Blocks, b => Math.Abs(x - b.X) < b.Width / 2 + 10 && Math.Abs(y - b.Y) < b.Depth / 2 + 10);
+            Assert.False(x > px0 - 20 && x < px1 + 20 && y > py0 - 20 && y < py1 + 20);
+            Assert.False(x > FunCourse.StuntX0 - 20 && x < FunCourse.StuntX1 + 20 && y > FunCourse.StuntY0 - 20 && y < FunCourse.StuntY1 + 20);
+            Assert.False(x > FunCourse.RunwayX0 - 20 && x < FunCourse.RunwayX1 + 20 && Math.Abs(y - FunCourse.RunwayY) < 60);
+            Assert.DoesNotContain(others, p => Math.Abs(p.X - x) < 30 && Math.Abs(p.Y - y) < 30);
+        }
+    }
+
+    [Fact]
     public void The_pvp_block_holds_its_cover_and_no_venue()
     {
         var (x0, y0, x1, y1) = FunCourse.PvpBox;

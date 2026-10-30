@@ -12,6 +12,7 @@ namespace UnitSport.Terrain.Fixture;
 /// <item>the neon boulevard (Y = <see cref="BoulevardY"/>): a bowling centre, a cinema, an arcade, a nightclub, a café
 /// and a restaurant with terraces, all fronts on it;</item>
 /// <item>west: the race track (an oval of <see cref="TrackWidth"/> m, pit cars on its north side) with a kart loop in its infield;</item>
+/// <item>all round: the grand circuit (<see cref="CircuitCorners"/>), about 9 km of chicanes, esses, a sweeper, crests and a dip, its grid on the south straight;</item>
 /// <item>north: a runway with small planes and a helicopter on its apron; the air rings (<see cref="Rings"/>) start over it;</item>
 /// <item>north-west: the snow hill, a groomed slope and a T-bar;</item>
 /// <item>north-east: the neon arena (<see cref="Arena"/>), its stage always playing;</item>
@@ -148,6 +149,9 @@ public static class FunCourse
         c.Road(RoadClass.Minor, new FixtureCourse.Pen(KartX0, KartY0, Flat, 0, 0).Straight(KartX1 - KartX0).Arc(KartR, 180).Points);
         c.Road(RoadClass.Minor, new FixtureCourse.Pen(KartX1, KartY1, Flat, 180, 0).Straight(KartX1 - KartX0).Arc(KartR, 180).Points);
         c.RoadWidths[kart] = c.RoadWidths[kart + 1] = KartWidth;
+        // the grand circuit round everything, one closed edge of its own
+        c.RoadWidths[c.Roads.Count] = CircuitWidth;
+        c.Road(RoadClass.Major, Circuit());
     }
 
     private static List<(double X, double Y, double Z)> Line(double x0, double y0, double x1, double y1)
@@ -226,6 +230,9 @@ public static class FunCourse
         // the pit row north of the track's north straight: the 80s and 90s heroes, nose to the track
         int[] heroes = [8, 9, 12, 22, 27, 11, 14, 19, 15, 31, 24, 28];
         for (int i = 0; i < heroes.Length; i++) c.Fleet.Add(new(heroes[i], TrackX0 + 15 + 24 * i, TrackY1 + 22, 180));
+        // the grand circuit's grid: two staggered columns behind the start line on the main straight, facing east
+        int[] grid = [27, 31, 22, 9, 12, 33, 32, 30, 23, 8];
+        for (int i = 0; i < grid.Length; i++) c.Fleet.Add(new(grid[i], CircuitGridX - 14 * i, CircuitCorners[0].Y + (i % 2 == 0 ? 3 : -3), 90));
         // karts in the kart loop's infield
         for (int i = 0; i < 8; i++) c.Fleet.Add(new(36, KartX0 + 8 + 12 * i, (KartY0 + KartY1) / 2, 90));
         // small planes and a helicopter on the apron, facing the runway
@@ -253,6 +260,93 @@ public static class FunCourse
     /// <summary><c>TrailerCatalog.Code</c> (index + 1, load percent in the second byte), which this plain file cannot reach.</summary>
     private static int Trailer(int index, float load) => (index + 1) | (int)Math.Round(load * 100) << 8;
 
+    // ---- the grand circuit ----------------------------------------------------------------------------
+
+    /// <summary>The grand circuit's width, m.</summary>
+    public const float CircuitWidth = 12f;
+
+    /// <summary>
+    /// The grand circuit's corners, metres from the start, anticlockwise from the start line, each with the radius its
+    /// corner is rounded to: round the whole course, outside every other area. The main straight along the south with
+    /// a chicane, a fast sweeper into the east side's esses, over the east crest, a tight corner onto the back straight
+    /// with its own chicane and crest, the bus stop half-way down the west side.
+    /// </summary>
+    public static readonly (double X, double Y, double R)[] CircuitCorners =
+    {
+        (-1150, -1130, 90),                                                      // turn 1: onto the main straight
+        (120, -1130, 30), (165, -1100, 30), (245, -1100, 30), (290, -1130, 30),   // the chicane
+        (1240, -1130, 160),                                                      // the sweeper
+        (1240, -700, 70), (1160, -480, 70), (1320, -250, 80), (1250, 80, 120),   // the esses, toward the crest
+        (1330, 1000, 60),                                                        // onto the back straight
+        (420, 1000, 35), (380, 955, 35), (280, 955, 35), (240, 1000, 35),       // the back chicane
+        (-1150, 1000, 110),                                                      // the north-west corner
+        (-1150, 160, 40), (-1075, 110, 40), (-1075, -60, 40), (-1150, -110, 40),  // the bus stop
+    };
+
+    /// <summary>
+    /// The grand circuit's centreline, a point every <see cref="FixtureCourse.Pen.Step"/> m, closed (the last point is the
+    /// first) and on the ground: each corner of <see cref="CircuitCorners"/> rounded to its radius, straights between.
+    /// </summary>
+    public static List<(double X, double Y, double Z)> Circuit()
+    {
+        var c = CircuitCorners;
+        int n = c.Length;
+        var line = new List<(double X, double Y)>();
+        for (int i = 0; i < n; i++)
+        {
+            var (px, py, r) = c[i];
+            var (ax, ay, _) = c[(i + n - 1) % n];
+            var (bx, by, _) = c[(i + 1) % n];
+            double inX = px - ax, inY = py - ay, inL = Math.Sqrt(inX * inX + inY * inY);
+            double outX = bx - px, outY = by - py, outL = Math.Sqrt(outX * outX + outY * outY);
+            (inX, inY, outX, outY) = (inX / inL, inY / inL, outX / outL, outY / outL);
+            double turn = Math.Atan2(inX * outY - inY * outX, inX * outX + inY * outY);   // signed, left positive
+            double t = r * Math.Tan(Math.Abs(turn) / 2);
+            // the arc from the tangent point on the way in to the one on the way out
+            double sx = px - inX * t, sy = py - inY * t;
+            double side = Math.Sign(turn);
+            double cx = sx - inY * r * side, cy = sy + inX * r * side;
+            double a0 = Math.Atan2(sy - cy, sx - cx);
+            int steps = Math.Max(1, (int)Math.Ceiling(r * Math.Abs(turn) / FixtureCourse.Pen.Step));
+            for (int k = 0; k <= steps; k++)
+            {
+                double a = a0 + turn * k / steps;
+                line.Add((cx + Math.Cos(a) * r, cy + Math.Sin(a) * r));
+            }
+        }
+        line.Add(line[0]);
+        // straights between the arcs, a point every step
+        var pts = new List<(double X, double Y, double Z)>();
+        for (int i = 1; i < line.Count; i++)
+        {
+            var (x0, y0) = line[i - 1];
+            var (x1, y1) = line[i];
+            double len = Math.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+            int steps = Math.Max(1, (int)Math.Ceiling(len / FixtureCourse.Pen.Step));
+            for (int k = i == 1 ? 0 : 1; k <= steps; k++)
+            {
+                double x = x0 + (x1 - x0) * k / steps, y = y0 + (y1 - y0) * k / steps;
+                pts.Add((x, y, Ground(x, y)));
+            }
+        }
+        return pts;
+    }
+
+    /// <summary>The circuit's crests and dip: broad, gentle swells of the ground it runs over (nothing else stands there).</summary>
+    private static double Swells(double x, double y)
+    {
+        double h = 0;
+        foreach (var (sx, sy, r, height) in new[] { (1290.0, 300.0, 230.0, 14.0), (-420.0, 1000.0, 190.0, 10.0), (420.0, -1130.0, 160.0, -5.0) })
+        {
+            double d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
+            if (d < r) h += height * (0.5 + 0.5 * Math.Cos(Math.PI * d / r));
+        }
+        return h;
+    }
+
+    /// <summary>The grid's front car, metres from the start: the start line just ahead of it on the main straight.</summary>
+    public const double CircuitGridX = -850;
+
     // ---- the ground ------------------------------------------------------------------------------
 
     private static double Smooth(double t)
@@ -261,7 +355,7 @@ public static class FunCourse
         return t * t * (3 - 2 * t);
     }
 
-    public static double Ground(double x, double y) => Flat + Hill(x, y) + Stunts(x, y) + Lake(x, y);
+    public static double Ground(double x, double y) => Flat + Hill(x, y) + Stunts(x, y) + Lake(x, y) + Swells(x, y);
 
     /// <summary>The snow hill: 110 m up over 400 m north (15°, eased at both ends), a plateau, a steeper back; steep flanks.</summary>
     private static double Hill(double x, double y)
