@@ -467,7 +467,7 @@ public static partial class HumanMeshBuilder
                 // pointing (#889), the hand bends at the wrist along its own way: it is drawn as from an
                 // elbow straight behind it on that line
                 bool point = !left && r.PointDirR != Vector3.Zero;
-                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point);
+                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point, r.Fist);
             }
         }
         if (!head) return fit;
@@ -662,16 +662,56 @@ public static partial class HumanMeshBuilder
     }
 
     /// <summary>
+    /// The closed fist of a sword's grip (#1371), from <see cref="HandGrip"/>: each finger a ring of straight boxes round the handle (the flat sides
+    /// tangent to its circle), stacked along the handle's axis, the thumb over the index and middle fingers. Built once, when the sword is equipped.
+    /// </summary>
+    private static void FistGrip(MeshScratch s, Vector3 wrist, Vector3 t, Vector3 d, Vector3 n, Color colour)
+    {
+        Vector3 At(System.Numerics.Vector3 v) => wrist + t * v.X + d * v.Y + n * v.Z;
+        var axis = HandGrip.Axis;
+        var axisW = (t * axis.X + d * axis.Y).Normalized();
+        Span<System.Numerics.Vector3> pts = stackalloc System.Numerics.Vector3[HandGrip.Segments + 1];
+        for (int i = 0; i < 4; i++)
+        {
+            HandGrip.RingPoints(i, pts);
+            for (int k = 0; k < HandGrip.Segments; k++)
+            {
+                var a = At(pts[k]);
+                var b = At(pts[k + 1]);
+                var along = b - a;
+                float len = along.Length();
+                var y = along / len;
+                var z = axisW.Cross(y).Normalized();
+                s.Box((a + b) * 0.5f, new Vector3(HandGrip.FingerWide, len + 0.003f, HandGrip.FingerThick), colour, new Basis(axisW, y, z));
+            }
+        }
+        Span<System.Numerics.Vector3> th = stackalloc System.Numerics.Vector3[3];
+        HandGrip.ThumbPoints(th);
+        s.Tube(At(th[0]), At(th[1]), HandGrip.ThumbRadius * 1.1f, HandGrip.ThumbRadius, colour, 5);
+        s.Tube(At(th[1]), At(th[2]), HandGrip.ThumbRadius, HandGrip.ThumbRadius * 0.9f, colour, 5);
+    }
+
+    /// <summary>
     /// A hand: palm, four fingers curled a little toward the palm, and a thumb on the side facing
     /// forward when the arm hangs. The palm faces the body. <paramref name="point"/>: the index
     /// straight on along the hand, the others curled into the palm (a finger on a screen, #889).
     /// </summary>
-    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false)
+    /// <summary>The viewer's close-ups of the grip build the unposed figure with closed fists (the game's is <c>FigureLook.Fist</c>).</summary>
+    [ThreadStatic] private static bool ForceFist;
+
+    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false, bool fist = false)
     {
+        fist |= ForceFist;
+        if (fist) scale = 1f;   // the grip is described at one hand size (HandGrip), so the sword sits in it whatever the build
         var h = HandFrameOf(elbow, wrist, side, scale);
         var (dir, thumbSide, n, k) = (h.Along, h.Thumb, h.Inward, scale);
         var basis = new Basis(thumbSide, dir, thumbSide.Cross(dir));
         s.Box(h.Palm, new Vector3(0.068f, 0.072f, 0.028f) * k, palm, basis);
+        if (fist)
+        {
+            FistGrip(s, wrist, thumbSide, dir, n, fingers);
+            return;
+        }
 
         // fingers from the knuckle line, the index on the thumb side
         var knuckles = h.Palm + dir * 0.036f * k;
@@ -679,7 +719,8 @@ public static partial class HumanMeshBuilder
         for (int i = 0; i < 4; i++)
         {
             // pointing: the index straight, the rest folded into the palm
-            float bend = !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
+            // a closed fist (#1371, a sword in the hand): every finger curled right round into the palm
+            float bend = fist ? 1.38f : !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
             var curl = (dir * Mathf.Cos(bend) + n * Mathf.Sin(bend)).Normalized();
             var fingerBasis = new Basis(thumbSide, curl, thumbSide.Cross(curl));
             float across = (1.5f - i) * 0.0168f * k;
@@ -696,7 +737,8 @@ public static partial class HumanMeshBuilder
         }
 
         var thumbRoot = wrist + dir * 0.022f * k + thumbSide * 0.028f * k;
-        var thumbDir = (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
+        var thumbDir = fist ? (dir * 0.45f + n * 0.55f - thumbSide * 0.40f).Normalized()   // over the curled fingers
+            : (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
         s.Tube(thumbRoot, thumbRoot + thumbDir * 0.055f * k, 0.013f * k, 0.009f * k, fingers, 5);
     }
 

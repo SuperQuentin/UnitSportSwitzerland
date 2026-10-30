@@ -572,6 +572,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public Transform3D? HandLocal { get; private set; }
 
+    /// <summary>The closed fist's grip frame (ring centre, handle axis along Z) while a sword is drawn, in this body's space; else null (<see cref="Avatar.HandGrip"/>).</summary>
+    public Transform3D? GripLocal { get; private set; }
+
+    /// <summary>The largest angle (degrees) and distance (cm) seen between the item hand frame used before the grip (<c>HandBasis</c>, a guessed socket) and the skinned hand bone / the closed fist's ring centre (an audit, #1371).</summary>
+    public float HandBoneMaxDeg, HandSocketMaxCm;
+
     /// <summary>
     /// What the item hand is doing with the held item: 0 idle, 1 aim, 2 use. Replicated next to
     /// <see cref="HeldItemId"/>; written by the owner (<c>ItemController</c>). Every peer derives the
@@ -2006,8 +2012,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // seated on a stand (#885): the hands rest in the lap, holding nothing
         if (_walker == null || PoseKind == PoseSit) { HandLocal = null; return; }
         // mounts are already turned to face -Z, where the figure's right is +X
-        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        var hand = SwordDrawn ? mounts.HandR : mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;   // a sword is in the right hand even when the off hand crosses to the handle
         HandLocal = _walker.Transform * new Transform3D(mounts.HandBasis, hand);
+        // a sword's grip (#1371): from the right hand's own frame, where its skinned bone and its fist are
+        GripLocal = SwordDrawn ? _walker.Transform * new Transform3D(mounts.GripBasis, mounts.GripOrigin) : null;
+        if (SwordDrawn)
+        {
+            // an audit: how far the hand's frame the item used to be placed from (HandBasis, from the other arm's direction and the world's up) is from the
+            // skinned hand bone's real frame, and from the closed fist's ring centre
+            var bone = _walker.Transform.Basis * mounts.BoneBasis;
+            var old = _walker.Transform.Basis * mounts.HandBasis;
+            float deg = Mathf.RadToDeg((old.Inverse() * bone).GetRotationQuaternion().GetAngle());
+            if (deg > HandBoneMaxDeg) HandBoneMaxDeg = deg;
+            float cm = ((hand + mounts.HandBasis * new Vector3(0, -0.05f, -0.03f)) - mounts.GripOrigin).Length() * 100f;
+            if (cm > HandSocketMaxCm) HandSocketMaxCm = cm;
+        }
     }
 
     /// <summary>The arm pose the held item and <see cref="ItemAction"/> call for, the same on every peer.</summary>
@@ -2346,7 +2365,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
-        var dance = DrawnDance = StepFightPose(dt) ?? StepAuraPose(dt) ?? StepSchwingPose(dt) ?? danced;
+        var dance = DrawnDance = StepSwordPose(dt) ?? StepFightPose(dt) ?? StepAuraPose(dt) ?? StepSchwingPose(dt) ?? danced;
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
@@ -2373,7 +2392,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float phase = pose == PoseFall ? _flailClock : _stridePhase;
         // a hand held by a friend's (#1266, ArmHold): keyed to 2 cm, the item hand stays the item's
         var hold = pose == PoseStride && dance == null && vr == null ? HoldPose(armed) : null;
-        var key = new FootPoseKey(_walker, pose, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold);
+        var key = new FootPoseKey(_walker, pose, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold, SwordDrawn);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2397,7 +2416,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _poseKey = key;
             _poseWait = 0f;
             // a new look (clothes, hat, style, a finger out to point) is the only thing that builds a mesh
-            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat, Point: point != null) { Smooth = smooth });
+            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat, Point: point != null, Fist: SwordDrawn) { Smooth = smooth });
             switch (pose)
             {
                 case PoseTucked: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Tucked, arm, blend, wind); break;
@@ -2433,7 +2452,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
         bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null, Vector3 Wind = default,
-        Avatar.HumanMeshBuilder.HandHold? Hold = null);
+        Avatar.HumanMeshBuilder.HandHold? Hold = null, bool Fist = false);
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
@@ -2618,12 +2637,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
         var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
-        if (CameraShake > 0f)
+        float shake = CameraShake + SwordShake * GameSettings.Current.ScreenShake;   // a landed blow (#1371) adds to it
+        if (shake > 0f)
         {
             // two incommensurate wobbles per axis: a tremble, not a wave
             float now = (float)Time.GetTicksMsec() / 1000f;
-            view = view * new Basis(Vector3.Right, CameraShake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
-                        * new Basis(Vector3.Up, CameraShake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
+            view = view * new Basis(Vector3.Right, shake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
+                        * new Basis(Vector3.Up, shake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
         }
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
@@ -3623,6 +3643,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (UnitSport.Core.UiFocus.TextEntryActive) return;
 
+        // the sword in the hand (#1371): the lock-on takes the middle button and R3 before the shoulder swap and the view switch
+        if (SwordDrawn && IsMultiplayerAuthority() && !@event.IsEcho() && @event.IsActionPressed(PlayerInput.SwordLock))
+        {
+            SwordToggleLock();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // the other shoulder (#460): its own key, or R3 on a pad while a gun is shouldered
         if (_ride == null && !@event.IsEcho() && (@event.IsActionPressed(PlayerInput.SwapShoulder)
             || (GunAim && @event is InputEventJoypadButton && @event.IsActionPressed(PlayerInput.CameraToggle))))
@@ -3917,6 +3945,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float dt = (float)delta;
         // inside another player (a shared spawn): ease apart rather than be shoved out (#203)
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Separate, Bot)) SeparateFromPlayers(dt);
+        // the sword in the hand (#1371, FootPlayer.Sword.cs): its machine, the dodge and lunge steps, a blow's push
+        SwordStep(dt, IsOnFloor());
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Health, Bot))
@@ -4000,6 +4030,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         bool running = sprintDown || _sprintLatch;
         bool crouchHeld = keys ? PlayerInput.Held(PlayerInput.CrouchSlide) : acts.Crouch;
+        // a sword in hand: the pad's B is the dodge (#1371), so the pad's crouch and slide wait until it is put away
+        if (keys && SwordDrawn && PlayerInput.LastDevice == InputDevice.Gamepad) crouchHeld = false;
         // a prop (#1268): walks at its cap, never runs, jumps or slides (the Sprint key is its burst, PropWalk's answer)
         float? propWalk = PropWalk?.Invoke(this);
         if (propWalk != null) running = sprintDown = _sprintLatch = crouchHeld = false;
@@ -4433,6 +4465,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void FaceTravel(float dt, Vector3 moveDirection)
     {
         // winding up a throw: square up to where the view points, whatever the feet do
+        // swinging the sword, or locked on to a target (#1371): face where the blow goes
+        if (SwordFaceYaw is { } swordYaw)
+        {
+            Rotation = new Vector3(0, SwordFaceSnap ? swordYaw : Mathf.LerpAngle(Rotation.Y, swordYaw, MathX.Damp(26f, dt)), 0);
+            return;
+        }
         if (_throwBlend > 0.05f || SquareToView)
         {
             Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, MathX.Damp(18f, dt)), 0);
@@ -5559,6 +5597,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _camera.Fov = Mathf.Lerp(_camera.Fov, zoom, MathX.Damp(14f, dt));
             return;
         }
-        _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, MathX.Damp(5f, dt));
+        // a finisher's or a full charge's hit punches the view in a few degrees and back (#1371, SwordFovKick)
+        if (SwordFovKick > 0f) _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov - SwordFovKick, MathX.Damp(30f, dt));
+        else _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, MathX.Damp(5f, dt));
     }
 }
