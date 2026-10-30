@@ -88,6 +88,16 @@ public static partial class InteriorGenerator
                 && rooms[gi].Area >= DiningMinArea(guest) && (apt ? rooms[gi].Type == RoomType.Shop : GuestCapable(rooms[gi].Type)))
                 best = gi;
             bool behind = best >= 0;
+            // its own door with no doorway yet (a wing's plan had no room on that wall for it, #1304): the room that will
+            // stand behind it is the venue's, whatever it was, so the doorway is fitted into a guest room once the rooms
+            // reach the facade (Vestibules); the plan follows the door
+            bool doorless = !behind && !apt && own == null
+                && fp.Doors.Any(x => x.Unit && x.Venue > 0 && Venues.At(x.Venue - 1) == v);
+            if (doorless && fp.Doors.First(x => x.Unit && x.Venue > 0 && Venues.At(x.Venue - 1) == v) is var vd)
+            {
+                var dd = new Vector2(vd.Position.X, vd.Position.Z) - fp.Center;
+                (px, pz) = (dd.Dot(fp.AxisU), dd.Dot(fp.AxisV));
+            }
             (int Rank, float Dist) bestD = (int.MaxValue, float.MaxValue);
             for (int i = 0; i < rooms.Count && best < 0; i++)
             {
@@ -96,10 +106,13 @@ public static partial class InteriorGenerator
                 if (taken.Contains(i) || r.Area < DiningMinArea(guest) || r.Shape != null) continue;
                 bool fits = apt ? r.Type == RoomType.Shop
                     : r.Type is RoomType.Shop or RoomType.Living or RoomType.Dining or RoomType.Office
-                        or RoomType.Classroom or RoomType.Hall;
+                        or RoomType.Classroom or RoomType.Hall
+                      // behind its door, a private room too: a bedroom or a study becomes the venue's
+                      || doorless && r.Type is RoomType.Bedroom or RoomType.Study or RoomType.GuestRoom or RoomType.Storage;
                 if (!fits) continue;
                 float dx = Math.Max(0, Math.Max(r.X0 - px, px - r.X1)), dz = Math.Max(0, Math.Max(r.Z0 - pz, pz - r.Z1));
-                var score = (GuestRank(r.Type), dx * dx + dz * dz - r.Area * 1e-4f);
+                // behind its door the nearest room wins, whatever its kind; else the best kind, then the nearest its point
+                var score = (doorless ? 0 : GuestRank(r.Type), dx * dx + dz * dz - r.Area * 1e-4f);
                 if (score.CompareTo(bestD) < 0) (best, bestD) = (i, score);
             }
             if (best < 0) continue;

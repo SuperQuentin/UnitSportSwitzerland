@@ -989,6 +989,18 @@ public static class BuildingFootprint
             return extra;
         }
 
+        // a building planned wing by wing (#1304: its outline peels into two or more) has rooms only where a wing stands:
+        // a venue's door, and its glass, go only on a wall a wing is behind, or the plan has no room for them (the
+        // wedge between two wings of an angled block). The door goes where the plan has a way in (#1292 with #1304).
+        var wings = PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+        bool Backed(Vector2 xz, Vector2 n)
+        {
+            if (wings is not { Count: >= 2 }) return true;
+            var q = xz - n * 1.0f - fp.Center;
+            float x = q.Dot(fp.AxisU), z = q.Dot(fp.AxisV);
+            return wings.Any(w => x >= w.X0 - 0.3f && x <= w.X1 + 0.3f && z >= w.Z0 - 0.3f && z <= w.Z1 + 0.3f);
+        }
+
         // every venue its own door, even where the building has the one: the planner puts the stair behind the main
         // door, so the café beside it gets a door of its own rather than a lobby in front of it (owner, #1292)
         foreach (int vi in dining)
@@ -1011,7 +1023,17 @@ public static class BuildingFootprint
                 for (int k = 0; k <= slides && d == null; k++)
                 {
                     float s = s0 + (k % 2 == 1 ? 1 : -1) * ((k + 1) / 2) * SlideStep;
+                    var xz = c.Normal * c.Offset + t * s;
+                    if (!Backed(xz, c.Normal)) continue;
                     d = At(c, s, want);
+                    // the glass only where a wing is behind it: a bay pair off at a time until both its ends are
+                    if (d is { Span: > 0 } fronted)
+                    {
+                        float span = fronted.Span;
+                        while (span >= VenueFront.MinSpan && !(Backed(xz + t * (span / 2), c.Normal) && Backed(xz - t * (span / 2), c.Normal)))
+                            span -= 2 * VenueFront.Bay;
+                        d = fronted with { Span = span >= VenueFront.MinSpan ? span : 0f };
+                    }
                 }
                 if (d is not { } door) continue;
                 Add(door with { Venue = vi + 1 });

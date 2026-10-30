@@ -629,6 +629,11 @@ public static partial class InteriorGenerator
             var outward = new Vector2(o.Dot(u), o.Dot(v)).Normalized();
             var n = -outward;
             var t = new Vector2(-outward.Y, outward.X);
+            // a venue's own door (#1292) with a private room behind it (an arm the outline fit grew off a room, a bedroom
+            // or a study): that room is the venue's, so its doorway fits there (the plan follows the door)
+            if (!flats && d.Unit && d.Venue > 0
+                && rooms.FirstOrDefault(r => r.Holds(at.X + n.X * 0.6f, at.Y + n.Y * 0.6f)) is { Type: RoomType.Bedroom or RoomType.Study or RoomType.GuestRoom or RoomType.Storage } priv)
+                priv.Type = DiningRoomOf(Venues.At(d.Venue - 1));
             if (rooms.Any(r => r.Holds(at.X + n.X * 0.6f, at.Y + n.Y * 0.6f)))
             {
                 // a room right behind it, and no doorway yet: the door's own was never planned (the box's side had

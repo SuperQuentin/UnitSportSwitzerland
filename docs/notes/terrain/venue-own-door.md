@@ -42,6 +42,25 @@ Plan and the owner's decisions: `docs/plans/venue-own-door.md`. See-through glas
   room keeps 6 m across (`GenderedKeep`). See `public-toilets`.
 - **Plan version 40.**
 
+## With the outlines and the planned doors (#1290, #1304)
+
+One rule on both sides: the outside decides where the doors are, and a door goes where the plan has a way in.
+- #1304's doors (flats' front doors a facade a wing, `SameFacade`, no door on a courtyard the roof closes round) are
+  placed first; a unit's or a venue's own door comes after, beyond the budget, and keeps `MinGap` from them.
+- **Not on an enclosed courtyard** (`Courtyard`, #1304's test) and, in a building planned wing by wing (two wings or
+  more, `PlanOutline.Wings`), **only on a wall a wing stands behind** (`Backed`, 1 m in): the wedge between two wings
+  of an angled block has no room. The glass shrinks a bay pair at a time until a wing is behind both its ends.
+- A unit door is no wing's front (`TryWings`), builds no stairwell (`TryBlock`), and the outline fit and #1304's
+  vestibules never lock it (`UnitDoors`); the shop units come from the same apartment planner (`StreetUnits`, the
+  wing plan planned whole: it is kept only if all of it validates).
+- `DiningUnits` takes the room behind the venue's door in whichever plan was kept (box, front rectangle or wings); a
+  venue whose door got no doorway in its wing's plan takes the room nearest that door, a private room too, and
+  #1304's `Vestibules` makes a private arm room the outline fit grew behind a venue's door the venue's before fitting
+  the doorway into it: the plan follows the door.
+- Measured with #1304 merged (Oct 30, the 17 survey tiles): 1,634 own doors, 10 with no doorway inside (22 before the
+  wing rule), 46 into a room not theirs, 75 of 773 glazed rooms over 1 m narrower than their front (88). What is left
+  is #1304's own limits: a stair or another door where the doorway would go, no room in reach, a wall turned away.
+
 ## Checks
 
 - `--diningcheck`: every venue by its own door into its guest room, its windows at the bays (a café in a

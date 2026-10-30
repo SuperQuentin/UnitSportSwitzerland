@@ -90,6 +90,16 @@ public static class ShopSurvey
                                 ownLocked++;
                                 string why = $"{l.Type}{(e == null ? "" : " entrance but no room")} wings: {InteriorGenerator.WingFailure ?? "planned"} vestibules: {(InteriorGenerator.VestibuleWhy.Count == 0 ? "none tried" : string.Join("; ", InteriorGenerator.VestibuleWhy.Keys))}{(InteriorGenerator.OutlineFailure is { } f ? " outline: " + f : "")}";
                                 lockedWhy[why[..Math.Min(170, why.Length)]] = lockedWhy.GetValueOrDefault(why[..Math.Min(170, why.Length)]) + 1;
+                                // the plan, its outline and a mark at the door: test_output/shopsurvey-locked/
+                                if (lockedWhy.Values.Sum() <= 12)
+                                {
+                                    System.IO.Directory.CreateDirectory("test_output/shopsurvey-locked");
+                                    var g = PlanOutline.FineGrid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+                                    var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+                                    var rel = new Vector2(own.Position.X - l.CenterX, own.Position.Z - l.CenterZ);
+                                    System.IO.File.WriteAllText($"test_output/shopsurvey-locked/{fp.Key}_{own.Slot}.svg",
+                                        InteriorValidator.ToSvg(l, g == null ? null : InteriorGenerator.RingsFor(l, g), [new Vector2(rel.Dot(u), rel.Dot(new Vector2(-u.Y, u.X)))]));
+                                }
                                 if (lockedWhy.Values.Sum() <= 12) sb.AppendLine($"  locked: {id} #{index} slot {own.Slot} {(own.Venue > 0 ? "venue" : "shop")} {why}");
                                 continue;
                             }
