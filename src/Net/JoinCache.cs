@@ -114,6 +114,42 @@ public sealed class AssetDigest
         return hash;
     }
 
+    private sealed record Built(string Stamp, byte[]? Manifest, byte[]? Landings, AssetDigest? Digest);
+
+    private static volatile Built? _last;
+    private static int _builds;
+
+    /// <summary>How many times <see cref="BuildCached"/> really built a digest (tests, and the server's log).</summary>
+    public static int Builds => Volatile.Read(ref _builds);
+
+    /// <summary>Each source file's length and write time, or "-" when absent: what a cached digest is valid for.</summary>
+    private static string StampOf(string directory)
+    {
+        var sb = new StringBuilder(directory);
+        foreach (string name in JoinCache.RegionFiles.Prepend("manifest.json"))
+        {
+            var info = new FileInfo(Path.Combine(directory, name));
+            sb.Append('|').Append(info.Exists ? $"{info.Length}:{info.LastWriteTimeUtc.Ticks}" : "-");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <see cref="Build"/>, reused while the directory's files (length, write time) and the override arrays
+    /// (by identity: the server sets each once) are unchanged. Every join asks; the digest of a nationwide
+    /// index is not hashed again for each. Thread-safe: two first requests may both build, the last wins.
+    /// </summary>
+    public static AssetDigest? BuildCached(string directory, byte[]? manifestOverride, byte[]? landingsOverride)
+    {
+        string stamp = StampOf(directory);
+        if (_last is { } c && c.Stamp == stamp && ReferenceEquals(c.Manifest, manifestOverride) && ReferenceEquals(c.Landings, landingsOverride))
+            return c.Digest;
+        var digest = Build(directory, manifestOverride, landingsOverride);
+        _last = new Built(stamp, manifestOverride, landingsOverride, digest);
+        Interlocked.Increment(ref _builds);
+        return digest;
+    }
+
     /// <summary>
     /// The digest of what a server serves from <paramref name="directory"/>; an override replaces the
     /// manifest or landings file (what <c>ChunkStreamer</c> sends instead of it). Null without a manifest.

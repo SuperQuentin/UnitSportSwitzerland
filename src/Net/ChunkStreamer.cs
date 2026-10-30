@@ -325,7 +325,12 @@ public partial class ChunkStreamer : Node
     {
         try
         {
-            if (AssetDigest.Build(directory, manifestOverride, landingsOverride) is not { } digest)
+            int before = AssetDigest.Builds;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var built = AssetDigest.BuildCached(directory, manifestOverride, landingsOverride);
+            if (AssetDigest.Builds != before) GD.Print($"[stream] join digest built in {clock.ElapsedMilliseconds} ms");
+            else GD.Print($"[stream] join digest from the cache in {clock.Elapsed.TotalMilliseconds:F1} ms");
+            if (built is not { } digest)
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
             byte[] payload = digest.ToBytes();
             return new Prepared(peer, requestId, payload, payload.Length, AssetStream.Crc32(payload), false, false);

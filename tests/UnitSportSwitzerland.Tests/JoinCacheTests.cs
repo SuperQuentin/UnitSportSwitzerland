@@ -112,3 +112,45 @@ public class JoinCacheTests
         Assert.Null(AssetDigest.FromBytes("{}"u8.ToArray()));
     }
 }
+
+public class DigestCacheTests
+{
+    [Fact]
+    public void ADigestIsBuiltOnlyWhenAnInputChanged()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"joincache-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string manifest = Path.Combine(dir, "manifest.json"), horizon = Path.Combine(dir, "horizon.bin");
+            File.WriteAllText(manifest, "{}");
+            File.WriteAllBytes(horizon, [1, 2]);
+            byte[] landings = [5];
+
+            int b0 = AssetDigest.Builds;
+            var first = AssetDigest.BuildCached(dir, null, landings);
+            Assert.Equal(b0 + 1, AssetDigest.Builds);
+            Assert.Same(first, AssetDigest.BuildCached(dir, null, landings));      // same stamps: cached
+            Assert.Equal(b0 + 1, AssetDigest.Builds);
+
+            File.WriteAllBytes(horizon, [1, 2, 3]);                               // length changed
+            var second = AssetDigest.BuildCached(dir, null, landings);
+            Assert.Equal(b0 + 2, AssetDigest.Builds);
+            Assert.NotEqual(first!.Files["horizon.bin"], second!.Files["horizon.bin"]);
+
+            File.SetLastWriteTimeUtc(horizon, DateTime.UtcNow.AddMinutes(5));      // write time changed
+            AssetDigest.BuildCached(dir, null, landings);
+            Assert.Equal(b0 + 3, AssetDigest.Builds);
+
+            AssetDigest.BuildCached(dir, null, [5]);                               // another override array
+            Assert.Equal(b0 + 4, AssetDigest.Builds);
+            var third = AssetDigest.BuildCached(dir, [9], [5]);                    // a manifest override
+            Assert.Equal(b0 + 5, AssetDigest.Builds);
+            Assert.Equal(JoinCache.Sha256Hex([9]), third!.Manifest);
+
+            File.Delete(horizon);                                                  // a file gone
+            Assert.False(AssetDigest.BuildCached(dir, [9], [5])!.Files.ContainsKey("horizon.bin"));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+}
