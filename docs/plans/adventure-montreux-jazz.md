@@ -156,8 +156,7 @@ and `ConcertRig.MusicNear` | none | a bot sitting on the lawn is a follow-up (`S
 One RPC `RequestMontreux(kind, a)` (0 listening mark, 1 clap) client to server, `TellMontreux(night, song, meter, text)` server to client;
 the server judges from the shared clock (`ClockSync.ServerNow`) and the pure `PogoBeat`, needs an adventuring human within the zone
 (`AdventureService.PositionOf`), 10 requests a second at most, a BR round refuses. The set itself is pure, nothing is sent (every peer builds
-the night's event from the instance and the day). **Protocol 85** (one bump for the PR; main is at 84 as of writing, re-read
-`Net/Handshake.Protocol` and take the next number at merge time). Persistence through the `festivals` section and
+the night's event from the instance and the day). **Protocol 86** (one bump for the PR: main was at 85 when it was marked ready). Persistence through the `festivals` section and
 `FestivalBook` only; the per-song marks are in memory (a restart gives the day's cap again, as the Christmas market does).
 
 ## Checks (cheapest tier that catches each bug)
