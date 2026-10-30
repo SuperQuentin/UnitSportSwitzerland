@@ -115,6 +115,9 @@ public static class ConcertPlanner
         "Afterglow Tour", "Gravity Tour", "Horizon Tour",
     };
 
+    /// <summary>Whether the venue has a stage on this date: every night, except a venue with a season (<see cref="StadiumSpec.Season"/>, #1394) outside it.</summary>
+    public static bool Open(StadiumSpec stadium, DateTime date) => stadium.InSeason(DateOnly.FromDateTime(date));
+
     /// <summary>Tonight's event in a stadium: seeded by its name and the date.</summary>
     public static ConcertEvent Tonight(StadiumSpec stadium, DateTime date) =>
         Plan(stadium, Seed(stadium.Name, date));

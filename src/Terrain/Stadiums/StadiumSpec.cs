@@ -46,6 +46,23 @@ public sealed record StadiumSpec
     /// usually at one end), or null for the concert's own choice of layout.
     /// </summary>
     public StadiumSide? StageAt { get; init; }
+    /// <summary>
+    /// When the stage stands (#1394): a schedule token and its tail as <c>MM-wkd#n+N</c> (<c>07-fri#1+15</c>: the first Friday of July and 15 days on), or
+    /// null for every night. Outside it the venue builds no stage and no crowd (<c>--concert N</c> and a hosted set still do). Read by <see cref="InSeason"/>.
+    /// </summary>
+    public string? Season { get; init; }
+
+    /// <summary>Whether the venue's stage stands on <paramref name="date"/>: always without a <see cref="Season"/>.</summary>
+    public bool InSeason(DateOnly date)
+    {
+        if (Season is not { } s) return true;
+        int plus = s.LastIndexOf('+');
+        return plus > 0 && UnitSport.Occasions.Festivals.FestivalCalendar.Day([(s[..plus], s[plus..])], date) > 0;
+    }
+
+    /// <summary>Sides an open air draws no fence on (the lake side of a quay, #1394).</summary>
+    public StadiumSide[] OpenSides { get; init; } = Array.Empty<StadiumSide>();
+
     /// <summary>The concert capacity (standing floor included), for the crowd and the record.</summary>
     public int ConcertCapacity { get; init; }
     /// <summary>The centre spot, LV95 (from the pitch polygon's centroid).</summary>
