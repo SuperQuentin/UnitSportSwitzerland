@@ -34,6 +34,7 @@ public partial class SwordNetProbe : ChatProbe
 
     public override async void _Ready()
     {
+        GameSettings.Current.AutoHolster = false;   // the probes idle for seconds with the sword out (#1369 would put it away)
         _role = Role ?? "A";
         SwordService.Landed += s => _landed.Add(s);
         SwordService.Swung += (who, move) => _swung.Add((who, move));

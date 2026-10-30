@@ -22,6 +22,7 @@ public partial class SwordClipProbe : Node
 
     public SwordClipProbe(ItemController items)
     {
+        GameSettings.Current.AutoHolster = false;   // the probes idle for seconds with the sword out (#1369 would put it away)
         _items = items;
         ProcessPriority = 1000;   // after the player's own camera, so the view below is the one drawn
     }
@@ -30,6 +31,7 @@ public partial class SwordClipProbe : Node
 
     public override async void _Ready()
     {
+        GameSettings.Current.AutoHolster = false;   // the probes idle for seconds with the sword out (#1369 would put it away)
         double next = 0;
         while (GetViewport().GetCamera3D()?.GetParent() is not FootPlayer { } p || !p.IsOnFloor() || SwordService.Instance == null)
         {
