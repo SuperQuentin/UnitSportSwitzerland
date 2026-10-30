@@ -13,7 +13,7 @@ namespace UnitSport.World.Fun;
 /// </summary>
 public static class FunWorld
 {
-    /// <summary>The hour the sky is held at: the sun a few degrees up in the west, the retro sun on the horizon.</summary>
+    /// <summary>The hour the sky is held at: the sun just down in the west, the blue hour, the retro sun on the horizon there.</summary>
     public const double DuskHour = 19.6;
 
     /// <summary>Where the course starts, LV95: the default spawn on every peer (a fixture course is built round it).</summary>

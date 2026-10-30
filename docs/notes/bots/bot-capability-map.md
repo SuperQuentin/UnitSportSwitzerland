@@ -86,6 +86,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
+| the fun world's PvP block and air rings (#1396) | the existing weapons' and flying seams | — (`PvpRules.Zone` asks the server's bodies; a bot is fair game anywhere already) | — | — | n/a: no new action; the rings are this client's own timer (no network), the block's crates are Battle Royale crates (`BrCrates.TryTake` for a bot in it) |
 | venue guests (#1244) | — | — | — | — | n/a: client-side decoration (`VenuePatrons`), nothing a bot meets or uses; a bot standing on a guest's spot is not one of `BeamBodies` and does not clear it. Real guests: #1330 |
 | find the nearest castle, lake, cinema, church + spire... (`/locate`, #1277) | — (a query string, as typed) | `LocateService.FindAsync(query, e, n, max)`: the same engine, index and garage check as the chat's | the answer's `LocateHit`s: name, LV95, distance | — | gap: no brain asks yet; the sense a "go to the nearest X" goal needs |
 | go to coordinates (`/go @E,N`, #1277) | — | `ChatManager.CommandGo` on the `/city` terms (`MayTeleport`), `ForceTeleport` to the owner | — | — | n/a: a bot walks or travels; a teleport is a player's |
