@@ -20,6 +20,7 @@ the same cache again; `[world] ready after N s`).
   for. A cached copy with the server's hash is not fetched (its `onDone` still runs on the cached
   bytes so a boot that read the local source reloads it; not the horizon, which the world read at boot,
   so there is no second horizon pass).
+- **The digest is built once** (`AssetDigest.BuildCached`): reused while every source file keeps its length and write time and the override arrays are the same objects; a join then costs a few stats (`[stream] join digest built in 28 ms` the first time, `from the cache in 0.6 ms` after, real terrain).
 - **The region files are fetched in parallel** (`Task.WhenAll`), beside the mirror probe, and a busy
   server is asked again (three tries) instead of reading as "the server has none".
 - **Changed tiles** (`JoinCache.ChangedTiles`): by content hash when both indexes carry one (manifest
