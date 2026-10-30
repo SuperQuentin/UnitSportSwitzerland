@@ -2766,9 +2766,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ExitVehicle();
             return true;
         }
-        // seated on a stand (#885): stand up
+        // seated on a stand (#885): stand up; seated at a restaurant's table (#1385), E is the fondue there (start one,
+        // or sit in at its pot) and standing up is walking or jumping off
         if (Sitting)
         {
+            if (Interiors.PotTables.Near(GlobalPosition) != null)
+            {
+                TryTogetherInteract();
+                return true;
+            }
             StandUpFromSeat();
             return true;
         }
