@@ -12,7 +12,9 @@ namespace UnitSport.BattleRoyale;
 /// <item>The zone is the same for a seed, and each circle lies inside the one before.</item>
 /// <item>A round lasts 30 to 45 minutes at the automatic size and normal pace.</item>
 /// <item>Over the real <c>places.json</c> and manifest when they are found, 200 seeds all give a
-/// region that passes the hard rules, and five rounds in a row never land within 8 km of each other.</item>
+/// region that passes the hard rules, and five rounds in a row never land within 8 km of each other.
+/// First the map must have room for them (#894): 5 regions 8 km apart and 2 mountain regions, else one
+/// FAIL says what is missing and writes the missing tiles to <c>test_output/brcheck_missing_tiles.txt</c>.</item>
 /// <item>The match state survives a JSON round trip.</item>
 /// <item>An inventory lent to a match comes back as it was.</item>
 /// </list>
@@ -221,17 +223,24 @@ public static class BrCheck
         }
         Expect(bad == 0, $"200 random regions pass the hard rules ({bad} failed, {watch.ElapsedMilliseconds / 200.0:F0} ms each)");
 
-        var recent = new List<(double E, double N)>();
-        var names = new List<string>();
-        bool close = false;
-        for (int round = 0; round < 5; round++)
+        // what the five rounds and the sites need from the map (#894): a partial map fails here, clearly,
+        // instead of in the checks below with a misleading line
+        var room = RoomOf(places, byTile);
+        Roomy(room, places.Count);
+        if (room.Apart.Count >= RoundsApart)
         {
-            var area = BrRegion.Pick(1000 + round, 6000, places, tiles, recent, (0, 0));
-            close |= recent.Any(r => Math.Sqrt((r.E - area.E) * (r.E - area.E) + (r.N - area.N) * (r.N - area.N)) < BrRegion.RepeatKm * 1000);
-            recent.Add((area.E, area.N));
-            names.Add(area.Name);
+            var recent = new List<(double E, double N)>();
+            var names = new List<string>();
+            bool close = false;
+            for (int round = 0; round < RoundsApart; round++)
+            {
+                var area = BrRegion.Pick(1000 + round, 6000, places, tiles, recent, (0, 0));
+                close |= recent.Any(r => Math.Sqrt((r.E - area.E) * (r.E - area.E) + (r.N - area.N) * (r.N - area.N)) < BrRegion.RepeatKm * 1000);
+                recent.Add((area.E, area.N));
+                names.Add(area.Name);
+            }
+            Expect(!close, $"five rounds, none within {BrRegion.RepeatKm} km of another: {string.Join(", ", names)}");
         }
-        Expect(!close, $"five rounds, none within {BrRegion.RepeatKm} km of another: {string.Join(", ", names)}");
 
         // the map of one of them, from the real tiles
         var mapped = BrRegion.Pick(77, 6000, places, tiles, new List<(double, double)>(), (0, 0));
@@ -244,7 +253,88 @@ public static class BrCheck
         image.SavePng(file);
         int colours = bytes.Chunk(4).Select(p => (p[0], p[1], p[2])).Distinct().Count();
         Expect(colours > 40, $"the map of {mapped.Name} built in {timer.ElapsedMilliseconds} ms, {colours} colours, {file}");
-        Roadside(places, tiles);
+        Roadside(places, tiles, room.Mountains);
+    }
+
+    /// <summary>Regions 8 km apart the five-round check needs, and mountain regions the sites check needs (#894).</summary>
+    private const int RoundsApart = 5, MountainRegions = 2;
+
+    /// <summary>
+    /// Metres between the lowest and the highest tile top of a mountain region's square: bunkers want a 31°
+    /// slope by a road (<c>BrSites</c>), which the flat lake shore never has.
+    /// </summary>
+    private const float MountainRelief = 600f;
+
+    private const string MissingFile = "res://test_output/brcheck_missing_tiles.txt";
+
+    /// <summary>
+    /// What the map can carry. <c>Apart</c>: usable regions, one per town's square, 8 km apart; <c>Mountains</c>: the
+    /// steepest of them, 8 km apart; <c>Short</c>: the towns whose square misses tiles, and which; <c>Could</c>: how many
+    /// regions 8 km apart the listed towns would give with every tile there.
+    /// </summary>
+    private sealed record MapRoom(List<BrArea> Apart, List<BrArea> Mountains, List<(Place Town, List<(int E, int N)> Missing)> Short, int Could);
+
+    private static MapRoom RoomOf(IReadOnlyList<Place> places, IReadOnlyDictionary<(int E, int N), ManifestTile> byTile)
+    {
+        var towns = places.Where(p => p.Kind == PlaceKind.Town && p.Buildings >= 15).ToList();
+        var none = new List<(double, double)>();
+        var usable = new List<(BrArea Area, double Score, float Relief)>();
+        var shortOf = new List<(Place, List<(int E, int N)>)>();
+        var anyTiles = new List<BrArea>();
+        foreach (var town in towns.OrderByDescending(t => t.Buildings))
+        {
+            var area = new BrArea(Math.Round(town.E / 50) * 50, Math.Round(town.N / 50) * 50, 6000, town.Name);
+            var missing = BrRegion.TilesOf(area).Where(t => !BrRegion.Usable(byTile, t.E, t.N, out _)).ToList();
+            if (missing.Count > 0) shortOf.Add((town, missing));
+            if (towns.Where(t => area.Contains(t.E, t.N)).Sum(t => t.Buildings) >= BrRegion.MinBuildings) anyTiles.Add(area);
+            if (BrRegion.Score(area, towns, byTile, none) is not { } score) continue;
+            var tops = BrRegion.TilesOf(area).Select(t => (float)byTile[t].Max).ToList();
+            usable.Add((area, score, tops.Max() - tops.Min()));
+        }
+        static List<BrArea> Spread(IEnumerable<BrArea> areas)
+        {
+            var kept = new List<BrArea>();
+            foreach (var a in areas)
+                if (kept.All(k => Math.Sqrt((k.E - a.E) * (k.E - a.E) + (k.N - a.N) * (k.N - a.N)) >= BrRegion.RepeatKm * 1000)) kept.Add(a);
+            return kept;
+        }
+        return new MapRoom(
+            Spread(usable.OrderByDescending(u => u.Score).Select(u => u.Area)),
+            Spread(usable.Where(u => u.Relief >= MountainRelief).OrderByDescending(u => u.Relief).Select(u => u.Area)),
+            shortOf, Spread(anyTiles).Count);
+    }
+
+    /// <summary>
+    /// True when the map can carry the five rounds and the sites. Otherwise one FAIL that says what is missing,
+    /// and the towns' missing tiles in <see cref="MissingFile"/>, ready for <c>tools/MapSetup --tiles-file</c>.
+    /// </summary>
+    private static bool Roomy(MapRoom room, int placeCount)
+    {
+        if (room.Apart.Count >= RoundsApart && room.Mountains.Count >= MountainRegions) return true;
+        static string Names(List<BrArea> a) => a.Count == 0 ? "none" : string.Join(", ", a.Select(x => x.Name));
+        var why = new List<string>();
+        if (room.Apart.Count < RoundsApart)
+            why.Add($"the five rounds need {RoundsApart} match regions {BrRegion.RepeatKm} km apart, the map has {room.Apart.Count} ({Names(room.Apart)})");
+        if (room.Mountains.Count < MountainRegions)
+            why.Add($"the sites need {MountainRegions} mountain regions ({MountainRelief:F0} m of relief, for the bunkers), the map has {room.Mountains.Count} ({Names(room.Mountains)})");
+        string fix;
+        if (room.Short.Count > 0)
+        {
+            var lines = room.Short.SelectMany(s => s.Missing.Select(t => $"{t.E}-{t.N}  # {s.Town.Name}")).DistinctBy(l => l.Split(' ')[0]).ToList();
+            string file = ProjectSettings.GlobalizePath(MissingFile);
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file)!);
+            System.IO.File.WriteAllLines(file, lines);
+            fix = $"{room.Short.Count} of its towns miss tiles of their 6 km square ("
+                + string.Join(", ", room.Short.Take(6).Select(s => $"{s.Town.Name} {s.Missing.Count}")) + (room.Short.Count > 6 ? ", ..." : "")
+                + $"): {lines.Count} tiles in {file}, for `dotnet run --project tools/MapSetup -- --tiles-file {file}`";
+        }
+        else fix = "every town it lists has its tiles";
+        if (room.Could < RoundsApart)
+            fix += $". Even with every tile, its towns give only {room.Could} regions {BrRegion.RepeatKm} km apart: set up more of the country (MapSetup --canton, --town)";
+        Expect(false, $"the map is too small for the real-data checks: {string.Join("; ", why)}. places.json lists {placeCount} places; {fix}. "
+            + (room.Apart.Count < RoundsApart ? "The five rounds were not checked" : "The five rounds were checked")
+            + $", the sites only in {room.Mountains.Count} region(s)");
+        return false;
     }
 
     private static (List<Place> Places, List<ManifestTile> Tiles) LoadWorld()
@@ -391,7 +481,7 @@ public static class BrCheck
         Expect(inside && outside && UnitSport.Loot.LootTables.MatchEpoch == null, "match loot only in the region's buildings, and only during the match");
     }
 
-    private static void Roadside(IReadOnlyList<Place> places, IReadOnlyList<ManifestTile> tiles)
+    private static void Roadside(IReadOnlyList<Place> places, IReadOnlyList<ManifestTile> tiles, List<BrArea> mountains)
     {
         var area = BrRegion.Pick(5, 6000, places, tiles, new List<(double, double)>(), (0, 0));
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
@@ -423,10 +513,9 @@ public static class BrCheck
             Expect(alt - top > 300, FormattableString.Invariant($"the plane over {region.Name} flies at {alt:F0} m, {alt - top:F0} m over the highest ground under its line ({top:F0} m)"));
         }
 
-        // the outdoor sites (#198) of two real regions
-        foreach (int seed in new[] { 5, 41 })
+        // the outdoor sites (#198) of the two steepest regions: bunkers need slopes (#894), so not just any region
+        foreach (var (region, seed) in mountains.Take(MountainRegions).Zip(new[] { 5, 41 }))
         {
-            var region = BrRegion.Pick(seed, 6000, places, tiles, new List<(double, double)>(), (0, 0));
             var regionRoads = Task.Run(() => BrLoot.RoadPoints(source, region)).GetAwaiter().GetResult();
             var w = System.Diagnostics.Stopwatch.StartNew();
             var sites = Task.Run(() => BrSites.Place(source, region, seed, regionRoads)).GetAwaiter().GetResult();
