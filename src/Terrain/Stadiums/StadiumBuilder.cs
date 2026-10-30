@@ -197,7 +197,7 @@ public static class StadiumBuilder
 
     [Showcase("Terrain", "Stadium")]
     private static IEnumerable<(string, Func<Node3D>)> Showcase() =>
-        StadiumCatalog.All.Select(s => (s.Name, (Func<Node3D>)(() => new MeshInstance3D
+        StadiumCatalog.Real.Append(Fixture.FunCourse.Arena).Select(s => (s.Name, (Func<Node3D>)(() => new MeshInstance3D
         {
             Name = "Stadium",
             Mesh = ChunkNode.ToPropMesh(BuildLocal(s, collision: false).Mesh!, StyleKit.Material(MaterialRole.Prop)),
