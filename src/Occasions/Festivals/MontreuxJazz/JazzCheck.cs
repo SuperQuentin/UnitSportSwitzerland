@@ -105,6 +105,26 @@ public partial class JazzCheck : ChatProbe
         var lines = new List<string>();
         Svc.MontreuxTold += (what, _, _, text) => { told.Add(what); if (text.Length > 0) lines.Add(text); };
 
+        // ---- windowed: the stage as it would stand at the site, with its band and seated lawn, for the pictures ----------
+        if (DisplayServer.GetName() != "headless")
+        {
+            var venue = Terrain.Stadiums.StadiumCatalog.MontreuxJazzOpenAir;
+            var origin = Me!.Origin!;
+            var w = origin.ToWorld(site.E, site.N, 0);
+            float a = Mathf.DegToRad(venue.AzimuthDeg);
+            var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
+            var rig = new ConcertRig(e) { Name = "JazzStage", Transform = new Transform3D(basis, w with { Y = Me.GlobalPosition.Y - 0.9f }), ForceLive = true };
+            GetParent().AddChild(rig);
+            var (fe, fn) = MontreuxJazzRules.FromFrame(site.E, site.N, venue.AzimuthDeg, 0, MontreuxJazzRules.FrontV + 14f);
+            var from = origin.ToWorld(fe, fn, 0);
+            var look = origin.ToWorld(MontreuxJazzRules.StageFront(site).E, MontreuxJazzRules.StageFront(site).N, 0);
+            Me.PlaceAt(new Vector3(from.X, Me.GlobalPosition.Y, from.Z), Mathf.Atan2(-(look.X - from.X), -(look.Z - from.Z)));
+            await Seconds(3.0);
+            GD.Print($"[montreuxcheck] shot {Shot("stage")}");
+            rig.QueueFree();
+            await Seconds(0.5);
+        }
+
         // ---- away from the rail, and with the sky off the evening ------------------------------------------
         Stand(site, 60f);
         await Seconds(0.4);

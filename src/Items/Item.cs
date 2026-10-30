@@ -798,9 +798,9 @@ public static class ItemDefs
                 break;
             case ItemId.JazzPass:
                 // a wristband: an amber loop with a dark clasp and a stripe of the festival's blue
-                s.Tube(new Vector3(0, -0.02f, 0), new Vector3(0, 0.02f, 0), 0.07f, 0.07f, new Color(0.88f, 0.63f, 0.19f), 14);
-                s.Tube(new Vector3(0, -0.005f, 0), new Vector3(0, 0.005f, 0), 0.0725f, 0.0725f, new Color(0.12f, 0.2f, 0.7f), 14);
-                s.Box(new Vector3(0, 0.0f, 0.07f), new Vector3(0.05f, 0.05f, 0.012f), new Color(0.12f, 0.12f, 0.14f));
+                s.Tube(new Vector3(0, -0.03f, 0), new Vector3(0, 0.03f, 0), 0.07f, 0.07f, new Color(0.88f, 0.63f, 0.19f), 14);
+                s.Tube(new Vector3(0, -0.01f, 0), new Vector3(0, 0.01f, 0), 0.082f, 0.082f, new Color(0.12f, 0.2f, 0.7f), 14);
+                s.Box(new Vector3(0, 0.0f, 0.10f), new Vector3(0.05f, 0.05f, 0.012f), new Color(0.12f, 0.12f, 0.14f));
                 break;
             case ItemId.ChalandaTreichel:
                 s.Tube(new Vector3(0, -0.07f, 0), new Vector3(0, 0.05f, 0), 0.075f, 0.04f, new Color(0.79f, 0.6f, 0.23f), 10);

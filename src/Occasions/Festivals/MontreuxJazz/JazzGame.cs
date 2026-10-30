@@ -220,14 +220,14 @@ public partial class JazzGame : CanvasLayer
             }
             if (g._calling) DrawRing();
             else if (g._inZone && g._svc.MontreuxListening)
-                Text("Listening: stay near the stage", new Vector2(Size.X * 0.5f, Size.Y * 0.88f), 600f, UiTheme.FontSmall, new Color(UiTheme.TextDim, 0.9f));
+                Text("Listening: stay near the stage", new Vector2(Size.X * 0.5f, Size.Y * 0.80f), 600f, UiTheme.FontSmall, new Color(UiTheme.TextDim, 0.9f));
         }
 
         /// <summary>The clap ring at the bottom centre: closes onto its target on each beat, the meter above it, the grade of the last clap.</summary>
         private void DrawRing()
         {
             var g = Game;
-            var c = new Vector2(Size.X * 0.5f, Size.Y * 0.78f);
+            var c = new Vector2(Size.X * 0.5f, Size.Y * 0.70f);
             double beats = g._callBeat;
             float phase = (float)(beats - Math.Floor(beats));
             double ring = beats - JazzSet.CallLeadBeats;
