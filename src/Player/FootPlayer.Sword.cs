@@ -290,7 +290,7 @@ public partial class FootPlayer
                 // the move's own forward reach (the thrust reaches furthest), to the target's surface: its radius is the dummy's torso or a body's
                 var track = Items.SwordBlade.Get(_sword.Move, _swordVariant, _swordSeed);
                 float radius = _swordAimKind == SwordTargetKind.Dummy ? 0.28f : SwordSweep.BodyRadius;
-                float reach = _swordVariant == 1 && _sword.Move == SwordMove.Slash3 ? track.Reach : track.Forward;   // the spin is a circle round the body
+                float reach = _swordVariant == 1 && _sword.Move == SwordMove.Slash3 || track.Forward < 0.3f ? track.Reach * 0.7f : track.Forward;   // the spin is a circle round the body; a cut that never crosses the centre line is measured by its reach
                 want = Mathf.Clamp(_swordLungeMoved + to.Length() - radius - Mathf.Clamp(reach * 0.6f, 0.45f, 0.7f), 0f, 1.2f);   // what is left to close, on top of what was stepped
             }
             if (_swordLungeDone < 0.999f)

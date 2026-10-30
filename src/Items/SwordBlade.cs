@@ -32,6 +32,34 @@ public static class SwordBlade
 
     private static readonly Dictionary<int, Track> Cache = new();
 
+    private static float _sign;
+
+    /// <summary>+1 when the item mesh's blade runs along +Z of its node, -1 when along -Z (the mesh is built mirrored).</summary>
+    public static float BladeSign
+    {
+        get
+        {
+            if (_sign == 0f)
+            {
+                var aabb = ItemDefs.HandMesh(ItemId.Sword)!.GetAabb();
+                _sign = aabb.End.Z > -aabb.Position.Z ? 1f : -1f;
+            }
+            return _sign;
+        }
+    }
+
+    /// <summary>
+    /// The sword node's transform from a hand's grip (<c>GaitMounts.GripOrigin</c> / <c>GripBasis</c>, <see cref="HandGrip"/>): the handle's axis along
+    /// the grip's Z, the point of the handle the four fingers close on (<see cref="HandGrip.HandleAtFingers"/> from the mesh origin) at the ring centre.
+    /// The blade, the trail and the hit capsule follow the hand through this and nothing else.
+    /// </summary>
+    public static Transform3D NodeFor(Vector3 gripOrigin, Basis grip)
+    {
+        float sign = BladeSign;
+        var basis = sign > 0f ? grip : grip * new Basis(Vector3.Up, Mathf.Pi);
+        return new Transform3D(basis, gripOrigin - basis.Z * (sign * Avatar.HandGrip.HandleAtFingers));
+    }
+
     public static Track Get(SwordMove move, int variant, int seed)
     {
         int key = (int)move | (variant << 4) | (seed << 6);
@@ -43,8 +71,7 @@ public static class SwordBlade
     {
         var (r0, r1) = SwordPoses.TrailWindow(move, seed);
         float total = Math.Max(0.01f, SwordRules.Def(move).Total);
-        var aabb = ItemDefs.HandMesh(ItemId.Sword)!.GetAabb();
-        float sign = aabb.End.Z > -aabb.Position.Z ? 1f : -1f;
+        float sign = BladeSign;
         var hilt = new Vector3[Count];
         var tip = new Vector3[Count];
         float reach = 0f, forward = 0f;
@@ -54,12 +81,8 @@ public static class SwordBlade
             var dance = new DanceParams(Audio.Cd.MusicStyle.Pop, HumanMeshBuilder.SwordMoves, 0f, Mathf.Min(p, 0.999f),
                 HumanMeshBuilder.SwordCode(move, variant, seed), 1f);
             var mounts = HumanMeshBuilder.MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
-            var hand = mounts.HandR;   // the sword hand: the mount's R, never picked by position (the off hand crosses to the handle)
-            var basis = mounts.HandBasis;
-            // the item node as the game places it (HeldItemVisual), then the blade's whip at the wrist (FootPlayer.SwordArcNow)
-            var node = new Transform3D(basis, hand + basis * SocketOffset);
-            var (pitch, yaw, roll, fwd) = SwordPoses.Wrist(move, p);
-            var full = node * new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll)), new Vector3(0, 0, fwd));
+            // the item node as the game places it: from the right hand's own grip frame (the one its skinned bone and its fist are built in)
+            var full = NodeFor(mounts.GripOrigin, mounts.GripBasis);
             hilt[i] = full * new Vector3(0, 0, sign * HiltAt);
             tip[i] = full * new Vector3(0, 0, sign * TipAt);
             reach = Mathf.Max(reach, new Vector2(tip[i].X, tip[i].Z).Length());

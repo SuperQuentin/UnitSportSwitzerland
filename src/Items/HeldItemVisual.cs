@@ -465,8 +465,10 @@ void fragment() {{
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
             var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
-            _inHand.Transform = new Transform3D(basis, hand.Origin + basis * (id == ItemId.Sword ? SwordBlade.SocketOffset : new Vector3(0, -0.05f, -0.03f)))
-                * RadioBounce(0.7f) * SwordSwing();
+            // a sword sits in the closed fist by its grip frame (the skinned hand's own); anything else by the wrist
+            _inHand.Transform = id == ItemId.Sword && _player.GripLocal is { } grip
+                ? SwordBlade.NodeFor(grip.Origin, grip.Basis)
+                : new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f)) * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
         StepSparkles(_inHand.Visible, dt);

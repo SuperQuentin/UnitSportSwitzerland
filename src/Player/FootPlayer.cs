@@ -572,6 +572,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public Transform3D? HandLocal { get; private set; }
 
+    /// <summary>The closed fist's grip frame (ring centre, handle axis along Z) while a sword is drawn, in this body's space; else null (<see cref="Avatar.HandGrip"/>).</summary>
+    public Transform3D? GripLocal { get; private set; }
+
+    /// <summary>The largest angle (degrees) and distance (cm) seen between the item hand frame used before the grip (<c>HandBasis</c>, a guessed socket) and the skinned hand bone / the closed fist's ring centre (an audit, #1371).</summary>
+    public float HandBoneMaxDeg, HandSocketMaxCm;
+
     /// <summary>
     /// What the item hand is doing with the held item: 0 idle, 1 aim, 2 use. Replicated next to
     /// <see cref="HeldItemId"/>; written by the owner (<c>ItemController</c>). Every peer derives the
@@ -2005,6 +2011,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // mounts are already turned to face -Z, where the figure's right is +X
         var hand = SwordDrawn ? mounts.HandR : mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;   // a sword is in the right hand even when the off hand crosses to the handle
         HandLocal = _walker.Transform * new Transform3D(mounts.HandBasis, hand);
+        // a sword's grip (#1371): from the right hand's own frame, where its skinned bone and its fist are
+        GripLocal = SwordDrawn ? _walker.Transform * new Transform3D(mounts.GripBasis, mounts.GripOrigin) : null;
+        if (SwordDrawn)
+        {
+            // an audit: how far the hand's frame the item used to be placed from (HandBasis, from the other arm's direction and the world's up) is from the
+            // skinned hand bone's real frame, and from the closed fist's ring centre
+            var bone = _walker.Transform.Basis * mounts.BoneBasis;
+            var old = _walker.Transform.Basis * mounts.HandBasis;
+            float deg = Mathf.RadToDeg((old.Inverse() * bone).GetRotationQuaternion().GetAngle());
+            if (deg > HandBoneMaxDeg) HandBoneMaxDeg = deg;
+            float cm = ((hand + mounts.HandBasis * new Vector3(0, -0.05f, -0.03f)) - mounts.GripOrigin).Length() * 100f;
+            if (cm > HandSocketMaxCm) HandSocketMaxCm = cm;
+        }
     }
 
     /// <summary>The arm pose the held item and <see cref="ItemAction"/> call for, the same on every peer.</summary>

@@ -56,8 +56,8 @@ public partial class SwordNetProbe : ChatProbe
                 var verts = mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();
                 Expect(verts.Length == Items.SwordBlade.Count * 2 && verts[1].IsEqualApprox(t.Tip[0]), $"the {move} set{v} trail starts on the blade's tip sample");
             }
-        Expect(Items.SwordBlade.Get(SwordMove.Slash4, 0, 3).Forward > Items.SwordBlade.Get(SwordMove.Slash1, 0, 3).Forward, "the thrust reaches further than the diagonal slash");
-        Expect(Items.SwordBlade.Get(SwordMove.Slash4, 1, 3).Forward > Items.SwordBlade.Get(SwordMove.Slash2, 1, 3).Forward, "the thrust reaches further than the backhand");
+        Expect(Items.SwordBlade.Get(SwordMove.Slash4, 0, 3).Reach > Items.SwordBlade.Get(SwordMove.Slash1, 0, 3).Reach, "the thrust reaches further than the diagonal slash");
+        Expect(Items.SwordBlade.Get(SwordMove.Slash4, 1, 3).Reach > Items.SwordBlade.Get(SwordMove.Slash2, 1, 3).Reach, "the thrust reaches further than the backhand");
     }
 
     // ---- A: the swinger ---------------------------------------------------------------------------------------
@@ -99,6 +99,7 @@ public partial class SwordNetProbe : ChatProbe
         GD.Print($"{Log} combo landed {string.Join(",", moves)}; dummy hp {dummy.Hp}");
         Expect(moves.Count >= 3 && moves[0] == SwordMove.Slash1 && moves[1] == SwordMove.Slash2 && moves[2] == SwordMove.Slash3, "the first three swings of the combo land in order");
         Expect(dummy.Hp < SwordService.DummyHp - 30f, "the dummy lost health");
+        GD.Print($"{Log} owner hand audit: the old hand frame was up to {me.HandBoneMaxDeg:F1} degrees off the skinned hand bone, its guessed socket up to {me.HandSocketMaxCm:F1} cm off the ring centre");
         Say("combo");
         await Seconds(1.0);
 
@@ -220,7 +221,7 @@ public partial class SwordNetProbe : ChatProbe
         me.LookYaw = Mathf.Atan2(-look.X, -look.Z);
         bool windowed = DisplayServer.GetName() != "headless";
         Expect2(await Until(() => Copy() is { SwordShown: not SwordMove.None }, 20), "A's copy swings (its sword is drawn turning)");
-        if (windowed) { await Seconds(0.05); GD.Print($"{Log} shot {Shot("B_swing")}"); }
+        if (windowed) { await Seconds(0.05); GD.Print($"{Log} shot {Shot("B_swing")}"); await RemoteGripShots(me); }
         float lean = 0f;
         Expect2(await Until(() => (lean = Mathf.Max(lean, dummy.Lean)) > 0.1f, 20), $"the dummy recoils on B's screen (lean {lean:F2})");
         if (windowed) GD.Print($"{Log} shot {Shot("B_recoil")}");
@@ -228,6 +229,9 @@ public partial class SwordNetProbe : ChatProbe
         Expect(await Until(() => dummy.Blows >= 3, 20), $"B saw the dummy take three blows ({dummy.Blows})");
         if (!await Heard("A", "combo", 30)) { Fail("A never finished the combo"); return; }
         Expect(dummy.Hp < SwordService.DummyHp, $"the dummy's health fell on B's screen ({dummy.Hp:F0})");
+        // the remote copy's hand: the sword sits in the closed fist by the skinned hand's own frame, and the old frame was this far off it
+        if (Copy() is { } seen)
+            GD.Print($"{Log} remote hand audit: the old hand frame was up to {seen.HandBoneMaxDeg:F1} degrees off the skinned hand bone, its guessed socket up to {seen.HandSocketMaxCm:F1} cm off the ring centre");
 
         if (!await Heard("A", "charged", 40)) { Fail("A never charged"); return; }
         Expect(_swung.Any(s => s.Move == SwordMove.Charge), "B saw the wind-up");
@@ -292,6 +296,27 @@ public partial class SwordNetProbe : ChatProbe
         }
         Input.ActionRelease(PlayerInput.MoveForward);
         await Seconds(0.2);
+    }
+
+    /// <summary>Windowed B: close-ups of A's copy's hand with the sword, from the posed remote figure (palm, back, thumb, below), over the next swing.</summary>
+    private async Task RemoteGripShots(FootPlayer me)
+    {
+        string[] names = { "palm", "back", "thumb", "below" };
+        for (int v = 0; v < 4; v++)
+        {
+            for (int f = 0; f < 18; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (Copy() is not { GripLocal: { } g } a || me.CameraOrNull is not { } cam) return;
+            var target = a.GlobalTransform * g.Origin;
+            var right = a.GlobalTransform.Basis.X.Normalized();
+            var fwd = -a.GlobalTransform.Basis.Z.Normalized();
+            var from = v switch { 0 => target - right * 0.5f, 1 => target + right * 0.5f, 2 => target + fwd * 0.5f, _ => target + Vector3.Down * 0.5f + fwd * 0.1f };
+            var z = (from - target).Normalized();
+            var up = Mathf.Abs(z.Y) > 0.95f ? fwd : Vector3.Up;
+            var x = up.Cross(z).Normalized();
+            cam.GlobalTransform = new Transform3D(new Basis(x, z.Cross(x), z), from);
+            await ToSignal(RenderingServer.Singleton, RenderingServerInstance.SignalName.FramePostDraw);
+            GD.Print($"{Log} shot {Shot("B_remote_grip_" + names[v])}");
+        }
     }
 
     private static void Release()

@@ -45,43 +45,24 @@ public static partial class HumanMeshBuilder
     private static DanceParams SwordDance(SwordMove move, int variant, float progress) =>
         new(Audio.Cd.MusicStyle.Pop, SwordMoves, 0f, Mathf.Min(progress, 0.999f), SwordCode(move, variant, 3), 1f);
 
-    /// <summary>The figure at that frame with the sword in its hand, placed from the same mounts the game's held item uses.</summary>
-    private static Node3D SwordFigure(SwordMove move, int variant, float progress)
-    {
-        var dance = SwordDance(move, variant, progress);
-        var node = Figure(BuildStride(HumanPalette.ForRider((int)move), 0f, 0f, dance: dance));
-        var mounts = MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
-        var hand = mounts.HandR;
-        var basis = mounts.HandBasis;
-        var (wp, wy, wr, wf) = SwordPoses.Wrist(move, progress);
-        node.AddChild(new MeshInstance3D
-        {
-            Mesh = Items.ItemDefs.HandMesh(Items.ItemId.Sword), MaterialOverride = Items.ItemDefs.Material,
-            Transform = new Transform3D(basis, hand + basis * Items.SwordBlade.SocketOffset)
-                * new Transform3D(Basis.FromEuler(new Vector3(wp, wy, wr)), new Vector3(0, 0, wf)),
-        });
-        return node;
-    }
+    /// <summary>The figure at that frame, closed fists, with the sword in its hand by the grip frame (what the game places it by).</summary>
+    private static Node3D SwordFigure(SwordMove move, int variant, float progress) => GripFigure(move, progress, variant);
 
-    private static Node3D GripFigure(SwordMove move, float progress)
+    private static Node3D GripFigure(SwordMove move, float progress, int variant = 0)
     {
         // the figure is built with closed fists, as when a sword is equipped (FigureLook.Fist)
-        var dance = SwordDance(move, 0, progress);
+        var dance = SwordDance(move, variant, progress);
         ForceFist = true;
         Node3D node;
         try { node = Figure(BuildStride(HumanPalette.ForRider(4), 0f, 0f, dance: dance)); }
         finally { ForceFist = false; }
         var mounts = MountsFor(0f, 0f, ItemArmPose.None, 0f, dance, null, null);
-        var hand = mounts.HandR;
-        GD.Print($"[swordgrip] {move} hand at {hand.X:F3},{hand.Y:F3},{hand.Z:F3}");
-        var basis = mounts.HandBasis;
-        var (wp, wy, wr, wf) = SwordPoses.Wrist(move, progress);
+        var grip = Items.SwordBlade.NodeFor(mounts.GripOrigin, mounts.GripBasis);
         node.AddChild(new MeshInstance3D
         {
-            Mesh = Items.ItemDefs.HandMesh(Items.ItemId.Sword), MaterialOverride = Items.ItemDefs.Material,
-            Transform = new Transform3D(basis, hand + basis * Items.SwordBlade.SocketOffset)
-                * new Transform3D(Basis.FromEuler(new Vector3(wp, wy, wr)), new Vector3(0, 0, wf)),
+            Mesh = Items.ItemDefs.HandMesh(Items.ItemId.Sword), MaterialOverride = Items.ItemDefs.Material, Transform = grip,
         });
+        GD.Print($"[swordgrip] {move} grip at {mounts.GripOrigin.X:F3},{mounts.GripOrigin.Y:F3},{mounts.GripOrigin.Z:F3}");
         return node;
     }
 

@@ -232,11 +232,9 @@ public static class SwordPoses
     /// </summary>
     public static (float Pitch, float Yaw, float Roll, float Forward) Wrist(SwordMove move, float progress)
     {
-        if (move is SwordMove.None or SwordMove.Charge or SwordMove.Dodge) return (CockPitch, CockYaw, CockRoll, 0f);
-        float total = Math.Max(0.0001f, SwordRules.Def(move).Total);
-        var (yaw, pitch, roll, fwd) = SwordRules.Arc(move, Math.Max(0f, progress - BladeLag / total));
-        float k = move == SwordMove.Plunge ? 1f : 0.5f;
-        return (CockPitch + pitch * k, CockYaw + yaw * k, CockRoll + roll * k, fwd * k);
+        // the sword is held in a closed fist whose ring the handle runs through (Avatar/HandGrip): it cannot turn about the socket without leaving the
+        // fingers, so the blade's angle is the hand's, from the arm keys; the whip is the arm's, not the sword node's
+        return (0f, 0f, 0f, 0f);
     }
 
     /// <summary>The span of the move (progress) a trail covers: from just before the blade goes live to just after the strike ends.</summary>

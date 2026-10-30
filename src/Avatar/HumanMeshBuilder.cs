@@ -448,7 +448,7 @@ public static partial class HumanMeshBuilder
     public readonly record struct GaitMounts(
         Vector3 Eye, Vector3 Head, Vector3 Chest, Vector3 Hip,
         Vector3 ShoulderL, Vector3 ShoulderR, Vector3 FootL, Vector3 FootR,
-        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default);
+        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default, Vector3 GripOrigin = default, Basis GripBasis = default, Basis BoneBasis = default);
 
     /// <summary>
     /// The mount points for one instant of the gait.
@@ -868,7 +868,31 @@ public static partial class HumanMeshBuilder
             Lean: rig.TorsoLean,
             HandL: Flip(rig.WristL),
             HandR: Flip(rig.WristR),
-            HandBasis: HandBasisOf(rig));
+            HandBasis: HandBasisOf(rig),
+            GripOrigin: GripOf(rig).Origin, GripBasis: GripOf(rig).Basis, BoneBasis: BoneBasisOf(rig));
+
+        // the right hand's skinned bone frame (Frames: HandBone), flipped to mount space: where the posed hand mesh really is
+        static Basis BoneBasisOf(Rig r)
+        {
+            var b = HandBone(r.ElbowR, r.WristR, 1f).Basis;
+            return new Basis(Flip(b.X), Flip(b.Y), Flip(b.Z));
+        }
+
+        // the sword's grip (#1371): the ring centre of the closed fingers and the handle's axis through it, from the right hand's own frame, the one
+        // its skinned bone is posed in (HandBone) and its fist is built in (Hand), flipped to mount space; X the way the fingers leave, Y the palm's inside, Z along the handle
+        static (Vector3 Origin, Basis Basis) GripOf(Rig r)
+        {
+            var hf = HandFrameOf(r.ElbowR, r.WristR, 1f, 1f);
+            Vector3 W(System.Numerics.Vector3 v) => r.WristR + hf.Thumb * v.X + hf.Along * v.Y + hf.Inward * v.Z;
+            var c = HandGrip.Centre;
+            var ax = HandGrip.Axis;
+            var fi = HandGrip.Finger;
+            var axisW = (hf.Thumb * ax.X + hf.Along * ax.Y).Normalized();
+            var fingerW = (hf.Thumb * fi.X + hf.Along * fi.Y).Normalized();
+            var basis = new Basis(Flip(fingerW), Flip(hf.Inward), Flip(axisW));
+            if (basis.Determinant() < 0f) basis = new Basis(-basis.X, basis.Y, basis.Z);
+            return (Flip(W(c)), basis);
+        }
 
         // the item hand's frame in mesh space: -Z along the item, from the pose's direction or the forearm
         static Basis HandBasisOf(Rig r)

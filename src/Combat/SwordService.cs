@@ -56,7 +56,7 @@ public partial class SwordService : Node
     private readonly Dictionary<long, float> _yaw = new();
     private readonly Dictionary<long, int> _code = new();
     /// <summary>How far past the blade's capsule the server lets a claimed hit be (the two bodies' positions are a moment old), metres.</summary>
-    public const float GeometrySlack = 0.30f;
+    public const float GeometrySlack = 0.35f;
     /// <summary>The window of the swing's progress, in seconds either side of when the hit arrives, the server sweeps the blade over.</summary>
     public const double WindowSeconds = 0.10;
 

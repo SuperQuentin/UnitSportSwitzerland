@@ -113,7 +113,7 @@ when it carries a sword and no gun and the target is in reach. Not done: a brain
   move's spline pose and the wrist (`SwordPoses.Wrist`) at 16 moments of the strike window, in character space; the trail is built from the
   same samples. The owner's client sweeps it every physics frame against each target's own shape (a body: capsule r 0.42, 1.85 m; the dummy: post,
   torso, head, arms) and names a target at the moment of contact, once a swing. The server sweeps the same capsule over the swing's window (100 ms
-  either side of the hit's arrival, from the announced yaw plus the move's spin and the two bodies' positions) with 0.30 m of slack; a forged hit
+  either side of the hit's arrival, from the announced yaw plus the move's spin and the two bodies' positions) with 0.35 m of slack; a forged hit
   from 3 m is refused (`[sword] refused ... the Slash1 blade never reached ...`). Removed: the reach-and-cone test (`InCone` with `LagSlack` and
   `ConeSlackDeg`) on the client and the server, and the height check. Soft lock and the lunge bring a target in reach: the lunge is as long as it
   takes to bring the move's forward reach onto the target (at most 1.2 m), the body turns to it through the wind-up.

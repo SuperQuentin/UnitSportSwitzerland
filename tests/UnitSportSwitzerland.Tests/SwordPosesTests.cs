@@ -355,23 +355,10 @@ public class SwordPosesTests
     }
 
     [Fact]
-    public void The_grip_socket_is_inside_the_closed_hand_and_the_wrist_keeps_the_blade_off_the_forearm()
+    public void The_sword_node_has_no_angle_of_its_own_the_hand_carries_it()
     {
-        var (x, y, z) = SwordPoses.GripSocket;
-        var (hx, hy, hz) = SwordPoses.HandHalfExtents;
-        // the hand's centre is 0.042 m along the hand from the wrist (the mount): the socket sits inside the palm and fingers' box
-        Assert.InRange(MathF.Abs(x), 0f, hx);
-        Assert.InRange(MathF.Abs(y), 0f, hy);
-        Assert.InRange(MathF.Abs(z + 0.042f), 0f, hz);
-        // neutral: forward and up 30 to 45 degrees off the forearm, the wrist cocked
-        Assert.InRange(SwordPoses.CockPitch * 180f / MathF.PI, 30f, 45f);
         foreach (var move in AllMoves)
             for (float p = 0f; p <= 1f; p += 0.02f)
-            {
-                var w = SwordPoses.Wrist(move, p);
-                Assert.True(float.IsFinite(w.Pitch + w.Yaw + w.Roll + w.Forward));
-                // the whip never turns the blade a full half turn off the grip
-                Assert.InRange(MathF.Abs(w.Yaw), 0f, 1.6f);
-            }
+                Assert.Equal((0f, 0f, 0f, 0f), SwordPoses.Wrist(move, p));
     }
 }
