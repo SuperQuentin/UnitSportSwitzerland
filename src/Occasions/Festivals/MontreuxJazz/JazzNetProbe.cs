@@ -76,8 +76,9 @@ public partial class JazzNetProbe : ChatProbe
         bool lea = _role == "A";
 
         // a party of the two
+        // B may join after A said anything (a chat line is not replayed): A waits for B's word, B for A's invite
         Say("ready");
-        Expect(await Heard(lea ? "B" : "A", "ready", 120), "the other is on");
+        if (lea) Expect(await Heard("B", "ready", 150), "B is on");
         if (lea)
         {
             Chat!.Send("/party invite Tom");
