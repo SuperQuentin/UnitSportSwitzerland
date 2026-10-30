@@ -42,7 +42,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
-            new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
+            new("Third person: camera zoom in / out, down to the face (Shift or not)", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
             new("Pinball: E at a machine steps up to it and presses Start (again to add a player in the first ball); Esc steps back", PlayerInput.InteractMount),
@@ -65,7 +65,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Pick up what you point at; a radio: tap to switch it on / off, hold to open it", PlayerInput.InteractMount),
             new("Radio in hand: tap to switch it on / off, hold to open it; aim + hold to throw it", PlayerInput.UseItem),
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
-            new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "{next_item}"),
+            new("Pick a hotbar slot (the plain wheel zooms the camera)", Keys: "1–6 / {next_item} / {prev_item}", Pad: "{next_item} (tap)"),
+            new("Put the item in hand away / take it out (also the number of the slot in hand; it goes away by itself after 8 s idle: Settings › Gameplay)", Keys: "{holster_item}", Pad: "{next_item} (hold)"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
             new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
             new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
@@ -97,6 +98,11 @@ public partial class ControlsHelp : CanvasLayer
         ("Festivals: the Christmas market (#1348)", new Row[]
         {
             new("At a market stall: the day's free taste (the stall-hop), then buy its ware for Batzen; at the Samichlaus on 6 December: his bag", PlayerInput.InteractMount),
+        }),
+        ("Festivals: the Zibelemärit (#1373)", new Row[]
+        {
+            new("At an onion market stall: the day's free taste (the stall-hop), then buy its ware for Batzen", PlayerInput.InteractMount),
+            new("Confetti egg or Räppli in hand: throw it over the square (every fifth throw pays)", PlayerInput.UseItem),
         }),
         ("Festivals: the Escalade (#1351)", new Row[]
         {
@@ -188,7 +194,7 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("Build the piece shown", PlayerInput.UseItem),
             new("Take back your own piece", Keys: "{aim_item} + {use_item}", Pad: "{aim_item} + {use_item}"),
-            new("Next piece", Keys: "{aim_item} + {next_item}", Pad: "{aim_item} + {next_item}"),
+            new("Next piece", Keys: "{aim_item} + wheel", Pad: "{aim_item} + {next_item}"),
             new("Turn the piece", PlayerInput.BuildTurn),
             new("Change the material", Keys: "{aim_item} + {build_turn}", Pad: "{aim_item} + {build_turn}"),
         }),

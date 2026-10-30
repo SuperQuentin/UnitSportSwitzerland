@@ -126,6 +126,11 @@ public partial class SettingsScreen : Screen
                 v => $"{v:F0} W", "What you hold for an hour (your FTP / 0.95); above it a Simulation sprint drains your reserve");
             UiKit.ToggleRow(rows, "Third-person view", s.ThirdPerson, on => GameSettings.Current.ThirdPerson = on,
                 "Over the shoulder on foot, chase view mounted (V in game)");
+            UiKit.OptionRow(rows, "Hotbar", new[] { "Always", "Fade out", "Hidden" }, (int)s.Hotbar,
+                i => GameSettings.Current.Hotbar = (HotbarMode)i,
+                "Fade shows it a few seconds after a change; the item in hand stays in the bottom-right corner. Touch keeps it always");
+            UiKit.ToggleRow(rows, "Auto holster", s.AutoHolster, on => GameSettings.Current.AutoHolster = on,
+                "The item in hand is put away after 8 seconds of not using it (the key beside M holsters or draws it)");
             UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,
                 "What players near you say in the chat, in a comic bubble over their head");
             UiKit.SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
@@ -157,7 +162,7 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Fondue stirring guide", s.StirGuide, on => GameSettings.Current.StirGuide = on,
                 "The faint figure-eight behind your trace while you stir a shared pot");
             UiKit.ToggleRow(rows, "Crevasses", s.Crevasses, on => GameSettings.Current.Crevasses = on,
-                "Hidden crevasses on glaciers: unroped, a snow bridge may give way under you");
+                "Hidden crevasses on glaciers: a snow bridge may give way and drop you into the ice; roped to a friend, they hold you. A server's --crevasses off wins");
             // alcohol (#1271)
             rows.AddChild(UiKit.Spacer(6));
             rows.AddChild(UiKit.Section("Alcohol"));

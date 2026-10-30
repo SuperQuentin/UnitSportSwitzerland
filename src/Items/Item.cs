@@ -154,7 +154,7 @@ public static class ItemDefs
         Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
 
         // building (#274): pieces cost materials straight from the pack
-        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + {next_item} picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
+        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + wheel (D-pad right on a pad) picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
             ItemUse.Build, 1, new Color(0.45f, 0.30f, 0.18f), "HM", 0, ItemCategory.Gear, 12f),
         new(ItemId.TrafficTool, "Traffic tool", "An admin's (#971). Held, the traffic generators show; {use_item} on a road places one, on a placed one opens it: whether it makes cars and how many, whether it is a destination, where its cars go, which way it faces.",
             ItemUse.TrafficTool, 1, new Color(0.95f, 0.5f, 0.1f), "TG", 0, ItemCategory.Gear, 0f),
@@ -297,6 +297,15 @@ public static class ItemDefs
         // the Sechseläuten (#1358): a Cervelat grilled on the Böögg's embers
         Eat(ItemId.BooggCervelat, "Grilled Cervelat", 14, "#b0502e", "CV", 40, ItemCategory.Food, 3) with
             { Blurb = "{use_item} to eat. A Cervelat grilled on the embers of the Böögg's pyre, the Zürich way: warm for 2 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 120f },
+        // the Zibelemärit (#1373): the market's onion braid, tart and soup, and the confetti egg (thrown like the Räppli)
+        new(ItemId.Zwiebelzopf, "Zwiebelzopf", "A braid of onions from the Zibelemärit. Worth nothing but the look in the hand.",
+            ItemUse.Material, 10, new Color("#c8923c"), "ZZ", 0, ItemCategory.Cosmetic, 6f),
+        Eat(ItemId.Zibelechueche, "Zibelechueche", 6, "#d8b068", "ZC", 40, ItemCategory.Food, 4) with
+            { Blurb = "{use_item} to eat. Bern's onion tart, a slice from the Zibelemärit." },
+        Eat(ItemId.Mehlsuppe, "Mehlsuppe", 5, "#c8a070", "MS", 40, ItemCategory.Food, 3) with
+            { Blurb = "{use_item} to eat. The Zibelemärit's flour soup from the kettle: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
+        new(ItemId.Konfettiei, "Confetti egg", "{use_item} throws it as a burst of confetti. Everyone near sees it; thrown at the Zibelemärit it counts towards the party's score.",
+            ItemUse.Confetti, 30, new Color("#f0e0b0"), "KE", 0, ItemCategory.Cosmetic, 1f),
         // the Chalandamarz (#1356): the first march's hand bell (the procession's tart is the existing Engadiner Nusstorte)
         new(ItemId.ChalandaTreichel, "Chalanda Treichel", "A child's hand Treichel from the Chalandamarz procession. Worth nothing but the sound.",
             ItemUse.Material, 5, new Color("#c99a3a"), "CT", 0, ItemCategory.Cosmetic, 8f),
@@ -773,6 +782,28 @@ public static class ItemDefs
             case ItemId.SoupeEscalade:
                 s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
                 s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.85f, 0.6f, 0.28f), 10);
+                break;
+            case ItemId.Zwiebelzopf:
+                // a plait: onions up a rope, each a little higher and turned
+                s.Tube(new Vector3(0, -0.14f, 0), new Vector3(0, 0.16f, 0), 0.012f, 0.012f, new Color(0.45f, 0.32f, 0.18f), 5);
+                for (int k = 0; k < 5; k++)
+                {
+                    float y = -0.1f + k * 0.06f, a = k * 1.1f;
+                    s.Tube(new Vector3(MathF.Cos(a) * 0.035f, y, MathF.Sin(a) * 0.035f), new Vector3(MathF.Cos(a) * 0.035f, y + 0.07f, MathF.Sin(a) * 0.035f), 0.04f, 0.03f, new Color(0.78f, 0.55f, 0.22f), 7);
+                }
+                break;
+            case ItemId.Zibelechueche:
+                s.Tube(new Vector3(0, -0.02f, 0), new Vector3(0, 0.0f, 0), 0.1f, 0.1f, new Color(0.7f, 0.5f, 0.25f), 12);
+                s.Tube(new Vector3(0, 0.0f, 0), new Vector3(0, 0.012f, 0), 0.085f, 0.085f, new Color(0.92f, 0.82f, 0.5f), 12);
+                break;
+            case ItemId.Mehlsuppe:
+                s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
+                s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.72f, 0.52f, 0.32f), 10);
+                break;
+            case ItemId.Konfettiei:
+                s.Tube(new Vector3(0, -0.04f, 0), new Vector3(0, 0.05f, 0), 0.045f, 0.05f, new Color(0.94f, 0.88f, 0.7f), 8);
+                s.Box(new Vector3(0, 0.0f, 0.04f), new Vector3(0.05f, 0.012f, 0.012f), new Color(0.85f, 0.2f, 0.2f));
+                s.Box(new Vector3(0, 0.025f, 0.04f), new Vector3(0.04f, 0.012f, 0.012f), new Color(0.2f, 0.4f, 0.85f));
                 break;
             case ItemId.BooggCervelat:
                 s.Tube(new Vector3(-0.1f, 0, 0), new Vector3(0.1f, 0, 0), 0.032f, 0.032f, new Color(0.69f, 0.31f, 0.18f), 8);

@@ -2,7 +2,6 @@
 # A model over its line (or a new one with any) fails the check. Lower it with --zfightcheck update.
 42.2	Adventure / Breathalyzer
 134.9	Adventure / Caquelon
-8040	Adventure / Crevasse
 4.8	Adventure / Fondue bread
 7	Aircraft / Airbus A320
 7	Aircraft / Airbus A320 (parked)

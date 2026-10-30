@@ -75,7 +75,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
 | drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
-| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
+| next / prev_item, slot_1-6 | Alt + wheel (the plain wheel zooms, #1369), 1-6 / D-pad → (tap) | ok: R stick ↓, a short grip at the right / left hip (#437) | slots shown at the hip |
+| holster_item (#1369) | `,`, the number of the slot in hand / hold D-pad → | ok: hold the grip at the right hip (0.35 s, a buzz): puts the item away, again draws it (`XrHands.AtHip`, `Gesture`) | keep |
 | inventory | I, Tab / Back (tap; opens on the release) | ok: Menu hold | keep |
 | quick_menu (#840) | hold F2 / hold Back | ok: wrist menu Activities + Invites entries; a ring opened by Back is aimed by the right hand | a hold of Menu longer than the inventory's pulse |
 | invite_decline (#840) | Shift+F2 / — | ok: wrist menu › Invites › Decline (laser), or Menu tap › Activities | keep |
@@ -90,6 +91,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | drink with alcohol (beer, wine, kirsch; #1271) | `use_item` with the drink in hand (the mouth pose) | RT | ok: the pad route (RT); **gap**: bringing the bottle to the mouth by hand |
 | breathalyzer: blow into it for 5 s (#1271) | `use_item` with it in hand | RT | ok: the pad route (RT); **gap**: bringing it to the mouth by hand |
 | breathalyzer: offer a test to a player (#1271) | `interact_mount` E at them with the electronic device in hand (shown by `InputHints`, outlined) | Y | ok: the pad route (Y) or a grip at them (`TryInteract(byHand)`) |
+| fall into a hidden crevasse; climb the ice wall out; be hauled (#1372) | nothing to press: the fall happens; push W into the ice wall (free climb, as any face); the partner holds E 2 s | the stick into the wall (free climb); the partner holds Y | ok: the pad route and the hand climb (`XrClimb`: the wall is an ordinary static face); the partner's haul is the hold-Y route below; **gap**: pulling the rope hand over hand | keep |
 | haul a roped partner (#1266) | hold E 2 s at the rope | hold Y | ok: the pad route (hold Y); **gap**: pulling the rope hand over hand |
 | talk to an errand giver (#1267) | E / Y within 3 m of the figure (a prompt "Talk to ...") | ok: Y, or reach out and grip toward the giver (`TryInteract(byHand)`) | keep |
 | errand dialogue: choose, next card, leave (#1267) | 1-3, Enter, Left / Right, Esc / D-pad, A, LB / RB, B | ok: laser + trigger on the panel, the pad's route | keep |
@@ -277,3 +279,6 @@ work (#437, #438); 8 fixed by #435.
 | Alphorn: blow (hold from a note's start to its end) | LMB `use_item` / RB or RT | new: the trigger (replays as the pad's RT through `XrPad`) | raise the horn to the mouth and blow (a later target) |
 | Alphorn: choose the note (partial) | wheel, W / S / R stick up-down | new: the right stick up-down through `XrPad` | keep |
 | Yodel: tap on the beat | Space `jump` / A | new: A | keep |
+| Zibelemärit: taste at a stall (the day's stamp), buy its ware (#1373) | `interact_mount` E within 5.5 m of a stall (`ZibeleGame.TryInteract`) | new: Y through `XrPad`; a grip at the stall | grip a braid off the awning or the kettle's ladle (`gap`: the pad route works) |
+| Zibelemärit: throw a confetti egg or Räppli on the square (#1373) | `use_item` LMB with the egg in hand (`ItemUse.Confetti`) | X / the trigger through `XrPad` | toss it by hand (`gap`: the pad route works) |
+| Zibelemärit: eat the tart or the soup (#1373) | `use_item` LMB (`ItemController`, like any food) | X / the trigger through `XrPad` | bring it to the mouth (the eat pose) |

@@ -1141,6 +1141,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="RideControls"/>.
     /// </summary>
     public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
+    /// <summary>On foot, on the ground, moving with the run intent (Shift, pad L3, a bot's Run): the item holsters on its start (#1369).</summary>
+    public bool SprintIntent { get; private set; }
 
     /// <summary>
     /// Jump and crouch for a body that reads no keys (an <see cref="Npc"/>, a server-run bot, #837),
@@ -1808,6 +1810,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
             // published whatever the view: first person draws no body, but everyone else does
             using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Publish, Bot)) PublishFootPose(dt);
+            if (InCrevasse) PublishCrevassePose();   // #1372: down a hidden crevasse
             StepThrowView(dt);
             // a fist fight (#495): its own side-on view
             if (FightView(dt)) return;
@@ -2345,6 +2348,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void ApplyFootPose()
     {
+        int pose = ShownPose;   // a crevasse's figure is what its Anim.W names (#1372)
         // the figure chosen in the Character menu reaches the owner after the body was built (PublishAppearance): draw it again
         if (AppearanceBits != _visualAppearance) RefreshVisual();
         if (_walker == null) return;
@@ -2356,8 +2360,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         float dt = (float)GetProcessDeltaTime();
         // a swimmer's face lives too (#802): blinks, glances, a blow's grimace
-        if (PoseKind == PoseSwim) { ApplySwimFigure(); StepFace(dt); return; }
-        if (PoseKind == PoseWallClimb) { ApplyClimbFigure(); StepFace(dt); return; }   // #1225
+        if (pose == PoseSwim) { ApplySwimFigure(); StepFace(dt); return; }
+        if (pose == PoseWallClimb) { ApplyClimbFigure(); StepFace(dt); return; }   // #1225
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
@@ -2377,24 +2381,24 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a restyle to or from a lit style changes the figure's build (#311): a new look
         bool smooth = Avatar.HumanMeshBuilder.SmoothFigures;
         // VR hands (#439) as they are: posing the arms is bones only (#1202), no need to snap them to 2 cm
-        var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
+        var vr = pose == PoseStride && dance == null ? VrHands : null;
         // a finger on the phone's screen (#889): the owner's own, keyed to 4 mm
-        Avatar.HumanMeshBuilder.Pointing? point = PoseKind == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
+        Avatar.HumanMeshBuilder.Pointing? point = pose == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
             ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
                 (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
             : null;
         // a fall's windmill runs on this peer's clock: nothing more is replicated than the pose kind
-        _flailClock = PoseKind == PoseFall ? _flailClock + dt : 0f;
-        float phase = PoseKind == PoseFall ? _flailClock : _stridePhase;
+        _flailClock = pose == PoseFall ? _flailClock + dt : 0f;
+        float phase = pose == PoseFall ? _flailClock : _stridePhase;
         // a hand held by a friend's (#1266, ArmHold): keyed to 2 cm, the item hand stays the item's
-        var hold = PoseKind == PoseStride && dance == null && vr == null ? HoldPose(armed) : null;
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold, SwordDrawn);
+        var hold = pose == PoseStride && dance == null && vr == null ? HoldPose(armed) : null;
+        var key = new FootPoseKey(_walker, pose, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold, SwordDrawn);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
         {
             _mountsKey = key;
-            _poseMounts = PoseKind switch
+            _poseMounts = pose switch
             {
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
@@ -2413,7 +2417,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _poseWait = 0f;
             // a new look (clothes, hat, style, a finger out to point) is the only thing that builds a mesh
             _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat, Point: point != null, Fist: SwordDrawn) { Smooth = smooth });
-            switch (PoseKind)
+            switch (pose)
             {
                 case PoseTucked: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Tucked, arm, blend, wind); break;
                 case PoseAir: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Running, arm, blend, wind); break;
@@ -2437,7 +2441,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _walker.Transform *= FlinchPose(dt);
         // stood on a slope, the capsule's round bottom holds the body r(1/cos - 1) over the ground under
         // its origin (#883): the figure goes down by that, so its feet are on the slope, not over it
-        _footDrop = Mathf.Lerp(_footDrop, PoseKind is PoseStride or PoseTucked ? SlopeDrop() : 0f, MathX.Damp(12f, dt));
+        _footDrop = Mathf.Lerp(_footDrop, pose is PoseStride or PoseTucked ? SlopeDrop() : 0f, MathX.Damp(12f, dt));
         if (_footDrop > 0.002f) _walker.Position += Vector3.Down * _footDrop;
         PlaceHand(mounts);
         PlaceBack(mounts);
@@ -2867,6 +2871,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Occasions.Festivals.Desalpe.DesalpeGame.TryInteract(this)) return true;
         // the Christmas market's stalls and the Samichlaus (#1348): a taste, a ware, his bag
         if (Occasions.Festivals.Christmas.ChristmasGame.TryInteract(this)) return true;
+        // the Zibelemärit's stalls (#1373): a taste, a ware
+        if (Occasions.Festivals.Zibelemaerit.ZibeleGame.TryInteract(this)) return true;
         // the Escalade's Marmite, soup pot and start line (#1351)
         if (Occasions.Festivals.Escalade.EscaladeGame.TryInteract(this)) return true;
         // the Fasnacht's Larven stall, Basel's Morgestraich lantern and the Guggenmusik stage (#1357)
@@ -3652,8 +3658,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        // the on-foot camera's zoom (#1149): Shift + wheel, = / -
-        if (ZoomsView && (@event.IsActionPressed(PlayerInput.ViewZoomIn, true) || @event.IsActionPressed(PlayerInput.ViewZoomOut, true)))
+        // the on-foot camera's zoom (#1149, #1369): the plain wheel, whatever else is held (Shift is sprint), = / -.
+        // Not Alt + wheel (the hotbar's), not a wheel the held item owns (ItemController.WheelClaimed); a panel,
+        // the quick wheel or the map hold UiFocus (above) or swallow the wheel themselves
+        if (ZoomsView && (@event.IsActionPressed(PlayerInput.ViewZoomIn, true) || @event.IsActionPressed(PlayerInput.ViewZoomOut, true))
+            && (@event is not InputEventMouseButton
+                || (!PlayerInput.IsHotbarWheel(@event) && !UnitSport.Items.ItemController.WheelClaimed)))
         {
             ZoomView(@event.IsActionPressed(PlayerInput.ViewZoomIn, true) ? 1f : -1f);
             GetViewport().SetInputAsHandled();
@@ -4070,6 +4080,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             running = tied.Run;
         }
         if (_slideCooldown > 0) _slideCooldown -= dt;
+        SprintIntent = running && moveAmount > 0.1f && onFloor;
         // sprinting in a fight costs stamina (#1225); out of one it is free. Empty or winded: a run is a walk
         if (running && moveAmount > 0.1f && onFloor && InCombat && !SpendStamina(StaminaKind.SprintCombat, dt)) running = false;
 
@@ -4499,6 +4510,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private bool RescueFromVoid(double delta)
     {
         _sinceSnapWarning += delta;
+        // down a hidden crevasse (#1372): ten metres under the ground on purpose, the slot's own collision holds the body
+        if (InCrevasse) return false;
         // creative flight through walls (#1002) goes into hills on purpose: back up once it lands
         if (CreativeFlying && GameSettings.Current.CreativeNoclip) return false;
         Vector3 to;

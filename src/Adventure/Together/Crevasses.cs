@@ -42,4 +42,40 @@ public static class Crevasses
         double across = Math.Abs(-Math.Sin(c.Angle) * de + Math.Cos(c.Angle) * dn);
         return across <= Width / 2;
     }
+
+    // ---- the slot (#1372): the owner's rules, pure ----
+
+    /// <summary>Seconds in a slot after which a body that cannot climb out is set on the lip (the server's flag lasts at most this long too).</summary>
+    public const double RescueSeconds = 60;
+    /// <summary>How far under the surface the body must have been before "back at the top" counts as out (m).</summary>
+    public const double DeepEnough = 2;
+    /// <summary>How far under the lip a roped fall is caught: the rope runs over the lip, so the body hangs this far under it (m).</summary>
+    public const double CatchDepth = 3;
+
+    /// <summary>The rope holds the fall: the partner stands (not climbing, not riding) and is within the rope's length of the break.</summary>
+    public static bool CaughtByRope(bool partnerStands, double ropeDistance, double ropeLength) =>
+        partnerStands && ropeDistance <= ropeLength;
+
+    /// <summary>
+    /// A body is out of the slot: it has been deep, and its feet are back at the ground (<paramref name="bodyY"/> against
+    /// <paramref name="groundY"/> under it). Never out while it never went down (the first ticks of the fall).
+    /// </summary>
+    public static bool Out(double bodyY, double groundY, double deepestBelowGround) =>
+        deepestBelowGround <= -DeepEnough && bodyY >= groundY;
+
+    /// <summary>A body that has been in the slot too long: no stamina, no rope. It is set on the lip.</summary>
+    public static bool Stuck(double secondsInside) => secondsInside >= RescueSeconds;
+
+    /// <summary>
+    /// The strip's heading in the world's plane: (E, N) per metre of its length, so a caller can turn the slot along it.
+    /// </summary>
+    public static (double E, double N) Heading(double angle) => (Math.Cos(angle), Math.Sin(angle));
+
+    /// <summary>The point of the strip's line (through <paramref name="c"/> at its angle) nearest to (<paramref name="e"/>, <paramref name="n"/>): where the slot opens.</summary>
+    public static (double E, double N) OnLine((double E, double N, double Angle) c, double e, double n)
+    {
+        var (he, hn) = Heading(c.Angle);
+        double along = (e - c.E) * he + (n - c.N) * hn;
+        return (c.E + he * along, c.N + hn * along);
+    }
 }

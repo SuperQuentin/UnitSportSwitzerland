@@ -1012,6 +1012,33 @@ public static partial class ItemIcons
             p.Set(5, 8, 'r'); p.Set(9, 9, 'N'); p.Set(8, 7, 'l');
         });
 
+        d[ItemId.Zwiebelzopf] = Round(p =>
+        {
+            p.Rect(7, 1, 8, 15, 'N');
+            p.Disc(5.5f, 11f, 2.6f, 2.8f, 'y', 'o', 'O');
+            p.Disc(10f, 8f, 2.6f, 2.8f, 'y', 'o', 'O');
+            p.Disc(5.5f, 5.5f, 2.4f, 2.6f, 'y', 'o', 'O');
+        });
+
+        d[ItemId.Zibelechueche] = Round(p =>
+        {
+            p.Disc(7.5f, 9f, 6.4f, 4.4f, 'O', 'o', 'N');
+            p.Disc(7.5f, 8.5f, 5.2f, 3.2f, 'Y', 'y', 'o');
+            p.Set(5, 8, 'N'); p.Set(9, 9, 'N');
+        });
+
+        d[ItemId.Mehlsuppe] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 6f, 3.2f, 'w', 'w', 'a');
+            p.Disc(7.5f, 8.5f, 4.8f, 1.8f, 'O', 'o', 'N');
+        });
+
+        d[ItemId.Konfettiei] = Round(p =>
+        {
+            p.Disc(7.5f, 8.5f, 4.4f, 5.6f, 'w', 'Y', 'O');
+            p.Set(6, 7, 'R'); p.Set(9, 9, 'b'); p.Set(7, 11, 'G'); p.Set(10, 6, 'R');
+        });
+
         d[ItemId.BooggCervelat] = Round(p =>
         {
             p.Rect(2, 7, 13, 11, 'R');

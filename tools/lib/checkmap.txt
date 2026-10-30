@@ -693,6 +693,12 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+# the holster, Alt + wheel and the wheel's zoom (#1369): the phone check drives them, the phone net check replicates them
+src/Items/Inventory      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/ItemController quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Core/PlayerInput     quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/Inventory      net    tools/phonenetcheck.sh
+src/Items/ItemController net    tools/phonenetcheck.sh
 src/Phone/               net    tools/phonenetcheck.sh
 src/Player/FootPlayer.Phone net  tools/phonenetcheck.sh
 # the Swiss match items (#478): fondue, smoke and alphorn between two clients
@@ -838,6 +844,7 @@ src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Playtest/Scenarios/Adv3 quick --playtest --playtest-smoke --world fixture --chunks fixture:flat --festival test --systems terrain,npcs,birds,physics,audio,network,sky,interiors,loot,occasions,ui,build,airports,farming,containers,snow,lifts,adventure --pois fixture --givers fixture --crevasses on --adventure-dir res://test_output/playtest/adv3
 # the playtest recorder (#844): a 20 s recorded session read back (trace, note, report, top view)
 src/Playtest/            quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Movie/ReplayWatch    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
@@ -1038,6 +1045,13 @@ src/Occasions/Festivals/FestivalService.Christmas quick  --christmascheck --fest
 src/Occasions/Festivals/Christmas/ net    tools/christmasnetcheck.sh
 src/Occasions/Festivals/FestivalService.Christmas net    tools/christmasnetcheck.sh
 tools/christmasnetcheck.sh    net    tools/christmasnetcheck.sh
+# #1373: the Zibelemaerit: four onion-market stalls (taste, buy), the Marktgang, the confetti fight's pay and cap (offline quick probe; server + two clients)
+src/Occasions/Festivals/Zibelemaerit/ quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Zibelemaerit/ net    tools/zibelenetcheck.sh
+src/Occasions/Festivals/FestivalService.Zibelemaerit net    tools/zibelenetcheck.sh
+tools/zibelenetcheck.sh    net    tools/zibelenetcheck.sh
 # #1351: the Escalade: the Marmite's pair, the soup pot, the Course's gates and pay (offline quick probe; server + two clients)
 src/Occasions/Festivals/Escalade/ quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/Festivals/FestivalCatalog.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
@@ -1110,3 +1124,11 @@ src/Occasions/Festivals/FestivalService.Chalanda quick  --chalandacheck --chalan
 src/Occasions/Festivals/Chalanda/ net    tools/chalandanetcheck.sh
 src/Occasions/Festivals/FestivalService.Chalanda net    tools/chalandanetcheck.sh
 tools/chalandanetcheck.sh    net    tools/chalandanetcheck.sh
+# #1372: the hidden crevasse's slot: fall, climb out, rescue, rope and haul (offline quick probe)
+src/Adventure/Together/CrevasseCheck quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNode quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/TogetherService.Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNetProbe net tools/crevassenetcheck.sh
+tools/crevassenetcheck.sh  net  tools/crevassenetcheck.sh
+src/Net/StaminaWatch net tools/crevassenetcheck.sh

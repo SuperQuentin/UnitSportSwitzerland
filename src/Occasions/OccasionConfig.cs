@@ -153,6 +153,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("11-25", "12-23") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // the Zibelemärit (#1373): the fourth Monday of November, Bern's Bundesplatz (relocated to the region's largest town); the stalls and the confetti fight
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ZibelemaeritId, Priority = 8,
+            Schedule = { new DateWindow("11-mon#4", "+0") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         // the Escalade (#1351): the second Saturday of December and the Sunday after it, Geneva's old town (relocated to the region's largest town)
         entries.Add(new OccasionEntry
         {

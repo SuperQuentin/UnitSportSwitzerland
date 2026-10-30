@@ -23,6 +23,21 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] The grip: the handle sits in the closed fist, no sliding or popping through the combo; the free hand is a quiet counterweight, goes to the handle on the finisher and the charged cut and back without a pop.
 - [ ] With a friend: they see your swings and the same variants, the dummy's hits, your knockback on them; a dodge in time avoids a blow.
 
+## Wheel zoom, holster, fading hotbar, hand chip (PR for [#1369](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1369))
+
+On foot in third person, anywhere (`--world fixture` does).
+
+- [ ] Sprint (Shift) and turn the wheel: the camera zooms in and out, the hotbar does not move. Alt + wheel steps the slot; releasing Alt after a wheel step does not free the cursor (a lone Alt tap still does).
+- [ ] Press the number of the slot in hand, and `,`: the item leaves the hand and comes back. Does the chip (bottom right) read well dimmed as "holstered", and "Empty hand" on an empty slot, over snow and over a dark scene?
+- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Every item goes away, the hammer, rod and detector too; aiming, a camera held up and a cast line do not.
+- [ ] Start sprinting (Shift / L3) with an item in hand: it goes in the pocket at once and stays there after the sprint; Use draws it on the run, and a new sprint start holsters again. Does it feel right (not annoying when you want the item while running)?
+- [ ] Pad: tap D-pad right steps the slot; hold it (about half a second, a tick) holsters or draws. Does the tap feel late now (it fires on release)?
+- [ ] VR: hold the grip at the right hip for a third of a second (buzz): the item goes away, again it comes out. A quick squeeze there still steps to the next slot.
+- [ ] Settings › Gameplay › Hotbar: Always, Fade out (default), Hidden. In Fade, change slot / holster / use an item / open the quick wheel: the bar shows for about 3 s then fades smoothly. Is 3 s right?
+- [ ] A second player sees your hand empty when you holster and the item come back when you draw.
+- [ ] Touch (phone, or `--mobile`): the hotbar stays always visible and there is no chip.
+
+
 ## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
 
 `--festival test --date 2027-02-04 --world fixture` (Luzern's: the Larven stall 9 m west of the fixture's start, the Guggenmusik stage 14 m east and 6 m north); `--date 2027-02-15` and the clock at 04:30 (`--time 4.5`) for Basel's Morgestraich with its lantern 11 m north; or online on the western map in the real dates (easter-52 for six days, easter-41 for three, relocated to the region's largest town).
@@ -34,6 +49,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Basel's Morgestraich at 04:00 of day 1: do the street lamps and lit windows really go out (houses, street lamps, props) while the lanterns shine, is it dark enough to be an event, and does the drum roll with the saying land? At 05:30 do the lamps come back?
 - [ ] The stage, the stall and the lantern as props at night and by day (Cartoon, PS1, Realistic): readable, not z-fighting.
 - [ ] VR: a grip at the stall, the lantern or the stage works through the pad route; tapping the notes with the trigger; striking a drum by hand and tossing Räppli by hand are not built.
+
 ## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
 
 `--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).
@@ -76,6 +92,16 @@ At a cinema booth's panel (E at the screen half), online on a server where you a
 - [ ] The walk with friends: two or three in a party at the post at night, E (pad Y) starts it; the HUD shows the stop, its distance and compass point; lag behind and the party is told to wait. Is the loop's length (565 m, ten stops) and the 30 m rule fair?
 - [ ] Own fireworks: buy a box (20 Batzen) at the stand, light it at night with the use key (LMB, pad X, the VR trigger): the fuse hiss and a 40 s volley; others within sight play it too; is it loud and big enough but safe for the frame time on a Quest?
 - [ ] VR: a grip at a stand or the post works through the pad route; lighting by hand is not built.
+
+## Zibelemärit ([#1376](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1376))
+
+`--festival test --date 2027-11-22 --world fixture` (four stalls in a row 4 m north of the fixture's start), or online on the western map in the real dates (fourth Monday of November, relocated to the region's largest town).
+
+- [ ] Look at the lane: four booths with red-and-black awnings, onion braids hanging at one, tarts on a rack, an iron kettle with a glowing lid, crates of eggs under a bunting. At night do the lanterns glow warm? Cartoon, PS1 and Realistic: do they read well?
+- [ ] E (pad Y) at a stall: "Taste at the Onion braid stall (free)" pays 6 Batzen with a bell; E again buys the braid for 6 Batzen with a paper rustle. Is the prompt readable and the outline round the stall right? All four stalls in a day pay the Marktgang.
+- [ ] Buy six confetti eggs at the Konfetti stall and throw them (LMB, pad X, the VR trigger): is the burst of paper like the Räppli, does every fifth throw pay with the crack sound, is 16 Batzen a day fair?
+- [ ] Eat the Zibelechueche and the Mehlsuppe (LMB, pad X): the soup warms for 3 minutes.
+- [ ] VR: a grip at a stall works through the pad route; grabbing a braid or throwing an egg by hand is not built.
 
 ## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
 
@@ -268,12 +294,24 @@ Two players in one party, `--systems ...,adventure`. On a real region for the gl
 - [ ] Hold E 0.5 s at a party member, the other accepts with F2 → hands are posed to meet at hip height on both screens; walk with no input as the follower and you are led along the leader's trail. Tap E at the same person → still the fist-fight challenge.
 - [ ] Pad: hold Y at a party member → the same invite; Y with no target lets go. VR: the same through the pad route (hold Y); gripping a hand and opening the grip are not built. Judge whether the hand pose looks natural.
 - [ ] Rope up on a glacier or a snowfield (`/rope <player>`), then fall off a ledge or into the snow → the rope catches you, you hang at the rope's length; the partner holds E 2 s (pad hold Y) → you rise. Judge the swing and the haul speed.
-- [ ] A real glacier unroped, walking across it (`Settings › Gameplay › Crevasses` on) → now and then a hidden crevasse's bridge breaks: you stumble back winded and a blue slot opens. Roped to a standing partner → a stumble only. Judge how often it happens (4 % of 12 m cells) and whether it is fun or an annoyance. Not built: the slot with its own collision, you cannot fall in.
+- [ ] Hidden crevasses: see the section "Hidden crevasses" below.
 - [ ] A mountain hut, a Beiz or a lit campfire with a fondue pot (E, or use the pot item at the fire) → the panel opens, the party sits down; trace an eight with the mouse (hold LMB) and the right stick (VR: the stick; no real fork yet) → the cheese stays smooth; stop stirring on a high heat → it splits with a hiss. Judge the stirring feel and the panel's size on a pad and in VR.
 - [ ] Lose your bread (keep dipping) → the forfeit popup (line, buy a round, yodel) answers with 1-3, D-pad + A and the laser; `--forfeits mild` hides the money one.
 - [ ] Two-handle gate at a castle, hut or mine (`RewardPlacer` layouts, real region) → two players hold E at the two wheels within 1.5 s and it opens for 60 s; leg-up: crouch at a high boulder, the partner jumps onto the step → 2.6 m climb-jump without stamina.
 - [ ] With a veteran (3 summits) guiding a newcomer to a first summit on a real map → both get their cap (Erstbesteigung, Bergführer); the Journal's Collection > Together page shows the stamps, the week's minutes and the mentor table. Judge the page's layout.
 - [ ] `--world fixture` is enough for everything except the glacier, the real huts and the gates; the Crevasse, Caquelon, Rope, Harness and Gate models are in the model viewer (`--models`, category Adventure) → look right in Cartoon, PS1 and Realistic.
+## Hidden crevasses (#1372)
+
+A real glacier (Aletsch, Rhône, Morteratsch: `--chunks` at real tiles with glacier cover). `Settings › Gameplay › Crevasses` on (default), or `--crevasses on`.
+
+- [ ] Unroped, walk across a glacier for a few minutes → now and then (4 % of 12 m cells) the snow bridge breaks: you fall 10 m into a blue ice slot, unhurt, and the toast says to climb. Judge how often it happens and whether the fall, the dark slot and the sky above read well in Cartoon, PS1 and Realistic (the terrain is not drawn from underneath: look up and sideways).
+- [ ] In the slot, push the stick / W into an ice wall → you grab it and climb out (the stamina ring pays); at the top you stand on solid snow, not falling through. Pad: the left stick into the wall. VR: the same through the pad route, or hand over hand (`XrClimb`). Judge the climb speed and whether the top-out is smooth.
+- [ ] Wait a minute in the slot without climbing → you are set on the lip (the rescue). Judge whether a minute is the right time.
+- [ ] Roped to a standing friend within the rope's length → the bridge breaks, the rope holds you 3 m under the lip (zip sound), you hang; the friend holds E 2 s (pad: hold Y) → you rise out. Your friend sees you in the slot on their screen. Judge the swing and whether the friend can see what is going on.
+- [ ] Settings › Crevasses off, or the server started with `--crevasses off` → nothing breaks.
+- [ ] A server run (`StaminaWatch` on): the server log shows `is down a crevasse: not watched` and no `implausible climb` for the climb out.
+- [ ] The Crevasse model (`--models`, Adventure) and the Crack and Thud sounds (`--sounds`) look and sound right.
+
 ## Festival framework, part 1 of the festivals ([#1295](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1295))
 
 Nothing is player-facing yet but the Journal tab and the poles: the check-only festival stands in for the real ones. Offline: `<godot> --path . -- --festival test --date 2027-03-11 --systems ui,physics,occasions,adventure --world fixture` (add `--chunks D:/UnitSportSwitzerland/terrain_chunks` for the real map, where the test festival is held at the Riddes spawn).

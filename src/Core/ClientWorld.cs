@@ -983,6 +983,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
+            || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
             || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null
             || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested || Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null
             || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
@@ -1228,6 +1229,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.Festivals.Christmas.ChristmasGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Christmas.ChristmasCheck.Requested) AddChild(new Occasions.Festivals.Christmas.ChristmasCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null) AddChild(new Occasions.Festivals.Christmas.ChristmasNetProbe(items));
+            // the Zibelemärit (#1373): E at a stall tastes or buys; confetti eggs and Räppli thrown on the square count
+            AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleNetProbe(items));
             // the Escalade (#1351): E at the marmite smashes it, at the pot ladles the soupe, at the start line begins the Course
             AddChild(new Occasions.Festivals.Escalade.EscaladeGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Escalade.EscaladeCheck.Requested) AddChild(new Occasions.Festivals.Escalade.EscaladeCheck(items, () => LocalPlayer));

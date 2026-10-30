@@ -290,6 +290,16 @@ public enum ItemId
     // ---- the action-RPG combat (#1370; 600-619 are its block) ----
     /// <summary>The sword (#1371): held, the combat controls are on (<see cref="ItemUse.Sword"/>, <c>docs/notes/combat/sword-combat.md</c>).</summary>
     Sword = 600,
+
+    // ---- the Zibelemärit (#1373, docs/notes/occasions/festival-zibelemaerit.md; 525-529 are its block) ----
+    /// <summary>A braid of onions, bought at the Zwiebelzopf stall: worth nothing but the look in the hand.</summary>
+    Zwiebelzopf = 525,
+    /// <summary>The Zibelechueche, Bern's onion tart from the pie stall: food.</summary>
+    Zibelechueche = 526,
+    /// <summary>The Mehlsuppe, the market's flour soup from the kettle: food, warm for 3 minutes.</summary>
+    Mehlsuppe = 527,
+    /// <summary>A confetti egg from the Konfetti stall: Use throws it like a handful of Räppli (<see cref="ItemUse.Confetti"/>), the Zibelemärit's confetti fight.</summary>
+    Konfettiei = 528,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }
