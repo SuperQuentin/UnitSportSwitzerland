@@ -190,6 +190,9 @@ public partial class DayNight : Node
     /// The movie studio replaying a recording (#775): the sky held at this hour instead of the clock's,
     /// applied at once (the game may be paused). Null gives the clock back.
     /// </summary>
+    /// <summary>A world's own colours over the palette's (#1396, the fun world's dusk): sun elevation, tint, sky in; tint, sky out.</summary>
+    public static Func<float, Color, Color, (Color, Color)>? WorldGrade { get; set; }
+
     public double? HourOverride
     {
         get => _hourOverride;
@@ -242,6 +245,7 @@ public partial class DayNight : Node
 
         var (tint, sky) = Palette(SunElevationDeg);
         if (occasion is { Owner: var owner }) (tint, sky) = owner.Grade(SunElevationDeg, tint, sky);
+        if (WorldGrade is { } grade) (tint, sky) = grade(SunElevationDeg, tint, sky);
         Night = Mathf.SmoothStep(4f, -7f, SunElevationDeg);
 
         RenderingServer.GlobalShaderParameterSet(GSunDir, shade.Normalized());

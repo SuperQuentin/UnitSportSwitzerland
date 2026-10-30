@@ -156,6 +156,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         // which world this is (#999): every path, course and save below reads it
         WorldChoice.Active = Launch.World;
+        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
         Audio.SfxBus.Ensure();
         foreach (var (requested, run) in QuickChecks)
             if (requested())
@@ -691,6 +692,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(_dayNight);
         }
         ApplySun();
+        // the fun world (#1396): its sky held at dusk, the synthwave backdrop, the air rings
+        if (WorldChoice.FunActive)
+        {
+            if (_dayNight != null) _dayNight.HourOverride = World.Fun.FunWorld.DuskHour;
+            AddChild(new World.Fun.FunBackdrop(_chunks, origin, environment));
+            AddChild(new World.Fun.FunRings(origin, () => LocalPlayer));
+        }
 
         // cars on the roads and trains on the railway, around wherever the view is
         if (!Systems.On(Systems.Trains)) GameSettings.Current.Trains = false;   // this run only: not committed
@@ -1665,6 +1673,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var environment = StyleKit.NewEnvironment();
             _worldEnvironment.Environment = environment;
             _dayNight?.SetEnvironment(environment);
+            World.Fun.FunBackdrop.Instance?.Restyle(environment);
         }
         ApplySun();
         ApplyNearTrees();
