@@ -61,7 +61,7 @@ concert system `concert/concerts`, the venue row `terrain/venues`.
   sums the Perfect claps of everyone, party or stranger, bots too; at **12** the band returns and every human with at least **two** claps of their own is paid `Yield(10, friends)` and 25 points
   (a lone player cannot reach 12 on eight beats: two friends need 6 each). Deviation: the bis's *lights* always play (they are a pure function of the clock, nothing is broadcast); only the pay depends
   on the meter, and the toast says "the band is back" or "the crowd was too quiet".
-- **Network** (protocol 86, see `net/protocol`): `RequestMontreux(kind, stamp)` client to server (kinds 0 mark, 1 clap, 10 a second at most through `Allowed`), `TellMontreux(what, a, b, text)` server to
+- **Network** (protocol 86, `net/protocol-handshake`): `RequestMontreux(kind, stamp)` client to server (kinds 0 mark, 1 clap; 10 requests a second at most through `Allowed`), `TellMontreux(what, a, b, text)` server to
   client (the meter on every clap, the song paid, the call's result). Everything is judged on the server from the shared clock; persistence is the `festivals` section only (the pass flag and the Batzen);
   per-song tallies are in memory (a restart gives the day's cap again, as the Christmas market does). A Battle Royale round refuses (`Active`).
 - **Bots**: `ServeMontreux(botPeer, kind)`, counted in `MontreuxBotActs`, claps join the meter and are never paid (`bots/bot-capability-map`).
