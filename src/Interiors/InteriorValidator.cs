@@ -358,7 +358,7 @@ public static class InteriorValidator
     }
 
     /// <summary>Plan view of every floor side by side, the front wall at the bottom.</summary>
-    public static string ToSvg(InteriorLayout l, IReadOnlyList<Godot.Vector2[]>? outline = null)
+    public static string ToSvg(InteriorLayout l, IReadOnlyList<Godot.Vector2[]>? outline = null, IReadOnlyList<Godot.Vector2>? locked = null)
     {
         var inv = CultureInfo.InvariantCulture;
         const float S = 24f, Gap = 30f;
@@ -430,6 +430,10 @@ public static class InteriorValidator
                     var (door, _) = InteriorGenerator.DoorInPlan(l, e);
                     sb.Append($"<circle cx=\"{N(X(door.X))}\" cy=\"{N(Y(door.Y))}\" r=\"5\" fill=\"none\" stroke=\"#d11\" stroke-width=\"2\"/>");
                 }
+            // street doors with no doorway (#1304, the survey): a filled magenta dot on the ground floor
+            if (f == l.Below)
+                foreach (var p in locked ?? [])
+                    sb.Append($"<circle cx=\"{N(X(p.X))}\" cy=\"{N(Y(p.Y))}\" r=\"9\" fill=\"#d0c\" stroke=\"#fff\" stroke-width=\"2\"/>");
             foreach (var h in floor.Holes)
                 sb.Append($"<rect x=\"{N(X(h.X0))}\" y=\"{N(Y(h.Z1))}\" width=\"{N((h.X1 - h.X0) * S)}\" height=\"{N((h.Z1 - h.Z0) * S)}\" fill=\"#333\" fill-opacity=\"0.5\"/>");
             foreach (var g in floor.Landings)

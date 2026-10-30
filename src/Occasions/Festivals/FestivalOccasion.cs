@@ -23,6 +23,25 @@ public sealed class FestivalOccasion : Occasion
 
     public override string Title => FestivalCatalog.Get(Id)?.Title ?? (Id.Length == 0 ? Id : char.ToUpperInvariant(Id[0]) + Id[1..]);
 
+    /// <summary>The Fasnacht's own mask while it runs (the Hats facet, #1357): Luzern's Fritschi, Basel's Ueli; nothing for the other festivals.</summary>
+    public override Headwear Hat => Id switch
+    {
+        FestivalCatalog.FasnachtId => Headwear.LarveFritschi,
+        FestivalCatalog.BaslerFasnachtId => Headwear.LarveUeli,
+        _ => Headwear.None,
+    };
+
+    private static readonly OccasionAtmosphere MorgestraichDark = new() { Lamps = 0f };
+
+    /// <summary>
+    /// Basel's Morgestraich (#1357): between 04:00 and 05:30 on the festival's first day the street lamps and lit windows are out (<c>world_lamps</c> 0), the
+    /// lanterns of <see cref="Fasnacht.FasnachtModels"/> still shine. Null (an ordinary day) the rest of the time; read every frame by <c>DayNight</c>, so the cheap hour test
+    /// goes first.
+    /// </summary>
+    public override OccasionAtmosphere? Atmosphere =>
+        Id == FestivalCatalog.BaslerFasnachtId && World.DayNight.Instance is { } sky && Fasnacht.FasnachtRules.Morgestraich(Id, 1, sky.Hour)
+            && FestivalService.Instance?.RunningOf(Id) is { Day: 1 } ? MorgestraichDark : null;
+
     // ---- the site ------------------------------------------------------------------------------
 
     /// <summary>The place this festival is held, once resolved (null: not held in this region).</summary>
@@ -114,6 +133,17 @@ public sealed class FestivalOccasion : Occasion
             float jitter = OccasionHash.Unit((int)e, (int)n, salt) * 0.5f - 0.25f;
             into.Add(FlagPole, new Transform3D(new Basis(Vector3.Up, yaw + jitter), local));
         }
+        // the game grounds: the stone put's stone and lane (#1269 part 3)
+        if (FestivalCatalog.Get(Id) is { } stein && stein.Game(SteinRules.GameId) != null) SteinProps.Decorate(site, tile, into);
+        Horn.HornGround.Decorate(Id, site, tile, into);   // the alphorn row of the alphorn and yodel game
+        if (string.Equals(Id, FestivalCatalog.DesalpeId, StringComparison.OrdinalIgnoreCase)) Desalpe.DesalpeModels.Decorate(site, tile, into);   // the alp sign and the fair's ring
+        if (string.Equals(Id, FestivalCatalog.ChristmasMarketId, StringComparison.OrdinalIgnoreCase)) Christmas.ChristmasModels.Decorate(site, tile, into);   // the stalls, the Samichlaus and the tree
+        if (string.Equals(Id, FestivalCatalog.ZibelemaeritId, StringComparison.OrdinalIgnoreCase)) Zibelemaerit.ZibeleModels.Decorate(site, tile, into);   // the four stalls
+        if (string.Equals(Id, FestivalCatalog.EscaladeId, StringComparison.OrdinalIgnoreCase)) Escalade.EscaladeModels.Decorate(site, tile, into);   // the marmite, the soup pot, the start arch and the gates' torches
+        if (Fasnacht.FasnachtRules.IsFasnacht(Id)) Fasnacht.FasnachtModels.Decorate(Id, site, tile, into);   // the Larven stall, the Guggenmusik stage and Basel's lantern
+        if (string.Equals(Id, FestivalCatalog.SechselaeutenId, StringComparison.OrdinalIgnoreCase)) Sechselaeuten.SechselaeutenModels.Decorate(site, tile, into);   // the Zunft's Weibel and the guild banners (the pyre is the stage's)
+        if (string.Equals(Id, FestivalCatalog.ChalandaId, StringComparison.OrdinalIgnoreCase)) Chalanda.ChalandaModels.Decorate(site, tile, into);   // the Treichel stand and the stations' banners
+        if (string.Equals(Id, FestivalCatalog.August1Id, StringComparison.OrdinalIgnoreCase)) August1.August1Models.Decorate(site, tile, into);   // the lampion stand, the fireworks stand, the walk's post, the village fire   // the marmite, the soup pot, the start arch and the gates' torches
         // the closing show's launch point: the rack at the site's middle, its tubes leaning away from where the shells fan out
         if (FestivalCatalog.Get(Id) is { } def && FestivalShows.HasFireworks(def.Show) && TileId.FromLv95(site.E - RackOffset, site.N) == tile.Id)
         {
@@ -125,5 +155,44 @@ public sealed class FestivalOccasion : Occasion
                 into.Add(MortarRack, new Transform3D(new Basis(Vector3.Up, 0f), local));
             }
         }
+        // the flag swingers' ground (#1269 part 5): a low stage with the flag stand, where the Fahnenschwingen game is played
+        if (FestivalCatalog.Get(Id) is { } fd && fd.Game(FestivalCatalog.FahneGame) != null)
+        {
+            var (ge, gn) = FestivalCatalog.FahneGround(site);
+            if (TileId.FromLv95(ge, gn) == tile.Id && tile.HeightAt(tile.Local(ge, gn)) is { } gh)
+            {
+                var local = tile.Local(ge, gn);
+                local.Y = gh;
+                into.Add(FlagStage, new Transform3D(new Basis(Vector3.Up, 0f), local));
+            }
+        }
     }
+
+    private static readonly Color Bunting = Matte(0.98f, 0.82f, 0.18f);
+
+    /// <summary>
+    /// The flag swingers' stage (#1269 part 5): a square of planks a hand high, a flag stand with a Swiss flag at each corner and a
+    /// red-and-white swag between them. Seen in the model viewer (Occasions › Prop); the ground the game is played on.
+    /// </summary>
+    public static readonly PropKind FlagStage = new("FestivalFlagStage", () =>
+    {
+        var s = new MeshScratch();
+        s.Box(new Vector3(0, 0.1f, 0), new Vector3(6f, 0.2f, 6f), Wood);
+        s.Box(new Vector3(0, 0.22f, 0), new Vector3(5.6f, 0.04f, 5.6f), Matte(0.62f, 0.5f, 0.34f));
+        foreach (var (x, z) in new[] { (-2.8f, -2.8f), (2.8f, -2.8f), (-2.8f, 2.8f), (2.8f, 2.8f) })
+        {
+            s.Tube(new Vector3(x, 0.2f, z), new Vector3(x, 3.2f, z), 0.05f, 0.035f, Pole, 6);
+            s.Box(new Vector3(x + 0.4f, 2.7f, z), new Vector3(0.8f, 0.8f, 0.03f), Red);
+            s.Box(new Vector3(x + 0.4f, 2.7f, z), new Vector3(0.46f, 0.14f, 0.05f), White);
+            s.Box(new Vector3(x + 0.4f, 2.7f, z), new Vector3(0.14f, 0.46f, 0.05f), White);
+        }
+        // a swag of pennants along the front and back edges
+        for (int k = 0; k < 10; k++)
+        {
+            float x = -2.5f + k * 0.55f, sag = 0.18f * MathF.Sin(MathF.PI * k / 9f);
+            s.Box(new Vector3(x, 2.95f - sag, -2.8f), new Vector3(0.3f, 0.3f, 0.02f), k % 2 == 0 ? Red : White);
+            s.Box(new Vector3(x, 2.95f - sag, 2.8f), new Vector3(0.3f, 0.3f, 0.02f), k % 2 == 0 ? Bunting : Red);
+        }
+        return s.Build();
+    }, candle: false);
 }

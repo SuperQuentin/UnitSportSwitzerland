@@ -68,6 +68,7 @@ public partial class SettingsScreen : Screen
             UiKit.OptionRow(rows, "Concert screens", new[] { "Low (256x144)", "Medium (512x288)", "High (1024x576)" },
                 Math.Max(0, Array.IndexOf(imag, s.ConcertScreenWidth)), i => GameSettings.Current.ConcertScreenWidth = imag[i],
                 "The stadium screens' camera feed; higher is sharper and a little slower");
+            CinemaRow(rows, "Cinema video", s.CinemaVideo, q => GameSettings.Current.CinemaVideo = q);
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
@@ -125,10 +126,17 @@ public partial class SettingsScreen : Screen
                 v => $"{v:F0} W", "What you hold for an hour (your FTP / 0.95); above it a Simulation sprint drains your reserve");
             UiKit.ToggleRow(rows, "Third-person view", s.ThirdPerson, on => GameSettings.Current.ThirdPerson = on,
                 "Over the shoulder on foot, chase view mounted (V in game)");
+            UiKit.OptionRow(rows, "Hotbar", new[] { "Always", "Fade out", "Hidden" }, (int)s.Hotbar,
+                i => GameSettings.Current.Hotbar = (HotbarMode)i,
+                "Fade shows it a few seconds after a change; the item in hand stays in the bottom-right corner. Touch keeps it always");
+            UiKit.ToggleRow(rows, "Auto holster", s.AutoHolster, on => GameSettings.Current.AutoHolster = on,
+                "The item in hand is put away after 8 seconds of not using it (the key beside M holsters or draws it)");
             UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,
                 "What players near you say in the chat, in a comic bubble over their head");
             UiKit.SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
+            UiKit.ToggleRow(rows, "Impact frames", s.ImpactFrames, on => GameSettings.Current.ImpactFrames = on,
+                "A brief flash and speed lines when a sword finisher or a full charge lands; turn off if flashes bother you (never shown in VR)");
             UiKit.OptionRow(rows, "Snowboard stance", new[] { "Regular (left foot forward)", "Goofy (right foot forward)" }, s.Goofy ? 1 : 0,
                 i => GameSettings.Current.Goofy = i == 1, "Which foot leads on the board; riding switch swaps them for a while");
             UiKit.ToggleRow(rows, "Pigeon flies tail first", s.TailFirstPigeon, on => GameSettings.Current.TailFirstPigeon = on,
@@ -154,7 +162,14 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Fondue stirring guide", s.StirGuide, on => GameSettings.Current.StirGuide = on,
                 "The faint figure-eight behind your trace while you stir a shared pot");
             UiKit.ToggleRow(rows, "Crevasses", s.Crevasses, on => GameSettings.Current.Crevasses = on,
-                "Hidden crevasses on glaciers: unroped, a snow bridge may give way under you");
+                "Hidden crevasses on glaciers: a snow bridge may give way and drop you into the ice; roped to a friend, they hold you. A server's --crevasses off wins");
+            // alcohol (#1271)
+            rows.AddChild(UiKit.Spacer(6));
+            rows.AddChild(UiKit.Section("Alcohol"));
+            UiKit.OptionRow(rows, "Alcohol (your own world)", new[] { "Off: drinks carry no alcohol", "Mild: half the effects, no passing out", "Real: builds up and wears off" }, Math.Clamp(s.AlcoholMode, 0, 2),
+                i => GameSettings.Current.AlcoholMode = i, "On a server, the server decides (--alcohol)");
+            UiKit.ToggleRow(rows, "Alcohol view effects", s.AlcoholViewEffects, on => GameSettings.Current.AlcoholViewEffects = on,
+                "The camera's sway and the blurred edges while drunk; off keeps the input lag. VR never sways, it narrows the view instead");
             // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
             Button replay = null!;
             replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>
@@ -542,6 +557,9 @@ public partial class SettingsScreen : Screen
         UiKit.OptionRow(rows, "VR terrain detail", new[] { "Very low", "Low", "Medium", "High" },
             Math.Max(0, Array.IndexOf(vrDetails, GameSettings.Current.VrDetail)), i => GameSettings.Current.VrDetail = vrDetails[i],
             "The headset's own Detail. Low draws a third of Medium's triangles, Very low a quarter of Low's");
+        CinemaRow(rows, "VR cinema video", GameSettings.Current.VrCinemaVideo, q => GameSettings.Current.VrCinemaVideo = q);
+        UiKit.ToggleRow(rows, "VR sharp cinema screen", GameSettings.Current.VrCinemaLayer, on => GameSettings.Current.VrCinemaLayer = on,
+            "The film on a layer of its own, drawn at the headset's full resolution (2D films)");
         // comfort (#439, docs/notes/xr/rig.md)
         int[] snaps = { 0, 15, 30, 45 };
         UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },
@@ -660,6 +678,11 @@ public partial class SettingsScreen : Screen
     /// The main view's anti-aliasing (#768), greyed out while the style is PS1, which turns it off
     /// as it keeps its own low resolution (<see cref="DisplaySettings"/>); it follows a live style switch.
     /// </summary>
+    /// <summary>A cinema video quality row (#1319): 480p, 720p, 1080p sources; a playing hall's decoder restarts on a change.</summary>
+    private static void CinemaRow(Container into, string name, Interiors.CinemaVideo.Quality current, Action<Interiors.CinemaVideo.Quality> set) =>
+        UiKit.OptionRow(into, name, new[] { "Low (480p)", "Medium (720p)", "High (1080p)" }, (int)current,
+            i => set((Interiors.CinemaVideo.Quality)i), "A cinema's film decoded on this computer; higher is sharper and costs more CPU");
+
     private static void AntiAliasingRow(Container into, AntiAliasing current)
     {
         var option = UiKit.OptionRow(into, "Anti-aliasing", new[] { "Off", "FXAA", "MSAA 2x", "MSAA 4x", "MSAA 8x" },

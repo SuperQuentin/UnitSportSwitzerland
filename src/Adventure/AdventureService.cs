@@ -122,8 +122,14 @@ public partial class AdventureService : Node
             return;
         }
         if (AdventureCheck.Requested || Places.PlacesCheck.Requested || Navigation.NavCheck.Requested || Navigation.TravelCheck.Requested || Rewards.RewardCheck.Requested
-            || Together.TogetherCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
-            || Occasions.Festivals.FireworksCheck.Requested) AdventureCheck.ClearScratch();
+            || Together.TogetherCheck.Requested || Together.CrevasseCheck.Requested || Together.FondueCheck.Requested || Errands.ErrandCheck.Requested || Errands.WorldEventCheck.Requested || Occasions.Festivals.FestivalCheck.Requested
+            || Occasions.Festivals.FireworksCheck.Requested
+            || Occasions.Festivals.Fahnen.FahnenCheck.Requested || Occasions.Festivals.Horn.HornCheck.Requested
+            || Occasions.Festivals.Desalpe.DesalpeCheck.Requested || Occasions.Festivals.Christmas.ChristmasCheck.Requested
+            || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested
+            || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Chalanda.ChalandaCheck.Requested
+            || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested
+            || Occasions.Festivals.August1.August1Check.Requested) AdventureCheck.ClearScratch();
         if (!_server)
         {
             // offline: this client is the server, and the local player is its one peer
@@ -295,10 +301,24 @@ public partial class AdventureService : Node
         : Navigation.NavCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/navcheck")
         : Navigation.TravelCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/travelcheck")
         : Together.TogetherCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/togethercheck")
+        : Together.CrevasseCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/crevassecheck")
+        : Alcohol.AlcoholCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/alcoholcheck")
         : Together.FondueCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fonduecheck")
         : Errands.ErrandCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/errandcheck")
+        : Errands.WorldEventCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/worldeventcheck")
         : Occasions.Festivals.FestivalCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/festivalcheck")
-        : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck") : null;
+        : Occasions.Festivals.FireworksCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fireworkscheck")
+        : Occasions.Festivals.SteinCheck.Requested ? Occasions.Festivals.SteinCheck.Scratch
+        : Occasions.Festivals.Fahnen.FahnenCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fahnecheck")
+        : Occasions.Festivals.Desalpe.DesalpeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/desalpecheck")
+        : Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/zibelecheck")
+        : Occasions.Festivals.Escalade.EscaladeCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/escaladecheck")
+        : Occasions.Festivals.Fasnacht.FasnachtCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/fasnachtcheck")
+        : Occasions.Festivals.August1.August1Check.Requested ? ProjectSettings.GlobalizePath("res://test_output/august1check")
+        : Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/sechsecheck")
+        : Occasions.Festivals.Chalanda.ChalandaCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/chalandacheck")
+        : Occasions.Festivals.Christmas.ChristmasCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/christmascheck")
+        : Occasions.Festivals.Horn.HornCheck.Requested ? ProjectSettings.GlobalizePath("res://test_output/hornscheck") : null;
 
     /// <summary>The save file of a key (checks read it back).</summary>
     public string FileOf(string key) => ProjectSettings.GlobalizePath(PathOf(key));

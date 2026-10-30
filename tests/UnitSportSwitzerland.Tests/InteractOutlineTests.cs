@@ -47,6 +47,7 @@ public class InteractOutlineTests
             + "acts with no thing: the ski lift's wait and letting go, the crane's controls let go, a deck's hint, "
             + "standing up (three times: a stand, a deck, a cinema seat #1279), getting out, the dance (twice), the rope's let go / haul and the pot's seat (#1266)"),
         ["src/BattleRoyale/BrHud.cs:_Draw"] = (1, "the drop's jump from the plane: no thing"),
+        ["src/Interiors/Pinball/PinballPlay.cs:UpdateHint"] = (2, "standing at a pinball machine: Start is the machine's own button, the machine is the whole view (#1325)"),
     };
 
     private static string Root()

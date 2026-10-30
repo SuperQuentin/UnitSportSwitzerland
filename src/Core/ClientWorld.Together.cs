@@ -27,7 +27,9 @@ public partial class ClientWorld
         AddChild(new FonduePanel());
         TogetherPage.Register();
         if (FondueCheck.Requested) AddChild(new FondueCheck(items, () => LocalPlayer));
+        if (CrevasseCheck.Requested) AddChild(new CrevasseCheck(items, () => LocalPlayer));
         if (TogetherCheck.Requested) AddChild(new TogetherCheck(items, () => LocalPlayer));
+        if (CrevasseNetProbe.Role != null) AddChild(new CrevasseNetProbe(items));
         if (TogetherNetProbe.Role != null) AddChild(new TogetherNetProbe(items));
     }
 }

@@ -36,8 +36,10 @@ public partial class InteriorManager
             if (Vehicles.VehicleReach.Current != null || _current == null) return null;
             // an elevator's button or cabin, a flat's door (#557); the church radio; a cinema's booth panel
             // (#1238); a cupboard, unless at the way out, where E is the door
-            // a cinema seat from its row's lane (#1279), as E takes it before a cupboard
-            return InsideInteraction(p) ?? ChurchRadios.InteractionFor(p) ?? CinemaBooths.InteractionFor(p) ?? p.SeatInteraction()
+            // a cinema seat from its row's lane (#1279), as E takes it before a cupboard; a bowling centre's
+            // shoe counter, ball rack, hood and approach (#1323); a pinball machine (#1325)
+            return InsideInteraction(p) ?? ChurchRadios.InteractionFor(p) ?? CinemaBooths.InteractionFor(p) ?? BowlingLanes.InteractionFor(p)
+                ?? Pinball.PinballTables.InteractionFor(p) ?? p.SeatInteraction()
                 ?? (ExitAt(p) is { } exit ? ExitInteraction(exit) : Loot.LootService.Instance?.InteractionFor(p));
         }
         // a building site crane's ladder or its remote's box (#618); a farm stand or a buyer (#494); a
@@ -45,7 +47,15 @@ public partial class InteriorManager
         outranks = Outranking.Vehicle;
         if (p.CraneInteraction() is { } crane) return crane;
         if ((Farming.FarmSales.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
-            ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p)) is { } outdoors) return outdoors;
+            ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p) ?? Adventure.Errands.WorldEvents.InteractionFor(p)
+            ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p) ?? Occasions.Festivals.Desalpe.DesalpeGame.InteractionFor(p)
+            ?? Occasions.Festivals.Christmas.ChristmasGame.InteractionFor(p) ?? Occasions.Festivals.Escalade.EscaladeGame.InteractionFor(p)
+            ?? Occasions.Festivals.Zibelemaerit.ZibeleGame.InteractionFor(p)
+            ?? Occasions.Festivals.Fasnacht.FasnachtGame.InteractionFor(p)
+            ?? Occasions.Festivals.Sechselaeuten.SechseGame.InteractionFor(p)
+            ?? Occasions.Festivals.Chalanda.ChalandaGame.InteractionFor(p)
+            ?? Occasions.Festivals.August1.August1Game.InteractionFor(p)
+            ?? Occasions.Festivals.Horn.HornGround.InteractionFor(p) ?? Occasions.Festivals.SteinGame.InteractionFor(p)) is { } outdoors) return outdoors;
         outranks = Outranking.None;
         if (Vehicles.VehicleReach.Current != null) return null;
         // a building site's skip or materials faced (#627), a building's door; then another player looked

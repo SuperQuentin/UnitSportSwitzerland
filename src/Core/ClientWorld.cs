@@ -226,6 +226,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.DiningProbe { Name = "DiningProbe" });
             return;
         }
+        // the four pinball tables built and played through their nodes (#1325)
+        if (Interiors.Pinball.PinballProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
+            return;
+        }
         // arcades planned in hand-made buildings (#1240)
         if (Interiors.ArcadeProbe.ParseArgs())
         {
@@ -265,6 +272,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.CinemaProbe { Name = "CinemaProbe" });
+            return;
+        }
+        // balls rolled into the pins, each deck in its own physics space (#1323)
+        if (Interiors.BowlingRollProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.BowlingRollProbe { Name = "BowlingRollProbe" });
             return;
         }
         // bowling centres planned in hand-made buildings (#1235)
@@ -547,6 +561,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball machines, played and watched (#1325)
+        Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
@@ -579,6 +595,24 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
             interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+            // --enter: straight into a building once spawned, or at once for a shot run's free camera (#1244)
+            if (Interiors.InteriorManager.EnterTarget is { } enter)
+            {
+                if (CmdArgs.Has("--shot-queue") || CmdArgs.Has("--shot"))
+                    GetTree().CreateTimer(3.0).Timeout += () => interiors.Enter(enter, null);
+                else
+                {
+                    // once the body stands in the world (the spawn settled, on foot): the camera alone after a minute
+                    double waited = 0;
+                    void Go()
+                    {
+                        if (_onFoot && LocalPlayer is { } me && !SpawnPending) interiors.Enter(enter, me);
+                        else if ((waited += 0.5) < 60) GetTree().CreateTimer(0.5).Timeout += Go;
+                        else interiors.Enter(enter, null);
+                    }
+                    GetTree().CreateTimer(0.5).Timeout += Go;
+                }
+            }
             var chunksForDoors = _chunks;
             interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
             interiors.OccupancySink = chunksForDoors.SetOccupancy;
@@ -614,6 +648,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
             Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
+            Occasions.Festivals.Sechselaeuten.BooggStage.Create(this, _chunks, origin);
+            Combat.SchwingRing.Create(this, _chunks, origin);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
         // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
@@ -911,6 +947,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
         if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
+        if (EnterSpectatorCheck.Requested) AddChild(new EnterSpectatorCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -945,8 +982,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
+            || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
+            || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
+            || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
+            || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
+            || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null
+            || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested || Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null
+            || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
+            || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -960,13 +1005,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.Bank.Create(this, inventory);
         var items = new Items.ItemController(inventory, origin)
         {
-            ActivePlayer = () => _onFoot ? LocalPlayer : null,
+            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging && !Occasions.Festivals.Desalpe.DesalpeGame.TakesUse && !Occasions.Festivals.Sechselaeuten.SechseGame.TakesUse ? LocalPlayer : null,
         };
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
         // the concert pogo (#1150): dancing at a show, jump on the beat
         AddChild(new Concert.PogoQte(() => _onFoot ? LocalPlayer : null));
+        // the Älplerfest's flag swingers (#1269 part 5): figures drawn on the beat at the festival's flag ground
+        AddChild(new Occasions.Festivals.Fahnen.FahnenGame(() => _onFoot ? LocalPlayer : null));
         // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
         var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
@@ -979,6 +1026,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
         if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
+        if (Interiors.Pinball.PinballNetProbe.Role != null) AddChild(new Interiors.Pinball.PinballNetProbe(items, origin));
+        if (Interiors.BowlingNetProbe.Role != null) AddChild(new Interiors.BowlingNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
@@ -1032,6 +1081,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
+        if (Combat.SchwingNetProbe.Role != null) AddChild(new Combat.SchwingNetProbe(items));
+        if (Combat.SwordNetProbe.Role != null) AddChild(new Combat.SwordNetProbe(items));   // #1371
+        if (Combat.SwordDebug.On) AddChild(new Combat.SwordDebug { Name = "SwordDebug" });
+        if (Combat.SwordClipProbe.Scenario != null) AddChild(new Combat.SwordClipProbe(items));
         if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -1111,6 +1164,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
         // as the server's, which relays the first and owns the second; offline this client does both
         Items.ItemEvents.Create(this, origin, server: false);
+        Combat.SwordService.Create(this, origin, server: false);   // the sword's moves, hits and training dummies (#1371)
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
@@ -1161,11 +1215,57 @@ public partial class ClientWorld : Node3D, IOriginContainer
             festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
             festivals.Start = () => _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
             Occasions.Festivals.FestivalPage.Register();
+            // Steinstossen (#1269 part 3): the attempt's wire, the stone, its arc and its stakes
+            Occasions.Festivals.SteinService.Create(festivals, adventure, server: false, networked: Launch.Networked);
+            if (_worldOrigin is { } steinOrigin)
+                Occasions.Festivals.SteinGame.Create(this, () => LocalPlayer, steinOrigin, p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null);
+            if (Occasions.Festivals.SteinCheck.Requested) AddChild(new Occasions.Festivals.SteinCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.SteinNetProbe.Role != null) AddChild(new Occasions.Festivals.SteinNetProbe(items));
+            AddChild(new Occasions.Festivals.Horn.HornGame(() => LocalPlayer, () => _worldOrigin, () => _chunks));
+            // the Désalpe's herd and its game (#1269 part 7): dress the cows, drive them down, vote at the fair
+            AddChild(new Occasions.Festivals.Desalpe.DesalpeHerd(() => _worldOrigin, () => _chunks));
+            AddChild(new Occasions.Festivals.Desalpe.DesalpeGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Desalpe.DesalpeCheck.Requested) AddChild(new Occasions.Festivals.Desalpe.DesalpeCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Desalpe.DesalpeNetProbe.Role != null) AddChild(new Occasions.Festivals.Desalpe.DesalpeNetProbe(items));
+            // the Christmas market (#1348): E at a stall tastes or buys, E at the Samichlaus takes his bag
+            AddChild(new Occasions.Festivals.Christmas.ChristmasGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Christmas.ChristmasCheck.Requested) AddChild(new Occasions.Festivals.Christmas.ChristmasCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null) AddChild(new Occasions.Festivals.Christmas.ChristmasNetProbe(items));
+            // the Zibelemärit (#1373): E at a stall tastes or buys; confetti eggs and Räppli thrown on the square count
+            AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleNetProbe(items));
+            // the Escalade (#1351): E at the marmite smashes it, at the pot ladles the soupe, at the start line begins the Course
+            AddChild(new Occasions.Festivals.Escalade.EscaladeGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Escalade.EscaladeCheck.Requested) AddChild(new Occasions.Festivals.Escalade.EscaladeCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null) AddChild(new Occasions.Festivals.Escalade.EscaladeNetProbe(items));
+            // the Fasnacht (#1357): E at the Larven stall, the Morgestraich lantern or the Guggenmusik stage; Räppli with the item's Use
+            AddChild(new Occasions.Festivals.Fasnacht.FasnachtGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Fasnacht.FasnachtCheck.Requested) AddChild(new Occasions.Festivals.Fasnacht.FasnachtCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null) AddChild(new Occasions.Festivals.Fasnacht.FasnachtNetProbe(items));
+            // the Sechseläuten (#1358): E at the pyre bets (Use steps the minute) or grills, at the Weibel takes the purse
+            AddChild(new Occasions.Festivals.Sechselaeuten.SechseGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested) AddChild(new Occasions.Festivals.Sechselaeuten.SechselaeutenCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null) AddChild(new Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe(items));
+            // the Chalandamarz (#1356): E at the stand begins the procession, E on the march beat rings the Treichel
+            AddChild(new Occasions.Festivals.Chalanda.ChalandaGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Chalanda.ChalandaCheck.Requested) AddChild(new Occasions.Festivals.Chalanda.ChalandaCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null) AddChild(new Occasions.Festivals.Chalanda.ChalandaNetProbe(items));
+            // the 1 August (#1355): the lampion stand, the fireworks stand and the walk's post on E, the Höhenfeuer on the summits, a box of fireworks on the use key
+            AddChild(new Occasions.Festivals.August1.August1Game(() => _onFoot ? LocalPlayer : null));
+            AddChild(new Occasions.Festivals.August1.Hoehenfeuer(() => _worldOrigin, () => GetViewport().GetCamera3D()));
+            if (Occasions.Festivals.August1.August1Check.Requested) AddChild(new Occasions.Festivals.August1.August1Check(items, () => LocalPlayer));
+            if (Occasions.Festivals.August1.August1NetProbe.Role != null) AddChild(new Occasions.Festivals.August1.August1NetProbe(items));
+            if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FireworksCheck.Requested) AddChild(new Occasions.Festivals.FireworksCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Fahnen.FahnenCheck.Requested) AddChild(new Occasions.Festivals.Fahnen.FahnenCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.FestivalNetProbe.Role != null) AddChild(new Occasions.Festivals.FestivalNetProbe(items));
+            if (Occasions.Festivals.Fahnen.FahnenNetProbe.Role != null) AddChild(new Occasions.Festivals.Fahnen.FahnenNetProbe(items));
             AddNavigation(adventure, items, ground);
             AddTogether(adventure, items);   // #1266, ClientWorld.Together.cs
+            AddAlcohol(adventure, items);    // #1271, ClientWorld.Alcohol.cs
             AddErrands(adventure, items);   // #1267, ClientWorld.Errands.cs
         }
         // Versteckis (#1268): World/Versteckis on every client (RPCs route by path): the games, the disguises of the bodies
@@ -1804,10 +1904,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Fight on both sides (#495): the challenge, the match state, and its screen
         AddChild(Combat.FightManager.CreateClient());
         AddChild(new Combat.FightHud());
+        AddChild(new Combat.SwordHud());   // #1371
+        AddChild(new Combat.SwordImpact());
         AddChild(Combat.AuraManager.CreateClient());
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
         AddChild(new Combat.AuraWatchHud());
+        // Schwingen (#1269): the bout, its screen, and the Älplerfest's sawdust ring
+        AddChild(Combat.SchwingManager.CreateClient());
+        AddChild(new Combat.SchwingHud());
 
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
@@ -2294,6 +2399,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
             }
+            else if (p.SwordDrawn && p.Ride == RideKind.OnFoot)
+            {
+                // the sword (#1371): the attack, its charge, the dodge and the lock
+                yield return (PlayerInput.UseItem, "Swing (again in rhythm: combo; hold after a swing: charged)");
+                yield return (PlayerInput.SwordDodge, "Dodge");
+                yield return (PlayerInput.SwordLock, p.SwordLocked ? "Let go of the lock" : "Lock on");
+            }
             else if (p.InAura)
             {
                 // an aura battle (#907): the one timed key; the planner shows its own
@@ -2609,9 +2721,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!inPlace)
         {
             var pos = _spectator!.GlobalPosition;
-            float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
-            player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
+            // the first floor, stair, roof or ground under the camera with room to stand (#1244): in a building that
+            // is its floor, not the street 3 km over it; the terrain's height when no collision is there yet
+            // under a building's floor (flown through it into the void): onto its lowest floor there
+            if ((player.StandingSpotBelow(pos) ?? (Interiors.InteriorManager.Instance?.LowestFloorAbove(pos) is { } floor
+                    ? player.StandingSpotBelow(floor) : null)) is { } spot)
+                player.GlobalPosition = spot;
+            else
+            {
+                float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
+                player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
+            }
             player.Velocity = Vector3.Zero;
+            Interiors.InteriorManager.Instance?.SetBodySpace(player, player.GlobalPosition);
         }
         player.Camera.Current = true;
         _chunks!.RemoveAnchor(_spectator!);

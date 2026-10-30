@@ -124,8 +124,7 @@ public static class OccasionConfig
                 Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false, Games = false },
             },
         };
-        // festivals (#1269): each part registers its own default entry here (priority 8: under the seasons for the sky, over the
-        // UFOs); part 1 ships none. The check-only festival exists only under --festival test
+        // festivals (#1269): the check-only festival exists only under --festival test; the Älplerfest's entry is below
         if (Festivals.FestivalCatalog.TestRequested)
             entries.Add(new OccasionEntry
             {
@@ -133,6 +132,76 @@ public static class OccasionConfig
                 Schedule = { new DateWindow("03-10", "03-14") },
                 Facets = new FacetToggles { Atmosphere = false, Audio = true, Loot = false, Hunt = false, Hats = false },
             });
+        // the Alpine herders' festival (#1269 part 5): 14-24 August; the sky stays the season's, the games and the flags run
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.AelplerfestId, Priority = 8,
+            Schedule = { new DateWindow("08-14", "08-24") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the cow drive (#1269 part 7): 20 September to 5 October, the herd, the sign and the fair's ring
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.DesalpeId, Priority = 8,
+            Schedule = { new DateWindow("09-20", "10-05") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Christmas markets (#1348): 25 November to 23 December inside the Christmas season, which keeps the sky; the stalls, the tree and the Samichlaus
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ChristmasMarketId, Priority = 8,
+            Schedule = { new DateWindow("11-25", "12-23") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Zibelemärit (#1373): the fourth Monday of November, Bern's Bundesplatz (relocated to the region's largest town); the stalls and the confetti fight
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ZibelemaeritId, Priority = 8,
+            Schedule = { new DateWindow("11-mon#4", "+0") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Escalade (#1351): the second Saturday of December and the Sunday after it, Geneva's old town (relocated to the region's largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.EscaladeId, Priority = 8,
+            Schedule = { new DateWindow("12-sat#2", "+1") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Fasnacht (#1357): Luzern's from the Schmutziger Donnerstag for six days, Basel's three days from the Monday after Ash Wednesday. The Hats facet is the
+        // festival's own mask (Fritschi, Ueli); Basel's Atmosphere is the Morgestraich (street lamps out at 04:00 on day 1), and only that: the sky is the season's
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.FasnachtId, Priority = 8,
+            Schedule = { new DateWindow("easter-52", "+5") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = true },
+        });
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.BaslerFasnachtId, Priority = 8,
+            Schedule = { new DateWindow("easter-41", "+2") },
+            Facets = new FacetToggles { Atmosphere = true, Loot = false, Hunt = false, Hats = true },
+        });
+        // the Sechseläuten (#1358): the third Monday of April, Zürich's Sechseläutenplatz (relocated to the region's largest town); the sky is the season's
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.SechselaeutenId, Priority = 8,
+            Schedule = { new DateWindow("04-mon#3", "+0") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Chalandamarz (#1356): 1 March, the children's procession in an Engadin village (relocated to the region's largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ChalandaId, Priority = 8,
+            Schedule = { new DateWindow("03-01", "03-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the 1 August (#1355): 31 July and 1 August, the Höhenfeuer, the lake fireworks, the lampion walk (held in the first lake town the region has, else its largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.August1Id, Priority = 8,
+            Schedule = { new DateWindow("07-31", "08-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         return entries;
     }
 

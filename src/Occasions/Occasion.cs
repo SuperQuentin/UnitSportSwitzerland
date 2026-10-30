@@ -27,6 +27,9 @@ public sealed record OccasionAtmosphere
     /// <summary>0..1: festive lights (eaves, trees) — they still only shine at night.</summary>
     public float Lights { get; init; }
 
+    /// <summary>1: the street lamps and lit windows shine at night as ever; 0: they are out (the Basel Morgestraich, #1357). Lanterns are not lamps.</summary>
+    public float Lamps { get; init; } = 1f;
+
     /// <summary>Low-lying mist, authored as a colour you would see (sRGB).</summary>
     public Color MistColor { get; init; } = new(0.7f, 0.72f, 0.76f);
 

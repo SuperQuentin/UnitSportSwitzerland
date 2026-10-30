@@ -98,7 +98,7 @@ public static partial class Preprocessor
                 case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
                     or "--dem-check" or "--rgealti-check" or "--dem-probe"
                     or "--osm-overlay" or "--landings-file" or "--airports-file" or "--sitg-signs"
-                    or "--pois" or "--pois-file" or "--poisstats" or "--wikidata" or "--venues":
+                    or "--pois" or "--pois-file" or "--poisstats" or "--wikidata" or "--venues" or "--givers":
                     return false;
             }
         }
@@ -147,6 +147,8 @@ public static partial class Preprocessor
         string? castlesFile = null;
         // venues (#1232): bowling centres, cinemas, arcades, restaurants and bars from OSM, into venues.tsv.gz the game embeds
         string? venuesFile = null;
+        // errand givers (#1339): post offices, dairies, Beizen and farms from OSM and the built tiles, into givers.tsv.gz the game embeds
+        string? giversFile = null;
         // points of interest (#1224): standalone with --pois (needs --out, --tlm), and after every --places pass
         // given --tlm; --boundaries <swissBOUNDARIES3D gpkg> for the cantons, --osm-pbf for castles
         bool poisOnly = false, poisStats = false, wikidata = false;
@@ -210,6 +212,7 @@ public static partial class Preprocessor
                 case "--airports-file": airportsFile = args[++i]; break;
                 case "--castles": castlesFile = args[++i]; break;
                 case "--venues": venuesFile = args[++i]; break;
+                case "--givers": giversFile = args[++i]; break;
                 case "--pois": poisOnly = true; break;
                 case "--pois-file": poisFile = args[++i]; break;
                 case "--poisstats": poisStats = true; break;
@@ -323,6 +326,17 @@ public static partial class Preprocessor
                 return 2;
             }
             return VenueStage.Run(outDir, airportsOsm, venuesFile, jobs);
+        }
+
+        // ---- errand givers (#1339): OSM post offices, dairies, Beizen and farms, and the farms of the built tiles
+        if (giversFile != null)
+        {
+            if (outDir == null || airportsOsm == null)
+            {
+                Console.Error.WriteLine("--givers <givers.tsv.gz> requires --osm <switzerland .osm.pbf> and --out <chunk dir> (the region's tiles: heights, farms, solids) [--boundaries <swissboundaries3d .gpkg>]");
+                return 2;
+            }
+            return GiverStage.Run(outDir, airportsOsm, giversFile, boundariesGpkg, jobs);
         }
 
         // ---- castles (#859): OSM historic=castle and GWR names resolved to solids --------------------

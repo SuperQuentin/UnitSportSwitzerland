@@ -83,6 +83,17 @@ public static class FestivalRules
     }
 
     /// <summary>
+    /// Spends <paramref name="batzen"/> held (a stall's ware, #1348): false when the player holds fewer. <see cref="FestivalInstance.Earned"/> is not
+    /// touched, so what the cap counts stays what the games paid.
+    /// </summary>
+    public static bool Spend(FestivalInstance inst, int batzen)
+    {
+        if (batzen < 0 || inst.Batzen < batzen) return false;
+        inst.Batzen -= batzen;
+        return true;
+    }
+
+    /// <summary>
     /// A party milestone pays this player: outside the cap, which counts what games earn, and once (the index is
     /// remembered). Returns false when it already paid.
     /// </summary>

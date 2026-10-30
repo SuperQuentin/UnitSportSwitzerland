@@ -86,6 +86,8 @@ bots earn nothing.
 
 ## For the next parts
 
+Schwingen (part 6, built: `combat/schwingen`) is the model for a game with an opponent: a ground placed from the site (`SchwingRing.Of`), E to join, a server method that calls `Award` when the play ends.
+
 Register the festival's def (`FestivalCatalog.Register`) and its `OccasionEntry` default; call `Award` from the game's server method after checking the body
 is at the ground; a game's day goes in `Days`. Every new `ItemId` of a festival is in 500-539 and every `Headwear` in 5-20 (reserved in the enums).
 The closing show (part 2, built: `festival-fireworks`) reads `FestivalDef.Show` and the last day; a def with `ClosingShow.Fireworks` gets it for free.

@@ -224,7 +224,7 @@ public class ErrandTests
     {
         var src = Source();
         var engine = new QuestEngine(src);
-        var offer = src.Cell(20261027, Cell.E, Cell.N).First();
+        var offer = src.Cell(20261027, Cell.E, Cell.N).First(o => o.Quest.Steps.All(s => s.Plan == null));   // the hiker and the postcard need their plans
         var progress = new QuestsProgress();
         Assert.Equal("Ask the giver.", engine.Start(progress, offer.Id, 1));
         Assert.Empty(progress.Active);

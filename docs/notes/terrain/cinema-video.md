@@ -21,7 +21,7 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
 - **Links**: http(s) only (no `file:`, `concat:`, devices: every client hands it to ffmpeg, as one argument,
   with `-protocol_whitelist`); `--cinemavideolocal` lets the checks play a local file (server and clients).
   A site's page (YouTube, Twitch, Vimeo, Dailymotion) and any `.m3u8` / `.mpd` go through yt-dlp first
-  (`NeedsLookup`): `SiteFormat` picks H.264 at most 480p + best sound, prints `is_live` and the duration; a
+  (`NeedsLookup`): `SiteFormat(lines)` picks H.264 at most the quality's lines (below) + best sound, prints `is_live` and the duration; a
   YouTube link gives separate video and sound URLs. Each client looks it up itself (the URLs are per client).
 - **Live**: from yt-dlp's `is_live` (or ffmpeg's `Duration: N/A` for a plain link): no seek, an HLS playlist from
   `-live_start_index -2`, frames shown a second after the first arrives. Clients are a segment or so apart,
@@ -35,9 +35,9 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   off them. Ended or failed: the hall's slides and music back.
 - **Sound**: `CinemaVideoSpeaker` at the screen, spread over the hall's half-diagonal, the music bus, in
   `MusicFocus`; samples pushed by index on the clock as `WebRadioSpeaker` does (50 ms tolerance). Every hall
-  showing a video has its film music off (`MuteFilmMusic`).
+  showing a video has its film music off (`MuteFilmMusic`). The speaker stands 3 m into the hall, not on the screen (there `Hearing`'s rays hit the screen and wall: muffled, #1365), and a hall's audience is silent (`VenuePatrons` sound: an `Auditorium` room never murmurs; it has patrons only while its screen is on): a full hall chattered over the film at +0 dB. Recorded with `--write-movie <wav or avi> -- --fixed-fps --cinemashotcurtains --cinemavideoshot <tone file>,<prefix> --cinemavideolocal` (a 440 Hz tone: its share of the mix says what else plays).
 - **Picking**: E / pad Y / VR grip at the booth panel's screen half opens `CinemaPanelUi` (low on the screen,
-  the hall's screen above it): Screen off, Cat slides / Stop the video, a link box with Paste and Play, the
+  the hall's screen above it): Screen off, Cat slides / Stop the video, the cinema's films (open films + the server's list, `FilmCount`/`FilmAt`) in a drop-down with Play the film (#1367, from the start, 2D), then this player's starred links (the star by Stop for a web link playing, `user://cinema_starred.txt`); an admin's **Server's films…** window (name, In the halls' rotation, Add/Save/Remove) sends `/cinema pool add|set|remove` through the chat, the server checks the rights; a link box with Paste and Play, the
   last six links played (`user://cinema_links.txt`). `/cinema play <link>`, `/cinema stop`, `/cinema`
   (status: position, the frame shown, restarts) in the chat (`CinemaBooths.RunLocal`, before the server).
 - **Through the server** (phase 2, `CinemaBooths.Relay.cs`, `CinemaRelayTap.cs`, `CinemaRelayFeed.cs`, protocol 60):
@@ -117,7 +117,9 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   chosen video, the slides or the screen off from the panel are kept, `""` included); the draw is cached per hall,
   showing and list version (no string per frame). The server's list: `user://cinema_pool.json`, sent on join and on change
   (`SetPool`); `/cinema pool` lists, an admin `add <link>` (title and length looked up on the server, `CinemaLookup.Probe`;
-  not a live stream) and `remove <n>`. The panel names a showing by its title. Checked: A, B and C (late) draw the same
+  not a live stream; `add <link> [norotation] [title]`), `set <n> [rotation|norotation] [title]` and `remove <n>`. A film out of the
+  halls' rotation (`Film.Rotation`, #1367; protocol 78: `SetPool` carries it) is only picked at the panel: halls draw from
+  the rotation alone (`Rotation()`, cached per list version). The panel names a showing by its title. Checked: A, B and C (late) draw the same
   film and loop phase for every hall (`cinemanetcheck`); `--cinemavideoshot showing,<prefix>` (Cosmos Laundromat 604 s in,
   on the clock within 50 ms).
 - **Side curtains frame the picture** (the owner's, Oct 28: "open and close to adapt to the streamed ratio", smoothly;
@@ -149,6 +151,26 @@ tier 0 `--filter CinemaVideo`), `CinemaVideoStream.cs` (one client's decoder), `
   than the default (or a 3D film) keeps the pasted screen at every detail. The slides are not touched. Shots:
   `--cinemadisplay <fit>,<ratio>` with `--cinemavideoshot` (and `--cinemashotcurtains`, `--cinemashotport` for the
   porthole's glass from 2.5 m).
+- **Video quality** (#1319, the owner's: "a video quality setting", after asking why 854x358): what this machine decodes
+  itself, `CinemaVideo.Quality` / `DecodeSize`: Low 480p sources at 854x358 (the phase-1 size, 37 MB/s of frames), Medium
+  720p at 1280x536 (the default, 82 MB/s), High 1080p at 1920x804 (185 MB/s, a 10-frame ring of 6 MB frames).
+  Settings › Video › **Cinema video**; **VR cinema video** in the VR rows, High by default (the screen fills much more of
+  the view); `CinemaVideoStream.QualityHere`, `--cinemaquality low|medium|high` for the checks. A change restarts the
+  hall's decoder at the clock's moment (`PumpVideo`). The relay (480x200, scaled to 854x358) and the live and file shares
+  keep their sizes. A picture taller than Low keeps the pasted screen at High detail (the light's would be its atlas's
+  blur) and the light gets a nearest-scaled 854-wide copy (`_videoSmall`) for the room and whoever stands in the beam;
+  the frozen-light check needs `--cinemaquality low`. The picture's shape ignores a frame lit only in a small part
+  both ways (`Shape.Add`: a title card's letters on black were measured as the picture and zoomed to the whole screen).
+- **VR sharp cinema screen** (#1319, the owner's: "the movie screen at full resolution in VR, in another layer, like the
+  menus"; `InteriorNode.CinemaLayer.cs`, Settings › VR sharp cinema screen, on by default): in a real headset a 2D film's
+  screen is an `OpenXRCompositionLayerQuad` (child of the tracking origin, `SortOrder` -3, behind `XrUi`'s -2 and the
+  watch's -1) whose `SubViewport` (the frame's size) draws the frame through the hall's display
+  (`shaders/cinema_layer.gdshader`, the same `cinema_display` mapping); the compositor samples it at the headset's own
+  resolution, where the mesh screen is resampled into the eye picture first. The screen's mesh becomes a hole
+  (`cinema_hole.gdshader`: colour and alpha multiplied by 0, depth-tested), so heads, seats, the curtains and hands stay
+  in front, as the menus' hole. Placed again every frame (`HoldLayer`, from `CinemaBooths`: the origin moves with the
+  player). Not for 3D (a quad layer shows both eyes one picture), `--xrsim`, or a runtime without quad layers
+  (`IsNativelySupported`, asked once a run). Untested in a headset when written (TO-TEST-BY-HUMAN).
 - `--capturecheck <dir>`: lists what can be shared, shares the first monitor and window 3 s each (frames counted, the
   last as JPEG), records the PC's sound 4 s (play something meanwhile). Measured here: monitor 26-27 frames, window
   30, PC sound 98 % of real time. A desktop check, not CI. `--cinemavideoshot live:monitor|window|camera|test,<prefix>`

@@ -21,7 +21,7 @@ nothing in its card game and hide-and-seek, and that is the mistake not to repea
 
 Plus [`adventure-alcohol`](adventure-alcohol.md) #1271 (asked by the owner while deciding): a real blood
 alcohol level, its effects on walking and driving, an electronic and a single-use breathalyzer. It
-builds after `together` (wine, kirsch, the fondue pot), and its ItemIds 486-488 are in together's block.
+builds after `together` (wine, kirsch, the fondue pot), and its ItemIds 486-488 are in together's block. Built in [#1309](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1309).
 
 ## Decisions taken (October 27, 2026)
 
@@ -80,5 +80,5 @@ Each plan's own list holds the details; these are the ones that change what gets
 | 11 | Versteckis variants (jail and rescue, caught hiders become seekers)? | plain rules first, then a lobby option |
 | 12 | Festival tokens: 1 Batzen = CHF 1, about CHF 600 per festival? | yes, after an economy check |
 | 13 | Festivals whose city is outside the server's region? | move them to the region's largest town ("held this year in Bulle") |
-| 14 | Montreux Jazz and the Zibelemärit? | later |
+| 14 | Montreux Jazz and the Zibelemärit? | later; the Zibelemärit is built, Montreux Jazz is planned in [`adventure-montreux-jazz`](adventure-montreux-jazz.md) ([#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394)) |
 | 15 | VR "for real" (lift the stone, grip the belt, swing the flag)? | the pad way first, the hand ways after a headset playtest |

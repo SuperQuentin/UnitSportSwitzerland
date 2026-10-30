@@ -46,7 +46,7 @@ public partial class DiningProbe : Node
         // a block of flats with a restaurant and a bar on its ground floor: shop units for them, flats above
         new("block", 26, 14, 16, BuildingKind.Apartment,
             new[] { new Spot(VenueType.Restaurant, "regional", -9, 0), new Spot(VenueType.Bar, "", 9, 0) },
-            new[] { RoomType.Gaststube, RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true, Toilets: ToiletSet.Shared),
+            new[] { RoomType.Gaststube, RoomType.BarRoom }, new[] { FurnitureType.BarCounter }, FlatsAbove: true, Toilets: ToiletSet.Gendered),
         // a restaurant in a commercial block's street unit, its front 7 bays (#1292): a women's and a men's WC, the big
         // gendered set needs more wall than its room has (the owner's call: compact washrooms where space is short)
         new("hall", 18, 24, 4.5f, BuildingKind.Commercial, new[] { new Spot(VenueType.Restaurant, "regional") },

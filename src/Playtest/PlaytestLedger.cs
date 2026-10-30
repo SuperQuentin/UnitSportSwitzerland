@@ -66,6 +66,33 @@ public static class PlaytestLedger
     };
 
     /// <summary>Whether a repo-relative path (forward slashes) matches a glob: <c>*</c> within a folder, <c>**</c> across folders, <c>?</c> one character.</summary>
+    /// <summary>Whether every <c>--flag value</c> pair of <paramref name="wanted"/> is in <paramref name="args"/> with that value.</summary>
+    public static bool HasFlags(IReadOnlyList<string> args, IReadOnlyList<string>? wanted)
+    {
+        if (wanted == null) return true;
+        for (int i = 0; i + 1 < wanted.Count; i += 2)
+        {
+            int at = -1;
+            for (int k = 0; k + 1 < args.Count; k++) if (args[k] == wanted[i]) { at = k; break; }
+            if (at < 0 || args[at + 1] != wanted[i + 1]) return false;
+        }
+        return true;
+    }
+
+    /// <summary>The launch <paramref name="args"/> with each <c>--flag value</c> pair of <paramref name="wanted"/> set: replaced where it is there, appended where not.</summary>
+    public static List<string> WithFlags(IEnumerable<string> args, IReadOnlyList<string>? wanted)
+    {
+        var list = args.ToList();
+        if (wanted == null) return list;
+        for (int i = 0; i + 1 < wanted.Count; i += 2)
+        {
+            int at = list.IndexOf(wanted[i]);
+            if (at >= 0 && at + 1 < list.Count) list[at + 1] = wanted[i + 1];
+            else list.AddRange([wanted[i], wanted[i + 1]]);
+        }
+        return list;
+    }
+
     public static bool GlobMatch(string glob, string path) => GlobRegex(glob).IsMatch(path.Replace('\\', '/'));
 
     private static readonly Dictionary<string, Regex> Globs = new();

@@ -15,6 +15,21 @@ public static class CinemaVideo
     /// </summary>
     public const int Width = 854, Height = 358, Fps = 30;
 
+    /// <summary>
+    /// How sharp a client decodes a video itself (#1319, the player's setting, <see cref="CinemaVideoStream.QualityHere"/>):
+    /// the sources yt-dlp may pick and the decoded size, 2.39:1 as <see cref="Width"/> x <see cref="Height"/>. Each step
+    /// about doubles the frames to upload (37, 82, 185 MB/s at 30 fps). The relay and the live shares keep their own.
+    /// </summary>
+    public enum Quality { Low, Medium, High }
+
+    /// <summary>A quality's decoded size and the tallest source picked for it, in lines.</summary>
+    public static (int Width, int Height, int Lines) DecodeSize(Quality q) => q switch
+    {
+        Quality.Medium => (1280, 536, 720),
+        Quality.High => (1920, 804, 1080),
+        _ => (Width, Height, 480),
+    };
+
     /// <summary>The sound, decoded by a second ffmpeg at the same moment: 48 kHz stereo.</summary>
     public const int AudioRate = 48000;
 
@@ -122,8 +137,11 @@ public static class CinemaVideo
         return $"split[a][b];[a]{left},{unsqueeze},{fit}[l];[b]{right},{unsqueeze},{fit}[r];[l][r]hstack";
     }
 
-    /// <summary>A film a hall can be showing when the cinema is first seen: its title, its link, its length in seconds.</summary>
-    public readonly record struct Film(string Title, string Link, double Seconds);
+    /// <summary>
+    /// A film a hall can be showing when the cinema is first seen: its title, its link, its length in seconds; out of the
+    /// halls' rotation (<paramref name="Rotation"/> false, a server's list only, #1367) it is only picked at the panel.
+    /// </summary>
+    public readonly record struct Film(string Title, string Link, double Seconds, bool Rotation = true);
 
     /// <summary>
     /// The open films every cinema can be showing (#1298, the owner's: "free open films"): Blender's open movies, CC-BY,
@@ -200,6 +218,9 @@ public static class CinemaVideo
         public void Add(float width, float height = 1f)
         {
             if (width <= 0) return;
+            // a picture fills its frame one way (the decoder fits it), or most of it both ways (bars burned into the video);
+            // a title card's few lit letters on black say nothing of its shape (#1319: one zoomed into the whole screen)
+            if (Math.Max(width, height) < 0.97f && (width < 0.5f || height < 0.5f)) return;
             _frames++;
             if (width > _widest) _widest = width;
             if (height > _tallest) _tallest = height;
@@ -349,10 +370,12 @@ public static class CinemaVideo
     }
 
     /// <summary>
-    /// yt-dlp's choice for a screen 358 px high: H.264 at most 480p (cheap to decode) and the best sound, else
-    /// any video at most 480p, else what there is (a live stream offers one muxed rendition at each size).
+    /// yt-dlp's choice for a decode <paramref name="lines"/> tall at most (<see cref="DecodeSize"/>): H.264 (cheap to
+    /// decode) and the best sound, else any video that tall, else what there is (a live stream offers one muxed
+    /// rendition at each size).
     /// </summary>
-    public const string SiteFormat = "bv*[height<=480][vcodec^=avc1]+ba/bv*[height<=480]+ba/b[height<=480]/b";
+    public static string SiteFormat(int lines = 480) =>
+        $"bv*[height<={lines}][vcodec^=avc1]+ba/bv*[height<={lines}]+ba/b[height<={lines}]/b";
 
     /// <summary>Where in the video the hall is at shared-clock time <paramref name="now"/>, s: since Play.</summary>
     public static double PositionAt(double now, double t0) => Math.Max(0, now - t0);

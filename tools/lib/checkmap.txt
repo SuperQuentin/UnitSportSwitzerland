@@ -163,6 +163,10 @@ tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
 src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
 src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
 src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+# #1323: playable bowling: the lane rig in every centre; balls rolled into the pins in their own physics space
+src/Interiors/Bowling/ quick --bowlingcheck --systems ui
+src/Interiors/Bowling/ quick --bowlingrollcheck --systems physics
+src/Interiors/Bowling/ net    tools/bowlingnetcheck.sh
 # #1238: cinemas planned in hand-made buildings; the booth over the network
 src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
 src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
@@ -196,6 +200,11 @@ src/Interiors/RoomLights    quick  --cinemacheck --systems ui
 src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
 src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
 src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
+# #1325: pinball: the four cabinets built and played through their nodes (the solver and rules: unit tests)
+src/Interiors/Pinball/ quick --pinballcheck --systems ui
+src/Interiors/Pinball/ quick --zfightcheck Pinball
+shaders/pinball_display quick --pinballcheck --systems ui
+src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
@@ -684,6 +693,12 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+# the holster, Alt + wheel and the wheel's zoom (#1369): the phone check drives them, the phone net check replicates them
+src/Items/Inventory      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/ItemController quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Core/PlayerInput     quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/Inventory      net    tools/phonenetcheck.sh
+src/Items/ItemController net    tools/phonenetcheck.sh
 src/Phone/               net    tools/phonenetcheck.sh
 src/Player/FootPlayer.Phone net  tools/phonenetcheck.sh
 # the Swiss match items (#478): fondue, smoke and alphorn between two clients
@@ -696,6 +711,11 @@ shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
+# the sword (#1371): moves, hits, dummies and bots between two clients
+src/Combat/Sword         net    tools/swordnetcheck.sh
+src/Combat/TrainingDummy net    tools/swordnetcheck.sh
+src/Player/FootPlayer.Sword net tools/swordnetcheck.sh
+src/Bots/BotHands        net    tools/swordnetcheck.sh
 # aura battles (#907): plan, cut on the beat, the server grades
 src/Combat/Aura          net    tools/auranetcheck.sh
 src/Player/FootPlayer.Aura net  tools/auranetcheck.sh
@@ -824,6 +844,7 @@ src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Playtest/Scenarios/Adv3 quick --playtest --playtest-smoke --world fixture --chunks fixture:flat --festival test --systems terrain,npcs,birds,physics,audio,network,sky,interiors,loot,occasions,ui,build,airports,farming,containers,snow,lifts,adventure --pois fixture --givers fixture --crevasses on --adventure-dir res://test_output/playtest/adv3
 # the playtest recorder (#844): a 20 s recorded session read back (trace, note, report, top view)
 src/Playtest/            quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Movie/ReplayWatch    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
@@ -1011,14 +1032,103 @@ src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
 src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
 tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
+tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
+src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Desalpe/ net    tools/desalpenetcheck.sh
+tools/desalpenetcheck.sh    net    tools/desalpenetcheck.sh
+src/Occasions/Festivals/Desalpe/ quick  --desalpecheck --festival test --date 2027-09-24 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+# #1348: the Christmas market: stalls, the taste and the ware, the Glühwein mug and its alcohol, the Samichlaus (offline quick probe; server + two clients)
+src/Occasions/Festivals/Christmas/ quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Christmas quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Christmas quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Christmas/ net    tools/christmasnetcheck.sh
+src/Occasions/Festivals/FestivalService.Christmas net    tools/christmasnetcheck.sh
+tools/christmasnetcheck.sh    net    tools/christmasnetcheck.sh
+# #1373: the Zibelemaerit: four onion-market stalls (taste, buy), the Marktgang, the confetti fight's pay and cap (offline quick probe; server + two clients)
+src/Occasions/Festivals/Zibelemaerit/ quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Zibelemaerit/ net    tools/zibelenetcheck.sh
+src/Occasions/Festivals/FestivalService.Zibelemaerit net    tools/zibelenetcheck.sh
+tools/zibelenetcheck.sh    net    tools/zibelenetcheck.sh
+# #1351: the Escalade: the Marmite's pair, the soup pot, the Course's gates and pay (offline quick probe; server + two clients)
+src/Occasions/Festivals/Escalade/ quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Escalade/ net    tools/escaladenetcheck.sh
+src/Occasions/Festivals/FestivalService.Escalade net    tools/escaladenetcheck.sh
+tools/escaladenetcheck.sh    net    tools/escaladenetcheck.sh
+# #1357: the Fasnacht: Larven stall, Raeppli, Guggenmusik, Basel's Morgestraich (offline quick probe; server + two clients)
+src/Occasions/Festivals/Fasnacht/ quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalCatalog.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalService.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/Fasnacht/ net    tools/fasnachtnetcheck.sh
+src/Occasions/Festivals/FestivalService.Fasnacht net    tools/fasnachtnetcheck.sh
+tools/fasnachtnetcheck.sh    net    tools/fasnachtnetcheck.sh
+# #1358: the Sechseläuten: the purse, the bet on the Böögg, the light, the bang and the shares, the stage (offline quick probe; server + two clients)
+src/Occasions/Festivals/Sechselaeuten/ quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+shaders/sechse_flame quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Sechselaeuten/ net    tools/sechsenetcheck.sh
+src/Occasions/Festivals/FestivalService.Sechselaeuten net    tools/sechsenetcheck.sh
+tools/sechsenetcheck.sh    net    tools/sechsenetcheck.sh
+# #1355: the 1 August: the lampion, the stands, the lampion walk, the volleys, the lake show, the Höhenfeuer (offline quick probe; server + two clients)
+src/Occasions/Festivals/August1/ quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+shaders/hoehenfeuer quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/August1/ net    tools/august1netcheck.sh
+src/Occasions/Festivals/FestivalService.August1 net    tools/august1netcheck.sh
+tools/august1netcheck.sh    net    tools/august1netcheck.sh
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
 tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
 src/Adventure/Together/ net tools/togethernetcheck.sh
 
+# #1269 part 3 Steinstossen: the offline check (prompt, attempt, perfect put, foul, forged put, bots, the day's three puts) and the two-client check
+src/Occasions/Festivals/    quick  --steincheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/    net    tools/steinnetcheck.sh
+tools/steinnetcheck.sh      net    tools/steinnetcheck.sh
+src/Combat/Schwing       net    tools/schwingnetcheck.sh
+src/Player/FootPlayer.Schwing net tools/schwingnetcheck.sh
+src/Avatar/HumanMeshBuilder.Schwing net tools/schwingnetcheck.sh
+
+# #1271: alcohol: the drink log, the curve, the effects on the intents, the climb gate, passing out, the two breathalyzers (offline quick probe; server + two clients)
+src/Adventure/Alcohol/  quick  --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Drunk quick --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/Alcohol/AlcoholNetProbe net tools/alcoholnetcheck.sh
+tools/alcoholnetcheck.sh  net  tools/alcoholnetcheck.sh
+src/Adventure/Alcohol/ net tools/alcoholnetcheck.sh
 # #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
 src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/WorldEvent  quick  --worldeventcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/WorldEventNetProbe net tools/worldeventnetcheck.sh
+tools/worldeventnetcheck.sh  net  tools/worldeventnetcheck.sh
+src/Adventure/Errands/WorldEvents.cs net tools/worldeventnetcheck.sh
 src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh
 tools/errandnetcheck.sh  net  tools/errandnetcheck.sh
 src/Adventure/Errands/ErrandService net tools/errandnetcheck.sh
+
+# #1269 the alphorn and yodel game: the offline check (a four-voice song, harmony, pay, forged and early songs refused, the valley echo) and the two-client check
+src/Occasions/Festivals/Horn/   quick  --hornscheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Horn   net  tools/hornnetcheck.sh
+src/Occasions/Festivals/Horn/   net    tools/hornnetcheck.sh
+tools/hornnetcheck.sh           net    tools/hornnetcheck.sh
+# #1356: the Chalandamarz: the march beat, the Treichel rings graded by stamp, the loop's stations, the pay (offline quick probe; server + two clients)
+src/Occasions/Festivals/Chalanda/ quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Chalanda/ net    tools/chalandanetcheck.sh
+src/Occasions/Festivals/FestivalService.Chalanda net    tools/chalandanetcheck.sh
+tools/chalandanetcheck.sh    net    tools/chalandanetcheck.sh
+# #1372: the hidden crevasse's slot: fall, climb out, rescue, rope and haul (offline quick probe)
+src/Adventure/Together/CrevasseCheck quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNode quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/TogetherService.Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNetProbe net tools/crevassenetcheck.sh
+tools/crevassenetcheck.sh  net  tools/crevassenetcheck.sh
+src/Net/StaminaWatch net tools/crevassenetcheck.sh

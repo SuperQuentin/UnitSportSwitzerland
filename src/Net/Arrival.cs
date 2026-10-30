@@ -41,6 +41,12 @@ public partial class Arrival : Node
     /// <summary>Server: thermals, ridge lift and updrafts carry gliders (#1225); <c>--lift off</c> stills the air.</summary>
     public bool Lift { get; private set; } = true;
 
+    /// <summary>Server: <c>--alcohol off|mild|real</c> (#1271): 0, 1, 2.</summary>
+    public int Alcohol { get; private set; } = 2;
+
+    /// <summary>Server: <c>--crevasses off|on</c> (#1372): hidden glacier crevasses open under unroped players (on by default).</summary>
+    public bool Crevasses { get; private set; } = true;
+
     /// <summary>Client: the server said where to start, LV95 metres.</summary>
     public event Action<double, double>? Told;
 
@@ -56,8 +62,10 @@ public partial class Arrival : Node
         a.FreeTeleport = !CmdArgs.Has("--no-teleport") && CmdArgs.Value("--adventure-travel")?.ToLowerInvariant() != "network";
         a.Stamina = CmdArgs.Value("--stamina") != "off";
         a.Lift = CmdArgs.Value("--lift") != "off";
+        a.Alcohol = (int)Adventure.Alcohol.AlcoholRules.ParseMode(CmdArgs.Value("--alcohol"));
+        a.Crevasses = CmdArgs.Value("--crevasses")?.ToLowerInvariant() != "off";
         GD.Print($"[arrival] players start at {a.Spawn.E:F0}/{a.Spawn.N:F0}, teleporting {(a.FreeTeleport ? "allowed" : "admins only")}, "
-                 + $"stamina {(a.Stamina ? "on" : "off")}, lift {(a.Lift ? "on" : "off")}");
+                 + $"stamina {(a.Stamina ? "on" : "off")}, lift {(a.Lift ? "on" : "off")}, alcohol {(Adventure.Alcohol.AlcoholMode)a.Alcohol}, crevasses {(a.Crevasses ? "on" : "off")}");
         world.AddChild(a);
         return a;
     }
@@ -70,10 +78,10 @@ public partial class Arrival : Node
     }
 
     /// <summary>Server: a peer was accepted; tell it where it starts and what it may do.</summary>
-    public void SendTo(long peer) => RpcId(peer, MethodName.Rules, Spawn.E, Spawn.N, FreeTeleport, WorldChoice.ActiveId, Stamina, Lift);
+    public void SendTo(long peer) => RpcId(peer, MethodName.Rules, Spawn.E, Spawn.N, FreeTeleport, WorldChoice.ActiveId, Stamina, Lift, (byte)Alcohol, Crevasses);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Rules(double e, double n, bool freeTeleport, string world, bool stamina, bool lift)
+    private void Rules(double e, double n, bool freeTeleport, string world, bool stamina, bool lift, byte alcohol, bool crevasses)
     {
         if (_server) return;
         // the world this client loaded came from the server list; a server it could not ask says it here
@@ -84,6 +92,8 @@ public partial class Arrival : Node
         }
         Permissions.SetServerTeleport(freeTeleport);
         Permissions.SetServerBody(stamina, lift);
+        Permissions.SetServerAlcohol(alcohol);
+        Permissions.SetServerCrevasses(crevasses);
         GD.Print($"[arrival] server rules: stamina {(stamina ? "on" : "off")}, lift {(lift ? "on" : "off")}");
         Told?.Invoke(e, n);
     }

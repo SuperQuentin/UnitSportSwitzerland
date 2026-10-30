@@ -15,7 +15,9 @@
   go ahead after 25 s anyway. Hosting adds "Starting your server" before all of it.
 - **A play launch at a point** (#1296): `<godot> --path . -- --chunks <dir> --at E,N` (with only the flags
   `GameShell.UseTitle` calls harmless) skips the title but not this screen: `GameShell.PlayAt`, then
-  Explore at that point as from the menus (on foot on open ground). A probe or `--connect`, `--seat`, any
+  Explore at that point as from the menus (on foot on open ground). `--enter <venue | building>` (#1244) is one
+  too: its building is the landing, and the player goes inside once on foot (often before the screen lifts). A probe
+  or `--connect`, `--seat`, any
   flag of its own, still boots `Direct`: no title, no loading screen.
 - **Frames to draw**: `ClientWorld._Ready` yields a frame (`Breathe`) at a few points when launched
   from the title, with an `IsInsideTree()` check after each await (Cancel may free the world

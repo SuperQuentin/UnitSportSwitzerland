@@ -105,6 +105,10 @@ world_lights={
 "type": "float",
 "value": 0.0
 }
+world_lamps={
+"type": "float",
+"value": 1.0
+}
 world_origin_offset={
 "type": "vec2",
 "value": Vector2(0, 0)

@@ -51,6 +51,7 @@ public class ClockDisciplineTests
     /// </summary>
     private static readonly Dictionary<string, string> Allowed = new()
     {
+        ["src/Adventure/Alcohol/Bac.cs"] = "clock: blood alcohol runs on real time, so a player who logs off drunk comes back sober (#1271); pure, linked into tier 0",
         // ---- the clocks themselves ----
         ["src/Core/RealClock.cs"] = "clock: it is the wall clock",
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",
@@ -116,10 +117,17 @@ public class ClockDisciplineTests
         ["src/Player/FootPlayer.Aura.cs"] = "presentation: which move of the combo the shared beat is on, and the Griddy's beat",
         ["src/Combat/AuraManager.Bots.cs"] = "presentation: a bot battler's laugh on the aura battle's shared beat (#914)",
         ["src/Combat/AuraManager.Music.cs"] = "presentation: a radio's CD position, which an aura battle takes its beat from (#914)",
+        // the stone put (#1269 part 3): the stamps of its presses are server time, checked against the arrival like an aura battle's
+        ["src/Occasions/Festivals/SteinGame.cs"] = "presentation: the lift meter and the run-up drum, on the attempt's server time, and the stamps of the presses",
+        ["src/Occasions/Festivals/SteinService.cs"] = "plumbing: the attempt's start and the arrival of its stamps are server time, as an aura battle's are",
         ["src/Combat/AuraWatchHud.cs"] = "presentation: the move a watched aura battle is on, on its shared beat (#914)",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
         ["src/Concert/ConcertService.Songs.cs"] = "presentation: /concert song reads where the setlist is on the shared clock the music plays to",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
+        ["src/Occasions/Festivals/Fahnen/FahnenGame.cs"] = "presentation: the flag swinger's figures are judged against a drum that plays on the shared clock in real time, like the pogo's beat",
+        ["src/Occasions/Festivals/Chalanda/ChalandaGame.cs"] = "presentation: the march drum and the HUD's closing ring are on the shared server clock, and a press is stamped with it, like the pogo's beat",
+        ["src/Occasions/Festivals/FestivalService.Chalanda.cs"] = "clock: the march beat is the server's real clock (120 BPM), a ring's stamp is graded against it and checked for plausibility, not the simulated clock /speed scales",
+        ["src/Occasions/Festivals/FestivalService.Fahnen.cs"] = "clock: a routine's start, its stamps and its settlement are on the server's real clock (the drum's beat, 96 BPM), not the simulated one /speed scales",
         ["src/Concert/PogoQte.cs"] = "presentation: the pogo QTE judges a press against the beat of the music as heard, which plays on the shared clock in real time",
         ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
         ["src/Concert/Mvr/Mdns.cs"] = "plumbing: mDNS answers at most once a second, real time on its receive thread",
@@ -142,6 +150,8 @@ public class ClockDisciplineTests
         ["src/Interiors/CinemaVideoSpeaker.cs"] = "presentation: the sample of a hall's video due now, on the shared clock (#1298)",
         ["src/Interiors/CinemaVideoShot.cs"] = "presentation: a shot's video plays on the clock as in a hall (#1298)",
         ["src/Audio/Tracker/TrackerSpeaker.cs"] = "presentation: where a venue's tracker playlist should be playing now, on the shared clock (#1244)",
+        ["src/Interiors/Patrons/VenuePatrons.cs"] = "presentation: which venue guests sit where and how they move, the same on every client from the shared clock; the game hour through WorldClock.HourAt (#1244)",
+        ["src/Interiors/VenueTerraces.cs"] = "presentation: --terracelog prints whether a terrace's guests are out at this moment of the shared clock (#1244)",
         ["src/Audio/Ambience.cs"] = "presentation: church bells strike on the machine's local hour (docs/notes/audio/audio.md)",
         ["src/Audio/Cd/CdLibrary.cs"] = "presentation: the library's burn progress readout",
         ["src/Audio/Surfaces.cs"] = "presentation: footstep surface sampling",

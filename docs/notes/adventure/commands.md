@@ -90,9 +90,16 @@
   station's sign charged (B, an admin, funds it) and B sees A's remote body land, the GA bought and used from anywhere
   for nothing, refused in a BR round, the pin gone from B when A leaves. RESULT line; logs `test_output/navnet_*.log`.
 
+## Alcohol (#1271)
+
+- `--alcoholcheck --chunks fixture:crag --systems ui,physics,adventure` (quick), `tools/alcoholnetcheck.sh` (net: two clients, then `--alcohol off`).
+- Server: `--alcohol off|mild|real` (default real), `--alcohol-test` (opens `/alcohol test drink <beers> <minutes ago>`). Any peer: `--alcohol-clock N` (the clock runs N times faster, checks only). Offline: Settings > Gameplay > Alcohol.
+- Chat: `/alcohol`.
+
 ## Together (#1266)
 
+- `--crevassecheck` (quick, `--world fixture --systems ui,terrain,physics,adventure`), `tools/crevassenetcheck.sh` (net), `--crevasses off|on`: `crevasses`.
 - `--togethercheck`, `--fonduecheck` (quick, `--world fixture --systems ui,terrain,physics,adventure`; `--rewardspots res://tools/lib/together_spots.txt`, `--fondueseed 2`), `tools/togethernetcheck.sh` (net).
 - Server: `--forfeits off|mild|all`, `--fondueseed N`, `--together-test` (opens `/rope test veteran|<milestone>`), `--together-day-seconds N`. Any peer: `--together-glacier E,N,R`.
 - Chat: `/rope [hands] <player>`, `/rope off`, `/fondue [start|raclette|sit|invite <p>|leave|forfeit 1-3]`.
-- `--givers fixture` (with `--pois fixture`): the eight fixture errand givers round the start; `--errand-day-offset n`: the Swiss day of the daily Postkarten moves n days on; `--errandcheck` (quick) and `tools/errandnetcheck.sh` (net) (#1267, `errands`).
+- `--givers fixture` (with `--pois fixture`): the eight fixture errand givers round the start; `--errand-day-offset n`: the Swiss day of the daily Postkarten moves n days on; `--errandcheck` (quick) and `tools/errandnetcheck.sh` (net) (#1267, `errands`). `--world-events off|rare|normal` (the server's switch for the random events, normal by default), `--worldevent cow,hiker,avalanche,fire` (plan one of each in turn near the first player, with `--worldevent-forest` for a checkerboard forest and `--worldevent-players n` to wait for n players), `--worldeventcheck` (quick, `--world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure`) and `tools/worldeventnetcheck.sh` (net) (#1339, `world-events`); the quick check keeps its progress in `test_output/worldeventcheck`, never the real save (#1346).

@@ -586,6 +586,187 @@ public static partial class InteriorGenerator
         l.Entrances.RemoveAll(locked.Contains);
     }
 
+    /// <summary>Why vestibules were or were not made (the survey prints it).</summary>
+    internal static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> VestibuleWhy = new();
+
+    /// <summary>The plans a vestibule was made in (the survey draws a few).</summary>
+    internal static readonly System.Collections.Concurrent.ConcurrentQueue<string> VestibuleKeys = new();
+
+    /// <summary>How deep a vestibule may run in from its door to the first room (#1304).</summary>
+    private const float MaxVestibule = 20f;
+
+    /// <summary>
+    /// A way in behind each street door that has no room behind it (#1304): a door on a stretch of the outline the
+    /// rooms do not reach (the far arm of a civic block, the bit of a works' roof its hall pieces leave) reads as
+    /// locked. A vestibule 1.8 m wide runs in square from it, a four-sided shape, to the wall of the first room it
+    /// meets up to <see cref="MaxVestibule"/> deep, that wall at most 60° off the door's, and opens into the room
+    /// through an arch: if the room is one a street door may open into (<see cref="FitDoorway"/>'s rule), the
+    /// vestibule stays inside the outline and clear of every room, and the plan validates no worse.
+    /// </summary>
+    internal static void Vestibules(InteriorLayout l, Footprint fp, bool[,] grid)
+    {
+        if (l.Floors.Count == 0) return;
+        var rings = RingsFor(l, grid);
+        if (rings.Count == 0) return;
+        if (l.Entrances.Count == 0) l.Entrances.AddRange(l.AllEntrances());
+        int gf = Math.Min(l.Below, l.Floors.Count - 1);
+        var rooms = l.Floors[gf].Rooms;
+        bool flats = l.Type is BuildingType.Apartments or BuildingType.MixedUse;
+        var u = new Vector2(MathF.Cos(l.Yaw), -MathF.Sin(l.Yaw));
+        var v = new Vector2(-u.Y, u.X);
+        float clear = l.StoreyHeight - Slab, bw = l.Width / 2, bd = l.Depth / 2;
+        const float hw = 0.9f;
+        int? before = null;
+        static void Why(string w) => VestibuleWhy[w.Length > 70 ? w[..70] : w] = VestibuleWhy.GetValueOrDefault(w.Length > 70 ? w[..70] : w) + 1;
+        foreach (var d in fp.Doors)
+        {
+            if (d.Level != 0 || d.Width <= 0 || d.Vehicle) continue;
+            string key = new DoorKey(fp.Key, d.Slot).ToString();
+            if (l.Entrances.Any(e => e.Door == key)) continue;
+            var rel = new Vector2(d.Position.X - l.CenterX, d.Position.Z - l.CenterZ);
+            var at = new Vector2(rel.Dot(u), rel.Dot(v));
+            var o = new Vector2(d.Outward.X, d.Outward.Z);
+            var outward = new Vector2(o.Dot(u), o.Dot(v)).Normalized();
+            var n = -outward;
+            var t = new Vector2(-outward.Y, outward.X);
+            if (rooms.Any(r => r.Holds(at.X + n.X * 0.6f, at.Y + n.Y * 0.6f)))
+            {
+                // a room right behind it, and no doorway yet: the door's own was never planned (the box's side had
+                // no room for it), so it is fitted here as MoveEntries fits the others
+                var cut = new OpeningPlan { Width = Math.Min(d.Width, 1.2f), Top = Math.Min(d.Height, clear - 0.15f), Kind = OpeningKind.Entry };
+                if (!FitDoorway(l, gf, new RoomPlan(), cut, at, outward, out var room, out int edge, out float along, out var spot, out var normal)) { Why("a room behind, no doorway fits"); continue; }
+                before ??= InteriorValidator.Validate(l).Count;
+                var removed = room.Openings.Where(q => q.Kind == OpeningKind.Window && OnEdge(room, q, edge, along, cut.Width / 2 + 0.2f)).ToList();
+                room.Openings.RemoveAll(removed.Contains);
+                var moved = new OpeningPlan { Width = cut.Width, Top = Math.Min(cut.Top, l.ClearOf(room) - 0.15f), Kind = OpeningKind.Entry };
+                var sd = Facing(normal);
+                if (room.Shape != null) (moved.Edge, moved.Center) = (edge, along);
+                else (moved.Side, moved.Center) = (sd, sd is Side.Front or Side.Back ? spot.X : spot.Y);
+                room.Openings.Add(moved);
+                var fitted = new EntrancePlan
+                {
+                    Door = key, X = spot.X, Z = spot.Y, InX = -normal.X, InZ = -normal.Y, Width = cut.Width,
+                    DoorX = d.Position.X, DoorY = d.Position.Y, DoorZ = d.Position.Z, DoorOutX = d.Outward.X, DoorOutZ = d.Outward.Z,
+                    DoorWidth = d.Width, DoorHeight = d.Height, Hang = d.Hang, Vehicle = false,
+                };
+                l.Entrances.Add(fitted);
+                if (InteriorValidator.Validate(l).Count <= before) { Why("a room behind, doorway fitted"); continue; }
+                Why("a room behind, invalid");
+                l.Entrances.Remove(fitted);
+                room.Openings.Remove(moved);
+                room.Openings.AddRange(removed);
+                continue;
+            }
+            // the first room straight in
+            RoomPlan? to = null;
+            float hitAt = 0;
+            for (float k = 0.6f; k <= MaxVestibule && to == null; k += 0.25f)
+            {
+                to = rooms.FirstOrDefault(r => r.Holds(at.X + n.X * k, at.Y + n.Y * k));
+                hitAt = k;
+            }
+            if (to == null) { Why("no room in reach"); continue; }
+            if (to.Type is RoomType.Elevator or RoomType.Vault or RoomType.Shelter or RoomType.Ramp or RoomType.Stairwell) { Why("a stair or lift room"); continue; }
+            if (flats ? StreetRank(to) is < 0 or > 1
+                : to.Type is RoomType.Bedroom or RoomType.GuestRoom or RoomType.Bathroom or RoomType.WC or RoomType.ToiletStall or RoomType.Laundry) { Why("a private room"); continue; }
+            // the wall of it the door's centre line crosses
+            var c = to.Corners();
+            int wall = -1;
+            float best = float.MaxValue;
+            for (int k = 0; k < c.Length; k++)
+            {
+                var a0 = c[k];
+                var a1 = c[(k + 1) % c.Length];
+                if (LineHit(at, n, a0, a1) is not { } hit || hit < 0 || hit > hitAt + 0.5f || hit >= best) continue;
+                var p = at + n * hit;
+                var e = a1 - a0;
+                float along0 = (p - a0).Dot(e) / e.LengthSquared();
+                if (along0 < -0.001f || along0 > 1.001f) continue;
+                (best, wall) = (hit, k);
+            }
+            if (wall < 0) { Why("no wall crossed"); continue; }
+            var wa = c[wall];
+            var wb = c[(wall + 1) % c.Length];
+            float wlen = wa.DistanceTo(wb);
+            var wAlong = (wb - wa) / wlen;
+            var wOut = new Vector2(wAlong.Y, -wAlong.X);
+            if (wOut.Dot(outward) < 0.5f) { Why("the wall is turned away"); continue; }
+            var fa = at - t * hw;
+            var fb = at + t * hw;
+            if (LineHit(fa, n, wa, wb) is not { } ha || LineHit(fb, n, wa, wb) is not { } hb || ha < 0.3f || hb < 0.3f) { Why("no wall crossed"); continue; }
+            var ea = fa + n * ha;
+            var eb = fb + n * hb;
+            float sa = (ea - wa).Dot(wAlong), sb = (eb - wa).Dot(wAlong);
+            if (Math.Min(sa, sb) < 0.2f || Math.Max(sa, sb) > wlen - 0.2f) { Why("beside the room"); continue; }
+            var quad = new List<Vector2> { fa, fb, eb, ea };
+            if (RoomShapes.Area(quad) < 0) quad.Reverse();
+            if (quad.Any(q => q.X < -bw || q.X > bw || q.Y < -bd || q.Y > bd)) { Why("leaves the box"); continue; }
+            // inside the outline and clear of the rooms, a step in from its edges
+            bool ok = true;
+            float x0 = quad.Min(q => q.X), x1 = quad.Max(q => q.X), z0 = quad.Min(q => q.Y), z1 = quad.Max(q => q.Y);
+            var arr = quad.ToArray();
+            for (float x = x0 + 0.1f; x < x1 && ok; x += 0.25f)
+                for (float z = z0 + 0.1f; z < z1 && ok; z += 0.25f)
+                {
+                    var q = new Vector2(x, z);
+                    if (!RoomShapes.Contains(arr, q) || RoomShapes.EdgeDistance(arr, q) < 0.1f) continue;
+                    if (!RoomShapes.Contains(rings, q)) { Why("leaves the outline"); ok = false; }
+                    else if (rooms.Any(r => r.Holds(x, z))) { Why("runs through a room"); ok = false; }
+                }
+            if (!ok) continue;
+            // its core: a metre square round its middle, inside it and clear of the others' cores
+            var mid = (fa + fb + ea + eb) / 4;
+            var core = new RectPlan(mid.X - 0.5f, mid.Y - 0.5f, mid.X + 0.5f, mid.Y + 0.5f);
+            if (new[] { new Vector2(core.X0, core.Z0), new Vector2(core.X1, core.Z0), new Vector2(core.X1, core.Z1), new Vector2(core.X0, core.Z1) }.Any(q => !RoomShapes.Contains(arr, q))
+                || rooms.Any(r => new RectPlan(r.X0, r.Z0, r.X1, r.Z1).Overlaps(core, 0.02f))) { Why("too short for its core"); continue; }
+            float width = Math.Min(d.Width, 1.2f);
+            float atWall = ((ea + eb) / 2 - wa).Dot(wAlong);
+            var into = new OpeningPlan { Width = width, Top = Math.Min(2.2f, clear - 0.2f), Kind = OpeningKind.Arch, Other = rooms.Count };
+            if (to.Shape != null) (into.Edge, into.Center) = (wall, atWall);
+            else
+            {
+                into.Side = wOut.Y < -0.5f ? Side.Front : wOut.Y > 0.5f ? Side.Back : wOut.X < 0 ? Side.Left : Side.Right;
+                var pm = (ea + eb) / 2;
+                into.Center = into.Side is Side.Front or Side.Back ? pm.X : pm.Y;
+            }
+            var probe = to.WallFrame(into).At;
+            if (to.Openings.Any(q => q.Kind != OpeningKind.Window && to.WallFrame(q).At.DistanceTo(probe) < (q.Width + width) / 2 + 0.3f)) { Why("another opening"); continue; }
+            before ??= InteriorValidator.Validate(l).Count;
+            var hall = new RoomPlan { X0 = core.X0, Z0 = core.Z0, X1 = core.X1, Z1 = core.Z1, Type = RoomType.Corridor, Shape = quad.SelectMany(q => new[] { q.X, q.Y }).ToArray() };
+            var cs = hall.Corners();
+            int Edge(Vector2 p0, Vector2 p1)
+            {
+                for (int k = 0; k < cs.Length; k++)
+                    if (cs[k].DistanceTo(p0) < 0.01f && cs[(k + 1) % cs.Length].DistanceTo(p1) < 0.01f
+                        || cs[k].DistanceTo(p1) < 0.01f && cs[(k + 1) % cs.Length].DistanceTo(p0) < 0.01f) return k;
+                return -1;
+            }
+            int front = Edge(fa, fb), back = Edge(ea, eb);
+            if (front < 0 || back < 0) { Why("no edges"); continue; }
+            hall.Openings.Add(new OpeningPlan { Edge = front, Center = hw, Width = width, Top = Math.Min(d.Height, clear - 0.15f), Kind = OpeningKind.Entry });
+            hall.Openings.Add(new OpeningPlan { Edge = back, Center = (eb - ea).Length() / 2, Width = width, Top = into.Top, Kind = OpeningKind.Arch, Other = rooms.IndexOf(to) });
+            var windows = to.Openings.Where(q => q.Kind == OpeningKind.Window && to.WallFrame(q).At.DistanceTo(probe) < (q.Width + width) / 2 + 0.2f).ToList();
+            to.Openings.RemoveAll(windows.Contains);
+            to.Openings.Add(into);
+            rooms.Add(hall);
+            var entrance = new EntrancePlan
+            {
+                Door = key, X = hall.WallFrame(hall.Openings[0]).At.X, Z = hall.WallFrame(hall.Openings[0]).At.Y, InX = n.X, InZ = n.Y, Width = width,
+                DoorX = d.Position.X, DoorY = d.Position.Y, DoorZ = d.Position.Z, DoorOutX = d.Outward.X, DoorOutZ = d.Outward.Z,
+                DoorWidth = d.Width, DoorHeight = d.Height, Hang = d.Hang, Vehicle = false,
+            };
+            l.Entrances.Add(entrance);
+            var after = InteriorValidator.Validate(l);
+            if (after.Count <= before) { Why("made"); VestibuleKeys.Enqueue(l.Key); continue; }
+            Why("invalid: " + System.Text.RegularExpressions.Regex.Replace(after.Last(), @"[\d.]+", "#"));
+            // it does not hold together: as it was
+            l.Entrances.Remove(entrance);
+            rooms.RemoveAt(rooms.Count - 1);
+            to.Openings.Remove(into);
+            to.Openings.AddRange(windows);
+        }
+    }
+
     /// <summary>How many rooms of a plan no one can reach, as the validator counts them.</summary>
     private static int Unreached(InteriorLayout l) => InteriorValidator.Unreachable(l).Count;
 

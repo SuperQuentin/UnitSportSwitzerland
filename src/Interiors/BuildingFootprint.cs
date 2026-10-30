@@ -418,6 +418,24 @@ public static class BuildingFootprint
         }
         bool Under(Vector2 p) => roof.Any(r => InTriangle(p, r.A, r.B, r.C));
 
+        // the courtyards the roof closes round (#1304): a door there opens where no one from the street
+        // stands, and the plan inside never has a room on that wall, so none goes there
+        bool[,]? shut = null;
+        bool shutRead = false;
+        float sw = Math.Max(1f, w), sd = Math.Max(1f, dpt);
+        bool Courtyard(Vector2 wall, Vector2 n)
+        {
+            if (!shutRead)
+            {
+                shutRead = true;
+                if (PlanOutline.Grid(b, center, u, sw, sd, PlanOutline.Cell) is { } g) shut = PlanOutline.Enclosed(g);
+            }
+            if (shut == null) return false;
+            var q = wall + n * 1.0f - center;
+            int i = (int)((q.Dot(u) + sw / 2) / PlanOutline.Cell), j = (int)((q.Dot(new Vector2(-u.Y, u.X)) + sd / 2) / PlanOutline.Cell);
+            return i >= 0 && j >= 0 && i < shut.GetLength(0) && j < shut.GetLength(1) && shut[i, j];
+        }
+
         // ---- facade facets: coplanar wall triangles, merged along their wall line --------
         var facets = new Dictionary<(int, int), Facet>();
         var cuts = new List<(Vector2 Mid, Vector2 Normal, float Ground)>();
@@ -497,6 +515,7 @@ public static class BuildingFootprint
             }
             else score += f.Normal.Dot(new Vector2(0.3f, 0.95f)) * 0.3f; // south-ish, like Swiss entrances
             if (ground < b.MinY - 0.6f) score -= 2f;          // on stilts over a slope
+            if (Courtyard(xz, f.Normal)) score -= 4f;         // on a courtyard the roof closes round
             if (ground > b.MaxY - plainH - 0.3f) score -= 3f; // buried side of a hillside house
             if (width < doorW * 0.8f) score -= 1f;
             // too little wall here for the door this building wants: it can still take a shorter
@@ -742,6 +761,29 @@ public static class BuildingFootprint
         if (found && door.Width > 0 && pedBudget > 1 + extras.Count)
         {
             var (serviceW, serviceH) = ServiceDoorFor(kind);
+            // a block of flats (#1304) is entered by the stairwells its planner builds behind the doors on each
+            // wing's front: one facade a wing (the main door's for a block in one piece; a wing of an L, a U or a
+            // courtyard block, planned apart, #577, the facade of its first door), as TryWings gives them out
+            var flatWings = kind == BuildingKind.Apartment ? PlanOutline.Wings(b, center, u, w, dpt) : null;
+            var v = new Vector2(-u.Y, u.X);
+            int WingOf(Vector2 xz, Vector2 n)
+            {
+                if (flatWings is not { Count: >= 2 }) return 0;
+                var q = xz - center;
+                float x = q.Dot(u), z = q.Dot(v), nx = n.Dot(u), nz = n.Dot(v);
+                for (int i = 0; i < flatWings.Count; i++)
+                {
+                    var r = flatWings[i];
+                    bool alongX = Math.Abs(nz) >= Math.Abs(nx);
+                    float edge = alongX ? (nz < 0 ? r.Z0 : r.Z1) : (nx < 0 ? r.X0 : r.X1);
+                    float across = alongX ? z : x, along = alongX ? x : z;
+                    float lo = alongX ? r.X0 : r.Z0, hi = alongX ? r.X1 : r.Z1;
+                    if (Math.Abs(edge - across) < 2f && along > lo - 0.5f && along < hi + 0.5f) return i;
+                }
+                return -1;
+            }
+            var fronts = new Dictionary<int, Vector2>();
+            if (kind == BuildingKind.Apartment) fronts[WingOf(new Vector2(door.Position.X, door.Position.Z), new Vector2(door.Outward.X, door.Outward.Z))] = new Vector2(door.Outward.X, door.Outward.Z);
             var placed = new List<DoorSpot> { door };
             placed.AddRange(extras);   // the bays are already on the wall and keep their room
             var order = new List<Cand>();
@@ -757,7 +799,7 @@ public static class BuildingFootprint
                     if (placed.Count >= pedBudget) break;
                     if (off == 0 && c == main) continue; // the main door already stands there
                     var xz = c.Normal * c.Offset + t * (mid + off);
-                    if (Covered(xz)) continue;
+                    if (Covered(xz) || Courtyard(xz, c.Normal)) continue;
                     float ground = grid != null
                         ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
                         : b.MinY + 0.8f;
@@ -778,6 +820,17 @@ public static class BuildingFootprint
                     };
                     if (!DoorOnWall(b, spot)) continue;
                     if (placed.Any(q => TooClose(q, spot))) continue;
+                    // a block of flats is entered by its stairwells (#1304), and the planner builds one behind each
+                    // front door far enough from the next: so its doors are on the main door's facade, a street
+                    // front's spacing apart however the TIN breaks that facade up; on an end or at the back, or
+                    // closer, a door would open into a flat
+                    if (kind == BuildingKind.Apartment)
+                    {
+                        int wing = WingOf(xz, c.Normal);
+                        if (wing < 0 || fronts.TryGetValue(wing, out var front) && c.Normal.Dot(front) < 0.95f
+                            || placed.Any(q => SameFacade(q, spot) && Flat(q).DistanceTo(xz) < DoorBudget.Spacing - 1f)) continue;
+                        fronts.TryAdd(wing, c.Normal);
+                    }
                     // a front-wall entrance (and its stairwell) keeps clear of the ramp's lane and car park (#694), any other door of the garage door
                     if (garage != null && planX != null && c.Normal.Dot(main!.Normal) > 0.9f && (garageLeft ? planX(xz) < keepX - 0.01f : planX(xz) > keepX + 0.01f)) continue;
                     if (placed.Any(q => q.Link.Any && new Vector2(q.Position.X, q.Position.Z).DistanceTo(xz) < GarageRule.StairClear)) continue;
@@ -807,7 +860,7 @@ public static class BuildingFootprint
         float GroundOf(Vector2 xz) => grid != null
             ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
             : b.MinY + 0.8f;
-        var own = OwnDoors(tile, index, map, built, ranked, Covered, Under, GroundOf, box.Eave);
+        var own = OwnDoors(tile, index, map, built, ranked, Covered, Under, Courtyard, GroundOf, box.Eave);
         return own.Count == 0 ? built : built with { Extra = extras.Concat(own).ToList() };
     }
 
@@ -827,7 +880,8 @@ public static class BuildingFootprint
     /// Only where the planner gives a venue a room: not an industrial site, a church, a landmark, a hall venue or a shed.
     /// </summary>
     private static List<DoorSpot> OwnDoors(BuildingTile tile, int index, BuildingTypeMap map, Footprint fp,
-        List<Cand> ranked, Func<Vector2, bool> covered, Func<Vector2, bool> under, Func<Vector2, float> groundAt, float eave)
+        List<Cand> ranked, Func<Vector2, bool> covered, Func<Vector2, bool> under, Func<Vector2, Vector2, bool> courtyard,
+        Func<Vector2, float> groundAt, float eave)
     {
         var b = tile.Buildings[index];
         var extra = new List<DoorSpot>();
@@ -857,7 +911,8 @@ public static class BuildingFootprint
             if (s - w / 2 < c.S0 + 0.3f || s + w / 2 > c.S1 - 0.3f) return null;
             var t = new Vector2(-c.Normal.Y, c.Normal.X);
             var xz = c.Normal * c.Offset + t * s;
-            if (covered(xz)) return null;
+            // never on a courtyard the roof closes round (#1304): no street there, no room planned on that wall
+            if (covered(xz) || courtyard(xz, c.Normal)) return null;
             float ground = groundAt(xz), baseY = Math.Max(ground, b.MinY);
             if (ground < b.MinY - 0.6f || ground > b.MaxY - h - 0.3f || eave - baseY - DoorUnderEave < h) return null;
             span = Math.Min(span, 2 * Math.Min(s - c.S0, c.S1 - s) - 0.2f);
@@ -1005,6 +1060,19 @@ public static class BuildingFootprint
     {
         var d = new Vector2(a.Position.X - b.Position.X, a.Position.Z - b.Position.Z);
         return d.Length() < a.Width / 2 + b.Width / 2 + gap;
+    }
+
+    private static Vector2 Flat(DoorSpot d) => new(d.Position.X, d.Position.Z);
+
+    /// <summary>
+    /// Whether two doors are on one facade (#1304): facing the same way, their walls within a step of each
+    /// other. A facade the TIN breaks into slightly offset pieces is still one street front, and its doors
+    /// keep <see cref="DoorBudget.Spacing"/> apart as they do along one run.
+    /// </summary>
+    private static bool SameFacade(DoorSpot a, DoorSpot b)
+    {
+        var n = new Vector2(a.Outward.X, a.Outward.Z);
+        return n.Dot(new Vector2(b.Outward.X, b.Outward.Z)) > 0.95f && Math.Abs((Flat(a) - Flat(b)).Dot(n)) < 1.5f;
     }
 
     /// <summary>Where a triangle crosses the horizontal plane at <paramref name="y"/>, in plan (x, z).</summary>

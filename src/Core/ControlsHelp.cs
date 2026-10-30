@@ -42,9 +42,19 @@ public partial class ControlsHelp : CanvasLayer
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
-            new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
+            new("Third person: camera zoom in / out, down to the face (Shift or not)", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
             new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
+            new("Pinball: E at a machine steps up to it and presses Start (again to add a player in the first ball); Esc steps back", PlayerInput.InteractMount),
+            new("Pinball: the flippers (A / D, the arrows, or Left / Right Shift)", Keys: "{pinball_left} / {pinball_right}", Pad: "LB / RB (or LT / RT)"),
+            new("Pinball: hold to pull the plunger, let go to launch (Space, S or Enter)", PlayerInput.PinballPlunge),
+            new("Pinball: nudge the cabinet (too hard, too often: tilt); Q / R to the sides, the pad's left stick sideways", PlayerInput.PinballNudge),
+            new("Pinball: the player's view or straight down on the playfield", PlayerInput.CameraToggle),
+            new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
+            new("Bowling: move your spot", PlayerInput.MoveLeft),
+            new("Bowling: turn your line", PlayerInput.BowlAimLeft),
+            new("Bowling: hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
+            new("Festival alphorn row: sit down to the song; blow, pick the note, yodel", Keys: "{interact_mount}, hold {use_item}, wheel or {move_forward} / {move_back}, {jump}", Pad: "{interact_mount}, hold {use_item}, right stick ↑ ↓, {jump}"),
         }),
         ("Items", new Row[]
         {
@@ -55,7 +65,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Pick up what you point at; a radio: tap to switch it on / off, hold to open it", PlayerInput.InteractMount),
             new("Radio in hand: tap to switch it on / off, hold to open it; aim + hold to throw it", PlayerInput.UseItem),
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
-            new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "{next_item}"),
+            new("Pick a hotbar slot (the plain wheel zooms the camera)", Keys: "1–6 / {next_item} / {prev_item}", Pad: "{next_item} (tap)"),
+            new("Put the item in hand away / take it out (also the number of the slot in hand; it goes away by itself after 8 s idle: Settings › Gameplay)", Keys: "{holster_item}", Pad: "{next_item} (hold)"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
             new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
             new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
@@ -73,6 +84,50 @@ public partial class ControlsHelp : CanvasLayer
             new("Map: pin icon", Keys: "1–6", Pad: "D-pad, A"),
             new("Map: track a place, a pin, a travel point", Keys: "Track (click)", Pad: "A on it, then Track"),
         }),
+        ("Festivals: the Älplerfest's stone put (#1269)", new Row[]
+        {
+            new("Put the stone at its ground (an open Älplerfest): lift it", PlayerInput.InteractMount),
+            new("Lift: hold, let go on the meter's peak; then once on each beat of the drum, the last is the push (look up to about 40 degrees)", PlayerInput.UseItem),
+            new("Another stone while you are lifting it", PlayerInput.Jump),
+        }),
+        ("Festivals: the Désalpe cow drive (#1269)", new Row[]
+        {
+            new("At a cow of the herd on the alp: put on the next headdress shape (the alp sign starts the drive, the fair's ring gives the vote)", PlayerInput.InteractMount),
+            new("At a cow: the next colour; in the fair's ring: the next herd to vote for", PlayerInput.UseItem),
+        }),
+        ("Festivals: the Christmas market (#1348)", new Row[]
+        {
+            new("At a market stall: the day's free taste (the stall-hop), then buy its ware for Batzen; at the Samichlaus on 6 December: his bag", PlayerInput.InteractMount),
+        }),
+        ("Festivals: the Zibelemärit (#1373)", new Row[]
+        {
+            new("At an onion market stall: the day's free taste (the stall-hop), then buy its ware for Batzen", PlayerInput.InteractMount),
+            new("Confetti egg or Räppli in hand: throw it over the square (every fifth throw pays)", PlayerInput.UseItem),
+        }),
+        ("Festivals: the Escalade (#1351)", new Row[]
+        {
+            new("At the Marmite: smash it (the party's youngest and oldest both press); at the soup pot: ladle a bowl for the party; at the start line: begin the Course de l'Escalade", PlayerInput.InteractMount),
+        }),
+        ("Festivals: the Fasnacht (#1357)", new Row[]
+        {
+            new("At the Larven stall: a mask and Räppli; at Basel's lantern at 04:00 on day 1: the Morgestraich; at the Guggenmusik stage: sit down in the band", PlayerInput.InteractMount),
+            new("In the Guggenmusik song: tap on every note (drum, trumpet, sousaphone), loud and in step", PlayerInput.UseItem),
+            new("Räppli in hand: throw a handful of confetti", PlayerInput.UseItem),
+        }),
+        ("Festivals: the Sechseläuten (#1358)", new Row[]
+        {
+            new("At the Böögg's pyre before it is lit: change the minute you bet on", PlayerInput.UseItem),
+            new("At the pyre: place your bet; after the bang: grill a Cervelat on the embers; at the Zunft's Weibel: take the day's purse", PlayerInput.InteractMount),
+        }),
+        ("Festivals: the Chalandamarz (#1356)", new Row[]
+        {
+            new("At the Treichel stand: begin the procession; then, walking the village loop, ring the Treichel on the march beat (the drum and the HUD's pulse); rings in step with a party member score extra", PlayerInput.InteractMount),
+        }),
+        ("Festivals: the 1 August (#1355)", new Row[]
+        {
+            new("At the lampion stand: a lampion; at the fireworks stand: a box for Batzen; at the lampion post at night: begin the lampion walk with your party", PlayerInput.InteractMount),
+            new("With a box of fireworks in hand, at night: light it", PlayerInput.UseItem),
+        }),
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
@@ -87,6 +142,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
             new("Wind the line in; cancel a cast", PlayerInput.AimItem),
         }),
+        ("Flag swinging at the Älplerfest (#1269)", new Row[]
+        {
+            new("Step onto the flag ground and swing the flag", PlayerInput.InteractMount),
+            new("Draw the figure shown (up, down, a sweep, a circle, an eight) before its last beat", Keys: "Mouse", Pad: "Right stick"),
+            new("High throw: hold, let go on a beat; catch on the beat it lands", PlayerInput.UseItem),
+        }),
         ("Fist fight (#495)", new Row[]
         {
             new("Challenge a player you look at, or accept their challenge", PlayerInput.InteractMount),
@@ -98,6 +159,24 @@ public partial class ControlsHelp : CanvasLayer
             new("Uppercut: down, forward + punch", Keys: "{move_back} {move_right} + {fight_punch}", Pad: "{move_back} {move_right} + {fight_punch}"),
             new("String: punch, punch, kick", Keys: "{fight_punch} {fight_punch} {fight_kick}", Pad: "{fight_punch} {fight_punch} {fight_kick}"),
             new("Finish them: down, down + kick", Keys: "{move_back} {move_back} + {fight_kick}", Pad: "{move_back} {move_back} + {fight_kick}"),
+        }),
+        ("Sword (#1371, /spawn sword; /dummy puts a training dummy in front of you)", new Row[]
+        {
+            new("Swing; again in the rhythm for a five-blow combo", PlayerInput.UseItem),
+            new("Charged blow: hold after a swing, let go (costs stamina)", PlayerInput.UseItem),
+            new("Plunge: swing while falling or gliding", PlayerInput.UseItem),
+            new("Dodge (a moment you cannot be hit; costs stamina)", PlayerInput.SwordDodge),
+            new("Lock on to the target nearest your view; again lets go", PlayerInput.SwordLock),
+        }),
+        ("Schwingen (#1269, the Älplerfest ring, /schwing <player or bot>)", new Row[]
+        {
+            new("Join the ring's queue (at the sawdust ring), or give the place up", PlayerInput.InteractMount),
+            new("Lean (towards / away / round)", Keys: "{move_left} {move_right} {move_forward} {move_back}", Pad: "{move_right}"),
+            new("Throw (the lean picks which)", PlayerInput.FightPunch),
+            new("Leg hook (Gammen)", PlayerInput.FightKick),
+            new("Brace against a throw (hold), or lean its counter", PlayerInput.FightBlock),
+            new("On the ground: mash to pin or to get out", PlayerInput.FightPunch),
+            new("Leave: /schwing leave", Keys: "/schwing", Pad: "/schwing"),
         }),
         ("Aura battle (#907, /aura <player>)", new Row[]
         {
@@ -115,7 +194,7 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("Build the piece shown", PlayerInput.UseItem),
             new("Take back your own piece", Keys: "{aim_item} + {use_item}", Pad: "{aim_item} + {use_item}"),
-            new("Next piece", Keys: "{aim_item} + {next_item}", Pad: "{aim_item} + {next_item}"),
+            new("Next piece", Keys: "{aim_item} + wheel", Pad: "{aim_item} + {next_item}"),
             new("Turn the piece", PlayerInput.BuildTurn),
             new("Change the material", Keys: "{aim_item} + {build_turn}", Pad: "{aim_item} + {build_turn}"),
         }),

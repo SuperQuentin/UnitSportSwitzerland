@@ -80,7 +80,9 @@ public static class OccasionProbe
         Expect("stacking", stacked, "2026-10-20", "halloween-2026", "games-2026");
 
         // the file wins per id; a default the file does not mention is still there
-        var merged = OccasionConfig.Merge(OccasionConfig.Defaults(), new List<OccasionEntry>
+        // the seasons and the UFOs only: a festival's default entry (the Désalpe in early October, the Christmas market in December) is not what this merge is about
+        var seasons = OccasionConfig.Defaults().Where(e => Festivals.FestivalCatalog.Get(e.Id) == null).ToList();
+        var merged = OccasionConfig.Merge(seasons, new List<OccasionEntry>
         {
             new() { Id = "Halloween", Enabled = false },
             new() { Id = "community-day", Schedule = { new DateWindow("2026-10-03", "2026-10-03") } },

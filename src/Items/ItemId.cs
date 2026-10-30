@@ -222,6 +222,13 @@ public enum ItemId
     WhiteWine = 480,
     /// <summary>Kirsch, a shot a drink: the shared pot's <c>Hearty</c>.</summary>
     Kirsch = 481,
+    // ---- alcohol (#1271, docs/notes/adventure/alcohol.md) ----
+    /// <summary>An electronic breathalyzer, reusable: blow for 5 s and its screen reads the per mille and mg/L (<see cref="ItemUse.Breath"/>); held out to a player, it tests them if they agree.</summary>
+    Breathalyzer = 486,
+    /// <summary>A single-use crystal-tube test: one blow, green (under 0.5 per mille) or amber (over), then used up (<see cref="ItemUse.Breath"/>).</summary>
+    BreathTestSingle = 487,
+    /// <summary>An alcohol-free beer (0.5 %), the driver's choice: drunk like a beer.</summary>
+    BeerAlcoholFree = 488,
     /// <summary>Garments (Avatar.Garments, <c>GarmentStyle.Together</c>): a mentored newcomer's first summit, glacier, ride and build.</summary>
     ErstbesteigungCap = 482, GletscherScarf = 483, MitfahrerGloves = 484, ZimmermannCap = 485,
     /// <summary>Garments: the mentor's own for each milestone, and the tenth punch card's felt hat.</summary>
@@ -247,7 +254,52 @@ public enum ItemId
     /// <summary>Garments (Avatar.Garments), earned by playing: the gnome's Zipfelmütze (10 games) and the Treichel cowbell (30 rounds survived).</summary>
     Zipfelmuetze = 466, Treichel = 467,
 
+    // ---- bowling (#1323, docs/notes/terrain/bowling-play.md) ----
+    /// <summary>Hire shoes (Avatar.Garments): worn while signed in at a bowling centre's shoe counter, never owned.</summary>
+    BowlingShoes = 540,
+
     // ---- Festivals (#1269, docs/notes/occasions/festival-framework.md); 500-539 are this plan's (adventure-phase3) ----
+    /// <summary>The wrestler's jute over-trousers (#1269 Schwingen): worn in the Bottom slot, from the Älplerfest's chests and stalls.</summary>
+    Schwingerhosen = 500,
+    // ---- the Christmas markets (#1348, docs/notes/occasions/festival-christmas.md) ----
+    /// <summary>The market's mulled wine in a mug, bought with Batzen: 2 dl, 10 % (<see cref="ItemDef.DrinkMl"/>, <see cref="ItemDef.Abv"/>), warm for 4 minutes. The found <see cref="Gluehwein"/> stays an alcohol-free treat.</summary>
+    GluehweinMug = 501,
+    /// <summary>A glass Christmas bauble, bought at the ornaments stall: worth nothing but the look in the hand.</summary>
+    ChristmasBauble = 502,
+    // ---- the Escalade (#1351, docs/notes/occasions/festival-escalade.md) ----
+    /// <summary>A shard of the Marmite's chocolate shell, handed round when it is smashed: sweet food.</summary>
+    MarmiteChocolate = 503,
+    /// <summary>A bowl of the Escalade's vegetable soup from the pot that feeds the party: warm for 3 minutes.</summary>
+    SoupeEscalade = 504,
+    // ---- the Fasnacht (#1357, docs/notes/occasions/festival-fasnacht.md): 505-509 ----
+    /// <summary>A bag of Räppli, the Fasnacht's confetti: Use throws a handful on every peer near (<see cref="ItemUse.Confetti"/>).</summary>
+    Raeppli = 505,
+    /// <summary>The Larven (masks) the stall hands out, worn on the head: the Waggis, the Alti Dante, the Harlekin and the Teufel (Headwear 5-8).</summary>
+    LarveWaggis = 506, LarveDante = 507, LarveHarlekin = 508, LarveTeufel = 509,
+    // ---- the Sechseläuten (#1358, docs/notes/occasions/festival-sechselaeuten.md); 510-514 are this festival's ----
+    /// <summary>A Cervelat grilled on the embers of the Böögg's pyre, once the head has burst: food, warm for 2 minutes.</summary>
+    BooggCervelat = 510,
+    // ---- the Chalandamarz (#1356, docs/notes/occasions/festival-chalandamarz.md): 515-519 (the procession's Nusstorte is the existing 436) ----
+    /// <summary>A child's hand Treichel from the Chalandamarz, the first march of the day: worth nothing but the sound (the worn Treichel is <see cref="Treichel"/>).</summary>
+    ChalandaTreichel = 515,
+    // ---- the 1 August (#1355, docs/notes/occasions/festival-august1.md; 520-524 are its block) ----
+    /// <summary>A paper lantern on a stick, from the lampion stand: held, it is a light everyone sees; the lampion walk needs one.</summary>
+    Lampion = 520,
+    /// <summary>A box of fireworks from the 1 August stand, bought with Batzen: Use lights a 40 s volley of your own, at night.</summary>
+    FireworkBox = 521,
+    // ---- the action-RPG combat (#1370; 600-619 are its block) ----
+    /// <summary>The sword (#1371): held, the combat controls are on (<see cref="ItemUse.Sword"/>, <c>docs/notes/combat/sword-combat.md</c>).</summary>
+    Sword = 600,
+
+    // ---- the Zibelemärit (#1373, docs/notes/occasions/festival-zibelemaerit.md; 525-529 are its block) ----
+    /// <summary>A braid of onions, bought at the Zwiebelzopf stall: worth nothing but the look in the hand.</summary>
+    Zwiebelzopf = 525,
+    /// <summary>The Zibelechueche, Bern's onion tart from the pie stall: food.</summary>
+    Zibelechueche = 526,
+    /// <summary>The Mehlsuppe, the market's flour soup from the kettle: food, warm for 3 minutes.</summary>
+    Mehlsuppe = 527,
+    /// <summary>A confetti egg from the Konfetti stall: Use throws it like a handful of Räppli (<see cref="ItemUse.Confetti"/>), the Zibelemärit's confetti fight.</summary>
+    Konfettiei = 528,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
 }
@@ -311,4 +363,12 @@ public enum ItemUse
     Gust,
     /// <summary>A Versteckis round tool (#1268): Use asks the game's server for it (tag, sniff, decoy, sprint, moo, the Disguise radial).</summary>
     Round,
+    /// <summary>Use blows into it for 5 s (#1271): the electronic breathalyzer is kept, the single-use test is used up.</summary>
+    Breath,
+    /// <summary>Use lights a box of fireworks where you stand (<see cref="ItemId.FireworkBox"/>, #1355): at night in a running 1 August, once in 25 s.</summary>
+    Firework,
+    /// <summary>Use throws a handful of Räppli: confetti on every peer near, one used up (<see cref="ItemId.Raeppli"/>, #1357).</summary>
+    Confetti,
+    /// <summary>Held, the combat controls are on: Use swings (a combo; held after a swing, a charged blow), the dodge and the lock-on have their own keys (<see cref="ItemId.Sword"/>, #1371).</summary>
+    Sword,
 }

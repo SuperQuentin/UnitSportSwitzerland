@@ -450,7 +450,7 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
             int w = manor_window(vec2(q.x - cx, q.y - y0), 1.0, 1.8);
             if (w > 0) {
                 open = w;
-                lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night);
+                lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night * world_lamps);
             }
         }
     } else {
@@ -474,7 +474,7 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
                 }
                 if (w > 0) {
                     open = w;
-                    lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night);
+                    lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night * world_lamps);
                 }
             }
         }
@@ -513,7 +513,7 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
             open = 0;
         } else if (yb > 1.25 && yb < 2.45 && pu > 0.42 && pu < 1.06 && r > 0.35) {
             open = 2;
-            lit = hash(vec2(floor(cu), 4.4) + seed) > mix(0.93, 0.45, world_night);
+            lit = hash(vec2(floor(cu), 4.4) + seed) > mix(0.93, 0.45, world_night * world_lamps);
         }
     }
 
@@ -688,7 +688,7 @@ void fragment() {
             // string courses cost a Quest 2 most of a city's frame seen from above
             float r = hash(cell);
             float busy = occupancy(world_pos);
-            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night) - busy * 0.45;
+            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night * world_lamps) - busy * 0.45;
             vec3 win = lit ? window_lit : window_color;
             col = mix(col, win, legible);
             glass = legible;
@@ -701,7 +701,7 @@ void fragment() {
             // someone inside lights more of them
             float busy = occupancy(world_pos);
             // a few lit windows by day, most of a village at night
-            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night) - busy * 0.45;
+            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night * world_lamps) - busy * 0.45;
             // a shuttered house keeps a few of its dark windows shut
             bool closed = shuttered && !lit && busy == 0.0 && hash(cell + 6.6) < 0.15;
             vec3 win = lit ? window_lit : window_color;
@@ -829,11 +829,11 @@ void fragment() {
     ROUGHNESS = 1.0;
 #endif
     // a lit window is its own light: at night it shines through the darkness around it
-    EMISSION = col * door_light(world_pos, n) + glow * world_night;
+    EMISSION = col * door_light(world_pos, n) + glow * world_night * world_lamps;
 #else
     col *= world_tint + door_light(world_pos, n);
     // a lit window is its own light: at night it shines through the darkness around it
-    col = max(col, glow * world_night);
+    col = max(col, glow * world_night * world_lamps);
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     col = retro_posterize(col, FRAGCOORD.xy);

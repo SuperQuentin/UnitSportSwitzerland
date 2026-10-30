@@ -140,6 +140,14 @@ public enum Headwear
     SantaHat = 3,
     ReindeerAntlers = 4,
     // 5-20 are the festivals' (#1269): Fasnacht masks and the flower crown, added by the parts that draw them
+    // the Fasnacht's Larven (#1357), full-head masks like the pumpkin: Basel's Waggis, the Alti Dante, the Harlekin, the Teufel (the stall's four) and the
+    // Luzern Fritschi and the Basel Ueli (the festivals' own hat while they run)
+    LarveWaggis = 5,
+    LarveDante = 6,
+    LarveHarlekin = 7,
+    LarveTeufel = 8,
+    LarveFritschi = 9,
+    LarveUeli = 10,
 }
 
 /// <summary>
@@ -181,7 +189,7 @@ public static partial class HumanMeshBuilder
         Vector3 ShoulderR, Vector3 ElbowR, Vector3 WristR,
         Vector3 HipL, Vector3 KneeL, Vector3 AnkleL, Vector3 ToeL,
         Vector3 HipR, Vector3 KneeR, Vector3 AnkleR, Vector3 ToeR,
-        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default);
+        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default, bool Fist = false);
 
     /// <param name="into">A mesh to rebuild in place (a figure redrawn while it moves keeps one), or null for a new one.</param>
     public static ArrayMesh Build(HumanPalette palette, HumanPose pose = HumanPose.Standing,
@@ -440,7 +448,7 @@ public static partial class HumanMeshBuilder
     public readonly record struct GaitMounts(
         Vector3 Eye, Vector3 Head, Vector3 Chest, Vector3 Hip,
         Vector3 ShoulderL, Vector3 ShoulderR, Vector3 FootL, Vector3 FootR,
-        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default);
+        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default, Vector3 GripOrigin = default, Basis GripBasis = default, Basis BoneBasis = default);
 
     /// <summary>
     /// The mount points for one instant of the gait.
@@ -797,6 +805,12 @@ public static partial class HumanMeshBuilder
     public static Vector3[] PoseJoints(HumanPose pose) => JointsOf(RigFor(pose));
 
     /// <summary>
+    /// The walking gait's joints at <paramref name="speed"/> m/s and <paramref name="phase"/> of its cycle (two steps),
+    /// author space: for a figure whose arms are set over its walk (a decoration bowler's approach, #1334).
+    /// </summary>
+    public static Vector3[] StrideJoints(float speed, float phase) => JointsOf(GaitRig(speed, phase));
+
+    /// <summary>
     /// A figure drawn from free joint points (a ragdoll): <paramref name="joints"/> in
     /// <see cref="Joint"/> order, author space. Bone lengths are whatever the points say.
     /// </summary>
@@ -854,7 +868,31 @@ public static partial class HumanMeshBuilder
             Lean: rig.TorsoLean,
             HandL: Flip(rig.WristL),
             HandR: Flip(rig.WristR),
-            HandBasis: HandBasisOf(rig));
+            HandBasis: HandBasisOf(rig),
+            GripOrigin: GripOf(rig).Origin, GripBasis: GripOf(rig).Basis, BoneBasis: BoneBasisOf(rig));
+
+        // the right hand's skinned bone frame (Frames: HandBone), flipped to mount space: where the posed hand mesh really is
+        static Basis BoneBasisOf(Rig r)
+        {
+            var b = HandBone(r.ElbowR, r.WristR, 1f).Basis;
+            return new Basis(Flip(b.X), Flip(b.Y), Flip(b.Z));
+        }
+
+        // the sword's grip (#1371): the ring centre of the closed fingers and the handle's axis through it, from the right hand's own frame, the one
+        // its skinned bone is posed in (HandBone) and its fist is built in (Hand), flipped to mount space; X the way the fingers leave, Y the palm's inside, Z along the handle
+        static (Vector3 Origin, Basis Basis) GripOf(Rig r)
+        {
+            var hf = HandFrameOf(r.ElbowR, r.WristR, 1f, 1f);
+            Vector3 W(System.Numerics.Vector3 v) => r.WristR + hf.Thumb * v.X + hf.Along * v.Y + hf.Inward * v.Z;
+            var c = HandGrip.Centre;
+            var ax = HandGrip.Axis;
+            var fi = HandGrip.Finger;
+            var axisW = (hf.Thumb * ax.X + hf.Along * ax.Y).Normalized();
+            var fingerW = (hf.Thumb * fi.X + hf.Along * fi.Y).Normalized();
+            var basis = new Basis(Flip(fingerW), Flip(hf.Inward), Flip(axisW));
+            if (basis.Determinant() < 0f) basis = new Basis(-basis.X, basis.Y, basis.Z);
+            return (Flip(W(c)), basis);
+        }
 
         // the item hand's frame in mesh space: -Z along the item, from the pose's direction or the forearm
         static Basis HandBasisOf(Rig r)
@@ -952,6 +990,112 @@ public static partial class HumanMeshBuilder
                 }
                 // the red nose, on the face's nose (0.07 up the head, at its front)
                 s.Box(centre + fwd * 0.092f * k - up * 0.035f * k, new Vector3(0.04f, 0.04f, 0.035f), new Color(0.90f, 0.08f, 0.08f), frame);
+                break;
+            }
+            case >= Headwear.LarveWaggis and <= Headwear.LarveUeli:
+                AppendLarve(s, hat, centre, side, up, fwd, k, frame);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// A Fasnacht Larve (#1357): a head-sized shell round the whole head (the figure draws no face or hair under it) with the features of the mask: the Waggis's
+    /// huge nose, the Alti Dante's glasses and bun, the Harlekin's diamonds and cap, the Teufel's horns, Fritschi's bicorne and moustache, Ueli's belled jester cap.
+    /// </summary>
+    private static void AppendLarve(MeshScratch s, Headwear hat, Vector3 centre, Vector3 side, Vector3 up, Vector3 fwd, float k, Basis frame)
+    {
+        var c = centre + up * 0.01f * k;
+        var skin = hat switch
+        {
+            Headwear.LarveWaggis => new Color(0.93f, 0.66f, 0.56f),
+            Headwear.LarveDante => new Color(0.92f, 0.82f, 0.72f),
+            Headwear.LarveHarlekin => new Color(0.95f, 0.94f, 0.92f),
+            Headwear.LarveTeufel => new Color(0.82f, 0.10f, 0.10f),
+            Headwear.LarveFritschi => new Color(0.93f, 0.62f, 0.52f),
+            _ => new Color(0.94f, 0.80f, 0.66f),
+        };
+        s.Tube(c - up * 0.13f * k, c, 0.12f * k, 0.155f * k, skin, 8);
+        s.Tube(c, c + up * 0.14f * k, 0.155f * k, 0.10f * k, skin, 8);
+        var dark = new Color(0.08f, 0.07f, 0.09f);
+        var face = c + fwd * 0.145f * k;
+        foreach (float sgn in stackalloc[] { -1f, 1f })   // the eye holes
+            s.Box(face + (up * 0.04f + side * sgn * 0.055f) * k, new Vector3(0.05f, 0.035f, 0.03f) * k, hat == Headwear.LarveTeufel ? new Color(1f, 0.85f, 0.2f) : dark, frame);
+        switch (hat)
+        {
+            case Headwear.LarveWaggis:
+            {
+                // the Waggis: a nose as long as an arm's end, a straw wig and a red kerchief
+                s.Tube(face - up * 0.01f * k, face + fwd * 0.17f * k - up * 0.025f * k, 0.045f * k, 0.065f * k, skin, 7);
+                s.Box(face + fwd * 0.185f * k - up * 0.03f * k, new Vector3(0.09f, 0.09f, 0.08f) * k, new Color(0.85f, 0.25f, 0.25f), frame);
+                s.Box(c + up * 0.15f * k, new Vector3(0.26f, 0.08f, 0.26f) * k, new Color(0.92f, 0.80f, 0.35f), frame);
+                s.Tube(c + up * 0.08f * k, c + up * 0.12f * k, 0.162f * k, 0.162f * k, new Color(0.80f, 0.12f, 0.12f), 8);
+                break;
+            }
+            case Headwear.LarveDante:
+            {
+                // the Alti Dante: round glasses, a grey bun, a hat with a flower
+                var rim = new Color(0.22f, 0.20f, 0.20f);
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (up * 0.04f + side * sgn * 0.065f + fwd * 0.03f) * k, new Vector3(0.075f, 0.065f, 0.012f) * k, rim, frame);
+                s.Box(face - up * 0.015f * k + fwd * 0.02f * k, new Vector3(0.03f, 0.05f, 0.05f) * k, skin, frame);
+                s.Tube(c - fwd * 0.13f * k + up * 0.06f * k, c - fwd * 0.2f * k + up * 0.08f * k, 0.07f * k, 0.07f * k, new Color(0.78f, 0.78f, 0.80f), 7);
+                s.Tube(c + up * 0.15f * k, c + up * 0.19f * k, 0.15f * k, 0.12f * k, new Color(0.35f, 0.22f, 0.45f), 8);
+                s.Box(c + (up * 0.2f + side * 0.07f) * k, new Vector3(0.06f, 0.05f, 0.06f) * k, new Color(0.95f, 0.45f, 0.55f), frame);
+                break;
+            }
+            case Headwear.LarveHarlekin:
+            {
+                // the Harlekin: black diamonds on white and a two-pointed cap, one red, one yellow
+                var diamond = new Basis(fwd, MathF.PI / 4) * frame;
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (-up * 0.045f + side * sgn * 0.07f) * k, new Vector3(0.05f, 0.05f, 0.02f) * k, dark, diamond);
+                s.Box(face + up * 0.1f * k, new Vector3(0.05f, 0.05f, 0.02f) * k, dark, diamond);
+                var red = new Color(0.85f, 0.12f, 0.15f);
+                var yellow = new Color(0.95f, 0.78f, 0.15f);
+                s.Tube(c + (up * 0.1f + side * 0.075f) * k, c + up * 0.2f * k + side * 0.18f * k, 0.065f * k, 0.03f, red, 6);
+                s.Tube(c + (up * 0.1f - side * 0.075f) * k, c + up * 0.2f * k - side * 0.18f * k, 0.065f * k, 0.03f, yellow, 6);
+                break;
+            }
+            case Headwear.LarveTeufel:
+            {
+                // the Teufel: two black horns and a goatee
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                {
+                    var root = c + (up * 0.12f + side * sgn * 0.08f) * k;
+                    s.Tube(root, root + up * 0.1f + side * sgn * 0.05f - fwd * 0.03f, 0.035f * k, 0.008f, dark, 5);
+                }
+                s.Box(face - up * 0.075f * k, new Vector3(0.05f, 0.07f, 0.04f) * k, dark, frame);
+                s.Box(face - up * 0.035f * k, new Vector3(0.11f, 0.02f, 0.025f) * k, dark, frame);
+                break;
+            }
+            case Headwear.LarveFritschi:
+            {
+                // Luzern's Fritschi: a black bicorne with a red ribbon, a white moustache, red cheeks
+                var white = new Color(0.95f, 0.95f, 0.93f);
+                s.Box(face - up * 0.03f * k, new Vector3(0.15f, 0.04f, 0.03f) * k, white, frame);
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (-up * 0.02f + side * sgn * 0.1f) * k, new Vector3(0.04f, 0.04f, 0.015f) * k, new Color(0.9f, 0.3f, 0.3f), frame);
+                s.Box(c + up * 0.17f * k, new Vector3(0.36f, 0.09f, 0.16f) * k, dark, frame);
+                s.Box(c + (up * 0.2f + side * 0.14f) * k, new Vector3(0.07f, 0.1f, 0.15f) * k, dark, frame);
+                s.Box(c + (up * 0.2f - side * 0.14f) * k, new Vector3(0.07f, 0.1f, 0.15f) * k, dark, frame);
+                s.Box(c + (up * 0.16f + fwd * 0.08f) * k, new Vector3(0.3f, 0.025f, 0.02f) * k, new Color(0.85f, 0.12f, 0.15f), frame);
+                break;
+            }
+            default:
+            {
+                // Basel's Ueli: red cheeks and a three-pointed jester cap in blue and white with a gold bell on each point
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (-up * 0.02f + side * sgn * 0.09f) * k, new Vector3(0.045f, 0.045f, 0.015f) * k, new Color(0.9f, 0.25f, 0.25f), frame);
+                var blue = new Color(0.12f, 0.28f, 0.70f);
+                var white = new Color(0.95f, 0.95f, 0.95f);
+                var gold = new Color(0.95f, 0.78f, 0.2f);
+                (Vector3 Dir, Color Col)[] points = [(side * 0.17f + up * 0.12f, blue), (up * 0.2f - fwd * 0.04f, white), (-side * 0.17f + up * 0.12f, blue)];
+                foreach (var (dir, col) in points)
+                {
+                    var tip = c + up * 0.12f * k + dir * k;
+                    s.Tube(c + up * 0.1f * k, tip, 0.1f * k, 0.025f, col, 6);
+                    s.Box(tip, new Vector3(0.04f, 0.04f, 0.04f), gold, frame);
+                }
                 break;
             }
         }
@@ -1439,6 +1583,12 @@ public static partial class HumanMeshBuilder
         AuraSixSeven, AuraLasso, AuraCutTheRope,
         // #914
         AuraLeadRival, AuraShush, AuraBow, AuraLaugh,
+        // #1269: Schwingen (HumanMeshBuilder.Schwing.cs); past FightStand, so no groove either
+        SchwingGrip, SchwingLeanIn, SchwingLeanOut, SchwingLeanLeft, SchwingLeanRight, SchwingBrace, SchwingDown,
+        SchwingGroundTop, SchwingGroundBottom, SchwingStumble, SchwingBrush, SchwingDusted,
+        SchwingKurz, SchwingUebersprung, SchwingHueften, SchwingBrienzer, SchwingGammen, SchwingWyberhaken,
+        // #1371: the sword's whole-body poses (HumanMeshBuilder.Sword.cs), the move in DanceParams.Bar; past FightStand, so no groove either
+        SwordPose,
     }
 
     /// <summary>
@@ -1569,6 +1719,8 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= SwordMoves) return DanceMove.SwordPose;
+        if (index >= SchwingMoves) return SchwingResolve(index - SchwingMoves);
         if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
@@ -1619,10 +1771,11 @@ public static partial class HumanMeshBuilder
     private readonly struct Beat
     {
         public readonly float C, B, R, D, E;
-        public readonly int K, Par;
+        public readonly int K, Par, Bar;
 
         public Beat(float barPhase, int bar)
         {
+            Bar = bar;
             R = barPhase - Mathf.Floor(barPhase);
             C = R * 4f;
             K = Mathf.Clamp((int)C, 0, 3);
@@ -1993,6 +2146,8 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case DanceMove.SwordPose: EvalSword(t, mv, ref ch); break;
+            case >= DanceMove.SchwingGrip: EvalSchwing(move, t, mv, ref ch); break;
             case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }

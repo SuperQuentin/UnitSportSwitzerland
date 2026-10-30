@@ -166,6 +166,14 @@ public static partial class HumanMeshBuilder
             .Concat(Enum.GetValues<FightMove>().Where(m => m != FightMove.None)
                 .Select(m => ($"Move - {m}", (Func<Node3D>)(() => Figure(Danced(FightMoves + FightRules.PoseOf(m), (int)m, 0.4f))))));
 
+    // Schwingen (#1269): the grip, the leans, the ground work and the six throws at their moment of effort
+    [Showcase("Schwingen")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseSchwingen() =>
+        Enum.GetValues<SchwingStance>().Where(s => s is not SchwingStance.None and < SchwingStance.ThrowBase)
+            .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(SchwingMoves + (int)s, (int)s, 0.3f)))))
+            .Concat(SchwingRules.Throws
+                .Select(d => ($"Throw - {d.Name}", (Func<Node3D>)(() => Figure(Danced(SchwingMoves + SchwingRules.PoseOf(d.Throw), (int)d.Throw, 0.5f))))));
+
     // the aura battle (#907): its stances, then each move most of the way through (the pose held)
     [Showcase("Aura")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseAura() =>

@@ -3,19 +3,19 @@
 
 # Alcohol: a blood alcohol level, its effects, and two breathalyzers
 
-Status: **planned**. Tracking issue: #1271 (phase 3: #1270). Asked by the owner while deciding
+Status: **built** in [#1309](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1309) (see "As built" below; notes: `docs/notes/adventure/alcohol.md`). Tracking issue: #1271 (phase 3: #1270). Asked by the owner while deciding
 phase 3 (October 27, 2026): a real alcohol level in the body, an electronic breathalyzer, and a
 single-use one. Builds on `adventure-together` (wine and kirsch, the shared fondue pot) and on
 `adventure-festivals` (Glühwein, the festival tent).
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Body model | planned | `Bac` (pure): grams of ethanol per drink, absorption, Widmark distribution, elimination; the level in ‰ at any time |
-| 2 Drinks | planned | The alcohol in beer (exists), wine, kirsch, Glühwein and the fondue; alcohol-free beer |
-| 3 Effects | planned | Graded by ‰: view sway, reaction delay on vehicle and walk input, drift, stumbling, no climbing, passing out |
-| 4 Electronic breathalyzer | planned | Reusable, reads ‰ and mg/L to two decimals, waits out mouth alcohol, tests a friend who agrees |
-| 5 Single-use test | planned | Crystal tube: one reading, "under / over 0.5 ‰", then it is used up |
-| 6 Switches and checks | planned | `--alcohol off\|mild\|real`, comfort settings, tier 0 maths, a quick probe, a two-client net check |
+| 1 Body model | built | `Bac` (pure): grams of ethanol per drink, absorption, Widmark distribution, elimination; the level in ‰ at any time |
+| 2 Drinks | built | The alcohol in beer (exists), wine, kirsch, Glühwein and the fondue; alcohol-free beer |
+| 3 Effects | built | Graded by ‰: view sway, reaction delay on vehicle and walk input, drift, stumbling, no climbing, passing out |
+| 4 Electronic breathalyzer | built | Reusable, reads ‰ and mg/L to two decimals, waits out mouth alcohol, tests a friend who agrees |
+| 5 Single-use test | built | Crystal tube: one reading, "under / over 0.5 ‰", then it is used up |
+| 6 Switches and checks | built | `--alcohol off\|mild\|real`, comfort settings, tier 0 maths, a quick probe, a two-client net check |
 
 ## Goal
 
@@ -171,6 +171,23 @@ and professional drivers, 0.5 ‰ is the general limit, and 0.8 ‰ is a qualifi
   - B tests A with the electronic device after A accepts, and the value matches the server's;
   - A's level never reaches B otherwise;
   - `--alcohol off` reads 0.
+
+## As built
+
+What differs from the text above (the rest is as written):
+
+- **No `Level` message.** The `alcohol` section reaches its owner through the progress sync, so the owner computes its level from the
+  same log on the same real clock; nothing else about a player's level is sent. The wire is `ReportDrank`, `RequestSelfTest`,
+  `RequestOffer` and `TellResult` (protocol 69), plus the `breath` invite kind.
+- **The level is stepped**, not closed-form: the clipped elimination has no closed form (30 s steps over the log, at most 4 Hz).
+- **Settings**: there is no Accessibility tab, so "Alcohol view effects" and the offline mode sit under Settings > Gameplay > Alcohol.
+- **Bodies**: mass from the figure's build (open question 1, as recommended). Flying is not filtered yet (the ground ride and the boat are).
+- **Fondue and Gluehwein**: `AlcoholRules.FondueWineGrams` / `FondueKirschGrams` and `GluehweinGrams` are data and
+  `AlcoholService.ServeGrams` / `ServeDrink` are the hooks; the pot calls them when it feeds the table, the festivals' item (the Christmas
+  market's `ItemId.GluehweinMug`, #1348, built) calls the second through its `ItemDef`. The wine and kirsch items (together's) drink as 1 dl and 2 cl.
+- **Test seam**: `--alcohol-clock N` and `Skip` speed the clock; `/alcohol test drink <beers> <minutes ago>` back-dates a drink (a server
+  needs `--alcohol-test`).
+- Open questions 2 to 4 stay as recommended: no police checks, no age gate, no passenger warning.
 
 ## Open questions
 

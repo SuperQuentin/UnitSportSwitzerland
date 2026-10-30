@@ -328,5 +328,6 @@ public partial class CinemaBooths : Node
         node.UpdateSeats();
         node.FadeHouse(delta);
         node.MoveCurtains(delta);
+        node.HoldLayer();
     }
 }

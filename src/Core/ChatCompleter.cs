@@ -64,6 +64,7 @@ public sealed class ChatCompleter
         ("go", false, true, "@E,N", "Travel", "teleport to coordinates (as /city)"),
         ("track", false, true, "@E,N [name] | off", "Travel", "point the way to coordinates"),
         ("map", false, true, "@E,N", "Travel", "show coordinates on the map"),
+        ("enter", false, true, "<venue name | building key>", "Travel", "go straight inside a building, no door (offline)"),
         ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]", "Travel", "the venues: what plays there, go to one"),
         ("tpa", false, false, "<player>", "Travel", "ask to go to a player"),
         ("tphere", false, false, "<player>", "Travel", "ask a player over"),
@@ -73,6 +74,7 @@ public sealed class ChatCompleter
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>", "World", "the time of day"),
         ("speed", false, true, "[<0.05 .. 8> | normal]", "World", "how fast the simulation runs"),
         ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]", "World", "the weather and snow"),
+        ("pinball", false, true, "[list | play <machine> | start | robot | view]", "Concerts & media", "the pinball machines of the venue you are in: step up to one, a robot at the flippers, the top view"),
         ("cinema", false, true, "[play <link> | stop | relay on|off | fit <how> | ratio <r> | pool] | <hall> [lights full|dim|off] [film on|off]", "Concerts & media", "the hall you are in: its film; a hall's lights and film by number (admin)"),
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]", "World", "waves on the lakes"),
         ("water", false, true, "[E N]", "World", "the water surface at a point"),
@@ -85,9 +87,11 @@ public sealed class ChatCompleter
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status", "Activities", "Battle Royale"),
         ("vs", false, false, "open [here|nearest|random|<village>] [rounds] [bots off|n] [easy|normal|hard] | join [id] | leave | start | invite <player> | close <id> | list | stats [name]", "Activities", "Versteckis, hide-and-seek in a village"),
         ("fight", false, false, "<player> | accept | decline | leave", "Activities", "a fist fight"),
+        ("dummy", false, true, "[clear]", "Activities", "a training dummy to practise the sword on"),
         ("aura", false, false, "<player> | accept | decline | leave", "Activities", "an aura battle"),
         ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
         ("rope", false, false, "[<player> | hands <player> | off]", "Activities", "rope up or hold hands with a party member"),
+        ("alcohol", false, false, "", "Activities", "what alcohol does here; measure your level with a breathalyzer"),
         ("fondue", false, false, "[invite <player> | leave | forfeit 1|2|3]", "Activities", "the shared pot at your table"),
         // invites (#840)
         ("invites", false, false, "", "Activities", "invites open to you and from you"),
@@ -367,6 +371,10 @@ public sealed class ChatCompleter
 
             case "fight" or "aura":
                 options = argIndex == 0 ? [.. PlayerNames(), "accept", "decline", "leave"] : [];
+                break;
+
+            case "dummy":   // #1371
+                options = argIndex == 0 ? ["clear"] : [];
                 break;
 
             case "rope":

@@ -28,6 +28,10 @@ varying flat int v_fx;
 instance uniform vec2 skirt_flutter;
 instance uniform float skirt_floor = -1000000.0;
 
+// A figure seen through (#1336, the bowler's own body under the bowling camera): this share of its pixels left out in a
+// 4x4 ordered pattern, so what is behind it shows between them; 0 a solid figure.
+instance uniform float see_through = 0.0;
+
 void vertex() {
     v_pos = CUSTOM0.w > 0.5 ? CUSTOM0.xyz : VERTEX;
     v_fx = int(round((1.0 - COLOR.a) * 255.0));
@@ -70,6 +74,11 @@ float around(vec3 p) {
 }
 
 void fragment() {
+    if (see_through > 0.0) {
+        ivec2 q = ivec2(FRAGCOORD.xy) % 4;
+        int bayer[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+        if ((float(bayer[q.y * 4 + q.x]) + 0.5) / 16.0 < see_through) discard;
+    }
     vec3 base = COLOR.rgb;
     ALBEDO = base;
 #if defined(STYLE_CARTOON)

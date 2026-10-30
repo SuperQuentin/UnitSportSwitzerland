@@ -71,6 +71,8 @@ public static class ShopSurvey
                         if (BuildingFootprint.Compute(tile, index, roads, null) is not { } fp || fp.Door.Width <= 0) continue;
                         InteriorLayout l;
                         InteriorGenerator.OutlineFailure = null;
+                        InteriorGenerator.WingFailure = null;
+                        InteriorGenerator.VestibuleWhy.Clear();
                         var watch = System.Diagnostics.Stopwatch.StartNew();
                         try { l = InteriorGenerator.Generate(tile, index, roads, null); }
                         catch (Exception ex) { GD.PrintErr($"[shopsurvey] {id} #{index}: {ex.Message}"); continue; }
@@ -86,9 +88,9 @@ public static class ShopSurvey
                             if (ri is not int k)
                             {
                                 ownLocked++;
-                                string why = $"{l.Type}{(e == null ? "" : " entrance but no room")}{(InteriorGenerator.OutlineFailure is { } f ? " outline: " + f : "")}";
-                                lockedWhy[why[..Math.Min(60, why.Length)]] = lockedWhy.GetValueOrDefault(why[..Math.Min(60, why.Length)]) + 1;
-                                if (lockedWhy.Values.Sum() <= 12) sb.AppendLine($"  locked: {id} #{index} slot {own.Slot} {(own.Venue > 0 ? "venue" : "shop")} {l.Type}");
+                                string why = $"{l.Type}{(e == null ? "" : " entrance but no room")} wings: {InteriorGenerator.WingFailure ?? "planned"} vestibules: {(InteriorGenerator.VestibuleWhy.Count == 0 ? "none tried" : string.Join("; ", InteriorGenerator.VestibuleWhy.Keys))}{(InteriorGenerator.OutlineFailure is { } f ? " outline: " + f : "")}";
+                                lockedWhy[why[..Math.Min(170, why.Length)]] = lockedWhy.GetValueOrDefault(why[..Math.Min(170, why.Length)]) + 1;
+                                if (lockedWhy.Values.Sum() <= 12) sb.AppendLine($"  locked: {id} #{index} slot {own.Slot} {(own.Venue > 0 ? "venue" : "shop")} {why}");
                                 continue;
                             }
                             var room = ground.Rooms[k];
