@@ -21,6 +21,7 @@ public sealed record FestivalMilestone(int Points, int Batzen, string Title);
 /// A festival as data (#1269 part 1, a catalogue like <c>QuestCatalog</c>): its id is the occasion's id, the dates are the
 /// occasion entry's (<see cref="Schedule"/> is only the default an operator may move in <c>occasions.json</c>).
 /// </summary>
+/// <param name="Relocates">False for a festival that needs its real place (Montreux Jazz's stage, #1394): a region without it does not hold the festival, no town stands in.</param>
 /// <param name="TokenCap">The most Batzen a player can earn from games in one festival: 600, about CHF 600 once converted.</param>
 public sealed record FestivalDef(
     string Id,
@@ -31,7 +32,8 @@ public sealed record FestivalDef(
     ClosingShow Show,
     (string From, string To)[] Schedule,
     FestivalMilestone[] Milestones,
-    int TokenCap = FestivalDef.DefaultTokenCap)
+    int TokenCap = FestivalDef.DefaultTokenCap,
+    bool Relocates = true)
 {
     /// <summary>1 Batzen = CHF 1 (decided in #1270); the cap makes a festival worth about CHF 600 at most from its games.</summary>
     public const int DefaultTokenCap = 600;

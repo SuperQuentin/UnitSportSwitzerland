@@ -312,6 +312,12 @@
     <!-- the Christmas market (#1348): stalls, wares, prices, the Samichlaus; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Christmas\ChristmasRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Christmas.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- Montreux Jazz (#1394): the jazz night's event and set clock, the window, the venue's frame, the crowd meter, the festival def; pure -->
+    <Compile Include="..\..\src\Concert\ShowSection.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\JazzSet.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\ConcertEvent.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\MontreuxJazz\MontreuxJazzRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.MontreuxJazz.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <!-- the Zibelemaerit (#1373): stalls, wares, the stall-hop and the confetti fight; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Zibelemaerit\ZibeleRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Zibelemaerit.cs" Link="Game\Festivals\%(Filename)%(Extension)" />

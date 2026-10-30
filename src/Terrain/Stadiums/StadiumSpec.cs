@@ -52,13 +52,17 @@ public sealed record StadiumSpec
     /// </summary>
     public string? Season { get; init; }
 
-    /// <summary>Whether the venue's stage stands on <paramref name="date"/>: always without a <see cref="Season"/>.</summary>
-    public bool InSeason(DateOnly date)
+    /// <summary>The day (1 = the season's first date) and the year the season opened in, when <paramref name="date"/> is in it; null outside it, or without a <see cref="Season"/>.</summary>
+    public (int Day, int Year)? SeasonAt(DateOnly date)
     {
-        if (Season is not { } s) return true;
+        if (Season is not { } s) return null;
         int plus = s.LastIndexOf('+');
-        return plus > 0 && UnitSport.Occasions.Festivals.FestivalCalendar.Day([(s[..plus], s[plus..])], date) > 0;
+        if (plus <= 0 || UnitSport.Occasions.Festivals.FestivalCalendar.Containing([(s[..plus], s[plus..])], date) is not { } c) return null;
+        return (c.Span.Day(date), c.StartYear);
     }
+
+    /// <summary>Whether the venue's stage stands on <paramref name="date"/>: always without a <see cref="Season"/>.</summary>
+    public bool InSeason(DateOnly date) => Season == null || SeasonAt(date) != null;
 
     /// <summary>Sides an open air draws no fence on (the lake side of a quay, #1394).</summary>
     public StadiumSide[] OpenSides { get; init; } = Array.Empty<StadiumSide>();

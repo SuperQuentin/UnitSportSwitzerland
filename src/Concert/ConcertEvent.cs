@@ -22,7 +22,8 @@ public enum StageLayout
 public enum ScreenSet { None, Center, Sides, CenterAndSides }
 
 /// <summary>What kind of show: it sizes the rig and picks its looks.</summary>
-public enum Genre { Rock, Pop, Electronic, HipHop, Ballad }
+/// <remarks>Jazz (#1394) is appended, never drawn by <see cref="ConcertPlanner.Plan"/>: only a venue's festival forces it (<see cref="ConcertPlanner.Jazz"/>).</remarks>
+public enum Genre { Rock, Pop, Electronic, HipHop, Ballad, Jazz }
 
 /// <summary>
 /// One night's concert in a stadium (#885): who plays, on what stage, under what rig. A pure
@@ -64,6 +65,10 @@ public sealed record ConcertEvent
     public int ConfettiCannons { get; init; }
     public int Gerbs { get; init; }
     public int Airbursts { get; init; }
+
+    /// <summary>A jazz night (#1394): songs in a set before the call for the bis (<see cref="JazzSet"/>), and whether it is the closing night's finale set (the confetti cannons fire).</summary>
+    public int SetSongs { get; init; }
+    public bool FinaleNight { get; init; }
 
     /// <summary>The game hours the show plays, [start, end); the stage stands from <see cref="BuildHour"/>.</summary>
     public float StartHour { get; init; } = 20.5f;
@@ -118,9 +123,77 @@ public static class ConcertPlanner
     /// <summary>Whether the venue has a stage on this date: every night, except a venue with a season (<see cref="StadiumSpec.Season"/>, #1394) outside it.</summary>
     public static bool Open(StadiumSpec stadium, DateTime date) => stadium.InSeason(DateOnly.FromDateTime(date));
 
-    /// <summary>Tonight's event in a stadium: seeded by its name and the date.</summary>
+    /// <summary>
+    /// Tonight's event in a stadium: seeded by its name and the date; a venue with a season (Montreux, #1394) plays its jazz night inside it
+    /// (<see cref="Jazz"/>), and an ordinary night outside it (it has no stage then: <see cref="Open"/>).
+    /// </summary>
     public static ConcertEvent Tonight(StadiumSpec stadium, DateTime date) =>
-        Plan(stadium, Seed(stadium.Name, date));
+        stadium.SeasonAt(DateOnly.FromDateTime(date)) is { } at ? Jazz(stadium, at.Year, at.Day) : Plan(stadium, Seed(stadium.Name, date));
+
+    private static readonly string[] JazzFirst =
+    {
+        "Clara", "Anselm", "Odile", "Basile", "Ruth", "Gaspard", "Mireille", "Paulo", "Edda", "Lucien", "Noemi", "Victor", "Hanne", "Armand",
+    };
+    private static readonly string[] JazzLast =
+    {
+        "Delacroix", "Lindner", "Perrin", "Baumann", "Valentin", "Roche", "Aebi", "Cattin", "Morand", "Zbinden", "Girard", "Sutter",
+    };
+    private static readonly string[] JazzGroup =
+    {
+        "Quartet", "Four", "Sextet", "Lakeside Jazz", "Blue Hour Quartet", "Quai Collective", "Night Train Four", "Trio and Friends",
+    };
+    private static readonly string[] JazzTour =
+    {
+        "Montreux Sessions", "Lakeside Set", "Blue Hour", "Quai Nights", "Late Set", "Standards and Strangers",
+    };
+
+    /// <summary>The set's songs on a festival night: two on an ordinary one, four on the Jazz Night, six on the closing one (<see cref="MontreuxJazzRules.SetSongs"/>).</summary>
+    private static int SongsOn(int night) => Occasions.Festivals.MontreuxJazz.MontreuxJazzRules.SetSongs(night);
+
+    /// <summary>
+    /// The jazz quartet's night at a venue with a season (#1394): night <paramref name="night"/> (1-based) of the festival that opened in <paramref name="year"/>.
+    /// Forced by the festival, never drawn by <see cref="Plan"/>, so the other venues' seeds and the 300-seed check do not move. A small end stage
+    /// (a 12 x 7 m deck under a 4.5 m roof, no screens), about 30 fixtures (spots, washes, floor beams, hazers; no strobes, blinders or pyro), amber, deep
+    /// blue and magenta, 80 to 150 BPM; the closing night adds two confetti cannons.
+    /// </summary>
+    public static ConcertEvent Jazz(StadiumSpec stadium, int year, int night)
+    {
+        int seed = Seed($"{stadium.Name}|montreuxjazz|{year}", new DateTime(2000, 1, 1).AddDays(night));
+        var rng = new Random(seed);
+        T Pick<T>(T[] from) => from[rng.Next(from.Length)];
+        float Range(float a, float b) => a + (float)rng.NextDouble() * (b - a);
+        string artist = rng.Next(3) switch
+        {
+            0 => $"{Pick(JazzFirst)} {Pick(JazzLast)} {Pick(JazzGroup)}",
+            1 => $"The {Pick(JazzLast)} {Pick(JazzGroup)}",
+            _ => $"{Pick(JazzFirst)} {Pick(JazzLast)} Trio",
+        };
+        float hue = (float)rng.NextDouble();
+        bool closing = night == Occasions.Festivals.MontreuxJazz.MontreuxJazzRules.ClosingNight;
+        float across = 2 * stadium.FrontHalfU;
+        return new ConcertEvent
+        {
+            Seed = seed,
+            Stadium = stadium,
+            Artist = artist,
+            Tour = Pick(JazzTour),
+            Genre = Genre.Jazz,
+            Layout = StageLayout.EndNorth,
+            Screens = ScreenSet.None,
+            // amber on the soloist, deep blue and a magenta accent over it
+            Palette = new[] { new Color(1f, 0.72f, 0.32f), new Color(0.12f, 0.2f, 0.7f), Color.FromHsv(0.86f + 0.04f * hue, 0.75f, 1f) },
+            Bpm = Range(80f, 150f),
+            Width = Math.Min(12f, across * 0.72f),
+            Depth = Occasions.Festivals.MontreuxJazz.MontreuxJazzRules.DeckDepth,
+            DeckHeight = Range(1.0f, 1.3f),
+            RoofHeight = 4.5f,
+            Spots = 6, Beams = 0, Washes = 6, FloorBeams = 4, Blinders = 0, Strobes = 0, PixelBars = 0,
+            Flames = 0, Co2Jets = 0, Gerbs = 0, Airbursts = 0,
+            ConfettiCannons = closing ? 2 : 0,
+            SetSongs = SongsOn(night),
+            FinaleNight = closing,
+        };
+    }
 
     /// <summary>A stable seed from a stadium and a day (not <c>string.GetHashCode</c>, which is randomised per run).</summary>
     public static int Seed(string stadium, DateTime date)
