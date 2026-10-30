@@ -51,6 +51,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | phone › Training app (#901): import, search, connect, start / stop | the phone's own navigation (Enter, Esc) / D-pad A B | ok: the phone's poke and ray, as every app (the OS file picker shows on the desktop) | keep |
 | training: the next junction's road left / right (#901) | A D / left stick | ok: the stick, as steering; the Training app's Left / Right by poke | keep |
 | training: ride_rejoin, ride_uturn, ride_erg, ride_power_up / down (#901) | PgUp PgDn \ ] [ / the Training app's buttons (no pad button is free on a bike) | ok: the Training app's Rejoin, Turn round, ERG, ±10 W by poke | a wrist-menu row if riders want it without the phone |
+| sword swing, combo, charged, plunge (#1371) | LMB / RB | ok: R trigger (RB on foot) | **swing for real** (hand speed) |
+| sword_dodge (#1371) | Shift / B | ok: B (`XrPad.RightB`) | a step or a dodge by body movement |
+| sword_lock (#1371) | Middle button, Z / R3 | ok: R3 | grip-pointing at a target; the stamina bar has no VR display yet (**gap**: wrist display) |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
@@ -72,7 +75,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
 | drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
-| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
+| next / prev_item, slot_1-6 | Alt + wheel (the plain wheel zooms, #1369), 1-6 / D-pad → (tap) | ok: R stick ↓, a short grip at the right / left hip (#437) | slots shown at the hip |
+| holster_item (#1369) | `,`, the number of the slot in hand / hold D-pad → | ok: hold the grip at the right hip (0.35 s, a buzz): puts the item away, again draws it (`XrHands.AtHip`, `Gesture`) | keep |
 | inventory | I, Tab / Back (tap; opens on the release) | ok: Menu hold | keep |
 | quick_menu (#840) | hold F2 / hold Back | ok: wrist menu Activities + Invites entries; a ring opened by Back is aimed by the right hand | a hold of Menu longer than the inventory's pulse |
 | invite_decline (#840) | Shift+F2 / — | ok: wrist menu › Invites › Decline (laser), or Menu tap › Activities | keep |
@@ -87,6 +91,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | drink with alcohol (beer, wine, kirsch; #1271) | `use_item` with the drink in hand (the mouth pose) | RT | ok: the pad route (RT); **gap**: bringing the bottle to the mouth by hand |
 | breathalyzer: blow into it for 5 s (#1271) | `use_item` with it in hand | RT | ok: the pad route (RT); **gap**: bringing it to the mouth by hand |
 | breathalyzer: offer a test to a player (#1271) | `interact_mount` E at them with the electronic device in hand (shown by `InputHints`, outlined) | Y | ok: the pad route (Y) or a grip at them (`TryInteract(byHand)`) |
+| fall into a hidden crevasse; climb the ice wall out; be hauled (#1372) | nothing to press: the fall happens; push W into the ice wall (free climb, as any face); the partner holds E 2 s | the stick into the wall (free climb); the partner holds Y | ok: the pad route and the hand climb (`XrClimb`: the wall is an ordinary static face); the partner's haul is the hold-Y route below; **gap**: pulling the rope hand over hand | keep |
 | haul a roped partner (#1266) | hold E 2 s at the rope | hold Y | ok: the pad route (hold Y); **gap**: pulling the rope hand over hand |
 | talk to an errand giver (#1267) | E / Y within 3 m of the figure (a prompt "Talk to ...") | ok: Y, or reach out and grip toward the giver (`TryInteract(byHand)`) | keep |
 | errand dialogue: choose, next card, leave (#1267) | 1-3, Enter, Left / Right, Esc / D-pad, A, LB / RB, B | ok: laser + trigger on the panel, the pad's route | keep |

@@ -39,6 +39,46 @@ public partial class FootPlayer
     public Vector3? HoldWrist => HandHold is { } h && _walker != null && _mountsKey.Hold is { } k
         ? _walker.ToGlobal(k.Left ? _poseMounts.HandR : _poseMounts.HandL) : null;
 
+    // ---- a fall into a hidden crevasse (#1372) ---------------------------------------------------
+
+    /// <summary>
+    /// Down a hidden crevasse (the owner's, <see cref="CrevasseNode"/>): replicated in <see cref="PoseKind"/> while the body
+    /// is in its slot, <c>Anim.W</c> saying what the figure does (0 stands or hangs, 1 climbs the ice, 2 falls). The server
+    /// sees a body 10 m under the ground: <c>StaminaWatch</c> skips it.
+    /// </summary>
+    public const int PoseCrevasse = 9;
+    /// <summary>The collision layer of a crevasse's slot (walls, ends, floor): only a body in the slot has it in its mask.</summary>
+    public const uint CrevasseLayer = 1u << 20;
+
+    /// <summary>The body is inside a crevasse's slot (owner): the ground is not solid for it, the slot is.</summary>
+    public bool InCrevasse { get; private set; }
+
+    /// <summary>The bridge broke: the ground is let go for this body and the slot's walls and floor taken instead.</summary>
+    public void EnterCrevasse()
+    {
+        InCrevasse = true;
+        CollisionMask = (CollisionMask & ~1u) | CrevasseLayer;
+    }
+
+    /// <summary>Out of the slot (or let out of it): the ground again.</summary>
+    public void LeaveCrevasse()
+    {
+        if (!InCrevasse) return;
+        InCrevasse = false;
+        CollisionMask = (CollisionMask & ~CrevasseLayer) | (_walkMask & 1u);
+    }
+
+    /// <summary>The owner's pose in a slot, over what the walk or the climb published: PoseKind <see cref="PoseCrevasse"/> and what the figure does.</summary>
+    private void PublishCrevassePose()
+    {
+        float inner = PoseKind == PoseWallClimb ? 1f : PoseKind is PoseFall or PoseAir ? 2f : 0f;
+        PoseKind = PoseCrevasse;
+        Anim = Anim with { W = inner };
+    }
+
+    /// <summary>The pose a peer draws: a crevasse's figure is the climb, the flail or the stand its <c>Anim.W</c> names.</summary>
+    private int ShownPose => PoseKind != PoseCrevasse ? PoseKind : Anim.W > 1.5f ? PoseFall : Anim.W > 0.5f ? PoseWallClimb : PoseStride;
+
     // ---- the held E ---------------------------------------------------------------------------------
 
     /// <summary>Seconds E is held at a party member to ask to hold hands (a tap stays the fight's).</summary>

@@ -1080,6 +1080,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Combat.SchwingNetProbe.Role != null) AddChild(new Combat.SchwingNetProbe(items));
+        if (Combat.SwordNetProbe.Role != null) AddChild(new Combat.SwordNetProbe(items));   // #1371
+        if (Combat.SwordDebug.On) AddChild(new Combat.SwordDebug { Name = "SwordDebug" });
+        if (Combat.SwordClipProbe.Scenario != null) AddChild(new Combat.SwordClipProbe(items));
         if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -1159,6 +1162,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
         // as the server's, which relays the first and owns the second; offline this client does both
         Items.ItemEvents.Create(this, origin, server: false);
+        Combat.SwordService.Create(this, origin, server: false);   // the sword's moves, hits and training dummies (#1371)
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
@@ -1898,6 +1902,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Fight on both sides (#495): the challenge, the match state, and its screen
         AddChild(Combat.FightManager.CreateClient());
         AddChild(new Combat.FightHud());
+        AddChild(new Combat.SwordHud());   // #1371
+        AddChild(new Combat.SwordImpact());
         AddChild(Combat.AuraManager.CreateClient());
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
@@ -2390,6 +2396,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightPunch, "Punch");
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
+            }
+            else if (p.SwordDrawn && p.Ride == RideKind.OnFoot)
+            {
+                // the sword (#1371): the attack, its charge, the dodge and the lock
+                yield return (PlayerInput.UseItem, "Swing (again in rhythm: combo; hold after a swing: charged)");
+                yield return (PlayerInput.SwordDodge, "Dodge");
+                yield return (PlayerInput.SwordLock, p.SwordLocked ? "Let go of the lock" : "Lock on");
             }
             else if (p.InAura)
             {

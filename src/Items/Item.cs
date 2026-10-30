@@ -127,6 +127,9 @@ public static class ItemDefs
             ItemUse.Shoot, 1, new Color(0.42f, 0.28f, 0.16f), "HR", 0, ItemCategory.Gear, 1200f),
         new(ItemId.Knife, "Army knife", "{use_item} to stab whoever stands in front of you.",
             ItemUse.Melee, 1, new Color(0.80f, 0.10f, 0.12f), "KN", 0, ItemCategory.Gear, 40f),
+        // the sword (#1371): its controls are on while it is in the hand (Combat/SwordRules)
+        new(ItemId.Sword, "Sword", "{use_item} swings, again in the rhythm for a five-blow combo; hold {use_item} after a swing for a charged blow. {sword_dodge} dodges (you cannot be hit for a moment), {sword_lock} locks onto a target. Blows and dodges cost stamina.",
+            ItemUse.Sword, 1, new Color(0.72f, 0.76f, 0.84f), "SW", 0, ItemCategory.Gear, 600f),
         new(ItemId.Ammo9mm, "9 mm rounds", "Ammunition for the pistol.",
             ItemUse.Material, 90, new Color(0.80f, 0.66f, 0.30f), "9M", 0, ItemCategory.Gear, 0.5f),
         new(ItemId.Ammo75, "7.5 mm rounds", "Ammunition for the assault rifle and the hunting rifle.",
@@ -151,7 +154,7 @@ public static class ItemDefs
         Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
 
         // building (#274): pieces cost materials straight from the pack
-        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + {next_item} picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
+        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + wheel (D-pad right on a pad) picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
             ItemUse.Build, 1, new Color(0.45f, 0.30f, 0.18f), "HM", 0, ItemCategory.Gear, 12f),
         new(ItemId.TrafficTool, "Traffic tool", "An admin's (#971). Held, the traffic generators show; {use_item} on a road places one, on a placed one opens it: whether it makes cars and how many, whether it is a destination, where its cars go, which way it faces.",
             ItemUse.TrafficTool, 1, new Color(0.95f, 0.5f, 0.1f), "TG", 0, ItemCategory.Gear, 0f),
@@ -630,6 +633,20 @@ public static class ItemDefs
             {
                 s.Box(new Vector3(0, 0.0f, 0.0f), new Vector3(0.022f, 0.028f, 0.10f), new Color(0.80f, 0.10f, 0.12f));   // the red handle
                 s.Box(new Vector3(0, 0.003f, 0.10f), new Vector3(0.006f, 0.022f, 0.10f), new Color(0.80f, 0.82f, 0.86f)); // blade
+                break;
+            }
+            case ItemId.Sword:
+            {
+                // a bright arming sword: leather grip, round pommel, crossguard, a long flat blade with a diamond point
+                var leather = new Color(0.30f, 0.18f, 0.12f);
+                var gold = new Color(0.86f, 0.68f, 0.22f);
+                var steel = new Color(0.80f, 0.83f, 0.88f);
+                s.Tube(new Vector3(0, 0, -0.17f), new Vector3(0, 0, 0.05f), Avatar.HandGrip.HandleRadius, leather, 12);   // the handle: two fists long, as thick as the fist's ring (HandGrip)
+                s.Box(new Vector3(0, 0, -0.185f), new Vector3(0.04f, 0.04f, 0.04f), gold);                       // pommel
+                s.Box(new Vector3(0, 0, 0.062f), new Vector3(0.20f, 0.026f, 0.03f), gold);                       // crossguard
+                s.Box(new Vector3(0, 0, 0.45f), new Vector3(0.010f, 0.046f, 0.80f), steel);                      // blade
+                s.Box(new Vector3(0, 0, 0.45f), new Vector3(0.0125f, 0.010f, 0.76f), new Color(0.62f, 0.66f, 0.72f));   // fuller
+                s.Box(new Vector3(0, 0, 0.87f), new Vector3(0.0092f, 0.033f, 0.033f), steel, new Basis(Vector3.Right, Mathf.Pi / 4f));   // point
                 break;
             }
             case ItemId.Alphorn:
