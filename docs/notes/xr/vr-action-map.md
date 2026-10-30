@@ -278,4 +278,6 @@ work (#437, #438); 8 fixed by #435.
 | Yodel: tap on the beat | Space `jump` / A | new: A | keep |
 | Zibelemärit: taste at a stall (the day's stamp), buy its ware (#1373) | `interact_mount` E within 5.5 m of a stall (`ZibeleGame.TryInteract`) | new: Y through `XrPad`; a grip at the stall | grip a braid off the awning or the kettle's ladle (`gap`: the pad route works) |
 | Zibelemärit: throw a confetti egg or Räppli on the square (#1373) | `use_item` LMB with the egg in hand (`ItemUse.Confetti`) | X / the trigger through `XrPad` | toss it by hand (`gap`: the pad route works) |
+| Montreux Jazz: mark "I am listening" at the stage-front rail (#1394) | `interact_mount` E within 3.5 m of the rail (`JazzGame.TryInteract`) | new: Y through `XrPad`; a grip at the rail | grip the rail in front of the stage (`gap`: the pad route works) |
+| Montreux Jazz: clap the band back for the bis on the ring's beats (#1394) | `jump` Space while the call is on in the audience (`JazzGame`, `FootPlayer.JumpTaken`, as the pogo's) | A | the pad's A through `XrPad` (clapping by hand is not built: `gap`) |
 | Zibelemärit: eat the tart or the soup (#1373) | `use_item` LMB (`ItemController`, like any food) | X / the trigger through `XrPad` | bring it to the mouth (the eat pose) |

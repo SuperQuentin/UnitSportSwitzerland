@@ -3,10 +3,26 @@
 
 # Montreux Jazz Festival: a quay stage, a jazz set, the encore
 
-Status: **planned**. Issue: [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394). Part of the festivals plan
+Status: **built** in [PR #1395](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1395) (as built below). Issue: [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394). Part of the festivals plan
 ([`adventure-festivals`](adventure-festivals.md), #1269, its open question 6; phase 3 question 14 in
 [`adventure-phase3`](adventure-phase3.md)). Scoped there as "the concert system plus a new open-air `StadiumSpec` on the
 Montreux quay (small, its own issue)". This plan keeps it small: one venue row, one genre, one festival def, two games, one item.
+
+## As built (#1395)
+
+All of the owner's answers to the open questions were followed (stable dates, `ClosingShow.Concert` only, no relocation, four props, `Genre.Jazz` forced by the festival, a jazz playlist hook with no
+audio, an optional `Season`, the strangers-count meter, 6 / 10 Batzen and cap 400, `ItemId` 511). Where the build differs from the text below:
+
+- **Venue**: fitted on the swissimage aerial as the sand square of the Place du Marché (2559335 / 1142425, azimuth 270, 60 x 32 m, capacity 1200), not the lawn at 2559368 / 1142410
+  (that point is among the hotels); the stage is at the lake end, the fence is open on that side (`StadiumSpec.OpenSides`, new). The Christmas site fix (Grand-Rue 1, 2559396 / 1142356) is its own first commit.
+- **Songs and the set**: short, so a set fits the game's three real minutes of show at the default day length: sections of 4 bars (not 32), a song 40-75 s, a set of 2 songs (4 on the Jazz Night, 6 on the
+  closing night), the call, the bis, a rest (`JazzSet`). The 12-songs-a-night cap is kept but the game's 60 a day binds first.
+- **Games**: the encore's meter, the 80 % rule and the yield are as planned; a stranger who claps at least twice is paid the base like anyone (only a party's friends add the yield). The bis's lights always play
+  (a pure function of the clock); only the pay depends on the meter. The first milestone pays 10 Batzen, not 15 (the milestones' total must stay a quarter of the 400 cap).
+- **Crowd**: 350-700 people, not 600-900 (the lawn's size). **Rig**: 33-35 fixtures in one universe (the IR rig counts).
+- **Not built**: string lights, the Jazz pass worn on the wrist and a Journal card (the pass is a held keepsake, item 511), `ClosingShow.Both` (owner: Concert first), the `--perflog` run.
+- **New seams**: `FestivalDef.Relocates`, `StadiumSpec.Season/OpenSides`, `OccasionWeekdays` tails up to 15 days, `--jazzbpm`, `--festivalhour`, `CdLibrary.JazzUrls`.
+- Notes: `docs/notes/occasions/festival-montreuxjazz.md`; checks: `MontreuxJazzTests`, `MontreuxJazzRulesTests`, `--montreuxcheck`, `tools/montreuxnetcheck.sh`, `--concertcheck`, `--stadiumcheck`, `adv3-montreux-jazz`.
 
 ## Goal
 
