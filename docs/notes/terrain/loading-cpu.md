@@ -13,7 +13,7 @@
   `SitePlans`) block a build thread on it and would deadlock the scheduler.
   **Not covered**: `FallbackChunkSource` (generated fill, its `Task.Run` and `Parallel.For`) and the horizon
   still use the pool at Normal priority; they are bounded by the builds in flight.
-- **Frame cap**: `LoadingScreen.Begin` sets `Engine.MaxFps` to min(60, monitor Hz) (only if the user's limit is
+- **Frame cap**: `LoadingScreen.Begin` sets `Engine.MaxFps` to 30 and doubles the terrain commit slice (`ChunkManager.CommitBudgetScale`, same commit ms per second as at 60) (only if the user's limit is
   higher or off) and `Finish`/`Close` restore it. Not under `--fixed-fps`.
 - **Cache trim**: `NetworkChunkSource.EvictIfOversized` no longer scans the directory on every write: the running
   byte total decides (`CacheTrimPolicy`), the scan runs in a background task, at most once per 30 s.

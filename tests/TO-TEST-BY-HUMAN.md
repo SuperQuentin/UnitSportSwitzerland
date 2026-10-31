@@ -9,7 +9,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 
 ## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
 
-- [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 60 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.
+- [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 30 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.
 
 ## Faster rejoin ([#1387](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1387))
 

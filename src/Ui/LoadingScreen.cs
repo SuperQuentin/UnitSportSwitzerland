@@ -143,18 +143,20 @@ public partial class LoadingScreen : CanvasLayer
     }
 
     private static int _savedFps = -1;
+    private const int LoadingFps = 30;
 
     /// <summary>
-    /// A loading screen free-running at 90+ fps pins a core for nothing (#1381): 60 Hz, or the
-    /// monitor's rate if lower, until the world is ready; the player's own limit comes back after.
+    /// A loading screen free-running at 90+ fps pins a core for nothing (#1381): 30 fps until the
+    /// world is ready, the player's own limit back after. The terrain's per-frame commit slice grows to
+    /// match, so the commit time per second (what bounds loading) stays what it was at 60.
     /// </summary>
     private static void CapFps()
     {
         if (_savedFps >= 0 || UnitSport.Core.GameClock.Fixed) return;
         _savedFps = Engine.MaxFps;
-        int hz = (int)Math.Round(DisplayServer.ScreenGetRefreshRate());
-        int cap = hz > 0 ? Math.Min(60, hz) : 60;
-        if (Engine.MaxFps == 0 || Engine.MaxFps > cap) Engine.MaxFps = cap;
+        if (Engine.MaxFps != 0 && Engine.MaxFps <= LoadingFps) return;
+        Engine.MaxFps = LoadingFps;
+        UnitSport.Terrain.ChunkManager.CommitBudgetScale = 60.0 / LoadingFps;
     }
 
     private static void RestoreFps()
@@ -162,6 +164,7 @@ public partial class LoadingScreen : CanvasLayer
         if (_savedFps < 0) return;
         Engine.MaxFps = _savedFps;
         _savedFps = -1;
+        UnitSport.Terrain.ChunkManager.CommitBudgetScale = 1;
     }
 
     public override void _Process(double delta)

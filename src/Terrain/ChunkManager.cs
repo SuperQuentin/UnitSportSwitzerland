@@ -42,6 +42,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public double CommitBudgetMs { get; set; } = 4;
     private const double VrCommitBudgetMs = 2;
 
+    /// <summary>
+    /// Multiplies the per-frame commit slice while the loading screen caps the frame rate (#1381):
+    /// 30 fps with a doubled slice commits as much per second as 60 fps did.
+    /// </summary>
+    public static double CommitBudgetScale { get; set; } = 1;
+
     public LodPolicy Lod { get; set; } = new();
 
     /// <summary>
@@ -1500,7 +1506,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             // trees is as expensive as a surface, and letting those through unbudgeted
             // stacked five of them into one 120 ms frame
             bool overBudget = !OfflineMode && meshCommits > 0
-                && clock.Elapsed.TotalMilliseconds >= CommitBudgetMs;
+                && clock.Elapsed.TotalMilliseconds >= CommitBudgetMs * CommitBudgetScale;
             if (overBudget) break;
             if (!_ready.TryDequeue(out var result)) break;
 
@@ -1653,7 +1659,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (GodotObject.IsInstanceValid(anchor)) _anchorScratch.Add(anchor.GlobalPosition);
 
         int done = 0;
-        while (done == 0 || OfflineMode || clock.Elapsed.TotalMilliseconds < CommitBudgetMs)
+        while (done == 0 || OfflineMode || clock.Elapsed.TotalMilliseconds < CommitBudgetMs * CommitBudgetScale)
         {
             TileId bestId = default;
             ChunkState? best = null;
