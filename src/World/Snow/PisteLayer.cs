@@ -125,7 +125,7 @@ public partial class PisteLayer : Node
         if (_chunks.RoadsAt(id) is { } roads) TagRoads(roads, layer);
     }
 
-    /// <summary>The roads mesh and its cells (a standalone headset's, <see cref="ChunkNode.SetRoadCells"/>).</summary>
+    /// <summary>The roads mesh and its cells (<see cref="ChunkNode.SetRoadCells"/>).</summary>
     private static void TagRoads(MeshInstance3D roads, int layer)
     {
         roads.SetInstanceShaderParameter(PisteLayerParam, layer);

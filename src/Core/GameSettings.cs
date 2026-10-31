@@ -18,7 +18,10 @@ public enum DetailPreset
     Low = 0,
     Medium = 1,
     High = 2,
-    /// <summary>Under Low, for a standalone headset's GPU (#1112): offered in VR only.</summary>
+    /// <summary>
+    /// Under Low: what a standalone headset's GPU affords (#1112), on every device since #1216 (lighter shaders, one
+    /// shadow cascade, sparse far trees, the coarse horizon; <see cref="GameSettings.Lean"/>).
+    /// </summary>
     VeryLow = 3,
 }
 
@@ -218,6 +221,28 @@ public sealed class GameSettings
     /// <summary>Whether the client streams as Low data now: chosen, or the data saver with auto on.</summary>
     [JsonIgnore]
     public bool LowDataActive => Data == DataPreset.Low || AutoLowData && DataSaverOn;
+
+    /// <summary>The detail preset in use: the headset's own in VR (<see cref="VrDetail"/>), at most Low on low data.</summary>
+    public DetailPreset EffectiveDetail
+    {
+        get
+        {
+            var preset = XR.XrSession.Active ? VrDetail : Detail;
+            return LowDataActive && preset != DetailPreset.VeryLow ? DetailPreset.Low : preset;
+        }
+    }
+
+    /// <summary>
+    /// Very low in use (#1216): the cuts a Quest 2 needed (#1112), on any device that picks it. The lighter
+    /// shader variants, one shadow cascade, the 200 m horizon lattice.
+    /// </summary>
+    public static bool Lean => Current.EffectiveDetail == DetailPreset.VeryLow;
+
+    /// <summary>
+    /// Low or Very low in use (#1216): the cheaper half, unseen at a glance. Two shadow cascades, decorations and
+    /// parked cars drawn nearer, herds and birds posed less often.
+    /// </summary>
+    public static bool Cheap => Current.EffectiveDetail is DetailPreset.Low or DetailPreset.VeryLow;
 
     /// <summary>Low data's render distance cap, in rings: past it the horizon draws the land.</summary>
     public const int LowDataRings = 5;

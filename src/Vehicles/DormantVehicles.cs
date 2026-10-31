@@ -61,10 +61,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     public const float ReachM = 3.0f;
 
     /// <summary>
-    /// Dormant cars are drawn to here, as <c>Traffic</c> draws its own to 600 m; a standalone headset to 250 m
-    /// (#1112): Geneva's loaded parked cars were 2.5 million triangles.
+    /// Dormant cars of a tile drawn now reach this far, as <c>Traffic</c> draws its own to 600 m; 250 m on Low and
+    /// Very low (#1216, a standalone headset's since #1112): Geneva's loaded parked cars were 2.5 million triangles.
     /// </summary>
-    private static readonly float DrawnM = Core.Platform.IsStandaloneVr ? 250f : 400f;
+    private static float DrawnM => Core.GameSettings.Cheap ? 250f : 400f;
     private const double CellM = 125.0;
 
     /// <summary>
@@ -837,13 +837,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_drawn.Remove(id, out var old)) Free(old);
         if (!_slots.TryGetValue(id, out var slots)) return;
 
-        // a standalone headset's are also cut into 125 m cells (#1112): an instancer's drawn range counts from its
-        // middle, which for a whole tile's cars of one look was the tile's, far from the cars at its edge
+        // cut into 125 m cells (#1112, every device since #1216): an instancer's drawn range counts from its middle,
+        // which for a whole tile's cars of one look was the tile's, far from the cars at its edge
         var byLook = new Dictionary<(DormantLooks.Key Look, long Cell), List<VehicleSlot>>();
         foreach (var s in slots)
         {
             if (_awake.Contains(KeyOf(s))) continue;
-            long cell = Core.Platform.IsStandaloneVr ? (long)Math.Floor(s.E / CellM) * 100_000 + (long)Math.Floor(s.N / CellM) : 0;
+            long cell = (long)Math.Floor(s.E / CellM) * 100_000 + (long)Math.Floor(s.N / CellM);
             var key = (DormantLooks.KeyOf(s), cell);
             if (!byLook.TryGetValue(key, out var list)) byLook[key] = list = new List<VehicleSlot>();
             list.Add(s);

@@ -255,16 +255,14 @@ public partial class ChunkNode : Node3D
         Swap(_roadInstance, mesh);
     }
 
-    /// <summary>Beyond this the road paint is not drawn on a standalone headset, m: a marking there is under a pixel.</summary>
-    public const float PaintToM = 250f;
-
     private MeshInstance3D[]? _roadCellInstances;
 
     /// <summary>
-    /// A standalone headset's roads cut into cells (#1112), children of the roads mesh (which keeps the piers):
-    /// shown and hidden with it, and given its ski-slope layer. Null clears them.
+    /// The roads cut into cells (#1112, everywhere since #1216), children of the roads mesh (which keeps the piers):
+    /// shown and hidden with it, and given its ski-slope layer. Null clears them. The markings are drawn to
+    /// <paramref name="paintToM"/> from the eye (<see cref="LodPolicy.RoadPaintToM"/>, 0: as far as the roads).
     /// </summary>
-    public void SetRoadCells(ArrayMesh?[]? roads, ArrayMesh?[]? paint)
+    public void SetRoadCells(ArrayMesh?[]? roads, ArrayMesh?[]? paint, float paintToM)
     {
         ClearRoadCells();
         if (_roadInstance == null || (roads == null && paint == null)) return;
@@ -287,9 +285,37 @@ public partial class ChunkNode : Node3D
             }
         }
         Add(roads, "RoadCell", 0f);
-        Add(paint, "RoadPaint", PaintToM);
+        Add(paint, "RoadPaint", PaintRange(paint, paintToM));
         _roadCellInstances = list.ToArray();
     }
+
+    /// <summary>
+    /// A new preset's distances on what this tile already draws (#1216): its building cells' meshes to
+    /// <paramref name="boxFromM"/> and their boxes beyond, its road markings to <paramref name="paintToM"/>.
+    /// </summary>
+    public void SetRanges(float boxFromM, float paintToM)
+    {
+        if (_cellInstances != null)
+            foreach (var cell in _cellInstances)
+            {
+                if (cell.Name.ToString().StartsWith("BuildingProxies")) cell.VisibilityRangeBegin = boxFromM;
+                else if (cell.VisibilityRangeEnd > 0f) cell.VisibilityRangeEnd = boxFromM;
+            }
+        if (_roadCellInstances != null)
+        {
+            float range = PaintRange(_roadCellInstances.Count(c => c.Name.ToString().StartsWith("RoadPaint")), paintToM);
+            foreach (var cell in _roadCellInstances)
+                if (cell.Name.ToString().StartsWith("RoadPaint")) cell.VisibilityRangeEnd = range;
+        }
+    }
+
+    /// <summary>
+    /// The paint's drawn range: <paramref name="paintToM"/> for cells; for the whole tile's paint as one mesh
+    /// (#1216), half the tile's diagonal more, as a range counts from the middle of what it draws.
+    /// </summary>
+    private static float PaintRange(int meshes, float paintToM) => paintToM > 0f && meshes == 1 ? paintToM + WholeTileSlackM : paintToM;
+    private static float PaintRange(ArrayMesh?[]? meshes, float paintToM) => PaintRange(meshes?.Length ?? 0, paintToM);
+    private const float WholeTileSlackM = 707f;
 
     private void ClearRoadCells()
     {
@@ -397,17 +423,13 @@ public partial class ChunkNode : Node3D
     private OccluderInstance3D? _occluder;
 
     /// <summary>
-    /// A standalone headset draws a building cell's own mesh up to this far from the eye, and its boxes
-    /// (<see cref="BuildingMeshBuilder.BuildProxies"/>) beyond: a 3D distance per cell, whatever tile it is in (#1112).
-    /// </summary>
-    public const float ProxyFromM = 300f;
-
-    /// <summary>
     /// The buildings cut into cells, with the tile's occluders (#553, <see cref="BuildingOcclusion"/>):
     /// what a tile round the camera draws, so a block hidden behind a row of houses is culled.
     /// Replaces the one-mesh buildings; <see cref="SetBuildings"/> replaces these.
     /// </summary>
-    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices, ArrayMesh?[]? proxies = null)
+    /// <param name="boxFromM">A cell's own mesh to this far from the eye, its <paramref name="proxies"/> beyond
+    /// (<see cref="LodPolicy.BuildingBoxFromM"/>, #1112): a 3D distance per cell, whatever tile it is in.</param>
+    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices, ArrayMesh?[]? proxies = null, float boxFromM = 0f)
     {
         ClearCells();
         if (_buildingInstance?.Mesh is { } whole)
@@ -421,7 +443,7 @@ public partial class ChunkNode : Node3D
             if (cells[c] is not { } mesh) continue;
             var instance = new MeshInstance3D { Name = $"Buildings{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings) };
             // no fade: Godot's fades dither with a discard, which a standalone headset's GPU cannot afford
-            if (proxies != null) instance.VisibilityRangeEnd = ProxyFromM;
+            if (proxies != null) instance.VisibilityRangeEnd = boxFromM;
             AddChild(instance);
             list.Add(instance);
         }
@@ -432,7 +454,7 @@ public partial class ChunkNode : Node3D
                 var proxy = new MeshInstance3D
                 {
                     Name = $"BuildingProxies{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings),
-                    VisibilityRangeBegin = ProxyFromM, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                    VisibilityRangeBegin = boxFromM, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 };
                 AddChild(proxy);
                 list.Add(proxy);

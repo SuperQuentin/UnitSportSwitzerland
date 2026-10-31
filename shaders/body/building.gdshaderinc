@@ -2,6 +2,8 @@
 // shader_type, render_mode, its defines, then this include.
 
 #include "res://shaders/common/world.gdshaderinc"
+// where the far buildings turn into their boxes, m (Terrain/ChunkManager from LodPolicy.BuildingBoxFromM, #1216)
+global uniform float world_building_box_from;
 #include "res://shaders/common/retro.gdshaderinc"
 #include "res://shaders/common/style.gdshaderinc"
 #include "res://shaders/common/sightline.gdshaderinc"
@@ -770,11 +772,12 @@ void fragment() {
         float leaf_w = (hi.x - lo.x) * 0.5;
         float slats = fine_detail(0.075, px);
 
+        // past the preset's LodPolicy.BuildingBoxFromM (from a 125 m cell's middle, so from 0.7 of it for a building
+        // in its corner) the building is its far stand-in, which has no windows: they fade into the wall before, and
+        // the stand-in takes over unseen (#1112; every preset's distance since #1216)
+        legible *= 1.0 - smoothstep(0.5 * world_building_box_from, 0.7 * world_building_box_from,
+            length(world_pos - CAMERA_POSITION_WORLD));
 #ifdef STANDALONE
-        // past ChunkNode.ProxyFromM (300 m from a 125 m cell's middle, so from 212 m for a building in its corner)
-        // the building is its far stand-in, which has no windows: they fade into the wall before, and the stand-in
-        // takes over unseen (#1112)
-        legible *= 1.0 - smoothstep(150.0, 210.0, length(world_pos - CAMERA_POSITION_WORLD));
         if (windowed && in_row && in_col) {
             // a standalone headset (#1112): the window as flat glass, lit or not by the same per-window
             // hash; the recess traced into the wall, the room behind, the shutters, the sills and the

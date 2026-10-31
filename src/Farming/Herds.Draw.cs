@@ -51,7 +51,9 @@ public partial class Herds
         }
     }
 
-    private static readonly int NearEvery = Core.Platform.IsStandaloneVr ? 2 : 1, FarEvery = Core.Platform.IsStandaloneVr ? 16 : 8;
+    // on Low and Very low (#1216; a standalone headset's since #1112) the near herds every other frame, the far half as often
+    private static int NearEvery => Core.GameSettings.Cheap ? 2 : 1;
+    private static int FarEvery => Core.GameSettings.Cheap ? 16 : 8;
 
     public override void _Process(double delta)
     {
@@ -79,8 +81,7 @@ public partial class Herds
             bool fresh = h.Bodies == null;
             if (fresh) Build(h);
             if (!h.Bodies!.Visible) h.Bodies.Visible = h.Heads!.Visible = true;
-            // far herds a few times a second, staggered so they do not all land on one frame; on a
-            // standalone headset (#1112) the near ones every other frame and the far ones half as often
+            // far herds a few times a second, staggered so they do not all land on one frame (NearEvery, FarEvery)
             int every = dist > NearRange ? FarEvery : NearEvery;
             if (!fresh && !any && every > 1 && (_frame + h.Plan.Index) % every != 0) continue;
             // a near herd posed this frame anyway (being carried, just built) moves by this frame's time only
