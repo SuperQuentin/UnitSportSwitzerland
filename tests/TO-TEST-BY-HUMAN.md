@@ -7,6 +7,13 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Wide tile heights, France terrain ([#1400](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1400))
+
+Needs a v3 region (`tools/build-france.sh test mont-blanc` on the NAS, copy `terrain_chunks_france_test/mont-blanc` and point the game at it with `--chunks`).
+
+- [ ] Start the game on the Mont Blanc tiles, walk to the highest cell (about 4,779 m): does the ground reach it (no flat top at 4,700 m), the terrain look right and the Swiss region still load unchanged afterwards?
+- [ ] Camargue tiles (`camargue`): the lowest ground is below 0 m (-1 m) and the player stands on it without falling through.
+
 ## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
 
 - [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 30 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.

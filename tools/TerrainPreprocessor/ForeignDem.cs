@@ -68,6 +68,13 @@ public sealed class ForeignDem
         /// 560k of them cost no file handles. The header is checked against the name on that first read.
         /// </summary>
         public bool Lazy;
+        /// <summary>
+        /// For a lazy tile on the edge of the delivered area (a neighbour is missing: the coast, a
+        /// border): which 100 m squares (10x10, row-major from the north-west) hold data. Shared by the
+        /// copies of one tile; null: a tile with all eight neighbours present has data throughout.
+        /// </summary>
+        public bool[]? Mask;
+        public int KmX, KmY;
         public double MinX => OriginX - PixelX / 2;
         public double MaxX => OriginX + (Width - 0.5) * PixelX;
         public double MaxY => OriginY + PixelY / 2;
@@ -84,7 +91,7 @@ public sealed class ForeignDem
     private readonly Dictionary<(int, int, int), Lazy<float[]>> _loading = new();
     private long _cachedBytes;
 
-    /// <summary>RGE ALTI 1 m height tiles: <c>RGEALTI_FXX_&lt;E km&gt;_&lt;N km&gt;_MNT_...tif</c> (the SRC and DST companions are not heights).</summary>
+    /// <summary>RGE ALTI 1 m height tiles: <c>RGEALTI_FXX_&lt;E km&gt;_&lt;N km&gt;_MNT_...tif</c> (the SRC and DST companions are not heights). The sample (0,0) is at the integer Lambert-93 metre the name gives (north-west corner), checked against each header on the first read.</summary>
     private static readonly Regex RgeName = new(@"^RGEALTI_FXX_(\d{4})_(\d{4})_MNT_.*\.tif$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex XyzKm = new(@"_(\d{3,4})_(\d{4})_1_", RegexOptions.CultureInvariant);
@@ -108,7 +115,7 @@ public sealed class ForeignDem
                     double x0 = int.Parse(rge.Groups[1].Value) * 1000.0, y0 = int.Parse(rge.Groups[2].Value) * 1000.0;
                     Add(new Entry
                     {
-                        Name = path, Lazy = true, OriginX = x0 + 0.5, OriginY = y0 - 0.5, PixelX = 1, PixelY = 1,
+                        Name = path, Lazy = true, KmX = int.Parse(rge.Groups[1].Value), KmY = int.Parse(rge.Groups[2].Value), OriginX = x0, OriginY = y0, PixelX = 1, PixelY = 1, // IGN puts the sample at the integer metre
                         Width = 1000, Height = 1000, BlockW = 1000, BlockH = 1000, NoData = -99999f,
                     });
                     CoverageOnly = true;
@@ -199,6 +206,7 @@ public sealed class ForeignDem
     /// </summary>
     public List<TileId> TilesIn(int minE, int minN, int maxE, int maxN, IReadOnlySet<TileId> exclude, int minProbes = 1)
     {
+        if (CoverageOnly) EnsureMasks();
         var ids = new List<TileId>();
         for (int n = minN; n < maxN; n++)
             for (int e = minE; e < maxE; e++)
@@ -208,14 +216,31 @@ public sealed class ForeignDem
         {
             var cur = new Cursor();
             int found = 0;
-            for (int j = 0; j <= 4; j++)
-                for (int i = 0; i <= 4; i++)
+            // the corners and edges are shared with the neighbours; a tile of lazy rasters is judged by
+            // 10x10 points strictly inside it (one per 100 m square of the edge masks), so data that lies
+            // only next door does not make it a tile and a sliver of data (a summit on the border) does
+            int side = CoverageOnly ? 10 : 5;
+            double first = CoverageOnly ? 50 : 0, step = CoverageOnly ? 100 : 250;
+            int need = CoverageOnly && minProbes > 1 ? minProbes * 4 : minProbes;
+            if (CoverageOnly)
+            {
+                // sea, other countries: nothing within two kilometres of the centre, so none of the 100 probes can hit
+                var (cx, cy) = DemProjection.FromLv95(Crs, id.MinE + 500.0, id.MaxN - 500.0);
+                int kx = (int)Math.Floor(cx / 1000), ky = (int)Math.Floor(cy / 1000);
+                bool near = false;
+                for (int dy = -2; dy <= 2 && !near; dy++)
+                    for (int dx = -2; dx <= 2 && !near; dx++)
+                        near = _index.ContainsKey((kx + dx, ky + dy));
+                if (!near) return;
+            }
+            for (int j = 0; j < side; j++)
+                for (int i = 0; i < side; i++)
                 {
-                    var (x, y) = DemProjection.FromLv95(Crs, id.MinE + 250.0 * i, id.MaxN - 250.0 * j);
+                    var (x, y) = DemProjection.FromLv95(Crs, id.MinE + first + step * i, id.MaxN - first - step * j);
                     if (!Covers(x, y)) continue;
                     // France's tree: a file under the probe is the data (reading 560k tiles' blocks to
                     // ask would decode every French tile several times before the build even starts)
-                    if ((CoverageOnly ? FindAt(x, y) >= 0 : !double.IsNaN(Sample(x, y, ref cur))) && ++found >= minProbes) { hit.Add(id); return; }
+                    if ((CoverageOnly ? HasData(x, y) : !double.IsNaN(Sample(x, y, ref cur))) && ++found >= need) { hit.Add(id); return; }
                 }
         });
         return hit.OrderByDescending(t => t.N).ThenBy(t => t.E).ToList();
@@ -241,6 +266,67 @@ public sealed class ForeignDem
     }
 
     private int FindAt(double x, double y) => Find(x, y, -1);
+
+    private bool _masked;
+
+    /// <summary>
+    /// Reads the tiles on the edge of the delivered area, once, to learn where their data stops (the
+    /// coast, the border: IGN delivers a whole tile with -99999 beyond it). Every other tile has all
+    /// eight neighbours, so it is data throughout and is never opened here: a tile choice that read the
+    /// 560k blocks would decode each French tile several times before the build starts, and this reads
+    /// about one in fifty, in parallel.
+    /// </summary>
+    private void EnsureMasks()
+    {
+        lock (_gate)
+        {
+            if (_masked) return;
+            var maskClock = System.Diagnostics.Stopwatch.StartNew();
+            var byKm = new Dictionary<(int, int), List<Entry>>();
+            foreach (var e in _entries)
+                if (e.Lazy)
+                {
+                    if (!byKm.TryGetValue((e.KmX, e.KmY), out var l)) byKm[(e.KmX, e.KmY)] = l = new List<Entry>();
+                    l.Add(e);
+                }
+            var edge = byKm.Where(kv =>
+            {
+                var (x, y) = kv.Key;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                        if (!byKm.ContainsKey((x + dx, y + dy))) return true;
+                return false;
+            }).Select(kv => kv.Value).ToList();
+            Parallel.ForEach(edge, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Jobs) }, copies =>
+            {
+                var mask = new bool[100];
+                foreach (var e in copies)
+                {
+                    var data = Decode(e, 0, 0);
+                    for (int r = 0; r < 1000; r++)
+                        for (int c = 0; c < 1000; c++)
+                        {
+                            float h = data[r * 1000 + c];
+                            if (!(float.IsNaN(h) || h == e.NoData || h < -1000 || h > 9000)) mask[r / 100 * 10 + c / 100] = true;
+                        }
+                }
+                foreach (var e in copies) e.Mask = mask;
+            });
+            Console.WriteLine($"  {Name}: {edge.Count} of {byKm.Count} tiles are on the edge of the delivered area; their data read in {maskClock.Elapsed.TotalSeconds:F0}s");
+            _masked = true;
+        }
+    }
+
+    /// <summary>Whether a raster holds data at (x, y), judged by <see cref="Entry.Mask"/> for an edge tile (100 m squares).</summary>
+    private bool HasData(double x, double y)
+    {
+        int ei = Find(x, y, -1);
+        if (ei < 0) return false;
+        var e = _entries[ei];
+        if (e.Mask == null) return true;
+        int col = (int)Math.Clamp(Math.Round((x - e.OriginX) / e.PixelX), 0, 999), row = (int)Math.Clamp(Math.Round((e.OriginY - y) / e.PixelY), 0, 999);
+        return e.Mask[row / 100 * 10 + col / 100];
+    }
 
     private bool Covers(double x, double y) => _index.ContainsKey(((int)Math.Floor(x / 1000), (int)Math.Floor(y / 1000)));
 

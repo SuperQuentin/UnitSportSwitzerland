@@ -217,7 +217,10 @@ public static class TerrainBuild
                     {
                         // a foreign tile (#936, #965): resampled from the neighbours' DEMs, which read their own files
                         var dems = o.Foreign ?? throw new InvalidOperationException("foreign DEM tile without --dem");
-                        if (ForeignDem.FillAll(dems, src.Id, sc.Cells, onlyMissing: false) < sc.Cells.LongLength) XyzParser.FillMissing(sc.Cells);
+                        long filled = ForeignDem.FillAll(dems, src.Id, sc.Cells, onlyMissing: false);
+                        if (filled < sc.Cells.LongLength) XyzParser.FillMissing(sc.Cells);
+                        // nothing under it at all (a tile only chosen for a probe at its edge): sea level, not 4700 m walls
+                        if (filled == 0) Array.Fill(sc.Cells, ChunkFormat.Quantize(0));
                     }
                     else
                     {

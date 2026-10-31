@@ -162,7 +162,8 @@ public static partial class Preprocessor
         string? rgeAltiDir = null, demBox = null;
         double rgeAltiDz = 0;
         bool demCheck = false, demReparse = false;
-        int demCacheMb = 384;
+        int demCacheMb = 384, demMinProbes = 13;
+        bool demPlan = false;
         var demProbes = new List<(double E, double N)>();
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
@@ -250,6 +251,10 @@ public static partial class Preprocessor
                     break;
                 // only these départements of a France tree (RGEALTI_..._D074_... folders), for a test run
                 case "--dem-only": ForeignDem.OnlyFolders = args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries); break;
+                // of 25 probe points a new tile needs this many with data (default 13; 1 keeps every border tile, e.g. the Mont Blanc summit)
+                case "--dem-min-probes": demMinProbes = int.Parse(args[++i]); break;
+                // scan the rasters, pick the tiles, print how many and how long, build nothing
+                case "--dem-plan": demPlan = true; break;
                 case "--dem-cache-mb": demCacheMb = int.Parse(args[++i]); break;
                 // swissALTI3D tiles with foreign data under them are parsed again, so their -9999 gaps
                 // (0 m pits before #936) are filled from it; their old .edge files are set aside
@@ -695,9 +700,15 @@ public static partial class Preprocessor
             foreach (var dem in foreign)
             {
                 // a new tile needs data under half of it; partial ones are the generated fill's
-                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss, minProbes: 13);
+                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss, minProbes: demMinProbes);
                 Console.WriteLine($"DEM {dem.Name}: {mine.Count} LV95 tiles with its data and no swissALTI3D");
                 tiles.UnionWith(mine);
+            }
+            if (demPlan)
+            {
+                Console.WriteLine($"--dem-plan: {tiles.Count} tiles to build in {sw.Elapsed.TotalSeconds:F0}s; E {tiles.Min(t => t.E)}..{tiles.Max(t => t.E)}, N {tiles.Min(t => t.N)}..{tiles.Max(t => t.N)}"
+                    + $"; heap {GC.GetTotalMemory(false) / 1048576} MB");
+                return 0;
             }
             if (demReparse)
             {
