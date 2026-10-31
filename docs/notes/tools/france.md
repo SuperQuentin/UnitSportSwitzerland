@@ -47,3 +47,6 @@
   lower than the lake and its banks connect through the river.
 - `TiffFloat` reads IGN's strip float32 TIFFs (LZW, predictor 2) without GDAL. 16 GB for D074;
   a 1 735-tile fill took ~16 min on the NAS at 6 jobs, peak a few hundred MB.
+- **All of France** (#1399): the same reader over every département, run on the NAS with a wider tile height
+  range: `france-nas-run`, `terrain/height-format-v3`. This `--rgealti` path (Léman border box filling a Swiss
+  build) is unchanged.

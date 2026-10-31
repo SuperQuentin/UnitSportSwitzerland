@@ -82,6 +82,80 @@ public class TerrainFormatTests
     }
 
     [Fact]
+    public void Legacy_encoding_decodes_exactly_as_before_the_wide_format()
+    {
+        // version 2: metres = q * 4700 / 65535, no offset; these are the values every Swiss tile on disk means
+        var legacy = HeightEncoding.Legacy;
+        Assert.Equal(2, legacy.Version);
+        foreach (ushort q in new ushort[] { 0, 1, 4096, 31337, 65534, 65535 })
+            Assert.Equal(q * (4700.0 / 65535.0), legacy.Dequantize(q));
+        Assert.Equal(4700.0 / 65535.0, ChunkFormat.HeightScale);
+        Assert.Equal(0, legacy.Quantize(-10));          // below the range clamps, as it always did
+        Assert.Equal(65535, legacy.Quantize(4806));     // Mont Blanc is clipped in the old format
+        Assert.Equal(legacy.Quantize(1234.5), ChunkFormat.Quantize(1234.5));
+    }
+
+    [Fact]
+    public void Wide_encoding_holds_mont_blanc_and_land_below_sea_level()
+    {
+        var wide = HeightEncoding.Wide;
+        Assert.Equal(3, wide.Version);
+        Assert.Equal((-50.0, 4900.0), (wide.MinM, wide.MaxM));
+        Assert.Equal(4950.0 / 65535.0, wide.Scale);
+        foreach (double m in new[] { -10.0, -1.7, 0.0, 372.14, 4806.0, 4807.9 })
+            Assert.InRange(wide.Dequantize(wide.Quantize(m)) - m, -wide.Scale / 2, wide.Scale / 2);
+        Assert.Equal(0, wide.Quantize(-50));
+        Assert.Equal(0, wide.Quantize(-500));
+        Assert.Equal(65535, wide.Quantize(4900));
+        Assert.Equal(65535, wide.Quantize(9000));
+        Assert.True(wide.Quantize(-10) > 0 && wide.Dequantize(wide.Quantize(-10)) < 0);
+        Assert.True(wide.Scale < 0.08); // under 8 cm a step
+    }
+
+    [Fact]
+    public void Wide_chunk_round_trips_and_is_told_apart_from_a_legacy_one()
+    {
+        var wide = HeightEncoding.Wide;
+        var heights = new ushort[ChunkFormat.GridSize * ChunkFormat.GridSize];
+        heights[0] = wide.Quantize(4806);
+        heights[1] = wide.Quantize(-10);
+        heights[2] = wide.Quantize(0);
+        for (int i = 3; i < heights.Length; i++) heights[i] = (ushort)(i * 7);
+        var grid = new ChunkGrid(Id, heights, (float)wide.Dequantize(heights.Min()), (float)wide.Dequantize(heights.Max()));
+
+        using var ms = new MemoryStream();
+        ChunkCodec.Encode(grid, ms, wide);
+        var bytes = ms.ToArray();
+        Assert.Equal(3, BitConverter.ToUInt16(bytes, 4)); // the version word of the 32-byte header
+        Assert.Equal(ChunkFormat.HeaderSize + heights.Length * 2, bytes.Length); // same size as a v2 tile
+
+        var back = ChunkCodec.Decode(new MemoryStream(bytes), out var found);
+        Assert.Equal(3, found.Version);
+        Assert.Equal(heights, back.Heights);
+        Assert.InRange(found.Dequantize(back.Heights[0]), 4805.96, 4806.04);
+        Assert.InRange(found.Dequantize(back.Heights[1]), -10.04, -9.96);
+
+        // the same call on a v2 tile says v2; neither touches the process-wide choice
+        using var old = new MemoryStream();
+        ChunkCodec.Encode(grid, old, HeightEncoding.Legacy);
+        ChunkCodec.Decode(new MemoryStream(old.ToArray()), out var oldFound);
+        Assert.Equal(2, oldFound.Version);
+        Assert.Throws<InvalidDataException>(() => HeightEncoding.ForVersion(4));
+    }
+
+    [Fact]
+    public void Manifest_names_its_height_encoding()
+    {
+        var json = new TerrainManifest().ToJson();
+        var back = TerrainManifest.FromJson(json);
+        Assert.Equal(ChunkFormat.HeightScale, back.HeightScale);
+        // a manifest from before the wide format has no offset: it reads as 0, the version-2 meaning
+        var old = TerrainManifest.FromJson("{\"formatVersion\":2,\"heightScale\":0.0717}");
+        Assert.Equal(2, old.FormatVersion);
+        Assert.Equal(0.0, old.HeightOffsetM);
+    }
+
+    [Fact]
     public void Chunk_round_trips_bit_identical()
     {
         var grid = new ChunkGrid(Id, RandomHeights(ChunkFormat.GridSize, 1), 372.5f, 1680.25f);

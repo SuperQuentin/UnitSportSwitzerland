@@ -14,6 +14,9 @@ public sealed class TerrainManifest
     public int GridSize { get; set; } = ChunkFormat.GridSize;
     public double SpacingM { get; set; } = ChunkFormat.SpacingM;
     public double HeightScale { get; set; } = ChunkFormat.HeightScale;
+
+    /// <summary>Metres at quantized height 0: 0 in version 2 (absent in old files), -50 in version 3.</summary>
+    public double HeightOffsetM { get; set; }
     public Lv95Point SuggestedOriginLv95 { get; set; } = new();
     public Lv95Bounds BoundsLv95 { get; set; } = new();
     public List<ManifestTile> Tiles { get; set; } = new();
@@ -41,6 +44,16 @@ public sealed class TerrainManifest
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
     };
+
+    /// <summary>
+    /// Makes this region's height encoding the process's (<see cref="ChunkFormat.Use"/>); the game's
+    /// manifest loads call it, tools that merely read a manifest do not.
+    /// </summary>
+    public TerrainManifest UseFormat()
+    {
+        ChunkFormat.Use(FormatVersion);
+        return this;
+    }
 
     public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
 

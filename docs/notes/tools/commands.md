@@ -11,7 +11,7 @@
   seams of their new neighbours are refreshed from the existing `.terr`. `--force` re-parses,
   `--fresh` drops tiles from earlier runs. Numbers are read by a fixed-point scanner
   (`mantissa / 10^d` is one correctly rounded division, i.e. the same double `Utf8Parser` gives);
-  the tool targets net9.0 for its zlib-ng inflate.
+  the tool targets net8.0 (SDK 9 pinned by `global.json`; the zlib-ng inflate comes with the SDK 9 build).
 - Tile fingerprint (#924): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --manifest-hash`
   adds each manifest tile's content hash (`hash`: SHA-256 over every `<kind>_E_N.*` file of the
   tile, 16 hex digits, `TileFingerprint`) and the region files' (`shared`: horizon, places,
