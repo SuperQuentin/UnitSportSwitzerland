@@ -508,6 +508,7 @@
 2.8	Concert / Stage - SideEast: Kai Duval (Pop, screens Sides)
 5.6	Concert / Stage - SideWest: The Electric Glaciers (Ballad, screens Sides)
 321.1	Concert / Stage - Thrust: Lunar Comets (Ballad, screens CenterAndSides)
+252.1	Concert / Stage - jazz: Victor Baumann Trio (Jazz)
 7.8	Crafting / Ashes
 96.1	Emotes / Air drums
 391.5	Emotes / Air guitar

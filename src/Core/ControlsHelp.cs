@@ -99,6 +99,11 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("At a market stall: the day's free taste (the stall-hop), then buy its ware for Batzen; at the Samichlaus on 6 December: his bag", PlayerInput.InteractMount),
         }),
+        ("Festivals: Montreux Jazz (#1394)", new Row[]
+        {
+            new("At the stage-front rail: mark yourself as listening (a song heard from the audience pays when it ends)", PlayerInput.InteractMount),
+            new("When the band has left after the set: clap it back on every beat of the ring (jump), the whole crowd's claps count", PlayerInput.Jump),
+        }),
         ("Festivals: the Zibelemärit (#1373)", new Row[]
         {
             new("At an onion market stall: the day's free taste (the stall-hop), then buy its ware for Batzen", PlayerInput.InteractMount),

@@ -993,6 +993,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
             || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
+            || Occasions.Festivals.MontreuxJazz.JazzCheck.Requested || Occasions.Festivals.MontreuxJazz.JazzNetProbe.Role != null
             || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null
             || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested || Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null
             || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
@@ -1238,6 +1239,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.Festivals.Christmas.ChristmasGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Christmas.ChristmasCheck.Requested) AddChild(new Occasions.Festivals.Christmas.ChristmasCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null) AddChild(new Occasions.Festivals.Christmas.ChristmasNetProbe(items));
+            // Montreux Jazz (#1394): E at the stage-front rail marks the listener, jump on the beat claps the band back for the bis
+            AddChild(new Occasions.Festivals.MontreuxJazz.JazzGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.MontreuxJazz.JazzCheck.Requested) AddChild(new Occasions.Festivals.MontreuxJazz.JazzCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.MontreuxJazz.JazzNetProbe.Role != null) AddChild(new Occasions.Festivals.MontreuxJazz.JazzNetProbe(items));
             // the Zibelemärit (#1373): E at a stall tastes or buys; confetti eggs and Räppli thrown on the square count
             AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleCheck(items, () => LocalPlayer));

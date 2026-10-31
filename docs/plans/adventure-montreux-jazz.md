@@ -3,10 +3,26 @@
 
 # Montreux Jazz Festival: a quay stage, a jazz set, the encore
 
-Status: **planned**. Issue: [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394). Part of the festivals plan
+Status: **built** in [PR #1395](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1395) (as built below). Issue: [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394). Part of the festivals plan
 ([`adventure-festivals`](adventure-festivals.md), #1269, its open question 6; phase 3 question 14 in
 [`adventure-phase3`](adventure-phase3.md)). Scoped there as "the concert system plus a new open-air `StadiumSpec` on the
 Montreux quay (small, its own issue)". This plan keeps it small: one venue row, one genre, one festival def, two games, one item.
+
+## As built (#1395)
+
+All of the owner's answers to the open questions were followed (stable dates, `ClosingShow.Concert` only, no relocation, four props, `Genre.Jazz` forced by the festival, a jazz playlist hook with no
+audio, an optional `Season`, the strangers-count meter, 6 / 10 Batzen and cap 400, `ItemId` 511). Where the build differs from the text below:
+
+- **Venue**: fitted on the swissimage aerial as the sand square of the Place du Marché (2559335 / 1142425, azimuth 270, 60 x 32 m, capacity 1200), not the lawn at 2559368 / 1142410
+  (that point is among the hotels); the stage is at the lake end, the fence is open on that side (`StadiumSpec.OpenSides`, new). The Christmas site fix (Grand-Rue 1, 2559396 / 1142356) is its own first commit.
+- **Songs and the set**: short, so a set fits the game's three real minutes of show at the default day length: sections of 4 bars (not 32), a song 40-75 s, a set of 2 songs (4 on the Jazz Night, 6 on the
+  closing night), the call, the bis, a rest (`JazzSet`). The 12-songs-a-night cap is kept but the game's 60 a day binds first.
+- **Games**: the encore's meter, the 80 % rule and the yield are as planned; a stranger who claps at least twice is paid the base like anyone (only a party's friends add the yield). The bis's lights always play
+  (a pure function of the clock); only the pay depends on the meter. The first milestone pays 10 Batzen, not 15 (the milestones' total must stay a quarter of the 400 cap).
+- **Crowd**: 350-700 people, not 600-900 (the lawn's size). **Rig**: 33-35 fixtures in one universe (the IR rig counts).
+- **Not built**: string lights, the Jazz pass worn on the wrist and a Journal card (the pass is a held keepsake, item 511), `ClosingShow.Both` (owner: Concert first), the `--perflog` run.
+- **New seams**: `FestivalDef.Relocates`, `StadiumSpec.Season/OpenSides`, `OccasionWeekdays` tails up to 15 days, `--jazzbpm`, `--festivalhour`, `CdLibrary.JazzUrls`.
+- Notes: `docs/notes/occasions/festival-montreuxjazz.md`; checks: `MontreuxJazzTests`, `MontreuxJazzRulesTests`, `--montreuxcheck`, `tools/montreuxnetcheck.sh`, `--concertcheck`, `--stadiumcheck`, `adv3-montreux-jazz`.
 
 ## Goal
 
@@ -29,8 +45,8 @@ indoor stages, paid tickets, a playable instrument (the jazz-jam follow-up is in
   The row's final E/N and `AzimuthDeg` come from the #948 recipe: fit the quay outline on swissimage and the lake edge from
   swissTLM3D, drawn over the aerial and looked at, stage on the land side with the audience facing the water. Confidence is
   low-medium until fitted (the real stages move each year; we pin one plausible, inspected place).
-- **Found while planning**: the Christmas market's Montreux site (`FestivalCatalog.Christmas`, `Grand-Rue, Montreux`,
-  2562650 / 1145250) is about 4 km east-north-east of the same town on the same formula (the town centre is near 2559400 / 1142400).
+- **Found while planning**: the Christmas market's Montreux site (`FestivalCatalog.Christmas`, `Grand-Rue, Montreux`, was
+  2562650 / 1145250, fixed in the first commit to the swisstopo address Grand-Rue 1, 2559396 / 1142356) was about 4 km east-north-east of the same town on the same formula (the town centre is near 2559400 / 1142400).
   Verify against the swisstopo reverse geocoder before this PR and fix it in the same PR if confirmed (its own commit).
 - **A season window**: the other 33 venues play every night. Montreux's stage stands only while the festival runs, so
   `StadiumSpec` gets an optional `Season` (an `OccasionSchedule` token, `07-fri#1+15`); outside it `ConcertDirector` builds no
@@ -140,8 +156,7 @@ and `ConcertRig.MusicNear` | none | a bot sitting on the lawn is a follow-up (`S
 One RPC `RequestMontreux(kind, a)` (0 listening mark, 1 clap) client to server, `TellMontreux(night, song, meter, text)` server to client;
 the server judges from the shared clock (`ClockSync.ServerNow`) and the pure `PogoBeat`, needs an adventuring human within the zone
 (`AdventureService.PositionOf`), 10 requests a second at most, a BR round refuses. The set itself is pure, nothing is sent (every peer builds
-the night's event from the instance and the day). **Protocol 85** (one bump for the PR; main is at 84 as of writing, re-read
-`Net/Handshake.Protocol` and take the next number at merge time). Persistence through the `festivals` section and
+the night's event from the instance and the day). **Protocol 86** (one bump for the PR: main was at 85 when it was marked ready). Persistence through the `festivals` section and
 `FestivalBook` only; the per-song marks are in memory (a restart gives the day's cap again, as the Christmas market does).
 
 ## Checks (cheapest tier that catches each bug)
