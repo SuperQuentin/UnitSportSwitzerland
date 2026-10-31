@@ -7,6 +7,13 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
+
+An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.
+
+- [ ] Join at once, sit in a car with a station on (U) or stand near venue music for 5 min → no cuts; the log says `burning the default CDs` at boot and no `burning CD … for peer 0` after `[world] connected`.
+- [ ] Quit, start offline → the default CDs burn then; the game and its sound stay smooth while they do (a few cores only).
+
 ## Sit on chairs, benches and terrace seats ([#1385](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1385))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva).
