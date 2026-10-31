@@ -308,7 +308,7 @@ public partial class ShopProbe : ChatProbe
                 + $"{new Vector2(me.GlobalPosition.X - door.World.X, me.GlobalPosition.Z - door.World.Z).Length():F1} m from it, {me.GlobalPosition.Y - door.World.Y:F1} m up, on the floor {me.IsOnFloor()})");
             return false;
         }
-        bool inside = await WalkUntil(me, inward, () => me.Indoors && interiors.Current != null, 8);
+        bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);
         return true;

@@ -172,11 +172,38 @@ public abstract partial class ChatProbe : Node
     /// held action when the window loses focus (another test window opening, a click elsewhere), and a player walking
     /// in through a door stopped on the doorstep now and then (#1401). Says where it stopped when it never got there.
     /// </summary>
-    protected async Task<bool> WalkUntil(FootPlayer me, Vector3 way, Func<bool> there, double seconds, double past = 0.4)
+    protected Task<bool> WalkUntil(FootPlayer me, Vector3 way, Func<bool> there, double seconds, double past = 0.4)
     {
         var wish = (way with { Y = 0 }).Normalized();
+        return WalkUntil(me, () => wish, there, seconds, past);
+    }
+
+    /// <summary>
+    /// In through the doorway whose outside frame is <paramref name="doorway"/> (<c>DoorLink.Outside</c>: the sill's
+    /// middle, Z out of the building): aimed at the doorway's middle line a little ahead, so a player off that line is drawn back between the jambs.
+    /// The building's shell has no hole, it lets a walker through only with their feet inside the doorway's width
+    /// (<c>DoorLink.InOutsideDoorway</c>), and a player set down beside another on the same doorstep was eased half a
+    /// metre aside and walked into the wall next to the door (#1401).
+    /// </summary>
+    protected Task<bool> WalkInThrough(FootPlayer me, Transform3D doorway, Func<bool> there, double seconds = 8)
+    {
+        var door = doorway.Origin;
+        var o = (doorway.Basis.Z with { Y = 0 }).Normalized();
+        return WalkUntil(me, () =>
+        {
+            float along = (me.GlobalPosition - door).Dot(o);
+            var aim = door + o * (along - DoorAimAhead) - me.GlobalPosition;
+            return (aim with { Y = 0 }).Normalized();
+        }, there, seconds, 0.4);
+    }
+
+    /// <summary>How far ahead on the doorway's middle line <see cref="WalkInThrough"/> aims, m: a player half a metre off it is back within a metre.</summary>
+    private const float DoorAimAhead = 0.6f;
+
+    private async Task<bool> WalkUntil(FootPlayer me, Func<Vector3> wish, Func<bool> there, double seconds, double past)
+    {
         var from = me.GlobalPosition;
-        me.WalkControls = () => (wish, false);
+        me.WalkControls = () => (wish(), false);
         bool ok = await Until(there, seconds);
         await Seconds(past);
         me.WalkControls = null;

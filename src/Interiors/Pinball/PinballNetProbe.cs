@@ -139,7 +139,7 @@ public partial class PinballNetProbe : ChatProbe
             open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
         }
         if (!open) { Fail($"the door {doorKey} never opened"); return false; }
-        bool inside = await WalkUntil(me, inward, () => me.Indoors && interiors.Current != null, 8);
+        bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);
         return true;
