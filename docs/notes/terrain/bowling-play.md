@@ -53,6 +53,7 @@ Playable lanes in every bowling centre (`bowling-centres` builds them). Plan: `d
 - **Playing**: E / Y (or a VR hand reaching out) at the counter, a rack (the ball reached for: across the
   rack, the lower tier when looking down), the hood, the approach. `BowlingAim`: spot, line, then hold Jump
   to swing (power swells and ebbs), sideways for hook, let go; Sprint looks at the pins; Cancel steps back.
+  Phone (#1353): `TouchMode.Bowl` (Bowl held to swing and dragged for hook, Back, Pins; drag turns the line).
   VR: grip your ball on the approach, swing, open the hand (`XrBowling`: the hand's last 0.1 s; wrist twist
   = hook; x1.3 swing gain); or the same steps on the stick.
 - **Shoes**: `ItemId.BowlingShoes` (a garment never owned), on the feet while signed in (`OccasionHats`).

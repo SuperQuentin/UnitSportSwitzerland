@@ -22,11 +22,17 @@ public partial class PauseScreen : Screen
         AddChild(dim);
         AddChild(TitleScreen.SideShade(0.9f, 0.55f));
 
+        // centred while it fits; a short screen (a phone held sideways, #1353) scrolls it, or Leave fell off the bottom
+        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, FollowFocus = true };
+        scroll.SetAnchorsPreset(LayoutPreset.LeftWide);
+        scroll.OffsetLeft = 72; scroll.OffsetRight = 72 + 360;
+        scroll.OffsetTop = 12; scroll.OffsetBottom = -56;   // above the footer's line
+        AddChild(scroll);
         var column = UiKit.VBox(6);
-        column.SetAnchorsPreset(LayoutPreset.LeftWide);
-        column.OffsetLeft = 72; column.OffsetRight = 72 + 360;
+        column.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        column.SizeFlagsVertical = SizeFlags.ExpandFill;
         column.Alignment = BoxContainer.AlignmentMode.Center;
-        AddChild(column);
+        scroll.AddChild(column);
 
         var paused = UiKit.Text("Paused", 48);
         UiKit.Display(paused);   // the skin's title face (#1135)
