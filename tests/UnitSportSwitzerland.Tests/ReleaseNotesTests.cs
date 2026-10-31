@@ -11,8 +11,18 @@ public class ReleaseNotesTests
     {
         string md = "### Highlights\n![gif](https://e/a.gif)\n\n### Features\n- **Sit** on chairs (#1385)\n  - nested [x]\n\n**Full diff:** https://e/compare\n";
         Assert.Equal(
-            "[font_size=16][b]Highlights[/b][/font_size]\n\n[font_size=16][b]Features[/b][/font_size]\n• [b]Sit[/b] on chairs (#1385)\n  • nested [lb]x[rb]",
+            "[font_size=16][b]Features[/b][/font_size]\n• [b]Sit[/b] on chairs (#1385)\n  • nested [lb]x[rb]",
             ReleaseNotes.ToBbcode(md));
+    }
+
+    [Fact]
+    public void A_heading_with_only_dropped_lines_is_dropped()
+    {
+        string md = "### Highlights\n![clip](https://e/a.gif)\n![clip](https://e/b.gif)\n\n### Features and changes\n- one\n\n**Full diff:** https://e/compare\n";
+        string o = ReleaseNotes.ToBbcode(md);
+        Assert.DoesNotContain("Highlights", o);
+        Assert.Equal("[font_size=16][b]Features and changes[/b][/font_size]\n• one", o);
+        Assert.Equal("", ReleaseNotes.ToBbcode("### Highlights\n![clip](https://e/a.gif)\n"));
     }
 
     [Fact]

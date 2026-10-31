@@ -30,6 +30,7 @@ public static class ReleaseNotes
     public static string ToBbcode(string? markdown)
     {
         var lines = new List<string>();
+        var pending = new List<string>(); // a heading and its blank lines, kept only once content follows
         foreach (string raw in (markdown ?? "").Replace("\r", "").Split('\n'))
         {
             string line = raw.TrimEnd();
@@ -38,15 +39,20 @@ public static class ReleaseNotes
                 || t.StartsWith("**Full diff", StringComparison.OrdinalIgnoreCase)) continue;
             if (line.Length == 0)
             {
-                if (lines.Count > 0 && lines[^1].Length > 0) lines.Add("");
+                var sink = pending.Count > 0 ? pending : lines;
+                if (sink.Count > 0 && sink[^1].Length > 0) sink.Add("");
                 continue;
             }
             if (Heading.Match(line) is { Success: true } h)
             {
                 int size = h.Groups[1].Length <= 2 ? 18 : 16;
-                lines.Add($"[font_size={size}][b]{Inline(h.Groups[2].Value)}[/b][/font_size]");
+                pending.Clear();
+                pending.Add($"[font_size={size}][b]{Inline(h.Groups[2].Value)}[/b][/font_size]");
+                continue;
             }
-            else if (Bullet.Match(line) is { Success: true } b)
+            lines.AddRange(pending);
+            pending.Clear();
+            if (Bullet.Match(line) is { Success: true } b)
                 lines.Add(new string(' ', b.Groups[1].Length) + "• " + Inline(b.Groups[2].Value));
             else lines.Add(Inline(t));
         }
