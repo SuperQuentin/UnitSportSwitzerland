@@ -21,6 +21,8 @@
 - `user://` (loot, bank, placed, birds, CDs, identity) is a fresh `test_output/userdata_<x>` per run
   (Windows `APPDATA`, Linux `XDG_DATA_HOME`, macOS `HOME` of the Godot runs, see below): a check
   never touches real saves. `USERDATA=<dir>` keeps one across runs, `USERDATA=real` uses the real one.
+  Every one but the real one gets `test_window.cfg` (`guard_quiet_godot`, #1378): a windowed client
+  never takes focus and is silent (`general/testing`).
 - The server and every client of a check share that one dir, so they share one `identity.key`: the
   second client logs on the server as `identity XXXX already connected, no sleeper for it`. A client
   that must be a player of its own runs under `( tc_userdata "$OUT/userdata_<x>_B"; tc_client ... ) &`
