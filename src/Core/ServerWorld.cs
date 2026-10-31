@@ -66,6 +66,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 return;
             }
             GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
+            if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
         }
         // the account step of a join (#1123): checked before anything is loaded, so a typo never serves a world
         if (ParseAccounts() is not { } accounts) { GetTree().Quit(1); return; }
@@ -188,6 +189,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
+        // the fun world's sky is held at dusk (#1396): its clock stopped there
+        if (WorldChoice.FunActive) World.WorldClock.Start(World.Fun.FunWorld.DuskHour, 0);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -310,6 +313,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
+        // the fun world's PvP block (#1396): who stands in it, and its weapon crates
+        if (WorldChoice.FunActive)
+        {
+            var players = _players;
+            World.Fun.FunWorld.Players = peer => players.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer)) is { } p ? p.Global : null;
+            AddChild(new World.Fun.FunCrates(_brCrates));
+        }
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
             (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
         br.Origin = origin;

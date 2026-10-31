@@ -7,6 +7,23 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Fun world ([#1397](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1397))
+
+Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
+
+- [ ] The look: violet sky with stars, the striped retro sun on the western horizon, wireframe mountains all round, the grid floor beyond the course, neon edges on the roads and venues, palms and lamp posts. In Cartoon, PS1 and Realistic (`/style`): anything washed out, too dark or flickering (the floor's edge at the course's border)?
+- [ ] Venues: enter Strike City (bowl a frame), Laser Palace (a showing on), Pixel Paradise (pinball), Café Miami and Sunset Diner (terrace tables), Club Turbo.
+- [ ] Race track: take a pit car, `/race start` near the track; the kart loop with a kart. Is the 14 m track width right, do the neon edges help or distract?
+- [ ] Grand circuit (all round the course): take a car from the grid on the south straight, `/race start` there: does the race follow the whole lap, are the chicanes, the esses and the crests fun at speed, is anything too tight for its radius?
+- [ ] Airfield: take a small plane from the apron, fly the air rings from the runway's west end: does the next ring read (pink, larger), is the panel on the right readable, does the time stop at the last ring? On a pad, and in VR (the panel is not shown there).
+- [ ] Snow hill: skis or snowboard on the slope, the T-bar up.
+- [ ] Neon Arena: the concert plays whenever you come.
+- [ ] Festival field: Fahnenschwingen, Schwingen ring, alphorns, the stone all open.
+- [ ] Stunt park: kickers, gap jump, half-pipe and bowl with a car, a motorbike, skis: fun or frustrating, too steep, too small?
+- [ ] Truck yard: reverse the Scania into a dock bay between the trailers, back the tractor under a trailer between the containers, the L alley, the drawbar train's box; the pickup's speedboat down the slipway.
+- [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
+- [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
+
 ## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
 
 On the Android phone (a test APK).
