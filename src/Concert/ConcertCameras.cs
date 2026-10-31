@@ -329,9 +329,14 @@ public partial class ConcertPerformers : Node3D
         _style = e.Genre switch
         {
             Genre.Rock => Audio.Cd.MusicStyle.Rock, Genre.Electronic => Audio.Cd.MusicStyle.Electronic,
-            Genre.HipHop => Audio.Cd.MusicStyle.HipHop, Genre.Ballad => Audio.Cd.MusicStyle.Chill, _ => Audio.Cd.MusicStyle.Pop,
+            Genre.HipHop => Audio.Cd.MusicStyle.HipHop, Genre.Ballad or Genre.Jazz => Audio.Cd.MusicStyle.Chill, _ => Audio.Cd.MusicStyle.Pop,
         };
         float h = e.DeckHeight, z = _plan.Round ? 0 : -e.Depth * 0.35f;
+        if (e.Genre == Genre.Jazz)
+        {
+            BuildBand(e, h);
+            return;
+        }
         float[] xs = e.Genre switch
         {
             Genre.Electronic => new[] { 0f },
@@ -355,6 +360,67 @@ public partial class ConcertPerformers : Node3D
             AddChild(node);
             _people.Add((node, palette, i * 3));
             _showing.Add(long.MinValue);
+        }
+    }
+
+    // ---- the jazz quartet (#1394) -------------------------------------------------------------------------
+
+    /// <summary>One player of the quartet: a pivot at the post (turned to face), the figure and its instrument as children, swaying as a node.</summary>
+    private readonly List<(Node3D Pivot, Basis Yaw, float Phase)> _band = new();
+    private bool _bandShown = true;
+
+    /// <summary>
+    /// A quartet at fixed posts of the deck (stage frame, x across, z towards the audience): the saxophonist at the front, the bassist stage left, the
+    /// pianist stage right at a piano turned side-on (the stool pushed back), the drummer on the back line. Instruments are nodes
+    /// (<see cref="JazzInstruments"/>), the figures idle skinned ones holding them; the sway is the pivot's roll.
+    /// </summary>
+    private void BuildBand(ConcertEvent e, float deck)
+    {
+        (float X, float Z, float FaceX, float FaceZ, JazzInstruments.Kind Kind)[] posts =
+        {
+            (-1.2f, -1.9f, 0f, 1f, JazzInstruments.Kind.Sax),
+            (-4.3f, -3.0f, 0f, 1f, JazzInstruments.Kind.Bass),
+            (4.0f, -3.6f, -1f, 0.35f, JazzInstruments.Kind.Piano),
+            (1.4f, -5.1f, 0f, 1f, JazzInstruments.Kind.Kit),
+        };
+        for (int i = 0; i < posts.Length; i++)
+        {
+            var post = posts[i];
+            var at = _plan.StagePoint(post.X, deck, post.Z);
+            var face = (_plan.StagePoint(post.X + post.FaceX * 10f, deck, post.Z + post.FaceZ * 10f) - at) with { Y = 0 };
+            var yaw = new Basis(Vector3.Up, Mathf.Atan2(-face.X, -face.Z));
+            var pivot = new Node3D { Name = $"Band{i}", Position = at, Basis = yaw };
+            var node = new SkinnedFigure { Name = $"Artist{i}", MaterialOverride = HumanMeshBuilder.FigureMaterial() };
+            var palette = HumanPalette.ForRider(e.Seed + i * 7);
+            node.Show(new FigureLook(palette));
+            HumanMeshBuilder.PoseStride(node, 0f, 0f, ItemArmPose.Hold, 1f);
+            pivot.AddChild(node);
+            pivot.AddChild(JazzInstruments.Node(post.Kind));
+            AddChild(pivot);
+            _people.Add((node, palette, i * 3));
+            _showing.Add(long.MinValue);
+            _band.Add((pivot, yaw, i * 0.7f));
+        }
+    }
+
+    /// <summary>The band sways a little to the beat, each on its own phase (the pivot's roll); out of sight while it is off for the encore.</summary>
+    private void StepJazz()
+    {
+        var part = _desk.Jazz.Part;
+        bool away = part is JazzPart.Call or JazzPart.Rest && _desk.HeldSection == null;
+        if (away == _bandShown)
+        {
+            _bandShown = !away;
+            foreach (var (pivot, _, _) in _band) pivot.Visible = _bandShown;
+        }
+        if (away) return;
+        bool playing = _desk.Section is not (ShowSection.Blackout or ShowSection.WalkIn);
+        float beat = _desk.Beat;
+        for (int i = 0; i < _band.Count; i++)
+        {
+            var (pivot, yaw, phase) = _band[i];
+            float roll = playing ? 0.045f * MathF.Sin(beat * MathF.PI * 0.5f + phase) : 0f;
+            pivot.Basis = yaw * new Basis(Vector3.Back, roll);
         }
     }
 
@@ -382,6 +448,11 @@ public partial class ConcertPerformers : Node3D
     public void Step(float strobeHz = 0f, float strobeT = 0f, Audio.Cd.CdInfo? song = null, double heardT = -1, float dt = 0f)
     {
         Sing(song, heardT, dt);
+        if (_band.Count > 0)
+        {
+            StepJazz();
+            return;
+        }
         float beat = _desk.Beat, phase = beat - MathF.Floor(beat);
         int bar = (int)MathF.Floor(beat / 4f);
         float barPhase = beat / 4f - bar;

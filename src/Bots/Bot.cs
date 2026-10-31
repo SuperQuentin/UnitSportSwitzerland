@@ -24,6 +24,10 @@ public struct BotIntent
     public float Pitch;
     /// <summary>Fire (or stab) at this world point this tick, if the weapon is ready (<see cref="BotHands.Fire"/>).</summary>
     public Vector3? FireAt;
+    /// <summary>Swing the sword at this world point (<see cref="BotHands.Swing"/>); held, it chains the combo.</summary>
+    public Vector3? SwordAt;
+    /// <summary>Dodge away from this world point this tick (<see cref="BotHands.Dodge"/>).</summary>
+    public Vector3? DodgeFrom;
     /// <summary>
     /// In the air: whether it wants the parachute open (else the wingsuit). The body's flight controls
     /// turn the wish into the deploy or cut-away press only when the ride differs, never a held key.
@@ -66,6 +70,12 @@ public sealed class Bot
     public bool Watched;
     /// <summary>The hands' state (<see cref="BotHands"/>): when the weapon is ready again, the barrel's heat and since when.</summary>
     public double NextShotAt;
+    /// <summary>The sword's machine (#1371): the combo, the dodge and their stamina, stepped by <see cref="BotHands.Tick"/>; the same rules as a player's.</summary>
+    public Combat.SwordMachine Sword { get; } = new();
+    public double SwordWantUntil, DodgeWantUntil;
+    public Vector3 SwordTarget, DodgeAway;
+    public bool SwordPulse, SwordTraced;
+    public int SwordSwings;
     public float Heat;
     public double HeatAt;
     /// <summary>What it perceives (<see cref="BotSenses"/>): the only way its brain learns about the world.</summary>

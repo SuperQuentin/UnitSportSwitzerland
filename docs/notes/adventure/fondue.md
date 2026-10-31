@@ -6,7 +6,7 @@
   **a dining venue's table** (#1384, the owner's call: a table interaction, not anywhere near a venue): E within
   `PotTables.Reach` (1.8 m) of a table in a venue's guest room (`TableSet`, `BanquetteSet`, `HighTable`) or of its
   terrace's bistro set or beer bench (`PotTables`, client); the request carries the table's top (`AskStartAt`,
-  `RequestStartAt`, protocol 85) and the server checks it is within reach and a dining venue's point within
+  `RequestStartAt`, protocol 87) and the server checks it is within reach and a dining venue's point within
   `VenueReach` (`ServeStartAt`); one pot a table, standing on it. `/fondue start` at a venue says to use E at a table. The server reads the campfire from `PlacedSource` (`ServerWorld` hands it its `PlacedObjects`; `PlacedObjects.Instance` is client-only).
 - **Seats**: the starter's party within 6 m (offered, E to sit), 2 to 8. `/fondue [start | raclette | sit | invite <p> | leave | forfeit 1|2|3]`.
 - **Ingredients**: cheese (6 dips each), bread (your own, the one you can lose), `WhiteWine` 480 (Warm), `Kirsch` 481 (Hearty), potatoes for raclette. `AskAdd` takes the item first and the server gives it back on a refusal.

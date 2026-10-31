@@ -98,6 +98,10 @@ public partial class VenueProbe : Node
         Check(doors.Where(d => d.Index == 0 && d.Slot > 0).All(d => d.Venue == 0), "its other doors do not");
         Check(doors.First(d => d.Index == 2).Venue == 0, "the bare house's door carries nothing");
         Check(VenueSigns.Place(main) is { } at && at.Origin.Y > main.Position.Y + 2f, "the sign hangs over the door");
+        // the street hears the venue from in front of its door, not through its own wall (#1386: muffled by Hearing's wall)
+        var music = VenueMusic.AtDoor(main, Venues.At(map.VenueOf(0)), new BuildingKey(id.E, id.N, 0));
+        Check(music == null || (music.Position - main.Position).Dot(main.Outward) > 0.1f,
+            $"the door's music stands outside the wall ({(music == null ? "none" : $"{(music.Position - main.Position).Dot(main.Outward):F2} m out")})");
 
         foreach (var t in Enum.GetValues<VenueType>())
         {
@@ -178,6 +182,15 @@ public partial class VenueProbe : Node
                         var fp = BuildingFootprint.Compute(tile, i, Roads(dir, t), null);
                         if (fp != null && InteriorGenerator.Generate(tile, i, Roads(dir, t), null) is { } plan)
                         {
+                            // each venue's own street door (#1292), its glazed front, and the room it opens into
+                            foreach (var own in fp.Doors.Where(x => x.Unit && x.Venue > 0))
+                            {
+                                var e = plan.EntranceOf(new DoorKey(fp.Key, own.Slot).ToString());
+                                int? ri = e == null ? null : InteriorGenerator.EntryRoom(plan.GroundFloor.Rooms, e);
+                                string into = ri is int k ? $"{plan.GroundFloor.Rooms[k].Type} {plan.GroundFloor.Rooms[k].Width:F1}x{plan.GroundFloor.Rooms[k].Depth:F1} m" : "no doorway (locked)";
+                                GD.Print($"[venues]   own door of {Venues.NameOf(Venues.At(own.Venue - 1))}: slot {own.Slot} E {t.MinE + own.Position.X:F1} N {t.MaxN - own.Position.Z:F1} "
+                                    + $"out {own.Outward.X:F2},{-own.Outward.Z:F2}, front {own.Span:F1} m to {own.FrontTop:F1} m, into {into}");
+                            }
                             // every room (#1250: a hall's auditoriums and booth too), and the plan beside the shots
                             for (int fl = 0; fl < plan.Floors.Count; fl++)
                                 foreach (var r in plan.Floors[fl].Rooms.Where(r => r.Type is not (RoomType.Corridor or RoomType.Hall) || r.Area >= 20f))

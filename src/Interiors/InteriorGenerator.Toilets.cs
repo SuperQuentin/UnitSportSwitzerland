@@ -158,6 +158,7 @@ public static partial class InteriorGenerator
                     break;
                 }
                 case ToiletSet.Shared: Shared(0); break;
+                case ToiletSet.Pair: Pair(0); break;
                 case ToiletSet.Single: Single(0); break;
             }
         }
@@ -343,12 +344,21 @@ public static partial class InteriorGenerator
             Fix(FurnitureType.PaperRoll, StripWall.Start, a0, b0, a1, b1, b1 - Off - 0.45f, 0.14f, 0.1f, 0.14f, 0.7f, force: true);
         }
 
-        /// <summary>The single WC from <paramref name="a"/>: its own door, the bowl at the back, a basin on the side wall.</summary>
-        private void Single(float a)
+        /// <summary>The women's and the men's WC side by side from <paramref name="a"/> (#1292), each a single WC with its sign.</summary>
+        private void Pair(float a)
         {
-            float a1 = a + SingleW + _extra;
+            Single(a, 0, FurnitureType.WcSignWomen);
+            Single(a + SingleW, _extra, FurnitureType.WcSignMen);
+        }
+
+        /// <summary>The single WC from <paramref name="a"/>: its own door, the bowl at the back, a basin on the side wall.</summary>
+        private void Single(float a) => Single(a, _extra, FurnitureType.WcSignAll);
+
+        private void Single(float a, float extra, FurnitureType sign)
+        {
+            float a1 = a + SingleW + extra;
             int wc = Room(RoomType.WC, a, 0, a1, D);
-            HostDoor(wc, (a + a1) / 2, 0.8f, true, FurnitureType.WcSignAll);
+            HostDoor(wc, (a + a1) / 2, 0.8f, true, sign);
             Fix(FurnitureType.Toilet, StripWall.Back, a, 0, a1, D, (a + a1) / 2, 0.4f, 0.65f, 0.75f, force: true);
             Fix(FurnitureType.Sink, StripWall.Start, a, 0, a1, D, Math.Max(1.05f, D - Off - 0.65f - 0.3f), 0.45f, 0.35f, 0.85f);
             Fix(FurnitureType.PaperRoll, StripWall.End, a, 0, a1, D, D - Off - 0.45f, 0.14f, 0.1f, 0.14f, 0.7f, force: true);
@@ -407,6 +417,7 @@ public static partial class InteriorGenerator
         var rooms = l.Floors.SelectMany(fl => fl.Rooms).ToList();
         if (rooms.Any(r => r.Type == RoomType.WomensToilet) && rooms.Any(r => r.Type == RoomType.MensToilet)) return ToiletSet.Gendered;
         if (rooms.Any(r => r.Type == RoomType.ToiletLobby)) return ToiletSet.Shared;
+        if (l.Furniture.Any(p => p.Type == FurnitureType.WcSignWomen) && l.Furniture.Any(p => p.Type == FurnitureType.WcSignMen)) return ToiletSet.Pair;
         if (l.Furniture.Any(p => p.Type == FurnitureType.WcSignAll)) return ToiletSet.Single;
         return ToiletSet.None;
     }
@@ -426,13 +437,13 @@ public static partial class InteriorGenerator
     };
 
     /// <summary>
-    /// The three sets in the model viewer (#1285): each planned into a strip along the back of a plain hall,
+    /// The four sets in the model viewer (#1285, the pair #1292): each planned into a strip along the back of a plain hall,
     /// the gendered one with its accessible WC.
     /// </summary>
     [Core.Showcase("Interiors", "Public toilets")]
     private static IEnumerable<(string Name, Func<Godot.Node3D> Make)> ShowcaseToilets()
     {
-        foreach (var (name, w, depth, people) in new[] { ("Gendered", 14f, 3.4f, 150), ("Shared", 6f, 3.0f, 40), ("Single", 5f, 2.2f, 8) })
+        foreach (var (name, w, depth, people) in new[] { ("Gendered", 14f, 3.4f, 150), ("Shared", 6f, 3.0f, 40), ("Pair", 5f, 2.2f, 40), ("Single", 5f, 2.2f, 8) })
             yield return (name, () =>
             {
                 var l = new InteriorLayout { Key = "toilets-" + name, Kind = BuildingKind.Commercial, Width = w, Depth = 8f, StoreyHeight = 3f, EntryX = 0, EntryWidth = 1.8f };

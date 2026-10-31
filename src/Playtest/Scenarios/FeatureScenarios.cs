@@ -83,4 +83,23 @@ public static class FeatureScenarios
             await c.Drive(CollisionScenarios.Heavy("Arocs 3245"), c.At(0), c.Heading(0));
         },
     };
+    /// <summary>Played at Trois Verres, Geneva: <c>--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5</c>.</summary>
+    [PlaytestScenario("pr1327-venue-own-door", "Venues and shops: their own door and a glazed front", "PR #1327")]
+    private static PlaytestScenario VenueOwnDoor() => new()
+    {
+        Instructions = "Launched at Trois Verres (Geneva): its door is ahead of you. Look at its front, walk in by its own door, "
+            + "then walk the streets round it past the shops under the blocks of flats. Type /time set 22:00 in the chat for the night look.",
+        Checklist =
+        [
+            "Trois Verres: its own door among glass bays, a stone plinth, the fascia or awning with its name",
+            "In by that door: straight into the restaurant, no lobby; its windows inside where the bays are outside",
+            "The panes show a room behind them, tinted to the venue; warm-lit at night",
+            "Shops under flats: each its own door and glass front, about 8 m apart; no facade window peeking round the glass",
+            "No flicker where the frame, the fascia, a sign or an awning meet",
+        ],
+        Covers = ["src/Interiors/VenueFront.cs", "shaders/shop_glass.gdshader", "shaders/common/room_behind.gdshaderinc",
+            "src/Interiors/VenueSigns.cs", "src/Interiors/VenueTerraces.cs"],
+        // the door of Trois Verres is 10.8 m east and 5.3 m north of the launch point
+        Setup = async c => await c.PutPlayer(c.At(0), PlaytestContext.Facing(c.At(0), c.At(0) + new Godot.Vector3(10.8f, 0, -5.3f))),
+    };
 }
