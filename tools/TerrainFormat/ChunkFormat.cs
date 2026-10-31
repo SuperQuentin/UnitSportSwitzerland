@@ -16,7 +16,50 @@ public static class ChunkFormat
     /// new resolution — a region built before this bump has 2 m tiles and must be reprocessed
     /// with `--verify` before its coarse companions and roads are regenerated.
     /// </summary>
-    public const ushort Version = 2;
+    public const ushort LegacyVersion = 2;
+
+    /// <summary>
+    /// Version 3 (#1399): the same file, heights stored over -50..4900 m instead of 0..4700 m, so
+    /// Mont Blanc (4806 m) is not clipped and the Camargue or the Wateringues are not clamped to
+    /// 0 m. Only the quantization differs; see <see cref="HeightEncoding"/>.
+    /// </summary>
+    public const ushort WideVersion = 3;
+
+    private static HeightEncoding _current = HeightEncoding.Legacy;
+    private static bool _locked;
+
+    /// <summary>
+    /// How this process turns quantized heights into metres: the encoding of the region it works
+    /// on, version 2 until <see cref="Use"/> or the first decoded tile says otherwise. A region is
+    /// built in one encoding (its manifest's <c>formatVersion</c>), so one process-wide choice is
+    /// enough and the ~60 call sites of <see cref="Dequantize"/> need no tile in hand.
+    /// </summary>
+    public static HeightEncoding Current => _current;
+
+    /// <summary>The version the process writes and expects.</summary>
+    public static ushort Version => _current.Version;
+
+    /// <summary>Selects the encoding explicitly (manifest load, preprocessor flag). Overrides an earlier choice.</summary>
+    public static void Use(int version)
+    {
+        _current = HeightEncoding.ForVersion(version);
+        _locked = true;
+    }
+
+    /// <summary>
+    /// A decoded tile names its encoding: take it when none was chosen yet, refuse a tile of the
+    /// other encoding afterwards (heights would be silently wrong by metres).
+    /// </summary>
+    public static void Adopt(HeightEncoding found)
+    {
+        lock (typeof(ChunkFormat))
+        {
+            if (!_locked) { _current = found; _locked = true; }
+            else if (_current.Version != found.Version)
+                throw new InvalidDataException(
+                    $"Tile is height format v{found.Version} but this process decodes v{_current.Version}");
+        }
+    }
 
     /// <summary>
     /// Vertices per tile edge; corner-aligned, so spacing = 1000 / (GridSize - 1) = 1 m.
@@ -37,11 +80,14 @@ public static class ChunkFormat
 
     public const double SpacingM = TileSizeM / (GridSize - 1);
 
-    /// <summary>Max representable altitude; Switzerland tops out at 4634 m.</summary>
-    public const double MaxHeightM = 4700.0;
+    /// <summary>Max representable altitude of the current encoding (4700 m, or 4900 m in v3).</summary>
+    public static double MaxHeightM => _current.MaxM;
 
-    /// <summary>Meters per quantization step (~7.2 cm).</summary>
-    public const double HeightScale = MaxHeightM / 65535.0;
+    /// <summary>Lowest representable altitude of the current encoding (0 m, or -50 m in v3).</summary>
+    public static double MinHeightM => _current.MinM;
+
+    /// <summary>Meters per quantization step (~7.2 cm in v2, ~7.6 cm in v3).</summary>
+    public static double HeightScale => _current.Scale;
 
     public const int HeaderSize = 32;
 
@@ -61,8 +107,39 @@ public static class ChunkFormat
     /// </summary>
     public static string CoarseFileName(TileId id) => $"chunk_{id.E}_{id.N}.terrc";
 
-    public static double Dequantize(ushort q) => q * HeightScale;
+    public static double Dequantize(ushort q) => _current.Dequantize(q);
 
-    public static ushort Quantize(double meters) =>
-        (ushort)Math.Clamp((long)Math.Round(meters / HeightScale), 0, 65535);
+    public static ushort Quantize(double meters) => _current.Quantize(meters);
+}
+
+/// <summary>
+/// How a uint16 maps to metres: <c>MinM + q * Scale</c> over <c>MinM..MaxM</c>. Version 2 is 0..4700 m
+/// (Switzerland tops out at 4634 m), version 3 is -50..4900 m for France.
+/// </summary>
+public readonly struct HeightEncoding
+{
+    public ushort Version { get; }
+    public double MinM { get; }
+    public double MaxM { get; }
+    public double Scale { get; }
+
+    private HeightEncoding(ushort version, double minM, double maxM)
+    {
+        Version = version; MinM = minM; MaxM = maxM; Scale = (maxM - minM) / 65535.0;
+    }
+
+    public static readonly HeightEncoding Legacy = new(ChunkFormat.LegacyVersion, 0.0, 4700.0);
+    public static readonly HeightEncoding Wide = new(ChunkFormat.WideVersion, -50.0, 4900.0);
+
+    public static HeightEncoding ForVersion(int version) => version switch
+    {
+        ChunkFormat.LegacyVersion => Legacy,
+        ChunkFormat.WideVersion => Wide,
+        _ => throw new InvalidDataException($"Unsupported chunk version {version}"),
+    };
+
+    public double Dequantize(ushort q) => q * Scale + MinM;
+
+    public ushort Quantize(double meters) =>
+        (ushort)Math.Clamp((long)Math.Round((meters - MinM) / Scale), 0, 65535);
 }

@@ -193,7 +193,7 @@ public sealed partial class ClientTerrainSync : Node
 
             try
             {
-                manifest = TerrainManifest.FromJson(Encoding.UTF8.GetString(bytes));
+                manifest = TerrainManifest.FromJson(Encoding.UTF8.GetString(bytes)).UseFormat();
             }
             catch (Exception e)
             {
@@ -494,7 +494,7 @@ public sealed partial class ClientTerrainSync : Node
             string path = Path.Combine(Core.TerrainPaths.FindCacheDir(), CachedIndexFile);
             if (!File.Exists(path)) return 0;
 
-            var manifest = TerrainManifest.FromJson(File.ReadAllText(path));
+            var manifest = TerrainManifest.FromJson(File.ReadAllText(path)).UseFormat();
 
             if (Math.Abs(manifest.SuggestedOriginLv95.E - origin.E) > 0.5
                 || Math.Abs(manifest.SuggestedOriginLv95.N - origin.N) > 0.5)

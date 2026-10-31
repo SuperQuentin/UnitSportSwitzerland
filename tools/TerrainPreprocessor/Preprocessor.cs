@@ -162,6 +162,7 @@ public static partial class Preprocessor
         string? rgeAltiDir = null, demBox = null;
         double rgeAltiDz = 0;
         bool demCheck = false, demReparse = false;
+        int demCacheMb = 384;
         var demProbes = new List<(double E, double N)>();
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
@@ -238,6 +239,18 @@ public static partial class Preprocessor
                 case "--dem-box": case "--rgealti-box": demBox = args[++i]; break;
                 case "--rgealti-dz": rgeAltiDz = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--dem-check": case "--rgealti-check": demCheck = true; break;
+                // (#1399) tile height encoding: "wide" = format v3, -50..4900 m (France); "legacy" = v2, 0..4700 m (default)
+                case "--height-format":
+                    ChunkFormat.Use(args[++i].ToLowerInvariant() switch
+                    {
+                        "wide" or "3" => ChunkFormat.WideVersion,
+                        "legacy" or "2" => ChunkFormat.LegacyVersion,
+                        var v => throw new ArgumentException($"--height-format wide|legacy, not {v}"),
+                    });
+                    break;
+                // only these départements of a France tree (RGEALTI_..._D074_... folders), for a test run
+                case "--dem-only": ForeignDem.OnlyFolders = args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries); break;
+                case "--dem-cache-mb": demCacheMb = int.Parse(args[++i]); break;
                 // swissALTI3D tiles with foreign data under them are parsed again, so their -9999 gaps
                 // (0 m pits before #936) are filled from it; their old .edge files are set aside
                 case "--dem-reparse": demReparse = true; break;
@@ -612,14 +625,22 @@ public static partial class Preprocessor
 
         // ---- terrain: sources -> .terr + .terrc, parsed and finished in one parallel pass -------
         var sw = Stopwatch.StartNew();
+        string manifestFile = Path.Combine(outDir, "manifest.json");
+        if (File.Exists(manifestFile) && TerrainManifest.FromJson(File.ReadAllText(manifestFile)) is { Tiles.Count: > 0 } built
+            && built.FormatVersion != ChunkFormat.Version)
+        {
+            Console.Error.WriteLine($"{outDir} holds height format v{built.FormatVersion} tiles but this run writes v{ChunkFormat.Version}; use a new --out or the matching --height-format");
+            return 2;
+        }
         var sources = TerrainBuild.Discover(inDirs);
         List<ForeignDem>? foreign = null;
         if (demArgs.Count > 0)
         {
-            var b = (demBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
-            if (b.Length != 4)
+            int[] b = demBox == "auto" ? Array.Empty<int>()
+                : (demBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (b.Length != 4 && demBox != "auto")
             {
-                Console.Error.WriteLine("--dem / --rgealti needs --dem-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145)");
+                Console.Error.WriteLine("--dem / --rgealti needs --dem-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145) or auto");
                 return 2;
             }
             foreign = new List<ForeignDem>();
@@ -628,9 +649,17 @@ public static partial class Preprocessor
                 // grid,dir[,dz]: the dir may hold a drive letter's colon, so commas split
                 var parts = d.Split(',');
                 double dz = parts.Length > 2 ? double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) : 0;
-                var dem = new ForeignDem(DemProjection.Parse(parts[0]), parts[1], dz);
-                Console.WriteLine($"DEM {dem.Name}: {dem.FileCount} rasters, dz {dz:+0.00;-0.00} m");
+                var scan = Stopwatch.StartNew();
+                var dem = new ForeignDem(DemProjection.Parse(parts[0]), parts[1], dz) { Jobs = jobs, CacheBytes = demCacheMb * 1048576L };
+                Console.WriteLine($"DEM {dem.Name}: {dem.FileCount} rasters, dz {dz:+0.00;-0.00} m, scanned in {scan.Elapsed.TotalSeconds:F0}s");
                 foreign.Add(dem);
+            }
+            if (demBox == "auto")
+            {
+                // the union of what each DEM covers
+                var bb = foreign.Select(d => d.BoundsLv95Km()).ToList();
+                b = new[] { bb.Min(x => x.MinE), bb.Min(x => x.MinN), bb.Max(x => x.MaxE), bb.Max(x => x.MaxN) };
+                Console.WriteLine($"--dem-box auto: {string.Join(",", b)} (LV95 km)");
             }
             if (demProbes.Count > 0)
             {

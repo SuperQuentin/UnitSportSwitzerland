@@ -34,7 +34,7 @@ public sealed class LocalChunkSource : IChunkSource
         try
         {
             string json = await File.ReadAllTextAsync(path, ct);
-            return TerrainManifest.FromJson(json);
+            return TerrainManifest.FromJson(json).UseFormat();
         }
         catch (Exception e)
         {
