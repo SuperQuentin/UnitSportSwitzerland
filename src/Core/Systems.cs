@@ -46,9 +46,10 @@ public static class Systems
     /// <summary>True when this run boots <paramref name="system"/>: always, unless a test narrowed it.</summary>
     public static bool On(string system) =>
         // a test world (#999) is the whole game on its own tiles: nothing generated round them, and no
-        // adventure progress (#1223) unless a probe names it
+        // adventure progress (#1223) unless a probe names it; the fun world (#1396) is for playing, its festival
+        // field the adventure layer's
         (system != Generated || WorldChoice.Active == null)
-        && (system != Adventure || WorldChoice.Active == null || Parsed.On?.Contains(Adventure) == true)
+        && (system != Adventure || WorldChoice.Active == null || WorldChoice.FunActive || Parsed.On?.Contains(Adventure) == true)
         && (Parsed.On == null || Parsed.On.Contains(system));
 
     /// <summary>A test narrowed the systems (<c>--systems</c> or <c>--world flat|fixture</c>).</summary>

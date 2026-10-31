@@ -710,10 +710,20 @@ public static class StadiumCatalog
         Season = "07-fri#1+15",
     };
 
-    public static readonly StadiumSpec[] All =
+    /// <summary>The real stadiums, catalogue order.</summary>
+    public static readonly StadiumSpec[] Real =
     {
         Geneva, Wankdorf, StJakobPark, Letzigrund, Kybunpark, Swissporarena, StockhornArena, Tourbillon, Tuiliere, Maladiere, Brugglifeld, Schutzenwiese, Hallenstadion, PostFinanceArena, StJakobshalle, SwissLifeArena, VaudoiseArena, VernetsArena, GenevaArena, BcfArena, TissotArena, BossardArena, CornerArena, TheHall, SwissArenaKloten, DavosArena, PaleoOpenAir, GurtenOpenAir, FrauenfeldOpenAir, StGallenOpenAir, GreenfieldOpenAir, HeitereOpenAir, MoonAndStarsOpenAir, MontreuxJazzOpenAir,
     };
+
+    /// <summary>
+    /// The stadiums of the world being played: <see cref="Real"/>, plus a course's own at the end (#1396, the fun
+    /// world's arena), so the real ones keep their indices on the wire. Set by the course's source on every peer.
+    /// </summary>
+    public static StadiumSpec[] All { get; private set; } = Real;
+
+    /// <summary>Plays <paramref name="extra"/> beside the real stadiums; null: the real ones alone.</summary>
+    public static void UseWorld(StadiumSpec? extra) => All = extra == null ? Real : [.. Real, extra];
 
     /// <summary>How far past its own tile a data building may reach, m: tiles this far from a stadium's outline are clipped (<see cref="StadiumClip"/>).</summary>
     public const float Reach = 300f;
