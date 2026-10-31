@@ -241,7 +241,9 @@ public partial class LockSyncProbe : ChatProbe
             await Seconds(0.8);
             if (InteriorManager.Instance?.Current?.Key == layout.Key && LootService.NearestContainer(me, layout, node) == index) return true;
         }
-        Fail($"could not stand in front of #{index}");
+        var look = node.GlobalTransform.Basis.Inverse() * -me.Camera.GlobalTransform.Basis.Z;
+        Fail($"could not stand in front of #{index} (in {InteriorManager.Instance?.Current?.Key}, nearest #{LootService.NearestContainer(me, layout, node)}, "
+            + $"{node.ToLocal(me.GlobalPosition) - new Vector3(f.X, layout.FloorY(f.Floor), f.Z)} from it, looking {look})");
         return false;
     }
 
