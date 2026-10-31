@@ -48,6 +48,12 @@ public partial class LootSyncProbe : ChatProbe
         await Seconds(1.0);
         var door = DoorIndex.Nearest(me.GlobalPosition, 400f)!.Value;
         string doorKey = door.Key.ToString();
+        // in one after the other: two walkers in one doorway push each other off its line, into the shell beside it (#1401)
+        if (_role == "B")
+        {
+            if (!await Heard("A", "entered", 120)) { Fail("A never walked in"); return; }
+            door = DoorIndex.Find(door.Key) ?? door;   // in today's frame (#1090)
+        }
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
         me.Velocity = Vector3.Zero;
@@ -61,6 +67,7 @@ public partial class LootSyncProbe : ChatProbe
         { Fail($"the door {doorKey} never opened"); return; }
         bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return; }
+        if (_role == "A") Say("entered");
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         var layout = interiors.Current!;
         var node = interiors.CurrentNode!;

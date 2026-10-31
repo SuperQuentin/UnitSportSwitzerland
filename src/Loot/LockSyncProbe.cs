@@ -71,6 +71,8 @@ public partial class LockSyncProbe : ChatProbe
         var lockType = plan.Furniture[index].Type;
         GD.Print($"[locksync {_role}] building {doorKey} ({door.Kind}), {lockType} #{index} in the {plan.RoomOf(plan.Furniture[index])?.Type}");
 
+        // in one after the other: two walkers in one doorway push each other off its line, into the shell beside it (#1401)
+        if (_role == "B" && !await Heard("A", "entered", 120)) { Fail("A never walked in"); return; }
         var at = Fresh(door);
         var inward = -at.Outward;
         me.LeaveInterior(at.World + at.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
@@ -97,6 +99,7 @@ public partial class LockSyncProbe : ChatProbe
         }
 
         if (!await WalkIn(me, interiors, door)) return;
+        if (_role == "A") Say("entered");
         var layout = interiors.Current!;
         var node = interiors.CurrentNode!;
         if (layout.Key != plan.Key) { Fail($"walked into {layout.Key}, not {plan.Key}"); return; }
