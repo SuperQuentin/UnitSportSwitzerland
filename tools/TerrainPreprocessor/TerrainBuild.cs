@@ -100,6 +100,7 @@ public static class TerrainBuild
         var bySource = sources.ToDictionary(s => s.Id);
         var dataset = new HashSet<TileId>(bySource.Keys);
         var cachedEdges = new ConcurrentDictionary<TileId, uint[]>();
+        var current = new ConcurrentDictionary<TileId, byte>(); // built, with an up-to-date .edge (not read yet)
 
         // previously built tiles, in this run's sources or not, keep counting as neighbours
         var candidates = new HashSet<TileId>(bySource.Keys);
@@ -112,12 +113,12 @@ public static class TerrainBuild
         {
             bySource.TryGetValue(id, out var src);
             bool built = IsValidTerr(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)));
-            uint[]? edges = o.Force || !built ? null
-                : EdgeStrips.TryRead(EdgeStrips.PathFor(cacheDir, id), src?.Length, src?.Ticks);
-            if (edges != null) cachedEdges[id] = edges;
+            // header only: a resume of a nationwide run must not hold every tile's 16 KB of edges at once
+            bool upToDate = !o.Force && built && EdgeStrips.IsCurrent(EdgeStrips.PathFor(cacheDir, id), src?.Length, src?.Ticks);
+            if (upToDate) current[id] = 0;
             else if (src != null) toParse.Add(src);
         });
-        foreach (var id in cachedEdges.Keys) dataset.Add(id);
+        foreach (var id in current.Keys) dataset.Add(id);
 
         // raster order, north row first: a tile completes once the row south of it has parsed,
         // so the set of interiors waiting on neighbours stays a narrow band
@@ -139,8 +140,13 @@ public static class TerrainBuild
         foreach (var id in toWrite)
             foreach (var nb in Hood(id))
                 if (dataset.Contains(nb)) users.AddOrUpdate(nb, 1, (_, v) => v + 1);
-        foreach (var id in cachedEdges.Keys)
-            if (!users.ContainsKey(id)) cachedEdges.TryRemove(id, out _);
+        // only the up-to-date tiles a tile to be written needs have their edges read
+        Parallel.ForEach(current.Keys.Where(users.ContainsKey), new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
+        {
+            bySource.TryGetValue(id, out var src);
+            cachedEdges[id] = EdgeStrips.TryRead(EdgeStrips.PathFor(cacheDir, id), src?.Length, src?.Ticks)
+                ?? throw new InvalidDataException($"{id}: .edge changed during the scan");
+        });
 
         var edgesOf = cachedEdges; // parsed tiles join it as they finish
         var interiors = new ConcurrentDictionary<TileId, ushort[]>();
@@ -298,7 +304,7 @@ public static class TerrainBuild
             foreach (var t in TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles)
                 previous[t.Id] = t;
 
-        var manifest = new TerrainManifest();
+        var manifest = new TerrainManifest { HeightOffsetM = ChunkFormat.MinHeightM };
         foreach (var id in dataset.OrderBy(t => t.N).ThenBy(t => t.E))
         {
             if (written.TryGetValue(id, out var t) || previous.TryGetValue(id, out t))
