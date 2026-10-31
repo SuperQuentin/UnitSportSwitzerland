@@ -506,6 +506,7 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] Walk out beyond 900 m and back, once while the show is on and once after it has ended: the crowd is gone when the show is off, and the rig comes back lit.
 - [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
 - [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.
+
 ## Playtest panel confirmations ([#1388](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1388))
 
 `tools/playtest.sh batch` (or `--playtest --playtest-batch --playtest-record`).
