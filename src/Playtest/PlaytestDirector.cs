@@ -115,6 +115,13 @@ public partial class PlaytestDirector : Node
             Entries = Entries.Where(e => Status.GetValueOrDefault(e.Id) != PlaytestStatus.Validated).ToList();
             GD.Print($"[playtest] retest: {Entries.Count} scenarios due");
         }
+        // --playtest-only id[,id...] (#1292): only the scenarios whose id starts with one of them, a PR's own
+        if (CmdArgs.Value("--playtest-only") is { Length: > 0 } only)
+        {
+            var ids = only.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            Entries = Entries.Where(e => ids.Any(id => e.Id.StartsWith(id, StringComparison.Ordinal))).ToList();
+            GD.Print($"[playtest] only {only}: {Entries.Count} scenarios");
+        }
 
         var protocol = new McpProtocol("unitsport-playtest", "1", Instructions, [.. Tools(), .. RecorderTools()]);
         protocol.Initialized += client => OnMain(() => { Client = client; Say("system", $"{client} connected."); return Task.FromResult(0); });

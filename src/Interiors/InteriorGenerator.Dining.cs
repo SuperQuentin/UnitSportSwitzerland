@@ -79,24 +79,50 @@ public static partial class InteriorGenerator
             float px = d.Dot(fp.AxisU), pz = d.Dot(fp.AxisV);
             var guest = DiningRoomOf(v);
             int best = -1;
+            // its own street door (#1292): the room that door opens into is its guest room
+            EntrancePlan? own = null;
+            foreach (var door in fp.Doors)
+                if (door.Venue > 0 && Venues.At(door.Venue - 1) == v && l.EntranceOf(new DoorKey(fp.Key, door.Slot).ToString()) is { } e && e.Level == 0)
+                    own = e;
+            if (own != null && EntryRoom(rooms, own) is int gi && !taken.Contains(gi) && rooms[gi].Shape == null
+                && rooms[gi].Area >= DiningMinArea(guest) && (apt ? rooms[gi].Type == RoomType.Shop : GuestCapable(rooms[gi].Type)))
+                best = gi;
+            bool behind = best >= 0;
+            // its own door with no doorway yet (a wing's plan had no room on that wall for it, #1304): the room that will
+            // stand behind it is the venue's, whatever it was, so the doorway is fitted into a guest room once the rooms
+            // reach the facade (Vestibules); the plan follows the door
+            bool doorless = !behind && !apt && own == null
+                && fp.Doors.Any(x => x.Unit && x.Venue > 0 && Venues.At(x.Venue - 1) == v);
+            if (doorless && fp.Doors.First(x => x.Unit && x.Venue > 0 && Venues.At(x.Venue - 1) == v) is var vd)
+            {
+                var dd = new Vector2(vd.Position.X, vd.Position.Z) - fp.Center;
+                (px, pz) = (dd.Dot(fp.AxisU), dd.Dot(fp.AxisV));
+            }
             (int Rank, float Dist) bestD = (int.MaxValue, float.MaxValue);
-            for (int i = 0; i < rooms.Count; i++)
+            for (int i = 0; i < rooms.Count && best < 0; i++)
             {
                 var r = rooms[i];
                 // a shaped room (#1197, a drawn one) is not carved: its kitchen would stand in its shape
                 if (taken.Contains(i) || r.Area < DiningMinArea(guest) || r.Shape != null) continue;
                 bool fits = apt ? r.Type == RoomType.Shop
                     : r.Type is RoomType.Shop or RoomType.Living or RoomType.Dining or RoomType.Office
-                        or RoomType.Classroom or RoomType.Hall;
+                        or RoomType.Classroom or RoomType.Hall
+                      // behind its door, a private room too: a bedroom or a study becomes the venue's
+                      || doorless && r.Type is RoomType.Bedroom or RoomType.Study or RoomType.GuestRoom or RoomType.Storage;
                 if (!fits) continue;
                 float dx = Math.Max(0, Math.Max(r.X0 - px, px - r.X1)), dz = Math.Max(0, Math.Max(r.Z0 - pz, pz - r.Z1));
-                var score = (GuestRank(r.Type), dx * dx + dz * dz - r.Area * 1e-4f);
+                // behind its door the nearest room wins, whatever its kind; else the best kind, then the nearest its point
+                var score = (doorless ? 0 : GuestRank(r.Type), dx * dx + dz * dz - r.Area * 1e-4f);
                 if (score.CompareTo(bestD) < 0) (best, bestD) = (i, score);
             }
             if (best < 0) continue;
             var was = rooms[best].Type;
             rooms[best].Type = guest;
             taken.Add(best);
+            // the room walled off to its front's span, what is left of it keeping its use (#1292, the owner's call)
+            var parts = new List<int>();
+            if (behind && !apt && fp.Doors.FirstOrDefault(x => x.Venue > 0 && Venues.At(x.Venue - 1) == v) is { Span: > 0 } front)
+                foreach (int part in WallToSpan(l, rooms, best, own, front.Span, was)) { taken.Remove(part); parts.Add(part); }
             // through its doors: the first kitchen, store or pantry becomes its kitchen, a dining room its Säli
             bool kitchen = false;
             int store = -1;
@@ -154,10 +180,122 @@ public static partial class InteriorGenerator
                     break;
                 }
             }
+            // entered by its own street door, it keeps no door into the building's rooms (a school's classroom, #1292
+            // playtest): each walled up where that room is still reached some other way
+            if (behind && !apt) SealOff(l, rooms, best, r => taken.Contains(r) || parts.Contains(r) || ToiletRoom(rooms[r].Type) || rooms[r].Type == RoomType.WC);
         }
         // the shop counter a shop building is promised goes to its shop, never into a restaurant
         if (taken.Count > 0 && l.Shop != Loot.ShopType.None && !l.Floors.Any(fl => fl.Rooms.Any(r => r.Type == RoomType.Shop)))
             l.Shop = Loot.ShopType.None;
+    }
+
+    /// <summary>A room a venue may make its guest room outside a block of flats: a public or a living room, a hall last.</summary>
+    internal static bool GuestCapable(RoomType t) => t is RoomType.Shop or RoomType.Living or RoomType.Dining or RoomType.Office
+        or RoomType.Classroom or RoomType.Hall;
+
+    /// <summary>The ground-floor room a street doorway is cut in, or null.</summary>
+    internal static int? EntryRoom(List<RoomPlan> rooms, EntrancePlan e)
+    {
+        // on a rectangle's wall or, once the outline fit moved it (#1290), on a shaped room's angled edge
+        for (int i = 0; i < rooms.Count; i++)
+            foreach (var o in rooms[i].Openings)
+            {
+                if (o.Kind != OpeningKind.Entry) continue;
+                var at = rooms[i].WallFrame(o).At;
+                if (Math.Abs(at.X - e.X) < 0.05f && Math.Abs(at.Y - e.Z) < 0.05f) return i;
+            }
+        return null;
+    }
+
+    /// <summary>
+    /// Walls up guest room <paramref name="gi"/>'s doors and arches into rooms not its venue's (<paramref name="ours"/>
+    /// false), both sides and the leaf, where that room is still reached without the guest room.
+    /// </summary>
+    private static void SealOff(InteriorLayout l, List<RoomPlan> rooms, int gi, Func<int, bool> ours)
+    {
+        int f = l.Floors.FindIndex(fl => fl.Rooms == rooms);
+        foreach (var o in rooms[gi].Openings.ToList())
+        {
+            if (o.Kind is not (OpeningKind.Door or OpeningKind.Arch) || o.Other < 0 || o.Other >= rooms.Count || ours(o.Other)) continue;
+            int other = o.Other;
+            var back = rooms[other].Openings.FirstOrDefault(b => b.Other == gi && b.Side == Opposite(o.Side) && Math.Abs(b.Center - o.Center) < 0.01f);
+            rooms[gi].Openings.Remove(o);
+            if (back != null) rooms[other].Openings.Remove(back);
+            if (ReachedWithout(rooms, other, gi))
+            {
+                l.InnerDoors.RemoveAll(d => d.Floor == f && Math.Abs(d.Center - o.Center) < 0.01f
+                    && (d.Room == gi && d.Side == o.Side || d.Room == other && d.Side == Opposite(o.Side)));
+                continue;
+            }
+            // the only way to it: the door stays
+            rooms[gi].Openings.Add(o);
+            if (back != null) rooms[other].Openings.Add(back);
+        }
+    }
+
+    /// <summary>A part walled off a guest room must be at least this wide to be a room of its own, m; less stays the venue's.</summary>
+    private const float SpanRest = 2.2f;
+
+    /// <summary>Whether room <paramref name="target"/> is reached from a street doorway without passing through room <paramref name="avoid"/>.</summary>
+    private static bool ReachedWithout(List<RoomPlan> rooms, int target, int avoid)
+    {
+        var seen = new HashSet<int>();
+        var todo = new Stack<int>();
+        for (int i = 0; i < rooms.Count; i++)
+            if (i != avoid && rooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry)) { seen.Add(i); todo.Push(i); }
+        while (todo.Count > 0)
+        {
+            int i = todo.Pop();
+            if (i == target) return true;
+            foreach (var o in rooms[i].Openings)
+                if (o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0 && o.Other < rooms.Count && o.Other != avoid && seen.Add(o.Other))
+                    todo.Push(o.Other);
+        }
+        return false;
+    }
+
+    /// <summary>A guest room keeps this much across past a strip of gendered toilets off its own wall, m: less, and a smaller set.</summary>
+    private const float GenderedKeep = 6f;
+
+    /// <summary>A guest room is never walled off smaller than this to its front, m².</summary>
+    private const float SpanKeep = 30f;
+
+    /// <summary>
+    /// Walls guest room <paramref name="gi"/> off to its glazed front (#1292): <paramref name="span"/> m along the wall its
+    /// street doorway is in, centred on the doorway. What is left at either end, when wide enough, is a room of what the
+    /// room was, behind a door from the guest room. Returns the parts walled off.
+    /// </summary>
+    private static List<int> WallToSpan(InteriorLayout l, List<RoomPlan> rooms, int gi, EntrancePlan e, float span, RoomType was)
+    {
+        var parts = new List<int>();
+        var r = rooms[gi];
+        var o = r.Openings.FirstOrDefault(x => x.Kind == OpeningKind.Entry && WallPoint(r, x.Side, x.Center) is var (x0, z0)
+            && Math.Abs(x0 - e.X) < 0.05f && Math.Abs(z0 - e.Z) < 0.05f);
+        if (o == null) return parts;
+        bool alongX = o.Side is Side.Front or Side.Back;
+        float top = Math.Min(2.05f, l.ClearOf(r) - 0.2f);
+        // each end of the wall, the far one first so the doorway's centre is measured on the room as it was
+        foreach (var end in alongX ? new[] { Side.Right, Side.Left } : new[] { Side.Back, Side.Front })
+        {
+            float lo = alongX ? r.X0 : r.Z0, hi = alongX ? r.X1 : r.Z1;
+            float rest = end is Side.Right or Side.Back ? hi - (o.Center + span / 2) : o.Center - span / 2 - lo;
+            // and the guest room keeps enough of itself for its tables: else it keeps that end, its glass on part of it
+            float across = alongX ? r.Z1 - r.Z0 : r.X1 - r.X0;
+            if (rest < SpanRest || (hi - lo - rest) * across < SpanKeep) continue;
+            // a door in the wall the cut stands across moves the cut along, never into the front
+            int k = -1;
+            for (float slide = 0; slide <= 1.5f && k < 0; slide += 0.5f)
+                if (rest - slide >= SpanRest) k = Carve(l, rooms, gi, end, rest - slide, was);
+            if (k < 0) continue;
+            parts.Add(k);
+            // reached some other way than through the guest room (a door to the lobby it kept): its wall stays whole,
+            // for the venue's toilets; else a door from the guest room, at the back of the wall between them
+            if (ReachedWithout(rooms, k, gi)) continue;
+            float a0 = alongX ? r.Z0 : r.X0, a1 = alongX ? r.Z1 : r.X1;
+            float c = o.Side is Side.Front or Side.Left ? Math.Max((a0 + a1) / 2, a1 - 1.2f) : Math.Min((a0 + a1) / 2, a0 + 1.2f);
+            Opening(rooms, gi, end, k, c, 0.9f, top, OpeningKind.Door);
+        }
+        return parts;
     }
 
     /// <summary>Whether a guest room's venue cooks: everything but a bar and a club [S: a pub's kitchen is the norm in CH].</summary>
@@ -382,12 +520,14 @@ public static partial class InteriorGenerator
                 var plan = ToiletSizing.Choose(wall, deep, seats);
                 float need = plan.Set switch
                 {
-                    ToiletSet.Gendered => 3.4f, ToiletSet.Shared => ToiletSizing.SharedD, ToiletSet.Single => ToiletSizing.SingleD + 0.1f, _ => 0f,
+                    ToiletSet.Gendered => 3.4f, ToiletSet.Shared => ToiletSizing.SharedD,
+                    ToiletSet.Pair or ToiletSet.Single => ToiletSizing.SingleD + 0.1f, _ => 0f,
                 };
                 // the shallowest strip that holds the set: a deeper one only wastes the room
                 if (plan.Set == ToiletSet.None || need < deep - 0.01f) continue;
-                // the room keeps 4 m across and most of its floor for its tables (a kebab's or a café's counter needs less)
-                if (across - deep < 4f || wall * (across - deep) < Math.Max((DiningMinArea(g.Type) < 10f ? 1.5f : 2f) * DiningMinArea(g.Type), Math.Min(0.65f * g.Area, 40f))) continue;
+                // the room keeps 4 m across and most of its floor for its tables (a kebab's or a café's counter needs less);
+                // the big gendered set only where the room keeps 6 m, else the vestibule or the pair (#1292, the owner's call)
+                if (across - deep < (plan.Set == ToiletSet.Gendered ? GenderedKeep : 4f) || wall * (across - deep) < Math.Max((DiningMinArea(g.Type) < 10f ? 1.5f : 2f) * DiningMinArea(g.Type), Math.Min(0.65f * g.Area, 40f))) continue;
                 // no doorway on that wall, nor on a side wall within the strip: the cut takes those with it
                 bool lateral(OpeningPlan o) => o.Side != side && o.Side != Opposite(side);
                 if (g.Openings.Any(o => o.Kind != OpeningKind.Window
@@ -636,8 +776,9 @@ public static partial class InteriorGenerator
                     blocked.Add(floor);
                 }
                 Bar(Math.Clamp(r.Width * 0.4f, 3.0f, 10.0f), stools: true);
+                // facing the bar across the floor, else beside it on the bar's own wall when the others have doors (#1292)
                 TryPlace(l, f, r, new Piece(FurnitureType.DjBooth, 2.4f, 1.3f, 1.3f, true), placed, blocked, rng,
-                    new[] { Opposite(barSide), Turn(barSide), Opposite(Turn(barSide)) });
+                    new[] { Opposite(barSide), Turn(barSide), Opposite(Turn(barSide)), barSide });
                 Along(new Piece(FurnitureType.Settee, 2.0f, 0.9f, 1.0f, true), 6, walls);
                 break;
             }

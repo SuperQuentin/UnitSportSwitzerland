@@ -689,6 +689,7 @@
 8823.8	Interiors / Dining - Pizzeria
 8830.2	Interiors / Dining - Pub
 2900.4	Interiors / Public toilets - Gendered
+1835.4	Interiors / Public toilets - Pair
 2079.5	Interiors / Public toilets - Shared
 1557.2	Interiors / Public toilets - Single
 2.3	Items / Agone

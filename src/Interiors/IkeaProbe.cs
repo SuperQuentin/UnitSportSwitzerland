@@ -186,7 +186,7 @@ public partial class IkeaProbe : Node
         var loo = ToiletCheck.Problems(layout, ToiletSet.Gendered, accessible: true);
         Check(loo.Count == 0, $"toilets {ToiletCheck.Describe(layout)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
         // and a slab of each size has the set it has room for
-        foreach (var (w, d, want) in new[] { (9f, 10f, ToiletSet.Single), (9f, 12f, ToiletSet.Shared), (40f, 30f, ToiletSet.Gendered) })
+        foreach (var (w, d, want) in new[] { (9f, 10f, ToiletSet.Pair), (9f, 12f, ToiletSet.Shared), (40f, 30f, ToiletSet.Gendered) })
         {
             var small = InteriorGenerator.IkeaOfSize(w, d);
             if (small == null) { Check(false, $"a {w}x{d} m store is planned"); continue; }

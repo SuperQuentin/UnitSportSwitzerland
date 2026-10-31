@@ -10,6 +10,11 @@ public enum ToiletSet
     Shared,
     /// <summary>Plenty of space: a women's and a men's room each behind its own anteroom, an accessible WC in a big building.</summary>
     Gendered,
+    /// <summary>
+    /// Too little depth for the anteroom (#1292, the owner's call): two single WCs side by side, the women's and the men's, each
+    /// a bowl and a basin behind its own door. Between the shared set and the single WC; last in the list so stored values keep.
+    /// </summary>
+    Pair,
 }
 
 /// <summary>
@@ -67,7 +72,7 @@ public static class ToiletSizing
 
     /// <summary>
     /// The biggest set a strip <paramref name="length"/> m along its host wall and <paramref name="depth"/> m
-    /// deep holds, for <paramref name="people"/>: gendered, shared, single, or none.
+    /// deep holds, for <paramref name="people"/>: gendered, shared, a pair of WCs, single, or none.
     /// </summary>
     public static Plan Choose(float length, float depth, int people)
     {
@@ -86,6 +91,8 @@ public static class ToiletSizing
         }
         if (people >= SharedFrom && depth >= SharedD - eps && length >= SharedW - eps)
             return new Plan(ToiletSet.Shared, SharedW, 1, 1, 0, false);
+        if (people >= SharedFrom && depth >= SingleD - eps && length >= 2 * SingleW - eps)
+            return new Plan(ToiletSet.Pair, 2 * SingleW, 1, 1, 0, false);
         if (depth >= SingleD - eps && length >= SingleW - eps)
             return new Plan(ToiletSet.Single, SingleW, 0, 0, 0, false);
         return Plan.None;

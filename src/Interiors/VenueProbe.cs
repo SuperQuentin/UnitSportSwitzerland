@@ -178,6 +178,15 @@ public partial class VenueProbe : Node
                         var fp = BuildingFootprint.Compute(tile, i, Roads(dir, t), null);
                         if (fp != null && InteriorGenerator.Generate(tile, i, Roads(dir, t), null) is { } plan)
                         {
+                            // each venue's own street door (#1292), its glazed front, and the room it opens into
+                            foreach (var own in fp.Doors.Where(x => x.Unit && x.Venue > 0))
+                            {
+                                var e = plan.EntranceOf(new DoorKey(fp.Key, own.Slot).ToString());
+                                int? ri = e == null ? null : InteriorGenerator.EntryRoom(plan.GroundFloor.Rooms, e);
+                                string into = ri is int k ? $"{plan.GroundFloor.Rooms[k].Type} {plan.GroundFloor.Rooms[k].Width:F1}x{plan.GroundFloor.Rooms[k].Depth:F1} m" : "no doorway (locked)";
+                                GD.Print($"[venues]   own door of {Venues.NameOf(Venues.At(own.Venue - 1))}: slot {own.Slot} E {t.MinE + own.Position.X:F1} N {t.MaxN - own.Position.Z:F1} "
+                                    + $"out {own.Outward.X:F2},{-own.Outward.Z:F2}, front {own.Span:F1} m to {own.FrontTop:F1} m, into {into}");
+                            }
                             // every room (#1250: a hall's auditoriums and booth too), and the plan beside the shots
                             for (int fl = 0; fl < plan.Floors.Count; fl++)
                                 foreach (var r in plan.Floors[fl].Rooms.Where(r => r.Type is not (RoomType.Corridor or RoomType.Hall) || r.Area >= 20f))

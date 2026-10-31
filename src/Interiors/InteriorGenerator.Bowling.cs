@@ -563,7 +563,7 @@ public static partial class InteriorGenerator
         // the counter's front is its local +Z: the stools stand 0.4 m out from it
         float fx = MathF.Sin(bar.Turns * MathF.PI / 2), fz = MathF.Cos(bar.Turns * MathF.PI / 2);
         float ax = MathF.Cos(bar.Turns * MathF.PI / 2), az = -MathF.Sin(bar.Turns * MathF.PI / 2);
-        int n = Math.Max(1, (int)((bar.W - 0.6f) / 0.6f));
+        int n = Math.Max(1, (int)((bar.W - 0.6f) / 0.6f)), put = 0;
         for (int i = 0; i < n; i++)
         {
             float t = -bar.W / 2 + 0.6f + i * 0.6f;
@@ -571,6 +571,16 @@ public static partial class InteriorGenerator
             var rect = new RectPlan(x - 0.2f, z - 0.2f, x + 0.2f, z + 0.2f);
             if (!Free(r, rect, placed, blocked, 0.02f)) continue;
             Put(l, f, FurnitureType.BarStool, x, z, bar.Turns, 0.4f, 0.4f, 0.78f, placed);
+            put++;
+        }
+        if (put > 0) return;
+        // its front kept clear (the way in from a street door before it, #1292): a stool at each end, against its front half
+        foreach (int end in new[] { -1, 1 })
+        {
+            float t = end * (bar.W / 2 + 0.3f), u = bar.D / 4;
+            float x = bar.X + fx * u + ax * t, z = bar.Z + fz * u + az * t;
+            var rect = new RectPlan(x - 0.2f, z - 0.2f, x + 0.2f, z + 0.2f);
+            if (Free(r, rect, placed, blocked, 0.02f)) Put(l, f, FurnitureType.BarStool, x, z, bar.Turns + 1, 0.4f, 0.4f, 0.78f, placed);
         }
     }
 
