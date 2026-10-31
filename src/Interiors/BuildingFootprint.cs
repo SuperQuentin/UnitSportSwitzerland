@@ -9,6 +9,12 @@ namespace UnitSport.Interiors;
 /// </summary>
 public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height)
 {
+    /// <summary>A stoop of this many steps down from the sill to the ground in front (#1417); 0 for a door level with its ground.</summary>
+    public int Steps { get; init; }
+
+    /// <summary>The rise of each step of the stoop, metres (at most <see cref="BuildingFootprint.MaxStoopRise"/>).</summary>
+    public float Rise { get; init; }
+
     /// <summary>Which of its building's doors this is: 0 the main one, 1 and up the extra ones (#498).</summary>
     public int Slot { get; init; }
 
@@ -194,6 +200,9 @@ public static class BuildingFootprint
     /// (<see cref="LowWallPenalty"/>) so a taller wall takes the door where the building has one.
     /// </summary>
     public const float MinDoorHeight = 2.0f;
+
+    /// <summary>The most one step of a door's stoop rises (#1417): a walker climbs it without a jump.</summary>
+    public const float MaxStoopRise = 0.3f;
 
     /// <summary>A barn's pair is never planned shorter than this, low eave or not.</summary>
     public const float MinBarnDoorHeight = 2.5f;

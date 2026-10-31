@@ -38,7 +38,58 @@ public static partial class BuildingMeshBuilder
     public const float FootingFlag = -1f;
 
     /// <summary>One piece of footing: the base edge's two ends, the ground under each, and its building.</summary>
-    private readonly record struct Footing(Vector3 A, Vector3 B, float GroundA, float GroundB, int Building);
+    internal readonly record struct Footing(Vector3 A, Vector3 B, float GroundA, float GroundB, int Building, float Below = FootingBelow);
+
+    /// <summary>The footings of a tile drawn at <paramref name="ringStride"/>, from its full grid as the chunk build gets it (a ring finer than the coarse tile loads the stride-1 grid, the coarse ring its stride-10 one).</summary>
+    internal static List<Footing> FootingsForRing(BuildingTile tile, ChunkGrid? full, int ringStride) =>
+        Footings(tile, full != null && ringStride >= ChunkFormat.CoarseStride ? full.Decimate(ringStride) : full);
+
+    /// <summary>
+    /// A solid's wall bottoms: the horizontal edges of its wall triangles that stand on its base (both
+    /// ends within 5 cm of <see cref="Building.MinY"/>), and those that do not (a wall that starts above
+    /// its base: an annex on a ledge, an upper storey, a wall on a terrace), up to a storey above it. An
+    /// off-base edge is a bottom only if the wall is above it and no wall triangle is below it.
+    /// </summary>
+    internal static List<(Vector3 P, Vector3 Q, bool OnBase)> BottomEdges(Building b)
+    {
+        var edges = new List<(Vector3, Vector3, bool)>();
+        var seen = new Dictionary<(int, int, int, int, int, int), int>();
+        static (int, int, int) K(Vector3 v) => (Mathf.RoundToInt(v.X * 100f), Mathf.RoundToInt(v.Y * 100f), Mathf.RoundToInt(v.Z * 100f));
+        static (int, int, int, int, int, int) Key(Vector3 p, Vector3 q)
+        {
+            var (a, c) = (K(p), K(q));
+            return a.CompareTo(c) <= 0 ? (a.Item1, a.Item2, a.Item3, c.Item1, c.Item2, c.Item3) : (c.Item1, c.Item2, c.Item3, a.Item1, a.Item2, a.Item3);
+        }
+        for (int t = 0; t < b.TriangleCount; t++)
+        {
+            var (a, c, d) = b.Tri(t);
+            if (IsRoof(a, c, d, float.MaxValue)) continue;
+            for (int k = 0; k < 3; k++)
+            {
+                var p = k == 0 ? a : k == 1 ? c : d;
+                var q = k == 0 ? c : k == 1 ? d : a;
+                var key = Key(p, q);
+                seen[key] = seen.GetValueOrDefault(key) + 1;
+            }
+        }
+        for (int t = 0; t < b.TriangleCount; t++)
+        {
+            var (a, c, d) = b.Tri(t);
+            if (IsRoof(a, c, d, float.MaxValue)) continue;
+            for (int k = 0; k < 3; k++)
+            {
+                var p = k == 0 ? a : k == 1 ? c : d;
+                var q = k == 0 ? c : k == 1 ? d : a;
+                var r = k == 0 ? d : k == 1 ? a : c;
+                float len = new Vector2(q.X - p.X, q.Z - p.Z).Length();
+                if (len < 0.05f) continue;
+                if (p.Y <= b.MinY + 0.05f && q.Y <= b.MinY + 0.05f) { edges.Add((p, q, true)); continue; }
+                if (Mathf.Abs(p.Y - q.Y) < 0.05f && p.Y < b.MinY + 4f && r.Y > p.Y + 0.1f && seen[Key(p, q)] == 1)
+                    edges.Add((p, q, false));
+            }
+        }
+        return edges;
+    }
 
     /// <summary>
     /// The footings of a tile's buildings over <paramref name="ground"/> (the tile's terrain): every
@@ -48,7 +99,7 @@ public static partial class BuildingMeshBuilder
     /// 2026): 57% sit in the ground, 28% stand up to 1 m above it somewhere, 14% 1-3 m, 1% 3-10 m and
     /// 65 more than 10 m (up to 123 m: data errors).
     /// </summary>
-    private static List<Footing> Footings(BuildingTile tile, ChunkGrid? ground)
+    internal static List<Footing> Footings(BuildingTile tile, ChunkGrid? ground)
     {
         var footings = new List<Footing>();
         if (ground == null) return footings;
@@ -111,7 +162,7 @@ public static partial class BuildingMeshBuilder
                 colour.A = 1f;
             }
             int start = f.Count;
-            Quad(v, c, f, new Vector3(ft.A.X, ft.GroundA - FootingBelow, ft.A.Z), new Vector3(ft.B.X, ft.GroundB - FootingBelow, ft.B.Z),
+            Quad(v, c, f, new Vector3(ft.A.X, ft.GroundA - ft.Below, ft.A.Z), new Vector3(ft.B.X, ft.GroundB - ft.Below, ft.B.Z),
                 ft.B, ft.A, colour);
             for (int i = start; i < f.Count; i++) f[i] = FootingFlag;
         }
@@ -122,7 +173,7 @@ public static partial class BuildingMeshBuilder
     {
         foreach (var ft in Footings(tile, ground))
         {
-            Vector3 a = new(ft.A.X, ft.GroundA - FootingBelow, ft.A.Z), b = new(ft.B.X, ft.GroundB - FootingBelow, ft.B.Z);
+            Vector3 a = new(ft.A.X, ft.GroundA - ft.Below, ft.A.Z), b = new(ft.B.X, ft.GroundB - ft.Below, ft.B.Z);
             faces.Add(a); faces.Add(b); faces.Add(ft.B); faces.Add(a); faces.Add(ft.B); faces.Add(ft.A);
             faces.Add(a); faces.Add(ft.B); faces.Add(b); faces.Add(a); faces.Add(ft.A); faces.Add(ft.B);
         }
