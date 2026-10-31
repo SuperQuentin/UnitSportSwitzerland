@@ -189,6 +189,40 @@ public partial class PortalDemo : Node3D
         })));
 
     /// <summary>
+    /// Where a house meets the ground (#1417): a base 1.5 m up on level ground gets a footing, one 6 m up a plinth wall (the
+    /// basement storey), and a door whose ground in front is 1, 2 or 3 steps down gets a stoop. The ground is a flat tile at
+    /// 0 m; the stoops are on a house standing on it, the door's sill raised by the steps.
+    /// </summary>
+    [Showcase("Terrain", "Ground contact")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseGroundContact()
+    {
+        Func<Node3D> House(float baseY, int steps) => () =>
+        {
+            var tile = new BuildingTile
+            {
+                Id = new TileId(0, 0),
+                Buildings = new List<Building>
+                {
+                    new() { Kind = BuildingKind.House, Floors = 2, MinY = baseY, MaxY = baseY + 8.5f, Triangles = Solid(Vector2.Zero, 10f, 8f, baseY + 6.2f, baseY + 8.5f, baseY) },
+                },
+            };
+            // the 51 x 51 stride-20 lattice of a tile at 0 m
+            var flat = new ushort[51 * 51];
+            Array.Fill(flat, ChunkFormat.Quantize(0));
+            var ground = new ChunkGrid(tile.Id, flat, 0f, 0f, 20);
+            float rise = steps > 0 ? 0.28f : 0f;
+            var door = new DoorSpot(0, new Vector3(0, baseY + steps * rise, 4.03f), new Vector3(0, 0, 1), 1.1f, 2.2f) { Steps = steps, Rise = rise };
+            return new MeshInstance3D
+            {
+                Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door }, Styles.StyleKit.Detail, ground)!, World(Styles.MaterialRole.Building)),
+            };
+        };
+        yield return ("Footing 1.5 m", House(1.5f, 0));
+        yield return ("Plinth 6 m", House(6f, 0));
+        for (int n = 1; n <= 3; n++) yield return ($"Stoop {n} step{(n > 1 ? "s" : "")}", House(0f, n));
+    }
+
+    /// <summary>
     /// Roof shapes for the overhangs (#1067; <see cref="RoofOverhangs"/>, drawn with the style's
     /// mesh detail, so only High shows them): a hipped roof, a terraced row whose middle house
     /// stands taller (its verges reach over the lower neighbours' roofs, theirs stop at its walls),
@@ -530,18 +564,18 @@ public partial class PortalDemo : Node3D
     // ---- the street -------------------------------------------------------------------------------
 
     /// <summary>A house: walls to the eave, gables east and west, a pitched roof with its ridge along X.</summary>
-    private static float[] Solid(Vector2 c, float w, float d, float eave, float ridge)
+    private static float[] Solid(Vector2 c, float w, float d, float eave, float ridge, float floor = 0f)
     {
         float x0 = c.X - w / 2, x1 = c.X + w / 2, z0 = c.Y - d / 2, z1 = c.Y + d / 2;
         var t = new List<float>();
         // wound clockwise seen from outside: Godot's front face, and the facade shader culls the back
         void Tri(Vector3 a, Vector3 b, Vector3 e) { t.AddRange(new[] { a.X, a.Y, a.Z, e.X, e.Y, e.Z, b.X, b.Y, b.Z }); }
         void Quad(Vector3 a, Vector3 b, Vector3 e, Vector3 f) { Tri(a, b, e); Tri(a, e, f); }
-        Quad(new(x0, 0, z1), new(x1, 0, z1), new(x1, eave, z1), new(x0, eave, z1)); // south
-        Quad(new(x1, 0, z0), new(x0, 0, z0), new(x0, eave, z0), new(x1, eave, z0)); // north
-        Quad(new(x0, 0, z0), new(x0, 0, z1), new(x0, eave, z1), new(x0, eave, z0)); // west
+        Quad(new(x0, floor, z1), new(x1, floor, z1), new(x1, eave, z1), new(x0, eave, z1)); // south
+        Quad(new(x1, floor, z0), new(x0, floor, z0), new(x0, eave, z0), new(x1, eave, z0)); // north
+        Quad(new(x0, floor, z0), new(x0, floor, z1), new(x0, eave, z1), new(x0, eave, z0)); // west
         Tri(new(x0, eave, z0), new(x0, eave, z1), new(x0, ridge, c.Y));
-        Quad(new(x1, 0, z1), new(x1, 0, z0), new(x1, eave, z0), new(x1, eave, z1)); // east
+        Quad(new(x1, floor, z1), new(x1, floor, z0), new(x1, eave, z0), new(x1, eave, z1)); // east
         Tri(new(x1, eave, z1), new(x1, eave, z0), new(x1, ridge, c.Y));
         Quad(new(x0, eave, z1), new(x1, eave, z1), new(x1, ridge, c.Y), new(x0, ridge, c.Y)); // roof
         Quad(new(x1, eave, z0), new(x0, eave, z0), new(x0, ridge, c.Y), new(x1, ridge, c.Y));

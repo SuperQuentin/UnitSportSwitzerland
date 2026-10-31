@@ -197,8 +197,10 @@ public static partial class BuildingMeshBuilder
             float hx = -hw * 0.7f;
             Box(hx - 0.04f, hx + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, BuildingFootprint.DoorHandleColor);
         }
-        // a doorstep: the cue that says "this is a way in" from across the street
-        Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
+        // a stoop down to the ground in front (#1417), or the doorstep: the cue that says "this is a way in" from across the street
+        if (d.Steps > 0)
+            foreach (var (a0, a1, u0, u1, o0, o1) in StoopBoxes(d)) Box(a0, a1, u0, u1, o0, o1, step);
+        else Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
     }
 
     /// <summary>

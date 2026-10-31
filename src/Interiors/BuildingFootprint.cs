@@ -201,6 +201,18 @@ public static class BuildingFootprint
     /// </summary>
     public const float MinDoorHeight = 2.0f;
 
+    /// <summary>Metres: how far in front of a door the ground is read (#1417), and the most of a wide door's half width that is spread to the jambs.</summary>
+    public const float FrontReach = 0.8f, MaxJambReach = 1.5f;
+
+    /// <summary>Metres: ground this far above a sill buries the door, this far below it floats it (#1417); the doorstep covers the rest.</summary>
+    public const float BuriedTolerance = 0.1f, FloatTolerance = 0.15f;
+
+    /// <summary>Metres: the most a sill is raised to meet the ground in front of it, and the most a stoop is asked to close (three steps).</summary>
+    public const float MaxLandingRaise = 0.9f, MaxStoopDrop = 0.9f;
+
+    /// <summary>The most steps in a door's stoop.</summary>
+    public const int MaxStoopSteps = 3;
+
     /// <summary>The most one step of a door's stoop rises (#1417): a walker climbs it without a jump.</summary>
     public const float MaxStoopRise = 0.3f;
 
@@ -493,6 +505,46 @@ public static class BuildingFootprint
         bool barn = DoorLeaf.SwingsOut(kind);
         var roadTarget = roads.Streets.Nearest(center, 60f) ?? roads.Paths.Nearest(center, 40f);
 
+        // ---- the ground in front of a door (#1417) ------------------------------------------
+        // One sample in the wall plane buried a door on ground rising in front of it and left a downhill one
+        // over a gap the 0.3 m step does not close. The ground is read 0.8 m out at both jambs and in the
+        // middle, and in the wall plane: a sill below it is raised to it (a level landing) when the wall
+        // has the headroom and the rise is a landing's; a sill above the lowest of the three gets a stoop of
+        // up to three steps (mesh and collision), and the wall a penalty when it is a climb rather than a stoop.
+        // Doors a vehicle drives through are left as they are.
+        DoorSpot Settle(DoorSpot d, out float penalty)
+        {
+            penalty = 0;
+            if (grid == null || d.Width <= 0 || d.Vehicle) return d;
+            var o2 = new Vector2(d.Outward.X, d.Outward.Z);
+            var side = new Vector2(-o2.Y, o2.X) * Math.Min(d.Width / 2, MaxJambReach);
+            var at = new Vector2(d.Position.X, d.Position.Z);
+            float G(Vector2 q) => (float)grid.SampleMeshHeight(tile.Id.MinE + q.X, tile.Id.MaxN - q.Y);
+            var front = at + o2 * FrontReach;
+            float gm = G(front), gl = G(front - side), gr = G(front + side), gw = G(at);
+            float high = Math.Max(Math.Max(gm, gl), Math.Max(gr, gw)), low = Math.Min(gm, Math.Min(gl, gr));
+            float sill = d.Position.Y;
+            if (high > sill + BuriedTolerance)
+            {
+                float room = box.Eave - high - DoorUnderEave;
+                if (high - sill <= MaxLandingRaise && room >= Math.Min(d.Height, MinDoorHeight))
+                {
+                    d = d with { Position = d.Position with { Y = high }, Height = FitUnderEave(d.Height, box.Eave - high, barn: false) };
+                    sill = high;
+                }
+                else penalty += 3f;                        // buried: another wall wins
+            }
+            float drop = sill - low;
+            if (drop > FloatTolerance)
+            {
+                int steps = Math.Min(MaxStoopSteps, (int)Math.Ceiling(drop / MaxStoopRise - 1e-4f));
+                if (drop > MaxStoopDrop) penalty += 4f;    // more than a stoop: a climb
+                penalty += 0.2f * steps;                   // a level door wins a tie
+                d = d with { Steps = steps, Rise = Math.Min(MaxStoopRise, drop / steps) };
+            }
+            return d;
+        }
+
         var ranked = new List<Cand>();
         foreach (var f in facets.Values)
         {
@@ -532,11 +584,11 @@ public static class BuildingFootprint
             if (headroom - DoorUnderEave < doorH - 0.01f) score -= LowWallPenalty;
 
             var pos = new Vector3(xz.X + f.Normal.X * 0.03f, baseY, xz.Y + f.Normal.Y * 0.03f);
-            ranked.Add(new Cand(score, f.Normal, f.Offset, s0, s1,
-                new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)
-                {
-                    Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind), Run = length,
-                }));
+            var spot0 = Settle(new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)
+            {
+                Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind), Run = length,
+            }, out float landing);
+            ranked.Add(new Cand(score - landing, f.Normal, f.Offset, s0, s1, spot0));
         }
 
         // best-scoring door that is actually on a wall; the score alone can pick a run whose
@@ -554,11 +606,11 @@ public static class BuildingFootprint
             var open = cuts.Where(k => !Covered(k.Mid)).ToList();
             var cut = (open.Count > 0 ? open : cuts).MaxBy(k => k.Normal.Dot((aim - k.Mid).Normalized()) - k.Mid.DistanceTo(aim) * 0.01f);
             var pos = new Vector3(cut.Mid.X + cut.Normal.X * 0.03f, cut.Ground, cut.Mid.Y + cut.Normal.Y * 0.03f);
-            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f),
+            door = Settle(new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f),
                 FitUnderEave(plainH, box.Eave - cut.Ground, barn: false))
             {
                 Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind),
-            };
+            }, out _);
             found = true;
         }
         if (!found && ranked.Count > 0) { main = ranked.MaxBy(r => r.Score); door = main!.Door; found = true; }
@@ -827,6 +879,8 @@ public static class BuildingFootprint
                         // swings into the hall and no tractor comes through it
                         Slot = placed.Count, Hang = DoorHang.Inward, Vehicle = false,
                     };
+                    spot = Settle(spot, out float buried);
+                    if (buried >= 3f) continue;        // a side door in the hill: no door rather than a buried one
                     if (!DoorOnWall(b, spot)) continue;
                     if (placed.Any(q => TooClose(q, spot))) continue;
                     // a block of flats is entered by its stairwells (#1304), and the planner builds one behind each
@@ -869,7 +923,7 @@ public static class BuildingFootprint
         float GroundOf(Vector2 xz) => grid != null
             ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
             : b.MinY + 0.8f;
-        var own = OwnDoors(tile, index, map, built, ranked, Covered, Under, Courtyard, GroundOf, box.Eave);
+        var own = OwnDoors(tile, index, map, built, ranked, Covered, Under, Courtyard, GroundOf, box.Eave, d => Settle(d, out _));
         return own.Count == 0 ? built : built with { Extra = extras.Concat(own).ToList() };
     }
 
@@ -890,7 +944,7 @@ public static class BuildingFootprint
     /// </summary>
     private static List<DoorSpot> OwnDoors(BuildingTile tile, int index, BuildingTypeMap map, Footprint fp,
         List<Cand> ranked, Func<Vector2, bool> covered, Func<Vector2, bool> under, Func<Vector2, Vector2, bool> courtyard,
-        Func<Vector2, float> groundAt, float eave)
+        Func<Vector2, float> groundAt, float eave, Func<DoorSpot, DoorSpot> settle)
     {
         var b = tile.Buildings[index];
         var extra = new List<DoorSpot>();
@@ -938,6 +992,7 @@ public static class BuildingFootprint
                 Slot = slot, Hang = DoorHang.Inward, Vehicle = false, Unit = true, Span = glazed && span >= VenueFront.MinSpan ? span : 0f,
                 FrontTop = glazed ? glassTop : 0f, Run = c.S1 - c.S0,
             };
+            spot = settle(spot);
             if (!DoorOnWall(b, spot) || placed.Any(q => TooClose(q, spot))) return null;
             return spot;
         }

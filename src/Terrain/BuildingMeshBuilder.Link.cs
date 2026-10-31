@@ -160,4 +160,45 @@ public static partial class BuildingMeshBuilder
         }
         return faces.ToArray();
     }
+
+    /// <summary>
+    /// The treads of a door's stoop (#1417) in the door's own frame (along the wall, up, out), nearest the sill
+    /// first: one box per step, the first level with the sill, each next one a <see cref="DoorSpot.Rise"/> lower and
+    /// 0.35 m further out, all down to just under the ground the stoop closes. The mesh and the collision both read this.
+    /// </summary>
+    internal static IEnumerable<(float A0, float A1, float U0, float U1, float O0, float O1)> StoopBoxes(DoorSpot d)
+    {
+        float hw = d.Width / 2 + 0.2f, bottom = -d.Steps * d.Rise - 0.3f;
+        for (int i = 0; i < d.Steps; i++)
+            yield return (-hw, hw, bottom, -i * d.Rise, 0f, 0.45f + 0.35f * i);
+    }
+
+    /// <summary>
+    /// The stoops' collision, both windings (#1417): the top and the front of every tread and its two ends, so a walker
+    /// climbs the steps up to the sill and a one-sided shape cannot swallow it. Like <see cref="LinkFaces"/>.
+    /// </summary>
+    public static Vector3[] StoopFaces(DoorSpot[]? doors)
+    {
+        if (doors == null) return [];
+        var faces = new List<Vector3>();
+        foreach (var d in doors)
+        {
+            if (d.Steps <= 0 || d.Width <= 0) continue;
+            var t = new Vector3(-d.Outward.Z, 0, d.Outward.X);
+            Vector3 P(float along, float up, float o) => d.Position + t * along + Vector3.Up * up + d.Outward * o;
+            void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 e)
+            {
+                faces.AddRange([a, b, c, a, c, e]);
+                faces.AddRange([a, c, b, a, e, c]);
+            }
+            foreach (var (a0, a1, u0, u1, o0, o1) in StoopBoxes(d))
+            {
+                Quad(P(a0, u1, o0), P(a1, u1, o0), P(a1, u1, o1), P(a0, u1, o1));   // tread
+                Quad(P(a0, u0, o1), P(a1, u0, o1), P(a1, u1, o1), P(a0, u1, o1));   // riser
+                Quad(P(a0, u0, o0), P(a0, u1, o0), P(a0, u1, o1), P(a0, u0, o1));   // ends
+                Quad(P(a1, u0, o0), P(a1, u0, o1), P(a1, u1, o1), P(a1, u1, o0));
+            }
+        }
+        return faces.ToArray();
+    }
 }
