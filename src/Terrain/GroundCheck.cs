@@ -18,8 +18,9 @@ namespace UnitSport.Terrain;
 /// (a slot under a footing). Doors: the sill against the ground 0.8 m in front at both jambs
 /// (buried over 10 cm, floating over 15 cm after the stoop). Each at the ring strides 1/2/4/10, so
 /// the LOD mismatch shows. Output also goes to <c>test_output/ground/groundcheck.txt</c>.
-/// The road-to-facade strip slope histogram of the issue is not measured: it needs the road
-/// surface the terrain pass changes, which the later terrain issue owns.
+/// The road-to-facade strip (#1419, <see cref="GroundStrip"/>): the walkable ground (the road blend
+/// at clearance 0, as the collision floor) between a road ribbon's edge and a facade within 25 m,
+/// per ring stride: a slope histogram and the lattice edges stepping over 0.3 m.
 /// </para>
 /// </summary>
 public static class GroundCheck
@@ -63,6 +64,7 @@ public static class GroundCheck
             // the doors as the build gets them: the stride-1 grid for rings 0-2 (strides 1, 2, 4), none at the coarse ring
             var doorsFine = BuildingFootprint.ComputeDoors(bt, roads, full);
             var doorsCoarse = BuildingFootprint.ComputeDoors(bt, roads, null);
+            Strip(bt, roads, full, Say);
             foreach (int s in Strides)
             {
                 var drawn = s == 1 ? full : full.Decimate(s);
@@ -142,6 +144,38 @@ public static class GroundCheck
             + (worstBare > 0 ? $" at --at {worstAtE:F0},{worstAtN:F0}" : "") + $"); {bareBuildings}/{buildingsWithGap} gapped buildings have NO footing at all; "
             + $"{footings.Count} footings, {slots} end above drawn ground (worst {worstSlot:F2} m); drawn vs stride-1 ground at the base worst {worstDiff:F2} m; "
             + $"off-base wall bottoms over a gap (<=3 m): {offPieces} pieces, {offBare} with NO footing");
+    }
+
+    private static void Strip(BuildingTile bt, RoadTile? roads, ChunkGrid full, Action<string> say)
+    {
+        if (roads == null) { say("  strip: no road tile"); return; }
+        int n = ChunkFormat.GridSize;
+        var ground = TerrainMeshBuilder.GroundHeights(full, TerrainMeshBuilder.ComputeRoadBlend(roads), 0.0);
+        var heights = new float[n * n];
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < n; c++) heights[r * n + c] = ground(c, r);
+        var facades = new List<GroundStrip.Seg>();
+        var plans = new List<float[]>();
+        foreach (var b in bt.Buildings)
+        {
+            if (!BuildingMeshBuilder.Drawn(b)) continue;
+            foreach (var (p, q, onBase) in BuildingMeshBuilder.BottomEdges(b))
+                if (onBase) facades.Add(new GroundStrip.Seg(p.X, p.Z, q.X, q.Z));
+            for (int t = 0; t < b.TriangleCount; t++)
+            {
+                var (a, c, d) = b.Tri(t);
+                plans.Add([a.X, a.Z, c.X, c.Z, d.X, d.Z]);
+            }
+        }
+        var (rd, onRoad) = GroundStrip.RoadEdgeDistance(roads);
+        var (fd, under) = GroundStrip.FacadeDistance(facades, plans);
+        var strip = GroundStrip.Members(rd, onRoad, fd, under);
+        foreach (int s in Strides)
+        {
+            var m = GroundStrip.Of(heights, strip, s);
+            say($"  strip stride {s}: {m.Cells} cells; slope deg {string.Join(" ", GroundStrip.SlopeNames.Select((nm, i) => $"{nm}={m.Slope[i]}"))}; "
+                + $"lattice steps >0.3 m: {m.Steps} of {m.Edges} edges (worst {m.WorstStep:F2} m)");
+        }
     }
 
     private static bool Near(BuildingMeshBuilder.Footing f, Vector3 a, Vector3 b) =>
