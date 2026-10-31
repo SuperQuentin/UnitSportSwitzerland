@@ -230,8 +230,8 @@ public sealed class CdBurner
                 BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, Grid?.Bpm ?? 0f, Grid?.Offset ?? 0f);
             float duration = pcm.Length / (float)AnalysisRate;
             string ogg = Path.Combine(CdDirectory, $"{id}.ogg");
-            status.Report("Listening for the singer…");
-            if (analysis != null) analysis = await WithVocalAsync(analysis, source, bpm, ogg, ct);
+            // the singer comes after (#1405): the vocal pass took 30-36 s and the CD waited for it; the library
+            // queues it on the analysis backfill once the CD is listed, which adds the block and the stems
 
             status.Report("Encoding…");
             if (!await EncodeOggAsync(source, ogg, ct))

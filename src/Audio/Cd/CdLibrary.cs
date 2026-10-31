@@ -400,6 +400,7 @@ public partial class CdLibrary : Node
                 GD.Print($"[cd] personal CD {cd.Id} ready: {cd.Describe()}");
                 BurnStatus?.Invoke($"Burnt for you only: {cd.Title}");
                 Changed?.Invoke();
+                QueueVocal(cd.Id, true);
                 continue;
             }
             _all[cd.Id] = Note(cd);
@@ -407,6 +408,7 @@ public partial class CdLibrary : Node
             GD.Print($"[cd] CD {cd.Id} ready: {cd.Describe()}");
             Changed?.Invoke();
             if (_server && Online) Rpc(MethodName.Added, _all[cd.Id].ToDict());
+            QueueVocal(cd.Id, false);
         }
         if (!_burning && _fixtures.TryDequeue(out string? next))
         {
@@ -418,6 +420,17 @@ public partial class CdLibrary : Node
     }
 
     // ---- analysis backfill (#725) ---------------------------------------------------------------
+
+    /// <summary>
+    /// A CD just burnt, listed and playable, gets its singer on the backfill (#1405): separation and
+    /// stems on a worker, the block to every client through <see cref="Reanalysed"/>. Not on a headless
+    /// client (#1169: a check, never a player), as at start.
+    /// </summary>
+    private void QueueVocal(int id, bool personal)
+    {
+        if (!_server && DisplayServer.GetName() == "headless") return;
+        if (!_stale.Contains((id, personal))) _stale.Enqueue((id, personal));
+    }
 
     /// <summary>
     /// Queues every CD of this library (the shared one where this copy owns it, and this player's
