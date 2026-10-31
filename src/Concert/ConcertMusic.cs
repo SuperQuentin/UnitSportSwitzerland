@@ -144,11 +144,11 @@ public partial class ConcertMusic : Node3D
 
     private void OnLibrary() => _libraryVersion = -1;
 
-    /// <summary>The setlist from the library: its CDs that have a beat grid, shuffled by the seed; the rat beat and personal CDs never.</summary>
+    /// <summary>The setlist from the library: its CDs that have a beat grid, shuffled by the seed; the rat beat and personal CDs never; a jazz night plays the jazz playlist only (#1394), every other stage none of it.</summary>
     public static CdInfo[] SetlistOf(ConcertEvent e, IEnumerable<CdInfo> library)
     {
         var rng = new Random(e.Seed);
-        return library.Where(c => c.Id > 0 && !CdLibrary.IsRatBeat(c.Id) && c.Duration > 30f && c.Bpm > 0)
+        return library.Where(c => c.Id > 0 && !CdLibrary.IsRatBeat(c.Id) && c.Duration > 30f && c.Bpm > 0 && CdLibrary.IsJazz(c) == (e.Genre == Genre.Jazz))
             .OrderBy(c => c.Id).OrderBy(_ => rng.Next()).Take(MaxSongs).ToArray();
     }
 

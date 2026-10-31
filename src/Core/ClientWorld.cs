@@ -491,7 +491,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
         // A fixture course is all there is: nothing cached joins it.
-        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        if (!fixture)
+        {
+            // a returning player's own server first (#1380): its index is known before the first frame
+            if (Launch.Mode == GameMode.Multiplayer)
+            {
+                _serverKey = JoinCache.ServerKey(Launch.Endpoint, WorldChoice.ActiveId);
+                _cachedIndexMerged = ClientTerrainSync.MergeServerIndex(_chunks, _serverKey);
+            }
+            if (!_cachedIndexMerged) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        }
 
         AddChild(_chunks);
         // the water (#299): queries on these tiles, waves pushed to the shaders, the underwater look;
@@ -986,6 +995,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
             || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
+            || Occasions.Festivals.MontreuxJazz.JazzCheck.Requested || Occasions.Festivals.MontreuxJazz.JazzNetProbe.Role != null
             || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null
             || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested || Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null
             || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
@@ -1231,6 +1241,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.Festivals.Christmas.ChristmasGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Christmas.ChristmasCheck.Requested) AddChild(new Occasions.Festivals.Christmas.ChristmasCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null) AddChild(new Occasions.Festivals.Christmas.ChristmasNetProbe(items));
+            // Montreux Jazz (#1394): E at the stage-front rail marks the listener, jump on the beat claps the band back for the bis
+            AddChild(new Occasions.Festivals.MontreuxJazz.JazzGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.MontreuxJazz.JazzCheck.Requested) AddChild(new Occasions.Festivals.MontreuxJazz.JazzCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.MontreuxJazz.JazzNetProbe.Role != null) AddChild(new Occasions.Festivals.MontreuxJazz.JazzNetProbe(items));
             // the Zibelemärit (#1373): E at a stall tastes or buys; confetti eggs and Räppli thrown on the square count
             AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleCheck(items, () => LocalPlayer));
@@ -1594,18 +1608,36 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // The horizon's lattice is generated at boot (or read from its cache) while the steps
-        // above run; its blocks then stream nearest first.
+        // The horizon is not needed to spawn (#1380): once the ring-0 tile is playable and the body is
+        // grounded (the gates above), a joining player goes in and the lattice finishes behind the
+        // screen. Its blocks stream nearest first, and the safety timeout above still applies.
+        // Command-line solo runs keep waiting for it: their shots and probes expect it drawn.
         var horizon = _chunks.Horizon?.Progress();
-        if (!timedOut && horizon == null)
+        bool nearReady = total > 0 && done >= total;
+        bool horizonBehind = Launch.Mode == GameMode.Multiplayer || !Launch.FromCommandLine;
+        if (horizonBehind)
         {
-            Report(LoadStage.DrawingHorizon, 0.6f);
-            return;
+            // only when nothing near is ready and the horizon is still unknown is there nothing to show yet
+            if (!timedOut && horizon == null && !nearReady)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
         }
-        if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+        else
         {
-            Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
-            return;
+            // The horizon's lattice is generated at boot (or read from its cache) while the steps
+            // above run; its blocks then stream nearest first.
+            if (!timedOut && horizon == null)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
+            if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
+                return;
+            }
         }
 
         Stage = LoadStage.Ready;
@@ -1937,7 +1969,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat!.Kicked += OnKicked;
 
         // Merges the server's tile list so tiles this client never shipped with become streamable.
-        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!);
+        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!) { ServerKey = _serverKey, CachedIndexMerged = _cachedIndexMerged };
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>
@@ -2315,6 +2347,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private IEnumerable<(string, string)> Prompts()
     {
         if (MenuOpen?.Invoke() == true || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
+        // stepped up to bowl (#1353): its own steps label the phone's keys
+        if (Interiors.BowlingAim.Current is { } bowling)
+        {
+            foreach (var row in bowling.Prompts()) yield return row;
+            yield break;
+        }
+        if (Interiors.Pinball.PinballPlay.Current is { } pinball)
+        {
+            foreach (var row in pinball.Prompts()) yield return row;
+            yield break;
+        }
+        // what E acts on, where the screen says it in a floating line (a door, a counter, a rack, loot):
+        // a phone needs it as a row too, for its button (#1353)
+        if (TouchControls.Shown && Interiors.InteriorManager.Instance?.Floating is { } floating)
+            yield return (PlayerInput.InteractMount, floating);
 
         var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
         var viewer = Viewer;
@@ -2510,6 +2557,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private TouchState TouchNow()
     {
+        if (Interiors.BowlingAim.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
+        if (Interiors.Pinball.PinballPlay.Current != null) return new TouchState(TouchMode.Pinball, TouchFlags.None);
         if (Viewer is not { } p || !IsInstanceValid(p))
         {
             var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
@@ -2684,6 +2733,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;
+
+    /// <summary>The server this join goes to, as the cache keys it (#1380); null offline.</summary>
+    private string? _serverKey;
+
+    /// <summary>An earlier visit's index of that server was merged at boot.</summary>
+    private bool _cachedIndexMerged;
 
     /// <summary>
     /// The server's start point (#799): the fly camera goes there, and the body follows it down once

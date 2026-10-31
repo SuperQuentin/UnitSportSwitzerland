@@ -77,6 +77,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `perf-static-city` — what a city's static things cost (#553): CPU-bound frames, buildings 1.1–1.6 ms of GPU, the dormant layer ~0.3 ms, shop signs 1 300 draws → drawn to 200 m; tiles past the building/road ring shed them (`TileUnfurnished`)
 - `occlusion-culling` — buildings as occluders near the ground (#553): 125 m building cells round the camera, box occluders inset 0.5 m for buildings that fill their plan box, cells only under 40 m above ground, off in VR and during a sightline cut
 - `perf-ring-key` — `EvaluateRings` compares its inputs in `RingKeyChanged()` (no string key); a new desired-set input goes there
+- `loading-cpu` — Loading must not starve the PC (#1381): desktop build cap `Max(2, cores-2)`, BelowNormal `BuildScheduler` threads, loading-screen frame cap, cache trim off the write path
 
 ## Commands
 

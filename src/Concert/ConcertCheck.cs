@@ -15,6 +15,75 @@ public static class ConcertCheck
 {
     public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--concertcheck") >= 0;
 
+    /// <summary>
+    /// Montreux Jazz's nights (#1394): the sixteen nights' stages fit the lawn, the crowd sits on it and in no crew zone (a few hundred, a centre aisle kept),
+    /// the rig is the small one (no strobe, blinder, pyro), and the light desk plays a whole set: calm to peak without a strobe, the call dark, the bis lit.
+    /// </summary>
+    private static void JazzNights(Action<bool, FormattableString> expect)
+    {
+        var venue = StadiumCatalog.MontreuxJazzOpenAir;
+        string? bad = null;
+        int people = 0, fixtures = 0;
+        for (int night = 1; night <= 16 && bad == null; night++)
+        {
+            var e = ConcertPlanner.Jazz(venue, 2026, night);
+            var plan = new StagePlan(e);
+            fixtures = plan.Patch.Fixtures.Count;
+            foreach (var b in plan.Boxes)
+            {
+                float c = MathF.Abs(MathF.Cos(b.Yaw)), sn = MathF.Abs(MathF.Sin(b.Yaw));
+                float ex = c * b.Size.X / 2 + sn * b.Size.Z / 2, ez = sn * b.Size.X / 2 + c * b.Size.Z / 2;
+                if (MathF.Abs(b.Centre.X) + ex > venue.FrontHalfU + 0.5f || MathF.Abs(b.Centre.Z) + ez > venue.FrontHalfV + 0.5f)
+                {
+                    bad = FormattableString.Invariant($"night {night}: a box at {b.Centre} size {b.Size} leaves the lawn");
+                    break;
+                }
+            }
+            if (plan.Patch.Fixtures.Any(f => f.Type.Kind is FixtureKind.Strobe or FixtureKind.Blinder or FixtureKind.Flame or FixtureKind.Co2 or FixtureKind.Gerb or FixtureKind.Airburst))
+                bad ??= $"night {night}: a strobe, blinder or pyro head on the jazz rig";
+            var crowd = new ConcertCrowd(plan);
+            var places = crowd.Places();
+            crowd.Free();
+            people = places.Count;
+            if (people < 300 || people > 1000) bad ??= $"night {night}: {people} people on the lawn";
+            foreach (var (t, _) in places)
+            {
+                var p = new Vector2(t.Origin.X, t.Origin.Z);
+                if (MathF.Abs(p.X) > venue.FrontHalfU || MathF.Abs(p.Y) > venue.FrontHalfV) bad ??= $"night {night}: someone at {t.Origin} off the lawn";
+                if (MathF.Abs((p - plan.Origin).Dot(new Vector2(-plan.Forward.Y, plan.Forward.X))) < 1.0f) bad ??= $"night {night}: someone in the centre aisle at {t.Origin}";
+                foreach (var z in plan.Zones)
+                    if (z.Contains(p)) { bad ??= $"night {night}: someone at {t.Origin} in the {z.Name} zone"; break; }
+            }
+        }
+        expect(bad == null, $"jazz: 16 nights' stages fit the lawn, {people} seated, none in an aisle or a crew zone, {fixtures} fixtures, no strobe, blinder or pyro{(bad != null ? ": " + bad : "")}");
+
+        // one set on the desk: every part, no strobe lit, the call dark, the bis lit
+        var ev = ConcertPlanner.Jazz(venue, 2026, 3);
+        var pl = new StagePlan(ev);
+        var desk = new LightDesk(pl);
+        double beatSeconds = 60.0 / ev.Bpm;
+        var seen = new Dictionary<JazzPart, int>();
+        var lit = new Dictionary<JazzPart, float>();
+        bool strobed = false;
+        for (double beat = 0; beat < JazzSet.SetBars(ev.SetSongs) * 4.0; beat += 1.0)
+        {
+            desk.Write(beat * beatSeconds + 0.01);
+            var part = desk.Jazz.Part;
+            seen[part] = seen.GetValueOrDefault(part) + 1;
+            float dim = 0f;
+            foreach (var f in pl.Patch.Fixtures)
+            {
+                if (f.Type.Kind == FixtureKind.Strobe && pl.Patch.Get01(f, Attr.Dimmer) > 0.01f) strobed = true;
+                if (f.Type.Kind is FixtureKind.Wash or FixtureKind.Spot) dim = MathF.Max(dim, pl.Patch.Get01(f, Attr.Dimmer));
+            }
+            lit[part] = MathF.Max(lit.GetValueOrDefault(part), dim);
+        }
+        expect(seen.Count == 5 && seen.ContainsKey(JazzPart.Call) && seen.ContainsKey(JazzPart.Bis), $"jazz: a set plays every part ({string.Join(", ", seen.Select(kv => $"{kv.Key} {kv.Value}"))})");
+        expect(!strobed, $"jazz: no strobe lit through a whole set");
+        expect(lit.GetValueOrDefault(JazzPart.Call) < 0.01f && lit.GetValueOrDefault(JazzPart.Song) > 0.4f && lit.GetValueOrDefault(JazzPart.Bis) > 0.4f,
+            $"jazz: the call is dark ({(int)(lit.GetValueOrDefault(JazzPart.Call) * 100)} %), the songs ({(int)(lit.GetValueOrDefault(JazzPart.Song) * 100)} %) and the bis ({(int)(lit.GetValueOrDefault(JazzPart.Bis) * 100)} %) are lit");
+    }
+
     public static int Run()
     {
         int failures = 0;
@@ -151,7 +220,8 @@ public static class ConcertCheck
             $"the stage is built by {ConcertEvent.BuildHour}h and struck at the show's end ({day.EndHour}h)");
         Expect(layouts.Count == Enum.GetValues<StageLayout>().Length, $"300 seeds reach every layout ({layouts.Count})");
         Expect(screens.Count == Enum.GetValues<ScreenSet>().Length, $"and every screen set ({screens.Count})");
-        Expect(genres.Count == Enum.GetValues<Genre>().Length, $"and every genre ({genres.Count})");
+        Expect(genres.Count == Enum.GetValues<Genre>().Length - 1 && !genres.Contains(Genre.Jazz), $"and every genre but jazz, which only a festival forces ({genres.Count})");
+        JazzNights(Expect);
         Expect(worstChannels <= 4 * DmxPatch.Channels, $"the biggest rig: {worstFixtures} fixtures on {worstChannels} channels");
 
         // the desk: DMX written decodes back, and the sections light the rig as they should
