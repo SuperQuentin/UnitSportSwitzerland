@@ -216,7 +216,10 @@ CHECKS=(${KEPT[@]+"${KEPT[@]}"})
 resumed() { ROWS+=("$(printf '%-30s %-8s %6s  %s' "$1" PASS 0 "(passed earlier, TEST_RESUME)")"); echo "[test] $1: passed earlier, skipped"; }
 if passed_before "unit (dotnet test)"; then resumed "unit (dotnet test)"; else
   t0=$SECONDS
-  guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests
+  # [Trait("Speed", "Slow")] tests run in the full tier only (#1407): the signal test region's build alone was
+  # 556 s of a 14 min unit stage
+  SLOW=(--filter "Speed!=Slow"); [ "$TIER" = full ] && SLOW=()
+  guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests ${SLOW[@]+"${SLOW[@]}"}
   record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$OUT/unit.log"
   grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
 fi

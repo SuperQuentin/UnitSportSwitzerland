@@ -507,7 +507,8 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.Equal(7.5f + 1.5f, s.OuterRight(0), 3);
     }
 
-    [Fact]
+    // builds the whole signal test region: 556 s of a 14 min unit run (#1407), so only the full tier runs it
+    [Fact, Trait("Speed", "Slow")]
     public void The_written_test_region_holds_its_cores_and_transitions_and_decodes_them_alike()
     {
         string dir = Path.Combine(Path.GetTempPath(), "unitsport-818w-" + Guid.NewGuid().ToString("N"));
