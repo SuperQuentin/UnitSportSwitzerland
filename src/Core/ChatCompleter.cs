@@ -87,6 +87,7 @@ public sealed class ChatCompleter
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status", "Activities", "Battle Royale"),
         ("vs", false, false, "open [here|nearest|random|<village>] [rounds] [bots off|n] [easy|normal|hard] | join [id] | leave | start | invite <player> | close <id> | list | stats [name]", "Activities", "Versteckis, hide-and-seek in a village"),
         ("fight", false, false, "<player> | accept | decline | leave", "Activities", "a fist fight"),
+        ("dummy", false, true, "[clear]", "Activities", "a training dummy to practise the sword on"),
         ("aura", false, false, "<player> | accept | decline | leave", "Activities", "an aura battle"),
         ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
         ("rope", false, false, "[<player> | hands <player> | off]", "Activities", "rope up or hold hands with a party member"),
@@ -370,6 +371,10 @@ public sealed class ChatCompleter
 
             case "fight" or "aura":
                 options = argIndex == 0 ? [.. PlayerNames(), "accept", "decline", "leave"] : [];
+                break;
+
+            case "dummy":   // #1371
+                options = argIndex == 0 ? ["clear"] : [];
                 break;
 
             case "rope":

@@ -189,7 +189,7 @@ public static partial class HumanMeshBuilder
         Vector3 ShoulderR, Vector3 ElbowR, Vector3 WristR,
         Vector3 HipL, Vector3 KneeL, Vector3 AnkleL, Vector3 ToeL,
         Vector3 HipR, Vector3 KneeR, Vector3 AnkleR, Vector3 ToeR,
-        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default);
+        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default, bool Fist = false);
 
     /// <param name="into">A mesh to rebuild in place (a figure redrawn while it moves keeps one), or null for a new one.</param>
     public static ArrayMesh Build(HumanPalette palette, HumanPose pose = HumanPose.Standing,
@@ -448,7 +448,7 @@ public static partial class HumanMeshBuilder
     public readonly record struct GaitMounts(
         Vector3 Eye, Vector3 Head, Vector3 Chest, Vector3 Hip,
         Vector3 ShoulderL, Vector3 ShoulderR, Vector3 FootL, Vector3 FootR,
-        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default);
+        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default, Vector3 GripOrigin = default, Basis GripBasis = default, Basis BoneBasis = default);
 
     /// <summary>
     /// The mount points for one instant of the gait.
@@ -868,7 +868,31 @@ public static partial class HumanMeshBuilder
             Lean: rig.TorsoLean,
             HandL: Flip(rig.WristL),
             HandR: Flip(rig.WristR),
-            HandBasis: HandBasisOf(rig));
+            HandBasis: HandBasisOf(rig),
+            GripOrigin: GripOf(rig).Origin, GripBasis: GripOf(rig).Basis, BoneBasis: BoneBasisOf(rig));
+
+        // the right hand's skinned bone frame (Frames: HandBone), flipped to mount space: where the posed hand mesh really is
+        static Basis BoneBasisOf(Rig r)
+        {
+            var b = HandBone(r.ElbowR, r.WristR, 1f).Basis;
+            return new Basis(Flip(b.X), Flip(b.Y), Flip(b.Z));
+        }
+
+        // the sword's grip (#1371): the ring centre of the closed fingers and the handle's axis through it, from the right hand's own frame, the one
+        // its skinned bone is posed in (HandBone) and its fist is built in (Hand), flipped to mount space; X the way the fingers leave, Y the palm's inside, Z along the handle
+        static (Vector3 Origin, Basis Basis) GripOf(Rig r)
+        {
+            var hf = HandFrameOf(r.ElbowR, r.WristR, 1f, 1f);
+            Vector3 W(System.Numerics.Vector3 v) => r.WristR + hf.Thumb * v.X + hf.Along * v.Y + hf.Inward * v.Z;
+            var c = HandGrip.Centre;
+            var ax = HandGrip.Axis;
+            var fi = HandGrip.Finger;
+            var axisW = (hf.Thumb * ax.X + hf.Along * ax.Y).Normalized();
+            var fingerW = (hf.Thumb * fi.X + hf.Along * fi.Y).Normalized();
+            var basis = new Basis(Flip(fingerW), Flip(hf.Inward), Flip(axisW));
+            if (basis.Determinant() < 0f) basis = new Basis(-basis.X, basis.Y, basis.Z);
+            return (Flip(W(c)), basis);
+        }
 
         // the item hand's frame in mesh space: -Z along the item, from the pose's direction or the forearm
         static Basis HandBasisOf(Rig r)
@@ -1563,6 +1587,8 @@ public static partial class HumanMeshBuilder
         SchwingGrip, SchwingLeanIn, SchwingLeanOut, SchwingLeanLeft, SchwingLeanRight, SchwingBrace, SchwingDown,
         SchwingGroundTop, SchwingGroundBottom, SchwingStumble, SchwingBrush, SchwingDusted,
         SchwingKurz, SchwingUebersprung, SchwingHueften, SchwingBrienzer, SchwingGammen, SchwingWyberhaken,
+        // #1371: the sword's whole-body poses (HumanMeshBuilder.Sword.cs), the move in DanceParams.Bar; past FightStand, so no groove either
+        SwordPose,
     }
 
     /// <summary>
@@ -1693,6 +1719,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= SwordMoves) return DanceMove.SwordPose;
         if (index >= SchwingMoves) return SchwingResolve(index - SchwingMoves);
         if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
@@ -1744,10 +1771,11 @@ public static partial class HumanMeshBuilder
     private readonly struct Beat
     {
         public readonly float C, B, R, D, E;
-        public readonly int K, Par;
+        public readonly int K, Par, Bar;
 
         public Beat(float barPhase, int bar)
         {
+            Bar = bar;
             R = barPhase - Mathf.Floor(barPhase);
             C = R * 4f;
             K = Mathf.Clamp((int)C, 0, 3);
@@ -2118,6 +2146,7 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case DanceMove.SwordPose: EvalSword(t, mv, ref ch); break;
             case >= DanceMove.SchwingGrip: EvalSchwing(move, t, mv, ref ch); break;
             case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;

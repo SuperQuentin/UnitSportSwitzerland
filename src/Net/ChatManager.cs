@@ -656,6 +656,11 @@ public partial class ChatManager : Node
                     ? said.Length > 0 ? said : "Asked." : "Playing together needs the Adventure layer.", ChatKind.Private);
                 return;
 
+            // a training dummy for the sword (#1371): offline the one process is its own server
+            case "dummy":
+                Show(Combat.SwordService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "[dummy] Not available here.", ChatKind.Private);
+                return;
+
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
                 or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis":
                 // Versteckis has no offline game (#1268): its bots need a server; Host a game from the menu
@@ -1071,6 +1076,11 @@ public partial class ChatManager : Node
                 if (Fight == null) ReplyTo(sender, "Fights are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId) ReplyTo(sender, "'/fight' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Fight.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "dummy":
+                if (sender == ConsolePeerId) ReplyTo(sender, "'/dummy' needs a body to put it in front of.", ChatKind.Error);
+                else ReplyTo(sender, GetNodeOrNull<Combat.SwordService>("../" + Combat.SwordService.NodeName)?.Command(sender, rest) ?? "[dummy] Not available here.", ChatKind.Private);
                 return;
 
             case "schwing":

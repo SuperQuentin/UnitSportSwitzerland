@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using UnitSport.Combat;
 using UnitSport.Player;
 using UnitSport.Core;
 
@@ -311,6 +312,90 @@ void fragment() {{
         _inHand.AddChild(_handFore);
     }
 
+    private MeshInstance3D? _ribbon;
+    private ShaderMaterial? _ribbonMat;
+    private int _ribbonKey = -1;
+    private float _ribbonReveal = -1f, _ribbonFade = -1f;
+    private bool _ribbonPinned;
+
+    /// <summary>
+    /// The blade's trail (#1371, <see cref="SwordTrails"/>): the ribbon of the swing being drawn, pinned in the world at the strike's start and
+    /// revealed along the arc through the active frames, faded over 0.15 s. Only a mesh swap when the swing changes and shader parameters when
+    /// they change; nothing is rebuilt per frame.
+    /// </summary>
+    private void StepTrail()
+    {
+        bool on = _shown == ItemId.Sword && _player != null
+            && _player.SwordTrailState(out var move, out int variant, out int seed, out float reveal, out float fade);
+        if (!on)
+        {
+            if (_ribbon != null && _ribbon.Visible) _ribbon.Visible = false;
+            _ribbonPinned = false;
+            return;
+        }
+        _player!.SwordTrailState(out var m, out int v, out int sd, out float rev, out float fd);
+        if (_ribbon == null)
+        {
+            _ribbonMat = SwordTrails.NewMaterial();
+            _ribbon = new MeshInstance3D
+            {
+                Name = "SwordTrail", TopLevel = true, MaterialOverride = _ribbonMat, Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, ExtraCullMargin = 3f,
+            };
+            AddChild(_ribbon);
+        }
+        int key = (int)m | (v << 4) | (sd << 6);
+        if (key != _ribbonKey)
+        {
+            _ribbonKey = key;
+            _ribbon.Mesh = SwordTrails.Get(m, v, sd);
+            _ribbonPinned = false;
+            _ribbonMat!.SetShaderParameter(GainParam, m is SwordMove.Slash5 or SwordMove.Charged ? 1.5f : 1f);
+        }
+        if (!_ribbonPinned)
+        {
+            // where the body stands as the strike begins: the ribbon stays there while it follows through
+            var t = _player.GlobalTransform;
+            _ribbon.GlobalTransform = new Transform3D(t.Basis.Orthonormalized(), t.Origin);
+            _ribbonPinned = true;
+        }
+        if (!_ribbon.Visible) _ribbon.Visible = true;
+        if (Mathf.Abs(rev - _ribbonReveal) > 0.004f) { _ribbonReveal = rev; _ribbonMat!.SetShaderParameter(RevealParam, rev); }
+        if (Mathf.Abs(fd - _ribbonFade) > 0.004f) { _ribbonFade = fd; _ribbonMat!.SetShaderParameter(FadeParam, fd); }
+    }
+
+    private static readonly StringName RevealParam = "reveal", FadeParam = "fade", GainParam = "gain";
+
+    // the glint at full charge: a small star at the tip, shown only while the charge is full
+    private MeshInstance3D? _glint;
+    private bool _glintOn;
+
+    private void StepGlint()
+    {
+        bool full = _shown == ItemId.Sword && _player != null && _player.SwordShown == SwordMove.Charge && _player.SwordState.Charging
+            && _player.SwordState.ChargeShare(GameClock.Now) >= 0.99f;
+        if (full == _glintOn) return;
+        _glintOn = full;
+        if (_glint == null)
+        {
+            var aabb = ItemDefs.HandMesh(ItemId.Sword)!.GetAabb();
+            float sign = aabb.End.Z > -aabb.Position.Z ? 1f : -1f;
+            _glint = new MeshInstance3D
+            {
+                Name = "Glint", Mesh = new QuadMesh { Size = new Vector2(0.28f, 0.28f) }, Position = new Vector3(0, 0, sign * 0.86f),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = false,
+                MaterialOverride = new StandardMaterial3D
+                {
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha, BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+                    AlbedoColor = new Color(1f, 0.97f, 0.85f, 0.9f),
+                },
+            };
+            _inHand.AddChild(_glint);
+        }
+        _glint.Visible = full;
+    }
+
     private static MeshInstance3D NewForeEnd() => new()
     {
         Name = "ForeEnd",
@@ -380,11 +465,15 @@ void fragment() {{
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
             var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
-            _inHand.Transform = new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f))
-                * RadioBounce(0.7f);
+            // a sword sits in the closed fist by its grip frame (the skinned hand's own); anything else by the wrist
+            _inHand.Transform = id == ItemId.Sword && _player.GripLocal is { } grip
+                ? SwordBlade.NodeFor(grip.Origin, grip.Basis)
+                : new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f)) * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
         StepSparkles(_inHand.Visible, dt);
+        StepTrail();
+        StepGlint();
         StepTorch((id == ItemId.Torch || id == ItemId.Lampion) && any, dt, id == ItemId.Lampion);
 
         // --- in front of the local camera ---
@@ -444,6 +533,7 @@ void fragment() {{
         _viewmodel.Position = (pos + _sway * swayScale + new Vector3(rc * 0.012f, -lowered + rc * 0.03f, Kick * 0.06f + rc * 0.13f)) * ViewScale;
         _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f + rc * 0.22f, rc * 0.03f, rc * 0.07f);
         if (_shown == ItemId.Radio) _viewmodel.Transform *= RadioBounce(0.45f);
+        else if (_shown == ItemId.Sword) _viewmodel.Transform *= SwordSwing();
 
         if (_print != null && IsInstanceValid(_print))
         {
@@ -502,6 +592,17 @@ void fragment() {{
         }
         if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles { Layers = _inHand.Layers });
         _sparkles.Step(true, RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow), dt);
+    }
+
+    /// <summary>
+    /// The sword's swing (#1371): the rigid node turned about the grip along the move's arc (<c>SwordRules.Arc</c>), on every peer
+    /// from its replicated state; identity when the sword is at rest or not in the hand. Nothing is rebuilt.
+    /// </summary>
+    private Transform3D SwordSwing()
+    {
+        if (_shown != ItemId.Sword || _player == null) return Transform3D.Identity;
+        _player.SwordWristNow(out float pitch, out float yaw, out float roll, out float forward);
+        return new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll)), new Vector3(0, 0, forward));
     }
 
     /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>

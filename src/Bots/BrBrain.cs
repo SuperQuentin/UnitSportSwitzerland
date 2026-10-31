@@ -75,7 +75,7 @@ public sealed class BrBrain : IBotBrain
     public double Think(Bot bot, double now)
     {
         var body = bot.Body;
-        bot.Intent.FireAt = null;
+        bot.Intent.FireAt = bot.Intent.SwordAt = bot.Intent.DodgeFrom = null;
         if (body.Eliminated || body.Down != 0)
         {
             bot.Intent = BotIntent.Stand;
@@ -334,7 +334,7 @@ public sealed class BrBrain : IBotBrain
         var ride = body.Ride;
         if (ride is not (Player.RideKind.Wingsuit or Player.RideKind.Parachute)) return false;
         bot.Intent.Wish = Vector3.Zero;
-        bot.Intent.FireAt = null;
+        bot.Intent.FireAt = bot.Intent.SwordAt = bot.Intent.DodgeFrom = null;
         var pos = body.GlobalPosition;
         // after its human: where they are now, a few metres to the side (they choose where the team lands)
         if (JumpWith != 0 && _br.BodyOfPeer(JumpWith) is { } human && _br.State.Find(JumpWith) is { Alive: true })
@@ -538,7 +538,14 @@ public sealed class BrBrain : IBotBrain
         if (Harmless) return;
         // it fires once it has had time to react, with its error
         double seenFor = bot.Senses.FirstSeen.TryGetValue(target.Id, out double first) ? now - first : 0;
-        if (seenFor < bot.Profile.ReactionSeconds || weapon == null) return;
+        if (seenFor < bot.Profile.ReactionSeconds) return;
+        // a sword and no gun (#1371): it swings once the target is at its reach
+        if (weapon == null && BotHands.HasSword(bot))
+        {
+            if (target.Distance <= BotHands.SwordReach + 0.4f) bot.Intent.SwordAt = chest;
+            return;
+        }
+        if (weapon == null) return;
         if (weapon.Melee && target.Distance > weapon.Range + 0.4f) return;
         float error = BrTactics.AimError(bot.Profile.AimErrorDeg, target.Distance, target.Body.NetVel.Length(), (float)seenFor);
         var eye = body.EyePosition;
@@ -620,7 +627,7 @@ public sealed class BrBrain : IBotBrain
         foreach (var x in bot.Senses.Seen)
             if (!x.Downed && x.Distance < BailFrom && me != null && state.Find(x.Id) is { Alive: true } e && BrState.Hostile(me, e)) enemyClose = true;
         bot.Intent.FaceYaw = null;
-        bot.Intent.FireAt = null;
+        bot.Intent.FireAt = bot.Intent.SwordAt = bot.Intent.DodgeFrom = null;
         if (_travel is not { } goal || enemyClose || bot.Drive.Stopping)
         {
             if (BotDriving.GetOut(bot)) _travel = null;
