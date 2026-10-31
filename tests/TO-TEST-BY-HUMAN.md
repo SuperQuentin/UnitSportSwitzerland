@@ -13,6 +13,13 @@ An exported build, a fresh `user://` (so the default CDs are still to burn), joi
 
 - [ ] Quit, start offline → the default CDs burn then; the game and its sound stay smooth while they do (a few cores only).
 
+## Wide tile heights, France terrain ([#1400](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1400))
+
+Needs a v3 region (`tools/build-france.sh test mont-blanc` on the NAS, copy `terrain_chunks_france_test/mont-blanc` and point the game at it with `--chunks`).
+
+- [ ] Start the game on the Mont Blanc tiles, walk to the highest cell (about 4,779 m): does the ground reach it (no flat top at 4,700 m), the terrain look right and the Swiss region still load unchanged afterwards?
+- [ ] Camargue tiles (`camargue`): the lowest ground is below 0 m (-1 m) and the player stands on it without falling through.
+
 ## Sit on chairs, benches and terrace seats ([#1385](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1385))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva).
@@ -580,3 +587,8 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] The Jazz Night (day 8) and the closing night (day 16, `--festival test` is not needed: set the date `--date 2027-07-17` at the real map): the set is longer, the last song of the closing night pays the 20 Batzen finale and the two confetti cannons fire on each song's last chorus.
 - [ ] A real 3-18 July run: the festival is on, the Journal's Festival tab shows the days, the Jazz pass (item 511) is in the pack after the first song, the Batzen convert after the last day.
 - [ ] No audio plays at the stage yet (lights only, the made-up songs): once the owner picks copyright-free jazz tracks (`CdLibrary.JazzUrls`), does the set follow the CD, and does the 80 % rule need `ConcertMusic.At` as the games' clock (a follow-up noted in `occasions/festival-montreuxjazz`)?
+
+## What's new (PR for [#1413](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1413))
+
+- [ ] In a real exported build, update from an older release (delta patch, then again by unpacking the archive by hand) and reach the title: the "What's new" popup lists every release since, newest first, once; the next launch shows none. Offline at the first launch after an update: no popup, it comes at the next online launch.
+- [ ] Pad and VR: the "What's new" title entry opens the notes; the stick scrolls them, B closes (VR: pointer on Close). Is the text readable at the panel's distance?

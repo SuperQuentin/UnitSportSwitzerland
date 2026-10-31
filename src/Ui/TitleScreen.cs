@@ -17,6 +17,7 @@ public partial class TitleScreen : Screen
     private Button _first = null!;
     private UpdatePrompt? _update;
     private Button _updateEntry = null!;
+    private Button _notesEntry = null!;
     private Container? _entries;
 
     public static TitleScreen Create() => new() { Name = "Title" };
@@ -65,6 +66,9 @@ public partial class TitleScreen : Screen
             Entry(column, XR.XrSession.Active ? "Leave VR" : "Play in VR",
                 () => SettingsScreen.AskVr(this, Shell, !XR.XrSession.Active));
         Entry(column, "Controls", () => Shell.ShowControls());
+        // the release notes (#1413): needs the release list, so it waits disabled for the update check's answer
+        _notesEntry = Entry(column, "What's new", () => ShowNotes(UpdateInfo.NotesBetween(UpdatePrompt.Releases ?? [], null, UpdatePrompt.CurrentVersion)));
+        _notesEntry.Visible = false;
         column.AddChild(UiKit.Spacer(8));
         Entry(column, "Quit", () => Shell.Quit(), dim: true);
         _entries = column;
@@ -91,17 +95,26 @@ public partial class TitleScreen : Screen
         _update = UpdatePrompt.Attach(this);
         if (_update != null) _update.Stopped += () => _updateEntry.Disabled = false;
         if (UpdatePrompt.Available is { } tag) ShowUpdate(tag);
+        if (_update != null)
+        {
+            _notesEntry.Visible = true;
+            _notesEntry.Disabled = true;
+            _notesEntry.TooltipText = "Needs the release list from GitHub: not reachable yet";
+            if (UpdatePrompt.Releases != null) OnListed();
+        }
     }
 
     public override void _EnterTree()
     {
         UpdatePrompt.Found += ShowUpdate;
+        UpdatePrompt.Listed += OnListed;
         Net.Accounts.Account.Changed += ShowAccount;
     }
 
     public override void _ExitTree()
     {
         UpdatePrompt.Found -= ShowUpdate;
+        UpdatePrompt.Listed -= OnListed;
         Net.Accounts.Account.Changed -= ShowAccount;
     }
 
@@ -158,6 +171,28 @@ public partial class TitleScreen : Screen
         _updateEntry.Text = $"Update to {tag}";
         _updateEntry.Visible = true;
     }
+
+    /// <summary>
+    /// The release list is in (#1413): the "What's new" entry works, and a build newer than the last one seen
+    /// shows the notes once. The version is recorded only when they were shown (offline: next time); a first
+    /// install just records it.
+    /// </summary>
+    private void OnListed()
+    {
+        if (_update == null || UpdatePrompt.Releases is not { } releases) return;
+        _notesEntry.Disabled = false;
+        _notesEntry.TooltipText = "";
+        string current = UpdatePrompt.CurrentVersion, seen = GameSettings.Current.LastSeenVersion;
+        if (seen == current) return;
+        GameSettings.Current.LastSeenVersion = current;
+        GameSettings.SaveOnly(nameof(GameSettings.LastSeenVersion), current);
+        if (UpdateInfo.ParseVersion(seen) == null || !UpdateInfo.IsNewer(current, seen)) return;
+        var news = UpdateInfo.NotesBetween(releases, seen, current);
+        if (news.Count > 0) ShowNotes(news);
+    }
+
+    private void ShowNotes(IReadOnlyList<UpdateInfo.Release> releases) =>
+        Modal.Notes(this, "What's new", releases.Count > 0 ? ReleaseNotes.Format(releases) : "No release notes for this version.");
 
     private void PressUpdate()
     {

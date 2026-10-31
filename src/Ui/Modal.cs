@@ -210,6 +210,28 @@ public partial class Modal : Control
         return m;
     }
 
+    /// <summary>A scrolling text with one Close button (Esc / B too), for notes longer than a message (#1413).</summary>
+    public static Modal Notes(Control host, string title, string bbcode)
+    {
+        var m = Build(host, title, null, out var body);
+        var text = new RichTextLabel
+        {
+            BbcodeEnabled = true, Text = bbcode, FocusMode = FocusModeEnum.All, // a focused label scrolls on the stick and arrows
+            CustomMinimumSize = new Vector2(560, 360),
+        };
+        text.AddThemeFontSizeOverride("normal_font_size", UiTheme.FontSmall);
+        text.AddThemeFontSizeOverride("bold_font_size", UiTheme.FontSmall);
+        body.AddChild(text);
+        var buttons = UiKit.HBox(10);
+        buttons.Alignment = BoxContainer.AlignmentMode.End;
+        body.AddChild(buttons);
+        var close = UiKit.Button("Close", primary: true, minWidth: 110);
+        close.Pressed += m.Cancel;
+        buttons.AddChild(close);
+        text.CallDeferred(Control.MethodName.GrabFocus);
+        return m;
+    }
+
     /// <summary>
     /// A progress bar, a status line under it and Cancel (also Esc / B). The caller fills both and
     /// closes the modal with <see cref="CloseModal"/> when the work ends.
