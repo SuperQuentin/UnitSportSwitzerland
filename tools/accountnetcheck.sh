@@ -7,7 +7,7 @@
 # Every other net check covers --accounts off (the default), which admits at once.
 #   GODOT=<exe> [PORT=] tools/accountnetcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" accountnet
-if ! docker info > /dev/null 2>&1; then echo "[accountnetcheck] RESULT: FAILED (no Docker: start Docker Desktop, the check needs a Nakama)"; exit 1; fi
+if ! guard_docker_up; then echo "[accountnetcheck] RESULT: FAILED ($GUARD_DOCKER_WHY: the check needs a Nakama)"; exit 1; fi
 . tools/nakama/throwaway.sh
 nk_up unitsport-accountcheck 17360 17361 "$OUT/accountnet_nakama" \
   || { echo "[accountnetcheck] RESULT: FAILED (Nakama did not come up, $OUT/accountnet_nakama/up.log)"; exit 1; }

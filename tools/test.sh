@@ -115,6 +115,49 @@ while read -r prefix tier check; do
   printf "%s\n" ${CHECKS[@]+"${CHECKS[@]}"} | grep -Fqx -- "$tier $check" || CHECKS+=("$tier $check")
 done < tools/lib/checkmap.txt
 
+# A --collidecheck row whose targets another selected row already covers, in the same world, runs once (#1407):
+# several areas list the combined runs and the per-folder ones, and a full run rammed every truck, boat and
+# plane two or three times (11 runs, 1,014 s). Targets compare without case ("Trucks/" = "trucks/").
+collide_parts() { # check: sets C_WORLD (every word but the targets) and C_TARGETS (",a/,b/,", lower case)
+  local w words=() t=
+  read -r -a words <<< "$1"
+  C_WORLD=
+  for ((w = 0; w < ${#words[@]}; w++)); do
+    if [ "${words[w]}" = --targets ]; then t=${words[w + 1]:-}; w=$((w + 1)); else C_WORLD="$C_WORLD ${words[w]}"; fi
+  done
+  C_TARGETS=",$(printf %s "$t" | tr '[:upper:]' '[:lower:]'),"
+}
+collide_covers() { # big small (",a/,b/," lists): every target of small is in big
+  local x rest=${2#,}
+  while [ -n "$rest" ]; do
+    x=${rest%%,*}; rest=${rest#*,}
+    [ -z "$x" ] && continue
+    [[ $1 == *",$x,"* ]] || return 1
+  done
+  return 0
+}
+KEPT=()
+for ((i = 0; i < ${#CHECKS[@]}; i++)); do
+  entry=${CHECKS[i]}; tier=${entry%% *}; check=${entry#* }
+  if [[ $check == --collidecheck* ]] && [[ $check == *--targets* ]]; then
+    collide_parts "$check"; mine_world=$C_WORLD; mine=$C_TARGETS; covered=
+    for ((j = 0; j < ${#CHECKS[@]}; j++)); do
+      [ "$j" = "$i" ] && continue
+      other=${CHECKS[j]#* }; [ "${CHECKS[j]%% *}" = "$tier" ] || continue
+      [[ $other == --collidecheck* ]] && [[ $other == *--targets* ]] || continue
+      collide_parts "$other"
+      [ "$C_WORLD" = "$mine_world" ] || continue
+      collide_covers "$C_TARGETS" "$mine" || continue
+      # the same set twice in other spellings: keep the first
+      if collide_covers "$mine" "$C_TARGETS" && [ "$j" -gt "$i" ]; then continue; fi
+      covered=yes; break
+    done
+    [ -n "$covered" ] && { echo "[test] skipped $check: another selected collidecheck covers its targets"; continue; }
+  fi
+  KEPT+=("$entry")
+done
+CHECKS=(${KEPT[@]+"${KEPT[@]}"})
+
 # --- tier 0 -----------------------------------------------------------------------------------
 t0=$SECONDS
 guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests

@@ -17,8 +17,12 @@ SEED=${SEED:-1}
 AT=${AT:-2518038,1167321}
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
+# where the game looks (#1407): CHUNKS, else terrain_location.json's "chunks" (as TerrainPaths reads it), else the project's
+if [ -z "${CHUNKS:-}" ] && [ -f terrain_location.json ]; then
+  CHUNKS=$(sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' terrain_location.json | head -1 | sed 's#\\\\#/#g')
+fi
 CHUNKS=${CHUNKS:-$ROOT/terrain_chunks}
-[ -f "$CHUNKS/manifest.json" ] || { echo "no terrain in $CHUNKS (set CHUNKS=<dir>)"; exit 1; }
+[ -f "$CHUNKS/manifest.json" ] || { echo "no terrain in $CHUNKS (set CHUNKS=<dir>, or terrain_location.json)"; exit 1; }
 OUT=$ROOT/test_output/loadtest/$LABEL
 rm -rf "$OUT"; mkdir -p "$OUT"
 BOTS=$((PLAYERS - 1))
