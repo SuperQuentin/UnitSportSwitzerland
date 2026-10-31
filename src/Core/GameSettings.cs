@@ -566,6 +566,18 @@ public sealed class GameSettings
     /// <summary>Reads the file (if any), then the command line. Call once at boot.</summary>
     public static void Load()
     {
+        // a test run (#1411): the fixed profile, never the machine's file, then the check's own flags
+        if (TestRun)
+        {
+            var test = TestProfile();
+            test.Clamp();
+            test.ApplyCommandLine(CmdArgs.All);
+            if (WantsGeneratedWorld(CmdArgs.All)) test.GeneratedFill = true;
+            Current = test;
+            GD.Print($"[settings] test profile: rings={test.RenderDistanceRings} horizon={test.HorizonKm}km detail={test.Detail} "
+                + $"scale={test.RenderScale} aa={test.AntiAliasing} window={test.WindowWidth}x{test.WindowHeight}");
+            return;
+        }
         // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
         if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
@@ -602,6 +614,47 @@ public sealed class GameSettings
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
             + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} aa={loaded.AntiAliasing} vsync={loaded.VSync} "
             + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
+    }
+
+    /// <summary>
+    /// A test run (#1411): its user:// holds test_window.cfg (tools/lib/guard.sh), so it never reads or
+    /// writes settings.json and plays on <see cref="TestProfile"/>, the same on every machine.
+    /// </summary>
+    public static bool TestRun => MouseCapture.TestWindow;
+
+    /// <summary>
+    /// What every check runs on (#1411): the code defaults, fixed with the repo, at the least a world needs
+    /// to stand up, so a full run leaves the machine to the person at it. Detail Low, not VeryLow: the
+    /// near terrain's LOD rings stay as a player's. A check that needs more asks on its command line
+    /// (--rings, --horizon, --detail, --render-scale, --aa, --mirrors ...), which <see cref="ApplyCommandLine"/> lays on top.
+    /// </summary>
+    public static GameSettings TestProfile() => new()
+    {
+        RenderDistanceRings = MinRings,
+        HorizonKm = 0,
+        Detail = DetailPreset.Low,
+        RenderScale = 0.5f,
+        AntiAliasing = AntiAliasing.Off,
+        ConcertScreenWidth = 256,
+        CockpitMirrors = false,
+        WindowWidth = 640,
+        WindowHeight = 360,
+        FirstRunDone = false,   // as a fresh user:// before: the welcome stays a probe's own choice
+    };
+
+    /// <summary>
+    /// A test run's process below normal priority (#1411), headless or windowed, server or client: the
+    /// person at the machine is served first; its ffmpeg and yt-dlp children inherit the class.
+    /// </summary>
+    public static void LowerTestPriority()
+    {
+        if (!TestRun) return;
+        try
+        {
+            System.Diagnostics.Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
+            GD.Print("[settings] test run: below normal priority");
+        }
+        catch (Exception e) { GD.Print($"[settings] could not lower the test run's priority: {e.Message}"); }
     }
 
     /// <summary>
@@ -670,6 +723,7 @@ public sealed class GameSettings
 
     public void Save()
     {
+        if (TestRun) return;   // the fixed profile stays fixed (#1411)
         try
         {
             JsonStore.Save(File, this, JsonOptions);

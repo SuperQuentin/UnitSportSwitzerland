@@ -35,6 +35,13 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   `tools/` scripts isolate themselves. The real one carried the player's settings, CDs and placed objects
   into the checks: an H-pattern truck gearbox failed seven quick checks on one machine and passed on the
   next. `TEST_USERDATA=real` runs them on the real one, to debug a check against your own data.
+- **Every check plays on one fixed, minimal profile, at low priority (#1411)**: in a test run (the test
+  `user://`'s `unitsport/test_window`) `GameSettings` never reads or writes `settings.json`; it starts from
+  `GameSettings.TestProfile()` (code defaults, versioned with the repo; 6 rings, horizon off, detail Low,
+  render scale 0.5, no AA, 256 px concert screens, no mirrors, 640x360), the same on every machine, and
+  the process runs below normal priority. A check that needs more says so on its command line (`--rings`,
+  `--horizon`, `--detail`, `--render-scale`, `--aa`, `--mirrors`), never by changing the profile.
+  `lootsynccheck` on real terrain: 978 MB per client, 2.4 GB in all (3.4 GB per client on the defaults).
 - **A windowed check by hand** (a session running one probe straight from Godot) gets none of that on
   its own: `. tools/lib/guard.sh; guard_test_userdata test_output/userdata_<x>` first (then
   `${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} <godot> --path . -- --<x>check ...`), or headless when it
