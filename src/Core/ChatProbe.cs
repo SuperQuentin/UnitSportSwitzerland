@@ -181,8 +181,12 @@ public abstract partial class ChatProbe : Node
         await Seconds(past);
         me.WalkControls = null;
         if (!ok)
-            GD.Print($"{Log} walked {(me.GlobalPosition - from).Length():F2} m of the way in {seconds} s, to {me.GlobalPosition}, "
-                + $"on the floor {me.IsOnFloor()}, velocity {me.Velocity}");
+        {
+            var near = PlayerSnapshot.Of(GetTree()).Where(s => s.Player != me && s.Pos.DistanceTo(me.GlobalPosition) < 3f)
+                .Select(s => $"{s.Player.Name} {s.Pos - me.GlobalPosition}");
+            GD.Print($"{Log} walked {(me.GlobalPosition - from).Length():F2} m of the way in {seconds} s, from {from} to {me.GlobalPosition}, "
+                + $"on the floor {me.IsOnFloor()}, velocity {me.Velocity}, players within 3 m: [{string.Join("; ", near)}]");
+        }
         return ok;
     }
 
