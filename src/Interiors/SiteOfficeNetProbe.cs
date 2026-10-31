@@ -245,10 +245,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
     /// <summary>Walks through the open door into the office: the player's space must become it.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, string doorKey)
     {
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkUntil(me, -me.Camera.GlobalTransform.Basis.Z, () => me.Indoors && interiors.Current != null, 8);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         Expect(interiors.Current!.Kind == BuildingKind.UnderConstruction, $"{_role} walked into the site office {interiors.Current.Key}");

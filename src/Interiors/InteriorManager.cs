@@ -1279,10 +1279,21 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (problems.Count > 0)
             GD.PushWarning($"[interior] {keyText}: {string.Join("; ", problems.Take(3))}");
 
+        // Only a cache, and every writer stores the same plan. Games sharing one user:// (a check's
+        // clients, a server beside its client) plan a building at once: a shared ".part" was open
+        // in another process, and the throw took the caller's plan with it (#1401).
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        string tmp = path + ".part";
-        await File.WriteAllTextAsync(tmp, layout.ToJson());
-        File.Move(tmp, path, overwrite: true);
+        string tmp = $"{path}.{Guid.NewGuid():N}.part";
+        try
+        {
+            await File.WriteAllTextAsync(tmp, layout.ToJson());
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Windows refuses to replace a file another game is reading: it holds the same plan
+            try { File.Delete(tmp); } catch (IOException) { }
+        }
         return layout;
     }
 }
