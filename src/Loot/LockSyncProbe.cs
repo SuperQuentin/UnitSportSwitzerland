@@ -102,7 +102,10 @@ public partial class LockSyncProbe : ChatProbe
         if (layout.Key != plan.Key) { Fail($"walked into {layout.Key}, not {plan.Key}"); return; }
         Expect(!node.IsLockOpen(index) && !loot.IsUnlocked(layout.Key, index), "the lock starts shut");
 
+        // one after the other: two bodies set down inside each other are eased apart, off the spot (#1401)
+        if (_role == "B" && !await Heard("A", "stood", 60)) { Fail("A never stood at the lock"); return; }
         if (!await StandAt(me, layout, node, index)) return;
+        if (_role == "A") Say("stood");
         Expect(LootService.NearestContainer(me, layout, node) == index, $"standing in front of the {lockType}");
         Shot("shut");
 
@@ -216,7 +219,7 @@ public partial class LockSyncProbe : ChatProbe
         for (int attempt = 0; attempt < 4 && !open; attempt++)
         {
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
-            open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
+            open = await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, DoorSettle, 5 + attempt * 2);
         }
         if (!open) { Fail($"the door {doorKey} never opened"); return false; }
         bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
@@ -233,10 +236,13 @@ public partial class LockSyncProbe : ChatProbe
         var front = turn * new Vector3(0, 0, f.D / 2 + 0.55f);
         var face = node.GlobalTransform.Basis * -front;
         float sign = _role == "A" ? -1f : 1f;
-        foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f })
+        foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f, 0.6f })
         {
             var side = turn * new Vector3(sign * offset, 0, 0);
-            me.EnterInterior(layout.Key, node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side), Mathf.Atan2(-face.X, -face.Z));
+            var spot = node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side);
+            // never onto the other player: bodies closer than this touch, and set down inside each other they are eased apart (#1401)
+            if (PlayerSnapshot.Of(GetTree()).Any(s => s.Player != me && s.Pos.DistanceTo(spot) < 0.7f)) continue;
+            me.EnterInterior(layout.Key, spot, Mathf.Atan2(-face.X, -face.Z));
             me.Velocity = Vector3.Zero;
             await Seconds(0.8);
             if (InteriorManager.Instance?.Current?.Key == layout.Key && LootService.NearestContainer(me, layout, node) == index) return true;

@@ -57,7 +57,7 @@ public partial class LootSyncProbe : ChatProbe
         // doors are portals (#59): E opens it — unless the other client already did, when E would
         // shut it in their face — it swings, and you walk through
         if (!interiors.IsOpen(doorKey)) me.TryInteract();
-        if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
+        if (!await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, DoorSettle, 15))
         { Fail($"the door {doorKey} never opened"); return; }
         bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return; }

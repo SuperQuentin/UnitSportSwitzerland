@@ -326,7 +326,7 @@ public partial class CinemaNetProbe : ChatProbe
         for (int attempt = 0; attempt < 4 && !open; attempt++)
         {
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
-            open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
+            open = await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, DoorSettle, 5 + attempt * 2);
         }
         if (!open) { Fail($"the door {doorKey} never opened"); return false; }
         bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);

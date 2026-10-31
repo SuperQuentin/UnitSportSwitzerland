@@ -299,7 +299,7 @@ public partial class ShopProbe : ChatProbe
         for (int attempt = 0; attempt < 6 && !open; attempt++)
         {
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
-            open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
+            open = await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, DoorSettle, 5 + attempt * 2);
         }
         if (!open)
         {

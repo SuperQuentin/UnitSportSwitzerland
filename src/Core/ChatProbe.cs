@@ -197,6 +197,13 @@ public abstract partial class ChatProbe : Node
         }, there, seconds, 0.4);
     }
 
+    /// <summary>
+    /// How long a door must have stood open before a probe walks at it, s: two clients reaching for one door
+    /// at once, the second E shuts what the first opened a round trip later, and a walker who set off on the
+    /// first frame it read open met the shell (no hole in it) and climbed the facade (#1401).
+    /// </summary>
+    protected const double DoorSettle = 1.0;
+
     /// <summary>How far ahead on the doorway's middle line <see cref="WalkInThrough"/> aims, m: a player half a metre off it is back within a metre.</summary>
     private const float DoorAimAhead = 0.6f;
 
