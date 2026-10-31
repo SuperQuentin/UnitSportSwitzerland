@@ -3,7 +3,7 @@
 - **Online, nobody picks their own spawn.** Joining (LAN list, saved server, address, hosting) does
   not open the landing map (`GameShell.LaunchVia` skips it for `GameMode.Multiplayer`). `Net/Arrival`
   at `World/Arrival` (server and every client) sends `Rules(e, n, freeTeleport, world)` (world: the test world id, #999, `core/test-worlds`) to each peer in
-  `ServerWorld.OnPeerAccepted`, right after its player is spawned. Server flags: `--spawn E,N`
+  `ServerWorld.OnPeerAccepted`, first thing (before the player is spawned, #1380; still before `Sleepers.WakeAt`). Server flags: `--spawn E,N`
   (LV95, default Riddes), `--no-teleport`.
 - **Client**: `ClientWorld` sets `_awaitingServerSpawn` at boot for a networked launch without `--at`;
   it is part of `SpawnPending`, so the loading screen stays on "Placing you" and the networked body

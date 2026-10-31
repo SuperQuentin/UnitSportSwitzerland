@@ -23,4 +23,4 @@
   first. Named after the build's module id (any rebuild regenerates; old files are deleted on save);
   blended tiles are keyed by a hash of the real knots they blend on. Cache everything or nothing that
   touches the generator: with the plain tiles cached, the 180 blended ones alone took ~4 s, because
-  the plain pass is what used to warm the generator's lattice cache. Warm launch: 0.3 s.
+  the plain pass is what used to warm the generator's lattice cache. Warm launch: 0.3 s. The boot pass and the pass after the server index merged blend on different real sets: the file holds the union of their blended tiles (#1380; each used to erase the other's, ~4.5 s of recomputing every launch).
