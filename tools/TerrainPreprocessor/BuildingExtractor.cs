@@ -28,13 +28,6 @@ public sealed class BuildingExtractor
 
     private Func<double, double, double?>? _heightOf;
 
-    /// <summary>
-    /// Depth of the building base below our terrain after normalisation. The source
-    /// solids include a foundation block, so a little burial is correct — what is not
-    /// correct is letting its depth vary with the mismatch between swisstopo's terrain
-    /// and ours, which buried some buildings by over 5 m.
-    /// </summary>
-    private const double FoundationDepth = 0.8;
 
     /// <summary>Reads the solids from an exported GeoPackage (what GDAL used to produce).</summary>
     public BuildingExtractor(string gpkgPath, string? gwrSqlitePath)
@@ -304,25 +297,17 @@ public sealed class BuildingExtractor
         Total++;
         if (match != null) Matched++;
 
-        // Re-seat the solid on our own heightfield. Sampling a 3x3 grid over the footprint
-        // and taking the median keeps a building on a slope from being driven by one
-        // outlying corner.
+        // Re-seat the solid on our own heightfield (#1419): the ground level is chosen from heights sampled
+        // along the footprint outline, not the box around it (an L-shaped house's box corners lie on
+        // other people's ground), at the level that costs least cut and fill within the pad cap
+        // (BuildingPad.ChooseGround). The tile grading stage then levels the heights inside the outline to it.
         double lift = 0;
         if (_heightOf != null)
         {
-            var samples = new List<double>(9);
-            for (int gy = 0; gy <= 2; gy++)
-                for (int gx = 0; gx <= 2; gx++)
-                {
-                    double? h = _heightOf(minE + (maxE - minE) * gx / 2.0,
-                                          minN + (maxN - minN) * gy / 2.0);
-                    if (h.HasValue) samples.Add(h.Value);
-                }
-            if (samples.Count > 0)
+            double? ground = OutlineGround(rings, minZ, minE, minN, maxE, maxN);
+            if (ground.HasValue)
             {
-                samples.Sort();
-                double ground = samples[samples.Count / 2];
-                lift = (ground - FoundationDepth) - minZ;
+                lift = (ground.Value - BuildingPad.FoundationDepth) - minZ;
                 if (Math.Abs(lift) > 0.05)
                 {
                     Reseated++;
@@ -358,6 +343,57 @@ public sealed class BuildingExtractor
             MaxY = (float)maxZ,
             Triangles = tris,
         });
+    }
+
+    /// <summary>
+    /// The ground level under a solid: <see cref="BuildingPad.ChooseGround"/> over the terrain sampled every
+    /// <see cref="BuildingPad.SampleStepM"/> along the bottom edges of its walls (the outline). A solid with
+    /// no such edges falls back to the median of a 3x3 grid over its box.
+    /// </summary>
+    private double? OutlineGround(List<GeoPackageReader.Ring> rings, double minZ,
+        double minE, double minN, double maxE, double maxN)
+    {
+        var samples = new List<double>();
+        foreach (var ring in rings)
+        {
+            int corners = ring.Count - 1;
+            if (corners < 3) continue;
+            // a wall face has a (near) horizontal normal; floors and roofs are skipped
+            double nx = 0, ny = 0, nz = 0;
+            for (int i = 0; i < corners; i++)
+            {
+                int j = (i + 1) % corners;
+                double x0 = ring.Xyz[i * 3], y0 = ring.Xyz[i * 3 + 1], z0 = ring.Xyz[i * 3 + 2];
+                double x1 = ring.Xyz[j * 3], y1 = ring.Xyz[j * 3 + 1], z1 = ring.Xyz[j * 3 + 2];
+                nx += (y0 - y1) * (z0 + z1);
+                ny += (z0 - z1) * (x0 + x1);
+                nz += (x0 - x1) * (y0 + y1);
+            }
+            double len = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            if (len < 1e-9 || Math.Abs(nz) / len >= 0.5) continue;
+            for (int i = 0; i < corners; i++)
+            {
+                int j = (i + 1) % corners;
+                if (ring.Xyz[i * 3 + 2] > minZ + 0.1 || ring.Xyz[j * 3 + 2] > minZ + 0.1) continue;
+                double x0 = ring.Xyz[i * 3], y0 = ring.Xyz[i * 3 + 1], x1 = ring.Xyz[j * 3], y1 = ring.Xyz[j * 3 + 1];
+                double l = Math.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+                int steps = Math.Max(1, (int)Math.Ceiling(l / BuildingPad.SampleStepM));
+                for (int k = 0; k < steps && samples.Count < 4000; k++)
+                {
+                    double u = (double)k / steps;
+                    if (_heightOf!(x0 + (x1 - x0) * u, y0 + (y1 - y0) * u) is { } h) samples.Add(h);
+                }
+            }
+        }
+        if (samples.Count >= 4) return BuildingPad.ChooseGround(samples);
+
+        var box = new List<double>(9);
+        for (int gy = 0; gy <= 2; gy++)
+            for (int gx = 0; gx <= 2; gx++)
+                if (_heightOf!(minE + (maxE - minE) * gx / 2.0, minN + (maxN - minN) * gy / 2.0) is { } h) box.Add(h);
+        if (box.Count == 0) return null;
+        box.Sort();
+        return box[box.Count / 2];
     }
 
     private static void WriteVertex(float[] tris, ref int w, GeoPackageReader.Ring ring,

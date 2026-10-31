@@ -155,6 +155,8 @@ public static partial class Preprocessor
         string? poisFile = null, boundariesGpkg = null, atlasCards = null;
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false, hashOnly = false;
+        // building pads graded into the tile heights between the building and the road extraction (#1419); --no-grade skips it
+        bool noGrade = false;
         string? franceBox = null;
         // the neighbours' terrain (#936, #965): their DEMs for the LV95 tiles swissALTI3D lacks, in a box (km).
         // --dem <grid>,<dir>[,<dz m>] is repeatable; --rgealti <dir> [--rgealti-dz m] is --dem lambert93,<dir>,<dz>
@@ -280,6 +282,7 @@ public static partial class Preprocessor
                 case "--manifest-hash": hashOnly = true; break;
                 // no hashing after this pass (RunCoreAsync)
                 case "--no-hash": break;
+                case "--no-grade": noGrade = true; break;
                 default:
                     Console.Error.WriteLine($"Unknown argument: {args[i]}");
                     return 2;
@@ -892,8 +895,36 @@ public static partial class Preprocessor
             // once (a junction on a batch seam needs both sides) and measures streets against the facades
             // (#119); cover masks trees off the network stage's final lines
             bool roads = tlmGpkg != null && !coverOnly;
+            // building pads (#1419): the buildings are seated on the raw heights, the pads are graded into the
+            // tiles afterwards, and only then are the roads draped, so they lie on the graded ground
+            bool grade = buildings != null && !noGrade;
+            var gradeTiles = ordered.Select(t => t.Id).ToList();
+            if (grade)
+            {
+                SetStage("grade");
+                int rc = GradeStage.Restore(outDir!, tempDir!, gradeTiles, jobs, ct);
+                if (rc != 0) return rc;
+            }
             if (roads)
             {
+                if (buildings != null)
+                {
+                    SetStage("buildings");
+                    for (int b = 0; b < batches; b++)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var batch = LoadBatch(b, out var slice);
+                        Console.WriteLine($"=== buildings, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+                        int rc = BuildingStage.Run(buildings, outDir!, batch);
+                        if (rc != 0) return rc;
+                    }
+                    if (grade)
+                    {
+                        SetStage("grade");
+                        int rc = GradeStage.Run(outDir!, tempDir!, gradeTiles, jobs, ct);
+                        if (rc != 0) return rc;
+                    }
+                }
                 SetStage("roads");
                 for (int b = 0; b < batches; b++)
                 {
@@ -902,11 +933,6 @@ public static partial class Preprocessor
                     Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
                     int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch, coverOverrides);
                     if (rc != 0) return rc;
-                    if (buildings != null)
-                    {
-                        rc = BuildingStage.Run(buildings, outDir!, batch);
-                        if (rc != 0) return rc;
-                    }
                 }
                 int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
                 if (nrc != 0) return nrc;
@@ -934,6 +960,12 @@ public static partial class Preprocessor
                     int rc = buildings == null ? 1 : BuildingStage.Run(buildings, outDir!, batch);
                     if (rc != 0) return rc;
                 }
+            }
+            if (grade && !roads)
+            {
+                SetStage("grade");
+                int grc = GradeStage.Run(outDir!, tempDir!, gradeTiles, jobs, ct);
+                if (grc != 0) return grc;
             }
             // the cover says where the water is, so the beds follow every cover pass (whole region: the
             // water bodies and their depths are region-wide)

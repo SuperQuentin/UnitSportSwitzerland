@@ -186,6 +186,7 @@ public static class GroundCheck
         float Ground(Vector3 p) => (float)drawn.SampleMeshHeight(bt.Id.MinE + p.X, bt.Id.MaxN - p.Z);
         int total = 0, buried = 0, floating = 0, stoops = 0, level = 0;
         var worst = new List<(float Off, string What)>();
+        var off = new int[2, 3];   // buried / floating by how far: 0.1-0.3, 0.3-1, over 1 m
         foreach (var d in doors)
         {
             if (d.Width <= 0 || !BuildingMeshBuilder.Drawn(bt.Buildings[d.Index])) continue;
@@ -200,11 +201,11 @@ public static class GroundCheck
             float drop = sill - low - d.Steps * d.Rise;
             if (d.Steps > 0) stoops++;
             string where = $"--at {bt.Id.MinE + d.Position.X:F0},{bt.Id.MaxN - d.Position.Z:F0} slot {d.Slot} sill {sill:F2} front {low:F2}..{high:F2} steps {d.Steps}";
-            if (high - sill > 0.1f) { buried++; worst.Add((high - sill, "buried " + where)); }
-            else if (drop > 0.15f) { floating++; worst.Add((drop, "floating " + where)); }
+            if (high - sill > 0.1f) { buried++; off[0, high - sill < 0.3f ? 0 : high - sill < 1f ? 1 : 2]++; worst.Add((high - sill, "buried " + where)); }
+            else if (drop > 0.15f) { floating++; off[1, drop < 0.3f ? 0 : drop < 1f ? 1 : 2]++; worst.Add((drop, "floating " + where)); }
             else level++;
         }
-        say($"  doors stride {stride}: {total} doors; buried>10cm {buried}, floating>15cm {floating}, with a stoop {stoops}, level {level}"
+        say($"  doors stride {stride}: {total} doors; buried>10cm {buried}, floating>15cm {floating}, with a stoop {stoops}, level {level} (buried by 0.1-0.3/0.3-1/>1 m: {off[0, 0]}/{off[0, 1]}/{off[0, 2]}, floating {off[1, 0]}/{off[1, 1]}/{off[1, 2]})"
             + (worst.Count > 0 ? "; worst: " + string.Join(" | ", worst.OrderByDescending(w => w.Off).Take(3).Select(w => $"{w.Off:F2} m {w.What}")) : ""));
     }
 }
