@@ -40,6 +40,7 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   pad A / right stick back, nudge W / pad X
   (Q / R or the left stick for the side), Start E / Y, Esc / B back. VR: the head stays the camera, grips and
   triggers flip (they are the pad's shoulders, `XrPad`). Sounds `PinballSounds` via `PinballCabinet.Audio`.
+- **Phone** (#1353): the touch overlay stays at a machine in its pinball layout (`core/touch-controls`): a Flip under each thumb, Plunger, Nudge, Back; Start as a pill.
 - **`/pinball`** (offline): `list`, `play <n>`, `start`, `robot` (a robot at the flippers), `view`. BowlinGland
   (Gland): `--origin 2510000,1140000`, shot `429.1,i1.6,-978.3,-5,43.4,3,<png>`, then machines #7 and #8 at plan
   x 39.16 / 35.69, z 16.02, turned 2: the eye pose `35.69,l1.5,14.93,-21.5,180`, straight down

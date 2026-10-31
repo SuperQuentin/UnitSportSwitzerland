@@ -24,6 +24,15 @@ Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
 - [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
 - [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
 
+## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
+
+On the Android phone (a test APK).
+
+- [ ] Walk up to a building's door, a shop counter, a loot cupboard: a cyan pill names it ("Open the door") on the right edge; a tap does it.
+- [ ] In a bowling centre: the shoe counter, a ball rack and the approach each show their pill. Step up: the overlay stays, with Bowl, Back and Pins; the stick walks the spot, a drag turns the line; Bowl sets it, then hold Bowl to swing and slide the thumb sideways for hook, let go to roll. Back steps back. Is a whole frame comfortable?
+- [ ] At a pinball machine: the overlay stays with a Flip under each thumb, Plunger and Nudge on the right, Back on the left, a Start pill. Hold Plunger and let go to launch; both flippers at once work; Left-handed in Settings keeps the left flipper on the left. Is a whole game comfortable?
+- [ ] II (pause) on a phone held sideways: every entry down to Quit can be reached (it scrolls when it does not fit), Leave to main menu works.
+
 ## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
 
 - [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 30 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.
