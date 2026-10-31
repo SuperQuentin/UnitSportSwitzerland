@@ -179,10 +179,7 @@ public partial class SiteUpperNetProbe : ChatProbe
                 me.EnterInterior(layout.Key, at, Mathf.Atan2(-face.X, -face.Z));
                 me.Velocity = Vector3.Zero;
                 await Seconds(0.8);
-                Input.ActionPress(PlayerInput.MoveForward);
-                bool outside = await Until(() => !me.Indoors, 6);
-                await Seconds(0.3);
-                Input.ActionRelease(PlayerInput.MoveForward);
+                bool outside = await WalkUntil(me, face, () => !me.Indoors, 6, 0.3);
                 await Until(() => Mathf.Abs(me.GlobalPosition.Y - Deck()) < 0.6f && me.IsOnFloor(), 3);
                 Expect(outside, $"C walked out through {doorKey}");
                 Expect(Mathf.Abs(me.GlobalPosition.Y - Deck()) < 0.6f && me.IsOnFloor(),
@@ -312,10 +309,7 @@ public partial class SiteUpperNetProbe : ChatProbe
     /// <summary>Walks through the open door: the player's space must become the office's, on the door's floor.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, string doorKey)
     {
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkUntil(me, -me.Camera.GlobalTransform.Basis.Z, () => me.Indoors && interiors.Current != null, 8);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         var layout = interiors.Current!;

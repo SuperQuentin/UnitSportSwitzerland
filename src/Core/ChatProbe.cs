@@ -166,6 +166,33 @@ public abstract partial class ChatProbe : Node
     protected async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
 
     /// <summary>
+    /// Walks <paramref name="me"/> along <paramref name="way"/> (world, flattened) until <paramref name="there"/>, at
+    /// most <paramref name="seconds"/>, and <paramref name="past"/> s on, through the walk intent (<see
+    /// cref="FootPlayer.WalkControls"/>, a bot's seam). Never a held <c>Input.ActionPress</c>: Godot lets go of every
+    /// held action when the window loses focus (another test window opening, a click elsewhere), and a player walking
+    /// in through a door stopped on the doorstep now and then (#1401). Says where it stopped when it never got there.
+    /// </summary>
+    protected async Task<bool> WalkUntil(FootPlayer me, Vector3 way, Func<bool> there, double seconds, double past = 0.4)
+    {
+        var wish = (way with { Y = 0 }).Normalized();
+        var from = me.GlobalPosition;
+        me.WalkControls = () => (wish, false);
+        bool ok = await Until(there, seconds);
+        await Seconds(past);
+        me.WalkControls = null;
+        if (!ok)
+            GD.Print($"{Log} walked {(me.GlobalPosition - from).Length():F2} m of the way in {seconds} s, to {me.GlobalPosition}, "
+                + $"on the floor {me.IsOnFloor()}, velocity {me.Velocity}");
+        return ok;
+    }
+
+    /// <summary>Logged, for a check whose window loses focus: Godot lets go of every held action then (#1401).</summary>
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusOut) GD.Print($"{Log} the window lost focus");
+    }
+
+    /// <summary>
     /// <c>--checkspeed n</c> (#931): the whole simulation n times faster through <c>/speed</c>, for a net check whose
     /// time is simulated waiting (bots falling, fight rounds). Logs in with <paramref name="password"/> (the server's
     /// <c>--admin-password</c>) unless already admin, and waits until the scale is on this peer; every peer follows,

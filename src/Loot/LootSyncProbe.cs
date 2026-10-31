@@ -59,10 +59,7 @@ public partial class LootSyncProbe : ChatProbe
         if (!interiors.IsOpen(doorKey)) me.TryInteract();
         if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
         { Fail($"the door {doorKey} never opened"); return; }
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkUntil(me, inward, () => me.Indoors && interiors.Current != null, 8);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return; }
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         var layout = interiors.Current!;
