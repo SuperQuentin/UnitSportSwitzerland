@@ -7,6 +7,12 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
+
+An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.
+
+- [ ] Quit, start offline → the default CDs burn then; the game and its sound stay smooth while they do (a few cores only).
+
 ## Wide tile heights, France terrain ([#1400](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1400))
 
 Needs a v3 region (`tools/build-france.sh test mont-blanc` on the NAS, copy `terrain_chunks_france_test/mont-blanc` and point the game at it with `--chunks`).

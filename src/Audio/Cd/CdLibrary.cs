@@ -408,13 +408,16 @@ public partial class CdLibrary : Node
             Changed?.Invoke();
             if (_server && Online) Rpc(MethodName.Added, _all[cd.Id].ToDict());
         }
-        if (!_burning && _fixtures.TryDequeue(out string? next))
+        // online, the server's library is what plays (#1414): a client's default queue and backfill wait
+        // for the next offline start, so they never take the cores the radio's audio thread needs
+        bool owns = Owns;
+        if (owns && !_burning && _fixtures.TryDequeue(out string? next))
         {
             Begin(0, next, false, out string refusal);
             if (refusal.Length > 0) GD.PushWarning($"[cd] fixture refused: {refusal}");
         }
         while (_reanalysed.TryDequeue(out var r)) Reanalysed(r.Id, r.Personal, r.Analysis, r.NoFfmpeg);
-        if (!_reanalysing && !_noFfmpeg && _stale.TryDequeue(out var stale)) Reanalyse(stale.Id, stale.Personal);
+        if (owns && !_reanalysing && !_noFfmpeg && _stale.TryDequeue(out var stale)) Reanalyse(stale.Id, stale.Personal);
     }
 
     // ---- analysis backfill (#725) ---------------------------------------------------------------
