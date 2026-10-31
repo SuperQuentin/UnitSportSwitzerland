@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Fondue at a table ([#1384](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1384))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva), adventuring on.
+
+- [ ] Walk the street past restaurants → no "Start a fondue" prompt anywhere but at a table.
+- [ ] Stand at a terrace table, E → the caquelon stands on that table; a friend's E there sits them at it.
+- [ ] Inside the restaurant, at a table, E → the same; at the bar or in the doorway → no prompt.
+- [ ] Pad and VR: the same interaction where E works (the pot's existing button).
 ## Venue music from the street ([#1386](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1386))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva), and any bar or club at night.

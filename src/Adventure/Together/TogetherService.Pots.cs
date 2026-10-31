@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Core;
+using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Net;
 using UnitSport.Player;
@@ -102,8 +103,7 @@ public partial class TogetherService
         var near = new List<Places.Poi>();
         Places.PoiCatalogueHost.Current.Near(at.E, at.N, HutReach, near, PoiKind.Hut);
         if (near.Count > 0) return (PotSpot.Hut, $"hut:{near[0].Id}", near[0].E, near[0].N, (float)at.Alt);
-        // a dining venue (a restaurant, a pub, a Beiz)
-        if (DiningVenueNear(at.E, at.N) is { } v) return (PotSpot.Venue, $"venue:{v.Osm}", v.E, v.N, (float)at.Alt);
+        // a dining venue is no spot by itself: its pots stand on its tables (ServeStartAt, #1384)
         return null;
     }
 
@@ -133,8 +133,29 @@ public partial class TogetherService
     {
         if (!Authority) return "Not here.";
         if (!_adventure.Active(peer)) return Refuse(peer, "No adventuring now.");
-        if (SpotNear(peer, campfireOnly: atFire) is not { } spot) return Refuse(peer, atFire ? "No burning fire here." : "No table for a pot here: a mountain hut, a restaurant, or a fire with a fondue pot.");
+        if (SpotNear(peer, campfireOnly: atFire) is not { } spot)
+            return Refuse(peer, atFire ? "No burning fire here." : "No pot here: E at a restaurant's table, at a mountain hut, or bring a fondue pot to a fire.");
         if (spot.Spot == PotSpot.Campfire && !atFire) return Refuse(peer, "Bring a fondue pot to the fire: use it there.");
+        return StartPot(peer, spot, raclette);
+    }
+
+    /// <summary>
+    /// Starts a pot on a dining venue's table (#1384): the table's top at (<paramref name="e"/>, <paramref name="n"/>,
+    /// <paramref name="alt"/>), which the client found (<see cref="PotTables"/>); within reach of the peer, and a dining
+    /// venue's (its point within <see cref="VenueReach"/>). One pot a table. Null when started (or sat at the one there).
+    /// </summary>
+    public string? ServeStartAt(long peer, bool raclette, double e, double n, float alt)
+    {
+        if (!Authority) return "Not here.";
+        if (!_adventure.Active(peer)) return Refuse(peer, "No adventuring now.");
+        if (PositionOf(peer) is not { } at || Dist(at, e, n) > PotTables.Reach + 0.7f || Math.Abs(at.Alt - alt) > 2.5)
+            return Refuse(peer, "Come to the table first.");
+        if (DiningVenueNear(e, n) is null) return Refuse(peer, "Not a restaurant's table.");
+        return StartPot(peer, (PotSpot.Venue, FormattableString.Invariant($"table:{Math.Round(e, 1)},{Math.Round(n, 1)}"), e, n, alt), raclette);
+    }
+
+    private string? StartPot(long peer, (PotSpot Spot, string Id, double E, double N, float Alt) spot, bool raclette)
+    {
         if (Pots.AtSpot(spot.Id) is { } there) return ServeSit(peer, there.Id);
         if (Pots.Start(peer, spot.Spot, spot.Id, spot.E, spot.N, spot.Alt, raclette, GameClock.Now) is not { } pot) return Refuse(peer, "You sit at another pot.");
         GD.Print($"[fondue] {Who(peer)} starts a {(raclette ? "raclette" : "fondue")} at {spot.Id}");
@@ -160,7 +181,7 @@ public partial class TogetherService
         bool bot = Body(peer) is { Bot: true };
         if (bot) _adventure.SessionFor(peer);
         if (!bot && peer != pot.Starter && !SameParty(peer, pot.Starter) && !_invitedTo.Contains(peer)) return Refuse(peer, "Only the table's party, or whom it invites.");
-        if (PositionOf(peer) is not { } at || Dist(at, pot.E, pot.N) > SitReach + (pot.Spot == PotSpot.Venue ? VenueReach : 2f))
+        if (PositionOf(peer) is not { } at || Dist(at, pot.E, pot.N) > SitReach + 2f)
             return Refuse(peer, "Come to the table first.");
         if (Pots.Sit(pot, peer) is { } why) return Refuse(peer, why);
         GD.Print($"[fondue] {Who(peer)} sits at pot {pot.Id} ({pot.Seats.Count} seated)");
@@ -556,6 +577,19 @@ public partial class TogetherService
         else RpcId(1, MethodName.RequestStart, atFire, raclette);
     }
 
+    /// <summary>Starts a pot on the table the local player stands at (#1384), its top <paramref name="top"/> in the world.</summary>
+    public void AskStartAt(Vector3 top, bool raclette = false)
+    {
+        if (Me?.Invoke() is not { } me) return;
+        // the table's place in LV95: the player's, moved by the table's offset (x east, z south, y up)
+        var d = top - me.GlobalPosition;
+        var g = me.Global;
+        double e = g.E + d.X, n = g.N - d.Z;
+        float alt = (float)(g.Alt + d.Y);
+        if (Authority) ServeStartAt(Self, raclette, e, n, alt);
+        else RpcId(1, MethodName.RequestStartAt, raclette, e, n, alt);
+    }
+
     public void AskSit(int pot)
     {
         if (Authority) ServeSit(Self, pot);
@@ -615,6 +649,9 @@ public partial class TogetherService
     private void RequestStart(bool atFire, bool raclette) { if (_server) ServeStart(Multiplayer.GetRemoteSenderId(), atFire, raclette); }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestStartAt(bool raclette, double e, double n, float alt) { if (_server) ServeStartAt(Multiplayer.GetRemoteSenderId(), raclette, e, n, alt); }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestSit(int pot) { if (_server) ServeSit(Multiplayer.GetRemoteSenderId(), pot); }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -646,22 +683,24 @@ public partial class TogetherService
         return true;
     }
 
-    /// <summary>E with nothing else at hand: sit at a pot offered near, or start one at a hut or a venue. False when neither.</summary>
+    /// <summary>E with nothing else at hand: sit at a pot offered near, or start one on a venue's table or at a hut. False when neither.</summary>
     public bool TryPotInteract(FootPlayer me)
     {
         if (Permissions.InMatch || MyPot != null) return false;
         if (OfferNear() is int id) { AskSit(id); return true; }
+        if (_tableHere is { } top) { AskStartAt(top); return true; }
         if (_spotHere) { AskStart(atFire: false); return true; }
         return false;
     }
 
-    /// <summary>"Sit down at the pot" / "Start a fondue" for E, or null.</summary>
+    /// <summary>"Sit down at the pot" / "Start a fondue" (at a table or a hut) for E, or null.</summary>
     private string? PotPrompt() => Permissions.InMatch || MyPot != null ? null
-        : OfferNear() != null ? "Sit down at the pot" : _spotHere ? "Start a fondue" : null;
+        : OfferNear() != null ? "Sit down at the pot" : _spotHere || _tableHere != null ? "Start a fondue" : null;
 
     // pots offered to the local player (its party's, an accepted invite's): id -> where; the server says when one starts
     private readonly Dictionary<int, (double E, double N, double Until)> _offers = new();
     private bool _spotHere;
+    private Vector3? _tableHere;
     private double _nextSpotLook;
 
     /// <summary>A pot is offered near the local player (checks).</summary>
@@ -675,12 +714,18 @@ public partial class TogetherService
         return null;
     }
 
-    /// <summary>Client, 4 times a second: is there a hut or a venue to start a pot at (campfires take a fondue pot used).</summary>
+    /// <summary>
+    /// Client, 4 times a second: a hut, or a dining venue's table within reach (#1384), to start a pot at (campfires take
+    /// a fondue pot used).
+    /// </summary>
     private void LookForSpot(double now)
     {
         if (now < _nextSpotLook) return;
         _nextSpotLook = now + 0.25;
-        _spotHere = MyPot == null && !Permissions.InMatch && Me?.Invoke() != null && SpotNear(Self) is { Spot: not PotSpot.Campfire };
+        var me = MyPot == null && !Permissions.InMatch ? Me?.Invoke() : null;
+        _spotHere = me != null && SpotNear(Self) is { Spot: PotSpot.Hut };
+        _tableHere = me != null && PotTables.Near(me.GlobalPosition) is { } top
+            && PositionOf(Self) is { } at && DiningVenueNear(at.E, at.N) != null ? top : null;
     }
 
     private void OfferPot(long peer, Pot pot)
@@ -710,7 +755,7 @@ public partial class TogetherService
             case "" or "start" or "raclette":
                 return ServeStart(peer, atFire: false, raclette: verb == "raclette") is { } why ? $"[fondue] {why}" : "[fondue] The pot is on the table.";
             case "sit":
-                if (Pots.All.FirstOrDefault(p => PositionOf(peer) is { } at && Dist(at, p.E, p.N) <= SitReach + VenueReach) is not { } pot) return "[fondue] No pot near.";
+                if (Pots.All.FirstOrDefault(p => PositionOf(peer) is { } at && Dist(at, p.E, p.N) <= SitReach + 2f) is not { } pot) return "[fondue] No pot near.";
                 return ServeSit(peer, pot.Id) is { } no ? $"[fondue] {no}" : "[fondue] You sit down at the pot.";
             case "leave":
                 if (Pots.Of(peer) is not { } mine) return "[fondue] You sit at no pot.";

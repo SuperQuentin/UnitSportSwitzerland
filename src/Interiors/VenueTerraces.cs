@@ -296,6 +296,8 @@ public partial class VenueTerraces : Node
                     Transform = new Transform3D(it.Kind == TerraceKind.Awning ? look * Basis.FromScale(new Vector3(it.Span, 1, 1)) : look, it.At),
                 };
                 root.AddChild(mesh);
+                // a table a fondue pot can stand on (#1384)
+                if (it.Kind is TerraceKind.BistroSet or TerraceKind.BeerBench) PotTables.AddTerrace(root, it.At);
                 if (it.Kind == TerraceKind.Awning) root.AddChild(Valance(Venues.NameOf(v), it, basis));
                 if (TerraceProps.Solid(it.Kind) is { } box)
                     body.AddChild(new CollisionShape3D
