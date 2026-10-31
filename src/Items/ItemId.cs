@@ -279,6 +279,9 @@ public enum ItemId
     // ---- the Sechseläuten (#1358, docs/notes/occasions/festival-sechselaeuten.md); 510-514 are this festival's ----
     /// <summary>A Cervelat grilled on the embers of the Böögg's pyre, once the head has burst: food, warm for 2 minutes.</summary>
     BooggCervelat = 510,
+    // ---- Montreux Jazz (#1394, docs/notes/occasions/festival-montreuxjazz.md); 511-514 are its block ----
+    /// <summary>The festival wristband, given on the first song heard at the Montreux Jazz stage: a keepsake, worth nothing but the look in the hand.</summary>
+    JazzPass = 511,
     // ---- the Chalandamarz (#1356, docs/notes/occasions/festival-chalandamarz.md): 515-519 (the procession's Nusstorte is the existing 436) ----
     /// <summary>A child's hand Treichel from the Chalandamarz, the first march of the day: worth nothing but the sound (the worn Treichel is <see cref="Treichel"/>).</summary>
     ChalandaTreichel = 515,
@@ -287,6 +290,10 @@ public enum ItemId
     Lampion = 520,
     /// <summary>A box of fireworks from the 1 August stand, bought with Batzen: Use lights a 40 s volley of your own, at night.</summary>
     FireworkBox = 521,
+    // ---- the action-RPG combat (#1370; 600-619 are its block) ----
+    /// <summary>The sword (#1371): held, the combat controls are on (<see cref="ItemUse.Sword"/>, <c>docs/notes/combat/sword-combat.md</c>).</summary>
+    Sword = 600,
+
     // ---- the Zibelemärit (#1373, docs/notes/occasions/festival-zibelemaerit.md; 525-529 are its block) ----
     /// <summary>A braid of onions, bought at the Zwiebelzopf stall: worth nothing but the look in the hand.</summary>
     Zwiebelzopf = 525,
@@ -365,4 +372,6 @@ public enum ItemUse
     Firework,
     /// <summary>Use throws a handful of Räppli: confetti on every peer near, one used up (<see cref="ItemId.Raeppli"/>, #1357).</summary>
     Confetti,
+    /// <summary>Held, the combat controls are on: Use swings (a combo; held after a swing, a charged blow), the dodge and the lock-on have their own keys (<see cref="ItemId.Sword"/>, #1371).</summary>
+    Sword,
 }

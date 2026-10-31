@@ -98,7 +98,8 @@ public partial class FestivalPage : Control
         Lines.Add("-- Days");
         foreach (var row in def.Days)
         {
-            string games = string.Join(", ", row.Opens.Select(id => def.Game(id)?.Title ?? id));
+            // a day that opens no game (Montreux Jazz's Jazz Night and closing concert, #1394) says what it is instead
+            string games = row.Opens.Length == 0 ? row.Blurb : string.Join(", ", row.Opens.Select(id => def.Game(id)?.Title ?? id));
             bool open = row.From <= run.Day;
             string state = open ? "open" : row.From == run.Day + 1 ? "tomorrow" : $"opens day {row.From}";
             Line($"Day {row.From} · {games} · {state}", open ? UiTheme.Good : UiTheme.TextDim, card);

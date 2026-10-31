@@ -13,6 +13,83 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 
 - [ ] Stand at a venue's door → its music clearly heard, quieter than inside; walk away → it fades and dulls within some 20 m.
 - [ ] Two venues side by side → each heard at its own door, neither drowning the street.
+## Venues and shop units: their own door and a glazed front ([#1327](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1327))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499805,1117476` (Trois Verres, Geneva; `--venuecheck --venuedoors "Trois Verres"` prints its door).
+
+- [ ] Walk the street past a block with shops under flats → each shop has its own door and a glazed front of 1.1 m bays, a stone plinth, a fascia; no window of the facade's grid peeks round the glass.
+- [ ] Walk in by a café's or a restaurant's own door → straight into its guest room, no lobby; inside, its windows stand where the bays are outside.
+- [ ] Look through the panes by day and by night → a room behind, tinted to the venue, warm at night; the name sits on the fascia, an awning clears it.
+- [ ] Trois Verres → its door on the school's west wall; its room is narrower than its front (a known limit): judge how it reads.
+## Fun world ([#1397](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1397))
+
+Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
+
+- [ ] The look: violet sky with stars, the striped retro sun on the western horizon, wireframe mountains all round, the grid floor beyond the course, neon edges on the roads and venues, palms and lamp posts. In Cartoon, PS1 and Realistic (`/style`): anything washed out, too dark or flickering (the floor's edge at the course's border)?
+- [ ] Venues: enter Strike City (bowl a frame), Laser Palace (a showing on), Pixel Paradise (pinball), Café Miami and Sunset Diner (terrace tables), Club Turbo.
+- [ ] Race track: take a pit car, `/race start` near the track; the kart loop with a kart. Is the 14 m track width right, do the neon edges help or distract?
+- [ ] Grand circuit (all round the course): take a car from the grid on the south straight, `/race start` there: does the race follow the whole lap, are the chicanes, the esses and the crests fun at speed, is anything too tight for its radius?
+- [ ] Airfield: take a small plane from the apron, fly the air rings from the runway's west end: does the next ring read (pink, larger), is the panel on the right readable, does the time stop at the last ring? On a pad, and in VR (the panel is not shown there).
+- [ ] Snow hill: skis or snowboard on the slope, the T-bar up.
+- [ ] Neon Arena: the concert plays whenever you come.
+- [ ] Festival field: Fahnenschwingen, Schwingen ring, alphorns, the stone all open.
+- [ ] Stunt park: kickers, gap jump, half-pipe and bowl with a car, a motorbike, skis: fun or frustrating, too steep, too small?
+- [ ] Truck yard: reverse the Scania into a dock bay between the trailers, back the tractor under a trailer between the containers, the L alley, the drawbar train's box; the pickup's speedboat down the slipway.
+- [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
+- [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
+
+## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
+
+On the Android phone (a test APK).
+
+- [ ] Walk up to a building's door, a shop counter, a loot cupboard: a cyan pill names it ("Open the door") on the right edge; a tap does it.
+- [ ] In a bowling centre: the shoe counter, a ball rack and the approach each show their pill. Step up: the overlay stays, with Bowl, Back and Pins; the stick walks the spot, a drag turns the line; Bowl sets it, then hold Bowl to swing and slide the thumb sideways for hook, let go to roll. Back steps back. Is a whole frame comfortable?
+- [ ] At a pinball machine: the overlay stays with a Flip under each thumb, Plunger and Nudge on the right, Back on the left, a Start pill. Hold Plunger and let go to launch; both flippers at once work; Left-handed in Settings keeps the left flipper on the left. Is a whole game comfortable?
+- [ ] II (pause) on a phone held sideways: every entry down to Quit can be reached (it scrolls when it does not fit), Leave to main menu works.
+
+## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
+
+- [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 30 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.
+
+## Faster rejoin ([#1387](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1387))
+
+The real server (unitsport.infrack.ch, HTTP mirror and Linux deploy), which loopback cannot stand in for: join it twice from the same install, the cache kept between.
+
+- [ ] First join, then leave and join again: the log shows `index of the last visit to this server merged at boot`, `the copy from the last visit is still the server's` for the horizon and places, and one `[horizon]` line, not two. Is the second spawn clearly faster, and does the horizon fill in behind you instead of holding the loading screen?
+- [ ] After the server is updated (new tiles or a new `horizon.bin`), join again: the log says the index changed and the files stream, nothing stale is drawn.
+- [ ] Join an older server (no `AssetKind.Digest`): it joins as before, one "not available on the server" line for the digest.
+
+## Sword combat ([#1374](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1374))
+
+`/spawn sword` (admin), put it on the hotbar, `/dummy`; on a server also `/pvp on` with a friend, `/bot add 1`, `/bot arm sword`, `/bot swing`.
+
+- [ ] Feel of the combo: five taps in the rhythm chain the five distinct swings (diagonal, backhand rising, spin, thrust with a lunge, jump and slam). Does each read as its own move from behind in Cartoon and PS1, are the wind-up, the whip and the settle readable, is the lunge a good size and stopped at the target?
+- [ ] Standing still versus walking forward gives two sets; do the repeats look varied, not looped? Does the body blend in and out of walking without a snap?
+- [ ] Charged blow (hold after a swing, let go after about half a second): crouched wind-up and spinning release; plunge from a ledge: tucked fall and the kneel; dodge in each direction (roll forward, backstep, sidestep).
+- [ ] Hit feel: hit-stop, shake (try the screen-shake setting), pad rumble, damage numbers and the dummy's recoil; is the finisher's weight right, is it too much on repeat?
+- [ ] The blade's trail through the active frames: visible and not distracting, in Cartoon and PS1; the backhand mirrors it.
+- [ ] Lock-on: Middle button / Z / R3 locks the target nearest the view, the camera eases round, the body faces it; does a soft lock turn a swing to a target a little off the aim?
+- [ ] Pad: RB swing, B dodge (the pad's crouch and slide are off while the sword is drawn), R3 lock (the view switch is off). VR: trigger swing, B dodge, R3 lock, and the stamina bar is missing there.
+- [ ] Hits are the blade touching: does a hit ever count when the blade visibly misses, or a visible touch not count (try the edge of the reach, a moving target, a dummy and a player)? `--sworddebug` shows the capsules.
+- [ ] Impact frame: a finisher and a full charge flash the screen with speed lines and punch the view in; Settings > Impact frames turns it off. In VR there is none (only the hit-stop and the spark): is that enough?
+- [ ] The grip: the handle sits in the closed fist, no sliding or popping through the combo; the free hand is a quiet counterweight, goes to the handle on the finisher and the charged cut and back without a pop.
+- [ ] Auto-holster (#1369) with the sword: it is not put away by a dodge (Shift shares the sprint) nor mid-blow; after about 8 idle seconds it is holstered and Aim or comma draws it again.
+- [ ] With a friend: they see your swings and the same variants, the dummy's hits, your knockback on them; a dodge in time avoids a blow.
+
+## Wheel zoom, holster, fading hotbar, hand chip (PR for [#1369](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1369))
+
+On foot in third person, anywhere (`--world fixture` does).
+
+- [ ] Sprint (Shift) and turn the wheel: the camera zooms in and out, the hotbar does not move. Alt + wheel steps the slot; releasing Alt after a wheel step does not free the cursor (a lone Alt tap still does).
+- [ ] Press the number of the slot in hand, and `,`: the item leaves the hand and comes back. Does the chip (bottom right) read well dimmed as "holstered", and "Empty hand" on an empty slot, over snow and over a dark scene?
+- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Every item goes away, the hammer, rod and detector too; aiming, a camera held up and a cast line do not.
+- [ ] Start sprinting (Shift / L3) with an item in hand: it goes in the pocket at once and stays there after the sprint; Use draws it on the run, and a new sprint start holsters again. Does it feel right (not annoying when you want the item while running)?
+- [ ] Pad: tap D-pad right steps the slot; hold it (about half a second, a tick) holsters or draws. Does the tap feel late now (it fires on release)?
+- [ ] VR: hold the grip at the right hip for a third of a second (buzz): the item goes away, again it comes out. A quick squeeze there still steps to the next slot.
+- [ ] Settings › Gameplay › Hotbar: Always, Fade out (default), Hidden. In Fade, change slot / holster / use an item / open the quick wheel: the bar shows for about 3 s then fades smoothly. Is 3 s right?
+- [ ] A second player sees your hand empty when you holster and the item come back when you draw.
+- [ ] Touch (phone, or `--mobile`): the hotbar stays always visible and there is no chip.
+
 
 ## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
 
@@ -25,6 +102,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Basel's Morgestraich at 04:00 of day 1: do the street lamps and lit windows really go out (houses, street lamps, props) while the lanterns shine, is it dark enough to be an event, and does the drum roll with the saying land? At 05:30 do the lamps come back?
 - [ ] The stage, the stall and the lantern as props at night and by day (Cartoon, PS1, Realistic): readable, not z-fighting.
 - [ ] VR: a grip at the stall, the lantern or the stage works through the pad route; tapping the notes with the trigger; striking a drum by hand and tossing Räppli by hand are not built.
+
 ## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
 
 `--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).
@@ -459,3 +537,13 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] Walk out beyond 900 m and back, once while the show is on and once after it has ended: the crowd is gone when the show is off, and the rig comes back lit.
 - [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
 - [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.
+
+## Montreux Jazz Festival (PR for [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394))
+
+- [ ] With the real map at Montreux (the full region needed; `--date 2027-07-11 --time 21` shows the stage today, or in the real 3-18 July window): the small stage stands on the Place du Marché by the quay, facing east with the lake behind the band, the crowd seated on the sand, the promenade along the water free to walk, the fence open on the lake side, nothing inside the stage. Does it look like Montreux? Outside the festival's dates the square is the square (no stage, no crowd, no fence).
+- [ ] The quartet (an upright bass, a sax, a piano with its stool, a drum kit): do the four instruments look right in Cartoon, PS1 and Realistic? Does the sway read as jazz, and do the warm washes feel calm (never a strobe or a flash)?
+- [ ] Listening: E at the stage-front rail (pad Y, VR grip or the pad's Y) marks you; a toast top right for each song heard to its end. Does the toast stay clear of the stage and fade in about 3 s? Is a song's 6 Batzen (about CHF 2 a minute at the festival's real pace) a fair pay?
+- [ ] The encore, alone and with a friend on a second machine: the ring closes at the bottom centre on every beat, the meter's text ("7 of 12") is readable, jump / the pad's A / the VR pad's A claps. Does the ring feel fair with a pad and in a headset? Two friends with 6 claps each fill the meter; does it feel good that strangers' claps count?
+- [ ] The Jazz Night (day 8) and the closing night (day 16, `--festival test` is not needed: set the date `--date 2027-07-17` at the real map): the set is longer, the last song of the closing night pays the 20 Batzen finale and the two confetti cannons fire on each song's last chorus.
+- [ ] A real 3-18 July run: the festival is on, the Journal's Festival tab shows the days, the Jazz pass (item 511) is in the pack after the first song, the Batzen convert after the last day.
+- [ ] No audio plays at the stage yet (lights only, the made-up songs): once the owner picks copyright-free jazz tracks (`CdLibrary.JazzUrls`), does the set follow the CD, and does the 80 % rule need `ConcertMusic.At` as the games' clock (a follow-up noted in `occasions/festival-montreuxjazz`)?

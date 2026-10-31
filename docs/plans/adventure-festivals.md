@@ -472,7 +472,7 @@ Rules: `perf-no-per-frame-allocations`, `no-mesh-rebuild-per-frame`.
 5. **Festival tent as an interior**: *recommend* an open-sided outdoor prop group (no door portal);
    a real interior only if the venues epic makes temporary interiors cheap.
 6. **Montreux Jazz and the Zibelemärit**: *recommend* later: Montreux Jazz is the concert system plus a
-   new open-air `StadiumSpec` on the Montreux quay (small, its own issue); the Zibelemärit is one day of
+   new open-air `StadiumSpec` on the Montreux quay (small, its own issue: planned in [`adventure-montreux-jazz`](adventure-montreux-jazz.md), [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394)); the Zibelemärit is one day of
    stalls in Bern, a Christmas-market variant once markets exist.
 7. **The decoration vote**: players only, one vote, not one's own party? *Recommend yes*; with fewer
    than 3 parties the vote is skipped and every arrived herd gets the middle prize.

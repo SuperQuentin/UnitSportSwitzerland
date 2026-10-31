@@ -66,6 +66,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 return;
             }
             GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
+            if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
         }
         // the account step of a join (#1123): checked before anything is loaded, so a typo never serves a world
         if (ParseAccounts() is not { } accounts) { GetTree().Quit(1); return; }
@@ -188,6 +189,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
+        // the fun world's sky is held at dusk (#1396): its clock stopped there
+        if (WorldChoice.FunActive) World.WorldClock.Start(World.Fun.FunWorld.DuskHour, 0);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -310,6 +313,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
+        // the fun world's PvP block (#1396): who stands in it, and its weapon crates
+        if (WorldChoice.FunActive)
+        {
+            var players = _players;
+            World.Fun.FunWorld.Players = peer => players.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer)) is { } p ? p.Global : null;
+            AddChild(new World.Fun.FunCrates(_brCrates));
+        }
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
             (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
         br.Origin = origin;
@@ -341,6 +351,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, origin, server: true);
+        Combat.SwordService.Create(this, origin, server: true);   // #1371
 
         // the birds everybody shares (#143): simulated here around every player, sent to those near
         var birds = new Birds.BirdLife(_chunks, origin, null)
@@ -690,12 +701,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private void OnPeerAccepted(long id)
     {
         GD.Print($"[server] peer {id} speaks protocol {Handshake.Protocol}");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // The rules first (#1380): the joining client's loading screen waits for them, and nothing
+        // below is needed to read them. Still before Sleepers.WakeAt, which is sent further down on
+        // the same ordered channel (net/arrival).
+        _arrival?.SendTo(id);
+        long rulesMs = clock.ElapsedMilliseconds;
         _registry?.Add(id);
 
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
             _chunks!.AddAnchor(player, collision: false);   // a proxy: height queries only, no collision (#837)
-        _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
         _cinemaBooths?.SendTo(id);
@@ -722,6 +738,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat?.SendWorldTimeTo(id);
         _chat?.SendWorldSpeedTo(id);
         _chat?.SendSeaStateTo(id);
+        GD.Print($"[server] peer {id} accepted: rules sent at {rulesMs} ms, player spawned and state sent at {clock.ElapsedMilliseconds} ms");
     }
 
     private void OnPeerDisconnected(long id)
