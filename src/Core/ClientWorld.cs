@@ -490,7 +490,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
         // A fixture course is all there is: nothing cached joins it.
-        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        if (!fixture)
+        {
+            // a returning player's own server first (#1380): its index is known before the first frame
+            if (Launch.Mode == GameMode.Multiplayer)
+            {
+                _serverKey = JoinCache.ServerKey(Launch.Endpoint, WorldChoice.ActiveId);
+                _cachedIndexMerged = ClientTerrainSync.MergeServerIndex(_chunks, _serverKey);
+            }
+            if (!_cachedIndexMerged) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        }
 
         AddChild(_chunks);
         // the water (#299): queries on these tiles, waves pushed to the shaders, the underwater look;
@@ -647,6 +656,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
             Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
+            Occasions.Festivals.Sechselaeuten.BooggStage.Create(this, _chunks, origin);
             Combat.SchwingRing.Create(this, _chunks, origin);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
@@ -980,6 +990,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
+            || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
+            || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
+            || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
+            || Occasions.Festivals.MontreuxJazz.JazzCheck.Requested || Occasions.Festivals.MontreuxJazz.JazzNetProbe.Role != null
+            || Occasions.Festivals.Fasnacht.FasnachtCheck.Requested || Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null
+            || Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested || Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null
+            || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
             || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
@@ -996,7 +1013,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.Bank.Create(this, inventory);
         var items = new Items.ItemController(inventory, origin)
         {
-            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging && !Occasions.Festivals.Desalpe.DesalpeGame.TakesUse ? LocalPlayer : null,
+            ActivePlayer = () => _onFoot && !Occasions.Festivals.Fahnen.FahnenGame.Swinging && !Occasions.Festivals.Desalpe.DesalpeGame.TakesUse && !Occasions.Festivals.Sechselaeuten.SechseGame.TakesUse ? LocalPlayer : null,
         };
         AddChild(items);
         _items = items;
@@ -1073,6 +1090,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Combat.SchwingNetProbe.Role != null) AddChild(new Combat.SchwingNetProbe(items));
+        if (Combat.SwordNetProbe.Role != null) AddChild(new Combat.SwordNetProbe(items));   // #1371
+        if (Combat.SwordDebug.On) AddChild(new Combat.SwordDebug { Name = "SwordDebug" });
+        if (Combat.SwordClipProbe.Scenario != null) AddChild(new Combat.SwordClipProbe(items));
         if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -1152,6 +1172,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
         // as the server's, which relays the first and owns the second; offline this client does both
         Items.ItemEvents.Create(this, origin, server: false);
+        Combat.SwordService.Create(this, origin, server: false);   // the sword's moves, hits and training dummies (#1371)
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
@@ -1218,6 +1239,35 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.Festivals.Christmas.ChristmasGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Christmas.ChristmasCheck.Requested) AddChild(new Occasions.Festivals.Christmas.ChristmasCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null) AddChild(new Occasions.Festivals.Christmas.ChristmasNetProbe(items));
+            // Montreux Jazz (#1394): E at the stage-front rail marks the listener, jump on the beat claps the band back for the bis
+            AddChild(new Occasions.Festivals.MontreuxJazz.JazzGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.MontreuxJazz.JazzCheck.Requested) AddChild(new Occasions.Festivals.MontreuxJazz.JazzCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.MontreuxJazz.JazzNetProbe.Role != null) AddChild(new Occasions.Festivals.MontreuxJazz.JazzNetProbe(items));
+            // the Zibelemärit (#1373): E at a stall tastes or buys; confetti eggs and Räppli thrown on the square count
+            AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null) AddChild(new Occasions.Festivals.Zibelemaerit.ZibeleNetProbe(items));
+            // the Escalade (#1351): E at the marmite smashes it, at the pot ladles the soupe, at the start line begins the Course
+            AddChild(new Occasions.Festivals.Escalade.EscaladeGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Escalade.EscaladeCheck.Requested) AddChild(new Occasions.Festivals.Escalade.EscaladeCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null) AddChild(new Occasions.Festivals.Escalade.EscaladeNetProbe(items));
+            // the Fasnacht (#1357): E at the Larven stall, the Morgestraich lantern or the Guggenmusik stage; Räppli with the item's Use
+            AddChild(new Occasions.Festivals.Fasnacht.FasnachtGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Fasnacht.FasnachtCheck.Requested) AddChild(new Occasions.Festivals.Fasnacht.FasnachtCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Fasnacht.FasnachtNetProbe.Role != null) AddChild(new Occasions.Festivals.Fasnacht.FasnachtNetProbe(items));
+            // the Sechseläuten (#1358): E at the pyre bets (Use steps the minute) or grills, at the Weibel takes the purse
+            AddChild(new Occasions.Festivals.Sechselaeuten.SechseGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Sechselaeuten.SechselaeutenCheck.Requested) AddChild(new Occasions.Festivals.Sechselaeuten.SechselaeutenCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe.Role != null) AddChild(new Occasions.Festivals.Sechselaeuten.SechselaeutenNetProbe(items));
+            // the Chalandamarz (#1356): E at the stand begins the procession, E on the march beat rings the Treichel
+            AddChild(new Occasions.Festivals.Chalanda.ChalandaGame(() => _onFoot ? LocalPlayer : null));
+            if (Occasions.Festivals.Chalanda.ChalandaCheck.Requested) AddChild(new Occasions.Festivals.Chalanda.ChalandaCheck(items, () => LocalPlayer));
+            if (Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null) AddChild(new Occasions.Festivals.Chalanda.ChalandaNetProbe(items));
+            // the 1 August (#1355): the lampion stand, the fireworks stand and the walk's post on E, the Höhenfeuer on the summits, a box of fireworks on the use key
+            AddChild(new Occasions.Festivals.August1.August1Game(() => _onFoot ? LocalPlayer : null));
+            AddChild(new Occasions.Festivals.August1.Hoehenfeuer(() => _worldOrigin, () => GetViewport().GetCamera3D()));
+            if (Occasions.Festivals.August1.August1Check.Requested) AddChild(new Occasions.Festivals.August1.August1Check(items, () => LocalPlayer));
+            if (Occasions.Festivals.August1.August1NetProbe.Role != null) AddChild(new Occasions.Festivals.August1.August1NetProbe(items));
             if (Occasions.Festivals.Horn.HornCheck.Requested) AddChild(new Occasions.Festivals.Horn.HornCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Horn.HornNetProbe.Role != null) AddChild(new Occasions.Festivals.Horn.HornNetProbe(items));
             if (Occasions.Festivals.FestivalCheck.Requested) AddChild(new Occasions.Festivals.FestivalCheck(items, () => LocalPlayer));
@@ -1556,18 +1606,36 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // The horizon's lattice is generated at boot (or read from its cache) while the steps
-        // above run; its blocks then stream nearest first.
+        // The horizon is not needed to spawn (#1380): once the ring-0 tile is playable and the body is
+        // grounded (the gates above), a joining player goes in and the lattice finishes behind the
+        // screen. Its blocks stream nearest first, and the safety timeout above still applies.
+        // Command-line solo runs keep waiting for it: their shots and probes expect it drawn.
         var horizon = _chunks.Horizon?.Progress();
-        if (!timedOut && horizon == null)
+        bool nearReady = total > 0 && done >= total;
+        bool horizonBehind = Launch.Mode == GameMode.Multiplayer || !Launch.FromCommandLine;
+        if (horizonBehind)
         {
-            Report(LoadStage.DrawingHorizon, 0.6f);
-            return;
+            // only when nothing near is ready and the horizon is still unknown is there nothing to show yet
+            if (!timedOut && horizon == null && !nearReady)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
         }
-        if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+        else
         {
-            Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
-            return;
+            // The horizon's lattice is generated at boot (or read from its cache) while the steps
+            // above run; its blocks then stream nearest first.
+            if (!timedOut && horizon == null)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
+            if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
+                return;
+            }
         }
 
         Stage = LoadStage.Ready;
@@ -1866,6 +1934,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Fight on both sides (#495): the challenge, the match state, and its screen
         AddChild(Combat.FightManager.CreateClient());
         AddChild(new Combat.FightHud());
+        AddChild(new Combat.SwordHud());   // #1371
+        AddChild(new Combat.SwordImpact());
         AddChild(Combat.AuraManager.CreateClient());
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
@@ -1897,7 +1967,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat!.Kicked += OnKicked;
 
         // Merges the server's tile list so tiles this client never shipped with become streamable.
-        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!);
+        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!) { ServerKey = _serverKey, CachedIndexMerged = _cachedIndexMerged };
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>
@@ -2374,6 +2444,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
             }
+            else if (p.SwordDrawn && p.Ride == RideKind.OnFoot)
+            {
+                // the sword (#1371): the attack, its charge, the dodge and the lock
+                yield return (PlayerInput.UseItem, "Swing (again in rhythm: combo; hold after a swing: charged)");
+                yield return (PlayerInput.SwordDodge, "Dodge");
+                yield return (PlayerInput.SwordLock, p.SwordLocked ? "Let go of the lock" : "Lock on");
+            }
             else if (p.InAura)
             {
                 // an aura battle (#907): the one timed key; the planner shows its own
@@ -2654,6 +2731,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;
+
+    /// <summary>The server this join goes to, as the cache keys it (#1380); null offline.</summary>
+    private string? _serverKey;
+
+    /// <summary>An earlier visit's index of that server was merged at boot.</summary>
+    private bool _cachedIndexMerged;
 
     /// <summary>
     /// The server's start point (#799): the fly camera goes there, and the body follows it down once

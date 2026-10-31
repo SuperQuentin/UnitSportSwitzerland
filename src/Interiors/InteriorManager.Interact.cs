@@ -49,7 +49,12 @@ public partial class InteriorManager
         if ((Farming.FarmSales.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
             ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p) ?? Adventure.Errands.WorldEvents.InteractionFor(p)
             ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p) ?? Occasions.Festivals.Desalpe.DesalpeGame.InteractionFor(p)
-            ?? Occasions.Festivals.Christmas.ChristmasGame.InteractionFor(p)
+            ?? Occasions.Festivals.Christmas.ChristmasGame.InteractionFor(p) ?? Occasions.Festivals.Escalade.EscaladeGame.InteractionFor(p)
+            ?? Occasions.Festivals.Zibelemaerit.ZibeleGame.InteractionFor(p) ?? Occasions.Festivals.MontreuxJazz.JazzGame.InteractionFor(p)
+            ?? Occasions.Festivals.Fasnacht.FasnachtGame.InteractionFor(p)
+            ?? Occasions.Festivals.Sechselaeuten.SechseGame.InteractionFor(p)
+            ?? Occasions.Festivals.Chalanda.ChalandaGame.InteractionFor(p)
+            ?? Occasions.Festivals.August1.August1Game.InteractionFor(p)
             ?? Occasions.Festivals.Horn.HornGround.InteractionFor(p) ?? Occasions.Festivals.SteinGame.InteractionFor(p)) is { } outdoors) return outdoors;
         outranks = Outranking.None;
         if (Vehicles.VehicleReach.Current != null) return null;

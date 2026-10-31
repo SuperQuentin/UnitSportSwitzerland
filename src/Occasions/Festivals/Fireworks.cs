@@ -103,9 +103,33 @@ public partial class Fireworks : Node3D, IOriginContainer
     private int _launchCursor, _burstCursor;
     private double _siteE, _siteN, _ground = double.NaN;
     private bool _sees = true, _hears = true;
+    // the 1 August lakes turn the fan towards the water (radians clockwise from north); a player's own volley (#1355) plays before any show on the books
+    private float _rot;
+    private bool _playingOwn;
+    private readonly List<Own> _owns = new();
+    private FestivalService? _hooked;
+
+    private sealed class Own
+    {
+        public double Start, E, N;
+        public int Seed;
+        public bool Done;
+    }
+
+    /// <summary>A player's own volley (the 1 August firework box) is queued: it plays from its server start, over the show on the books if one plays.</summary>
+    public void QueueOwn(double start, int seed, double e, double n)
+    {
+        _owns.RemoveAll(o => o.Done || Clock + Skew > o.Start + FireworkShow.VolleySeconds + FestivalShows.Tail);
+        if (_owns.Count < 6) _owns.Add(new Own { Start = start, Seed = seed, E = e, N = n });
+    }
+
+    /// <summary>Whether the show playing now is a player's own volley (checks).</summary>
+    public bool PlayingOwn => _show != null && _playingOwn;
 
     /// <summary>Seconds added to the clock: a check seeks through a show that lasts six minutes (never set in the game).</summary>
-    public double Skew { get; set; }
+    public double Skew { get => _skew; set { _skew = value; _nextLook = 0; } }
+
+    private double _skew;
 
     /// <summary>Shells that burst in sight of this viewer, climbs started, bangs and crackles played, since the node began (checks).</summary>
     public int BurstsFired { get; private set; }
@@ -218,6 +242,9 @@ public partial class Fireworks : Node3D, IOriginContainer
     public override void _Process(double delta)
     {
         double now = Clock + Skew;
+        if (_hooked == null && FestivalService.Instance is { } svc) { _hooked = svc; svc.OwnShowTold += QueueOwn; }
+        // an own volley takes the sky: a show on the books is found again afterwards, from where it has got to
+        if (_show != null && !_playingOwn && NextOwn(now) != null) { _show = null; _nextLook = 0; }
         if (_show == null)
         {
             if (now >= _nextLook) { _nextLook = now + 0.5; FindShow(); }
@@ -226,7 +253,8 @@ public partial class Fireworks : Node3D, IOriginContainer
         double t = now - _start;
         if (t > _show.Duration + 6)
         {
-            _doneStart = _start;
+            if (_playingOwn) { foreach (var o in _owns) if (o.Start == _start) o.Done = true; }
+            else _doneStart = _start;
             _show = null;
             return;
         }
@@ -256,10 +284,25 @@ public partial class Fireworks : Node3D, IOriginContainer
         foreach (var r in _rockets) Park(r);
     }
 
+    private Own? NextOwn(double now)
+    {
+        foreach (var o in _owns)
+            if (!o.Done && now >= o.Start - 1 && now < o.Start + FireworkShow.VolleySeconds + 6) return o;
+        return null;
+    }
+
     private void FindShow()
     {
         var svc = FestivalService.Instance;
         if (svc == null) return;
+        if (NextOwn(Clock + Skew) is { } own)
+        {
+            var om0 = OccasionManager.Instance;
+            _sees = om0 == null || om0.IsActive(August1.August1Rules.FestivalId, OccasionFacets.Decorations);
+            _hears = om0 == null || om0.IsActive(August1.August1Rules.FestivalId, OccasionFacets.Audio);
+            Begin(own.Start, own.Seed, own.E, own.N, float.NaN, true);
+            return;
+        }
         var running = svc.Running;
         for (int i = 0; i < running.Count; i++)
         {
@@ -268,14 +311,23 @@ public partial class Fireworks : Node3D, IOriginContainer
             var om = OccasionManager.Instance;
             _sees = om == null || om.IsActive(r.Id, OccasionFacets.Decorations);
             _hears = om == null || om.IsActive(r.Id, OccasionFacets.Audio);
-            Begin(r.ShowStart, r.ShowSeed, site.E, site.N);
+            // the 1 August's show is over the nearest lake (or the site's own water), its fan turned to the lake
+            if (string.Equals(r.Id, August1.August1Rules.FestivalId, StringComparison.OrdinalIgnoreCase) && GetViewport()?.GetCamera3D() is { } cam)
+            {
+                var (ce, cn) = _origin.ToLv95(cam.GlobalPosition);
+                var launch = August1.August1Rules.LaunchFor(site, ce, cn);
+                Begin(r.ShowStart, r.ShowSeed, launch.E, launch.N, (float)launch.Bearing, false);
+            }
+            else Begin(r.ShowStart, r.ShowSeed, site.E, site.N);
             return;
         }
     }
 
-    private void Begin(double start, int seed, double e, double n)
+    private void Begin(double start, int seed, double e, double n, float bearing = float.NaN, bool own = false)
     {
-        _show = FireworkShow.Plan(seed);
+        _show = own ? FireworkShow.Volley(seed) : FireworkShow.Plan(seed);
+        _playingOwn = own;
+        _rot = float.IsNaN(bearing) ? 0f : bearing - _show.Heading;
         _start = start;
         _siteE = e;
         _siteN = n;
@@ -302,8 +354,12 @@ public partial class Fireworks : Node3D, IOriginContainer
         return cam?.GlobalPosition.Y ?? 400f;
     }
 
-    private (double E, double N, float Alt) Spot(in Shell s, Camera3D? cam) =>
-        (_siteE + s.East, _siteN + s.North, GroundAt(_siteE, _siteN, cam) + s.Height);
+    private (double E, double N, float Alt) Spot(in Shell s, Camera3D? cam)
+    {
+        // the fan turned by _rot (compass angles add): (sin h, cos h) becomes (sin(h + r), cos(h + r))
+        float sr = Mathf.Sin(_rot), cr = Mathf.Cos(_rot);
+        return (_siteE + s.East * cr + s.North * sr, _siteN - s.East * sr + s.North * cr, GroundAt(_siteE, _siteN, cam) + s.Height);
+    }
 
     private bool InRange(Camera3D? cam, in Vector3 at, out float distance)
     {
@@ -377,7 +433,7 @@ public partial class Fireworks : Node3D, IOriginContainer
             case ShellKind.Crossette:
                 Fire(Look.Crossette, s.Colour, at, d, cam);
                 // four halves a moment later, along the fan and up and down
-                double sx = Math.Cos(_show.Heading), sy = -Math.Sin(_show.Heading);
+                double sx = Math.Cos(_show.Heading + _rot), sy = -Math.Sin(_show.Heading + _rot);
                 Later(t + 0.9, e + sx * 9, n + sy * 9, alt, Look.CrossetteChild, s.Colour);
                 Later(t + 0.9, e - sx * 9, n - sy * 9, alt, Look.CrossetteChild, s.Colour);
                 Later(t + 0.9, e, n, alt + 9, Look.CrossetteChild, s.Colour);

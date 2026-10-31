@@ -51,6 +51,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | phone › Training app (#901): import, search, connect, start / stop | the phone's own navigation (Enter, Esc) / D-pad A B | ok: the phone's poke and ray, as every app (the OS file picker shows on the desktop) | keep |
 | training: the next junction's road left / right (#901) | A D / left stick | ok: the stick, as steering; the Training app's Left / Right by poke | keep |
 | training: ride_rejoin, ride_uturn, ride_erg, ride_power_up / down (#901) | PgUp PgDn \ ] [ / the Training app's buttons (no pad button is free on a bike) | ok: the Training app's Rejoin, Turn round, ERG, ±10 W by poke | a wrist-menu row if riders want it without the phone |
+| sword swing, combo, charged, plunge (#1371) | LMB / RB | ok: R trigger (RB on foot) | **swing for real** (hand speed) |
+| sword_dodge (#1371) | Shift / B | ok: B (`XrPad.RightB`) | a step or a dodge by body movement |
+| sword_lock (#1371) | Middle button, Z / R3 | ok: R3 | grip-pointing at a target; the stamina bar has no VR display yet (**gap**: wrist display) |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
@@ -72,7 +75,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
 | drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
-| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
+| next / prev_item, slot_1-6 | Alt + wheel (the plain wheel zooms, #1369), 1-6 / D-pad → (tap) | ok: R stick ↓, a short grip at the right / left hip (#437) | slots shown at the hip |
+| holster_item (#1369) | `,`, the number of the slot in hand / hold D-pad → | ok: hold the grip at the right hip (0.35 s, a buzz): puts the item away, again draws it (`XrHands.AtHip`, `Gesture`) | keep |
 | inventory | I, Tab / Back (tap; opens on the release) | ok: Menu hold | keep |
 | quick_menu (#840) | hold F2 / hold Back | ok: wrist menu Activities + Invites entries; a ring opened by Back is aimed by the right hand | a hold of Menu longer than the inventory's pulse |
 | invite_decline (#840) | Shift+F2 / — | ok: wrist menu › Invites › Decline (laser), or Menu tap › Activities | keep |
@@ -87,6 +91,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | drink with alcohol (beer, wine, kirsch; #1271) | `use_item` with the drink in hand (the mouth pose) | RT | ok: the pad route (RT); **gap**: bringing the bottle to the mouth by hand |
 | breathalyzer: blow into it for 5 s (#1271) | `use_item` with it in hand | RT | ok: the pad route (RT); **gap**: bringing it to the mouth by hand |
 | breathalyzer: offer a test to a player (#1271) | `interact_mount` E at them with the electronic device in hand (shown by `InputHints`, outlined) | Y | ok: the pad route (Y) or a grip at them (`TryInteract(byHand)`) |
+| fall into a hidden crevasse; climb the ice wall out; be hauled (#1372) | nothing to press: the fall happens; push W into the ice wall (free climb, as any face); the partner holds E 2 s | the stick into the wall (free climb); the partner holds Y | ok: the pad route and the hand climb (`XrClimb`: the wall is an ordinary static face); the partner's haul is the hold-Y route below; **gap**: pulling the rope hand over hand | keep |
 | haul a roped partner (#1266) | hold E 2 s at the rope | hold Y | ok: the pad route (hold Y); **gap**: pulling the rope hand over hand |
 | talk to an errand giver (#1267) | E / Y within 3 m of the figure (a prompt "Talk to ...") | ok: Y, or reach out and grip toward the giver (`TryInteract(byHand)`) | keep |
 | errand dialogue: choose, next card, leave (#1267) | 1-3, Enter, Left / Right, Esc / D-pad, A, LB / RB, B | ok: laser + trigger on the panel, the pad's route | keep |
@@ -229,6 +234,16 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | Désalpe: start the Alpabzug at the alp sign; give the vote in the ring (#1269) | `interact_mount` E | new: Y through `XrPad`; a grip at the sign or the ring | grip the sign, the notice board (after a headset playtest) |
 | Christmas market: taste at a stall (the day's stamp), buy its ware, take the Samichlaus's bag (#1348) | `interact_mount` E within 5.5 m of a stall or 4.5 m of the Samichlaus (`ChristmasGame.TryInteract`) | new: Y through `XrPad`; a grip at the stall | grip the stall's counter or the mug on it (`gap`: the pad route works) |
 | Christmas market: drink the Glühwein mug (#1348) | `use_item` LMB (`ItemController`, like any drink) | X / the trigger through `XrPad` | hold the mug to the mouth (the drink pose, as the beer) |
+| Escalade: smash the Marmite (youngest and oldest of the party both press), ladle the soupe for the party, start the Course de l'Escalade (#1351) | `interact_mount` E within 5 m of the Marmite, 4.5 m of the pot or 5 m of the start line (`EscaladeGame.TryInteract`) | new: Y through `XrPad`; a grip at the Marmite, the pot or the start line | grip the Marmite's lid and bring a hand down, grip the ladle (`gap`: the pad route works) |
+| Chalandamarz: begin the procession at the Treichel stand, then ring the Treichel on the march beat while walking the loop (#1356) | `interact_mount` E within 5 m of the stand to begin, then every E rings (`ChalandaGame.TryInteract`) | new: Y through `XrPad`; a grip at the stand to begin, then a grip on each beat (the walk is the stick or room scale) | swing the hand like a cowbell, the shake read from the controller's motion (`gap`: the pad route works) |
+| Escalade: eat the chocolate or the soupe (#1351) | `use_item` LMB (`ItemController`, like any food) | X / the trigger through `XrPad` | bring the bowl or the piece to the mouth (the eat pose) |
+| Fasnacht: take a Larve and Räppli at the stall, march at Basel's lantern, sit down at the Guggenmusik stage (#1357) | `interact_mount` E within 5 m of the stall, 6 m of the lantern, 7 m of the stage (`FasnachtGame.TryInteract`) | new: Y through `XrPad`; a grip at the stall, the lantern or the stage | grip a mask on its peg, the lantern's handle, a drumstick (`gap`: the pad route works) |
+| Fasnacht: tap the Guggenmusik's notes; throw Räppli (#1357) | `use_item` LMB (or `jump`) while a song runs (`FasnachtGame`); `use_item` with the bag in hand throws a handful (`ItemUse.Confetti`) | the trigger (RT) through `XrPad` | strike a drum with the controller, toss a handful by hand (`gap`: the pad route works) |
+| Sechseläuten: step the minute of a bet at the Böögg's pyre (#1358) | `use_item` LMB while at the pyre with bets open (`SechseGame.TakesUse`, like the Désalpe vote) | X / the trigger through `XrPad` | turn a dial by hand (`gap`: the pad route works) |
+| Sechseläuten: place the bet, grill a Cervelat on the embers, take the Zunft's purse (#1358) | `interact_mount` E within 14 m of the pyre or 4 m of the Weibel (`SechseGame.TryInteract`) | new: Y through `XrPad`; a grip at the pyre or the Weibel | drop a coin in the stake box, hold a sausage in the fire (`gap`: the pad route works) |
+| Sechseläuten: eat the grilled Cervelat (#1358) | `use_item` LMB (`ItemController`, like any food) | X / the trigger through `XrPad` | bring it to the mouth (the eat pose) |
+| 1 August: take a lampion, buy a box of fireworks, start the lampion walk (#1355) | `interact_mount` E within 4.5 m of a stand or 5 m of the post (`August1Game.TryInteract`) | new: Y through `XrPad`; a grip at the stand or the post | grip the stall's counter, the lantern or the pole (`gap`: the pad route works) |
+| 1 August: hold the lampion (a light), light a box of fireworks (#1355) | the lampion is held like the torch (the hotbar); `use_item` LMB lights a box (`ItemUse.Firework`, `August1Game.TryLight`) | the lampion in the hand as any item; X / the trigger through `XrPad` lights the box | hold the lantern up in the hand (the hand is its light); strike the box on the ground (`gap`) |
 | Désalpe: drive the herd (#1269) | walk behind the herd; a body in a cow's flight zone (5 m, 9 m mounted) moves it away | new: the same, the body is the head and the controllers are not used | walk or ride behind it for real; waving it on by hand (`gap`) |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | partly (#1277): the quick menu's Chat wedge opens it with the "/" picker, the commands and their words as buttons the ray presses; free text still no keyboard | laser key grid on the `XrUi` panel, for free text |
@@ -264,3 +279,8 @@ work (#437, #438); 8 fixed by #435.
 | Alphorn: blow (hold from a note's start to its end) | LMB `use_item` / RB or RT | new: the trigger (replays as the pad's RT through `XrPad`) | raise the horn to the mouth and blow (a later target) |
 | Alphorn: choose the note (partial) | wheel, W / S / R stick up-down | new: the right stick up-down through `XrPad` | keep |
 | Yodel: tap on the beat | Space `jump` / A | new: A | keep |
+| Zibelemärit: taste at a stall (the day's stamp), buy its ware (#1373) | `interact_mount` E within 5.5 m of a stall (`ZibeleGame.TryInteract`) | new: Y through `XrPad`; a grip at the stall | grip a braid off the awning or the kettle's ladle (`gap`: the pad route works) |
+| Zibelemärit: throw a confetti egg or Räppli on the square (#1373) | `use_item` LMB with the egg in hand (`ItemUse.Confetti`) | X / the trigger through `XrPad` | toss it by hand (`gap`: the pad route works) |
+| Montreux Jazz: mark "I am listening" at the stage-front rail (#1394) | `interact_mount` E within 3.5 m of the rail (`JazzGame.TryInteract`) | new: Y through `XrPad`; a grip at the rail | grip the rail in front of the stage (`gap`: the pad route works) |
+| Montreux Jazz: clap the band back for the bis on the ring's beats (#1394) | `jump` Space while the call is on in the audience (`JazzGame`, `FootPlayer.JumpTaken`, as the pogo's) | A | the pad's A through `XrPad` (clapping by hand is not built: `gap`) |
+| Zibelemärit: eat the tart or the soup (#1373) | `use_item` LMB (`ItemController`, like any food) | X / the trigger through `XrPad` | bring it to the mouth (the eat pose) |

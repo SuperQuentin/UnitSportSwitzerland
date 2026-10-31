@@ -22,7 +22,7 @@ public static partial class FestivalCatalog
             new FestivalSite("Werdmühleplatz, Zürich", 2683100, 1247300, 90),
             new FestivalSite("Münsterplatz, Bern", 2600700, 1199600, 90),
             new FestivalSite("Franziskanerplatz, Luzern", 2665850, 1211600, 90),
-            new FestivalSite("Grand-Rue, Montreux", 2562650, 1145250, 90),
+            new FestivalSite("Grand-Rue, Montreux", 2559396, 1142356, 90),
             new FestivalSite("Plainpalais, Genève", 2499450, 1117400, 90),
         ],
         [

@@ -16,6 +16,125 @@ On the Android phone (a test APK).
 - [ ] At a pinball machine: the overlay stays with a Flip under each thumb, Plunger and Nudge on the right, Back on the left, a Start pill. Hold Plunger and let go to launch; both flippers at once work; Left-handed in Settings keeps the left flipper on the left. Is a whole game comfortable?
 - [ ] II (pause) on a phone held sideways: every entry down to Quit can be reached (it scrolls when it does not fit), Leave to main menu works.
 
+## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
+
+- [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 30 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.
+
+## Faster rejoin ([#1387](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1387))
+
+The real server (unitsport.infrack.ch, HTTP mirror and Linux deploy), which loopback cannot stand in for: join it twice from the same install, the cache kept between.
+
+- [ ] First join, then leave and join again: the log shows `index of the last visit to this server merged at boot`, `the copy from the last visit is still the server's` for the horizon and places, and one `[horizon]` line, not two. Is the second spawn clearly faster, and does the horizon fill in behind you instead of holding the loading screen?
+- [ ] After the server is updated (new tiles or a new `horizon.bin`), join again: the log says the index changed and the files stream, nothing stale is drawn.
+- [ ] Join an older server (no `AssetKind.Digest`): it joins as before, one "not available on the server" line for the digest.
+
+## Sword combat ([#1374](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1374))
+
+`/spawn sword` (admin), put it on the hotbar, `/dummy`; on a server also `/pvp on` with a friend, `/bot add 1`, `/bot arm sword`, `/bot swing`.
+
+- [ ] Feel of the combo: five taps in the rhythm chain the five distinct swings (diagonal, backhand rising, spin, thrust with a lunge, jump and slam). Does each read as its own move from behind in Cartoon and PS1, are the wind-up, the whip and the settle readable, is the lunge a good size and stopped at the target?
+- [ ] Standing still versus walking forward gives two sets; do the repeats look varied, not looped? Does the body blend in and out of walking without a snap?
+- [ ] Charged blow (hold after a swing, let go after about half a second): crouched wind-up and spinning release; plunge from a ledge: tucked fall and the kneel; dodge in each direction (roll forward, backstep, sidestep).
+- [ ] Hit feel: hit-stop, shake (try the screen-shake setting), pad rumble, damage numbers and the dummy's recoil; is the finisher's weight right, is it too much on repeat?
+- [ ] The blade's trail through the active frames: visible and not distracting, in Cartoon and PS1; the backhand mirrors it.
+- [ ] Lock-on: Middle button / Z / R3 locks the target nearest the view, the camera eases round, the body faces it; does a soft lock turn a swing to a target a little off the aim?
+- [ ] Pad: RB swing, B dodge (the pad's crouch and slide are off while the sword is drawn), R3 lock (the view switch is off). VR: trigger swing, B dodge, R3 lock, and the stamina bar is missing there.
+- [ ] Hits are the blade touching: does a hit ever count when the blade visibly misses, or a visible touch not count (try the edge of the reach, a moving target, a dummy and a player)? `--sworddebug` shows the capsules.
+- [ ] Impact frame: a finisher and a full charge flash the screen with speed lines and punch the view in; Settings > Impact frames turns it off. In VR there is none (only the hit-stop and the spark): is that enough?
+- [ ] The grip: the handle sits in the closed fist, no sliding or popping through the combo; the free hand is a quiet counterweight, goes to the handle on the finisher and the charged cut and back without a pop.
+- [ ] Auto-holster (#1369) with the sword: it is not put away by a dodge (Shift shares the sprint) nor mid-blow; after about 8 idle seconds it is holstered and Aim or comma draws it again.
+- [ ] With a friend: they see your swings and the same variants, the dummy's hits, your knockback on them; a dodge in time avoids a blow.
+
+## Wheel zoom, holster, fading hotbar, hand chip (PR for [#1369](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1369))
+
+On foot in third person, anywhere (`--world fixture` does).
+
+- [ ] Sprint (Shift) and turn the wheel: the camera zooms in and out, the hotbar does not move. Alt + wheel steps the slot; releasing Alt after a wheel step does not free the cursor (a lone Alt tap still does).
+- [ ] Press the number of the slot in hand, and `,`: the item leaves the hand and comes back. Does the chip (bottom right) read well dimmed as "holstered", and "Empty hand" on an empty slot, over snow and over a dark scene?
+- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Every item goes away, the hammer, rod and detector too; aiming, a camera held up and a cast line do not.
+- [ ] Start sprinting (Shift / L3) with an item in hand: it goes in the pocket at once and stays there after the sprint; Use draws it on the run, and a new sprint start holsters again. Does it feel right (not annoying when you want the item while running)?
+- [ ] Pad: tap D-pad right steps the slot; hold it (about half a second, a tick) holsters or draws. Does the tap feel late now (it fires on release)?
+- [ ] VR: hold the grip at the right hip for a third of a second (buzz): the item goes away, again it comes out. A quick squeeze there still steps to the next slot.
+- [ ] Settings › Gameplay › Hotbar: Always, Fade out (default), Hidden. In Fade, change slot / holster / use an item / open the quick wheel: the bar shows for about 3 s then fades smoothly. Is 3 s right?
+- [ ] A second player sees your hand empty when you holster and the item come back when you draw.
+- [ ] Touch (phone, or `--mobile`): the hotbar stays always visible and there is no chip.
+
+
+## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
+
+`--festival test --date 2027-02-04 --world fixture` (Luzern's: the Larven stall 9 m west of the fixture's start, the Guggenmusik stage 14 m east and 6 m north); `--date 2027-02-15` and the clock at 04:30 (`--time 4.5`) for Basel's Morgestraich with its lantern 11 m north; or online on the western map in the real dates (easter-52 for six days, easter-41 for three, relocated to the region's largest town).
+
+- [ ] Look at the six Larven on a figure (Waggis, Alti Dante, Harlekin, Teufel, Fritschi, Ueli: model viewer Figures / Hat - Larve...), in Cartoon, PS1 and Realistic: do they read as faces at game distance, is the Waggis's nose funny and not scary?
+- [ ] The Larven stall: E takes a mask and a bag of Räppli once a day; the mask goes on from the pack; others see it. With nothing on the head, the festival's own mask (Fritschi in Luzern's window, Ueli in Basel's) is worn.
+- [ ] Räppli: Use with the bag in hand throws a handful; does the paper look and fall like confetti in all three styles, does a second player near see it, is the toss sound good? Ten handfuls pay 3 Batzen.
+- [ ] The Guggenmusik: E at the stage, the count-in, tap on every note (LMB, pad RT, VR trigger). Is 120-140 BPM playable on the drum (40 notes in 15 s) on the pad and with the VR trigger? Do the snare, bass drum, trumpet and sousaphone sound like a Gugge (loud, a bit sour)? With two friends on the other voices, does "in sync" feel earned (the din's result line)? Esc leaves; walking away ends the song.
+- [ ] Basel's Morgestraich at 04:00 of day 1: do the street lamps and lit windows really go out (houses, street lamps, props) while the lanterns shine, is it dark enough to be an event, and does the drum roll with the saying land? At 05:30 do the lamps come back?
+- [ ] The stage, the stall and the lantern as props at night and by day (Cartoon, PS1, Realistic): readable, not z-fighting.
+- [ ] VR: a grip at the stall, the lantern or the stage works through the pad route; tapping the notes with the trigger; striking a drum by hand and tossing Räppli by hand are not built.
+
+## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
+
+`--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).
+
+- [ ] Look at the square: a ten metre pyre of crossed logs with a cotton-wool snowman on top (blue and white sash, a broom, red firecracker fuses round the head, a pointed hat), the Zunft Weibel with his staff and six guild banners. Cartoon, PS1 and Realistic: does it read well, and is the pyre not floating or sunk on a slope?
+- [ ] At the Weibel E (pad Y) takes the purse once; at the pyre Use (pad X, VR trigger) steps the minute and E places the bet: is the picker readable, does the coin sound land, is it clear that the panel changes after you bet?
+- [ ] The light at 18:00: the whoosh and bell, flames rising over about fifteen seconds with smoke, the glow on the square at night. Do the flames look like fire in each style, and are the billboards not clipping the logs too visibly?
+- [ ] The bang: flash, the burst of sparks and the boom, the head vanishing, the pyre falling to glowing embers. Is it a satisfying moment, loud but not harsh? Is a bet on the right minute worth the wait (a median burn is 78 s)?
+- [ ] After the bang E at the pyre grills a Cervelat; eat it (LMB, pad X): warm for 2 minutes. With two players: the board names both bets and the shares are fair by closeness.
+- [ ] VR: a grip at the pyre or the Weibel works through the pad route; dropping a coin or stepping a dial by hand is not built.
+## Chalandamarz ([#1361](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1361))
+
+`--festival test --date 2027-03-01 --world fixture` (the Treichel stand is 45 m west of the fixture's start, the loop of seven stations round it), or online on the western map on 1 March (Scuol, Zuoz or Guarda, else the region's largest town).
+
+- [ ] Look at the loop: the Treichel stand (wooden frame with five brass Treicheln, a blue board, a straw doll) and seven pennant banners on a ring of 45 m. Cartoon, PS1 and Realistic: do they read well?
+- [ ] E (pad Y) at the stand begins; then ring with E (pad Y) on the beat while walking: does the drum at 120 BPM and the closing ring on the HUD feel like the same beat as the Treichel you hear when you press? Is it fair with real latency (Perfect 70 ms, Good 140 ms around the server's beat)? Is walking at a child's pace (1.4 m/s) comfortable while pressing every step?
+- [ ] Two people in a party ringing on the same beats: "In step with <name>! +2" and the chime; do both see it, does the party's total on the Journal's Festival tab add up?
+- [ ] Is "Keep walking!" / "Back onto the loop!" clear when ringing on the spot or in the square?
+- [ ] VR: a grip at the stand begins and a grip on each beat rings (pad route through `XrPad`); swinging the hand like a cowbell is not built.
+
+## Cinema panel: the cinema's films, stars, the server's films ([#1368](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1368))
+
+At a cinema booth's panel (E at the screen half), online on a server where you are admin and one where you are not.
+
+- [ ] On a phone: pick a film in the drop-down, Play the film → the hall plays it from its start, through the server.
+- [ ] Pad (D-pad, A) and the VR laser: open the drop-down, pick, Play the film; reach the star and Server's films….
+- [ ] Play a web link, press the star → it fills; the drop-down ends with "Starred: …"; close and reopen the panel, play it from there; press the star again → gone.
+- [ ] As an admin, Server's films… → a window: a name and In the halls' rotation; Add → the chat says it was added with that name; the drop-down lists it for every player. As a non-admin the button is not there.
+- [ ] Rotation off for a film, then restart the showings (screen off and on in a few halls) → halls never pick it by themselves; on → they may.
+- [ ] Server's films… on a film already listed → Save renames it, Remove takes it off for everyone.
+
+## 1 August ([#1362](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1362))
+
+`--festival test --date 2027-07-31 --world fixture --pois fixture --august1hour 22.5` on a server, or online on the western map in the real dates (31 July and 1 August; held in Genève, else Lausanne or the largest town). `/time set 22:30` for the night.
+
+- [ ] The ground: a lampion stand (striped roof, a string of paper lanterns), a fireworks stand, a village fire (log pyramid with a flame), the lampion post with its lanterns and a Swiss flag, a stop lantern at each of ten stops on a ring. Cartoon, PS1 and Realistic: do they read, and do the lanterns and flames glow at night?
+- [ ] Höhenfeuer: from the village or a summit at night, flame billboards on the peaks round you out to the horizon (about one in four peaks under 2 500 m). Do they flicker, stay readable at 10 km and not pop when you walk? Does a paraglider over one of them climb?
+- [ ] Lake fireworks at 22:00 game time: at Genève, Lausanne-Ouchy, Montreux, Neuchâtel, Zürich, Luzern and Lugano do the shells lie over the water, not over the town? (The quays and bearings are read off the map by eye: report any that are wrong.)
+- [ ] The lampion: take one at the stand, hold it; others see its red light. Is it a pleasant light in each style and in VR?
+- [ ] The walk with friends: two or three in a party at the post at night, E (pad Y) starts it; the HUD shows the stop, its distance and compass point; lag behind and the party is told to wait. Is the loop's length (565 m, ten stops) and the 30 m rule fair?
+- [ ] Own fireworks: buy a box (20 Batzen) at the stand, light it at night with the use key (LMB, pad X, the VR trigger): the fuse hiss and a 40 s volley; others within sight play it too; is it loud and big enough but safe for the frame time on a Quest?
+- [ ] VR: a grip at a stand or the post works through the pad route; lighting by hand is not built.
+
+## Zibelemärit ([#1376](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1376))
+
+`--festival test --date 2027-11-22 --world fixture` (four stalls in a row 4 m north of the fixture's start), or online on the western map in the real dates (fourth Monday of November, relocated to the region's largest town).
+
+- [ ] Look at the lane: four booths with red-and-black awnings, onion braids hanging at one, tarts on a rack, an iron kettle with a glowing lid, crates of eggs under a bunting. At night do the lanterns glow warm? Cartoon, PS1 and Realistic: do they read well?
+- [ ] E (pad Y) at a stall: "Taste at the Onion braid stall (free)" pays 6 Batzen with a bell; E again buys the braid for 6 Batzen with a paper rustle. Is the prompt readable and the outline round the stall right? All four stalls in a day pay the Marktgang.
+- [ ] Buy six confetti eggs at the Konfetti stall and throw them (LMB, pad X, the VR trigger): is the burst of paper like the Räppli, does every fifth throw pay with the crack sound, is 16 Batzen a day fair?
+- [ ] Eat the Zibelechueche and the Mehlsuppe (LMB, pad X): the soup warms for 3 minutes.
+- [ ] VR: a grip at a stall works through the pad route; grabbing a braid or throwing an egg by hand is not built.
+
+## Escalade ([#1352](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1352))
+
+`--festival test --date 2027-12-11 --world fixture` (the Marmite stands at the fixture's start, the pot 9 m east, the start line 12 m west), or online on the western map in the real dates (second Saturday of December, relocated to the region's largest town).
+
+- [ ] Look at the square: a cast-iron Marmite with a chocolate lid and a red-and-white band, marzipan vegetables and a little flag; a copper soup pot over a fire; the start arch; six torch posts on a ring of 55 m. Cartoon, PS1 and Realistic: do they read well, and do the fire, torches and lanterns glow at night?
+- [ ] Two people in a party at the Marmite: E (pad Y) as the first says "You hold the Marmite", the other gets "take the other side now!"; the second's E smashes it. Is the saying readable, the crash and crumbs a good sound, the chocolate in both packs? A third party member near it is paid but cannot smash.
+- [ ] The soup pot: one E feeds everyone of the party within 12 m; the others see "<name> ladles you a bowl of soupe". Eat the soupe (LMB, pad X): warm for 3 minutes.
+- [ ] The Course: E at the start arch begins it with the horn; the panel counts the time and shows the next gate with its distance and compass point; the torch posts are easy to find; a bell rings at each gate and at the line. Is par (a good jog) fair, are the gate rings of 6 m forgiving?
+- [ ] VR: a grip at the Marmite, the pot or the start line works through the pad route; gripping the lid or the ladle by hand is not built.
+
 ## Christmas market ([#1349](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1349))
 
 `--festival test --date 2027-11-30 --world fixture` (the market stands at the fixture's start; `--date 2027-12-06` for the Samichlaus's day), or online on the western map in the real dates (Montreux, Grand-Rue).
@@ -197,12 +316,24 @@ Two players in one party, `--systems ...,adventure`. On a real region for the gl
 - [ ] Hold E 0.5 s at a party member, the other accepts with F2 → hands are posed to meet at hip height on both screens; walk with no input as the follower and you are led along the leader's trail. Tap E at the same person → still the fist-fight challenge.
 - [ ] Pad: hold Y at a party member → the same invite; Y with no target lets go. VR: the same through the pad route (hold Y); gripping a hand and opening the grip are not built. Judge whether the hand pose looks natural.
 - [ ] Rope up on a glacier or a snowfield (`/rope <player>`), then fall off a ledge or into the snow → the rope catches you, you hang at the rope's length; the partner holds E 2 s (pad hold Y) → you rise. Judge the swing and the haul speed.
-- [ ] A real glacier unroped, walking across it (`Settings › Gameplay › Crevasses` on) → now and then a hidden crevasse's bridge breaks: you stumble back winded and a blue slot opens. Roped to a standing partner → a stumble only. Judge how often it happens (4 % of 12 m cells) and whether it is fun or an annoyance. Not built: the slot with its own collision, you cannot fall in.
+- [ ] Hidden crevasses: see the section "Hidden crevasses" below.
 - [ ] A mountain hut, a Beiz or a lit campfire with a fondue pot (E, or use the pot item at the fire) → the panel opens, the party sits down; trace an eight with the mouse (hold LMB) and the right stick (VR: the stick; no real fork yet) → the cheese stays smooth; stop stirring on a high heat → it splits with a hiss. Judge the stirring feel and the panel's size on a pad and in VR.
 - [ ] Lose your bread (keep dipping) → the forfeit popup (line, buy a round, yodel) answers with 1-3, D-pad + A and the laser; `--forfeits mild` hides the money one.
 - [ ] Two-handle gate at a castle, hut or mine (`RewardPlacer` layouts, real region) → two players hold E at the two wheels within 1.5 s and it opens for 60 s; leg-up: crouch at a high boulder, the partner jumps onto the step → 2.6 m climb-jump without stamina.
 - [ ] With a veteran (3 summits) guiding a newcomer to a first summit on a real map → both get their cap (Erstbesteigung, Bergführer); the Journal's Collection > Together page shows the stamps, the week's minutes and the mentor table. Judge the page's layout.
 - [ ] `--world fixture` is enough for everything except the glacier, the real huts and the gates; the Crevasse, Caquelon, Rope, Harness and Gate models are in the model viewer (`--models`, category Adventure) → look right in Cartoon, PS1 and Realistic.
+## Hidden crevasses (#1372)
+
+A real glacier (Aletsch, Rhône, Morteratsch: `--chunks` at real tiles with glacier cover). `Settings › Gameplay › Crevasses` on (default), or `--crevasses on`.
+
+- [ ] Unroped, walk across a glacier for a few minutes → now and then (4 % of 12 m cells) the snow bridge breaks: you fall 10 m into a blue ice slot, unhurt, and the toast says to climb. Judge how often it happens and whether the fall, the dark slot and the sky above read well in Cartoon, PS1 and Realistic (the terrain is not drawn from underneath: look up and sideways).
+- [ ] In the slot, push the stick / W into an ice wall → you grab it and climb out (the stamina ring pays); at the top you stand on solid snow, not falling through. Pad: the left stick into the wall. VR: the same through the pad route, or hand over hand (`XrClimb`). Judge the climb speed and whether the top-out is smooth.
+- [ ] Wait a minute in the slot without climbing → you are set on the lip (the rescue). Judge whether a minute is the right time.
+- [ ] Roped to a standing friend within the rope's length → the bridge breaks, the rope holds you 3 m under the lip (zip sound), you hang; the friend holds E 2 s (pad: hold Y) → you rise out. Your friend sees you in the slot on their screen. Judge the swing and whether the friend can see what is going on.
+- [ ] Settings › Crevasses off, or the server started with `--crevasses off` → nothing breaks.
+- [ ] A server run (`StaminaWatch` on): the server log shows `is down a crevasse: not watched` and no `implausible climb` for the climb out.
+- [ ] The Crevasse model (`--models`, Adventure) and the Crack and Thud sounds (`--sounds`) look and sound right.
+
 ## Festival framework, part 1 of the festivals ([#1295](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1295))
 
 Nothing is player-facing yet but the Journal tab and the poles: the check-only festival stands in for the real ones. Offline: `<godot> --path . -- --festival test --date 2027-03-11 --systems ui,physics,occasions,adventure --world fixture` (add `--chunks D:/UnitSportSwitzerland/terrain_chunks` for the real map, where the test festival is held at the Riddes spawn).
@@ -368,3 +499,20 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 
 - [ ] On foot, click a house in a dense town on the adventure map (and the XR hand map, `/goto` onto a footprint) → you land on the nearest open ground beside it, never inside; the travel curtain lifts only once you stand there.
 - [ ] Teleport into a forest → you end up in the nearest clearing (up to 150 m); is that acceptable?
+
+## City main-thread hot spots ([#1345](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1345))
+
+- [ ] Walk up to a stadium during a show (`--concert 1`, or a venue with an event today): the rig, the LED wall and the crowd are lit and moving as you cross 900 m, with no frozen beams or black screens on the first frames, and the beams swing in from their DMX position rather than from a stale one.
+- [ ] Walk out beyond 900 m and back, once while the show is on and once after it has ended: the crowd is gone when the show is off, and the rig comes back lit.
+- [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
+- [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.
+
+## Montreux Jazz Festival (PR for [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394))
+
+- [ ] With the real map at Montreux (the full region needed; `--date 2027-07-11 --time 21` shows the stage today, or in the real 3-18 July window): the small stage stands on the Place du Marché by the quay, facing east with the lake behind the band, the crowd seated on the sand, the promenade along the water free to walk, the fence open on the lake side, nothing inside the stage. Does it look like Montreux? Outside the festival's dates the square is the square (no stage, no crowd, no fence).
+- [ ] The quartet (an upright bass, a sax, a piano with its stool, a drum kit): do the four instruments look right in Cartoon, PS1 and Realistic? Does the sway read as jazz, and do the warm washes feel calm (never a strobe or a flash)?
+- [ ] Listening: E at the stage-front rail (pad Y, VR grip or the pad's Y) marks you; a toast top right for each song heard to its end. Does the toast stay clear of the stage and fade in about 3 s? Is a song's 6 Batzen (about CHF 2 a minute at the festival's real pace) a fair pay?
+- [ ] The encore, alone and with a friend on a second machine: the ring closes at the bottom centre on every beat, the meter's text ("7 of 12") is readable, jump / the pad's A / the VR pad's A claps. Does the ring feel fair with a pad and in a headset? Two friends with 6 claps each fill the meter; does it feel good that strangers' claps count?
+- [ ] The Jazz Night (day 8) and the closing night (day 16, `--festival test` is not needed: set the date `--date 2027-07-17` at the real map): the set is longer, the last song of the closing night pays the 20 Batzen finale and the two confetti cannons fire on each song's last chorus.
+- [ ] A real 3-18 July run: the festival is on, the Journal's Festival tab shows the days, the Jazz pass (item 511) is in the pack after the first song, the Batzen convert after the last day.
+- [ ] No audio plays at the stage yet (lights only, the made-up songs): once the owner picks copyright-free jazz tracks (`CdLibrary.JazzUrls`), does the set follow the CD, and does the 80 % rule need `ConcertMusic.At` as the games' clock (a follow-up noted in `occasions/festival-montreuxjazz`)?

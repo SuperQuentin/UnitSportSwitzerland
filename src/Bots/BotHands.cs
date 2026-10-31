@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Godot;
+using UnitSport.Combat;
 using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Player;
@@ -42,6 +43,8 @@ public static class BotHands
     /// </summary>
     public static bool Fire(Bot bot, Vector3 target)
     {
+        // a sword in the pack and the target at its reach (#1371): the swing is the hands' answer, a gun's range is not
+        if (HasSword(bot) && Pick(bot) is null && bot.Body.GlobalPosition.DistanceTo(target) <= SwordReach + 0.9f) return Swing(bot, target);
         if (ItemEventsServer is not { } events || Pick(bot) is not var (slot, weapon)) return false;
         var body = bot.Body;
         // on foot only, as a player's items (ItemController.UsablePlayer): nobody shoots from the wheel
@@ -107,9 +110,107 @@ public static class BotHands
         return true;
     }
 
+    // ---- the sword (#1371) -------------------------------------------------------------------------------------
+
+    /// <summary>Whether the bot carries a sword on its hotbar.</summary>
+    public static bool HasSword(Bot bot) => SwordSlot(bot) >= 0;
+
+    private static int SwordSlot(Bot bot)
+    {
+        for (int i = 0; i < Inventory.HotbarSize; i++)
+            if (bot.Inventory[i].Id == ItemId.Sword && !bot.Inventory[i].IsEmpty) return i;
+        return -1;
+    }
+
+    /// <summary>The longest a swing reaches from the body's centre, for a brain's choice of distance.</summary>
+    public static float SwordReach => SwordRules.Def(SwordMove.Slash1).Reach;
+
+    /// <summary>
+    /// Swings the sword at <paramref name="target"/> (a world point): the hands press the attack for a moment, and the machine
+    /// (the same as a player's) chains the combo while it is asked every tick. False when there is no sword, the body is not
+    /// up, or the target is out of reach (the brain closes in first). The moves and hits go through <c>SwordService</c>'s
+    /// server path (<see cref="SwordService.ServerAct"/>, <see cref="SwordService.ServerHit"/>): the same guard as a player's.
+    /// </summary>
+    public static bool Swing(Bot bot, Vector3 target)
+    {
+        int slot = SwordSlot(bot);
+        var body = bot.Body;
+        if (slot < 0 || body.Eliminated || body.KnockedOut || body.Down != 0 || BotDriving.Mounted(bot)) return false;
+        if (body.GlobalPosition.DistanceTo(target) > SwordReach + 0.9f) return false;
+        Cancel(bot);
+        bot.Inventory.Select(slot);
+        body.HeldItemId = (int)ItemId.Sword;
+        body.ItemAction = 1;
+        bot.SwordWantUntil = BotDirector.Clock + 0.12;
+        bot.SwordTarget = target;
+        return true;
+    }
+
+    /// <summary>Dodges away from <paramref name="from"/> (a world point): a dash with the i-frames, for the stamina, through the server's guard.</summary>
+    public static bool Dodge(Bot bot, Vector3 from)
+    {
+        if (!HasSword(bot) || bot.Body.Eliminated || bot.Body.Down != 0) return false;
+        bot.DodgeWantUntil = BotDirector.Clock + 0.12;
+        bot.DodgeAway = from;
+        return true;
+    }
+
+    /// <summary>The director, every frame: the sword's machine stepped with what the hands were asked, its moves and blows sent through the service.</summary>
+    private static void SwordTick(Bot bot, double now)
+    {
+        var m = bot.Sword;
+        var body = bot.Body;
+        int slot = SwordSlot(bot);
+        if (slot < 0 || !bot.Alive || body.Down != 0)
+        {
+            if (m.Busy || m.Charging) m.Reset();
+            return;
+        }
+        bool want = now < bot.SwordWantUntil, wantDodge = now < bot.DodgeWantUntil;
+        if (!want && !wantDodge && !m.Busy && now - m.EndedAt > 1.0 && m.Stamina.Points >= SwordStamina.Max - 0.01f) return;   // nothing to do, nothing to refill
+        var dir = bot.SwordTarget - body.GlobalPosition;
+        float yaw = Mathf.Atan2(-dir.X, -dir.Z);
+        // a pulse, never a hold: the press is the edge, and the next tick lets go
+        bot.SwordPulse = want && !bot.SwordPulse;
+        var input = new SwordInput { Attack = bot.SwordPulse, Tap = true, Dodge = wantDodge && !bot.SwordPulse, Grounded = true };
+        m.Step(now, input);
+        var svc = ServerSwords;
+        if (m.Began)
+        {
+            if (m.Move == SwordMove.Dodge)
+            {
+                var away = (body.GlobalPosition - bot.DodgeAway) with { Y = 0 };
+                body.SwordDash((away.LengthSquared() > 0.01f ? away.Normalized() : Vector3.Back) * 13f);
+                svc?.ServerAct(bot.Id, SwordMove.Dodge, body.Rotation.Y);
+            }
+            else
+            {
+                body.LookYaw = yaw;
+                body.SquareToView = true;
+                bot.SwordTraced = false;
+                svc?.ServerAct(bot.Id, m.Move, yaw, SwordPoses.Code(0, (int)m.Move + bot.SwordSwings++));
+            }
+        }
+        if (svc != null && SwordRules.IsBlow(m.Move))
+        {
+            // the blade goes live: reach and cone against what the server holds; once more late in the window
+            double into = m.Into(now);
+            var d = SwordRules.Def(m.Move);
+            if (m.ActiveBegan) { bot.SwordTraced = false; svc.ServerTrace(bot.Id, m.Move, yaw); }
+            else if (m.Live(now) && !bot.SwordTraced && into >= d.Startup + d.Active * 0.6)
+            {
+                bot.SwordTraced = true;
+                svc.ServerTrace(bot.Id, m.Move, yaw);
+            }
+        }
+    }
+
+    private static SwordService? ServerSwords => BotDirector.Instance?.Swords;
+
     /// <summary>The director, every frame: a use that has run its time applies (the item is spent then, not before).</summary>
     public static void Tick(Bot bot, double now)
     {
+        SwordTick(bot, now);
         if (bot.UseUntil <= 0 || now < bot.UseUntil) return;
         var item = bot.UseItem;
         bot.UseUntil = 0;
@@ -131,6 +232,14 @@ public static class BotHands
     /// <summary>Gives a bot a weapon and rounds for it (<c>/bot arm</c>, a mode's kit).</summary>
     public static void Arm(Bot bot, ItemId weapon, int rounds)
     {
+        if (weapon == ItemId.Sword)
+        {
+            int free = Enumerable.Range(0, Inventory.HotbarSize).FirstOrDefault(i => bot.Inventory[i].IsEmpty, 1);
+            bot.Inventory.Put(free, new ItemStack(weapon, 1));
+            bot.Inventory.Select(free);
+            bot.Body.HeldItemId = (int)weapon;
+            return;
+        }
         if (Weapons.Get(weapon) is not { } w) return;
         int slot = Enumerable.Range(0, Inventory.HotbarSize).FirstOrDefault(i => bot.Inventory[i].IsEmpty, 1);
         bot.Inventory.Put(slot, new ItemStack(weapon, 1));

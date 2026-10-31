@@ -53,6 +53,19 @@ public partial class PhoneNetProbe : ChatProbe
         Expect(!phone.IsOut, "A put it away");
         Say("away");
         Expect(await Heard("B", "seen away", 12), "B saw it put away");
+
+        // the holster (#1369): the selection stays on A, B's copy of A has an empty hand, then the item again
+        var inv = _items.Inventory;
+        for (int i = 0; i < Inventory.HotbarSize && inv.Held.IsEmpty; i++) inv.Select(i);
+        await Seconds(1.0);
+        Say("drawn");
+        Expect(await Heard("B", "seen drawn", 12), "B saw A's item in hand");
+        inv.SetHolstered(true);
+        Say("holstered");
+        Expect(await Heard("B", "seen holstered", 12), "B saw A's hand empty after the holster");
+        inv.SetHolstered(false);
+        Say("redrawn");
+        Expect(await Heard("B", "seen redrawn", 12), "B saw the item back in A's hand");
     }
 
     private async Task RunB(FootPlayer me)
@@ -80,6 +93,16 @@ public partial class PhoneNetProbe : ChatProbe
                                  && c.PhoneModel is not { Visible: true }, 4),
             $"A's copy has put it away, its arms off the phone (arms {Copy()?.DrawnArmPose})");
         Say("seen away");
+
+        if (!await Heard("A", "drawn", 20)) { Fail("A never drew an item"); return; }
+        Expect(await Until(() => Copy() is { HeldItemId: not 0 }, 4), $"A's copy has an item in hand ({Copy()?.HeldItemId})");
+        Say("seen drawn");
+        if (!await Heard("A", "holstered", 20)) { Fail("A never holstered"); return; }
+        Expect(await Until(() => Copy() is { HeldItemId: 0 }, 4), $"A's copy has an empty hand once holstered ({Copy()?.HeldItemId})");
+        Say("seen holstered");
+        if (!await Heard("A", "redrawn", 20)) { Fail("A never drew again"); return; }
+        Expect(await Until(() => Copy() is { HeldItemId: not 0 }, 4), $"A's copy has the item back ({Copy()?.HeldItemId})");
+        Say("seen redrawn");
     }
 
     /// <summary>Windowed: turn to A's copy and save the view.</summary>

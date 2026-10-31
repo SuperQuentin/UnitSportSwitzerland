@@ -53,13 +53,15 @@ public partial class PhoneProbe : Node
         await Wait(1.0);
         Shot("phone_0_before.png");
 
-        // the camera's own zoom (#1149): Shift + wheel in to the face, the hotbar left as it was; - back out
+        // the camera's own zoom (#1149, #1369): the plain wheel zooms whatever is held (Shift too: it is sprint),
+        // in to the face, the hotbar left as it was; - back out
+        await HolsterChecks(me);
         if (me.ZoomsView)
         {
             int inHand = me.HeldItemId;
             for (int i = 0; i < 12; i++) await Wheel(MouseButton.WheelUp, shift: true, 0.05);
             await Wait(0.8);
-            Check(me.ViewZoom < 0.7f, $"Shift + wheel zooms in to the face ({me.ViewZoom:F2} m)");
+            Check(me.ViewZoom < 0.7f, $"wheel with Shift held zooms in to the face ({me.ViewZoom:F2} m)");
             Check(me.HeldItemId == inHand, $"and does not step the hotbar ({inHand} -> {me.HeldItemId})");
             Shot("phone_0b_zoom_back.png");
             me.LookYaw += Mathf.Pi;
@@ -440,11 +442,107 @@ public partial class PhoneProbe : Node
         Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
     }
 
-    private async Task Wheel(MouseButton button, bool shift, double after)
+    private async Task Wheel(MouseButton button, bool shift, double after, bool alt = false)
     {
         foreach (bool down in new[] { true, false })
-            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, ShiftPressed = shift });
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, ShiftPressed = shift, AltPressed = alt });
         await Wait(after);
+    }
+
+    /// <summary>
+    /// The hotbar's wheel and the holster (#1369): Alt + wheel steps the slot (the plain wheel, Shift or not, does not),
+    /// the number of the slot in hand puts its item away and takes it out, the holster key does the same, Use draws
+    /// and uses, and an item left alone for 8 s goes away by itself. A holstered hand reads as empty to the other peers.
+    /// </summary>
+    private async Task HolsterChecks(FootPlayer me)
+    {
+        if (Items.ItemController.Instance is not { } items) { Log("skip (no items)"); return; }
+        var inv = items.Inventory;
+        int slot = -1;
+        for (int i = 0; i < Items.Inventory.HotbarSize && slot < 0; i++) if (!inv[i].IsEmpty) slot = i;
+        if (slot < 0) { Log("skip (empty hotbar)"); return; }
+        GameSettings.Current.AutoHolster = true;
+        inv.Select(slot);
+        await Wait(0.3);
+        Check(me.HeldItemId != 0 && !inv.Holstered, $"slot {slot + 1} is in hand ({me.HeldItemId})");
+
+        int before = inv.Selected;
+        await Wheel(MouseButton.WheelDown, shift: false, 0.2);
+        await Wheel(MouseButton.WheelDown, shift: true, 0.2);
+        Check(inv.Selected == before, $"the plain wheel, Shift or not, does not step the hotbar ({before} -> {inv.Selected})");
+        await Wheel(MouseButton.WheelDown, shift: false, 0.2, alt: true);
+        Check(inv.Selected == (before + 1) % Items.Inventory.HotbarSize, $"Alt + wheel steps it ({before} -> {inv.Selected})");
+        await Wheel(MouseButton.WheelUp, shift: false, 0.2, alt: true);
+        Check(inv.Selected == before, $"Alt + wheel up steps back ({inv.Selected})");
+
+        await Key(Godot.Key.Key1 + slot, 0.3);
+        Check(inv.Holstered && me.HeldItemId == 0, $"the number of the slot in hand holsters it: the hand is empty ({me.HeldItemId})");
+        await Key(Godot.Key.Key1 + slot, 0.3);
+        Check(!inv.Holstered && me.HeldItemId != 0, $"and again draws it ({me.HeldItemId})");
+        await Press(PlayerInput.Holster, 0.3);
+        Check(inv.Holstered && me.HeldItemId == 0, "the holster key puts it away");
+        items.ForceAim = true;
+        await Wait(0.2);
+        items.ForceAim = false;
+        Check(!inv.Holstered, "Aim draws it");
+        inv.SetHolstered(true);
+        await Press(PlayerInput.UseItem, 0.1);
+        Check(!inv.Holstered, "Use draws it (and uses it on the same press)");
+        inv.SetHolstered(true);
+        await Press(PlayerInput.NextItem, 0.3);
+        Check(!inv.Holstered, "picking another slot draws");
+        inv.Select(slot);
+        await Wait(0.3);
+
+        double t0 = GameClock.Now;
+        while (!inv.Holstered && GameClock.Now - t0 < 12) await Wait(0.2);
+        double idle = GameClock.Now - t0;
+        Check(inv.Holstered && idle is > 7.0 and < 10.0, $"left alone, it is holstered after about 8 s ({idle:F1} s)");
+        Check(me.HeldItemId == 0, "and replicated as an empty hand");
+        // no item type is exempt: a hammer left alone goes away too
+        var keep = inv[slot];
+        int hamSlot = (slot + 1) % Items.Inventory.HotbarSize;
+        var keepHam = inv[hamSlot];
+        inv.Put(hamSlot, new Items.ItemStack(Items.ItemId.Hammer, 1));
+        inv.Select(hamSlot);
+        await Wait(0.3);
+        t0 = GameClock.Now;
+        while (!inv.Holstered && GameClock.Now - t0 < 12) await Wait(0.2);
+        idle = GameClock.Now - t0;
+        Check(inv.Holstered && idle is > 7.0 and < 10.0, $"a hammer (once exempt) is holstered after about 8 s too ({idle:F1} s)");
+
+        // a new sprint start holsters at once; drawing on the run stays out; the next sprint holsters again
+        inv.Select(hamSlot);
+        await Wait(0.3);
+        Check(!inv.Holstered, "hammer in hand before the sprint");
+        Input.ActionPress(PlayerInput.MoveForward);
+        Input.ActionPress(PlayerInput.Sprint);
+        for (double w0 = GameClock.Now; !me.SprintIntent && GameClock.Now - w0 < 2;) await Wait(0.1);
+        await Wait(0.3);
+        Check(me.SprintIntent && inv.Holstered && me.HeldItemId == 0, "starting a sprint puts the item in the pocket");
+        await Wait(0.5);
+        Check(inv.Holstered, "and it is not drawn back by itself");
+        await Press(PlayerInput.UseItem, 0.1);
+        await Wait(0.5);
+        Check(!inv.Holstered && me.SprintIntent, "Use draws it on the run, and it stays out while the sprint goes on");
+        Input.ActionRelease(PlayerInput.Sprint);
+        await Wait(0.3);
+        Input.ActionPress(PlayerInput.Sprint);
+        await Wait(0.4);
+        Check(inv.Holstered, "a NEW sprint holsters again");
+        Input.ActionRelease(PlayerInput.Sprint);
+        Input.ActionRelease(PlayerInput.MoveForward);
+        inv.Put(hamSlot, keepHam);
+        inv.Put(slot, keep);
+
+        GameSettings.Current.AutoHolster = false;
+        inv.Select(slot);
+        t0 = GameClock.Now;
+        await Wait(9.5);
+        Check(!inv.Holstered, "Auto holster off: it stays out");
+        GameSettings.Current.AutoHolster = true;
+        inv.Select(slot);
+        await Wait(0.3);
     }
 
     /// <summary>One of the phone's screens as it is drawn, into test_output/ (windowed).</summary>

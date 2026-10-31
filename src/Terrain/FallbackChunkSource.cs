@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using UnitSport.Terrain.Format;
 
@@ -419,6 +420,10 @@ public sealed partial class FallbackChunkSource : IChunkSource
             });
         });
 
+        lock (_touchedBlends)
+            for (int t = 0; t < ids.Count; t++)
+                if (blendKeys[t] != 0) _touchedBlends.Add((ids[t], blendKeys[t]));
+
         var tiles = new Dictionary<TileId, ushort[]>(ids.Count + (real?.Count ?? 0));
         if (real != null)
             foreach (var id in real.Tiles)
@@ -436,13 +441,7 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
         Log?.Invoke($"[fallback] horizon: {real?.Count ?? 0} real + {ids.Count} generated tiles "
             + $"({blended} blended, {ids.Count - computed} from cache) in {clock.ElapsedMilliseconds} ms");
-        if (computed > 0)
-        {
-            var current = new List<((TileId, ulong), ushort[])>(ids.Count);
-            for (int t = 0; t < ids.Count; t++)
-                if (blendKeys[t] != 0) current.Add(((ids[t], blendKeys[t]), samples[t]));
-            SaveHorizonCache(current);
-        }
+        if (computed > 0) SaveHorizonCache();
         return new HorizonIndex(tiles, water);
     }
 
@@ -486,15 +485,21 @@ public sealed partial class FallbackChunkSource : IChunkSource
         if (!File.Exists(path)) return;
         try
         {
-            using var reader = new BinaryReader(new BufferedStream(File.OpenRead(path), 1 << 16));
-            if (reader.ReadUInt32() != HorizonCacheMagic || reader.ReadInt32() != HorizonCacheVersion) return;
-            int count = reader.ReadInt32();
+            // one read and slices, not 10 million ReadUInt16 calls: the warm launch's first cost (#1380)
+            var file = File.ReadAllBytes(path).AsSpan();
+            if (file.Length < 12 || BinaryPrimitives.ReadUInt32LittleEndian(file) != HorizonCacheMagic
+                || BinaryPrimitives.ReadInt32LittleEndian(file[4..]) != HorizonCacheVersion) return;
+            int count = BinaryPrimitives.ReadInt32LittleEndian(file[8..]);
+            int sampleBytes = HorizonFormat.SamplesPerTile * sizeof(ushort), record = 16 + sampleBytes;
+            if (file.Length < 12 + (long)count * record) return;
             for (int i = 0; i < count; i++)
             {
-                var id = new TileId(reader.ReadInt32(), reader.ReadInt32());
-                ulong key = reader.ReadUInt64();
+                var entry = file.Slice(12 + i * record, record);
+                var id = new TileId(BinaryPrimitives.ReadInt32LittleEndian(entry), BinaryPrimitives.ReadInt32LittleEndian(entry[4..]));
+                ulong key = BinaryPrimitives.ReadUInt64LittleEndian(entry[8..]);
                 var samples = new ushort[HorizonFormat.SamplesPerTile];
-                for (int j = 0; j < samples.Length; j++) samples[j] = reader.ReadUInt16();
+                var raw = entry[16..];
+                for (int j = 0; j < samples.Length; j++) samples[j] = BinaryPrimitives.ReadUInt16LittleEndian(raw[(j * 2)..]);
                 if (key == 0) _plainHorizon.TryAdd(id, samples);
                 else _blendedHorizon.TryAdd((id, key), samples);
             }
@@ -502,12 +507,29 @@ public sealed partial class FallbackChunkSource : IChunkSource
         catch (Exception e) { Log?.Invoke($"[fallback] generated horizon cache unreadable: {e.Message}"); }
     }
 
-    /// <summary>Every plain tile known, and the blended tiles of the current real set.</summary>
-    private void SaveHorizonCache(List<((TileId Id, ulong Key), ushort[] Samples)> blended)
+    /// <summary>Blends any pass of this process asked for: what a cache bigger than needed is pruned to.</summary>
+    private readonly HashSet<(TileId Id, ulong Key)> _touchedBlends = new();
+
+    /// <summary>
+    /// Every plain tile known, and every blended tile known: the file's, plus what this process computed
+    /// in each pass. A pass used to save only its own blends. The boot pass (the real set the client
+    /// knew) and the one after the server's index merged (the whole region) then each erased the other's,
+    /// so the second recomputed ~4.5 s of blends at every launch (#1380). Keys carry the knots they blend
+    /// on, so both sets live side by side; the file is cut back to this process's blends only when it
+    /// holds over four times as many (a region that changed under it).
+    /// </summary>
+    private void SaveHorizonCache()
     {
         if (HorizonCachePath is not { } path) return;
         try
         {
+            List<((TileId Id, ulong Key), ushort[] Samples)> blended;
+            lock (_touchedBlends)
+            {
+                blended = _blendedHorizon.Select(kv => (kv.Key, kv.Value)).ToList();
+                if (blended.Count > 4 * Math.Max(_touchedBlends.Count, 1000))
+                    blended = blended.Where(b => _touchedBlends.Contains(b.Item1)).ToList();
+            }
             Directory.CreateDirectory(HorizonCacheDir!);
             foreach (var old in Directory.GetFiles(HorizonCacheDir!, "generated-horizon-*.bin"))
                 if (old != path) File.Delete(old);

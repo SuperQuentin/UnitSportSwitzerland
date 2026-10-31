@@ -179,6 +179,9 @@ public static class Recipes
         ItemId.Candy, ItemId.Pumpkin, ItemId.Biberli, ItemId.Mandarin,
         ItemId.Grittibaenz, ItemId.Gluehwein,
         ItemId.WitchHat, ItemId.PumpkinHead, ItemId.SantaHat, ItemId.ReindeerAntlers,
+        ItemId.JazzPass,   // the Montreux Jazz wristband, from its Listening game (#1394)
+        ItemId.Zwiebelzopf, ItemId.Zibelechueche, ItemId.Mehlsuppe, ItemId.Konfettiei,   // the Zibelemärit's, from its stalls (#1373)
+        ItemId.Raeppli, ItemId.LarveWaggis, ItemId.LarveDante, ItemId.LarveHarlekin, ItemId.LarveTeufel,   // the Fasnacht's, from its stall (#1357)
         // sold only (#273): the Swiss army knife, and what only a PAUSA machine holds
         ItemId.SwissArmyKnife, ItemId.IceTea, ItemId.Crisps, ItemId.GummyBears, ItemId.IsotonicDrink,
         // Battle Royale finds (#478)

@@ -997,6 +997,87 @@ public static partial class ItemIcons
 
         d[ItemId.GluehweinMug] = d[ItemId.Gluehwein];
 
+        d[ItemId.MarmiteChocolate] = Round(p =>
+        {
+            p.Rect(3, 5, 12, 11, 'R');
+            p.Rect(4, 6, 11, 10, 'O');
+            p.Rect(5, 7, 7, 8, 'Y');
+            p.Rect(9, 9, 10, 9, 'R');
+        });
+
+        d[ItemId.SoupeEscalade] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 6f, 3.2f, 'w', 'w', 'a');
+            p.Disc(7.5f, 8.5f, 4.8f, 1.8f, 'y', 'o', 'O');
+            p.Set(5, 8, 'r'); p.Set(9, 9, 'N'); p.Set(8, 7, 'l');
+        });
+
+        d[ItemId.Zwiebelzopf] = Round(p =>
+        {
+            p.Rect(7, 1, 8, 15, 'N');
+            p.Disc(5.5f, 11f, 2.6f, 2.8f, 'y', 'o', 'O');
+            p.Disc(10f, 8f, 2.6f, 2.8f, 'y', 'o', 'O');
+            p.Disc(5.5f, 5.5f, 2.4f, 2.6f, 'y', 'o', 'O');
+        });
+
+        d[ItemId.Zibelechueche] = Round(p =>
+        {
+            p.Disc(7.5f, 9f, 6.4f, 4.4f, 'O', 'o', 'N');
+            p.Disc(7.5f, 8.5f, 5.2f, 3.2f, 'Y', 'y', 'o');
+            p.Set(5, 8, 'N'); p.Set(9, 9, 'N');
+        });
+
+        d[ItemId.Mehlsuppe] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 6f, 3.2f, 'w', 'w', 'a');
+            p.Disc(7.5f, 8.5f, 4.8f, 1.8f, 'O', 'o', 'N');
+        });
+
+        d[ItemId.Konfettiei] = Round(p =>
+        {
+            p.Disc(7.5f, 8.5f, 4.4f, 5.6f, 'w', 'Y', 'O');
+            p.Set(6, 7, 'R'); p.Set(9, 9, 'b'); p.Set(7, 11, 'G'); p.Set(10, 6, 'R');
+        });
+
+        d[ItemId.BooggCervelat] = Round(p =>
+        {
+            p.Rect(2, 7, 13, 11, 'R');
+            p.Rect(3, 8, 12, 10, 'O');
+            p.Set(5, 8, 'N'); p.Set(8, 9, 'N'); p.Set(11, 8, 'N');
+            p.Rect(13, 6, 15, 6, 'a');
+        });
+
+        d[ItemId.JazzPass] = Round(p =>
+        {
+            p.Disc(7.5f, 8f, 6.2f, 5.2f, 'Y', 'o', 'N');
+            p.Disc(7.5f, 8f, 3.4f, 2.6f, 'n', 'n', 'n');
+            p.Rect(2, 7, 13, 8, 'b');
+        });
+
+        d[ItemId.ChalandaTreichel] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 5.4f, 4.6f, 'y', 'o', 'O');
+            p.Rect(7, 3, 8, 6, 'N');
+            p.Rect(5, 3, 10, 3, 'R');
+        });
+
+        d[ItemId.Lampion] = Round(p =>
+        {
+            p.Rect(7, 1, 8, 15, 'N');
+            p.Rect(5, 1, 10, 1, 'N');
+            p.Disc(7.5f, 7f, 3.8f, 4.4f, 'q', 'r', 'R');
+            p.Rect(6, 5, 9, 9, 'Y');
+            p.Set(7, 13, 'k'); p.Set(8, 13, 'k');
+        });
+
+        d[ItemId.FireworkBox] = Round(p =>
+        {
+            p.Rect(2, 6, 13, 13, 'R');
+            p.Rect(2, 6, 13, 7, 'w');
+            p.Rect(5, 9, 10, 11, 'Y');
+            p.Rect(4, 2, 4, 5, 'w'); p.Set(4, 1, 'Y'); p.Set(3, 0, 'O');
+        });
+
         d[ItemId.ChristmasBauble] = Round(p =>
         {
             p.Disc(7.5f, 9f, 5.2f, 4.8f, 'q', 'r', 'R');
@@ -1117,6 +1198,27 @@ public static partial class ItemIcons
             "knnNNnnNNNkkkkkk",
             "kNNk.kGk........",
             ".kkk.kkk........",
+        };
+
+        // the sword (#1371): a long blade up to the right, a gold guard, a leather grip
+        d[ItemId.Sword] = new[]
+        {
+            "..............kk",
+            ".............kwk",
+            "............kwak",
+            "...........kwak.",
+            "..........kwak..",
+            ".........kwak...",
+            "........kwak....",
+            "..k....kwak.....",
+            "..kYk.kwak......",
+            "...kYkwak.......",
+            "....kYYk........",
+            "...kNkYYk.......",
+            "..kNnk.kYk......",
+            "..kNk....k......",
+            "...k............",
+            "................",
         };
 
         d[ItemId.Knife] = new[]

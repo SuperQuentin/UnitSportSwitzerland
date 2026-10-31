@@ -127,6 +127,9 @@ public static class ItemDefs
             ItemUse.Shoot, 1, new Color(0.42f, 0.28f, 0.16f), "HR", 0, ItemCategory.Gear, 1200f),
         new(ItemId.Knife, "Army knife", "{use_item} to stab whoever stands in front of you.",
             ItemUse.Melee, 1, new Color(0.80f, 0.10f, 0.12f), "KN", 0, ItemCategory.Gear, 40f),
+        // the sword (#1371): its controls are on while it is in the hand (Combat/SwordRules)
+        new(ItemId.Sword, "Sword", "{use_item} swings, again in the rhythm for a five-blow combo; hold {use_item} after a swing for a charged blow. {sword_dodge} dodges (you cannot be hit for a moment), {sword_lock} locks onto a target. Blows and dodges cost stamina.",
+            ItemUse.Sword, 1, new Color(0.72f, 0.76f, 0.84f), "SW", 0, ItemCategory.Gear, 600f),
         new(ItemId.Ammo9mm, "9 mm rounds", "Ammunition for the pistol.",
             ItemUse.Material, 90, new Color(0.80f, 0.66f, 0.30f), "9M", 0, ItemCategory.Gear, 0.5f),
         new(ItemId.Ammo75, "7.5 mm rounds", "Ammunition for the assault rifle and the hunting rifle.",
@@ -151,7 +154,7 @@ public static class ItemDefs
         Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
 
         // building (#274): pieces cost materials straight from the pack
-        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + {next_item} picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
+        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + wheel (D-pad right on a pad) picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
             ItemUse.Build, 1, new Color(0.45f, 0.30f, 0.18f), "HM", 0, ItemCategory.Gear, 12f),
         new(ItemId.TrafficTool, "Traffic tool", "An admin's (#971). Held, the traffic generators show; {use_item} on a road places one, on a placed one opens it: whether it makes cars and how many, whether it is a destination, where its cars go, which way it faces.",
             ItemUse.TrafficTool, 1, new Color(0.95f, 0.5f, 0.1f), "TG", 0, ItemCategory.Gear, 0f),
@@ -279,6 +282,41 @@ public static class ItemDefs
         // the Christmas markets (#1348): the stalls' mulled wine (2 dl, 10 %, through AlcoholService.ServeDrink when drunk) and the ornaments stall's bauble
         Eat(ItemId.GluehweinMug, "Glühwein (mug)", 3, "#8a1a2a", "GM", 20, ItemCategory.Water, 5) with
             { Blurb = "{use_item} to drink. Mulled red wine, 2 dl at 10 %: warm for 4 minutes (climbing costs a quarter less). Bought at the Christmas market.", DrinkMl = 200f, Abv = 0.10f, Buff = Player.StaminaBuff.Warm, BuffSeconds = 240f },
+        // the Escalade (#1351): chocolate from the smashed Marmite and the pot's soup
+        Eat(ItemId.MarmiteChocolate, "Marmite chocolate", 10, "#4a2a18", "MC", 30, ItemCategory.Food, 3) with
+            { Blurb = "{use_item} to eat. A shard of the Marmite's chocolate shell, smashed at the Escalade." },
+        Eat(ItemId.SoupeEscalade, "Soupe de l'Escalade", 5, "#d89a4a", "SE", 45, ItemCategory.Food, 4) with
+            { Blurb = "{use_item} to eat. The Escalade's vegetable soup, a bowl from the pot: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
+        // the Fasnacht (#1357): the Räppli to throw and the Larven (masks) from the stall
+        new(ItemId.Raeppli, "Räppli", "{use_item} throws a handful of confetti. Everyone near sees it; thrown at the Fasnacht it also counts towards the party's score.",
+            ItemUse.Confetti, 99, new Color("#e8a020"), "RP", 0, ItemCategory.Cosmetic, 1f),
+        Hat(ItemId.LarveWaggis, "Larve: Waggis", "#e8d8b0", "LW"),
+        Hat(ItemId.LarveDante, "Larve: Alti Dante", "#d8b8a0", "LD"),
+        Hat(ItemId.LarveHarlekin, "Larve: Harlekin", "#e8e0e0", "LH"),
+        Hat(ItemId.LarveTeufel, "Larve: Teufel", "#c82020", "LT"),
+        // the Sechseläuten (#1358): a Cervelat grilled on the Böögg's embers
+        Eat(ItemId.BooggCervelat, "Grilled Cervelat", 14, "#b0502e", "CV", 40, ItemCategory.Food, 3) with
+            { Blurb = "{use_item} to eat. A Cervelat grilled on the embers of the Böögg's pyre, the Zürich way: warm for 2 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 120f },
+        // the Zibelemärit (#1373): the market's onion braid, tart and soup, and the confetti egg (thrown like the Räppli)
+        new(ItemId.Zwiebelzopf, "Zwiebelzopf", "A braid of onions from the Zibelemärit. Worth nothing but the look in the hand.",
+            ItemUse.Material, 10, new Color("#c8923c"), "ZZ", 0, ItemCategory.Cosmetic, 6f),
+        Eat(ItemId.Zibelechueche, "Zibelechueche", 6, "#d8b068", "ZC", 40, ItemCategory.Food, 4) with
+            { Blurb = "{use_item} to eat. Bern's onion tart, a slice from the Zibelemärit." },
+        Eat(ItemId.Mehlsuppe, "Mehlsuppe", 5, "#c8a070", "MS", 40, ItemCategory.Food, 3) with
+            { Blurb = "{use_item} to eat. The Zibelemärit's flour soup from the kettle: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
+        new(ItemId.Konfettiei, "Confetti egg", "{use_item} throws it as a burst of confetti. Everyone near sees it; thrown at the Zibelemärit it counts towards the party's score.",
+            ItemUse.Confetti, 30, new Color("#f0e0b0"), "KE", 0, ItemCategory.Cosmetic, 1f),
+        // Montreux Jazz (#1394): the festival wristband, given on the first song heard
+        new(ItemId.JazzPass, "Jazz pass", "The Montreux Jazz wristband, given for the first song you heard at the lake stage. Worth nothing but the look in the hand.",
+            ItemUse.Material, 1, new Color("#e0a030"), "JP", 0, ItemCategory.Cosmetic, 2f),
+        // the Chalandamarz (#1356): the first march's hand bell (the procession's tart is the existing Engadiner Nusstorte)
+        new(ItemId.ChalandaTreichel, "Chalanda Treichel", "A child's hand Treichel from the Chalandamarz procession. Worth nothing but the sound.",
+            ItemUse.Material, 5, new Color("#c99a3a"), "CT", 0, ItemCategory.Cosmetic, 8f),
+        // the 1 August (#1355): the lampion is a held light like the torch; the box of fireworks is lit with Use, at night
+        new(ItemId.Lampion, "Lampion", "A paper lantern on a stick: a soft light in your hand that everyone sees. Take one at the 1 August lampion stand; the lampion walk needs it.",
+            ItemUse.Readout, 1, new Color("#d8402a"), "LA", 0, ItemCategory.Gear, 5f),
+        new(ItemId.FireworkBox, "Box of fireworks", "{use_item} lights it where you stand: a 40 s volley of your own, at night during the 1 August. Bought at the 1 August fireworks stand for Batzen.",
+            ItemUse.Firework, 1, new Color("#c0302a"), "FW", 0, ItemCategory.Gear, 9f),
         new(ItemId.ChristmasBauble, "Christmas bauble", "A glass bauble from the market. Worth nothing but the look in the hand.",
             ItemUse.Material, 10, new Color("#c81e24"), "XB", 0, ItemCategory.Cosmetic, 12f),
         Eat(ItemId.BeerAlcoholFree, "Alcohol-free beer", 6, "#b8a050", "BA", 8, ItemCategory.Water, 3) with
@@ -600,6 +638,20 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.003f, 0.10f), new Vector3(0.006f, 0.022f, 0.10f), new Color(0.80f, 0.82f, 0.86f)); // blade
                 break;
             }
+            case ItemId.Sword:
+            {
+                // a bright arming sword: leather grip, round pommel, crossguard, a long flat blade with a diamond point
+                var leather = new Color(0.30f, 0.18f, 0.12f);
+                var gold = new Color(0.86f, 0.68f, 0.22f);
+                var steel = new Color(0.80f, 0.83f, 0.88f);
+                s.Tube(new Vector3(0, 0, -0.17f), new Vector3(0, 0, 0.05f), Avatar.HandGrip.HandleRadius, leather, 12);   // the handle: two fists long, as thick as the fist's ring (HandGrip)
+                s.Box(new Vector3(0, 0, -0.185f), new Vector3(0.04f, 0.04f, 0.04f), gold);                       // pommel
+                s.Box(new Vector3(0, 0, 0.062f), new Vector3(0.20f, 0.026f, 0.03f), gold);                       // crossguard
+                s.Box(new Vector3(0, 0, 0.45f), new Vector3(0.010f, 0.046f, 0.80f), steel);                      // blade
+                s.Box(new Vector3(0, 0, 0.45f), new Vector3(0.0125f, 0.010f, 0.76f), new Color(0.62f, 0.66f, 0.72f));   // fuller
+                s.Box(new Vector3(0, 0, 0.87f), new Vector3(0.0092f, 0.033f, 0.033f), steel, new Basis(Vector3.Right, Mathf.Pi / 4f));   // point
+                break;
+            }
             case ItemId.Alphorn:
             {
                 // carried on the shoulder: a long wooden tube, the bell low in front
@@ -691,7 +743,8 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.20f, 0.035f), new Vector3(0.22f, 0.12f, 0.02f), new Color(0.22f, 0.25f, 0.18f));  // plate pocket
                 break;
             }
-            case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers:
+            case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers
+                or ItemId.LarveWaggis or ItemId.LarveDante or ItemId.LarveHarlekin or ItemId.LarveTeufel:
                 // the real hat, the one a figure wears
                 HumanMeshBuilder.AppendHat(s, UnitSport.Occasions.OccasionHats.ForItem(id), new Vector3(0, -0.02f, 0), Vector3.Up * 0.2f);
                 break;
@@ -724,6 +777,69 @@ public static class ItemDefs
                 s.Tube(new Vector3(0, -0.08f, 0), new Vector3(0, 0.07f, 0), 0.05f, 0.058f, new Color(0.92f, 0.9f, 0.84f), 10);
                 s.Tube(new Vector3(0, 0.07f, 0), new Vector3(0, 0.086f, 0), 0.046f, 0.046f, new Color(0.55f, 0.1f, 0.16f), 10);   // the wine, a skin proud of the rim
                 s.Box(new Vector3(0.075f, 0, 0), new Vector3(0.03f, 0.08f, 0.02f), new Color(0.92f, 0.9f, 0.84f));
+                break;
+            case ItemId.MarmiteChocolate:
+                s.Box(new Vector3(-0.03f, 0, 0), new Vector3(0.16f, 0.05f, 0.11f), new Color(0.29f, 0.16f, 0.09f), new Basis(Vector3.Up, 0.3f));
+                s.Box(new Vector3(0.05f, 0.03f, 0.03f), new Vector3(0.1f, 0.05f, 0.09f), new Color(0.36f, 0.2f, 0.11f), new Basis(Vector3.Up, -0.5f));
+                break;
+            case ItemId.SoupeEscalade:
+                s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
+                s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.85f, 0.6f, 0.28f), 10);
+                break;
+            case ItemId.Zwiebelzopf:
+                // a plait: onions up a rope, each a little higher and turned
+                s.Tube(new Vector3(0, -0.14f, 0), new Vector3(0, 0.16f, 0), 0.012f, 0.012f, new Color(0.45f, 0.32f, 0.18f), 5);
+                for (int k = 0; k < 5; k++)
+                {
+                    float y = -0.1f + k * 0.06f, a = k * 1.1f;
+                    s.Tube(new Vector3(MathF.Cos(a) * 0.035f, y, MathF.Sin(a) * 0.035f), new Vector3(MathF.Cos(a) * 0.035f, y + 0.07f, MathF.Sin(a) * 0.035f), 0.04f, 0.03f, new Color(0.78f, 0.55f, 0.22f), 7);
+                }
+                break;
+            case ItemId.Zibelechueche:
+                s.Tube(new Vector3(0, -0.02f, 0), new Vector3(0, 0.0f, 0), 0.1f, 0.1f, new Color(0.7f, 0.5f, 0.25f), 12);
+                s.Tube(new Vector3(0, 0.0f, 0), new Vector3(0, 0.012f, 0), 0.085f, 0.085f, new Color(0.92f, 0.82f, 0.5f), 12);
+                break;
+            case ItemId.Mehlsuppe:
+                s.Tube(new Vector3(0, -0.05f, 0), new Vector3(0, 0.03f, 0), 0.05f, 0.09f, new Color(0.92f, 0.9f, 0.84f), 10);
+                s.Tube(new Vector3(0, 0.03f, 0), new Vector3(0, 0.045f, 0), 0.08f, 0.08f, new Color(0.72f, 0.52f, 0.32f), 10);
+                break;
+            case ItemId.Konfettiei:
+                s.Tube(new Vector3(0, -0.04f, 0), new Vector3(0, 0.05f, 0), 0.045f, 0.05f, new Color(0.94f, 0.88f, 0.7f), 8);
+                s.Box(new Vector3(0, 0.0f, 0.04f), new Vector3(0.05f, 0.012f, 0.012f), new Color(0.85f, 0.2f, 0.2f));
+                s.Box(new Vector3(0, 0.025f, 0.04f), new Vector3(0.04f, 0.012f, 0.012f), new Color(0.2f, 0.4f, 0.85f));
+                break;
+            case ItemId.BooggCervelat:
+                s.Tube(new Vector3(-0.1f, 0, 0), new Vector3(0.1f, 0, 0), 0.032f, 0.032f, new Color(0.69f, 0.31f, 0.18f), 8);
+                s.Box(new Vector3(0.0f, 0.032f, 0.0f), new Vector3(0.12f, 0.006f, 0.02f), new Color(0.3f, 0.12f, 0.07f));   // the char of the grill
+                s.Tube(new Vector3(0.1f, 0, 0), new Vector3(0.2f, 0.03f, 0), 0.008f, 0.008f, new Color(0.45f, 0.32f, 0.2f), 5);   // the stick
+                break;
+            case ItemId.JazzPass:
+                // a wristband: an amber loop with a dark clasp and a stripe of the festival's blue
+                s.Tube(new Vector3(0, -0.03f, 0), new Vector3(0, 0.03f, 0), 0.07f, 0.07f, new Color(0.88f, 0.63f, 0.19f), 14);
+                s.Tube(new Vector3(0, -0.01f, 0), new Vector3(0, 0.01f, 0), 0.082f, 0.082f, new Color(0.12f, 0.2f, 0.7f), 14);
+                s.Box(new Vector3(0, 0.0f, 0.10f), new Vector3(0.05f, 0.05f, 0.012f), new Color(0.12f, 0.12f, 0.14f));
+                break;
+            case ItemId.ChalandaTreichel:
+                s.Tube(new Vector3(0, -0.07f, 0), new Vector3(0, 0.05f, 0), 0.075f, 0.04f, new Color(0.79f, 0.6f, 0.23f), 10);
+                s.Tube(new Vector3(0, 0.04f, 0), new Vector3(0, 0.1f, 0), 0.012f, 0.012f, new Color(0.23f, 0.14f, 0.09f), 5);
+                s.Box(new Vector3(0, 0.1f, 0), new Vector3(0.1f, 0.03f, 0.05f), new Color(0.78f, 0.12f, 0.16f));
+                break;
+            case ItemId.Lampion:
+            {
+                // a stick with a paper lantern hung from a crossbar: ribbed red paper, a glowing candle inside
+                s.Tube(new Vector3(0, -0.14f, 0), new Vector3(0, 0.30f, 0), 0.012f, 0.012f, new Color(0.45f, 0.29f, 0.15f), 6);
+                s.Box(new Vector3(0, 0.30f, 0), new Vector3(0.14f, 0.015f, 0.015f), new Color(0.45f, 0.29f, 0.15f));
+                s.Tube(new Vector3(0.05f, 0.18f, 0), new Vector3(0.05f, 0.30f, 0), 0.003f, 0.003f, new Color(0.2f, 0.2f, 0.2f), 3);
+                s.Tube(new Vector3(0.05f, 0.08f, 0), new Vector3(0.05f, 0.19f, 0), 0.045f, 0.06f, new Color(0.85f, 0.25f, 0.16f), 10);
+                s.Box(new Vector3(0.05f, 0.135f, 0), new Vector3(0.05f, 0.07f, 0.05f), new Color(1f, 0.78f, 0.35f));
+                s.Tube(new Vector3(0.05f, 0.07f, 0), new Vector3(0.05f, 0.085f, 0), 0.03f, 0.03f, new Color(0.3f, 0.2f, 0.12f), 8);
+                break;
+            }
+            case ItemId.FireworkBox:
+                s.Box(new Vector3(0, 0, 0), new Vector3(0.22f, 0.12f, 0.14f), new Color(0.75f, 0.17f, 0.15f));
+                s.Box(new Vector3(0, 0.061f, 0), new Vector3(0.23f, 0.012f, 0.15f), new Color(0.95f, 0.9f, 0.8f));
+                s.Box(new Vector3(0, 0.0f, 0.071f), new Vector3(0.1f, 0.06f, 0.006f), new Color(0.95f, 0.8f, 0.2f));
+                s.Tube(new Vector3(-0.06f, 0.06f, 0), new Vector3(-0.06f, 0.15f, 0), 0.012f, 0.01f, new Color(0.9f, 0.85f, 0.7f), 6);
                 break;
             case ItemId.ChristmasBauble:
                 s.Tube(new Vector3(0, -0.06f, 0), new Vector3(0, 0.06f, 0), 0.055f, 0.055f, new Color(0.78f, 0.12f, 0.14f), 10);

@@ -11,6 +11,8 @@ global uniform float world_mist_density;
 global uniform float world_mist_top;
 // 0..1: festive lights; they still only shine at night (world_night)
 global uniform float world_lights;
+// 1: the street lamps and the lit windows are on at night; 0: the Basel Morgestraich has put them out (a lantern is not a lamp: prop mask under 0.99)
+global uniform float world_lamps;
 
 // Snow lies on what faces up. `hold` is how much of it this surface keeps (a road is cleared,
 // a crown holds less than a roof). Linear colour, applied before lighting.

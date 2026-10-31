@@ -153,9 +153,14 @@ public partial class FestivalNetProbe : ChatProbe
     private async Task B()
     {
         Expect(await Running(2), "the server runs the test festival on day 2");
-        Say("ready");
-        Expect(await Heard("A", "ready", 120), "A is on");
-        Expect(await Until(() => Invites().Incoming.Any(v => v.Kind == Parties.Kind), 40), "B is invited to A's party");
+        // A's greeting may be said before this probe listens (a chat line is not replayed), so B does not wait for it: B says "ready" until A's invite arrives
+        bool invited = false;
+        for (double end = GameClock.Now + 120; !invited && GameClock.Now < end;)
+        {
+            Say("ready");
+            invited = await Until(() => Invites().Incoming.Any(v => v.Kind == Parties.Kind), 4);
+        }
+        Expect(invited, "B is invited to A's party");
         if (Invites().Incoming.FirstOrDefault(v => v.Kind == Parties.Kind) is { } invite) Invites().Accept(invite.Id);
         Expect(await Until(() => Parties.Client is { Members.Count: 2 }, 30), "B's party holds A and B");
         Expect(await Heard("A", "played", 120), "A played twice");
