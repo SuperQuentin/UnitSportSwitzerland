@@ -173,7 +173,9 @@ public static class WorldClock
     }
 
     /// <summary>A dedicated server outside tests keeps its clock across restarts.</summary>
-    private static bool Persists => !Core.Systems.Narrowed && Array.IndexOf(OS.GetCmdlineUserArgs(), "--parent-pid") < 0;
+    private static bool Persists => !Core.Systems.Narrowed && Array.IndexOf(OS.GetCmdlineUserArgs(), "--parent-pid") < 0
+        // the fun world's clock is held at dusk (#1396): never the one the open world picks up again
+        && !Core.WorldChoice.FunActive;
 
     private static (double EnvNow, double HourShift, float MinutesPerDay)? Load()
     {

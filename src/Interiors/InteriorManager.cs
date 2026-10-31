@@ -941,9 +941,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// </summary>
     public string? OutsideDoorInReach(FootPlayer player) => OutsideEntry(player)?.Key.ToString();
 
-    /// <summary>The door <see cref="OutsideDoorInReach(FootPlayer)"/> names, as the index has it (its outline, #1286).</summary>
-    private DoorIndex.Entry? OutsideEntry(FootPlayer player) =>
-        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside);
+    /// <summary>
+    /// The door <see cref="OutsideDoorInReach(FootPlayer)"/> names, as the index has it (its outline, #1286); none
+    /// when a seat in reach is nearer than it (a venue's terrace stands at its own door, #1292, #1385: E sits there).
+    /// </summary>
+    private DoorIndex.Entry? OutsideEntry(FootPlayer player)
+    {
+        if (DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside) is not { } e) return null;
+        if (player.SitInReach() is { } seat)
+        {
+            var at = player.GlobalPosition;
+            if (new Vector2(seat.Hip.X - at.X, seat.Hip.Z - at.Z).Length() < new Vector2(e.World.X - at.X, e.World.Z - at.Z).Length()) return null;
+        }
+        return e;
+    }
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
@@ -1143,6 +1154,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return best;
     }
 
+    /// <summary>
+    /// What E acts on now when the floating line says it (the bar's own rows aside), its key tag cut off, or null:
+    /// the phone's overlay makes its button from it (#1353, <c>ClientWorld.Prompts</c>).
+    /// </summary>
+    public string? Floating { get; private set; }
+    private string? _floatingRaw;
+
+    /// <summary>"[E] Open the door" without its "[E] ": the overlay's button names the key itself.</summary>
+    private static string Untagged(string text)
+    {
+        string tag = InputHints.Tag(PlayerInput.InteractMount) + " ";
+        return text.StartsWith(tag, StringComparison.Ordinal) ? text[tag.Length..] : text;
+    }
+
     private void UpdatePrompt(double delta)
     {
         if (_prompt == null) return;
@@ -1160,6 +1185,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
             hit = Interacting(p, out outranks);
         PointOutline(hit, outranks);
+        string? floatingNow = hit is { InBar: false } shown ? shown.Text : null;
+        if (floatingNow != _floatingRaw)
+        {
+            _floatingRaw = floatingNow;
+            Floating = floatingNow == null ? null : Untagged(floatingNow);
+        }
         if (hint) return;
         // a bar row's words are in the prompt bar (ClientWorld.Prompts), from the same call
         string? text = hit is { InBar: false } floating ? floating.Text : null;

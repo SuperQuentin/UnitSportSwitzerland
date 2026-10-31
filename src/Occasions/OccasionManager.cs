@@ -54,6 +54,9 @@ public partial class OccasionManager : Node
     // session-only overrides on the authority
     private HashSet<string>? _cliSet;   // --occasion: replaces the calendar entirely
     private readonly HashSet<string> _started = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Occasions a world runs whatever the date, as if started by hand (#1396, the fun world's Älplerfest).</summary>
+    public static string[] WorldStarted { get; set; } = [];
     private readonly HashSet<string> _stopped = new(StringComparer.OrdinalIgnoreCase);
     private DateOnly? _dateOverride;
 
@@ -116,6 +119,7 @@ public partial class OccasionManager : Node
     {
         _config = OccasionConfig.Load();
         ParseCommandLine(CmdArgs.All);
+        foreach (string id in WorldStarted) _started.Add(id);
         GameSettings.Changed += OnSettingsChanged;
         EvaluateAuthority(force: true);
 

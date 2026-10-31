@@ -124,6 +124,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Interiors.OutlineSurvey.Requested, Interiors.OutlineSurvey.Run),
+        (() => Interiors.ShopSurvey.Requested, Interiors.ShopSurvey.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
         (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
@@ -156,6 +157,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         // which world this is (#999): every path, course and save below reads it
         WorldChoice.Active = Launch.World;
+        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
         Audio.SfxBus.Ensure();
         foreach (var (requested, run) in QuickChecks)
             if (requested())
@@ -682,6 +684,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(_chunks));   // neon over every venue (#1232)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueFronts(_chunks));   // glazed fronts of shop units and venues (#1292)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(_chunks, _cache!));   // tables out front (#1243)
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
@@ -700,6 +703,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(_dayNight);
         }
         ApplySun();
+        // the fun world (#1396): its sky held at dusk, the synthwave backdrop, the air rings
+        if (WorldChoice.FunActive)
+        {
+            if (_dayNight != null) _dayNight.HourOverride = World.Fun.FunWorld.DuskHour;
+            AddChild(new World.Fun.FunBackdrop(_chunks, origin, environment));
+            AddChild(new World.Fun.FunRings(origin, () => LocalPlayer));
+        }
 
         // cars on the roads and trains on the railway, around wherever the view is
         if (!Systems.On(Systems.Trains)) GameSettings.Current.Trains = false;   // this run only: not committed
@@ -949,6 +959,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Concert.PogoProbe.Requested) AddChild(new Concert.PogoProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
+        if (Player.ChairProbe.Requested) AddChild(new Player.ChairProbe(() => LocalPlayer));
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
@@ -1697,6 +1708,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var environment = StyleKit.NewEnvironment();
             _worldEnvironment.Environment = environment;
             _dayNight?.SetEnvironment(environment);
+            World.Fun.FunBackdrop.Instance?.Restyle(environment);
         }
         ApplySun();
         ApplyNearTrees();
@@ -2345,6 +2357,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private IEnumerable<(string, string)> Prompts()
     {
         if (MenuOpen?.Invoke() == true || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
+        // stepped up to bowl (#1353): its own steps label the phone's keys
+        if (Interiors.BowlingAim.Current is { } bowling)
+        {
+            foreach (var row in bowling.Prompts()) yield return row;
+            yield break;
+        }
+        if (Interiors.Pinball.PinballPlay.Current is { } pinball)
+        {
+            foreach (var row in pinball.Prompts()) yield return row;
+            yield break;
+        }
+        // what E acts on, where the screen says it in a floating line (a door, a counter, a rack, loot):
+        // a phone needs it as a row too, for its button (#1353)
+        if (TouchControls.Shown && Interiors.InteriorManager.Instance?.Floating is { } floating)
+            yield return (PlayerInput.InteractMount, floating);
 
         var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
         var viewer = Viewer;
@@ -2491,8 +2518,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.InteractMount, fight.Text);
             else if (p.Indoors)
             {
-                // seated in a cinema (#1279): E stands up (the seat itself is offered by InteriorManager.Interacting)
-                if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                // seated in a cinema (#1279): E stands up (the seat itself is offered by InteriorManager.Interacting);
+                // at a restaurant's table (#1385) E is the fondue, so standing up is the jump
+                if (p.Sitting) yield return (Interiors.PotTables.Near(p.GlobalPosition) != null ? PlayerInput.Jump : PlayerInput.InteractMount, "Stand up");
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))
@@ -2504,7 +2532,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 // a concert's light desk (#885), at its console
                 if (p.LightDeskInteraction() is { } desk) yield return (PlayerInput.InteractMount, desk.Text);
                 // a stand's seat (#885), before the dance: E sits there first
-                else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                else if (p.Sitting) yield return (Interiors.PotTables.Near(p.GlobalPosition) != null ? PlayerInput.Jump : PlayerInput.InteractMount, "Stand up");
                 else if (p.SeatInteraction() is { } seat) yield return (PlayerInput.InteractMount, seat.Text);
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
@@ -2540,6 +2568,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private TouchState TouchNow()
     {
+        if (Interiors.BowlingAim.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
+        if (Interiors.Pinball.PinballPlay.Current != null) return new TouchState(TouchMode.Pinball, TouchFlags.None);
         if (Viewer is not { } p || !IsInstanceValid(p))
         {
             var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
