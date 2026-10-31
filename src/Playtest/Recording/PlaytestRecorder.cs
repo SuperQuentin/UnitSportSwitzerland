@@ -49,6 +49,18 @@ public partial class PlaytestRecorder : Node
     /// <summary>The bundle's folder.</summary>
     public string Dir { get; }
     public bool Running => _trace != null && !_stopped;
+    /// <summary>End session was asked for and the files are still being closed (the movie is saved first).</summary>
+    public bool Ending => _finished is { Task.IsCompleted: false };
+    /// <summary>Stopped and <c>report.md</c> written: the game goes on unrecorded.</summary>
+    public bool Ended => _finished is { Task.IsCompleted: true };
+    /// <summary>The report's path from the repo root, as the player tells it to Claude.</summary>
+    public string ReportPath => Path.GetRelativePath(PlaytestDirector.Root, Path.Combine(Dir, SessionReport.ReportFile)).Replace('\\', '/');
+    /// <summary>The movie studio records the session too (its 3D replay is saved at the end).</summary>
+    public bool Movie => _movie;
+    /// <summary>Notes in the session so far, those of earlier launches included.</summary>
+    public int NoteCount => _noteCount;
+    /// <summary>A note was saved (its id) or the recording stopped or finished stopping (0): the playtest panel's confirmations (#1383). Main thread.</summary>
+    public event Action<int>? Changed;
     /// <summary>The local player's trace id as of the last sample (a respawn is a new node, so a new id); -1 before.</summary>
     public int LocalId { get; private set; } = -1;
     /// <summary>The local player, on a client (the checks drive it).</summary>
@@ -589,6 +601,7 @@ public partial class PlaytestRecorder : Node
         if (pin is { } pp) Notes.Add(new TopNote(t, pp.E, pp.N, text));
         _awaitingTop.Add((id, t, pin));
         GD.Print($"[playtest] note {id}: {text}");
+        Changed?.Invoke(id);
         return id;
     }
 
@@ -695,6 +708,7 @@ public partial class PlaytestRecorder : Node
         foreach (var (id, t, at) in _awaitingTop) RenderNoteTop(id, t, at, exiting);
         _awaitingTop.Clear();
         if (_perf is { Recording: true } perf) perf.Stop();
+        Changed?.Invoke(0);
         if (_movie && !exiting && ReplayRecorder.Instance is { Recording: true } replay)
         {
             void Saved(MovieProject? p, string? error)
@@ -750,7 +764,7 @@ public partial class PlaytestRecorder : Node
             Said();
             done.TrySetResult();
         }
-        else work.ContinueWith(_ => Callable.From(() => { Said(); done.TrySetResult(); }).CallDeferred(), TaskScheduler.Default);
+        else work.ContinueWith(_ => Callable.From(() => { Said(); done.TrySetResult(); Changed?.Invoke(0); }).CallDeferred(), TaskScheduler.Default);
     }
 
     private static string Git(params string[] args)

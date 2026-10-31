@@ -557,6 +557,14 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
 - [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.
 
+## Playtest panel confirmations ([#1388](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1388))
+
+`tools/playtest.sh batch` (or `--playtest --playtest-batch --playtest-record`).
+
+- [ ] Pad: L3+R3 opens the panel, Note → "✔ Note N saved" beside "Recording · N notes" for 4 s, and on the card once the panel is closed. End session → "Saving the session…", then "Not recording: session ended", the report's path and "Claude reads it next"; Note and End session go grey and the focus lands on Top view, not nowhere.
+- [ ] VR: the same Note and End session on the XrUi panel through XrPad: the confirmations are readable at the panel's distance.
+- [ ] With the movie on (no `--playtest-nomovie`): End session waits on "Saving…" while the replay is saved, then the "Saved" line names the 3D replay.
+
 ## Montreux Jazz Festival (PR for [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394))
 
 - [ ] With the real map at Montreux (the full region needed; `--date 2027-07-11 --time 21` shows the stage today, or in the real 3-18 July window): the small stage stands on the Place du Marché by the quay, facing east with the lake behind the band, the crowd seated on the sand, the promenade along the water free to walk, the fence open on the lake side, nothing inside the stage. Does it look like Montreux? Outside the festival's dates the square is the square (no stage, no crowd, no fence).

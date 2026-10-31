@@ -352,7 +352,7 @@ public partial class PlaytestDirector : Node
         }
         Say("system", "Saving the session…");
         await rec.Stop();
-        string report = Path.GetRelativePath(Root, Path.Combine(rec.Dir, SessionReport.ReportFile)).Replace('\\', '/');
+        string report = rec.ReportPath;
         Say("system", $"Session saved. Tell Claude: read {report} and fix what I noted.");
         Tell($"session ended: {report}");
     }
