@@ -30,6 +30,11 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   the two helpers, never the real `user://` (it also carries the player's settings: an H-pattern truck
   gearbox failed four checks). Only `playtest.sh` and `run-worktree.sh` keep focus, mouse and sound: a
   person plays those.
+- **No check runs on the real `user://` (#1403)**: `tools/test.sh` starts every quick-tier Godot (and
+  `@netsmoke`'s two) in `test_output/tests/userdata/<check>`, fresh each run (`ud` in `run_one`); the
+  `tools/` scripts isolate themselves. The real one carried the player's settings, CDs and placed objects
+  into the checks: an H-pattern truck gearbox failed seven quick checks on one machine and passed on the
+  next. `TEST_USERDATA=real` runs them on the real one, to debug a check against your own data.
 - **A windowed check by hand** (a session running one probe straight from Godot) gets none of that on
   its own: `. tools/lib/guard.sh; guard_test_userdata test_output/userdata_<x>` first (then
   `${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} <godot> --path . -- --<x>check ...`), or headless when it
