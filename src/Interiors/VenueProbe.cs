@@ -98,6 +98,10 @@ public partial class VenueProbe : Node
         Check(doors.Where(d => d.Index == 0 && d.Slot > 0).All(d => d.Venue == 0), "its other doors do not");
         Check(doors.First(d => d.Index == 2).Venue == 0, "the bare house's door carries nothing");
         Check(VenueSigns.Place(main) is { } at && at.Origin.Y > main.Position.Y + 2f, "the sign hangs over the door");
+        // the street hears the venue from in front of its door, not through its own wall (#1386: muffled by Hearing's wall)
+        var music = VenueMusic.AtDoor(main, Venues.At(map.VenueOf(0)), new BuildingKey(id.E, id.N, 0));
+        Check(music == null || (music.Position - main.Position).Dot(main.Outward) > 0.1f,
+            $"the door's music stands outside the wall ({(music == null ? "none" : $"{(music.Position - main.Position).Dot(main.Outward):F2} m out")})");
 
         foreach (var t in Enum.GetValues<VenueType>())
         {

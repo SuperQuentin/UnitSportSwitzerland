@@ -7,6 +7,12 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Venue music from the street ([#1386](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1386))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva), and any bar or club at night.
+
+- [ ] Stand at a venue's door → its music clearly heard, quieter than inside; walk away → it fades and dulls within some 20 m.
+- [ ] Two venues side by side → each heard at its own door, neither drowning the street.
 ## Venues and shop units: their own door and a glazed front ([#1327](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1327))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499805,1117476` (Trois Verres, Geneva; `--venuecheck --venuedoors "Trois Verres"` prints its door).
