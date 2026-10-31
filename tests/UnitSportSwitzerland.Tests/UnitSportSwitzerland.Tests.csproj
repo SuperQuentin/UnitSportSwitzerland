@@ -76,6 +76,7 @@
     <Compile Include="..\..\src\World\ClockSave.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\JoinCache.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the server's admin API (#1211) and the loopback transport it shares with the playtest MCP endpoint -->
     <Compile Include="..\..\src\Net\AdminApi.cs" Link="Game\%(Filename)%(Extension)" />
@@ -132,6 +133,11 @@
     <Compile Include="..\..\src\Avatar\Face\DanceFace.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\SwordRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\SwordGuard.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\SwordPoses.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\SwordSweep.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\HandGrip.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\SchwingRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\SchwingBot.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\AuraRules.cs" Link="Game\%(Filename)%(Extension)" />

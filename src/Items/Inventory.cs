@@ -164,7 +164,25 @@ public sealed class Inventory
 
     public ItemStack Held => _slots[Selected];
 
-    public ItemId HeldId => Held.IsEmpty ? ItemId.None : Held.Id;
+    /// <summary>What is in the hand: nothing while <see cref="Holstered"/>, though the slot stays selected (#1369).</summary>
+    public ItemId HeldId => Holstered || Held.IsEmpty ? ItemId.None : Held.Id;
+
+    /// <summary>The selected item is put away: the hand is empty, the selection is kept, the next draw takes it out again (#1369).</summary>
+    public bool Holstered { get; private set; }
+
+    /// <summary>The slot in hand changed, or the item was holstered or drawn (the hotbar fades in, the hand chip updates).</summary>
+    public event Action? HandChanged;
+
+    /// <summary>Puts the item away or takes it out; a no-op when nothing changes.</summary>
+    public void SetHolstered(bool holstered)
+    {
+        if (holstered == Holstered) return;
+        Holstered = holstered;
+        HandChanged?.Invoke();
+        Notify();
+    }
+
+    public void ToggleHolster() => SetHolstered(!Holstered);
 
     /// <summary>
     /// The radio this player carries and plays (#261): the one in the hand, else the first one in
@@ -189,8 +207,12 @@ public sealed class Inventory
     public void Select(int hotbarSlot)
     {
         hotbarSlot = ((hotbarSlot % HotbarSize) + HotbarSize) % HotbarSize;
-        if (hotbarSlot == Selected) return;
+        // picking a slot draws it, the one already in hand included (#1369)
+        bool drew = Holstered;
+        Holstered = false;
+        if (hotbarSlot == Selected && !drew) return;
         Selected = hotbarSlot;
+        HandChanged?.Invoke();
         Notify();
     }
 
@@ -810,6 +832,7 @@ public sealed class Inventory
         Carried = ItemStack.Empty;
         Trashed = ItemStack.Empty;
         Selected = 0;
+        Holstered = false;
         Notify();
     }
 
@@ -820,6 +843,7 @@ public sealed class Inventory
         _lent = null;
         _slots = lent.Slots;
         Selected = lent.Selected;
+        Holstered = false;
         Carried = ItemStack.Empty;
         Trashed = ItemStack.Empty;
         Notify();

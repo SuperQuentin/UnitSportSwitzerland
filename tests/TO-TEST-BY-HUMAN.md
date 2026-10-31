@@ -11,6 +11,46 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 
 - [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 60 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.
 
+## Faster rejoin ([#1387](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1387))
+
+The real server (unitsport.infrack.ch, HTTP mirror and Linux deploy), which loopback cannot stand in for: join it twice from the same install, the cache kept between.
+
+- [ ] First join, then leave and join again: the log shows `index of the last visit to this server merged at boot`, `the copy from the last visit is still the server's` for the horizon and places, and one `[horizon]` line, not two. Is the second spawn clearly faster, and does the horizon fill in behind you instead of holding the loading screen?
+- [ ] After the server is updated (new tiles or a new `horizon.bin`), join again: the log says the index changed and the files stream, nothing stale is drawn.
+- [ ] Join an older server (no `AssetKind.Digest`): it joins as before, one "not available on the server" line for the digest.
+
+## Sword combat ([#1374](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1374))
+
+`/spawn sword` (admin), put it on the hotbar, `/dummy`; on a server also `/pvp on` with a friend, `/bot add 1`, `/bot arm sword`, `/bot swing`.
+
+- [ ] Feel of the combo: five taps in the rhythm chain the five distinct swings (diagonal, backhand rising, spin, thrust with a lunge, jump and slam). Does each read as its own move from behind in Cartoon and PS1, are the wind-up, the whip and the settle readable, is the lunge a good size and stopped at the target?
+- [ ] Standing still versus walking forward gives two sets; do the repeats look varied, not looped? Does the body blend in and out of walking without a snap?
+- [ ] Charged blow (hold after a swing, let go after about half a second): crouched wind-up and spinning release; plunge from a ledge: tucked fall and the kneel; dodge in each direction (roll forward, backstep, sidestep).
+- [ ] Hit feel: hit-stop, shake (try the screen-shake setting), pad rumble, damage numbers and the dummy's recoil; is the finisher's weight right, is it too much on repeat?
+- [ ] The blade's trail through the active frames: visible and not distracting, in Cartoon and PS1; the backhand mirrors it.
+- [ ] Lock-on: Middle button / Z / R3 locks the target nearest the view, the camera eases round, the body faces it; does a soft lock turn a swing to a target a little off the aim?
+- [ ] Pad: RB swing, B dodge (the pad's crouch and slide are off while the sword is drawn), R3 lock (the view switch is off). VR: trigger swing, B dodge, R3 lock, and the stamina bar is missing there.
+- [ ] Hits are the blade touching: does a hit ever count when the blade visibly misses, or a visible touch not count (try the edge of the reach, a moving target, a dummy and a player)? `--sworddebug` shows the capsules.
+- [ ] Impact frame: a finisher and a full charge flash the screen with speed lines and punch the view in; Settings > Impact frames turns it off. In VR there is none (only the hit-stop and the spark): is that enough?
+- [ ] The grip: the handle sits in the closed fist, no sliding or popping through the combo; the free hand is a quiet counterweight, goes to the handle on the finisher and the charged cut and back without a pop.
+- [ ] Auto-holster (#1369) with the sword: it is not put away by a dodge (Shift shares the sprint) nor mid-blow; after about 8 idle seconds it is holstered and Aim or comma draws it again.
+- [ ] With a friend: they see your swings and the same variants, the dummy's hits, your knockback on them; a dodge in time avoids a blow.
+
+## Wheel zoom, holster, fading hotbar, hand chip (PR for [#1369](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1369))
+
+On foot in third person, anywhere (`--world fixture` does).
+
+- [ ] Sprint (Shift) and turn the wheel: the camera zooms in and out, the hotbar does not move. Alt + wheel steps the slot; releasing Alt after a wheel step does not free the cursor (a lone Alt tap still does).
+- [ ] Press the number of the slot in hand, and `,`: the item leaves the hand and comes back. Does the chip (bottom right) read well dimmed as "holstered", and "Empty hand" on an empty slot, over snow and over a dark scene?
+- [ ] Leave an item alone for 8 s: it holsters by itself. Does 8 s feel right? Every item goes away, the hammer, rod and detector too; aiming, a camera held up and a cast line do not.
+- [ ] Start sprinting (Shift / L3) with an item in hand: it goes in the pocket at once and stays there after the sprint; Use draws it on the run, and a new sprint start holsters again. Does it feel right (not annoying when you want the item while running)?
+- [ ] Pad: tap D-pad right steps the slot; hold it (about half a second, a tick) holsters or draws. Does the tap feel late now (it fires on release)?
+- [ ] VR: hold the grip at the right hip for a third of a second (buzz): the item goes away, again it comes out. A quick squeeze there still steps to the next slot.
+- [ ] Settings › Gameplay › Hotbar: Always, Fade out (default), Hidden. In Fade, change slot / holster / use an item / open the quick wheel: the bar shows for about 3 s then fades smoothly. Is 3 s right?
+- [ ] A second player sees your hand empty when you holster and the item come back when you draw.
+- [ ] Touch (phone, or `--mobile`): the hotbar stays always visible and there is no chip.
+
+
 ## Fasnacht ([#1364](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1364))
 
 `--festival test --date 2027-02-04 --world fixture` (Luzern's: the Larven stall 9 m west of the fixture's start, the Guggenmusik stage 14 m east and 6 m north); `--date 2027-02-15` and the clock at 04:30 (`--time 4.5`) for Basel's Morgestraich with its lantern 11 m north; or online on the western map in the real dates (easter-52 for six days, easter-41 for three, relocated to the region's largest town).
@@ -22,6 +62,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Basel's Morgestraich at 04:00 of day 1: do the street lamps and lit windows really go out (houses, street lamps, props) while the lanterns shine, is it dark enough to be an event, and does the drum roll with the saying land? At 05:30 do the lamps come back?
 - [ ] The stage, the stall and the lantern as props at night and by day (Cartoon, PS1, Realistic): readable, not z-fighting.
 - [ ] VR: a grip at the stall, the lantern or the stage works through the pad route; tapping the notes with the trigger; striking a drum by hand and tossing Räppli by hand are not built.
+
 ## Sechseläuten ([#1363](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1363))
 
 `--festival test --date 2027-04-19 --world fixture` (the pyre stands at the fixture's start, the Weibel 9 m east of it; `--sechsepace 1` makes a minute of the burn a second, `/time set 17:59` as admin lights it at once), or online on the western map on the real date (third Monday of April, relocated to the region's largest town).

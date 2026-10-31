@@ -318,6 +318,8 @@
 459.8	Boats / Paddle steamer (parked)
 646.9	Boats / Speedboat
 97.9	Boats / Speedboat (parked)
+2.8	Bowling / Lane pair, pinsetters cycling
+2.8	Bowling / Mini lane pair, pinsetters cycling
 30.7	Build / CamoNet
 2016	Build / DoorWall - Metal
 3840	Build / Floor - Metal
@@ -406,6 +408,7 @@
 79.2	Cars / ZN6 (parked)
 4.8	Cars / ZZW30 MR-S
 4.8	Cars / ZZW30 MR-S (parked)
+549	Clothes / Alien antennae
 444.1	Clothes / Alpine knee socks
 549	Clothes / Alpine wool gloves
 2645.9	Clothes / Bee stockings
@@ -434,7 +437,6 @@
 96.1	Clothes / Disco-ball top
 287.5	Clothes / Edelweiss shirt
 172.5	Clothes / Erstbesteigung cap
-115.4	Clothes / Mitfahrer gloves
 115.4	Clothes / Fahrlehrer gloves
 6.5	Clothes / Fang mask
 34.6	Clothes / Fingerless gloves
@@ -453,6 +455,8 @@
 517.9	Clothes / Jeans
 913.7	Clothes / Kawaii knee socks
 96.1	Clothes / Lava tee
+115.4	Clothes / Mary Janes
+115.4	Clothes / Mitfahrer gloves
 77.5	Clothes / Mountain guide's hat
 287.5	Clothes / Navy polo
 405.8	Clothes / Neon headset
@@ -488,6 +492,7 @@
 100.5	Clothes / Swirly OwO mask
 3.8	Clothes / Swiss-cross bandana
 483.5	Clothes / TAZ 90 jacket
+517.9	Clothes / TAZ 90 trousers
 549	Clothes / Tall antennae
 6.4	Clothes / Tongue-out mask
 3.7	Clothes / Treichel
@@ -496,9 +501,7 @@
 533.3	Clothes / Witch robe
 170.3	Clothes / Zimmermann hat
 199.6	Clothes / Zipfelmütze
-549	Clothes / Alien antennae
-115.4	Clothes / Mary Janes
-517.9	Clothes / TAZ 90 trousers
+64	Combat / Training dummy
 418	Concert / Stage - Center: Remy Rossi (Pop, screens CenterAndSides)
 313.2	Concert / Stage - EndNorth: Silent Echoes (HipHop, screens None)
 281.6	Concert / Stage - EndSouth: Paper Foxes (Pop, screens Center)
@@ -533,8 +536,8 @@
 2.8	Emotes / Wave
 381.4	Emotes / YMCA
 65.0	Festivals / Böögg embers
-52.6	Festivals / Désalpe - Dressed cow: wreath
 219.3	Festivals / Désalpe - Dressed cow: straw hat
+52.6	Festivals / Désalpe - Dressed cow: wreath
 382.9	Fights / Move - Finisher
 102.9	Fights / Move - JumpKick
 388.1	Fights / Move - Kick
@@ -631,6 +634,7 @@
 57	Furniture / DjBooth
 3185.2	Furniture / DrumKit
 20	Furniture / Dryer
+427.2	Furniture / Forklift
 1909.6	Furniture / FrontPew
 360	Furniture / GuitarStand
 3421.7	Furniture / GunLocker
@@ -638,6 +642,7 @@
 99	Furniture / JerryCan
 469.1	Furniture / KebabCounter
 48	Furniture / Keyboard
+2.8	Furniture / LanePair
 1060.8	Furniture / Locker
 8028	Furniture / Machine
 12	Furniture / OrderCounter
@@ -690,6 +695,7 @@
 44.9	Items / Alphorn
 3	Items / AlpineGloves
 2.6	Items / AlpineSocks
+5.9	Items / Appenzeller
 2.3	Items / ArcticChar
 3	Items / ArmyTee
 5.5	Items / Backpack
@@ -699,6 +705,7 @@
 2.5	Items / Barbel
 3.9	Items / Barley
 5.9	Items / BarleySeed
+9.4	Items / BaslerLaeckerli
 2.6	Items / BeeStockings
 200.8	Items / BeerAlcoholFree
 200.8	Items / BeerBottle
@@ -710,6 +717,7 @@
 3	Items / BlackMarcel
 3.7	Items / BlackShorts
 2.6	Items / BlackStockings
+3.4	Items / BowlingShoes
 6.4	Items / Bread
 42.2	Items / Breathalyzer
 2.3	Items / BrookTrout
@@ -743,13 +751,16 @@
 3	Items / EdelweissShirt
 5.2	Items / Electronics
 29.6	Items / EnergyBar
+1.2	Items / EngadinerNusstorte
 2.1	Items / EnginePart
 3.1	Items / ErstbesteigungCap
 3	Items / FahrlehrerGloves
 8.1	Items / FarmStand
+9.4	Items / FerryCrate
 3.9	Items / Fertiliser
 12.8	Items / FieldWorkbench
 3	Items / FingerlessGloves
+400	Items / FireworkBox
 4.5	Items / FirstAidKit
 3.5	Items / FishSoup
 2.6	Items / Fishnets
@@ -793,6 +804,7 @@
 3	Items / LaceArmWarmers
 3.1	Items / LaceHeadband
 2.3	Items / LakeTrout
+4.3	Items / Lampion
 2.9	Items / LavaTee
 5.3	Items / LolitaDress
 3	Items / LongAntennae
@@ -836,9 +848,11 @@
 3	Items / PolierHat
 3	Items / PostalJacket
 7.5	Items / PostalSkirt
+10.9	Items / Postcard
 3.9	Items / Potato
 2.9	Items / Pumpkin
 3.1	Items / Raclette
+5.9	Items / RacletteCheese
 160.5	Items / Radio
 169.3	Items / Radio backpack
 8.8	Items / Radio backpack straps
@@ -860,6 +874,8 @@
 6.6	Items / Rubber
 2.3	Items / Rudd
 7.5	Items / RuffledMini
+3.9	Items / SaucissonVaudois
+5.9	Items / Sbrinz
 3.7	Items / Schwingerhosen
 5.9	Items / SeedPotato
 3	Items / SeilschaftScarf
@@ -870,6 +886,7 @@
 12	Items / SmartBinoculars
 7.9	Items / SmokeCanister
 4.7	Items / SpikedChoker
+9.4	Items / StGallerBratwurst
 3	Items / StammgastHat
 3.1	Items / Stone
 3	Items / StripedArmWarmers
@@ -880,6 +897,7 @@
 5.9	Items / SunflowerSeed
 3.9	Items / SunflowerSeeds
 6.2	Items / SwissArmyKnife
+152	Items / Sword
 7.5	Items / TartanSkirt
 3.7	Items / TazTrousers
 7	Items / ToastedBread
@@ -906,6 +924,8 @@
 2.5	Items / Zander
 3	Items / ZimmermannCap
 3.1	Items / Zipfelmuetze
+9.4	Items / ZuercherTirggel
+2.3	Items / ZugerKirschtorte
 1.5	Motorbikes / Honda CB500 (1994-03)
 1.5	Motorbikes / Honda CB500 Hornet (2024-26)
 1.5	Motorbikes / Honda CB500F (2013-15)
@@ -1037,12 +1057,12 @@
 1.9	Motorbikes / Yamaha XT1200ZE Super Ténéré (2014-21)
 25.7	Motorbikes / Yamaha XT1200ZE Super Ténéré (2014-21) (parked)
 8.3	Motorbikes / Yamaha YZF-R3 (2016) (parked)
+99.7	Occasions / Prop - FestivalAlphornRow
 1559.9	Occasions / Prop - FestivalFlagStage
 1608	Occasions / Prop - GiftBlue
 1824	Occasions / Prop - GiftGreen
 1788	Occasions / Prop - GiftRed
 7.7	Occasions / Prop - TreatBowl
-99.7	Occasions / Prop - FestivalAlphornRow
 505.3	Pallets / On the forks
 82	Parts / Excavator boom
 36	Parts / Excavator bucket
@@ -1052,6 +1072,14 @@
 7.9	Parts / Phone back half
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
+425.2	People / Errand givers - Dairy
+37.9	People / Errand givers - Farmer
+96.1	People / Errand givers - Host
+77.8	People / Errand givers - HutWarden
+18	People / Errand givers - Postmaster
+199.6	People / Errand givers - Senn
+39.4	People / Errand givers - ShipMaster
+467.9	People / Errand givers - StationMaster
 336.1	Rides / Airstairs
 64	Rides / Airstairs (parked)
 294.4	Rides / Compact roller
@@ -1098,6 +1126,105 @@
 23.9	Schwingen / Throw - Hüfter
 403.1	Schwingen / Throw - Wyberhaken
 382.9	Schwingen / Throw - Übersprung
+575.9	Sword poses / Charged set0 f0
+563.8	Sword poses / Charged set0 f1
+555.1	Sword poses / Charged set0 f2
+555.1	Sword poses / Charged set0 f3
+555.1	Sword poses / Charged set0 f4
+574.9	Sword poses / Charged set0 f5
+96.1	Sword poses / Charging
+546.6	Sword poses / Dodge v0 f0
+546.7	Sword poses / Dodge v0 f1
+545.8	Sword poses / Dodge v0 f2
+541.3	Sword poses / Dodge v0 f3
+541.3	Sword poses / Dodge v0 f4
+551.3	Sword poses / Dodge v0 f5
+546.6	Sword poses / Dodge v1 f0
+534.9	Sword poses / Dodge v1 f1
+546.7	Sword poses / Dodge v1 f2
+536.7	Sword poses / Dodge v1 f3
+535.9	Sword poses / Dodge v1 f4
+534.9	Sword poses / Dodge v1 f5
+546.6	Sword poses / Dodge v2 f0
+543.9	Sword poses / Dodge v2 f1
+534.9	Sword poses / Dodge v2 f2
+535.9	Sword poses / Dodge v2 f3
+534.9	Sword poses / Dodge v2 f4
+534.9	Sword poses / Dodge v2 f5
+546.6	Sword poses / Dodge v3 f0
+546.6	Sword poses / Dodge v3 f1
+543.4	Sword poses / Dodge v3 f2
+534.9	Sword poses / Dodge v3 f3
+534.8	Sword poses / Dodge v3 f4
+546.7	Sword poses / Dodge v3 f5
+192.3	Sword poses / Grip - one-handed
+188.5	Sword poses / Grip - two-handed
+152	Sword poses / Plunge set0 f0
+152	Sword poses / Plunge set0 f1
+156.7	Sword poses / Plunge set0 f2
+152	Sword poses / Plunge set0 f3
+152	Sword poses / Plunge set0 f4
+162.2	Sword poses / Plunge set0 f5
+189.5	Sword poses / Slash1 set0 f0
+179.7	Sword poses / Slash1 set0 f1
+178.9	Sword poses / Slash1 set0 f2
+177.7	Sword poses / Slash1 set0 f3
+152	Sword poses / Slash1 set0 f4
+152	Sword poses / Slash1 set0 f5
+189.5	Sword poses / Slash1 set1 f0
+152	Sword poses / Slash1 set1 f1
+176.5	Sword poses / Slash1 set1 f2
+181.8	Sword poses / Slash1 set1 f3
+183.5	Sword poses / Slash1 set1 f4
+152	Sword poses / Slash1 set1 f5
+544.4	Sword poses / Slash2 set0 f0
+534.8	Sword poses / Slash2 set0 f1
+544.9	Sword poses / Slash2 set0 f2
+543.2	Sword poses / Slash2 set0 f3
+537	Sword poses / Slash2 set0 f4
+539.2	Sword poses / Slash2 set0 f5
+544.4	Sword poses / Slash2 set1 f0
+534.9	Sword poses / Slash2 set1 f1
+544.9	Sword poses / Slash2 set1 f2
+541.9	Sword poses / Slash2 set1 f3
+541.6	Sword poses / Slash2 set1 f4
+538.8	Sword poses / Slash2 set1 f5
+192.1	Sword poses / Slash3 set0 f0
+179.5	Sword poses / Slash3 set0 f1
+152	Sword poses / Slash3 set0 f2
+184.4	Sword poses / Slash3 set0 f3
+152	Sword poses / Slash3 set0 f4
+184.1	Sword poses / Slash3 set0 f5
+192.1	Sword poses / Slash3 set1 f0
+185.4	Sword poses / Slash3 set1 f1
+181	Sword poses / Slash3 set1 f2
+181.2	Sword poses / Slash3 set1 f3
+182.6	Sword poses / Slash3 set1 f4
+184	Sword poses / Slash3 set1 f5
+192.3	Sword poses / Slash4 set0 f0
+154.8	Sword poses / Slash4 set0 f1
+187.2	Sword poses / Slash4 set0 f2
+185.1	Sword poses / Slash4 set0 f3
+188	Sword poses / Slash4 set0 f4
+190.3	Sword poses / Slash4 set0 f5
+192.3	Sword poses / Slash4 set1 f0
+154.8	Sword poses / Slash4 set1 f1
+186.6	Sword poses / Slash4 set1 f2
+189.8	Sword poses / Slash4 set1 f3
+156.3	Sword poses / Slash4 set1 f4
+194.3	Sword poses / Slash4 set1 f5
+259.9	Sword poses / Slash5 set0 f0
+257.2	Sword poses / Slash5 set0 f1
+253	Sword poses / Slash5 set0 f2
+248.1	Sword poses / Slash5 set0 f3
+254	Sword poses / Slash5 set0 f4
+248.1	Sword poses / Slash5 set0 f5
+259.9	Sword poses / Slash5 set1 f0
+248.1	Sword poses / Slash5 set1 f1
+248.1	Sword poses / Slash5 set1 f2
+251.4	Sword poses / Slash5 set1 f3
+248.1	Sword poses / Slash5 set1 f4
+248.1	Sword poses / Slash5 set1 f5
 295728	Terrain / Building site - a site office with its gallery, one stack (#827)
 591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
 157213.4	Terrain / Building site - foundations, a block of four floors
@@ -1132,8 +1259,11 @@
 26966.2	Terrain / Traffic light - Gantry, lane signs
 29391.3	Terrain / Traffic light - Gantry, three signs
 6688.5	Terrain / Traffic light - Geneva
+144437.8	Terrain / Traffic light - Mast arm
 6926	Terrain / Traffic light - Permissive left, arrow
 2218.2	Terrain / Traffic light - Permissive left, ball
+146154.4	Terrain / Traffic light - Permissive left, uncombined arrow
+219558.9	Terrain / Traffic light - Portal
 29391.3	Terrain / Traffic light - Span wire
 9202.7	Terrain / Traffic light - Tram
 6804.8	Terrain / Traffic light - Tram, Romandy
@@ -1182,6 +1312,7 @@
 2.2	Unlisted / BoatMeshBuilder.RunaboutWheel
 28.3	Unlisted / FarmStandVisual.StandMesh
 160.5	Unlisted / RadioBody.Mesh
+61	Unlisted / SechselaeutenModels.BuildRemains
 4.3	Unlisted / SteamerMeshBuilder.LeverMesh
 408.9	Unlisted / SteamerMeshBuilder.WheelMesh
 194455.5	Venues / Pinball - Alpine Ski Race, a robot playing
@@ -1193,26 +1324,4 @@
 167444.1	Venues / Pinball attract - Haunted Castle, high scores
 174635.9	Venues / Pinball attract - Space Mission, high scores
 30	World / Ropeways - T-bar
-5.9	Items / Appenzeller
-9.4	Items / BaslerLaeckerli
-1.2	Items / EngadinerNusstorte
-9.4	Items / FerryCrate
-10.9	Items / Postcard
-5.9	Items / RacletteCheese
-3.9	Items / SaucissonVaudois
-5.9	Items / Sbrinz
-9.4	Items / StGallerBratwurst
-9.4	Items / ZuercherTirggel
-2.3	Items / ZugerKirschtorte
-425.2	People / Errand givers - Dairy
-37.9	People / Errand givers - Farmer
-96.1	People / Errand givers - Host
-77.8	People / Errand givers - HutWarden
-18	People / Errand givers - Postmaster
-199.6	People / Errand givers - Senn
-39.4	People / Errand givers - ShipMaster
-467.9	People / Errand givers - StationMaster
-3.4	Items / BowlingShoes
-2.8	Furniture / LanePair
-2.8	Bowling / Lane pair, pinsetters cycling
-2.8	Bowling / Mini lane pair, pinsetters cycling
+1.1	Items / Zwiebelzopf

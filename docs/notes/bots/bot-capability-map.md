@@ -26,6 +26,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | mantle a ledge | jump at a wall (`FootActions`) | the body | knee and head rays | `MoveTo` | ok |
 | face / aim | `LookYaw`, `LookPitch`, `SquareToView` (`BotIntent.FaceYaw`) | the body | — | `Engage` | ok |
 | free climbing (#1225) | `FootActions` `Climb` (`BotIntent.Climb`): a bot grabs the face it walks into only when its brain asks (a `MoveTo` into a cliff never starts a climb); `WalkControls` climbs it (into the face = up), `FootActions` jump / crouch climb-jump and let go | the body, on the server's collision round a bot (ground and buildings); spends the same `Stamina` (infinite where the rules say off) | its own position; the cover is unknown on the server (counts as rock: a bot may climb a glacier wall) | — | gap: a `Climb` skill (`MoveTo` blocked by a cliff climbs it when the stamina estimate reaches a ledge); BR bots n/a (climbing is off in a match) |
+| holster, draw (#1369) | none: `BotHands` sets `Inventory.Select` / `HeldItemId` directly; `Inventory.Holstered` and the auto holster live in the owner's `ItemController`, which a bot has not | — | — | — | n/a: a bot's hand is what its brain selects; the holster is a player's comfort (a bot's hand never clutters a view) |
 | stamina (#1225) | spent by the body's own paths (sprint in a fight, the sprint stroke, climbing) | the body; a bot's max is the base 100 (no `PlayerProgress`) | — | — | ok |
 | gliders in thermals, ridge lift, campfire updrafts (#1225) | — | — | — | — | n/a: bots do not fly gliders |
 | swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |
@@ -54,6 +55,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | knife | `BotIntent.FireAt` | `BotHands.Fire` (`PlayerHits.Stab`) | — | `Engage` | ok |
 | bandage, first-aid kit | — | `BotHands.Use` (2.2 s / 5.6 s, spent at the end, a shot cancels) | its own health | `BrBrain` heal (safe 4 s) | ok |
 | armour vest | — | `BotHands.Use` → `FootPlayer.AddArmor` | its own armour | `BrBrain` vest | ok |
+| sword (#1371): combo, dodge | `BotIntent.SwordAt` / `DodgeFrom` (`BotHands.Swing` / `Dodge`, a `SwordMachine` per bot) | `SwordService.ServerAct` / `ServerHit` / `ServerTrace`: the same `SwordGuard` as a player's | the target in reach (`BrBrain.Engage`) | `Engage` swings at arm's length when carrying a sword and no gun | ok; gap: no brain dodges, charges or plunges |
+| training dummy (#1371) | none | `SwordService.Command` (`/dummy`); a bot's blows hit it through `ServerTrace` | `/bot swing` aims at it | none | n/a: a target, not a bot's business |
 | flare gun, binoculars, horn, smoke | — | — | — | — | gap: later, as a mode needs them |
 | hammer, structure pieces, gadgets | — | `Build/` (client RPCs) | — | `Build` | gap: phase 2+ (building is a follow-up issue) |
 | thrown items (bonk) | — | `ItemEvents.RelayBonk` (client sender) | — | — | gap: later |

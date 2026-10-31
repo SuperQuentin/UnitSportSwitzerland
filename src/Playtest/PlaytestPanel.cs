@@ -289,7 +289,7 @@ public partial class PlaytestPanel : CanvasLayer
             var (chip, color) = Chip(_director.Status.GetValueOrDefault(e.Id));
             var b = new Button
             {
-                Text = $"{chip}  {e.Title}{(_director.Playable(e) ? "" : $"   ({e.Scenario.Course})")}",
+                Text = $"{chip}  {e.Title}{(_director.Playable(e) ? "" : $"   ({_director.Needs(e)})")}",
                 Alignment = HorizontalAlignment.Left,
                 Flat = e != _director.Current,
                 FocusMode = Control.FocusModeEnum.All,

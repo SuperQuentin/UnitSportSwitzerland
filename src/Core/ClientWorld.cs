@@ -490,7 +490,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
         // A fixture course is all there is: nothing cached joins it.
-        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        if (!fixture)
+        {
+            // a returning player's own server first (#1380): its index is known before the first frame
+            if (Launch.Mode == GameMode.Multiplayer)
+            {
+                _serverKey = JoinCache.ServerKey(Launch.Endpoint, WorldChoice.ActiveId);
+                _cachedIndexMerged = ClientTerrainSync.MergeServerIndex(_chunks, _serverKey);
+            }
+            if (!_cachedIndexMerged) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        }
 
         AddChild(_chunks);
         // the water (#299): queries on these tiles, waves pushed to the shaders, the underwater look;
@@ -1080,6 +1089,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Combat.SchwingNetProbe.Role != null) AddChild(new Combat.SchwingNetProbe(items));
+        if (Combat.SwordNetProbe.Role != null) AddChild(new Combat.SwordNetProbe(items));   // #1371
+        if (Combat.SwordDebug.On) AddChild(new Combat.SwordDebug { Name = "SwordDebug" });
+        if (Combat.SwordClipProbe.Scenario != null) AddChild(new Combat.SwordClipProbe(items));
         if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -1159,6 +1171,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
         // as the server's, which relays the first and owns the second; offline this client does both
         Items.ItemEvents.Create(this, origin, server: false);
+        Combat.SwordService.Create(this, origin, server: false);   // the sword's moves, hits and training dummies (#1371)
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
@@ -1588,18 +1601,36 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // The horizon's lattice is generated at boot (or read from its cache) while the steps
-        // above run; its blocks then stream nearest first.
+        // The horizon is not needed to spawn (#1380): once the ring-0 tile is playable and the body is
+        // grounded (the gates above), a joining player goes in and the lattice finishes behind the
+        // screen. Its blocks stream nearest first, and the safety timeout above still applies.
+        // Command-line solo runs keep waiting for it: their shots and probes expect it drawn.
         var horizon = _chunks.Horizon?.Progress();
-        if (!timedOut && horizon == null)
+        bool nearReady = total > 0 && done >= total;
+        bool horizonBehind = Launch.Mode == GameMode.Multiplayer || !Launch.FromCommandLine;
+        if (horizonBehind)
         {
-            Report(LoadStage.DrawingHorizon, 0.6f);
-            return;
+            // only when nothing near is ready and the horizon is still unknown is there nothing to show yet
+            if (!timedOut && horizon == null && !nearReady)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
         }
-        if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+        else
         {
-            Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
-            return;
+            // The horizon's lattice is generated at boot (or read from its cache) while the steps
+            // above run; its blocks then stream nearest first.
+            if (!timedOut && horizon == null)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f);
+                return;
+            }
+            if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+            {
+                Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
+                return;
+            }
         }
 
         Stage = LoadStage.Ready;
@@ -1898,6 +1929,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Fight on both sides (#495): the challenge, the match state, and its screen
         AddChild(Combat.FightManager.CreateClient());
         AddChild(new Combat.FightHud());
+        AddChild(new Combat.SwordHud());   // #1371
+        AddChild(new Combat.SwordImpact());
         AddChild(Combat.AuraManager.CreateClient());
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
@@ -1929,7 +1962,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat!.Kicked += OnKicked;
 
         // Merges the server's tile list so tiles this client never shipped with become streamable.
-        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!);
+        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!) { ServerKey = _serverKey, CachedIndexMerged = _cachedIndexMerged };
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>
@@ -2391,6 +2424,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
             }
+            else if (p.SwordDrawn && p.Ride == RideKind.OnFoot)
+            {
+                // the sword (#1371): the attack, its charge, the dodge and the lock
+                yield return (PlayerInput.UseItem, "Swing (again in rhythm: combo; hold after a swing: charged)");
+                yield return (PlayerInput.SwordDodge, "Dodge");
+                yield return (PlayerInput.SwordLock, p.SwordLocked ? "Let go of the lock" : "Lock on");
+            }
             else if (p.InAura)
             {
                 // an aura battle (#907): the one timed key; the planner shows its own
@@ -2669,6 +2709,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;
+
+    /// <summary>The server this join goes to, as the cache keys it (#1380); null offline.</summary>
+    private string? _serverKey;
+
+    /// <summary>An earlier visit's index of that server was merged at boot.</summary>
+    private bool _cachedIndexMerged;
 
     /// <summary>
     /// The server's start point (#799): the fly camera goes there, and the body follows it down once

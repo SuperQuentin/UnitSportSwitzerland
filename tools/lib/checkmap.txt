@@ -693,6 +693,12 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+# the holster, Alt + wheel and the wheel's zoom (#1369): the phone check drives them, the phone net check replicates them
+src/Items/Inventory      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/ItemController quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Core/PlayerInput     quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/Inventory      net    tools/phonenetcheck.sh
+src/Items/ItemController net    tools/phonenetcheck.sh
 src/Phone/               net    tools/phonenetcheck.sh
 src/Player/FootPlayer.Phone net  tools/phonenetcheck.sh
 # the Swiss match items (#478): fondue, smoke and alphorn between two clients
@@ -705,6 +711,11 @@ shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
+# the sword (#1371): moves, hits, dummies and bots between two clients
+src/Combat/Sword         net    tools/swordnetcheck.sh
+src/Combat/TrainingDummy net    tools/swordnetcheck.sh
+src/Player/FootPlayer.Sword net tools/swordnetcheck.sh
+src/Bots/BotHands        net    tools/swordnetcheck.sh
 # aura battles (#907): plan, cut on the beat, the server grades
 src/Combat/Aura          net    tools/auranetcheck.sh
 src/Player/FootPlayer.Aura net  tools/auranetcheck.sh
@@ -833,6 +844,7 @@ src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Playtest/Scenarios/Adv3 quick --playtest --playtest-smoke --world fixture --chunks fixture:flat --festival test --systems terrain,npcs,birds,physics,audio,network,sky,interiors,loot,occasions,ui,build,airports,farming,containers,snow,lifts,adventure --pois fixture --givers fixture --crevasses on --adventure-dir res://test_output/playtest/adv3
 # the playtest recorder (#844): a 20 s recorded session read back (trace, note, report, top view)
 src/Playtest/            quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Movie/ReplayWatch    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
