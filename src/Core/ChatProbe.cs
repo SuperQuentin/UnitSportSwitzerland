@@ -191,6 +191,9 @@ public abstract partial class ChatProbe : Node
         var o = (doorway.Basis.Z with { Y = 0 }).Normalized();
         return WalkUntil(me, () =>
         {
+            // over the sill the body is in the interior's frame, 3 km down and turned: walk on the way it faces,
+            // as a held key would, or the aim at the street's doorway took it back out (#1401)
+            if (me.Indoors) return (-me.Camera.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
             float along = (me.GlobalPosition - door).Dot(o);
             var aim = door + o * (along - DoorAimAhead) - me.GlobalPosition;
             return (aim with { Y = 0 }).Normalized();
