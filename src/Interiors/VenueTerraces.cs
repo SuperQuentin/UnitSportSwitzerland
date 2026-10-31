@@ -298,6 +298,8 @@ public partial class VenueTerraces : Node
                 root.AddChild(mesh);
                 // a table a fondue pot can stand on (#1384)
                 if (it.Kind is TerraceKind.BistroSet or TerraceKind.BeerBench) PotTables.AddTerrace(root, it.At);
+                // its chairs and benches to sit on (#1385)
+                ChairSeats.AddTerrace(root, it.At, it.Yaw, it.Kind);
                 if (it.Kind == TerraceKind.Awning) root.AddChild(Valance(Venues.NameOf(v), it, basis));
                 if (TerraceProps.Solid(it.Kind) is { } box)
                     body.AddChild(new CollisionShape3D

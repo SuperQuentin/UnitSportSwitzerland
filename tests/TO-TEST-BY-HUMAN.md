@@ -7,6 +7,17 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Sit on chairs, benches and terrace seats ([#1385](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1385))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva).
+
+- [ ] A terrace chair, E → seated facing the table, the figure on the chair (third person too); walk off → up.
+- [ ] Seated at the table, E → a fondue on that table, not standing up; the hint says Stand up on the jump; Space → up.
+- [ ] Inside a restaurant: a table's chairs, a banquette, a bar stool, a high table's stool → each seats you on it, not in the air or in the table.
+- [ ] A home: a sofa, an armchair, a dining chair; a church pew; a bench.
+- [ ] Pad: Y sits, the stick or A stands. VR: grip a chair → seated.
+- [ ] Online: a second player sees you seated on the chair.
+
 ## Fondue at a table ([#1384](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1384))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva), adventuring on.

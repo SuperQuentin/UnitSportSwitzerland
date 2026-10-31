@@ -959,6 +959,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Concert.PogoProbe.Requested) AddChild(new Concert.PogoProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
+        if (Player.ChairProbe.Requested) AddChild(new Player.ChairProbe(() => LocalPlayer));
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
@@ -2517,8 +2518,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.InteractMount, fight.Text);
             else if (p.Indoors)
             {
-                // seated in a cinema (#1279): E stands up (the seat itself is offered by InteriorManager.Interacting)
-                if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                // seated in a cinema (#1279): E stands up (the seat itself is offered by InteriorManager.Interacting);
+                // at a restaurant's table (#1385) E is the fondue, so standing up is the jump
+                if (p.Sitting) yield return (Interiors.PotTables.Near(p.GlobalPosition) != null ? PlayerInput.Jump : PlayerInput.InteractMount, "Stand up");
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
                 if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
                     && (p.DanceId != 0 || p.RatBeatHere(heard: true)))
@@ -2530,7 +2532,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 // a concert's light desk (#885), at its console
                 if (p.LightDeskInteraction() is { } desk) yield return (PlayerInput.InteractMount, desk.Text);
                 // a stand's seat (#885), before the dance: E sits there first
-                else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                else if (p.Sitting) yield return (Interiors.PotTables.Near(p.GlobalPosition) != null ? PlayerInput.Jump : PlayerInput.InteractMount, "Stand up");
                 else if (p.SeatInteraction() is { } seat) yield return (PlayerInput.InteractMount, seat.Text);
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
