@@ -37,12 +37,31 @@ public static partial class BuildingMeshBuilder
     /// </summary>
     public const float FootingFlag = -1f;
 
-    /// <summary>One piece of footing: the base edge's two ends, the ground under each, and its building.</summary>
-    internal readonly record struct Footing(Vector3 A, Vector3 B, float GroundA, float GroundB, int Building, float Below = FootingBelow);
+    /// <summary>Metres: the most an upper wall bottom (not on the base) standing over the ground is footed, under a walk-through clearance.</summary>
+    public const float OffBaseMax = 1.5f;
 
-    /// <summary>The footings of a tile drawn at <paramref name="ringStride"/>, from its full grid as the chunk build gets it (a ring finer than the coarse tile loads the stride-1 grid, the coarse ring its stride-10 one).</summary>
+    /// <summary>
+    /// Metres: the tallest plinth wall under a base (a basement storey, a terrace wall). Past it the data
+    /// is wrong (a base 123 m up) and that piece is left as it is.
+    /// </summary>
+    public const float PlinthMax = 12f;
+
+    private static readonly float[] Dips = [0.25f, 0.5f, 0.75f];
+
+    /// <summary>One piece of footing: the base edge's two ends, the ground under each, its building, how deep it goes, and whether it is a plinth wall.</summary>
+    internal readonly record struct Footing(Vector3 A, Vector3 B, float GroundA, float GroundB, int Building, float Below = FootingBelow, bool Plinth = false);
+
+    /// <summary>
+    /// The ground a tile drawn at <paramref name="ringStride"/> shows, from its full grid: the footings are
+    /// sized on what the ring draws, not on the stride-1 grid the chunk build loads for the fine rings.
+    /// </summary>
+    internal static ChunkGrid? RingGround(ChunkGrid? full, int ringStride) =>
+        full != null && ringStride > full.Stride && ringStride % full.Stride == 0 && (ChunkFormat.GridSize - 1) % ringStride == 0
+            ? full.Decimate(ringStride) : full;
+
+    /// <summary>The footings of a tile drawn at <paramref name="ringStride"/> (what the chunk build makes).</summary>
     internal static List<Footing> FootingsForRing(BuildingTile tile, ChunkGrid? full, int ringStride) =>
-        Footings(tile, full != null && ringStride >= ChunkFormat.CoarseStride ? full.Decimate(ringStride) : full);
+        Footings(tile, RingGround(full, ringStride));
 
     /// <summary>
     /// A solid's wall bottoms: the horizontal edges of its wall triangles that stand on its base (both
@@ -92,52 +111,45 @@ public static partial class BuildingMeshBuilder
     }
 
     /// <summary>
-    /// The footings of a tile's buildings over <paramref name="ground"/> (the tile's terrain): every
-    /// bottom edge of a wall (both ends on the solid's base), in pieces, where it stands above the
-    /// ground by more than 5 cm; none at all for a building whose base is anywhere more than
-    /// <see cref="FootingMax"/> above it. Measured over the local world's 308,759 buildings (Oct
-    /// 2026): 57% sit in the ground, 28% stand up to 1 m above it somewhere, 14% 1-3 m, 1% 3-10 m and
-    /// 65 more than 10 m (up to 123 m: data errors).
+    /// The footings of a tile's buildings over <paramref name="ground"/> (the ground the tile draws): every
+    /// bottom edge of a wall (<see cref="BottomEdges"/>), in pieces, where it stands above the ground by more
+    /// than 5 cm, each piece on its own. Up to <see cref="FootingMax"/> a plain footing; up to
+    /// <see cref="PlinthMax"/> a plinth wall (a basement storey, a darker masonry); a piece higher than that is
+    /// a data error and stays as it is. An edge not on the base is footed only up to <see cref="OffBaseMax"/>,
+    /// under a walk-through clearance: an upper storey over a passage stays open. Measured over the local
+    /// world's 308,759 buildings (Oct 2026): 57% sit in the ground, 28% stand up to 1 m above it somewhere,
+    /// 14% 1-3 m, 1% 3-10 m and 65 more than 10 m (up to 123 m: data errors).
     /// </summary>
-    internal static List<Footing> Footings(BuildingTile tile, ChunkGrid? ground)
+    internal static List<Footing> Footings(BuildingTile tile, ChunkGrid? ground, float below = FootingBelow)
     {
         var footings = new List<Footing>();
         if (ground == null) return footings;
         float Ground(Vector3 p) => (float)ground.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z);
-        var mine = new List<Footing>();
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
             var b = tile.Buildings[bi];
             if (!Drawn(b)) continue;
-            mine.Clear();
-            bool inAir = false;
-            for (int t = 0; t < b.TriangleCount && !inAir; t++)
+            foreach (var (p, q, onBase) in BottomEdges(b))
             {
-                var (a, c, d) = b.Tri(t);
-                if (IsRoof(a, c, d, float.MaxValue)) continue;
-                for (int k = 0; k < 3 && !inAir; k++)
+                float len = new Vector2(q.X - p.X, q.Z - p.Z).Length();
+                int pieces = Mathf.Max(1, Mathf.CeilToInt(len / FootingStep));
+                for (int i = 0; i < pieces; i++)
                 {
-                    var p = k == 0 ? a : k == 1 ? c : d;
-                    var q = k == 0 ? c : k == 1 ? d : a;
-                    if (p.Y > b.MinY + 0.05f || q.Y > b.MinY + 0.05f) continue;
-                    float len = new Vector2(q.X - p.X, q.Z - p.Z).Length();
-                    if (len < 0.05f) continue;
-                    int pieces = Mathf.Max(1, Mathf.CeilToInt(len / FootingStep));
-                    for (int i = 0; i < pieces && !inAir; i++)
-                    {
-                        var e0 = p.Lerp(q, (float)i / pieces);
-                        var e1 = p.Lerp(q, (float)(i + 1) / pieces);
-                        float g0 = Ground(e0), g1 = Ground(e1);
-                        float gap0 = e0.Y - g0, gap1 = e1.Y - g1;
-                        if (gap0 > FootingMax || gap1 > FootingMax) { inAir = true; break; } // the whole building in the air
-                        if (Mathf.Max(gap0, gap1) <= 0.05f) continue;                     // standing in the ground
-                        mine.Add(new Footing(e0, e1, Mathf.Min(g0, e0.Y), Mathf.Min(g1, e1.Y), bi));
-                    }
+                    var e0 = p.Lerp(q, (float)i / pieces);
+                    var e1 = p.Lerp(q, (float)(i + 1) / pieces);
+                    float g0 = Ground(e0), g1 = Ground(e1);
+                    float gap = Mathf.Max(e0.Y - g0, e1.Y - g1);
+                    if (gap <= 0.05f) continue;                          // standing in the ground
+                    if (gap > (onBase ? PlinthMax : OffBaseMax)) continue; // data error / a passage: as it is
+                    float a0 = Mathf.Min(g0, e0.Y), a1 = Mathf.Min(g1, e1.Y);
+                    // the foot is a straight line between the two ends; the ground between them (a stride-1 quad
+                    // mesh, or a coarse ring's plane) can dip under it, so the piece goes as deep as the deepest dip
+                    float dip = 0;
+                    foreach (float u in Dips)
+                        dip = Mathf.Max(dip, Mathf.Lerp(a0, a1, u) - Ground(e0.Lerp(e1, u)));
+                    footings.Add(new Footing(e0, e1, a0, a1, bi, below + dip, onBase && gap > FootingMax));
                 }
             }
-            // a building some of whose base is more than FootingMax up is left as it is, all of it:
-            // half a footing under a house in the air would be worse than none
-            if (!inAir) footings.AddRange(mine);
         }
         return footings;
     }
@@ -146,11 +158,11 @@ public static partial class BuildingMeshBuilder
     /// The footings into the extra geometry: foundation masonry, the building's own wall colour
     /// darkened (a castle's stone, a house's render gone to its plinth), flagged <see cref="FootingFlag"/>.
     /// </summary>
-    private static void AppendFootings(BuildingTile tile, BuildingTypeMap types, ChunkGrid? ground,
+    private static void AppendFootings(BuildingTile tile, BuildingTypeMap types, List<Footing> footings,
         List<Vector3> v, List<Color> c, List<float> f)
     {
         var colours = new Dictionary<int, Color>();
-        foreach (var ft in Footings(tile, ground))
+        foreach (var ft in footings)
         {
             if (!colours.TryGetValue(ft.Building, out var colour))
             {
@@ -163,10 +175,13 @@ public static partial class BuildingMeshBuilder
             }
             int start = f.Count;
             Quad(v, c, f, new Vector3(ft.A.X, ft.GroundA - ft.Below, ft.A.Z), new Vector3(ft.B.X, ft.GroundB - ft.Below, ft.B.Z),
-                ft.B, ft.A, colour);
+                ft.B, ft.A, ft.Plinth ? PlinthShade(colour) : colour);
             for (int i = start; i < f.Count; i++) f[i] = FootingFlag;
         }
     }
+
+    /// <summary>A plinth wall's masonry: a basement storey darker than the footing and the wall above it.</summary>
+    private static Color PlinthShade(Color footing) => new(footing.R * 0.75f, footing.G * 0.75f, footing.B * 0.75f, 1f);
 
     /// <summary>The footings' collision, both windings (the shape is one-sided).</summary>
     private static void FootingCollision(BuildingTile tile, ChunkGrid? ground, List<Vector3> faces)

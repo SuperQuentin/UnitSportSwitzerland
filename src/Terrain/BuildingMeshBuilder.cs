@@ -53,9 +53,10 @@ public static partial class BuildingMeshBuilder
     /// stay one surface and one draw call.
     /// </summary>
     /// <param name="detail">The visual style's mesh detail: <see cref="Styles.MeshDetail.High"/> adds the roof overhangs (#1067).</param>
-    /// <param name="ground">The tile's terrain: given, a base standing a little above it gets a footing down to it.</param>
+    /// <param name="ground">The tile's terrain: given, a base standing above it gets a footing or a plinth wall down to it.</param>
+    /// <param name="ringStride">The stride the tile's ring draws the ground at: the footings follow that ground, not the finer grid <paramref name="ground"/> may be.</param>
     public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
-        Styles.MeshDetail detail = Styles.MeshDetail.Low, ChunkGrid? ground = null)
+        Styles.MeshDetail detail = Styles.MeshDetail.Low, ChunkGrid? ground = null, int ringStride = 1)
     {
         Core.ShowcaseTrace.Mark();
         var data = Build(tile, detail);
@@ -75,7 +76,7 @@ public static partial class BuildingMeshBuilder
         var ruins = new FacadeSink();
         if (castles) AppendCastles(tile, types, v, c, f, ruins);
         // a base a little above the ground carried down to it
-        AppendFootings(tile, types, ground, v, c, f);
+        AppendFootings(tile, types, FootingsForRing(tile, ground, ringStride), v, c, f);
 
         int n = data.Vertices.Length, r = ruins.V.Count;
         var vertices = new Vector3[n + v.Count + r];

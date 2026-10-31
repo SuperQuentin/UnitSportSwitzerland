@@ -2412,7 +2412,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
-                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid) is { } buildingData)
+                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid, stride) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (cells)
