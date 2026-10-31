@@ -2,9 +2,6 @@ using Godot;
 
 namespace UnitSport.Concert;
 
-/// <summary>What the show is doing now: the section of a song, or between them.</summary>
-public enum ShowSection : byte { WalkIn, Calm, Groove, Chorus, Peak, Blackout }
-
 /// <summary>
 /// The virtual light desk (#885): every frame it writes the whole rig's DMX from the show's clock,
 /// the way a programmed console plays back a show: groups, palettes, effects with a phase spread
@@ -32,6 +29,8 @@ public sealed class LightDesk
     private const int BarsPerSection = 16;
 
     public ShowSection Section { get; private set; }
+    /// <summary>Where a jazz night's set is (#1394), as the last made-up frame saw it; meaningless for the other genres.</summary>
+    public JazzMoment Jazz { get; private set; }
     public float Beat { get; private set; }
     /// <summary>Bars since the section began, and whether it is the song's last section: what the effects key on.</summary>
     public int SectionBar { get; private set; }
@@ -159,6 +158,14 @@ public sealed class LightDesk
         if (Blackout) return ShowSection.Blackout;
         if (HeldSection is { } held) return held;
         if (showSeconds < 0) return ShowSection.WalkIn;
+        if (_e.Genre == Genre.Jazz)
+        {
+            // a jazz night's own set (#1394): short songs, the call for the bis, the bis (the server counts the same grid)
+            Jazz = JazzSet.At(beat, _e.SetSongs);
+            SectionBar = Jazz.SectionBar;
+            LastSection = Jazz.LastSection;
+            return Jazz.Section;
+        }
         int songBars = SongForm.Length * BarsPerSection + 1;
         int inSong = bar % songBars;
         _finale = (bar / songBars) % 4 == 3;
@@ -197,12 +204,13 @@ public sealed class LightDesk
         ph32 ^= ph32 >> 13; ph32 *= 0x5bd1e995; ph32 ^= ph32 >> 15;
         _phraseHash = ph32;
         bool syncUp = Section == ShowSection.Chorus && SectionBar < 2 || Music is { Build: > 0f } || Music is { SinceDrop: < 4f };
-        _phrase = syncUp || Section == ShowSection.Calm ? Phrase.Sync : (Phrase)(ph32 % 8);
+        _phrase = syncUp || Section == ShowSection.Calm || _e.Genre == Genre.Jazz ? Phrase.Sync : (Phrase)(ph32 % 8);
         _kick = kick;
         _pump = Section switch
         {
             ShowSection.Calm => 0.2f, ShowSection.Groove => 0.65f, ShowSection.Chorus => 0.4f, ShowSection.Peak => 0.8f, _ => 0f,
         };
+        if (_e.Genre == Genre.Jazz) _pump *= 0.3f;   // a jazz rig breathes, it does not pump
         var p = _plan.Patch;
 
         // the haze is always on during a show: it is what makes beams visible
@@ -212,7 +220,8 @@ public sealed class LightDesk
             p.Set01(f, Attr.Fan, 0.5f);
         }
 
-        switch (Section)
+        if (_e.Genre == Genre.Jazz && Section is ShowSection.Calm or ShowSection.Groove or ShowSection.Chorus or ShowSection.Peak) JazzLook(beat, bar);
+        else switch (Section)
         {
             case ShowSection.WalkIn:
                 Washes(0.35f, _walkInWash, tilt: 25f, sway: 6f, speed: 0.125f, beat);
@@ -275,19 +284,61 @@ public sealed class LightDesk
                 Screens(clip: 4, speed: _e.Bpm / 60f, Colors.White, _pal[1], 1f);
                 break;
         }
-        if (bands is { } m && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Accents(m, beat);
+        if (bands is { } m && Section is not (ShowSection.Blackout or ShowSection.WalkIn) && _e.Genre != Genre.Jazz) Accents(m, beat);
         if (melody.Has && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Singer(melody, beat);
         StrobeBursts();
         Effects(beat);
         Bands(beat);
     }
 
+    // ---- the jazz look (#1394) ------------------------------------------------------------------------
+
+    /// <summary>
+    /// A jazz night's sections, never a strobe or a blackout flash: calm is a warm spot on the soloist over slow amber and blue washes; the groove
+    /// fans the floor beams slowly and turns the washes on the bar; the chorus lifts the washes up in the palette; the peak is a gentle build over the
+    /// section's four bars. Replaces the genre-less section looks; the song's sections still come from the set (<see cref="JazzSet"/>).
+    /// </summary>
+    private void JazzLook(float beat, float bar)
+    {
+        var amber = _pal[0];
+        var warm = new Color(1f, 0.82f, 0.55f);
+        int barN = (int)MathF.Floor(bar);
+        float build = Math.Clamp((SectionBar + (bar - MathF.Floor(bar))) / JazzSet.SectionBars, 0f, 1f);
+        Off(RigGroup.MidTruss); Off(RigGroup.Blinders); Off(RigGroup.Strobes);
+        switch (Section)
+        {
+            case ShowSection.Calm:
+                Washes(0.5f, _calmWash, tilt: 20f, sway: 8f, speed: 0.25f, beat);
+                Spots(0.8f, warm, aimCentre: true, beat, zoom: 0.25f);
+                Off(RigGroup.Floor);
+                break;
+            case ShowSection.Groove:
+                Washes(0.55f, i => (i + barN) % 2 == 0 ? amber : _pal[1], tilt: 25f, sway: 10f, speed: 0.25f, beat);
+                Spots(0.55f, warm, aimCentre: true, beat, zoom: 0.35f);
+                Beams(RigGroup.Floor, _jazzFloor, _pal[1], fan: 22f + 8f * MathF.Sin(bar * MathF.Tau / 4f), tilt: 18f, open: true);
+                break;
+            case ShowSection.Chorus:
+                Washes(0.85f, i => (i + barN) % 3 == 0 ? _pal[2] : amber, tilt: 30f, sway: 12f, speed: 0.5f, beat);
+                Spots(0.9f, warm, aimCentre: false, beat, zoom: 0.5f);
+                Beams(RigGroup.Floor, _jazzFloor, amber, fan: 32f, tilt: 24f, open: true);
+                break;
+            default:   // the peak: a build over its four bars, not a ballyhoo
+                Washes(0.6f + 0.35f * build, i => i % 2 == 0 ? _pal[2] : _pal[1], tilt: 32f, sway: 14f, speed: 0.5f, beat);
+                Spots(0.8f + 0.2f * build, warm, aimCentre: false, beat, zoom: 0.55f);
+                Beams(RigGroup.Floor, _jazzFloor, _pal[2], fan: 30f + 15f * build, tilt: 26f, open: true);
+                break;
+        }
+    }
+
+    private static float JazzFloorDim(int i) => 0.55f;
+    private readonly Func<int, float> _jazzFloor = JazzFloorDim;
+
     // ---- the crowd's wristbands (#986) ---------------------------------------------------------------
 
     private readonly float[] _irLateral;
 
     /// <summary>A slow song: its bands twinkle through the verses instead of staying dark.</summary>
-    private bool Ballad => _e.Genre == Genre.Ballad || (_bpm ?? _e.Bpm) < 90f;
+    private bool Ballad => _e.Genre is Genre.Ballad or Genre.Jazz || (_bpm ?? _e.Bpm) < 90f;
 
     /// <summary>
     /// The crowd's wristbands, by section: dark through the walk-in, between songs and in a song's calm
@@ -305,6 +356,8 @@ public sealed class LightDesk
         foreach (var f in heads) Dark(f);
         foreach (var f in floods) Dark(f);
         foreach (var f in G(RigGroup.Wristbands)) Dark(f);
+        // the call for the bis: the dark crowd holds its bands up, amber (a jazz night's, #1394)
+        if (_e.Genre == Genre.Jazz && Jazz.Part == JazzPart.Call && HeldSection == null && !Blackout) Transmit(_pal[0], 0.9f, Wristbands.Twinkle, 0.35f);
         if (Section is ShowSection.WalkIn or ShowSection.Blackout) return;
         int beatN = (int)MathF.Floor(beat);
         if (Music is { SinceDrop: < 4f })

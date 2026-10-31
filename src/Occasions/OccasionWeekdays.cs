@@ -115,8 +115,8 @@ public static class OccasionWeekdays
         return -1;
     }
 
-    /// <summary>A tail longer than this is a typo: the longest festival runs eleven days.</summary>
-    private const int MaxTail = 13;
+    /// <summary>A tail longer than this is a typo: the longest festival runs sixteen days (Montreux Jazz).</summary>
+    private const int MaxTail = 15;
 
     /// <summary>A parsed token: <c>Month</c> 0 = every month; <c>Easter</c> with its <c>Offset</c> in days.</summary>
     private readonly record struct Token(int Month, DayOfWeek Day, int Nth, bool Easter, int Offset);

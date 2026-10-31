@@ -46,7 +46,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<ChunkGrid?> LoadChunkAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, ChunkFormat.ChunkFileName(id));
             if (!File.Exists(path)) return (ChunkGrid?)null;
@@ -57,7 +57,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<ChunkGrid?> LoadCoarseChunkAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, ChunkFormat.CoarseFileName(id));
             if (!File.Exists(path)) return (ChunkGrid?)null;
@@ -68,7 +68,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<HashSet<int>?> LoadHolesAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, HoleFormat.FileName(id));
             if (!File.Exists(path)) return (HashSet<int>?)null;
@@ -79,7 +79,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<BuildingTile?> LoadBuildingsAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, BuildingFormat.FileName(id));
             if (!File.Exists(path)) return (BuildingTile?)null;
@@ -90,7 +90,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, CoverFormat.FileName(id));
             if (!File.Exists(path)) return (byte[]?)null;
@@ -102,7 +102,7 @@ public sealed class LocalChunkSource : IChunkSource
     /// <summary>The preprocessor's <c>.water</c> layer (#298), on the runtime's 2 m lattice; null where the tile has no water file.</summary>
     public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, WaterFormat.FileName(id));
             if (!File.Exists(path)) return (WaterTile?)null;
@@ -113,7 +113,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, TreeFormat.FileName(id));
             if (!File.Exists(path)) return (List<TreeInstance>?)null;
@@ -124,7 +124,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, HorizonFormat.FileName);
             if (!File.Exists(path)) return (HorizonIndex?)null;

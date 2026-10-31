@@ -47,7 +47,7 @@ public partial class ConcertDirector : Node
         {
             -1 => null,
             { } seed => ConcertPlanner.Plan(s, seed),
-            _ => ConcertPlanner.Tonight(s, Core.Calendar.Now.Date),
+            _ => ConcertPlanner.Open(s, Core.Calendar.Now.Date) ? ConcertPlanner.Tonight(s, Core.Calendar.Now.Date) : null,
         };
 
     /// <summary>The tile nodes holding each stadium's rig, so a hosted set can replace it.</summary>
@@ -92,7 +92,8 @@ public partial class ConcertDirector : Node
     {
         if (ConcertService.Instance?.SeedFor(index) != null || ForcedSeed is >= 0) return true;
         if (ForcedSeed == -1) return false;
-        return ConcertPlanner.Tonight(StadiumCatalog.All[index], Core.Calendar.Now.Date).Standing(World.WorldClock.CurrentHour);
+        var venue = StadiumCatalog.All[index];
+        return ConcertPlanner.Open(venue, Core.Calendar.Now.Date) && ConcertPlanner.Tonight(venue, Core.Calendar.Now.Date).Standing(World.WorldClock.CurrentHour);
     }
 
     /// <summary>The stage, its rig, its floor and its crowd taken away.</summary>

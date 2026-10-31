@@ -147,10 +147,14 @@ public partial class FestivalService : Node
                 FestivalCatalog.Register(chalanda with { Sites = [new FestivalSite("the test field", e, n, 100)] });
             if (FestivalCatalog.Get(FestivalCatalog.ZibelemaeritId) is { } zibele)
                 FestivalCatalog.Register(zibele with { Sites = [new FestivalSite("the test field", e, n, 100)] });
+            if (FestivalCatalog.Get(FestivalCatalog.MontreuxJazzId) is { } jazz)
+                FestivalCatalog.Register(jazz with { Sites = [new FestivalSite("the test field", e, n, 120)] });
             if (FestivalCatalog.Get(FestivalCatalog.August1Id) is { } august1)
                 FestivalCatalog.Register(august1 with { Sites = [new FestivalSite("the test field", e, n, 120)] });
         }
         // a check's sky: --august1hour 22.5 holds the server's game hour (a dedicated server without a sky reads noon)
+        // the same for any festival's evening (--festivalhour 21.5): the jazz night's set plays 20:30 to 23:30
+        if (CmdArgs.Value("--festivalhour") is { } anyHour && double.TryParse(anyHour, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double h2)) Hour = () => h2;
         if (CmdArgs.Value("--august1hour") is { } fixedHour && double.TryParse(fixedHour, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double h1)) Hour = () => h1;
         if (!Authority) return;
         _adventure.Loaded += OnLoaded;
@@ -195,6 +199,7 @@ public partial class FestivalService : Node
         SechseTick(now);
         ChalandaTick(now);
         August1Tick(now);
+        MontreuxTick(now);
         if (now >= _nextCrewCheck)
         {
             _nextCrewCheck = now + CrewCheckEvery;
@@ -517,6 +522,7 @@ public partial class FestivalService : Node
         DesalpeWelcome(peer);
         MarketWelcome(peer);
         ZibeleWelcome(peer);
+        MontreuxWelcome(peer);
         SechseWelcome(peer);
         foreach (var run in Running)
         {

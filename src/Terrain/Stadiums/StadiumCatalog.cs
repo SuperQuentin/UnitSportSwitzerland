@@ -689,10 +689,31 @@ public static class StadiumCatalog
         ConcertCapacity = 8000,
     };
 
+    /// <summary>
+    /// Montreux Jazz Festival, the lake stage (Montreux), open air: a small stage and a seated lawn on the Place du Marché by the quay (#1394). Fitted on the swissimage
+    /// aerial: the sand square 60 x 32 m between the market hall and the hotels, the stage at its lake (west) end, the audience facing the water behind the band
+    /// (low-medium: the real stages move each year). It stands only in the festival's window (<see cref="StadiumSpec.Season"/>), the lake side is open.
+    /// </summary>
+    public static readonly StadiumSpec MontreuxJazzOpenAir = new()
+    {
+        Name = "Montreux Jazz, Lake Stage", Town = "Montreux",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2559335, N = 1142425, AzimuthDeg = 270f,
+        FrontHalfU = 16f, FrontHalfV = 30f, FrontCorner = 3f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        OpenSides = new[] { StadiumSide.North },
+        Kiosks = false,
+        ConcertCapacity = 1200,
+        Season = "07-fri#1+15",
+    };
+
     /// <summary>The real stadiums, catalogue order.</summary>
     public static readonly StadiumSpec[] Real =
     {
-        Geneva, Wankdorf, StJakobPark, Letzigrund, Kybunpark, Swissporarena, StockhornArena, Tourbillon, Tuiliere, Maladiere, Brugglifeld, Schutzenwiese, Hallenstadion, PostFinanceArena, StJakobshalle, SwissLifeArena, VaudoiseArena, VernetsArena, GenevaArena, BcfArena, TissotArena, BossardArena, CornerArena, TheHall, SwissArenaKloten, DavosArena, PaleoOpenAir, GurtenOpenAir, FrauenfeldOpenAir, StGallenOpenAir, GreenfieldOpenAir, HeitereOpenAir, MoonAndStarsOpenAir,
+        Geneva, Wankdorf, StJakobPark, Letzigrund, Kybunpark, Swissporarena, StockhornArena, Tourbillon, Tuiliere, Maladiere, Brugglifeld, Schutzenwiese, Hallenstadion, PostFinanceArena, StJakobshalle, SwissLifeArena, VaudoiseArena, VernetsArena, GenevaArena, BcfArena, TissotArena, BossardArena, CornerArena, TheHall, SwissArenaKloten, DavosArena, PaleoOpenAir, GurtenOpenAir, FrauenfeldOpenAir, StGallenOpenAir, GreenfieldOpenAir, HeitereOpenAir, MoonAndStarsOpenAir, MontreuxJazzOpenAir,
     };
 
     /// <summary>

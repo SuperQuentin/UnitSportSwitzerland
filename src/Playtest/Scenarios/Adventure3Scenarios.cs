@@ -3,6 +3,7 @@ using UnitSport.Adventure;
 using UnitSport.Adventure.Errands;
 using UnitSport.Adventure.Together;
 using UnitSport.Combat;
+using UnitSport.Concert;
 using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
@@ -14,6 +15,7 @@ using UnitSport.Occasions.Festivals.Desalpe;
 using UnitSport.Occasions.Festivals.Escalade;
 using UnitSport.Occasions.Festivals.Fasnacht;
 using UnitSport.Occasions.Festivals.Horn;
+using UnitSport.Occasions.Festivals.MontreuxJazz;
 using UnitSport.Occasions.Festivals.Sechselaeuten;
 
 namespace UnitSport.Playtest.Scenarios;
@@ -24,7 +26,7 @@ namespace UnitSport.Playtest.Scenarios;
 /// They run on the fixture course with the check-only festival, so the festivals stand at the fixture's start; the scenarios
 /// that need the real map or a headset to be judged say so in their text. Only the owner's tick of the TO-TEST list deletes a line.
 /// </summary>
-public static class Adventure3Scenarios
+public static partial class Adventure3Scenarios
 {
     private const string Cat = Adv3.Category;
     private static readonly string[] Look = ["Cartoon, PS1 and Realistic (Settings > Style): it reads well in each, nothing z-fights, no prop floats or sinks"];
@@ -551,4 +553,65 @@ public static class Adventure3Scenarios
             await Adv3.Stand(c, (start.E - tx * 4, start.N - ty * 4), (start.E, start.N));
         },
     };
+
+    [PlaytestScenario("adv3-montreux-jazz", "Montreux Jazz: the quay stage, a song and the encore", Cat)]
+    private static PlaytestScenario MontreuxJazz() => new()
+    {
+        Flags = [.. Adv3.Flags, "--jazzbpm", "240"],
+        Instructions = "A night of Montreux Jazz (11 July 2027, 21:00; the songs last half a minute here, not a minute and a half), held at the fixture's start: the quay's small stage with its quartet, the seated lawn and the lake end of it behind the band. " +
+            "You stand at the stage-front rail: E (pad Y) marks you as listening; stay for a song and watch the toast at the top right when it ends. When the set is over the band leaves and a ring closes on the bottom centre on every beat: Space (pad A, VR pad A) on the beat claps it back, " +
+            "and the meter above the ring counts every clap in the crowd. A stand-in (a bot, not a party member) claps with you for the first six beats, so the meter half-fills by itself; clap the rest to bring the band back for the bis. " +
+            "The real quay, the lake and a headset are not judged here: the lawn is the fixture's flat field.",
+        Checklist = Checks(
+            "The small stage and its roof, the quartet (a bass, a sax, a piano with its stool, a drum kit) and the seated crowd read from the lawn; the figures sway a little, nobody pogos or hops",
+            "The lights stay warm and calm: amber and blue washes, a warm spot on the soloist, floor beams fanning slowly; never a strobe or a flash, and the call for the bis is dark with the crowd's bands twinkling",
+            "The toast says what the song paid, top right, for about 3 s, and never covers the stage; the Listening chip at the bottom centre is readable",
+            "The clap ring is where the pogo's is (bottom centre, clear of the hotbar), its eight dots count the beats, the grade shows for half a second, the meter's text is readable; with a pad (A) and in a headset (the pad's A) the claps feel fair",
+            "After a full meter the band is back for the bis lights (a chorus and a gentle peak); with a short meter the line says the crowd was too quiet",
+            "Settings > Style: the instruments, the seated people and the stage look right in Cartoon, PS1 and Realistic"),
+        Covers = Adv3.Dir("src/Occasions/Festivals/MontreuxJazz", "src/Occasions/Festivals/FestivalService.MontreuxJazz.cs", "src/Occasions/Festivals/FestivalCatalog.MontreuxJazz.cs",
+            "src/Concert/JazzSet.cs", "src/Concert/JazzInstruments.cs", "src/Terrain/Stadiums/StadiumCatalog.cs"),
+        Setup = async c =>
+        {
+            var site = await Adv3.Festival(c, MontreuxJazzRules.FestivalId, D(2027, 7, 11), "21:00");
+            var svc = FestivalService.Instance!;
+            svc.Hour = () => 21.0;
+            var e = FestivalService.MontreuxEvent(svc.RunningOf(MontreuxJazzRules.FestivalId)!);
+            // the stage on the fixture, in the venue's frame at the site (the real one stands in the Montreux tile)
+            var venue = Terrain.Stadiums.StadiumCatalog.MontreuxJazzOpenAir;
+            var me = await c.OnFoot();
+            var origin = me.Origin ?? throw new InvalidOperationException("no world origin yet");
+            var w = origin.ToWorld(site.E, site.N, 0);
+            w = w with { Y = c.Ground(w) };
+            float a = Mathf.DegToRad(venue.AzimuthDeg);
+            var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
+            c.Own(new ConcertRig(e) { Name = "JazzStage", Transform = new Transform3D(basis, w), ForceLive = true });
+            c.Own(new JazzStandIn(e) { Name = "JazzStandIn" });
+            var rail = MontreuxJazzRules.Rail(site);
+            var front = MontreuxJazzRules.StageFront(site);
+            await Adv3.Stand(c, (rail.E + 1.2, rail.N), front);
+        },
+    };
+
+    /// <summary>The stand-in of <c>adv3-montreux-jazz</c>: a bot that claps the first six beats of every call, as a stranger would (it joins the meter and is never paid).</summary>
+    private sealed partial class JazzStandIn : Node
+    {
+        private readonly ConcertEvent _e;
+        private int _last = int.MinValue;
+
+        public JazzStandIn(ConcertEvent e) => _e = e;
+        public JazzStandIn() : this(ConcertPlanner.Jazz(Terrain.Stadiums.StadiumCatalog.MontreuxJazzOpenAir, 2027, 1)) { }
+
+        public override void _Process(double delta)
+        {
+            if (FestivalService.Instance is not { } svc) return;
+            double now = Net.ClockSync.ServerNow;
+            var mom = MontreuxJazzRules.Moment(_e, now);
+            if (mom.Part != JazzPart.Call) { _last = int.MinValue; return; }
+            int beat = (int)Math.Round(JazzSet.BeatOf(now % 86400.0, _e.Bpm) - JazzSet.CallStart(mom.Set, _e.SetSongs)) - JazzSet.CallLeadBeats;
+            if (beat == _last || beat < 0 || beat >= 6) return;
+            _last = beat;
+            svc.ServeMontreux(-9, FestivalService.MontreuxClap);
+        }
+    }
 }

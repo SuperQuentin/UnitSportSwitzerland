@@ -1132,3 +1132,12 @@ src/Adventure/Together/TogetherService.Crevasses quick --crevassecheck --world f
 src/Adventure/Together/CrevasseNetProbe net tools/crevassenetcheck.sh
 tools/crevassenetcheck.sh  net  tools/crevassenetcheck.sh
 src/Net/StaminaWatch net tools/crevassenetcheck.sh
+# #1394: Montreux Jazz: the quay's lake stage, the set's clock, Listening (a song heard pays at its end), the Encore (the crowd meter), the Jazz Night and the finale (offline quick probe; server + two clients)
+src/Occasions/Festivals/MontreuxJazz/ quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.MontreuxJazz quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.MontreuxJazz quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Concert/JazzSet quick  --concertcheck --systems ui
+src/Concert/JazzInstruments quick  --concertcheck --systems ui
+src/Occasions/Festivals/MontreuxJazz/ net    tools/montreuxnetcheck.sh
+src/Occasions/Festivals/FestivalService.MontreuxJazz net    tools/montreuxnetcheck.sh
+tools/montreuxnetcheck.sh    net    tools/montreuxnetcheck.sh

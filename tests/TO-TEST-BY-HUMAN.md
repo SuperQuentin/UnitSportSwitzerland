@@ -24,6 +24,18 @@ Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
 - [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
 - [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
 
+## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
+
+- [ ] Load the open world offline and join the server with a browser, a video and the task manager open: does the PC stay responsive while loading (mouse, windows, video), does the loading screen stay near 30 fps, and does the game's own frame limit come back once in the world? → nothing stutters outside the game; the world still loads about as fast.
+
+## Faster rejoin ([#1387](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1387))
+
+The real server (unitsport.infrack.ch, HTTP mirror and Linux deploy), which loopback cannot stand in for: join it twice from the same install, the cache kept between.
+
+- [ ] First join, then leave and join again: the log shows `index of the last visit to this server merged at boot`, `the copy from the last visit is still the server's` for the horizon and places, and one `[horizon]` line, not two. Is the second spawn clearly faster, and does the horizon fill in behind you instead of holding the loading screen?
+- [ ] After the server is updated (new tiles or a new `horizon.bin`), join again: the log says the index changed and the files stream, nothing stale is drawn.
+- [ ] Join an older server (no `AssetKind.Digest`): it joins as before, one "not available on the server" line for the digest.
+
 ## Sword combat ([#1374](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1374))
 
 `/spawn sword` (admin), put it on the hotbar, `/dummy`; on a server also `/pvp on` with a friend, `/bot add 1`, `/bot arm sword`, `/bot swing`.
@@ -502,3 +514,13 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] Walk out beyond 900 m and back, once while the show is on and once after it has ended: the crowd is gone when the show is off, and the rig comes back lit.
 - [ ] Stand beside a building-site crane (a tower crane at rest, then one worked from its remote): the jib, trolley, hook and rope still move, and a crane at rest stands still with its hook where it was.
 - [ ] Walk along a street with doors: the "Open the door" prompt appears at the right doors, facing one door over a nearer one at your back, and in the lower right the key hints (E, R, F1) still change when you step to a door, mount a vehicle or touch a pad.
+
+## Montreux Jazz Festival (PR for [#1394](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1394))
+
+- [ ] With the real map at Montreux (the full region needed; `--date 2027-07-11 --time 21` shows the stage today, or in the real 3-18 July window): the small stage stands on the Place du Marché by the quay, facing east with the lake behind the band, the crowd seated on the sand, the promenade along the water free to walk, the fence open on the lake side, nothing inside the stage. Does it look like Montreux? Outside the festival's dates the square is the square (no stage, no crowd, no fence).
+- [ ] The quartet (an upright bass, a sax, a piano with its stool, a drum kit): do the four instruments look right in Cartoon, PS1 and Realistic? Does the sway read as jazz, and do the warm washes feel calm (never a strobe or a flash)?
+- [ ] Listening: E at the stage-front rail (pad Y, VR grip or the pad's Y) marks you; a toast top right for each song heard to its end. Does the toast stay clear of the stage and fade in about 3 s? Is a song's 6 Batzen (about CHF 2 a minute at the festival's real pace) a fair pay?
+- [ ] The encore, alone and with a friend on a second machine: the ring closes at the bottom centre on every beat, the meter's text ("7 of 12") is readable, jump / the pad's A / the VR pad's A claps. Does the ring feel fair with a pad and in a headset? Two friends with 6 claps each fill the meter; does it feel good that strangers' claps count?
+- [ ] The Jazz Night (day 8) and the closing night (day 16, `--festival test` is not needed: set the date `--date 2027-07-17` at the real map): the set is longer, the last song of the closing night pays the 20 Batzen finale and the two confetti cannons fire on each song's last chorus.
+- [ ] A real 3-18 July run: the festival is on, the Journal's Festival tab shows the days, the Jazz pass (item 511) is in the pack after the first song, the Batzen convert after the last day.
+- [ ] No audio plays at the stage yet (lights only, the made-up songs): once the owner picks copyright-free jazz tracks (`CdLibrary.JazzUrls`), does the set follow the CD, and does the 80 % rule need `ConcertMusic.At` as the games' clock (a follow-up noted in `occasions/festival-montreuxjazz`)?
