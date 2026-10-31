@@ -5,8 +5,8 @@
 
 The preprocessor seats every solid rigidly on the median ground of its footprint and never flattens the
 terrain, so on a slope a base floats or sinks and a door sill is one point against ground that moves.
-Two game-side fixes and a probe; the terrain-side fixes (outline-sampled base, building pads, a joint town
-ground solve, smoothed road profiles) are a later issue.
+Two game-side fixes and a probe; the terrain-side fixes are #1419 (below: outline-sampled base, building pads; the joint
+town ground solve and the smoothed road profile are its next phase).
 
 ## The probe
 
@@ -20,7 +20,7 @@ when a tile was measured). Default tiles: Sion 2597,1119, Lausanne 2538,1152, Ze
 - doors: sill against the ground 0.8 m in front at both jambs and the middle, buried over 10 cm, floating over 15 cm
   after the stoop, the three worst as `--at E,N`.
 
-The road-to-facade strip histogram is not measured: it needs the road surface the terrain issue rebuilds.
+The road-to-facade strip is measured too (below).
 
 | Stride 1 | no-footing pieces | buildings with none | doors buried / floating |
 |---|---|---|---|
@@ -59,3 +59,49 @@ Ground is read `FrontReach` (0.8 m) in front at both jambs (half the width, at m
   most `MaxStoopRise` (0.3 m) (`DoorSpot.Steps/Rise`); a drop over `MaxStoopDrop` (0.9 m) penalises the wall 4.
 - Vehicle doors (barn, garage, bays) are left alone. A null grid changes nothing, so the golden door baselines hold.
 - Mesh: `AppendDoor` via `StoopBoxes`; collision: `StoopFaces` beside `LinkFaces`. Model viewer: `Terrain > Ground contact`.
+
+## The road-to-facade strip (#1419, `GroundStrip.cs`)
+
+`--groundcheck` also prints, per tile and ring stride, `strip stride S`: the lattice cells between a road ribbon's edge and a
+facade, with a slope histogram (< 15, 15-30, 30-45, 45-52, > 52 degrees) and the lattice edges that step over 0.3 m. A cell is in the
+strip when it is outside every at-grade ribbon (`RoadEmbankment.EdgeOffset`, sidewalk and verge included; no rail, ford or stairs)
+and every footprint, and its distance to the nearest ribbon edge plus to the nearest facade is at most 25 m. The ground is the one
+players stand on: the road blend at clearance 0 over the stride-1 grid, then every S-th vertex. Pure code in `GroundStrip.cs`
+(unit tests `GroundStripTests`). The Sion/Lausanne/Zermatt tiles are rebuilt into a scratch dir with the preprocessor
+(`terrain` pass from the `.xyz.zip`s of the tile and its 8 neighbours, then `--features-only --tlm --route-keys --buildings --gwr`).
+
+## Terrain graded to the buildings, phase 1 (#1419; `tools/building-pads`)
+
+Three steps, each measured on the three tiles (stride 1 unless said; "gaps" = base pieces more than 5 cm over the drawn ground;
+doors buried/floating at strides 1 / 2 / 4 / 10):
+
+| Tile | Step | Gaps > 5 cm | Gapped buildings | Doors buried / floating, 1 / 2 / 4 / 10 | Strip steps > 0.3 m, slope > 45 deg |
+|---|---|---|---|---|---|
+| Sion | #1418 build | 447 | 82 | 2/2, 12/12, 30/37, 102/74 | 30911 of 200619, 5791 |
+| | outline base | 409 | 84 | 3/1, 14/12, 37/37, 91/78 | unchanged |
+| | + pads, planned on graded ground | 39 | 11 | 1/0, 5/5, 14/12, 59/46 | 33135, 6293 |
+| | + doors read on the ring | | | 1/0, 0/0, 2/1, 23/8 | |
+| Lausanne | #1418 build | 6,980 | 217 | 9/11, 51/70, 117/190, 506/531 | 68494 of 517308, 16136 |
+| | outline base | 5,056 | 218 | 8/9, 51/71, 129/172, 593/435 | unchanged |
+| | + pads | 2,287 | 118 | 3/8, 37/53, 148/129, 523/351 | 99979, 19277 |
+| | + doors read on the ring | | | 3/8, 1/7, 13/15, 349/180 | |
+| Zermatt | #1418 build | 1,138 | 174 | 4/5, 42/57, 85/118, 198/206 | 69416 of 300758, 8857 |
+| | outline base | 933 | 170 | 3/6, 43/50, 81/109, 210/206 | unchanged |
+| | + pads | 113 | 31 | 0/1, 13/20, 62/58, 197/157 | 74580, 11066 |
+| | + doors read on the ring | | | 0/1, 0/3, 1/7, 61/47 | |
+
+(Raw logs of the runs: `test_output/grading/gc_*.log` of the worktree; the "#1418 build" rows are from the same build path, the
+unchanged preprocessor.) What is left at stride 10: doors more than 1 m off (a 10 m lattice has no pad; the footing hides the wall,
+and a raise past `MaxLandingRaise` is not tried); at stride 1 the 1-3 and 3-10 m gaps of Lausanne's steep streets (the pad is
+capped at 1.5 m, plinths take the rest). **The strip got worse, not better** (pad banks and the rest are for the next phase: the
+joint ground solve in towns).
+
+## Far-ring doors
+
+The door set is planned once, on the graded stride-1 heights (`BuildingFootprint.ComputeDoors`, unchanged). The pad is flat for
+`BuildingPad.Shoulder` (3 m) past the outline, so the ground 0.8 m in front of a wall is the level the sill was planned on and a
+2 or 4 m lattice cell round it is mostly flat too (shoulders of 1 / 2 / 3 m: Lausanne stride-2 doors buried 174 / 41 / 37). A ring
+that draws the ground coarser then reads the sills again on its own ground (`BuildingFootprint.ForRing`, called in
+`ChunkManager` for the mesh when the ring stride is above 1): each pedestrian door's sill is lifted by at most
+`MaxLandingRaise` (the lintel stays, the door gets shorter) or its stoop made longer, the door set (walls, slots, sizes) untouched, collision untouched.
+`--groundcheck` prints both ("as planned" and the re-read ones).

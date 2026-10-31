@@ -39,6 +39,7 @@
   (reads the manifest, `.terr`, `.bldg` and the PBF, writes `airports.json`; seconds; the game: `--airports <file>` tries one out).
 - Buildings export (needs GDAL, install: `gdal-setup`): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
 - Features: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --tlm <tlm.gpkg> --route-keys ressources/data/routes/route_keys.sqlite --cover --buildings ressources/data/buildings3d/buildings.gpkg --gwr ressources/data/gwr/data.sqlite`
+  A feature pass with buildings grades their pads into the `.terr` heights before the roads are draped (`building-pads`; `--no-grade` skips it).
 - Roads preprocessing: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --roads-only --tlm ressources/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg --route-keys ressources/data/routes/route_keys.sqlite`
 - Rebuild a built map, whole or an area, from the source data on disk:
   `tools/rebuild-map.sh <what> [area] [--force] [--dry-run]` (VS Code: `data: rebuild all`,

@@ -2412,7 +2412,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
-                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid, stride) is { } buildingData)
+                        // a ring that draws the ground coarser than the grid the doors were planned on reads the sills again on it (#1419)
+                        var meshDoors = stride > 1 && BuildingMeshBuilder.RingGround(grid, stride) is { } ringGround
+                            ? Interiors.BuildingFootprint.ForRing(doors, bTile, ringGround) : doors;
+                        if (BuildingMeshBuilder.Build(bTile, meshDoors, detail, grid, stride) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (cells)

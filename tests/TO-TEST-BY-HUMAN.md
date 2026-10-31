@@ -17,6 +17,17 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] A door whose ground rises in front of it: the sill sits on a level landing, the door opens and you walk in with the interior floor at the sill.
 - [ ] Realistic style: the plinth wall and stoop show plain masonry, not a roof texture.
 
+## Terrain graded to the buildings, phase 1 ([#1419](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1419))
+
+Needs tiles rebuilt with the grading stage (`docs/notes/tools/building-pads.md`; Sion 2597,1119, Lausanne 2538,1152, Zermatt 2623,1095), `--chunks` at them.
+
+- [ ] Walk round a house on a slope in Sion and Zermatt: the ground is level for a few metres round it with a soft bank beyond, no step or crease where the apron ends, no hole between the wall and the ground.
+- [ ] Walk up to a few front doors on a hillside (Sion `--at 2597738,1119166`, Lausanne `--at 2538232,1152903`): the doorstep is level with the ground, the stoop shorter than before, you walk in without a jump.
+- [ ] A terrace of houses and a street at Lausanne (`--at 2538322,1152535`): the pads of neighbours join without a ledge between them, the road beside is not buried by a bank.
+- [ ] Drive and walk the strip between a road and the houses along it: still bumpy or steep in places (this phase only adds the probe, the joint ground solve is next); say where.
+- [ ] Fly out to 1, 2 and 3 km over the same hillside: doors and the houses' feet look the same at the ring changes, no door floating or sunk at 1-2 km.
+- [ ] A building across a tile border (Sion, Lausanne tile edges): no seam in the ground at the border, the pad is continuous.
+
 ## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
 
 An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.

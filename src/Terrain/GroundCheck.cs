@@ -69,7 +69,9 @@ public static class GroundCheck
             {
                 var drawn = s == 1 ? full : full.Decimate(s);
                 Walls(bt, full, drawn, s, Say);
-                Doors(bt, s >= ChunkFormat.CoarseStride ? doorsCoarse : doorsFine, drawn, s, Say);
+                // the doors as the mesh gets them: planned on the stride-1 grid (none at the coarse ring), then read again on the ring's ground
+                var planned = s >= ChunkFormat.CoarseStride ? doorsCoarse : doorsFine;
+                Doors(bt, s == 1 ? planned : BuildingFootprint.ForRing(planned, bt, drawn), drawn, s, Say, s == 1 ? null : planned, s == 1 ? "planned" : "");
             }
         }
         string outDir = System.IO.Path.Combine("test_output", "ground");
@@ -181,8 +183,9 @@ public static class GroundCheck
     private static bool Near(BuildingMeshBuilder.Footing f, Vector3 a, Vector3 b) =>
         (f.A.DistanceTo(a) < 0.02f && f.B.DistanceTo(b) < 0.02f) || (f.A.DistanceTo(b) < 0.02f && f.B.DistanceTo(a) < 0.02f);
 
-    private static void Doors(BuildingTile bt, DoorSpot[] doors, ChunkGrid drawn, int stride, Action<string> say)
+    private static void Doors(BuildingTile bt, DoorSpot[] doors, ChunkGrid drawn, int stride, Action<string> say, DoorSpot[]? asPlanned = null, string label = "")
     {
+        if (asPlanned != null) Doors(bt, asPlanned, drawn, stride, say, null, "as planned");
         float Ground(Vector3 p) => (float)drawn.SampleMeshHeight(bt.Id.MinE + p.X, bt.Id.MaxN - p.Z);
         int total = 0, buried = 0, floating = 0, stoops = 0, level = 0;
         var worst = new List<(float Off, string What)>();
@@ -205,7 +208,7 @@ public static class GroundCheck
             else if (drop > 0.15f) { floating++; off[1, drop < 0.3f ? 0 : drop < 1f ? 1 : 2]++; worst.Add((drop, "floating " + where)); }
             else level++;
         }
-        say($"  doors stride {stride}: {total} doors; buried>10cm {buried}, floating>15cm {floating}, with a stoop {stoops}, level {level} (buried by 0.1-0.3/0.3-1/>1 m: {off[0, 0]}/{off[0, 1]}/{off[0, 2]}, floating {off[1, 0]}/{off[1, 1]}/{off[1, 2]})"
+        say($"  doors stride {stride}{(label.Length > 0 ? " (" + label + ")" : " (read on the ring)")}: {total} doors; buried>10cm {buried}, floating>15cm {floating}, with a stoop {stoops}, level {level} (buried by 0.1-0.3/0.3-1/>1 m: {off[0, 0]}/{off[0, 1]}/{off[0, 2]}, floating {off[1, 0]}/{off[1, 1]}/{off[1, 2]})"
             + (worst.Count > 0 ? "; worst: " + string.Join(" | ", worst.OrderByDescending(w => w.Off).Take(3).Select(w => $"{w.Off:F2} m {w.What}")) : ""));
     }
 }
