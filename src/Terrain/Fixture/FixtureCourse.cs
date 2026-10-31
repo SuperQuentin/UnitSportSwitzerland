@@ -31,7 +31,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site", "crag", "hamlet" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site", "crag", "hamlet", "fun" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -83,6 +83,39 @@ public sealed class FixtureCourse
     public (double DoorX, double DoorY, double FloorAreaM2, bool Retail)? Store { get; init; }
     /// <summary>The course's airports (#422) planned at a start in LV95; null: none.</summary>
     public Func<double, double, AirportIndex>? Airports { get; init; }
+
+    /// <summary>A road's own width (m), by its index in <see cref="Roads"/>; the others are their class's default.</summary>
+    public Dictionary<int, float> RoadWidths { get; } = new();
+
+    /// <summary>
+    /// A venue standing in a block (#1396): its kind, a point inside the block, metres from the start. The source makes
+    /// them the venue list (<c>Interiors.Venues.Override</c>), so the block is that bowling centre, cinema or café.
+    /// </summary>
+    public sealed record Venue(VenueType Type, double X, double Y, string Name, VenueFlags Flags = VenueFlags.None, int Count = 0);
+
+    /// <summary>The course's venues; none by default (the embedded list then stays).</summary>
+    public List<Venue> Venues { get; } = new();
+
+    /// <summary>
+    /// A vehicle standing on the course (#1396): a <c>RideKind</c> as an int, where, facing which way (degrees, 0 north,
+    /// clockwise as a compass), with a <c>TrailerCatalog</c> code for a trailer coupled to it or standing alone.
+    /// </summary>
+    public sealed record Parked(int Kind, double X, double Y, float HeadingDeg, int Train = 0, float Load = 0.5f);
+
+    /// <summary>The course's parked vehicles, put back a while after one is taken; none by default.</summary>
+    public List<Parked> Fleet { get; } = new();
+
+    /// <summary>A prepared ski slope (#1396): an outline, metres from the start, and how hard it is.</summary>
+    public sealed record Slope(string Name, PisteDifficulty Difficulty, (double X, double Y)[] Outline);
+
+    /// <summary>The course's ski slopes; none by default.</summary>
+    public List<Slope> Slopes { get; } = new();
+
+    /// <summary>Painted lines on the ground (a marked bay), metres from the start: white, 15 cm.</summary>
+    public List<(double X0, double Y0, double X1, double Y1)> Lines { get; } = new();
+
+    /// <summary>A stadium of the course's own, planned at a start in LV95 (#1396); null: none.</summary>
+    public Func<double, double, Stadiums.StadiumSpec>? StadiumAt { get; init; }
 
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }
@@ -157,6 +190,7 @@ public sealed class FixtureCourse
         "site" => Site(),
         "crag" => Crag.Create(),
         "hamlet" => Hamlet(),
+        "fun" => FunCourse.Create(),
         _ => null,
     };
 

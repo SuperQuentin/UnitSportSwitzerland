@@ -610,6 +610,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                     Yards(source, id, buildings, roads, list, stacks, ct);
                     Sites(source, id, buildings, roads, list, stacks, ct);
                     Marina(source, id, list, ct);
+                    // a fixture course's own parked vehicles (#1396, the fun world's pit row, apron and yard)
+                    if (Terrain.Fixture.FixtureChunkSource.Fleet.TryGetValue(id, out var course)) list.AddRange(course);
                     // nothing parks inside a stadium (#885): the bowl stands on mapped car parks; ordinals stay
                     list.RemoveAll(v => Terrain.Stadiums.StadiumClip.InsideAny(v.E, v.N));
                     return (list, stacks);

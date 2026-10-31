@@ -7,6 +7,56 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Sit on chairs, benches and terrace seats ([#1385](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1385))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva).
+
+- [ ] A terrace chair, E → seated facing the table, the figure on the chair (third person too); walk off → up.
+- [ ] Seated at the table, E → a fondue on that table, not standing up; the hint says Stand up on the jump; Space → up.
+- [ ] Inside a restaurant: a table's chairs, a banquette, a bar stool, a high table's stool → each seats you on it, not in the air or in the table.
+- [ ] A home: a sofa, an armchair, a dining chair; a church pew; a bench.
+- [ ] Pad: Y sits, the stick or A stands. VR: grip a chair → seated.
+- [ ] Online: a second player sees you seated on the chair.
+
+## Fondue at a table ([#1384](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1384))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva), adventuring on.
+
+- [ ] Walk the street past restaurants → no "Start a fondue" prompt anywhere but at a table.
+- [ ] Stand at a terrace table, E → the caquelon stands on that table; a friend's E there sits them at it.
+- [ ] Inside the restaurant, at a table, E → the same; at the bar or in the doorway → no prompt.
+- [ ] Pad and VR: the same interaction where E works (the pot's existing button).
+## Venue music from the street ([#1386](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1386))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499794.3,1117466.5` (Trois Verres, Geneva), and any bar or club at night.
+
+- [ ] Stand at a venue's door → its music clearly heard, quieter than inside; walk away → it fades and dulls within some 20 m.
+- [ ] Two venues side by side → each heard at its own door, neither drowning the street.
+## Venues and shop units: their own door and a glazed front ([#1327](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1327))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2499805,1117476` (Trois Verres, Geneva; `--venuecheck --venuedoors "Trois Verres"` prints its door).
+
+- [ ] Walk the street past a block with shops under flats → each shop has its own door and a glazed front of 1.1 m bays, a stone plinth, a fascia; no window of the facade's grid peeks round the glass.
+- [ ] Walk in by a café's or a restaurant's own door → straight into its guest room, no lobby; inside, its windows stand where the bays are outside.
+- [ ] Look through the panes by day and by night → a room behind, tinted to the venue, warm at night; the name sits on the fascia, an awning clears it.
+- [ ] Trois Verres → its door on the school's west wall; its room is narrower than its front (a known limit): judge how it reads.
+## Fun world ([#1397](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1397))
+
+Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
+
+- [ ] The look: violet sky with stars, the striped retro sun on the western horizon, wireframe mountains all round, the grid floor beyond the course, neon edges on the roads and venues, palms and lamp posts. In Cartoon, PS1 and Realistic (`/style`): anything washed out, too dark or flickering (the floor's edge at the course's border)?
+- [ ] Venues: enter Strike City (bowl a frame), Laser Palace (a showing on), Pixel Paradise (pinball), Café Miami and Sunset Diner (terrace tables), Club Turbo.
+- [ ] Race track: take a pit car, `/race start` near the track; the kart loop with a kart. Is the 14 m track width right, do the neon edges help or distract?
+- [ ] Grand circuit (all round the course): take a car from the grid on the south straight, `/race start` there: does the race follow the whole lap, are the chicanes, the esses and the crests fun at speed, is anything too tight for its radius?
+- [ ] Airfield: take a small plane from the apron, fly the air rings from the runway's west end: does the next ring read (pink, larger), is the panel on the right readable, does the time stop at the last ring? On a pad, and in VR (the panel is not shown there).
+- [ ] Snow hill: skis or snowboard on the slope, the T-bar up.
+- [ ] Neon Arena: the concert plays whenever you come.
+- [ ] Festival field: Fahnenschwingen, Schwingen ring, alphorns, the stone all open.
+- [ ] Stunt park: kickers, gap jump, half-pipe and bowl with a car, a motorbike, skis: fun or frustrating, too steep, too small?
+- [ ] Truck yard: reverse the Scania into a dock bay between the trailers, back the tractor under a trailer between the containers, the L alley, the drawbar train's box; the pickup's speedboat down the slipway.
+- [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
+- [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
+
 ## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
 
 On the Android phone (a test APK).

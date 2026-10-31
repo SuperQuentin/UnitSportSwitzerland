@@ -31,6 +31,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
 | concert pogo QTE (#1150): dancing at a concert, jump on the beat | Space / A | ok: the pad's A (`jump`); the ring is a CanvasLayer like the other HUDs | keep |
 | sit on a stand's seat / stand up (#885) | E / Y on a stadium row; again, or walk off | ok: Y, or reach out and grip (`TryInteract(byHand)` sits before the dance); the stick stands up | keep |
+| sit on a chair, stool, sofa, bench or terrace seat / stand up (#1385) | E / Y within 1.1 m of a seat; again, or walk off; at a restaurant's table E is the fondue and Space / A (jump) stands up | ok: Y, or reach out and grip (the same `TrySit`); the stick or the jump stands up | keep |
 | export or import a concert rig as MVR (#941) | the desk's MVR row (Export MVR, the file picker, Import, Own rig, Folder) or `/concert export`, `/concert import <file>` | ok: the desk is a CanvasLayer on the VR panel (`XrUi`), the ray clicks the picker and the buttons | keep |
 | run a concert camera (#885) | `/concert camera take <n>` or the desk's Operate row; WASD / left stick along the rails, fly up/down rises, mouse / right stick looks, = - wheel / shoulders zoom, Enter / X cuts to it, Esc leaves | ok: the sticks and shoulders through `XrPad`; the viewfinder is a CanvasLayer, on the VR panel (`XrUi`) | new: a hand-held steadicam, gripped and aimed by the hand |
 | a concert's light desk (#885) | E / Y at the front-of-house console | ok: Y, or reach out and grip (`TryInteract(byHand)`); the screen is a CanvasLayer, on the VR panel (`XrUi`), the ray clicks | keep |
@@ -251,6 +252,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | watch | — | ok: Swiss watch on the drawn left wrist (#439, #1097); read it and the radial menu opens over it | keep |
 | save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
 | movie studio timeline (#638, markers #656, camera keys #669, cameras #675) | Space J K L, ← →, S, Del, M, I, V, 1-9, C / Y, LT RT, D-pad, X (hold: cut to camera), R3, View, L3, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |
+| fun world air rings (#1396) | fly through them: no key | ok: fly as ever; the ring panel is a 2D `CanvasLayer` (`gap`: not shown in the headset) | the panel on the cockpit or the wrist |
 | free_cursor (#654) | tap Alt / — | n/a: VR points with the laser, a pad has no cursor | keep |
 | map screen: pan / zoom / draw / tool / search (#515, #799) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | ok on the panel (#799): the ray is the pointer, trigger click puts the marker down, trigger drag pans, left stick pans, on-map + / − zoom (the shoulders are muted there: in VR they are the trigger), popular places instead of typing; draw tools pointable under Advanced | a table-top relief map you reach into (#535)
 

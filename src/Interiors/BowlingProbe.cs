@@ -42,7 +42,7 @@ public partial class BowlingProbe : Node
         // (20 m tall, so not a box of its own: its storeys stay, and two of them give a mezzanine)
         new("mall", 180, 120, 20, BuildingKind.Commercial, true, Mezzanine: true, Spare: true, Toilets: ToiletSet.Gendered, Accessible: true),
         // a narrow alley of mini lanes: a single WC beside the concourse (#1285)
-        new("alley", 8.6f, 24, 5, BuildingKind.Commercial, true, Mini: true, Toilets: ToiletSet.Single),
+        new("alley", 8.6f, 24, 5, BuildingKind.Commercial, true, Mini: true, Toilets: ToiletSet.Pair),
         // a kiosk: no lanes fit, the ordinary rules furnish it
         new("too-small", 8, 12, 4, BuildingKind.Commercial, false),
     };

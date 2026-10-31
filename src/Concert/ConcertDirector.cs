@@ -29,10 +29,13 @@ public partial class ConcertDirector : Node
 
     public ConcertDirector() : this(null!) { }
 
-    /// <summary>The seed forced on the command line, if any; <c>off</c> gives -1.</summary>
+    /// <summary>The seed forced on the command line, if any (<c>off</c> gives -1), else the world's own (<see cref="WorldSeed"/>).</summary>
     public static int? ForcedSeed => CmdArgs.Value("--concert") is { } v
         ? v == "off" ? -1 : int.TryParse(v, out int s) ? s : null
-        : null;
+        : WorldSeed;
+
+    /// <summary>A world whose stage always plays (#1396, the fun world's arena): its set's seed; null in the open world.</summary>
+    public static int? WorldSeed { get; set; }
 
     /// <summary>
     /// The event in a stadium: the set an operator hosts (<see cref="ConcertService"/>), else the one

@@ -35,12 +35,15 @@ public partial class FootPlayer
     /// </summary>
     public readonly record struct SitSpot(Vector3 Hip, float Drop, float Yaw, Vector3 Stand);
 
-    /// <summary>The seat a press of E would sit on, here and now, outdoors (a stand) or in a cinema; null when there is none.</summary>
+    /// <summary>
+    /// The seat a press of E would sit on, here and now: a stand's (outdoors) or a cinema's, else a chair, a stool, a
+    /// sofa, a bench or a pew indoors and a terrace's chairs and benches outdoors (#1385); null when there is none.
+    /// </summary>
     public SitSpot? SitInReach()
     {
         if (Sitting || !CanEmote || _ride != null || RidingWith != 0 || Aboard || !IsOnFloor()) return null;
-        if (Indoors) return Interiors.CinemaSeats.At(this);
-        if (SeatInReach() is not { } seat || Origin is not { } origin) return null;
+        if (Indoors) return Interiors.CinemaSeats.At(this) ?? Interiors.ChairSeats.At(this);
+        if (SeatInReach() is not { } seat || Origin is not { } origin) return Interiors.ChairSeats.At(this);
         var at = origin.ToWorld(seat.E, seat.N, 0);
         float hipY = GlobalPosition.Y + seat.Hip;
         return new SitSpot(new Vector3(at.X, hipY, at.Z), seat.Drop, seat.Yaw, new Vector3(at.X, hipY - seat.Hip + 0.05f, at.Z));
@@ -107,9 +110,12 @@ public partial class FootPlayer
             StandUpFromSeat();
             return false;
         }
-        float wish = WalkControls?.Invoke() is { } walk ? walk.Wish.Length() : Npc ? 0f : PlayerInput.Move.Length();
-        if (wish < 0.1f) _sitArmed = true;
-        else if (_sitArmed && wish > SitStandWish)
+        var walk = WalkControls?.Invoke();
+        float wish = walk is { } w ? w.Wish.Length() : Npc ? 0f : PlayerInput.Move.Length();
+        // a player's jump stands up too (#1385: at a table E is the fondue, not standing up); a bot walks off
+        bool jump = walk == null && !Npc && PlayerInput.Held(PlayerInput.Jump);
+        if (wish < 0.1f && !jump) _sitArmed = true;
+        else if (_sitArmed && (wish > SitStandWish || jump))
         {
             StandUpFromSeat();
             return false;
