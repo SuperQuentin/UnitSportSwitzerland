@@ -428,6 +428,9 @@ public sealed class GameSettings
     /// </summary>
     public bool TutorialDone { get; set; }
 
+    /// <summary>The newest build whose "What's new" (#1413) the player has seen; empty on a first install.</summary>
+    public string LastSeenVersion { get; set; } = "";
+
     /// <summary>
     /// The rides whose mini tutorial (#517, <see cref="VehicleIntroCard"/>) was done, by
     /// <see cref="VehicleIntroKind"/> name. Cleared with <see cref="TutorialDone"/> by "Play again".

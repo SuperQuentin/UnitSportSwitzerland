@@ -574,3 +574,8 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] The Jazz Night (day 8) and the closing night (day 16, `--festival test` is not needed: set the date `--date 2027-07-17` at the real map): the set is longer, the last song of the closing night pays the 20 Batzen finale and the two confetti cannons fire on each song's last chorus.
 - [ ] A real 3-18 July run: the festival is on, the Journal's Festival tab shows the days, the Jazz pass (item 511) is in the pack after the first song, the Batzen convert after the last day.
 - [ ] No audio plays at the stage yet (lights only, the made-up songs): once the owner picks copyright-free jazz tracks (`CdLibrary.JazzUrls`), does the set follow the CD, and does the 80 % rule need `ConcertMusic.At` as the games' clock (a follow-up noted in `occasions/festival-montreuxjazz`)?
+
+## What's new (PR for [#1413](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1413))
+
+- [ ] In a real exported build, update from an older release (delta patch, then again by unpacking the archive by hand) and reach the title: the "What's new" popup lists every release since, newest first, once; the next launch shows none. Offline at the first launch after an update: no popup, it comes at the next online launch.
+- [ ] Pad and VR: the "What's new" title entry opens the notes; the stick scrolls them, B closes (VR: pointer on Close). Is the text readable at the panel's distance?
