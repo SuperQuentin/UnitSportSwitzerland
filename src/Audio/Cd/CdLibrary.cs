@@ -69,6 +69,16 @@ public partial class CdLibrary : Node
         "https://www.youtube.com/watch?v=PGNiXGX2nLU",
     };
 
+    /// <summary>
+    /// The jazz playlist of the Montreux Jazz stage (#1394), burnt like <see cref="DefaultUrls"/> but played only there (<see cref="IsJazz"/>): copyright-free
+    /// tracks only (CC BY ones credited), never committed as audio. Empty until the owner picks the tracks; the stage then runs on its made-up songs, lights only.
+    /// </summary>
+    public static readonly string[] JazzUrls = Array.Empty<string>();
+
+    /// <summary>Whether a CD is one of the <see cref="JazzUrls"/>: the jazz stage plays these and only these, every other stage everything else.</summary>
+    public static bool IsJazz(CdInfo cd) =>
+        JazzUrls.Length > 0 && cd.Source.StartsWith("default:", StringComparison.Ordinal) && Array.IndexOf(JazzUrls, cd.Source["default:".Length..]) >= 0;
+
     /// <summary><see cref="CdInfo.Source"/> of the CD burnt from a <see cref="DefaultUrls"/> link.</summary>
     public static string DefaultSource(string url) => "default:" + url;
 
@@ -647,7 +657,7 @@ public partial class CdLibrary : Node
     {
         if (!Owns || !(OS.HasFeature("template") || CmdArgs.Has("--defaultcds"))) return;
         var have = _all.Values.Select(c => c.Source).ToHashSet();
-        foreach (string url in DefaultUrls)
+        foreach (string url in DefaultUrls.Concat(JazzUrls))
         {
             if (have.Contains(DefaultSource(url)) || (url == RatBeatUrl && (RatBeatId >= 0 || _sources.ContainsValue(RatBeatSource)))) continue;
             _sources[url] = DefaultSource(url);

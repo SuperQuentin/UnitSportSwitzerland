@@ -1,6 +1,6 @@
 # Concert venues across Switzerland (#948)
 
-33 rows in `StadiumCatalog`: Stade de Genève (#885) and 32 researched for #948, of three kinds
+34 rows in `StadiumCatalog`: Stade de Genève (#885), 32 researched for #948 and Montreux Jazz's lake stage (#1394), of three kinds
 (`StadiumSpec.Kind`, `VenueKind`):
 
 - **Stadiums** (an open bowl): Wankdorf (Bern), St. Jakob-Park (Basel), Letzigrund (Zürich), kybunpark
@@ -12,7 +12,7 @@
   THE HALL (Dübendorf), SWISS Arena (Kloten), Davos.
 - **Open airs** (no bowl: a 2.2 m fence round the ground, following its slope, open at its `Gates`;
   `StageAt = North` puts the main stage where the festival builds it): Paléo, Gurten, Frauenfeld,
-  OpenAir St. Gallen, Greenfield, Heitere, Moon&Stars. They keep the buildings on their ground (no
+  OpenAir St. Gallen, Greenfield, Heitere, Moon&Stars, Montreux Jazz (the Place du Marché by the quay, fenced except on the lake side: `OpenSides`; it has a `Season`, `07-fri#1+15`, so its stage stands only in the festival's window and the quay is the quay otherwise, `ConcertPlanner.Open`; `occasions/festival-montreuxjazz`). They keep the buildings on their ground (no
   `StadiumClip`), drop parked cars and trees, and have no occluder.
 
 ## How the rows were made

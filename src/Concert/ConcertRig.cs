@@ -605,7 +605,8 @@ public partial class ConcertRig : Node3D
             float bpm = _music.Song?.Bpm ?? Event.Bpm;
             beat -= (_strobeT * _strobeHz) % 1f / _strobeHz * bpm / 60f;
         }
-        _crowd.Drive(beat, _energy, tint, _desk.Section == ShowSection.Chorus ? 1f : 0f);
+        // a seated jazz crowd sways, it does not hop (#1394)
+        _crowd.Drive(beat, Event.Genre == Genre.Jazz ? _energy * 0.25f : _energy, tint, _desk.Section == ShowSection.Chorus ? 1f : 0f);
     }
 
     /// <summary>The beam's direction from 16-bit pan and tilt: tilt tips it from the yoke's axis towards the fixture's home side, pan turns that about the axis.</summary>
@@ -738,5 +739,8 @@ public partial class ConcertRig : Node3D
             if (!seen.Add(e.Layout)) continue;
             yield return ($"{e.Layout}: {e.Artist} ({e.Genre}, screens {e.Screens})", () => new ConcertRig(e) { ForceLive = true, WithCrowd = false });
         }
+        // the jazz quartet on its small quay stage (#1394): bass, sax, piano with its stool, drum kit, amber washes
+        var jazz = ConcertPlanner.Jazz(StadiumCatalog.MontreuxJazzOpenAir, 2026, 1);
+        yield return ($"jazz: {jazz.Artist} ({jazz.Genre})", () => new ConcertRig(jazz) { ForceLive = true, WithCrowd = false });
     }
 }

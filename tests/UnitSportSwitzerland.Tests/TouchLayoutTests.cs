@@ -54,7 +54,8 @@ public class TouchLayoutTests
     public void TheRightThumbKeepsOutOfTheStickZone(TouchMode mode, TouchFlags flags)
     {
         // the stick takes the lower 70 % of the left 42 %; at the default size and below a phone's
-        // buttons must leave it all to the left thumb
+        // buttons must leave it all to the left thumb (a mode without the stick may use it)
+        if (!TouchLayout.HasStick(mode)) return;
         foreach (var screen in Screens.Take(4))
             foreach (var scale in new[] { 0.75f, 1f })
             {
@@ -86,6 +87,21 @@ public class TouchLayoutTests
                     foreach (var key in keys)
                         Assert.False(bar.Grow(0.5f).Intersects(TouchLayout.Place(key, safe, 1f, scale, left)), $"the hotbar runs under {key.Id}: {where}");
                 }
+    }
+
+    [Fact]
+    public void PinballsFlippersKeepTheirSidesForEitherHand()
+    {
+        // the left flipper is under the left thumb even for the left-handed: the table's sides are fixed
+        var keys = TouchLayout.For(TouchMode.Pinball, TouchFlags.None);
+        Assert.False(TouchLayout.HasStick(TouchMode.Pinball));
+        var safe = new Rect2(Vector2.Zero, Screens[1]);
+        foreach (bool left in new[] { false, true })
+        {
+            var l = TouchLayout.Place(keys.First(k => k.Id == "lflip"), safe, 1f, 1f, left).GetCenter();
+            var r = TouchLayout.Place(keys.First(k => k.Id == "rflip"), safe, 1f, 1f, left).GetCenter();
+            Assert.True(l.X < safe.Size.X / 2 && r.X > safe.Size.X / 2, $"flippers swapped{(left ? ", left-handed" : "")}");
+        }
     }
 
     [Fact]

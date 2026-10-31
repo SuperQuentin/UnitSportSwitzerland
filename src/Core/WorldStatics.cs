@@ -27,6 +27,7 @@ public static class WorldStatics
         WorldChoice.Active = null;   // back to the open world for the title (#999)
 
         Items.ItemEvents.ResetEvents();
+        Combat.SwordService.ResetEvents();
         Items.PhotoTransfer.ResetEvents();
         Items.RadioManager.ResetEvents();
         Items.DroppedItems.ResetEvents();

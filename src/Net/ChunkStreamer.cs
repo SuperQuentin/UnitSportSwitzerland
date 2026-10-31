@@ -309,12 +309,38 @@ public partial class ChunkStreamer : Node
             AssetKind.HttpBase => TilesUrl is { } url ? System.Text.Encoding.UTF8.GetBytes(url) : null,
             _ => ManifestOverride,
         };
-        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(Prepare(peer, requestId, assetKind, path, manifestOverride)));
+        var digestManifest = ManifestOverride;
+        var digestLandings = LandingsOverride;
+        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(assetKind == AssetKind.Digest
+            ? PrepareDigest(peer, requestId, directory, digestManifest, digestLandings)
+            : Prepare(peer, requestId, assetKind, path, manifestOverride)));
     }
 
     private readonly System.Collections.Concurrent.ConcurrentQueue<Prepared> _prepared = new();
 
     private sealed record Prepared(long Peer, uint RequestId, byte[]? Wire, int RawLength, uint Crc, bool Compressed, bool Missing);
+
+    /// <summary>The digest (#1380): hashes of the index as served and of every region file, small and never deflated.</summary>
+    private static Prepared PrepareDigest(long peer, uint requestId, string directory, byte[]? manifestOverride, byte[]? landingsOverride)
+    {
+        try
+        {
+            int before = AssetDigest.Builds;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var built = AssetDigest.BuildCached(directory, manifestOverride, landingsOverride);
+            if (AssetDigest.Builds != before) GD.Print($"[stream] join digest built in {clock.ElapsedMilliseconds} ms");
+            else GD.Print($"[stream] join digest from the cache in {clock.Elapsed.TotalMilliseconds:F1} ms");
+            if (built is not { } digest)
+                return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
+            byte[] payload = digest.ToBytes();
+            return new Prepared(peer, requestId, payload, payload.Length, AssetStream.Crc32(payload), false, false);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] cannot hash {directory}: {e.Message}");
+            return new Prepared(peer, requestId, null, 0, 0, false, Missing: false);
+        }
+    }
 
     private static Prepared Prepare(long peer, uint requestId, AssetKind kind, string path, byte[]? manifestOverride)
     {
