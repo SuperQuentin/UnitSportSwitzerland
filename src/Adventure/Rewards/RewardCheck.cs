@@ -332,6 +332,7 @@ public partial class RewardCheck : ChatProbe
 
     private async Task Gadgets(RewardSpot chest)
     {
+        UnitSport.Core.GameSettings.Current.AutoHolster = false;   // the walk runs and idles: the holster is PhoneProbe's (#1369)
         int slot = Inventory.HotbarSize - 1;
         _items.Inventory.Put(slot, new ItemStack(ItemId.TreasureDetector, 1));
         _items.Inventory.Select(slot);

@@ -1047,6 +1047,13 @@ public static partial class ItemIcons
             p.Rect(13, 6, 15, 6, 'a');
         });
 
+        d[ItemId.JazzPass] = Round(p =>
+        {
+            p.Disc(7.5f, 8f, 6.2f, 5.2f, 'Y', 'o', 'N');
+            p.Disc(7.5f, 8f, 3.4f, 2.6f, 'n', 'n', 'n');
+            p.Rect(2, 7, 13, 8, 'b');
+        });
+
         d[ItemId.ChalandaTreichel] = Round(p =>
         {
             p.Disc(7.5f, 10f, 5.4f, 4.6f, 'y', 'o', 'O');
@@ -1191,6 +1198,27 @@ public static partial class ItemIcons
             "knnNNnnNNNkkkkkk",
             "kNNk.kGk........",
             ".kkk.kkk........",
+        };
+
+        // the sword (#1371): a long blade up to the right, a gold guard, a leather grip
+        d[ItemId.Sword] = new[]
+        {
+            "..............kk",
+            ".............kwk",
+            "............kwak",
+            "...........kwak.",
+            "..........kwak..",
+            ".........kwak...",
+            "........kwak....",
+            "..k....kwak.....",
+            "..kYk.kwak......",
+            "...kYkwak.......",
+            "....kYYk........",
+            "...kNkYYk.......",
+            "..kNnk.kYk......",
+            "..kNk....k......",
+            "...k............",
+            "................",
         };
 
         d[ItemId.Knife] = new[]

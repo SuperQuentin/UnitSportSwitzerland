@@ -45,7 +45,7 @@ tested).
   `p/80`, urinals `p/40`, each at least one (women two), capped by the space; a gendered set from 30
   people, an accessible WC from 60.
 
-## The three sets (`ToiletSet`, chosen by the strip's size, `ToiletSizing.Choose`)
+## The four sets (`ToiletSet`, chosen by the strip's size, `ToiletSizing.Choose`)
 
 Frame: a strip along one wall of its host room (the lobby, concourse, hall, guest room), `a` along the
 host wall, `b` away from it.
@@ -58,7 +58,14 @@ host wall, `b` away from it.
   `WcSignAccessible`) over each doorway on the host's side.
 - **Shared** (less space; ~2.4 x 2.9 m): one anteroom off the host with the basin(s), two stalls off its
   back wall, a women's and a men's sign over their doors; a `WcSignAll` over the way in.
+- **Pair** (no depth for the anteroom; ~2.8 x 1.7 m, from `SharedFrom` people; #1292, the owner's call): a
+  women's and a men's `WC` side by side, each a bowl and a basin behind its own door, `WcSignWomen` and
+  `WcSignMen`. Tried after the shared set, before the single WC.
 - **Single** (really no space; ~1.4 x 1.7 m): one `WC` room, bowl, basin, its own door, `WcSignAll`.
+- **Too big is the wrong answer** (owner, #1292): where space is short a washroom shrinks (a room per gender,
+  else a vestibule with a stall each, else one WC) rather than squeezing the room it serves. A strip of
+  gendered toilets walled off a dining venue's own room needs the room to keep 6 m across past it
+  (`GenderedKeep`); else the smaller sets.
 
 ## Where each building has them
 
@@ -86,7 +93,7 @@ for the caller's store. Bump a generator's rules constant when its toilets chang
   every stall and accessible WC, as many screens as urinals and one, the rails, the signs, every
   doorway of a toilet room reachable among its pieces. Each generator has a single, a shared and a
   gendered case.
-- Model viewer: `Interiors / Public toilets - Gendered|Shared|Single`, and every piece under Furniture.
+- Model viewer: `Interiors / Public toilets - Gendered|Shared|Pair|Single`, and every piece under Furniture.
   Inside: `--modelsonly "Public toilets - Gendered" --modelsyaw 180 --modelspitch -5 --modelslook 0,1.4,0.6,4.2`
   (the doorways from the hall), `--modelsyaw 0 --modelspitch -12 --modelslook 0.6,0.9,0.9,2.5` (the urinals).
 

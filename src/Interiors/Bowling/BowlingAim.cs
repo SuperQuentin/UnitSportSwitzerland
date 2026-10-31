@@ -63,6 +63,8 @@ public partial class BowlingAim : CanvasLayer
         // a right-hander's usual stand: a little right of centre, the line a touch outward
         _spot = -0.15f;
         UiFocus.Set(this, true);
+        // a phone plays it on its own controls (#1353): the focus above would hide them
+        TouchControls.Takeover = this;
         BuildHud();
         _curveMesh = new ImmediateMesh();
         _curve = new MeshInstance3D
@@ -91,6 +93,7 @@ public partial class BowlingAim : CanvasLayer
     {
         if (Current == this) Current = null;
         UiFocus.Set(this, false);
+        if (TouchControls.Takeover == this) TouchControls.Takeover = null;
         if (_own != null && IsInstanceValid(_own) && !_watched) _own.MakeCurrent();
         if (IsInstanceValid(_player)) _player.SeenFromOutside = false;
         if (_cam != null && IsInstanceValid(_cam)) _cam.QueueFree();
@@ -141,8 +144,29 @@ public partial class BowlingAim : CanvasLayer
 
     public override void _Input(InputEvent e)
     {
-        if (_step == Step.Swing && _swinging && e is InputEventMouseMotion m)
+        // the mouse Godot makes of a finger is not a twist: the overlay's look drag is (#1353)
+        if (e is not InputEventMouseMotion m || m.Device == InputEvent.DeviceIdEmulation) return;
+        if (_step == Step.Swing && _swinging)
             _hook = Mathf.Clamp(_hook - m.Relative.X * 0.004f, -1f, 1f);
+        // a look drag turns the line, as the aim keys do: a phone has no right stick here
+        else if (_step == Step.Aim && PlayerInput.IsLookMotion(m))
+            _line = Mathf.Clamp(_line - m.Relative.X * 0.0003f, -0.08f, 0.08f);
+    }
+
+    /// <summary>The rows the phone's controls are labelled from (<c>ClientWorld.Prompts</c>, #1353).</summary>
+    public IEnumerable<(string, string)> Prompts()
+    {
+        if (_step == Step.Aim)
+        {
+            yield return (PlayerInput.Jump, "Set the line");
+            yield return (PlayerInput.Sprint, "Look at the pins");
+            yield return ("ui_cancel", "Step back");
+        }
+        else
+        {
+            yield return (PlayerInput.Jump, "Hold to swing");
+            yield return ("ui_cancel", "Back");
+        }
     }
 
     private BowlingBall.Release Release() => new(_spot, _line, 5f + _power * 5f, 16f + Mathf.Abs(_hook) * 26f, _hook * 0.75f);
@@ -201,7 +225,11 @@ public partial class BowlingAim : CanvasLayer
         if (_step != _shownStep)
         {
             _shownStep = _step;
-            _text.Text = _step switch
+            _text.Text = TouchControls.Hinting ? _step switch
+            {
+                Step.Aim => "Aim  ·  the stick moves you, drag to turn the line, Set when ready",
+                _ => "Swing  ·  hold Bowl, slide your thumb sideways for hook, let go to roll",
+            } : _step switch
             {
                 Step.Aim => $"Aim  ·  {InputHints.Prompt(PlayerInput.MoveLeft, "")}{InputHints.Prompt(PlayerInput.MoveRight, "move")}   {InputHints.Prompt(PlayerInput.BowlAimLeft, "")}{InputHints.Prompt(PlayerInput.BowlAimRight, "turn")}   {InputHints.Prompt(PlayerInput.Jump, "set")}   {InputHints.Prompt(PlayerInput.Sprint, "look at the pins")}",
                 _ => $"Swing  ·  hold {InputHints.Prompt(PlayerInput.Jump, "")}, move sideways for hook, let go to roll",

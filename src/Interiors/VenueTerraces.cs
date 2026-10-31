@@ -134,9 +134,10 @@ public partial class VenueTerraces : Node
             // no tables: the awning alone over the door and its windows, the name on it (#1250)
             if (awning)
             {
-                float span = Math.Max(d.Width + 1.6f, 3.2f);
+                // over a glazed front (#1292): as wide as the front
+                float span = VenueFront.Has(d) ? d.Span : Math.Max(d.Width + 1.6f, 3.2f);
                 if (d.Run > 0) span = Math.Min(span, d.Run - 0.4f);
-                if (span >= d.Width + 0.4f) items.Add(new TerraceItem(TerraceKind.Awning, d.Position with { Y = floor }, yaw, colour, span));
+                if (span >= d.Width + 0.4f) items.Add(new TerraceItem(TerraceKind.Awning, d.Position with { Y = floor + TerraceProps.AwningLift(d) }, yaw, colour, span));
             }
             return items;
         }
@@ -145,7 +146,7 @@ public partial class VenueTerraces : Node
         // shade: an awning across the front of a café or restaurant, else a parasol through each table
         float lo = sets.Min(x => x.S) - setAlong / 2, hi = sets.Max(x => x.S) + setAlong / 2;
         if (awning)
-            items.Add(new TerraceItem(TerraceKind.Awning, (d.Position + along * ((lo + hi) / 2)) with { Y = floor }, yaw, colour, hi - lo));
+            items.Add(new TerraceItem(TerraceKind.Awning, (d.Position + along * ((lo + hi) / 2)) with { Y = floor + TerraceProps.AwningLift(d) }, yaw, colour, hi - lo));
         else if (!garden)
             foreach (var (at, _) in sets) items.Add(new TerraceItem(TerraceKind.Parasol, at, yaw, colour));
 
@@ -381,6 +382,13 @@ public static class TerraceProps
         return s.Build();
     }, candle: false)).ToArray();
 
+    /// <summary>How far an awning is lifted so its roller box clears a glazed front's fascia (#1292), m; 0 without a front.</summary>
+    public static float AwningLift(DoorSpot d) =>
+        VenueFront.Has(d) ? Math.Max(0f, d.FrontTop + VenueFront.FasciaH + 0.06f - (AwningBoxY - 0.05f)) : 0f;
+
+    /// <summary>The middle of an awning's roller box against the facade, m.</summary>
+    private const float AwningBoxY = 2.75f;
+
     /// <summary>An awning's valance: its middle's height, its height, and the point 1.2 cm before its face the name is painted at (#1250).</summary>
     public const float ValanceY = 2.12f, ValanceH = 0.30f;
     public static readonly Vector3 ValanceFront = new(0, ValanceY, 2.2f + 0.015f + 0.012f);
@@ -392,7 +400,7 @@ public static class TerraceProps
         var tilt = new Basis(Vector3.Right, Mathf.DegToRad(13));
         s.Box(new Vector3(0, 2.5f, 1.1f), new Vector3(1f, 0.04f, 2.26f), c, tilt);
         s.Box(new Vector3(0, ValanceY, 2.2f), new Vector3(0.97f, ValanceH, 0.03f), PropColors.Matte(0.95f, 0.95f, 0.93f));
-        s.Box(new Vector3(0, 2.75f, 0.04f), new Vector3(1.03f, 0.1f, 0.08f), Dark);
+        s.Box(new Vector3(0, AwningBoxY, 0.04f), new Vector3(1.03f, 0.1f, 0.08f), Dark);
         return s.Build();
     }, candle: false)).ToArray();
 

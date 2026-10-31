@@ -148,6 +148,7 @@ public static partial class InteriorGenerator
             // a room cut into pieces is furnished once, in its biggest piece
             foreach (var (piece, _) in extra) piece.Type = RoomType.Corridor;
             DiningUnits(layout, fp, dining);
+            FrontWindows(layout, fp);
             Furnish(layout, rng);
             foreach (var (piece, t) in extra) piece.Type = t;
             return layout;
@@ -223,14 +224,60 @@ public static partial class InteriorGenerator
         // (a carved room keeps a rectangle), before the furniture stands in them
         if (outline != null)
         {
-            FitOutline(layout, outline);
-            // a way in behind each street door no room is behind (#1304)
-            Vestibules(layout, fp, outline);
+            // a shop's or a venue's own door is never locked by the fit (#1292)
+            UnitDoors = fp.Doors.Where(d => d.Unit).Select(d => new DoorKey(fp.Key, d.Slot).ToString()).ToHashSet();
+            try
+            {
+                FitOutline(layout, outline);
+                // a way in behind each street door no room is behind (#1304)
+                Vestibules(layout, fp, outline);
+            }
+            finally { UnitDoors = null; }
         }
         _onCore = onCore;
+        FrontWindows(layout, fp);
 
         Furnish(layout, rng);
         return layout;
+    }
+
+    /// <summary>
+    /// The room behind a glazed front (#1292, <see cref="VenueFront"/>) takes its windows on that wall from the front:
+    /// one per bay, at the bay's place, sill and top, so inside and outside line up (#60's way: the plan follows the
+    /// facade). A door the plan opens on a shaped room's angled edge keeps that room's own windows.
+    /// </summary>
+    private static void FrontWindows(InteriorLayout l, Footprint fp)
+    {
+        var rooms = l.GroundFloor.Rooms;
+        foreach (var d in fp.Doors)
+        {
+            if (!VenueFront.Has(d) || l.EntranceOf(new DoorKey(fp.Key, d.Slot).ToString()) is not { Level: 0 } e) continue;
+            if (EntryRoom(rooms, e) is not int ri) continue;
+            var r = rooms[ri];
+            var entry = r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Entry && o.Edge == null
+                && WallPoint(r, o.Side, o.Center) is var (x, z) && Math.Abs(x - e.X) < 0.05f && Math.Abs(z - e.Z) < 0.05f);
+            if (entry == null) continue;
+            var side = entry.Side;
+            bool alongX = side is Side.Front or Side.Back;
+            float lo = alongX ? r.X0 : r.Z0, hi = alongX ? r.X1 : r.Z1;
+            float top = Math.Min(d.FrontTop, l.ClearOf(r) - 0.15f);
+            if (top - VenueFront.Sill < 0.6f) continue;
+            // the wall along the door's frame: +X of the frame, into the plan's frame
+            var o = new Godot.Vector2(d.Outward.X, d.Outward.Z).Normalized();
+            var along = new Godot.Vector2(o.Y, -o.X);
+            var foot = new Godot.Vector2(d.Position.X, d.Position.Z) - fp.Center;
+            r.Openings.RemoveAll(w => w.Kind == OpeningKind.Window && w.Side == side && w.Edge == null);
+            foreach (var (c, w) in VenueFront.Bays(d))
+            {
+                var p = foot + along * c;
+                float at = alongX ? p.Dot(fp.AxisU) : p.Dot(fp.AxisV);
+                float width = w - 0.1f;
+                if (at - width / 2 < lo + 0.1f || at + width / 2 > hi - 0.1f) continue;
+                // never over the doorway or another door in that wall
+                if (r.Openings.Any(x => x.Kind != OpeningKind.Window && x.Side == side && Math.Abs(x.Center - at) < (x.Width + width) / 2 + 0.02f)) continue;
+                r.Openings.Add(new OpeningPlan { Side = side, Center = at, Width = width, Bottom = VenueFront.Sill, Top = top, Kind = OpeningKind.Window });
+            }
+        }
     }
 
     /// <summary>
@@ -254,6 +301,33 @@ public static partial class InteriorGenerator
         var rng = new Random(StableHash(fp.Key.ToString()));
         return TryApartments(layout, fp, b, b.Kind, n, flats, rng)
             && layout.Entrances.Any(e => e.Vehicle) && layout.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
+    }
+
+    /// <summary>
+    /// The shop units a block of flats plans on its ground floor (#1292): each sales floor's rectangle in the plan's frame, for
+    /// <see cref="BuildingFootprint"/> to lay each one its own street door. The plan of <see cref="Generate(Footprint, Building, bool, BuildingType, VenueRecord?, IReadOnlyList{VenueRecord}?)"/>
+    /// as far as the flats, as <see cref="PlansGarageRamp"/> runs it, so the units and their doors agree: a unit's door
+    /// (<see cref="DoorSpot.Unit"/>) changes nothing in the plan but the doorway it opens. Empty when the block plans no shops.
+    /// </summary>
+    internal static List<RectPlan> StreetUnits(Footprint fp, Building b, BuildingType flats, bool dining)
+    {
+        var (h, n) = Storeys(b);
+        var layout = new InteriorLayout
+        {
+            Key = fp.Key.ToString(), Kind = b.Kind, Width = fp.Width, Depth = fp.Depth, StoreyHeight = h,
+            EntryX = fp.EntryX, EntryWidth = Math.Min(fp.Door.Width, 1.8f), DoorHeight = fp.Door.Height,
+            DoorX = fp.Door.Position.X, DoorY = fp.Door.Position.Y, DoorZ = fp.Door.Position.Z,
+            DoorOutX = fp.Door.Outward.X, DoorOutZ = fp.Door.Outward.Z, DoorWidth = fp.Door.Width,
+        };
+        var rng = new Random(StableHash(fp.Key.ToString()));
+        DiningShops = dining;
+        GroundOnly = true;
+        try
+        {
+            if (!TryApartments(layout, fp, b, b.Kind, n, flats, rng)) return [];
+        }
+        finally { DiningShops = GroundOnly = false; }
+        return layout.GroundFloor.Rooms.Where(r => r.Type == RoomType.Shop).Select(r => new RectPlan(r.X0, r.Z0, r.X1, r.Z1)).ToList();
     }
 
     // ---- several ways in (#498) -------------------------------------------------------------
@@ -311,12 +385,16 @@ public static partial class InteriorGenerator
             float width = d.Vehicle ? d.Width : Math.Min(d.Width, 1.8f);
             if (width < 0.7f || Math.Min(d.Height, clear - 0.15f) < 1.9f) continue;
 
-            // the wall that faces the same way first, then round the building
-            foreach (var side in new[] { Side.Front, Side.Right, Side.Back, Side.Left }
-                         .OrderByDescending(x => Facing(x).X * faces.X + Facing(x).Z * faces.Y)
-                         .ThenBy(x => (int)x))
+            // the wall that faces the same way first, then round the building; a venue's own door (#1292) into a room
+            // a venue can take first, never a corridor if it can help it
+            var sides = new[] { Side.Front, Side.Right, Side.Back, Side.Left }
+                .OrderByDescending(x => Facing(x).X * faces.X + Facing(x).Z * faces.Y).ThenBy(x => (int)x).ToList();
+            Func<RoomPlan, int>? any = null, venueRoom = r => GuestCapable(r.Type) ? 0 : -1;
+            var tries = sides.Select(x => (x, any));
+            if (d.Venue > 0) tries = sides.Select(x => (x, venueRoom)).Concat(tries);
+            foreach (var (side, rank) in tries)
             {
-                if (!FitEntry(l, ground, side, side is Side.Front or Side.Back ? at.X : at.Y, width, out var room, out float center))
+                if (!FitEntry(l, ground, side, side is Side.Front or Side.Back ? at.X : at.Y, width, out var room, out float center, rank))
                     continue;
                 // under the ceiling of the room it actually opens into, not of the storey: a works
                 // hall's service block is a 2.6 m room standing inside a 9 m hall (#497)

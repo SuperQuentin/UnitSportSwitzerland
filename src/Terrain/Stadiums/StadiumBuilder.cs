@@ -197,7 +197,7 @@ public static class StadiumBuilder
 
     [Showcase("Terrain", "Stadium")]
     private static IEnumerable<(string, Func<Node3D>)> Showcase() =>
-        StadiumCatalog.All.Select(s => (s.Name, (Func<Node3D>)(() => new MeshInstance3D
+        StadiumCatalog.Real.Append(Fixture.FunCourse.Arena).Select(s => (s.Name, (Func<Node3D>)(() => new MeshInstance3D
         {
             Name = "Stadium",
             Mesh = ChunkNode.ToPropMesh(BuildLocal(s, collision: false).Mesh!, StyleKit.Material(MaterialRole.Prop)),
@@ -369,7 +369,7 @@ public static class StadiumBuilder
         {
             var a = st[i];
             var b = st[(i + 1) % st.Count];
-            if (a.Kind == Seg.Gate) continue;
+            if (a.Kind == Seg.Gate || Array.IndexOf(s.OpenSides, a.Side) >= 0) continue;
             float ga = Gr(a.P), gb = Gr(b.P);
             g.Quad(at(a.P, ga - 0.3f), at(b.P, gb - 0.3f), at(b.P, gb + Height), at(a.P, ga + Height), c.Fence, solid: true);
             g.Quad(at(a.P, ga + Height), at(b.P, gb + Height), at(b.P, gb - 0.3f), at(a.P, ga - 0.3f), c.Fence, solid: false);

@@ -94,6 +94,11 @@ public partial class ChairProbe : Node
             me.Velocity = Vector3.Zero;
             await Until(() => me.SitInReach() != null, 3);
         }
+        // looking at the chair, as a player behind it does (a terrace stands in front of its venue's door, #1292: E is
+        // the door when the door is what you face)
+        me.LookYaw = Mathf.Atan2(-(chair.Hip.X - me.GlobalPosition.X), -(chair.Hip.Z - me.GlobalPosition.Z));
+        me.LookPitch = -0.3f;
+        await Wait(0.3);
         var offer = me.SitInReach();
         Check(offer != null, $"a seat in reach behind the chair: {offer} (at {me.GlobalPosition}, on floor {me.IsOnFloor()})");
         Check(me.SeatInteraction()?.Text == "Sit down", $"the prompt says Sit down ({me.SeatInteraction()?.Text})");

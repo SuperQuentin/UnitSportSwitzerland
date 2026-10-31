@@ -52,6 +52,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | phone › Training app (#901): import, search, connect, start / stop | the phone's own navigation (Enter, Esc) / D-pad A B | ok: the phone's poke and ray, as every app (the OS file picker shows on the desktop) | keep |
 | training: the next junction's road left / right (#901) | A D / left stick | ok: the stick, as steering; the Training app's Left / Right by poke | keep |
 | training: ride_rejoin, ride_uturn, ride_erg, ride_power_up / down (#901) | PgUp PgDn \ ] [ / the Training app's buttons (no pad button is free on a bike) | ok: the Training app's Rejoin, Turn round, ERG, ±10 W by poke | a wrist-menu row if riders want it without the phone |
+| sword swing, combo, charged, plunge (#1371) | LMB / RB | ok: R trigger (RB on foot) | **swing for real** (hand speed) |
+| sword_dodge (#1371) | Shift / B | ok: B (`XrPad.RightB`) | a step or a dodge by body movement |
+| sword_lock (#1371) | Middle button, Z / R3 | ok: R3 | grip-pointing at a target; the stamina bar has no VR display yet (**gap**: wrist display) |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
@@ -73,7 +76,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
 | drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
-| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
+| next / prev_item, slot_1-6 | Alt + wheel (the plain wheel zooms, #1369), 1-6 / D-pad → (tap) | ok: R stick ↓, a short grip at the right / left hip (#437) | slots shown at the hip |
+| holster_item (#1369) | `,`, the number of the slot in hand / hold D-pad → | ok: hold the grip at the right hip (0.35 s, a buzz): puts the item away, again draws it (`XrHands.AtHip`, `Gesture`) | keep |
 | inventory | I, Tab / Back (tap; opens on the release) | ok: Menu hold | keep |
 | quick_menu (#840) | hold F2 / hold Back | ok: wrist menu Activities + Invites entries; a ring opened by Back is aimed by the right hand | a hold of Menu longer than the inventory's pulse |
 | invite_decline (#840) | Shift+F2 / — | ok: wrist menu › Invites › Decline (laser), or Menu tap › Activities | keep |
@@ -248,6 +252,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | watch | — | ok: Swiss watch on the drawn left wrist (#439, #1097); read it and the radial menu opens over it | keep |
 | save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
 | movie studio timeline (#638, markers #656, camera keys #669, cameras #675) | Space J K L, ← →, S, Del, M, I, V, 1-9, C / Y, LT RT, D-pad, X (hold: cut to camera), R3, View, L3, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |
+| fun world air rings (#1396) | fly through them: no key | ok: fly as ever; the ring panel is a 2D `CanvasLayer` (`gap`: not shown in the headset) | the panel on the cockpit or the wrist |
 | free_cursor (#654) | tap Alt / — | n/a: VR points with the laser, a pad has no cursor | keep |
 | map screen: pan / zoom / draw / tool / search (#515, #799) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | ok on the panel (#799): the ray is the pointer, trigger click puts the marker down, trigger drag pans, left stick pans, on-map + / − zoom (the shoulders are muted there: in VR they are the trigger), popular places instead of typing; draw tools pointable under Advanced | a table-top relief map you reach into (#535)
 
@@ -278,4 +283,6 @@ work (#437, #438); 8 fixed by #435.
 | Yodel: tap on the beat | Space `jump` / A | new: A | keep |
 | Zibelemärit: taste at a stall (the day's stamp), buy its ware (#1373) | `interact_mount` E within 5.5 m of a stall (`ZibeleGame.TryInteract`) | new: Y through `XrPad`; a grip at the stall | grip a braid off the awning or the kettle's ladle (`gap`: the pad route works) |
 | Zibelemärit: throw a confetti egg or Räppli on the square (#1373) | `use_item` LMB with the egg in hand (`ItemUse.Confetti`) | X / the trigger through `XrPad` | toss it by hand (`gap`: the pad route works) |
+| Montreux Jazz: mark "I am listening" at the stage-front rail (#1394) | `interact_mount` E within 3.5 m of the rail (`JazzGame.TryInteract`) | new: Y through `XrPad`; a grip at the rail | grip the rail in front of the stage (`gap`: the pad route works) |
+| Montreux Jazz: clap the band back for the bis on the ring's beats (#1394) | `jump` Space while the call is on in the audience (`JazzGame`, `FootPlayer.JumpTaken`, as the pogo's) | A | the pad's A through `XrPad` (clapping by hand is not built: `gap`) |
 | Zibelemärit: eat the tart or the soup (#1373) | `use_item` LMB (`ItemController`, like any food) | X / the trigger through `XrPad` | bring it to the mouth (the eat pose) |

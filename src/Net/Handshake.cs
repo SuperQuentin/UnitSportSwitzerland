@@ -116,8 +116,10 @@ public partial class Handshake : Node
     /// 82: World/Adventure/Festivals RequestFasnacht, TellFasnacht, RequestGuggenStart, RequestGuggenSong, TellGuggenSeat, TellGuggenResult (#1357: the Fasnacht's Larven stall, Räppli, Morgestraich and Guggenmusik), ItemEventKind.Confetti 12, ItemUse.Confetti, Headwear 5-10, ItemId 505-509.
     /// 83: World/Adventure/Festivals RequestZibele, TellZibele (#1373: the Zibelemärit's onion stalls and confetti fight), ItemId 525-528.
     /// 84: FootPlayer.PoseKind 9 (PoseCrevasse, #1372: down a hidden glacier crevasse, Anim.W says stand, climb or fall), World/Arrival Rules carries the server's --crevasses switch.
-    /// 85: Adventure/Together RequestStartAt (#1384: a fondue pot on a dining venue's table, the table's place sent).
-    public const int Protocol = 85;
+    /// 85: World/Sword Act, Acted, Hit, Struck, DummySpawn/DummyHit (#1371: sword combat, server-checked blade hits), ItemId 600, ItemUse.Sword, the sword dance moves (7000+).
+    /// 86: World/Adventure/Festivals RequestMontreux, TellMontreux (#1394: Montreux Jazz's listening mark and the encore's claps), ItemId 511, Genre.Jazz (the jazz night's event is built from the festival's year and day, nothing is sent).
+    /// 87: Adventure/Together RequestStartAt (#1384: a fondue pot on a dining venue's table, the table's place sent).
+    public const int Protocol = 87;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
