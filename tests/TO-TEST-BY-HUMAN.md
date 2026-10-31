@@ -11,7 +11,6 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 
 An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.
 
-- [ ] Join at once, sit in a car with a station on (U) or stand near venue music for 5 min → no cuts; the log says `burning the default CDs` at boot and no `burning CD … for peer 0` after `[world] connected`.
 - [ ] Quit, start offline → the default CDs burn then; the game and its sound stay smooth while they do (a few cores only).
 
 ## Sit on chairs, benches and terrace seats ([#1385](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1385))

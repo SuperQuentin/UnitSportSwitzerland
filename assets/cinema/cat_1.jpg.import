@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cfyksot18mlrv"
-path="res://.godot/imported/cat_1.jpg-41c3b3049128f218757ba12a7452d05b.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://assets/cinema/cat_1.jpg"
-dest_files=["res://.godot/imported/cat_1.jpg-41c3b3049128f218757ba12a7452d05b.ctex"]
 
 [params]
 
