@@ -14,7 +14,8 @@
 #      net/full tiers), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts),
 #      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps), TEST_JOBS (net/full checks at
 #      once, default the heavy lock's slot count; 1 = one at a time), TEST_ONLY (one tier's rows alone:
-#      `TEST_ONLY=net tools/test.sh full` runs the whole net tier).
+#      `TEST_ONLY=net tools/test.sh full` runs the whole net tier), TEST_USERDATA (real: the Godot checks
+#      run on the real user://, not a fresh test_output/tests/userdata/<check> each, #1403).
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
 # (docs/notes/general/fast-checks.md); a map row whose check starts with @realtime opts out.
 # Prints one PASS/FAIL table; every log goes to test_output/tests/. Exit code 0 only if all passed.
@@ -125,16 +126,32 @@ guard_run "$TIMEOUT" "$OUT/ridelink.log" dotnet test tools/RideLink/tests/RideLi
 record "unit RideLink (dotnet test)" "$(verdict $? "$OUT/ridelink.log")" $((SECONDS - t0)) "$OUT/ridelink.log"
 
 # --- Godot tiers ------------------------------------------------------------------------------
+# Every Godot here runs in a fresh user:// of its own check (#1403): the player's settings, CDs and placed
+# objects never reach a check (an H-pattern truck gearbox in the real one failed seven). UD is the env prefix
+# for one run, never exported, so nothing after it inherits the folder; TEST_USERDATA=real keeps the real one.
+ud() { # log path: sets UD
+  UD=()
+  [ "${TEST_USERDATA:-}" = real ] && return 0
+  local d
+  d="$OUT/userdata/$(basename "$1" .log)"
+  ( guard_test_userdata "$d" ) || return 0   # the folder and its quiet test_window.cfg, nothing exported here
+  d=$(cd "$d" && pwd)
+  if _guard_windows; then UD=(env APPDATA="$(cygpath -w "$d")")
+  elif [ "$(uname)" = Darwin ]; then UD=(env HOME="$d")
+  else UD=(env XDG_DATA_HOME="$d"); fi
+}
+
 netsmoke() { # headless dedicated server on the flat fixture world + a headless client joining and leaving it
   local port=$(( ${TEST_PORT:-7821} + ${GUARD_SLOT:-0} * 1000 )) slog=$OUT/netsmoke_server.log
-  "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
+  ud "$1"   # the server and the client share one user://, as a twoclient check's do
+  ${UD[@]+"${UD[@]}"} "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
   SERVER=$!
   for _ in $(seq 1 600); do
     grep -q "server listening" "$slog" 2>/dev/null && break
     kill -0 "$SERVER" 2>/dev/null || break
     guard_nap 0.2
   done
-  guard_run "$TIMEOUT" "$1" "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture
+  guard_run "$TIMEOUT" "$1" ${UD[@]+"${UD[@]}"} "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture
   local code=$?
   _guard_kill_tree "$SERVER"
   wait "$SERVER" 2>/dev/null
@@ -151,9 +168,9 @@ run_one() { # tier check log: runs one check, its exit code
   case $check in
     @netsmoke) netsmoke "$log" ;;
     tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
-    @realtime\ *) guard_run "$TIMEOUT" "$log" "$GODOT" --headless --path . -- ${check#@realtime } ;;
+    @realtime\ *) ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ;;
     *) if [ "$tier" = quick ]; then eng=$FAST; elif [ -n "${TC_MAX_FPS:-}" ]; then eng="--max-fps $TC_MAX_FPS"; fi
-       guard_run "$TIMEOUT" "$log" "$GODOT" --headless $eng --path . -- $check ;;
+       ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ;;
   esac
 }
 
