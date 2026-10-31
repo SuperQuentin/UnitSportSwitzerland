@@ -6,6 +6,7 @@
 #   tools/test.sh net [area]      quick + the headless network tier on the fixture world, if the change touches it
 #   tools/test.sh full [area]     every check in tools/lib/checkmap.txt, windowed and load scripts too
 #   tools/test.sh lock            who holds the machine-wide heavy-run lock, and whether it is stale
+#   tools/test.sh stop            stops the running test.sh of this checkout and everything under it, by PID (#1409)
 # The checks come from tools/lib/checkmap.txt, matched against the files changed since origin/main
 # (plus uncommitted and untracked ones); [area] (e.g. Loot, src/Player/) matches it instead.
 # Env: GODOT (the Godot executable; on Windows the full path of the *_console.exe, see
@@ -15,7 +16,10 @@
 #      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps), TEST_JOBS (net/full checks at
 #      once, default the heavy lock's slot count; 1 = one at a time), TEST_ONLY (one tier's rows alone:
 #      `TEST_ONLY=net tools/test.sh full` runs the whole net tier), TEST_USERDATA (real: the Godot checks
-#      run on the real user://, not a fresh test_output/tests/userdata/<check> each, #1403).
+#      run on the real user://, not a fresh test_output/tests/userdata/<check> each, #1403), TEST_RESUME (1:
+#      skip what results.tsv already holds as PASS, to go on after a run that died, #1409).
+# Every result is appended to test_output/tests/results.tsv as it lands (time, check, verdict, seconds, log):
+# a run that dies keeps what it had.
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
 # (docs/notes/general/fast-checks.md); a map row whose check starts with @realtime opts out.
 # Prints one PASS/FAIL table; every log goes to test_output/tests/. Exit code 0 only if all passed.
@@ -23,12 +27,47 @@ set -u
 TIER=${1:-}
 AREA=${2:-}
 case $TIER in
-  unit | quick | net | full | lock) ;;
-  *) echo "usage: tools/test.sh unit|quick|net|full [area] | lock" >&2; exit 2 ;;
+  unit | quick | net | full | lock | stop) ;;
+  *) echo "usage: tools/test.sh unit|quick|net|full [area] | lock | stop" >&2; exit 2 ;;
 esac
 cd "$(dirname "$0")/.."
 . tools/lib/guard.sh
 [ "$TIER" = lock ] && { guard_status; exit 0; }
+OUT=test_output/tests
+PIDFILE=$OUT/test.pid
+# stop (#1409): the run's whole tree from its PID file, never by name; stopping the shell that started it
+# left test.sh and its checks running before
+# A child that forks while the tree is walked is missed by the walk, and orphaned once its parent dies: every
+# process of a run inherits TEST_RUN (exported below), so a sweep of /proc/*/environ for that exact id finds
+# them, and nothing else (Git Bash and Linux; macOS has no /proc: the tree only).
+run_procs() { # id: the PIDs still carrying TEST_RUN=<id>
+  local e p
+  for e in /proc/[0-9]*/environ; do
+    [ -r "$e" ] || continue
+    p=${e#/proc/}; p=${p%/environ}
+    [ "$p" = $$ ] && continue
+    tr '\0' '\n' < "$e" 2>/dev/null | grep -qx "TEST_RUN=$1" && echo "$p"
+  done
+}
+if [ "$TIER" = stop ]; then
+  pid=$(sed -n 1p "$PIDFILE" 2>/dev/null); run=$(sed -n 2p "$PIDFILE" 2>/dev/null)
+  if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+    left=$([ -n "$run" ] && [ -d /proc ] && run_procs "$run")
+    [ -z "$left" ] && { echo "[test] no run of this checkout is going"; rm -f "$PIDFILE"; exit 0; }
+  fi
+  echo "[test] stopping test.sh ${pid:-?} (run $run) and everything under it"
+  [ -n "$pid" ] && _guard_kill_tree "$pid"
+  for _ in 1 2 3; do   # late forks and orphans, by the run's id
+    left=$([ -n "$run" ] && [ -d /proc ] && run_procs "$run")
+    [ -z "$left" ] && break
+    for p in $left; do _guard_kill_tree "$p"; done
+    sleep 1
+  done
+  left=$([ -n "$run" ] && [ -d /proc ] && run_procs "$run")
+  rm -f "$PIDFILE"
+  [ -z "$left" ] && echo "[test] stopped: nothing of it is left" || echo "[test] still there, by PID: $left"
+  exit 0
+fi
 
 # Windows: the winget `godot`/`godot_console` links start the GUI build and hang headless runs
 # (docs/notes/general/godot-exe.md), so default to the real console exe when one is installed
@@ -39,13 +78,16 @@ if [ -z "${GODOT:-}" ] && _guard_windows; then
 fi
 GODOT=${GODOT:-godot}
 export GODOT
-OUT=test_output/tests
 TIMEOUT=${TEST_TIMEOUT:-600}
 # one physics tick (project default 60 Hz) per frame, no real-time sync; net/full stay real time
 FAST=--fixed-fps\ 60
 [ "${TEST_REALTIME:-}" = 1 ] && FAST=
 BASE=${TEST_BASE:-origin/main}
 mkdir -p "$OUT"
+export TEST_RUN="$$.$RANDOM$RANDOM"   # every process of this run inherits it: what `stop` sweeps for
+printf '%s\n%s\n' $$ "$TEST_RUN" > "$PIDFILE"
+RESULTS=$OUT/results.tsv
+[ "${TEST_RESUME:-}" = 1 ] && [ -f "$RESULTS" ] || printf 'time\tcheck\tverdict\tseconds\tlog\n' > "$RESULTS"
 
 ROWS=()
 FAILED=0
@@ -53,8 +95,18 @@ SERVER=
 cleanup() {
   [ -n "$SERVER" ] && _guard_kill_tree "$SERVER"
   guard_unlock
+  [ "$(sed -n 1p "$PIDFILE" 2>/dev/null)" = $$ ] && rm -f "$PIDFILE"
 }
 trap cleanup EXIT
+
+# one line of results.tsv, appended as it lands (from heavy jobs too: one short line, one write)
+result_line() { # name verdict seconds log
+  printf '%s\t%s\t%s\t%s\t%s\n' "$(date '+%F %T')" "$1" "$2" "$3" "$4" >> "$RESULTS"
+}
+# TEST_RESUME=1: this check passed earlier in the results.tsv being continued
+passed_before() {
+  [ "${TEST_RESUME:-}" = 1 ] && grep -qF "$(printf '\t%s\tPASS\t' "$1")" "$RESULTS"
+}
 
 # a check's verdict: its last RESULT line if it printed one (exit 139 at shutdown is ignored,
 # docs/notes/general/headless-exit-139.md), its exit code otherwise
@@ -71,6 +123,7 @@ verdict() {
 }
 
 record() { # name verdict seconds log
+  result_line "$1" "$2" "$3" "$4"
   ROWS+=("$(printf '%-30s %-8s %6s  %s' "$1" "$2" "$3" "$4")")
   [ "$2" = PASS ] || FAILED=1
   echo "[test] $1: $2 (${3}s)"
@@ -159,17 +212,23 @@ done
 CHECKS=(${KEPT[@]+"${KEPT[@]}"})
 
 # --- tier 0 -----------------------------------------------------------------------------------
-t0=$SECONDS
-# [Trait("Speed", "Slow")] tests run in the full tier only (#1407): the signal test region's build alone was
-# 556 s of a 14 min unit stage
-SLOW=(--filter "Speed!=Slow"); [ "$TIER" = full ] && SLOW=()
-guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests ${SLOW[@]+"${SLOW[@]}"}
-record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$OUT/unit.log"
-grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
+# a row TEST_RESUME skips: in the table as passed earlier, not again in results.tsv
+resumed() { ROWS+=("$(printf '%-30s %-8s %6s  %s' "$1" PASS 0 "(passed earlier, TEST_RESUME)")"); echo "[test] $1: passed earlier, skipped"; }
+if passed_before "unit (dotnet test)"; then resumed "unit (dotnet test)"; else
+  t0=$SECONDS
+  # [Trait("Speed", "Slow")] tests run in the full tier only (#1407): the signal test region's build alone was
+  # 556 s of a 14 min unit stage
+  SLOW=(--filter "Speed!=Slow"); [ "$TIER" = full ] && SLOW=()
+  guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests ${SLOW[@]+"${SLOW[@]}"}
+  record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$OUT/unit.log"
+  grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
+fi
 # RideLink (#901, tools/RideLink): the trainer library's own tests (parsers, the FTMS handshake, the router)
-t0=$SECONDS
-guard_run "$TIMEOUT" "$OUT/ridelink.log" dotnet test tools/RideLink/tests/RideLink.Tests
-record "unit RideLink (dotnet test)" "$(verdict $? "$OUT/ridelink.log")" $((SECONDS - t0)) "$OUT/ridelink.log"
+if passed_before "unit RideLink (dotnet test)"; then resumed "unit RideLink (dotnet test)"; else
+  t0=$SECONDS
+  guard_run "$TIMEOUT" "$OUT/ridelink.log" dotnet test tools/RideLink/tests/RideLink.Tests
+  record "unit RideLink (dotnet test)" "$(verdict $? "$OUT/ridelink.log")" $((SECONDS - t0)) "$OUT/ridelink.log"
+fi
 
 # --- Godot tiers ------------------------------------------------------------------------------
 # Every Godot here runs in a fresh user:// of its own check (#1403): the player's settings, CDs and placed
@@ -254,6 +313,7 @@ heavy_job() { # index tier check: one check in a slot of its own, its row in $OU
     # stopped by the RAM watchdog, not by what it checks: run again alone at the end
     grep -aq "RAM floor\|MB free (floor" "$log" && ram=1
     res="$(printf '%-30s %-8s %6s  %s' "$check" "$v" $((SECONDS - t0)) "$log")"
+    result_line "$check" "$v" $((SECONDS - t0)) "$log"
     echo "[test] $check: $v ($((SECONDS - t0))s, slot $GUARD_SLOT$([ $ram = 1 ] && echo ", stopped at the RAM floor"))"
   fi
   printf '%s\n%s\n%s\n' "${v:-FAIL}" "$res" "$ram" > "$OUT/.row.$i"   # verdict, table row, RAM-floor stop
@@ -261,7 +321,7 @@ heavy_job() { # index tier check: one check in a slot of its own, its row in $OU
 
 # room for one more job: free RAM for it, and the last one started TEST_JOB_STAGGER s ago (40), so its Godots
 # have grown to their size before the next is weighed against what is left
-room() { [ $(( SECONDS - last_start )) -ge "${TEST_JOB_STAGGER:-40}" ] && [ "$(guard_free_mb)" -ge $(( ${TEST_HEAVY_RAM_GB:-6} * 1024 )) ]; }
+room() { [ $(( SECONDS - last_start )) -ge "${TEST_JOB_STAGGER:-40}" ] && _guard_free_into && [ "$GUARD_FREE" -ge $(( ${TEST_HEAVY_RAM_GB:-6} * 1024 )) ]; }
 
 run_heavy() {
   local i n=${#HEAVY[@]} pids=() groups=() k busy running entry tier check g t0=$SECONDS last_start=-999 again=()
@@ -333,6 +393,7 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
         tier=${entry%% *}
         check=${entry#* }
         log=$(log_of "$check")
+        passed_before "$check" && { resumed "$check"; continue; }
         if [ "$tier" = quick ]; then
           guard_wait_ram "${TEST_RAM_GB:-3}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         elif [ "$JOBS" -gt 1 ]; then
