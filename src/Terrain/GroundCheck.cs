@@ -18,8 +18,9 @@ namespace UnitSport.Terrain;
 /// (a slot under a footing). Doors: the sill against the ground 0.8 m in front at both jambs
 /// (buried over 10 cm, floating over 15 cm after the stoop). Each at the ring strides 1/2/4/10, so
 /// the LOD mismatch shows. Output also goes to <c>test_output/ground/groundcheck.txt</c>.
-/// The road-to-facade strip slope histogram of the issue is not measured: it needs the road
-/// surface the terrain pass changes, which the later terrain issue owns.
+/// The road-to-facade strip (#1419, <see cref="GroundStrip"/>): the walkable ground (the road blend
+/// at clearance 0, as the collision floor) between a road ribbon's edge and a facade within 25 m,
+/// per ring stride: a slope histogram and the lattice edges stepping over 0.3 m.
 /// </para>
 /// </summary>
 public static class GroundCheck
@@ -63,11 +64,14 @@ public static class GroundCheck
             // the doors as the build gets them: the stride-1 grid for rings 0-2 (strides 1, 2, 4), none at the coarse ring
             var doorsFine = BuildingFootprint.ComputeDoors(bt, roads, full);
             var doorsCoarse = BuildingFootprint.ComputeDoors(bt, roads, null);
+            Strip(bt, roads, full, Say);
             foreach (int s in Strides)
             {
                 var drawn = s == 1 ? full : full.Decimate(s);
                 Walls(bt, full, drawn, s, Say);
-                Doors(bt, s >= ChunkFormat.CoarseStride ? doorsCoarse : doorsFine, drawn, s, Say);
+                // the doors as the mesh gets them: planned on the stride-1 grid (none at the coarse ring), then read again on the ring's ground
+                var planned = s >= ChunkFormat.CoarseStride ? doorsCoarse : doorsFine;
+                Doors(bt, s == 1 ? planned : BuildingFootprint.ForRing(planned, bt, drawn), drawn, s, Say, s == 1 ? null : planned, s == 1 ? "planned" : "");
             }
         }
         string outDir = System.IO.Path.Combine("test_output", "ground");
@@ -144,14 +148,48 @@ public static class GroundCheck
             + $"off-base wall bottoms over a gap (<=3 m): {offPieces} pieces, {offBare} with NO footing");
     }
 
+    private static void Strip(BuildingTile bt, RoadTile? roads, ChunkGrid full, Action<string> say)
+    {
+        if (roads == null) { say("  strip: no road tile"); return; }
+        int n = ChunkFormat.GridSize;
+        var ground = TerrainMeshBuilder.GroundHeights(full, TerrainMeshBuilder.ComputeRoadBlend(roads), 0.0);
+        var heights = new float[n * n];
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < n; c++) heights[r * n + c] = ground(c, r);
+        var facades = new List<GroundStrip.Seg>();
+        var plans = new List<float[]>();
+        foreach (var b in bt.Buildings)
+        {
+            if (!BuildingMeshBuilder.Drawn(b)) continue;
+            foreach (var (p, q, onBase) in BuildingMeshBuilder.BottomEdges(b))
+                if (onBase) facades.Add(new GroundStrip.Seg(p.X, p.Z, q.X, q.Z));
+            for (int t = 0; t < b.TriangleCount; t++)
+            {
+                var (a, c, d) = b.Tri(t);
+                plans.Add([a.X, a.Z, c.X, c.Z, d.X, d.Z]);
+            }
+        }
+        var (rd, onRoad) = GroundStrip.RoadEdgeDistance(roads);
+        var (fd, under) = GroundStrip.FacadeDistance(facades, plans);
+        var strip = GroundStrip.Members(rd, onRoad, fd, under);
+        foreach (int s in Strides)
+        {
+            var m = GroundStrip.Of(heights, strip, s);
+            say($"  strip stride {s}: {m.Cells} cells; slope deg {string.Join(" ", GroundStrip.SlopeNames.Select((nm, i) => $"{nm}={m.Slope[i]}"))}; "
+                + $"lattice steps >0.3 m: {m.Steps} of {m.Edges} edges (worst {m.WorstStep:F2} m)");
+        }
+    }
+
     private static bool Near(BuildingMeshBuilder.Footing f, Vector3 a, Vector3 b) =>
         (f.A.DistanceTo(a) < 0.02f && f.B.DistanceTo(b) < 0.02f) || (f.A.DistanceTo(b) < 0.02f && f.B.DistanceTo(a) < 0.02f);
 
-    private static void Doors(BuildingTile bt, DoorSpot[] doors, ChunkGrid drawn, int stride, Action<string> say)
+    private static void Doors(BuildingTile bt, DoorSpot[] doors, ChunkGrid drawn, int stride, Action<string> say, DoorSpot[]? asPlanned = null, string label = "")
     {
+        if (asPlanned != null) Doors(bt, asPlanned, drawn, stride, say, null, "as planned");
         float Ground(Vector3 p) => (float)drawn.SampleMeshHeight(bt.Id.MinE + p.X, bt.Id.MaxN - p.Z);
         int total = 0, buried = 0, floating = 0, stoops = 0, level = 0;
         var worst = new List<(float Off, string What)>();
+        var off = new int[2, 3];   // buried / floating by how far: 0.1-0.3, 0.3-1, over 1 m
         foreach (var d in doors)
         {
             if (d.Width <= 0 || !BuildingMeshBuilder.Drawn(bt.Buildings[d.Index])) continue;
@@ -166,11 +204,11 @@ public static class GroundCheck
             float drop = sill - low - d.Steps * d.Rise;
             if (d.Steps > 0) stoops++;
             string where = $"--at {bt.Id.MinE + d.Position.X:F0},{bt.Id.MaxN - d.Position.Z:F0} slot {d.Slot} sill {sill:F2} front {low:F2}..{high:F2} steps {d.Steps}";
-            if (high - sill > 0.1f) { buried++; worst.Add((high - sill, "buried " + where)); }
-            else if (drop > 0.15f) { floating++; worst.Add((drop, "floating " + where)); }
+            if (high - sill > 0.1f) { buried++; off[0, high - sill < 0.3f ? 0 : high - sill < 1f ? 1 : 2]++; worst.Add((high - sill, "buried " + where)); }
+            else if (drop > 0.15f) { floating++; off[1, drop < 0.3f ? 0 : drop < 1f ? 1 : 2]++; worst.Add((drop, "floating " + where)); }
             else level++;
         }
-        say($"  doors stride {stride}: {total} doors; buried>10cm {buried}, floating>15cm {floating}, with a stoop {stoops}, level {level}"
+        say($"  doors stride {stride}{(label.Length > 0 ? " (" + label + ")" : " (read on the ring)")}: {total} doors; buried>10cm {buried}, floating>15cm {floating}, with a stoop {stoops}, level {level} (buried by 0.1-0.3/0.3-1/>1 m: {off[0, 0]}/{off[0, 1]}/{off[0, 2]}, floating {off[1, 0]}/{off[1, 1]}/{off[1, 2]})"
             + (worst.Count > 0 ? "; worst: " + string.Join(" | ", worst.OrderByDescending(w => w.Off).Take(3).Select(w => $"{w.Off:F2} m {w.What}")) : ""));
     }
 }

@@ -210,6 +210,47 @@ public static class BuildingFootprint
     /// <summary>Metres: the most a sill is raised to meet the ground in front of it, and the most a stoop is asked to close (three steps).</summary>
     public const float MaxLandingRaise = 0.9f, MaxStoopDrop = 0.9f;
 
+    /// <summary>
+    /// A tile's doors for a ring that draws the ground coarser than the stride-1 grid they were planned on (#1419):
+    /// each pedestrian door's sill and stoop are read again on <paramref name="ring"/>, the ground that ring draws,
+    /// within the same landing and stoop limits. Which doors there are, their walls, slots and sizes stay as planned
+    /// (the door set must not depend on the ring); only a sill is lifted by at most <see cref="MaxLandingRaise"/> (the
+    /// lintel stays where it was, the door shorter by that much) or a stoop made longer, and a mismatch beyond that is
+    /// left to the footing. Mesh only: the collision of a near tile is built on the stride-1 doors.
+    /// </summary>
+    public static DoorSpot[] ForRing(DoorSpot[] doors, BuildingTile tile, ChunkGrid ring)
+    {
+        var result = new DoorSpot[doors.Length];
+        for (int i = 0; i < doors.Length; i++)
+        {
+            var d = result[i] = doors[i];
+            if (d.Width <= 0 || d.Vehicle) continue;
+            var o2 = new Vector2(d.Outward.X, d.Outward.Z);
+            var side = new Vector2(-o2.Y, o2.X) * Math.Min(d.Width / 2, MaxJambReach);
+            var at = new Vector2(d.Position.X, d.Position.Z);
+            float G(Vector2 q) => (float)ring.SampleMeshHeight(tile.Id.MinE + q.X, tile.Id.MaxN - q.Y);
+            var front = at + o2 * FrontReach;
+            float gm = G(front), gl = G(front - side), gr = G(front + side), gw = G(at);
+            float high = Math.Max(Math.Max(gm, gl), Math.Max(gr, gw)), low = Math.Min(gm, Math.Min(gl, gr));
+            float sill = d.Position.Y;
+            float lintel = sill + d.Height;
+            if (high > sill + BuriedTolerance && high - sill <= MaxLandingRaise && lintel - high >= 1.2f)
+            {
+                d = d with { Position = d.Position with { Y = high }, Height = lintel - high };
+                sill = high;
+            }
+            float drop = sill - low;
+            if (drop > FloatTolerance && drop <= MaxStoopDrop)
+            {
+                int steps = Math.Min(MaxStoopSteps, (int)Math.Ceiling(drop / MaxStoopRise - 1e-4f));
+                d = d with { Steps = steps, Rise = Math.Min(MaxStoopRise, drop / steps) };
+            }
+            else if (drop <= FloatTolerance) d = d with { Steps = 0, Rise = 0 };
+            result[i] = d;
+        }
+        return result;
+    }
+
     /// <summary>The most steps in a door's stoop.</summary>
     public const int MaxStoopSteps = 3;
 

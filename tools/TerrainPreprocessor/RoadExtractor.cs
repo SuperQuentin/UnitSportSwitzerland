@@ -146,7 +146,7 @@ public sealed class RoadExtractor
     }
 
     private readonly List<PendingLine> _pending = new();
-    private readonly HashSet<(long, long)> _openEnds = new(), _lonelyTunnelEnds = new();
+    private readonly HashSet<(long, long)> _openEnds = new(), _lonelyTunnelEnds = new(), _allEnds = new();
 
     /// <summary>
     /// The portals of a tunnel line: its ends that meet a road or a rail, or nothing, where the bore
@@ -229,6 +229,10 @@ public sealed class RoadExtractor
             }
         _lonelyTunnelEnds.Clear();
         foreach (var (key, count) in tunnelEnds) if (count == 1) _lonelyTunnelEnds.Add(key);
+        // every line end: an interior vertex of another line there is a junction its smoothed profile keeps (#1419)
+        _allEnds.Clear();
+        _allEnds.UnionWith(_openEnds);
+        _allEnds.UnionWith(tunnelEnds.Keys);
 
         foreach (var p in _pending)
             Emit(p, result, heightOf);
@@ -398,6 +402,16 @@ public sealed class RoadExtractor
                         RoadFormat.TunnelHeight(cls), heightOf, Holes, Portals(line, cls, heightOf));
 
                 var draped = DrapeHeights(dense, heightOf, DrapeOffset + ClassLift(cls));
+                // the long profile averaged over tens of metres (#1419): the piece's ends (a line end, a junction, a
+                // tile seam) and every junction on it keep their draped height, so links still meet and seams match
+                if (!useOwnZ && RoadProfile.SigmaFor(cls, flags) is var sigma && sigma > 0)
+                {
+                    var anchor = new bool[dense.Count];
+                    for (int i = 1; i < dense.Count - 1; i++)
+                        anchor[i] = _allEnds.Contains(JoinKey(dense[i].E, dense[i].N));
+                    var delta = RoadProfile.Delta(along, draped, sigma, anchor);
+                    for (int i = 0; i < draped.Length; i++) draped[i] += delta[i];
+                }
                 LimitGrade(dense, draped, MaxGrade(cls, flags));
 
                 // A DRAPED road that ends where a deck or bore begins ramps up to meet it.

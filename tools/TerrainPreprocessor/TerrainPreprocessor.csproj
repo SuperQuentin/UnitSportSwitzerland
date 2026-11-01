@@ -18,6 +18,8 @@
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
     <!-- the road network stage (TileRewriter) runs after the road stage -->
     <ProjectReference Include="..\RoadGen\RoadGen.csproj" />
+    <!-- the runtime road blend (plain C#, as tools/BlendCheck links it): the town ground stage solves on its road cells (#1419) -->
+    <Compile Include="..\..\src\Terrain\TerrainMeshBuilder.RoadBlend.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

@@ -5,8 +5,8 @@
   only step needing it) -> `buildings.gpkg` -> `.bldg` per tile. GWR cadastre is joined
   **spatially** (EGID is null in the 3.0 Beta); classification uses GKLAS, not GKAT.
   Roof vs wall is decided per triangle by normal; year built tints tone.
-  Solids are **re-seated on our heightfield** (median of a 3x3 footprint sample, base set
-  0.8 m below ground): the source foundation block is referenced to swisstopo's terrain,
+  Solids are **re-seated on our heightfield** (#1419: the cheapest level of heights sampled along the footprint outline, base set
+  0.8 m below ground, the pad graded into the tiles: `building-pads`): the source foundation block is referenced to swisstopo's terrain,
   not ours, which buried every building by ~3 m and some by over 5 m.
   **Stray faces are dropped first** (`BuildingExtractor.DropStrayFaces`): nationwide, 798
   "single houses" in swissBUILDINGS3D 3.0 span over 200 m (the worst 4.3 km) because their solid

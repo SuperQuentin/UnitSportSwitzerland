@@ -21,9 +21,27 @@ public static partial class TerrainMeshBuilder
     /// cut slope, and ground already between them stays where it is. Sparse: a tile's corridors
     /// cover a few percent of it. Computed once per tile and applied twice — to the collision
     /// floor at clearance 0 and to the visual mesh at <see cref="VisualBlendClearance"/> — which
-    /// is why the clearance is not baked in.
+    /// is why the clearance is not baked in. <c>Weight</c> is how much of the clamp applies (#1419): 1 under a
+    /// road and on its slopes, fading to 0 over the last <see cref="ReachFadeM"/> of the slope's reach, so the
+    /// band's outer edge meets the untouched ground without a step or a crease.
     /// </summary>
-    public sealed record RoadBlend(int[] Cells, float[] Lo, float[] Hi, float[] Clear);
+    public sealed record RoadBlend(int[] Cells, float[] Lo, float[] Hi, float[] Clear, float[] Weight);
+
+    /// <summary>
+    /// Metres (#1419): over this much of a slope's outer reach (at most half of it) the clamp's correction fades
+    /// to zero with a smoothstep. The 1:1 / 2:3 limits hold in full inside it; past the reach the ground was
+    /// never touched, so a slope that missed the ground there used to end in a step (a crease where it met it).
+    /// </summary>
+    public const double ReachFadeM = 2.5;
+
+    /// <summary>How much of a slope's clamp applies <paramref name="fromEdge"/> metres out from the edge, for a slope of this reach.</summary>
+    public static double ReachWeight(double fromEdge, double reach)
+    {
+        double fade = Math.Min(ReachFadeM, reach * 0.5);
+        if (fromEdge <= reach - fade) return 1;
+        double t = Math.Clamp((reach - fromEdge) / fade, 0, 1);
+        return t * t * (3 - 2 * t);
+    }
 
     /// <summary>
     /// The visual clearance holds under a road, its sidewalks and corners, and fades out over this
@@ -36,7 +54,9 @@ public static partial class TerrainMeshBuilder
     {
         double c = clearance * blend.Clear[k];
         float lo = (float)(blend.Lo[k] - c), hi = (float)(blend.Hi[k] - c);
-        return ground < lo ? lo : ground > hi ? hi : ground;
+        float clamped = ground < lo ? lo : ground > hi ? hi : ground;
+        float w = blend.Weight[k];
+        return w >= 1f ? clamped : ground + (clamped - ground) * w;
     }
 
     /// <summary>Applies a blend to a full-resolution height map in place.</summary>
@@ -108,10 +128,13 @@ public static partial class TerrainMeshBuilder
         // 0 = full clearance: every pass that does not measure an edge distance (islands, walls)
         // keeps the old behaviour; the pool hands back old values otherwise
         Array.Clear(edgeDist, 0, n * n);
+        // how much of the clamp is released (1 - weight): 0 for every pass but a slope's outer reach
+        float[] release = floats.Rent(n * n);
+        Array.Clear(release, 0, n * n);
         byte[] seen = System.Buffers.ArrayPool<byte>.Shared.Rent(n * n);
         Array.Clear(seen, 0, n * n);
         var touched = new List<int>(16384);
-        var scratch = new Scratch(lo, hi, coreDist, edgeDist, seen, touched, n);
+        var scratch = new Scratch(lo, hi, coreDist, edgeDist, release, seen, touched, n);
 
         try
         {
@@ -169,6 +192,7 @@ public static partial class TerrainMeshBuilder
             var los = new List<float>(touched.Count);
             var his = new List<float>(touched.Count);
             var clears = new List<float>(touched.Count);
+            var weights = new List<float>(touched.Count);
             foreach (int idx in touched)
             {
                 float l = lo[idx], h = hi[idx];
@@ -181,8 +205,9 @@ public static partial class TerrainMeshBuilder
                 his.Add(h);
                 clears.Add(coreDist[idx] < float.PositiveInfinity ? 1f
                     : (float)Math.Max(0, 1 - edgeDist[idx] / ClearanceFadeM));
+                weights.Add(coreDist[idx] < float.PositiveInfinity ? 1f : 1f - release[idx]);
             }
-            return new RoadBlend(cells.ToArray(), los.ToArray(), his.ToArray(), clears.ToArray());
+            return new RoadBlend(cells.ToArray(), los.ToArray(), his.ToArray(), clears.ToArray(), weights.ToArray());
         }
         finally
         {
@@ -190,6 +215,7 @@ public static partial class TerrainMeshBuilder
             floats.Return(hi);
             floats.Return(coreDist);
             floats.Return(edgeDist);
+            floats.Return(release);
             System.Buffers.ArrayPool<byte>.Shared.Return(seen);
         }
     }
@@ -231,7 +257,7 @@ public static partial class TerrainMeshBuilder
         return result;
     }
 
-    private sealed record Scratch(float[] Lo, float[] Hi, float[] CoreDist, float[] EdgeDist, byte[] Seen, List<int> Touched, int N);
+    private sealed record Scratch(float[] Lo, float[] Hi, float[] CoreDist, float[] EdgeDist, float[] Release, byte[] Seen, List<int> Touched, int N);
 
     /// <summary>
     /// One segment's centreline, in lattice units (1 m), with its two edge offsets and, per side,
@@ -338,13 +364,14 @@ public static partial class TerrainMeshBuilder
         private void Strip(Scratch s, double ax, double az, double ay, double by, double ux, double uz,
             double len, double a0, double a1, bool startEnd, bool endEnd, double left, double right)
         {
-            float[] lo = s.Lo, hi = s.Hi, coreDist = s.CoreDist, edgeDist = s.EdgeDist;
+            float[] lo = s.Lo, hi = s.Hi, coreDist = s.CoreDist, edgeDist = s.EdgeDist, release = s.Release;
             byte[] seen = s.Seen;
             var touched = s.Touched;
             int n = s.N;
             double reach = _reach, spacing = ChunkFormat.SpacingM;
             double raiseLeft = _raiseLeft, raiseRight = _raiseRight, endEdge = _endEdge;
             double fill = RoadEmbankment.FillSlope, cut = RoadEmbankment.CutSlope;
+            double fadeFrom = reach - Math.Min(ReachFadeM, reach * 0.5);
             // right of the drawing direction, X east and Z south
             double rx = -uz, rz = ux;
             double rad = (Math.Max(left, right) + reach) / spacing;
@@ -396,9 +423,12 @@ public static partial class TerrainMeshBuilder
                         else if (dist >= coreDist[idx]) continue;
                         coreDist[idx] = (float)dist;
                         lo[idx] = hi[idx] = (float)y;
+                        release[idx] = 0;
                         continue;
                     }
                     float l = (float)(y - fill * fromEdge), h = (float)(y + cut * fromEdge);
+                    // the outer reach fades the clamp out (the weight is 1 over most of the slope)
+                    float rel = fromEdge <= fadeFrom ? 0f : (float)(1 - ReachWeight(fromEdge, reach));
                     if (seen[idx] == 0)
                     {
                         seen[idx] = 1;
@@ -407,11 +437,13 @@ public static partial class TerrainMeshBuilder
                         edgeDist[idx] = (float)fromEdge;
                         lo[idx] = l;
                         hi[idx] = h;
+                        release[idx] = rel;
                         continue;
                     }
                     if (coreDist[idx] < float.PositiveInfinity) continue;   // a slope never reaches under a road
                     if (l > lo[idx]) lo[idx] = l;
                     if (h < hi[idx]) hi[idx] = h;
+                    if (rel < release[idx]) release[idx] = rel;   // the strongest road's weight
                     if (fromEdge < edgeDist[idx]) edgeDist[idx] = (float)fromEdge;
                 }
             }
@@ -481,6 +513,7 @@ public static partial class TerrainMeshBuilder
                         if (s.Hi[idx] < s.Lo[idx]) s.Hi[idx] = s.Lo[idx];
                     }
                     s.EdgeDist[idx] = float.PositiveInfinity;   // no clearance: the ground is the roof
+                    s.Release[idx] = 0;
                 }
         }
     }
@@ -515,6 +548,7 @@ public static partial class TerrainMeshBuilder
                     if (s.Seen[idx] == 0) { s.Seen[idx] = 1; s.Touched.Add(idx); }
                     s.CoreDist[idx] = core ? 0f : float.PositiveInfinity;
                     s.EdgeDist[idx] = 0;   // under the surface: the full clearance
+                    s.Release[idx] = 0;
                     s.Lo[idx] = s.Hi[idx] = (float)(l0 * v[i0 + 1] + l1 * v[i1 + 1] + l2 * v[i2 + 1]);
                 }
         }
@@ -602,6 +636,7 @@ public static partial class TerrainMeshBuilder
                         {
                             float foot = (float)(fa + (fb - fa) * Math.Clamp(along / len, 0, 1));
                             s.Lo[idx] = s.Hi[idx] = foot;
+                            s.Release[idx] = 0;
                         }
                         else
                         {
@@ -628,6 +663,7 @@ public static partial class TerrainMeshBuilder
             else if (s.CoreDist[idx] < float.PositiveInfinity) return;   // a ribbon's own cell stays the ribbon's
             s.CoreDist[idx] = 0.5f;
             s.Lo[idx] = s.Hi[idx] = y;
+            s.Release[idx] = 0;
         });
 
     /// <summary>
@@ -683,6 +719,7 @@ public static partial class TerrainMeshBuilder
                     if (d > reach) continue;
                     double y = ay + (by - ay) * t;
                     float lo = (float)(y - fill * d), hi = (float)(y + cut * Math.Max(0, d - PadRimM));
+                    float rel = (float)(1 - ReachWeight(d, reach));
                     if (s.Seen[idx] == 0)
                     {
                         s.Seen[idx] = 1;
@@ -691,10 +728,12 @@ public static partial class TerrainMeshBuilder
                         s.EdgeDist[idx] = (float)d;
                         s.Lo[idx] = lo;
                         s.Hi[idx] = hi;
+                        s.Release[idx] = rel;
                         continue;
                     }
                     if (lo > s.Lo[idx]) s.Lo[idx] = lo;
                     if (hi < s.Hi[idx]) s.Hi[idx] = hi;
+                    if (rel < s.Release[idx]) s.Release[idx] = rel;
                     if (d < s.EdgeDist[idx]) s.EdgeDist[idx] = (float)d;
                 }
         }
@@ -747,10 +786,12 @@ public static partial class TerrainMeshBuilder
                 s.CoreDist[idx] = float.PositiveInfinity;
                 s.Lo[idx] = float.NegativeInfinity;
                 s.Hi[idx] = top;
+                s.Release[idx] = 0;
                 return;
             }
             if (s.CoreDist[idx] < float.PositiveInfinity) return;
             if (top < s.Hi[idx]) s.Hi[idx] = top;
+            s.Release[idx] = 0;
             if (s.Lo[idx] > s.Hi[idx]) s.Lo[idx] = s.Hi[idx];
         });
 

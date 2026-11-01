@@ -127,7 +127,7 @@ public static partial class Preprocessor
         // stage and the network stage after it
         string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
         bool coverOnly = false;
-        bool coarseOnly = false, horizonOnly = false, photosOnly = false;
+        bool coarseOnly = false, horizonOnly = false, photosOnly = false, townGroundOnly = false;
         // lake and river beds + the .water level layer (#298): standalone with --water, and after every
         // cover pass; --bathy points at the swissBATHY3D zips (without it every bed is synthetic)
         bool waterOnly = false;
@@ -155,6 +155,8 @@ public static partial class Preprocessor
         string? poisFile = null, boundariesGpkg = null, atlasCards = null;
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false, hashOnly = false;
+        // building pads graded into the tile heights between the building and the road extraction (#1419); --no-grade skips it
+        bool noGrade = false;
         string? franceBox = null;
         // the neighbours' terrain (#936, #965): their DEMs for the LV95 tiles swissALTI3D lacks, in a box (km).
         // --dem <grid>,<dir>[,<dz m>] is repeatable; --rgealti <dir> [--rgealti-dz m] is --dem lambert93,<dir>,<dz>
@@ -205,6 +207,7 @@ public static partial class Preprocessor
                 case "--features-only": featuresOnly = true; break;
                 case "--coarse": coarseOnly = true; break;
                 case "--horizon": horizonOnly = true; break;
+                case "--town-ground": townGroundOnly = true; break;
                 case "--water": waterOnly = true; break;
                 case "--landings": landingsOnly = true; break;
                 case "--tram-stops": tramStopsOnly = true; break;
@@ -280,6 +283,7 @@ public static partial class Preprocessor
                 case "--manifest-hash": hashOnly = true; break;
                 // no hashing after this pass (RunCoreAsync)
                 case "--no-hash": break;
+                case "--no-grade": noGrade = true; break;
                 default:
                     Console.Error.WriteLine($"Unknown argument: {args[i]}");
                     return 2;
@@ -415,6 +419,20 @@ public static partial class Preprocessor
         }
 
         // ---- horizon: one region-wide 100 m lattice, from the tiles already built ------------------
+        if (townGroundOnly)
+        {
+            // the town ground stage alone (#1419), again on a built region: undone, then solved on the roads and pads there
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--town-ground requires --out <chunk dir>");
+                return 2;
+            }
+            SetStage("town ground");
+            var all = TerrainManifest.FromJson(File.ReadAllText(Path.Combine(outDir, "manifest.json"))).Tiles.Select(t => t.Id).ToList();
+            string tdir = tempDir ?? outDir.TrimEnd('/', '\\') + "_temp";
+            int trc = TownGroundStage.Restore(outDir, tdir, all, jobs, ct);
+            return trc != 0 ? trc : TownGroundStage.Run(outDir, tdir, all, jobs, ct);
+        }
         if (horizonOnly)
         {
             if (outDir == null)
@@ -892,8 +910,38 @@ public static partial class Preprocessor
             // once (a junction on a batch seam needs both sides) and measures streets against the facades
             // (#119); cover masks trees off the network stage's final lines
             bool roads = tlmGpkg != null && !coverOnly;
+            // building pads (#1419): the buildings are seated on the raw heights, the pads are graded into the
+            // tiles afterwards, and only then are the roads draped, so they lie on the graded ground
+            bool grade = buildings != null && !noGrade;
+            var gradeTiles = ordered.Select(t => t.Id).ToList();
+            if (grade)
+            {
+                SetStage("grade");
+                // the town ground ran after the pads, so it is undone first
+                int rc = TownGroundStage.Restore(outDir!, tempDir!, gradeTiles, jobs, ct);
+                if (rc == 0) rc = GradeStage.Restore(outDir!, tempDir!, gradeTiles, jobs, ct);
+                if (rc != 0) return rc;
+            }
             if (roads)
             {
+                if (buildings != null)
+                {
+                    SetStage("buildings");
+                    for (int b = 0; b < batches; b++)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var batch = LoadBatch(b, out var slice);
+                        Console.WriteLine($"=== buildings, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+                        int rc = BuildingStage.Run(buildings, outDir!, batch);
+                        if (rc != 0) return rc;
+                    }
+                    if (grade)
+                    {
+                        SetStage("grade");
+                        int rc = GradeStage.Run(outDir!, tempDir!, gradeTiles, jobs, ct);
+                        if (rc != 0) return rc;
+                    }
+                }
                 SetStage("roads");
                 for (int b = 0; b < batches; b++)
                 {
@@ -902,14 +950,16 @@ public static partial class Preprocessor
                     Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
                     int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch, coverOverrides);
                     if (rc != 0) return rc;
-                    if (buildings != null)
-                    {
-                        rc = BuildingStage.Run(buildings, outDir!, batch);
-                        if (rc != 0) return rc;
-                    }
                 }
                 int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
                 if (nrc != 0) return nrc;
+                // the joint ground solve in towns (#1419): on the final roads (their blend) and the pads
+                if (grade)
+                {
+                    SetStage("town ground");
+                    int trc = TownGroundStage.Run(outDir!, tempDir!, gradeTiles, jobs, ct);
+                    if (trc != 0) return trc;
+                }
             }
 
             if (!doCover && ((buildingsGpkg == null && buildingsGdb.Count == 0) || roads)) return 0;
@@ -934,6 +984,12 @@ public static partial class Preprocessor
                     int rc = buildings == null ? 1 : BuildingStage.Run(buildings, outDir!, batch);
                     if (rc != 0) return rc;
                 }
+            }
+            if (grade && !roads)
+            {
+                SetStage("grade");
+                int grc = GradeStage.Run(outDir!, tempDir!, gradeTiles, jobs, ct);
+                if (grc != 0) return grc;
             }
             // the cover says where the water is, so the beds follow every cover pass (whole region: the
             // water bodies and their depths are region-wide)
