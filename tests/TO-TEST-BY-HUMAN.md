@@ -7,6 +7,16 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Buildings meet the ground ([#1417](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1417))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2597738,1119166` (Sion, a hillside door that gets a 3-step stoop); Lausanne `--at 2538476,1152508` (a 12 m plinth).
+
+- [ ] Walk up to the Sion door: the stoop's steps climb on foot (keyboard, then pad) up to the sill, no jump, no catching on a tread; walk off it back down.
+- [ ] A downhill house in Lausanne/Zermatt: no dark slot or daylight under its uphill-to-downhill walls, the plinth reads as a basement storey, in Cartoon and PS1.
+- [ ] Fly out over the building rings (strides 2, 4, 10, about 1-3 km): no sliver of daylight under a house at the ring change, and no footing poking out of the ground.
+- [ ] A door whose ground rises in front of it: the sill sits on a level landing, the door opens and you walk in with the interior floor at the sill.
+- [ ] Realistic style: the plinth wall and stoop show plain masonry, not a roof texture.
+
 ## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
 
 An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.
