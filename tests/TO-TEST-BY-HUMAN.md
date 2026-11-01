@@ -24,9 +24,17 @@ Needs tiles rebuilt with the grading stage (`docs/notes/tools/building-pads.md`;
 - [ ] Walk round a house on a slope in Sion and Zermatt: the ground is level for a few metres round it with a soft bank beyond, no step or crease where the apron ends, no hole between the wall and the ground.
 - [ ] Walk up to a few front doors on a hillside (Sion `--at 2597738,1119166`, Lausanne `--at 2538232,1152903`): the doorstep is level with the ground, the stoop shorter than before, you walk in without a jump.
 - [ ] A terrace of houses and a street at Lausanne (`--at 2538322,1152535`): the pads of neighbours join without a ledge between them, the road beside is not buried by a bank.
-- [ ] Drive and walk the strip between a road and the houses along it: still bumpy or steep in places (this phase only adds the probe, the joint ground solve is next); say where.
 - [ ] Fly out to 1, 2 and 3 km over the same hillside: doors and the houses' feet look the same at the ring changes, no door floating or sunk at 1-2 km.
 - [ ] A building across a tile border (Sion, Lausanne tile edges): no seam in the ground at the border, the pad is continuous.
+
+## Terrain graded to the buildings, phase 2 ([#1419](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1419))
+
+The same rebuilt tiles, with the town ground stage (`docs/notes/tools/town-ground.md`).
+
+- [ ] Walk a Lausanne street to a front door (`--at 2538322,1152535`, `--at 2538232,1152903`): the ground from the sidewalk to the wall is smooth, no ledge where the old pad bank was, the doorstep is level and you walk in without a jump.
+- [ ] Drive the same streets and pull onto the verge: no bump where the town ground meets the road edge, the car does not hop at the sidewalk.
+- [ ] Cartoon: a rural road on a hillside (above Sion, Zermatt valley road): the road's shoulders blend into the slope with no crease or step at the end of the cut/fill band, and the long profile is smooth to drive (no hummocks every few metres).
+- [ ] A Lausanne street on a steep slope: say where the ground between road and houses is still steep (the solve keeps 2 m round each house at the pad level).
 
 ## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
 

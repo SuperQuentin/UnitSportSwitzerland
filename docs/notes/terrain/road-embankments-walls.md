@@ -5,7 +5,8 @@
   plus that side's sidewalk and verge from #119). Past the edge the ground is clamped between a 2:3
   fill slope below and a 1:1 cut slope above, out to 7 m (3 m for tracks, paths, rail, squares).
   Ground already inside that band does not move, so a road on gentle ground changes nothing beside
-  it. All numbers live in `tools/TerrainFormat/RoadEmbankment.cs`, shared by build and runtime.
+  it. Over the last 2.5 m of the reach (half of a 3 m one) the clamp fades out with a smoothstep
+  (`RoadBlend.Weight`, #1419 `town-ground`), so the band meets the untouched ground without a step. All numbers live in `tools/TerrainFormat/RoadEmbankment.cs`, shared by build and runtime.
 - **Blend** (`TerrainMeshBuilder.RoadBlend.cs`, Godot-free so BlendCheck compiles it): a cell holds
   a band `[Lo, Hi]` and the ground is clamped into it, one sparse pass for collision (clearance 0)
   and the visual mesh (0.35 m). Under a road `Lo = Hi` = the centreline at the cell's foot, nearest

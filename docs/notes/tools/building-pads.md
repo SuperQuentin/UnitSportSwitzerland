@@ -15,7 +15,8 @@
 - **Outline**: wall triangles' edges on the base (both ends within 5 cm of `MinY`); the loops must close (every endpoint twice) for
   the even-odd inside test, else the plan of the roof/floor triangles tells inside. Under-construction sites get no pad.
 - **Order** (`Preprocessor.RunFeatures`): `Restore` (raw heights back) -> buildings extracted for every batch (seated on raw
-  heights) -> `GradeStage.Run` -> roads per batch (draped on the graded grids) -> network -> cover -> water. `--no-grade` skips
+  heights) -> `GradeStage.Run` -> roads per batch (draped on the graded grids) -> network -> town ground
+  (`town-ground`, undone before the pads) -> cover -> water. `--no-grade` skips
   Restore and Run (the buildings then run first, then the roads). A cover-only or tlm-less pass grades after its building loop.
 - **Tile edges**: a pad reaches into the neighbour. Each tile is graded from the footprints of its own and its 8 neighbours'
   `.bldg` in one global order, from the original height of the shared vertex (bit-identical in both tiles), and the requested

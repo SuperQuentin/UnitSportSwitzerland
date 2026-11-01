@@ -5,8 +5,8 @@
 
 The preprocessor seats every solid rigidly on the median ground of its footprint and never flattens the
 terrain, so on a slope a base floats or sinks and a door sill is one point against ground that moves.
-Two game-side fixes and a probe; the terrain-side fixes are #1419 (below: outline-sampled base, building pads; the joint
-town ground solve and the smoothed road profile are its next phase).
+Two game-side fixes and a probe; the terrain-side fixes are #1419 (below: outline-sampled base, building pads; then the
+joint town ground solve, the smoothed road profile and the road blend's reach fade, `tools/town-ground`).
 
 ## The probe
 
@@ -95,6 +95,29 @@ unchanged preprocessor.) What is left at stride 10: doors more than 1 m off (a 1
 and a raise past `MaxLandingRaise` is not tried); at stride 1 the 1-3 and 3-10 m gaps of Lausanne's steep streets (the pad is
 capped at 1.5 m, plinths take the rest). **The strip got worse, not better** (pad banks and the rest are for the next phase: the
 joint ground solve in towns).
+
+## Phase 2: town ground, road profiles, reach fade (#1419; `tools/town-ground`)
+
+Same three tiles and build path (`--features-only`, then `--groundcheck`); strip = lattice steps over 0.3 m / cells over 45 deg
+at stride 1; gaps = base pieces over 5 cm (gapped buildings); doors buried/floating at strides 1 / 2 / 4 / 10 (read on the ring).
+
+| Tile | Step | Strip steps / > 45 deg | Gaps | Doors 1 / 2 / 4 / 10 |
+|---|---|---|---|---|
+| Sion | #1418 build | 30,911 / 5,791 | 447 (82) | 2/2, 12/12, 30/37, 102/74 (as planned) |
+| | phase 1 | 33,135 / 6,293 | 39 (11) | 1/0, 0/0, 2/1, 23/8 |
+| | phase 2 | **28,199 / 2,854** | 39 (11) | 1/0, 0/0, 2/2, 25/12 |
+| Lausanne | #1418 build | 68,494 / 16,136 | 6,980 (217) | 9/11, 51/70, 117/190, 506/531 |
+| | phase 1 | 99,979 / 19,277 | 2,287 (118) | 3/8, 1/7, 13/15, 349/180 |
+| | phase 2 | 78,926 / **12,655** | 2,291 (119) | 3/8, 2/7, 11/17, 350/181 |
+| Zermatt | #1418 build | 69,416 / 8,857 | 1,138 (174) | 4/5, 42/57, 85/118, 198/206 |
+| | phase 1 | 74,580 / 11,066 | 113 (31) | 0/1, 0/3, 1/7, 61/47 |
+| | phase 2 | **59,202 / 3,920** | 113 (31) | 0/1, 0/3, 4/9, 53/51 |
+
+Lausanne's strip steps stay above the #1418 build: the footprint and its kept 2 m shoulder are half of that tile, at pad
+heights (the shoulder sweep is in `town-ground`; with none it reaches 65,751 but gaps and doors regress). Worst strip step
+Lausanne 17.5 -> 11.2 m. BlendCheck `--roads` over the 27 tiles: unhidden drops over 3 m 11,254 -> 9,655, walls 740 -> 742.
+`--roadcheck --embankments` passes on the three tiles (Sion failed on phase 1, the known Path sample). Logs:
+`test_output/grading/gc_P2.log`, `build_P2.log` of the worktree; two rebuilds byte-identical.
 
 ## Far-ring doors
 
