@@ -16,8 +16,9 @@ namespace UnitSport.Tools.Preprocessor;
 /// <c>UrbanField</c> weight above zero). They get the harmonic fill of the constraints and of the untouched
 /// ground round them (Laplace, red-black SOR from the original heights), then the change fades to nothing
 /// with the urban weight and over the outer <see cref="FadeM"/> of the reach, and is capped at <see cref="Cap"/>
-/// (the footings and plinths cover the rest). A road cell is written at its visual height (the blend's
-/// clearance under it), so the runtime blend is a no-op on the mesh there and only lifts the collision.
+/// (the footings and plinths cover the rest). A road cell keeps its stored height: the runtime blend sets the
+/// ground there anyway (the collision at the road, the mesh the clearance under it), and a door beside a
+/// sidewalk reads the stored heights (writing the visual height there buried and floated doors).
 /// </para>
 ///
 /// <para>
@@ -40,7 +41,7 @@ public static class TownGround
     public const double Cap = 2;
 
     /// <summary>Metres past a footprint's outline the (pad) ground is kept: the door reads it 0.8 m out.</summary>
-    public const double FootprintShoulder = 1.5;
+    public const double FootprintShoulder = 2.0;
 
     /// <summary>Red-black SOR sweeps; the free regions are at most ~2 Reach across, which this resolves to millimetres.</summary>
     public const int Iterations = 60;
@@ -57,7 +58,7 @@ public static class TownGround
         Outside,
         /// <summary>A candidate: free if it is near a road or a footprint and in town.</summary>
         Free,
-        /// <summary>A road cell: fixed at <see cref="Window.Fixed"/>, written as <see cref="Window.Write"/>.</summary>
+        /// <summary>A road cell: fixed at <see cref="Window.Fixed"/> in the solve, its stored height not changed.</summary>
         Road,
         /// <summary>Kept at its height (a wall, a bridge, a stream).</summary>
         Keep,
@@ -71,13 +72,11 @@ public static class TownGround
         public int Size { get; } = size;
         public float[] H0 { get; } = new float[size * size];
         public Kind[] Kinds { get; } = new Kind[size * size];
-        /// <summary>A road cell's height in the solve (the collision floor).</summary>
+        /// <summary>A road cell's height in the solve (the collision floor the runtime blend leaves there).</summary>
         public float[] Fixed { get; } = new float[size * size];
-        /// <summary>A road cell's height written into the tile (the visual ground under the ribbon).</summary>
-        public float[] Write { get; } = new float[size * size];
     }
 
-    public sealed record Result(float[] Heights, int Free, int Roads, float Residual);
+    public sealed record Result(float[] Heights, int Free, float Residual);
 
     private static double Smoothstep(double t)
     {
@@ -87,7 +86,7 @@ public static class TownGround
 
     /// <summary>
     /// The solved heights of the window (the original where nothing changes). <paramref name="urban"/> gives the
-    /// urban weight (0 rural .. 1 town) at a window index; it is called for road cells and candidates in reach only.
+    /// urban weight (0 rural .. 1 town) at a window index; it is called for the candidates in reach only.
     /// </summary>
     public static Result Solve(Window win, Func<int, double> urban)
     {
@@ -100,7 +99,7 @@ public static class TownGround
         bool any = false;
         for (int i = 0; i < count; i++)
             if (kinds[i] is Kind.Road or Kind.Footprint) { sites[i] = true; any = true; }
-        if (!any) return new Result(result, 0, 0, 0);
+        if (!any) return new Result(result, 0, 0);
         var dist = new float[count];
         DistanceTransform.Run(sites, w, w, dist);
 
@@ -109,7 +108,6 @@ public static class TownGround
         var weight = new float[count];
         var red = new List<int>();
         var black = new List<int>();
-        int roads = 0;
         for (int i = 0; i < count; i++)
         {
             switch (kinds[i])
@@ -119,15 +117,6 @@ public static class TownGround
                 default: v[i] = h0[i]; break;
             }
             int r = i / w, c = i - r * w;
-            if (kinds[i] == Kind.Road)
-            {
-                double u = urban(i);
-                if (u <= 1e-3) continue;
-                double d = Math.Clamp(u * (win.Write[i] - h0[i]), -Cap, Cap);
-                result[i] = (float)(h0[i] + d);
-                roads++;
-                continue;
-            }
             if (kinds[i] != Kind.Free || dist[i] >= Reach) continue;
             // a cell on the window's rim or next to no data stays put
             if (r == 0 || c == 0 || r == w - 1 || c == w - 1
@@ -170,6 +159,6 @@ public static class TownGround
                 double d = Math.Clamp(weight[i] * (v[i] - h0[i]), -Cap, Cap);
                 result[i] = (float)(h0[i] + d);
             }
-        return new Result(result, redA.Length + blackA.Length, roads, residual);
+        return new Result(result, redA.Length + blackA.Length, residual);
     }
 }

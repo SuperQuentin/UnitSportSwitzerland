@@ -42,7 +42,7 @@ public static class TownGroundStage
     {
         public required ushort[] H0;
         public required int[] RoadCells;      // tile-local indices
-        public required float[] RoadFixed, RoadWrite;
+        public required float[] RoadFixed;
         public required List<long> Keep, Footprint;   // global keys
     }
 
@@ -157,7 +157,6 @@ public static class TownGroundStage
 
         var roadCells = new List<int>();
         var roadFixed = new List<float>();
-        var roadWrite = new List<float>();
         var keep = new List<long>();
         long x0 = X0(id), y0 = Y0(id);
         string roadPath = Path.Combine(outDir, RoadFormat.FileName(id));
@@ -175,7 +174,6 @@ public static class TownGroundStage
                 {
                     roadCells.Add(cell);
                     roadFixed.Add(lo);
-                    roadWrite.Add((float)(lo - TerrainMeshBuilder.VisualBlendClearance * blend.Clear[k]));
                 }
                 else if (!float.IsFinite(lo) || !float.IsFinite(hi))
                     keep.Add(Key(x0 + cell % n, y0 + cell / n));   // one-sided: over a bore, under an island
@@ -211,7 +209,7 @@ public static class TownGroundStage
         }
         return new Inputs
         {
-            H0 = heights, RoadCells = roadCells.ToArray(), RoadFixed = roadFixed.ToArray(), RoadWrite = roadWrite.ToArray(),
+            H0 = heights, RoadCells = roadCells.ToArray(), RoadFixed = roadFixed.ToArray(),
             Keep = keep, Footprint = footprint,
         };
     }
@@ -297,7 +295,6 @@ public static class TownGroundStage
                 taken[wi] = true;
                 kinds[wi] = TownGround.Kind.Road;
                 win.Fixed[wi] = inp.RoadFixed[k];
-                win.Write[wi] = inp.RoadWrite[k];
                 anyRoad = true;
             }
         }

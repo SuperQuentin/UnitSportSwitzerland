@@ -69,7 +69,6 @@ public class TownGroundTests
                 {
                     win.Kinds[i] = TownGround.Kind.Road;
                     win.Fixed[i] = (float)(100 + 0.02 * 500 + 0.001 * x);
-                    win.Write[i] = win.Fixed[i] - 0.35f;
                 }
                 else if (x >= 990 && x <= 1010 && y >= 515 && y <= 530)
                 {
@@ -91,8 +90,8 @@ public class TownGroundTests
         Assert.True(res.Free > 0);
         Assert.True(res.Residual < 0.01f);
         int At(int x, int y) => (y + m) * size + x + m;
-        // a road cell is written at its visual height, a footprint keeps its own
-        Assert.Equal(win.Write[At(300, 500)], res.Heights[At(300, 500)], 4);
+        // a road cell and a footprint keep their stored heights (the runtime blend sets the road's)
+        Assert.Equal(win.H0[At(300, 500)], res.Heights[At(300, 500)]);
         Assert.Equal(112f, res.Heights[At(1000, 520)]);
         // between the road (110.3..111.3) and the block (112) the fill is smooth: no lattice step over 0.3 m
         for (int y = 507; y < 515; y++)
