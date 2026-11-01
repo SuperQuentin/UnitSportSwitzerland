@@ -427,6 +427,8 @@
     <Compile Include="..\..\src\Terrain\TerrainMeshBuilder.RoadBlend.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- building pads graded into the tile heights (#1419) -->
     <Compile Include="..\..\tools\TerrainPreprocessor\BuildingPad.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <!-- the smoothed road profile and the joint town ground solve (#1419, phase 2) -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\RoadProfile.cs;..\..\tools\TerrainPreprocessor\TownGround.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the road-to-facade strip of the ground check (#1419) -->
     <Compile Include="..\..\src\Terrain\GroundStrip.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- forklift pallets (#583): the load byte, the ids and the fork rule, against the forks' numbers;

@@ -31,14 +31,17 @@ namespace UnitSport.Tools.Preprocessor;
 /// </summary>
 public static class GradeStage
 {
-    private static string SidecarPath(string tempDir, TileId id) => Path.Combine(tempDir, "grade", $"{id.E}_{id.N}.grd");
+    /// <summary>The sidecar directory of the pads; <see cref="TownGroundStage"/> keeps its own beside it.</summary>
+    internal const string PadDir = "grade";
 
-    private readonly record struct Change(int Cell, ushort Original, ushort Graded);
+    internal static string SidecarPath(string tempDir, TileId id, string sub = PadDir) => Path.Combine(tempDir, sub, $"{id.E}_{id.N}.grd");
 
-    private static List<Change> ReadSidecar(string tempDir, TileId id)
+    internal readonly record struct Change(int Cell, ushort Original, ushort Graded);
+
+    internal static List<Change> ReadSidecar(string tempDir, TileId id, string sub = PadDir)
     {
         var list = new List<Change>();
-        string path = SidecarPath(tempDir, id);
+        string path = SidecarPath(tempDir, id, sub);
         if (!File.Exists(path)) return list;
         using var r = new BinaryReader(File.OpenRead(path));
         int count = r.ReadInt32();
@@ -46,9 +49,9 @@ public static class GradeStage
         return list;
     }
 
-    private static void WriteSidecar(string tempDir, TileId id, List<Change> changes)
+    internal static void WriteSidecar(string tempDir, TileId id, List<Change> changes, string sub = PadDir)
     {
-        string path = SidecarPath(tempDir, id);
+        string path = SidecarPath(tempDir, id, sub);
         if (changes.Count == 0) { if (File.Exists(path)) File.Delete(path); return; }
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         AtomicFile.Write(path, s =>
@@ -60,7 +63,7 @@ public static class GradeStage
     }
 
     /// <summary>Puts the original of every cell an earlier run graded and nothing has changed since back.</summary>
-    private static int Undo(ushort[] heights, List<Change> changes)
+    internal static int Undo(ushort[] heights, List<Change> changes)
     {
         int n = 0;
         foreach (var c in changes)
@@ -68,28 +71,28 @@ public static class GradeStage
         return n;
     }
 
-    private static ChunkGrid GridOf(TileId id, ushort[] heights)
+    internal static ChunkGrid GridOf(TileId id, ushort[] heights)
     {
         ushort qMin = ushort.MaxValue, qMax = 0;
         foreach (ushort q in heights) { if (q < qMin) qMin = q; if (q > qMax) qMax = q; }
         return new ChunkGrid(id, heights, (float)ChunkFormat.Dequantize(qMin), (float)ChunkFormat.Dequantize(qMax));
     }
 
-    private static void WriteTile(string outDir, ChunkGrid grid)
+    internal static void WriteTile(string outDir, ChunkGrid grid)
     {
         AtomicFile.Write(Path.Combine(outDir, ChunkFormat.ChunkFileName(grid.Id)), s => ChunkCodec.Encode(grid, s));
         AtomicFile.Write(Path.Combine(outDir, ChunkFormat.CoarseFileName(grid.Id)),
             s => ChunkCodec.Encode(grid.Decimate(ChunkFormat.CoarseStride), s));
     }
 
-    private static ChunkGrid ReadTile(string outDir, TileId id)
+    internal static ChunkGrid ReadTile(string outDir, TileId id)
     {
         using var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)));
         return ChunkCodec.Decode(fs);
     }
 
     /// <summary>The tiles and their neighbours that exist: a pad reaches into the next tile, so both are graded together.</summary>
-    private static HashSet<TileId> ScopeOf(string outDir, IReadOnlyCollection<TileId> tiles)
+    internal static HashSet<TileId> ScopeOf(string outDir, IReadOnlyCollection<TileId> tiles)
     {
         var manifest = TerrainManifest.FromJson(File.ReadAllText(Path.Combine(outDir, "manifest.json")));
         var region = manifest.Tiles.Select(t => t.Id).ToHashSet();
@@ -108,24 +111,25 @@ public static class GradeStage
     /// Undoes the grading of the tiles that have a record, so the next extraction seats buildings on
     /// the raw heights. The coarse companions, the manifest and the horizon follow in <see cref="Run"/>.
     /// </summary>
-    public static int Restore(string outDir, string tempDir, IReadOnlyCollection<TileId> tiles, int jobs, CancellationToken ct = default)
+    public static int Restore(string outDir, string tempDir, IReadOnlyCollection<TileId> tiles, int jobs, CancellationToken ct = default,
+        string sub = PadDir)
     {
-        string dir = Path.Combine(tempDir, "grade");
+        string dir = Path.Combine(tempDir, sub);
         if (!Directory.Exists(dir)) return 0;
         var scope = ScopeOf(outDir, tiles);
         int restored = 0, cells = 0;
         Parallel.ForEach(scope, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, id =>
         {
-            if (!File.Exists(SidecarPath(tempDir, id)) || !File.Exists(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)))) return;
+            if (!File.Exists(SidecarPath(tempDir, id, sub)) || !File.Exists(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)))) return;
             var grid = ReadTile(outDir, id);
             var heights = (ushort[])grid.Heights.Clone();
-            int n = Undo(heights, ReadSidecar(tempDir, id));
+            int n = Undo(heights, ReadSidecar(tempDir, id, sub));
             if (n == 0) return;
             AtomicFile.Write(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)), s => ChunkCodec.Encode(GridOf(id, heights), s));
             Interlocked.Increment(ref restored);
             Interlocked.Add(ref cells, n);
         });
-        if (restored > 0) Console.WriteLine($"Grade: restored the raw heights of {restored} tiles ({cells:N0} cells) before seating the buildings");
+        if (restored > 0) Console.WriteLine($"Grade ({sub}): restored the heights of {restored} tiles ({cells:N0} cells) before seating the buildings");
         return 0;
     }
 
