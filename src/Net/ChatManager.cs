@@ -651,6 +651,13 @@ public partial class ChatManager : Node
                 Show(Adventure.Alcohol.AlcoholService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "Alcohol needs the Adventure layer.", ChatKind.Private);
                 return;
 
+            case "birthday":
+                // offline (#1423): only this player; their day, or when it is
+                Show(Occasions.Birthdays.MyBirthday.IsToday ? Occasions.Birthdays.MyBirthday.Greeting(GameSettings.Current.PlayerName)!
+                    : Occasions.Birthdays.MyBirthday.Date.IsSet ? "It is not your birthday today." : "Enter your birthday on the Account page, from the title screen.",
+                    ChatKind.Private);
+                return;
+
             case "rope" or "fondue":
                 Show(Adventure.Together.TogetherService.Instance?.Command(Adventure.AdventureService.LocalPeer, verb, rest) is { } said
                     ? said.Length > 0 ? said : "Asked." : "Playing together needs the Adventure layer.", ChatKind.Private);
@@ -1051,6 +1058,11 @@ public partial class ChatManager : Node
             case "alcohol":
                 if (Adventure.Alcohol.AlcoholService.Instance is not { } alcohol) ReplyTo(sender, "Alcohol is not available here.", ChatKind.Error);
                 else ReplyTo(sender, alcohol.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "birthday":
+                // who celebrates today, and the wishes of one's own (#1423)
+                ReplyTo(sender, Occasions.Birthdays.BirthdayService.Server?.Command(sender) ?? "Birthdays are not kept here.", ChatKind.Private);
                 return;
             case "rope" or "fondue":
                 if (Adventure.Together.TogetherService.Instance is not { } together) ReplyTo(sender, "Playing together is not available here.", ChatKind.Error);

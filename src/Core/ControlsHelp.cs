@@ -87,6 +87,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Festivals: the Älplerfest's stone put (#1269)", new Row[]
         {
             new("Put the stone at its ground (an open Älplerfest): lift it", PlayerInput.InteractMount),
+            new("A birthday (#1423): look at a celebrant to wish them a happy birthday; at a birthday cake, take a slice", PlayerInput.InteractMount),
             new("Lift: hold, let go on the meter's peak; then once on each beat of the drum, the last is the push (look up to about 40 degrees)", PlayerInput.UseItem),
             new("Another stone while you are lifting it", PlayerInput.Jump),
         }),

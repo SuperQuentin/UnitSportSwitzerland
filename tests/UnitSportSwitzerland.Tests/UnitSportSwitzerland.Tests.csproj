@@ -289,6 +289,8 @@
     <!-- UFO sightings and the herds they beam up (#863): schedule, herds, cows, paths; pure -->
     <Compile Include="..\..\src\Occasions\OccasionWeekdays.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\UfoSighting.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- player birthdays (#1423): the day, the age, the gift, the lines; pure -->
+    <Compile Include="..\..\src\Occasions\Birthdays\BirthdayRules.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the festival framework (#1269): definition, calendar, sites, Batzen book and party board; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\FestivalDef.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCalendar.cs" Link="Game\Festivals\%(Filename)%(Extension)" />

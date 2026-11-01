@@ -624,9 +624,20 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Firework:
-                // a box of the 1 August stand's fireworks (#1355): the server decides, the box is used up when it may be lit
-                if (Occasions.Festivals.August1.August1Game.TryLight(player, out string? why)) _inventory.TakeOne(slot);
+                // a birthday rocket (#1423): only on the player's birthday, the server keeps the count; else a box of the 1 August
+                // stand's fireworks (#1355): the server decides, the box is used up when it may be lit
+                if (def.Id == ItemId.BirthdayRocket)
+                {
+                    string? notNow = "Not now.";
+                    if (Occasions.Birthdays.BirthdayService.Instance is { } birthdays && birthdays.TryLight(player, out notNow)) _inventory.TakeOne(slot);
+                    else _ui.Toast(notNow ?? "Not now.");
+                }
+                else if (Occasions.Festivals.August1.August1Game.TryLight(player, out string? why)) _inventory.TakeOne(slot);
                 else _ui.Toast(why ?? "Not now.");
+                break;
+
+            case ItemUse.Open:
+                OpenGift(player, slot);
                 break;
 
             case ItemUse.Photo:
@@ -1294,8 +1305,10 @@ public partial class ItemController : Node
             if (IsInstanceValid(player))
             {
                 var (e, n) = _origin.ToLv95(player.GlobalPosition);
+                // by a birthday cake (#1423), the birthday frame
+                bool party = Occasions.Birthdays.BirthdayService.Instance?.CakeNear(player.GlobalPosition) == true;
                 photo = PhotoStore.Save(image, e, n, player.GlobalPosition.Y, _focalMm, path,
-                    Adventure.Rewards.RewardPhotos.SpotFor(player, player.Camera, FovFromFocal(_focalMm)));
+                    Adventure.Rewards.RewardPhotos.SpotFor(player, player.Camera, FovFromFocal(_focalMm)), party);
             }
         }
         catch (Exception e)
@@ -1528,6 +1541,29 @@ public partial class ItemController : Node
                 _ui.Toast(spec.Done);
             });
         });
+    }
+
+    /// <summary>
+    /// Opens a birthday gift (#1423): the party hat, the year's collectible (<see cref="ItemDefs.BirthdayCollectibles"/>), a cake, the
+    /// rockets and the cash, into the pack (what does not fit falls at your feet); confetti for everyone near.
+    /// </summary>
+    private void OpenGift(FootPlayer player, int slot)
+    {
+        var stack = _inventory[slot];
+        if (stack.Id != ItemId.BirthdayGift) return;
+        int year = int.TryParse(stack.Data, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int y)
+            ? y : Core.Calendar.Today.Year;
+        _inventory.TakeOne(slot);
+        var hat = ItemDefs.BirthdayCollectibles[Occasions.Birthdays.BirthdayRules.CollectibleIndex(year, ItemDefs.BirthdayCollectibles.Length)];
+        Give(new ItemStack(hat, 1));
+        Give(new ItemStack(ItemId.PartyHat, 1));
+        Give(new ItemStack(ItemId.BirthdayCake, 1));
+        Give(new ItemStack(ItemId.BirthdayRocket, Occasions.Birthdays.BirthdayRules.ShowsPerDay));
+        _inventory.Add(ItemId.Francs, Occasions.Birthdays.BirthdayRules.GiftCash);
+        Kick(player);
+        ItemEvents.Instance?.Send(ItemEventKind.BirthdayWish, player.GlobalPosition + Vector3.Up * 1.9f, Vector3.Zero, "gift");
+        _ui.Toast($"You unwrap your gift: a {ItemDefs.Get(hat)?.Name.ToLowerInvariant()} ({year}'s collectible), a party hat, a cake, "
+            + $"{Occasions.Birthdays.BirthdayRules.ShowsPerDay} rockets and CHF {Occasions.Birthdays.BirthdayRules.GiftCash}.");
     }
 
     /// <summary>Takes back a placed object (<paramref name="aim"/> is a pick-up): the flag or the bench comes back to the pack, a fire is spent.</summary>

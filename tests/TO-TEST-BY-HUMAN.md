@@ -7,6 +7,21 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Player birthdays ([#1423](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1423))
+
+Set your birthday to today on the Account page (title screen, the account button), with a year and "Let other players see it" on.
+
+- [ ] The Account page's Birthday row: pick a day, a month, a year by mouse, by pad and by VR laser; "31 April" says it has no 31st; Clear empties it.
+- [ ] The title screen: "Happy Nth birthday, <name>!" under the account name, in amber; the profile picture wears the party hat, its tip not cut off.
+- [ ] Signed in: set the date, sign out, sign in on another machine (or after deleting the birthday fields in `settings.json`) → the date comes back from the account.
+- [ ] In the world: the party hat on your head (third person); the gift in the pack with a greeting; Open it → a collectible hat, a party hat, a cake, 3 rockets, CHF 30, paper over your head.
+- [ ] Wear each collectible hat (and see `--models,test_output/models`, Headwear) → none clips the face or floats; hair under the propeller cap is hidden.
+- [ ] Set the cake on a restaurant table (seated and standing), on a terrace table and on grass → it sits on the top; E takes slices, the cake loses one each time; gone after 8.
+- [ ] A Polaroid and a phone selfie by the cake → the print has confetti on the border and bunting at the bottom.
+- [ ] Light a rocket at night → a minute of fireworks overhead, the finale of rings; a second rocket at once is refused and kept.
+- [ ] Two players online, the server on today's date: the joining celebrant's chat line with the age; the other player looks at them → "Wish <name> a happy birthday" on E/Y; the wish → paper and chime for both, the celebrant's toast counts the wishes; a second wish is not offered; `/birthday` lists them.
+- [ ] A server with bots free-roaming: a bot within 40 m walks up, wishes you, waves.
+
 ## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
 
 An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.

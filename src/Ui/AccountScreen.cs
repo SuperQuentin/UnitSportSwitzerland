@@ -41,6 +41,7 @@ public partial class AccountScreen : Screen
         var (scroll, rows) = UiKit.ScrollPage(4);
         body.AddChild(scroll);
         AccountPage.Fill(rows);
+        BirthdayPage.Fill(rows);
 
         Show();
         Account.Changed += Show;

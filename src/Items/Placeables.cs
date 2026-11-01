@@ -27,6 +27,9 @@ public static class Placeables
         // the Adventure's travel flag (#1227): planted like the Swiss flag; travel to it is the navigation plan's (#1226)
         new(ItemId.TravelFlag, PlacedKind.TravelFlag, "plant your travel flag", "Travel flag planted.", "Too steep to plant a flag.", 0.6f,
             ItemDefs.PlantedTravelFlagMesh, true),
+        // a birthday cake (#1423): on a table or any flat ground; the slices are Occasions.Birthdays.BirthdayService's
+        new(ItemId.BirthdayCake, PlacedKind.BirthdayCake, "set the cake down", "Cake set down: everyone near can take a slice.",
+            "Too steep for a cake.", 0.9f, () => Occasions.Birthdays.BirthdayMeshes.Cake(Occasions.Birthdays.BirthdayRules.CakeSlices), false),
     };
 
     public static Placeable? ForItem(ItemId id) => All.FirstOrDefault(p => p.Item == id);

@@ -30,6 +30,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Occasions.Birthdays.BirthdayService? _birthdays;
     private World.TrafficGenerators? _trafficEndpoints;
     private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
@@ -372,6 +373,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // player birthdays (#1423): who celebrates today, the wishes, the cakes' slices, the birthday fireworks
+        _birthdays = Occasions.Birthdays.BirthdayService.Create(this, origin, server: true, networked: true);
+        _birthdays.BodyOf = peer => _players?.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer));
+        _birthdays.NameOf = peer => _players?.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer)) is { Bot: true } bot
+            ? bot.BotName.Length > 0 ? bot.BotName : "Bot" : _chat.NameOfPeer(peer);
+        _birthdays.Chat = _chat;
         // traffic endpoints (#971): admins set them, every client runs them on its own traffic
         _trafficEndpoints = World.TrafficGenerators.Create(this, server: true);
         _trafficEndpoints.IsAdmin = _chat.IsAdminPeer;
@@ -721,6 +728,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Farming.Herds.Instance?.SendTo(id);
         Occasions.UfoSightings.Instance?.SendTo(id);
         _placed?.SendTo(id);
+        _birthdays?.SendTo(id);
         _trafficEndpoints?.SendTo(id);
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
@@ -753,6 +761,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Adventure.Rewards.RewardService.Instance?.PeerLeft(id);
         Adventure.Navigation.AdventureTravel.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
+        _birthdays?.PeerLeft(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);

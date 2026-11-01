@@ -1033,6 +1033,8 @@ src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
 src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
 tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Birthdays/     quick  --birthdaycheck --date 2026-11-01 --birthday 01-11-1996 --birthday-public --world fixture --chunks fixture:flat --systems ui,physics,occasions
+src/Occasions/Birthdays/     net    tools/birthdaynetcheck.sh
 src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
 tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
 src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
