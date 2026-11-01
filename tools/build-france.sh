@@ -42,29 +42,13 @@ PIDFILE=$NAS_ROOT/terrain_chunks_france.pid
 DEM=$NAS_ROOT/data/france/rgealti
 PUBLISH=test_output/build-france/publish
 
-nas() { ssh -o BatchMode=yes -o ConnectTimeout=15 "$NAS" "$@"; }
-
-publish() {
-  echo "== dotnet publish linux-x64 (self-contained)"
-  dotnet publish tools/TerrainPreprocessor/TerrainPreprocessor.csproj -c Release -r linux-x64 --self-contained \
-    -p:DebugType=none -o "$PUBLISH" -v q -nologo
-  local size; size=$(du -sh "$PUBLISH" | cut -f1)
-  echo "== copy $size to $NAS:$BIN_DIR"
-  # tar over ssh: one stream, not thousands of scp round trips; the old files stay, the new ones overwrite
-  nas "mkdir -p '$BIN_DIR'"
-  (cd "$PUBLISH" && tar -cf - *) | nas "tar -C '$BIN_DIR' --no-overwrite-dir --no-same-owner --no-same-permissions -m -xf - && chmod +x '$BIN_DIR/TerrainPreprocessor' 2>/dev/null; test -x '$BIN_DIR/TerrainPreprocessor'"
-  echo "== published"
-}
-
-alive() { nas "test -f '$PIDFILE' && kill -0 \$(cat '$PIDFILE') 2>/dev/null"; }
+. tools/lib/nas.sh
 
 # the command line shared by the full run and the tests: the NAS side, run through bash (its login shell is zsh)
 run_args() { # out temp [extra...]
   local out=$1 temp=$2; shift 2
   echo "--dem lambert93,$DEM --height-format wide --dem-min-probes $MIN_PROBES --dem-cache-mb $DEM_CACHE_MB --out $out --temp $temp --no-hash $*"
 }
-
-heap_hex() { printf '0x%x' $((HEAP_GB * 1024 * 1024 * 1024)); }
 
 start() {
   if alive; then echo "already running (pid $(nas cat "$PIDFILE")); use status / stop" >&2; exit 1; fi
