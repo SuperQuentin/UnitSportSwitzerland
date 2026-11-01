@@ -40,7 +40,8 @@ namespace UnitSport.Birds;
 /// </summary>
 public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
-    public static readonly int Budget = Core.Platform.IsStandaloneVr ? 16 : 32;   // a standalone headset's CPU (#1112)
+    /// <summary>The most birds at once: 16 on Low and Very low (#1216; a standalone headset's CPU, #1112).</summary>
+    public static int Budget => Core.GameSettings.Cheap ? 16 : 32;
     private const float SpawnMin = 35f, SpawnMax = 150f;
     public const float DespawnDistance = 240f;
     public const float Range = 55f;

@@ -72,6 +72,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `download-job` — Background region downloads (#515): `DownloadJob` runs MapCore's Planner steps on a worker, survives worlds deliberately, polled progress; new tiles arrive on the next world load
 - `data-location` — Data location: `--chunks` > `UNITSPORT_CHUNKS` > `terrain_location.json` (MapSetup's drive picker) > `terrain_chunks/`; game and server alike
 - `perf-lod-trees` — Ring strides by screen-space error, trees thinned by ring (`VisibleInstanceCount`), shared unit tree meshes, free every replaced mesh
+- `detail-presets` — What Very low, Low, Medium and High each draw (far buildings as boxes, paint range, shadows, lean shaders), cells near only, renderer-keyed draw order (#1216)
 - `landings` (world) — `PierMeshBuilder`: a tile's piers and jetties as one more roads-mesh surface (Prop role) and road collision cells; `IChunkSource.LoadLandingsAsync`; `ChunkManager.RebuildPiers` when the landings change
 - `parking-runtime` — Car parks at runtime (#499): the pad through `PavementBuilder` with an embankment round its edge (#603), planters through `IslandBuilder`, walks as #119 sidewalks, bay lines and the disabled roundel as `PNT2`, `ParkingBuilder` for the boom/kiosk/shelter/P sign, the `PARK` bay list as a wire contract
 - `perf-collision-commits` — Collision is queued and committed one 4x4 cell piece a frame, nearest a body first; a new collision layer must go through that queue

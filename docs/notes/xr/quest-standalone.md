@@ -74,17 +74,20 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
 
 ## What a Quest 2's GPU cannot afford
 
+Since #1216 these are the **Very low** Detail preset on every device (`terrain/detail-presets`), not a property of the
+headset: a Quest gets them because its `VrDetail` defaults to Very low.
+
 - **`discard`** in any shader turns off the Adreno's early depth rejection (LRZ) for everything drawn after it, so
   every hidden layer is shaded: the `_standalone` shader variants (`StyleKit` takes `<shader>_standalone` where it
-  exists) define `NO_DISCARD`, `NO_SCENE_DEPTH` (water: no depth read, opaque) and `STANDALONE` (flat windows, no
+  exists, on Very low: `GameSettings.Lean`) define `NO_DISCARD`, `NO_SCENE_DEPTH` (water: no depth read, opaque) and `STANDALONE` (flat windows, no
   ground patterns).
 - **Whole-tile meshes:** a tile's buildings and roads are cut into 125 m cells (`BuildingOcclusion.Cells`), so the
-  frustum and occlusion culling drop what is behind the eye or a block. Past `ChunkNode.ProxyFromM` (300 m, by 3D
-  distance from the eye to the cell, at any height) a cell's buildings are their roof on walls
+  frustum and occlusion culling drop what is behind the eye or a block. Past `LodPolicy.BuildingBoxFromM` (Very
+  low's 300 m, by 3D distance from the eye to the cell, at any height) a cell's buildings are their roof on walls
   (`BuildingMeshBuilder.BuildProxies`: the surveyed roof triangles, walls under the roof's outer edges; a plan box
   reached across the street of an L or a ring). No fade there: Godot's dithers with a discard. Instead the near
-  buildings' windows fade into the wall by 210 m (`building.gdshaderinc`), so the windowless stand-in takes over
-  unseen. Road paint stops at `ChunkNode.PaintToM`.
+  buildings' windows fade into the wall by 0.7 of that distance (`building.gdshaderinc`, `world_building_box_from`),
+  so the windowless stand-in takes over unseen. Road paint stops at `LodPolicy.RoadPaintToM`.
 - **Application SpaceWarp** works (`--spacewarp on` on a `QUEST_SPACEWARP=1 tools/quest.sh` build: `XrSession.ApplySpaceWarp`; registered and switched off, the extension crashed the game as the session began. Registered by
   `tools/quest.sh`) but is off: a black patch flashed in the left eye, and the made frames felt less smooth than the
   headset's own reprojection of a slower game. Motion vectors also cost ~5 ms a rendered frame.

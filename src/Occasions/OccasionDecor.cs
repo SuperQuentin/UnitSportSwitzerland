@@ -279,7 +279,7 @@ public partial class OccasionDecor : Node
                     Multimesh = multi,
                     MaterialOverride = kind.Candle ? _candle : _steady,
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                    VisibilityRangeEnd = Core.Platform.IsStandaloneVr ? StandaloneDrawnM : 0f,
+                    VisibilityRangeEnd = DrawnM,
                 });
             }
         foreach (var mesh in into.Meshes)
@@ -295,18 +295,25 @@ public partial class OccasionDecor : Node
     }
 
     /// <summary>
-    /// How far a standalone headset draws the decor, m (#1112): a pumpkin or a gift past it is a few pixels, and
-    /// a Halloween city's were a millisecond of a Quest's frame from the air.
+    /// How far the decor of a tile built now is drawn, m, by the Detail preset (#1216); 0 as far as it is loaded.
+    /// A pumpkin or a gift past it is a few pixels, and a Halloween city's were a millisecond of a Quest's frame
+    /// from the air (#1112).
     /// </summary>
-    private const float StandaloneDrawnM = 150f;
+    private static float DrawnM => Core.GameSettings.Current.EffectiveDetail switch
+    {
+        Core.DetailPreset.VeryLow => 150f,
+        Core.DetailPreset.Low => 300f,
+        Core.DetailPreset.Medium => 600f,
+        _ => 0f,
+    };
 
     /// <summary>
-    /// One kind's props as drawn: all in one MultiMesh, or on a standalone headset in the buildings' 125 m cells
-    /// (<see cref="Terrain.BuildingOcclusion.Cells"/>), so each cell's range is measured from where its props stand.
+    /// One kind's props as drawn: in the buildings' 125 m cells (<see cref="Terrain.BuildingOcclusion.Cells"/>), so
+    /// each cell's range is measured from where its props stand; all in one MultiMesh where nothing limits it.
     /// </summary>
     private static IEnumerable<List<(Transform3D Xf, float Seed, float Glow)>> Cells(List<(Transform3D Xf, float Seed, float Glow)> all)
     {
-        if (!Core.Platform.IsStandaloneVr)
+        if (DrawnM <= 0f)
         {
             yield return all;
             yield break;
