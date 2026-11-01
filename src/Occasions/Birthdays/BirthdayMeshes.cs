@@ -42,9 +42,6 @@ public static class BirthdayMeshes
         return Cakes[left] = s.Build();
     }
 
-    /// <summary>The whole cake: the placing ghost's and the held one's.</summary>
-    public static ArrayMesh WholeCake() => Cake(BirthdayRules.CakeSlices);
-
     /// <summary>The cake in the hand, with its origin at the grip (under the plate).</summary>
     public static void AppendHeldCake(MeshScratch s)
     {

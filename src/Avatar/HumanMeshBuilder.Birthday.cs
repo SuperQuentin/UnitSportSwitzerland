@@ -57,8 +57,9 @@ public static partial class HumanMeshBuilder
             }
             case Headwear.CandleHat:
             {
-                // a short cone with one big birthday candle on top, lit
-                var tip = StripedCone(s, top - up * 0.01f, up, 0.09f * k, 0.12f, [PartyBlue, PartyWhite, PartyBlue]);
+                // a straight band round the hair, a cone over it, one big birthday candle on top, lit
+                s.Tube(top - up * 0.03f, top + up * 0.07f, 0.12f * k, 0.118f * k, PartyBlue, 10);
+                var tip = StripedCone(s, top + up * 0.07f, up, 0.118f * k, 0.13f, [PartyWhite, PartyBlue, PartyWhite]);
                 s.Tube(tip - up * 0.01f, tip + up * 0.09f, 0.018f, 0.018f, PartyPink, 6);
                 s.Tube(tip + up * 0.09f, tip + up * 0.10f, 0.002f, 0.002f, new Color(0.15f, 0.12f, 0.1f), 4);
                 s.Tube(tip + up * 0.10f, tip + up * 0.145f, 0.014f, 0.001f, Flame, 5);
