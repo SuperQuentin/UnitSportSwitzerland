@@ -556,4 +556,12 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.InRange(CorePlanner.SignedArea(ring), 199, 202);
         Assert.DoesNotContain(new UnitSport.Tools.RoadGen.Geometry.Vec2(20, 8), ring);
     }
+
+    [Fact]
+    public void A_one_point_centre_line_is_not_offset_and_does_not_throw()
+    {
+        var point = new UnitSport.Tools.RoadGen.Geometry.Vec2(5, 7);
+        var offset = CorePlanner.Offset(new[] { point }, 2.0);
+        Assert.Equal(new[] { point }, offset);
+    }
 }
