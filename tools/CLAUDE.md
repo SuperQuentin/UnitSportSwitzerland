@@ -30,6 +30,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `france` — France (cross-border): IGN BD TOPO® via the Géoplateforme WFS (`data.geopf.fr`, Licence Ouverte 2.0) ->...
 - `foreign-terrain` — the neighbours' DEMs (`--dem grid,dir,dz`, DE/AT/IT/FR, `ForeignDem`, `TiffFloat`), dz per country, `--dem-probe`/`--dem-check`/`--dem-reparse`, FillMissing's 4700 m walls
 - `france-nas-run` — #1399: all of France's RGE ALTI on the NAS: `tools/build-france.sh start|status|stop|test|plan`, lazy tile reader, tile choice by coverage and edge masks, resume, v3 heights, scale numbers
+- `swiss-nas-run` — #1421: the whole Swiss map in v3 on the NAS: `tools/build-swiss-nas.sh start|status|stop|test`, stages terrain/frdem/dem/osm/features/airports/hash with markers, `FROM=features` to rerun one, boxes, memory
 - `land-cover` — Land cover: six TLM area layers are rasterised onto the 501x501 vertex lattice -> `.cover` (deflate, ~2 KB/tile) ->...
 - `landings` (world) — `--landings [--landings-file F]`: boat landings and jetties into `landings.json` (`LandingPlanner`: a head at the steamer's plank height, a neck or a ramp from a TLM `Steg`, moved out for water; jetties over the water), after every water pass given `--tlm`
 - `poi-pipeline` (adventure) — `--pois`: the adventure's places into `pois.bin` (#1224: TLM names, objects, lakes, footprints, stops, cable-car ends, castles; ids from the source before the region filter; cantons by `CantonRings`; counts per kind), `--poisstats`, `--wikidata` facts into `atlas_facts.json`
