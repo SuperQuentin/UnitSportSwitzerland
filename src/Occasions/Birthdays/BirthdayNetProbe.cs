@@ -34,7 +34,7 @@ public partial class BirthdayNetProbe : ChatProbe
         await Until(() => Chat != null && BirthdayService.Instance != null, 120);
         Chat!.LineReceived += (line, _) => _lines.Add(line);
         var toast = Svc.Toast;
-        Svc.Toast = t => { _toasts.Add(t); toast?.Invoke(t); };
+        Svc.Toast = t => { _toasts.Add(t); GD.Print($"{Log} toast: {t}"); toast?.Invoke(t); };
         GD.Print($"{Log} listening");
         if (!await Joined(150, () => BirthdayService.Instance != null)) return;
         if (_role == "GUEST") await Guest();
@@ -55,16 +55,23 @@ public partial class BirthdayNetProbe : ChatProbe
         var (lea, body) = Other()!.Value;
         Expect(await Until(() => Svc.Celebrants.ContainsKey(lea), 10), "Lea is a celebrant here");
         Expect(Svc.CanWish(lea), "a wish is offered at Lea");
-        // stand by her: the server checks the distance from what we publish
-        Me!.GlobalPosition = body.GlobalPosition + new Vector3(1.5f, 0.3f, 0);
-        await Seconds(1.0);
+        // stand by her: the server checks the distance from what we both publish, so ask until it agrees we are there
         int paper = BirthdayFx.Count;
-        Svc.Wish(lea);
-        Expect(!Svc.CanWish(lea), "no second wish offered");
-        Expect(await Until(() => _toasts.Any(t => t.Contains("You wished Lea")), 10), "the server confirmed the wish");
+        bool wished = false;
+        for (int attempt = 0; attempt < 10 && !wished; attempt++)
+        {
+            Me!.GlobalPosition = body.GlobalPosition + new Vector3(1.5f, 0.3f, 0);
+            await Seconds(1.0);
+            int seen = _toasts.Count;
+            Svc.Wish(lea);
+            await Until(() => _toasts.Count > seen, 5);
+            wished = _toasts.Skip(seen).Any(t => t.Contains("You wished Lea"));
+        }
+        Expect(wished, "the server confirmed the wish");
+        Expect(await Until(() => !Svc.CanWish(lea), 5), "no second wish offered once it is taken");
         Expect(await Until(() => BirthdayFx.Count > paper, 10), "the paper over Lea's head, here");
         Say("wished");
-        Expect(await Until(() => Festivals.Fireworks.Instance?.PlayingOwn == true, 30), "Lea's birthday fireworks play here");
+        Expect(await Until(() => Festivals.Fireworks.Instance?.PlayingOwn == true, 90), "Lea's birthday fireworks play here");
         Expect(Festivals.Fireworks.Instance?.ShowSeed == BirthdayRules.ShowSeed("Lea", Calendar.Today, 1),
             $"the same show as Lea's (seed {Festivals.Fireworks.Instance?.ShowSeed})");
     }
@@ -73,8 +80,8 @@ public partial class BirthdayNetProbe : ChatProbe
     {
         Expect(MyBirthday.IsToday && MyBirthday.Age == 30, "it is Lea's 30th birthday");
         Expect(await Until(() => Svc.Celebrants.ContainsKey(Svc.Self), 20), "the server lists Lea as a celebrant");
-        Expect(await Heard("GUEST", "wished", 120), "Tom wished");
-        Expect(await Until(() => _toasts.Any(t => t.Contains("Tom wished you a happy birthday")), 10), "Lea read Tom's wish");
+        // the wish itself is the cue (a chat line from Tom may not reach her: the chat is heard near)
+        Expect(await Until(() => _toasts.Any(t => t.Contains("Tom wished you a happy birthday")), 300), "Lea read Tom's wish");
         Expect(BirthdayFx.Count > 0, "the paper over Lea's head, here too");
         Chat!.Send("/birthday");
         Expect(await Until(() => _lines.Any(l => l.Contains("1 person wished you a happy birthday today")), 10), "/birthday counts one wish");

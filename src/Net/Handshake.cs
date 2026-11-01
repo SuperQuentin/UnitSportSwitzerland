@@ -119,7 +119,7 @@ public partial class Handshake : Node
     /// 85: World/Sword Act, Acted, Hit, Struck, DummySpawn/DummyHit (#1371: sword combat, server-checked blade hits), ItemId 600, ItemUse.Sword, the sword dance moves (7000+).
     /// 86: World/Adventure/Festivals RequestMontreux, TellMontreux (#1394: Montreux Jazz's listening mark and the encore's claps), ItemId 511, Genre.Jazz (the jazz night's event is built from the festival's year and day, nothing is sent).
     /// 87: Adventure/Together RequestStartAt (#1384: a fondue pot on a dining venue's table, the table's place sent).
-    /// 88: World/Birthdays (#1423: Tell, RequestWish, RequestSlice, RequestShow, SetCelebrants, CakeState, Sliced, Told, Show), ItemIds 545-553,
+    /// 88: World/Birthdays (#1423: Tell, RequestWish, RequestSlice, RequestShow, SetCelebrants, CakeState, Sliced, Told, WishTaken, Show), ItemIds 545-553,
     /// ItemUse.Open, ItemEventKind.BirthdayWish, PlacedKind.BirthdayCake, Headwear 21-26 (the birthday hats).
     public const int Protocol = 88;
 

@@ -288,13 +288,18 @@ public partial class BirthdayService : Node
     /// <summary>The prompt's words at a celebrant.</summary>
     public string WishPrompt(long peer) => $"Wish {(Celebrants.TryGetValue(peer, out var n) ? n : "them")} a happy birthday";
 
-    /// <summary>Client: wishes <paramref name="peer"/> a happy birthday (the server checks and tells both).</summary>
+    /// <summary>
+    /// Client: wishes <paramref name="peer"/> a happy birthday (the server checks and tells both). The wish is offered again until the
+    /// server confirms it (<see cref="WishTaken"/>): a refused one ("walk up first") may be tried again.
+    /// </summary>
     public void Wish(long peer)
     {
-        _wishedByMe.Add(peer);
         if (Authority) ServeWish(Self, peer);
         else RpcId(1, MethodName.RequestWish, peer);
     }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void WishTaken(long target) => _wishedByMe.Add(target);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestWish(long target)
@@ -319,6 +324,8 @@ public partial class BirthdayService : Node
             : null;
         if (why != null)
         {
+            GD.Print($"[birthday] {Who(from)}'s wish to peer {to} refused: {why}"
+                + (a != null && b != null ? $" ({a.Global.DistanceTo(b.Global):F1} m apart)" : ""));
             Note(from, why);
             return why;
         }
@@ -328,6 +335,8 @@ public partial class BirthdayService : Node
         GD.Print($"[birthday] {wisher} wished {c.Name} a happy birthday ({count} today)");
         Note(to, BirthdayRules.Wished(wisher, count));
         Note(from, $"You wished {c.Name} a happy birthday.");
+        if (!_server) WishTaken(to);
+        else if (Connected(from)) RpcId(from, MethodName.WishTaken, to);
         var head = b!.Global;
         var at = _origin.ToWorld(head.E, head.N, head.Alt + 1.9);
         if (_server) GetParent()?.GetNodeOrNull<ItemEvents>(ItemEvents.NodeName)?.ServerSend(to, ItemEventKind.BirthdayWish, at, Vector3.Zero, wisher);

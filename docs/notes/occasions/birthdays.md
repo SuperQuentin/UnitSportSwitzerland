@@ -69,7 +69,7 @@ A player enters their birthday on the Account page; on that day the game celebra
 ## Network (protocol 88)
 
 `World/Birthdays` (`BirthdayService`): `Tell(day, month, year, shown)`, `RequestWish(target)`, `RequestSlice(cake)`,
-`RequestShow(e, n)` up; `SetCelebrants`, `CakeState`, `Sliced(owner)`, `Told(line)`, `Show(start, seed, e, n)` down. A joining peer
+`RequestShow(e, n)` up; `SetCelebrants`, `CakeState`, `Sliced(owner)`, `Told(line)`, `WishTaken(target)` (the wisher marks the wish only then: a refused one may be tried again), `Show(start, seed, e, n)` down. A joining peer
 gets the celebrants and the eaten cakes (`SendTo`); `PeerLeft` forgets. Bots never get an RPC (`Note` skips ids ≤ 0).
 
 ## Checks
