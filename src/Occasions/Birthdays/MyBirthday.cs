@@ -12,7 +12,8 @@ namespace UnitSport.Occasions.Birthdays;
 /// others may see it, the party hat, and the year of the last gift. Kept in <see cref="GameSettings"/> (the offline copy); signed in,
 /// the account's own storage object <c>profile/birthday</c> wins when the account is read (<see cref="Pull"/>), and every change is
 /// written back (<see cref="Push"/>), so the date follows the account to another machine.
-/// <c>--birthday DD-MM[-YYYY]</c> pins it for one run without saving, and <c>--birthday-public</c> shows it (the checks).
+/// <c>--birthday DD-MM[-YYYY]</c> pins it for one run, saving nothing (the gift's year is kept in memory, the account is not
+/// touched), and <c>--birthday-public</c> shows it: the checks run so and never change the player's own file.
 /// "Today" is <see cref="Calendar.Today"/>, so <c>--date</c> moves it too.
 /// </summary>
 public static class MyBirthday
@@ -52,6 +53,7 @@ public static class MyBirthday
     /// <summary>Sets the date and the switches from the Account page, saves, and writes them to the account when signed in.</summary>
     public static void Set(Birthday date, bool shown, bool hat)
     {
+        if (Pinned.Value != null) return;
         S.BirthdayDay = date.Day;
         S.BirthdayMonth = date.Month;
         S.BirthdayYear = date.Year;
@@ -68,6 +70,12 @@ public static class MyBirthday
     /// </summary>
     public static bool TakeGift()
     {
+        if (Pinned.Value != null)
+        {
+            if (!BirthdayRules.GiftDue(Date, _pinnedGiftYear, Calendar.Today)) return false;
+            _pinnedGiftYear = Calendar.Today.Year;
+            return true;
+        }
         if (!BirthdayRules.GiftDue(Date, S.BirthdayGiftYear, Calendar.Today)) return false;
         S.BirthdayGiftYear = Calendar.Today.Year;
         S.Commit();
@@ -75,12 +83,14 @@ public static class MyBirthday
         return true;
     }
 
+    private static int _pinnedGiftYear;
+
     private static bool _hooked;
 
     /// <summary>Follows the account: reads its copy each time it signs in. Called once by the title screen and the client world.</summary>
     public static void Hook()
     {
-        if (_hooked) return;
+        if (_hooked || Pinned.Value != null) return;
         _hooked = true;
         Account.Changed += () => { if (Account.SignedIn) _ = Pull(); };
         if (Account.SignedIn) _ = Pull();

@@ -1305,8 +1305,10 @@ public partial class ItemController : Node
             if (IsInstanceValid(player))
             {
                 var (e, n) = _origin.ToLv95(player.GlobalPosition);
+                // by a birthday cake (#1423), the birthday frame
+                bool party = Occasions.Birthdays.BirthdayService.Instance?.CakeNear(player.GlobalPosition) == true;
                 photo = PhotoStore.Save(image, e, n, player.GlobalPosition.Y, _focalMm, path,
-                    Adventure.Rewards.RewardPhotos.SpotFor(player, player.Camera, FovFromFocal(_focalMm)));
+                    Adventure.Rewards.RewardPhotos.SpotFor(player, player.Camera, FovFromFocal(_focalMm)), party);
             }
         }
         catch (Exception e)

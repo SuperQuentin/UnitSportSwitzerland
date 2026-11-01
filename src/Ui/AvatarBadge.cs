@@ -15,6 +15,7 @@ public partial class AvatarBadge : Control
     private readonly int _size;
     private SubViewport? _viewport;
     private MeshInstance3D? _figure;
+    private Camera3D? _camera;
     private TextureRect? _face;
     private bool _portrait = true;
 
@@ -62,9 +63,9 @@ public partial class AvatarBadge : Control
         });
         _viewport.AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-25), Mathf.DegToRad(-35), 0), LightEnergy = 1.15f });
         // head and shoulders, a little from below the eyes
-        var camera = new Camera3D { Position = new Vector3(0, 1.69f, 0.9f), Fov = 26, Current = true };
-        _viewport.AddChild(camera);
-        camera.RotationDegrees = new Vector3(-3, 0, 0);
+        _camera = new Camera3D { Position = new Vector3(0, 1.69f, 0.9f), Fov = 26, Current = true };
+        _viewport.AddChild(_camera);
+        _camera.RotationDegrees = new Vector3(-3, 0, 0);
         _figure = new MeshInstance3D { MaterialOverride = HumanMeshBuilder.FigureMaterial(), Rotation = new Vector3(0, Mathf.Pi, 0) };
         _viewport.AddChild(_figure);
         AddChild(_viewport);
@@ -90,7 +91,14 @@ public partial class AvatarBadge : Control
     public void Refresh()
     {
         if (_figure == null || _viewport == null || !IsInstanceValid(_figure)) return;
-        _figure.Mesh = HumanMeshBuilder.Build(HumanPalette.ForRider(1).With(CharacterPage.Mine(this)));
+        // on the player's birthday (#1423) the party hat, the camera a little wider and higher to keep its tip
+        bool party = Occasions.Birthdays.MyBirthday.IsToday && Occasions.Birthdays.MyBirthday.Hat;
+        _figure.Mesh = HumanMeshBuilder.Build(HumanPalette.ForRider(1).With(CharacterPage.Mine(this)), hat: party ? Headwear.PartyHat : Headwear.None);
+        if (_camera != null)
+        {
+            _camera.Position = new Vector3(0, party ? 1.76f : 1.69f, party ? 1.0f : 0.9f);
+            _camera.Fov = party ? 30 : 26;
+        }
         _viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
         QueueRedraw();
     }

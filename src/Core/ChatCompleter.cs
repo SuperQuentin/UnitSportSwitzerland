@@ -92,6 +92,7 @@ public sealed class ChatCompleter
         ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
         ("rope", false, false, "[<player> | hands <player> | off]", "Activities", "rope up or hold hands with a party member"),
         ("alcohol", false, false, "", "Activities", "what alcohol does here; measure your level with a breathalyzer"),
+        ("birthday", false, false, "", "Activities", "who celebrates a birthday today, and your wishes when it is yours"),
         ("fondue", false, false, "[invite <player> | leave | forfeit 1|2|3]", "Activities", "the shared pot at your table"),
         // invites (#840)
         ("invites", false, false, "", "Activities", "invites open to you and from you"),

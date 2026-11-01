@@ -212,7 +212,7 @@ public partial class BirthdayService : Node
 
     public override void _Process(double delta)
     {
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = RealClock.Now;   // polling the calendar and the pack: real seconds, whatever the game speed
         if (Authority && now >= _nextLook)
         {
             _nextLook = now + 20;
@@ -271,6 +271,16 @@ public partial class BirthdayService : Node
     private void Told(string text) => Toast?.Invoke(text);
 
     // ---- wishes --------------------------------------------------------------------------------------
+
+    /// <summary>Server: today's celebrants with their bodies (what a bot senses: the list every peer holds).</summary>
+    public IEnumerable<(long Peer, FootPlayer Body)> CelebrantBodies()
+    {
+        foreach (long peer in _celebrants.Keys)
+            if (BodyOf?.Invoke(peer) is { } body) yield return (peer, body);
+    }
+
+    /// <summary>Server: <paramref name="from"/> already wished <paramref name="to"/> today.</summary>
+    public bool HasWished(long from, long to) => _wished.Contains((from, to));
 
     /// <summary>Client: whether "Wish a happy birthday" is offered at <paramref name="peer"/>.</summary>
     public bool CanWish(long peer) => peer > 0 && peer != Self && Celebrants.ContainsKey(peer) && !_wishedByMe.Contains(peer);

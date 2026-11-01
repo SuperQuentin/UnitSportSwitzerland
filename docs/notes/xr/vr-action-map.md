@@ -56,6 +56,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | sword_dodge (#1371) | Shift / B | ok: B (`XrPad.RightB`) | a step or a dodge by body movement |
 | sword_lock (#1371) | Middle button, Z / R3 | ok: R3 | grip-pointing at a target; the stamina bar has no VR display yet (**gap**: wrist display) |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
+| wish a player a happy birthday (#1423) | E / Y, looking at a celebrant (before the fight's challenge) | ok: Y, or reach out and grip | keep |
+| take a slice of a birthday cake (#1423) | E / Y within 2.2 m of the cake, seated too | ok: Y (`XrPad`) | keep |
+| open a birthday gift, light a birthday rocket, set a cake down (#1423) | Use / the use button (the inventory's Open for the gift) | ok: the trigger; the inventory panel by laser | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
 | fight_block (#495, hold) | Shift L / B | ok: B (`XrPad.RightB`, not the crouch's B) | forearms raised in front of the face |

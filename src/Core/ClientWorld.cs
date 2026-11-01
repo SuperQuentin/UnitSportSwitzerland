@@ -1001,6 +1001,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
+            || Occasions.Birthdays.BirthdayCheck.Requested || Occasions.Birthdays.BirthdayNetProbe.Role != null
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
             || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
@@ -1195,6 +1196,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         birthdays.NameOf = _ => GameSettings.Current.PlayerName;
         birthdays.Toast = Toast;
         birthdays.Give = stack => items.Give(stack);
+        if (Occasions.Birthdays.BirthdayCheck.Requested) AddChild(new Occasions.Birthdays.BirthdayCheck(items, () => LocalPlayer));
+        if (Occasions.Birthdays.BirthdayNetProbe.Role != null) AddChild(new Occasions.Birthdays.BirthdayNetProbe(items));
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
         // the Adventure layer (#1223): the server keeps this player's progress and quests, offline this client

@@ -71,9 +71,10 @@ public static class PhotoStore
 
     /// <summary>
     /// Makes the print from a full frame: centre square, scaled to <see cref="ImageSize"/>, on the
-    /// white card, JPEG-encoded. Returns the card image too, for the develop animation.
+    /// white card, JPEG-encoded. Returns the card image too, for the develop animation. <paramref name="birthday"/>
+    /// (#1423, a picture taken by a birthday cake) prints the birthday frame: confetti on the border, bunting in the margin.
     /// </summary>
-    public static (byte[] Jpeg, Image Card) Print(Image frame)
+    public static (byte[] Jpeg, Image Card) Print(Image frame, bool birthday = false)
     {
         var src = (Image)frame.Duplicate();
         if (src.IsCompressed()) src.Decompress();
@@ -85,13 +86,58 @@ public static class PhotoStore
         var card = Image.CreateEmpty(CardW, CardH, false, Image.Format.Rgb8);
         card.Fill(Paper);
         card.BlitRect(crop, new Rect2I(0, 0, ImageSize, ImageSize), new Vector2I(Border, Border));
+        if (birthday) BirthdayFrame(card);
         return (card.SaveJpgToBuffer(0.85f), card);
     }
 
-    /// <summary>Prints a frame, stores it in the archive with its sidecar and returns its id.</summary>
-    public static string Save(Image frame, double e, double n, double altitude, float focalMm, string source, string spot = "")
+    private static readonly Color[] PartyColours =
+    [
+        new(0.93f, 0.36f, 0.62f), new(0.25f, 0.55f, 0.92f), new(0.98f, 0.78f, 0.18f), new(0.35f, 0.75f, 0.42f), new(0.62f, 0.38f, 0.85f),
+    ];
+
+    /// <summary>
+    /// The birthday frame (#1423), drawn on the white card around the picture: confetti scattered on the border (never on the
+    /// picture), a string of bunting across the bottom margin. The same on every birthday print.
+    /// </summary>
+    private static void BirthdayFrame(Image card)
     {
-        var (jpeg, card) = Print(frame);
+        var rng = new Random(1423);
+        var picture = new Rect2I(Border, Border, ImageSize, ImageSize);
+        for (int placed = 0, tries = 0; placed < 70 && tries < 2000; tries++)
+        {
+            int x = rng.Next(1, CardW - 5), y = rng.Next(1, CardH - 5), size = 2 + rng.Next(3);
+            var dot = new Rect2I(x, y, size, size);
+            if (dot.Intersects(picture.Grow(1)) || y > Border + ImageSize + 4 && y < CardH - 14) continue;
+            card.FillRect(dot, PartyColours[rng.Next(PartyColours.Length)]);
+            placed++;
+        }
+        // the bunting: a sagging cord and pennants hanging from it, in the bottom margin
+        int top = Border + ImageSize + 10;
+        var cord = new Color(0.45f, 0.40f, 0.36f);
+        const int Pennants = 11;
+        float step = (CardW - 2f * Border) / Pennants;
+        for (int x = Border; x < CardW - Border; x++)
+        {
+            float t = (x - Border) / (CardW - 2f * Border);
+            card.SetPixel(x, top + (int)(6 * 4 * t * (1 - t)), cord);
+        }
+        for (int i = 0; i < Pennants; i++)
+        {
+            float cx = Border + (i + 0.5f) * step, t = (cx - Border) / (CardW - 2f * Border);
+            int y0 = top + (int)(6 * 4 * t * (1 - t)) + 1;
+            var colour = PartyColours[i % PartyColours.Length];
+            for (int row = 0; row < 14; row++)
+            {
+                int half = (int)((step / 2 - 2) * (1 - row / 14f));
+                if (half > 0) card.FillRect(new Rect2I((int)cx - half, y0 + row, half * 2, 1), colour);
+            }
+        }
+    }
+
+    /// <summary>Prints a frame, stores it in the archive with its sidecar and returns its id.</summary>
+    public static string Save(Image frame, double e, double n, double altitude, float focalMm, string source, string spot = "", bool birthday = false)
+    {
+        var (jpeg, card) = Print(frame, birthday);
         string id = IdOf(jpeg);
         Directory.CreateDirectory(LocalDir);
         File.WriteAllBytes(Path.Combine(LocalDir, id + ".jpg"), jpeg);
