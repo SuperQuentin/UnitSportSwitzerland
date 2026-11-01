@@ -34,3 +34,12 @@ Stages, in one NAS-side process (a stage that ends leaves `terrain_chunks_v3_tem
 - Resume: a killed or stopped run restarts at its unfinished stage; the terrain stage skips tiles with a valid
   `.terr`+`.edge`. The feature pass redoes its tiles from the start of the pass.
 - Mixing is refused: the preprocessor stops if `--out` already holds the other version, so a v3 run never writes into `terrain_chunks`.
+
+## Test numbers (`test geneva`, 36 tiles, 12 threads; `test basel`, 36 tiles)
+
+Geneva / Basel, seconds: terrain 3 / 3, frdem 134 / 79 (585k rasters scanned in 2 s, then ~130 s reading the edge
+masks of the 8k edge tiles of France: a fixed cost of each start of that stage), dem 4 / 4, osm 7 / 9, features
+568 / 485 (the 3.4M GWR records and 3,230 building sheets load first: a fixed cost, ~4 GB RSS peak), airports 4,
+hash 1; wall 722 s. Peak RSS: terrain 0.6 GB, frdem 1.3 GB, osm 1.7 GB, features 4.0 GB. All `.terr` carry version
+word 3, the manifest says `formatVersion` 3, `heightOffsetM` -50. Fixed costs dominate a small box, so these do not
+extrapolate to the 43,621 tiles; the stage log of the first full run is the real number.
