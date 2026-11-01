@@ -674,6 +674,8 @@ public static class CorePlanner
     /// <summary>A polyline moved sideways by a distance per vertex, to its left (right when negative), mitred at its vertices.</summary>
     public static List<Vec2> Offset(IReadOnlyList<Vec2> line, Func<int, double> by)
     {
+        // a single point has no direction to be offset across: it comes back unchanged
+        if (line.Count < 2) return new List<Vec2>(line);
         var result = new List<Vec2>(line.Count);
         for (int k = 0; k < line.Count; k++)
         {
