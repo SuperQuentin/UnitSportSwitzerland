@@ -2792,6 +2792,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // or sit in at its pot) and standing up is walking or jumping off
         if (Sitting)
         {
+            // a birthday cake on the table (#1423): a slice, before the fondue
+            if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
             if (Interiors.PotTables.Near(GlobalPosition) != null)
             {
                 TryTogetherInteract();
@@ -2825,6 +2827,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
             if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
             if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
+            if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;   // a slice of a birthday cake (#1423)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
@@ -2857,6 +2860,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a building site crane's ladder or its remote's box (#618)
         if (TryCrane()) return true;
 
+        // a slice of a birthday cake at hand (#1423)
+        if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
         // Versteckis (#1268): an objective's hold; a prop opens no door and drives nothing

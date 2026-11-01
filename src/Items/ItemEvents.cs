@@ -38,6 +38,11 @@ public enum ItemEventKind
     Gust = 11,
     /// <summary>A handful of Räppli thrown (#1357). Position = the hand; direction = the aim; paper on every peer (<c>Occasions.Festivals.Fasnacht.RaeppliFx.OnConfetti</c>).</summary>
     Confetti = 12,
+    /// <summary>
+    /// A birthday wish or gift (#1423). Position = over the birthday player's head; extra = "gift" or the wisher's name. Paper and a chime on
+    /// every peer near (<c>Occasions.Birthdays.BirthdayFx.OnWish</c>); a wish is the server's (<c>BirthdayService.ServeWish</c>), a gift the owner's.
+    /// </summary>
+    BirthdayWish = 13,
 }
 
 /// <summary>
@@ -94,6 +99,7 @@ public partial class ItemEvents : Node
         [ItemEventKind.FishEnd] = Fishing.FishingVisuals.OnEnd,
         [ItemEventKind.Gust] = Adventure.Rewards.GustFx.OnGust,
         [ItemEventKind.Confetti] = Occasions.Festivals.Fasnacht.RaeppliFx.OnConfetti,
+        [ItemEventKind.BirthdayWish] = Occasions.Birthdays.BirthdayFx.OnWish,
     };
 
     /// <summary>

@@ -305,6 +305,26 @@ public enum ItemId
     Konfettiei = 528,
     // Reserved, nothing uses them yet: the festival stall's wares (flower crown, Edelweiss shirts, Sennenkaeppi variants, Treichel for
     // the wall, fireworks), masks and the Schwingerhosen come with the parts that build their games.
+
+    // ---- player birthdays (#1423, docs/notes/occasions/birthdays.md); 545-559 are its block ----
+    /// <summary>The paper party hat: worn on your birthday by itself, and in every birthday gift to wear any day.</summary>
+    PartyHat = 545,
+    /// <summary>A gold paper crown: one year's birthday collectible (<see cref="ItemDefs.BirthdayCollectibles"/>).</summary>
+    BirthdayCrown = 546,
+    /// <summary>A cone with a lit candle on top: one year's birthday collectible.</summary>
+    CandleHat = 547,
+    /// <summary>A little two-tier cake with candles, worn: one year's birthday collectible.</summary>
+    CakeHat = 548,
+    /// <summary>A propeller beanie: one year's birthday collectible.</summary>
+    PropellerCap = 549,
+    /// <summary>A headband with three balloons: one year's birthday collectible.</summary>
+    BalloonHat = 550,
+    /// <summary>The birthday gift, given on the first visit of the birthday: Use opens it (<see cref="ItemUse.Open"/>). Its data is the year.</summary>
+    BirthdayGift = 551,
+    /// <summary>A birthday cake: Use sets it down where the ghost shows (a table is best); everyone near takes a slice with Interact.</summary>
+    BirthdayCake = 552,
+    /// <summary>A birthday rocket: Use lights a minute of fireworks of your own, on your birthday (<see cref="ItemUse.Firework"/>).</summary>
+    BirthdayRocket = 553,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -374,4 +394,6 @@ public enum ItemUse
     Confetti,
     /// <summary>Held, the combat controls are on: Use swings (a combo; held after a swing, a charged blow), the dodge and the lock-on have their own keys (<see cref="ItemId.Sword"/>, #1371).</summary>
     Sword,
+    /// <summary>Use opens it: a gift that turns into what it holds (<see cref="ItemId.BirthdayGift"/>, #1423).</summary>
+    Open,
 }

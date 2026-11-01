@@ -1187,6 +1187,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
+        // player birthdays (#1423): the gift, the wishes, the cake's slices, the birthday fireworks; offline this client plays the server
+        var birthdays = Occasions.Birthdays.BirthdayService.Create(this, origin, server: false, networked: Launch.Networked);
+        birthdays.Me = () => _onFoot ? LocalPlayer : null;
+        birthdays.BodyOf = peer => peer == Multiplayer.GetUniqueId() || !Launch.Networked && peer == 1
+            ? LocalPlayer : _players?.GetNodeOrNull<FootPlayer>(PlayerReplication.NodeName(peer));
+        birthdays.NameOf = _ => GameSettings.Current.PlayerName;
+        birthdays.Toast = Toast;
+        birthdays.Give = stack => items.Give(stack);
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
         // the Adventure layer (#1223): the server keeps this player's progress and quests, offline this client
@@ -2082,6 +2090,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // a request, not a claim.
         string requested = Launch.PlayerName;
         _chat?.AnnounceName(requested.Length > 0 ? requested : $"Rider{Multiplayer.GetUniqueId()}");
+        // after the name, on the same ordered channel: the chat line about a birthday names the player (#1423)
+        Occasions.Birthdays.BirthdayService.Instance?.SendMine();
         // hosted from the menu: the player who started the server runs it
         if (Launch.HostToken is { } token) _chat?.ClaimHost(token);
 

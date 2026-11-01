@@ -35,18 +35,18 @@ public partial class InteriorManager
         {
             if (Vehicles.VehicleReach.Current != null || _current == null) return null;
             // an elevator's button or cabin, a flat's door (#557); the church radio; a cinema's booth panel
-            // (#1238); a cupboard, unless at the way out, where E is the door
+            // (#1238); a cupboard, unless at the way out, where E is the door; a birthday cake (#1423)
             // a cinema seat from its row's lane (#1279), as E takes it before a cupboard; a bowling centre's
             // shoe counter, ball rack, hood and approach (#1323); a pinball machine (#1325)
             return InsideInteraction(p) ?? ChurchRadios.InteractionFor(p) ?? CinemaBooths.InteractionFor(p) ?? BowlingLanes.InteractionFor(p)
-                ?? Pinball.PinballTables.InteractionFor(p) ?? p.SeatInteraction()
+                ?? Pinball.PinballTables.InteractionFor(p) ?? Occasions.Birthdays.BirthdayService.InteractionFor(p) ?? p.SeatInteraction()
                 ?? (ExitAt(p) is { } exit ? ExitInteraction(exit) : Loot.LootService.Instance?.InteractionFor(p));
         }
         // a building site crane's ladder or its remote's box (#618); a farm stand or a buyer (#494); a
         // chest, a seal's stack, a burrow (#1227); a summit cross, a board (#1224): all before a vehicle
         outranks = Outranking.Vehicle;
         if (p.CraneInteraction() is { } crane) return crane;
-        if ((Farming.FarmSales.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
+        if ((Occasions.Birthdays.BirthdayService.InteractionFor(p) ?? Farming.FarmSales.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
             ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p) ?? Adventure.Errands.WorldEvents.InteractionFor(p)
             ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p) ?? Occasions.Festivals.Desalpe.DesalpeGame.InteractionFor(p)
             ?? Occasions.Festivals.Christmas.ChristmasGame.InteractionFor(p) ?? Occasions.Festivals.Escalade.EscaladeGame.InteractionFor(p)

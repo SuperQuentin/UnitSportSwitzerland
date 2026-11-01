@@ -438,6 +438,24 @@ public sealed class GameSettings
     public List<string> VehicleIntrosSeen { get; set; } = new();
 
     /// <summary>
+    /// The player's birthday (#1423, <see cref="Occasions.Birthdays.MyBirthday"/>), from the Account page: day and month (0 = not
+    /// entered) and the year, 0 when not given (it only shows the age in the chat). Signed in, the account's copy wins
+    /// (<c>Nakama</c> storage <c>profile/birthday</c>); this is the offline copy.
+    /// </summary>
+    public int BirthdayDay { get; set; }
+    public int BirthdayMonth { get; set; }
+    public int BirthdayYear { get; set; }
+
+    /// <summary>Other players may see it is this player's birthday (#1423): the chat line, the wishes. Off by default.</summary>
+    public bool BirthdayPublic { get; set; }
+
+    /// <summary>A party hat on the birthday when the head slot is empty (#1423). On by default; off takes it off.</summary>
+    public bool BirthdayHat { get; set; } = true;
+
+    /// <summary>The year the last birthday gift was given (#1423): one a year, whatever the date is changed to.</summary>
+    public int BirthdayGiftYear { get; set; }
+
+    /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
     /// the Character menu (#806; till then the figure comes from the player's network id).
     /// Saved alone with <see cref="SaveOnly"/>; <c>ClientWorld.PublishAppearance</c> puts it on the player.

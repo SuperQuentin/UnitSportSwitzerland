@@ -93,6 +93,38 @@ public static class NakamaRest
         return admin && me.RootElement.TryGetProperty("username", out var n) ? n.GetString() ?? "admin" : null;
     }
 
+    /// <summary>
+    /// The signed-in player's own storage object <paramref name="collection"/>/<paramref name="key"/> (#1423, the birthday), its
+    /// value as JSON text; null when there is none. Throws <see cref="NakamaException"/> when the server refuses or does not answer.
+    /// </summary>
+    public static async Task<string?> ReadOwn(string url, string token, string collection, string key)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get,
+            $"{AccountRules.NormalizeUrl(url)}/v2/storage/{Uri.EscapeDataString(collection)}?limit=100");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var res = await Send(req);
+        string body = await res.Content.ReadAsStringAsync();
+        if (!res.IsSuccessStatusCode) throw new NakamaException(Message(body, res.StatusCode));
+        using var doc = JsonDocument.Parse(body);
+        if (!doc.RootElement.TryGetProperty("objects", out var objects) || objects.ValueKind != JsonValueKind.Array) return null;
+        foreach (var o in objects.EnumerateArray())
+            if (o.TryGetProperty("key", out var k) && k.GetString() == key && o.TryGetProperty("value", out var v)) return v.GetString();
+        return null;
+    }
+
+    /// <summary>Writes the signed-in player's own storage object (#1423), readable and writable by its owner only.</summary>
+    public static async Task WriteOwn(string url, string token, string collection, string key, string json)
+    {
+        var body = new { objects = new[] { new { collection, key, value = json, permission_read = 1, permission_write = 1 } } };
+        using var req = new HttpRequestMessage(HttpMethod.Put, AccountRules.NormalizeUrl(url) + "/v2/storage")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
+        };
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var res = await Send(req);
+        if (!res.IsSuccessStatusCode) throw new NakamaException(Message(await res.Content.ReadAsStringAsync(), res.StatusCode));
+    }
+
     private static async Task<NakamaSession> Session(string url, string serverKey, string path, object body)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, AccountRules.NormalizeUrl(url) + path)

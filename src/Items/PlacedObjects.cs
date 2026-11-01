@@ -34,6 +34,8 @@ public enum PlacedKind
     FarmStand = 11,
     /// <summary>A planted travel flag (#1227): a waypoint of one's own; what travel to it means is the navigation plan's (#1226). Only its owner pulls it up.</summary>
     TravelFlag = 12,
+    /// <summary>A birthday cake (#1423): anyone near takes a slice (<c>Occasions.Birthdays.BirthdayService</c> keeps how many are left); the server takes it away eaten.</summary>
+    BirthdayCake = 13,
 }
 
 /// <summary>
@@ -382,6 +384,17 @@ public partial class PlacedObjects : Node
             foreach (int p in Multiplayer.GetPeers())
                 RpcId(p, MethodName.Add, o.Id, (int)o.Kind, o.Owner, o.E, o.N, o.Altitude, o.Rotation, o.Payload);
         return o;
+    }
+
+    /// <summary>Server: takes one object away on its own authority (a birthday cake eaten up, #1423), told to everyone.</summary>
+    public void ServerRemove(long id)
+    {
+        if (!_objects.ContainsKey(id)) return;
+        Drop(id);
+        Save();
+        if (Online)
+            foreach (int p in Multiplayer.GetPeers())
+                RpcId(p, MethodName.Remove, id);
     }
 
     /// <summary>Server: takes away everything one owner set down (the match's gadgets when it is over).</summary>

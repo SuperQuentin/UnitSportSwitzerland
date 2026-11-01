@@ -1078,6 +1078,155 @@ public static partial class ItemIcons
             p.Rect(4, 2, 4, 5, 'w'); p.Set(4, 1, 'Y'); p.Set(3, 0, 'O');
         });
 
+        // player birthdays (#1423)
+        d[ItemId.PartyHat] = new[]
+        {
+            "......kwwk......",
+            "......kwak......",
+            ".......kk.......",
+            "......kssk......",
+            ".....kssssk.....",
+            ".....kyyyyk.....",
+            "....kyyyyyyk....",
+            "....kbbbbbbk....",
+            "...kbbbbbbbbk...",
+            "...kssssssssk...",
+            "..kssssssssssk..",
+            "..kyyyyyyyyyyk..",
+            ".kyyyyyyyyyyyyk.",
+            ".kkkkkkkkkkkkkk.",
+        };
+
+        d[ItemId.BirthdayCrown] = new[]
+        {
+            "..k....k....k...",
+            ".kyk..kyk..kyk..",
+            ".kyk..kyk..kyk..",
+            ".kyyk.kyk.kyyk..",
+            ".kyyykyyykyyyk..",
+            ".kyyyyyyyyyyyk..",
+            ".kYYYYYYYYYYYk..",
+            ".kyyyyrryyyyyk..",
+            ".kyyyyrryyyyyk..",
+            ".kYYYYYYYYYYYk..",
+            ".kkkkkkkkkkkkk..",
+        };
+
+        d[ItemId.CandleHat] = new[]
+        {
+            ".......kk.......",
+            "......koyk......",
+            "......kyyk......",
+            ".......kk.......",
+            ".......kd.......",
+            "......ksssk.....",
+            "......kssk......",
+            "......kssk......",
+            ".....kbbbbk.....",
+            "....kbwwwbk.....",
+            "....kwwwwwwk....",
+            "...kbbbbbbbbk...",
+            "..kbbbbbbbbbbk..",
+            "..kkkkkkkkkkkk..",
+        };
+
+        d[ItemId.CakeHat] = new[]
+        {
+            "....ko.ko.ko....",
+            "....kb.ks.kb....",
+            "....kb.ks.kb....",
+            "...kwwwwwwwwk...",
+            "...ksssssssk....",
+            "...ksssssssk....",
+            "..kwwwwwwwwwwk..",
+            "..kttttttttttk..",
+            "..kttttttttttk..",
+            "..kTTTTTTTTTTk..",
+            "..kkkkkkkkkkkk..",
+        };
+
+        d[ItemId.PropellerCap] = new[]
+        {
+            ".kkkkkk.kkkkkk..",
+            ".ksssssksssssk..",
+            ".kkkkkkgkkkkkk..",
+            ".......g........",
+            ".....kkkkk......",
+            "....kyyybbk.....",
+            "...kyyyybbbk....",
+            "...kyyyybbbk....",
+            "..kssssseeeek...",
+            "..kssssseeeek...",
+            "..kkkkkkkkkkkk..",
+            "..........kssk..",
+            "..........kkk...",
+        };
+
+        d[ItemId.BalloonHat] = new[]
+        {
+            "..kk..kkk..kk...",
+            ".kssk.kbbk.kyyk.",
+            ".kssk.kbbk.kyyk.",
+            ".kssk.kbbk.kyyk.",
+            "..kk..kkk...kk..",
+            "...g...g...g....",
+            "...g...g...g....",
+            "....g..g..g.....",
+            "....g..g..g.....",
+            "...kwwwwwwwwk...",
+            "..kwwwwwwwwwwk..",
+            "..kk........kk..",
+        };
+
+        d[ItemId.BirthdayGift] = new[]
+        {
+            ".....kk..kk.....",
+            "....kyyk.kyyk...",
+            ".....kyykyyk....",
+            "..kkkkkkkkkkkk..",
+            "..kssssyysssssk.",
+            "..kssssyysssssk.",
+            "..kyyyyyyyyyyyk.",
+            "..kssssyysssssk.",
+            "..kssssyysssssk.",
+            "..kssssyysssssk.",
+            "..kssssyysssssk.",
+            "..kkkkkkkkkkkkk.",
+        };
+
+        d[ItemId.BirthdayCake] = new[]
+        {
+            "...ko..ko..ko...",
+            "...kb..ks..kb...",
+            "..kwwwwwwwwwwk..",
+            "..kwrwwwrwwwrk..",
+            "..kttttttttttk..",
+            "..kttttttttttk..",
+            "..kwwwwwwwwwwk..",
+            "..kttttttttttk..",
+            "..kTTTTTTTTTTk..",
+            ".kaaaaaaaaaaaak.",
+            ".kkkkkkkkkkkkkk.",
+        };
+
+        d[ItemId.BirthdayRocket] = new[]
+        {
+            ".......kk.......",
+            "......kyyk......",
+            ".....kyyyYk.....",
+            ".....kssssk.....",
+            ".....kssssk.....",
+            ".....kbbbbk.....",
+            ".....kbbbBk.....",
+            ".....kssssk.....",
+            ".....kkkkkk.....",
+            ".......nk.......",
+            ".......nk.......",
+            ".......nk.......",
+            ".......nk.......",
+            ".......kk.......",
+        };
+
         d[ItemId.ChristmasBauble] = Round(p =>
         {
             p.Disc(7.5f, 9f, 5.2f, 4.8f, 'q', 'r', 'R');

@@ -64,7 +64,13 @@ public static class RaeppliFx
         Count++;
         var (stream, pitch, jitter) = FasnachtSounds.RaeppliToss.Pick(Rng);
         n.Sound3D(e.Position, stream, pitch, -4f + jitter, unitSize: 6f, maxDistance: 80f);
-        var dir = e.Direction.LengthSquared() > 1e-6f ? e.Direction.Normalized() : Vector3.Forward;
+        Burst(n, e.Position, e.Direction);
+    }
+
+    /// <summary>The paper alone, thrown from <paramref name="at"/> along <paramref name="direction"/> (a birthday wish's too, #1423).</summary>
+    public static void Burst(ItemEvents n, Vector3 at, Vector3 direction)
+    {
+        var dir = direction.LengthSquared() > 1e-6f ? direction.Normalized() : Vector3.Forward;
         var up = Mathf.Abs(dir.Y) > 0.95f ? Vector3.Forward : Vector3.Up;
         var burst = new GpuParticles3D
         {
@@ -75,7 +81,7 @@ public static class RaeppliFx
         };
         n.AddChild(burst);
         // the process material throws along -Z: turn the node so -Z is the aim
-        burst.GlobalTransform = new Transform3D(Basis.LookingAt(dir, up), e.Position);
+        burst.GlobalTransform = new Transform3D(Basis.LookingAt(dir, up), at);
         var end = burst.CreateTween();
         end.TweenInterval(Lifetime + 0.5);
         end.TweenCallback(Callable.From(burst.QueueFree));

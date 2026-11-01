@@ -148,6 +148,13 @@ public enum Headwear
     LarveTeufel = 8,
     LarveFritschi = 9,
     LarveUeli = 10,
+    // 21-30 are the birthdays' (#1423, docs/notes/occasions/birthdays.md): the party hat worn on the day, and the gift's yearly collectibles
+    PartyHat = 21,
+    BirthdayCrown = 22,
+    CandleHat = 23,
+    CakeHat = 24,
+    PropellerCap = 25,
+    BalloonHat = 26,
 }
 
 /// <summary>
@@ -994,6 +1001,9 @@ public static partial class HumanMeshBuilder
             }
             case >= Headwear.LarveWaggis and <= Headwear.LarveUeli:
                 AppendLarve(s, hat, centre, side, up, fwd, k, frame);
+                break;
+            case >= Headwear.PartyHat and <= Headwear.BalloonHat:
+                AppendBirthdayHat(s, hat, top, side, up, fwd, k, frame);
                 break;
         }
     }
