@@ -252,6 +252,7 @@ public static partial class TileRewriter
 
     public static Stats Run(string chunkDir, IReadOnlyList<TileId> tiles, Options options, Action<string> log)
     {
+        _plannerFailures = 0;
         string rawDir = options.RawDir ?? RawRoads.DirFor(RawRoads.DefaultTempDir(chunkDir));
         // the car park rings are written to their own directory beside the raw roads, not into it
         // (#499, ParkingAreaExtractor -> RawParking.DirFor), so they are found from the temp dir
@@ -1023,6 +1024,7 @@ public static partial class TileRewriter
             log(embankments.Format());
             log(railings.Format());
             log(parkingStats.Format());
+            if (_plannerFailures > 0) log($"  junction planner: {_plannerFailures:N0} plans threw on degenerate geometry and fell back (see the [WARN] lines, #1427)");
             return new Stats(tilesRead, TilesWritten, junctionCount, written, dropped,
                 overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, Net);
         }
