@@ -1,0 +1,49 @@
+# Reference screenshot views (#1429), read by tools/refshots.sh. The pictures live outside git
+# (D:/UnitSportSwitzerland/refshots/<tag>/ by default): compare two runs with tools/refshot-diff.py.
+# Every view is on the real terrain of D:/UnitSportSwitzerland/terrain_chunks (Geneva, Vaud, Lavaux,
+# Chablais, Riddes: LV95 E 2494-2588 km, N 1108-1163 km).
+#
+#   name  class  E  N  height  pitch  bearing  [hour]  [date]
+#
+# class    near (< 1 km), mid (1-5 km), far (20 km and more), edge (the frustum's edges), night:
+#          the diff report groups by it, and a curvature change (#187) should leave near and mid alone
+# height   metres above sea level, "g<m>" above the ground once it streamed in, or "i<m>" through the
+#          door in front of the point, into the house (src/Core/ShotRunner.cs)
+# pitch    degrees up from the horizontal (negative looks down)
+# bearing  compass degrees the camera looks along (0 north, 90 east)
+# hour     the clock (default 14); date YYYY-MM-DD (default 2026-07-15, the trailer's: no occasion)
+# Views run in this order, one launch per style and date; an "i" view is best last (it leaves its door open).
+
+# --- Riddes (VS), tools/style-shots.sh's views
+riddes_aerial     mid    2583250 1112800 900    -35  0
+riddes_low        mid    2583250 1112900 560    -12  0
+riddes_street     near   2583400 1113100 g2      -3  315
+riddes_house      near   2583395 1113109 g1.7    -3  201
+riddes_chase      near   2583250 1113000 g12    -10  180
+riddes_valley     mid    2583100 1112600 700     -8  60
+riddes_top        mid    2583100 1112600 1400   -70  60
+riddes_night      night  2583400 1113100 g2      -3  315  21.5
+
+# --- Chablais, Lavaux: the lake and the Alps across it
+villeneuve_a9     mid    2559000 1137000 g40     -6  300
+lavaux_alps       far    2548600 1148500 g3      -1  158
+lavaux_alps_low   far    2548600 1148500 g3       2  140
+lavaux_edge_top   edge   2548600 1148500 g3     -34  158
+lavaux_edge_low   edge   2548600 1148500 g3      36  158
+lavaux_bonfires   night  2548600 1148500 g3      -2  158  22    2026-08-01
+
+# --- Lausanne
+jorat_forest      near   2543000 1157000 g3      -5  0
+sauvabelin_town   mid    2538500 1154800 g20     -8  190
+sauvabelin_night  night  2538500 1154800 g20     -8  190  21.5
+ouchy_shore       near   2538000 1150800 g1.7   -25  180
+lausanne_air3k    far    2538000 1152000 3000   -12  150
+lake_air8k        far    2525000 1140000 8000   -15  120
+
+# --- Jura and Geneva
+dole_alps         far    2497800 1142800 g2      -1  139
+geneva_quai       near   2500300 1118450 g1.7   -20  207
+geneva_alps       far    2500600 1118300 g30      0  120
+
+# --- inside last: it leaves its door open
+riddes_interior   near   2583390 1113097 i1.6    -8  168

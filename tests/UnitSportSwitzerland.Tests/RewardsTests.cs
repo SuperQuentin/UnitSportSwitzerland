@@ -524,6 +524,15 @@ public class PhotoJudgeTests
     }
 
     [Fact]
+    public void A_level_target_twenty_km_over_a_level_plain_is_seen_on_a_flat_earth()
+    {
+        // pinned before the round world (#1429): the sight line ignores the Earth's curvature, so a
+        // spot 20 km off and as high as the eye clears the plain. #187 adds the ~7 m bulge and flips it
+        var far = new PhotoSpot("ph:far", "Far", 2600000, 1200000, 150, 2600000, 1220000, 503, "A level spot");
+        Assert.Equal(PhotoVerdict.Taken, PhotoJudge.Judge(far, 2600000, 1200000, 502, 0, 0, 40, (_, _) => 500));
+    }
+
+    [Fact]
     public void The_curated_spots_are_thirty_in_switzerland_for_review()
     {
         Assert.Equal(30, PhotoSpots.Curated.Length);

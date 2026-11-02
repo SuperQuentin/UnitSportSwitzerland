@@ -134,6 +134,9 @@ public static class Interest
         Expect(Clear(new Vector3(0, 2, 0), new Vector3(800, 1, 0), ridge), false, "ridge blocks");
         Expect(Clear(new Vector3(0, 2, 0), new Vector3(800, 600, 0), ridge), true, "plane over the ridge");
         Expect(Clear(new Vector3(0, 2, 0), new Vector3(800, 1, 0), _ => 0f), true, "flat ground");
+        // long range over a level plain, pinned before the round world (#1429): the line still
+        // ignores the Earth's curvature, so 90 km between two eyes 100 m up is clear. #187 flips it
+        Expect(Clear(new Vector3(0, 100, 0), new Vector3(90_000, 100, 0), _ => 0f), true, "90 km over a level plain (flat Earth)");
         return ok;
     }
 }
