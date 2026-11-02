@@ -26,11 +26,11 @@ riddes_night      night  2583400 1113100 g2      -3  315  21.5
 
 # --- Chablais, Lavaux: the lake and the Alps across it
 villeneuve_a9     mid    2559000 1137000 g40     -6  300
-lavaux_alps       far    2548600 1148500 g3      -1  158
-lavaux_alps_low   far    2548600 1148500 g3       2  140
-lavaux_edge_top   edge   2548600 1148500 g3     -34  158
-lavaux_edge_low   edge   2548600 1148500 g3      36  158
-lavaux_bonfires   night  2548600 1148500 g3      -2  158  22    2026-08-01
+lavaux_alps       far    2548600 1148500 g60     -1  158
+lavaux_alps_low   far    2548600 1148500 g60      2  140
+lavaux_edge_top   edge   2548600 1148500 g60    -34  158
+lavaux_edge_low   edge   2548600 1148500 g60     36  158
+lavaux_bonfires   night  2548600 1148500 g60     -2  158  22    2026-08-01
 
 # --- Lausanne
 jorat_forest      near   2543000 1157000 g3      -5  0
@@ -38,10 +38,10 @@ sauvabelin_town   mid    2538500 1154800 g20     -8  190
 sauvabelin_night  night  2538500 1154800 g20     -8  190  21.5
 ouchy_shore       near   2538000 1150800 g1.7   -25  180
 lausanne_air3k    far    2538000 1152000 3000   -12  150
-lake_air8k        far    2525000 1140000 8000   -15  120
+lake_air5k        far    2525000 1140000 5000    -6  130
 
 # --- Jura and Geneva
-dole_alps         far    2497800 1142800 g2      -1  139
+dole_alps         far    2497800 1142800 g150    -3  139
 geneva_quai       near   2500300 1118450 g1.7   -20  207
 geneva_alps       far    2500600 1118300 g30      0  120
 
