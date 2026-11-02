@@ -524,12 +524,15 @@ public class PhotoJudgeTests
     }
 
     [Fact]
-    public void A_level_target_twenty_km_over_a_level_plain_is_seen_on_a_flat_earth()
+    public void A_level_target_twenty_km_over_a_level_plain_is_behind_the_earths_bulge()
     {
-        // pinned before the round world (#1429): the sight line ignores the Earth's curvature, so a
-        // spot 20 km off and as high as the eye clears the plain. #187 adds the ~7 m bulge and flips it
+        // the round world (#187; #1429 pinned it as seen on the flat Earth before): 6.8 m of the Earth
+        // stand halfway between, and a spot 20 km off as high as the eye, 2 m over the plain, is hidden
         var far = new PhotoSpot("ph:far", "Far", 2600000, 1200000, 150, 2600000, 1220000, 503, "A level spot");
-        Assert.Equal(PhotoVerdict.Taken, PhotoJudge.Judge(far, 2600000, 1200000, 502, 0, 0, 40, (_, _) => 500));
+        Assert.Equal(PhotoVerdict.Blocked, PhotoJudge.Judge(far, 2600000, 1200000, 502, 0, 0, 40, (_, _) => 500));
+        // 30 m higher it clears the bulge
+        var high = far with { TargetAlt = 533 };
+        Assert.Equal(PhotoVerdict.Taken, PhotoJudge.Judge(high, 2600000, 1200000, 532, 0, 0, 40, (_, _) => 500));
     }
 
     [Fact]

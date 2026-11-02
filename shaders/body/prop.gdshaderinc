@@ -33,7 +33,7 @@ void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     seed = INSTANCE_CUSTOM.x;
     glow_gain = INSTANCE_CUSTOM.y;
-    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION = retro_snap(PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 void fragment() {

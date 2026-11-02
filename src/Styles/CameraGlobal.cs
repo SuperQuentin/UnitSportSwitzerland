@@ -23,6 +23,17 @@ public partial class CameraGlobal : Node
 {
     public CameraGlobal() => Name = "CameraGlobal";
 
+    private static readonly StringName CamPos = "world_cam_pos", CurvatureParam = "world_curvature";
+
+    /// <summary>The drop per square metre last pushed (<see cref="Core.Curvature"/>), NaN before the first push.</summary>
+    private float _curvature = float.NaN;
+
+    /// <summary><c>--curvature 0</c>: the flat world, as before #187 (a picture to compare with main's).</summary>
+    public override void _Ready()
+    {
+        if (Core.CmdArgs.Double("--curvature") is 0) Core.Curvature.Drawn = false;
+    }
+
     public override void _EnterTree() => RenderingServer.FramePreDraw += Push;
 
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Push;
@@ -33,7 +44,14 @@ public partial class CameraGlobal : Node
         {
             var at = cam.GlobalPosition;
             if (Interiors.InteriorManager.Instance is { } interiors) at = interiors.ThroughNearestDoor(at);
-            RenderingServer.GlobalShaderParameterSet("world_cam_pos", at);
+            RenderingServer.GlobalShaderParameterSet(CamPos, at);
+        }
+        // the Earth's curvature in every world shader (#187), pushed when it changes
+        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2 : 0f;
+        if (curvature != _curvature)
+        {
+            _curvature = curvature;
+            RenderingServer.GlobalShaderParameterSet(CurvatureParam, curvature);
         }
     }
 }

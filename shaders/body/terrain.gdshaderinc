@@ -103,7 +103,7 @@ void vertex() {
         v_col = c;
     }
 #endif
-    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION = retro_snap(PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 
