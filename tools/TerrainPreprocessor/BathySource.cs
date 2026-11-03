@@ -65,6 +65,17 @@ public sealed class BathySource
 
     public bool Covers(TileId id) => _index.ContainsKey(id);
 
+    /// <summary>
+    /// Drops the decoded grids west of kilometre column <paramref name="e"/>: a pass that walks the country west to east
+    /// holds the three columns it is on, not every survey kilometre read so far (up to 10 GB nationwide, #1439).
+    /// A dropped kilometre is read again if it is asked for.
+    /// </summary>
+    public void ReleaseBefore(int e)
+    {
+        foreach (var key in _grids.Keys)
+            if (key.E < e) _grids.TryRemove(key, out _);
+    }
+
     /// <summary>The lake a survey kilometre belongs to (the STAC item's name, e.g. "lacleman"), or null.</summary>
     public string? LakeAt(TileId id) => _index.TryGetValue(id, out var e) ? e.Lake : null;
 
