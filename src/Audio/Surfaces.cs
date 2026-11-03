@@ -115,8 +115,7 @@ public static class Surfaces
     {
         if (Origin is not { } origin || chunks.Source is not { } source) return null;
         Watch(chunks);
-        var (e, n) = origin.ToLv95(feet);
-        var tile = TileId.FromLv95(e, n);
+        var tile = origin.TileAt(feet);
         if (!Roads.TryGetValue(tile, out var index))
         {
             // fetched once through the (cached) chunk source; until it lands there is simply no road
@@ -124,8 +123,9 @@ public static class Surfaces
             return null;
         }
         if (index == null) return null;
-        double lx = e - tile.MinE, lz = tile.MaxN - n;
-        return index.Nearest(lx, lz, feet.Y, index.Cell(lx, lz));
+        // the road file is tile-local (#1443): the feet in the tile's own frame
+        var local = origin.TileLocal(tile, feet);
+        return index.Nearest(local.X, local.Z, local.Y, index.Cell(local.X, local.Z));
     }
 
     /// <summary>

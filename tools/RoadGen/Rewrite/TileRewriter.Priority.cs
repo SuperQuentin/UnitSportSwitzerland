@@ -203,15 +203,27 @@ public static partial class TileRewriter
     /// <summary>
     /// Building footprints of a block, from the <c>.bldg</c> tiles beside the roads: a sign never
     /// stands inside a building. A point is inside when a triangle of the building covers it in
-    /// plan (the roof always does). Loaded lazily per tile, each tile's buildings in <see cref="Cell"/> m cells (#854: a
+    /// plan (the roof always does). Loaded lazily per tile, each tile's roof triangles in <see cref="Cell"/> m cells (#854: a
     /// junction's corner asks thousands of points; scanning every building of nine tiles made planning the cores slow).
     /// </summary>
     private sealed class Footprints(Func<TileId, BuildingTile?> source)
     {
-        private const double Cell = 25;
-        private readonly Dictionary<TileId, Dictionary<(int X, int Z), List<(double MinX, double MinY, double MaxX, double MaxY, float[] Tris)>>> _tiles = new();
+        private const double Cell = 10;
+        // per cell its roof triangles in plan, each as its box then its corners (10 numbers): a big building's box held a point
+        // that was then tried against every triangle of its roof
+        private readonly Dictionary<TileId, Dictionary<(int X, int Z), List<double>>> _tiles = new();
+        // the same points are asked again and again (a core's corners are laid over and over while its turns are narrowed, each
+        // radius tried along the same bisector): a Geneva block took hours (#1279). Exact points, so the answers are the same
+        private readonly Dictionary<(double X, double Y), bool> _asked = new();
 
         public bool Contains(Vec2 p)
+        {
+            if (_asked.TryGetValue((p.X, p.Y), out var known)) return known;
+            if (_asked.Count > 4_000_000) _asked.Clear();
+            return _asked[(p.X, p.Y)] = Scan(p);
+        }
+
+        private bool Scan(Vec2 p)
         {
             var at = TileId.FromLv95(p.X, p.Y);
             for (int de = -1; de <= 1; de++)
@@ -220,37 +232,33 @@ public static partial class TileRewriter
                 var id = new TileId(at.E + de, at.N + dn);
                 double x = p.X - id.MinE, z = id.MaxN - p.Y;
                 if (!Load(id).TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var here)) continue;
-                foreach (var b in here)
+                for (int t = 0; t + 9 < here.Count; t += 10)
                 {
-                    if (x < b.MinX || x > b.MaxX || z < b.MinY || z > b.MaxY) continue;
-                    for (int t = 0; t + 8 < b.Tris.Length; t += 9)
-                        if (InTriangle(x, z, b.Tris[t], b.Tris[t + 2], b.Tris[t + 3], b.Tris[t + 5], b.Tris[t + 6], b.Tris[t + 8]))
-                            return true;
+                    if (x < here[t] || x > here[t + 2] || z < here[t + 1] || z > here[t + 3]) continue;
+                    if (InTriangle(x, z, here[t + 4], here[t + 5], here[t + 6], here[t + 7], here[t + 8], here[t + 9])) return true;
                 }
             }
             return false;
         }
 
-        private Dictionary<(int X, int Z), List<(double MinX, double MinY, double MaxX, double MaxY, float[] Tris)>> Load(TileId id)
+        private Dictionary<(int X, int Z), List<double>> Load(TileId id)
         {
             if (_tiles.TryGetValue(id, out var cells)) return cells;
             _tiles[id] = cells = new();
             // a building tile that is missing or will not decode only loses this check
             if (source(id) is not { } tile) return cells;
             foreach (var b in tile.Buildings)
-            {
-                double minX = double.MaxValue, minZ = double.MaxValue, maxX = double.MinValue, maxZ = double.MinValue;
-                for (int i = 0; i + 2 < b.Triangles.Length; i += 3)
+                for (int t = 0; t + 8 < b.Triangles.Length; t += 9)
                 {
-                    minX = Math.Min(minX, b.Triangles[i]); maxX = Math.Max(maxX, b.Triangles[i]);
-                    minZ = Math.Min(minZ, b.Triangles[i + 2]); maxZ = Math.Max(maxZ, b.Triangles[i + 2]);
+                    double ax = b.Triangles[t], az = b.Triangles[t + 2], bx = b.Triangles[t + 3], bz = b.Triangles[t + 5], cx = b.Triangles[t + 6], cz = b.Triangles[t + 8];
+                    // a wall is a line in plan and covers no point
+                    if (Math.Abs((bx - ax) * (cz - az) - (bz - az) * (cx - ax)) < 1e-9) continue;
+                    double minX = Math.Min(ax, Math.Min(bx, cx)), maxX = Math.Max(ax, Math.Max(bx, cx));
+                    double minZ = Math.Min(az, Math.Min(bz, cz)), maxZ = Math.Max(az, Math.Max(bz, cz));
+                    for (int gx = (int)Math.Floor(minX / Cell); gx <= (int)Math.Floor(maxX / Cell); gx++)
+                        for (int gz = (int)Math.Floor(minZ / Cell); gz <= (int)Math.Floor(maxZ / Cell); gz++)
+                            (cells.TryGetValue((gx, gz), out var list) ? list : cells[(gx, gz)] = []).AddRange([minX, minZ, maxX, maxZ, ax, az, bx, bz, cx, cz]);
                 }
-                if (minX > maxX) continue;
-                var entry = (minX, minZ, maxX, maxZ, b.Triangles);
-                for (int cx = (int)Math.Floor(minX / Cell); cx <= (int)Math.Floor(maxX / Cell); cx++)
-                    for (int cz = (int)Math.Floor(minZ / Cell); cz <= (int)Math.Floor(maxZ / Cell); cz++)
-                        (cells.TryGetValue((cx, cz), out var list) ? list : cells[(cx, cz)] = []).Add(entry);
-            }
             return cells;
         }
 

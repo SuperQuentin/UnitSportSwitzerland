@@ -17,8 +17,9 @@
   only, for your shadow and the mirrors (`avatar/own-body-from-eye`, #833). Mounted first person sits at the figure's own eye
   (`Rideable.FirstPersonEye` from `MountsForPose`), rolled with the lean. In a car it is the
   cockpit, a cycle of three (chase, with your body, without): `cockpit`.
-  **Zoom** (#1149, Genshin's way): Shift + wheel / `=` `-` (`view_zoom_in/out`; the plain wheel is the
-  hotbar, which skips `PlayerInput.IsZoomWheel`), a pad holds R3 and pushes the right stick (a tap of R3
+  **Zoom** (#1149, #1369, Genshin's way): the plain wheel, whatever is held (Shift is sprint), / `=` `-`
+  (`view_zoom_in/out`; the hotbar is Alt + wheel, `PlayerInput.IsHotbarWheel`; no zoom on a wheel the held
+  item owns, `ItemController.WheelClaimed`, nor with a released pointer), a pad holds R3 and pushes the right stick (a tap of R3
   is still the view switch, on release). `_zoomWant` 0.6..8 m (default `ArmLength`) in ×1.2 steps,
   `_zoom` eased; closer than `ArmLength` the pivot climbs to `EyeHeight`, the shoulder offset and the
   speed pull-back go (`face`), so the nearest stop frames the head: orbit round to the front for the

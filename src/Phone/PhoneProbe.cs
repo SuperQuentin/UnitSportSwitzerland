@@ -53,13 +53,15 @@ public partial class PhoneProbe : Node
         await Wait(1.0);
         Shot("phone_0_before.png");
 
-        // the camera's own zoom (#1149): Shift + wheel in to the face, the hotbar left as it was; - back out
+        // the camera's own zoom (#1149, #1369): the plain wheel zooms whatever is held (Shift too: it is sprint),
+        // in to the face, the hotbar left as it was; - back out
+        await HolsterChecks(me);
         if (me.ZoomsView)
         {
             int inHand = me.HeldItemId;
             for (int i = 0; i < 12; i++) await Wheel(MouseButton.WheelUp, shift: true, 0.05);
             await Wait(0.8);
-            Check(me.ViewZoom < 0.7f, $"Shift + wheel zooms in to the face ({me.ViewZoom:F2} m)");
+            Check(me.ViewZoom < 0.7f, $"wheel with Shift held zooms in to the face ({me.ViewZoom:F2} m)");
             Check(me.HeldItemId == inHand, $"and does not step the hotbar ({inHand} -> {me.HeldItemId})");
             Shot("phone_0b_zoom_back.png");
             me.LookYaw += Mathf.Pi;
@@ -95,7 +97,8 @@ public partial class PhoneProbe : Node
         await Wait(1.0);
         Check(phone.IsCovering, "Up again opens it and the screen covers the view");
         Check(me.PhoneState == FootPlayer.PhoneOpenState, $"open on the wire (state {me.PhoneState})");
-        Check(me.PhoneCover == 0f, "home is seen in the hands, not square on");
+        if (Platform.IsTouch) Check(me.PhoneCover > 0f, $"touch: Home is seen square on, enlarged ({me.PhoneCover:F2})");
+        else Check(me.PhoneCover == 0f, "home is seen in the hands, not square on");
         // the cursor over the screen: the free hand's index finger comes to point at it
         var mid = me.CameraOrNull is { } eye && me.PhoneModel is { } pm
             ? eye.UnprojectPosition(pm.GlobalTransform * PhoneModel.InnerScreenCentre) : GetViewport().GetVisibleRect().Size / 2f;
@@ -103,9 +106,10 @@ public partial class PhoneProbe : Node
         var atWindow = GetViewport().GetScreenTransform() * mid;
         Input.ParseInputEvent(new InputEventMouseMotion { Position = atWindow, GlobalPosition = atWindow });
         await Wait(0.4);
-        Check(me.PhonePointTip != null, $"the cursor on the screen: the index finger points at it (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
+        Check(me.PhonePointTip != null || Platform.IsTouch, $"the cursor on the screen: the index finger points at it (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
         Log($"finger: tip {me.PhonePointTip}, built {me.DrawnPoint}, body {me.GlobalPosition}, phone {me.PhoneModel?.GlobalPosition}");
         Shot("phone_5_open.png");
+        Save(phone.Screens.Inner, "phone_5_open_screen.png");
         await Key(Godot.Key.S, 0.4);
         Shot("phone_5b_swipe.png");
 
@@ -114,7 +118,29 @@ public partial class PhoneProbe : Node
         await Wait(0.6);
         Check(phone.Screens.Shown == PhoneScreens.Page.Activities, "the Activities app opens on the phone");
         Shot("phone_5c_activities.png");
+        Save(phone.Screens.Inner, "phone_5c_activities_screen.png");
         await Key(Godot.Key.Escape, 0.4);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Esc goes back from an app to home (#1253)");
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        await Key(Godot.Key.Backspace, 0.4);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Backspace goes back too (#1253)");
+        phone.Open(PhoneScreens.Page.Training);
+        await Wait(0.4);
+        await Key(Godot.Key.Escape, 0.4);
+        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Activities, "Esc from Training goes up to Activities, it does not fold the phone (#1253)");
+        await Key(Godot.Key.Escape, 0.4);
+        Check(phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "and once more to the home screen (#1253)");
+        Check(phone.Screens.HomeTileCount == 6, $"the home screen has six apps ({phone.Screens.HomeTileCount}); Menu and Training live in Activities (#1253)");
+        await ContactsChecks(phone);
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        await Hold(Godot.Key.Escape, PhoneController.StowHoldSeconds + 0.6);
+        for (int i = 0; i < 30 && phone.IsOut; i++) await Wait(0.1);
+        Check(!phone.IsOut, "holding Esc puts the phone away from any page (#1253)");
+        await Press(PlayerInput.Phone, 1.0);
+        phone.Open(PhoneScreens.Page.Home);
+        await Wait(0.6);
 
         // the map: closer first, then the world fades to black behind the phone
         phone.Open(PhoneScreens.Page.Map);
@@ -123,6 +149,8 @@ public partial class PhoneProbe : Node
         await Wait(1.2);
         Check(me.PhoneCover >= 1f && me.PhoneBackdropShown >= 1f, $"the map square on, the world black behind ({me.PhoneCover:F2}, {me.PhoneBackdropShown:F2})");
         Shot("phone_5d_map.png");
+        Save(phone.Screens.Inner, "phone_5d_map_screen.png");
+        Check(phone.Screens.MapRowCount > 0 || !phone.Screens.HasPlaces, $"the Map lists places without typing ({phone.Screens.MapRowCount} rows) (#1253)");
         await Key(Godot.Key.Escape, 1.0);
 
         // the camera app: raised before the face, the lens out of its back; Enter shoots into the album
@@ -160,6 +188,28 @@ public partial class PhoneProbe : Node
         Save(phone.Screens.Cover, "phone_9_selfie_cover.png");
         await Key(Godot.Key.F, 0.8);
         Check(me.PhoneState == FootPlayer.PhoneCameraState, "F turns it back");
+
+        // the camera's own buttons (#1253): zoom chips with the current lens lit, a focusable shutter and Selfie
+        Check(phone.Screens.ShutterButton.FocusMode == Control.FocusModeEnum.All, "the shutter button can take focus");
+        Check(phone.Screens.LitChip == 0 && phone.Screens.Zoom == 1f, "the 1x chip is lit to start with");
+        phone.CameraTap(phone.Screens.ZoomChipUv(2));
+        await Wait(0.2);
+        Check(phone.Screens.Zoom == 5f && phone.Screens.LitChip == 2, $"a tap on the 5x chip zooms to 5x and lights it ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        await Key(Godot.Key.Down, 0.2);
+        Check(phone.Screens.Zoom == 2f && phone.Screens.LitChip == 1, $"Down steps the zoom and moves the lit chip ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        phone.CameraTap(phone.Screens.ZoomChipUv(0));
+        await Wait(0.2);
+        Check(phone.Screens.Zoom == 1f && phone.Screens.LitChip == 0, "the 1x chip puts it back");
+        // a finger on the picture itself does not shoot
+        string? beforeTap = phone.LastPhoto;
+        await FingerTap(me, new Vector2(0.3f, 0.5f), cover: false);
+        await Wait(1.0);
+        Check(phone.LastPhoto == beforeTap && !phone.Selfie, "a tap on the glass does not shoot (touch)");
+        phone.CameraTap(phone.Screens.SelfieUv());
+        await Wait(0.8);
+        Check(phone.Selfie, "the Selfie button turns the phone round");
+        await Key(Godot.Key.F, 0.8);
+        Check(!phone.Selfie, "and F turns it back");
         await Key(Godot.Key.Escape, 0.8);
         Check(me.PhoneState == FootPlayer.PhoneOpenState, "Esc goes back to the home screen");
 
@@ -168,12 +218,37 @@ public partial class PhoneProbe : Node
         await Wait(0.6);
         Check(phone.Screens.Shown == PhoneScreens.Page.Photos, "the Photos app opens");
         Shot("phone_10_photos.png");
+        Save(phone.Screens.Inner, "phone_10_photos_screen.png");
+        // the selfie key means nothing outside the camera app
+        await Key(Godot.Key.F, 0.3);
+        await Key(Godot.Key.Tab, 0.3);
+        Check(!phone.Selfie && phone.Screens.Shown == PhoneScreens.Page.Photos, "F and Tab are not a selfie outside the camera");
         if (Rendered)
         {
+            int count = phone.Screens.GridCount;
+            Check(count >= 2, $"the album has the shots ({count})");
+            Pad(JoyButton.RightShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.GridFocus == count - 1, $"RB pages the grid down ({phone.Screens.GridFocus} of {count})");
+            Pad(JoyButton.LeftShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.GridFocus == 0, $"LB pages it back up ({phone.Screens.GridFocus})");
             await Key(Godot.Key.Enter, 0.5);
             Check(phone.Screens.Shown == PhoneScreens.Page.Photo, "Enter opens the newest photo");
-            await Key(Godot.Key.D, 0.3);
+            string? newest = phone.Screens.PhotoShown;
+            await Key(Godot.Key.Right, 0.3);
+            Check(phone.Screens.PhotoShown != newest && phone.Screens.PhotoShown != null, "Right shows the next photo");
+            await Key(Godot.Key.Left, 0.3);
+            Check(phone.Screens.PhotoShown == newest, "Left shows the previous one");
+            Pad(JoyButton.RightShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.PhotoShown != newest, "RB is next in the viewer");
+            Pad(JoyButton.LeftShoulder);
+            await Wait(0.3);
+            Check(phone.Screens.PhotoShown == newest && phone.Screens.Shown == PhoneScreens.Page.Photo, "LB is previous");
+            await Key(Godot.Key.S, 0.3);
             Shot("phone_11_photo.png");
+            Save(phone.Screens.Inner, "phone_11_photo_screen.png");
             await Key(Godot.Key.Enter, 0.5);
             Check(phone.Wallpapers.Home == phone.LastPhoto, $"set as the home screen ({phone.Wallpapers.Home})");
             await Key(Godot.Key.Escape, 0.4);
@@ -181,6 +256,17 @@ public partial class PhoneProbe : Node
         else Log("skip (headless: no shot to open or set as a wallpaper)");
         await Key(Godot.Key.Escape, 0.6);
         Shot("phone_12_home_wallpaper.png");
+
+        // Esc on the curtain cancels a travel that has not jumped yet
+        var stay = me.Global;
+        Teleporter.Instance?.TeleportTo(stay.E + 500, stay.N, "probe cancelled");
+        await Wait(0.1);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Travel, "the curtain is up while the jump waits (#1253)");
+        await Key(Godot.Key.Escape, 2.5);
+        var stayed = me.Global;
+        Check(Math.Abs(stayed.E - stay.E) < 2 && phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the curtain cancels the travel and stays on the phone (#1253)");
+
+        await FingerChecks(me, phone);
 
         // travel while open: behind the phone once the world is dark, and the phone folds away there
         var from = me.GlobalPosition;
@@ -219,6 +305,67 @@ public partial class PhoneProbe : Node
         GetTree().Quit(_failed == 0 ? 0 : 1);
     }
 
+    /// <summary>The window pixels where uv (0..1) of the inner or cover screen is, as a parsed event wants them.</summary>
+    private Vector2 WindowAt(FootPlayer me, Vector2 uv, bool cover)
+    {
+        var world = me.PhoneScreenToWorld(uv, cover, 0f) ?? Vector3.Zero;
+        var canvas = me.CameraOrNull?.UnprojectPosition(world) ?? Vector2.Zero;
+        return GetViewport().GetScreenTransform() * canvas;
+    }
+
+    /// <summary>A finger (the mouse Godot emulates from a touch): down at uv, dragged <paramref name="move"/> millimetres, up.</summary>
+    private async Task FingerTap(FootPlayer me, Vector2 uv, bool cover, Vector2 move = default)
+    {
+        float s = GetViewport().GetScreenTransform().X.Length();
+        float mm = TouchControls.MeasureScreen(GetViewport(), GetViewport().GetVisibleRect().Size).PxPerMm * s;
+        var from = WindowAt(me, uv, cover);
+        void Send(InputEvent e) => Input.ParseInputEvent(e);
+        Send(new InputEventMouseMotion { Device = (int)InputEvent.DeviceIdEmulation, Position = from, GlobalPosition = from });
+        Send(new InputEventMouseButton { Device = (int)InputEvent.DeviceIdEmulation, ButtonIndex = MouseButton.Left, Pressed = true, Position = from, GlobalPosition = from });
+        await Wait(0.05);
+        foreach (float f in new[] { 0.5f, 1f })
+        {
+            var at = from + move * mm * f;
+            Send(new InputEventMouseMotion { Device = (int)InputEvent.DeviceIdEmulation, Position = at, GlobalPosition = at, ButtonMask = MouseButtonMask.Left });
+            await Wait(0.03);
+        }
+        var end = from + move * mm;
+        Send(new InputEventMouseButton { Device = (int)InputEvent.DeviceIdEmulation, ButtonIndex = MouseButton.Left, Pressed = false, Position = end, GlobalPosition = end });
+        await Wait(0.3);
+    }
+
+    private static void Pad(JoyButton button)
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventJoypadButton { ButtonIndex = button, Pressed = down });
+    }
+
+    /// <summary>A finger counts in millimetres (#1253): 2 mm of wobble is still a tap, 10 mm sideways is Back; Photo pages sideways.</summary>
+    private async Task FingerChecks(FootPlayer me, PhoneController phone)
+    {
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Wait(0.5);
+        if (phone.Screens.FocusUv() is not { } tile) { Log("skip (no focused tile to touch)"); return; }
+        await FingerTap(me, tile, cover: false, new Vector2(1.2f, 0.6f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Map, $"a finger that wobbles 1.3 mm still taps the tile ({phone.Screens.Shown})");
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(6f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Map, $"a 6 mm sideways stroke is not Back ({phone.Screens.Shown})");
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(12f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, $"a 12 mm swipe right is Back ({phone.Screens.Shown})");
+        if (!Rendered) return;
+        phone.Screens.ShowPage(PhoneScreens.Page.Photos);
+        await Wait(0.4);
+        if (phone.Screens.GridCount < 2) return;
+        await Key(Godot.Key.Enter, 0.4);
+        string? first = phone.Screens.PhotoShown;
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(-12f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Photo && phone.Screens.PhotoShown != first, "a swipe left in the viewer is the next photo, not Back");
+        await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(12f, 0f));
+        Check(phone.Screens.Shown == PhoneScreens.Page.Photo && phone.Screens.PhotoShown == first, "a swipe right is the previous one");
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Wait(0.3);
+    }
+
     /// <summary>Headless draws no frame, so the camera has nothing to shoot: its checks run windowed only (as the Polaroid's).</summary>
     private static bool Rendered => DisplayServer.GetName() != "headless";
 
@@ -226,6 +373,52 @@ public partial class PhoneProbe : Node
     {
         if (Rendered) Check(ok, what);
         else Log($"skip (headless: no frame to shoot): {what}");
+    }
+
+    /// <summary>Contacts (#1253): one row per player, a sheet of four asks, Cancel first in a confirm, a result line that stays.</summary>
+    private async Task ContactsChecks(PhoneController phone)
+    {
+        var screens = phone.Screens;
+        var sent = new List<string>();
+        void Sent(string c) => sent.Add(c);
+        screens.CommandPicked += Sent;
+        screens.TestPeople = new List<string> { "Anna", "Ben" };
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        Check(screens.ContactRowCount == 2, $"Contacts has one row per player ({screens.ContactRowCount})");
+        Check(screens.ContactsFocus?.StartsWith("Anna") == true && screens.ContactsFocus.Contains("Online"), $"a row shows name and status ({screens.ContactsFocus})");
+        await Key(Godot.Key.Enter, 0.3);
+        Check(screens.ContactsSheetOpen && screens.ContactsFocus == "Go to", $"Enter opens the sheet on Go to ({screens.ContactsFocus})");
+        await Key(Godot.Key.Down, 0.2); await Key(Godot.Key.Down, 0.2); await Key(Godot.Key.Down, 0.2);
+        Check(screens.ContactsFocus == "Fight", $"the sheet has Go to, Bring here, Party invite, Fight ({screens.ContactsFocus})");
+        await Key(Godot.Key.Enter, 0.3);
+        Check(screens.ContactsConfirmOpen && screens.ContactsFocus == "Cancel" && sent.Count == 0, $"Fight asks first, Cancel focused, nothing sent ({screens.ContactsFocus}, {sent.Count} sent)");
+        await Key(Godot.Key.Enter, 0.3);
+        Check(screens.ContactsSheetOpen && !screens.ContactsConfirmOpen && sent.Count == 0, "Cancel goes back to the sheet, nothing sent");
+        await Key(Godot.Key.Escape, 0.3);
+        Check(!screens.ContactsSheetOpen && phone.Screens.Shown == PhoneScreens.Page.Contacts, "Esc closes the sheet, the list stays");
+        await Key(Godot.Key.Enter, 0.3);
+        await Key(Godot.Key.Down, 0.2); await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        Check(sent.Count == 1 && sent[0] == "/party invite Anna", $"Party invite sends the party command ({string.Join("|", sent)})");
+        Check(screens.ContactsResult.StartsWith("Party invite · Anna"), $"the result line stays after the action ({screens.ContactsResult})");
+        screens.OnResolved("party", "Anna", "declined");
+        Check(screens.ContactsResult == "Party invite · Anna: Declined", $"Declined shows ({screens.ContactsResult})");
+        screens.OnResolved("party", "Anna", "lapsed");
+        Check(screens.ContactsResult.EndsWith("Timed out"), $"Timed out shows ({screens.ContactsResult})");
+        screens.OnResolved("party", "Anna", "accepted");
+        Check(screens.ContactsResult.EndsWith("Accepted"), $"Accepted shows ({screens.ContactsResult})");
+        await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        await Key(Godot.Key.Down, 0.2);
+        await Key(Godot.Key.Enter, 0.3);
+        Check(sent.Count == 2 && sent[1] == "/tphere Ben", $"Bring here confirmed sends /tphere ({string.Join("|", sent)})");
+        await Key(Godot.Key.Escape, 0.3);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the list still goes home");
+        screens.CommandPicked -= Sent;
+        screens.TestPeople = null;
     }
 
     private async Task Press(string action, double after)
@@ -249,11 +442,107 @@ public partial class PhoneProbe : Node
         Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
     }
 
-    private async Task Wheel(MouseButton button, bool shift, double after)
+    private async Task Wheel(MouseButton button, bool shift, double after, bool alt = false)
     {
         foreach (bool down in new[] { true, false })
-            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, ShiftPressed = shift });
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, ShiftPressed = shift, AltPressed = alt });
         await Wait(after);
+    }
+
+    /// <summary>
+    /// The hotbar's wheel and the holster (#1369): Alt + wheel steps the slot (the plain wheel, Shift or not, does not),
+    /// the number of the slot in hand puts its item away and takes it out, the holster key does the same, Use draws
+    /// and uses, and an item left alone for 8 s goes away by itself. A holstered hand reads as empty to the other peers.
+    /// </summary>
+    private async Task HolsterChecks(FootPlayer me)
+    {
+        if (Items.ItemController.Instance is not { } items) { Log("skip (no items)"); return; }
+        var inv = items.Inventory;
+        int slot = -1;
+        for (int i = 0; i < Items.Inventory.HotbarSize && slot < 0; i++) if (!inv[i].IsEmpty) slot = i;
+        if (slot < 0) { Log("skip (empty hotbar)"); return; }
+        GameSettings.Current.AutoHolster = true;
+        inv.Select(slot);
+        await Wait(0.3);
+        Check(me.HeldItemId != 0 && !inv.Holstered, $"slot {slot + 1} is in hand ({me.HeldItemId})");
+
+        int before = inv.Selected;
+        await Wheel(MouseButton.WheelDown, shift: false, 0.2);
+        await Wheel(MouseButton.WheelDown, shift: true, 0.2);
+        Check(inv.Selected == before, $"the plain wheel, Shift or not, does not step the hotbar ({before} -> {inv.Selected})");
+        await Wheel(MouseButton.WheelDown, shift: false, 0.2, alt: true);
+        Check(inv.Selected == (before + 1) % Items.Inventory.HotbarSize, $"Alt + wheel steps it ({before} -> {inv.Selected})");
+        await Wheel(MouseButton.WheelUp, shift: false, 0.2, alt: true);
+        Check(inv.Selected == before, $"Alt + wheel up steps back ({inv.Selected})");
+
+        await Key(Godot.Key.Key1 + slot, 0.3);
+        Check(inv.Holstered && me.HeldItemId == 0, $"the number of the slot in hand holsters it: the hand is empty ({me.HeldItemId})");
+        await Key(Godot.Key.Key1 + slot, 0.3);
+        Check(!inv.Holstered && me.HeldItemId != 0, $"and again draws it ({me.HeldItemId})");
+        await Press(PlayerInput.Holster, 0.3);
+        Check(inv.Holstered && me.HeldItemId == 0, "the holster key puts it away");
+        items.ForceAim = true;
+        await Wait(0.2);
+        items.ForceAim = false;
+        Check(!inv.Holstered, "Aim draws it");
+        inv.SetHolstered(true);
+        await Press(PlayerInput.UseItem, 0.1);
+        Check(!inv.Holstered, "Use draws it (and uses it on the same press)");
+        inv.SetHolstered(true);
+        await Press(PlayerInput.NextItem, 0.3);
+        Check(!inv.Holstered, "picking another slot draws");
+        inv.Select(slot);
+        await Wait(0.3);
+
+        double t0 = GameClock.Now;
+        while (!inv.Holstered && GameClock.Now - t0 < 12) await Wait(0.2);
+        double idle = GameClock.Now - t0;
+        Check(inv.Holstered && idle is > 7.0 and < 10.0, $"left alone, it is holstered after about 8 s ({idle:F1} s)");
+        Check(me.HeldItemId == 0, "and replicated as an empty hand");
+        // no item type is exempt: a hammer left alone goes away too
+        var keep = inv[slot];
+        int hamSlot = (slot + 1) % Items.Inventory.HotbarSize;
+        var keepHam = inv[hamSlot];
+        inv.Put(hamSlot, new Items.ItemStack(Items.ItemId.Hammer, 1));
+        inv.Select(hamSlot);
+        await Wait(0.3);
+        t0 = GameClock.Now;
+        while (!inv.Holstered && GameClock.Now - t0 < 12) await Wait(0.2);
+        idle = GameClock.Now - t0;
+        Check(inv.Holstered && idle is > 7.0 and < 10.0, $"a hammer (once exempt) is holstered after about 8 s too ({idle:F1} s)");
+
+        // a new sprint start holsters at once; drawing on the run stays out; the next sprint holsters again
+        inv.Select(hamSlot);
+        await Wait(0.3);
+        Check(!inv.Holstered, "hammer in hand before the sprint");
+        Input.ActionPress(PlayerInput.MoveForward);
+        Input.ActionPress(PlayerInput.Sprint);
+        for (double w0 = GameClock.Now; !me.SprintIntent && GameClock.Now - w0 < 2;) await Wait(0.1);
+        await Wait(0.3);
+        Check(me.SprintIntent && inv.Holstered && me.HeldItemId == 0, "starting a sprint puts the item in the pocket");
+        await Wait(0.5);
+        Check(inv.Holstered, "and it is not drawn back by itself");
+        await Press(PlayerInput.UseItem, 0.1);
+        await Wait(0.5);
+        Check(!inv.Holstered && me.SprintIntent, "Use draws it on the run, and it stays out while the sprint goes on");
+        Input.ActionRelease(PlayerInput.Sprint);
+        await Wait(0.3);
+        Input.ActionPress(PlayerInput.Sprint);
+        await Wait(0.4);
+        Check(inv.Holstered, "a NEW sprint holsters again");
+        Input.ActionRelease(PlayerInput.Sprint);
+        Input.ActionRelease(PlayerInput.MoveForward);
+        inv.Put(hamSlot, keepHam);
+        inv.Put(slot, keep);
+
+        GameSettings.Current.AutoHolster = false;
+        inv.Select(slot);
+        t0 = GameClock.Now;
+        await Wait(9.5);
+        Check(!inv.Holstered, "Auto holster off: it stays out");
+        GameSettings.Current.AutoHolster = true;
+        inv.Select(slot);
+        await Wait(0.3);
     }
 
     /// <summary>One of the phone's screens as it is drawn, into test_output/ (windowed).</summary>

@@ -76,7 +76,51 @@ public partial class Handshake : Node
     /// 47: the e-bike (#1159): RideKind.EBike 203 and its low-frame EBikeOpen 204, catalogue bicycles.
     /// 48: a CD's voice and music stems over AssetKind.Cd (TileId.N 1 and 2), the radios' and the concert's voice/music mix (#1153).
     /// 49: World/Accounts (Ask, Present, Welcome, Refuse): the account step after this check (#1123).
-    public const int Protocol = 49;
+    /// 50: World/Adventure (#1223: RequestStart/Abandon/Track/Deliver; SectionSync, QuestNote, Granted, DeliverOk, Refused, Unsaved), World/Bank Credited.
+    /// 51: World/Adventure/Places (#1224: RequestInteract; Stamped, Synced, FogFull, FogDelta), AssetKind.AtlasFacts 18.
+    /// 52: World/CinemaBooths (#1238: AskSet; Set): a cinema's house lights and screen.
+    /// 53: World/Arrival Rules carries the stamina and lift switches; FootPlayer.PoseKind 8 (PoseWallClimb) (#1225).
+    /// 54: World/Adventure/Travel (#1226: RequestTravel/Buy/PinAdd/PinEdit/PinRemove; TellMode, TellUnlocked, TellRefused, Depart, PartyPinsState).
+    /// 55: World/Adventure/Rewards (#1227: RequestOpen/Pick/SealStep/Offer/Guide/Photo/Fauna/Trial/TrialGate/TrialLeave/Board/
+    /// Ghost/GhostPart; TellOpened/Picked/Seal/Refused/Offered/Photo/TrialStarted/TrialGate/TrialEnded/Board/Ghost, GuideLeg),
+    /// PlacedKind.TravelFlag 12, ItemEventKind.Gust 11.
+    /// 56: World/Invites Ended (kind, name, outcome): the sender of a direct invite learns accepted, declined or lapsed (#1253; 55 is main's).
+    /// 57: World/Versteckis (#1268: RequestDisguise/Tag/Sniff/Decoy/Sprint/Moo/Objective; SetGames, Enter, Kit, PutAt, Release, Caught,
+    /// Missed, Sniffed, Sounded), the <c>versteckis</c> invite kind, <c>InterestService.Withheld</c>, ItemId 460-467, ItemUse.Round.
+    /// 58: World/CinemaBooths AskSet and Set carry the hall (#1279: a panel per hall; 57 is main's).
+    /// 59: World/Adventure/Festivals (#1269 part 1: RequestRing/TestDate; TellFestivals, TellBoard, TellConverted, TellRang, TellRefused),
+    /// the <c>festivals</c> section, <c>OccasionFacets.Games</c> (1 &lt;&lt; 6) on the occasions wire.
+    /// 60: World/Together (#1266: Links, GateOpen, PotState, BreadLost, TellFeast, TellHaul, the Ask* requests), invite kinds rope and fondue.
+    /// 61: World/CinemaBooths AskVideoRpc and SetVideo (#1298: a hall's video link and its start on the shared clock).
+    /// 62: World/CinemaBooths AskVideoRpc and SetVideo carry the hall's relay switch; WatchRelay, RelayFrame, RelaySound,
+    /// RelayStatus on channel 5 (#1298 phase 2: the hall's video through the server).
+    /// 63: World/CinemaBooths AskLiveRpc, PushFrame, PushSound (#1298 phase 3: a player's screen, window or webcam on a hall).
+    /// 64: World/CinemaBooths AskVideoRpc, AskLiveRpc and SetVideo carry the hall's 3D layout (#1298 phase 6).
+    /// 65: World/CinemaBooths SetPool (#1298: the server's own films a showing hall draws from).
+    /// 66: World/CinemaBooths AskDisplayRpc and SetDisplay (#1298: a hall's projector fit and ratio).
+    /// 67: World/Errands (#1267: RequestAccept/Share/Join; Accepted, Shared, TookBack, Told), the <c>errands</c> section, ItemId 430-444.
+    /// 68: World/Adventure/Festivals RequestFahneStart, RequestFahneRoutine, TellFahneStart, TellFahneResult (#1269 part 5: Fahnenschwingen).
+    /// 69: World/Alcohol (#1271: ReportDrank, RequestSelfTest, RequestOffer; TellResult), World/Arrival Rules carries <c>--alcohol</c>, the <c>breath</c> invite kind, ItemId 486-488, ItemUse.Breath.
+    /// 70: World/Schwing (#1269 Schwingen: RequestJoin/RequestLeave/Act/Tug; Begin, State, Thrown, Ended, TellQueue), the <c>schwing</c> invite kind, FootPlayer.SchwingPose, ItemId 500.
+    /// 71: World/Adventure/Festivals alphorn game (#1269 part 4: RequestHornStart/Song; TellHornSeat, TellHornResult).
+    /// 72: World/Adventure/Festivals/Stein RequestBegin, RequestThrow, TellBegin, TellNo, TellLanded (#1269 part 3: the stone put).
+    /// 73: World/Adventure/Festivals Désalpe RequestDesalpeDress/Start/Vote, TellDesalpe, TellDesalpeSnap, TellDesalpeResult, TellDesalpeVoted (#1269 part 7).
+    /// 74: World/WorldEvents (#1339: RequestHelp; PlanOut, MovedOut, StateOut, EndedOut, Told), the <c>errands</c> section's <c>events</c> count.
+    /// 75: Interiors/Bowling lanes state carries each pair's house balls on the return (#1336).
+    /// 76: World/Adventure/Festivals RequestMarket, TellMarket (#1348: the Christmas market's stalls and Samichlaus), ItemId 501-502.
+    /// 77: World/Adventure/Festivals RequestEscalade, TellEscalade (#1351: the Escalade's Marmite, soup pot and Course), ItemId 503-504.
+    /// 78: Interiors/CinemaBooths SetPool carries each film's place in the halls' rotation (#1367).
+    /// 79: World/Adventure/Festivals RequestChalanda, TellChalanda (#1356: the Chalandamarz's procession and its stamped Treichel rings), ItemId 515.
+    /// 80: World/Adventure/Festivals RequestSechse, TellSechse (#1358: the Sechseläuten's bet on the Böögg, the purse, the Cervelat), ItemId 510.
+    /// 81: World/Adventure/Festivals RequestAugust1, TellAugust1, ShowOwn (#1355: the 1 August's stands, lampion walk and own fireworks), ItemId 520-521, ItemUse.Firework.
+    /// 82: World/Adventure/Festivals RequestFasnacht, TellFasnacht, RequestGuggenStart, RequestGuggenSong, TellGuggenSeat, TellGuggenResult (#1357: the Fasnacht's Larven stall, Räppli, Morgestraich and Guggenmusik), ItemEventKind.Confetti 12, ItemUse.Confetti, Headwear 5-10, ItemId 505-509.
+    /// 83: World/Adventure/Festivals RequestZibele, TellZibele (#1373: the Zibelemärit's onion stalls and confetti fight), ItemId 525-528.
+    /// 84: FootPlayer.PoseKind 9 (PoseCrevasse, #1372: down a hidden glacier crevasse, Anim.W says stand, climb or fall), World/Arrival Rules carries the server's --crevasses switch.
+    /// 85: World/Sword Act, Acted, Hit, Struck, DummySpawn/DummyHit (#1371: sword combat, server-checked blade hits), ItemId 600, ItemUse.Sword, the sword dance moves (7000+).
+    /// 86: World/Adventure/Festivals RequestMontreux, TellMontreux (#1394: Montreux Jazz's listening mark and the encore's claps), ItemId 511, Genre.Jazz (the jazz night's event is built from the festival's year and day, nothing is sent).
+    /// 87: Adventure/Together RequestStartAt (#1384: a fondue pot on a dining venue's table, the table's place sent).
+    /// 88: World/Telescopes AskLook, AskLeave, Answered, Busy (#1440: one player at a time at a set-up telescope), PlacedKind.Telescope 13, ItemId 640.
+    public const int Protocol = 88;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

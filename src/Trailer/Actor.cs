@@ -326,7 +326,7 @@ public sealed class Actor
                     return ((right * wish.X + ahead * wish.Y).LimitLength(1f), run);
                 };
                 // jumps and crouches scripted (a slide, a wall jump, a base jump), the wingsuit flown after
-                if (Spec.Actions != null) body.FootActions = () => Spec.Actions(_moving);
+                if (Spec.Actions != null) body.FootActions = () => { var (jump, crouch) = Spec.Actions(_moving); return (jump, crouch, false); };
                 if (Spec.Flight != null) body.FlyControls = () => Spec.Flight(_moving);
                 break;
             case Drive.Stand when Body.Vehicle is Flyer:

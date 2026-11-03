@@ -44,6 +44,21 @@
   - `submit_result` takes `{course, playerKey, name?, timeMs, avgWatts?, event?}` and returns
     `{leaderboard, rank, best}`. It is called as `POST /v2/rpc/submit_result?http_key=<key>&unwrap` with the raw
     JSON body.
+- **Forgotten passwords** (#1257): Nakama sends no mail, so the layout service (`net/house-layouts`, which has `SMTP_*`) does.
+  - The module holds the token. `password_reset_issue {email}` and `password_reset_apply {token, password}` are
+    **http key only** (a player's session gets 403). Issue returns `{token}` for an account with that email (banned
+    ones excluded) and `{}` for none; a new request replaces the account's earlier token.
+  - The token is 64 hex characters; only its SHA-256 sits in a system-owned storage object (collection `password_reset`),
+    valid 30 minutes and spent by one use, even a failed one. Apply refuses a password outside 8 to 128 characters and
+    sets it with `nk.linkEmail` on the account's own email (checked on Nakama 3.41: it replaces the password).
+  - The service's `POST /api/password/forgot {email}` answers 200 whether or not the account exists, mails
+    `<site>/reset.html#token=…` (the fragment never reaches a log), and waits a minute between two mails to one address,
+    on top of the `login` rate limit. `POST /api/password/reset {token, password}` applies it. Both answer 503 without
+    `NAKAMA_URL` and `NAKAMA_HTTP_KEY`; with no `SMTP_HOST` the link goes to the service's log.
+  - The deploy writes both into `layouts.env` on `--setup`, reading the key from the host's Nakama `.env`. On a first
+    deploy, run `--nakama`, then `--setup` again.
+  - Asked from the site's sign-in dialog (**Forgot your password?**, `web-dashboard`), `reset.html`, and the game's
+    Account page (`net/accounts`). `tools/nakama/check.sh` covers the RPCs.
 - **Trust boundary**: a result comes only from a race server, which already checked the checkpoints and timed the
   finish on its clock (`RaceManager`).
   - `submit_result` refuses any call made with a player's session (`ctx.userId` set) with **403**. Invalid fields

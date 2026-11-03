@@ -25,8 +25,11 @@ public static class FishRules
 
     public static bool IsNight(double hour) => hour < 5.5 || hour >= 21;
 
-    /// <summary>How keen a species is on this spot, bait and hour; 0 = it does not live there.</summary>
-    public static double Weight(FishSpecies s, FishSpot spot, Bait bait, double hour)
+    /// <summary>
+    /// How keen a species is on this spot, bait and hour; 0 = it does not live there. Fishing with
+    /// <paramref name="together"/> friends near (#1266) makes the rare, very rare and legendary ones likelier.
+    /// </summary>
+    public static double Weight(FishSpecies s, FishSpot spot, Bait bait, double hour, int together = 0)
     {
         if ((s.Waters & spot.Kind) == 0 || (s.Basins & spot.Basin) == 0) return 0;
         // the altitude range is soft at its ends: 100 m beyond, the odds fade to nothing
@@ -46,16 +49,17 @@ public static class FishRules
             _ => 0.6,
         };
         if (IsNight(hour)) w *= s.Night ? 2.5 : 0.6;
+        if (together > 0 && s.Rarity >= Rarity.Rare) w *= Adventure.Together.TogetherRules.RareFactor(together);
         return w;
     }
 
     /// <summary>Every species that may bite here, with its weight, heaviest first.</summary>
-    public static List<(FishSpecies Species, double Weight)> Odds(FishSpot spot, Bait bait, double hour)
+    public static List<(FishSpecies Species, double Weight)> Odds(FishSpot spot, Bait bait, double hour, int together = 0)
     {
         var list = new List<(FishSpecies, double)>();
         foreach (var s in FishCatalog.All)
         {
-            double w = Weight(s, spot, bait, hour);
+            double w = Weight(s, spot, bait, hour, together);
             if (w > 0) list.Add((s, w));
         }
         list.Sort((a, b) => b.Item2.CompareTo(a.Item2));
@@ -63,9 +67,9 @@ public static class FishRules
     }
 
     /// <summary>Draws the fish that bites, or null where nothing lives.</summary>
-    public static FishSpecies? Pick(FishSpot spot, Bait bait, double hour, Random rng)
+    public static FishSpecies? Pick(FishSpot spot, Bait bait, double hour, Random rng, int together = 0)
     {
-        var odds = Odds(spot, bait, hour);
+        var odds = Odds(spot, bait, hour, together);
         double total = odds.Sum(o => o.Weight);
         if (total <= 0) return null;
         double roll = rng.NextDouble() * total;
@@ -78,7 +82,7 @@ public static class FishRules
     /// Seconds until the next bite: an exponential wait round the mean, shorter at dawn and dusk (when fish
     /// feed), longer with no bait, on a stormy lake and where little lives.
     /// </summary>
-    public static double MeanBiteSeconds(FishSpot spot, Bait bait, double hour, double seaState)
+    public static double MeanBiteSeconds(FishSpot spot, Bait bait, double hour, double seaState, int together = 0)
     {
         double mean = 14;
         if (bait == Bait.None) mean *= 2.5;
@@ -87,12 +91,13 @@ public static class FishRules
         else if (hour >= 11 && hour < 15) mean *= 1.25;
         if (seaState > 0.6) mean *= 1.5;
         if (spot.Kind == WaterKind.MountainStream || spot.Kind == WaterKind.AlpineLake) mean *= 1.3;
-        return mean;
+        // friends fishing beside you (#1266): a bite comes sooner
+        return mean * Adventure.Together.TogetherRules.BiteFactor(together);
     }
 
-    public static double BiteSeconds(FishSpot spot, Bait bait, double hour, double seaState, Random rng)
+    public static double BiteSeconds(FishSpot spot, Bait bait, double hour, double seaState, Random rng, int together = 0)
     {
-        double mean = MeanBiteSeconds(spot, bait, hour, seaState);
+        double mean = MeanBiteSeconds(spot, bait, hour, seaState, together);
         // never at once, never for ever
         return Math.Clamp(-Math.Log(1 - rng.NextDouble()) * mean, 3, mean * 4);
     }

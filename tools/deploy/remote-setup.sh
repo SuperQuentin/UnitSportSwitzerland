@@ -106,6 +106,7 @@ if [ "${TILES:-1}" = 1 ]; then
   new=$(<"$HERE/Caddyfile"); new=${new//@TILES_SITE@/"$TILES_SITE"}; new=${new//@CHUNKS_DIR@/"$CHUNKS_DIR"}; new=${new//@WEB_DIR@/"$DEPLOY_DIR/web"}; new=${new//@COMPRESS@/"$serve"}
   new=${new//@LAYOUTS_PORT@/"${LAYOUTS_PORT:-5080}"}
   new=${new//@NAKAMA_PORT@/"${NAKAMA_PORT:-7350}"}   # Nakama behind the same Caddy at /nakama/ (#1205)
+  new=${new//@ADMIN_HTTP_PORT@/"${ADMIN_HTTP_PORT:-7790}"}   # the game server's admin API at /server-api/ (#1211)
   if [ -n "${LAYOUTS_TRUSTED_PROXIES:-}" ]; then global=$'{\n\tservers {\n\t\ttrusted_proxies static '"$LAYOUTS_TRUSTED_PROXIES"$'\n\t}\n}'; else global=""; fi
   new=${new//@GLOBAL@/"$global"}
   cf=/etc/caddy/Caddyfile

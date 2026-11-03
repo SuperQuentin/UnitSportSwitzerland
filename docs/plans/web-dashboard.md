@@ -40,6 +40,11 @@ Asked by the owner on 2026-10-25:
 
 ## Phase 2: the game server's admin API, the Server and Console tabs
 
+**Status (2026-10-25, #1211):** built as below, with these changes. Live settings are the existing commands (`/time`,
+`/weather`, `/seastate`, `/speed`, `/say`) run from the page, their replies shown; no new teleport rule or message of the
+day yet. A player is kicked from the table; sending one to the spawn is left out (`/spawn` needs the admin's own body).
+Startup arguments are a checked line, not a form.
+
 - **`--admin-http 127.0.0.1:7790`**: a loopback HTTP listener in the dedicated server, modelled on
   `Playtest/LoopbackHttp` (raw `TcpListener`, Host and Origin checked, body capped).
   - Caddy proxies `/server-api/*` to it.

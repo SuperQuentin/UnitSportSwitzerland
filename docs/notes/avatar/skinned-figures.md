@@ -49,6 +49,10 @@ The figure was rebuilt and re-uploaded for every pose (`perf-pose-mesh-cache`): 
 180 KB of garbage a rebuild on a desktop, every frame for anyone walking, falling, dancing,
 swimming, steering or pedalling. On the Quest (#1112) the frame rate quadrupled when the tracked
 hands stopped the own figure's arms moving. Measured before/after: see the PR.
+- **On the Quest 2** (debug exports, 0cf043cf vs 5946bf42, `tools/quest-measure.sh`): offline it is the
+  same, with no shader errors on the Mobile renderer. The kart street scene (`--at 2500300,1118450 --heading 207
+  --seat kart`) runs at 42.2 fps, 17.8 ms GPU before and 42.4 fps, 17.8 ms after; the title screen at 72 fps,
+  8.2 ms both. With bots it is not measured yet: a Quest cannot stay on a server (#1218).
 
 ## Same look, checked
 - `--skincheck` (quick tier, ~70 s): every look (builds, hair, hats, helmets, every garment)

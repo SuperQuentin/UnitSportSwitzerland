@@ -39,7 +39,13 @@
   `ssh -t user@host tmux attach -t unitsport` (detach Ctrl-b d). A deploy kills the session (no graceful save exists) and
   restarts it, then waits for the UDP port (about 30 s) and prints the log tail. **Ctrl-d in the console ends its stdin**:
   the server keeps running but reads no more commands until a restart. Inside the session `start-server.sh run`
-  loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it).
+  loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it),
+  and so the dashboard's Restart starts the same build again (the `restart-requested` marker, #1211). It puts
+  `$DEPLOY_DIR/server-args.local` (the dashboard's startup arguments, never written by a deploy) first on the command
+  line. Every tmux lookup is exact (`-t =unitsport`): a bare name is a prefix, and `unitsport` matched `unitsport-layouts`.
+- **The dashboard's Server and Console tabs** (#1211, `net/web-dashboard`): `DASHBOARD=1` (default with a web site) starts
+  the server with `--admin-http ADMIN_HTTP_PORT` (7790, loopback) and the Nakama on the host; Caddy serves it at
+  `/server-api/` (a host set up before it needs `--setup` once).
 - **Keeping it current** (#1088): a release-stamped server installs newer releases by itself once nobody plays
   (`net/server-update`; a `--build` deploy has no version and stays as deployed). When your game is newer than
   the server, its console (`net/console-link`) still joins it for the chat, with your admin rights there.
@@ -66,6 +72,7 @@
   Free space is checked first (new minus replaced bytes plus `SPACE_MARGIN_MB`). Copy is `rsync` when both ends have it,
   else a `tar | ssh tar` stream (keeps mtimes, so the next run is a no-op); `manifest.json` goes last. Server-only files are
   kept unless `--prune`. Lists land in `test_output/deploy/`. Listing 246k files from Git Bash takes minutes.
+- **SMTP check** (#1287, `net/house-layouts`): `tools/deploy-linux.sh --smtp-check you@example.ch` is a step of its own (no build, no other step): over SSH it loads `layouts/layouts.env` and runs `app/LayoutService --smtp-check`, which mails a test message (MailKit: port 465 implicit TLS, 587 or other ports STARTTLS) and prints the exact failure; the password never leaves the host.
 - **Gotchas seen on the first real deploy (Debian 13):** the root partition was 19 GB, so the space check refused the tiles until
   `DEPLOY_CHUNKS_DIR` pointed at `/home` (check `df -h` on the host first). `/etc/os-release` defines `VERSION`, so the setup
   script reads it in a subshell or the mDNS TXT would advertise "13 (trixie)". A server started before the tiles arrive exits

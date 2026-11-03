@@ -4,6 +4,13 @@ namespace UnitSport.Terrain.Format;
 /// WGS84 (GPS) to LV95 conversion using swisstopo's approximate formulas.
 ///
 /// <para>
+/// <b>Kept only for the preprocessor's stages until they move to the global tiles (#1443, G1).</b>
+/// The game and anything new use <see cref="SwissGeodesy.ToLv95"/> / <see cref="SwissGeodesy.ToLatLon"/>,
+/// the rigorous chain: these polynomials are off by 10 m at Paris and 276 m at Brest, which puts French
+/// roads and buildings beside their (rigorously placed) terrain.
+/// </para>
+///
+/// <para>
 /// Accurate to well under a metre inside Switzerland, which is far tighter than consumer GPS
 /// itself, so the rigorous transformation would buy nothing for a GPX track.
 /// </para>

@@ -53,7 +53,7 @@ internal sealed class TouchMore
         ("Quick menu", PlayerInput.QuickMenu),
         ("Emotes", PlayerInput.EmoteWheel),
         ("Drop item", PlayerInput.DropItem),
-        ("Bird journal", PlayerInput.BirdJournal),
+        ("Journal", PlayerInput.BirdJournal),
         ("Character", PlayerInput.CharacterMenu),
         ("All controls", PlayerInput.Help),
     };

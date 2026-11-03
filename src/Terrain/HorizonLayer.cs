@@ -36,7 +36,25 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private const double CommitBudgetMs = 3;
 
     /// <summary>Metres beyond which no block is loaded. 0 turns the layer off.</summary>
-    public double DistanceM { get; set; }
+    public double DistanceM
+    {
+        get => _distanceM;
+        set
+        {
+            _distanceM = value;
+            foreach (var block in _blocks.Values)
+                if (block != null) block.ExtraCullMargin = CullMargin();
+        }
+    }
+    private double _distanceM;
+
+    /// <summary>
+    /// How far a block's drawn ground can lie below its box (#187): the shaders lower it by the Earth's
+    /// drop round the camera, 340 m at the far edge of a 60 km horizon, and a box culled as flat would
+    /// lose the peaks along the top of the screen. The farthest a block's corner can be from the camera.
+    /// </summary>
+    // without refraction's share: from 20 km up the drop is the true sphere's (#1430 H1), 15 % more
+    private float CullMargin() => (float)(Curvature.Drop(_distanceM + UnloadSlackM + BlockM * Math.Sqrt(2)) / (1 - Curvature.Refraction));
 
     private IChunkSource? _source;
     private WorldOrigin? _origin;
@@ -328,6 +346,7 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
             Mesh = mesh,
             // ground: never a sun-shadow caster (lit styles)
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            ExtraCullMargin = CullMargin(),
             // NW corner of the block, like a tile
             Position = _origin!.ToWorld(key.E * ChunkFormat.TileSizeM, (key.N + BlockTiles) * ChunkFormat.TileSizeM, 0),
         };

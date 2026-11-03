@@ -55,24 +55,31 @@ public partial class PromptBar : CanvasLayer
         Rebuild();
     }
 
-    private string _shown = "";
+    // the rows on screen and the next ones: kept lists, so a refresh that changes nothing allocates no list
+    // and no key string (#1344). The label is part of a row, so a rebound key or a switched device still rebuilds.
+    private List<(string Action, string Text, string Label)> _shown = new(), _next = new();
 
     private void Rebuild()
     {
+        _next.Clear();
         // on a phone the touch buttons carry these labels themselves (#63)
-        var rows = UiFocus.TextEntryActive || Source == null || TouchControls.Shown
-            ? new List<(string, string)>()
-            : Source().ToList();
+        if (!(UiFocus.TextEntryActive || Source == null || TouchControls.Shown))
+            foreach (var (action, text) in Source())
+                _next.Add((action, text, InputHints.Label(action)));
 
-        string key = string.Join("|", rows.Select(r => InputHints.Tag(r.Item1) + r.Item2));
-        if (key == _shown) return;
-        _shown = key;
+        if (_next.Count == _shown.Count)
+        {
+            int i = 0;
+            while (i < _next.Count && _next[i] == _shown[i]) i++;
+            if (i == _next.Count) return;
+        }
+        (_shown, _next) = (_next, _shown);
 
         foreach (var child in _lines.GetChildren()) child.QueueFree();
-        for (int i = 0; i < rows.Count; i++)
+        for (int i = 0; i < _shown.Count; i++)
         {
-            var (action, text) = rows[i];
-            bool last = i == rows.Count - 1 && action == PlayerInput.Help;
+            var (action, text, _) = _shown[i];
+            bool last = i == _shown.Count - 1 && action == PlayerInput.Help;
             _lines.AddChild(Row(action, text, last));
         }
     }

@@ -1,0 +1,82 @@
+<!doctype html>
+<!-- Served at /reset.html by Caddy on a deployed server (#1257). The page the "reset your password" email links to:
+     /reset.html#token=<64 hex>. The token rides in the fragment, so it is never sent to the server or written in a
+     log; the page posts it with the new password to the layout service (/api/password/reset), which has Nakama check
+     and spend it. A forgot-password request starts in account.js's dialog (and the game's Account page). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose a new password - UnitSport</title>
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<style>
+:root { --bg: #120c14; --text: #fbf4ee; --muted: #c2b3b0; --dim: #8d7e80; --glow: #ff7a45; --glow2: #ffb36b;
+  --rose: #e0567a; --ok: #4fe08a; --glass: rgba(26, 16, 26, .55); --line: rgba(255, 220, 200, .14); }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--text);
+  font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--glow2); }
+main { width: 100%; max-width: 400px; background: var(--glass); border: 1px solid var(--line); border-radius: 16px; padding: 24px;
+  display: flex; flex-direction: column; gap: 14px; }
+h1 { margin: 0; font-size: 20px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+input { font: 400 15px system-ui, sans-serif; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .05); color: var(--text); }
+input:focus { outline: 2px solid var(--glow); outline-offset: 1px; }
+button { font: 700 15px system-ui, sans-serif; padding: 11px; border-radius: 10px; border: none; background: var(--glow); color: #1a0d10; cursor: pointer; }
+button[disabled] { opacity: .6; cursor: wait; }
+.msg { min-height: 1.4em; font-size: 14px; }
+.msg.err { color: var(--rose); }
+.msg.ok { color: var(--ok); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Choose a new password</h1>
+  <form id="form" novalidate>
+    <label>New password
+      <input id="pw" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+    </label>
+    <label style="margin-top:12px">Type it again
+      <input id="pw2" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+    </label>
+    <div class="msg err" id="err" role="alert" style="margin:8px 0"></div>
+    <button id="go" type="submit" style="width:100%">Set the password</button>
+  </form>
+  <div id="done" hidden>
+    <p class="msg ok">Your password is changed. Sign in with it on the site, or in the game's Account page.</p>
+    <p><a href="/">Back to the home page</a></p>
+  </div>
+  <div id="bad" hidden>
+    <p class="msg err">This link is missing, used or expired.</p>
+    <p><a href="/">Back to the home page</a>, then Sign in &rarr; Forgot your password? for a new link.</p>
+  </div>
+</main>
+<script>
+(function () {
+  var token = (location.hash.match(/token=([0-9a-f]{64})/) || [])[1] || "";
+  var form = document.getElementById("form"), err = document.getElementById("err"), go = document.getElementById("go");
+  if (!token) { form.hidden = true; document.getElementById("bad").hidden = false; return; }
+  history.replaceState(null, "", location.pathname);   // the token leaves the address bar and the history
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var pw = document.getElementById("pw").value;
+    if (pw.length < 8) { err.textContent = "8 characters or more."; return; }
+    if (pw !== document.getElementById("pw2").value) { err.textContent = "The two passwords differ."; return; }
+    go.disabled = true; err.textContent = "";
+    fetch("/api/password/reset", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "houses" },
+      body: JSON.stringify({ token: token, password: pw }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { r: r, j: j }; }); })
+      .then(function (x) {
+        if (x.r.ok) { form.hidden = true; document.getElementById("done").hidden = false; return; }
+        if (x.r.status === 400 && /used or expired/.test(x.j.error || "")) { form.hidden = true; document.getElementById("bad").hidden = false; return; }
+        err.textContent = x.j.error || "Something went wrong: try again.";
+      }, function () { err.textContent = "The server does not answer."; })
+      .then(function () { go.disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>

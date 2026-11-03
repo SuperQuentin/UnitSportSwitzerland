@@ -6,6 +6,8 @@
 # The live map (#896): map.html, players.json (--livemap-file, every 2 s) and antennas-4g.json (tools/deploy/antennas.py).
 # House layouts (#1186): houses.html, and /api/ to the layout service on loopback (tools/LayoutService).
 # Nakama (#1205, tools/nakama): /nakama/ to its API and realtime socket on loopback, the prefix stripped.
+# The dashboard's Server and Console tabs (#1211): /server-api/ to the game server's admin API on loopback (--admin-http),
+# the prefix stripped; every call carries an admin's Nakama token, which the game server checks.
 # The global block below (empty by default): the proxies in front trusted for X-Forwarded-For (LAYOUTS_TRUSTED_PROXIES), so the service sees the visitor.
 @GLOBAL@
 @TILES_SITE@ {
@@ -19,6 +21,13 @@
 	}
 	handle_path /nakama/* {
 		reverse_proxy 127.0.0.1:@NAKAMA_PORT@
+	}
+	handle_path /server-api/* {
+		request_body {
+			max_size 64KB
+		}
+		header Cache-Control "no-store"
+		reverse_proxy 127.0.0.1:@ADMIN_HTTP_PORT@
 	}
 	handle /api/* {
 		request_body {

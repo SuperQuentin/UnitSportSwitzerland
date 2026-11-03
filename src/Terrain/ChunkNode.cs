@@ -280,7 +280,7 @@ public partial class ChunkNode : Node3D
                     VisibilityRangeEnd = rangeEnd,
                 };
                 if (layer.VariantType != Variant.Type.Nil) instance.SetInstanceShaderParameter(World.Snow.PisteLayer.PisteLayerParam, layer);
-                _roadInstance.AddChild(instance);
+                _roadInstance.AddChild(Styles.ZoomRanges.Track(instance));
                 list.Add(instance);
             }
         }
@@ -300,12 +300,18 @@ public partial class ChunkNode : Node3D
             {
                 if (cell.Name.ToString().StartsWith("BuildingProxies")) cell.VisibilityRangeBegin = boxFromM;
                 else if (cell.VisibilityRangeEnd > 0f) cell.VisibilityRangeEnd = boxFromM;
+                else continue;
+                Styles.ZoomRanges.Track(cell); // the new range is the zoom's base
             }
         if (_roadCellInstances != null)
         {
             float range = PaintRange(_roadCellInstances.Count(c => c.Name.ToString().StartsWith("RoadPaint")), paintToM);
             foreach (var cell in _roadCellInstances)
-                if (cell.Name.ToString().StartsWith("RoadPaint")) cell.VisibilityRangeEnd = range;
+                if (cell.Name.ToString().StartsWith("RoadPaint"))
+                {
+                    cell.VisibilityRangeEnd = range;
+                    Styles.ZoomRanges.Track(cell);
+                }
         }
     }
 
@@ -444,7 +450,7 @@ public partial class ChunkNode : Node3D
             var instance = new MeshInstance3D { Name = $"Buildings{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings) };
             // no fade: Godot's fades dither with a discard, which a standalone headset's GPU cannot afford
             if (proxies != null) instance.VisibilityRangeEnd = boxFromM;
-            AddChild(instance);
+            AddChild(Styles.ZoomRanges.Track(instance));
             list.Add(instance);
         }
         if (proxies != null)
@@ -456,7 +462,7 @@ public partial class ChunkNode : Node3D
                     Name = $"BuildingProxies{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings),
                     VisibilityRangeBegin = boxFromM, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 };
-                AddChild(proxy);
+                AddChild(Styles.ZoomRanges.Track(proxy));
                 list.Add(proxy);
             }
         _cellInstances = list.ToArray();
@@ -760,7 +766,11 @@ public partial class ChunkNode : Node3D
         bool billboards = trees.ConifersFar != null || trees.BroadleavesFar != null;
         foreach (var near in new[] { _coniferInstance, _broadleafInstance })
             if (near?.Multimesh is { } multi)
+            {
                 near.VisibilityRangeEnd = billboards ? Styles.StyleKit.TreeNearRange(multi.CustomAabb) : 0f;
+                // zoomed, the shader keeps trees 3D farther (world_lod_scale): the cut follows
+                Styles.ZoomRanges.Track(near);
+            }
         ApplyTreeDensity();
     }
 

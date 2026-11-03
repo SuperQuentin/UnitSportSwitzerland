@@ -34,6 +34,7 @@ public sealed class FacetToggles
     public bool Loot { get; set; } = true;
     public bool Hunt { get; set; } = true;
     public bool Hats { get; set; } = true;
+    public bool Games { get; set; } = true;
 
     public OccasionFacets ToFlags() =>
         (Decorations ? OccasionFacets.Decorations : 0)
@@ -41,7 +42,8 @@ public sealed class FacetToggles
         | (Audio ? OccasionFacets.Audio : 0)
         | (Loot ? OccasionFacets.Loot : 0)
         | (Hunt ? OccasionFacets.Hunt : 0)
-        | (Hats ? OccasionFacets.Hats : 0);
+        | (Hats ? OccasionFacets.Hats : 0)
+        | (Games ? OccasionFacets.Games : 0);
 }
 
 /// <summary>
@@ -97,27 +99,118 @@ public static class OccasionConfig
     /// sightings on the first Friday of every month and the morning after (#863; the saucers only
     /// come at night, 21:00-05:00 game time, <see cref="SightingPlanner"/>).
     /// </summary>
-    public static List<OccasionEntry> Defaults() => new()
+    public static List<OccasionEntry> Defaults()
     {
-        new OccasionEntry
+        var entries = new List<OccasionEntry>
         {
-            Id = OccasionIds.Halloween, Priority = 10,
-            Schedule = { new DateWindow("09-01", "10-31") },
-        },
-        new OccasionEntry
+            new()
+            {
+                Id = OccasionIds.Halloween, Priority = 10,
+                Schedule = { new DateWindow("09-01", "10-31") },
+                Facets = new FacetToggles { Games = false },
+            },
+            new()
+            {
+                Id = OccasionIds.Christmas, Priority = 10,
+                Schedule = { new DateWindow("11-01", "12-31") },
+                Facets = new FacetToggles { Games = false },
+            },
+            new()
+            {
+                // below the seasons: on a Halloween Friday, Halloween keeps its sky
+                Id = OccasionIds.Ufo, Priority = 5,
+                Schedule = { new DateWindow("fri#1", "+1") },
+                // no loot, no hunt, no hat: the saucers (Decorations), the green night, the wail
+                Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false, Games = false },
+            },
+        };
+        // festivals (#1269): the check-only festival exists only under --festival test; the Älplerfest's entry is below
+        if (Festivals.FestivalCatalog.TestRequested)
+            entries.Add(new OccasionEntry
+            {
+                Id = Festivals.FestivalCatalog.TestId, Priority = 8,
+                Schedule = { new DateWindow("03-10", "03-14") },
+                Facets = new FacetToggles { Atmosphere = false, Audio = true, Loot = false, Hunt = false, Hats = false },
+            });
+        // the Alpine herders' festival (#1269 part 5): 14-24 August; the sky stays the season's, the games and the flags run
+        entries.Add(new OccasionEntry
         {
-            Id = OccasionIds.Christmas, Priority = 10,
-            Schedule = { new DateWindow("11-01", "12-31") },
-        },
-        new OccasionEntry
+            Id = Festivals.FestivalCatalog.AelplerfestId, Priority = 8,
+            Schedule = { new DateWindow("08-14", "08-24") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the cow drive (#1269 part 7): 20 September to 5 October, the herd, the sign and the fair's ring
+        entries.Add(new OccasionEntry
         {
-            // below the seasons: on a Halloween Friday, Halloween keeps its sky
-            Id = OccasionIds.Ufo, Priority = 5,
-            Schedule = { new DateWindow("fri#1", "+1") },
-            // no loot, no hunt, no hat: the saucers (Decorations), the green night, the wail
-            Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false },
-        },
-    };
+            Id = Festivals.FestivalCatalog.DesalpeId, Priority = 8,
+            Schedule = { new DateWindow("09-20", "10-05") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Christmas markets (#1348): 25 November to 23 December inside the Christmas season, which keeps the sky; the stalls, the tree and the Samichlaus
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ChristmasMarketId, Priority = 8,
+            Schedule = { new DateWindow("11-25", "12-23") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // Montreux Jazz (#1394): sixteen days from the first Friday of July, the quay's small stage (no stand-in town: a region without Montreux does not hold it)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.MontreuxJazzId, Priority = 8,
+            Schedule = { new DateWindow("07-fri#1", "+15") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Zibelemärit (#1373): the fourth Monday of November, Bern's Bundesplatz (relocated to the region's largest town); the stalls and the confetti fight
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ZibelemaeritId, Priority = 8,
+            Schedule = { new DateWindow("11-mon#4", "+0") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Escalade (#1351): the second Saturday of December and the Sunday after it, Geneva's old town (relocated to the region's largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.EscaladeId, Priority = 8,
+            Schedule = { new DateWindow("12-sat#2", "+1") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Fasnacht (#1357): Luzern's from the Schmutziger Donnerstag for six days, Basel's three days from the Monday after Ash Wednesday. The Hats facet is the
+        // festival's own mask (Fritschi, Ueli); Basel's Atmosphere is the Morgestraich (street lamps out at 04:00 on day 1), and only that: the sky is the season's
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.FasnachtId, Priority = 8,
+            Schedule = { new DateWindow("easter-52", "+5") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = true },
+        });
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.BaslerFasnachtId, Priority = 8,
+            Schedule = { new DateWindow("easter-41", "+2") },
+            Facets = new FacetToggles { Atmosphere = true, Loot = false, Hunt = false, Hats = true },
+        });
+        // the Sechseläuten (#1358): the third Monday of April, Zürich's Sechseläutenplatz (relocated to the region's largest town); the sky is the season's
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.SechselaeutenId, Priority = 8,
+            Schedule = { new DateWindow("04-mon#3", "+0") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the Chalandamarz (#1356): 1 March, the children's procession in an Engadin village (relocated to the region's largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.ChalandaId, Priority = 8,
+            Schedule = { new DateWindow("03-01", "03-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        // the 1 August (#1355): 31 July and 1 August, the Höhenfeuer, the lake fireworks, the lampion walk (held in the first lake town the region has, else its largest town)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.August1Id, Priority = 8,
+            Schedule = { new DateWindow("07-31", "08-01") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
+        return entries;
+    }
 
     public static List<OccasionEntry> Load()
     {
@@ -163,7 +256,8 @@ public static class OccasionConfig
     {
         try
         {
-            Core.JsonStore.Save(File, new OccasionConfigFile { Occasions = entries }, JsonOptions);
+            // the check-only festival (--festival test) never lands in a player's file
+            Core.JsonStore.Save(File, new OccasionConfigFile { Occasions = entries.Where(e => e.Id != Festivals.FestivalCatalog.TestId).ToList() }, JsonOptions);
         }
         catch (Exception e)
         {

@@ -35,6 +35,18 @@ F12 (`NoteTaker`): the screenshot is the frame before the box draws, and the tim
 press, not the Enter. `/note <text>` in the chat, the Fail button's text, the panel's Note button
 (the box's text, or none: a pad marks the moment), and Claude's MCP `note` do the same.
 
+## What the panel shows (#1383)
+
+Under the panel's Note / Top view / Free play / End session row, and on the closed card, a line
+with the recording's state: a red dot and "Recording · 5 notes", "Saving the session…" while End
+session closes the files (the movie first), then "Not recording: session ended". Every saved note,
+whichever way it came, adds "✔ Note 5 saved" on that line for 4 s (`PlaytestRecorder.Changed`
+fires with its id; 0 when the recording stops); a note asked for when nothing records says "Not
+recording: the note was not saved" in red. Once ended the panel lists what was saved, the report's
+path (`test_output/playtest/sessions/<time>/report.md`), that the game keeps running unrecorded and
+that Claude reads the report next; Note and End session go grey (a pad's focus moves to Top view).
+The same panel serves the pad (L3+R3) and VR (the XrUi screen, XrPad), so all three see it.
+
 ## Cost and size
 
 Reads only, at 10 Hz; one frame copy handed to the worker, which writes and flushes every second.
@@ -47,8 +59,10 @@ again from the tiles the session names (`topview`).
 ## Checks
 
 `--playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat`
-(quick tier): a 20 s session with a scenario's car and a scripted note, read back. Windowed it also
-checks the screenshot and saves `test_output/playtest/recordcheck_overlay.png` (the live top view).
+(quick tier): a 20 s session with a scenario's car and a scripted note, read back, ended through
+the director's End session; the panel's line must confirm the note and the end with the report's
+path. Windowed it also checks the screenshot and saves `test_output/playtest/recordcheck_overlay.png`
+(the live top view) and `recordcheck_{note,ended}{,_card}.png` (the panel open and its card).
 `tools/playtestnetcheck.sh` (net tier): a recording server and two recording clients; B must have
 drawn A within a few metres of where the server had it (median 0.3 m at 8 m/s on loopback).
 Tier 0: `PlaytestTraceTests` (trace, index, relaunch append, cut frame, ring, top view, report).

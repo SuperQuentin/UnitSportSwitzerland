@@ -43,6 +43,15 @@ public enum AntiAliasing
     Msaa8x = 4,
 }
 
+/// <summary>When the hotbar is drawn on foot (#1369): the current item is always in the corner chip.</summary>
+public enum HotbarMode
+{
+    Always = 0,
+    /// <summary>Shown for a few seconds after a slot change, a holster or draw, a use or the quick wheel, then faded out.</summary>
+    Fade = 1,
+    Hidden = 2,
+}
+
 /// <summary>What the on-screen performance overlay shows (F3 cycles it).</summary>
 public enum PerfOverlayMode
 {
@@ -109,6 +118,31 @@ public sealed class GameSettings
     public string MenuSkinDay { get; set; } = Ui.Skins.MenuSkin.DayDefault;
     public string MenuSkinNight { get; set; } = Ui.Skins.MenuSkin.NightDefault;
 
+    // ---- the adventure's navigation (#1226, docs/notes/adventure/compass.md, guide.md, travel.md) ----
+    /// <summary>The free-roam compass strip at the top of the screen.</summary>
+    public bool AdventureCompass { get; set; } = true;
+
+    /// <summary>Versteckis (#1268): the blind seeker hears the count, a tick a second.</summary>
+    public bool VersteckisCounting { get; set; } = true;
+    /// <summary>The guiding gust: 0 on demand (N), 1 always while a target is tracked, 2 arrow only, 3 off.</summary>
+    public int GuideWind { get; set; }
+    /// <summary>The guide as a high-contrast arrow on the ground instead of leaves (accessibility).</summary>
+    public bool GuideHighContrast { get; set; }
+    /// <summary>Offline: travel only through the unlocked network (no free jumps), as on a network server.</summary>
+    public bool AdventureTravelNetwork { get; set; }
+    // ---- playing together (#1266, docs/notes/adventure/together.md) ----
+    /// <summary>The "Together ×n" chip beside the stamina ring while friends are near.</summary>
+    public bool TogetherChip { get; set; } = true;
+    /// <summary>The fondue panel's figure-eight guide (the faint lemniscate behind your stirring trace).</summary>
+    public bool StirGuide { get; set; } = true;
+    /// <summary>Hidden crevasses on glacier cover: a snow bridge may break under an unroped player.</summary>
+    public bool Crevasses { get; set; } = true;
+    // ---- alcohol (#1271, docs/notes/adventure/alcohol.md) ----
+    /// <summary>Offline: <c>0</c> off, <c>1</c> mild, <c>2</c> real (the default). A server's <c>--alcohol</c> decides online.</summary>
+    public int AlcoholMode { get; set; } = 2;
+    /// <summary>Comfort: the view sway and edge blur while drunk (the input lag stays); VR never sways.</summary>
+    public bool AlcoholViewEffects { get; set; } = true;
+
     /// <summary>No hover tilts, pops or ambient animation in the menus (#1135): plain fades only.</summary>
     public bool ReduceMotion { get; set; }
 
@@ -154,6 +188,13 @@ public sealed class GameSettings
     /// another render of the bowl; the size costs less than the render itself.
     /// </summary>
     public int ConcertScreenWidth { get; set; } = 512;
+
+    /// <summary>
+    /// How sharp a cinema hall's video is decoded on this machine (#1319, <see cref="Interiors.CinemaVideo.DecodeSize"/>):
+    /// 480p, 720p or 1080p sources. Only what this machine decodes itself; through the server it stays the relay's.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Interiors.CinemaVideo.Quality CinemaVideo { get; set; } = Interiors.CinemaVideo.Quality.Medium;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
@@ -335,14 +376,33 @@ public sealed class GameSettings
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
 
+    /// <summary>The sword's impact frame (#1371): a brief flash with speed lines on a finisher's or a full charge's hit. Off for photosensitivity.</summary>
+    public bool ImpactFrames { get; set; } = true;
+
     /// <summary>Radial streaks at the screen edge at speed.</summary>
     public bool SpeedLines { get; set; } = true;
+
+    /// <summary>The gliders' variometer: a beep that rises with the climb, a low tone in sink (#1225, <see cref="Audio.Variometer"/>).</summary>
+    public bool Variometer { get; set; } = true;
+
+    /// <summary>
+    /// Radios, stereos and speakers muffled by what stands between them and the ears, found by rays
+    /// (<see cref="Audio.Hearing"/>). Off: heard as in the open, no rays cast (#1281).
+    /// </summary>
+    public bool SoundOcclusion { get; set; } = true;
 
     /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
     public bool ChatBubbles { get; set; } = true;
 
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
+
+    /// <summary>The hotbar on foot (#1369). Touch controls keep it always, their taps need it.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public HotbarMode Hotbar { get; set; } = HotbarMode.Fade;
+
+    /// <summary>The item in hand is put away after a few idle seconds (#1369, <see cref="Items.ItemController.AutoHolsterSeconds"/>).</summary>
+    public bool AutoHolster { get; set; } = true;
 
     /// <summary>The on-foot camera over the left shoulder instead of the right; <c>swap_shoulder</c> flips it in game (#460).</summary>
     public bool LeftShoulder { get; set; }
@@ -392,6 +452,9 @@ public sealed class GameSettings
     /// then; Settings › Gameplay turns it off again to replay it.
     /// </summary>
     public bool TutorialDone { get; set; }
+
+    /// <summary>The newest build whose "What's new" (#1413) the player has seen; empty on a first install.</summary>
+    public string LastSeenVersion { get; set; } = "";
 
     /// <summary>
     /// The rides whose mini tutorial (#517, <see cref="VehicleIntroCard"/>) was done, by
@@ -479,6 +542,14 @@ public sealed class GameSettings
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public DetailPreset VrDetail { get; set; } = DetailPreset.Low;
+    /// <summary>The cinema's video in the headset (#1319): the screen fills much more of the view there.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Interiors.CinemaVideo.Quality VrCinemaVideo { get; set; } = Interiors.CinemaVideo.Quality.High;
+    /// <summary>
+    /// The playing hall's screen as a compositor layer of its own in the headset (#1319, <c>InteriorNode.CinemaLayer</c>):
+    /// sampled at the headset's resolution, never resampled into the eye picture first.
+    /// </summary>
+    public bool VrCinemaLayer { get; set; } = true;
 
     // --- VR comfort (#439) ---
     /// <summary>The right stick's turn on foot: a snap of 15, 30 or 45 degrees, or 0 for a smooth turn.</summary>

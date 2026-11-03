@@ -29,6 +29,8 @@
     - Server side, for a living entrant (`BrManager.Playing`): `/spawn` (sender), `/give`, `/money`,
       `/clear <player>` (target), `/tp` and `/bring` (either side) are refused (`ChatManager.RefusedInMatch`),
       `/tpall` skips entrants, and `VehicleManager.MayPark` refuses an admin's conjured vehicle.
+    - These ask `Core/Rounds` since #1268 (`core/rounds`): the BR registers first and keeps its words; a Versteckis
+      entrant is refused the same way, and a BR lobby refuses an entrant of another mode's round.
   - Is carried in the plane's hold until it jumps (`plane` note).
 - **Client at Release**: undoes all of that. `Inventory.EndMatch()`, `Respawn` if eliminated, then
   teleport back. Cash is never lost to a knockout in a match.
@@ -41,7 +43,7 @@
 - **PvP**: `Combat.PvpRules.Override` while Playing allows hits only between two living entrants
   (and not team-mates once teams exist). Anyone outside the match is left to `PvpRules.Enabled`.
   `PvpRules.HitRelayed` adds up damage dealt.
-- **Spectating**: once out, a `Camera3D` follows a living entrant (the killer first) from behind.
+- **Spectating**: once out, `Ui/FollowCam` (#1268, `ui/follow-cam`) follows a living entrant (the killer first) from behind.
   Its node is added as a chunk anchor. Left / right (`ui_left` / `ui_right`) switch who is followed.
 - **HUD** (`BrHud`, CanvasLayer 10, drawn), from top to bottom:
   - phase line (timer, alive, kills) and the area name;

@@ -65,6 +65,12 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
   layers (`Core/RenderCensus`), `--rendercensus` prints triangles per branch. `adb shell ovrgpuprofiler -r` reads the
   GPU's counters; `adb shell simpleperf record --app <package> -g` samples the CPU (a debug export only; C# shows as
   `unknown`, so rank it with `dotnet-trace` on a `--xrsim --quest` desktop run of the same place).
+- **A headset screenshot:** `adb shell am startservice -n com.oculus.metacam/.capture.CaptureService -a
+  TAKE_SCREENSHOT`, then pull the newest file in `/sdcard/Oculus/Screenshots`. `debuggerd -b` needs root; to see where a
+  frozen app spins, `simpleperf record --app <package> -g --duration 12` while it is frozen.
+- **Online is broken (#1218):** joining a server freezes the main thread ~70 s (a loop in `libmonosgen`), so the server
+  drops the headset. Measure offline until it is fixed. A server wakes the headset at its sleeper
+  (`user://sleepers/server.json`), which may be off a fixture world or on tiles the headset lacks.
 
 ## What a Quest 2's GPU cannot afford
 

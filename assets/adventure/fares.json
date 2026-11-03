@@ -1,0 +1,37 @@
+{
+  "_doc": "Travel network fares (#1226, docs/notes/adventure/fares.md), in Swiss francs, 2nd class, full fare. Rail and bus: the SBB distance tariff on the straight distance x detour. Ships: the lake operators' distance tariff. Cable cars: per line one-way price by RopewayService line key, a default otherwise. Every value marked \"verify\": true is a plausible figure the team should check against the published tariff and update at the December timetable change.",
+  "timetable": "2026",
+  "detour": 1.25,
+  "roundTo": 0.2,
+  "rail": {
+    "_doc": "Degressive francs per tariff kilometre by band (fitted to Zurich-Winterthur 26 km ~ CHF 13.60, Zurich-Bern ~ CHF 56, Geneva-Zurich ~ CHF 91), minimum fare for short hops.",
+    "verify": true,
+    "minFare": 3.0,
+    "bands": [
+      { "fromKm": 0, "perKm": 0.52 },
+      { "fromKm": 25, "perKm": 0.47 },
+      { "fromKm": 75, "perKm": 0.43 },
+      { "fromKm": 120, "perKm": 0.25 },
+      { "fromKm": 200, "perKm": 0.20 }
+    ]
+  },
+  "ship": {
+    "_doc": "The big lakes' operators (CGN, SGV, BLS, URh, ZSG): dearer per kilometre than the train.",
+    "verify": true,
+    "minFare": 8.0,
+    "bands": [
+      { "fromKm": 0, "perKm": 1.20 },
+      { "fromKm": 20, "perKm": 0.90 }
+    ]
+  },
+  "cableCar": {
+    "_doc": "One way, full fare. lines: RopewayService line key -> { name, price }.",
+    "verify": true,
+    "default": 30,
+    "lines": {}
+  },
+  "cards": {
+    "halfFare": { "_doc": "Half-fare travelcard, 1 year, adult", "price": 190, "nextPrice": 195, "nextFrom": "2026-12-13" },
+    "ga": { "_doc": "GA travelcard, 2nd class, adult, 1 year", "price": 3995, "nextPrice": 4095, "nextFrom": "2026-12-13" }
+  }
+}

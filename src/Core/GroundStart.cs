@@ -9,7 +9,9 @@ namespace UnitSport.Core;
 /// high above the spawn, and not inside a house the spawn point happens to fall in. Run behind
 /// the loading screen once the body is down: it waits for the ground and the buildings' collision
 /// around the body, then moves it to the nearest dry spot with open sky over it and room to
-/// stand. Command-line runs keep the fly-camera start their tools expect.
+/// stand. Command-line runs keep the fly-camera start their tools expect. A teleport on foot
+/// runs the same search after <see cref="SpawnPoint"/> settles (#1342), so a map click on a
+/// roof or a house lands beside it.
 /// </summary>
 public sealed class GroundStart
 {

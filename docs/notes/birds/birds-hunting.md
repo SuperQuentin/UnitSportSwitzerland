@@ -17,7 +17,7 @@
   item (`ItemUse.Shoot`, `ItemId` 37–38 appended; Aim shoulders it at 50° FOV and shows a
   crosshair, Use spends a shell through `ItemController.Fire`) casts from the eye (`shotgun-feel`) a cone that opens to 1.4 m
   across at 35 m, with hit chance fading from 30 to 55 m and a raycast so walls block (not the ground the bird stands on nor the trunk it perches in: `shared-birds`). Every shot
-  flushes everything within 150 m. The field journal (**J**, `user://birds.json` by species
+  flushes everything within 150 m. The field journal (the Journal's **Birds** tab, **J**, `ui/adventure-log`; `user://birds.json` by species
   name) scores a game species in season by size and flight (+), a game species out of season
   (−100) and a protected one (−250). A player with no shotgun is given one plus 25 shells on the
   first run, existing saves included. Check: `<godot> --path . -- --birdcheck[,out.png]

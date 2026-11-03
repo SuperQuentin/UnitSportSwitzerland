@@ -9,7 +9,8 @@
 //   - the sun's patch through each window, on the floor and the wall opposite,
 //   - a ceiling lamp per room: on at night, and all day in a room with no window.
 // The same formula in every style, so a room by noon, at sunset or at midnight reads like the
-// street outside it. Vertex alpha < 0.5 marks glass, drawn as the flat colour of the sky outside.
+// street outside it. Vertex alpha < 0.2 marks glass, drawn as the flat colour of the sky outside;
+// 0.2 to 0.5 a part that lights itself (#1235: a score screen, a pinball's playfield, neon), drawn as it is.
 //   INTERIOR_CARTOON  the light in soft bands, colours toward pastel (style_grade)
 //   INTERIOR_REAL     plaster on walls and ceilings, boards on wooden floors (style_tinted)
 // Without either: the PS1 finish (vertex snap, light steps, Bayer dither), behind `retro`.
@@ -47,6 +48,11 @@ uniform float lamp_gain = 0.75;
 uniform vec3 lamp_color = vec3(1.0, 0.70, 0.40);
 // the style's exposure next to its outdoor surfaces, which Godot's sun lights (StyleKit sets it)
 uniform float light_gain = 1.0;
+// a cinema's house lights (#1238, Interiors/CinemaBooths): 1 full, dim, 0 off; scales tint-2 lamps
+uniform float house_lights = 1.0;
+// the light the picture on a cinema's screen throws back into its hall (#1250): the slide's mean colour,
+// faint, on the house-light lamps' falloff; black with the screen off
+uniform vec3 screen_glow = vec3(0.0);
 
 // A church turned night club while the chess type beat plays (#370, src/Interiors/ChurchDisco):
 // per instance, so only that church's meshes; the room goes dark and the mirror ball's beams and
@@ -79,11 +85,14 @@ float room_hash(vec2 p) {
 // The light falling on local point p with local normal n, linear, before the style's gain.
 vec3 room_light(vec3 p, vec3 n) {
     float day = 1.0 - world_night;
-    vec3 total = world_tint * ambient_day;
+    vec3 base = world_tint * ambient_day;
     if (floor_count <= 0) {
         // no table (a probe's or demo's room): a plain lit room
-        return total + lamp_color * lamp_gain * 0.6 * world_night;
+        return base + lamp_color * lamp_gain * 0.6 * world_night;
     }
+    vec3 total = vec3(0.0);
+    // a cinema hall's (its lamps tint 2): its ambient goes with the house lights too, so off is dark (#1279)
+    bool house = false;
     int f = clamp(int(floor((p.y - floor_base + 0.1) / storey_height)), 0, floor_count - 1);
     vec4 range = texelFetch(room_lights, ivec2(f, 0), 0);
     int first = int(range.x + 0.5);
@@ -128,14 +137,19 @@ vec3 room_light(vec3 p, vec3 n) {
                 }
             }
         } else {
-            // a ceiling lamp: on at night, or always in a windowless room
+            // a ceiling lamp: on at night, or always in a windowless room; a bowling hall's goes
+            // blacklight purple as night falls (tint 1, RoomLights.Tint: cosmic bowling, #1235)
             float on = max(world_night, a.y);
             float fall = 1.0 - clamp(d / a.x, 0.0, 1.0);
             float facing = clamp(dot(n, dir) * 0.5 + 0.5, 0.0, 1.0);
-            total += lamp_color * lamp_gain * on * (0.12 + 0.88 * fall * fall) * (0.4 + 0.6 * facing);
+            vec3 lamp = a.z > 2.5 ? vec3(0.34, 0.18, 0.62)
+                : a.z > 1.5 ? lamp_color * house_lights + screen_glow
+                : a.z > 0.5 ? mix(lamp_color, vec3(0.30, 0.10, 0.80), world_night) : lamp_color;
+            total += lamp * lamp_gain * on * (0.12 + 0.88 * fall * fall) * (0.4 + 0.6 * facing);
+            house = house || (a.z > 1.5 && a.z < 2.5);
         }
     }
-    return total;
+    return total + base * (house ? max(house_lights, 0.03) : 1.0);
 }
 
 void vertex() {
@@ -189,6 +203,9 @@ void fragment() {
         light *= max(banded, 0.05) / l;
 #endif
         col *= light * light_gain;
+    } else if (COLOR.a >= 0.2) {
+        // self-lit: the colour itself, whatever the room's light
+        col = COLOR.rgb;
     } else {
         col = min(world_sky * glass_gain + glass_night * world_night, vec3(1.0));
     }

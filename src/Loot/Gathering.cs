@@ -28,7 +28,7 @@ namespace UnitSport.Loot;
 /// </summary>
 public partial class Gathering : Node, Core.IOriginShiftAware
 {
-    public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat, Crop }
+    public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat, Crop, Edelweiss, Cairn }
 
     /// <summary>
     /// A picked spot comes back half a day of environment time later (#579): berries and firewood
@@ -147,7 +147,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     public override void _Process(double delta)
     {
         var p = Eligible();
-        if (p == null)
+        // a world event's dig or beating owns the hold (#1339)
+        if (p == null || Adventure.Errands.WorldEvents.OwnsGather)
         {
             _target = default;
             Cancel();
@@ -232,6 +233,13 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             if (Farming.HandFarming.Instance?.HarvestAt(_cropE, _cropN) is { Count: > 0 }) Play(SfxSynth.Chime, 1.3f);
             return;
         }
+        if (target.Kind is Resource.Edelweiss or Resource.Cairn)
+        {
+            // an adventure collectible (#1227): the server checks the spot and the body, and keeps it in the player's progress
+            Adventure.Rewards.RewardService.Instance?.AskPick(target.Spot);
+            Play(Adventure.Rewards.RewardSounds.Pick, target.Kind == Resource.Cairn ? 0.6f : 1f);
+            return;
+        }
         if (target.Kind == Resource.Treat)
         {
             // an occasion hunt spot: claimed once per player per occasion, and the reward is its own
@@ -240,6 +248,16 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             return;
         }
         var (id, count) = Yield(target);
+        // friends near (#1266, the together rule): +25 % each, rolled for this player alone; nothing is split
+        int together = Adventure.Together.TogetherService.LocalNear;
+        int bonus = 0;
+        if (together > 0 && count > 0)
+        {
+            int withFriends = Adventure.Together.TogetherRules.Yield(count, together, _rng.NextDouble());
+            bonus = withFriends - count;
+            count = withFriends;
+            GD.Print($"[together] yield n={together} {id} {count - bonus}+{bonus}");
+        }
         int fit = Math.Min(count, _items.Inventory.Room(id));
         if (fit <= 0)
         {
@@ -249,8 +267,17 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         _items.Inventory.Add(id, fit);
         bool fresh = !_taken.TryGetValue(target.Spot, out var t) || Now - t.Since >= RegrowSeconds;
         _taken[target.Spot] = fresh ? (1, Now) : (t.Count + 1, t.Since);
-        _items.Ui.Toast($"+{fit} {ItemDefs.Get(id)!.Name}");
+        _items.Ui.Toast($"+{fit} {ItemDefs.Get(id)!.Name}{Adventure.Together.TogetherRules.BonusText(Math.Min(bonus, fit))}");
         Play(SfxSynth.Chime, 1.3f);
+        // a rare find (#1266): stone high up now and then holds a rock crystal, likelier with friends
+        if (target.Kind == Resource.Stone && Adventure.AdventureService.Instance != null && !Core.Permissions.InMatch
+            && Eligible() is { } body && _rng.NextDouble() < Adventure.Together.TogetherRules.RareFindChance(together, body.Global.Alt)
+            && _items.Inventory.Room(ItemId.Bergkristall) > 0)
+        {
+            _items.Inventory.Add(ItemId.Bergkristall, 1);
+            _items.Ui.Toast(together > 0 ? "A Bergkristall in the rock! (together)" : "A Bergkristall in the rock!");
+            GD.Print($"[together] rare find n={together}");
+        }
     }
 
     private void Play(AudioStreamWav stream, float pitch)
@@ -274,6 +301,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.TreeWood => "firewood",
         Resource.Pumpkin => "a pumpkin",
         Resource.Crop => "the crop",
+        Resource.Edelweiss => "the edelweiss",
+        Resource.Cairn => "a stone to the cairn",
         _ => "dead wood",
     };
 
@@ -284,6 +313,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Pumpkin => "pick",
         Resource.Crop => "harvest",
         Resource.Treat => "take",
+        Resource.Edelweiss => "pick",
+        Resource.Cairn => "add",
         _ => "gather",
     };
 
@@ -295,6 +326,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Pumpkin => 1.0,
         Resource.Crop => 1.4,
         Resource.Treat => 0.6,
+        Resource.Edelweiss or Resource.Cairn => 0.8,
         _ => 1.4,
     };
 
@@ -306,7 +338,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.TreeWood => 2,
         Resource.Pumpkin => 3,
         Resource.Crop => int.MaxValue,   // the cell itself turns to stubble
-        Resource.Treat => 1,
+        Resource.Treat or Resource.Edelweiss or Resource.Cairn => 1,
         _ => 2,
     };
 
@@ -362,6 +394,10 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         var ahead = feet + fwd * 1.2f;
         var tile = _origin.TileAt(feet);
         EnsureLoaded(tile);
+
+        // an edelweiss or a cairn within 1.6 m (#1227): before the water and the stone underfoot
+        if (Adventure.Rewards.RewardWorld.Instance?.CollectibleNear(feet, ahead) is { } reward)
+            return (reward.Kind == Adventure.Rewards.SpotKind.Cairn ? Resource.Cairn : Resource.Edelweiss, reward.Id, CoverClass.Open);
 
         // water: only standing in it, wading (#380): not from a boat's deck, a pier, a bridge or the
         // shore (the prompt showed over any water in reach, aboard the steamer included). A mapped

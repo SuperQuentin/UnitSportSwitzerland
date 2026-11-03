@@ -129,9 +129,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         var clock = Stopwatch.StartNew();
 
         for (int dx = -1; dx <= 1; dx++)
-            for (int dy = -1; dy <= 1; dy++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                var id = new TileId(centre.E + dx, centre.N + dy);
+                var id = centre.Neighbour(dx, dz);
                 var tile = await _source.LoadBuildingsAsync(id);
                 if (tile == null) continue;
                 var roads = await _source.LoadRoadsAsync(id);
@@ -152,7 +152,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                         {
                             GD.Print($"[interior] church {layout.Key}: {group.Members.Count} solid(s) ({string.Join(", ", group.Parts)}), "
                                 + $"{layout.AllEntrances().Count} entrance(s), {layout.Floors.Count} floor(s) of {layout.StoreyHeight:F1} m, "
-                                + $"{layout.Furniture.Count(f => f.Type is FurnitureType.Pew or FurnitureType.FrontPew)} pews, at LV95 {tile.Id.MinE + layout.CenterX:F0}/{tile.Id.MaxN - layout.CenterZ:F0}");
+                                + $"{layout.Furniture.Count(f => f.Type is FurnitureType.Pew or FurnitureType.FrontPew)} pews, at LV95 {tile.Id.Global(layout.CenterX, layout.CenterZ).E:F0}/{tile.Id.Global(layout.CenterX, layout.CenterZ).N:F0}");
                             if (layout.Type != BuildingType.Church) problems.Add("church planned as a plain building");
                             if (layout.Entrances.Count < group.Members.Count)
                                 GD.Print($"[interior]   (only {layout.Entrances.Count} of {group.Members.Count} solids have a door)");

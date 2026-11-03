@@ -1,4 +1,5 @@
 using Godot;
+using System.Threading;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -38,6 +39,27 @@ public static class VocalSeparator
     /// mix minus it, <see cref="Instrumental"/>).
     /// </summary>
     public static (float[] Vocal, string Source, short[] Stem) Separate(short[] stereo, CancellationToken ct, bool useModel = true)
+    {
+        // a player's machine keeps its audio and render threads (#1414): the worker yields to them
+        var thread = Thread.CurrentThread;
+        var priority = thread.Priority;
+        if (!Net.NetworkManager.DedicatedServer) thread.Priority = ThreadPriority.BelowNormal;
+        try { return SeparateAt(stereo, ct, useModel); }
+        finally { thread.Priority = priority; }
+    }
+
+    /// <summary>
+    /// Threads one separation may use (#1414): all cores but two on the dedicated server, a burning
+    /// CD still has players to serve; a quarter of them (1..4) on a player's machine, where the
+    /// radio's audio thread and the frame must not starve.
+    /// </summary>
+    internal static int Threads { get; } = Net.NetworkManager.DedicatedServer
+        ? Math.Max(1, System.Environment.ProcessorCount - 2)
+        : Math.Clamp(System.Environment.ProcessorCount / 4, 1, 4);
+
+    private static readonly ParallelOptions Frames = new() { MaxDegreeOfParallelism = Threads };
+
+    private static (float[] Vocal, string Source, short[] Stem) SeparateAt(short[] stereo, CancellationToken ct, bool useModel)
     {
         if (useModel && ModelName is { } name)
         {
@@ -83,11 +105,10 @@ public static class VocalSeparator
     /// </summary>
     private static short[] SeparateModel(short[] stereo, CancellationToken ct)
     {
-        // all cores but two: a server burning a CD still has players to serve
         using var options = new SessionOptions
         {
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-            IntraOpNumThreads = Math.Max(1, System.Environment.ProcessorCount - 2),
+            IntraOpNumThreads = Threads,
         };
         using var session = new InferenceSession(ModelPath, options);
         string input = session.InputMetadata.Keys.First();
@@ -358,7 +379,7 @@ public static class VocalSeparator
         {
             int plane = dimF * dimT;
             int half = _n / 2;
-            Parallel.For(0, dimT, NewScratch, (f, _, s) =>
+            Parallel.For(0, dimT, Frames, NewScratch, (f, _, s) =>
             {
                 int c = f * _hop - half;
                 for (int i = 0; i < _n; i++)
@@ -386,7 +407,7 @@ public static class VocalSeparator
             int half = _n / 2, plane = dimF * dimT;
             if (_framesL.Length != dimT * _n) { _framesL = new float[dimT * _n]; _framesR = new float[dimT * _n]; }
             float[] framesL = _framesL, framesR = _framesR;
-            Parallel.For(0, dimT, NewScratch, (f, _, s) =>
+            Parallel.For(0, dimT, Frames, NewScratch, (f, _, s) =>
             {
                 Array.Clear(s.XRe);
                 Array.Clear(s.XIm);

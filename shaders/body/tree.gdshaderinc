@@ -47,7 +47,9 @@ float near_keep(vec3 v) {
 // --- tree LOD (Styles/StyleKit) -----------------------------------------------------------
 // The 3D tree inside tree_near of the camera, a billboard beyond, with a dithered crossfade
 // between. Measured from world_cam_pos (the player's camera, Styles/CameraGlobal), not
-// CAMERA_POSITION_WORLD, so every view of the world agrees on which trees are 3D.
+// CAMERA_POSITION_WORLD, so every view of the world agrees on which trees are 3D. The distance
+// is divided by world_lod_scale, how much the camera zooms over the walking view (Styles/LodScale,
+// #1433): through a 200 mm lens a tree 2 km off is as big on screen as one 180 m off walking.
 //
 // The billboard is not a picture of a tree but a quad that ray-traces one: each pixel intersects
 // its view ray with the unit mesh of Terrain/ChunkNode (ConeMesh, CrownMesh). Both crowns are
@@ -55,6 +57,7 @@ float near_keep(vec3 v) {
 // and the silhouette and the flat facets match the 3D tree from any angle: a camera-facing
 // sprite would shrink to a sliver seen from above, and the forest floor would show through.
 global uniform vec3 world_cam_pos;
+global uniform float world_lod_scale;
 #include "res://shaders/common/music.gdshaderinc"
 uniform bool tree_lod = false;   // the 3D trees: collapse beyond tree_near (the tile has billboards)
 uniform float tree_near = 220.0;
@@ -91,7 +94,7 @@ void vertex() {
     vec3 origin = MODEL_MATRIX[3].xyz;
     float r = length(MODEL_MATRIX[0].xyz);
     float h = length(MODEL_MATRIX[1].xyz);
-    lod_keep = smoothstep(tree_near, tree_near + tree_fade, distance(origin, world_cam_pos));
+    lod_keep = smoothstep(tree_near, tree_near + tree_fade, distance(origin, world_cam_pos) / world_lod_scale);
     vec3 centre = origin + vec3(0.0, h * 0.5, 0.0);
     vec3 fwd = normalize(centre - CAMERA_POSITION_WORLD);
     vec3 right = cross(fwd, vec3(0.0, 1.0, 0.0));
@@ -113,16 +116,24 @@ void vertex() {
     NORMAL = -fwd;
     world_pos = wp;
     view_pos = (VIEW_MATRIX * vec4(wp, 1.0)).xyz;
-    POSITION = retro_snap(PROJECTION_MATRIX * VIEW_MATRIX * vec4(wp, 1.0));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * VIEW_MATRIX * vec4(wp, 1.0), wp));
 #else
     lod_keep = 1.0;
     if (tree_lod) {
-        lod_keep = 1.0 - smoothstep(tree_near, tree_near + tree_fade, distance(MODEL_MATRIX[3].xyz, world_cam_pos));
+        lod_keep = 1.0 - smoothstep(tree_near, tree_near + tree_fade, distance(MODEL_MATRIX[3].xyz, world_cam_pos) / world_lod_scale);
         if (lod_keep <= 0.0) {
             VERTEX = vec3(0.0);  // collapsed: the billboard stands here
         }
     }
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef STYLE_CARTOON
+    // Godot turns a MultiMesh instance's normals by its basis, not the inverse transpose: a
+    // conifer's (0.26 h, h, 0.26 h) tipped the smooth normals nearly straight up, every side lit
+    // like flat ground and pale under snow beside the billboards' traced ones (#1437). Divided by
+    // the squared scale here, the basis leaves them divided by the scale, as a normal should be.
+    NORMAL /= vec3(dot(MODEL_MATRIX[0].xyz, MODEL_MATRIX[0].xyz), dot(MODEL_MATRIX[1].xyz, MODEL_MATRIX[1].xyz),
+        dot(MODEL_MATRIX[2].xyz, MODEL_MATRIX[2].xyz));
+#endif
     // near music (#734): the crown sways a swing per two beats, louder wider, and leans away on
     // the kicks; the trunk's foot stays put (the sway grows with the height up the tree)
     vec3 base = MODEL_MATRIX[3].xyz;
@@ -136,7 +147,7 @@ void vertex() {
         world_pos += (side * swing * 0.05 + away * world_music_beat.x * 0.035) * tall * mr * up * up;
     }
     view_pos = (VIEW_MATRIX * vec4(world_pos, 1.0)).xyz;
-    POSITION = retro_snap(PROJECTION_MATRIX * VIEW_MATRIX * vec4(world_pos, 1.0));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * VIEW_MATRIX * vec4(world_pos, 1.0), world_pos));
 #endif
 }
 
@@ -210,6 +221,18 @@ float hit_tier(vec3 o, vec3 d, float base, float top, float r, out vec3 n) {
     return t_in <= t_out ? t_in : 1e30;
 }
 
+// The mesh's smooth normal at p on a tier's side face (facet normal n, from hit_tier), unit-mesh
+// space: what the GPU interpolates between the face's corners, (cos a, slope, sin a) at each rim
+// corner and at the face's middle angle on the apex. The barycentric weights come straight from
+// p: the apex's is its height up the tier, and across the face p.xz runs along the rim chord.
+vec3 tier_smooth(vec3 p, vec3 n, float base, float top, float r) {
+    vec2 mid = normalize(n.xz);
+    vec2 across = vec2(-mid.y, mid.x);
+    float w = clamp((p.y - base) / (top - base), 0.0, 1.0);
+    vec2 xz = (w + (1.0 - w) * cos(PI / 7.0)) * mid + dot(p.xz, across) / r * across;
+    return vec3(xz.x, r / (top - base), xz.y);
+}
+
 // One puff of PuffCrownMesh, an ellipsoid (the mesh's 6x4 one, traced smooth).
 float hit_puff(vec3 o, vec3 d, vec3 c, vec3 radii, out vec3 n) {
     vec3 oc = (o - c) / radii;
@@ -226,6 +249,26 @@ float hit_puff(vec3 o, vec3 d, vec3 c, vec3 radii, out vec3 n) {
     return t;
 }
 
+// Corner (i around, j down) of the puff mesh's 6x4 unit sphere (ChunkNode.Puff).
+vec3 puff_corner(float i, float j) {
+    float th = PI * j / 4.0, ph = TAU * i / 6.0;
+    return vec3(sin(th) * cos(ph), cos(th), sin(th) * sin(ph));
+}
+
+// The mesh's facet under u, a point of a puff's unit sphere (normal in that sphere's space). The
+// 3D tree's snow settles by its facets (facet_normal), and the smooth ellipsoid spread it over
+// the puffs' sides. Each quad of the mesh is two triangles split along b-c; the polar rings keep
+// one.
+vec3 puff_facet(vec3 u) {
+    float th = acos(clamp(u.y, -1.0, 1.0)) / (PI / 4.0);
+    float ph = mod(atan(u.z, u.x), TAU) / (TAU / 6.0);
+    float j = min(floor(th), 3.0), i = floor(ph);
+    vec3 a = puff_corner(i, j), b = puff_corner(i + 1.0, j);
+    vec3 c = puff_corner(i, j + 1.0), d = puff_corner(i + 1.0, j + 1.0);
+    vec3 n = j < 0.5 || (j < 2.5 && (ph - i) + (th - j) >= 1.0) ? cross(d - b, c - b) : cross(b - a, c - a);
+    return dot(n, u) < 0.0 ? -n : n;
+}
+
 // The 6-sided trunk prism of both, corners at radius r, from 0 up to top.
 float hit_trunk6(vec3 o, vec3 d, float r, float top, out vec3 n) {
     float t_in = -1e30, t_out = 1e30;
@@ -237,14 +280,6 @@ float hit_trunk6(vec3 o, vec3 d, float r, float top, out vec3 n) {
     clip_plane(vec3(0.0, 1.0, 0.0), top, o, d, t_in, t_out, n);
     clip_plane(vec3(0.0, -1.0, 0.0), 0.0, o, d, t_in, t_out, n);
     return t_in <= t_out ? t_in : 1e30;
-}
-
-// The nearer of two hits.
-void nearer(float t, vec3 n, inout float best, inout vec3 best_n) {
-    if (t < best) {
-        best = t;
-        best_n = n;
-    }
 }
 #endif
 
@@ -302,14 +337,29 @@ void fragment() {
     // three puffs on a 0.5 trunk, or three tiers on a 0.3 one
     float t_crown = 1e30;
     vec3 hit_n;
+    vec3 tier = vec3(0.0);  // the nearest tier's (base, top, r)
+    vec3 puff = vec3(1.0);  // the nearest puff's radii
     if (broadleaf) {
-        nearer(hit_puff(o, d, vec3(0.0, 0.70, 0.0), vec3(0.72, 0.28, 0.72), hit_n), hit_n, t_crown, crown_n);
-        nearer(hit_puff(o, d, vec3(0.34, 0.56, 0.18), vec3(0.52, 0.22, 0.52), hit_n), hit_n, t_crown, crown_n);
-        nearer(hit_puff(o, d, vec3(-0.30, 0.58, -0.22), vec3(0.55, 0.23, 0.55), hit_n), hit_n, t_crown, crown_n);
+        const vec3 PUFF_C[3] = vec3[](vec3(0.0, 0.70, 0.0), vec3(0.34, 0.56, 0.18), vec3(-0.30, 0.58, -0.22));
+        const vec3 PUFF_R[3] = vec3[](vec3(0.72, 0.28, 0.72), vec3(0.52, 0.22, 0.52), vec3(0.55, 0.23, 0.55));
+        for (int i = 0; i < 3; i++) {
+            float t_puff = hit_puff(o, d, PUFF_C[i], PUFF_R[i], hit_n);
+            if (t_puff < t_crown) {
+                t_crown = t_puff;
+                crown_n = hit_n;
+                puff = PUFF_R[i];
+            }
+        }
     } else {
-        nearer(hit_tier(o, d, 0.22, 0.62, 1.0, hit_n), hit_n, t_crown, crown_n);
-        nearer(hit_tier(o, d, 0.45, 0.82, 0.75, hit_n), hit_n, t_crown, crown_n);
-        nearer(hit_tier(o, d, 0.66, 1.0, 0.5, hit_n), hit_n, t_crown, crown_n);
+        const vec3 TIERS[3] = vec3[](vec3(0.22, 0.62, 1.0), vec3(0.45, 0.82, 0.75), vec3(0.66, 1.0, 0.5));
+        for (int i = 0; i < 3; i++) {
+            float t_tier = hit_tier(o, d, TIERS[i].x, TIERS[i].y, TIERS[i].z, hit_n);
+            if (t_tier < t_crown) {
+                t_crown = t_tier;
+                crown_n = hit_n;
+                tier = TIERS[i];
+            }
+        }
     }
     float t_trunk = hit_trunk6(o, d, broadleaf ? 0.07 : 0.06, broadleaf ? 0.5 : 0.3, trunk_n);
 #else
@@ -325,6 +375,15 @@ void fragment() {
     // back to world space: the hit point, and the facet normal through the inverse transpose
     vec3 wpos = CAMERA_POSITION_WORLD + ray * t;
     vec3 n = normalize((t_crown < t_trunk ? crown_n : trunk_n) / bb_scale);
+    // as on the 3D tree, the light takes the mesh's smooth normals and the snow its facets (n)
+    vec3 light_n = n;
+#ifdef STYLE_CARTOON
+    if (t_crown < t_trunk && broadleaf) {
+        n = normalize(puff_facet(crown_n * puff) / puff / bb_scale);
+    } else if (t_crown < t_trunk && crown_n.y > 0.0) {
+        light_n = normalize(tier_smooth(o + d * t, crown_n, tier.x, tier.y, tier.z) / bb_scale);
+    }
+#endif
 #else
     vec3 wpos = world_pos;
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
@@ -375,8 +434,8 @@ void fragment() {
     col = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
     ALBEDO = col;
 #ifdef TREE_BILLBOARD
-    // the traced facet; the 3D trees light by their mesh's own normals
-    NORMAL = style_view_normal(VIEW_MATRIX, n);
+    // the traced normal; the 3D trees light by their mesh's own normals
+    NORMAL = style_view_normal(VIEW_MATRIX, light_n);
 #endif
 #ifdef STYLE_REAL
 #ifndef TREE_BILLBOARD

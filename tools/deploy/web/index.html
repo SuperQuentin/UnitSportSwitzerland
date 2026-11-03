@@ -100,6 +100,8 @@ nav .cta { margin-left: auto; } @media (min-width: 820px) { nav .cta { margin-le
 .meta b { color: var(--text); font-weight: 600; }
 .addr { display: flex; gap: 8px; margin-top: 16px; }
 .addr code { flex: 1; min-width: 0; background: rgba(0,0,0,.3); border-radius: 12px; padding: 10px 14px; font: 15px ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+.join-hint:not([hidden]) { display: block; color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+.join-hint a { color: var(--text); }
 
 /* ---------- sections ---------- */
 section.block { padding: 110px 0 40px; position: relative; }
@@ -231,7 +233,8 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
       <ul class="names" id="names"></ul>
       <p class="empty" id="empty" hidden>Nobody on the mountain right now. Be the first.</p>
       <div class="meta"><span>Version <b id="version">–</b></span><span>World <b id="world">–</b></span><span>Up <b id="uptime">–</b></span></div>
-      <div class="addr"><code id="addr">–</code><button class="btn small" id="copy" type="button">Copy</button></div>
+      <div class="addr"><code id="addr">–</code><button class="btn small" id="copy" type="button">Copy</button><a class="btn hot small" id="join" href="unitsport://join/">Join</a></div>
+      <p class="join-hint" id="join-hint" hidden>Did the game not open? <a href="#join">Download it</a>, start it once, then press Join again.</p>
     </aside>
   </div>
   <div class="scroll-hint" aria-hidden="true"></div>
@@ -295,7 +298,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
           <h3>Connect</h3>
           <ol class="steps">
             <li><b>Unpack and start the game</b>Free, no account needed.</li>
-            <li><b>Open Multiplayer and add this server</b><span class="addr" style="margin-top:8px"><code id="addr2">–</code><button class="btn small" id="copy2" type="button">Copy</button></span></li>
+            <li><b>Press Join</b>Or open Multiplayer and add this server.<span class="addr" style="margin-top:8px"><code id="addr2">–</code><button class="btn small" id="copy2" type="button">Copy</button><a class="btn hot small" id="join2" href="unitsport://join/">Join</a></span><span class="join-hint" id="join-hint2" hidden>Did the game not open? Start it once after unpacking, then press Join again.</span></li>
             <li><b>Connect</b>The terrain streams in as you go. Say hi in the chat.</li>
           </ol>
         </div>
@@ -510,6 +513,7 @@ function showStatus(st) {
   $("uptime").textContent = online ? since(st.started) : "–";
   const port = st && st.port ? st.port : 7777;
   $("addr").textContent = $("addr2").textContent = location.hostname + (port === 7777 ? "" : ":" + port);
+  $("join").href = $("join2").href = "unitsport://join/" + $("addr").textContent;
 }
 async function poll() {
   try { const r = await fetch("status.json", { cache: "no-store" }); showStatus(r.ok ? await r.json() : null); }
@@ -520,6 +524,15 @@ for (const [btn, code] of [["copy", "addr"], ["copy2", "addr2"]])
     try { await navigator.clipboard.writeText($(code).textContent); $(btn).textContent = "Copied"; }
     catch { $(btn).textContent = "Select it"; }
     setTimeout(() => $(btn).textContent = "Copy", 1500);
+  });
+// Join (#1220): unitsport://join/<addr>, the game registers the scheme at each launch. A browser cannot
+// tell whether it is installed: when the page keeps focus (no "open the app?" prompt, no game), say how
+for (const [btn, hint] of [["join", "join-hint"], ["join2", "join-hint2"]])
+  $(btn).addEventListener("click", () => {
+    let left = false;
+    const away = () => left = true;
+    window.addEventListener("blur", away, { once: true });
+    setTimeout(() => { window.removeEventListener("blur", away); if (!left && document.hasFocus()) $(hint).hidden = false; }, 2000);
   });
 
 // ---------- downloads: the newest GitHub release, the visitor's OS first ----------

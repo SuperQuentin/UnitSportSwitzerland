@@ -104,100 +104,7 @@ float occupancy(vec3 p) {
     return busy;
 }
 
-// --- interior mapping ------------------------------------------------------------------
-// A room behind every window, without any geometry: the view ray enters at the glass and is
-// followed to the first of the room's planes, in the wall's own frame - u along the facade
-// (one room per window column), v up the storey, d into the building. The room's colours,
-// depth and furniture come from the window's hash, so a house reads the same every visit.
-// lu01 / lv01 are where the ray enters, as a fraction of the cell and the storey.
-vec3 room_behind(vec3 p, vec3 eye, vec2 tangent, float h, float lu01, float lv01, vec2 cell,
-                 bool lit, float busy, float time) {
-    float w = window_spacing;
-    vec3 t = normalize(vec3(tangent.x, 0.0, tangent.y));
-    vec3 v = normalize(p - eye);
-    // into the building is away from the eye, whichever way the TIN triangle was wound
-    vec3 n = vec3(-t.z, 0.0, t.x);
-    float dd = dot(v, n);
-    if (dd < 0.0) {
-        n = -n;
-        dd = -dd;
-    }
-    vec3 dim = lit ? window_lit : window_color;
-    if (dd < 0.03) {
-        return dim; // grazing: all glass
-    }
-    float du = dot(v, t);
-    float dv = v.y;
-    float lu = lu01 * w;
-    float lv = lv01 * h;
-    float ceil_h = h - 0.25; // the slab of the floor above
-    float depth = mix(room_depth.x, room_depth.y, hash(cell + 7.13));
-
-    float tu = du > 1e-4 ? (w - lu) / du : (du < -1e-4 ? -lu / du : 1e6);
-    float tv = dv > 1e-4 ? (ceil_h - lv) / dv : (dv < -1e-4 ? -lv / dv : 1e6);
-    float td = depth / dd;
-    float th = min(min(tu, tv), td);
-    vec3 hit = vec3(lu + du * th, lv + dv * th, dd * th);
-
-    float k = hash(cell + 3.71);
-    vec3 wall = k < 0.2 ? vec3(0.86, 0.80, 0.68) : k < 0.4 ? vec3(0.70, 0.78, 0.84)
-              : k < 0.6 ? vec3(0.74, 0.80, 0.66) : k < 0.8 ? vec3(0.84, 0.72, 0.68) : vec3(0.62, 0.46, 0.32);
-    vec3 c;
-    if (th == td) {
-        c = wall * 0.92;
-        // a cupboard, a sofa or a shelf against the back wall, and a picture beside it
-        float fx = hash(cell + 5.9) * (w - 1.2);
-        float fh = mix(0.8, 1.9, hash(cell + 9.1));
-        if (hit.x > fx && hit.x < fx + 1.1 && hit.y < fh) {
-            c = mix(vec3(0.35, 0.24, 0.16), vec3(0.45, 0.30, 0.35), hash(cell + 2.2));
-        } else if (abs(hit.x - (fx > w * 0.5 - 0.6 ? fx - 0.7 : fx + 1.8)) < 0.3 && abs(hit.y - 1.6) < 0.22) {
-            c = vec3(0.30, 0.38, 0.30);
-        }
-    } else if (th == tv) {
-        c = dv < 0.0 ? (hash(cell + 1.3) < 0.6 ? vec3(0.46, 0.32, 0.20) : vec3(0.55, 0.55, 0.52))
-                     : vec3(0.92, 0.91, 0.88);
-    } else {
-        c = wall * 0.78;
-    }
-    // lit from the window side: the far end of the room is darker
-    c *= mix(1.0, 0.55, clamp(hit.z / depth, 0.0, 1.0));
-    c *= lit ? window_lit * 1.15 : mix(vec3(0.42, 0.44, 0.46), vec3(0.06, 0.07, 0.10), world_night);
-
-    // someone at home: a figure crossing the room a metre and a half back from the glass
-    if (busy > 0.0 && hash(cell + 11.7) < 0.55 * busy) {
-        float tf = 1.4 / dd;
-        if (tf < th) {
-            vec2 q = vec2(lu + du * tf, lv + dv * tf);
-            float x0 = w * 0.5 + sin(time * (0.25 + 0.2 * hash(cell)) + hash(cell + 4.4) * 6.28) * w * 0.32;
-            if ((abs(q.x - x0) < 0.21 && q.y < 1.42) || length(q - vec2(x0, 1.60)) < 0.12) {
-                c = lit ? vec3(0.05, 0.04, 0.04) : c * 0.35;
-            }
-        }
-    }
-
-    // Only a hint of a room gets through: seen plainly, it is obviously a painted box. Softened
-    // toward its own average (old glass, dust, distance), behind a net curtain in half the
-    // windows and drawn side curtains in the rest, and under a strong reflection of the sky.
-    vec3 average = wall * (lit ? window_lit : mix(vec3(0.30), vec3(0.05), world_night));
-    c = mix(c, average, 0.45);
-    float drape = hash(cell + 8.8);
-    if (drape < 0.5) {
-        // a sheer net curtain across the whole pane: a figure behind a lit one still shows
-        vec3 net = lit ? window_lit * 0.95 : vec3(0.78, 0.78, 0.74) * mix(1.0, 0.12, world_night);
-        c = mix(c, net, 0.65);
-    } else if (lu01 < 0.36 || lu01 > 0.64) {
-        vec3 cloth = drape < 0.67 ? vec3(0.45, 0.14, 0.12) : drape < 0.84 ? vec3(0.22, 0.34, 0.24) : vec3(0.70, 0.62, 0.48);
-        c = cloth * (lit ? window_lit * 0.8 : mix(vec3(0.6), vec3(0.08), world_night));
-    }
-    float fres = 0.35 + 0.4 * pow(1.0 - dd, 2.0);
-    vec3 glass = mix(window_color, world_sky, 0.55);
-    c = mix(c, glass, lit ? fres * 0.35 : fres);
-    // a mullion and a transom
-    if (abs(lu01 - 0.5) < 0.012 || abs(lv01 - 0.62) < 0.012) {
-        c = vec3(0.86, 0.85, 0.82) * (lit ? 0.7 : 1.0);
-    }
-    return c;
-}
+#include "res://shaders/common/room_behind.gdshaderinc"
 
 // A church nave's one tall window row: leaded coloured glass, no room behind it.
 vec3 stained_glass(vec2 q, vec2 cell, bool lit) {
@@ -545,7 +452,7 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
             int w = manor_window(vec2(q.x - cx, q.y - y0), 1.0, 1.8);
             if (w > 0) {
                 open = w;
-                lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night);
+                lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night * world_lamps);
             }
         }
     } else {
@@ -569,7 +476,7 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
                 }
                 if (w > 0) {
                     open = w;
-                    lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night);
+                    lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night * world_lamps);
                 }
             }
         }
@@ -608,7 +515,7 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
             open = 0;
         } else if (yb > 1.25 && yb < 2.45 && pu > 0.42 && pu < 1.06 && r > 0.35) {
             open = 2;
-            lit = hash(vec2(floor(cu), 4.4) + seed) > mix(0.93, 0.45, world_night);
+            lit = hash(vec2(floor(cu), 4.4) + seed) > mix(0.93, 0.45, world_night * world_lamps);
         }
     }
 
@@ -674,7 +581,7 @@ void vertex() {
     // a roof's UV2 is its own frame, not a storey count or a garage flag
     storey_count = roof_kind > 0.5 ? 0.0 : UV2.x;
     garage_flag = roof_kind > 0.5 ? 0.0 : UV2.y;
-    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 void fragment() {
@@ -761,7 +668,8 @@ void fragment() {
         vec2 lo = vec2(0.30 * window_spacing, 0.32 * storey_h);
         vec2 hi = vec2(0.70 * window_spacing, 0.76 * storey_h);
         vec2 q = vec2(col_u * window_spacing, wall_v * storey_h);
-        bool windowed = facade.y > 0.35 && garage_flag < 2.5;
+        // a hall venue's ground storey (BlindGroundFlag, #1250) has no windows; the storeys above keep theirs
+        bool windowed = facade.y > 0.35 && garage_flag < 2.5 && !(garage_flag > 0.1 && garage_flag < 0.5 && facade.y < 1.0);
 
         // shutters on some houses, not on blocks of flats or a church: one paint a house
         float house = hash(floor(pattern_xz(world_pos) / 24.0) + 0.37);
@@ -783,7 +691,7 @@ void fragment() {
             // string courses cost a Quest 2 most of a city's frame seen from above
             float r = hash(cell);
             float busy = occupancy(world_pos);
-            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night) - busy * 0.45;
+            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night * world_lamps) - busy * 0.45;
             vec3 win = lit ? window_lit : window_color;
             col = mix(col, win, legible);
             glass = legible;
@@ -796,7 +704,7 @@ void fragment() {
             // someone inside lights more of them
             float busy = occupancy(world_pos);
             // a few lit windows by day, most of a village at night
-            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night) - busy * 0.45;
+            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night * world_lamps) - busy * 0.45;
             // a shuttered house keeps a few of its dark windows shut
             bool closed = shuttered && !lit && busy == 0.0 && hash(cell + 6.6) < 0.15;
             vec3 win = lit ? window_lit : window_color;
@@ -818,7 +726,7 @@ void fragment() {
                     if (storey_h > 5.5) {
                         win = stained_glass(gq, cell, lit);
                     } else {
-                        win = room_behind(world_pos + ray * th, CAMERA_POSITION_WORLD, wall_frame.xy, storey_h,
+                        win = room_behind(world_pos + ray * th, CAMERA_POSITION_WORLD, wall_frame.xy, window_spacing, storey_h,
                             gq.x / window_spacing, gq.y / storey_h, cell, lit, busy, TIME);
                     }
                 }
@@ -924,11 +832,11 @@ void fragment() {
     ROUGHNESS = 1.0;
 #endif
     // a lit window is its own light: at night it shines through the darkness around it
-    EMISSION = col * door_light(world_pos, n) + glow * world_night;
+    EMISSION = col * door_light(world_pos, n) + glow * world_night * world_lamps;
 #else
     col *= world_tint + door_light(world_pos, n);
     // a lit window is its own light: at night it shines through the darkness around it
-    col = max(col, glow * world_night);
+    col = max(col, glow * world_night * world_lamps);
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     col = retro_posterize(col, FRAGCOORD.xy);

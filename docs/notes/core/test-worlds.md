@@ -3,7 +3,8 @@
 
 # Test worlds from the menus (#999)
 
-- **What**: `Core/WorldChoice` lists the worlds a session can play: the UnitSport open world (default) and the test
+- **What**: `Core/WorldChoice` lists the worlds a session can play: the UnitSport open world (default), the fun world
+  (#1396, `world/fun-world`: a fixture course made for playing, above the "Test worlds" heading, adventure on) and the test
   worlds the checks run on, the traffic lights region (`tools/signal-test-region`) and the fixture courses
   (`Terrain/Fixture`: junction, straight, hairpin, narrow, verge, airport, lake, parking, garage, site, flat). Ids are
   short (`open`, `signals`, `junction`...): they go in the settings, on the server's command line and on the wire.

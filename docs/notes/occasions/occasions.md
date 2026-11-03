@@ -15,9 +15,10 @@
   when the server locked the occasion. Everything reacts to `OccasionManager.Changed`.
   Rendering reaches every world shader through `shaders/world_occasion.gdshaderinc` and five
   globals `DayNight` writes each frame (`world_snow`, `world_mist_color/density/top`,
-  `world_lights`); all zero is a strict no-op, and `DayNight` takes its sunrise/sunset/noon
-  and colour grade from the top occasion's `Atmosphere`, reducing exactly to the old 6/18/62°
-  day without one. Overrides: `--occasion <id|none>` (repeatable; replaces the calendar for the
+  `world_lights`); all zero is a strict no-op, and `DayNight` takes its colour grade from
+  the top occasion's `Atmosphere`, and under the fixed sun (`--sun fixed`, check runs) its
+  sunrise/sunset/noon too, reducing exactly to the old 6/18/62° day without one; the real sun
+  (#1430) has the date's own day. Overrides: `--occasion <id|none>` (repeatable; replaces the calendar for the
   session), `--date YYYY-MM-DD`, and `/occasion list|start|stop|auto` in chat or the server
   console.
   **Content hooks** (all on `Occasion`, all no-ops by default): `Decorate`/`PlaceHunt` per tile
@@ -33,7 +34,8 @@
   `ProceduralWorld.VillageCentres()` for the generated world. The hunt is taken with the
   **gather hold** (G), not E — the spots stand beside doors, where E means "go in" — and claims
   are local (`user://occasions/claims.json`, per instance), like `Gathering` and the inventory.
-  `ItemId` 37/38 are reserved by the bird-hunting PR (#7); occasions own 39-49.
+  `ItemId` 37/38 are reserved by the bird-hunting PR (#7); occasions own 39-49. Festivals (#1269) are occasions with the gameplay
+  `Games` facet, two more schedule tokens (`04-mon#3`, `easter-46`) and their own service: `festival-framework`.
   **Christmas** is almost entirely shader-side: `world_snow` whitens up-facing terrain, roofs,
   crowns and road *edges* (carriageways are ploughed), `world_lights` draws coloured bulbs along
   the eaves in `ps1_building` (no geometry) and lights more windows; falling snow is one static

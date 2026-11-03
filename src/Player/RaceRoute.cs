@@ -43,7 +43,7 @@ public sealed class RaceRoute
     /// </summary>
     public void Follow(OriginFrame now)
     {
-        if (Frame is { } was && !(was.E == now.E && was.N == now.N))
+        if (Frame is { } was && !was.SameFrame(now))
         {
             var shift = now.Since(was);
             for (int i = 0; i < Centre.Count; i++) Centre[i] = shift.Point(Centre[i]);

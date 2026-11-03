@@ -61,6 +61,13 @@ public partial class InventoryUi : CanvasLayer
     private readonly SlotButton[] _hotbarSlots = new SlotButton[Inventory.HotbarSize];
     private Label _heldName = null!;
     private float _heldNameTimer;
+    private HandChip _chip = null!;
+    private Tween? _fade;
+    private bool _hotbarOn = true;
+    private HotbarMode _hotbarMode = (HotbarMode)(-1);
+    private static readonly NodePath ModulateAlpha = "modulate:a";
+    /// <summary>Seconds the fading hotbar stays after a slot change, a holster or draw, a use or the quick wheel (#1369).</summary>
+    private const double HotbarHold = 3.0, HotbarFade = 0.6;
     private ItemId _lastHeld = (ItemId)(-1);
     private Label _toast = null!;
     private float _toastTimer;
@@ -173,6 +180,7 @@ public partial class InventoryUi : CanvasLayer
         PlayerInput.DeviceChanged -= OnDeviceChanged;
         if (Bank.Instance is { } bank) bank.BalanceChanged -= OnBalanceChanged;
         Inv.Refused -= OnRefused;
+        Inv.HandChanged -= PulseHotbar;
     }
 
     // ------------------------------------------------------------------------------------
@@ -243,6 +251,15 @@ public partial class InventoryUi : CanvasLayer
         _cashHud.OffsetTop = -14 - SlotPx;
         _cashHud.OffsetBottom = -14;
         _root.AddChild(_cashHud);
+
+        _chip = new HandChip(this) { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _chip.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+        _chip.OffsetLeft = -18 - HandChip.W;
+        _chip.OffsetRight = -18;
+        _chip.OffsetTop = -14 - HandChip.H;
+        _chip.OffsetBottom = -14;
+        _root.AddChild(_chip);
+        Inv.HandChanged += PulseHotbar;
 
         _heldName = CentredLabel(UiTheme.FontBody + 1, -14 - SlotPx - 28, UiTheme.Text);
         _toast = CentredLabel(UiTheme.FontBody, -14 - SlotPx - 56, new Color(1f, 0.92f, 0.7f));
@@ -559,9 +576,10 @@ public partial class InventoryUi : CanvasLayer
         if (Inv.HeldId != _lastHeld)
         {
             _lastHeld = Inv.HeldId;
-            _heldName.Text = ItemDefs.Get(Inv.HeldId)?.Name ?? "Empty hand";
+            _heldName.Text = Inv.Holstered ? "Holstered" : ItemDefs.Get(Inv.HeldId)?.Name ?? "Empty hand";
             _heldNameTimer = 1.8f;
         }
+        _chip.QueueRedraw();
     }
 
     private void RefreshMoney()
@@ -702,10 +720,12 @@ public partial class InventoryUi : CanvasLayer
         UiFocus.Set(this, false);
         Core.MouseCapture.Capture();
         Refresh();
+        PulseHotbar();
     }
 
     private void OpenWheel()
     {
+        PulseHotbar();
         _wheelAim = Vector2.Zero;
         // in VR the right hand aims, from where it is now (#489)
         if (XR.XrSession.Active) XR.XrSession.ZeroHandAim();
@@ -878,6 +898,43 @@ public partial class InventoryUi : CanvasLayer
     /// fingertip cells, clear of the buttons, the bag's cell first (drawn by the controls); the cash
     /// above it.
     /// </summary>
+    // ------------------------------------------------------------------------------------
+    // the hotbar's setting and fade (#1369)
+    // ------------------------------------------------------------------------------------
+
+    private bool _alwaysBar = true;
+
+    /// <summary>Shows the hotbar in Fade mode for <see cref="HotbarHold"/> seconds, then fades it out. One tween per change, nothing per frame.</summary>
+    public void PulseHotbar()
+    {
+        if (_hotbarMode != HotbarMode.Fade || _hotbar == null) return;
+        _fade?.Kill();
+        _hotbarOn = true;
+        _hotbar.Modulate = Colors.White;
+        _cashHud.Modulate = Colors.White;
+        _fade = CreateTween();
+        _fade.TweenInterval(HotbarHold);
+        _fade.TweenProperty(_hotbar, ModulateAlpha, 0f, HotbarFade);
+        _fade.Parallel().TweenProperty(_cashHud, ModulateAlpha, 0f, HotbarFade);
+        _fade.TweenCallback(Callable.From(HideHotbar));
+    }
+
+    private void HideHotbar() => _hotbarOn = false;
+
+    /// <summary>The setting changed (or first read): Always and touch keep the bar, Hidden drops it, Fade starts a pulse.</summary>
+    private void StepHotbar()
+    {
+        var mode = Platform.IsMobile || TouchControls.HotbarPlace != null ? HotbarMode.Always : GameSettings.Current.Hotbar;
+        if (mode == _hotbarMode) return;
+        _fade?.Kill();
+        _hotbarMode = mode;
+        _alwaysBar = mode == HotbarMode.Always;
+        _hotbarOn = mode != HotbarMode.Hidden;
+        _hotbar.Modulate = Colors.White;
+        _cashHud.Modulate = Colors.White;
+        if (mode == HotbarMode.Fade) PulseHotbar();
+    }
+
     private void PlaceForTouch()
     {
         if (TouchControls.HotbarPlace is not { } place || place == _touchPlace) return;
@@ -1075,6 +1132,8 @@ public partial class InventoryUi : CanvasLayer
 
         switch (e)
         {
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown }:
+                break;   // not the camera's zoom while the wheel is open
             case InputEventMouseMotion m:
                 // the pointer stays captured; its motion pushes a virtual stick instead
                 _wheelAim = (_wheelAim + m.Relative / 90f).LimitLength(1.2f);
@@ -1116,8 +1175,10 @@ public partial class InventoryUi : CanvasLayer
 
         ProcessCrafting(dt);
         PlaceForTouch();
-        _hotbar.Visible = ItemsActive && !IsOpen && Scope == null;
+        StepHotbar();
+        _hotbar.Visible = ItemsActive && !IsOpen && Scope == null && _hotbarOn;
         _cashHud.Visible = _hotbar.Visible;
+        _chip.Visible = ItemsActive && !IsOpen && Scope == null && !_alwaysBar;
         _readoutPanel.Visible = Readout != null && !IsOpen;
         if (Readout != null) _readout.Text = Readout;
 
@@ -1132,7 +1193,7 @@ public partial class InventoryUi : CanvasLayer
         }
 
         _heldNameTimer -= dt;
-        _heldName.Visible = ItemsActive && !IsOpen;
+        _heldName.Visible = ItemsActive && !IsOpen && _hotbarOn;
         _heldName.Modulate = new Color(1, 1, 1, Mathf.Clamp(_heldNameTimer / 0.4f, 0f, 1f));
         _toastTimer -= dt;
         _toast.Visible = PlayerPresent;
@@ -1160,6 +1221,9 @@ public partial class InventoryUi : CanvasLayer
     }
 
     public ItemStack WheelSlot(int i) => Inv[i];
+    public ItemStack HandStack => Inv.Held;
+    public bool HandHolstered => Inv.Holstered;
+    public int HandSlot => Inv.Selected;
     public int SelectedSlot => Inv.Selected;
 
     // ------------------------------------------------------------------------------------
@@ -1224,6 +1288,52 @@ public partial class SlotButton : Button
         if (_stack.IsEmpty && Placeholder.Length > 0)
             DrawString(UiTheme.Bold, new Vector2(0, r.Size.Y * 0.5f + 4), Placeholder,
                 HorizontalAlignment.Center, r.Size.X, UiTheme.FontTiny, UiTheme.TextFaint);
+    }
+}
+
+/// <summary>
+/// The item in hand, always in the bottom-right corner when the hotbar is not (#1369): its icon, name, slot number and
+/// the key that puts it away or takes it out. Dimmed while holstered; "Empty hand" for an empty slot. Redrawn only when
+/// the inventory changes (<see cref="InventoryUi"/> asks).
+/// </summary>
+public partial class HandChip : Control
+{
+    public const float W = 244, H = 52;
+    private static StyleBoxFlat? _bg;
+    private readonly InventoryUi _ui;
+
+    public HandChip(InventoryUi ui)
+    {
+        _ui = ui;
+        CustomMinimumSize = new Vector2(W, H);
+    }
+
+    public HandChip() : this(null!) { }
+
+    public override void _Ready() => PlayerInput.DeviceChanged += QueueRedraw;
+
+    public override void _ExitTree() => PlayerInput.DeviceChanged -= QueueRedraw;
+
+    public override void _Draw()
+    {
+        if (_ui == null) return;
+        _bg ??= UiTheme.Flat(new Color(0.07f, 0.08f, 0.10f, 0.72f), 10, 0, 0, new Color(1, 1, 1, 0.08f), 1);
+        DrawStyleBox(_bg, new Rect2(Vector2.Zero, Size));
+
+        var stack = _ui.HandStack;
+        bool holstered = _ui.HandHolstered && !stack.IsEmpty;
+        var tile = new Rect2(6, 6, H - 12, H - 12);
+        SlotDrawing.DrawSlot(this, tile, stack, "", !holstered, false, false);
+        if (holstered) DrawRect(tile, new Color(0.07f, 0.08f, 0.10f, 0.6f));
+
+        string name = stack.IsEmpty ? "Empty hand" : ItemDefs.Get(stack.Id)?.Name ?? "";
+        var font = UiTheme.Bold;
+        float x = H + 2, wide = W - x - 8;
+        DrawString(font, new Vector2(x, 22), name, HorizontalAlignment.Left, wide, UiTheme.FontBody,
+            stack.IsEmpty || holstered ? UiTheme.TextDim : UiTheme.Text);
+        string line = $"Slot {_ui.HandSlot + 1}";
+        if (!stack.IsEmpty) line += holstered ? $"  ·  holstered  ·  {InputHints.HolsterLabel()} draw" : $"  ·  {InputHints.HolsterLabel()} holster";
+        DrawString(font, new Vector2(x, 41), line, HorizontalAlignment.Left, wide, UiTheme.FontTiny, UiTheme.TextFaint);
     }
 }
 

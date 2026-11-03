@@ -109,6 +109,8 @@ public static class ChatCheck
 
         Venues(completer, host);
 
+        Locate(completer, host);
+
         History(host);
 
         GD.Print($"[chatcheck] RESULT {(_failures == 0 ? "PASS" : $"FAIL ({_failures})")}");
@@ -297,6 +299,68 @@ public static class ChatCheck
 
     private static bool Parses(string text, ItemId id, int count) =>
         ItemLookup.TryParse(text, out var def, out int n, out _) && def.Id == id && n == count;
+
+    /// <summary>
+    /// <c>/locate</c> and the chat's coordinates (#1277): the completion of nouns and selectors, the buttons under a
+    /// line carrying <c>@E,N</c>, and the pad's picker walked from "/" to a whole command by its buttons alone.
+    /// </summary>
+    private static void Locate(ChatCompleter completer, Node host)
+    {
+        ExpectTexts(completer, "/loc", ["/locate "], "/locate is offered offline");
+        ExpectTexts(completer, "/locate cas", ["/locate castle "], "a noun completes");
+        ExpectTexts(completer, "/locate church ", ["/locate church + spire ", "/locate church in "], "the selectors after a noun");
+        ExpectTexts(completer, "/locate church + par", ["/locate church + parking entrance "], "a selector completes");
+        ExpectTexts(completer, "/locate castle in La", ["/locate castle in La Chaux-de-Fonds"], "a town after in");
+        Expect(completer.Complete("/").Count > 14, $"a bare / lists every command ({completer.Complete("/").Count})");
+        Expect(ChatUi.BackOneWord("/locate church + spire") == "/locate church + ", "Back takes a word");
+        Expect(ChatUi.BackOneWord("/locate") == "/" && ChatUi.BackOneWord("/") == "", "Back down to nothing");
+
+        var chat = ChatManager.CreateClient();
+        var ui = ChatUi.Create(chat, completer);
+        host.AddChild(chat);
+        host.AddChild(ui);
+        var sent = new List<string>();
+        chat.LineReceived += (line, _) => sent.Add(line);
+
+        // a /locate answer's line: no buttons under it; its pin and coordinates are a link that opens the choices
+        ui.OpenInput();
+        ui.Append("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919", ChatKind.Private);
+        var labels = ui.FindChildren("*", "RichTextLabel", true, false).OfType<RichTextLabel>().ToList();
+        var located = labels.LastOrDefault(l => l.FocusMode == Control.FocusModeEnum.All);
+        Expect(located != null && located.GetParsedText().Replace("⁠", "").Contains("@2538395,1152919"), "the coordinates stay in the line, which a pad can focus");
+        Expect(!ui.FindChildren("*", "Button", true, false).OfType<Button>().Any(b => b.Text == "Track" && b.IsVisibleInTree()), "no buttons until the link is clicked");
+        located?.EmitSignal(RichTextLabel.SignalName.MetaClicked, "2538395,1152919|Château Saint-Maire");
+        var choices = ui.ChoiceLabels.ToList();
+        Expect(choices.Contains("Track") && choices.Contains("Show on map") && choices.Contains("Copy"), $"the link opens the choices [{string.Join(", ", choices)}]");
+        Expect(choices.Contains("Teleport") == Permissions.CanTeleport, "Teleport only where teleporting is allowed");
+        host.GetViewport().PushInput(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+        Expect(!ui.ChoiceLabels.Any() && ui.IsTyping, "Esc closes the choices first, the chat stays open");
+        ui.CloseInput(recaptureMouse: false);
+        Expect(World.Locate.LocateCoords.LabelOf("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919",
+            World.Locate.LocateCoords.FindAll("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919")[0]) == "Château Saint-Maire",
+            "the choices name the place");
+
+        // the picker: "/" then locate, castle, Send, by pressing its buttons
+        ui.OpenForPad();
+        Expect(ui.IsTyping && ui.PickerLabels.Contains("/locate"), $"the pad opens the chat on the commands [{string.Join(", ", ui.PickerLabels.Take(8))}...]");
+        void Press(string label)
+        {
+            var b = ui.FindChildren("*", "Button", true, false).OfType<Button>().FirstOrDefault(x => x.Text == label && x.IsVisibleInTree() && !x.IsQueuedForDeletion());
+            Expect(b != null, $"the picker has '{label}'");
+            b?.EmitSignal(BaseButton.SignalName.Pressed);
+        }
+        Press("/locate");
+        Expect(ui.PickerLabels.Contains("castle"), "after /locate the picker offers the nouns");
+        Press("castle");
+        Expect(ui.PickerLabels.Contains("+ spire") && ui.PickerLabels.Contains("Send"), "after a noun the selectors and Send");
+        Press("Back");
+        Expect(ui.PickerLabels.Contains("castle"), "Back returns to the nouns");
+        ui.CloseInput(recaptureMouse: false);
+        Expect(!ui.IsTyping, "Close shuts the chat");
+
+        ui.QueueFree();
+        chat.QueueFree();
+    }
 
     private static void ExpectTexts(ChatCompleter c, string input, string[] want, string what)
     {

@@ -100,7 +100,7 @@ public partial class TrainingProbe : Node
             if (road.Arc[i] - last < 8) continue;
             last = road.Arc[i];
             var g = _origin.ToGlobal(road.Centre[i]);
-            var (lat, lon) = SwissProjection.ToWgs84(g.E, g.N);
+            var (lat, lon) = SwissGeodesy.ToLatLon(g.E, g.N, g.Alt);
             gpx.Append(CultureInfo.InvariantCulture, $"<trkpt lat=\"{lat:0.0000000}\" lon=\"{lon:0.0000000}\"><ele>{g.Alt:0.0}</ele></trkpt>\n");
         }
         gpx.Append("</trkseg></trk></gpx>\n");
@@ -185,7 +185,7 @@ public partial class TrainingProbe : Node
         var gpx = new StringBuilder("<?xml version=\"1.0\"?>\n<gpx version=\"1.1\" creator=\"trainingcheck\"><trk><name>Fixture junction</name><type>cycling</type><trkseg>\n");
         for (double x = From; x <= To; x += 8)
         {
-            var (lat, lon) = SwissProjection.ToWgs84(e0 + x, n0);
+            var (lat, lon) = SwissGeodesy.ToLatLon(e0 + x, n0, main[0].Height[0]);
             gpx.Append(CultureInfo.InvariantCulture, $"<trkpt lat=\"{lat:0.0000000}\" lon=\"{lon:0.0000000}\"><ele>{main[0].Height[0]:0.0}</ele></trkpt>\n");
         }
         gpx.Append("</trkseg></trk></gpx>\n");

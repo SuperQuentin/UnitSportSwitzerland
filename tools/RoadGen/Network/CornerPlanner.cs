@@ -440,7 +440,12 @@ public static class CornerPlanner
             var wholePieces = Enumerable.Range(0, wholeTris.Count / 3)
                 .Select(t => new List<(Vec2 P, float Y)> { whole[wholeTris[t * 3]], whole[wholeTris[t * 3 + 1]], whole[wholeTris[t * 3 + 2]] }).ToList();
             var pieces = wholePieces;
-            foreach (var tri in (_bandTris ?? []).Concat(RoadTriangles(segments, whole)))
+            // only the band triangles over the corner's box: the tile's whole band mesh, each cut against every piece, took hours
+            // on a dense city tile (Geneva 2500,1117); a triangle off the box leaves every piece whole anyway
+            double bx0 = whole.Min(p => p.P.X), bx1 = whole.Max(p => p.P.X), by0 = whole.Min(p => p.P.Y), by1 = whole.Max(p => p.P.Y);
+            var nearBands = (_bandTris ?? []).Where(t => Math.Max(t.A.X, Math.Max(t.B.X, t.C.X)) > bx0 && Math.Min(t.A.X, Math.Min(t.B.X, t.C.X)) < bx1
+                && Math.Max(t.A.Y, Math.Max(t.B.Y, t.C.Y)) > by0 && Math.Min(t.A.Y, Math.Min(t.B.Y, t.C.Y)) < by1);
+            foreach (var tri in nearBands.Concat(RoadTriangles(segments, whole)))
                 pieces = [.. pieces.SelectMany(pc => Subtract(pc, tri)).Select(Dedupe)
                     .Where(pc => pc.Count >= 3 && Math.Abs(SignedArea(pc.Select(p => p.P).ToList())) >= 0.005)];
             string? gapWhy = null;

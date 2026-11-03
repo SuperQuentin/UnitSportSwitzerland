@@ -47,6 +47,9 @@ public static class Icons
     public static Texture2D Copy => Get("copy", 18, new[] { (6f, 6f, 15f, 6f), (15f, 6f, 15f, 15f), (15f, 15f, 6f, 15f), (6f, 15f, 6f, 6f), (3f, 12f, 3f, 3f), (3f, 3f, 12f, 3f) });
     public static Texture2D Enlarge => Get("enlarge", 18, new[] { (10.5f, 2.5f, 15.5f, 2.5f), (15.5f, 2.5f, 15.5f, 7.5f), (15.5f, 2.5f, 10f, 8f), (7.5f, 15.5f, 2.5f, 15.5f), (2.5f, 15.5f, 2.5f, 10.5f), (2.5f, 15.5f, 8f, 10f) });
     public static Texture2D Terminal => Get("terminal", 18, new[] { (2.5f, 3.5f, 15.5f, 3.5f), (15.5f, 3.5f, 15.5f, 14.5f), (15.5f, 14.5f, 2.5f, 14.5f), (2.5f, 14.5f, 2.5f, 3.5f), (5f, 7f, 7.5f, 9f), (7.5f, 9f, 5f, 11f), (9f, 11.5f, 13f, 11.5f) });
+    /// <summary>A map pin (#1277): the chat's mark beside coordinates.</summary>
+    public static Texture2D Pin => Get("pin", 18, Arc(9, 7, 4.8f, 135, 405).Concat(Arc(9, 7, 1.4f, 0, 360))
+        .Concat(new[] { (5.6f, 10.4f, 9f, 16f), (12.4f, 10.4f, 9f, 16f) }).ToArray());
     public static Texture2D Help => Get("help", 18, Arc(9, 6.5f, 3.5f, 180, 400).Concat(new[] { (9f, 10f, 9f, 11.5f), (9f, 14.5f, 9f, 15f) }).ToArray());
 
     private static (float, float, float, float)[] Arc(float cx, float cy, float r, float fromDeg, float toDeg)
