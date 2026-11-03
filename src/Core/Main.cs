@@ -155,9 +155,9 @@ public partial class Main : Node
 		}
 
 		// the globe's colour bake into a --cube-global region (#1430 H4): a tool, no game
-		if (UnitSport.World.Globe.GlobeAlbedoBake.Requested())
+		if (UnitSport.World.GlobeAlbedoBake.Requested())
 		{
-			AddChild(new UnitSport.World.Globe.GlobeAlbedoBake { Name = "GlobeAlbedoBake" });
+			AddChild(new UnitSport.World.GlobeAlbedoBake { Name = "GlobeAlbedoBake" });
 			return;
 		}
 

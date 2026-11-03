@@ -5,7 +5,7 @@ using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
-namespace UnitSport.World.Globe;
+namespace UnitSport.World;
 
 /// <summary>
 /// Bakes the globe's colour (#1430 H4; docs/plans/ellipsoid-handover.md §6a, tools/cube-tiles note)
