@@ -483,7 +483,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // far trees as billboards, before the first tile builds them
         var treeFarMaterial = StyleKit.Material(MaterialRole.TreeFar);
         StyleKit.TreeFarMaterial = StyleKit.TreeLod ? treeFarMaterial : null;
-        AddChild(new CameraGlobal());
+        AddChild(new CameraGlobal { Origin = origin });
 
         // Fog is a setting now (off by default: the far horizon is the point). Every world
         // material carries the uniforms, so the toggle just re-pushes two floats to each.
