@@ -29,6 +29,7 @@ public static class GameCatalog
         // each game adds its row here
         Add(Pool.PoolPlay.Spec);
         Add(Darts.DartsPlay.Spec);
+        Add(Foosball.FoosballPlay.Spec);
     }
 
     public static void Add(GameSpec spec) => Specs.Add(spec);

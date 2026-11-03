@@ -241,34 +241,8 @@ public static partial class InteriorMeshBuilder
                 break;
             }
             case FurnitureType.TableFootball:
-            {
-                // the box on its legs, the green pitch inside, eight rods across with their players and handles
-                var box = C(0.36f, 0.24f, 0.14f);
-                const float bx = 0.6f, bz = 0.36f, y0 = 0.7f, y1 = 0.92f;
-                foreach (float lx in new[] { -bx + 0.07f, bx - 0.13f })
-                    foreach (float lz in new[] { -bz + 0.07f, bz - 0.13f })
-                        B(lx, 0, lz, lx + 0.06f, y0 + sink, lz + 0.06f, dark);
-                B(-bx + 0.045f, y0, -bz + 0.045f, bx - 0.045f, 0.78f, bz - 0.045f, C(0.20f, 0.56f, 0.24f));
-                B(-bx, y0, -bz, bx, y1, -bz + 0.03f, box);
-                B(-bx, y0, bz - 0.03f, bx, y1, bz, box);
-                B(-bx, y0, -bz + 0.015f, -bx + 0.03f, y1 - 0.015f, bz - 0.015f, box);
-                B(bx - 0.03f, y0, -bz + 0.015f, bx, y1 - 0.015f, bz - 0.015f, box);
-                for (int i = 0; i < 8; i++)
-                {
-                    float x = -0.49f + i * 0.14f;
-                    B(x - 0.008f, 0.86f, -d - 0.1f, x + 0.008f, 0.876f, d + 0.1f, Chrome);
-                    float side = i % 2 == 0 ? -1 : 1;
-                    B(x - 0.02f, 0.85f, side * (d + 0.03f), x + 0.02f, 0.89f, side * (d + 0.11f), dark);
-                    var team = (i == 0 || i == 1 || i == 3 || i == 5) ? C(0.82f, 0.12f, 0.12f) : C(0.12f, 0.24f, 0.78f);
-                    int players = i is 0 or 7 ? 1 : i is 1 or 6 ? 2 : i is 3 or 4 ? 5 : 3;
-                    for (int k = 0; k < players; k++)
-                    {
-                        float z = players == 1 ? 0 : -0.25f + k * 0.5f / (players - 1);
-                        B(x - 0.02f, 0.8f, z - 0.03f, x + 0.02f, 0.9f, z + 0.03f, team);
-                    }
-                }
+                // the whole table is the game's (Games.Foosball.FoosballRig, #1324): rods and figures move, the box comes with them
                 break;
-            }
             case FurnitureType.Jukebox:
             {
                 B(-w, 0, -d, w, 1.2f, d, C(0.40f, 0.16f, 0.10f));
