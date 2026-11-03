@@ -50,6 +50,8 @@ public partial class RegionCheck : Node
         public double MinGap = double.MaxValue, MinCar = double.MaxValue;
         /// <summary>At the end of the walk: how far the walker went, how far the blocker was pushed.</summary>
         public double Walked, Pushed, ToCar;
+        /// <summary>At the end of the walk (before a hop moves one): whether its bots shared a region.</summary>
+        public bool Shared;
         public readonly StringBuilder Csv = new();
     }
 
@@ -67,6 +69,8 @@ public partial class RegionCheck : Node
     }
 
     private readonly List<Site> _sites = new();
+    /// <summary>The run's name in its files and its cars: the sites, and how it differs from a plain run.</summary>
+    private string Tag => _run + (ServerRegions.Off ? "-noregions" : "") + (RegionMirrors.Off ? "-nomirrors" : "");
     private readonly string _run;
     private string _out = "";
     private int _tick, _settled, _walked = -1, _wander, _wandered = -1;
@@ -176,6 +180,7 @@ public partial class RegionCheck : Node
                 s.Walked = s.Walker!.Body.Global.HorizontalDistanceTo(s.WalkerStart);
                 s.Pushed = s.Blocker!.Body.Global.HorizontalDistanceTo(s.BlockerStart);
                 s.ToCar = s.Driver!.Body.Global.HorizontalDistanceTo(s.DriverStart);
+                s.Shared = s.Walker.Body.Region == s.Blocker.Body.Region && s.Driver.Body.Region == s.Walker.Body.Region;
             }
         if (_hop && _sites.Count == 2 && _hopped < HopTicks)
         {
@@ -240,7 +245,8 @@ public partial class RegionCheck : Node
             s.CarAt = at with { N = at.N + CarGap };
             var state = new Vehicles.VehicleState(kind, s.CarAt, Mathf.Pi / 2, Vector3.Zero, ride.MaxHealth,
                 EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
-            if (vehicles.Place(state, $"regioncheck_car_{s.Name}", settled: true) == null) { Fail($"site {s.Name}: the car was not parked"); return false; }
+            // a name of this run's own: the object containers file a parked car, and the runs of one script share user://
+            if (vehicles.Place(state, $"regioncheck_car_{Tag}_{s.Name}", settled: true) == null) { Fail($"site {s.Name}: the car was not parked"); return false; }
         }
         GD.Print($"{Log} parked a car at each site; copies in far regions: {ServerRegions.Instance?.Mirrors ?? 0} (made at the next decision)");
         return true;
@@ -260,10 +266,10 @@ public partial class RegionCheck : Node
         int failures = 0;
         foreach (var s in _sites)
         {
-            string file = Path.Combine(_out, $"{_run}{(ServerRegions.Off ? "-noregions" : "")}-{s.Name}.csv");
+            string file = Path.Combine(_out, $"{Tag}-{s.Name}.csv");
             File.WriteAllText(file, s.Csv.ToString());
             double walked = s.Walked;
-            bool shared = s.Walker.Body.Region == s.Blocker!.Body.Region;
+            bool shared = s.Shared;
             // the two capsules (0.32 m each) touched and never went through each other
             bool touched = s.MinGap < 0.8, through = s.MinGap < 0.4;
             // the car's side is ~0.9 m from its centre: the walker stops there, never at the centre (through it)

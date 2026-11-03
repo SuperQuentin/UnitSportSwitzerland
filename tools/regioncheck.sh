@@ -10,6 +10,9 @@
 #   GODOT=<exe> [BEFORE=1] tools/regioncheck.sh      tracks: test_output/regions/*.csv
 . "$(dirname "$0")/lib/twoclient.sh" regions
 DIR="$OUT/regions"
+# the first python that runs (Windows' python3 can be the Store's stub)
+PYTHON=; for p in python3 python; do "$p" -c "" 2>/dev/null && { PYTHON=$p; break; }; done
+[ -n "$PYTHON" ] || { echo "[regioncheck] RESULT: FAILED (no python to compare the tracks)"; exit 1; }
 rm -rf "$DIR"; mkdir -p "$DIR"
 PORT=7838
 run() {   # <name> <regioncheck args...>
@@ -25,7 +28,7 @@ if [ -n "${BEFORE:-}" ]; then
   run noregions both --noregions
   run nomirrors b --nomirrors   # expected to FAIL: the walker goes through the parked car
 fi
-if tc_ok 3 "$DIR"/both.log "$DIR"/a.log "$DIR"/b.log && python3 tools/regioncheck-compare.py "$DIR" ${BEFORE:+--before}; then
+if tc_ok 3 "$DIR"/both.log "$DIR"/a.log "$DIR"/b.log && "$PYTHON" tools/regioncheck-compare.py "$DIR" ${BEFORE:+--before}; then
     echo "[regioncheck] RESULT: ok"; exit 0
 fi
 echo "[regioncheck] RESULT: FAILED (see $DIR/*.log)"; exit 1
