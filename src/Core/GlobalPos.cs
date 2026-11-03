@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Core;
 
@@ -42,6 +43,19 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
         new((float)(a.E - b.E), (float)(a.Alt - b.Alt), (float)-(a.N - b.N));
 
     public bool IsFinite => double.IsFinite(E) && double.IsFinite(N) && double.IsFinite(Alt);
+
+    /// <summary>
+    /// This place on the Earth (#1430), <see cref="Alt"/> taken as an LHN95 height: the rigorous
+    /// <see cref="SwissGeodesy"/> chain, so <see cref="FromEcef"/> brings it back to a tenth of a millimetre.
+    /// </summary>
+    public EcefPos ToEcef() => SwissGeodesy.ToEcef(E, N, Alt);
+
+    /// <summary>The inverse of <see cref="ToEcef"/>.</summary>
+    public static GlobalPos FromEcef(EcefPos p)
+    {
+        var (e, n, h) = SwissGeodesy.FromEcef(p);
+        return new(e, n, h);
+    }
 
     /// <summary>Puts this position in a network dictionary under <paramref name="key"/>, as three doubles.</summary>
     public void Write(Godot.Collections.Dictionary d, string key = "pos")
