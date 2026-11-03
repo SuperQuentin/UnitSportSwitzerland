@@ -148,15 +148,17 @@ public static class PhotoJudge
         double de = spot.TargetE - e, dn = spot.TargetN - n, dist = Math.Sqrt(de * de + dn * dn);
         if (dist < 1) return PhotoVerdict.OffTarget;
         double bearing = Math.Atan2(de, dn) * 180 / Math.PI;
-        double elev = Math.Atan2(spot.TargetAlt - eyeAlt, dist) * 180 / Math.PI;
+        // aimed where the target is drawn: lower by the Earth's drop (#187, 27 m at 20 km)
+        double elev = Math.Atan2(spot.TargetAlt - Core.Curvature.Drop(dist) - eyeAlt, dist) * 180 / Math.PI;
         double half = fovDeg / 2 * PhotoSpots.FrameShare;
         if (Math.Abs(AngleDiff(bearing, yawDeg)) > half || Math.Abs(elev - pitchDeg) > half) return PhotoVerdict.OffTarget;
-        // the sight line, past the first 30 m and short of the target's own slopes (the last 150 m)
+        // the sight line, past the first 30 m and short of the target's own slopes (the last 150 m),
+        // over the ground and the Earth's bulge between (#187)
         for (double s = 30; s < dist - 150; s += PhotoSpots.SightStep)
         {
             double t = s / dist;
             float line = (float)(eyeAlt + (spot.TargetAlt - eyeAlt) * t);
-            if (ground(e + de * t, n + dn * t) is { } g && g > line + 2) return PhotoVerdict.Blocked;
+            if (ground(e + de * t, n + dn * t) is { } g && g + Core.Curvature.Bulge(s, dist) > line + 2) return PhotoVerdict.Blocked;
         }
         return PhotoVerdict.Taken;
     }

@@ -153,6 +153,10 @@ world_cam_pos={
 "type": "vec3",
 "value": Vector3(0, 0, 0)
 }
+world_curvature={
+"type": "float",
+"value": 0.0
+}
 world_lod_scale={
 "type": "float",
 "value": 1.0

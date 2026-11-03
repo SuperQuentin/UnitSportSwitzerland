@@ -600,3 +600,14 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 
 - [ ] In a real exported build, update from an older release (delta patch, then again by unpacking the archive by hand) and reach the title: the "What's new" popup lists every release since, newest first, once; the next launch shows none. Offline at the first launch after an update: no popup, it comes at the next online launch.
 - [ ] Pad and VR: the "What's new" title entry opens the notes; the stick scrolls them, B closes (VR: pointer on Close). Is the text readable at the panel's distance?
+
+## Earth curvature drawn round the camera (PR for [#187](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/187))
+
+Launch: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2548600,1148500` (Lavaux, the Alps across the lake).
+
+- [ ] PC VR (Quest via Link): look at the far side of the lake and the Alps → both eyes agree, nothing swims or doubles at the horizon as you turn your head.
+- [ ] Standalone Quest: the same view → the horizon and the far peaks sit where they do on PC, no seam or gap under the far ridges.
+- [ ] Compare a known panorama with a photo (Lavaux → Dents du Midi, or La Dôle → the Alps) → the far peaks stand as high above the lake as in the photo, no longer ~170 m too tall at 50 km.
+- [ ] Debug menu → Terrain → "Earth curvature" off and on while looking at the far horizon → the far ground drops and rises; nearby nothing moves.
+- [ ] Fly the Cessna across several km (origin shifts) looking at the horizon → no jump in the horizon at a shift.
+- [ ] Navigate to a place 20-30 km away (adventure map) → the diamond sits on the place, not tens of metres above it.
