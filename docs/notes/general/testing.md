@@ -20,6 +20,20 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
   `godot ... &` without a timeout. A server + clients check sources `tools/lib/twoclient.sh`
   instead, which does all of that (`twoclient-checks`).
+- **A test window never takes focus or the mouse and never makes a sound (#1378)**: a person works at
+  the machine while a tier runs. Every windowed Godot a check starts runs in a fresh `user://` of its own
+  (`guard_test_userdata <dir>`, or `twoclient.sh`'s `tc_userdata`) holding `test_window.cfg`, which
+  `project.godot`'s `application/config/project_settings_override` reads before the window exists:
+  `display/window/size/no_focus=true`, the `Dummy` audio driver (it still mixes, as headless) and
+  `unitsport/test_window=true` (`MouseCapture.TestWindow`: no probe captures the pointer, listed in
+  `ClientWorld` or not). A player's own `user://` never has the file. A new windowed launcher uses one of
+  the two helpers, never the real `user://` (it also carries the player's settings: an H-pattern truck
+  gearbox failed four checks). Only `playtest.sh` and `run-worktree.sh` keep focus, mouse and sound: a
+  person plays those.
+- **A windowed check by hand** (a session running one probe straight from Godot) gets none of that on
+  its own: `. tools/lib/guard.sh; guard_test_userdata test_output/userdata_<x>` first (then
+  `${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} <godot> --path . -- --<x>check ...`), or headless when it
+  can be. `--nocapture` alone keeps only the mouse.
 - **Never kill by name or pattern** (`taskkill /im`, `pkill`, `Stop-Process` on a match): other
   agents run Godot at the same time. Only the PIDs you started; `guard_run` already does it.
 - Network, authority or replicated state changed: `tools/test.sh net` before the PR (root `CLAUDE.md`).

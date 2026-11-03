@@ -12,7 +12,8 @@
 #   user:// a fresh $OUT/userdata_<name> for every Godot started here (APPDATA on Windows,
 #           XDG_DATA_HOME on Linux, HOME of the Godot runs only on macOS), so loot, bank, placed,
 #           birds, identity... are never the real ones; USERDATA=<dir> picks another, USERDATA=real
-#           keeps the real one
+#           keeps the real one. Every one but the real one holds test_window.cfg (guard_quiet_godot,
+#           #1378): a windowed client never takes focus and makes no sound
 # Then:
 #   tc_server <timeout_s> <wait_s> <log> args...   a headless server ($GODOT --headless --path . -- args)
 #                                    in the background, its PID in SERVER; returns once its log says
@@ -60,6 +61,7 @@ tc_userdata() {
   if _guard_windows; then export APPDATA="$(cygpath -w "$d")"
   elif [ "$(uname)" = Darwin ]; then _tc_env=(env HOME="$d")
   else export XDG_DATA_HOME="$d"; fi
+  guard_quiet_godot "$d"   # a windowed client never takes focus, and is silent (#1378)
 }
 if [ "${USERDATA:-}" != real ]; then
   _tc_ud=${USERDATA:-$OUT/userdata_$_tc_name}
