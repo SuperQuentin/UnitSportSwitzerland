@@ -762,7 +762,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
             if (World.Globe.DataDir is { } globe)
             {
-                AddChild(new World.Globe { Name = "Globe", Dir = globe, Origin = origin });
+                var chunksForGlobe = _chunks;
+                AddChild(new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles });
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
             }
         }

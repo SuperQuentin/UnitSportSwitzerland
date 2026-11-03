@@ -55,6 +55,22 @@ public partial class Globe : Node
 
     public WorldOrigin? Origin { get; set; }
 
+    /// <summary>The tiles with real data (the rest is the generated fill, which gives way to the globe from high up).</summary>
+    public Func<IReadOnlySet<TileId>?>? RealTiles { get; set; }
+
+    /// <summary>The generated fill dissolves from here to <see cref="FillGoneM"/>, metres.</summary>
+    public const double FillFromM = 15_000, FillGoneM = 25_000;
+
+    /// <summary>Every flat tile dissolves from here to <see cref="FlatGoneM"/>: the globe alone above.</summary>
+    public const double FlatFromM = 150_000, FlatGoneM = 250_000;
+
+    private static readonly StringName FillHide = "world_fill_hide", FlatHide = "world_flat_hide", RealMask = "world_real_mask",
+        RealOrigin = "world_real_origin", RealExtent = "world_real_extent", RealAxes = "world_real_axes";
+
+    private int _realCount = -1, _maskMinE, _maskMaxN;
+    private float _fill = -1, _flat = -1;
+    private ImageTexture? _mask;
+
     /// <summary>Whether a globe is drawn past the edge of the data (the altitude haze need not hide it).</summary>
     public static bool Present { get; private set; }
 
@@ -101,6 +117,51 @@ public partial class Globe : Node
     {
         Present = false;
         Axes = null;
+        RenderingServer.GlobalShaderParameterSet(FillHide, 0f);
+        RenderingServer.GlobalShaderParameterSet(FlatHide, 0f);
+    }
+
+    /// <summary>
+    /// The flat world giving way: the generated fill from <see cref="FillFromM"/>, every tile from
+    /// <see cref="FlatFromM"/> (terrain.gdshaderinc's <c>flat_hidden</c>); the real tiles' mask rebuilt
+    /// when the real set grows. Written on change only.
+    /// </summary>
+    private void Hide(double altitude)
+    {
+        if (RealTiles?.Invoke() is { Count: > 0 } real && real.Count != _realCount)
+        {
+            _realCount = real.Count;
+            int minE = int.MaxValue, maxE = int.MinValue, minN = int.MaxValue, maxN = int.MinValue;
+            foreach (var t in real)
+            {
+                minE = Math.Min(minE, t.E); maxE = Math.Max(maxE, t.E);
+                minN = Math.Min(minN, t.N); maxN = Math.Max(maxN, t.N);
+            }
+            var image = Image.CreateEmpty(maxE - minE + 1, maxN - minN + 1, false, Image.Format.R8);
+            image.Fill(Colors.Black);
+            foreach (var t in real) image.SetPixel(t.E - minE, maxN - t.N, Colors.White);
+            (_maskMinE, _maskMaxN) = (minE, maxN);
+            _mask = ImageTexture.CreateFromImage(image);
+            RenderingServer.GlobalShaderParameterSet(RealMask, _mask.GetRid());
+            RenderingServer.GlobalShaderParameterSet(RealExtent, new Vector2(image.GetWidth() * 1000f, image.GetHeight() * 1000f));
+            PushMaskCorner();
+        }
+        float fill = _mask == null ? 0 : (float)Mathf.SmoothStep(FillFromM, FillGoneM, altitude);
+        float flat = (float)Mathf.SmoothStep(FlatFromM, FlatGoneM, altitude);
+        if (fill != _fill) RenderingServer.GlobalShaderParameterSet(FillHide, _fill = fill);
+        if (flat != _flat) RenderingServer.GlobalShaderParameterSet(FlatHide, _flat = flat);
+    }
+
+    /// <summary>The mask is sampled by world XZ: its NW corner and grid axes, again after a shift.</summary>
+    private void PushMaskCorner()
+    {
+        if (_mask == null || Origin == null) return;
+        double e = _maskMinE * 1000.0, n = (_maskMaxN + 1) * 1000.0;
+        var nw = Origin.ToWorld(e, n, 0);
+        var east = (Origin.ToWorld(e + 1000, n, 0) - nw).Normalized();
+        var south = (Origin.ToWorld(e, n - 1000, 0) - nw).Normalized();
+        RenderingServer.GlobalShaderParameterSet(RealOrigin, new Vector2(nw.X, nw.Z));
+        RenderingServer.GlobalShaderParameterSet(RealAxes, new Vector4(east.X, east.Z, south.X, south.Z));
     }
 
     private static void Index(string file, uint magic, Dictionary<CubeKey, (string, long, int)> into)
@@ -117,7 +178,9 @@ public partial class Globe : Node
         for (int k = 0; k < 4 && _ready.TryDequeue(out var r); k++)
             if (r.Month == _month && !_patches.ContainsKey(r.Key)) Commit(r.Key, r.Arrays, r.Colour);
 
-        bool show = Origin.AltitudeOf(cam.GlobalPosition) > ShowAboveM;
+        double altitude = Origin.AltitudeOf(cam.GlobalPosition);
+        Hide(altitude);
+        bool show = altitude > ShowAboveM;
         if (show != _shown)
         {
             _shown = show;
@@ -134,6 +197,7 @@ public partial class Globe : Node
             (_axesE, _axesN) = (ce, cn);
             Axes = Origin.Frame.EcefAxesAt(ce, cn);
             foreach (var (key, node) in _patches) node.Transform = Place(key);
+            PushMaskCorner();
         }
 
         // five plans a second
