@@ -41,3 +41,4 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 ## Commands
 
 - `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh, tools/bonkcheck.sh, --interactcheck, --churchstagecheck, --fishcheck, tools/fishcheck.sh
+- `telescope` — Telescope on a tripod (#1440): `Placeables` item, one viewer at a time (`Telescopes`), `TelescopeView` zoom 100-8,000 mm and moon lock, `CameraLens` frustum below 1°, the moon in the sky (`World/MoonDisc`, NASA LROC map), `--telescopecheck`, `tools/telescopecheck.sh`

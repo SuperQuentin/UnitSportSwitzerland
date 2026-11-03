@@ -54,6 +54,9 @@ public partial class ControlsHelp : CanvasLayer
             new("Bowling: move your spot", PlayerInput.MoveLeft),
             new("Bowling: turn your line", PlayerInput.BowlAimLeft),
             new("Bowling: hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
+            new("Telescope: E at a set-up telescope looks through it; E or Esc steps back", PlayerInput.InteractMount),
+            new("Telescope: zoom", Keys: "wheel / + -", Pad: "D-pad ↑ ↓"),
+            new("Telescope: lock on the moon, or let go", PlayerInput.UseItem),
             new("Festival alphorn row: sit down to the song; blow, pick the note, yodel", Keys: "{interact_mount}, hold {use_item}, wheel or {move_forward} / {move_back}, {jump}", Pad: "{interact_mount}, hold {use_item}, right stick ↑ ↓, {jump}"),
         }),
         ("Items", new Row[]
