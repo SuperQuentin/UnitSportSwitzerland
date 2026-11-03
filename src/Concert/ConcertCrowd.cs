@@ -78,11 +78,11 @@ public partial class ConcertCrowd : Node3D
                 buffer[k + 12] = custom.R; buffer[k + 13] = custom.G; buffer[k + 14] = custom.B; buffer[k + 15] = custom.A;
             }
             mm.Buffer = buffer;
-            AddChild(new MultiMeshInstance3D
+            AddChild(Styles.ZoomRanges.Track(new MultiMeshInstance3D
             {
                 Name = $"Crowd{b}", Multimesh = mm, MaterialOverride = _material,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, VisibilityRangeEnd = Range,
-            });
+            }));
         }
     }
 
