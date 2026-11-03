@@ -287,26 +287,7 @@ public partial class CubeHarness : Node3D
         PlaceCamera(Math.Min(_t, _flightS));
 
         // at most one commit a frame, as a streamer would
-        if (_ready.TryDequeue(out var job))
-        {
-            var sw = Stopwatch.StartNew();
-            if (_loaded.TryGetValue(job.Key, out var entry))
-            {
-                entry.Node?.QueueFree();
-                MeshInstance3D? node = null;
-                if (job.Arrays != null)
-                {
-                    var mesh = new ArrayMesh();
-                    mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, job.Arrays);
-                    node = new MeshInstance3D { Mesh = mesh, MaterialOverride = _material, Transform = _xf[job.Key] };
-                    AddChild(node);
-                }
-                _loaded[job.Key] = (node, job.Step, false);
-                _commitMs.Add(sw.Elapsed.TotalMilliseconds);
-                _buildMs.Add(job.BuildMs);
-                _loads++;
-            }
-        }
+        if (_ready.TryDequeue(out var job)) Commit(job.Key, job.Step, job.Arrays, job.BuildMs);
 
         if (_t >= _nextPlan)
         {
@@ -314,6 +295,26 @@ public partial class CubeHarness : Node3D
             Plan();
         }
         if (_t > _flightS + 1) Finish();
+    }
+
+    /// <summary>A tile's mesh into the scene: once when it loads or its LOD step changes.</summary>
+    private void Commit(CubeKey key, int step, Godot.Collections.Array? arrays, double buildMs)
+    {
+        var sw = Stopwatch.StartNew();
+        if (!_loaded.TryGetValue(key, out var entry)) return;
+        entry.Node?.QueueFree();
+        MeshInstance3D? node = null;
+        if (arrays != null)
+        {
+            var mesh = new ArrayMesh();
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            node = new MeshInstance3D { Mesh = mesh, MaterialOverride = _material, Transform = _xf[key] };
+            AddChild(node);
+        }
+        _loaded[key] = (node, step, false);
+        _commitMs.Add(sw.Elapsed.TotalMilliseconds);
+        _buildMs.Add(buildMs);
+        _loads++;
     }
 
     /// <summary>Loads what is in reach at its LOD step, drops what has left it (500 m of slack).</summary>
