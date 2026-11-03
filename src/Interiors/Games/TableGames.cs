@@ -94,7 +94,7 @@ public partial class TableGames : Node
     public bool ServeSit(long peer, string key, int index, int wanted = -1)
     {
         if (Piece(peer, key, index) is not { } at) return false;
-        var g = SessionOf(key, index, at.Spec);
+        var g = SessionOf(key, index, at.Spec, at.Plan.Furniture[index]);
         if (g.SeatOf(peer) >= 0) return true;
         if (!IsBot(peer) && !Near(peer, at.Plan, index, at.Spec)) return Refuse(peer, $"Step up to the {at.Spec.Title.ToLowerInvariant()}.");
         // a seat held by a bot goes to a human who asks for it
@@ -219,9 +219,10 @@ public partial class TableGames : Node
         return (l, spec);
     }
 
-    private TableGame SessionOf(string key, int index, GameSpec spec)
+    private TableGame SessionOf(string key, int index, GameSpec spec, FurniturePlan piece)
     {
-        if (!_games.TryGetValue((key, index), out var g) || g.Kind != spec.Kind) _games[(key, index)] = g = spec.Make();
+        if (!_games.TryGetValue((key, index), out var g) || g.Kind != spec.Kind) _games[(key, index)] = g = spec.Make(piece);
+        g.Names ??= NameOf;
         return g;
     }
 
@@ -344,7 +345,8 @@ public partial class TableGames : Node
     private void State(string key, int index, byte kind, byte[] bytes)
     {
         if (GameCatalog.Of((GameKind)kind) is not { } spec) return;
-        if (!_games.TryGetValue((key, index), out var g) || g.Kind != spec.Kind) _games[(key, index)] = g = spec.Make();
+        if (InteriorManager.Instance?.PlanOf(key) is not { } l || index < 0 || index >= l.Furniture.Count) return;
+        if (!_games.TryGetValue((key, index), out var g) || g.Kind != spec.Kind) _games[(key, index)] = g = spec.Make(l.Furniture[index]);
         g.Unpack(bytes);
         RigOf(key, index)?.OnState(g, Clock);
     }

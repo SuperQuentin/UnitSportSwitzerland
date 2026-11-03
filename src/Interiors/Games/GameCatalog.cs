@@ -11,7 +11,7 @@ public sealed record GameSpec(
     FurnitureType Type,
     GameKind Kind,
     string Title,
-    Func<TableGame> Make,
+    Func<FurniturePlan, TableGame> Make,
     // the piece's frame (back −Z, front +Z): where a body may use it from, the box outlined round it
     Func<Vector3, FurniturePlan, bool> UseFrom,
     Func<FurniturePlan, (Vector3 Centre, Vector3 Size)> Box,

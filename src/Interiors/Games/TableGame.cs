@@ -31,6 +31,10 @@ public abstract class TableGame
     public long[] Seats { get; private set; } = Array.Empty<long>();
     /// <summary>The seat whose turn it is (turn games).</summary>
     public int Up;
+    /// <summary>The server's names for the players, for a game's calls ("Vreni pots the 3"); unset, "Player n".</summary>
+    public Func<long, string>? Names { get; set; }
+
+    protected string NameAt(int seat) => Names?.Invoke(Seats[seat]) ?? $"Player {seat + 1}";
 
     protected TableGame() { }
 
