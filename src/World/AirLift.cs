@@ -226,7 +226,7 @@ public static class AirLift
 
     private static float Thermals(double e, double n, float alt, double now, IAirLiftTerrain t)
     {
-        var sun = SunPath.Direction((float)t.HourAt(now), out float elevation);
+        var sun = SunPath.Direction(t.HourAt(now), e, n, out float elevation);
         if (elevation <= 0f) return 0f;
         var cache = CacheOf(t);
         long ci = (long)Math.Floor(e / CellSize), cj = (long)Math.Floor(n / CellSize);
@@ -251,7 +251,7 @@ public static class AirLift
     /// </summary>
     public static int ThermalsNear(double e, double n, double radius, double now, IAirLiftTerrain t, Span<Thermal> into)
     {
-        var sun = SunPath.Direction((float)t.HourAt(now), out float elevation);
+        var sun = SunPath.Direction(t.HourAt(now), e, n, out float elevation);
         if (elevation <= 0f || into.IsEmpty) return 0;
         var cache = CacheOf(t);
         long i0 = (long)Math.Floor((e - radius) / CellSize), i1 = (long)Math.Floor((e + radius) / CellSize);

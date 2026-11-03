@@ -286,3 +286,13 @@
   hosting a set, releasing it or the operator leaving clears it (the index belongs to that set's setlist).
 - `/concert host <word>` is refused (it used to read the word as no seed and host a new random set each time:
   `/concert host status`). `--concertcheck` covers the position math, `concertnetcheck` the refusal and the reply.
+
+## Jazz and a season (#1394)
+
+- `Genre.Jazz` is appended to the genre enum and **never drawn** by `ConcertPlanner.Plan`: only a venue with a `StadiumSpec.Season` (Montreux's lake stage, `07-fri#1+15`) forces it, through
+  `ConcertPlanner.Tonight` -> `Jazz(stadium, year, night)`. Outside its season such a venue has no stage and no crowd (`ConcertPlanner.Open`; `--concert N` and a hosted set override it); every other
+  row has `Season = null` and plays every night.
+- A jazz night is small (a 12 x 7 m deck, 4.5 m roof, 33-35 fixtures in one universe: no strobe, blinder or pyro; amber / deep blue / magenta), its songs made up on the set's own clock
+  (`JazzSet`: songs, the call for the bis, the bis, a rest; `LightDesk.JazzLook`, never a strobe), played by a quartet of skinned figures at fixed posts with four props that sway as nodes
+  (`JazzInstruments`), to a seated lawn (`crowd.gdshader` `seated`). A jazz night's setlist is the `CdLibrary.JazzUrls` playlist only (empty: lights only), every other stage's excludes it.
+  Details, the games and the checks: `occasions/festival-montreuxjazz`.

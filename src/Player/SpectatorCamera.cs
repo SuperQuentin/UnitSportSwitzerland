@@ -8,13 +8,19 @@ namespace UnitSport.Player;
 /// stick look, Ctrl / L3 for boost, mouse wheel to change speed. Click to take mouse capture back
 /// after a menu.
 /// </summary>
-public partial class SpectatorCamera : Camera3D
+public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
 {
     [Export] public float Speed { get; set; } = 150f;
     [Export] public float BoostMultiplier { get; set; } = 6f;
     [Export] public float MouseSensitivity { get; set; } = 0.0025f;
 
     private float _yaw;
+
+    /// <summary>The camera's rotation is rebuilt from its yaw each frame: a turning shift (#1430 H3) turns the yaw.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        if (shift.Turns) _yaw += shift.Yaw;
+    }
     private float _pitch;
 
     public override void _Ready()
@@ -85,6 +91,8 @@ public partial class SpectatorCamera : Camera3D
             float speed = Speed * amount
                 * (UnitSport.Core.PlayerInput.Held(UnitSport.Core.PlayerInput.FlyBoost) ? BoostMultiplier : 1f);
             Position += dir.Normalized() * speed * dt;
+            // no higher than the round world is drawn for until the Space regime (#1430 H3)
+            if (Position.Y > Core.Curvature.CeilingM) Position = Position with { Y = (float)Core.Curvature.CeilingM };
         }
     }
 }

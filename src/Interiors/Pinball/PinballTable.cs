@@ -42,6 +42,8 @@ public sealed class PinballTable
     public PinballEra Era;
     /// <summary>The playfield's ground, its art's two accents, the cabinet's paint and the trim.</summary>
     public Color Ground, AccentA, AccentB, Cabinet, Trim;
+    /// <summary>The ball's colour: steel, or dark on a light playfield where steel would vanish (the Alpine Ski Race's snow).</summary>
+    public Color Ball = new(0.86f, 0.88f, 0.92f);
 
     public readonly List<Wall> Walls = new();
     public readonly List<Disc> Discs = new();

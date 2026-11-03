@@ -34,6 +34,8 @@ public sealed class WanderBrain : IBotBrain
         if (body.Eliminated || body.KnockedOut) return 0.5;
         // a UFO sighting (#863): look up and wave, or run out from under a beam
         if (BotUfo.React(bot, now)) return 0.25;
+        // a player's birthday near (#1423): walk up and wish them a happy birthday
+        if (BotBirthday.React(bot, now)) return 0.25;
         if (now < _restUntil) return 0.5;
 
         // pressed against a wall or a house: a new goal, from where it stands

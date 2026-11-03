@@ -26,3 +26,22 @@
   `test_output/stadium/sit_*.png`:
   `--chunks <main>/terrain_chunks --at 2498705.1,1114859.2 --sitcheck` (E sits and stands, held still
   on the seat facing the pitch, a bot's way by `WalkControls`).
+
+## Chairs, stools, sofas, benches and terrace seats (#1385)
+
+- **Where** (`Interiors/ChairSeats`): indoors, every piece whose mesh draws seats, read where
+  `InteriorMeshBuilder` draws them (`ChairSeats.Of(FurniturePlan)`): a lone `Chair`, an `Armchair`, a
+  `Sofa`, a `Pew`, a `Bench` (a place every 0.6 m), a `TableSet`'s chairs, a `BanquetteSet`'s bench and
+  chairs, a `HighTable`'s four stools, a `BarStool` (it faces where you look), a `Settee`'s back row;
+  outdoors, a venue terrace's bistro chairs and beer benches (`VenueTerraces` registers them,
+  `ChairSeats.AddTerrace`). The nearest seat within 1.1 m of the feet; facing the way its back sends you;
+  standing up puts you back where you stood. `SitInReach` asks stands and cinemas first, then chairs.
+- **At a restaurant's table** (owner, #1385): seated, E is the fondue (#1384: start a pot on that table,
+  or sit in at its pot) and never stands you up; walking off or a **jump** does (a player's; a bot walks
+  off). The hint reads "Stand up" on the jump there.
+- **Not yet**: town benches (the world has no bench props), classroom desks (no chairs drawn at them).
+- **Check**: `--chaircheck` on the real tiles at Trois Verres, headless or windowed (screenshots in
+  `test_output/chairs/`; it never captures the mouse):
+  `--chunks <main>/terrain_chunks --at 2499794.3,1117466.5 --chaircheck` (a terrace chair: E sits, on the
+  seat facing the table, held still; E at the table starts a pot there and stays seated; a jump stands up;
+  a bot's way).

@@ -153,6 +153,13 @@ public static class OccasionConfig
             Schedule = { new DateWindow("11-25", "12-23") },
             Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
         });
+        // Montreux Jazz (#1394): sixteen days from the first Friday of July, the quay's small stage (no stand-in town: a region without Montreux does not hold it)
+        entries.Add(new OccasionEntry
+        {
+            Id = Festivals.FestivalCatalog.MontreuxJazzId, Priority = 8,
+            Schedule = { new DateWindow("07-fri#1", "+15") },
+            Facets = new FacetToggles { Atmosphere = false, Loot = false, Hunt = false, Hats = false },
+        });
         // the Zibelemärit (#1373): the fourth Monday of November, Bern's Bundesplatz (relocated to the region's largest town); the stalls and the confetti fight
         entries.Add(new OccasionEntry
         {

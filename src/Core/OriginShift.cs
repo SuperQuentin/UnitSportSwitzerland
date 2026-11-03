@@ -35,6 +35,22 @@ public readonly struct OriginShift
     /// <summary>An axis-aligned box in the new world space (exact while the rotation is the identity).</summary>
     public Aabb Apply(Aabb box) => Transform * box;
 
+    /// <summary>
+    /// How far the shift turns headings about the world's up, radians (#1430 H3): what a heading kept as
+    /// an angle (a view yaw, a flight heading) adds. 0 for every ground shift.
+    /// </summary>
+    public float Yaw
+    {
+        get
+        {
+            var f = Transform.Basis * Vector3.Forward;
+            return Mathf.Atan2(-f.X, -f.Z);
+        }
+    }
+
+    /// <summary>Whether the shift turns the world at all (an anchor frame's, #1430 H3).</summary>
+    public bool Turns => !Transform.Basis.IsEqualApprox(Basis.Identity);
+
     /// <summary>The way back: from the new world space to the old.</summary>
     public OriginShift Inverse => new(Transform.AffineInverse());
 

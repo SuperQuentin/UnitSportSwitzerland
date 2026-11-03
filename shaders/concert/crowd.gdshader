@@ -13,6 +13,8 @@ uniform float beat = 0.0;
 uniform float energy = 0.0;
 uniform vec3 tint : source_color = vec3(0.2);
 uniform float arms_up = 0.0;
+// a seated crowd (a jazz night's lawn, #1394): 1 lowers the person 0.45 m, the legs folded under; 0 stands
+uniform float seated = 0.0;
 
 // four per emitter: (position, cos half angle), (beam now), (beam a moment ago), (colour, power)
 uniform vec4 ir[64];
@@ -67,6 +69,10 @@ void vertex() {
 		// up with the hand in a chorus
 		VERTEX.y += raised * 1.0;
 		VERTEX.x -= raised * 0.04;
+	}
+	if (seated > 0.0) {
+		if (VERTEX.y > 0.8) VERTEX.y -= 0.45 * seated;
+		else VERTEX.y *= 1.0 - 0.5625 * seated;
 	}
 	// a hop on every beat, some on the off-beat: a crowd is never quite together
 	float ph = beat + (seed > 0.8 ? 0.5 : seed * 0.15);

@@ -27,7 +27,7 @@ namespace UnitSport.Vehicles;
 /// nothing. Every peer watches <see cref="Wrecked"/>: the frame it flips, it explodes there too.
 /// </para>
 /// </summary>
-public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
+public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IOriginShiftAware
 {
     public const string Group = "vehicles";
 
@@ -105,6 +105,19 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
     private VehicleState _initial;
     private RideMotion _motion;
     private FlightMotion _flight;
+
+    /// <summary>
+    /// The shifter moves the body; a turning shift (an anchor frame's, #1430 H3) also turns what it
+    /// keeps as directions: its velocity and its flight state. Nothing to do on a ground shift.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        if (!shift.Turns) return;
+        Velocity = shift.Direction(Velocity);
+        _flight.Velocity = shift.Direction(_flight.Velocity);
+        _flight.Yaw += shift.Yaw;
+        _flight.Attitude = shift.Transform.Basis * _flight.Attitude;
+    }
     private Node3D? _visual;
     private float _bikeRoll;
     private float _heavySpin;

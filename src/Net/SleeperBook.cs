@@ -12,7 +12,15 @@ namespace UnitSport.Net;
 /// had, which their jersey hue and (if they never chose one) their figure come from.
 /// </summary>
 public sealed record Sleeper(long Id, string Key, string Name, double E, double N, double Alt, float Yaw,
-    int Rider, long Outfit, int Appearance, int Headwear);
+    int Rider, long Outfit, int Appearance, int Headwear)
+{
+    /// <summary>
+    /// The name for the tag (#1359): the player's name now, from their key; <see cref="Name"/>, the backup name from
+    /// falling asleep, when the key resolves to nothing.
+    /// </summary>
+    public string NameShown(PlayerIds? ids) =>
+        ids != null && Key.Length > 0 ? ids.NameOfId(Key, Name) : Name;
+}
 
 /// <summary>
 /// The server's sleepers, one per identity, saved as JSON. No Godot here, so it is unit tested.

@@ -19,6 +19,10 @@ public enum TouchMode
     Passenger,
     Fight,
     Aura,
+    /// <summary>Stepped up to bowl (#1353): the stick walks the spot and hooks, Bowl held swings.</summary>
+    Bowl,
+    /// <summary>At a pinball machine: a flipper under each thumb, no stick.</summary>
+    Pinball,
 }
 
 /// <summary>What else changes the layout within a mode.</summary>
@@ -50,8 +54,8 @@ public readonly record struct TouchState(TouchMode Mode, TouchFlags Flags, strin
 
 public enum TouchShape { Round, Pedal, Rocker, Stick, Top }
 
-/// <summary>The corner a control is placed from. Mirrored for the left-handed.</summary>
-public enum TouchCorner { BottomRight, TopRight }
+/// <summary>The corner a control is placed from. Mirrored for the left-handed, unless it is <see cref="TouchFeel.Sided"/>.</summary>
+public enum TouchCorner { BottomRight, TopRight, BottomLeft }
 
 public enum TouchSendKind
 {
@@ -98,6 +102,8 @@ public enum TouchFeel
     NotWithHotbar = 8,
     /// <summary>Releases a <see cref="Lockable"/> control that is locked down (the brake).</summary>
     Unlocks = 16,
+    /// <summary>Its side is the game's, not the hand's: never mirrored for the left-handed (a pinball flipper).</summary>
+    Sided = 32,
 }
 
 /// <summary>
@@ -191,6 +197,10 @@ public static class TouchLayout
             k.Add(new TouchKey("rstick", label, TouchShape.Stick, TouchSend.RightStick, TouchCorner.BottomRight,
                 new Vector2(22f, 20f), new Vector2(2 * StickRadiusMm, 2 * StickRadiusMm)));
 
+        // an activity's own layout may use the left corner: its mode has no stick (HasStick)
+        void sided(string id, string label, TouchSend send, TouchCorner corner, Vector2 at, float d, TouchFeel feel = TouchFeel.None) =>
+            k.Add(new TouchKey(id, label, TouchShape.Round, send, corner, at, new Vector2(d, d), feel | TouchFeel.Sided));
+
         switch (mode)
         {
             case TouchMode.Foot:
@@ -272,6 +282,20 @@ public static class TouchLayout
                 break;
             case TouchMode.Aura:
                 round("next", "Next move", TouchSend.Pad(JoyButton.A), new Vector2(21f, 21f), 20f, TouchFeel.Primary);
+                break;
+            case TouchMode.Bowl:
+                // held through the swing; the thumb sliding off it sideways is the hook (a look drag)
+                round("bowl", "Bowl", TouchSend.Pad(JoyButton.A), Main, MainD, TouchFeel.Primary | TouchFeel.DragLook);
+                round("back", "Back", TouchSend.Pad(JoyButton.B), Second, SecondD);
+                round("pins", "Pins", TouchSend.Pad(JoyButton.LeftStick), Fourth, FourthD);
+                break;
+            case TouchMode.Pinball:
+                // a flipper under each thumb, held; the plunger pulls while held, as on the cabinet's right
+                sided("lflip", "Flip", TouchSend.Pad(JoyButton.LeftShoulder), TouchCorner.BottomLeft, new Vector2(15f, 16f), 16f, TouchFeel.Primary);
+                sided("rflip", "Flip", TouchSend.Pad(JoyButton.RightShoulder), TouchCorner.BottomRight, new Vector2(15f, 16f), 16f, TouchFeel.Primary);
+                sided("plunge", "Plunger", TouchSend.Pad(JoyButton.A), TouchCorner.BottomRight, new Vector2(32f, 9f), 11f);
+                sided("nudge", "Nudge", TouchSend.Pad(JoyButton.X), TouchCorner.BottomRight, new Vector2(33f, 26f), 9.5f);
+                sided("back", "Back", TouchSend.Pad(JoyButton.B), TouchCorner.BottomLeft, new Vector2(32f, 9f), 9.5f);
                 break;
         }
 
@@ -389,11 +413,17 @@ public static class TouchLayout
         TouchMode.Passenger => "passenger",
         TouchMode.Fight => "fist fight",
         TouchMode.Aura => "aura battle",
+        TouchMode.Bowl => "bowling",
+        TouchMode.Pinball => "pinball",
         _ => mode.ToString(),
     };
 
-    /// <summary>Whether the left stick is on screen (a passenger and an aura battle only look).</summary>
-    public static bool HasStick(TouchMode mode) => mode is not (TouchMode.Passenger or TouchMode.Aura);
+    /// <summary>Whether the left stick is on screen (a passenger and an aura battle only look; pinball's left thumb flips).</summary>
+    public static bool HasStick(TouchMode mode) => mode is not (TouchMode.Passenger or TouchMode.Aura or TouchMode.Pinball);
+
+    /// <summary>Whether a control's x is measured from the left edge: its corner, mirrored for the left-handed unless it is sided.</summary>
+    public static bool FromLeft(TouchKey key, bool leftHanded) =>
+        (key.Corner == TouchCorner.BottomLeft) != (leftHanded && !key.Has(TouchFeel.Sided));
 
     /// <summary>The word under the left stick.</summary>
     public static string StickLabel(TouchMode mode) => mode switch
@@ -404,6 +434,7 @@ public static class TouchLayout
         TouchMode.Crane => "Slew / trolley",
         TouchMode.Fly => "Pitch / roll",
         TouchMode.Fight => "Step",
+        TouchMode.Bowl => "Spot / hook",
         TouchMode.Spectator or TouchMode.CreativeFly => "Fly",
         _ => "Move",
     };
@@ -419,7 +450,7 @@ public static class TouchLayout
     public static Rect2 Place(TouchKey key, Rect2 safe, float pxPerMm, float scale, bool leftHanded)
     {
         float k = pxPerMm * scale;
-        float x = leftHanded ? safe.Position.X + key.Mm.X * k : safe.End.X - key.Mm.X * k;
+        float x = FromLeft(key, leftHanded) ? safe.Position.X + key.Mm.X * k : safe.End.X - key.Mm.X * k;
         float y = key.Corner == TouchCorner.TopRight ? safe.Position.Y + key.Mm.Y * k : safe.End.Y - key.Mm.Y * k;
         var size = key.SizeMm * k;
         return new Rect2(new Vector2(x, y) - size / 2, size);

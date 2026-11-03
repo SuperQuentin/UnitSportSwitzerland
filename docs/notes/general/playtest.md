@@ -33,6 +33,10 @@ tools/playtest.sh last | report [dir] | topview [dir] ...   # the newest session
 3. **Retest**: `tools/playtest.sh retest`. A fix changes the covered files' hash, so its scenario
    turns stale and is due again; a FAILED one stays due until validated.
 
+- **One PR's scenarios, on real terrain** (#1292): `--playtest-only <id prefix>[,...]` keeps only the scenarios
+  whose id starts with one of them; with `--at E,N` and `--chunks <dir>` the run loads through the loading
+  screen like any play launch: `<godot> --path . -- --chunks D:/.../terrain_chunks --at 2499794.3,1117466.5
+  --playtest --playtest-batch --playtest-record --playtest-only pr1327`.
 - Debug builds only: `src/Playtest/**` and the `PLAYTEST` symbol exist only in the `Debug`
   configuration (the csproj), so exports never carry the server. It starts only with
   `--playtest`, offline, on `127.0.0.1:7801` (`--playtest-port N` otherwise; `.mcp.json` names 7801).

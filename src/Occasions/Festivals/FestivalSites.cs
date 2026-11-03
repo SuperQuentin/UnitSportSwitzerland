@@ -30,6 +30,7 @@ public static class FestivalSites
             if (inRegion(s.E, s.N))
                 return new ResolvedSite(s.Name, s.E, s.N, s.RadiusM, false, s.PoiId, $"{def.Title} at {s.Name}");
 
+        if (!def.Relocates) return null;
         TownRef? best = null;
         foreach (var t in towns)
         {

@@ -63,7 +63,13 @@
     <Compile Include="..\..\src\Concert\Mvr\MvrCollision.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CollisionReach.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\FillDomain.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Styles\ZoomRule.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Curvature.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1443: the linked rules' LV95 distances go through GlobalPos (Godot maths and SwissGeodesy only), and the tile key's frame (OriginFrame) is pinned to the arithmetic it replaces -->
+    <Compile Include="..\..\src\Core\WorldOrigin.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\OriginShift.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\GlobalPos.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />
@@ -76,6 +82,7 @@
     <Compile Include="..\..\src\World\ClockSave.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\JoinCache.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the server's admin API (#1211) and the loopback transport it shares with the playtest MCP endpoint -->
     <Compile Include="..\..\src\Net\AdminApi.cs" Link="Game\%(Filename)%(Extension)" />
@@ -88,15 +95,18 @@
     <Compile Include="..\..\src\Net\SleeperBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Ui\Skins\SkinData.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\Accounts\AccountRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\PlayerIds.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\Invites\InviteBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\Invites\PartyBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\BuildPolicy.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\TelescopeOptics.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the Adventure layer's progress store, events and quests (#1223) -->
     <Compile Include="..\..\src\Adventure\SectionKey.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\PlayerProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
@@ -142,11 +152,17 @@
     <Compile Include="..\..\src\Combat\AuraMatch.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\AuraBody.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Trainer\FtpDetector.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- one "in a round" registry for the Battle Royale and Versteckis (#1268) -->
     <Compile Include="..\..\src\Core\Rounds.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Planet.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Ephemeris.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Ephemeris.Planets.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Sgp4.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\SwissTime.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Patrons\PatronSchedule.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\RunSeeds.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Calendar.cs" Link="Game\%(Filename)%(Extension)" />
@@ -188,6 +204,17 @@
     <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- table games (#1324): the shared game base, pool's solver and rules, darts' board and rules, table football, air hockey, the claw, the cabinets' games, Godot maths only -->
+    <Compile Include="..\..\src\Interiors\Games\TableGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Pool\PoolSolver.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Pool\PoolGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Darts\DartBoard.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Darts\DartsGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Foosball\FoosballGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\AirHockey\AirHockeyGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Claw\ClawGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Cabinet\MiniGames.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Cabinet\CabinetGame.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- pinball (#1325): the table as data, the ball's solver and the rules, Godot maths only -->
     <Compile Include="..\..\src\Interiors\Pinball\PinballTable.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Pinball\PinballLayouts.cs" Link="Game\%(Filename)%(Extension)" />
@@ -287,6 +314,8 @@
     <!-- UFO sightings and the herds they beam up (#863): schedule, herds, cows, paths; pure -->
     <Compile Include="..\..\src\Occasions\OccasionWeekdays.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\UfoSighting.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- player birthdays (#1423): the day, the age, the gift, the lines; pure -->
+    <Compile Include="..\..\src\Occasions\Birthdays\BirthdayRules.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the festival framework (#1269): definition, calendar, sites, Batzen book and party board; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\FestivalDef.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCalendar.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
@@ -317,6 +346,12 @@
     <!-- the Christmas market (#1348): stalls, wares, prices, the Samichlaus; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Christmas\ChristmasRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Christmas.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <!-- Montreux Jazz (#1394): the jazz night's event and set clock, the window, the venue's frame, the crowd meter, the festival def; pure -->
+    <Compile Include="..\..\src\Concert\ShowSection.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\JazzSet.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\ConcertEvent.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\MontreuxJazz\MontreuxJazzRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.MontreuxJazz.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <!-- the Zibelemaerit (#1373): stalls, wares, the stall-hop and the confetti fight; pure -->
     <Compile Include="..\..\src\Occasions\Festivals\Zibelemaerit\ZibeleRules.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Occasions\Festivals\FestivalCatalog.Zibelemaerit.cs" Link="Game\Festivals\%(Filename)%(Extension)" />
@@ -400,7 +435,7 @@
     <!-- the neighbours' terrain (#965): their grids from LV95, and the gap fill: pure -->
     <Compile Include="..\..\tools\TerrainPreprocessor\DemProjection.cs;..\..\tools\TerrainPreprocessor\XyzParser.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
-    <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs;..\..\src\Core\ReleaseNotes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Castles.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Castles.List.cs" Link="Game\%(Filename)%(Extension)" />

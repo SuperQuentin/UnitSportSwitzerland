@@ -12,9 +12,11 @@ ffmpeg or internet), they play tracker modules on our own player, also the same 
   (`VenueWakeMargin`) to `ProcessMode.Disabled` (its radio and tracker speakers inherit it) and hangs no speaker on it.
   Every source processing each frame cost Geneva half its main thread (52 ms frames, dotnet-trace).
 - **Where** (`Interiors/VenueMusic`): one in each venue room of a built interior (`AddTo`, beside the
-  staff in `InteriorManager.Create`), at its centre under the ceiling, volume 0.5; one just inside each
-  venue's door (`AtDoor`, beside its neon sign in `VenueSigns`), volume 0.12: the street hears it
-  through the wall, within some 17 m. No auditorium or kitchen plays anything.
+  staff in `InteriorManager.Create`), at its centre under the ceiling, volume 0.5; one over each
+  venue's door, a hand out from the wall (`AtDoor`, `DoorOut`, beside its neon sign in `VenueSigns`), volume 0.2:
+  the street hears it clearly at the door and dulled with distance, within some 22 m. It stood 0.5 m inside the
+  door at 0.12 until #1386: `Hearing` then took the building's wall too (10 dB and the highs over 700 Hz), and a
+  playtest found it "extremely muffled". No auditorium or kitchen plays anything.
 - **Which station** (`StationFor`, by venue kind or room kind; ids in `Stations`): bowling One FM,
   arcade SRF Virus, cinema lobby Radio Swiss Pop, a Beiz its region's first SRG channel (SRF 1, La 1ère,
   Rete Uno: `RegionOf`, Romandie west of E 2'570'000, Ticino south of N 1'170'000 and east of

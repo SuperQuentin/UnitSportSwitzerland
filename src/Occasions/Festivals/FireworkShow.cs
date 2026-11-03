@@ -135,6 +135,34 @@ public sealed class FireworkShow
         return new FireworkShow(seed, VolleySeconds, heading, list.OrderBy(s => s.T).ToArray());
     }
 
+    /// <summary>Seconds a birthday show lasts (#1423, <c>BirthdayRules.ShowSeconds</c>).</summary>
+    public const double BirthdaySeconds = 60;
+
+    /// <summary>
+    /// A birthday show (#1423): a minute of 22 shells 25-70 m out and 55-100 m high, rings and peonies, then a finale of six rings
+    /// together. From a seed alone, like <see cref="Volley"/>. It has no Swiss cross: it is the player's day, not the country's.
+    /// </summary>
+    public static FireworkShow Birthday(int seed)
+    {
+        var rng = new Random(seed);
+        float heading = (float)(rng.NextDouble() * Math.Tau);
+        var list = new List<Shell>(30);
+        ShellKind[] kinds = [ShellKind.Peony, ShellKind.Ring, ShellKind.Chrysanthemum, ShellKind.Palm, ShellKind.Ring];
+        (float, float) At(double side, double depth) =>
+            ((float)(Math.Sin(heading) * depth + Math.Cos(heading) * side), (float)(Math.Cos(heading) * depth - Math.Sin(heading) * side));
+        for (int i = 0; i < 22; i++)
+        {
+            var (east, north) = At((rng.NextDouble() * 2 - 1) * 35, 25 + rng.NextDouble() * 45);
+            list.Add(new Shell(2.5 + i * 2.2 + rng.NextDouble() * 0.6, east, north, 55 + (float)rng.NextDouble() * 45, kinds[rng.Next(kinds.Length)], 1 + rng.Next(Colours - 1)));
+        }
+        for (int i = 0; i < 6; i++)
+        {
+            var (east, north) = At((i - 2.5) * 12, 50);
+            list.Add(new Shell(BirthdaySeconds - 5 + i * 0.15, east, north, 85 + i % 2 * 10, ShellKind.Ring, 1 + i % (Colours - 1)));
+        }
+        return new FireworkShow(seed, BirthdaySeconds, heading, list.OrderBy(s => s.T).ToArray());
+    }
+
     private static void Salvo(List<Shell> list, Random rng, float heading, double t, int count, ShellKind[] kinds)
     {
         for (int i = 0; i < count; i++) list.Add(Make(rng, heading, t + i * 0.4, kinds[rng.Next(kinds.Length)]));

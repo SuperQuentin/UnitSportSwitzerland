@@ -375,7 +375,7 @@ public static partial class InteriorGenerator
         var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, 18f, 24f, 5f, BuildingKind.Commercial) } };
         Venues.Override = new List<VenueRecord>
         {
-            new("n1", VenueType.Arcade, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", "Arcade"),
+            new("n1", VenueType.Arcade, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, "", "Arcade"),
         };
         var layout = Generate(tile, 0, null, null)!;
         Venues.Override = null;

@@ -5,6 +5,9 @@
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never, fog_disabled, shadows_disabled;
 
+// drawn on the curved Earth like the summits they stand on (#187): 20 m lower at 17 km
+#include "res://shaders/common/curvature.gdshaderinc"
+
 uniform vec3 core_color : source_color = vec3(1.0, 0.86, 0.38);
 uniform vec3 edge_color : source_color = vec3(1.0, 0.30, 0.04);
 uniform float pixel_angle = 0.004; // the smallest size a flame is drawn at, radians of the view
@@ -21,7 +24,7 @@ void vertex() {
 	float flick = 0.90 + 0.10 * sin(TIME * 9.0 + v_phase * 40.0) + 0.06 * sin(TIME * 23.0 + v_phase * 91.0);
 	vec3 right = normalize(vec3(INV_VIEW_MATRIX[0].x, 0.0, INV_VIEW_MATRIX[0].z));
 	vec3 pos = centre + right * (VERTEX.x * width * grow) + vec3(0.0, VERTEX.y * height * grow * flick, 0.0);
-	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(pos, 1.0);
+	POSITION = CURVED_CLIP(PROJECTION_MATRIX * VIEW_MATRIX * vec4(pos, 1.0), pos);
 }
 
 void fragment() {

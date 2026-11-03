@@ -173,6 +173,20 @@ public static class EdgeStrips
         AtomicFile.WriteAllBytes(path, bytes);
     }
 
+    /// <summary><see cref="TryRead"/>'s verdict from the 32-byte header alone.</summary>
+    public static bool IsCurrent(string path, long? sourceLength = null, long? sourceTicks = null)
+    {
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length != FileBytes) return false;
+        Span<byte> h = stackalloc byte[HeaderSize];
+        using (var fs = File.OpenRead(path)) fs.ReadExactly(h);
+        return BinaryPrimitives.ReadUInt32LittleEndian(h[0..]) == Magic
+            && BinaryPrimitives.ReadUInt16LittleEndian(h[4..]) == N
+            && BinaryPrimitives.ReadUInt16LittleEndian(h[6..]) == TileReducer.Cells
+            && (sourceLength is not { } len || BinaryPrimitives.ReadInt64LittleEndian(h[8..]) == len)
+            && (sourceTicks is not { } ticks || BinaryPrimitives.ReadInt64LittleEndian(h[16..]) == ticks);
+    }
+
     /// <summary>Null when absent, from another grid layout, or (if a stamp is given) from a different source.</summary>
     public static uint[]? TryRead(string path, long? sourceLength = null, long? sourceTicks = null)
     {

@@ -56,6 +56,8 @@ public static class StadiumCheck
         new(StadiumCatalog.GreenfieldOpenAir, 112f, 182f, 25000),
         new(StadiumCatalog.HeitereOpenAir, 72f, 152f, 10000),
         new(StadiumCatalog.MoonAndStarsOpenAir, 72f, 172f, 8000),
+        // the Place du Marché by the quay (#1394): 60 x 32 m, the lake side without a fence
+        new(StadiumCatalog.MontreuxJazzOpenAir, 32f, 60f, 1200),
     };
 
     /// <summary>A stadium's mesh may not exceed this; Geneva is about 20 k.</summary>

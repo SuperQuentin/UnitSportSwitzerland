@@ -115,10 +115,11 @@ public sealed class CdAnalysis
     }
 
     /// <summary>
-    /// Whether this CD needs (re-)analysing: no block, one from an older analyser, or a vocal from
-    /// the fallback while the model is here now.
+    /// Whether this CD needs (re-)analysing: no block, one from an older analyser, no vocal yet (a CD
+    /// is ready before its singer, #1405), or a vocal from the fallback while the model is here now.
     /// </summary>
     public static bool IsStale(CdInfo cd) => cd.Analysis is not { } a || a.Version < CurrentVersion
+        || a.VocalSource.Length == 0
         || VocalSeparator.ModelName is { } model && a.VocalSource != model;
 
     /// <summary>For an RPC argument: the envelope as its base64 string, sections as packed arrays.</summary>

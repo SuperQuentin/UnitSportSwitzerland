@@ -647,10 +647,10 @@ public partial class InventoryUi : CanvasLayer
             : slot < Inventory.HotbarSize ? "Whatever is here can be in your hand." : "Room for anything you find.";
         _infoBlurbScroll.ScrollVertical = 0;
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
-        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print or ItemUse.Bag);
+        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print or ItemUse.Bag or ItemUse.Open);
         _useButton.Text = def?.Use is ItemUse.Bag or ItemUse.Wear
             ? slot == Inventory.BagSlot || worn ? "Take off" : "Wear"
-            : "Use";
+            : def?.Use == ItemUse.Open ? "Open" : "Use";
         _handButton.Disabled = def == null || slot == Inv.Selected || slot == Inventory.BagSlot || worn;
         _dropButton.Disabled = def == null || !ItemsActive;
     }

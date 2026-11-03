@@ -1,6 +1,11 @@
 # CD vocal: the singer separated, analysed, lip-synced, lit and mixed (#1153)
 
-- **Separation at burn time** (`Audio/Cd/VocalSeparator.cs`, on the burn/backfill worker):
+- **A CD is ready before its singer (#1405)**: the burn stops after the beat analysis and the Ogg, so the
+  CD is listed and plays at once; `CdLibrary.QueueVocal` puts it on the backfill, which separates, writes
+  the stems and sends the block to every client (`Added`) ~30 s later (centre fallback, 32 GB Windows).
+  `CdAnalysis.IsStale` counts a block with no vocal source as stale. Not on a headless client (#1169).
+  Waiting for it at burn cost 30-36 s per CD and timed out `radiocheck`, `uploadcheck`, `auranetcheck`.
+- **Separation after the burn** (`Audio/Cd/VocalSeparator.cs`, on the backfill worker):
   - With the model: UVR's MDX-Net `Kim_Vocal_2.onnx` (~64 MB) on the CPU through `Microsoft.ML.OnnxRuntime`
     (pinned 1.30.0). **Never shipped**: the weights carry no clear redistribution licence.
     `tools/deploy/get-vocal-model.sh [user data dir]` fetches it into `user://models/` (sha256 pinned);
@@ -56,3 +61,4 @@
   `/cd` parsing), `DanceFaceTests` (lips on the voice).
 - **Not done**: movie recordings (`ActorIo`) do not record `RadioMix`; the church radio has no mix; the
   concert desk's faders do not show a mix set by chat.
+- **Client thread budget (#1414)**: a burn's separation uses `VocalSeparator.Threads` (cores / 4, 1..4; the dedicated server keeps all but two) for ONNX and the STFT `Parallel.For`, on a below-normal worker, so the radio's audio thread does not underrun. A client that is online (`!Owns`) never burns its default/fixture queue nor runs the analysis backfill (queues kept, resumed offline); a personal CD it asks for still burns.

@@ -5,6 +5,8 @@
 #                                 (--world flat, --systems) and tier 1 (fixture courses), never the map
 #   tools/test.sh net [area]      quick + the headless network tier on the fixture world, if the change touches it
 #   tools/test.sh full [area]     every check in tools/lib/checkmap.txt, windowed and load scripts too
+#   tools/test.sh coords          every row of every tier whose prefix covers code that uses the coordinate
+#                                 system: the baseline before a coordinate or rendering change (#1429)
 #   tools/test.sh lock            who holds the machine-wide heavy-run lock, and whether it is stale
 #   tools/test.sh stop            stops the running test.sh of this checkout and everything under it, by PID (#1409)
 # The checks come from tools/lib/checkmap.txt, matched against the files changed since origin/main
@@ -15,9 +17,11 @@
 #      net/full tiers), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts),
 #      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps), TEST_JOBS (net/full checks at
 #      once, default the heavy lock's slot count; 1 = one at a time), TEST_ONLY (one tier's rows alone:
-#      `TEST_ONLY=net tools/test.sh full` runs the whole net tier), TEST_USERDATA (real: the Godot checks
-#      run on the real user://, not a fresh test_output/tests/userdata/<check> each, #1403), TEST_RESUME (1:
-#      skip what results.tsv already holds as PASS, to go on after a run that died, #1409).
+#      `TEST_ONLY=net tools/test.sh full` runs the whole net tier), TEST_LEDGER (the results CSV, default
+#      test_output/tests/results.csv; tools/test-compare.py compares two), TEST_LIST (1: print the checks
+#      it would run, then stop), TEST_USERDATA (real: the Godot checks run on the real user://, not a
+#      fresh test_output/tests/userdata/<check> each, #1403), TEST_RESUME (1: skip what results.tsv
+#      already holds as PASS, to go on after a run that died, #1409).
 # Every result is appended to test_output/tests/results.tsv as it lands (time, check, verdict, seconds, log):
 # a run that dies keeps what it had.
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
@@ -27,8 +31,8 @@ set -u
 TIER=${1:-}
 AREA=${2:-}
 case $TIER in
-  unit | quick | net | full | lock | stop) ;;
-  *) echo "usage: tools/test.sh unit|quick|net|full [area] | lock | stop" >&2; exit 2 ;;
+  unit | quick | net | full | coords | lock | stop) ;;
+  *) echo "usage: tools/test.sh unit|quick|net|full [area] | coords | lock | stop" >&2; exit 2 ;;
 esac
 cd "$(dirname "$0")/.."
 . tools/lib/guard.sh
@@ -90,6 +94,7 @@ RESULTS=$OUT/results.tsv
 [ "${TEST_RESUME:-}" = 1 ] && [ -f "$RESULTS" ] || printf 'time\tcheck\tverdict\tseconds\tlog\n' > "$RESULTS"
 
 ROWS=()
+LEDGER=()   # one CSV line per check: tier,check,result,seconds,log,note
 FAILED=0
 SERVER=
 cleanup() {
@@ -122,9 +127,15 @@ verdict() {
   else echo FAIL; fi
 }
 
-record() { # name verdict seconds log
+csv() { printf '"%s"' "${1//\"/\"\"}"; }   # one quoted CSV field: checks hold commas
+ledger() { # tier name verdict seconds log [note]
+  LEDGER+=("$1,$(csv "$2"),$3,$4,$(csv "$5"),$(csv "${6:-}")")
+}
+
+record() { # name verdict seconds log [tier]
   result_line "$1" "$2" "$3" "$4"
   ROWS+=("$(printf '%-30s %-8s %6s  %s' "$1" "$2" "$3" "$4")")
+  ledger "${5:-build}" "$1" "$2" "$3" "$4"
   [ "$2" = PASS ] || FAILED=1
   echo "[test] $1: $2 (${3}s)"
 }
@@ -138,14 +149,22 @@ rpc_touched() {
     grep -Eq '^[+-].*(\[Rpc|Rpc(Id)?\(|ReplicationConfig|MultiplayerSynchronizer|MultiplayerSpawner)'
 }
 
+# the code that uses the coordinate system (#1429): what a coordinate or rendering change can reach
+coord_files() {
+  {
+    grep -rlE '\bGlobalPos\b|WorldOrigin|OriginFrame|ToWorld\(|ToGlobal\(|ToLv95\(|TileAt\(|IOriginShiftAware|HorizonGround|horizon\.bin' src --include='*.cs'
+    git ls-files shaders src/Styles
+  } 2>/dev/null | grep -v '.uid$' | sort -u
+}
+
 case $TIER in
   unit) WANT="" ;;
   quick) WANT=" quick " ;;
   net) WANT=" quick net " ;;
-  full) WANT=" quick net full " ;;
+  full | coords) WANT=" quick net full " ;;
 esac
 
-CHANGED=$(changed_files)
+if [ "$TIER" = coords ]; then CHANGED=$(coord_files); AREA=; else CHANGED=$(changed_files); fi
 CHECKS=()
 RPC=
 while read -r prefix tier check; do
@@ -159,6 +178,7 @@ while read -r prefix tier check; do
     [[ $(printf %s "$prefix" | tr '[:upper:]' '[:lower:]') == *"$(printf %s "$AREA" | tr '[:upper:]' '[:lower:]')"* ]] || continue
   elif [ "$TIER" != full ]; then
     if [ "$prefix" = @rpc ]; then
+      [ "$TIER" = coords ] && RPC=yes   # positions cross the wire in every RPC
       [ -z "$RPC" ] && { rpc_touched && RPC=yes || RPC=no; }
       [ "$RPC" = yes ] || continue
     else
@@ -211,6 +231,12 @@ for ((i = 0; i < ${#CHECKS[@]}; i++)); do
 done
 CHECKS=(${KEPT[@]+"${KEPT[@]}"})
 
+if [ "${TEST_LIST:-}" = 1 ]; then
+  printf '%s\n' ${CHECKS[@]+"${CHECKS[@]}"}
+  echo "[test] ${#CHECKS[@]} checks"
+  exit 0
+fi
+
 # --- tier 0 -----------------------------------------------------------------------------------
 # a row TEST_RESUME skips: in the table as passed earlier, not again in results.tsv
 resumed() { ROWS+=("$(printf '%-30s %-8s %6s  %s' "$1" PASS 0 "(passed earlier, TEST_RESUME)")"); echo "[test] $1: passed earlier, skipped"; }
@@ -220,14 +246,14 @@ if passed_before "unit (dotnet test)"; then resumed "unit (dotnet test)"; else
   # 556 s of a 14 min unit stage
   SLOW=(--filter "Speed!=Slow"); [ "$TIER" = full ] && SLOW=()
   guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests ${SLOW[@]+"${SLOW[@]}"}
-  record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$OUT/unit.log"
+  record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$OUT/unit.log" unit
   grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
 fi
 # RideLink (#901, tools/RideLink): the trainer library's own tests (parsers, the FTMS handshake, the router)
 if passed_before "unit RideLink (dotnet test)"; then resumed "unit RideLink (dotnet test)"; else
   t0=$SECONDS
   guard_run "$TIMEOUT" "$OUT/ridelink.log" dotnet test tools/RideLink/tests/RideLink.Tests
-  record "unit RideLink (dotnet test)" "$(verdict $? "$OUT/ridelink.log")" $((SECONDS - t0)) "$OUT/ridelink.log"
+  record "unit RideLink (dotnet test)" "$(verdict $? "$OUT/ridelink.log")" $((SECONDS - t0)) "$OUT/ridelink.log" unit
 fi
 
 # --- Godot tiers ------------------------------------------------------------------------------
@@ -300,7 +326,7 @@ group_of() { # the twoclient name a script logs under (rampalong execs rampnet: 
 alone() { case $1 in tools/loadtest.sh* | tools/trailer.sh*) return 0 ;; esac; return 1; }
 
 heavy_job() { # index tier check: one check in a slot of its own, its row in $OUT/.row.<index>
-  local i=$1 tier=$2 check=$3 log t0 res v= ram=0
+  local i=$1 tier=$2 check=$3 log t0=$SECONDS res v= ram=0
   trap guard_unlock EXIT
   log=$(log_of "$check")
   if ! guard_lock; then res="$(printf '%-30s %-8s %6s  %s' "$check" FAIL 0 "(lock)")"
@@ -316,7 +342,9 @@ heavy_job() { # index tier check: one check in a slot of its own, its row in $OU
     result_line "$check" "$v" $((SECONDS - t0)) "$log"
     echo "[test] $check: $v ($((SECONDS - t0))s, slot $GUARD_SLOT$([ $ram = 1 ] && echo ", stopped at the RAM floor"))"
   fi
-  printf '%s\n%s\n%s\n' "${v:-FAIL}" "$res" "$ram" > "$OUT/.row.$i"   # verdict, table row, RAM-floor stop
+  # verdict, table row, RAM-floor stop, the ledger's line without its note, the note
+  printf '%s\n%s\n%s\n%s,%s,%s,%s,%s\n\n' "${v:-FAIL}" "$res" "$ram" \
+    "$tier" "$(csv "$check")" "${v:-FAIL}" $((SECONDS - t0)) "$(csv "$log")" > "$OUT/.row.$i"
 }
 
 # room for one more job: free RAM for it, and the last one started TEST_JOB_STAGGER s ago (40), so its Godots
@@ -362,11 +390,16 @@ run_heavy() {
     echo "[test] again, alone: ${entry#* } ($why)"
     ( heavy_job "$i" "${entry%% *}" "${entry#* }" )   # a subshell: its EXIT trap must not replace the runner's
     [ "$why" = "failed beside the others" ] && [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] &&
-      sed -i '2s|$|  (passed alone, failed beside others)|' "$OUT/.row.$i"
+      sed -i -e '2s|$|  (passed alone, failed beside others)|' -e '5s|^$|passed alone, failed beside others|' "$OUT/.row.$i"
   done
   for (( i = 0; i < n; i++ )); do
-    if [ -f "$OUT/.row.$i" ]; then ROWS+=("$(sed -n 2p "$OUT/.row.$i")"); [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] || FAILED=1
-    else ROWS+=("$(printf '%-30s %-8s %6s  %s' "${HEAVY[$i]#* }" FAIL 0 "(no result)")"); FAILED=1; fi
+    if [ -f "$OUT/.row.$i" ]; then
+      ROWS+=("$(sed -n 2p "$OUT/.row.$i")"); [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] || FAILED=1
+      LEDGER+=("$(sed -n 4p "$OUT/.row.$i"),$(csv "$(sed -n 5p "$OUT/.row.$i")")")
+    else
+      ROWS+=("$(printf '%-30s %-8s %6s  %s' "${HEAVY[$i]#* }" FAIL 0 "(no result)")"); FAILED=1
+      ledger "${HEAVY[$i]%% *}" "${HEAVY[$i]#* }" FAIL 0 "" "no result"
+    fi
   done
   rm -f "$OUT"/.row.*
   echo "[test] the net/full checks took $((SECONDS - t0))s side by side (${#again[@]} run again alone)"
@@ -405,7 +438,7 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
         fi
         t0=$SECONDS
         run_one "$tier" "$check" "$log"
-        record "$check" "$(verdict $? "$log")" $((SECONDS - t0)) "$log"
+        record "$check" "$(verdict $? "$log")" $((SECONDS - t0)) "$log" "$tier"
       done
       [ ${#HEAVY[@]} -gt 0 ] && run_heavy
     fi
@@ -417,4 +450,14 @@ fi
 echo
 printf '%-30s %-8s %6s  %s\n' CHECK RESULT SECONDS LOG
 printf '%s\n' "${ROWS[@]}"
+
+# the results as CSV, to keep beside a baseline and compare with tools/test-compare.py (#1429)
+LEDGER_FILE=${TEST_LEDGER:-$OUT/results.csv}
+mkdir -p "$(dirname "$LEDGER_FILE")"
+{
+  echo "# tools/test.sh $TIER ${AREA} commit $(git rev-parse --short HEAD 2>/dev/null) $(date -u +%Y-%m-%dT%H:%MZ)"
+  echo "tier,check,result,seconds,log,note"
+  printf '%s\n' ${LEDGER[@]+"${LEDGER[@]}"}
+} > "$LEDGER_FILE"
+echo "[test] results: $LEDGER_FILE"
 exit $FAILED
