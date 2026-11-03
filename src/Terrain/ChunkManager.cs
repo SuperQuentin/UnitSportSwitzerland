@@ -96,7 +96,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ViewDirection = -camera.GlobalTransform.Basis.Z;
         var size = camera.GetViewport().GetVisibleRect().Size;
         double aspect = size.Y > 0 ? size.X / size.Y : 16.0 / 9.0;
-        double half = Mathf.DegToRad(camera.Fov) / 2;
+        double half = Mathf.DegToRad(Core.CameraLens.FovOf(camera)) / 2;
         // Fov is the vertical angle unless the camera keeps its width
         if (camera.KeepAspect == Camera3D.KeepAspectEnum.Height)
             half = Math.Atan(Math.Tan(half) * aspect);

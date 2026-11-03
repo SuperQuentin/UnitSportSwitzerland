@@ -454,6 +454,27 @@ public static partial class ItemIcons
             ".kkkkkkkkkkkkkk.",
         };
 
+        // the telescope (#1440): a white refractor up to the right, its dew shield dark, on a tripod
+        d[ItemId.Telescope] = new[]
+        {
+            "...........kkk..",
+            "..........kdddk.",
+            ".........kwwddk.",
+            "........kwwwak..",
+            ".......kwwwak...",
+            "......kwwwak....",
+            ".....kwwwak.....",
+            "....kyawak......",
+            "...kkwak........",
+            "..kdkkg.........",
+            "..kk.kgk........",
+            "....kgkgk.......",
+            "...kg.kg.gk.....",
+            "..kg..kg..gk....",
+            ".kg...kg...gk...",
+            ".k....kk....k...",
+        };
+
         d[ItemId.Gps] = new[]
         {
             "...........kk...",

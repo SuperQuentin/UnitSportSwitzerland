@@ -372,6 +372,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // one player at a time at each set-up telescope (#1440)
+        Items.Telescopes.Create(this, server: true);
         // traffic endpoints (#971): admins set them, every client runs them on its own traffic
         _trafficEndpoints = World.TrafficGenerators.Create(this, server: true);
         _trafficEndpoints.IsAdmin = _chat.IsAdminPeer;

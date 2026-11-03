@@ -702,6 +702,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 Origin = origin,
             };
             AddChild(_dayNight);
+            // the real moon in the sky (#1440), drawn under the real sun only
+            AddChild(new World.MoonDisc());
         }
         ApplySun();
         // the fun world (#1396): its sky held at dusk, the synthwave backdrop, the air rings
@@ -1188,6 +1190,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
+        // who looks through which set-up telescope (#1440), same path as the server's
+        Items.Telescopes.Create(this, server: false);
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
         // the Adventure layer (#1223): the server keeps this player's progress and quests, offline this client

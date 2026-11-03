@@ -48,6 +48,7 @@ public class InteractOutlineTests
             + "standing up (three times: a stand, a deck, a cinema seat #1279), getting out, the dance (twice), the rope's let go / haul and the pot's seat (#1266)"),
         ["src/BattleRoyale/BrHud.cs:_Draw"] = (1, "the drop's jump from the plane: no thing"),
         ["src/Interiors/Pinball/PinballPlay.cs:UpdateHint"] = (2, "standing at a pinball machine: Start is the machine's own button, the machine is the whole view (#1325)"),
+        ["src/Items/TelescopeView.cs:Hint"] = (1, "looking through a telescope: stepping back, the telescope is the whole view (#1440)"),
     };
 
     private static string Root()

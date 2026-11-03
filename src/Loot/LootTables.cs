@@ -45,6 +45,7 @@ public static class LootTables
         [ItemId.BikeChain] = Tier.Rare, [ItemId.Tyre] = Tier.Rare, [ItemId.CarBattery] = Tier.Rare,
         [ItemId.FuelCan] = Tier.Rare, [ItemId.EnginePart] = Tier.VeryRare,
         [ItemId.SmartBinoculars] = Tier.VeryRare,
+        [ItemId.Telescope] = Tier.VeryRare,
         // only in the locked containers (gun lockers, safes): category Gear, so no category pool picks them up
         [ItemId.Shotgun] = Tier.Rare, [ItemId.Shells] = Tier.Common,
         // bags (#208): category Gear too, so only the pools that name them (Bags, Purses) give them
@@ -100,7 +101,7 @@ public static class LootTables
     private static readonly ItemId[] Gadgets = { ItemId.Electronics };
     private static readonly ItemId[] Wire = { ItemId.CopperWire };
     private static readonly ItemId[] Hardware = { ItemId.Screws, ItemId.DuctTape, ItemId.CopperWire, ItemId.Rope };
-    private static readonly ItemId[] Optics = { ItemId.SmartBinoculars };
+    private static readonly ItemId[] Optics = { ItemId.SmartBinoculars, ItemId.Telescope };
     /// <summary>Soft toys (#501): a bin of them at an IKEA, the odd one in a child's room.</summary>
     private static readonly ItemId[] Toys = { ItemId.Blahaj };
     private static readonly ItemId[] Tins = { ItemId.CannedFood };
@@ -691,7 +692,7 @@ public static class LootTables
     public static int Value(IEnumerable<ItemStack> stacks) => stacks.Sum(s => s.Id switch
     {
         ItemId.Francs => s.Count,
-        ItemId.Shotgun or ItemId.SmartBinoculars => 300 * s.Count,
+        ItemId.Shotgun or ItemId.SmartBinoculars or ItemId.Telescope => 300 * s.Count,
         _ => 25 * s.Count,
     });
 
