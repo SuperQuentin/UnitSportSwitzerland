@@ -159,7 +159,7 @@ public static class StadiumCheck
             var owner = StadiumCatalog.Owner(s);
             // across the facade where it crosses the centre spot's line, whatever the stadium's turn
             var outline = StadiumBuilder.Outline(s, owner);
-            float spotZ = (float)(owner.MaxN - s.N), edge = float.MaxValue;
+            float spotZ = (float)owner.Local(s.E, s.N).Z, edge = float.MaxValue;
             for (int i = 0; i < outline.Length; i++)
             {
                 var p0 = outline[i];
@@ -181,11 +181,11 @@ public static class StadiumCheck
             var clipped = StadiumClip.Clip(tile)!;
             Expect(clipped.Buildings.Count == 1 && clipped.Buildings[0].TriangleCount == 2,
                 $"{s.Name}: a building reaching inside the facade keeps only its outside ({clipped.Buildings[0].TriangleCount} of 4 triangles)");
-            var far = new BuildingTile { Id = new TileId(owner.E + 5, owner.N), Buildings = tile.Buildings };
+            var far = new BuildingTile { Id = owner.Neighbour(5, 0), Buildings = tile.Buildings };
             Expect(ReferenceEquals(StadiumClip.Clip(far), far), $"{s.Name}: a tile 5 km away is read as it was");
 
             var placed = StadiumBuilder.Build(owner, null, mesh: false, collision: true);
-            Expect(placed is { Faces.Length: > 0 } && StadiumCatalog.OwnedBy(new TileId(owner.E + 1, owner.N)).All(o => o != s),
+            Expect(placed is { Faces.Length: > 0 } && StadiumCatalog.OwnedBy(owner.Neighbour(1, 0)).All(o => o != s),
                 $"{s.Name}: built by tile {owner} and by no other");
         }
 

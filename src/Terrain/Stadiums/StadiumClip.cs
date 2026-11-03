@@ -98,7 +98,11 @@ public static class StadiumClip
         // relative to the centre spot, so a float keeps centimetres
         var owner = StadiumCatalog.Owner(s);
         var poly = StadiumBuilder.Outline(s, owner)
-            .Select(p => new Vector2((float)(owner.MinE + p.X - s.E), (float)(owner.MaxN - p.Y - s.N))).ToArray();
+            .Select(p =>
+            {
+                var (e, n) = owner.Global(p.X, p.Y);
+                return new Vector2((float)(e - s.E), (float)(n - s.N));
+            }).ToArray();
         var (min, max) = Bounds(poly);
         return (poly, min, max, s.E, s.N);
     }).ToArray();
@@ -118,12 +122,21 @@ public static class StadiumClip
     public static List<TreeInstance>? Trees(TileId id, List<TreeInstance>? trees)
     {
         if (trees == null || !Lv95.Any(o => Near(id, o.E0 + o.Min.X, o.N0 + o.Min.Y, o.E0 + o.Max.X, o.N0 + o.Max.Y))) return trees;
-        trees.RemoveAll(t => InsideAny(id.MinE + t.X, id.MaxN - t.Z));
+        trees.RemoveAll(t =>
+        {
+            var (e, n) = id.Global(t.X, t.Z);
+            return InsideAny(e, n);
+        });
         return trees;
     }
 
-    private static bool Near(TileId id, double e0, double n0, double e1, double n1) =>
-        e1 >= id.MinE && e0 <= id.MinE + ChunkFormat.TileSizeM && n1 >= id.MinN && n0 <= id.MaxN;
+    /// <summary>Whether an LV95 box touches the tile's square, compared in the tile's frame (#1443: z south).</summary>
+    private static bool Near(TileId id, double e0, double n0, double e1, double n1)
+    {
+        var (west, north) = id.Local(e0, n1);
+        var (east, south) = id.Local(e1, n0);
+        return east >= 0 && west <= ChunkFormat.TileSizeM && north <= ChunkFormat.TileSizeM && south >= 0;
+    }
 
     /// <summary>Even-odd test of a point against a closed polygon (x, z).</summary>
     public static bool Inside(Vector2[] poly, Vector2 p)

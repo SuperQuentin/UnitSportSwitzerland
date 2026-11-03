@@ -63,7 +63,8 @@ public static class StadiumBuilder
             Func<Vector2, float>? outside = grid == null ? null : uv =>
             {
                 var p = frame(uv, 0);
-                return (float)grid.SampleMeshHeight(id.MinE + p.X, id.MaxN - p.Z) - ground;
+                var (e, n) = id.Global(p.X, p.Z);
+                return (float)grid.SampleMeshHeight(e, n) - ground;
             };
             capacity += Sweep(s, g, frame, outside);
         }
@@ -191,7 +192,8 @@ public static class StadiumBuilder
         float a = Mathf.DegToRad(s.AzimuthDeg);
         var u = new Vector3(MathF.Cos(a), 0, MathF.Sin(a));
         var v = new Vector3(-MathF.Sin(a), 0, MathF.Cos(a));
-        var origin = new Vector3((float)(s.E - id.MinE), ground, (float)(id.MaxN - s.N));
+        var (sx, sz) = id.Local(s.E, s.N);
+        var origin = new Vector3((float)sx, ground, (float)sz);
         return (uv, y) => origin + u * uv.X + v * uv.Y + new Vector3(0, y, 0);
     }
 

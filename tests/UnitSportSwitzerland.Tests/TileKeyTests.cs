@@ -65,4 +65,49 @@ public class TileKeyTests
         var back = origin.TileLocal(T, before);
         Assert.True((back - local).Length() < 1e-3f, $"{back} vs {local}");
     }
+
+    // LV95 points round the tile: on its edges, just inside and outside, kilometres away, and random
+    // ones over the whole of Switzerland with sub-millimetre fractions
+    private static IEnumerable<(double E, double N)> Around()
+    {
+        double[] es = { T.MinE, T.MinE + 1000, T.MinE - 0.001, T.MinE + 999.999, T.MinE + 1000.001, T.MinE - 4321.5, T.MinE + 250.123456789 };
+        double[] ns = { T.MinN, T.MaxN, T.MinN - 0.001, T.MaxN - 0.001, T.MaxN + 0.001, T.MaxN + 4321.5, T.MinN + 750.987654321 };
+        foreach (var e in es) foreach (var n in ns) yield return (e, n);
+        var rng = new Random(1443);
+        for (int i = 0; i < 2000; i++) yield return (2_480_000 + rng.NextDouble() * 360_000, 1_070_000 + rng.NextDouble() * 230_000);
+    }
+
+    [Fact]
+    public void Reach_tests_in_local_metres_give_the_bits_the_LV95_ones_did()
+    {
+        // G0c moved the "how far from the tile's square" and "box touches the tile" tests of src/Terrain
+        // (CollisionReach, SiteSounds, LanePlanDebug, StadiumClip) into the tile's frame: LV95 differences
+        // are exact (both sides within a factor 2, Sterbenz), so each rewrite is the same number
+        foreach (var (e, n) in Around())
+        {
+            var (x, z) = T.Local(e, n);
+            Assert.Equal(Math.Max(0, Math.Max(T.MinE - e, e - (T.MinE + 1000))), Math.Max(0, Math.Max(-x, x - 1000)));
+            Assert.Equal(Math.Max(0, Math.Max(T.MinN - n, n - (T.MinN + 1000))), Math.Max(0, Math.Max(z - 1000, -z)));
+            Assert.Equal(Math.Abs(Math.Clamp(e, T.MinE, T.MinE + 1000) - e), Math.Abs(Math.Clamp(x, 0, 1000) - x));
+            Assert.Equal(Math.Abs(Math.Clamp(n, T.MaxN - 1000, T.MaxN) - n), Math.Abs(Math.Clamp(z, 0, 1000) - z));
+            // a box from (e, n) to 37.5 m north-east of it
+            double e1 = e + 37.5, n1 = n + 37.5;
+            var (west, north) = T.Local(e, n1);
+            var (east, south) = T.Local(e1, n);
+            Assert.Equal(e1 >= T.MinE && e <= T.MinE + 1000 && n1 >= T.MinN && n <= T.MaxN,
+                east >= 0 && west <= 1000 && north <= 1000 && south >= 0);
+        }
+    }
+
+    [Fact]
+    public void Tile_points_through_Global_are_the_corner_sums()
+    {
+        foreach (var (e, n) in Around())
+        {
+            // a float tile-local point, as the builders hold them
+            float x = (float)(e - T.MinE), z = (float)(T.MaxN - n);
+            Assert.Equal((T.MinE + x, T.MaxN - z), T.Global(x, z));
+            Assert.Equal(((float)(e - T.MinE), (float)(T.MaxN - n)), ((float)T.Local(e, n).X, (float)T.Local(e, n).Z));
+        }
+    }
 }
