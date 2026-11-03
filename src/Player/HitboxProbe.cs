@@ -91,10 +91,11 @@ public partial class HitboxProbe : Node3D
         if (_chunks?.Source is not { } source) return;
         var (e, n) = SpawnPoint.ParseTarget();
         var centre = TileId.FromLv95(e, n);
-        for (int dy = -1; dy <= 1; dy++)
+        // south row first, as the bodies stack in load order (z runs south in the tile's frame)
+        for (int dz = 1; dz >= -1; dz--)
             for (int dx = -1; dx <= 1; dx++)
             {
-                var tile = source.LoadBuildingsAsync(new TileId(centre.E + dx, centre.N + dy)).Result;
+                var tile = source.LoadBuildingsAsync(centre.Neighbour(dx, dz)).Result;
                 if (tile == null || tile.Buildings.Count == 0) continue;
                 var body = new StaticBody3D { Position = new Vector3(0, -20000f - _buildings.Count * 3000f, 0) };
                 AddChild(body);

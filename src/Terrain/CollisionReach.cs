@@ -27,9 +27,11 @@ public static class CollisionReach
     /// <summary>Horizontal distance from a point to a tile's square (0 inside it).</summary>
     public static double DistanceToTile(TileId tile, double e, double n)
     {
-        double dx = Math.Max(0, Math.Max(tile.MinE - e, e - (tile.MinE + ChunkFormat.TileSizeM)));
-        double dy = Math.Max(0, Math.Max(tile.MinN - n, n - (tile.MinN + ChunkFormat.TileSizeM)));
-        return Math.Sqrt(dx * dx + dy * dy);
+        // in the tile's own frame (#1443): x east and z south of its north-west corner
+        var (x, z) = tile.Local(e, n);
+        double dx = Math.Max(0, Math.Max(-x, x - ChunkFormat.TileSizeM));
+        double dz = Math.Max(0, Math.Max(z - ChunkFormat.TileSizeM, -z));
+        return Math.Sqrt(dx * dx + dz * dz);
     }
 
     /// <summary>

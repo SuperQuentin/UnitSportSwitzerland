@@ -735,9 +735,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             {
                 if (added.Contains(id)) return true;
                 if (_available.Contains(id)) return false;   // real before, and unchanged
-                for (int dn = -BlendReachTiles; dn <= BlendReachTiles; dn++)
-                    for (int de = -BlendReachTiles; de <= BlendReachTiles; de++)
-                        if (added.Contains(new TileId(id.E + de, id.N + dn))) return true;
+                for (int dz = -BlendReachTiles; dz <= BlendReachTiles; dz++)
+                    for (int dx = -BlendReachTiles; dx <= BlendReachTiles; dx++)
+                        if (added.Contains(id.Neighbour(dx, dz))) return true;
                 return false;
             }
             ReplaceTiles(Affected);
@@ -926,24 +926,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private void FitHorizonCoverage()
     {
         if (Horizon == null) return;
-        int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
-        foreach (var t in _available)
-        {
-            minE = Math.Min(minE, t.E);
-            maxE = Math.Max(maxE, t.E);
-            minN = Math.Min(minN, t.N);
-            maxN = Math.Max(maxN, t.N);
-        }
+        var cover = TileRect.Bounding(_available);
         if (_fallback?.Current is { Enabled: true } snap)
-        {
-            var b = snap.Bounds;
-            minE = Math.Min(minE, b.MinE);
-            maxE = Math.Max(maxE, b.MaxE);
-            minN = Math.Min(minN, b.MinN);
-            maxN = Math.Max(maxN, b.MaxN);
-        }
-        if (minE > maxE) return;
-        Horizon.EnsureCoverage(minE, maxE, minN, maxN);
+            cover = cover is { } real ? real.Union(snap.Bounds) : snap.Bounds;
+        if (cover is { } box) Horizon.EnsureCoverage(box);
     }
 
     // ---- debug menu (#339) -------------------------------------------------------------
@@ -1249,7 +1235,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
         if (!_chunks.TryGetValue(id, out var state) || state.Cover is not { } raster) return false;
-        int col = (int)Math.Round(e - id.MinE), row = (int)Math.Round(id.MaxN - n);
+        var (x, z) = id.Local(e, n);
+        int col = (int)Math.Round(x), row = (int)Math.Round(z);
         if ((uint)col >= ChunkFormat.GridSize || (uint)row >= ChunkFormat.GridSize) return false;
         int i = row * ChunkFormat.GridSize + col;
         if (i >= raster.Length) return false;
@@ -1278,8 +1265,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
+        var (x, z) = id.Local(e, n);
         return _chunks.TryGetValue(id, out var state) && state.Water is { } water
-            && water.TrySample(e - id.MinE, id.MaxN - n, out stillLevel, out waveScale);
+            && water.TrySample(x, z, out stillLevel, out waveScale);
     }
 
     /// <summary>
@@ -1342,8 +1330,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
+        var (x, z) = id.Local(e, n);
         return _chunks.TryGetValue(id, out var state) && state.Bores is { Count: > 0 } bores
-            && RoadTunnels.Inside(bores, e - id.MinE, worldPos.Y, id.MaxN - n);
+            && RoadTunnels.Inside(bores, x, worldPos.Y, z);
     }
 
     /// <summary>
@@ -1356,7 +1345,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
         if (!_chunks.TryGetValue(id, out var state) || state.Pits is not { Count: > 0 } pits) return false;
-        var at = new Vector2((float)(e - id.MinE), (float)(id.MaxN - n));
+        var (x, z) = id.Local(e, n);
+        var at = new Vector2((float)x, (float)z);
         foreach (var pit in pits)
             if (pit.Rect.Contains(at, 0.5f) && worldPos.Y > pit.Floor - 1.5f) return true;
         return false;
@@ -1374,7 +1364,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (!_chunks.TryGetValue(id, out var state)) return false;
         // the cell under the point, not the whole tile: cells land one per frame, nearest first,
         // so a body waits only for its own; and a bridge is ground too
-        int cell = ChunkNode.CollisionCell((int)(e - id.MinE), (int)(id.MaxN - n));
+        var (x, z) = id.Local(e, n);
+        int cell = ChunkNode.CollisionCell((int)x, (int)z);
         return (state.HeightCellsDone & (1 << cell)) != 0
             && ((state.RoadCellsQueued & (1 << cell)) == 0 || (state.RoadCellsDone & (1 << cell)) != 0);
     }
@@ -1611,7 +1602,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // has no cells to show, and recording that as "not cells" rebuilt it forever
                 state.BuildingCells = state.PendingCells;
                 if (result.Doors != null)
-                    Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
+                    Interiors.DoorIndex.SetTile(result.Id, _origin!.TileTransform(result.Id).Origin, result.Doors);
                 TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
                 if (result.Trees != null)
                 {
@@ -1763,7 +1754,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             state.Node = new ChunkNode
             {
                 Name = $"Chunk_{id}",
-                Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
+                Position = _origin!.TileTransform(id).Origin,
             };
             ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);
@@ -1992,12 +1983,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             var reach = byRadius ? ReachOf(anchor) : default;
             // how high the anchor is above its ground, for the vertical LOD (LodPolicy.WithAltitude)
             float agl = VerticalLod && TryGetHeight(anchor.GlobalPosition, out float under) ? anchor.GlobalPosition.Y - under : 0f;
-            for (int de = -radius; de <= radius; de++)
-                for (int dn = -radius; dn <= radius; dn++)
+            // dz runs from south to north, the order the tiles were always visited in
+            for (int dx = -radius; dx <= radius; dx++)
+                for (int dz = radius; dz >= -radius; dz--)
                 {
-                    var id = new TileId(center.E + de, center.N + dn);
+                    var id = center.Neighbour(dx, dz);
                     if (!IsAvailable(id)) continue;
-                    int ring = Math.Max(Math.Abs(de), Math.Abs(dn));
+                    int ring = center.RingDistance(id);
                     // the ring the detail is chosen by: further out the higher the anchor flies, never
                     // past the last ring (a tile under a high flight stays loaded at the coarsest stride)
                     int dist = VerticalLod ? Math.Min(LodPolicy.WithAltitude(ring, agl), Lod.MaxDist) : ring;

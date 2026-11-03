@@ -292,8 +292,7 @@ public static class RoadMeshBuilder
         for (int i = 0; i < n; i++)
         {
             var top = Point(seg, i);
-            double e = id.MinE + top.X;
-            double north = id.MaxN - top.Z;
+            var (e, north) = id.Global(top.X, top.Z);
             double ground = grid.SampleHeight(e, north);
             if (double.IsNaN(ground)) continue;
 
@@ -338,7 +337,8 @@ public static class RoadMeshBuilder
         for (int i = 0; i < n; i++)
         {
             var top = Point(seg, i);
-            double ground = grid.SampleHeight(id.MinE + top.X, id.MaxN - top.Z);
+            var (ge, gn) = id.Global(top.X, top.Z);
+            double ground = grid.SampleHeight(ge, gn);
             if (double.IsNaN(ground)) return;
 
             float height = Math.Clamp(top.Y - (float)ground, minHeight, maxHeight);
@@ -825,8 +825,7 @@ public static class RoadMeshBuilder
             if (sinceLast < PierSpacing) continue;
 
             var centre = (left[i] + right[i]) * 0.5f;
-            double e = tile.MinE + centre.X;
-            double nn = tile.MaxN - centre.Z;
+            var (e, nn) = tile.Global(centre.X, centre.Z);
             float ground = (float)grid.SampleHeight(e, nn);
 
             float deckBottom = centre.Y - thickness;
@@ -984,7 +983,8 @@ public static class RoadMeshBuilder
                 var p = Point(seg, i);
                 if (ends.GetValueOrDefault(Key(seg, i)) != 1) return false;
                 if (p.X < 0.05f || p.Z < 0.05f || p.X > 999.95f || p.Z > 999.95f) return false;
-                double ground = grid?.SampleHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z) ?? double.NaN;
+                var (ge, gn) = tile.Id.Global(p.X, p.Z);
+                double ground = grid?.SampleHeight(ge, gn) ?? double.NaN;
                 return RoadTunnels.AtSurface(ground, p.Y, height);
             }
             if (Mouth(0)) portals.Add(new TunnelPortal(path[0], path[1], halfWidth, height));

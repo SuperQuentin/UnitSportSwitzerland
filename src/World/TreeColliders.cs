@@ -138,9 +138,10 @@ public partial class TreeColliders : Node3D, Core.IOriginContainer
         var (e, n) = _origin.ToLv95(at);
         long ce = (long)System.Math.Floor(e / Cell), cn = (long)System.Math.Floor(n / Cell);
         int r = Mathf.CeilToInt(Radius / Cell);
-        for (int de = -r; de <= r; de++)
-            for (int dn = -r; dn <= r; dn++)
-                if (de * de + dn * dn <= r * r) _wanted.Add(Key(ce + de, cn + dn));
+        // a disc of cells, in cell steps (a grid offset, not an LV95 distance)
+        for (int i = -r; i <= r; i++)
+            for (int j = -r; j <= r; j++)
+                if (i * i + j * j <= r * r) _wanted.Add(Key(ce + i, cn + j));
     }
 
     /// <summary>A 10 m cell of the LV95 grid, by its south-west corner's indices.</summary>
@@ -177,8 +178,8 @@ public partial class TreeColliders : Node3D, Core.IOriginContainer
                     // clamped to what a real trunk measures
                     float slender = t.Kind switch { 2 => 0.34f, 3 => 0.40f, _ => 0.26f };
                     float r = Mathf.Clamp(t.Height * slender * 0.10f, 0.12f, 0.5f);
-                    long key = Key((long)System.Math.Floor((tile.MinE + t.X) / Cell),
-                        (long)System.Math.Floor((tile.MaxN - t.Z) / Cell));
+                    var (te, tn) = tile.Global(t.X, t.Z);
+                    long key = Key((long)System.Math.Floor(te / Cell), (long)System.Math.Floor(tn / Cell));
                     if (!cells.TryGetValue(key, out var list)) cells[key] = list = new();
                     list.Add(new Trunk(t.X, t.Y, t.Z, r, Mathf.Max(t.Height, 1.5f)));
                 }
@@ -205,7 +206,7 @@ public partial class TreeColliders : Node3D, Core.IOriginContainer
         var shape = (CylinderShape3D)body.GetChild<CollisionShape3D>(0).Shape;
         shape.Radius = t.Radius;
         shape.Height = t.Height;
-        var at = _origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y);
+        var at = _origin.TileToWorld(tile, new Vector3(t.X, t.Y, t.Z));
         body.GlobalPosition = at + Vector3.Up * (t.Height * 0.5f - 0.3f);   // a little into the ground on a slope
         body.ProcessMode = ProcessModeEnum.Inherit;
         return body;

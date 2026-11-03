@@ -125,7 +125,8 @@ public partial class SlopeMarkers : Node
                 {
                     // round the outline, just outside it: the side away from the area's inside
                     float ox = ty, oy = -tx;
-                    if (tile.At(tile.Id.MinE + px + ox * 2, tile.Id.MinN + py + oy * 2)?.Id == r.Id) { ox = -ox; oy = -oy; }
+                    var (pe, pn) = tile.Id.Global(px, ChunkFormat.TileSizeM - py);
+                    if (tile.At(pe + ox * 2, pn + oy * 2)?.Id == r.Id) { ox = -ox; oy = -oy; }
                     Add(node, tile, r, level, false, px + ox * Outside, py + oy * Outside, spots);
                 }
                 else
@@ -147,7 +148,8 @@ public partial class SlopeMarkers : Node
         // only the poles inside this tile (the path is kept whole in every tile it touches)
         if (east < 0 || east >= 1000 || north <= 0 || north > 1000) return;
         // not in the middle of another slope (two runs side by side, a junction)
-        int i = tile.IndexAt(tile.Id.MinE + east, tile.Id.MinN + north);
+        var (e, n) = tile.Id.Global(east, ChunkFormat.TileSizeM - north);
+        int i = tile.IndexAt(e, n);
         if (i >= 0 && tile.Slot[i] != 0 && tile.Records[tile.Slot[i] - 1].Id != r.Id && PisteFormat.MaskOf(tile.Aux[i]) > 0.5f) return;
         float y = Ground(node, east, north);
         if (float.IsNaN(y)) return;

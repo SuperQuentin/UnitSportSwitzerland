@@ -177,12 +177,12 @@ public partial class RewardWorld : Node3D
         }
         var at = me.Global;
         var here = TileId.FromLv95(at.E, at.N);
-        for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                if (svc.Map.TryTile(new TileId(here.E + de, here.N + dn)) is not { } spots) continue;
+                if (svc.Map.TryTile(here.Neighbour(dx, dz)) is not { } spots) continue;
                 foreach (var s in spots)
-                    if (Dist2(s.E, s.N, at.E, at.N) <= RangeM * RangeM) _near.Add(s);
+                    if (GlobalPos.HorizontalDistanceSquared(s.E, s.N, at.E, at.N) <= RangeM * RangeM) _near.Add(s);
             }
         var cat = PoiCatalogueHost.Current;
         cat.Near(at.E, at.N, RangeM, _nearPois);
@@ -210,7 +210,6 @@ public partial class RewardWorld : Node3D
         Place(origin, opened, taken, edition, cat);
     }
 
-    private static double Dist2(double e0, double n0, double e1, double n1) => (e0 - e1) * (e0 - e1) + (n0 - n1) * (n0 - n1);
 
     /// <summary>Whether a chest opens for this player now: no seal, or the server said it is complete.</summary>
     public static bool Unsealed(RewardSpot chest) =>

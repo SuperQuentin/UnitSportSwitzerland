@@ -329,7 +329,7 @@ public sealed class RaceLine
         }
         Vector2 Xz(TileId t, float x, float y, float z)
         {
-            var w = origin.ToWorld(t.MinE + x, t.MaxN - z, y);
+            var w = origin.TileToWorld(t, new Vector3(x, y, z));
             return new Vector2(w.X, w.Z);
         }
 
@@ -443,7 +443,8 @@ public sealed class RaceLine
             var (e, nn) = origin.ToLv95(world);
             var id = TileId.FromLv95(e, nn);
             if (!covers.TryGetValue(id, out var raster)) return false;
-            int col = (int)System.Math.Round(e - id.MinE), row = (int)System.Math.Round(id.MaxN - nn);
+            var (lx, lz) = id.Local(e, nn);
+            int col = (int)System.Math.Round(lx), row = (int)System.Math.Round(lz);
             int k = row * ChunkFormat.GridSize + col;
             if ((uint)col >= ChunkFormat.GridSize || (uint)row >= ChunkFormat.GridSize || k >= raster.Length) return false;
             return (CoverClass)raster[k] is CoverClass.Water or CoverClass.Wetland or CoverClass.Glacier;

@@ -86,10 +86,11 @@ public sealed partial class FallbackChunkSource
         var roads = new Dictionary<TileId, (RoadTile?, RawRoads.Key?[]?)>();
         var grids = new Dictionary<TileId, ChunkGrid?>();
         var source = Neighbours ?? _inner;
-        for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+        // dz (south) from +1 down: the order the tiles were always visited in
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                var t = new TileId(id.E + de, id.N + dn);
+                var t = id.Neighbour(dx, dz);
                 if (snap.Covers(t))
                 {
                     var input = t == id ? own : await StageInputAsync(t, snap, ct).ConfigureAwait(false);
@@ -101,10 +102,10 @@ public sealed partial class FallbackChunkSource
             }
         // the walls the density field reads round the halo, ahead of the gate
         var walls = new Dictionary<TileId, BuildingTile?>();
-        for (int de = -2; de <= 2; de++)
-            for (int dn = -2; dn <= 2; dn++)
+        for (int dx = -2; dx <= 2; dx++)
+            for (int dz = 2; dz >= -2; dz--)
             {
-                var t = new TileId(id.E + de, id.N + dn);
+                var t = id.Neighbour(dx, dz);
                 walls[t] = await source.LoadBuildingsAsync(t, ct).ConfigureAwait(false);
             }
 

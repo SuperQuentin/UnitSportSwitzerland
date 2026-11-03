@@ -118,7 +118,8 @@ public partial class PalletCheck : Node
         }
         _layout = layout;
         // the hall's own frame: its tile's corner at the world's origin, so nothing is kilometres out
-        var origin = new WorldOrigin(tile.Id.MinE, tile.Id.MaxN);
+        var (oe, on) = tile.Id.Global(0, 0);
+        var origin = new WorldOrigin(oe, on);
         _pallets = PalletService.Create(this, origin, server: false);
         _pallets.Layouts = k => Task.FromResult(k == layout.Key ? layout : null);
         var data = InteriorMeshBuilder.Build(layout);

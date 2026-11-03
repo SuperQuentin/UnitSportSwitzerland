@@ -95,10 +95,11 @@ public partial class PitCheck : Node
     private List<Dug> Find(WorldOrigin origin, IChunkSource source, TileId around)
     {
         var found = new List<Dug>();
-        for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+        // dz (south) from +1 down to -1: south to north, the order the tiles were always visited in
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                var id = new TileId(around.E + de, around.N + dn);
+                var id = around.Neighbour(dx, dz);
                 var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
                 if (tile == null || !SitePlans.HasSite(tile)) continue;
                 var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
@@ -112,7 +113,7 @@ public partial class PitCheck : Node
                     found.Add(new Dug(site, shell, pit, p =>
                     {
                         var t = SiteShellBuilder.ToTile(s, p);
-                        return origin.ToWorld(id.MinE + t.X, id.MaxN - t.Z, t.Y);
+                        return origin.TileToWorld(id, t);
                     }));
                 }
             }
