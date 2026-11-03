@@ -30,6 +30,9 @@ public static class Placeables
         // the telescope (#1440): E looks through it (Items.Telescopes), Use with an empty hand packs it up
         new(ItemId.Telescope, PlacedKind.Telescope, "set up the telescope", "Telescope set up: look through it with E.", "Too steep for the tripod.",
             0.8f, TelescopeVisual.SetUpMesh, false),
+        // a birthday cake (#1423): on a table or any flat ground; the slices are Occasions.Birthdays.BirthdayService's
+        new(ItemId.BirthdayCake, PlacedKind.BirthdayCake, "set the cake down", "Cake set down: everyone near can take a slice.",
+            "Too steep for a cake.", 0.9f, () => Occasions.Birthdays.BirthdayMeshes.Cake(Occasions.Birthdays.BirthdayRules.CakeSlices), false),
     };
 
     public static Placeable? ForItem(ItemId id) => All.FirstOrDefault(p => p.Item == id);

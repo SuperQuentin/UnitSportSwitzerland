@@ -121,7 +121,9 @@ public partial class Handshake : Node
     /// 87: Adventure/Together RequestStartAt (#1384: a fondue pot on a dining venue's table, the table's place sent).
     /// 88: World/Telescopes AskLook, AskLeave, Answered, Busy (#1440: one player at a time at a set-up telescope), PlacedKind.Telescope 13, ItemId 640.
     /// 89: creative flight's figure (#1219): FootPlayer.PoseKind 10 (PoseFly), Anim.X the lean, BodyPose the tilt.
-    public const int Protocol = 89;
+    /// 90: World/Birthdays (#1423: Tell, RequestWish, RequestSlice, RequestShow, SetCelebrants, CakeState, Sliced, Told, WishTaken, Show), ItemIds 545-553,
+    /// ItemUse.Open, ItemEventKind.BirthdayWish, PlacedKind.BirthdayCake 14, Headwear 21-26 (the birthday hats).
+    public const int Protocol = 90;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
