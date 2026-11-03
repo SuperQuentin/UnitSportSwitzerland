@@ -798,6 +798,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
             new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
+            // the far horizon at its corners, across origin shifts (#1429)
+            new(Terrain.HorizonCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.HorizonCheck(chunks, origin)),
+            // a GPX course drawn and run where it belongs, across origin shifts (#1429)
+            new(Gpx.GpxCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.GpxCheck(chunks, origin)),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
