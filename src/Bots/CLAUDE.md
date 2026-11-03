@@ -5,7 +5,7 @@ its topic; search with `grep -ril <word> docs/notes/bots`. Every new action, ite
 interactable is decided for bots too: `docs/notes/general/new-feature-bots.md`.
 
 - `architecture` — server-run FootPlayer (authority 1, `npc_1_n`, id -(1000+n), `BotData`), layers: body seams (`WalkControls`, `FootActions`, facing), `BotHands`, `Bot.Inventory`, `IBotBrain` per mode (`WanderBrain`), `BotProfile`, `BotDirector` (LOD, `Died`/`Downed`), `BotTag`, relay filters on server-run bodies
-- `server-collision` — `ChunkManager.CollisionByRadius`: collision within 300 m of a bot (look-ahead, none in the air, released at 400 m), proxies plain anchors, roads/holes/trees on the server; float precision and interiors still open
+- `server-collision` — `ChunkManager.CollisionByRadius`: collision within 300 m of a bot (look-ahead, none in the air, released at 400 m), proxies plain anchors, roads/holes/trees on the server; per server region since #1456 (`net/server-regions`); interiors still open
 - `brain` — BrBrain (phase 2): BotSenses (sight cone + ray, hearing, memory), BrTactics scores (pure), BotSkills (MoveTo with wall following, crate takes), streets (RoadNetwork.Path, GoTo), fighting (reaction, aim error, bands, strafing), the drop (board, jump 0.7 s apart, wingsuit, canopy), play-out
 - `vehicles` — phase 3: VehicleManager.Park/ServerClaim on the server, br_v names kept, BotDriving (spot, get in, RaceRoute.BuildAsync, AutoPilot, get out), BrBrain trips over 350 m, `/bot drive`, botcheck's drive
 - `hits` — players hit bots (targets, server applies `ShotHit`), bots fire (`BotHands`, `PlayerHits` sink, `ItemEvents.ServerHit`/`ServerSend`), PvP lets bots be hit anywhere, never `RpcId` a bot id

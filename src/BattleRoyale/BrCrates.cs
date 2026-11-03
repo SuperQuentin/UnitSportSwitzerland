@@ -158,10 +158,10 @@ public partial class BrCrates : Node3D, IOriginContainer
     public TakeResult TryTake(long taker, long id, int index, ItemId item, int count)
     {
         if (!_crates.TryGetValue(id, out var c) || !MayLoot(taker) || ClockSync.SimNow < c.LandsAt || c.Locked
-            || GetNodeOrNull<Node3D>("../Players/" + Net.PlayerReplication.NodeName(taker)) is not { } body
-            || !Near(c, body.GlobalPosition, Reach + 2.5f))
+            || GetNodeOrNull<FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(taker)) is not { } body
+            || !Near(c, body.Global, Reach + 2.5f))
         {
-            var at = GetNodeOrNull<Node3D>("../Players/" + Net.PlayerReplication.NodeName(taker))?.GlobalPosition;
+            var at = GetNodeOrNull<FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(taker))?.Global;
             GD.Print($"[br crates] take from {taker} refused: crate {id} {(c == null ? "gone" : c.Label)}, may loot {MayLoot(taker)}, body at {at}");
             return TakeResult.Refused;
         }
@@ -179,11 +179,14 @@ public partial class BrCrates : Node3D, IOriginContainer
     }
 
     /// <summary>Server: whether a body at <paramref name="at"/> (world) could open crate <paramref name="c"/> (#837: a bot walks up to it first).</summary>
-    public bool Reachable(Crate c, Vector3 at) => Near(c, at, Reach + 2.5f);
+    public bool Reachable(Crate c, GlobalPos at) => Near(c, at, Reach + 2.5f);
 
     /// <summary>Server: where a crate is, in this server's world space (its ground height when it has none), or null.</summary>
-    public Vector3? WorldOf(Crate c, float groundY) =>
-        Origin == null ? null : Origin.ToWorld(c.E, c.N, c.Alt == Ground ? groundY : c.Alt);
+    public Vector3? WorldOf(Crate c, float groundY) => WorldOf(c, groundY, Origin);
+
+    /// <summary>The crate in <paramref name="frame"/>: a bot's own, on a server with regions (#1456).</summary>
+    public static Vector3? WorldOf(Crate c, float groundY, WorldOrigin? frame) =>
+        frame?.ToWorld(c.E, c.N, c.Alt == Ground ? groundY : c.Alt);
 
     /// <summary>The dial's numbers for a locked crate: the same on the server and every client, never sent.</summary>
     public static int[] Combination(long id, int seed) =>
@@ -198,7 +201,7 @@ public partial class BrCrates : Node3D, IOriginContainer
         if (!_server) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (!_crates.TryGetValue(id, out var c) || !c.Locked || !MayLoot(peer)
-            || GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body || !Near(c, body.GlobalPosition, Reach + 2.5f))
+            || GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body || !Near(c, body.Global, Reach + 2.5f))
             return;
         if (!combo.SequenceEqual(Combination(id, Seed)))
         {
@@ -218,7 +221,7 @@ public partial class BrCrates : Node3D, IOriginContainer
         long peer = Multiplayer.GetRemoteSenderId();
         // a supply crate within a rifle's reach of a living entrant
         if (!_crates.TryGetValue(id, out var c) || c.Style != CrateStyle.Supply || !MayLoot(peer)
-            || GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body || !Near(c, body.GlobalPosition, 320f))
+            || GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body || !Near(c, body.Global, 320f))
             return;
         c.Style = CrateStyle.Pile;
         c.Label = "the broken crate";
@@ -226,12 +229,11 @@ public partial class BrCrates : Node3D, IOriginContainer
     }
 
     /// <summary>Whether <paramref name="at"/> stands at the crate: horizontally, and in height when the crate has one.</summary>
-    private bool Near(Crate c, Vector3 at, float reach)
+    private static bool Near(Crate c, GlobalPos at, float reach)
     {
-        if (Origin == null) return false;
-        var (e, n) = Origin.ToLv95(at);
-        if ((e - c.E) * (e - c.E) + (n - c.N) * (n - c.N) > reach * reach) return false;
-        return c.Alt == Ground || Mathf.Abs(at.Y - c.Alt) < 4f;
+        // in Earth positions (#1456): the body may be in another server region's frame than this world
+        if (GlobalPos.HorizontalDistanceSquared(at.E, at.N, c.E, c.N) > reach * reach) return false;
+        return c.Alt == Ground || System.Math.Abs(at.Alt - c.Alt) < 4f;
     }
 
     // ------------------------------------------------------------------------------------

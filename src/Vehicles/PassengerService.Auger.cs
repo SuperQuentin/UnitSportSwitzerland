@@ -44,7 +44,7 @@ public partial class PassengerService
             : HeavyCatalog.For(them.Ride) is not { Farm: true, TankItems: 0 } || TrailerCatalog.For(them.TrailerCode) is not { TankItems: > 0 } ? "no tipping trailer"
             : count is <= 0 or > 64 || crop <= 0 ? "a bad batch"
             : me.WorldVelocity.Length() > FootPlayer.AugerDrivenSpeed + 1f || them.WorldVelocity.Length() > FootPlayer.AugerDrivenSpeed + 1f ? "too fast"
-            : me.GlobalPosition.DistanceTo(them.GlobalPosition) > AugerReach ? "too far" : null;
+            : them.WhereIs(me).DistanceTo(them.GlobalPosition) > AugerReach ? "too far" : null;
         if (why != null)
         {
             GD.Print($"[passengers] auger from {sender} into {driverName}'s trailer refused: {why}");

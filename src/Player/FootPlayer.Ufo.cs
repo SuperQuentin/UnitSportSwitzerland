@@ -58,7 +58,7 @@ public partial class FootPlayer
             CollisionMask = CollisionMask,
             Exclude = SelfExclude,
         };
-        return GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0 ? feet + Vector3.Up * 0.1f : null;
+        return Space.IntersectShape(query, 1).Count == 0 ? feet + Vector3.Up * 0.1f : null;
     }
 
     // ---- in someone else's beam, on foot ------------------------------------------------------

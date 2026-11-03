@@ -95,17 +95,25 @@ public sealed class Bot
 /// <summary>
 /// What a brain may reach of the world (#837): the physics space for its senses and its walk, and
 /// the bodies there for its senses to look at. Nothing else: a brain never reads the world directly.
+/// One per bot: on a server with regions (#1456) both are its own region's, the space its body acts in
+/// and the bodies in the same frame (a body in another region is kilometres away, and its floats are
+/// in another frame).
 /// </summary>
 public sealed class BotWorld
 {
-    public BotWorld(Node3D players) => Players = players;
+    public BotWorld(Node3D players, FootPlayer body)
+    {
+        Players = players;
+        Body = body;
+    }
 
     public Node3D Players { get; }
-    public PhysicsDirectSpaceState3D Space => Players.GetWorld3D().DirectSpaceState;
+    public FootPlayer Body { get; }
+    public PhysicsDirectSpaceState3D Space => Body.Space;
 
     public System.Collections.Generic.IEnumerable<FootPlayer> Bodies()
     {
-        foreach (var n in Players.GetChildren()) if (n is FootPlayer p) yield return p;
+        foreach (var n in Players.GetChildren()) if (n is FootPlayer p && p.Region == Body.Region) yield return p;
     }
 }
 

@@ -1328,7 +1328,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     {
         var q = PhysicsRayQueryParameters3D.Create(worldPos + Vector3.Up * 0.5f, worldPos - Vector3.Up * depth);
         q.Exclude = new Godot.Collections.Array<Rid> { self };
-        return body.GetWorld3D().DirectSpaceState.IntersectRay(q).Count > 0;
+        // a body's own space: on the server a body in a region of its own is not in the viewport's (#1456)
+        var space = body is Player.FootPlayer player ? player.Space : body.GetWorld3D().DirectSpaceState;
+        return space.IntersectRay(q).Count > 0;
     }
 
     /// <summary>

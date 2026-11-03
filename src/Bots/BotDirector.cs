@@ -37,7 +37,6 @@ public partial class BotDirector : Node
     private MultiplayerSpawner _spawner = null!;
     private Node3D _players = null!;
     private readonly Dictionary<long, Bot> _bots = new();
-    private BotWorld? _world;
     private double _watchAt;
 
     /// <summary>A bot fell for good or was knocked out: (bot, killer id or 0, cause). Raised on the server.</summary>
@@ -58,14 +57,12 @@ public partial class BotDirector : Node
     private void OnHeard(long who, Items.ItemEventKind kind, GlobalPos at)
     {
         if (kind != Items.ItemEventKind.Shot || _bots.Count == 0) return;
-        var origin = GetParent()?.GetNodeOrNull<Items.ItemEvents>(Items.ItemEvents.NodeName)?.Origin;
-        if (origin == null) return;
-        var world = origin.ToWorld(at);
         double now = Now;
         // the relay passes the kind, not the gun: a rifle's earshot for every shot
         float earshot = BotSenses.HearShot(Items.ItemId.Rifle);
+        // in each bot's own frame: on a server with regions (#1456) they are not all the same
         foreach (var bot in _bots.Values)
-            if (bot.Alive) bot.Senses.Hear(bot, world, who, earshot, now);
+            if (bot.Alive && bot.Body.Origin is { } frame) bot.Senses.Hear(bot, frame.ToWorld(at), who, earshot, now);
     }
 
     /// <summary>
@@ -155,7 +152,7 @@ public partial class BotDirector : Node
             body.AppearanceBits = alien.Looks.Pack();
             body.OutfitBits = alien.Outfit.Bits;
         }
-        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = _world ??= new BotWorld(_players) };
+        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = new BotWorld(_players, body) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
         body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch, bot.Intent.Climb);
@@ -218,7 +215,8 @@ public partial class BotDirector : Node
             if (!bot.Body.Eliminated) BotSkills.Unembed(bot, bot.World.Space, now);
             if (now >= bot.NextThink)
             {
-                double wait = bot.Brain.Think(bot, now);
+                double wait;
+                using (World.WaterField.In(bot.Body.RegionTerrain)) wait = bot.Brain.Think(bot, now);
                 bot.NextThink = now + (bot.Watched ? wait : Math.Max(wait, FarThink));
             }
             // the facing: where it aims or looks, else where it walks (third person's FaceTravel)
@@ -248,15 +246,20 @@ public partial class BotDirector : Node
         foreach (var node in _players.GetChildren())
         {
             if (node is not FootPlayer human || human.Npc) continue;
-            var at = human.GlobalPosition;
+            // in Earth positions: a human and a bot can be in two server regions' frames (#1456)
+            var at = human.Global;
             foreach (var bot in _bots.Values)
                 if (!bot.Watched && GodotObject.IsInstanceValid(bot.Body)
-                    && bot.Body.GlobalPosition.DistanceSquaredTo(at) < WatchedRange * WatchedRange)
+                    && bot.Body.Global.DistanceTo(at) < WatchedRange)
                     bot.Watched = true;
         }
     }
 
     // ---- /bot (admin): bots in free roam, for trying them out and for the checks ----
+
+    /// <summary>A point of <paramref name="from"/>'s frame in <paramref name="bot"/>'s (the same unless a server region parts them, #1456).</summary>
+    private static Vector3 InFrameOf(Bot bot, FootPlayer from, Vector3 p) =>
+        bot.Body.Origin is { } to && from.Origin is { } frame && to != frame ? to.ToWorld(frame.ToGlobal(p)) : p;
 
     private int _seed = System.Environment.TickCount;
 
@@ -315,8 +318,8 @@ public partial class BotDirector : Node
                 int fired = 0;
                 foreach (var bot in _bots.Values)
                     if (bot.Alive && BotHands.Pick(bot) is var (_, w)
-                        && bot.Body.GlobalPosition.DistanceTo(target.GlobalPosition) <= w.Range
-                        && BotHands.Fire(bot, target.GlobalPosition + Vector3.Up * 1.2f))
+                        && bot.Body.GlobalPosition.DistanceTo(bot.Body.WhereIs(target)) <= w.Range
+                        && BotHands.Fire(bot, bot.Body.WhereIs(target) + Vector3.Up * 1.2f))
                         fired++;
                 return $"{fired} bot(s) fired.";
             }
@@ -325,7 +328,7 @@ public partial class BotDirector : Node
                 // /bot swing: every bot with a sword steps up to the sender's nearest dummy (else the sender) and swings the combo
                 // at it: a check of the sword's hands (#1371), the server's own path the way a brain's would take it
                 if (bodyOf(sender) is not { } swinger) return "'/bot swing' needs your body in the world.";
-                var dummyAt = Swords?.NearestDummy(swinger.GlobalPosition);
+                var dummyAt = Swords?.NearestDummy(swinger.GlobalPosition, swinger.Origin);
                 var goal = dummyAt ?? swinger.GlobalPosition;
                 int swung = 0;
                 foreach (var bot in _bots.Values)
@@ -333,9 +336,9 @@ public partial class BotDirector : Node
                     if (!bot.Alive || !BotHands.HasSword(bot)) continue;
                     var side = (swinger.GlobalPosition - goal) with { Y = 0 };
                     side = side.LengthSquared() > 0.01f ? side.Normalized() : Vector3.Right;
-                    bot.Body.GlobalPosition = goal + side * 1.15f + Vector3.Up * 0.1f;
+                    bot.Body.GlobalPosition = InFrameOf(bot, swinger, goal + side * 1.15f + Vector3.Up * 0.1f);
                     bot.SwordWantUntil = Clock + 2.5;
-                    bot.SwordTarget = goal + Vector3.Up * 1.1f;
+                    bot.SwordTarget = InFrameOf(bot, swinger, goal + Vector3.Up * 1.1f);
                     swung++;
                 }
                 return $"{swung} bot(s) swing at {(dummyAt != null ? "the dummy" : "you")}.";
@@ -347,7 +350,7 @@ public partial class BotDirector : Node
                 float metres = args.Length > 1 && float.TryParse(args[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float m) ? Math.Clamp(m, 50f, 3000f) : 400f;
                 var ahead = -driver.GlobalTransform.Basis.Z with { Y = 0 };
                 var goal = driver.GlobalPosition + (ahead.LengthSquared() > 0.01f ? ahead.Normalized() : Vector3.Forward) * metres;
-                foreach (var bot in _bots.Values) bot.Brain = new DriveBrain(goal);
+                foreach (var bot in _bots.Values) bot.Brain = new DriveBrain(InFrameOf(bot, driver, goal));
                 return $"{_bots.Count} bot(s) off to a point {metres:F0} m ahead of you.";
             }
             default:

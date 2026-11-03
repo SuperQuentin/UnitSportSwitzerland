@@ -29,16 +29,19 @@ public static class BotUfo
     public static bool React(Bot bot, double now)
     {
         var body = bot.Body;
-        if (UfoSightings.Instance?.Nearest(body.EyePosition, SeeRange) is not { } craft)
+        // the sightings are played in the server's main frame, the bot may be in a region's (#1456)
+        if (UfoSightings.Instance is not { } ufos
+            || ufos.Nearest(body.ToFrame(ufos.Origin, body.EyePosition), SeeRange) is not { } craft)
         {
             StopWave(bot);
             return false;
         }
 
         var pos = body.GlobalPosition;
-        var away = new Vector3(pos.X - craft.At.X, 0f, pos.Z - craft.At.Z);
+        var craftAt = body.FromFrame(ufos.Origin, craft.At);
+        var away = new Vector3(pos.X - craftAt.X, 0f, pos.Z - craftAt.Z);
         float apart = away.Length();
-        float depth = craft.At.Y + Avatar.UfoMeshBuilder.Hatch.Y - pos.Y;
+        float depth = craftAt.Y + Avatar.UfoMeshBuilder.Hatch.Y - pos.Y;
         bool under = depth > 0f && depth < TractorBeamMath.Reach && apart < TractorBeamMath.RadiusAt(depth) + FleeMargin;
         // a saucer hovering low overhead is about to beam: run before it does
         if (under && (craft.Beam || craft.Height < 40f))
@@ -62,7 +65,7 @@ public static class BotUfo
             return false;
         }
         bot.Intent = BotIntent.Stand;
-        var to = craft.At - body.EyePosition;
+        var to = craftAt - body.EyePosition;
         bot.Intent.FaceYaw = Mathf.Atan2(-to.X, -to.Z);
         bot.Intent.Pitch = Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f));
         int wave = FootPlayer.EmoteDanceBase + Wave;

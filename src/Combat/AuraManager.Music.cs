@@ -18,8 +18,11 @@ public partial class AuraManager
     {
         double now = ClockSync.ServerNow;
         // the server's NearestMusic leaves out carried radios (no speakers here): those are checked below
-        var best = RadioManager.Instance?.NearestMusic(m.CentreWorld, RadioManager.DanceRadius, heard: false);
-        float bestDist = best is { } b && IsInstanceValid(b.Source) ? b.Source.GlobalPosition.DistanceTo(m.CentreWorld) : float.MaxValue;
+        // the radios stand in the server's main frame, the match's centre in its fighters' (#1456)
+        var centre = RadioManager.Instance is { } radios && m.BodyA?.Origin is { } frame && frame != radios.Origin
+            ? radios.Origin.ToWorld(frame.ToGlobal(m.CentreWorld)) : m.CentreWorld;
+        var best = RadioManager.Instance?.NearestMusic(centre, RadioManager.DanceRadius, heard: false);
+        float bestDist = best is { } b && IsInstanceValid(b.Source) ? b.Source.GlobalPosition.DistanceTo(centre) : float.MaxValue;
         int cdId = best?.CdId ?? 0;
         double startedAt = best?.StartedAt ?? 0;
         if (GetTree() is { } tree)
