@@ -122,6 +122,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | treasure detector ping (#1227) | Use (LMB / RB) with the detector in hand | ok: R trigger (`use_item`) | point it and squeeze |
 | bottled gust (#1227) | Use (LMB / RB): thrown ahead | ok: R trigger (`use_item`) | a real throw by release velocity (the throw-drop target) |
 | `/trial leave` (#1227) | chat | ok: wrist menu › chat | a quick menu entry (gap, also on pad) |
+| `/movespeed [<factor> \| normal] [player]` (#1485, admin) | chat | ok: the quick menu's Chat wedge, the "/" picker: `/movespeed` then `normal`, `2`, `5`, `10` as buttons; another number needs the keyboard (gap, as all free text) | keep |
 | Steinstossen (#1269): open an attempt at the Älplerfest's stone, change stone | E / Y at the stone (`interact_mount`), Space / A (`jump`) | new, pad route: the pad actions through `XrPad` (grip or Y at the stone), A; the prompt through `InputHints` | keep |
 | Steinstossen: hold the lift, let go on the meter's peak, press on the drum's beats, push | hold LMB / RB (`use_item`), release, LMB on each beat; the camera's pitch is the angle | new, pad route: the trigger / shoulder (`use_item`), the head or stick sets the pitch; gap: a real two-handed lift and push by hand speed (plan section 3) | keep; the real lift is a later target |
 | adventure map (#1224) | M (`teleport`) while adventuring / quick menu › Map; drag, wheel, click; left stick, LB / RB, A | ok: wrist menu › Map on the `XrUi` panel, ray drag and trigger (the shoulders do not zoom in VR) | keep |

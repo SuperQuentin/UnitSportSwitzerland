@@ -48,6 +48,9 @@
   everyone (sent on join and on change); offline anyone. **`/water [E N]`**: the water at an LV95 point (or
   where you are) as this side computes it, to the 0.1 mm; the server's answer and a client's own compare
   directly (`tools/watercheck.sh`).
+- **`/movespeed [<factor> | normal] [player]`** (#1485, `player/move-speed`): an admin's movement speed factor, no
+  upper cap, `1` / `normal` back to normal; offline the player, online admins only (the single check), not in a
+  round. The server sends it to the body's owner (`MoveSpeedSet`) or sets a bot's body (`SetMoveSpeed`).
 - **Venues and getting around (#994)**: `/stadium` (alias `/venue`, anyone, offline too): bare it gives the nearest of the
   33 `StadiumCatalog` venues, how far away it is and what plays there today (`ConcertService.ShowAt`: a hosted set or tonight's
   artist and hours). `/stadium list [stadium|arena|openair]` numbers them by kind; `/stadium <name|town|#n>` goes there

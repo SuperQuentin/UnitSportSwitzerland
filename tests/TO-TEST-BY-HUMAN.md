@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## `/movespeed` ([#1487](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1487))
+
+On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), offline, then on a server as an admin with a second client watching.
+
+- [ ] `/movespeed 10`, run across a valley, then `/movespeed 100` → the run is that much faster, terrain keeps streaming in ahead (or says why not), no fall through the ground; `/movespeed 1` is the normal run again.
+- [ ] At x5: swim across a lake, climb a crag (Adventure on), fly in creative mode (T) → each is five times as fast; footsteps and head bob still read as a run.
+- [ ] Online at x10 while the other client watches → your body runs smoothly over there, no rubber-banding; a non-admin typing `/movespeed 5` is refused.
+- [ ] Pad: the chat's "/" picker offers `/movespeed` and its `normal`, `2`, `5`, `10` to an admin; VR: the same through the quick menu's Chat wedge.
+
 ## Server regions ([#1456](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1456))
 
 A server on the real map (`tools/wt.ps1 1456 net`, or `--server --chunks D:/UnitSportSwitzerland/terrain_chunks`): its manifest origin is ~45 km from Riddes, so play there now runs in a region of its own (the server log says `[regions] made region ...`).
