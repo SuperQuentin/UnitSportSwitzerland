@@ -62,6 +62,7 @@
     <Compile Include="..\..\src\Concert\Mvr\GdtfBody.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\MvrCollision.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CollisionReach.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\Regions\RegionPlanner.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\FillDomain.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Styles\ZoomRule.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
