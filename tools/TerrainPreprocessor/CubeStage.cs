@@ -161,7 +161,8 @@ public static class CubeStage
         int n = manifest.Tiles.Count;
         Console.WriteLine($"cube: {n} tiles in {bundles.Count} bundles, {bytes / 1e6:F1} MB ({(n > 0 ? bytes / n / 1024.0 : 0):F0} KB a tile), "
             + $"{roads} road runs, {buildings} buildings; {sw.Elapsed.TotalSeconds:F0} s "
-            + $"(heights {heightSeconds:F0} s = {(n > 0 ? heightSeconds * o.Jobs / n : 0):F2} CPU-s a tile on {o.Jobs} threads, features {featureSeconds:F0} s)");
+            + $"(heights {heightSeconds:F0} s = {(n > 0 ? heightSeconds * o.Jobs / n : 0):F2} CPU-s a tile on {o.Jobs} threads, features {featureSeconds:F0} s), "
+            + $"peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
         if (oldOffsets.Count > 0)
         {
             oldOffsets.Sort();

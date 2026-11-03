@@ -60,20 +60,23 @@ public sealed class CubeFeatures
         var list = new List<Raw>();
         using var cmd = GeoPackageReader.BboxQuery(tlm, "tlm_strassen_strasse", new[] { "objektart", "wanderwege", "kunstbaute", "verkehrsbeschraenkung", "richtungsgetrennt" },
             box.MinE, box.MinN, box.MaxE, box.MaxN);
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-        {
-            string? kind = r.IsDBNull(0) ? null : r.GetString(0);
-            if (RoadFormat.IsNotDrivableSurface(kind) || r.IsDBNull(5)) continue;
-            var cls = RoadFormat.ParseClass(kind);
-            var flags = RoadFormat.ParseFlags(Str(r, 1), Str(r, 2), Str(r, 3), Str(r, 4));
-            foreach (var line in GeoPackageReader.ParseLines((byte[])r.GetValue(5)))
+        var rows = new List<(RoadClass Cls, RoadFlags Flags, GeoPackageReader.Polyline Line)>();
+        using (var r = cmd.ExecuteReader())
+            while (r.Read())
             {
-                var pts = new List<Placed>(line.Count);
-                for (int i = 0; i < line.Count; i++)
-                    if (FromLv95(line.E[i], line.N[i], cur) is { } p) pts.Add(p);
-                if (pts.Count >= 2) list.Add(new Raw(CubeSource.SwissTlm, cls, RoadFormat.WidthFor(cls, flags), 0, false, pts.ToArray(), 0));
+                string? kind = r.IsDBNull(0) ? null : r.GetString(0);
+                if (RoadFormat.IsNotDrivableSurface(kind) || r.IsDBNull(5)) continue;
+                var cls = RoadFormat.ParseClass(kind);
+                var flags = RoadFormat.ParseFlags(Str(r, 1), Str(r, 2), Str(r, 3), Str(r, 4));
+                foreach (var line in GeoPackageReader.ParseLines((byte[])r.GetValue(5))) rows.Add((cls, flags, line));
             }
+        // in kilometre order, not the R-tree's: the heights come from 16 MB tiles held in an LRU
+        foreach (var (cls, flags, line) in rows.OrderBy(x => KmOrder(x.Line.E[0], x.Line.N[0])))
+        {
+            var pts = new List<Placed>(line.Count);
+            for (int i = 0; i < line.Count; i++)
+                if (FromLv95(line.E[i], line.N[i], cur) is { } p) pts.Add(p);
+            if (pts.Count >= 2) list.Add(new Raw(CubeSource.SwissTlm, cls, RoadFormat.WidthFor(cls, flags), 0, false, pts.ToArray(), 0));
         }
         return list;
     }
@@ -102,34 +105,34 @@ public sealed class CubeFeatures
 
         var list = new List<Raw>();
         using var cmd = GeoPackageReader.BboxQuery(tlm, "tlm_bauten_gebaeude_footprint", new[] { "objektart" }, box.MinE, box.MinN, box.MaxE, box.MaxN);
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
+        var rings = new List<GeoPackageReader.Ring>();
+        using (var r = cmd.ExecuteReader())
+            while (r.Read())
+                if (!r.IsDBNull(1))
+                    rings.AddRange(GeoPackageReader.ParsePolygons((byte[])r.GetValue(1)).Take(1)); // the outer ring
+        foreach (var ring in rings.Where(g => g.Count > 0).OrderBy(g => KmOrder(g.Xyz[0], g.Xyz[1])))
         {
-            if (r.IsDBNull(1)) continue;
-            foreach (var ring in GeoPackageReader.ParsePolygons((byte[])r.GetValue(1)))
+            var pts = new List<Placed>(ring.Count);
+            double ce = 0, cn = 0, ground = double.PositiveInfinity;
+            for (int i = 0; i < ring.Count; i++)
             {
-                var pts = new List<Placed>(ring.Count);
-                double ce = 0, cn = 0, ground = double.PositiveInfinity;
-                for (int i = 0; i < ring.Count; i++)
-                {
-                    double e = ring.Xyz[3 * i], n = ring.Xyz[3 * i + 1];
-                    ce += e; cn += n;
-                    if (FromLv95(e, n, cur) is not { } p) continue;
-                    pts.Add(p);
-                    ground = Math.Min(ground, SwissGeodesy.FromEcef(p.P).H);
-                }
-                if (pts.Count < 3) continue;
-                ce /= ring.Count; cn /= ring.Count;
-                double top = double.NaN;
-                int gx = (int)Math.Floor(ce / 100), gy = (int)Math.Floor(cn / 100);
-                for (int dy = -1; dy <= 1; dy++)
-                    for (int dx = -1; dx <= 1; dx++)
-                        if (grid.TryGetValue((gx + dx, gy + dy), out var near))
-                            foreach (var b in near)
-                                if (ce >= b.MinE && ce <= b.MaxE && cn >= b.MinN && cn <= b.MaxN) top = double.IsNaN(top) ? b.Top : Math.Max(top, b.Top);
-                float height = double.IsNaN(top) ? 0 : (float)Math.Max(0, top - ground);
-                list.Add(new Raw(CubeSource.SwissTlm, RoadClass.Road, 0, height, true, pts.ToArray(), 0));
+                double e = ring.Xyz[3 * i], n = ring.Xyz[3 * i + 1];
+                ce += e; cn += n;
+                if (FromLv95(e, n, cur) is not { } p) continue;
+                pts.Add(p);
+                ground = Math.Min(ground, SwissGeodesy.FromEcef(p.P).H);
             }
+            if (pts.Count < 3) continue;
+            ce /= ring.Count; cn /= ring.Count;
+            double top = double.NaN;
+            int gx = (int)Math.Floor(ce / 100), gy = (int)Math.Floor(cn / 100);
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    if (grid.TryGetValue((gx + dx, gy + dy), out var near))
+                        foreach (var b in near)
+                            if (ce >= b.MinE && ce <= b.MaxE && cn >= b.MinN && cn <= b.MaxN) top = double.IsNaN(top) ? b.Top : Math.Max(top, b.Top);
+            float height = double.IsNaN(top) ? 0 : (float)Math.Max(0, top - ground);
+            list.Add(new Raw(CubeSource.SwissTlm, RoadClass.Road, 0, height, true, pts.ToArray(), 0));
         }
         return list;
     }
@@ -141,6 +144,9 @@ public sealed class CubeFeatures
     public List<Raw> French(IEnumerable<BdFeature> roads, IEnumerable<BdFeature> buildings, CubeHeightSource.Cursors cur)
     {
         var list = new List<Raw>();
+        static double First(BdFeature f) => f.LatLonRings.Count > 0 && f.LatLonRings[0].Count > 0 ? Math.Floor(f.LatLonRings[0][0].Lat * 100) * 1000 + f.LatLonRings[0][0].Lon : 0;
+        roads = roads.OrderBy(First);
+        buildings = buildings.OrderBy(First);
         foreach (var f in roads)
         {
             if (FranceRoads.Classify(f) is not { } cls) continue;
@@ -227,6 +233,9 @@ public sealed class CubeFeatures
         }
         return xyz;
     }
+
+    /// <summary>A sort key that walks kilometre tiles row by row.</summary>
+    private static long KmOrder(double e, double n) => (long)Math.Floor(n / 1000) * 100_000 + (long)Math.Floor(e / 1000);
 
     private static string? Str(SqliteDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
 }
