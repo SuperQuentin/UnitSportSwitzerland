@@ -13,6 +13,28 @@ public readonly record struct CubeKey(int Face, int Level, int X, int Y)
     /// <summary>Cells a side at this level.</summary>
     public int Side => 1 << Level;
 
+    /// <summary>The finest lattice any level carries, as log2 of its cells a side: 9 (the level-14 leaves).</summary>
+    public const int MaxBits = 9;
+
+    /// <summary>
+    /// log2 of the lattice cells a side a tile at <paramref name="level"/> carries (#1430 H4, agreed on
+    /// #1455): ~1.2 m at a face centre down to the leaves (23 − level), and at most 512 cells a side
+    /// above them, so the coarse pyramid holds (level 0 is 19.6 km a cell, level 4 1.2 km: ETOPO
+    /// 2022's own spacing). Every coarse lattice point is a leaf lattice point, so edges stay exact.
+    /// The one source every writer and reader takes the lattice from.
+    /// </summary>
+    public static int LatticeBits(int level) => Math.Min(23 - level, MaxBits);
+
+    /// <summary>
+    /// A level's height quantum, metres: a thousandth of its lattice step, 1 cm to 1 m (1 cm at the
+    /// leaves, 1 m at level 4's 1.2 km cells), so a coarse tile does not spend bits on centimetres
+    /// nobody sees. One value a level, so shared edges quantise alike.
+    /// </summary>
+    public static float QuantumFor(int level) => (float)Math.Clamp(1.22 * Math.Pow(2, 23 - level - LatticeBits(level)) / 1000, 0.01, 1.0);
+
+    /// <summary>Where a pyramid level's tiles are bundled: levels 0-3 together under their face (85 tiles), then three levels up (64 a bundle).</summary>
+    public static int PyramidBundleLevel(int level) => Math.Max(0, level - 3);
+
     /// <summary>The cell's west (u) and south (v) edges and its size in face coordinates, exact.</summary>
     public double U0 => CubeSphere.Lattice(Level, X);
 

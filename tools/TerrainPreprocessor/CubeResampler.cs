@@ -29,7 +29,7 @@ public sealed class CubeResampler
     /// <summary>The tile's (2^bits + 1)² ellipsoidal heights, NaN where no source has data; null when it has none at all.</summary>
     public float[]? Heights(CubeKey key, int bits, CubeHeightSource.Cursors cur)
     {
-        int cells = 1 << bits, n = cells + 1, step = CubeGeometry.ControlStep(bits), c = cells / step + 1;
+        int cells = 1 << bits, n = cells + 1, step = CubeGeometry.ControlStep(key.Level, bits), c = cells / step + 1;
         int dems = _src.Dems.Count, per = 6 + 4 * dems;
         int lv = key.Level + bits;
         long gi0 = (long)key.X << bits, gj0 = (long)key.Y << bits;

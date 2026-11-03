@@ -50,6 +50,70 @@ path: nothing in the game reads it yet (G2 switches). Code in `tools/TerrainForm
   (i, j)–(i+1, j+1). `MeshHeightAt` finds the mesh height below a tangent-plane point;
   `CollisionField` samples a regular height field from it.
 
+## Coarse levels: the pyramid (#1430 H4, agreed on #1455)
+
+The globe (H4) and G2's far view are one pyramid in this format, from the leaves up to the faces.
+
+- **Lattice cap**: `CubeKey.LatticeBits(level)` = min(23 − level, 9), the one source of a level's
+  lattice (the tiler's `--cube-bits` default too): the level-14 leaves keep 512 cells, every level
+  above has 512 (level 0: 19.6 km a cell, level 4: 1.2 km, ETOPO 2022's spacing). A coarse lattice
+  point is a leaf lattice point to the bit (`CubePyramidTests`). `--cube-level 13` now defaults to 512
+  cells too (G1 measured it with 1024: pass `--cube-bits 10` to repeat that).
+- **Control points by distance**: `CubeGeometry.ControlStep(level, bits)` keeps the leaves' 32 (a 39 m
+  span) and halves the step until a span is under 100 m, so coarse tiles are rigorous at every vertex
+  (the leaves' step would sag 30 m at level 4, 7.7 km at level 0). The resampler takes the same step.
+- **A coarse height is a function of its lattice point**, never of its tile: an average of the leaves
+  takes the leaf vertices within half a coarse step of the point, the same from either neighbour, or
+  the seams break (`--cube-check`'s shared-edge test catches it; run it on coarse levels too).
+- **Quantum by level**: `CubeKey.QuantumFor(level)`, a thousandth of the lattice step, 1 cm to 1 m
+  (1 cm at the leaves, 1 m from level 4 up), carried in each tile's header (`CubeTile.Quantum`): one
+  value a level, so shared edges quantise alike. At 1 cm the global levels 0-4 were 882 MB, at 1 m 359.
+- **Manifest version 2**: `levels`, one `CubeManifestLevel` each (bits, bundle level, colour size and
+  colour bundle level); a version-1 manifest is its leaf level alone (`LevelsOrLeaf`).
+- **Colour** (`CubeAlbedo`, `CubeAlbedoCodec`, entries `CUBC`): 12 monthly images (or one) per tile,
+  WebP, row-major from the south-west like the heights, pixel centres a half pixel in. Bundled by their
+  own level in `.cuba` files (`CubeBundle.AlbedoMagic` "CUBA", the same index layout as `.cubb`);
+  leaves carry none. Encoded and decoded by Godot's `Image`: the tools have no image library.
+
+### The global levels (`--cube-global`, `World/Globe/GlobeAlbedoBake`)
+
+```
+tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-global \
+  --etopo D:/UnitSportSwitzerland/data/global/etopo2022 --cube-out D:/UnitSportSwitzerland/cube_global \
+  [--cube-levels 0-4] [--cube-check]
+<godot> --headless --path . -- --globealbedo D:/UnitSportSwitzerland/cube_global \
+  [--bmng D:/UnitSportSwitzerland/data/global/bmng] [--months 1-12]
+```
+
+- Heights (`CubeGlobal`, `EtopoGrid`): ETOPO 2022 60″ surface plus its EGM2008 geoid grid, h = H + N,
+  in memory (0.9 GB, loaded in seconds); each lattice point the mean of up to 8 × 8 bilinear samples
+  over its own footprint. Bundles by `CubeKey.PyramidBundleLevel` (levels 0-3 under their face, then
+  three levels up). `--cube-check` keys every edge vertex of a level by its ECEF bits: 4.2 M edge
+  vertices, 0 differ, every face edge included. Levels 0-4: 2,046 tiles, 359 MB, 21 s; levels 0-2
+  (shipped) 34 MB of heights.
+- Colour (`GlobeAlbedoBake`, a Godot tool mode: Godot decodes the 21600 × 10800 JPEGs and encodes
+  WebP): Blue Marble NG topography and bathymetry, a month at a time, each pixel the mean of up to
+  6 × 6 bilinear samples over its footprint; 256² a tile (512² at level 3); 15 MB a month for levels
+  0-4, 25 s a month. Blue Marble draws inland lakes black (Ladoga, Onega): to recolour.
+- Sources on D: (`data/global/`, never in git): `etopo2022/` (public domain, NOAA NCEI) and `bmng/`
+  (credit "NASA Earth Observatory").
+- Levels 5-13 where leaves exist (`--cube-swiss`, `CubeSwiss`), merged into the same region and manifest:
+  ```
+  tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-swiss     --cube-leaves D:/UnitSportSwitzerland/cube_g1/region14 --etopo D:/UnitSportSwitzerland/data/global/etopo2022     --cube-out D:/UnitSportSwitzerland/cube_global --cube-levels 5-13 --jobs 12 --cube-check
+  ```
+  Each level is the tent mean (¼ ½ ¼ each way) of the next finer level's nine lattice points round a
+  vertex, ETOPO's footprint where the nine are not all there; every tile over the leaves and its three
+  siblings (so a parent can always split). Nov 3 2026, below-normal priority, 12 threads: 39 s,
+  1,340 tiles, 136 MB, peak 9.6 GB (the 2,547 leaves held at once); 0 of 2.7 M edge vertices differ.
+  Run the colour bake again after it.
+- **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
+  together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
+  assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
+  export preset's `include_filter` (no Godot resources). The game reads them through `World/Globe/GlobeFiles`
+  (`res://` by Godot's FileAccess: inside a pack .NET's file API sees nothing); the full region on D: wins when it is there. The leaves are G1's local region (825 km² of swissALTI3D
+  0.5 m, all the 0.5 m on D:, plus RGE ALTI samples): the rest of Switzerland's 0.5 m is on the NAS
+  (`france-nas-run`); a `--cube` run over it there gives the rest of the country, then this again.
+
 ## The tiler (`--cube`)
 
 ```

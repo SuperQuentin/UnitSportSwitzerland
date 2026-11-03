@@ -93,7 +93,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
             Position += dir.Normalized() * speed * dt;
             // no higher than the ceiling; the altitude through the frame (in the Space regime Y is not the altitude, #1430 H3)
             double altitude = Core.OriginShifter.Instance?.Origin.AltitudeOf(Position) ?? Position.Y;
-            if (altitude > Core.Curvature.CeilingM) Position -= Vector3.Up * (float)(altitude - Core.Curvature.CeilingM);
+            if (altitude > Core.Curvature.SpectatorCeilingM) Position -= Vector3.Up * (float)(altitude - Core.Curvature.SpectatorCeilingM);
         }
     }
 }

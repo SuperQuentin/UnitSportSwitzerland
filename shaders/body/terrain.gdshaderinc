@@ -40,6 +40,35 @@ vec2 cover_uv(vec2 xz) {
     return vec2(dot(d, cover_axes.xy), dot(d, cover_axes.zw)) / cover_extent;
 }
 
+// The globe from high up (#1430 H4, World/Globe/Globe.cs): the generated fill (no real data under it)
+// gives way to the globe from 50 km, every flat tile from 150 km (world_fill_hide, world_flat_hide,
+// 0..1), dissolved by a dither; with NO_DISCARD (a standalone headset) a vertex past half sinks out of
+// sight instead, as the horizon goes under the real tiles there. The real tiles' mask is one R8 texel
+// a km tile, as cover_uv's.
+global uniform float world_fill_hide;
+global uniform float world_flat_hide;
+global uniform sampler2D world_real_mask : filter_nearest, repeat_disable;
+global uniform vec2 world_real_origin;
+global uniform vec2 world_real_extent;
+global uniform vec4 world_real_axes;
+
+// how far a world XZ point has given way, 0..1
+float flat_hide(vec2 xz) {
+    float hide = world_flat_hide;
+    if (world_fill_hide > 0.0) {
+        vec2 d = xz - world_real_origin;
+        vec2 uv = vec2(dot(d, world_real_axes.xy), dot(d, world_real_axes.zw)) / world_real_extent;
+        bool real = uv == clamp(uv, vec2(0.0), vec2(1.0)) && textureLod(world_real_mask, uv, 0.0).r > 0.5;
+        if (!real) hide = max(hide, world_fill_hide);
+    }
+    return hide;
+}
+
+bool flat_hidden(vec2 xz, vec2 frag) {
+    float hide = flat_hide(xz);
+    return hide > 0.0 && hide >= fract(52.9829189 * fract(dot(frag, vec2(0.06711056, 0.00583715))));
+}
+
 
 #ifdef STYLE_REAL
 // CC0 ground sets (assets/realistic/textures, Styles/StyleKit), picked by land cover
@@ -94,6 +123,11 @@ void vertex() {
         VERTEX.y -= covered * 400.0;
         world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     }
+    // the flat world giving way to the globe: past half, out of sight under it
+    if (flat_hide(world_pos.xz) > 0.5) {
+        VERTEX.y -= 20000.0;
+        world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    }
 #endif
     local_vertex = VERTEX;
     smooth_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
@@ -125,6 +159,9 @@ void fragment() {
         if (uv == clamp(uv, vec2(0.0), vec2(1.0)) && texture(detail_cover, uv).r > 0.5) {
             discard;
         }
+    }
+    if (flat_hidden(world_pos.xz, FRAGCOORD.xy)) {
+        discard;
     }
 #endif
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);

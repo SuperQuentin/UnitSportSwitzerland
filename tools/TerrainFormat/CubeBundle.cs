@@ -8,22 +8,28 @@ namespace UnitSport.Terrain.Format;
 /// §2 "Packing"): the whole Earth's land is ~100 M leaves at level 13, so tiles are never one file
 /// each. A bundle (<c>CUBB</c>, <c>F0_L8_131_127.cubb</c>) holds an index of its tiles (key, offset,
 /// length) and their <see cref="CubeTileCodec"/> bytes back to back; a reader seeks to one tile.
+/// Colour bundles (<c>CUBA</c>, <c>.cuba</c>, #1430 H4) are the same layout holding
+/// <see cref="CubeAlbedoCodec"/> entries instead, bundled by their own level, so a far-view fetch
+/// pulls only colour and leaves carry none.
 /// </summary>
 public static class CubeBundle
 {
     public const uint Magic = 0x42425543; // "CUBB"
+    public const uint AlbedoMagic = 0x41425543; // "CUBA"
     public const ushort Version = 1;
 
     public static string FileName(CubeKey bundle) => bundle.FileStem + ".cubb";
 
-    /// <summary>Writes a bundle atomically (a .tmp beside it, then a rename).</summary>
-    public static void Write(string path, CubeKey bundle, IReadOnlyList<(CubeKey Key, byte[] Bytes)> tiles)
+    public static string AlbedoFileName(CubeKey bundle) => bundle.FileStem + ".cuba";
+
+    /// <summary>Writes a bundle atomically (a .tmp beside it, then a rename): heights (<see cref="Magic"/>) or colour (<see cref="AlbedoMagic"/>).</summary>
+    public static void Write(string path, CubeKey bundle, IReadOnlyList<(CubeKey Key, byte[] Bytes)> tiles, uint magic = Magic)
     {
         string tmp = path + ".tmp";
         using (var fs = File.Create(tmp))
         using (var w = new BinaryWriter(fs))
         {
-            w.Write(Magic);
+            w.Write(magic);
             w.Write(Version);
             w.Write((ushort)0);
             w.Write((byte)bundle.Face);
@@ -52,10 +58,10 @@ public static class CubeBundle
     }
 
     /// <summary>A bundle's index: each tile's byte range in the file.</summary>
-    public static Dictionary<CubeKey, (long Offset, int Length)> ReadIndex(Stream s)
+    public static Dictionary<CubeKey, (long Offset, int Length)> ReadIndex(Stream s, uint magic = Magic)
     {
         var r = new BinaryReader(s);
-        if (r.ReadUInt32() != Magic) throw new InvalidDataException("not a cube bundle (CUBB)");
+        if (r.ReadUInt32() != magic) throw new InvalidDataException($"not a cube bundle ({(magic == Magic ? "CUBB" : "CUBA")})");
         ushort version = r.ReadUInt16();
         if (version != Version) throw new InvalidDataException($"cube bundle version {version}, this reads {Version}");
         r.ReadUInt16();
@@ -92,29 +98,47 @@ public static class CubeBundle
     }
 
     /// <summary>One tile of a bundle, or null when the bundle does not hold it.</summary>
-    public static CubeTile? Read(string path, CubeKey key)
+    public static CubeTile? Read(string path, CubeKey key) =>
+        ReadBytes(path, key) is { } bytes ? CubeTileCodec.Decode(bytes) : null;
+
+    /// <summary>One entry's bytes, or null when the bundle does not hold it.</summary>
+    public static byte[]? ReadBytes(string path, CubeKey key, uint magic = Magic)
     {
         using var fs = File.OpenRead(path);
-        if (!ReadIndex(fs).TryGetValue(key, out var at)) return null;
+        if (!ReadIndex(fs, magic).TryGetValue(key, out var at)) return null;
         fs.Position = at.Offset;
         var bytes = new byte[at.Length];
         fs.ReadExactly(bytes);
-        return CubeTileCodec.Decode(bytes);
+        return bytes;
     }
 }
 
 /// <summary>
 /// A cube region's manifest (<c>cube_manifest.json</c>): the leaf level and grid, the bundle level,
 /// and every tile with its height range, so a reader knows what exists without opening a bundle.
+/// Version 2 (#1430 H4): a pyramid holds several levels, each with its own lattice and bundle level
+/// (<see cref="Levels"/>); <see cref="LeafLevel"/>, <see cref="Bits"/> and <see cref="BundleLevel"/>
+/// stay the finest level's.
 /// </summary>
 public sealed class CubeManifest
 {
     public const string FileName = "cube_manifest.json";
+    public const int CurrentVersion = 2;
 
-    [JsonPropertyName("version")] public int Version { get; set; } = 1;
+    [JsonPropertyName("version")] public int Version { get; set; } = CurrentVersion;
     [JsonPropertyName("leafLevel")] public int LeafLevel { get; set; }
     [JsonPropertyName("bits")] public int Bits { get; set; }
     [JsonPropertyName("bundleLevel")] public int BundleLevel { get; set; }
+
+    /// <summary>Every level the region holds; a version-1 manifest has none, and is its leaf level alone (<see cref="LevelsOrLeaf"/>).</summary>
+    [JsonPropertyName("levels")] public List<CubeManifestLevel> Levels { get; set; } = new();
+
+    /// <summary>The levels, a version-1 manifest's leaf level standing for them.</summary>
+    public IReadOnlyList<CubeManifestLevel> LevelsOrLeaf => Levels.Count > 0 ? Levels
+        : new[] { new CubeManifestLevel { Level = LeafLevel, Bits = Bits, BundleLevel = BundleLevel } };
+
+    /// <summary>The level entry for <paramref name="level"/>, or null.</summary>
+    public CubeManifestLevel? LevelOf(int level) => LevelsOrLeaf.FirstOrDefault(l => l.Level == level);
     [JsonPropertyName("orientation")] public string Orientation { get; set; } =
         FormattableString.Invariant($"face 0 at {CubeSphere.CentreLatDeg}N {CubeSphere.CentreLonDeg}E, twist {CubeSphere.TwistDeg}");
     [JsonPropertyName("sources")] public List<string> Sources { get; set; } = new();
@@ -124,6 +148,18 @@ public sealed class CubeManifest
 
     public static CubeManifest FromJson(string json) => JsonSerializer.Deserialize<CubeManifest>(json)
         ?? throw new InvalidDataException("empty cube manifest");
+}
+
+/// <summary>One level of a pyramid: its lattice, where its tiles are bundled, and whether they carry colour.</summary>
+public sealed class CubeManifestLevel
+{
+    [JsonPropertyName("level")] public int Level { get; set; }
+    [JsonPropertyName("bits")] public int Bits { get; set; }
+    [JsonPropertyName("bundleLevel")] public int BundleLevel { get; set; }
+
+    /// <summary>The colour's side in pixels (<c>.cuba</c> bundles at <see cref="AlbedoBundleLevel"/>), 0 when the level has none.</summary>
+    [JsonPropertyName("albedo")] public int Albedo { get; set; }
+    [JsonPropertyName("albedoBundleLevel")] public int AlbedoBundleLevel { get; set; }
 }
 
 public sealed class CubeManifestTile

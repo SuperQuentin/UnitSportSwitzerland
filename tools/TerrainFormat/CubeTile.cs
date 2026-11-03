@@ -31,6 +31,9 @@ public sealed class CubeTile
     /// <summary>(2^Bits + 1)² ellipsoidal heights, metres; NaN where no source has data.</summary>
     public required float[] Heights { get; init; }
 
+    /// <summary>The height quantum, metres: 1 cm at the leaves, coarser on the pyramid's levels (<see cref="CubeKey.QuantumFor"/>).</summary>
+    public float Quantum { get; init; } = CubeTileCodec.Quantum;
+
     public List<CubeRoad> Roads { get; init; } = new();
 
     public List<CubeBuilding> Buildings { get; init; } = new();
@@ -103,8 +106,8 @@ public static class CubeTileCodec
         foreach (float h in t.Heights)
             if (!float.IsNaN(h)) { min = Math.Min(min, h); max = Math.Max(max, h); }
         if (float.IsPositiveInfinity(min)) min = max = 0;
-        long baseQ = (long)Math.Floor(min / Quantum);
-        byte[] blob = EncodeHeights(t.Heights, n, baseQ);
+        long baseQ = (long)Math.Floor(min / t.Quantum);
+        byte[] blob = EncodeHeights(t.Heights, n, baseQ, t.Quantum);
 
         w.Write(Magic);
         w.Write(Version);
@@ -116,7 +119,7 @@ public static class CubeTileCodec
         w.Write(t.Key.X);
         w.Write(t.Key.Y);
         w.Write(baseQ);
-        w.Write(Quantum);
+        w.Write(t.Quantum);
         w.Write(min);
         w.Write(max);
         w.Write(blob.Length);
@@ -161,7 +164,7 @@ public static class CubeTileCodec
         r.ReadSingle();
         byte[] blob = r.ReadBytes(r.ReadInt32());
         int n = (1 << bits) + 1;
-        var tile = new CubeTile { Key = key, Bits = bits, Heights = DecodeHeights(blob, n, baseQ, quantum) };
+        var tile = new CubeTile { Key = key, Bits = bits, Quantum = quantum, Heights = DecodeHeights(blob, n, baseQ, quantum) };
 
         int roads = r.ReadInt32();
         for (int k = 0; k < roads; k++)
@@ -194,13 +197,13 @@ public static class CubeTileCodec
 
     public const int HeaderBytes = 44;
 
-    public static byte[] EncodeHeights(float[] h, int n, long baseQ)
+    public static byte[] EncodeHeights(float[] h, int n, long baseQ, float quantum = Quantum)
     {
         var raw = new MemoryStream(h.Length * 2);
         Span<byte> buf = stackalloc byte[10];
         var q = new long[h.Length];
         for (int k = 0; k < h.Length; k++)
-            q[k] = float.IsNaN(h[k]) ? long.MinValue : (long)Math.Round(h[k] / (double)Quantum) - baseQ;
+            q[k] = float.IsNaN(h[k]) ? long.MinValue : (long)Math.Round(h[k] / (double)quantum) - baseQ;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {

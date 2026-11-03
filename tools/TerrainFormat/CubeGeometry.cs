@@ -19,8 +19,22 @@ namespace UnitSport.Terrain.Format;
 /// </summary>
 public static class CubeGeometry
 {
-    /// <summary>Control points every this many vertices: 17 × 17 a tile at 1024 cells (the plan's figure).</summary>
-    public static int ControlStep(int bits) => Math.Max(1, (1 << bits) / 16);
+    /// <summary>
+    /// Control points every this many vertices: 17 × 17 a tile at the leaves (the plan's figure), and
+    /// never a span over ~100 m, where the ellipsoid's sag between two control points stays under a
+    /// tenth of a millimetre. A coarse tile (#1430 H4) spans kilometres a cell, so there every vertex
+    /// is rigorous: with the leaves' 32 the span would be 39 km at level 4 (a 30 m sag).
+    /// </summary>
+    public static int ControlStep(int level, int bits)
+    {
+        // a lattice step at level + bits is ~1.2 m · 2^(23 − level − bits) at a face centre
+        int shift = 23 - level - bits;
+        if (shift < 0) shift = 0;
+        double spacing = 1.22 * Math.Pow(2, shift);
+        int step = Math.Max(1, (1 << bits) / 16);
+        while (step > 1 && step * spacing > 100) step >>= 1;
+        return step;
+    }
 
     /// <summary>The rigorous position of vertex (i, j) at height <paramref name="h"/> in the tile's anchor frame (x east, y up, z south).</summary>
     public static (double X, double Y, double Z) Exact(CubeKey key, int bits, int i, int j, double h) =>
@@ -32,7 +46,7 @@ public static class CubeGeometry
     /// </summary>
     public static float[] Vertices(CubeKey key, int bits, float[] heights, int step = 0)
     {
-        if (step <= 0) step = ControlStep(bits);
+        if (step <= 0) step = ControlStep(key.Level, bits);
         int cells = 1 << bits, n = cells + 1, c = cells / step + 1;
         var anchor = key.Anchor;
         // ground point and normal, local, at the control grid
