@@ -33,12 +33,12 @@ public partial class FarmSales : Node
     public static double Now => ClockOverride?.Invoke() ?? World.WorldClock.EnvNow;
 
     /// <summary>The month prices follow: the one the fields show (the server's, once it said), else <c>--farmmonth</c> / today.</summary>
-    public static int Month => FarmField.Instance?.Month ?? FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
+    public static int Month => FarmField.Instance?.Month ?? FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
 
     public static long Week => FarmCalendar.Week(Now);
 
     /// <summary>Where contracts and stands are saved: <c>--selldir &lt;dir&gt;</c> (checks), else <c>user://farm</c>.</summary>
-    public static string StoreDir => CmdArgs.Value("--selldir") is { } d ? ProjectSettings.GlobalizePath(d.StartsWith("res://") || d.StartsWith("user://") ? d : "res://" + d) : ProjectSettings.GlobalizePath("user://farm");
+    public static string StoreDir => CmdArgs.Value("--selldir") is { } d ? ProjectSettings.GlobalizePath(d.StartsWith("res://") || d.StartsWith("user://") ? d : "res://" + d) : ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://farm"));
 
     private bool _server;
     private WorldOrigin _origin = null!;
@@ -424,7 +424,13 @@ public partial class FarmSales : Node
     }
 
     /// <summary>The outdoor prompt for a stand or a buyer in reach (refreshed a few times a second, built only when it changes).</summary>
-    public static string? PromptFor(FootPlayer p) => FarmStands.Instance?.PromptFor(p) ?? Instance?.BuyerPrompt(p);
+    public static string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The outdoor prompt for a stand or a buyer in reach, and what to outline (#1286): the stand, or the buyer's office.</summary>
+    public static Interaction? InteractionFor(FootPlayer p) => FarmStands.Instance?.InteractionFor(p) ?? Instance?.BuyerInteraction(p);
+
+    private Interaction? BuyerInteraction(FootPlayer p) =>
+        BuyerHere(p) is { } b && BuyerPrompt(p) is { } text ? new(text, Outline.Of(FarmBuyerYards.Instance?.YardOf(b.Key))) : null;
 
     private (FarmBuyer? Buyer, ItemId Item, int Count, InputDevice Device) _buyerKey;
     private string? _buyerText;

@@ -32,7 +32,7 @@ const vec3 FACE_STUBBLE = vec3(0.1065, 0.0742, 0.0638); // 0.36 0.30 0.28
 const vec3 FACE_HEART = vec3(0.7913, 0.0185, 0.0513);   // 0.90 0.15 0.25
 
 // per EyeShape: half width, half height, tilt (+ the outer corner down), the upper lid's rest (0 open)
-const vec4 FACE_EYES[8] = {
+const vec4 FACE_EYES[9] = {
     vec4(1.45, 1.75, 0.0, 0.0),   // round
     vec4(1.85, 1.20, -0.10, 0.12),// almond
     vec4(1.70, 1.40, 0.30, 0.30), // droopy
@@ -40,7 +40,8 @@ const vec4 FACE_EYES[8] = {
     vec4(0.95, 0.95, 0.0, 0.0),   // button: a dark dot
     vec4(1.55, 2.30, 0.0, 0.0),   // anime
     vec4(1.70, 1.45, 0.05, 0.50), // sleepy
-    vec4(1.85, 1.95, 0.0, 0.0)    // wide
+    vec4(1.85, 1.95, 0.0, 0.0),   // wide
+    vec4(2.40, 1.70, -0.38, 0.0)  // alien (#880): a big dark almond slanting up to the temples
 };
 // per MouthShape: rest smile, rest jaw, width factor, teeth
 const vec4 FACE_MOUTHS[8] = {
@@ -98,7 +99,7 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
     // whole numbers up to 2^24: round, never + 0.5 (at 8 million a float steps by 1, so x + 0.5 rounds up a whole one)
     int lo = int(round(code.x));
     int hi = int(round(code.y));
-    int shape = lo & 7;
+    int shape = (lo & 7) | (((hi >> 16) & 1) << 3);   // the 4th bit (#880: alien eyes) rides the high half
     float size = 1.0 + 0.14 * float((lo >> 3) & 3);   // #728: a size up from 0.85 + 0.12 (bigger eyes)
     float spacing = 3.3 + 0.35 * float((lo >> 5) & 3);
     float eye_y = 6.9 + 0.45 * float((lo >> 7) & 3);
@@ -128,6 +129,13 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
     float lx = 8.0 - abs(p.x - 8.0);
     vec2 ec = vec2(8.0 - spacing, eye_y);
     vec4 sh = FACE_EYES[shape];
+    if (shape == 8) {
+        // an alien has no brows (#880): its eyes carry the mood, wider in surprise, the outer
+        // corners drooping when sad, slanting harder when cross
+        float b = face_mouth.w;
+        sh.xy *= vec2(1.0 + 0.06 * max(b, 0.0), 1.0 + 0.2 * max(b, 0.0));
+        sh.z += 0.45 * max(-face_mouth.x, 0.0) - 0.3 * max(-b, 0.0);
+    }
     float rx = sh.x * size;
     float ry = sh.y * size;
     vec2 d = vec2(lx - ec.x, p.y - ec.y);
@@ -185,6 +193,31 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
                     return vec4(1.0);
                 }
                 return vec4(FACE_LINE, 1.0);
+            } else if (shape == 8) {
+                // an alien's eye (#880): all dark, a big shine and a small one lit from the viewer's
+                // upper left, moving a little with the gaze, and a crescent of the eye colour below
+                float side = right ? -1.0 : 1.0;
+                // a smile pushes the lower lid up into a happy arch
+                float happy = clamp(face_mouth.x, 0.0, 1.0);
+                float f = 1.0 - clamp((e.x * e.x) / (rx * rx), 0.0, 1.0);
+                float under = ry * (1.0 - 0.75 * happy) - happy * 0.45 * ry * f;
+                if (e.y > under + half_px) {
+                    return vec4(0.0);
+                }
+                if (happy > 0.05 && e.y > under - half_px) {
+                    return vec4(FACE_LINE, 1.0);
+                }
+                vec2 g = vec2(side * gaze.x * 0.16 * rx, gaze.y * 0.14 * ry);
+                if (shine && length(e - (vec2(-0.30 * rx * side, -0.28 * ry) + g)) <= max(px * 1.1, ry * 0.32)) {
+                    return vec4(1.0);
+                }
+                if (shine && length(e - (vec2(0.34 * rx * side, 0.30 * ry) + g)) <= max(px * 0.7, ry * 0.15)) {
+                    return vec4(1.0);
+                }
+                if (r > 0.66 && e.y > ry * 0.18) {
+                    return vec4(mix(FACE_LINE, iris_col, 0.6), 1.0);
+                }
+                return vec4(mix(FACE_LINE, iris_col, 0.1), 1.0);
             } else {
                 float ir = min(rx, ry * 0.8) * iris_k;
                 float side = right ? -1.0 : 1.0;   // +gaze.x is +lx for the left eye, -lx for the right

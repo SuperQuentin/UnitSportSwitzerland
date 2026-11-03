@@ -30,9 +30,33 @@ public static class DoorIndex
 
         /// <summary>The shop behind it, if any (a farm co-op is found by it, #494).</summary>
         public Loot.ShopType Shop { get; init; }
+
+        /// <summary>Storeys above its building's ground floor it opens onto (<see cref="DoorSpot.Level"/>, #827): for probes and a bot's plans; reach reads <see cref="World"/>.</summary>
+        public int Level { get; init; }
     }
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
+
+    /// <summary>
+    /// Each tile's doors' extent in the ground plane (world X/Z), so a search within a reach skips the
+    /// tiles it cannot touch: a city's thousands of doors were measured every frame, on a Quest's CPU (#1112).
+    /// </summary>
+    private static readonly Dictionary<TileId, Rect2> Bounds = new();
+
+    /// <summary>A door can be this much nearer than its centre: half a wide door plus the leaves' reach out in front.</summary>
+    private const float BoundsSlack = 8f;
+
+    private static Rect2 BoundsOf(Entry[] doors)
+    {
+        if (doors.Length == 0) return new Rect2();
+        var r = new Rect2(doors[0].World.X, doors[0].World.Z, 0, 0);
+        foreach (var e in doors) r = r.Expand(new Vector2(e.World.X, e.World.Z));
+        return r;
+    }
+
+    /// <summary>Whether a tile's doors may be within <paramref name="reach"/> of <paramref name="at"/>.</summary>
+    private static bool MayReach(TileId id, Vector3 at, float reach) =>
+        !Bounds.TryGetValue(id, out var r) || r.Grow(reach + BoundsSlack).HasPoint(new Vector2(at.X, at.Z));
 
     public static void SetTile(TileId id, Vector3 tileOrigin, DoorSpot[] doors)
     {
@@ -41,19 +65,27 @@ public static class DoorIndex
             if (d.Width > 0)
                 list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
                 {
-                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop,
+                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop, Level = d.Level,
                 });
         Tiles[id] = list.ToArray();
+        Bounds[id] = BoundsOf(Tiles[id]);
     }
 
-    public static void ClearTile(TileId id) => Tiles.Remove(id);
+    public static void ClearTile(TileId id)
+    {
+        Tiles.Remove(id);
+        Bounds.Remove(id);
+    }
 
     /// <summary>The origin moved (#185): every door is now somewhere else in world space.</summary>
     public static void Shift(Core.OriginShift shift)
     {
-        foreach (var doors in Tiles.Values)
+        foreach (var (id, doors) in Tiles)
+        {
             for (int i = 0; i < doors.Length; i++)
                 doors[i] = doors[i] with { World = shift.Point(doors[i].World), Outward = shift.Direction(doors[i].Outward) };
+            Bounds[id] = BoundsOf(doors);
+        }
     }
 
     /// <summary>A given door, if its tile is drawn and the building has it.</summary>
@@ -65,7 +97,11 @@ public static class DoorIndex
         return null;
     }
 
-    public static void Clear() => Tiles.Clear();
+    public static void Clear()
+    {
+        Tiles.Clear();
+        Bounds.Clear();
+    }
 
     /// <summary>Every door currently drawn (for probes).</summary>
     public static IEnumerable<Entry> All() => Tiles.Values.SelectMany(t => t);
@@ -136,7 +172,14 @@ public static class DoorIndex
         All().Where(e => kind == null || e.Kind == kind)
             .Select(e =>
             {
-                var (distance, rejected) = Measure(e, at);
+                var (distance, rule) = Measure(e, at);
+                // the text is made here, for a probe's log, not for every door of every search
+                string? rejected = rule switch
+                {
+                    Rule.Storey => $"{Mathf.Abs((at - e.World).Y):F0} m {((at - e.World).Y > 0 ? "below" : "above")} us",
+                    Rule.Behind => "behind its wall",
+                    _ => null,
+                };
                 return (Door: e, Distance: distance, Rejected: rejected);
             })
             .OrderBy(c => c.Distance);
@@ -151,6 +194,23 @@ public static class DoorIndex
     public static Entry? NearestEntrance(Vector3 at, float reach, Func<Entry, float>? deeper = null) =>
         Nearest(at, reach, _ => true, deeper);
 
+    /// <summary>As <see cref="NearestEntrance(Vector3, float, Func{Entry, float}?)"/>, among the doors <paramref name="wanted"/> keeps (a VR hand: the doors whose opening it is in).</summary>
+    public static Entry? NearestEntrance(Vector3 at, float reach, Func<Entry, float>? deeper, Func<Entry, bool> wanted) =>
+        Nearest(at, reach, wanted, deeper);
+
+    /// <summary>
+    /// How far a door's sill may be from the feet for the door to be at the player's level (#827):
+    /// half a storey. Of the doors in reach, one at the player's level is taken before one that is
+    /// not (<see cref="Nearest(Vector3, float, Func{Entry, bool}, Func{Entry, float})"/>,
+    /// <see cref="FacedEntrance"/>), so a door stacked over another (a site office's upper container
+    /// over the one below) is told from it by the floor the player stands on, not by
+    /// <see cref="MaxRise"/> happening to be shorter than the storey.
+    /// </summary>
+    public const float LevelBand = 1.3f;
+
+    /// <summary>Whether a door's sill is at the level of a player whose feet are at <paramref name="feet"/> (<see cref="LevelBand"/>).</summary>
+    public static bool AtLevel(Entry e, Vector3 feet) => Mathf.Abs(feet.Y - e.World.Y) <= LevelBand;
+
     /// <summary>
     /// As <see cref="NearestEntrance"/>, but the nearest door whose facade the player faces
     /// (<paramref name="look"/>, flattened) wins over a nearer one at their back: two doors facing
@@ -159,18 +219,26 @@ public static class DoorIndex
     /// </summary>
     public static Entry? FacedEntrance(Vector3 at, Vector3 look, float reach, Func<Entry, float>? deeper = null)
     {
-        Entry? faced = null, any = null;
-        float facedD = reach, anyD = reach;
-        foreach (var doors in Tiles.Values)
+        // faced before not, and within each, at the player's level before not (#827)
+        Entry? facedLevel = null, faced = null, level = null, any = null;
+        float facedLevelD = reach, facedD = reach, levelD = reach, anyD = reach;
+        foreach (var (id, doors) in Tiles)
+        {
+            if (!MayReach(id, at, reach)) continue;
             foreach (var e in doors)
             {
                 var (d, rejected) = Measure(e, at, deeper);
-                if (rejected != null) continue;
-                if (d < anyD) { anyD = d; any = e; }
+                if (rejected != Rule.None) continue;
+                bool atLevel = AtLevel(e, at);
                 // facing into it: the look against the door's outward normal
-                if (d < facedD && look.X * e.Outward.X + look.Z * e.Outward.Z < 0f) { facedD = d; faced = e; }
+                bool isFaced = look.X * e.Outward.X + look.Z * e.Outward.Z < 0f;
+                if (d < anyD) { anyD = d; any = e; }
+                if (atLevel && d < levelD) { levelD = d; level = e; }
+                if (isFaced && d < facedD) { facedD = d; faced = e; }
+                if (isFaced && atLevel && d < facedLevelD) { facedLevelD = d; facedLevel = e; }
             }
-        return faced ?? any;
+        }
+        return facedLevel ?? faced ?? level ?? any;
     }
 
     /// <summary>
@@ -201,31 +269,44 @@ public static class DoorIndex
 
     private static Entry? Nearest(Vector3 at, float reach, Func<Entry, bool> wanted, Func<Entry, float>? deeper = null)
     {
-        Entry? best = null;
-        float bestD = reach;
-        foreach (var doors in Tiles.Values)
+        // a door at the player's level before one that is not (#827), the nearest of each
+        Entry? best = null, off = null;
+        float bestD = reach, offD = reach;
+        foreach (var (id, doors) in Tiles)
+        {
+            if (!MayReach(id, at, reach)) continue;
             foreach (var e in doors)
             {
                 if (!wanted(e)) continue;
                 var (d, rejected) = Measure(e, at, deeper);
-                if (rejected != null || d >= bestD) continue;
-                bestD = d;
-                best = e;
+                if (rejected != Rule.None) continue;
+                if (AtLevel(e, at))
+                {
+                    if (d >= bestD) continue;
+                    bestD = d;
+                    best = e;
+                }
+                else if (d < offD)
+                {
+                    offD = d;
+                    off = e;
+                }
             }
-        return best;
+        }
+        return best ?? off;
     }
 
     /// <summary>A door more than this far above or below the player is a different storey's.</summary>
-    private const float MaxRise = 2.5f;
+    public const float MaxRise = 2.5f;
 
     /// <summary>
     /// How far <paramref name="at"/> is from a door's opening, and what rules the door out from
-    /// there: it is a storey away, or the player stands behind its wall. A null reason means the
+    /// there: it is a storey away, or the player stands behind its wall. <see cref="Rule.None"/> means the
     /// door is usable and only the caller's reach can still rule it out. Shared by
     /// <see cref="Nearest(Vector3, float, Func{Entry, bool}, Func{Entry, float})"/> and
     /// <see cref="Candidates"/>, so a probe explains a miss by the rule that caused it.
     /// </summary>
-    private static (float Distance, string? Rejected) Measure(Entry e, Vector3 at, Func<Entry, float>? deeper = null)
+    private static (float Distance, Rule Rejected) Measure(Entry e, Vector3 at, Func<Entry, float>? deeper = null)
     {
         var rel = at - e.World;
         var t = new Vector3(-e.Outward.Z, 0, e.Outward.X);
@@ -234,8 +315,11 @@ public static class DoorIndex
         float depth = Mathf.Max(0, outward - (deeper?.Invoke(e) ?? 0f));
         float d = Mathf.Sqrt(along * along + depth * depth);
         // rel is the player relative to the door, so a positive Y means the door is the lower one
-        if (Mathf.Abs(rel.Y) > MaxRise) return (d, $"{Mathf.Abs(rel.Y):F0} m {(rel.Y > 0 ? "below" : "above")} us");
-        if (outward < -0.3f) return (d, "behind its wall");
-        return (d, null);
+        if (Mathf.Abs(rel.Y) > MaxRise) return (d, Rule.Storey);
+        if (outward < -0.3f) return (d, Rule.Behind);
+        return (d, Rule.None);
     }
+
+    /// <summary>What rules a door out in <see cref="Measure"/>: a code, so the hot searches build no text.</summary>
+    private enum Rule { None, Storey, Behind }
 }

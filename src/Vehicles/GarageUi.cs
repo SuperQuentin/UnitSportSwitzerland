@@ -147,7 +147,7 @@ public partial class GarageUi : CanvasLayer
         _hint.Text = (InputHints.Pad ? InputHints.Format("Free. {look_right}: walk round the car. {ui_cancel} / {tune}: done.")
                 : InputHints.Format("Free. Right-drag: walk round the car. {menu} / {tune}: done."))
             + " The parts stay on this car; a new car comes stock.";
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Refresh();
         ShowSlot(TuneSlot.Tyres);
@@ -161,7 +161,7 @@ public partial class GarageUi : CanvasLayer
         if (_player != null && IsInstanceValid(_player)) _player.ShowroomYaw = null;
         _player = null;
         UiFocus.Set(this, false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        MouseCapture.Capture();
     }
 
     private void Revert() => Set(_atOpen);

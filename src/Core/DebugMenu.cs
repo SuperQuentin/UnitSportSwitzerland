@@ -38,6 +38,7 @@ public partial class DebugMenu : CanvasLayer
     private readonly Action<double> _askSpeed;
     private DebugOverlay _overlay = null!;
     private ZFightOverlay _zfight = null!;
+    private LanePlanDebug _lanes = null!;
 
     private Control _panel = null!;
     private Label _readout = null!;
@@ -60,6 +61,7 @@ public partial class DebugMenu : CanvasLayer
     internal OptionButton ViewPicker => _viewPicker;
     internal DebugViewMode View => _view;
     internal DebugOverlay Overlay => _overlay;
+    internal LanePlanDebug Lanes => _lanes;
 
     public DebugMenu(ChunkManager chunks, WorldOrigin origin, Func<Node3D?> nearTrees, Action<string> say,
         Action<double>? askSpeed = null)
@@ -83,6 +85,8 @@ public partial class DebugMenu : CanvasLayer
         GetParent().CallDeferred(Node.MethodName.AddChild, _overlay);
         _zfight = new ZFightOverlay(_origin);
         GetParent().CallDeferred(Node.MethodName.AddChild, _zfight);
+        _lanes = new LanePlanDebug(_chunks, _origin);
+        GetParent().CallDeferred(Node.MethodName.AddChild, _lanes);
 
         var panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
         panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.78f, 10, 10));
@@ -130,6 +134,10 @@ public partial class DebugMenu : CanvasLayer
             $"Faces that fight for the depth buffer within {ZFightOverlay.Radius:0} m of the camera, in magenta through\n"
             + "everything: same-facing faces under 8 mm apart that overlap and can be seen (#788).\n"
             + "Rescanned as the camera moves; the places are in the log. Flicker shot below catches the rest.");
+        Switch(overlays, "lanes", "Lane plan", false, on => _lanes.On = on,
+            "The junction planner's cross-sections within 650 m, seen from above (#1181): every street, transition and core\n"
+            + "as its strips coloured by kind (legend top right), the arriving lanes' moves as arrows, and at each\n"
+            + "approach's mouth its strips left to right as the arriving driver sees them, under its LANE record.");
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Terrain"));
@@ -141,6 +149,8 @@ public partial class DebugMenu : CanvasLayer
         LayerSwitch(terrain, "water", "Water", TileLayers.Water);
         Switch(terrain, "horizon", "Far horizon", true, on => { _hideHorizon = !on; ApplyHidden(); },
             "The decimated ring of the whole country beyond the streamed tiles.");
+        Switch(terrain, "curvature", "Earth curvature", Curvature.Drawn, on => Curvature.Drawn = on,
+            "The ground drops away with distance as on the real Earth (246 m at 60 km). Off: the flat world, as before #187.");
         Switch(terrain, "real", "Real tiles", true, on => { _hideReal = !on; ApplyHidden(); },
             "Tiles built from swisstopo data.");
         Switch(terrain, "generated", "Generated tiles", true, on => { _hideGenerated = !on; ApplyHidden(); },
@@ -169,6 +179,9 @@ public partial class DebugMenu : CanvasLayer
                 GameSettings.Current.PerfOverlay = (PerfOverlayMode)i;
                 GameSettings.Current.Commit();
             });
+
+        AddTrafficSection(rows);
+        AddDespawnSection(rows);
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Streaming"));
@@ -353,6 +366,7 @@ public partial class DebugMenu : CanvasLayer
             if (key != "fill") box.SetPressedNoSignal(_defaults[key]);
         _overlay.Tiles = _overlay.Labels = _overlay.WorldOrigin = false;
         _zfight.On = false;
+        _lanes.On = false;
         _hiddenLayers = TileLayers.None;
         _hideHorizon = _hideReal = _hideGenerated = false;
         ApplyHidden();
@@ -362,11 +376,75 @@ public partial class DebugMenu : CanvasLayer
         if (_timeScaled) _askSpeed(SimClock.Normal);
         _timeScaled = false;
         _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
+        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = traffic.ShowMovers = traffic.ShowTrails = traffic.ShowModeGraphs = false;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // traffic endpoints (#971)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Traffic (#971): each car's way, the lit paths and the endpoints drawn, and the traffic tool, an admin's held item that places,
+    /// edits and removes generators and destinations (<see cref="Items.TrafficTool"/>: the user, placing them from here was
+    /// impractical); all of them removed at once. They go to the server, which shares them with everyone's traffic.
+    /// </summary>
+    private void AddTrafficSection(VBoxContainer rows)
+    {
+        rows.AddChild(UiKit.Spacer(6));
+        rows.AddChild(UiKit.Section("Traffic"));
+        var grid = Grid(rows);
+        Switch(grid, "paths", "Vehicle paths", false, on => { if (World.Traffic.Current is { } t) t.ShowPaths = on; },
+            "Each car's way ahead: a generated car's way to its destination in that destination's colour,\n"
+            + "any other's next legs in grey.");
+        Switch(grid, "lights", "Green paths", false, on => { if (World.Traffic.Current is { } t) t.ShowLights = on; },
+            "The paths through lit junctions that may go now: green on green (dashed where they must give way),\n"
+            + "yellow on amber, none on red; the riders' paths thin and the crossings wide, by their own lights (#971).");
+        Switch(grid, "movers", "Timing movers", false, on => { if (World.Traffic.Current is { } t) t.ShowMovers = on; },
+            "At each phase change of the lights, the movers its timing was worked out for: the ending group's last one\n"
+            + "(red, past its line as its amber ends) and the starting group's first (dark green, from its line at green),\n"
+            + "meeting at the ringed conflict area just as the last one has left it (#979).");
+        Switch(grid, "trails", "Timing trails", false, on => { if (World.Traffic.Current is { } t) t.ShowTrails = on; },
+            "The timing movers' trails alone, in their lights' colours: the starting stream green from its line to its first one,\n"
+            + "the ending one yellow on amber, then red, ahead of its last one; they never overlap (#979).");
+        Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
+            "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
+            + "a destination's ring in the colour its cars' ways are drawn in. Always shown with the traffic tool in hand.");
+        Switch(grid, "modegraphs", "Mode graphs", false, on => { if (World.Traffic.Current is { } t) t.ShowModeGraphs = on; },
+            "The walkers' (orange), riders' (green) and trams' (blue) lane graphs within 300 m (#1060);\n"
+            + "with Vehicle paths, each walker's, rider's and tram's way ahead in the same colours.");
+        var buttons = UiKit.HBox(6);
+        var tool = ActionButton("Traffic tool", () => Items.ItemController.Instance?.RunCommand?.Invoke("/spawn TrafficTool 1"));
+        tool.TooltipText = "Into your hands: Use on a road places a generator (its settings open), on a placed one opens it.\n"
+            + "Held, every generator and destination shows.";
+        buttons.AddChild(tool);
+        buttons.AddChild(ActionButton("Remove all endpoints", () => World.TrafficGenerators.Instance?.RequestRemove(0)));
+        rows.AddChild(buttons);
+    }
+
+    /// <summary>
+    /// Despawn (#1200): parked vehicles and dropped items taken out of the world, round the camera or
+    /// everywhere. Only sends <c>/despawn</c>, so online the server checks the admin and answers in the chat.
+    /// </summary>
+    private void AddDespawnSection(VBoxContainer rows)
+    {
+        rows.AddChild(UiKit.Spacer(6));
+        rows.AddChild(UiKit.Section("Despawn"));
+        var buttons = UiKit.HBox(6);
+        void Button(string label, string command, string tip)
+        {
+            var button = ActionButton(label, () => Items.ItemController.Instance?.RunCommand?.Invoke(command));
+            button.TooltipText = $"{tip}\n{command}";
+            buttons.AddChild(button);
+        }
+        Button("Vehicles near", "/despawn vehicles", "Every parked vehicle within 30 m.");
+        Button("Items near", "/despawn items", "Every dropped item within 30 m.");
+        Button("Everything everywhere", "/despawn all everywhere", "Every parked vehicle and dropped item in the world.");
+        rows.AddChild(buttons);
     }
 
     /// <summary>
     /// <c>--debugview</c>: a comma list of tools to turn on at boot. <c>open</c> shows the panel;
-    /// <c>tiles</c>, <c>labels</c>, <c>origin</c>, <c>zfight</c>, <c>freeze</c> switch those on; <c>no&lt;layer&gt;</c>
+    /// <c>tiles</c>, <c>labels</c>, <c>origin</c>, <c>zfight</c>, <c>lanes</c>, <c>freeze</c> switch those on; <c>no&lt;layer&gt;</c>
     /// hides one (<c>noground</c>, <c>noroads</c>, <c>nobuildings</c>, <c>notrees</c>, <c>nowater</c>,
     /// <c>nohorizon</c>, <c>noreal</c>, <c>nogenerated</c>); <c>wireframe</c>, <c>clay</c>,
     /// <c>colours</c>, <c>overdraw</c> pick the view; <c>flicker</c> takes a flicker shot after
@@ -417,8 +495,8 @@ public partial class DebugMenu : CanvasLayer
         // the two settings here may have changed in the Settings screen since
         _toggles["fill"].SetPressedNoSignal(GameSettings.Current.GeneratedFill);
         _perfPicker.Selected = (int)GameSettings.Current.PerfOverlay;
-        _mouseBefore = Input.MouseMode;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        _mouseBefore = MouseCapture.Mode;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     public void Close()

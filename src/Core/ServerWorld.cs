@@ -21,6 +21,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
     private Interiors.ChurchRadios? _churchRadios;
+    private Interiors.CinemaBooths? _cinemaBooths;
     private Items.DroppedItems? _dropped;
     private EntityInterest? _entityInterest;
     private PlayerRegistry? _registry;
@@ -29,24 +30,46 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private World.TrafficGenerators? _trafficEndpoints;
     private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
+    private Adventure.AdventureService? _adventure;
     private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
     private Terrain.Construction.CraneService? _cranes;
+    private Concert.ConcertService? _concerts;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
+    private World.Snow.SnowService? _snow;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
+    private Adventure.Versteckis.VersteckisManager? _vs;
     private Combat.FightManager? _fight;
+    private Combat.SchwingManager? _schwing;
+    private Combat.AuraManager? _aura;
     private InviteService? _invites;
     private Parties? _parties;
     private BattleRoyale.BrCrates? _brCrates;
     private Handshake? _handshake;
+    private Net.Accounts.AccountGate? _accountGate;
 
     public override async void _Ready()
     {
         if (ServerStats.Requested) AddChild(new ServerStats { Name = "ServerStats" });
+        // --test-world (#999, a game hosted from the menu on a test world): its tiles, course and saves
+        if ((WorldChoice.Active = WorldChoice.FromArgs()) is { } testWorld)
+        {
+            if (await System.Threading.Tasks.Task.Run(testWorld.Prepare) is { } why)
+            {
+                GD.PushError($"[server] {why}");
+                GetTree().Quit(1);
+                return;
+            }
+            GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
+            if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
+        }
+        // the account step of a join (#1123): checked before anything is loaded, so a typo never serves a world
+        if (ParseAccounts() is not { } accounts) { GetTree().Quit(1); return; }
         string chunkDir = TerrainPaths.FindChunkDir();
         // a test course built in code instead of the map (#221, Core/Systems): the same as the clients'
         IChunkSource local = Systems.FixtureCourse is { } course
@@ -93,8 +116,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
             enabled: generatedWorld || !GeneratedOff(args)) { Log = s => GD.Print(s) };
         // The server holds 5 KB coarse grids (ChunkManager, BuildMeshes off), plus whatever an
         // interior plan reads lazily: 32 MB is thousands of tiles, and a fixed ceiling.
-        var source = new CachingChunkSource(fallback ?? local, 32L * 1024 * 1024);
-        if (fallback != null) fallback.Neighbours = source;
+        const long cacheBytes = 32L * 1024 * 1024;
+        var source = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(local, cacheBytes);
+        // the region's points of interest (#1224): what the server serves as AssetKind.Pois is the same file
+        Adventure.Places.PoiCatalogueHost.Load(source);
 
         // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core
         // allows. 60 matches the physics tick and every client's send rate is well under it.
@@ -102,7 +127,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // Collision only around server-run bots (#837), within a few hundred metres of each: players'
         // proxies are plain anchors and keep coarse, collision-less tiles (net/lean-dedicated-server).
-        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true };
+        // The fill follows the players (#937): each client fills round its own start, which can be anywhere
+        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
+            FillFollowsAnchors = true };
         _chunks.Initialize(source, origin, manifest, null);
         // the bots' collision pieces (#837) commit within 2 ms a frame, not a client's 4: a server frame
         // carries every player's relays, and the build of a spread field landing at once is many pieces
@@ -146,6 +173,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _radios.PlayerPositions = _vehicles.PlayerPositions;
         // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
         _dropped = Items.DroppedItems.Create(this, origin);
+        // the UFOs' tractor beams (#861): what each peer simulates, moved when a beam holds it
+        Player.TractorBeams.Create(this);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         // which peer has which of those (#689): only what it could see from where it stands; before
         // anything is spawned, every entity's synchronizers ask it
@@ -154,9 +183,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Audio.Cd.CdUpload.Create(this, server: true);   // a player's own file, scanned on the server (#736)
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
+        _cinemaBooths = Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
+        Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball games: the score and the turn (#1325)
+        Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
+        Interiors.BowlingLanes.Create(this);   // every bowling centre's games (#1323)
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
+        // the fun world's sky is held at dusk (#1396): its clock stopped there
+        if (WorldChoice.FunActive) World.WorldClock.Start(World.Fun.FunWorld.DuskHour, 0);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -192,10 +227,21 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
         // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
-        if (Systems.On(Systems.Farming)) Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
+            // the herds on those fields (#863): the server's, so a tractor beam lifts the same cow for everyone
+            Farming.Herds.Create(this, _chunks, origin, dedicated: true);
+        }
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
+        // the ski slopes' weather and the wear real skiers put on them (#887)
+        if (Systems.On(Systems.Snow)) _snow = World.Snow.SnowService.Create(this, _chunks!);
+        // the ski lifts (#912): the same lines, for bots that ride them
+        if (Systems.On(Systems.Lifts)) World.Ropeways.RopewayService.Create(this, () => source, _chunks!);
+        // the UFO sightings (#863): planned here, played back by every peer from the shared clock
+        Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: true);
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
@@ -204,15 +250,30 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword(), PlayerRegistry.ParseHostToken());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
+        // /locate (#1277): every list the server holds, and an index of its buildings built now on workers
+        // (from the tiles themselves, not the 32 MB cache the rest shares) or read back from user://cache
+        AddChild(new World.Locate.LocateService(local, manifest, () => places, origin,
+            () => _players?.GetChildren().OfType<Player.FootPlayer>().Select(p => p.Global) ?? []));
 #if PLAYTEST
         // the playtest recorder (#844): the authoritative positions, for the top view's server-vs-client lines
-        if (Playtest.Recording.PlaytestRecorder.Requested) AddChild(new Playtest.Recording.PlaytestRecorder(server: true, () => origin));
+        if (Playtest.Recording.PlaytestRecorder.Requested)
+            AddChild(new Playtest.Recording.PlaytestRecorder(server: true, () => origin, ground: new Playtest.TopView.GroundSpec(null,
+                Systems.FixtureCourse is { } fixtureCourse ? Systems.FixturePrefix + fixtureCourse : chunkDir, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N)));
 #endif
 
         // nothing goes to a peer before it has said which protocol it speaks (World/Handshake)
         _handshake = Handshake.CreateServer(_chat);
-        _handshake.Accepted += OnPeerAccepted;
         AddChild(_handshake);
+        // then the account step (#1123, World/Accounts): off admits at once, optional or required ask for an account
+        _accountGate = Net.Accounts.AccountGate.CreateServer(accounts.Mode, accounts.Url);
+        _handshake.Accepted += _accountGate.Check;
+        _accountGate.Admitted += OnPeerAccepted;
+        AddChild(_accountGate);
+        GD.Print($"[server] accounts {accounts.Mode.ToString().ToLowerInvariant()}{(accounts.Mode == Net.Accounts.ServerAccounts.Off ? "" : " on " + accounts.Url)}");
+        // joining for the chat and commands only, from a client of any version (#1088)
+        AddChild(ConsoleLink.CreateServer(_chat, _handshake, QueryResponder.ParseServerName()));
+        // a deployed server installs a newer release by itself, once nobody plays (#1088)
+        if (ServerAutoUpdate.Create(_chat, _handshake) is { } autoUpdate) AddChild(autoUpdate);
 
         // invites (#840): World/Invites, one system every activity asks through; parties ride on it
         var invites = _invites = InviteService.CreateServer(_chat);
@@ -235,14 +296,52 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(_fight);
         _chat.Fight = _fight;
 
+        // aura battles (#907): World/Aura, the server owns every match and grades every press
+        _aura = Combat.AuraManager.CreateServer(_chat, _players);
+        _aura.Fights = _fight;
+        _fight.Aura = _aura;
+        AddChild(_aura);
+        _chat.Aura = _aura;
+
+        // Schwingen (#1269): World/Schwing, the server owns every bout and the ring's queue
+        _schwing = Combat.SchwingManager.CreateServer(_chat, _players);
+        _schwing.Fights = _fight;
+        _schwing.Auras = _aura;
+        _fight.Schwing = _schwing;
+        _aura.Schwing = _schwing;
+        AddChild(_schwing);
+        _chat.Schwing = _schwing;
+
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
+        // the fun world's PvP block (#1396): who stands in it, and its weapon crates
+        if (WorldChoice.FunActive)
+        {
+            var players = _players;
+            World.Fun.FunWorld.Players = peer => players.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer)) is { } p ? p.Global : null;
+            AddChild(new World.Fun.FunCrates(_brCrates));
+        }
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
             (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
         br.Origin = origin;
         AddChild(br);
         _chat.BattleRoyale = br;
-        if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b) || br.Together(a, b);
+        // one "in a round" registry (#1268, Core/Rounds): the Battle Royale first, so it keeps its own answers
+        Rounds.Register(new Rounds.Mode("br", "a Battle Royale match", br.InRound, br.Playing)
+        {
+            NoTeleport = "No teleporting out of a Battle Royale. /br leave to give up.",
+        });
+        // Versteckis (#1268): World/Versteckis, hide-and-seek as village props; its Rounds mode after the Battle Royale's
+        var vs = _vs = Adventure.Versteckis.VersteckisManager.CreateServer(_chat, _players, origin, () => source, places?.Places ?? new());
+        vs.GroundWorld = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+        AddChild(vs);
+        _chat.Versteckis = vs;
+        if (_interest != null)
+        {
+            _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b) || br.Together(a, b) || vs.Together(a, b);
+            // in a game's Hide every hider is despawned on its seeker (#1268)
+            _interest.Withheld = vs.Withheld;
+        }
 
         // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
@@ -253,6 +352,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, origin, server: true);
+        Combat.SwordService.Create(this, origin, server: true);   // #1371
 
         // the birds everybody shares (#143): simulated here around every player, sent to those near
         var birds = new Birds.BirdLife(_chunks, origin, null)
@@ -273,18 +373,85 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // one player at a time at each set-up telescope (#1440)
+        Items.Telescopes.Create(this, server: true);
+        // traffic endpoints (#971): admins set them, every client runs them on its own traffic
+        _trafficEndpoints = World.TrafficGenerators.Create(this, server: true);
+        _trafficEndpoints.IsAdmin = _chat.IsAdminPeer;
         // where a new player starts, and whether players may teleport (#799): the server's call
         _arrival = Net.Arrival.CreateServer(this);
         _chat.Arrival = _arrival;
         // players who left, asleep where they were (#644)
         _sleepers = Net.Sleepers.Create(this, origin, server: true);
         _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+        // the Adventure layer (#1223): progress per proven identity (an account on --accounts required), quests;
+        // off for a player in a Battle Royale round
+        if (Systems.On(Systems.Adventure))
+        {
+            var adventure = _adventure = Adventure.AdventureService.Create(this, server: true, networked: true);
+            adventure.InMatch = Rounds.InRound;
+            adventure.Provides("versteckis");
+            adventure.NameOf = _chat.NameOfPeer;
+            adventure.PositionOf = peer => _players!.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is { } body ? body.NetGlobal : null;
+            var gate = _accountGate;
+            if (accounts.Mode == Net.Accounts.ServerAccounts.Required)
+                adventure.AccountKey = peer => gate?.Of(peer) is { } account ? "acct:" + account.UserId : null;
+            _sleepers.Proven += adventure.PeerProven;
+            // places (#1224): discovery, fog and viewpoints for every adventuring peer, from its proxy's published state
+            Player.FootPlayer? PlayerOf(long peer) => _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
+            Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+            Adventure.Places.PlacesService.Create(adventure, server: true, networked: true).BodyOf = peer =>
+                PlayerOf(peer) is { } body ? Adventure.Places.PlacesBodies.Of(body, body.NetGlobal, PlayerOf, ground) : null;
+            // rewards (#1227): chests, edelweiss, seals, guides, trials and photos, checked against this server's own placement
+            var rewards = Adventure.Rewards.RewardService.Create(adventure, server: true, networked: true, () => source,
+                (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N));
+            var parties = _parties;
+            rewards.PartyOf = peer => parties?.Of(peer)?.Members;
+            var dropped = _dropped;
+            rewards.Occupied = (e, n, radius, except) =>
+            {
+                // a pressure plate's weight: another player's body, or something dropped on it
+                for (int i = 0; i < _players!.GetChildCount(); i++)
+                    if (_players.GetChild(i) is Player.FootPlayer p && p.GetMultiplayerAuthority() != except)
+                    {
+                        var g = p.NetGlobal;
+                        if ((g.E - e) * (g.E - e) + (g.N - n) * (g.N - n) <= radius * radius) return true;
+                    }
+                if (dropped != null)
+                    foreach (var item in dropped.Items)
+                    {
+                        var (ie, inn) = dropped.Origin.ToLv95(item.GlobalPosition);
+                        if ((ie - e) * (ie - e) + (inn - n) * (inn - n) <= radius * radius) return true;
+                    }
+                return false;
+            };
+            // navigation (#1226): the travel network (unlocks, trips, fares, the travelcards) and the pins, shared with the party
+            var travel = Adventure.Navigation.AdventureTravel.Create(adventure, server: true, networked: true);
+            travel.IsAdmin = _chat.IsAdminPeer;
+            travel.Racing = peer => race.RaceOf(peer) != 0;
+            travel.GroundAt = ground;
+            // festivals (#1269): which festival runs and on which day, held where, Batzen and the party board
+            var festivals = Occasions.Festivals.FestivalService.Create(adventure, server: true, networked: true);
+            festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
+            festivals.PartyOf = rewards.PartyOf;
+            festivals.Start = () => SpawnPoint.ParseTarget();
+            Occasions.Festivals.SteinService.Create(festivals, adventure, server: true, networked: true);   // Steinstossen (#1269 part 3)
+            // climbs higher than the stamina rules allow, logged (#1225): no correction
+            AddChild(new Net.StaminaWatch(_players!, _chat.NameOfPeer));
+            AddTogether(adventure);   // #1266, ServerWorld.Together.cs
+            AddAlcohol(adventure);    // #1271, ServerWorld.Alcohol.cs
+            AddErrands(adventure);   // #1267, ServerWorld.Errands.cs
+        }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
         _pallets.Source = () => source;
         // cranes players work (#618): who works which, and where one was let go
         _cranes = Terrain.Construction.CraneService.Create(this, server: true);
         _cranes.Source = () => source;
+        // concerts (#885): who hosts which stadium's set, its cues, the operator's DMX relayed
+        _concerts = Concert.ConcertService.Create(this, server: true);
+        _concerts.Chat = _chat;
+        _chat.Concerts = _concerts;
         _chat.NameAssigned += bank.SendBalance;
         // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
         if (Systems.On(Systems.Farming))
@@ -299,7 +466,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         {
             _structures = Build.Structures.Create(this, origin, server: true);
             _structures.NameOf = _chat.NameOfPeer;
-            _structures.InMatch = br.Playing;
+            _structures.InMatch = Rounds.Playing;
             _structures.MatchRunning = () => br.State.Running;
             _structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
             // a match piece that comes down leaves a pile of some of its materials (#276)
@@ -319,10 +486,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
         // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through
         // the ordinary client simulating them); never in a Battle Royale match, admin or not (#425)
-        _vehicles.MayPark = (peer, state) => state.Wrecked || (_chat.IsAdminPeer(peer) && !br.Playing(peer)) || race.TakeIssued(peer);
+        _vehicles.MayPark = (peer, state) => state.Wrecked || (_chat.IsAdminPeer(peer) && !Rounds.Playing(peer)) || race.TakeIssued(peer);
 
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
+        // the website's dashboard (#1211): the server's log, its commands, players, restart, startup arguments
+        if (AdminHttp.Create(_chat, _accountGate) is { } adminHttp) AddChild(adminHttp);
 
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.
@@ -366,20 +535,53 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         string name = QueryResponder.ParseServerName();
         string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-        string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+        // a test world says which (#999): joining clients load it
+        string world = WorldChoice.Active?.Id ?? (manifest.Tiles.Count > 0 ? "real" : "generated");
         var registry = _registry;
         // status queries on port + 1: LAN lists find this server, saved lists show it is up
         // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
         if (QueryResponder.ParsePort(port) is { } queryPort)
             AddChild(new QueryResponder(queryPort, () => new ServerStatus(
-                name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
+                name, port, registry?.InWorld.Count() ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
                 QueryResponder.ParseBind()));
         // the same, as a file the web page beside a deployed server reads (#740, docs/notes/net/status-page.md)
         if (StatusFile.ParsePath() is { } statusPath)
             AddChild(new StatusFile(statusPath, () => new StatusFileData(
-                name, version, world, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients,
-                registry is null ? [] : registry.Players.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
+                name, version, world, port, registry?.InWorld.Count() ?? 0, NetworkManager.MaxClients,
+                registry is null ? [] : registry.InWorld.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
+        // where everyone is, as a file the live map beside a deployed server reads (#896, docs/notes/net/live-map.md)
+        if (LiveMapFile.ParsePath() is { } mapPath)
+            AddChild(new LiveMapFile(mapPath, LiveMapPlayers));
         _parentPid = HostedServer.ParseParentPid();
+    }
+
+    private readonly List<LiveMapPlayer> _mapPlayers = new();
+
+    /// <summary>Every player and bot with a body, where it is now (race NPCs left out: they are scenery).</summary>
+    private IReadOnlyList<LiveMapPlayer> LiveMapPlayers()
+    {
+        _mapPlayers.Clear();
+        if (_players == null) return _mapPlayers;
+        for (int i = 0; i < _players.GetChildCount(); i++)
+        {
+            if (_players.GetChild(i) is not Player.FootPlayer p || p.Npc && !p.Bot || p.Stowed) continue;
+            var at = p.Global;
+            string name = p.Bot ? (p.BotName.Length > 0 ? p.BotName : "Bot") : _chat?.NameOfPeer(p.GetMultiplayerAuthority()) ?? p.Name;
+            _mapPlayers.Add(new LiveMapPlayer(name, Math.Round(at.E, 1), Math.Round(at.N, 1), Math.Round(at.Alt, 1),
+                RideLabel(p.RideKindId), p.Bot));
+        }
+        return _mapPlayers;
+    }
+
+    private static readonly Dictionary<int, string> RideLabels = new();
+
+    /// <summary>What a ride is called ("on foot", "Honda Africa Twin"), built once per kind: catalogue rides are numbers.</summary>
+    private static string RideLabel(int kind)
+    {
+        if (RideLabels.TryGetValue(kind, out var label)) return label;
+        var k = (Player.RideKind)kind;
+        label = k == Player.RideKind.OnFoot ? "on foot" : Player.Rideable.Create(k)?.Label ?? k.ToString();
+        return RideLabels[kind] = label;
     }
 
     /// <summary>The client that started this server from its menu, if any: the server goes when it does.</summary>
@@ -428,7 +630,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
     private double _sinceClockSave;
 
-    public override void _ExitTree() => World.WorldClock.Save();
+    public override void _ExitTree()
+    {
+        World.WorldClock.Save();
+        // the modes registered by this world go with it (#1268)
+        Rounds.Clear();
+    }
 
     public override void _Process(double delta)
     {
@@ -472,49 +679,94 @@ public partial class ServerWorld : Node3D, IOriginContainer
     }
 
     /// <summary>The peer speaks this server's protocol (<see cref="Handshake"/>): its player, and the world's state.</summary>
+    /// <summary>
+    /// <c>--accounts off|optional|required</c> (default off) and <c>--nakama-url</c>, the account server players
+    /// sign in to (#1123, docs/notes/net/accounts.md); null after saying what is wrong.
+    /// </summary>
+    private static (Net.Accounts.ServerAccounts Mode, string Url)? ParseAccounts()
+    {
+        string? arg = CmdArgs.Value("--accounts");
+        if (arg != null && Net.Accounts.AccountRules.Parse(arg) == null)
+        {
+            GD.PushError($"[server] --accounts {arg}: use off, optional or required");
+            return null;
+        }
+        var mode = Net.Accounts.AccountRules.Parse(arg) ?? Net.Accounts.ServerAccounts.Off;
+        string url = Net.Accounts.AccountRules.NormalizeUrl(CmdArgs.Value("--nakama-url"));
+        if (mode != Net.Accounts.ServerAccounts.Off && url.Length == 0)
+        {
+            GD.PushError($"[server] --accounts {arg} needs --nakama-url <the account server, e.g. http://127.0.0.1:7350>");
+            return null;
+        }
+        return (mode, url);
+    }
+
     private void OnPeerAccepted(long id)
     {
         GD.Print($"[server] peer {id} speaks protocol {Handshake.Protocol}");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // The rules first (#1380): the joining client's loading screen waits for them, and nothing
+        // below is needed to read them. Still before Sleepers.WakeAt, which is sent further down on
+        // the same ordered channel (net/arrival).
+        _arrival?.SendTo(id);
+        long rulesMs = clock.ElapsedMilliseconds;
         _registry?.Add(id);
 
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
             _chunks!.AddAnchor(player, collision: false);   // a proxy: height queries only, no collision (#837)
-        _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
+        _cinemaBooths?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
+        _snow?.SendTo(id);
+        Farming.Herds.Instance?.SendTo(id);
+        Occasions.UfoSightings.Instance?.SendTo(id);
         _placed?.SendTo(id);
+        _trafficEndpoints?.SendTo(id);
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
+        _adventure?.PeerJoined(id);
         _pallets?.SendTo(id);
         _cranes?.SendTo(id);
+        _concerts?.SendTo(id);
         // the dormant slots woken anywhere (#689): a far one's car is not sent, its bay must be empty
         Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
+        _vs?.SendTo(id);
         _brCrates?.SendTo(id);
         _invites?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
         _chat?.SendWorldSpeedTo(id);
         _chat?.SendSeaStateTo(id);
+        GD.Print($"[server] peer {id} accepted: rules sent at {rulesMs} ms, player spawned and state sent at {clock.ElapsedMilliseconds} ms");
     }
 
     private void OnPeerDisconnected(long id)
     {
         GD.Print($"[server] peer {id} disconnected");
         _handshake?.PeerLeft(id);
+        _accountGate?.PeerLeft(id);
         // before the registry forgets its name and the body is freed: it lies down where it was (#644)
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
+        _adventure?.PeerLeft(id);
+        Adventure.Places.PlacesService.Instance?.PeerLeft(id);
+        Adventure.Rewards.RewardService.Instance?.PeerLeft(id);
+        Adventure.Navigation.AdventureTravel.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);
+        _vs?.PeerLeft(id);
         _fight?.PeerLeft(id);
+        _aura?.PeerLeft(id);
+        _schwing?.PeerLeft(id);
         _invites?.PeerLeft(id);
         _parties?.PeerLeft(id);
         _cranes?.PeerLeft(id);
+        _concerts?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _dropped?.ForgetOwner(id);

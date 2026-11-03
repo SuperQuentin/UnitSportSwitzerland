@@ -74,7 +74,7 @@ public readonly record struct RoadHit(int Edge, double Arc, double Distance,
 /// rejoins them — without it every kilometre boundary is a dead end and no route crosses one.
 /// </para>
 /// </summary>
-public sealed class RoadNetwork
+public sealed class RoadNetwork : IWalkGraph
 {
     private readonly List<RoadEdge> _edges = new();
     private readonly List<List<(int Node, double Cost)>> _adjacency = new();
@@ -256,6 +256,7 @@ public sealed class RoadNetwork
     // edges along each road, and every dead end tied to the nearest vertex of another road within reach
     private readonly Dictionary<long, int> _walkIds = new();
     private readonly List<(double E, double N)> _walkPos = new();
+    private readonly List<double> _walkH = new();
     private readonly List<List<(int To, double Cost)>> _walkAdj = new();
     private bool _walkBuilt;
     /// <summary>A road ending this close to another road's vertex joins it (a T-junction, ended mid-street).</summary>
@@ -269,9 +270,9 @@ public sealed class RoadNetwork
         foreach (var g in _edges)
             for (int v = 0; v < g.E.Length; v++)
             {
-                int id = WalkNode(g.E[v], g.N[v]);
+                int id = WalkNode(g.E[v], g.N[v], g.Height[v]);
                 if (v == 0) continue;
-                int back = WalkNode(g.E[v - 1], g.N[v - 1]);
+                int back = WalkNode(g.E[v - 1], g.N[v - 1], g.Height[v - 1]);
                 if (back == id) continue;
                 double step = g.Cumulative[v] - g.Cumulative[v - 1];
                 _walkAdj[back].Add((id, step));
@@ -290,7 +291,7 @@ public sealed class RoadNetwork
                 for (int v = 0; v < g.E.Length; v++)
                 {
                     double d = Math.Sqrt((g.E[v] - e) * (g.E[v] - e) + (g.N[v] - n) * (g.N[v] - n));
-                    int other = WalkNode(g.E[v], g.N[v]);
+                    int other = WalkNode(g.E[v], g.N[v], g.Height[v]);
                     if (other == id || d >= bestD || _walkAdj[id].Exists(x => x.To == other)) continue;
                     best = other;
                     bestD = d;
@@ -302,15 +303,40 @@ public sealed class RoadNetwork
         }
     }
 
-    private int WalkNode(double e, double n)
+    private int WalkNode(double e, double n, double h)
     {
         long key = Key(Math.Round(e / NodeSnap), Math.Round(n / NodeSnap));
         if (_walkIds.TryGetValue(key, out int id)) return id;
         id = _walkPos.Count;
         _walkIds[key] = id;
         _walkPos.Add((e, n));
+        _walkH.Add(h);
         _walkAdj.Add(new List<(int, double)>());
         return id;
+    }
+
+    // ---- IWalkGraph: the walking graph read by a ride that turns at junctions (Trainer/JunctionChoice)
+
+    public (double E, double N, double H) Pos(int node) => (_walkPos[node].E, _walkPos[node].N, _walkH[node]);
+
+    public IReadOnlyList<(int To, double Cost)> Next(int node) => _walkAdj[node];
+
+    public List<int> NodesNear(double e, double n, double radius)
+    {
+        BuildWalkGraph();
+        var found = new List<int>();
+        foreach (var hit in Near(e, n, radius, 8))
+        {
+            var g = _edges[hit.Edge];
+            for (int v = 0; v < g.E.Length; v++)
+            {
+                double d = (g.E[v] - e) * (g.E[v] - e) + (g.N[v] - n) * (g.N[v] - n);
+                if (d <= radius * radius && _walkIds.TryGetValue(Key(Math.Round(g.E[v] / NodeSnap), Math.Round(g.N[v] / NodeSnap)), out int id)
+                    && !found.Contains(id))
+                    found.Add(id);
+            }
+        }
+        return found;
     }
 
     /// <summary>The walking graph's node nearest a point within <paramref name="radius"/>, or -1.</summary>

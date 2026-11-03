@@ -26,6 +26,12 @@ public partial class LoadingScreen : CanvasLayer
 
     public bool IsOpen => _root.Visible;
 
+    /// <summary>
+    /// From <see cref="Begin"/> until <see cref="Finish"/> or <see cref="Close"/>: a session is being
+    /// built. The headset shows its loading space meanwhile, not the half-streamed world (#1101).
+    /// </summary>
+    public static bool Active { get; private set; }
+
     public LoadingScreen()
     {
         Name = "LoadingScreen";
@@ -36,7 +42,7 @@ public partial class LoadingScreen : CanvasLayer
 
     public override void _Ready()
     {
-        _root = new Control { Theme = UiTheme.Get(), Visible = false, MouseFilter = Control.MouseFilterEnum.Stop };
+        _root = new Control { Theme = Skins.MenuSkin.Theme(), Visible = false, MouseFilter = Control.MouseFilterEnum.Stop };
         _root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_root);
 
@@ -102,6 +108,8 @@ public partial class LoadingScreen : CanvasLayer
         _cancel.Disabled = false;
         NextJoke(instant: true);
         _root.Visible = true;
+        Active = true;
+        CapFps();
         _root.Modulate = Colors.White;
         _cancel.CallDeferred(Control.MethodName.GrabFocus);
     }
@@ -119,13 +127,45 @@ public partial class LoadingScreen : CanvasLayer
     {
         _target = 1;
         _cancel.Disabled = true;
+        Active = false;
+        RestoreFps();
         var tw = CreateTween().SetIgnoreTimeScale(true);
         tw.TweenInterval(0.25f);
         tw.TweenProperty(_root, "modulate:a", 0f, 0.45f);
         tw.TweenCallback(Callable.From(() => _root.Visible = false));
     }
 
-    public void Close() => _root.Visible = false;
+    public void Close()
+    {
+        _root.Visible = false;
+        Active = false;
+        RestoreFps();
+    }
+
+    private static int _savedFps = -1;
+    private const int LoadingFps = 30;
+
+    /// <summary>
+    /// A loading screen free-running at 90+ fps pins a core for nothing (#1381): 30 fps until the
+    /// world is ready, the player's own limit back after. The terrain's per-frame commit slice grows to
+    /// match, so the commit time per second (what bounds loading) stays what it was at 60.
+    /// </summary>
+    private static void CapFps()
+    {
+        if (_savedFps >= 0 || UnitSport.Core.GameClock.Fixed) return;
+        _savedFps = Engine.MaxFps;
+        if (Engine.MaxFps != 0 && Engine.MaxFps <= LoadingFps) return;
+        Engine.MaxFps = LoadingFps;
+        UnitSport.Terrain.ChunkManager.CommitBudgetScale = 60.0 / LoadingFps;
+    }
+
+    private static void RestoreFps()
+    {
+        if (_savedFps < 0) return;
+        Engine.MaxFps = _savedFps;
+        _savedFps = -1;
+        UnitSport.Terrain.ChunkManager.CommitBudgetScale = 1;
+    }
 
     public override void _Process(double delta)
     {

@@ -29,6 +29,11 @@ public enum Layers
     Osm = 64,
     /// <summary>Real farm fields (#494): LWB land use per canton from geodienste.ch, fields_E_N.fld per tile.</summary>
     Fields = 128,
+    /// <summary>
+    /// Ski slopes (#887) from OpenStreetMap, pistes_E_N.pst per tile. Off unless picked by name, like
+    /// <see cref="Osm"/>: the files are an ODbL derived database.
+    /// </summary>
+    Pistes = 256,
 }
 
 /// <summary>What MapSetup remembers between runs, in terrain_chunks_temp/mapsetup.json.</summary>
@@ -235,12 +240,13 @@ public static partial class Planner
         });
 
         // ---- OpenStreetMap (optional) -----------------------------------------------------------
-        bool wantOsm = c.Layers.HasFlag(Layers.Osm) && wantRoads;
+        bool wantPistes = c.Layers.HasFlag(Layers.Pistes);
+        bool wantOsm = (c.Layers.HasFlag(Layers.Osm) && wantRoads) || wantPistes;
         long osmPbf = c.Country.Extras.GetValueOrDefault("osm", 550_000_000);
         steps.Add(new Step
         {
             Title = "Download OpenStreetMap",
-            Detail = "Geofabrik Switzerland extract (ODbL), for one-way, lanes, sidewalks and cycleways",
+            Detail = "Geofabrik Switzerland extract (ODbL), for one-way, lanes, sidewalks, cycleways and ski slopes",
             DownloadBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
             DiskBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
             DiskPath = p.OsmDir,
@@ -332,7 +338,7 @@ public static partial class Planner
             },
         });
 
-        string? osmSkip = !wantOsm ? "OSM layer off"
+        string? osmSkip = !(c.Layers.HasFlag(Layers.Osm) && wantRoads) ? "OSM layer off"
             : toBuild.Count == 0 && featureTiles.Count == 0 && File.Exists(Path.Combine(p.Temp, "osm_overlay.tsv"))
               && File.Exists(Path.Combine(p.Temp, "osm_nodes.tsv")) ? "overlay up to date" : null; // osm_nodes.tsv: #347
         // Before the extraction: the road network stage at its end reads the overlay. The whole
@@ -441,7 +447,7 @@ public static partial class Planner
         steps.Add(new Step
         {
             Title = "Place index",
-            Detail = "places.json for the in-game Tab search (towns, summits, passes)",
+            Detail = "places.json for the in-game Tab search (towns, summits, passes), then pois.bin, the adventure's places (#1224)",
             Seconds = 6 + builtTotal * 0.0003,
             Skip = !wantPlaces ? "places layer off"
                  : toBuild.Count == 0 && File.Exists(Path.Combine(p.Chunks, PlaceIndex.FileName)) ? "no new terrain" : null,
@@ -450,6 +456,12 @@ public static partial class Planner
                 if (!File.Exists(p.GwrSqlite)) { r.Fail("places need the GWR data.sqlite"); return Task.FromResult(false); }
                 var args = new List<string> { "--out", p.Chunks, "--places-only", "--gwr", p.GwrSqlite };
                 if (p.TlmGpkg is { } tlm) args.AddRange(["--tlm", tlm]);
+                // the points of interest follow the places (#1224): castles from OSM, cantons from swissBOUNDARIES3D
+                // (MapSetup's country bake caches it) when they are here, else the nearest town's canton
+                if (p.OsmPbf is { } osm) args.AddRange(["--osm-pbf", osm]);
+                var bake = Path.Combine(p.Temp, "mapsetup_bake");
+                if (Directory.Exists(bake) && Directory.GetFiles(bake, "swissboundaries3d_*.gpkg").OrderDescending(StringComparer.Ordinal).FirstOrDefault() is { } boundaries)
+                    args.AddRange(["--boundaries", boundaries]);
                 return r.Tool("TerrainPreprocessor", args, LineProgress.None);
             },
         });
@@ -466,6 +478,30 @@ public static partial class Planner
                 if (p.OsmPbf is { } pbf && File.Exists(p.GwrSqlite)) args.AddRange(["--osm-pbf", pbf, "--gwr", p.GwrSqlite]);
                 return r.Tool("TerrainPreprocessor", args, LineProgress.None);
             },
+        });
+
+        steps.Add(new Step
+        {
+            Title = "Ski slopes",
+            Detail = "pistes_E_N.pst for every built tile (OSM piste:type, ODbL)",
+            Seconds = 20 + builtTotal * 0.01,
+            Skip = !wantPistes ? "pistes layer off" : null,
+            Run = r =>
+            {
+                if (p.OsmPbf is not { } pbf) { r.Fail("ski slopes need the OpenStreetMap extract"); return Task.FromResult(false); }
+                return r.Tool("TerrainPreprocessor", ["--out", p.Chunks, "--pistes", "--osm-pbf", pbf], LineProgress.None);
+            },
+        });
+
+        // last: every preprocessor pass refreshes the tiles' content hashes itself, but RoadGen's
+        // rewrite runs on its own; incremental (a file is read again only when its size or time
+        // changed), so a run that changed nothing only lists the tiles (#924)
+        steps.Add(new Step
+        {
+            Title = "Fingerprint tiles",
+            Detail = "each tile's content hash into manifest.json (what a film was rendered on)",
+            Seconds = 3 + toBuild.Count * 0.03 + featureTiles.Count * 0.02,
+            Run = r => r.Tool("TerrainPreprocessor", ["--out", p.Chunks, "--temp", p.Temp, "--manifest-hash"], LineProgress.None),
         });
 
         // the C# tools are built once, just before the first step that needs them

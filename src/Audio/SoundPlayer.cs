@@ -187,6 +187,8 @@ public partial class SoundPlayer : Control
 
     // ---- check -----------------------------------------------------------------------------
 
+    private static readonly string? WavFilter = CmdArgs.Value("--soundswav");
+
     private void CheckAll()
     {
         int count = 0, bad = 0;
@@ -197,11 +199,29 @@ public partial class SoundPlayer : Control
                 try
                 {
                     var w = e.Make();
-                    var (peak, _, finite) = Stats(Samples(w));
+                    var samples = Samples(w);
+                    var (peak, _, finite) = Stats(samples);
+                    // --soundswav <text>: the sounds whose category or name holds it, as WAVs to listen to (#1244)
+                    if (WavFilter is { } only && !w.Stereo && w.MixRate == Dsp.Rate
+                        && $"{name} {e.Name}".Contains(only, StringComparison.OrdinalIgnoreCase))
+                    {
+                        System.IO.Directory.CreateDirectory("test_output/sounds");
+                        string file = string.Concat($"{name}_{e.Name}".Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '_'));
+                        Dsp.WriteWav($"test_output/sounds/{file}.wav", samples);
+                        GD.Print($"[sounds] wrote test_output/sounds/{file}.wav");
+                    }
                     if (!finite || peak > 1.0001f || peak < 1e-4f)
                     {
                         bad++;
                         GD.Print($"[sounds] {name} / {e.Name}: peak={peak:F4}{(finite ? "" : " not finite")}");
+                    }
+                    // Godot mixes a loop up to LoopEnd inclusive: past the last frame it reads outside
+                    // the buffer, which crashed Android (#1010, Dsp.LoopWav)
+                    else if (w.LoopMode != AudioStreamWav.LoopModeEnum.Disabled
+                             && (w.LoopBegin < 0 || w.LoopBegin >= w.LoopEnd || w.LoopEnd >= samples.Length))
+                    {
+                        bad++;
+                        GD.Print($"[sounds] {name} / {e.Name}: loop {w.LoopBegin}..{w.LoopEnd} outside its {samples.Length} frames");
                     }
                 }
                 catch (Exception ex)
@@ -211,7 +231,7 @@ public partial class SoundPlayer : Control
                 }
             }
         GD.Print($"[sounds] {count} sounds in {_categories.Count} categories");
-        GD.Print(bad == 0 ? "[sounds] RESULT: ok" : $"[sounds] RESULT: FAILED ({bad} sounds clip, are empty or throw)");
+        GD.Print(bad == 0 ? "[sounds] RESULT: ok" : $"[sounds] RESULT: FAILED ({bad} sounds clip, are empty, loop past their end or throw)");
         GetTree().Quit(bad == 0 ? 0 : 1);
     }
 

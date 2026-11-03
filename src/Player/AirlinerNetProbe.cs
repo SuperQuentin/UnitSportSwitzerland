@@ -71,8 +71,7 @@ public partial class AirlinerNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -82,7 +81,7 @@ public partial class AirlinerNetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         Expect(me.SetRide(RideKind.A320), "A takes an A320");
-        await Seconds(1);
+        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
         for (int i = 0; i < 3; i++) jet.Command(AirlinerCommand.FlapsDown);
         jet.Command(AirlinerCommand.Speedbrake);
@@ -110,7 +109,7 @@ public partial class AirlinerNetProbe : ChatProbe
         Expect(jet.State.ParkingBrake && jet.State.FlapLever == 2 && me.GroundSpeed < 0.5f,
             $"stopped with flaps 2 and the parking brake ({jet.State.FlapLever}, {jet.State.ParkingBrake}, {me.GroundSpeed:F1} m/s)");
         me.ExitVehicle();
-        await Seconds(2);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         Expect(me.Ride == RideKind.OnFoot, "A got out");
         Say("parked");
         if (!await Heard("B", "claimed", 60)) Fail("B never got in");
@@ -119,14 +118,14 @@ public partial class AirlinerNetProbe : ChatProbe
         me.PlaceAt(me.GlobalPosition + new Vector3(-70f, 0f, 0f), 0f);
         await Seconds(1.5);
         Expect(me.SetRide(RideKind.A320), "A takes another A320");
-        await Seconds(1);
+        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
         if (me.Vehicle is not Airliner air) { Fail("not an airliner"); return; }
         me.DebugLaunch(me.GlobalPosition + Vector3.Up * 400f, -me.GlobalTransform.Basis.Z * 95f);
         air.State.GearDown = true;
         air.State.Gear = 1f;
         await Seconds(0.5);
         air.Command(AirlinerCommand.Gear);
-        await Seconds(1);
+        await Until(() => !air.State.GearDown && !air.State.OnGround, 5);
         Expect(!air.State.GearDown && !air.State.OnGround, "gear lever up in the air");
         Say("gear up");
         // #421: what A's own screens show, said alongside A's steps, which keep main's timing: the walk aboard
@@ -252,7 +251,7 @@ public partial class AirlinerNetProbe : ChatProbe
         if (me.Vehicle != null)
         {
             me.ExitVehicle();
-            await Seconds(2);
+            await Until(() => me.Ride == RideKind.OnFoot, 3);
             me.PlaceAt(me.GlobalPosition + new Vector3(0f, 0f, 60f), 0f);
             await Seconds(2);
         }

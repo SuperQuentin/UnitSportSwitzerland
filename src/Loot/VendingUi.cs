@@ -117,7 +117,7 @@ public partial class VendingUi : CanvasLayer
         _message = "";
         _shownDrop = -1;
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Rebuild();
     }

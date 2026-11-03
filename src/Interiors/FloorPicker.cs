@@ -60,7 +60,7 @@ public partial class FloorPicker : CanvasLayer
         _root.Visible = true;
         _openedAt = Time.GetTicksMsec() / 1000.0;
         UiFocus.Set(this, true);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         (first ?? cancel).CallDeferred(Control.MethodName.GrabFocus);
     }
 

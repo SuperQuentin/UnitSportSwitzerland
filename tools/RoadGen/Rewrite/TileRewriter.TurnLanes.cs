@@ -67,7 +67,7 @@ public static partial class TileRewriter
     /// <summary>At the lights the centre line goes solid this far before the stop line on an approach without a left pocket (#711, the user's rule).</summary>
     private const double CentreSolidAtLights = 20;
 
-    /// <summary>A right-turn pocket only where the approach is faster than this, km/h (#711, the user's decision).</summary>
+    /// <summary>Without lights a right-turn pocket only where the approach is faster than this, km/h (#711, the user's decision; at the lights any, #971).</summary>
     private const int RightPocketSpeed = 50;
     /// <summary>The angled closing line of a lead-in hatch runs this far along the road (#700).</summary>
     private const double LeadInClose = 10;
@@ -259,96 +259,23 @@ public static partial class TileRewriter
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
             {
+                if (NeedsOf(junction, plan, i, rules, net, signalNodes, segmentOf, streetSide, overlay, restrictions, scratchLanes) is not { } need)
+                    continue;
                 var arm = plan.Arms[i];
-                if ((every ? !arm.Approach || Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes) : arm.Role != PriorityPlanner.Role.Main)
-                    || !TurnLaneRoad(net.Links[arm.LinkId])) continue;
-                // the lanes the carriageway already holds toward the junction (#700)
-                int ownLanes = segmentOf.TryGetValue(arm.LinkId, out var laneSeg) ? CarLanesIn(laneSeg.Segment, arm.End == LinkEnd.End) : 1;
-
-                // the approaching driver's way, and whether a car road leaves to their left / right
-                var d = Vec2.FromHeading(junction.Arms[i].OutwardHeading) * -1;
-                bool left = false, right = false;
-                int exit = -1, leftArm = -1;
-                double straightest = 0.87;
-                for (int k = 0; k < junction.Arms.Count && k < plan.Arms.Count; k++)
-                {
-                    if (k == i) continue;
-                    if (!every && plan.Arms[k].Role == PriorityPlanner.Role.Main) { exit = k; continue; }
-                    if (!every && plan.Arms[k].Role != PriorityPlanner.Role.Yield) continue;
-                    if (InfoOf(net.Links[plan.Arms[k].LinkId]) is not { } info || info.Class > RoadClass.Lane) continue;
-                    var v = Vec2.FromHeading(junction.Arms[k].OutwardHeading);
-                    double ahead = d.X * v.X + d.Y * v.Y;
-                    if (every && ahead > straightest) { straightest = ahead; exit = k; continue; }
-                    if (ahead > 0.87) continue;   // carries on nearly straight
-                    if (every && !PriorityPlanner.Leaves(info, plan.Arms[k].End)) continue;   // a one-way road in
-                    if (d.X * v.Y - d.Y * v.X > 0) { left = true; leftArm = k; } else right = true;
-                }
-                // the turns the approach has, as the signal plans name them (#386)
-                var armsHere = ArmsOf(junction, net);
-                var can = SignalMoves.None;
-                for (int k = 0; k < armsHere.Count; k++)
-                    if (k != i && armsHere[k].Out) can |= SignalPlan.Turn(armsHere, i, k);
+                var (ownLanes, can, wish, left, right, exit, kmh, town, wantLeft, wantRight, box) =
+                    (need.OwnLanes, need.Can, need.Wish, need.Left, need.Right, need.Exit, need.Kmh, need.Town, need.WantLeft, need.WantRight, need.BikeBox);
                 turns[(junction.NodeId, i)] = can;
-                // OSM's lane data at the junction end (#700), among the turns the approach has and OSM does not forbid:
-                // assigned to the lanes the carriageway holds; the pockets it wants are built, and none it does not want
-                var banned = restrictions?.Banned(junction, i, net, scratchLanes) ?? SignalMoves.None;
-                var wished = WishedLanes(overlay, net.Links[arm.LinkId], arm.End, can & ~banned);
-                // a right-turn pocket only on a faster road (#711, the user's decision), at every kind of junction: the speed OSM maps
-                // for the approach, else Switzerland's general limits (50 in a town, 80 outside)
-                int kmh = ApproachSpeed(overlay, net.Links[arm.LinkId], arm.End);
-                // in town: a sidewalk or path along either side at the junction (the street planner's, #119)
-                bool town = streetSide(arm.LinkId, arm.End, true).OuterDm > 0 || streetSide(arm.LinkId, arm.End, false).OuterDm > 0;
-                bool fast = (kmh > 0 ? kmh : town ? 50 : 80) > RightPocketSpeed;
-                var wish = Assign(wished, ownLanes, rightPocketPossible: fast && right && ownLanes == 1);
-                bool wantLeft = wish is null ? left && ownLanes == 1 : left && wish.Pocket.Length > 0;
-                bool wantRight = wish is null ? right && ownLanes == 1 && fast : wish.RightPocket;
                 if (right && ownLanes == 1)
                 {
                     if (kmh > RightPocketSpeed) stats.SpeedFast++; else if (kmh > 0) stats.SpeedSlow++; else if (town) stats.SpeedNoneTown++; else stats.SpeedNoneRural++;
                 }
-                if (wished is not null) wishes[(junction.NodeId, i)] = (home, wished, ownLanes, arm.LinkId, arm.End == LinkEnd.End);
-                // a multi-lane approach without OSM lane data (#700, the user's review of J7; #711: at every junction, shared out
-                // by the lanes each exit takes away, InferredLanes), with their arrows as OSM's would get
-                else if (ownLanes >= 2)
-                {
-                    // (#711) the lanes each turn's exit takes away: the most of any arm making that turn
-                    int outL = 0, outT = 0, outR = 0;
-                    for (int k = 0; k < armsHere.Count; k++)
-                    {
-                        if (k == i || !armsHere[k].Out) continue;
-                        int n = OutLanes(junction, k, net);
-                        switch (SignalPlan.Turn(armsHere, i, k))
-                        {
-                            case SignalMoves.Left: outL = Math.Max(outL, n); break;
-                            case SignalMoves.Through: outT = Math.Max(outT, n); break;
-                            case SignalMoves.Right: outR = Math.Max(outR, n); break;
-                        }
-                    }
-                    static int Known(int n) => n > 0 ? n : int.MaxValue;
-                    wishes[(junction.NodeId, i)] = (home, InferredLanes(can & ~banned, ownLanes, Known(outL), Known(outT), Known(outR)),
-                        ownLanes, arm.LinkId, arm.End == LinkEnd.End);
-                }
+                if ((need.Wished ?? need.Inferred) is { } lanes) wishes[(junction.NodeId, i)] = (home, lanes, ownLanes, arm.LinkId, arm.End == LinkEnd.End);
                 if (wish is not null) { stats.Wished++; stats.WishFolded += wish.Folded; }
                 else if (ownLanes >= 2) stats.MultiLane++;
-                // a bike box where the street the left turn goes into has no bike lane or path (#351)
-                bool box = false;
-                if (rules.Has(JunctionRule.BikeBoxes) && leftArm >= 0 && segmentOf.TryGetValue(plan.Arms[leftArm].LinkId, out var into))
-                {
-                    var leaving = plan.Arms[leftArm].End == LinkEnd.Start ? into.Segment.Attributes.Right : into.Segment.Attributes.Left;
-                    box = !leaving.HasLane && !leaving.HasTrack;
-                }
                 RightPlan? rightPlan = null;
                 if (wantRight && segmentOf.TryGetValue(arm.LinkId, out var rightSeg))
-                {
-                    // a painted bike lane on that side runs kerbside (a) or between the pocket and the through lane (b): at the
-                    // lights at random but the same on every run (#351), a bike signal guarding (a); without lights always (b),
-                    // the right-turning cars never crossing it at the mouth (#711); a path keeps (a)
-                    var kerb = arm.End == LinkEnd.End ? rightSeg.Painted.Attributes.Right : rightSeg.Painted.Attributes.Left;
-                    bool between = kerb.HasLane && !kerb.HasTrack
-                        && (!rules.Has(JunctionRule.KerbsideBikeLane) || BikePlanner.Fnv(ApproachKey(net.Links[arm.LinkId], arm.End, junction.Centre)) % 2 == 1);
                     rights.Add(rightPlan = new RightPlan(junction.NodeId, i, home, rightSeg, arm.End == LinkEnd.End, left)
-                        { Skew = MouthSkew(junction, junction.Arms[i]), BikeBetween = between, At = junction.Centre, Through = (can & SignalMoves.Through) != 0, Rules = rules });
-                }
+                        { Skew = MouthSkew(junction, junction.Arms[i]), BikeBetween = need.BikeBetween, At = junction.Centre, Through = (can & SignalMoves.Through) != 0, Rules = rules });
                 if (!left) continue;
                 stats.Candidates++;
                 if (!wantLeft) { if (wish is not null) stats.WishNoLeft++; continue; }

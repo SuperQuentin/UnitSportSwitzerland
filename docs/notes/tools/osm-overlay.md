@@ -13,7 +13,7 @@
 - **Commands**:
   `TerrainPreprocessor --out <chunks> --tlm <gpkg> --osm-overlay <data>/osm/switzerland-YYMMDD.osm.pbf [--tiles-file f]`
   covers the manifest's tiles (or the tiles file) and writes `<chunks>_temp/osm_overlay.tsv` and
-  `osm_overlay_report.txt` (and `osm_nodes.tsv`, below). `--osm-check` is the self-check
+  `osm_overlay_report.txt` (and `osm_nodes.tsv`, below; and `osm_tram_stops.tsv`, #1057: `railway=tram_stop` and tram stop positions, `tram-approaches`). `--osm-check` is the self-check
   (synthetic lines and a synthetic crossroads for the nodes file, exit 1 on failure). `--out` is
   only read for its manifest when there is no `--tiles-file`; `--temp` sends the output elsewhere.
   MapSetup: `--layers roads,osm` (never implied by `all`); the download is `swiss_data.py osm`.
@@ -50,6 +50,14 @@
   sidewalk_right cycleway_left cycleway_right` (OSM values, e.g. `yes/no/separate`,
   `lane/track`) `turn_lanes_fwd turn_lanes_bwd roundabout tram maxspeed_fwd maxspeed_bwd`. Every per-side and
   per-direction column is already in TLM's drawing direction (swapped when `dir` is `-`).
+- **`bicycle:lanes`** (v3, #854): `bicycle_lanes_fwd bicycle_lanes_bwd` after `maxspeed_bwd`, the values as OSM has them
+  (`:forward`/`:backward`, else `bicycle:lanes` on a one-way, as `turn:lanes`), left to right as the riders see them. The
+  junction planner reads where the `designated` lane lies (`junction-planner`: between the through lane and a right pocket,
+  or at the kerb). `OsmOverlayReader` reads v1 and v2 too (empty). Existing overlays are v2: regenerate to get it.
+- **`destination`** (v4, #1110, `direction-signs`): `destination_fwd destination_bwd destination_lanes_fwd
+  destination_lanes_bwd` after `bicycle_lanes_bwd`, OSM's values (`;` between names, `|` between lanes), per direction as
+  `turn:lanes` (`destination` alone follows the way unless it is a one-way the other way). A gantry's signs take them where
+  SITG has none. Geneva maps them on motorways and links only (58 ways); CH 4,725 ways, 1,401 with `destination:lanes`.
 - **`maxspeed`** (v2, #711): km/h per direction, from `maxspeed:forward`/`:backward`, else `maxspeed`
   (`OsmSpeed.Kmh`: a number, `N mph`, `CH:urban` 50, `CH:rural` 80, `CH:trunk` 100, `CH:motorway` 120,
   `walk` 10; empty for `none`, `signals` or anything else). `OsmOverlayReader` reads a v1 file too

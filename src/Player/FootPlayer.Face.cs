@@ -12,6 +12,8 @@ namespace UnitSport.Player;
 public partial class FootPlayer
 {
     private readonly FaceAnimator _face = new();
+    /// <summary>The dance's CD has a vocal analysis: the lips move at a voice's speed.</summary>
+    private bool _singing;
 
     /// <summary>Past this from the camera a face stops moving, m: a few pixels nobody reads.</summary>
     public const float FaceDrawDistance = 30f;
@@ -27,7 +29,15 @@ public partial class FootPlayer
         : Downed ? FaceExpression.Pain
         : Emote >= 0 ? FaceExpressions.ForEmote(Emote)
         : DanceId != 0 ? FaceExpression.Happy
+        : PhoneState == PhoneSelfieState ? SelfieFace()
         : FaceExpression.Neutral;
+
+    /// <summary>A selfie's faces (#889), one after the other, a few seconds each.</summary>
+    private static readonly FaceExpression[] SelfieFaces = { FaceExpression.Happy, FaceExpression.Joy, FaceExpression.Wink, FaceExpression.Love };
+
+    /// <summary>The selfie face now: off the shared clock, so every peer shows the same one at the same moment.</summary>
+    private static FaceExpression SelfieFace() =>
+        SelfieFaces[(int)(Math.Max(0.0, Net.ClockSync.ServerNow) / 2.5) % SelfieFaces.Length];
 
     private void StepFace(float dt)
     {
@@ -39,7 +49,10 @@ public partial class FootPlayer
             if (dist > FaceDrawDistance) return;
             if (dist < FaceLookDistance) look = cam.GlobalPosition;
         }
-        if (DanceFaceNow() is { } face) _face.Step(walker, face, look, dt);
+        // a selfie: into the phone's lens
+        if (PhoneState == PhoneSelfieState && _phoneModel is { Visible: true } phone)
+            look = phone.GlobalTransform * Phone.PhoneModel.LensPoint;
+        if (DanceFaceNow() is { } face) _face.Step(walker, face, look, dt, ease: _singing ? FaceAnimator.LipEase : 9f);
         else _face.Step(walker, FaceMood, look, dt);
     }
 
@@ -59,7 +72,9 @@ public partial class FootPlayer
         int floor = d.Move == Avatar.HumanMeshBuilder.BreakDown ? (beats >= 5f ? 1 : 0)
             : Avatar.HumanMeshBuilder.IsBreakPower(d.Move) ? (beats < 3.7f ? 1 : beats < 7f ? 2 : 0)
             : 0;
-        var hearing = new DanceHearing((int)d.Style, (int)g.Section, g.Level, g.Kick, g.BarKick, g.Burst, g.Beat, d.Bar, floor);
+        var hearing = new DanceHearing((int)d.Style, (int)g.Section, g.Level, g.Kick, g.BarKick, g.Burst, g.Beat, d.Bar, floor,
+            g.Voice, g.Syllable, g.Vowel);
+        _singing = g.Voice >= 0f;
         return DanceFace.Target(hearing, DanceSeed());
     }
 }

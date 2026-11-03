@@ -44,7 +44,10 @@ public sealed class FixtureChunkSource : IChunkSource
             for (int n = lo.N; n <= hi.N; n++)
                 _tiles.Add(new TileId(e, n));
 
-        foreach (var (cls, pts) in course.Roads)
+        for (int road = 0; road < course.Roads.Count; road++)
+        {
+            var (cls, pts) = course.Roads[road];
+            float width = course.RoadWidths.TryGetValue(road, out float w) ? w : RoadFormat.DefaultWidth(cls);
             foreach (var (tile, piece) in SplitAtTiles(pts.Select(p => (startE + p.X, startN + p.Y, p.Z)).ToList()))
             {
                 var xyz = new float[piece.Count * 3];
@@ -56,10 +59,26 @@ public sealed class FixtureChunkSource : IChunkSource
                 }
                 Add(_roads, tile, new RoadSegment
                 {
-                    Class = cls, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(cls), Points = xyz,
+                    Class = cls, Surface = RoadSurface.Paved, Width = width, Points = xyz,
                 });
             }
+        }
         PlanCarParks();
+        PaintLines();
+        PlanSlopes();
+        Fleet = PlanFleet();
+        // the course's venues (#1396) are the venue list while it is played, on the server and every client alike
+        if (course.Venues.Count > 0)
+        {
+            Interiors.Venues.Override = course.Venues.Select((v, i) => new VenueRecord($"fixture-{course.Name}-{i}", v.Type,
+                startE + v.X, startN + v.Y, VenueFix.Inside, v.Flags, v.Count, "", v.Name)).ToList();
+            _overrodeVenues = true;
+        }
+        if (course.StadiumAt is { } stadium)
+        {
+            Stadiums.StadiumCatalog.UseWorld(stadium(startE, startN));
+            _addedStadium = true;
+        }
         // buildings (#558), filed by the tile their middle is in
         Interiors.GarageRule.AlwaysRolls = course.AlwaysGarage;
         foreach (var block in course.Blocks)
@@ -76,6 +95,117 @@ public sealed class FixtureChunkSource : IChunkSource
                 (float)(tile.MaxN - n), height, 0));
         }
     }
+
+    /// <summary>Whether a course's venues replaced the venue list (#1396): <see cref="ForgetWorld"/> gives the embedded one back.</summary>
+    private static bool _overrodeVenues, _addedStadium;
+
+    /// <summary>
+    /// What a played course set for the whole process (its venues and fleet, #1396), undone as the world is left; the
+    /// venue list only when a course set it, so a check's own hand-made venues stay.
+    /// </summary>
+    public static void ForgetWorld()
+    {
+        if (_overrodeVenues) Interiors.Venues.Override = null;
+        if (_addedStadium) Stadiums.StadiumCatalog.UseWorld(null);
+        _overrodeVenues = _addedStadium = false;
+        Fleet = new Dictionary<TileId, List<Vehicles.VehicleSlot>>();
+    }
+
+    /// <summary>
+    /// The parked vehicles of the course last built in this process (#1396), by tile: the dormant layer reads them on
+    /// every peer, as it works out a car park's from the tile, so the same slots wake on the server.
+    /// </summary>
+    public static IReadOnlyDictionary<TileId, List<Vehicles.VehicleSlot>> Fleet { get; private set; } = new Dictionary<TileId, List<Vehicles.VehicleSlot>>();
+
+    private Dictionary<TileId, List<Vehicles.VehicleSlot>> PlanFleet()
+    {
+        var fleet = new Dictionary<TileId, List<Vehicles.VehicleSlot>>();
+        for (int i = 0; i < _course.Fleet.Count; i++)
+        {
+            var p = _course.Fleet[i];
+            double e = _startE + p.X, n = _startN + p.Y;
+            // a heading is clockwise from north, a yaw turns the other way
+            float yaw = (float)Math.IEEERemainder(-p.HeadingDeg * Math.PI / 180, 2 * Math.PI);
+            Add(fleet, TileId.FromLv95(e, n), new Vehicles.VehicleSlot($"fix_{_course.Name}", i, e, n, _course.Ground(p.X, p.Y), yaw,
+                p.Kind, (byte)(i * 37 % 8), false, p.Train, p.Load, Respawns: true));
+        }
+        return fleet;
+    }
+
+    /// <summary>The course's painted lines (#1396, the yard's bays): white, as a car park's are.</summary>
+    private void PaintLines()
+    {
+        foreach (var (x0, y0, x1, y1) in _course.Lines)
+        {
+            double e0 = _startE + x0, n0 = _startN + y0, e1 = _startE + x1, n1 = _startN + y1;
+            var at = TileId.FromLv95((e0 + e1) / 2, (n0 + n1) / 2);
+            if (!_tiles.Contains(at)) continue;
+            float Y(double x, double y) => (float)_course.Ground(x, y) + 0.02f;
+            Add(_parkPaint, at, new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = 0xE0DED1FF, Width = 0.15f,
+                Vertices = [(float)(e0 - at.MinE), Y(x0, y0), (float)(at.MaxN - n0), (float)(e1 - at.MinE), Y(x1, y1), (float)(at.MaxN - n1)],
+                Indices = [],
+            });
+        }
+    }
+
+    // ---- ski slopes (#1396) ---------------------------------------------------------------------
+
+    private readonly Dictionary<TileId, PisteTile> _pistes = new();
+
+    /// <summary>
+    /// The course's ski slopes as the piste stage would write them: one area record per slope in every tile it touches,
+    /// the slot raster inside its outline, the edge mask ramping in over <see cref="PisteFormat.EdgeRampM"/>, the groom
+    /// phase across the slope (east-west: a course's slopes run north-south).
+    /// </summary>
+    private void PlanSlopes()
+    {
+        if (_course.Slopes.Count == 0) return;
+        int size = PisteFormat.Size;
+        foreach (var tile in _tiles)
+        {
+            var records = new List<PisteRecord>();
+            var slot = new byte[size * size];
+            var aux = new ushort[size * size];
+            foreach (var slope in _course.Slopes)
+            {
+                double minX = slope.Outline.Min(p => p.X), maxX = slope.Outline.Max(p => p.X);
+                double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
+                if (_startE + maxX < tile.MinE || _startE + minX > tile.MinE + ChunkFormat.TileSizeM
+                    || _startN + maxY < tile.MinN || _startN + minY > tile.MaxN) continue;
+                var path = slope.Outline.SelectMany(p => new[] { (float)(_startE + p.X - tile.MinE), (float)(_startN + p.Y - tile.MinN) }).ToArray();
+                double low = _course.Ground((minX + maxX) / 2, minY), high = _course.Ground((minX + maxX) / 2, maxY);
+                double steep = Math.Atan2(Math.Abs(high - low), maxY - minY) * 180 / Math.PI;
+                records.Add(new PisteRecord(0xF0F0_0000UL + (ulong)_course.Slopes.IndexOf(slope), PisteType.Downhill, slope.Difficulty,
+                    PisteGrooming.Classic, true, (float)(maxX - minX), slope.Name, "", path, (float)Math.Min(low, high), (float)Math.Max(low, high),
+                    high > low ? 0.85f : 0.15f, (float)steep));
+                byte index = (byte)records.Count;
+                for (int r = 0; r < size; r++)
+                    for (int col = 0; col < size; col++)
+                    {
+                        double x = tile.MinE + col - _startE, y = tile.MaxN - r - _startN;
+                        if (!Inside(slope.Outline, x, y)) continue;
+                        double edge = Math.Min(Math.Min(x - minX, maxX - x), Math.Min(y - minY, maxY - y));
+                        slot[r * size + col] = index;
+                        aux[r * size + col] = PisteFormat.PackAux((float)Math.Clamp(edge / PisteFormat.EdgeRampM, 0, 1), x - minX);
+                    }
+            }
+            if (records.Count > 0) _pistes[tile] = new PisteTile(tile, records, slot, aux);
+        }
+
+        static bool Inside((double X, double Y)[] ring, double x, double y)
+        {
+            bool inside = false;
+            for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+                if ((ring[i].Y > y) != (ring[j].Y > y) && x < (ring[j].X - ring[i].X) * (y - ring[i].Y) / (ring[j].Y - ring[i].Y) + ring[i].X)
+                    inside = !inside;
+            return inside;
+        }
+    }
+
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) =>
+        Task.FromResult(_pistes.TryGetValue(id, out var t) ? t : null);
 
     /// <summary>The course <c>--chunks fixture:&lt;name&gt;</c> names, starting at the spawn; null for an unknown name.</summary>
     public static FixtureChunkSource? Create(string name, double startE, double startN) =>

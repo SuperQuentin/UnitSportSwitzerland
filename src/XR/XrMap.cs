@@ -123,7 +123,7 @@ internal sealed partial class XrMap : Node3D
     public void Update(FootPlayer? player)
     {
         if (!Visible) return;
-        if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 } || Input.MouseMode != Input.MouseModeEnum.Captured)
+        if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 } || Core.MouseCapture.Mode != Input.MouseModeEnum.Captured)
         {
             Visible = false;
             return;
@@ -143,7 +143,7 @@ internal sealed partial class XrMap : Node3D
         _dot.Visible = _aim != null;
         if (_aim is { } a) _dot.Position = new Vector3(a.X, 0.02f, a.Y);
 
-        bool trigger = _pointer.GetFloat("trigger") > 0.6f;
+        bool trigger = _pointer.GetFloat(XrPad.Inputs.Trigger) > 0.6f;
         if (trigger && !_triggerWas && _aim is { } go && BattleRoyale.BrManager.Instance?.InMatch != true
             && Core.Permissions.CanTeleport && Core.Teleporter.Instance is { } teleporter)
         {

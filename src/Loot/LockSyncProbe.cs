@@ -71,6 +71,8 @@ public partial class LockSyncProbe : ChatProbe
         var lockType = plan.Furniture[index].Type;
         GD.Print($"[locksync {_role}] building {doorKey} ({door.Kind}), {lockType} #{index} in the {plan.RoomOf(plan.Furniture[index])?.Type}");
 
+        // in one after the other: two walkers in one doorway push each other off its line, into the shell beside it (#1401)
+        if (_role == "B" && !await Heard("A", "entered", 120)) { Fail("A never walked in"); return; }
         var at = Fresh(door);
         var inward = -at.Outward;
         me.LeaveInterior(at.World + at.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
@@ -97,12 +99,16 @@ public partial class LockSyncProbe : ChatProbe
         }
 
         if (!await WalkIn(me, interiors, door)) return;
+        if (_role == "A") Say("entered");
         var layout = interiors.Current!;
         var node = interiors.CurrentNode!;
         if (layout.Key != plan.Key) { Fail($"walked into {layout.Key}, not {plan.Key}"); return; }
         Expect(!node.IsLockOpen(index) && !loot.IsUnlocked(layout.Key, index), "the lock starts shut");
 
+        // one after the other: two bodies set down inside each other are eased apart, off the spot (#1401)
+        if (_role == "B" && !await Heard("A", "stood", 60)) { Fail("A never stood at the lock"); return; }
         if (!await StandAt(me, layout, node, index)) return;
+        if (_role == "A") Say("stood");
         Expect(LootService.NearestContainer(me, layout, node) == index, $"standing in front of the {lockType}");
         Shot("shut");
 
@@ -134,7 +140,7 @@ public partial class LockSyncProbe : ChatProbe
             if (!await Heard("A", "cracked", 120)) { Fail("A never cracked it"); return; }
             Expect(await Until(() => node.IsLockOpen(index) && loot.IsUnlocked(layout.Key, index), 5),
                 "B saw the door swing open without doing anything");
-            await Seconds(1.2);
+            if (DisplayServer.GetName() != "headless") await Seconds(1.2);
             Shot("open");
             Expect(me.TryInteract() && loot.IsOpen && !ui.IsOpen, "B searches it straight away, no dial");
             await Until(() => !loot.Waiting, 10);
@@ -199,8 +205,7 @@ public partial class LockSyncProbe : ChatProbe
     /// The door as the index has it now: an entry kept across awaits holds world space from before
     /// any origin shift since (#185, <c>--originstress</c>); the index itself follows the shifts.
     /// </summary>
-    private static DoorIndex.Entry Fresh(DoorIndex.Entry door) =>
-        DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+    private static DoorIndex.Entry Fresh(DoorIndex.Entry door) => DoorIndex.Find(door.Key) ?? door;
 
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
@@ -217,13 +222,10 @@ public partial class LockSyncProbe : ChatProbe
         for (int attempt = 0; attempt < 4 && !open; attempt++)
         {
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
-            open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
+            open = await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, DoorSettle, 5 + attempt * 2);
         }
         if (!open) { Fail($"the door {doorKey} never opened"); return false; }
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         return true;
@@ -237,15 +239,20 @@ public partial class LockSyncProbe : ChatProbe
         var front = turn * new Vector3(0, 0, f.D / 2 + 0.55f);
         var face = node.GlobalTransform.Basis * -front;
         float sign = _role == "A" ? -1f : 1f;
-        foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f })
+        foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f, 0.6f })
         {
             var side = turn * new Vector3(sign * offset, 0, 0);
-            me.EnterInterior(layout.Key, node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side), Mathf.Atan2(-face.X, -face.Z));
+            var spot = node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side);
+            // never onto the other player: bodies closer than this touch, and set down inside each other they are eased apart (#1401)
+            if (PlayerSnapshot.Of(GetTree()).Any(s => s.Player != me && s.Pos.DistanceTo(spot) < 0.7f)) continue;
+            me.EnterInterior(layout.Key, spot, Mathf.Atan2(-face.X, -face.Z));
             me.Velocity = Vector3.Zero;
             await Seconds(0.8);
             if (InteriorManager.Instance?.Current?.Key == layout.Key && LootService.NearestContainer(me, layout, node) == index) return true;
         }
-        Fail($"could not stand in front of #{index}");
+        var look = node.GlobalTransform.Basis.Inverse() * -me.Camera.GlobalTransform.Basis.Z;
+        Fail($"could not stand in front of #{index} (in {InteriorManager.Instance?.Current?.Key}, nearest #{LootService.NearestContainer(me, layout, node)}, "
+            + $"{node.ToLocal(me.GlobalPosition) - new Vector3(f.X, layout.FloorY(f.Floor), f.Z)} from it, looking {look})");
         return false;
     }
 

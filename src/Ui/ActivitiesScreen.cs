@@ -8,12 +8,12 @@ namespace UnitSport.Ui;
 /// The Activities screen (#840): what the console does for an activity, as a page. Tabs Invites,
 /// Battle Royale and Race (LB / RB, Q / E). Every button sends the command the console takes
 /// (<c>/br open zug 6 normal duos</c>), so the server keeps one path and checks everything again;
-/// the reply shows in the status line at the bottom. Opened from the quick menu, the Start menu and
+/// the reply shows in the status line at the bottom. Versteckis (#1268) has its own tab. Opened from the quick menu, the Start menu and
 /// the wrist menu; online only. Docs: <c>docs/notes/ui/activities.md</c>.
 /// </summary>
 public partial class ActivitiesScreen : Screen
 {
-    public enum Tab { Invites, BattleRoyale, Race }
+    public enum Tab { Invites, BattleRoyale, Race, Versteckis }
 
     private readonly List<Button> _tabs = new();
     private readonly List<Control> _pages = new();
@@ -58,7 +58,7 @@ public partial class ActivitiesScreen : Screen
             b.AddThemeStyleboxOverride("normal", normal);
             b.AddThemeStyleboxOverride("pressed", on);
             b.AddThemeStyleboxOverride("hover_pressed", on);
-            b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+            UiKit.DimFont(b);
             b.AddThemeColorOverride("font_pressed_color", UiTheme.Amber);
             b.AddThemeColorOverride("font_hover_pressed_color", UiTheme.Amber);
             var tab = (Tab)_tabs.Count;
@@ -74,6 +74,7 @@ public partial class ActivitiesScreen : Screen
         AddTab("Invites", BuildInvites());
         AddTab("Battle Royale", BuildBr());
         AddTab("Race", BuildRace());
+        AddTab("Versteckis", BuildVs());
 
         body.AddChild(UiKit.Line());
         _status = UiKit.Text(Permissions.Online ? "" : "Activities need a multiplayer game.", UiTheme.FontSmall, UiTheme.TextDim);
@@ -98,6 +99,7 @@ public partial class ActivitiesScreen : Screen
         if (InviteService.Client is { } invites) invites.Changed -= OnInvitesChanged;
         if (Parties.Client is { } parties) parties.Changed -= OnInvitesChanged;
         UnbindBr();
+        UnbindVs();
     }
 
     /// <summary>The server's private replies and errors while the page is up: the status line.</summary>
@@ -171,6 +173,7 @@ public partial class ActivitiesScreen : Screen
             case Tab.Invites: RefreshInvites(); break;
             case Tab.BattleRoyale: RefreshBr(); break;
             case Tab.Race: RefreshRace(); break;
+            case Tab.Versteckis: RefreshVs(); break;
         }
     }
 
@@ -289,6 +292,7 @@ public partial class ActivitiesScreen : Screen
         Ask("Ask them to teleport to you", "tphere", "They accept, and they come to you (/tphere)");
         Ask("Invite to my party", "party invite", "A party plays a Battle Royale as one team (/party invite)");
         Ask("Challenge to a fist fight", "fight", "Within 12 m, both on foot (/fight)");
+        Ask("Challenge to an aura battle", "aura", "Within 12 m, both on foot: plan a combo, cut it on the beat (/aura)");
 
         right.AddChild(UiKit.Spacer(10));
         right.AddChild(UiKit.Section("Party"));
@@ -349,6 +353,17 @@ public partial class ActivitiesScreen : Screen
             foreach (var (peer, name) in parties.Members)
             {
                 var (row, _) = ListRow(peer == parties.Members[0].Peer ? $"{name}  (leader)" : name, null);
+                // playing together (#1266): hold hands or rope up with a party member near you
+                if (peer != Multiplayer.GetUniqueId() && Adventure.Together.TogetherService.Instance is { } together && together.MayAskLink(peer))
+                {
+                    string who = name;
+                    var hands = UiKit.Button("Hold hands");
+                    hands.Pressed += () => Run($"/rope hands {who}");
+                    var rope = UiKit.Button("Rope up");
+                    rope.Pressed += () => Run($"/rope {who}");
+                    row.AddChild(hands);
+                    row.AddChild(rope);
+                }
                 if (parties.IsLeader && peer != Multiplayer.GetUniqueId())
                 {
                     var kick = UiKit.Button("Put out");

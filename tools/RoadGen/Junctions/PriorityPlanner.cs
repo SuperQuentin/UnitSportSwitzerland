@@ -96,7 +96,7 @@ public static class PriorityPlanner
     public static LinkEnd EndAt(RoadNetwork net, Junction j, JunctionArm arm)
     {
         var link = net.Links[arm.LinkId];
-        bool start = link.StartNode == j.NodeId, end = link.EndNode == j.NodeId;
+        bool start = j.Holds(link.StartNode), end = j.Holds(link.EndNode);
         if (start != end) return start ? LinkEnd.Start : LinkEnd.End;
         // a loop back to its own node: the end whose alignment lies nearer this arm's mouth
         var mouth = (arm.Left + arm.Right) * 0.5;

@@ -78,12 +78,18 @@ public static class Surfaces
         // standing in water (World/WaterField, #299): a lake's shallows over a gravel bed are water
         if (chunks.TryGetWaterLevel(feet, out float still) && still - feet.Y > 0.05f) return Surface.Water;
 
+        // a ski slope (#887): snow all year, ice where its state says so
+        if (World.Snow.SnowService.Instance is { } snow && snow.Index?.At(feet, out float mask) is { } slope && mask > 0.3f)
+            return snow.StateAt(slope, feet.Y).Ice > 0.5f ? Surface.Ice : Surface.Snow;
+
         bool known = chunks.TryGetCover(feet, out var cover);
 
         // water is water even where a road is mapped across it: the raster says the lake is here
         if (known && cover == CoverClass.Water) return Surface.Water;
 
         if (RoadUnder(chunks, feet) is { } road) return road;
+        // the white above the permanent snow line, and an occasion's snow, are snow underfoot (#899)
+        if (feet.Y > CoverPalette.SnowLine + 125f || World.DayNight.OccasionSnow > 0.5f) return Surface.Snow;
         return known ? FromCover(cover) : Surface.Grass;
     }
 
@@ -109,8 +115,7 @@ public static class Surfaces
     {
         if (Origin is not { } origin || chunks.Source is not { } source) return null;
         Watch(chunks);
-        var (e, n) = origin.ToLv95(feet);
-        var tile = TileId.FromLv95(e, n);
+        var tile = origin.TileAt(feet);
         if (!Roads.TryGetValue(tile, out var index))
         {
             // fetched once through the (cached) chunk source; until it lands there is simply no road
@@ -118,8 +123,9 @@ public static class Surfaces
             return null;
         }
         if (index == null) return null;
-        double lx = e - tile.MinE, lz = tile.MaxN - n;
-        return index.Nearest(lx, lz, feet.Y, index.Cell(lx, lz));
+        // the road file is tile-local (#1443): the feet in the tile's own frame
+        var local = origin.TileLocal(tile, feet);
+        return index.Nearest(local.X, local.Z, local.Y, index.Cell(local.X, local.Z));
     }
 
     /// <summary>

@@ -25,6 +25,12 @@ namespace UnitSport.Player;
 /// seconds (and seen the thrower dance), B on the world radio, B in the thrower's hand, A in the
 /// thrower's hand (five seconds each), and silence for the thrower's personal CD.
 /// </para>
+///
+/// <para>
+/// The watcher says each condition in chat as it passes (<c>RS watch &lt;key&gt;</c>), and the thrower takes
+/// its next step on that line (#992). It used to step on a fixed timeline (30, 50, 70, 88, 112 s), which
+/// still stands as the latest time for each step.
+/// </para>
 /// </summary>
 public partial class RadioSyncCheck : Node
 {
@@ -41,6 +47,15 @@ public partial class RadioSyncCheck : Node
     private readonly HashSet<int> _personalBefore = new();
     private readonly Dictionary<string, double> _okSince = new();
     private readonly HashSet<string> _passed = new();
+    /// <summary>Thrower: the watcher's conditions it said had passed.</summary>
+    private readonly HashSet<string> _watcherPassed = new();
+    private bool _listening;
+    private const string Said = "RS watch ";
+
+    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
+
+    /// <summary>The thrower's step waits for the watcher to have passed <paramref name="key"/>, or for the old time.</summary>
+    private bool Seen(string key) => _watcherPassed.Contains(key);
 
     private static readonly (string Key, double Hold)[] Conditions =
         { ("worldA", 10), ("worldB", 5), ("heldB", 5), ("heldA", 5), ("personalSilent", 3) };
@@ -91,6 +106,16 @@ public partial class RadioSyncCheck : Node
     private void Throw()
     {
         if (_local() is not { } me) return;
+        if (!_listening && Chat is { } chat)
+        {
+            _listening = true;
+            chat.LineReceived += (line, _) =>
+            {
+                int at = line.IndexOf(Said, StringComparison.Ordinal);
+                if (at >= 0 && _watcherPassed.Add(line[(at + Said.Length)..].Trim()))
+                    GD.Print($"[radiocheck] thrower: the watcher passed {line[(at + Said.Length)..].Trim()} (t {_t - _since:F1} s)");
+            };
+        }
         if (_since < 0)
         {
             if (Other() == null || !me.IsOnFloor()) return;
@@ -126,7 +151,7 @@ public partial class RadioSyncCheck : Node
                 GD.Print("[radiocheck] thrower: dancing");
                 _step++;
                 break;
-            case 3 when t > 30:
+            case 3 when t > 30 || Seen("worldA"):
             {
                 if (AnyRadio(me.GlobalPosition) is not { } r) { Finish(false, "the radio vanished"); return; }
                 bool beat = r.BeatAt(ClockSync.ServerNow, out _, out _, out _, out _);
@@ -137,7 +162,7 @@ public partial class RadioSyncCheck : Node
                 _step++;
                 break;
             }
-            case 4 when t > 50:
+            case 4 when t > 50 || Seen("worldB"):
             {
                 if (AnyRadio(me.GlobalPosition) is not { } r) { Finish(false, "the radio vanished"); return; }
                 if (_inventory == null) { Finish(false, "no inventory"); return; }
@@ -160,7 +185,7 @@ public partial class RadioSyncCheck : Node
                 _step++;
                 break;
             }
-            case 5 when t > 70:
+            case 5 when t > 70 || Seen("heldB"):
             {
                 if (_inventory?.HeldId != ItemId.Radio) { Finish(false, "the radio is not in the hand"); return; }
                 var cdA = ByTitle("radiofixture")!;
@@ -169,7 +194,7 @@ public partial class RadioSyncCheck : Node
                 _step++;
                 break;
             }
-            case 6 when t > 88:
+            case 6 when t > 88 || Seen("heldA"):
             {
                 string file = CmdArgs.Value("--radiopersonal") ?? "";
                 if (CdLibrary.Instance is not { } library || !File.Exists(file)) { Finish(false, $"no personal fixture ({file})"); return; }
@@ -191,7 +216,7 @@ public partial class RadioSyncCheck : Node
                 _step++;
                 break;
             }
-            case 8 when t > 112:
+            case 8 when t > 112 || Seen("personalSilent"):
                 GD.Print($"[radiocheck] thrower: HeldRadio '{me.HeldRadio}'");
                 // tidy: the fixture is not a CD anyone wants to keep
                 if (RadioPlay.Decode(me.HeldRadio) is { CdId: < 0 } p) CdLibrary.Instance?.RemovePersonal(p.CdId);
@@ -251,6 +276,7 @@ public partial class RadioSyncCheck : Node
         {
             _passed.Add(key);
             GD.Print($"[radiocheck] watch: {key} ok");
+            Chat?.Send(Said + key);   // the thrower's cue for its next step
         }
     }
 
@@ -258,6 +284,7 @@ public partial class RadioSyncCheck : Node
     {
         GD.Print($"[radiocheck] RESULT: {(ok ? "ok" : "FAILED")} ({(_thrower ? "thrower" : "watch")}: {why})");
         SetProcess(false);
-        GetTree().Quit(ok ? 0 : 1);
+        // a moment for the last chat line to go out (the watcher's last cue), whatever the time scale
+        GetTree().CreateTimer(0.3, true, false, true).Timeout += () => GetTree().Quit(ok ? 0 : 1);
     }
 }

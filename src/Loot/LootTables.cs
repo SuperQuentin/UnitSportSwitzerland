@@ -45,6 +45,7 @@ public static class LootTables
         [ItemId.BikeChain] = Tier.Rare, [ItemId.Tyre] = Tier.Rare, [ItemId.CarBattery] = Tier.Rare,
         [ItemId.FuelCan] = Tier.Rare, [ItemId.EnginePart] = Tier.VeryRare,
         [ItemId.SmartBinoculars] = Tier.VeryRare,
+        [ItemId.Telescope] = Tier.VeryRare,
         // only in the locked containers (gun lockers, safes): category Gear, so no category pool picks them up
         [ItemId.Shotgun] = Tier.Rare, [ItemId.Shells] = Tier.Common,
         // bags (#208): category Gear too, so only the pools that name them (Bags, Purses) give them
@@ -100,7 +101,7 @@ public static class LootTables
     private static readonly ItemId[] Gadgets = { ItemId.Electronics };
     private static readonly ItemId[] Wire = { ItemId.CopperWire };
     private static readonly ItemId[] Hardware = { ItemId.Screws, ItemId.DuctTape, ItemId.CopperWire, ItemId.Rope };
-    private static readonly ItemId[] Optics = { ItemId.SmartBinoculars };
+    private static readonly ItemId[] Optics = { ItemId.SmartBinoculars, ItemId.Telescope };
     /// <summary>Soft toys (#501): a bin of them at an IKEA, the odd one in a child's room.</summary>
     private static readonly ItemId[] Toys = { ItemId.Blahaj };
     private static readonly ItemId[] Tins = { ItemId.CannedFood };
@@ -131,14 +132,14 @@ public static class LootTables
     /// <summary>Potatoes and carrots in a cellar, flour in a pantry (#494).</summary>
     private static readonly ItemId[] Roots = { ItemId.Potato, ItemId.Carrot, ItemId.Flour };
     /// <summary>Clothes to wear, plain, gothic and kawaii (#251): what a wardrobe mostly holds.</summary>
-    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial && g.Style != Avatar.GarmentStyle.Workwear).Select(g => g.Item).ToArray();
+    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial && g.Style is not (Avatar.GarmentStyle.Workwear or Avatar.GarmentStyle.Alpine or Avatar.GarmentStyle.Together)).Select(g => g.Item).ToArray();
     /// <summary>A building site's hard hats and hi-vis vests (#822): only its office's rail and lockers give them.</summary>
     private static readonly ItemId[] Workwear = Avatar.Garments.All.Where(g => g.Style == Avatar.GarmentStyle.Workwear).Select(g => g.Item).ToArray();
     /// <summary>The rare ones with a finish that moves: rainbow, disco ball, galaxy…</summary>
     private static readonly ItemId[] Specials = Avatar.Garments.All.Where(g => g.IsSpecial).Select(g => g.Item).ToArray();
     /// <summary>What comes out of the wash: tees, shorts, socks.</summary>
     private static readonly ItemId[] Laundry = Avatar.Garments.All
-        .Where(g => !g.IsSpecial && g.Shape is Avatar.GarmentShape.TShirt or Avatar.GarmentShape.Marcel
+        .Where(g => !g.IsSpecial && g.Style is not (Avatar.GarmentStyle.Alpine or Avatar.GarmentStyle.Together) && g.Shape is Avatar.GarmentShape.TShirt or Avatar.GarmentShape.Marcel
             or Avatar.GarmentShape.Shorts or Avatar.GarmentShape.KneeSock or Avatar.GarmentShape.ThighHigh
             or Avatar.GarmentShape.StripedThighHigh or Avatar.GarmentShape.Polo)
         .Select(g => g.Item).ToArray();
@@ -271,6 +272,13 @@ public static class LootTables
         [(FurnitureType.ToolChest, RoomType.SiteOffice)] = new(0.15f, 2, 4, new[] { P(Hardware, 60), P(Parts, 15), P(Scrap, 20), P(Minerals, 5) }),
         // its mess container is the changing room: spare clothes, a snack, a tool left in a pocket
         [(FurnitureType.Locker, RoomType.BreakRoom)] = new(0.30f, 1, 2, new[] { P(Cloth, 35), P(Workwear, 20), P(Sweets, 20), P(Hardware, 20), P(Medical, 10), P(Games, 6), P(Purses, 4) }, 0.25f, 2, 20),
+        // #827: up the stair, the site manager's desk keeps the cash box and the good radio; the
+        // drawing office's desk and shelf the pens, the laser measure, the plan rolls' tape
+        [(FurnitureType.Desk, RoomType.SiteManager)] = new(0.30f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 15), P(Hardware, 15), P(Medical, 10), P(Optics, 3) }, 0.55f, 10, 80),
+        [(FurnitureType.Locker, RoomType.SiteManager)] = new(0.30f, 1, 2, new[] { P(Cloth, 30), P(Workwear, 25), P(Hardware, 20), P(Medical, 15), P(Purses, 5) }, 0.20f, 2, 20),
+        [(FurnitureType.Shelf, RoomType.SiteManager)] = new(0.40f, 1, 2, new[] { P(Gadgets, 30), P(Wire, 30), P(Hardware, 25), P(Optics, 3) }),
+        [(FurnitureType.Desk, RoomType.DrawingOffice)] = new(0.35f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 25), P(Hardware, 20), P(Optics, 4) }, 0.25f, 2, 20),
+        [(FurnitureType.Shelf, RoomType.DrawingOffice)] = new(0.40f, 1, 2, new[] { P(Gadgets, 30), P(Wire, 25), P(Hardware, 30), P(Scrap, 15) }),
         [(FurnitureType.Desk, RoomType.ControlRoom)] = new(0.35f, 1, 2, new[] { P(Gadgets, 45), P(Wire, 30), P(Scrap, 25), P(Optics, 3) }, 0.35f, 5, 50),
     };
 
@@ -684,7 +692,7 @@ public static class LootTables
     public static int Value(IEnumerable<ItemStack> stacks) => stacks.Sum(s => s.Id switch
     {
         ItemId.Francs => s.Count,
-        ItemId.Shotgun or ItemId.SmartBinoculars => 300 * s.Count,
+        ItemId.Shotgun or ItemId.SmartBinoculars or ItemId.Telescope => 300 * s.Count,
         _ => 25 * s.Count,
     });
 

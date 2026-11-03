@@ -38,7 +38,8 @@ Out of scope: iOS, a phone-hosted server, the Play Store, and shipping real terr
   oldest-first eviction (`EvictIfOversized`).
 - **Joining from the UI.** `src/Core/MainMenu.cs` has a "Join a server" mode, so a client can
   connect without command-line flags.
-- **Style.** Low-poly PS1-style meshes and textures are cheap on mobile GPUs.
+- **Style.** Low-poly meshes are cheap on mobile GPUs. Cartoon, the default (#849), is lit with a
+  shadowed sun; PS1, unshaded, is the cheap look on a weak GPU.
 
 ## What blocks it today
 

@@ -37,6 +37,12 @@ public sealed record WorldLaunch
     /// </summary>
     public (double E, double N)? Landing { get; init; }
 
+    /// <summary>
+    /// The test world to play (#999, <see cref="WorldChoice"/>), or null for the open world. Online, the
+    /// server's: the server list reads it from the status reply, the handshake corrects it.
+    /// </summary>
+    public WorldChoice? World { get; init; }
+
     /// <summary>The server's display name, when it is known (LAN list, saved list, hosting).</summary>
     public string? ServerName { get; init; }
 
@@ -68,12 +74,16 @@ public sealed record WorldLaunch
             else if (args[i] == "--gpx" && i + 1 < args.Length)
                 gpx.Add(args[i + 1]);
         }
+        var world = WorldChoice.FromArgs();
         return new WorldLaunch
         {
             Mode = host != null ? GameMode.Multiplayer : gpx.Count > 0 ? GameMode.GpxReplay : GameMode.Explore,
             Endpoint = host ?? "127.0.0.1",
             GpxPaths = gpx,
             PlayerName = Net.PlayerRegistry.ParseRequestedName(),
+            // --test-world (#999): its own start, which --at still overrides
+            World = world,
+            Landing = world?.Start,
             FromCommandLine = true,
         };
     }

@@ -120,7 +120,11 @@
   - **A goods vehicle is drawn section by section** (`DormantLook.Sections`, each section merged in
     its own frame) and posed by `HeavyGround.Stand` on `GroundQuery.Under` — the very function and
     query a parked train stands on in `VehicleBody` — not level and straight. Where collision has
-    not been built yet the terrain's height stands in, and the tile is posed again once it has.
+    not been built yet the terrain's height stands in, and the tile is posed again once it has:
+    once the collision under every point that missed is built (`_unposed` keeps those points), and
+    only once. A slot recorded a metre under the built ground is never hit (the ray's ceiling look
+    starts inside it): retried every half second, that tile was redrawn for good, 48 replay copies a
+    second on a Battle Royale client (#966).
   - **A dormant box is never ground** (`GroundQuery` looks past `DormantBody`, as past players): a
     woken train posed in its `_Ready` stood its axles on its own dormant box, still in the physics
     space that frame, a metre up; a parked one could stand on a neighbour's.

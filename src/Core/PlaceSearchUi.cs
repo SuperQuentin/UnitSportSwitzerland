@@ -90,6 +90,9 @@ public partial class PlaceSearchUi : CanvasLayer
     /// <summary>Places matching a query, best first: the same ranking the search panel uses.</summary>
     public List<Place> Search(string query, int limit = 12) => _index.Search(query, limit);
 
+    /// <summary>The towns as loaded, for <c>/locate</c> offline (#1277).</summary>
+    public PlaceIndex Index => _index;
+
     /// <summary>Jumps to the best match for a name. Returns false when nothing matched.</summary>
     public bool GoToNamed(string query)
     {
@@ -159,7 +162,7 @@ public partial class PlaceSearchUi : CanvasLayer
         if (open)
         {
             // the fly-cam holds the mouse captured; typing needs it released
-            Input.MouseMode = Input.MouseModeEnum.Visible;
+            MouseCapture.Mode = Input.MouseModeEnum.Visible;
             _query.Clear();
             _hint.Text = Permissions.CanTeleport ? "Enter to jump   Esc to close"
                 : "This server does not allow teleporting   Esc to close";
@@ -185,7 +188,7 @@ public partial class PlaceSearchUi : CanvasLayer
     /// different things that make one worth picking out of a list. Labelling a mountain
     /// "0 buildings" would be true and useless.
     /// </summary>
-    private static string Describe(Place p) => p.Kind switch
+    internal static string Describe(Place p) => p.Kind switch
     {
         PlaceKind.Summit => $"{p.Name}   ▲ {p.Elevation} m",
         PlaceKind.Pass => $"{p.Name}   ⌒ pass, {p.Elevation} m",

@@ -41,15 +41,30 @@ public class FaceTests
     }
 
     [Fact]
-    public void Presets_fit_the_four_replicated_bits_and_keep_the_old_names()
+    public void Presets_fit_the_replicated_bits_and_keep_the_old_names()
     {
-        Assert.InRange(FaceGenome.PresetCount, 8, 16);
+        // Appearance.Face: 4 bits, 5 since #880 (UnitSport.Avatar.AppearanceCode.Faces)
+        Assert.InRange(FaceGenome.PresetCount, 8, UnitSport.Avatar.AppearanceCode.Faces);
         // Appearance.Face is saved and replicated: the #394 faces keep their index
         string[] old = { "anime", "calm", "sharp", "cute", "freckles", "stern", "grin", "stubble" };
         for (int i = 0; i < old.Length; i++) Assert.Equal(old[i], FaceGenome.PresetName(i));
         Assert.Equal(FaceGenome.PresetName(1), FaceGenome.PresetName(1 + FaceGenome.PresetCount));
         var codes = Enumerable.Range(0, FaceGenome.PresetCount).Select(i => FaceGenome.Preset(i).Code).ToHashSet();
         Assert.Equal(FaceGenome.PresetCount, codes.Count);
+    }
+
+    [Fact]
+    public void Alien_eyes_ride_the_high_half_and_leave_the_old_shapes_alone()
+    {
+        // #880: EyeShape.Alien (8) needs a 4th bit, the high half's bit 16; shapes 0-7 keep it 0
+        var alien = FaceGenome.Preset(16);
+        Assert.Equal(EyeShape.Alien, alien.Eyes);
+        Assert.Equal("visitor", FaceGenome.PresetName(16));
+        var (low, high) = alien.Code;
+        Assert.Equal(0, low & 7);
+        Assert.Equal(1, high >> 16 & 1);
+        Assert.Equal(alien, FaceGenome.FromCode(low, high));
+        for (int i = 0; i < 16; i++) Assert.Equal(0, FaceGenome.Preset(i).Code.High >> 16);
     }
 
     [Fact]

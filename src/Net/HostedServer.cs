@@ -39,7 +39,8 @@ public sealed class HostedServer
     /// <summary>Launches the process. Returns an error message, or null when it started.</summary>
     /// <param name="spawn">Where players start (<c>--spawn</c>, #799), LV95 metres; null: the server's default.</param>
     /// <param name="teleport">Players who are not admins may teleport; false adds <c>--no-teleport</c>.</param>
-    public string? Start(bool lanVisible, (double E, double N)? spawn = null, bool teleport = true)
+    /// <param name="world">A test world (#999) to serve instead of the open world: <c>--test-world</c>.</param>
+    public string? Start(bool lanVisible, (double E, double N)? spawn = null, bool teleport = true, WorldChoice? world = null)
     {
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(LogPath)!);
         var args = new List<string> { "--headless", "--log-file", LogPath };
@@ -54,10 +55,13 @@ public sealed class HostedServer
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         if (spawn is { } at) { args.Add("--spawn"); args.Add(string.Create(inv, $"{at.E:F0},{at.N:F0}")); }
         if (!teleport) args.Add("--no-teleport");
+        // the adventure's travel network (#1226): a host who chose it (Settings > Gameplay > Travel) serves it too
+        else if (Core.GameSettings.Current.AdventureTravelNetwork) { args.Add("--adventure-travel"); args.Add("network"); }
         // the same terrain this client reads; a copy without any gets the generated world
         string chunks = TerrainPaths.FindChunkDir();
         args.AddRange(new[] { "--chunks", chunks });
-        if (!System.IO.File.Exists(System.IO.Path.Combine(chunks, "manifest.json"))) args.Add("--generated-world");
+        if (world != null) { args.Add("--test-world"); args.Add(world.Id); }
+        else if (!System.IO.File.Exists(System.IO.Path.Combine(chunks, "manifest.json"))) args.Add("--generated-world");
 
         Pid = OS.CreateProcess(OS.GetExecutablePath(), args.ToArray(), openConsole: false);
         GD.Print($"[host] started server pid {Pid}: {string.Join(' ', args).Replace(HostToken, "***")}");

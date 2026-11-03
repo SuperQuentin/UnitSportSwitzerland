@@ -1,0 +1,28 @@
+{
+  "id": "collide-moto-car",
+  "title": "Motorbike into the side of a car",
+  "verdict": "failed",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:08Z",
+  "commit": "e6b105f8",
+  "coverHash": "8d846bbbe2d39397",
+  "covers": [
+    "src/Vehicles/VehicleBody*.cs",
+    "src/Vehicles/VehicleManager.cs",
+    "src/Vehicles/Explosion.cs",
+    "src/Player/FootPlayer.Crash.cs",
+    "src/Player/Rideable.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Player/Motorbike*.cs",
+    "src/Player/Ragdoll*.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:08Z",
+      "by": "Quentin Aellen",
+      "verdict": "failed",
+      "text": "nothing append the car have move a bit but i\u0027m still on the motorcycle"
+    }
+  ]
+}

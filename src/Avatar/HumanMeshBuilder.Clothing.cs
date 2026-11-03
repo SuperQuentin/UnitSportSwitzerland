@@ -78,8 +78,8 @@ public static partial class HumanMeshBuilder
         var headwear = o[WearSlot.Head];
         // head clothes replace an occasion hat; a helmet replaces both
         if (helmet || fullFace || headwear != null) hat = Headwear.None;
-        var cover = fullFace || hat == Headwear.PumpkinHead ? HairCover.Head
-            : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape is GarmentShape.Beanie or GarmentShape.HardHat ? HairCover.Hat
+        var cover = fullFace || hat == Headwear.PumpkinHead || hat >= Headwear.LarveWaggis ? HairCover.Head
+            : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape is GarmentShape.Beanie or GarmentShape.HardHat or GarmentShape.FeltHat ? HairCover.Hat
             : HairCover.None;
 
         var look = Dress(palette, o, top, bottom);
@@ -106,14 +106,22 @@ public static partial class HumanMeshBuilder
                 }
             }
             // with the legs or without (a cyclist's are their own mesh, driven by the cranks)
-            AppendSkirt(s, fit, top, bottom, palette.Wind);
+            using (s.Resting(TrunkRest(r) with { Part = PartSkirt }))
+            {
+                // a skinned one's shader keeps it over the floor, as the drape does (#1202)
+                s.OverFloor = s.Weigher != null;
+                AppendSkirt(s, fit, top, bottom, palette.Wind);
+                s.OverFloor = false;
+            }
         }
         if (!head) return;
 
         var h = fit.Head;
         bool hair = look.HairStyle != HairStyle.None && cover != HairCover.Head;
         var f = new Frame(h.Side, h.UpAxis, h.Fwd);
-        if (o[WearSlot.Neck] is { } neck) AppendNeckwear(s, fit, neck);
+        if (o[WearSlot.Neck] is { } neck)
+            using (s.Resting(TrunkRest(r) with { Part = PartCollar }))
+                AppendNeckwear(s, fit, neck);
         using var headRest = s.Resting(HeadRest(r));
         if (fullFace)
         {
@@ -178,9 +186,12 @@ public static partial class HumanMeshBuilder
                 GarmentShape.CroppedJacket => look with { Top = c.B, SleeveTo = 2f },
                 GarmentShape.Robe => look with { Top = c.A, SleeveTo = 1f, TopFrom = 1.5f },
                 GarmentShape.Dress => look with { Top = c.A, SleeveTo = 0.38f, TopFrom = 1.5f },
+                // #880: one piece from the neck to the wrists and the ankles
+                // moon boots in its trim colour unless shoes are worn (the feet slot is dressed after)
+                GarmentShape.SpaceSuit => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.5f, Shoes = c.B, Sole = Shade(c.B, 0.6f), BootFrom = 1.62f, Platform = 1.5f },
                 _ => look with { Top = c.A },
             };
-            if (top.CoversBottom) look = look with { Bottom = c.A, LegTo = 0.08f };
+            if (top.CoversBottom) look = look with { Bottom = c.A, LegTo = top.Shape == GarmentShape.SpaceSuit ? 2f : 0.08f };
         }
         if (bottom != null)
         {
@@ -192,7 +203,7 @@ public static partial class HumanMeshBuilder
             };
         }
 
-        if (o[WearSlot.Legs] is { } legs && !IsTrousers(bottom))
+        if (o[WearSlot.Legs] is { } legs && !IsTrousers(bottom) && top?.Shape != GarmentShape.SpaceSuit)
         {
             var c = Cols.Of(legs);
             look = look with
@@ -285,8 +296,9 @@ public static partial class HumanMeshBuilder
             {
                 // the print on the chest: a block and a smaller one inside it (a band logo, a heart)
                 float w = Mathf.Min(0.13f, FrontWidth(fit, 2.62f) * 0.95f);
+                // the inner one's face 1 cm in front of the block's (#947: 6 mm z-fought)
                 s.Box(t.Front(2.62f, 0.004f), new Vector3(w, 0.11f, 0.012f), c.B, TrunkBasis(fit, 2.62f));
-                s.Box(t.Front(2.62f, 0.010f), new Vector3(w * 0.46f, 0.05f, 0.012f), c.C, TrunkBasis(fit, 2.62f));
+                s.Box(t.Front(2.62f, 0.014f), new Vector3(w * 0.46f, 0.05f, 0.012f), c.C, TrunkBasis(fit, 2.62f));
                 break;
             }
 
@@ -418,6 +430,23 @@ public static partial class HumanMeshBuilder
                 t.Band(s, 3.8f, 4f, c.B, 0.008f);
                 AppendBow(s, t.Front(3.25f, 0.012f), FrameAt(fit, 3.25f), 0.7f, c.C, c.C);
                 break;
+
+            case GarmentShape.SpaceSuit:
+            {
+                // #880: a ringed collar, a belt with a glowing buckle, a round glowing badge on the chest
+                var glow = Garments.Fx(top.C, Finish.Neon);
+                // #947: the collar and belt stand 1.8 / 1.2 cm proud, the badge's glow 1 cm in front of its disc:
+                // closer, the bands' flat facets come within the 8 mm of the suit's that z-fight (general/zfight)
+                t.Band(s, 3.78f, 4f, c.B, 0.018f);
+                t.Band(s, 1.90f, 2.06f, c.B, 0.012f);
+                var basis = TrunkBasis(fit, 1.98f);
+                s.Box(t.Front(1.98f, 0.018f), new Vector3(0.040f, 0.030f, 0.010f), glow, basis);
+                var at = t.Front(3.10f, 0.010f);
+                var (_, _, fwd) = t.Frame(3.10f);
+                s.Ring(at, fwd, 0f, 0.030f, 0.008f, c.B, 12);
+                s.Ring(at + fwd * 0.010f, fwd, 0f, 0.020f, 0.008f, glow, 12);
+                break;
+            }
         }
     }
 
@@ -443,9 +472,9 @@ public static partial class HumanMeshBuilder
             }
             case GarmentShape.Pants:
             case GarmentShape.Cargo:
-                // a belt with its buckle
-                t.Band(s, 1.86f, 1.98f, Shade(c.A, 0.55f), 0.007f);
-                s.Box(t.Front(1.92f, 0.013f), new Vector3(0.035f, 0.026f, 0.010f), c.B, TrunkBasis(fit, 1.92f));
+                // a belt with its buckle, 1.2 cm proud (#947: at 7 mm the belt's facets z-fought the trousers')
+                t.Band(s, 1.86f, 1.98f, Shade(c.A, 0.55f), 0.012f);
+                s.Box(t.Front(1.92f, 0.018f), new Vector3(0.035f, 0.026f, 0.010f), c.B, TrunkBasis(fit, 1.92f));
                 break;
             case GarmentShape.SlitMaxi:
             case GarmentShape.HighLowSkirt:
@@ -490,6 +519,11 @@ public static partial class HumanMeshBuilder
                 case GarmentShape.FieldJacket:
                     // the cuff
                     LimbBand(s, shoulder, elbow, wrist, 1.84f, 2f, p, arm: true, 0.006f, c.B);
+                    break;
+                case GarmentShape.SpaceSuit:
+                    // the cuff, 1.6 cm proud and short of the wrist (#947: at 6 mm its facets z-fight the sleeve's,
+                    // and its end lay in the sleeve's)
+                    LimbBand(s, shoulder, elbow, wrist, 1.74f, 1.90f, p, arm: true, 0.016f, c.B);
                     break;
                 case GarmentShape.CroppedJacket:
                     // puffed at the shoulder, the jacket's sleeve over the blouse's, a white cuff
@@ -565,7 +599,8 @@ public static partial class HumanMeshBuilder
         switch (feet.Shape)
         {
             case GarmentShape.Sneakers:
-                LimbBand(s, hip, knee, ankle, 1.9f, 1.99f, p, arm: false, 0.016f, b.B);   // the collar
+                // the collar, 1 cm over the shoe (which stands 1.2 cm proud of the leg; #947: 4 mm z-fought)
+                LimbBand(s, hip, knee, ankle, 1.9f, 1.99f, p, arm: false, 0.022f, b.B);
                 break;
             case GarmentShape.PlatformBoots:
                 // knee-high, buckled three times up the shaft
@@ -585,7 +620,9 @@ public static partial class HumanMeshBuilder
                 if (dir.LengthSquared() < 1e-6f) break;
                 var at = ankle.Lerp(toe, 0.30f);
                 var along = dir.Normalized() * 0.008f;
-                s.Tube(at - along, at + along, 0.054f, b.A, 6);
+                // on the foot: a skinned figure's (#1202) bends with it at the ankle
+                using (s.Resting(FootRest(ankle, toe, outward, hip.X < 0)))
+                    s.Tube(at - along, at + along, 0.054f, b.A, 6);
                 break;
             }
         }
@@ -638,8 +675,12 @@ public static partial class HumanMeshBuilder
     /// thrown forward in a run), and never comes in again on the way down, so the cloth hangs over
     /// the knee instead of the knee going through it. No point drops below <paramref name="floor"/>.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="flutter"/>, when given (a skinned figure's, #1202): each hem point's offset it
+    /// ripples along and its index, for <see cref="MeshScratch.Drape"/>; the shader ripples it then.
+    /// </remarks>
     private static void HangSkirt(Vector3[][] rings, in Fit fit, float band, Vector3 hem, float hemRadius,
-        float ripple, float phase, float floor)
+        float ripple, float phase, float floor, Span<Vector4> flutter = default)
     {
         var t = fit.Torso;
         var r = fit.Rig;
@@ -705,6 +746,7 @@ public static partial class HumanMeshBuilder
                 }
                 radius[k] = need;   // never in again below
                 var p = c + d * need;
+                if (i == rings.Length - 1 && flutter.Length == DrapeSides) flutter[k] = new Vector4(d.X * need, d.Y * need, d.Z * need, k + 1);
                 if (i == rings.Length - 1 && ripple > 0f)
                 {
                     float wave = Mathf.Sin(phase + k * 2.4f) * 0.7f + Mathf.Sin(phase * 1.7f + k * 1.1f) * 0.3f;
@@ -744,23 +786,26 @@ public static partial class HumanMeshBuilder
         var rings = DrapeRings(ref _drape);
         int count = DrapeAt.Length;
         Span<Color> bands = stackalloc Color[count - 1];
+        // a skinned figure's hem flutters in its shader (#1202), so it is told how
+        Span<Vector4> hemFlutter = s.Weigher != null ? stackalloc Vector4[DrapeSides] : default;
 
-        if (top is { CoversBottom: true })
+        if (top is { Draped: true })
         {
             var c = Cols.Of(top);
             if (top.Shape == GarmentShape.Robe)
             {
-                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.06f), 0.30f + extra, ripple, phase, floor);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.06f), 0.30f + extra, ripple, phase, floor, hemFlutter);
                 bands.Fill(c.A);
                 bands[^1] = c.B;   // the trim
-                s.Drape(rings, 0, count, bands);
+                s.Drape(rings, 0, count, bands, hem: hemFlutter);
             }
             else
             {
                 // the dress, the petticoat frothing out under it
                 var hem = r.Hip.Lerp(knees, 0.85f);
                 Hang(hem, 0.29f + extra, c.A, bands);
-                Tier(s, fit, rings, 0.78f, Blown(hem - Vector3.Up * 0.035f), 0.32f + extra, c.B, ripple, phase, floor);
+                using (s.Resting(TrunkRest(r) with { Part = PartTier }))
+                    Tier(s, fit, rings, 0.78f, Blown(hem - Vector3.Up * 0.035f), 0.32f + extra, c.B, ripple, phase, floor);
             }
             return;
         }
@@ -777,7 +822,8 @@ public static partial class HumanMeshBuilder
                 var hem = r.Hip.Lerp(knees, 0.40f);
                 Hang(hem, 0.22f + extra, b.A, bands);
                 // a second tier of ruffle under the first
-                Tier(s, fit, rings, 0.55f, Blown(hem - Vector3.Up * 0.045f), 0.255f + extra, b.B, ripple, phase, floor);
+                using (s.Resting(TrunkRest(r) with { Part = PartTier }))
+                    Tier(s, fit, rings, 0.55f, Blown(hem - Vector3.Up * 0.045f), 0.255f + extra, b.B, ripple, phase, floor);
                 break;
             }
             case GarmentShape.HighLowSkirt:
@@ -786,9 +832,9 @@ public static partial class HumanMeshBuilder
                 break;
             case GarmentShape.SlitMaxi:
                 // to the ankles, with a slit up the front of the right leg (−X)
-                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.07f), 0.29f + extra, ripple, phase, floor);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.07f), 0.29f + extra, ripple, phase, floor, hemFlutter);
                 bands.Fill(b.A);
-                s.Drape(rings, 0, count, bands, new Vector3(-0.55f, 0, 1f), 0.42f);
+                s.Drape(rings, 0, count, bands, new Vector3(-0.55f, 0, 1f), 0.42f, hemFlutter);
                 break;
             case GarmentShape.LongPleated:
             {
@@ -817,9 +863,10 @@ public static partial class HumanMeshBuilder
         // the skirt in one colour
         void Hang(Vector3 hem, float rh, Color colour, Span<Color> bands)
         {
-            HangSkirt(rings, figure, band, Blown(hem), rh, ripple, phase, floor);
+            Span<Vector4> flutter = s.Weigher != null ? stackalloc Vector4[DrapeSides] : default;
+            HangSkirt(rings, figure, band, Blown(hem), rh, ripple, phase, floor, flutter);
             bands.Fill(colour);
-            s.Drape(rings, 0, bands.Length + 1, bands);
+            s.Drape(rings, 0, bands.Length + 1, bands, hem: flutter);
         }
     }
 
@@ -831,7 +878,8 @@ public static partial class HumanMeshBuilder
         float ripple, float phase, float floor)
     {
         var tier = DrapeRings(ref _tier);
-        HangSkirt(tier, fit, 2f, hem, rh, ripple, phase, floor);
+        Span<Vector4> flutter = s.Weigher != null ? stackalloc Vector4[DrapeSides] : default;
+        HangSkirt(tier, fit, 2f, hem, rh, ripple, phase, floor, flutter);
         int count = DrapeAt.Length;
         int i0 = 1;
         while (i0 < count - 2 && DrapeAt[i0] < from) i0++;
@@ -843,12 +891,12 @@ public static partial class HumanMeshBuilder
                 tier[i][k] = centre.Lerp(over[i][k], 0.97f).Lerp(tier[i][k], w);
         }
         Span<Color> one = [colour];
-        s.Drape(tier, i0, count - i0, one);
+        s.Drape(tier, i0, count - i0, one, hem: flutter);
     }
 
     /// <summary>Whether the outfit has something that blows in the wind: a skirt, a robe, a dress.</summary>
     public static bool Flutters(Outfit o) =>
-        o[WearSlot.Top] is { CoversBottom: true } || IsSkirt(o[WearSlot.Bottom]);
+        o[WearSlot.Top] is { Draped: true } || IsSkirt(o[WearSlot.Bottom]);
 
     // ------------------------------------------------------------------------------------
     // head and neck
@@ -879,6 +927,16 @@ public static partial class HumanMeshBuilder
                 s.Tube(lo, hi, neck + 0.006f, c.A, 8);
                 AppendHeart(s, mid + f.Fwd * (neck + 0.014f) - f.Up * 0.025f, f, 0.030f, c.B);
                 break;
+            case GarmentShape.Bandana:
+            {
+                // #1227: a red bandana knotted round the neck, its point on the chest, a white cross on it
+                s.Tube(lo, hi, neck + 0.01f, c.A, 8);
+                var point = mid + f.Fwd * (neck + 0.02f) - f.Up * 0.05f;
+                s.Box(point, new Vector3(0.07f, 0.06f, 0.012f), c.C, f.Basis);
+                s.Box(point + f.Fwd * 0.007f, new Vector3(0.03f, 0.008f, 0.004f), c.B, f.Basis);
+                s.Box(point + f.Fwd * 0.007f, new Vector3(0.008f, 0.03f, 0.004f), c.B, f.Basis);
+                break;
+            }
             case GarmentShape.BellCollar:
             {
                 s.Tube(lo, hi, neck + 0.008f, c.A, 8);
@@ -889,7 +947,8 @@ public static partial class HumanMeshBuilder
             }
             case GarmentShape.Chain:
             {
-                // hangs from the base of the neck onto the chest, a small cross at the bottom
+                // hangs from the base of the neck onto the chest, a small cross at the bottom: on the trunk
+                using var onChest = s.Resting(TrunkRest(r));
                 var t = fit.Torso;
                 for (int i = 0; i <= 10; i++)
                 {
@@ -1008,6 +1067,31 @@ public static partial class HumanMeshBuilder
             case GarmentShape.Bow:
                 AppendBow(s, top + fwd * 0.03f + side * 0.045f * rx + up * 0.005f, f, 1.5f, c.A, c.B);
                 break;
+            case GarmentShape.Antennae:
+            case GarmentShape.LongAntennae:
+            {
+                // #880: two stalks off a thin band, bending out and forward, a glowing bobble on each
+                bool tall = g.Shape == GarmentShape.LongAntennae;
+                var glow = Garments.Fx(g.C, Finish.Neon);
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                {
+                    var root = top - up * 0.012f + side * sgn * hw * 0.42f + fwd * 0.012f;
+                    var a = root + up * (tall ? 0.10f : 0.065f) + side * sgn * 0.016f - fwd * 0.004f;
+                    var b = a + up * (tall ? 0.09f : 0.050f) + side * sgn * (tall ? -0.012f : 0.022f) + fwd * 0.012f;
+                    var tip = tall ? b + up * 0.07f + side * sgn * 0.026f + fwd * 0.02f : b + up * 0.022f + side * sgn * 0.016f + fwd * 0.018f;
+                    s.Tube(root - up * 0.004f, root + up * 0.008f, 0.012f, c.B, 6);
+                    s.Tube(root, a, 0.0065f, 0.0055f, c.A, 5);
+                    s.Tube(a, b, 0.0055f, 0.0050f, c.A, 5);
+                    if (tall) s.Tube(b, tip, 0.0050f, 0.0045f, c.A, 5);
+                    var dir = (tip - (tall ? b : a)).Normalized();
+                    float br = tall ? 0.030f : 0.028f;
+                    var ball = tall ? tip + dir * br * 0.8f : b + dir * br * 0.8f;
+                    s.Tube(ball - dir * br, ball - dir * br * 0.45f, 0.004f, br * 0.85f, glow, 8);
+                    s.Tube(ball - dir * br * 0.45f, ball + dir * br * 0.45f, br * 0.85f, br * 0.85f, glow, 8);
+                    s.Tube(ball + dir * br * 0.45f, ball + dir * br, br * 0.85f, 0.004f, glow, 8);
+                }
+                break;
+            }
             case GarmentShape.LaceHeadband:
                 Band(c.A, 0.035f);
                 // the white lace frill standing along the band's top, in front of it
@@ -1034,6 +1118,23 @@ public static partial class HumanMeshBuilder
                 s.Box(from + up * (height * 0.86f), new Vector3(0.024f, 0.022f, 2f * r * 0.62f), c.C, f.Basis);
                 // the harness band inside the shell, seen under the brim
                 s.Tube(from - up * 0.012f, from - up * 0.002f, hw + 0.012f, c.B, 10);
+                break;
+            }
+            case GarmentShape.FeltHat:
+            {
+                // #1227: the mountain guide's felt hat: a pinched crown, a brim turned down at the front, its band and the edelweiss pin
+                var from = head.Centre(0.12f);
+                float r = hw + 0.02f;
+                // a low crown that narrows, its top pinched in a ridge front to back
+                s.Tube(from + up * 0.005f, top + up * 0.012f, r + 0.006f, (r + 0.006f) * 0.9f, c.A, 10);
+                s.Box(top + up * 0.016f, new Vector3(r * 0.8f, 0.016f, r * 1.4f), c.A, f.Basis);
+                // the brim: wide, a touch lower at the front and back than at the sides
+                s.Tube(from - up * 0.006f, from + up * 0.004f, r + 0.085f, r + 0.08f, c.A, 14);
+                s.Box(from + fwd * (r + 0.045f) - up * 0.012f, new Vector3(0.16f, 0.01f, 0.06f), c.A, f.Basis);
+                s.Box(from - fwd * (r + 0.045f) - up * 0.012f, new Vector3(0.16f, 0.01f, 0.06f), c.A, f.Basis);
+                s.Tube(from + up * 0.006f, from + up * 0.03f, r + 0.003f, r * 0.96f, c.B, 10);
+                var pin = from + up * 0.02f + side * (r + 0.006f);
+                s.Box(pin, new Vector3(0.006f, 0.022f, 0.022f), c.C, f.Basis);
                 break;
             }
             case GarmentShape.Beanie:

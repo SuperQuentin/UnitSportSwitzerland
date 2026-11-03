@@ -60,25 +60,32 @@ public partial class TestWorld : Node3D
             : RollerCheck.Requested ? new RollerCheck(origin)
             : TelehandlerCheck.Requested ? new TelehandlerCheck(origin)
             : TipperCheck.Requested ? new TipperCheck(origin)
+            : EBikeCheck.Requested ? new EBikeCheck(origin)
+            : RideMenuCheck.Requested ? new RideMenuCheck(origin)
             : DumperCheck.Requested ? new DumperCheck(origin)
             : Items.BedCheck.Requested ? new Items.BedCheck(origin)
             : Items.PalletCheck.Requested ? new Items.PalletCheck()
             : Items.ForkCheck.Requested ? new Items.ForkCheck(origin)
             : RideProbe.ParseArgs() is { } ride ? new RideProbe(null, origin, ride.Kind, ride.Seconds, ride.Shot)
             : FlightCheckProbe.ParseArgs() is { } fly ? new FlightCheckProbe(null, origin, fly.Kind, fly.Shot)
+            : BeamCheck.Requested ? new BeamCheck(origin)
             : Terrain.Construction.ShellWalkProbe.Requested() ? new Terrain.Construction.ShellWalkProbe()
             : Terrain.Construction.CraneCheck.Requested ? new Terrain.Construction.CraneCheck(origin)
             : Collision.CollisionMatrixProbe.Requested() ? new Collision.CollisionMatrixProbe(origin)
             : Collision.CollisionSandbox.Requested() ? new Collision.CollisionSandbox(origin)
             : OwnBodyCheck.Requested ? new OwnBodyCheck()
+            : CreativeCheck.Requested ? new CreativeCheck()
+            : Concert.ConcertWalkCheck.Requested ? new Concert.ConcertWalkCheck()
             : null;
         if (probe == null)
         {
-            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck)");
+            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --beamcheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck, --concertwalkcheck, --creativecheck)");
             GetTree().Quit(2);
             return;
         }
         GD.Print($"[testworld] flat world at LV95 {e:F0}/{n:F0}: {probe.GetType().Name}");
+        // the UFOs' tractor beams (#861): a saucer flown here lifts what is under it
+        Player.TractorBeams.Create(this);
         AddChild(probe);
     }
 }

@@ -1,0 +1,1205 @@
+<!doctype html>
+<!-- Served at /houses.html by Caddy on a deployed server (#1186, docs/notes/net/house-layouts.md). Find your building by
+     address, claim it, draw its floors over your plan and submit; admins review here too. Talks to the layout service
+     (tools/LayoutService) at /api/. Static, no build: Leaflet for the map, pdf.js only when a PDF plan is picked. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>House Layouts · UnitSport Switzerland</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+/* the status page's alpenglow palette (index.html, map.html) */
+:root {
+  --bg: #120c14; --panel: #1a101a; --text: #fbf4ee; --muted: #c2b3b0; --dim: #8d7e80;
+  --glow: #ff7a45; --glow2: #ffb36b; --rose: #e0567a; --ok: #4fe08a; --warn: #ffcf5a; --bad: #ff6b6b;
+  --glass: rgba(26, 16, 26, .86); --line: rgba(255, 220, 200, .14); --line2: rgba(255, 220, 200, .3);
+  --door: #ff9d5c; --window: #6fd3ff; --arch: #c9a2ff; --stair: #ffcf5a;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--glow2); }
+#map { position: fixed; inset: 0; background: #0e0a10; }
+.night .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.78) contrast(.92) saturate(.6); }
+.leaflet-control-attribution { background: rgba(18, 12, 20, .7) !important; color: var(--dim) !important; }
+.leaflet-control-attribution a { color: var(--muted) !important; }
+.leaflet-bar a { background: var(--glass) !important; color: var(--text) !important; border-color: var(--line) !important; }
+
+.panel { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; z-index: 1000; width: min(360px, calc(100vw - 24px));
+  max-height: calc(100% - 24px); overflow: auto; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: grid; gap: 16px; }
+.top { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .02em; text-decoration: none; color: inherit; }
+.brand i { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--glow), var(--rose)); display: grid; place-items: center; }
+.top a.back { margin-left: auto; color: var(--muted); font-size: 13px; }
+h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px; font-weight: 700; }
+p { margin: 0 0 8px; }
+.note { color: var(--dim); font-size: 13px; }
+.field { width: 100%; padding: 9px 11px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 12, 20, .9); }
+textarea.field { min-height: 64px; resize: vertical; }
+.row { display: flex; gap: 8px; align-items: center; }
+.btn { padding: 8px 13px; border-radius: 12px; border: 1px solid var(--line2); background: rgba(255, 255, 255, .05); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: rgba(255, 255, 255, .1); }
+.btn.go { background: linear-gradient(135deg, var(--glow), var(--rose)); border-color: transparent; color: #fff; font-weight: 700; }
+.btn.small { padding: 4px 9px; font-size: 13px; border-radius: 9px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:focus-visible, .field:focus-visible, .item:focus-visible, .tool:focus-visible { outline: 2px solid var(--glow2); outline-offset: 2px; }
+.results { display: grid; gap: 2px; margin-top: 6px; }
+.item { display: flex; gap: 8px; align-items: baseline; width: 100%; padding: 7px 9px; border-radius: 10px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.item:hover { background: rgba(255, 255, 255, .06); }
+.item .r { margin-left: auto; font-size: 12px; color: var(--dim); white-space: nowrap; }
+.card { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 8px; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; color: var(--muted); }
+.facts b { color: var(--text); font-weight: 600; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 700; background: rgba(255, 255, 255, .08); color: var(--muted); }
+.chip.draft { color: var(--glow2); } .chip.pending { color: var(--warn); } .chip.approved { color: var(--ok); } .chip.rejected { color: var(--bad); }
+.msg { font-size: 13px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .06); }
+.msg.bad { color: var(--bad); } .msg.ok { color: var(--ok); }
+.basemap { position: fixed; right: 12px; top: calc(12px + env(safe-area-inset-top, 0px)); z-index: 1000; display: flex; gap: 4px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+.basemap .btn { border: 0; }
+.basemap .btn[aria-pressed="true"] { background: rgba(255, 255, 255, .14); }
+
+/* ---------- the editor ---------- */
+#editor { position: fixed; inset: 0; z-index: 2000; display: grid; grid-template-rows: auto 1fr; background: var(--bg); }
+#editor[hidden] { display: none; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.bar .title { font-weight: 700; margin-right: 8px; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .sp { flex: 1; }
+.tools { display: flex; gap: 2px; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+.tool { padding: 5px 10px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; font-size: 14px; }
+.tool[aria-pressed="true"] { background: rgba(255, 255, 255, .14); color: #fff; }
+.tool kbd { font: 11px ui-monospace, monospace; color: var(--dim); margin-left: 4px; }
+.main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+#stage { position: relative; min-width: 0; min-height: 0; background: #151018; touch-action: none; }
+#svg { width: 100%; height: 100%; display: block; cursor: crosshair; user-select: none; }
+#svg.panning { cursor: grabbing; }
+.side { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 12px; display: grid; gap: 16px; align-content: start; }
+.floors { display: flex; flex-direction: column; gap: 4px; }
+.floors .item[aria-current="true"] { background: rgba(255, 255, 255, .12); color: #fff; font-weight: 700; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.grid2 label, .lbl { font-size: 12px; color: var(--dim); display: grid; gap: 2px; }
+.grid2 .field, .lbl .field { padding: 5px 8px; border-radius: 9px; }
+.problems { margin: 0; padding-left: 18px; font-size: 13px; color: var(--warn); }
+.problems.none { color: var(--ok); list-style: none; padding: 0; }
+.zoom { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 4px; }
+.hint { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: var(--dim); background: rgba(18, 12, 20, .8); padding: 4px 9px; border-radius: 8px; pointer-events: none; max-width: calc(100% - 90px); }
+.lbl rect { fill: rgba(18, 12, 20, .85); stroke: rgba(255, 220, 200, .25); }
+.lbl text { fill: #fbf4ee; font: 600 11px system-ui, sans-serif; }
+.lbl.measure rect { stroke: #7df0c8; }
+.lbl.measure text { fill: #7df0c8; }
+#stage .lbl { pointer-events: none; }
+.review { border: 1px solid var(--warn); border-radius: 14px; padding: 10px; display: grid; gap: 8px; }
+@media (max-width: 760px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .side { border-left: 0; border-top: 1px solid var(--line); max-height: 40vh; }
+  .tool kbd { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Map of Switzerland: click your building"></div>
+<div class="basemap" role="group" aria-label="Map background">
+  <button class="btn small" type="button" id="bm-map" aria-pressed="true">Map</button>
+  <button class="btn small" type="button" id="bm-air" aria-pressed="false">Aerial</button>
+</div>
+<aside class="panel" id="panel">
+  <div class="top">
+    <a class="brand" href="./"><i><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true"><path d="M13 4h6v9h9v6h-9v9h-6v-9H4v-6h9z" fill="#fff"/></svg></i>House layouts</a>
+    <a class="back" href="./">Server page</a>
+  </div>
+  <section>
+    <p class="note">Make your house in the game match the real one: find it, claim it, draw its rooms over your floor plan. A moderator checks every layout before it reaches the game.</p>
+    <h2>Find your building</h2>
+    <form class="row" id="search-form" role="search">
+      <input class="field" id="q" type="search" placeholder="Street and number, town" autocomplete="street-address" aria-label="Address">
+      <button class="btn" type="submit">Search</button>
+    </form>
+    <div class="results" id="results"></div>
+    <p class="note" style="margin-top:6px">…or zoom in and click your building on the map.</p>
+  </section>
+  <section id="picked" hidden></section>
+  <section id="account"></section>
+  <section id="mine" hidden><h2>My houses</h2><div class="results" id="mine-list"></div></section>
+  <section id="queue" hidden><h2>Review queue</h2><div class="results" id="queue-list"></div></section>
+</aside>
+
+<div id="editor" hidden>
+  <div class="bar">
+    <button class="btn small" type="button" id="ed-close" title="Back to the map">← Map</button>
+    <span class="title" id="ed-title"></span>
+    <span class="chip" id="ed-status"></span>
+    <div class="tools" role="toolbar" aria-label="Drawing tools" id="tools"></div>
+    <span class="sp"></span>
+    <button class="btn small" type="button" id="ed-undo" title="Undo (Ctrl+Z)">Undo</button>
+    <button class="btn small" type="button" id="ed-redo" title="Redo (Ctrl+Y)">Redo</button>
+    <button class="btn small" type="button" id="ed-save">Save</button>
+    <button class="btn small go" type="button" id="ed-submit">Submit for review</button>
+  </div>
+  <div class="main">
+    <div id="stage">
+      <svg id="svg" aria-label="Floor plan"></svg>
+      <div class="zoom"><button class="btn small" type="button" id="z-in" aria-label="Zoom in">+</button><button class="btn small" type="button" id="z-out" aria-label="Zoom out">−</button><button class="btn small" type="button" id="z-fit" aria-label="Fit the building">⤢</button></div>
+      <div class="hint" id="hint"></div>
+    </div>
+    <div class="side">
+      <section id="review" class="review" hidden></section>
+      <section><h2>Floors</h2><div class="floors" id="floors"></div>
+        <div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn small" type="button" id="f-up">+ Floor above</button><button class="btn small" type="button" id="f-down">+ Cellar</button>
+        <button class="btn small" type="button" id="f-copy" title="Copy the rooms of the floor below onto this one">Copy below</button><button class="btn small" type="button" id="f-del">Delete floor</button></div>
+        <label class="lbl" style="margin-top:8px">Storey height (m)<input class="field" id="storey" type="number" min="2.2" max="4.5" step="0.05"></label>
+      </section>
+      <section id="props"></section>
+      <section><h2>Your plan</h2>
+        <p class="note">A photo, scan or PDF of the floor plan. Align it to the building with two corners, then trace the rooms over it. Only you and the moderators see it.</p>
+        <div class="row" style="flex-wrap:wrap" id="plan-edit"><label class="btn small" for="plan-file">Upload plan…</label><input id="plan-file" type="file" accept="image/png,image/jpeg,application/pdf" hidden>
+          <button class="btn small" type="button" id="plan-align" disabled title="Two points on the plan, then the same two corners on the building's outline: scale, turn and place in one go">Align to building</button>
+          <button class="btn small" type="button" id="plan-cal" disabled title="Click two points on the plan, then give their real distance">Set scale</button></div>
+        <div class="grid2" style="margin-top:8px" id="plan-ctl" hidden>
+          <label>Turn (°)<span class="row"><input class="field" id="plan-rot" type="number" step="0.5"><button class="btn small" type="button" id="plan-r90" title="Turn a quarter">↻</button></span></label>
+          <label>Opacity<input id="plan-op" type="range" min="0.1" max="1" step="0.05"></label>
+          <label>Metres per pixel<input class="field" id="plan-scale" type="number" step="0.0001" min="0.0001"></label>
+          <label style="align-self:end"><span><input id="plan-show" type="checkbox" checked> Show</span></label>
+        </div>
+      </section>
+      <section><h2>Measures</h2>
+        <label class="note" style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input id="show-lengths" type="checkbox"> Show every wall's length</label>
+        <div id="measures"></div>
+      </section>
+      <section><h2>Note for the moderator</h2><textarea class="field" id="ed-note" maxlength="2000" placeholder="How do you know this house? Anything that helps the review."></textarea></section>
+      <section><h2>Check</h2><ul class="problems" id="problems"></ul></section>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtDate = t => t ? new Date(t * 1000).toLocaleDateString() : "";
+
+  // ---------- the service ----------
+  async function api(path, opts = {}) {
+    const init = { credentials: "same-origin", method: opts.method || (opts.body !== undefined || opts.form ? "POST" : "GET"), headers: { "X-Requested-With": "houses" } };
+    if (opts.form) init.body = opts.form;
+    else if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers["Content-Type"] = "application/json"; }
+    let res;
+    try { res = await fetch("api" + path, init); } catch (_) { throw { status: 0, error: "The layout service cannot be reached." }; }
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok) throw { status: res.status, error: data?.error || `Error ${res.status}`, problems: data?.problems };
+    return data;
+  }
+
+  // ---------- LV95 <-> WGS84, swisstopo's approximate formulas (about a metre off) ----------
+  function wgs84(e, n) {
+    const y = (e - 2600000) / 1e6, x = (n - 1200000) / 1e6;
+    const lon = 2.6779094 + 4.728982 * y + 0.791484 * y * x + 0.1306 * y * x * x - 0.0436 * y ** 3;
+    const lat = 16.9023892 + 3.238272 * x - 0.270978 * y * y - 0.002528 * x * x - 0.0447 * y * y * x - 0.0140 * x ** 3;
+    return [lat * 100 / 36, lon * 100 / 36];
+  }
+  function lv95(lat, lon) {
+    const p = (lat * 3600 - 169028.66) / 10000, l = (lon * 3600 - 26782.5) / 10000;
+    return [2600072.37 + 211455.93 * l - 10938.51 * l * p - 0.36 * l * p * p - 44.54 * l ** 3,
+            1200147.07 + 308807.95 * p + 3745.25 * l * l + 76.63 * p * p - 194.56 * l * l * p + 119.79 * p ** 3];
+  }
+
+  // ---------- the map ----------
+  const map = L.map("map", { zoomControl: false, minZoom: 7, maxZoom: 20, maxBounds: [[45.4, 5.4], [48.3, 11.1]], maxBoundsViscosity: 0.8 })
+    .fitBounds([[45.82, 5.96], [47.81, 10.49]]);
+  L.control.zoom({ position: "bottomright" }).addTo(map);
+  const attribution = '&copy; <a href="https://www.swisstopo.admin.ch/">swisstopo</a> · addresses &copy; GWR';
+  const base = {
+    map: L.tileLayer("https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-grau/default/current/3857/{z}/{x}/{y}.jpeg", { maxZoom: 20, maxNativeZoom: 18, attribution }),
+    air: L.tileLayer("https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg", { maxZoom: 20, maxNativeZoom: 19, attribution }),
+  };
+  function setBase(k) {
+    for (const [n, layer] of Object.entries(base)) { if (n === k) layer.addTo(map); else map.removeLayer(layer); $("bm-" + n).setAttribute("aria-pressed", String(n === k)); }
+    document.body.classList.toggle("night", k === "map");
+  }
+  $("bm-map").onclick = () => setBase("map");
+  $("bm-air").onclick = () => setBase("air");
+  setBase("map");
+  let outlineLayer = null;
+
+  // ---------- account ----------
+  let me = null;
+  async function loadMe() {
+    try { me = await api("/me"); } catch (e) { me = null; if (e.status && e.status !== 401) console.warn(e); }
+    renderAccount();
+  }
+  function renderAccount() {
+    const a = $("account");
+    if (!me) {
+      a.innerHTML = `<h2>Log in</h2><p class="note">We email you a link: no password. Your address is only used to log you in and for the moderator to reach you.</p>
+        <form class="row" id="login-form"><input class="field" id="email" type="email" required placeholder="you@example.ch" autocomplete="email" aria-label="Email">
+        <button class="btn" type="submit">Send link</button></form><div id="login-msg"></div>`;
+      $("login-form").onsubmit = async ev => {
+        ev.preventDefault();
+        const m = $("login-msg");
+        try { await api("/login", { body: { email: $("email").value } }); m.innerHTML = `<p class="msg ok">Check your inbox for the login link (valid 30 minutes).</p>`; }
+        catch (e) { m.innerHTML = `<p class="msg bad">${esc(e.error)}</p>`; }
+      };
+      $("mine").hidden = $("queue").hidden = true;
+      return;
+    }
+    a.innerHTML = `<div class="row"><span class="note">Logged in as <b>${esc(me.email)}</b>${me.admin ? " · moderator" : ""}</span><button class="btn small" type="button" id="logout" style="margin-left:auto">Log out</button></div>`;
+    $("logout").onclick = async () => { await api("/logout", { body: {} }).catch(() => {}); me = null; renderAccount(); };
+    $("mine").hidden = me.claims.length === 0;
+    $("mine-list").innerHTML = me.claims.map(c => `<button class="item" type="button" data-claim="${c.id}">${esc(c.address || "EGID " + c.egid)}
+      <span class="r"><span class="chip ${esc(c.status)}">${esc(c.status)}</span></span></button>`).join("");
+    if (me.admin) loadQueue();
+  }
+  $("mine-list").onclick = ev => { const b = ev.target.closest("[data-claim]"); if (b) openClaim(+b.dataset.claim); };
+  async function loadQueue() {
+    try {
+      const q = await api("/admin/claims?status=pending");
+      $("queue").hidden = false;
+      $("queue-list").innerHTML = q.length ? q.map(x => `<button class="item" type="button" data-claim="${x.claim.id}">${esc(x.claim.address || "EGID " + x.claim.egid)}
+        <span class="r">${esc(x.email)} · ${fmtDate(x.claim.submitted)}</span></button>`).join("") : `<p class="note">Nothing waiting.</p>`;
+    } catch (e) { console.warn(e); }
+  }
+  $("queue-list").onclick = ev => { const b = ev.target.closest("[data-claim]"); if (b) openClaim(+b.dataset.claim); };
+
+  // a login link: houses.html#login=<token>
+  async function redeemLink() {
+    const m = /(?:^#|&)login=([A-Za-z0-9_-]+)/.exec(location.hash);
+    if (!m) return;
+    history.replaceState(null, "", location.pathname);
+    try { await api("/login/verify", { body: { token: m[1] } }); }
+    catch (e) { $("account").insertAdjacentHTML("afterbegin", `<p class="msg bad">${esc(e.error)}</p>`); }
+  }
+
+  // ---------- finding a building ----------
+  $("search-form").onsubmit = async ev => {
+    ev.preventDefault();
+    const q = $("q").value.trim();
+    const out = $("results");
+    if (q.length < 3) return;
+    out.innerHTML = `<p class="note">Searching…</p>`;
+    try {
+      const url = "https://api3.geo.admin.ch/rest/services/api/SearchServer?type=locations&origins=address&limit=8&sr=2056&searchText=" + encodeURIComponent(q);
+      const r = await (await fetch(url)).json();
+      const hits = (r.results || []).map(h => ({ label: h.attrs.label.replace(/<[^>]+>/g, ""), egid: +(String(h.attrs.featureId || "").split("_")[0]) || 0, e: h.attrs.y, n: h.attrs.x }));
+      out.innerHTML = hits.length ? hits.map((h, i) => `<button class="item" type="button" data-i="${i}">${esc(h.label)}</button>`).join("") : `<p class="note">No address found.</p>`;
+      out.onclick = e2 => { const b = e2.target.closest("[data-i]"); if (b) { const h = hits[+b.dataset.i]; out.innerHTML = ""; pick(h.egid, h.e, h.n, h.label); } };
+    } catch (_) { out.innerHTML = `<p class="msg bad">The address search is not answering.</p>`; }
+  };
+  map.on("click", ev => { if (map.getZoom() < 16) { map.flyTo(ev.latlng, 17); return; } const [e, n] = lv95(ev.latlng.lat, ev.latlng.lng); pick(0, e, n, ""); });
+
+  let picked = null;
+  async function pick(egid, e, n, label) {
+    const box = $("picked");
+    box.hidden = false;
+    box.innerHTML = `<p class="note">Looking up the building…</p>`;
+    let r;
+    try { r = await api(`/building?egid=${egid}&e=${e}&n=${n}`); }
+    catch (err) { box.innerHTML = `<p class="msg bad">${esc(err.error)}</p>`; return; }
+    const b = r.building;
+    picked = { ...r, e, n, label: label || `Building ${b.egid || "without EGID"}` };
+    if (outlineLayer) map.removeLayer(outlineLayer);
+    outlineLayer = L.polygon(b.rings.map(ring => ring.map(([pe, pn]) => wgs84(pe, pn))), { color: "#ff7a45", weight: 2, fillOpacity: 0.25 }).addTo(map);
+    map.fitBounds(outlineLayer.getBounds(), { maxZoom: 19, padding: [80, 80] });
+    const mineOpen = me?.claims.find(c => c.egid === b.egid && ["draft", "pending", "rejected"].includes(c.status));
+    let action;
+    if (!r.claimable) action = `<p class="note">This building has no register number (EGID) in the game's map yet, so it cannot take a layout.</p>`;
+    else if (mineOpen) action = `<button class="btn go" type="button" id="open-mine">Open my layout</button>`;
+    else if (r.open) action = `<p class="note">Someone already has an open claim on this building. If it is yours, write to the server's admins.</p>`;
+    else if (!me) action = `<p class="note">Log in below to claim it.</p>`;
+    else action = `<textarea class="field" id="claim-note" maxlength="2000" placeholder="For the moderator: do you live here, own it, rent it?"></textarea>
+      <button class="btn go" type="button" id="claim">Claim this building${r.approved ? " (replace its layout)" : ""}</button>`;
+    box.innerHTML = `<h2>Building</h2><div class="card"><b>${esc(picked.label)}</b>
+      <div class="facts"><span>EGID</span><b>${b.egid || "—"}</b><span>Type</span><b>${esc(b.kind)}</b><span>Floors</span><b>${b.floors || "unknown"}</b>
+      <span>Built</span><b>${b.yearBuilt || "unknown"}</b><span>Size</span><b>${b.frame.length.toFixed(1)} × ${b.frame.width.toFixed(1)} m</b>
+      <span>In game</span><b>${r.approved ? "has an approved layout" : "generated interior"}</b></div>${action}<div id="claim-msg"></div></div>`;
+    if ($("open-mine")) $("open-mine").onclick = () => openClaim(mineOpen.id);
+    if ($("claim")) $("claim").onclick = async () => {
+      try {
+        const c = await api("/claims", { body: { egid: b.egid, e, n, address: picked.label, note: $("claim-note").value } });
+        await loadMe();
+        openClaim(c.id);
+      } catch (err) { $("claim-msg").innerHTML = `<p class="msg bad">${esc(err.error)}</p>`; }
+    };
+  }
+
+  // =====================================================================================
+  // The editor: one storey at a time, in the building's frame (x along its long side, z across, metres).
+  // Rooms are polygons (their edges are the walls); the game cuts them into the rectangles it builds from.
+  // =====================================================================================
+  const ROOM_TYPES = ["Living", "Kitchen", "Dining", "Bedroom", "Bathroom", "WC", "Hall", "Corridor", "Office", "Study", "Storage",
+    "Laundry", "GuestRoom", "Playroom", "HomeCinema", "MusicRoom", "Pantry", "Garage", "Workshop", "Cellar", "Carnotzet", "Shelter"];
+  const ROOM_COLOR = { Living: "#ff9d5c", Kitchen: "#ffcf5a", Dining: "#ffb36b", Bedroom: "#8fa8ff", GuestRoom: "#8fa8ff", Bathroom: "#6fd3ff",
+    WC: "#6fd3ff", Laundry: "#6fd3ff", Hall: "#b8a9a6", Corridor: "#b8a9a6", Office: "#c9a2ff", Study: "#c9a2ff", Playroom: "#ff8fb8",
+    HomeCinema: "#e0567a", MusicRoom: "#e0567a", Garage: "#8d7e80", Workshop: "#8d7e80", Storage: "#8d7e80", Pantry: "#8d7e80",
+    Cellar: "#7d6e70", Carnotzet: "#c97b5a", Shelter: "#7d6e70" };
+  const LABEL = { GuestRoom: "Guest room", HomeCinema: "Home cinema", MusicRoom: "Music room", WC: "WC" };
+  const TOOLS = [["select", "Select", "V"], ["room", "Room", "R"], ["box", "Box room", "B"], ["door", "Door", "D"], ["window", "Window", "W"],
+    ["arch", "Arch", "A"], ["stair", "Stair", "S"], ["ruler", "Ruler", "M"], ["plan", "Move plan", "P"]];
+  const HINTS = {
+    select: "Click a room, door or stair. Drag a room to move it, drag a corner to reshape it, double-click a wall to add a corner, Delete removes the selected corner or item. Arrows nudge 5 cm. Drag empty space or the right button to pan, wheel to zoom.",
+    room: "Click each corner of the room; click the first corner (or press Enter) to close it. While drawing, type a length and press Enter to place the next corner exactly. Snaps to corners, walls and 15° steps; hold Alt to place freely. Backspace undoes a corner, Esc cancels.",
+    box: "Drag a rectangle for a square-cornered room; reshape its corners afterwards with Select.",
+    door: "Click on a room's wall to put a door there. A shared wall makes an inner door; a door on an outer wall of the ground floor is the front door. Every room needs a way in.",
+    window: "Click on an outer wall to put a window there. A floor with no window drawn gets windows on its outer walls in the game.",
+    arch: "Click on a shared wall for an open passage between two rooms.",
+    stair: "Drag the stair's rectangle; it climbs along its long side, set the way in the panel. Leave the floor above open over it.",
+    ruler: "Click two points to measure between them; the measure stays on the plan. Snaps like a corner; Alt to measure freely. Remove measures in the panel.",
+    plan: "Drag to move the plan under the building. Or use Align to building: two points on the plan, then the same two on the outline.",
+  };
+  const SNAP_PX = 10, GRID = 0.05;
+  const r2 = v => Math.round(v / GRID) * GRID;
+  const fix = v => +(+v).toFixed(3);
+  const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const fmtM = m => `${m.toFixed(2)} m`;
+
+  let ed = null; // { claim, layout, plan, footprint, editable, level, sel, undo, redo, dirty, view, planImg }
+  let tool = "select";
+  let draft = null;   // a room being drawn: { pts: [[x,z]...], cur: [x,z], typed: "" }
+  let task = null;    // a two-click task: { mode: "ruler"|"cal"|"align", pts: [], cur, img: [] }
+  let snapMark = null;
+
+  const toolbar = $("tools");
+  toolbar.innerHTML = TOOLS.map(([k, name, key]) => `<button class="tool" type="button" data-tool="${k}" aria-pressed="${k === tool}">${name}<kbd>${key}</kbd></button>`).join("");
+  toolbar.onclick = ev => { const b = ev.target.closest("[data-tool]"); if (b) setTool(b.dataset.tool); };
+  function setTool(t) {
+    tool = t;
+    draft = null;
+    task = t === "ruler" ? { mode: "ruler", pts: [] } : null;
+    for (const b of toolbar.querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", String(b.dataset.tool === t));
+    if (ed && t !== "select") ed.sel = null; // a drawing tool starts something new
+    hint(HINTS[t]);
+    if (ed) { render(); renderProps(); }
+  }
+  const hint = t => { $("hint").textContent = t; };
+
+  async function openClaim(id) {
+    let d;
+    try { d = await api(`/claims/${id}`); } catch (e) { alert(e.error); return; }
+    const layout = d.layout;
+    layout.floors = (layout.floors || []).map(f => ({ level: f.level, rooms: (f.rooms || []).filter(r => Array.isArray(r.points)), openings: f.openings || [], stairs: f.stairs || [] }));
+    if (!layout.floors.length) layout.floors.push({ level: 0, rooms: [], openings: [], stairs: [] });
+    const mine = me && d.claim && me.claims.some(c => c.id === id);
+    const plan = d.plan && d.plan.scale ? d.plan : null;
+    ed = { claim: d.claim, email: d.email, building: d.building, layout, plan, measures: (d.plan && d.plan.measures) || [], footprint: d.footprint || [],
+      editable: mine && ["draft", "rejected"].includes(d.claim.status), level: 0, sel: null, undo: [], redo: [], dirty: false, view: null, planImg: null };
+    location.hash = "claim=" + id;
+    $("editor").hidden = false;
+    $("ed-title").textContent = d.claim.address || "EGID " + d.claim.egid;
+    $("ed-status").textContent = d.claim.status;
+    $("ed-status").className = "chip " + d.claim.status;
+    $("ed-note").value = d.claim.note || "";
+    $("ed-note").disabled = !ed.editable;
+    $("storey").value = layout.storeyHeight || 2.7;
+    for (const id2 of ["ed-undo", "ed-redo", "ed-save", "ed-submit", "f-up", "f-down", "f-copy", "f-del", "storey", "plan-file", "plan-rot", "plan-scale"]) $(id2).disabled = !ed.editable;
+    $("ed-submit").hidden = !mine;
+    $("plan-edit").hidden = !ed.editable;
+    toolbar.hidden = !ed.editable;
+    setTool(ed.editable ? "room" : "select");
+    renderReview();
+    if (d.claim.hasPlan) loadPlanImage(`api/claims/${id}/plan`);
+    else syncPlanCtl();
+    fit();
+    renderFloors(); render(); renderProps(); renderMeasures();
+    showProblems(null);
+    if (ed.editable) save(true);
+  }
+
+  function closeEditor() {
+    if (ed?.dirty && ed.editable && !confirm("Leave without saving your changes?")) return;
+    $("editor").hidden = true;
+    ed = null;
+    history.replaceState(null, "", location.pathname);
+    loadMe();
+  }
+  $("ed-close").onclick = closeEditor;
+  window.addEventListener("beforeunload", ev => { if (ed?.dirty && ed.editable) { ev.preventDefault(); ev.returnValue = ""; } });
+
+  function renderReview() {
+    const r = $("review");
+    const c = ed.claim;
+    const parts = [];
+    if (c.status === "rejected" && c.reason) parts.push(`<p><b>Not approved:</b> ${esc(c.reason)}</p><p class="note">Change the layout and submit it again.</p>`);
+    if (c.status === "pending" && !me?.admin) parts.push(`<p>Waiting for a moderator. You can withdraw it to edit again.</p>`);
+    if (c.status === "approved") parts.push(`<p>Approved: this is the layout the game uses.</p>`);
+    if (me?.admin && ed.email) parts.push(`<p class="note">By <b>${esc(ed.email)}</b> · claimed ${fmtDate(c.created)}${c.submitted ? " · submitted " + fmtDate(c.submitted) : ""}</p>`);
+    const owner = me && me.claims.some(x => x.id === c.id);
+    let buttons = "";
+    if (me?.admin && c.status === "pending") buttons += `<button class="btn go small" type="button" id="rv-ok">Approve</button><button class="btn small" type="button" id="rv-no">Reject…</button>`;
+    if (owner && ["draft", "pending", "approved", "rejected"].includes(c.status)) buttons += `<button class="btn small" type="button" id="rv-withdraw">${c.status === "approved" ? "Remove from the game" : "Withdraw"}</button>`;
+    if (buttons) parts.push(`<div class="row" style="flex-wrap:wrap">${buttons}</div><div id="rv-msg"></div>`);
+    r.hidden = parts.length === 0;
+    r.innerHTML = parts.join("");
+    const act = async (path, body, done) => {
+      try { await api(path, { body: body || {} }); done(); }
+      catch (e) { $("rv-msg").innerHTML = `<p class="msg bad">${esc(e.error)}</p>`; if (e.problems) showProblems(e.problems); }
+    };
+    if ($("rv-ok")) $("rv-ok").onclick = () => act(`/admin/claims/${c.id}/approve`, null, () => { ed.dirty = false; closeEditor(); });
+    if ($("rv-no")) $("rv-no").onclick = () => { const why = prompt("Why is it not approved? The person who drew it reads this."); if (why) act(`/admin/claims/${c.id}/reject`, { reason: why }, () => { ed.dirty = false; closeEditor(); }); };
+    if ($("rv-withdraw")) $("rv-withdraw").onclick = () => {
+      if (!confirm(c.status === "approved" ? "Remove this layout from the game? The generated interior comes back." : "Withdraw this claim? You can claim the building again later.")) return;
+      act(`/claims/${c.id}/withdraw`, null, () => { ed.dirty = false; closeEditor(); });
+    };
+  }
+
+  // ---------- floors ----------
+  const floor = () => ed.layout.floors.find(f => f.level === ed.level);
+  const floorAt = l => ed.layout.floors.find(f => f.level === l);
+  const levelName = l => l === 0 ? "Ground floor" : l > 0 ? `Floor ${l}` : `Cellar ${-l}`;
+  function renderFloors() {
+    const fl = [...ed.layout.floors].sort((a, b) => b.level - a.level);
+    $("floors").innerHTML = fl.map(f => `<button class="item" type="button" data-level="${f.level}" aria-current="${f.level === ed.level}">${levelName(f.level)}
+      <span class="r">${f.rooms.length} room${f.rooms.length === 1 ? "" : "s"}</span></button>`).join("");
+  }
+  $("floors").onclick = ev => { const b = ev.target.closest("[data-level]"); if (b) { ed.level = +b.dataset.level; ed.sel = null; draft = null; renderFloors(); render(); renderProps(); } };
+  $("f-up").onclick = () => { const l = Math.max(...ed.layout.floors.map(f => f.level)) + 1; if (l > 20) return; change(() => ed.layout.floors.push({ level: l, rooms: [], openings: [], stairs: [] })); ed.level = l; renderFloors(); render(); };
+  $("f-down").onclick = () => { const l = Math.min(...ed.layout.floors.map(f => f.level)) - 1; if (l < -3) return; change(() => ed.layout.floors.push({ level: l, rooms: [], openings: [], stairs: [] })); ed.level = l; renderFloors(); render(); };
+  $("f-del").onclick = () => {
+    if (ed.level === 0) { alert("The ground floor stays."); return; }
+    const top = Math.max(...ed.layout.floors.map(f => f.level)), bottom = Math.min(...ed.layout.floors.map(f => f.level));
+    if (ed.level !== top && ed.level !== bottom) { alert("Delete the top floor or the lowest cellar first."); return; }
+    if (!confirm(`Delete ${levelName(ed.level)}?`)) return;
+    change(() => { ed.layout.floors = ed.layout.floors.filter(f => f.level !== ed.level); });
+    ed.level = 0; renderFloors(); render(); renderProps();
+  };
+  $("f-copy").onclick = () => {
+    const below = floorAt(ed.level - 1);
+    if (!below?.rooms.length) { alert("The floor below has no rooms."); return; }
+    if (floor().rooms.length && !confirm("Replace this floor's rooms with the floor below's?")) return;
+    change(() => { const f = floor(); f.rooms = JSON.parse(JSON.stringify(below.rooms)); f.openings = below.openings.map(o => ({ ...o })); f.stairs = []; });
+  };
+  $("storey").onchange = () => { const v = +$("storey").value; if (v >= 2.2 && v <= 4.5) change(() => { ed.layout.storeyHeight = v; }); };
+
+  // ---------- undo ----------
+  function change(fn) {
+    ed.undo.push(JSON.stringify(ed.layout));
+    if (ed.undo.length > 200) ed.undo.shift();
+    ed.redo = [];
+    fn();
+    ed.dirty = true;
+    renderFloors(); render(); renderProps();
+  }
+  function undo() { if (!ed?.editable || !ed.undo.length) return; ed.redo.push(JSON.stringify(ed.layout)); ed.layout = JSON.parse(ed.undo.pop()); afterHistory(); }
+  function redo() { if (!ed?.editable || !ed.redo.length) return; ed.undo.push(JSON.stringify(ed.layout)); ed.layout = JSON.parse(ed.redo.pop()); afterHistory(); }
+  function afterHistory() { if (!floor()) ed.level = 0; ed.sel = null; ed.dirty = true; renderFloors(); render(); renderProps(); }
+  $("ed-undo").onclick = undo;
+  $("ed-redo").onclick = redo;
+
+  // ---------- view: screen = world * s + (ox, oy) ----------
+  const svg = $("svg");
+  function fit() {
+    const pts = ed.footprint.flat();
+    const rect = svg.getBoundingClientRect();
+    const w = rect.width || 800, h = rect.height || 600;
+    const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]);
+    const x0 = Math.min(...xs, -5), x1 = Math.max(...xs, 5), z0 = Math.min(...zs, -5), z1 = Math.max(...zs, 5);
+    const s = Math.min(w / (x1 - x0 + 6), h / (z1 - z0 + 6));
+    ed.view = { s, ox: w / 2 - (x0 + x1) / 2 * s, oy: h / 2 - (z0 + z1) / 2 * s };
+  }
+  const toWorld = (cx, cy) => { const r = svg.getBoundingClientRect(); return [(cx - r.left - ed.view.ox) / ed.view.s, (cy - r.top - ed.view.oy) / ed.view.s]; };
+  function zoomAt(f, cx, cy) {
+    const r = svg.getBoundingClientRect();
+    const px = cx - r.left, py = cy - r.top, v = ed.view;
+    const s = Math.min(600, Math.max(2, v.s * f));
+    v.ox = px - (px - v.ox) * s / v.s; v.oy = py - (py - v.oy) * s / v.s; v.s = s;
+    render();
+  }
+  svg.addEventListener("wheel", ev => { if (!ed) return; ev.preventDefault(); zoomAt(Math.exp(-ev.deltaY * 0.0015), ev.clientX, ev.clientY); }, { passive: false });
+  const centre = () => { const r = svg.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  $("z-in").onclick = () => zoomAt(1.3, ...centre());
+  $("z-out").onclick = () => zoomAt(1 / 1.3, ...centre());
+  $("z-fit").onclick = () => { fit(); render(); };
+  window.addEventListener("resize", () => ed && render());
+
+  // ---------- geometry ----------
+  function area(p) { let a = 0; for (let i = 0, j = p.length - 1; i < p.length; j = i++) a += p[j][0] * p[i][1] - p[i][0] * p[j][1]; return a / 2; }
+  function inside(p, x, z) {
+    let k = false;
+    for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+      const [ax, az] = p[i], [bx, bz] = p[j];
+      if ((az > z) !== (bz > z) && x < (bx - ax) * (z - az) / (bz - az) + ax) k = !k;
+    }
+    return k;
+  }
+  function proj(p, a, b) { // the point of segment a-b nearest p, its parameter, its distance
+    const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz;
+    const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / l2)) : 0;
+    const q = [a[0] + t * dx, a[1] + t * dz];
+    return { q, t, d: dist(p, q) };
+  }
+  // where to write a room's name: its centroid, or the inside point farthest from its walls when that falls outside
+  function labelAt(p) {
+    let cx = 0, cz = 0;
+    for (const [x, z] of p) { cx += x; cz += z; }
+    cx /= p.length; cz /= p.length;
+    if (inside(p, cx, cz)) return [cx, cz];
+    const xs = p.map(q => q[0]), zs = p.map(q => q[1]);
+    let best = [cx, cz], bd = -1;
+    for (let i = 1; i < 16; i++) for (let j = 1; j < 16; j++) {
+      const x = Math.min(...xs) + (Math.max(...xs) - Math.min(...xs)) * i / 16, z = Math.min(...zs) + (Math.max(...zs) - Math.min(...zs)) * j / 16;
+      if (!inside(p, x, z)) continue;
+      let d = Infinity;
+      for (let k = 0; k < p.length; k++) d = Math.min(d, proj([x, z], p[k], p[(k + 1) % p.length]).d);
+      if (d > bd) { bd = d; best = [x, z]; }
+    }
+    return best;
+  }
+  const edges = p => p.map((a, i) => [a, p[(i + 1) % p.length]]);
+
+  // ---------- snapping: corners, then walls, then 15° steps from the last corner, then the 5 cm grid ----------
+  function snapPoints(skip) {
+    const out = [];
+    const f = floor();
+    f.rooms.forEach((r, ri) => r.points.forEach((p, vi) => { if (!(skip && skip.room === ri && (skip.v === vi || skip.all))) out.push(p); }));
+    floorAt(ed.level - 1)?.rooms.forEach(r => r.points.forEach(p => out.push(p)));
+    floorAt(ed.level + 1)?.rooms.forEach(r => r.points.forEach(p => out.push(p)));
+    for (const ring of ed.footprint) for (const p of ring) out.push(p);
+    if (draft) for (const p of draft.pts) out.push(p);
+    return out;
+  }
+  function snapEdges(skip) {
+    const out = [];
+    floor().rooms.forEach((r, ri) => { if (!(skip && skip.room === ri)) out.push(...edges(r.points)); });
+    floorAt(ed.level - 1)?.rooms.forEach(r => out.push(...edges(r.points)));
+    for (const ring of ed.footprint) out.push(...edges(ring));
+    return out;
+  }
+  function snapPoint(p, { from = null, skip = null, free = false } = {}) {
+    snapMark = null;
+    if (free) return p.map(fix);
+    const tol = SNAP_PX / ed.view.s;
+    let best = null, bd = tol;
+    for (const q of snapPoints(skip)) { const d = dist(p, q); if (d < bd) { bd = d; best = q; } }
+    if (best) { snapMark = { kind: "corner", p: best }; return best.map(fix); }
+    let eb = null, ed2 = tol * 0.8;
+    for (const [a, b] of snapEdges(skip)) { const r = proj(p, a, b); if (r.d < ed2) { ed2 = r.d; eb = r.q; } }
+    if (eb) { snapMark = { kind: "wall", p: eb }; return eb.map(fix); }
+    if (from) {
+      const dx = p[0] - from[0], dz = p[1] - from[1], len = Math.hypot(dx, dz);
+      if (len > 1e-6) {
+        const ang = Math.atan2(dz, dx), step = Math.PI / 12, snapped = Math.round(ang / step) * step;
+        if (Math.abs(ang - snapped) < 4 * Math.PI / 180) {
+          const l2 = r2(len);
+          snapMark = { kind: "angle", p: [from[0] + Math.cos(snapped) * l2, from[1] + Math.sin(snapped) * l2] };
+          return snapMark.p.map(fix);
+        }
+      }
+    }
+    return [fix(r2(p[0])), fix(r2(p[1]))];
+  }
+
+  // walls a click can land on: every room's edges, at any angle
+  function nearestWall(x, z) {
+    let best = null, bd = 12 / ed.view.s;
+    floor().rooms.forEach((r, ri) => edges(r.points).forEach(([a, b], ei) => {
+      const res = proj([x, z], a, b);
+      if (res.d < bd) { bd = res.d; best = { room: ri, edge: ei, a, b, t: res.t, len: dist(a, b) }; }
+    }));
+    return best;
+  }
+  // an opening of the given length on that wall, centred where it was clicked, kept on the wall
+  function openingOn(w, kind, len) {
+    len = Math.min(len, w.len);
+    const c = Math.min(w.len - len / 2, Math.max(len / 2, w.t * w.len));
+    const ux = (w.b[0] - w.a[0]) / w.len, uz = (w.b[1] - w.a[1]) / w.len;
+    return { kind, x0: fix(w.a[0] + ux * (c - len / 2)), z0: fix(w.a[1] + uz * (c - len / 2)), x1: fix(w.a[0] + ux * (c + len / 2)), z1: fix(w.a[1] + uz * (c + len / 2)) };
+  }
+
+  // ---------- drawing ----------
+  function render() {
+    if (!ed?.view) return;
+    const v = ed.view, s = v.s, f = floor();
+    const X = x => x * s + v.ox, Y = z => z * s + v.oy;
+    const P = p => `${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`;
+    const path = p => "M" + p.map(P).join("L") + "Z";
+    const label = (x, z, text, cls = "") => `<g class="lbl ${cls}" transform="translate(${X(x).toFixed(1)} ${Y(z).toFixed(1)})"><rect x="${-text.length * 3.4 - 4}" y="-9" width="${text.length * 6.8 + 8}" height="16" rx="4"/><text text-anchor="middle" y="3">${esc(text)}</text></g>`;
+    const out = [];
+    out.push(`<defs><pattern id="g" width="${s}" height="${s}" patternUnits="userSpaceOnUse" x="${v.ox}" y="${v.oy}"><path d="M ${s} 0 L 0 0 0 ${s}" fill="none" stroke="rgba(255,220,200,.06)"/></pattern>
+      <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--stair)"/></marker></defs>`);
+    out.push(`<rect width="100%" height="100%" fill="url(#g)"/>`);
+    // the plan, under everything
+    if (ed.plan && ed.planImg && $("plan-show").checked) {
+      const p = ed.plan;
+      out.push(`<image href="${ed.planImg.url}" width="${p.w}" height="${p.h}" opacity="${p.opacity ?? 0.6}" preserveAspectRatio="none"
+        transform="translate(${X(p.x)} ${Y(p.z)}) rotate(${p.rot || 0}) scale(${p.scale * s}) translate(${-p.w / 2} ${-p.h / 2})" style="pointer-events:none"/>`);
+    }
+    // the building's footprint
+    out.push(`<path d="${ed.footprint.map(path).join("")}" fill="rgba(255,122,69,.07)" fill-rule="evenodd" stroke="#ff7a45" stroke-width="2" stroke-dasharray="6 4" style="pointer-events:none"/>`);
+    // the floor below, faint, to trace walls through
+    const below = floorAt(ed.level - 1);
+    if (below) for (const r of below.rooms) out.push(`<path d="${path(r.points)}" fill="none" stroke="rgba(255,255,255,.2)" stroke-dasharray="3 3" style="pointer-events:none"/>`);
+    if (below) for (const st of below.stairs) out.push(`<rect x="${X(st.x0)}" y="${Y(st.z0)}" width="${(st.x1 - st.x0) * s}" height="${(st.z1 - st.z0) * s}" fill="rgba(255,207,90,.08)" stroke="rgba(255,207,90,.4)" stroke-dasharray="3 3" style="pointer-events:none"/>`);
+    // rooms
+    const allLengths = $("show-lengths").checked;
+    f.rooms.forEach((r, i) => {
+      const sel = ed.sel?.kind === "room" && ed.sel.i === i, c = ROOM_COLOR[r.type] || "#b8a9a6";
+      out.push(`<path data-k="room" data-i="${i}" d="${path(r.points)}" fill="${c}" fill-opacity="${sel ? .32 : .16}" stroke="${sel ? "#fff" : c}" stroke-width="${sel ? 3 : 2}" stroke-linejoin="round"/>`);
+      const [lx, lz] = labelAt(r.points);
+      const a = Math.abs(area(r.points));
+      if (a * s * s > 1800) out.push(`<text x="${X(lx)}" y="${Y(lz)}" text-anchor="middle" fill="#fbf4ee" font-size="13" style="pointer-events:none">
+          <tspan x="${X(lx)}" dy="-0.2em" font-weight="700">${esc(LABEL[r.type] || r.type)}</tspan><tspan x="${X(lx)}" dy="1.2em" fill="#c2b3b0">${a.toFixed(1)} m²</tspan></text>`);
+      if (sel || allLengths)
+        for (const [p, q] of edges(r.points)) {
+          const L = dist(p, q);
+          if (L * s < 34) continue;
+          // the label sits just inside the room, off the wall's middle
+          const mx = (p[0] + q[0]) / 2, mz = (p[1] + q[1]) / 2, nx = -(q[1] - p[1]) / L, nz = (q[0] - p[0]) / L;
+          const k = inside(r.points, mx + nx * 0.3, mz + nz * 0.3) ? 1 : -1;
+          out.push(label(mx + nx * k * 14 / s, mz + nz * k * 14 / s, fmtM(L), "len"));
+        }
+    });
+    // stairs
+    f.stairs.forEach((st, i) => {
+      const sel = ed.sel?.kind === "stair" && ed.sel.i === i;
+      const alongX = st.up[1] === "x", n = Math.max(3, Math.round((alongX ? st.x1 - st.x0 : st.z1 - st.z0) / 0.28));
+      out.push(`<rect data-k="stair" data-i="${i}" x="${X(st.x0)}" y="${Y(st.z0)}" width="${(st.x1 - st.x0) * s}" height="${(st.z1 - st.z0) * s}" fill="rgba(255,207,90,.18)" stroke="${sel ? "#fff" : "var(--stair)"}" stroke-width="${sel ? 3 : 1.5}"/>`);
+      for (let k = 1; k < n; k++) {
+        const t = k / n;
+        out.push(alongX ? `<line x1="${X(st.x0 + (st.x1 - st.x0) * t)}" x2="${X(st.x0 + (st.x1 - st.x0) * t)}" y1="${Y(st.z0)}" y2="${Y(st.z1)}" stroke="rgba(255,207,90,.5)" style="pointer-events:none"/>`
+          : `<line y1="${Y(st.z0 + (st.z1 - st.z0) * t)}" y2="${Y(st.z0 + (st.z1 - st.z0) * t)}" x1="${X(st.x0)}" x2="${X(st.x1)}" stroke="rgba(255,207,90,.5)" style="pointer-events:none"/>`);
+      }
+      const cx = (st.x0 + st.x1) / 2, cz = (st.z0 + st.z1) / 2, neg = st.up[0] === "-";
+      const a = alongX ? [neg ? st.x1 - .3 : st.x0 + .3, cz, neg ? st.x0 + .3 : st.x1 - .3, cz] : [cx, neg ? st.z1 - .3 : st.z0 + .3, cx, neg ? st.z0 + .3 : st.z1 - .3];
+      out.push(`<line x1="${X(a[0])}" y1="${Y(a[1])}" x2="${X(a[2])}" y2="${Y(a[3])}" stroke="var(--stair)" stroke-width="2" marker-end="url(#arr)" style="pointer-events:none"/>`);
+    });
+    // openings
+    f.openings.forEach((o, i) => {
+      const sel = ed.sel?.kind === "opening" && ed.sel.i === i;
+      const col = o.kind === "door" ? "var(--door)" : o.kind === "window" ? "var(--window)" : "var(--arch)";
+      out.push(`<line data-k="opening" data-i="${i}" x1="${X(o.x0)}" y1="${Y(o.z0)}" x2="${X(o.x1)}" y2="${Y(o.z1)}" stroke="${sel ? "#fff" : col}" stroke-width="${sel ? 9 : 7}" stroke-linecap="butt" ${o.kind === "arch" ? 'stroke-dasharray="5 3"' : ""}/>`);
+    });
+    // handles: a selected room's corners, a selected stair's sides
+    const it = selItem();
+    if (it && ed.editable && ed.sel.kind === "room")
+      it.points.forEach((p, vi) => {
+        const on = ed.sel.v === vi;
+        out.push(`<circle data-k="vertex" data-v="${vi}" cx="${X(p[0])}" cy="${Y(p[1])}" r="${on ? 8 : 6}" fill="${on ? "var(--glow)" : "#fff"}" stroke="#120c14" stroke-width="2" style="cursor:move"/>`);
+      });
+    if (it && ed.editable && ed.sel.kind === "stair")
+      for (const [edge, x, z] of [["x0", it.x0, (it.z0 + it.z1) / 2], ["x1", it.x1, (it.z0 + it.z1) / 2], ["z0", (it.x0 + it.x1) / 2, it.z0], ["z1", (it.x0 + it.x1) / 2, it.z1]])
+        out.push(`<rect data-k="handle" data-edge="${edge}" x="${X(x) - 6}" y="${Y(z) - 6}" width="12" height="12" rx="3" fill="#fff" stroke="#120c14" style="cursor:${edge[0] === "x" ? "ew" : "ns"}-resize"/>`);
+    // a room being drawn
+    if (draft) {
+      const pts = draft.cur ? [...draft.pts, draft.cur] : draft.pts;
+      if (pts.length > 1) out.push(`<polyline points="${pts.map(P).join(" ")}" fill="rgba(255,255,255,.08)" stroke="#fff" stroke-width="2" stroke-dasharray="6 3"/>`);
+      draft.pts.forEach((p, k) => out.push(`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${k === 0 ? 7 : 4}" fill="${k === 0 ? "var(--glow)" : "#fff"}" stroke="#120c14"/>`));
+      if (draft.cur && draft.pts.length) {
+        const last = draft.pts[draft.pts.length - 1], L = dist(last, draft.cur);
+        const ang = Math.round(Math.atan2(-(draft.cur[1] - last[1]), draft.cur[0] - last[0]) * 180 / Math.PI);
+        out.push(label((last[0] + draft.cur[0]) / 2, (last[1] + draft.cur[1]) / 2, `${draft.typed ? draft.typed + " m ⏎" : fmtM(L)} · ${ang}°`, "len"));
+      }
+    }
+    if (drag?.mode === "draw" && drag.cur) {
+      const [a, b] = [drag.start, drag.cur];
+      out.push(`<rect x="${X(Math.min(a[0], b[0]))}" y="${Y(Math.min(a[1], b[1]))}" width="${Math.abs(b[0] - a[0]) * s}" height="${Math.abs(b[1] - a[1]) * s}" fill="rgba(255,255,255,.1)" stroke="#fff" stroke-dasharray="4 3"/>`);
+      out.push(label(b[0], b[1] - 18 / s, `${Math.abs(b[0] - a[0]).toFixed(2)} × ${Math.abs(b[1] - a[1]).toFixed(2)} m`, "len"));
+    }
+    // measures: the kept ones, and one being taken
+    ed.measures.forEach(([x0, z0, x1, z1], i) => {
+      out.push(`<line x1="${X(x0)}" y1="${Y(z0)}" x2="${X(x1)}" y2="${Y(z1)}" stroke="#7df0c8" stroke-width="2" stroke-dasharray="2 3" style="pointer-events:none"/>`);
+      for (const [x, z] of [[x0, z0], [x1, z1]]) out.push(`<circle cx="${X(x)}" cy="${Y(z)}" r="3" fill="#7df0c8" style="pointer-events:none"/>`);
+      out.push(label((x0 + x1) / 2, (z0 + z1) / 2, `${i + 1}: ${fmtM(dist([x0, z0], [x1, z1]))}`, "measure"));
+    });
+    if (task) {
+      const col = task.mode === "ruler" ? "#7df0c8" : "#fff";
+      task.pts.forEach(([x, z]) => out.push(`<circle cx="${X(x)}" cy="${Y(z)}" r="6" fill="none" stroke="${col}" stroke-width="2"/>`));
+      const from = task.pts[task.pts.length - 1];
+      if (from && task.cur && task.pts.length % 2 === 1) {
+        out.push(`<line x1="${X(from[0])}" y1="${Y(from[1])}" x2="${X(task.cur[0])}" y2="${Y(task.cur[1])}" stroke="${col}" stroke-dasharray="4 3"/>`);
+        out.push(label((from[0] + task.cur[0]) / 2, (from[1] + task.cur[1]) / 2, fmtM(dist(from, task.cur)), "measure"));
+      }
+    }
+    if (snapMark) {
+      const [x, z] = snapMark.p;
+      out.push(snapMark.kind === "corner" ? `<circle cx="${X(x)}" cy="${Y(z)}" r="9" fill="none" stroke="#7df0c8" stroke-width="2" style="pointer-events:none"/>`
+        : snapMark.kind === "wall" ? `<rect x="${X(x) - 6}" y="${Y(z) - 6}" width="12" height="12" fill="none" stroke="#7df0c8" stroke-width="2" style="pointer-events:none"/>`
+        : `<path d="M${X(x) - 7} ${Y(z)}h14M${X(x)} ${Y(z) - 7}v14" stroke="#7df0c8" stroke-width="2" style="pointer-events:none"/>`);
+    }
+    // north, turned by the frame's yaw: north is (sin yaw, -cos yaw) in (x, z)
+    const yaw = (ed.layout.yawDeg || 0) * Math.PI / 180, nx = Math.sin(yaw), nz = -Math.cos(yaw);
+    out.push(`<g transform="translate(40 40)" style="pointer-events:none"><circle r="18" fill="rgba(18,12,20,.8)" stroke="rgba(255,220,200,.3)"/>
+      <line x1="${-nx * 12}" y1="${-nz * 12}" x2="${nx * 12}" y2="${nz * 12}" stroke="#fff" stroke-width="2" marker-end="url(#arr)"/><text x="${nx * 26}" y="${nz * 26 + 4}" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">N</text></g>`);
+    const m = [0.5, 1, 2, 5, 10, 20].find(k => k * s > 70) || 50;
+    out.push(`<g transform="translate(70 ${svg.clientHeight - 50})" style="pointer-events:none"><line x1="0" x2="${m * s}" stroke="#fff" stroke-width="2"/><text x="${m * s / 2}" y="-6" text-anchor="middle" fill="#fff" font-size="11">${m} m</text></g>`);
+    svg.innerHTML = out.join("");
+  }
+
+  function selItem() {
+    if (!ed?.sel) return null;
+    const f = floor();
+    return ed.sel.kind === "room" ? f.rooms[ed.sel.i] : ed.sel.kind === "stair" ? f.stairs[ed.sel.i] : ed.sel.kind === "opening" ? f.openings[ed.sel.i] : null;
+  }
+
+  // ---------- drawing a room corner by corner ----------
+  function draftAdd(p) {
+    if (draft.pts.length >= 3 && dist(p, draft.pts[0]) < SNAP_PX / ed.view.s) { draftClose(); return; }
+    if (draft.pts.length && dist(p, draft.pts[draft.pts.length - 1]) < 0.05) return;
+    draft.pts.push(p);
+    draft.typed = "";
+    render();
+  }
+  function draftClose() {
+    if (!draft || draft.pts.length < 3) return;
+    const pts = draft.pts;
+    draft = null;
+    if (Math.abs(area(pts)) < 0.5) { hint("That room is too small."); render(); return; }
+    change(() => floor().rooms.push({ type: $("room-type")?.value || lastType, points: pts }));
+    ed.sel = { kind: "room", i: floor().rooms.length - 1 };
+    render(); renderProps();
+  }
+  // a typed length: the next corner that far from the last one, toward the cursor (or along the last snap)
+  function draftTyped() {
+    const L = parseFloat(draft.typed.replace(",", "."));
+    const last = draft.pts[draft.pts.length - 1];
+    if (!(L > 0) || !last || !draft.cur) return false;
+    const d = dist(last, draft.cur);
+    if (d < 1e-6) return false;
+    draftAdd([fix(last[0] + (draft.cur[0] - last[0]) / d * L), fix(last[1] + (draft.cur[1] - last[1]) / d * L)]);
+    return true;
+  }
+
+  // ---------- pointer ----------
+  let drag = null, spaceDown = false, lastTap = 0;
+  svg.addEventListener("contextmenu", ev => ev.preventDefault());
+  svg.addEventListener("dblclick", ev => {
+    if (!ed?.editable) return;
+    if (tool === "room" && draft) { draftClose(); return; }
+    // a corner on a wall of the selected room
+    if (tool === "select" && ed.sel?.kind === "room") {
+      const [x, z] = toWorld(ev.clientX, ev.clientY), r = selItem();
+      let best = -1, bd = 10 / ed.view.s, bq = null;
+      edges(r.points).forEach(([a, b], k) => { const res = proj([x, z], a, b); if (res.d < bd && res.t > 0.02 && res.t < 0.98) { bd = res.d; best = k; bq = res.q; } });
+      if (best >= 0) { change(() => r.points.splice(best + 1, 0, bq.map(fix))); ed.sel.v = best + 1; render(); renderProps(); }
+    }
+  });
+  svg.addEventListener("pointerdown", ev => {
+    if (!ed) return;
+    svg.setPointerCapture(ev.pointerId);
+    const [x, z] = toWorld(ev.clientX, ev.clientY);
+    const t = ev.target.dataset || {};
+    const pan = ev.button === 1 || ev.button === 2 || spaceDown;
+    if (pan) { drag = { mode: "pan", sx: ev.clientX, sy: ev.clientY, ox: ed.view.ox, oy: ed.view.oy }; svg.classList.add("panning"); return; }
+    if (task) { taskClick(x, z, ev.altKey); return; }
+    if (!ed.editable) {
+      if (t.k && t.k !== "handle" && t.k !== "vertex") { ed.sel = { kind: t.k, i: +t.i }; renderProps(); render(); }
+      else drag = { mode: "pan", sx: ev.clientX, sy: ev.clientY, ox: ed.view.ox, oy: ed.view.oy };
+      return;
+    }
+    if (tool === "plan" && ed.plan) { drag = { mode: "plan", start: [x, z], orig: { ...ed.plan } }; return; }
+    if (tool === "room") {
+      if (!draft) draft = { pts: [], cur: null, typed: "" };
+      const last = draft.pts[draft.pts.length - 1];
+      draftAdd(snapPoint([x, z], { from: last, free: ev.altKey }));
+      return;
+    }
+    if (tool === "box" || tool === "stair") { const p = snapPoint([x, z], { free: ev.altKey }); drag = { mode: "draw", start: p, cur: null }; return; }
+    if (tool === "door" || tool === "window" || tool === "arch") {
+      const w = nearestWall(x, z);
+      if (!w) { hint("Click closer to a room's wall: draw the rooms first."); return; }
+      change(() => floor().openings.push(openingOn(w, tool, tool === "door" ? 0.9 : 1.2)));
+      ed.sel = { kind: "opening", i: floor().openings.length - 1 };
+      render(); renderProps();
+      return;
+    }
+    // select
+    if (t.k === "vertex") { ed.sel.v = +t.v; drag = { mode: "vertex", before: JSON.stringify(ed.layout), moved: false }; render(); renderProps(); return; }
+    if (t.k === "handle") { drag = { mode: "resize", edge: t.edge, before: JSON.stringify(ed.layout) }; return; }
+    if (t.k) {
+      ed.sel = { kind: t.k, i: +t.i };
+      const it = selItem();
+      drag = { mode: "move", start: [x, z], orig: JSON.parse(JSON.stringify(it)), before: JSON.stringify(ed.layout), moved: false };
+      render(); renderProps();
+      return;
+    }
+    ed.sel = null; render(); renderProps();
+    drag = { mode: "pan", sx: ev.clientX, sy: ev.clientY, ox: ed.view.ox, oy: ed.view.oy };
+  });
+  svg.addEventListener("pointermove", ev => {
+    if (!ed) return;
+    const [x, z] = toWorld(ev.clientX, ev.clientY);
+    if (task) {
+      const snapOn = task.mode === "ruler" || (task.mode === "align" && task.pts.length >= 2);
+      task.cur = snapOn ? snapPoint([x, z], { free: ev.altKey, from: task.pts.length % 2 ? task.pts[task.pts.length - 1] : null }) : [x, z];
+      if (!snapOn) snapMark = null;
+      render();
+    }
+    if (tool === "room" && draft && !drag) {
+      const last = draft.pts[draft.pts.length - 1];
+      draft.cur = snapPoint([x, z], { from: last, free: ev.altKey });
+      render();
+    }
+    if (!drag) return;
+    if (drag.mode === "pan") { ed.view.ox = drag.ox + ev.clientX - drag.sx; ed.view.oy = drag.oy + ev.clientY - drag.sy; render(); return; }
+    if (drag.mode === "plan") { ed.plan.x = fix(drag.orig.x + x - drag.start[0]); ed.plan.z = fix(drag.orig.z + z - drag.start[1]); ed.dirty = true; render(); return; }
+    if (drag.mode === "draw") { drag.cur = snapPoint([x, z], { free: ev.altKey }); render(); return; }
+    const it = selItem();
+    if (!it) return;
+    if (drag.mode === "vertex") {
+      const vi = ed.sel.v, n = it.points.length;
+      it.points[vi] = snapPoint([x, z], { skip: { room: ed.sel.i, v: vi }, from: it.points[(vi + n - 1) % n], free: ev.altKey });
+      drag.moved = true; ed.dirty = true; render(); renderProps();
+      return;
+    }
+    if (drag.mode === "resize") {
+      const axis = drag.edge[0], v = axis === "x" ? snapPoint([x, z], { free: ev.altKey })[0] : snapPoint([x, z], { free: ev.altKey })[1];
+      if (drag.edge.endsWith("0")) it[drag.edge] = Math.min(v, it[axis + "1"] - 0.3); else it[drag.edge] = Math.max(v, it[axis + "0"] + 0.3);
+      it[drag.edge] = fix(it[drag.edge]);
+      ed.dirty = true; render(); renderProps();
+      return;
+    }
+    if (drag.mode === "move") {
+      const o = drag.orig;
+      let dx = x - drag.start[0], dz = z - drag.start[1];
+      if (!drag.moved && Math.hypot(dx, dz) * ed.view.s < 3) return;
+      drag.moved = true;
+      if (ed.sel.kind === "opening") {
+        // slide along its wall, or hop to another wall it is dropped on
+        const w = nearestWall(x, z);
+        if (w) Object.assign(it, openingOn(w, o.kind, dist([o.x0, o.z0], [o.x1, o.z1])));
+      } else if (ed.sel.kind === "room") {
+        // the corner nearest a snap point decides the snap of the whole room
+        if (!ev.altKey) {
+          let best = null, bd = SNAP_PX / ed.view.s;
+          const targets = snapPoints({ room: ed.sel.i, all: true });
+          for (const p of o.points) for (const q of targets) { const d = Math.hypot(p[0] + dx - q[0], p[1] + dz - q[1]); if (d < bd) { bd = d; best = [q[0] - p[0], q[1] - p[1]]; } }
+          if (best) [dx, dz] = best; else { dx = r2(dx); dz = r2(dz); }
+        }
+        it.points = o.points.map(([px, pz]) => [fix(px + dx), fix(pz + dz)]);
+      } else {
+        dx = r2(dx); dz = r2(dz);
+        it.x0 = fix(o.x0 + dx); it.x1 = fix(o.x1 + dx); it.z0 = fix(o.z0 + dz); it.z1 = fix(o.z1 + dz);
+      }
+      ed.dirty = true; render(); renderProps();
+    }
+  });
+  svg.addEventListener("pointerup", () => {
+    if (!ed || !drag) return;
+    const d = drag;
+    drag = null;
+    snapMark = null;
+    svg.classList.remove("panning");
+    if (d.mode === "draw" && d.cur) {
+      const [a, b] = [d.start, d.cur];
+      const r = { x0: Math.min(a[0], b[0]), z0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), z1: Math.max(a[1], b[1]) };
+      if (r.x1 - r.x0 < 0.5 || r.z1 - r.z0 < 0.5) { render(); return; }
+      if (tool === "box") {
+        change(() => floor().rooms.push({ type: $("room-type")?.value || lastType, points: [[r.x0, r.z0], [r.x1, r.z0], [r.x1, r.z1], [r.x0, r.z1]] }));
+        ed.sel = { kind: "room", i: floor().rooms.length - 1 };
+      } else {
+        const up = r.x1 - r.x0 > r.z1 - r.z0 ? "+x" : "+z";
+        change(() => floor().stairs.push({ ...r, up }));
+        ed.sel = { kind: "stair", i: floor().stairs.length - 1 };
+      }
+      render(); renderProps();
+    } else if (((d.mode === "move" || d.mode === "vertex") && d.moved) || d.mode === "resize") {
+      ed.undo.push(d.before); ed.redo = []; renderFloors(); render();
+    } else if (d.mode === "draw") render();
+  });
+
+  // ---------- keys ----------
+  window.addEventListener("keydown", ev => {
+    if (!ed || $("editor").hidden) return;
+    if (ev.target.closest("input, textarea, select")) return;
+    const k = ev.key.toLowerCase();
+    if ((ev.ctrlKey || ev.metaKey) && k === "z") { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === "y") { ev.preventDefault(); redo(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === "s") { ev.preventDefault(); save(); return; }
+    if (ev.key === " ") { spaceDown = true; ev.preventDefault(); return; }
+    // drawing a room: a typed length, Enter, Backspace, Esc
+    if (draft) {
+      if (/^[0-9.,]$/.test(ev.key)) { draft.typed += ev.key; render(); ev.preventDefault(); return; }
+      if (ev.key === "Enter") { ev.preventDefault(); if (!(draft.typed && draftTyped())) draftClose(); return; }
+      if (ev.key === "Backspace") { ev.preventDefault(); if (draft.typed) draft.typed = draft.typed.slice(0, -1); else draft.pts.pop(); render(); return; }
+      if (ev.key === "Escape") { draft = null; render(); return; }
+    }
+    if (ev.key === "Escape") { task = tool === "ruler" ? { mode: "ruler", pts: [] } : null; ed.sel = null; hint(HINTS[tool]); render(); renderProps(); return; }
+    if (!ed.editable) return;
+    const t = TOOLS.find(x => x[2].toLowerCase() === k);
+    if (t && !ev.ctrlKey && !ev.metaKey) { setTool(t[0]); return; }
+    if ((ev.key === "Delete" || ev.key === "Backspace") && ed.sel) { ev.preventDefault(); removeSel(); return; }
+    const nud = { ArrowLeft: [-GRID, 0], ArrowRight: [GRID, 0], ArrowUp: [0, -GRID], ArrowDown: [0, GRID] }[ev.key];
+    if (nud && ed.sel) {
+      ev.preventDefault();
+      change(() => {
+        const it = selItem();
+        if (ed.sel.kind === "room") {
+          const pts = ed.sel.v != null ? [it.points[ed.sel.v]] : it.points;
+          for (const p of pts) { p[0] = fix(p[0] + nud[0]); p[1] = fix(p[1] + nud[1]); }
+        } else { it.x0 = fix(it.x0 + nud[0]); it.x1 = fix(it.x1 + nud[0]); it.z0 = fix(it.z0 + nud[1]); it.z1 = fix(it.z1 + nud[1]); }
+      });
+    }
+  });
+  window.addEventListener("keyup", ev => { if (ev.key === " ") spaceDown = false; });
+  function removeSel() {
+    const s = ed.sel;
+    if (s.kind === "room" && s.v != null) {
+      const r = selItem();
+      if (r.points.length <= 3) { hint("A room needs three corners: delete the room instead (select it, not a corner)."); return; }
+      change(() => r.points.splice(s.v, 1));
+      ed.sel = { kind: "room", i: s.i };
+      render(); renderProps();
+      return;
+    }
+    ed.sel = null;
+    change(() => { const f = floor(); (s.kind === "room" ? f.rooms : s.kind === "stair" ? f.stairs : f.openings).splice(s.i, 1); });
+  }
+
+  // ---------- the side panel: what is selected ----------
+  let lastType = "Living";
+  function renderProps() {
+    const p = $("props");
+    if (!ed) return;
+    const it = selItem(), dis = ed.editable ? "" : "disabled";
+    const num = (k, label, v) => `<label>${label}<input class="field" data-p="${k}" type="number" step="0.05" value="${v ?? it[k]}" ${dis}></label>`;
+    const typeSelect = (id, cur) => `<select class="field" id="${id}" ${dis}>${ROOM_TYPES.map(t => `<option value="${t}" ${t === cur ? "selected" : ""}>${LABEL[t] || t}</option>`).join("")}</select>`;
+    if (!it) {
+      p.innerHTML = ed.editable && (tool === "room" || tool === "box") ? `<h2>New room</h2><label class="lbl">Type${typeSelect("room-type", lastType)}</label>`
+        : `<h2>Selection</h2><p class="note">${ed.editable ? "Nothing selected." : "Click a room, door or stair to see it."}</p>`;
+      if ($("room-type")) $("room-type").onchange = e => { lastType = e.target.value; };
+      return;
+    }
+    const del = ed.editable ? `<button class="btn small" type="button" id="p-del">Delete ${ed.sel.kind === "room" && ed.sel.v != null ? "corner" : ed.sel.kind === "opening" ? it.kind : ed.sel.kind}</button>` : "";
+    if (ed.sel.kind === "room") {
+      const a = Math.abs(area(it.points)), per = edges(it.points).reduce((s2, [q, w]) => s2 + dist(q, w), 0);
+      const v = ed.sel.v != null ? it.points[ed.sel.v] : null;
+      p.innerHTML = `<h2>Room</h2><label class="lbl">Type${typeSelect("p-type", it.type)}</label>
+        <p class="note" style="margin-top:6px">${it.points.length} corners · ${a.toFixed(1)} m² · walls ${per.toFixed(1)} m in all</p>
+        ${v ? `<div class="grid2">${num("vx", `Corner ${ed.sel.v + 1} x`, v[0])}${num("vz", "z", v[1])}</div>` : `<p class="note">Click a corner to place it exactly; double-click a wall to add one.</p>`}
+        <div class="row" style="flex-wrap:wrap">${del}${ed.sel.v != null && ed.editable ? `<button class="btn small" type="button" id="p-delroom">Delete room</button>` : ""}</div>`;
+      $("p-type").onchange = e => { lastType = e.target.value; change(() => { selItem().type = e.target.value; }); };
+      for (const inp of p.querySelectorAll("[data-p]")) inp.onchange = e => {
+        const val = +e.target.value;
+        if (!Number.isFinite(val)) return;
+        change(() => { selItem().points[ed.sel.v][e.target.dataset.p === "vx" ? 0 : 1] = fix(val); });
+      };
+      if ($("p-delroom")) $("p-delroom").onclick = () => { ed.sel.v = null; removeSel(); };
+    } else if (ed.sel.kind === "stair") {
+      p.innerHTML = `<h2>Stair</h2><label class="lbl">Climbs toward<select class="field" id="p-up" ${dis}>${[["+x", "right"], ["-x", "left"], ["+z", "down (screen)"], ["-z", "up (screen)"]].map(([v, l]) => `<option value="${v}" ${v === it.up ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <div class="grid2" style="margin-top:6px">${num("x0", "Left x")}${num("x1", "Right x")}${num("z0", "Top z")}${num("z1", "Bottom z")}</div>
+        <p class="note" style="margin-top:6px">${(it.x1 - it.x0).toFixed(2)} × ${(it.z1 - it.z0).toFixed(2)} m. It reaches the floor above; leave that floor open over it.</p>${del}`;
+      $("p-up").onchange = e => change(() => { selItem().up = e.target.value; });
+      for (const inp of p.querySelectorAll("[data-p]")) inp.onchange = e => { const v = +e.target.value; if (Number.isFinite(v)) change(() => { selItem()[e.target.dataset.p] = fix(v); }); };
+    } else {
+      const len = dist([it.x0, it.z0], [it.x1, it.z1]);
+      p.innerHTML = `<h2>${it.kind === "door" ? "Door" : it.kind === "window" ? "Window" : "Arch"}</h2>
+        <label class="lbl">Kind<select class="field" id="p-kind" ${dis}>${["door", "window", "arch"].map(k2 => `<option ${k2 === it.kind ? "selected" : ""}>${k2}</option>`).join("")}</select></label>
+        <label class="lbl" style="margin-top:6px">Width (m)<input class="field" id="p-len" type="number" step="0.05" min="0.5" max="5" value="${len.toFixed(2)}" ${dis}></label>
+        <p class="note" style="margin-top:6px">Drag it along the wall, or onto another wall.</p>${del}`;
+      $("p-kind").onchange = e => change(() => { selItem().kind = e.target.value; });
+      $("p-len").onchange = e => {
+        const l2 = +e.target.value;
+        if (!(l2 >= 0.5 && l2 <= 5)) return;
+        change(() => {
+          const o = selItem(), L = dist([o.x0, o.z0], [o.x1, o.z1]), ux = (o.x1 - o.x0) / L, uz = (o.z1 - o.z0) / L;
+          const cx = (o.x0 + o.x1) / 2, cz = (o.z0 + o.z1) / 2;
+          Object.assign(o, { x0: fix(cx - ux * l2 / 2), z0: fix(cz - uz * l2 / 2), x1: fix(cx + ux * l2 / 2), z1: fix(cz + uz * l2 / 2) });
+        });
+      };
+    }
+    if ($("p-del")) $("p-del").onclick = removeSel;
+  }
+  $("show-lengths").onchange = render;
+
+  // ---------- measures ----------
+  function renderMeasures() {
+    const box = $("measures");
+    box.innerHTML = ed.measures.length
+      ? ed.measures.map((m, i) => `<div class="row"><span class="note" style="flex:1">${i + 1}: <b style="color:var(--text)">${fmtM(dist([m[0], m[1]], [m[2], m[3]]))}</b></span>${ed.editable ? `<button class="btn small" type="button" data-del="${i}" aria-label="Remove measure ${i + 1}">×</button>` : ""}</div>`).join("")
+        + (ed.editable ? `<button class="btn small" type="button" id="m-clear" style="margin-top:4px">Remove all</button>` : "")
+      : `<p class="note">None yet: the Ruler tool (M) measures between two points.</p>`;
+    box.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { ed.measures.splice(+b.dataset.del, 1); ed.dirty = true; renderMeasures(); render(); });
+    if ($("m-clear")) $("m-clear").onclick = () => { ed.measures = []; ed.dirty = true; renderMeasures(); render(); };
+  }
+
+  // ---------- two-click tasks: ruler, plan scale, plan alignment ----------
+  // the plan image's own pixel under a point of the frame, and back
+  function toImg([x, z]) {
+    const p = ed.plan, a = -(p.rot || 0) * Math.PI / 180, dx = (x - p.x) / p.scale, dz = (z - p.z) / p.scale;
+    return [dx * Math.cos(a) - dz * Math.sin(a) + p.w / 2, dx * Math.sin(a) + dz * Math.cos(a) + p.h / 2];
+  }
+  function taskClick(x, z, free) {
+    if (task.mode === "ruler") {
+      const p = snapPoint([x, z], { free, from: task.pts.length % 2 ? task.pts[task.pts.length - 1] : null });
+      task.pts.push(p);
+      if (task.pts.length === 2) {
+        const [a, b] = task.pts;
+        if (dist(a, b) > 0.01 && ed.measures.length < 40) { ed.measures.push([a[0], a[1], b[0], b[1]].map(fix)); ed.dirty = true; renderMeasures(); }
+        task.pts = [];
+      }
+      render();
+      return;
+    }
+    if (task.mode === "cal") {
+      task.pts.push([x, z]);
+      render();
+      if (task.pts.length < 2) { hint("Now the other end of that length on the plan."); return; }
+      const [a, b] = task.pts, shown = dist(a, b);
+      const real = parseFloat(String(prompt(`The real length between the two points, in metres (now ${shown.toFixed(2)} m):`, shown.toFixed(2)) || "").replace(",", "."));
+      if (real > 0 && shown > 0) {
+        const k = real / shown, p = ed.plan;
+        // grow about the first point so it stays put
+        p.x = fix(a[0] + (p.x - a[0]) * k); p.z = fix(a[1] + (p.z - a[1]) * k); p.scale = +(p.scale * k).toPrecision(6);
+        ed.dirty = true; syncPlanCtl();
+      }
+      task = null; setTool(tool);
+      return;
+    }
+    // align: two points on the plan, then the same two on the building (snapped to its corners and walls)
+    if (task.pts.length < 2) {
+      task.img.push(toImg([x, z]));
+      task.pts.push([x, z]);
+      hint(task.pts.length === 1 ? "Second point on the plan: another corner, far from the first." : "Now click the first point's place on the building's outline (it snaps to its corners).");
+      render();
+      return;
+    }
+    task.pts.push(snapPoint([x, z], { free }));
+    if (task.pts.length === 3) { hint("And the second point's place on the outline."); render(); return; }
+    const [i1, i2] = task.img, t1 = task.pts[2], t2 = task.pts[3];
+    const vi = [i2[0] - i1[0], i2[1] - i1[1]], vt = [t2[0] - t1[0], t2[1] - t1[1]];
+    const li = Math.hypot(...vi), lt = Math.hypot(...vt);
+    if (li < 1 || lt < 0.1) { hint("Those points are too close together: try two corners far apart."); task = null; render(); return; }
+    const p = ed.plan, scale = lt / li, rot = Math.atan2(vt[1], vt[0]) - Math.atan2(vi[1], vi[0]);
+    // the image's centre lands where the first point's offset from it, turned and scaled, puts it
+    const ox = i1[0] - p.w / 2, oz = i1[1] - p.h / 2, c = Math.cos(rot), s = Math.sin(rot);
+    p.scale = +scale.toPrecision(6);
+    p.rot = +((rot * 180 / Math.PI + 360) % 360).toFixed(2);
+    p.x = fix(t1[0] - (ox * c - oz * s) * scale);
+    p.z = fix(t1[1] - (ox * s + oz * c) * scale);
+    ed.dirty = true;
+    task = null; snapMark = null;
+    syncPlanCtl(); setTool("room");
+    hint(`Plan aligned: ${(1 / scale).toFixed(1)} px per metre, turned ${p.rot}°. Check a known wall with the Ruler (M).`);
+  }
+
+  // ---------- the plan image ----------
+  function syncPlanCtl() {
+    const p = ed?.plan, has = !!(p && ed.planImg);
+    $("plan-ctl").hidden = !has;
+    $("plan-cal").disabled = $("plan-align").disabled = !has || !ed.editable;
+    if (!has) return;
+    $("plan-rot").value = p.rot || 0;
+    $("plan-op").value = p.opacity ?? 0.6;
+    $("plan-scale").value = p.scale;
+  }
+  async function loadPlanImage(url) {
+    try {
+      const blob = await (await fetch(url, { credentials: "same-origin" })).blob();
+      const img = await createImageBitmap(blob);
+      ed.planImg = { url: URL.createObjectURL(blob), w: img.width, h: img.height };
+      if (!ed.plan) {
+        // first time: fit the plan's longer side to the building's length, centred
+        const L0 = Math.max(ed.building?.frame.length || 15, 5);
+        ed.plan = { scale: +(L0 / Math.max(img.width, img.height)).toPrecision(6), rot: 0, x: 0, z: 0, opacity: 0.6, w: img.width, h: img.height };
+      }
+      ed.plan.w = img.width; ed.plan.h = img.height;
+      syncPlanCtl(); render();
+    } catch (e) { console.warn("plan", e); }
+  }
+  $("plan-rot").onchange = e => { ed.plan.rot = +e.target.value || 0; ed.dirty = true; render(); };
+  $("plan-r90").onclick = () => { if (!ed?.plan) return; ed.plan.rot = ((ed.plan.rot || 0) + 90) % 360; ed.dirty = true; syncPlanCtl(); render(); };
+  $("plan-op").oninput = e => { ed.plan.opacity = +e.target.value; ed.dirty = true; render(); };
+  $("plan-scale").onchange = e => { const v = +e.target.value; if (v > 0) { ed.plan.scale = v; ed.dirty = true; render(); } };
+  $("plan-show").onchange = render;
+
+  // the uploaded file is redrawn on a canvas first: a PDF page becomes a picture, and a photo loses its
+  // EXIF data (GPS position, camera) and its size beyond 4000 px
+  $("plan-file").onchange = async ev => {
+    const file = ev.target.files[0];
+    ev.target.value = "";
+    if (!file || !ed) return;
+    hint("Reading the plan…");
+    try {
+      let canvas;
+      if (file.type === "application/pdf") canvas = await pdfPage(file);
+      else {
+        const img = await createImageBitmap(file);
+        const k = Math.min(1, 4000 / Math.max(img.width, img.height));
+        canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * k); canvas.height = Math.round(img.height * k);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
+      if (!canvas) return;
+      const png = file.type === "application/pdf";
+      const blob = await new Promise(res => canvas.toBlob(res, png ? "image/png" : "image/jpeg", 0.9));
+      if (blob.size > 10 * 1024 * 1024) { alert("The plan is still over 10 MB once redrawn: try a smaller scan."); return; }
+      const form = new FormData();
+      form.append("plan", blob, png ? "plan.png" : "plan.jpg");
+      await api(`/claims/${ed.claim.id}/plan`, { form });
+      ed.plan = null;
+      await loadPlanImage(`api/claims/${ed.claim.id}/plan?t=${Date.now()}`);
+      ed.dirty = true;
+      startAlign();
+    } catch (e) { alert(e.error || "Could not read that file."); }
+  };
+  async function pdfPage(file) {
+    if (!window.pdfjsLib) {
+      await new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
+    let n = 1;
+    if (pdf.numPages > 1) { n = Math.round(+prompt(`This PDF has ${pdf.numPages} pages. Which one is this floor's plan?`, "1")); if (!(n >= 1 && n <= pdf.numPages)) return null; }
+    const page = await pdf.getPage(n);
+    const vp1 = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: Math.min(4, 3000 / Math.max(vp1.width, vp1.height)) });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return canvas;
+  }
+  function startAlign() {
+    if (!ed?.plan) return;
+    setTool("plan");
+    task = { mode: "align", pts: [], img: [] };
+    hint("Align the plan: click a corner of the house on the plan (zoom in to be exact). Esc to skip.");
+  }
+  $("plan-align").onclick = startAlign;
+  $("plan-cal").onclick = () => { if (!ed?.plan) return; setTool("plan"); task = { mode: "cal", pts: [] }; hint("Set the scale: click one end of a length you know on the plan (a wall with its dimension)."); };
+
+  // ---------- saving ----------
+  function showProblems(list) {
+    const ul = $("problems");
+    if (list == null) { ul.className = "problems"; ul.innerHTML = `<li class="note" style="list-style:none;margin-left:-18px">Save to check the layout.</li>`; return; }
+    ul.className = list.length ? "problems" : "problems none";
+    ul.innerHTML = list.length ? list.map(p => `<li>${esc(p)}</li>`).join("") : `<li>Ready to submit.</li>`;
+  }
+  async function save(quiet) {
+    if (!ed?.editable) return null;
+    ed.layout.storeyHeight = +$("storey").value || 2.7;
+    try {
+      const r = await api(`/claims/${ed.claim.id}/layout`, { method: "PUT", body: { layout: ed.layout, plan: ed.plan ? { ...ed.plan, measures: ed.measures } : { measures: ed.measures }, note: $("ed-note").value } });
+      ed.dirty = false;
+      showProblems(r.problems);
+      if (!quiet) $("hint").textContent = "Saved.";
+      return r.problems;
+    } catch (e) { if (!quiet) alert(e.error); return null; }
+  }
+  $("ed-save").onclick = () => save();
+  $("ed-note").onchange = () => { if (ed) ed.dirty = true; };
+  $("ed-submit").onclick = async () => {
+    const problems = await save(true);
+    if (problems == null) return;
+    if (problems.length) { alert("Fix the problems listed under Check first."); return; }
+    if (!confirm("Submit this layout for review? You cannot edit it while it waits.")) return;
+    try { await api(`/claims/${ed.claim.id}/submit`, { body: {} }); ed.dirty = false; await loadMe(); openClaim(ed.claim.id); }
+    catch (e) { if (e.problems) showProblems(e.problems); alert(e.error); }
+  };
+
+  // ---------- start ----------
+  (async () => {
+    await redeemLink();
+    await loadMe();
+    const m = /(?:^#|&)claim=(\d+)/.exec(location.hash);
+    if (m && me) openClaim(+m[1]);
+  })();
+})();
+</script>
+</body>
+</html>

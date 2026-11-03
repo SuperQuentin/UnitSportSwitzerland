@@ -91,7 +91,7 @@ public partial class StudioCamera : Camera3D
             if (Mode != ViewMode.Free) TakeOver();
             MouseCapture.Capture();   // never in a probe run (--nocapture): it flies with the cursor showing
         }
-        else Input.MouseMode = Input.MouseModeEnum.Visible;
+        else MouseCapture.Mode = Input.MouseModeEnum.Visible;
         FlyingChanged?.Invoke();
     }
 

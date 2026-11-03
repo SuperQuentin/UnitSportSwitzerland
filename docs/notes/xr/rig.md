@@ -60,3 +60,11 @@
   - `XrRig.Blink()`: black at once, clear again in 0.4 s (the vignette's `blackout`), to hide a cut. Used by the
     crash view (`player/crash-ragdoll`).
 - The hands in the headset are real hands on the grip pose, fingers tracked (#648, `real-hands`).
+- **Loading space (#1101).** While a session loads (`Ui.LoadingScreen.Active`, from `Begin` to `Finish`
+  or `Close`), the headset camera's mask is only `HeadsetOnlyLayer` (the panel with the loading screen,
+  the pointer, the hands, the watch), inside a 40 m sphere on the head (`LoadingSpace`,
+  `shaders/xr_loading_space.gdshader`): a still night-blue sky, a horizon band and soft floor rings 2 m
+  apart at the calibrated head height, shaded by world direction so they stay put. Nothing in it moves
+  or is fine, so it costs the Link encoder almost nothing, and the half-streamed world is never seen. At
+  the end the mask comes back behind a `Blink`. `--xrsim --xrspace` holds it on (in `--xrsim` the
+  window's camera draws the headset-only layer, so it shows on the monitor).

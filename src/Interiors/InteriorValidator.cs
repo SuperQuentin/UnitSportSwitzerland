@@ -26,8 +26,11 @@ public static class InteriorValidator
             var named = new HashSet<string>();
             foreach (var e in l.Entrances)
             {
-                if (!l.GroundFloor.Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
-                    errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}");
+                // on its own floor: the ground floor, or a raised door's (#827)
+                if (e.Level != 0 && (l.EntranceFloor(e) < 0 || l.EntranceFloor(e) >= l.Floors.Count))
+                    errors.Add($"entrance for {e.Door} is on floor {l.EntranceFloor(e)}, which the plan has not got");
+                else if (!l.EntranceRooms(e).Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
+                    errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}{(e.Level != 0 ? $" on floor {l.EntranceFloor(e)}" : "")}");
                 // two entrances for one door would give it two portals and two leaves (#498)
                 if (!named.Add(e.Door)) errors.Add($"two entrances for door {e.Door}");
             }
@@ -41,8 +44,9 @@ public static class InteriorValidator
                 var r = rooms[i];
                 if (r.X0 < -hw || r.X1 > hw || r.Z0 < -hd || r.Z1 > hd)
                     errors.Add($"floor {f} room {i} {r.Type} outside the footprint");
-                if (Math.Min(r.Width, r.Depth) < 1.0f)
+                if (Math.Min(r.Width, r.Depth) < 1.0f && !r.Piece)
                     errors.Add($"floor {f} room {i} {r.Type} is {r.Width:F1}x{r.Depth:F1} m");
+                if (r.Shape != null) ShapeErrors(l, f, i, hw, hd, errors);
                 // An opening cannot be taller than the room it is cut in. Worth stating because a
                 // room's headroom is no longer always the storey's: a site's service block is a
                 // 2.6 m room inside a 9 m hall (RoomPlan.Clear, #497), so anything that sizes a
@@ -62,14 +66,17 @@ public static class InteriorValidator
                 foreach (var o in r.Openings.Where(o => o.Kind == OpeningKind.Door))
                 {
                     if (o.Other < 0 || o.Other >= rooms.Count
-                        || !rooms[o.Other].Openings.Any(q => q.Other == i && Math.Abs(q.Center - o.Center) < 0.01f))
+                        || !rooms[o.Other].Openings.Any(q => q.Other == i && Matches(r, o, rooms[o.Other], q)))
                         errors.Add($"floor {f} room {i}: doorway without a matching cut on the other side");
                 }
             }
 
             if (f < l.Floors.Count - 1)
             {
-                if (!Stairs(l.Floors[f]).Any()) errors.Add($"no stairs from floor {f}");
+                // a floor with a way in of its own (a raised door, #827) needs no stair up to it:
+                // reachability below still asks that every room of it is reached
+                bool ownWay = l.Entrances.Any(e => e.Level != 0 && l.EntranceFloor(e) == f + 1);
+                if (!ownWay && !Stairs(l.Floors[f]).Any()) errors.Add($"no stairs from floor {f}");
                 foreach (var fl in l.Floors[f].AllFlights())
                 {
                     var area = fl.Area();
@@ -99,43 +106,7 @@ public static class InteriorValidator
             }
         }
 
-        // reachability from the ways in, through doorways, up and down the stairs and in the
-        // elevators: a block of flats' upper floors are several stairwells that never meet (#557)
-        var reached = new HashSet<(int F, int R)>();
-        var queue = new Queue<(int F, int R)>();
-        void Reach(int f, int r)
-        {
-            if (f >= 0 && f < l.Floors.Count && r >= 0 && r < l.Floors[f].Rooms.Count && reached.Add((f, r))) queue.Enqueue((f, r));
-        }
-        var groundRooms = l.GroundFloor.Rooms;
-        for (int i = 0; i < groundRooms.Count; i++)
-            if (groundRooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry)) Reach(l.Below, i);
-        if (reached.Count == 0) Reach(l.Below, 0);
-        while (queue.Count > 0)
-        {
-            var (f, a) = queue.Dequeue();
-            var floor = l.Floors[f];
-            var room = floor.Rooms[a];
-            foreach (var o in room.Openings)
-                if (o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0) Reach(f, o.Other);
-            // a stair from this room's floor, starting in it, lands in the room over its top: one
-            // flight, or two round a half landing (#571)
-            foreach (var (first, last) in Stairs(floor))
-                if (Inside(room, first.Bottom.X, first.Bottom.Z) && f + 1 < l.Floors.Count)
-                    Reach(f + 1, RoomAt(l.Floors[f + 1], last.TopEnd.X, last.TopEnd.Z));
-            // and back down one arriving here
-            if (f > 0)
-                foreach (var (first, last) in Stairs(l.Floors[f - 1]))
-                    if (Inside(room, last.TopEnd.X, last.TopEnd.Z)) Reach(f - 1, RoomAt(l.Floors[f - 1], first.Bottom.X, first.Bottom.Z));
-            if (room.Type == RoomType.Elevator)
-                foreach (var lift in l.Lifts)
-                    if (lift.Contains((room.X0 + room.X1) / 2, (room.Z0 + room.Z1) / 2))
-                        for (int g = lift.Bottom; g <= lift.Top; g++)
-                            Reach(g, RoomAt(l.Floors[g], (lift.X0 + lift.X1) / 2, (lift.Z0 + lift.Z1) / 2));
-        }
-        for (int f = 0; f < l.Floors.Count; f++)
-            for (int i = 0; i < l.Floors[f].Rooms.Count; i++)
-                if (!reached.Contains((f, i))) errors.Add($"floor {f} room {i} {l.Floors[f].Rooms[i].Type} unreachable");
+        errors.AddRange(Unreachable(l));
 
         // elevators: a cabin room on every floor they serve, and a doorway out of it
         foreach (var lift in l.Lifts)
@@ -153,7 +124,9 @@ public static class InteriorValidator
         {
             if (d.Floor < 0 || d.Floor >= l.Floors.Count || d.Room < 0 || d.Room >= l.Floors[d.Floor].Rooms.Count)
             { errors.Add("inner door in a missing room"); continue; }
-            if (!l.Floors[d.Floor].Rooms[d.Room].Openings.Any(o => o.Kind == OpeningKind.Door && o.Side == d.Side && Math.Abs(o.Center - d.Center) < 0.01f))
+            // a doorway, or a cinema's service doorway: an open hole between floors with its sill up a few steps (#1279)
+            if (!l.Floors[d.Floor].Rooms[d.Room].Openings.Any(o => (o.Kind == OpeningKind.Door || o.Kind == OpeningKind.Window && o.Open
+                    && Math.Abs(o.Bottom - d.Bottom) < 0.01f) && o.Side == d.Side && Math.Abs(o.Center - d.Center) < 0.01f))
                 errors.Add($"floor {d.Floor} inner door at {d.Center:F1} has no doorway");
         }
 
@@ -172,7 +145,7 @@ public static class InteriorValidator
             var lane = ramp.Area();
             var mouth = ramp.FootZone(0, GarageRule.RampTurn, 0);
             foreach (var p in l.Furniture.Where(p => p.Floor == fi
-                && p.Type is not (FurnitureType.FloorMarking or FurnitureType.Rug)))
+                && p.Type is not (FurnitureType.FloorMarking or FurnitureType.Rug or FurnitureType.Confetti)))
             {
                 bool odd = p.Turns % 2 == 1;
                 float w = (odd ? p.D : p.W) / 2, d = (odd ? p.W : p.D) / 2;
@@ -200,8 +173,8 @@ public static class InteriorValidator
                 // stood on (a rug, the chancel step, a showroom plinth, paint on the floor) or
                 // overhead (a bell, a cross on the wall, a crane beam)
                 if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais
-                        or FurnitureType.ShowroomPlinth or FurnitureType.FloorMarking
-                        or FurnitureType.CarLift)
+                        or FurnitureType.ShowroomPlinth or FurnitureType.FloorMarking or FurnitureType.Confetti
+                        or FurnitureType.CarLift or FurnitureType.BoothDeck or FurnitureType.ServiceSteps)
                     && p.Lift < 1.5f)
                 {
                     foreach (var o in room.Openings.Where(o => o.Kind is OpeningKind.Door or OpeningKind.Entry or OpeningKind.Arch))
@@ -214,6 +187,44 @@ public static class InteriorValidator
             }
         }
         return errors;
+    }
+
+    /// <summary>
+    /// A shaped room (#1290): inside the footprint, counter-clockwise, and no other room's floor
+    /// (on its floor, or rising into it) under any of it, sampled every 0.4 m away from its walls.
+    /// </summary>
+    private static void ShapeErrors(InteriorLayout l, int f, int i, float hw, float hd, List<string> errors)
+    {
+        var r = l.Floors[f].Rooms[i];
+        var c = r.Corners();
+        if (c.Any(p => p.X < -hw || p.X > hw || p.Y < -hd || p.Y > hd)) errors.Add($"floor {f} room {i} {r.Type}: its shape leaves the footprint");
+        if (RoomShapes.Area(c) <= 0) { errors.Add($"floor {f} room {i} {r.Type}: its shape is wound backwards"); return; }
+        float x0 = c.Min(p => p.X), x1 = c.Max(p => p.X), z0 = c.Min(p => p.Y), z1 = c.Max(p => p.Y);
+        // only the rooms whose box meets the shape's (a big block has hundreds a floor)
+        var near = new List<(int G, int J, RoomPlan O, Godot.Vector2[]? C)>();
+        for (int g = 0; g <= f; g++)
+            for (int j = 0; j < l.Floors[g].Rooms.Count; j++)
+            {
+                var o = l.Floors[g].Rooms[j];
+                if (g == f && j == i || g + o.Span <= f) continue;
+                var oc = o.Shape == null ? null : o.Corners();
+                float ox0 = oc?.Min(p => p.X) ?? o.X0, ox1 = oc?.Max(p => p.X) ?? o.X1, oz0 = oc?.Min(p => p.Y) ?? o.Z0, oz1 = oc?.Max(p => p.Y) ?? o.Z1;
+                if (ox1 > x0 && ox0 < x1 && oz1 > z0 && oz0 < z1) near.Add((g, j, o, oc));
+            }
+        if (near.Count == 0) return;
+        for (float x = x0 + 0.2f; x < x1; x += 0.4f)
+            for (float z = z0 + 0.2f; z < z1; z += 0.4f)
+            {
+                var q = new Godot.Vector2(x, z);
+                if (!RoomShapes.Contains(c, q) || RoomShapes.EdgeDistance(c, q) < 0.1f) continue;
+                foreach (var (g, j, o, oc) in near)
+                {
+                    bool under = oc == null
+                        ? x > o.X0 + 0.1f && x < o.X1 - 0.1f && z > o.Z0 + 0.1f && z < o.Z1 - 0.1f
+                        : RoomShapes.Contains(oc, q) && RoomShapes.EdgeDistance(oc, q) >= 0.1f;
+                    if (under) { errors.Add($"floor {f} room {i} {r.Type}: its shape overlaps room {j} {o.Type} of floor {g}"); return; }
+                }
+            }
     }
 
     /// <summary>
@@ -255,23 +266,88 @@ public static class InteriorValidator
         return -1;
     }
 
+    /// <summary>
+    /// The rooms no one can reach from the ways in, through doorways, up and down the stairs and in the
+    /// elevators, as errors (what <see cref="Validate"/> reports; alone, it is cheap enough to ask often).
+    /// </summary>
+    internal static List<string> Unreachable(InteriorLayout l)
+    {
+        var errors = new List<string>();
+        // a block of flats' upper floors are several stairwells that never meet (#557)
+        var reached = new HashSet<(int F, int R)>();
+        var queue = new Queue<(int F, int R)>();
+        void Reach(int f, int r)
+        {
+            if (f >= 0 && f < l.Floors.Count && r >= 0 && r < l.Floors[f].Rooms.Count && reached.Add((f, r))) queue.Enqueue((f, r));
+        }
+        var groundRooms = l.GroundFloor.Rooms;
+        for (int i = 0; i < groundRooms.Count; i++)
+            if (groundRooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry)) Reach(l.Below, i);
+        // a raised door (#827) is a way in to the room its doorway is cut in, on its floor
+        foreach (var e in l.Entrances)
+        {
+            int ef = l.EntranceFloor(e);
+            if (e.Level == 0 || ef < 0 || ef >= l.Floors.Count) continue;
+            var rooms = l.Floors[ef].Rooms;
+            for (int i = 0; i < rooms.Count; i++)
+                if (rooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(rooms[i], o, e.X, e.Z))) Reach(ef, i);
+        }
+        if (reached.Count == 0) Reach(l.Below, 0);
+        while (queue.Count > 0)
+        {
+            var (f, a) = queue.Dequeue();
+            var floor = l.Floors[f];
+            var room = floor.Rooms[a];
+            foreach (var o in room.Openings)
+                if (o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0) Reach(f, o.Other);
+            // a stair from this room's floor, starting in it, lands in the room over its top: one
+            // flight, or two round a half landing (#571)
+            foreach (var (first, last) in Stairs(floor))
+                if (Inside(room, first.Bottom.X, first.Bottom.Z) && f + 1 < l.Floors.Count)
+                    Reach(f + 1, RoomAt(l.Floors[f + 1], last.TopEnd.X, last.TopEnd.Z));
+            // and back down one arriving here
+            if (f > 0)
+                foreach (var (first, last) in Stairs(l.Floors[f - 1]))
+                    if (Inside(room, last.TopEnd.X, last.TopEnd.Z)) Reach(f - 1, RoomAt(l.Floors[f - 1], first.Bottom.X, first.Bottom.Z));
+            if (room.Type == RoomType.Elevator)
+                foreach (var lift in l.Lifts)
+                    if (lift.Contains((room.X0 + room.X1) / 2, (room.Z0 + room.Z1) / 2))
+                        for (int g = lift.Bottom; g <= lift.Top; g++)
+                            Reach(g, RoomAt(l.Floors[g], (lift.X0 + lift.X1) / 2, (lift.Z0 + lift.Z1) / 2));
+        }
+        for (int f = 0; f < l.Floors.Count; f++)
+            for (int i = 0; i < l.Floors[f].Rooms.Count; i++)
+                if (!reached.Contains((f, i))) errors.Add($"floor {f} room {i} {l.Floors[f].Rooms[i].Type} unreachable");
+        return errors;
+    }
+
     /// <summary>Whether an opening's middle is at (x, z) on its room's wall line.</summary>
     private static bool OnWall(RoomPlan r, OpeningPlan o, float x, float z)
     {
-        var (px, pz) = o.Side switch
-        {
-            Side.Front => (o.Center, r.Z0),
-            Side.Back => (o.Center, r.Z1),
-            Side.Left => (r.X0, o.Center),
-            _ => (r.X1, o.Center),
-        };
-        return Math.Abs(px - x) < 0.05f && Math.Abs(pz - z) < 0.05f;
+        // on the rectangle's wall line, or on a shaped room's edge (#1197)
+        var p = r.WallFrame(o).At;
+        return Math.Abs(p.X - x) < 0.05f && Math.Abs(p.Y - z) < 0.05f;
     }
+
+    /// <summary>
+    /// Whether two rooms' cuts are the one doorway: the same coordinate along a shared wall line, or,
+    /// where either is on a shaped room's edge (#1197), the same point.
+    /// </summary>
+    private static bool Matches(RoomPlan r, OpeningPlan o, RoomPlan other, OpeningPlan q) =>
+        o.Edge == null && q.Edge == null
+            ? Math.Abs(q.Center - o.Center) < 0.01f
+            : r.WallFrame(o).At.DistanceTo(other.WallFrame(q).At) < 0.05f;
 
     /// <summary>The strip just inside a doorway, which must stay clear.</summary>
     private static RectPlan Doorway(RoomPlan r, OpeningPlan o)
     {
         float half = o.Width / 2, deep = 0.6f;
+        if (o.Edge != null)
+        {
+            var (at, outward, along) = r.WallFrame(o);
+            var p = new[] { at - along * half, at + along * half, at - along * half - outward * deep, at + along * half - outward * deep };
+            return new RectPlan(p.Min(q => q.X), p.Min(q => q.Y), p.Max(q => q.X), p.Max(q => q.Y));
+        }
         return o.Side switch
         {
             Side.Front => new RectPlan(o.Center - half, r.Z0, o.Center + half, r.Z0 + deep),
@@ -282,7 +358,7 @@ public static class InteriorValidator
     }
 
     /// <summary>Plan view of every floor side by side, the front wall at the bottom.</summary>
-    public static string ToSvg(InteriorLayout l)
+    public static string ToSvg(InteriorLayout l, IReadOnlyList<Godot.Vector2[]>? outline = null, IReadOnlyList<Godot.Vector2>? locked = null)
     {
         var inv = CultureInfo.InvariantCulture;
         const float S = 24f, Gap = 30f;
@@ -309,6 +385,10 @@ public static class InteriorValidator
                     RoomType.Kitchen => "#c9e2b8",
                     RoomType.Bedroom => "#b8cde2",
                     RoomType.Bathroom or RoomType.WC => "#a8e0e0",
+                    RoomType.WomensToilet => "#f0b0c8",
+                    RoomType.MensToilet => "#a8c4f0",
+                    RoomType.ToiletStall or RoomType.AccessibleToilet => "#a8e0e0",
+                    RoomType.ToiletLobby => "#d0ecec",
                     RoomType.Shelter or RoomType.Vault => "#9aa29a",
                     RoomType.BankHall => "#efe2a8",
                     RoomType.Carnotzet or RoomType.Cellar or RoomType.Pantry => "#d8b89a",
@@ -321,20 +401,39 @@ public static class InteriorValidator
                     RoomType.Storage or RoomType.TechRoom => "#cfc6b8",
                     _ => "#ddd",
                 };
-                sb.Append($"<rect x=\"{N(X(r.X0))}\" y=\"{N(Y(r.Z1))}\" width=\"{N(r.Width * S)}\" height=\"{N(r.Depth * S)}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"2\"/>");
+                if (r.Shape != null)
+                {
+                    // a shaped room (#1290): its polygon, its core dashed inside it
+                    var pts = string.Join(" ", r.Corners().Select(p => $"{N(X(p.X))},{N(Y(p.Y))}"));
+                    sb.Append($"<polygon points=\"{pts}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"2\"/>");
+                    sb.Append($"<rect x=\"{N(X(r.X0))}\" y=\"{N(Y(r.Z1))}\" width=\"{N(r.Width * S)}\" height=\"{N(r.Depth * S)}\" fill=\"none\" stroke=\"#333\" stroke-width=\"0.6\" stroke-dasharray=\"3 3\"/>");
+                }
+                else
+                    sb.Append($"<rect x=\"{N(X(r.X0))}\" y=\"{N(Y(r.Z1))}\" width=\"{N(r.Width * S)}\" height=\"{N(r.Depth * S)}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"2\"/>");
                 sb.Append($"<text x=\"{N(X((r.X0 + r.X1) / 2))}\" y=\"{N(Y((r.Z0 + r.Z1) / 2))}\" text-anchor=\"middle\">{r.Type}</text>");
                 foreach (var o in r.Openings)
                 {
-                    bool along = o.Side is Side.Front or Side.Back;
-                    float a = o.Center - o.Width / 2, b = o.Center + o.Width / 2;
-                    float fixedC = o.Side switch { Side.Front => r.Z0, Side.Back => r.Z1, Side.Left => r.X0, _ => r.X1 };
+                    var (at, _, dir) = r.WallFrame(o);
+                    var a = at - dir * (o.Width / 2);
+                    var b = at + dir * (o.Width / 2);
                     string col = o.Kind switch { OpeningKind.Window => "#4aa3ff", OpeningKind.Entry => "#d11", _ => "#fff" };
-                    if (along)
-                        sb.Append($"<line x1=\"{N(X(a))}\" y1=\"{N(Y(fixedC))}\" x2=\"{N(X(b))}\" y2=\"{N(Y(fixedC))}\" stroke=\"{col}\" stroke-width=\"4\"/>");
-                    else
-                        sb.Append($"<line x1=\"{N(X(fixedC))}\" y1=\"{N(Y(a))}\" x2=\"{N(X(fixedC))}\" y2=\"{N(Y(b))}\" stroke=\"{col}\" stroke-width=\"4\"/>");
+                    sb.Append($"<line x1=\"{N(X(a.X))}\" y1=\"{N(Y(a.Y))}\" x2=\"{N(X(b.X))}\" y2=\"{N(Y(b.Y))}\" stroke=\"{col}\" stroke-width=\"4\"/>");
                 }
             }
+            // the building's real outline, when the check has it
+            foreach (var ring in outline ?? [])
+                sb.Append($"<polygon points=\"{string.Join(" ", ring.Select(p => $"{N(X(p.X))},{N(Y(p.Y))}"))}\" fill=\"none\" stroke=\"#c40\" stroke-width=\"1.5\" stroke-dasharray=\"6 3\"/>");
+            // with it, the real street doors on the facade (#1290): a doorway inside should stand at its ring
+            if (outline != null)
+                foreach (var e in l.AllEntrances().Where(e => l.EntranceFloor(e) == f))
+                {
+                    var (door, _) = InteriorGenerator.DoorInPlan(l, e);
+                    sb.Append($"<circle cx=\"{N(X(door.X))}\" cy=\"{N(Y(door.Y))}\" r=\"5\" fill=\"none\" stroke=\"#d11\" stroke-width=\"2\"/>");
+                }
+            // street doors with no doorway (#1304, the survey): a filled magenta dot on the ground floor
+            if (f == l.Below)
+                foreach (var p in locked ?? [])
+                    sb.Append($"<circle cx=\"{N(X(p.X))}\" cy=\"{N(Y(p.Y))}\" r=\"9\" fill=\"#d0c\" stroke=\"#fff\" stroke-width=\"2\"/>");
             foreach (var h in floor.Holes)
                 sb.Append($"<rect x=\"{N(X(h.X0))}\" y=\"{N(Y(h.Z1))}\" width=\"{N((h.X1 - h.X0) * S)}\" height=\"{N((h.Z1 - h.Z0) * S)}\" fill=\"#333\" fill-opacity=\"0.5\"/>");
             foreach (var g in floor.Landings)

@@ -59,8 +59,7 @@ public partial class An124NetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -70,17 +69,17 @@ public partial class An124NetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         Expect(me.SetRide(RideKind.An124), "A takes an AN-124");
-        await Seconds(2);
+        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
         Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.CarDoor, Pressed = true });
         Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.CarDoor, Pressed = false });
-        await Seconds(0.5);
+        await Until(() => jet.DoorsOpen == All, 3);
         Expect(jet.DoorsOpen == All && await Until(() => jet.KneelShown >= 1f, 15), $"G opened everything and knelt it (doors {jet.DoorsOpen}, kneel {jet.KneelShown:F2})");
         Say("open");
         if (!await Heard("B", "seen open", 40)) Fail("B never saw it open and knelt");
 
         me.ExitVehicle();
-        await Seconds(2);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         Expect(me.Ride == RideKind.OnFoot && await Until(() => Parked() is { BusDoors: All } v && FrameDrop(v) < -KneelDrop + 0.05f, 10),
             $"A got out, it stands parked open and knelt (doors {Parked()?.BusDoors}, frame {(Parked() is { } p ? FrameDrop(p) : 0f):F2})");
         // out of the way, off the left wing (B walks in at the nose)
@@ -142,7 +141,7 @@ public partial class An124NetProbe : ChatProbe
         float ground = parked.GlobalPosition.Y;
         Expect(await Until(() => (parked.BusDoors & 1 << KneelDoor) == 0 && FrameDrop(parked) > -0.02f, 15),
             $"it rises for B too (doors {parked.BusDoors}, frame {FrameDrop(parked):F2})");
-        await Seconds(1);
+        await Until(() => me.Aboard && Mathf.Abs(Local().Y - FloorY) < 0.3f && Mathf.Abs(me.GlobalPosition.Y - ground - FloorY) < 0.35f, 4);
         l = Local();
         Expect(me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.3f && Mathf.Abs(me.GlobalPosition.Y - ground - FloorY) < 0.35f,
             $"B rose with the floor ({me.GlobalPosition.Y - ground:F2} m over the ground)");

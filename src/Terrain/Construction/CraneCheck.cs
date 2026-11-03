@@ -299,6 +299,15 @@ public partial class CraneCheck : Node
         Expect(me.TryInteract() && !me.CraneWorking && CraneService.Instance.Mine == null, "E hangs the remote back up and lets go");
         await Frames(10);
         Expect(me.GlobalPosition.DistanceTo(crane.AtRemote.At) < 1f, "standing by the box");
+
+        // set down off the remote, at /speed 8: the landing dip's spring went unstable on 8x frames and
+        // threw the camera to NaN, and the floating origin the whole world with it (#1006, cranenetcheck)
+        var eye = GetViewport().GetCamera3D();
+        Engine.TimeScale = 8;
+        await Frames(60);
+        Engine.TimeScale = 1;
+        Expect(eye != null && eye.GlobalPosition.IsFinite() && eye.GlobalPosition.DistanceTo(me.GlobalPosition) < 10f,
+            $"at 8x the camera stays by the player ({eye?.GlobalPosition})");
         Finish();
     }
 

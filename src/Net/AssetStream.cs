@@ -85,6 +85,37 @@ public enum AssetKind
     /// others answer "missing" and their fields stay natural.
     /// </summary>
     Fields = 14,
+
+    /// <summary>
+    /// <c>pistes_E_N.pst</c>, a tile's ski slopes (#887). Only tiles a slope touches have one: the
+    /// others answer "missing".
+    /// </summary>
+    Pistes = 15,
+
+    /// <summary>
+    /// <c>ropeways.json</c>, the region's OSM aerialways (#915). Not tile-scoped, like
+    /// <see cref="Landings"/>: fetched once during sync; an older server answers "missing".
+    /// </summary>
+    Ropeways = 16,
+
+    /// <summary>
+    /// <c>pois.bin</c>, the region's points of interest (#1224). Not tile-scoped, like <see cref="Ropeways"/>:
+    /// fetched once during sync; an older server answers "missing" (an empty catalogue: adventure places idle).
+    /// </summary>
+    Pois = 17,
+
+    /// <summary>
+    /// <c>atlas_facts.json</c>, the region's Wikidata facts for the Swiss Atlas's cards (#1224). Not
+    /// tile-scoped, like <see cref="Pois"/>; an older server answers "missing" (cards keep their generated line).
+    /// </summary>
+    AtlasFacts = 18,
+
+    /// <summary>
+    /// The SHA-256 of the tile index and of each region file the server has (<see cref="AssetDigest"/>, #1380),
+    /// as JSON. A returning client fetches only what differs from its cached copies. An older server does not
+    /// know the kind and answers "missing" (no protocol bump): the client fetches everything.
+    /// </summary>
+    Digest = 19,
 }
 
 /// <summary>
@@ -130,11 +161,17 @@ public static class AssetStream
         AssetKind.Trees => TreeFormat.FileName(id),
         AssetKind.Buildings => BuildingFormat.FileName(id),
         AssetKind.Holes => HoleFormat.FileName(id),
-        AssetKind.Cd => $"{id.E}.ogg",
+        // N picks the file (#1153): 0 the CD, 1 its voice stem, 2 its music stem
+        AssetKind.Cd => id.N switch { 1 => $"{id.E}.voc.ogg", 2 => $"{id.E}.inst.ogg", _ => $"{id.E}.ogg" },
         AssetKind.Water => WaterFormat.FileName(id),
         AssetKind.Landings => LandingIndex.FileName,
         AssetKind.HttpBase => "",
         AssetKind.Fields => FieldFormat.FileName(id),
+        AssetKind.Pistes => PisteFormat.FileName(id),
+        AssetKind.Ropeways => RopewayInfoIndex.FileName,
+        AssetKind.Pois => PoiFile.FileName,
+        AssetKind.AtlasFacts => "atlas_facts.json",
+        AssetKind.Digest => "",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -144,13 +181,13 @@ public static class AssetStream
     /// nor CDs (another directory).
     /// </summary>
     public static bool ServedOverHttp(AssetKind kind) =>
-        kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase);
+        kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase or AssetKind.Digest);
 
     /// <summary>
     /// True for kinds whose format already compresses its own payload, so deflating again
     /// only burns CPU to add a few bytes.
     /// </summary>
-    public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd or AssetKind.Water;
+    public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd or AssetKind.Water or AssetKind.Pistes;
 
     /// <summary>Deflates a payload, returning null when the result is not smaller.</summary>
     public static byte[]? TryCompress(byte[] payload)

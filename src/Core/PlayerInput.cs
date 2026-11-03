@@ -12,6 +12,11 @@ public enum InputDevice
     /// so pad-only behaviour holds); only <see cref="PlayerInput.HintDevice"/>, so prompts name them.
     /// </summary>
     VR,
+    /// <summary>
+    /// The phone's touch controls (#1054). Never <see cref="PlayerInput.LastDevice"/> (the overlay
+    /// plays a pad); only <see cref="PlayerInput.HintDevice"/>, so hints name the on-screen controls.
+    /// </summary>
+    Touch,
 }
 
 /// <summary>
@@ -77,12 +82,20 @@ public partial class PlayerInput : Node
     public const string Couple = "couple";
     /// <summary>A steamer's whistle (#303), held: it blows as long as it is held. H, like coupling a truck.</summary>
     public const string Horn = "horn";
+    /// <summary>A UFO's tractor beam on or off (#861). H, like coupling a truck: "take hold of it".</summary>
+    public const string TractorBeam = "tractor_beam";
     /// <summary>A passenger moves into the free driver's seat (#158).</summary>
     public const string TakeWheel = "take_wheel";
     /// <summary>A bus kneels (lowers its door side) or rises.</summary>
     public const string Kneel = "kneel";
     /// <summary>The next destination on a bus's display.</summary>
     public const string Destination = "destination";
+    /// <summary>
+    /// The guiding gust (#1226, <c>Adventure.Navigation.GuidingWind</c>): N on foot and mounted (in a bus, a tipper or a
+    /// mixer N stays <see cref="Destination"/>'s). A pad has no free button on foot: the quick menu's Guide wedge; VR the
+    /// open left hand palm up, or the wrist menu.
+    /// </summary>
+    public const string Guide = "guide";
     /// <summary>Sequential shift up / down; in the H-pattern, the splitter high / low.</summary>
     public const string ShiftUp = "shift_up";
     public const string ShiftDown = "shift_down";
@@ -101,6 +114,9 @@ public partial class PlayerInput : Node
     /// <summary>Dig mode, the left stick: slew the house (X), run the stick out and in (Y).</summary>
     public const string ArmSlewLeft = "arm_slew_left";
     public const string ArmSlewRight = "arm_slew_right";
+    /// <summary>Bowling (#1336): turn your line on the lane while aiming (the spot moves on the move keys).</summary>
+    public const string BowlAimLeft = "bowl_aim_left";
+    public const string BowlAimRight = "bowl_aim_right";
     public const string ArmStickOut = "arm_stick_out";
     public const string ArmStickIn = "arm_stick_in";
     /// <summary>Dig mode, the right stick: raise and lower the boom (Y, back is up), curl and dump the bucket (X, left curls).</summary>
@@ -132,9 +148,21 @@ public partial class PlayerInput : Node
     public const string InteractMount = "interact_mount";
     public const string EngineToggle = "engine_toggle";
     public const string CameraToggle = "camera_toggle";
+    /// <summary>Operating a concert's camera (#885): zoom in and out, and cut this camera to air.</summary>
+    public const string CamZoomIn = "cam_zoom_in";
+    public const string CamZoomOut = "cam_zoom_out";
+    public const string CamCut = "cam_cut";
     /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
     public const string SwapShoulder = "swap_shoulder";
+    /// <summary>
+    /// On foot in third person: the camera arm in and out (#1149), from far off down to the face.
+    /// The plain wheel (Alt + wheel is the hotbar, #1369), = / -; a pad holds R3 and pushes the right stick.
+    /// </summary>
+    public const string ViewZoomIn = "view_zoom_in";
+    public const string ViewZoomOut = "view_zoom_out";
     public const string ToggleMode = "toggle_mode";
+    /// <summary>The spectator fly camera and back (#1002): Shift+T; a pad holds D-pad down (<c>ClientWorld</c>), VR the wrist menu.</summary>
+    public const string Spectator = "spectator";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
     public const string Ping = "ping";
@@ -145,6 +173,13 @@ public partial class PlayerInput : Node
     public const string CarDoor = "car_door";
     /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
     public const string RideMenu = "ride_menu";
+    /// <summary>
+    /// A home-trainer training (#901): back to the GPX course from a road off it, turn round, ERG on/off and its
+    /// target ±10 W. Keys only: a pad and VR have the same as buttons in the phone's Training app (no pad
+    /// button is free on a bike); the turn at a junction is the steering.
+    /// </summary>
+    public const string RideRejoin = "ride_rejoin", RideUTurn = "ride_uturn", RideErg = "ride_erg",
+        RidePowerUp = "ride_power_up", RidePowerDown = "ride_power_down";
     /// <summary>
     /// The pad's analog triggers alone, 0..1, for code that wants the pull itself (flight's lever,
     /// the GPX camera). Through the input map rather than <c>Input.GetJoyAxis(0, …)</c>, so any
@@ -176,14 +211,29 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     /// <summary>
     /// The quick menu (#840, <see cref="Ui.QuickMenu"/>): hold F2, or hold Back on a pad (a tap of Back is still the
-    /// inventory), for a ring of Activities, Invites, Inventory, Vehicles, Map, Emotes, Bird journal, Controls.
+    /// inventory), for a ring of Activities, Invites, Inventory, Vehicles, Map, Emotes, Journal, Controls.
     /// A tap of F2 while an invite is up accepts it.
     /// </summary>
     public const string QuickMenu = "quick_menu";
     /// <summary>Shift+F2 (#840): declines the newest invite. A pad declines from the quick menu's Invites or the Start menu.</summary>
     public const string InviteDecline = "invite_decline";
+    /// <summary>
+    /// The phone (#889): on foot, takes it out, and again opens it (<see cref="UnitSport.Phone.PhoneController"/>).
+    /// Up arrow, free on foot (only the excavator's boom in a cab); a pad reaches it from the quick menu.
+    /// </summary>
+    public const string Phone = "phone";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
+    // --- pinball (#1325): read only while standing at a machine (Interiors.Pinball.PinballPlay) ---
+    /// <summary>The left and right flipper buttons: held, the flipper is up. On a pad the shoulders and triggers, as on a cabinet's sides.</summary>
+    public const string PinballLeft = "pinball_left";
+    public const string PinballRight = "pinball_right";
+    /// <summary>Held: the plunger pulled back (the longer, the harder); let go, it launches. Pad A, or the right stick pulled down.</summary>
+    public const string PinballPlunge = "pinball_plunge";
+    /// <summary>A shove on the cabinet, forward or to a side. Too hard or too often: tilt.</summary>
+    public const string PinballNudge = "pinball_nudge";
+    public const string PinballNudgeLeft = "pinball_nudge_left";
+    public const string PinballNudgeRight = "pinball_nudge_right";
     /// <summary>
     /// The replay buffer's last minutes into the movie studio (#638). Keyboard only: a pad and VR do it
     /// from the pause menu (Save clip), which they reach with Start / the menu button.
@@ -200,14 +250,39 @@ public partial class PlayerInput : Node
     public const string FightKick = "fight_kick";
     /// <summary>Held: the guard (high standing, low crouching).</summary>
     public const string FightBlock = "fight_block";
+    /// <summary>
+    /// With a sword in hand only (#1371, <c>Combat/SwordRules</c>): the dodge. A press is the dodge, held on it carries on as the
+    /// sprint it also is. Attacking is <see cref="UseItem"/> (LMB, RB; VR's right trigger).
+    /// </summary>
+    public const string SwordDodge = "sword_dodge";
+    /// <summary>With a sword in hand only (#1371): locks onto the target nearest the view, again lets it go.</summary>
+    public const string SwordLock = "sword_lock";
+    /// <summary>
+    /// In an aura battle only (#907): its own context like the fight, the walk and the items are off.
+    /// Next cuts to the following move of the combo being performed (timed on the downbeat); the
+    /// planner's lock in, take back the last move, and suggest.
+    /// </summary>
+    public const string AuraNext = "aura_next";
+    public const string AuraLock = "aura_lock";
+    public const string AuraRemove = "aura_remove";
+    public const string AuraSuggest = "aura_suggest";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
+    /// <summary>Next hotbar slot: Alt + wheel down (the plain wheel zooms the camera, #1369), D-pad right on a pad.</summary>
     public const string NextItem = "next_item";
+    /// <summary>Puts the item in hand away, or takes it out again (#1369): comma on the keyboard (selection kept); a pad holds D-pad right, VR holds the grip at the right hip.</summary>
+    public const string Holster = "holster_item";
     /// <summary>Hotbar slots 1-6 (#391): select on foot, swap the hovered slot in the inventory, pick in the quick wheel. Same keys as the truck's gates, never at the same time.</summary>
     public static readonly StringName[] Slots = { "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6" };
     public const string PrevItem = "prev_item";
-    /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
+    /// <summary>
+    /// Opens and closes the Journal (<see cref="Ui.AdventureLog"/>, #1223): quests, birds, fish and the
+    /// Adventure plans' tabs. The id stays "bird_journal" so players' rebinds of J carry over.
+    /// </summary>
     public const string BirdJournal = "bird_journal";
+
+    /// <summary>Opens the Character menu, the figure editor (<see cref="Ui.CharacterScreen"/>, #1127). On foot only: P is the radio's previous station in a vehicle.</summary>
+    public const string CharacterMenu = "character_menu";
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
     public const string BuildTurn = "build_turn";
 
@@ -239,7 +314,7 @@ public partial class PlayerInput : Node
     /// </summary>
     public static bool IsLookMotion(InputEventMouseMotion m) =>
         m.Device == TouchControls.Device
-        || Input.MouseMode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
+        || MouseCapture.Mode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -268,7 +343,8 @@ public partial class PlayerInput : Node
     /// The device prompts name (#435): <see cref="InputDevice.VR"/> while the headset is on, where
     /// <see cref="LastDevice"/> stays Gamepad because the controllers replay as a pad.
     /// </summary>
-    public static InputDevice HintDevice => XR.XrSession.Active ? InputDevice.VR : _lastDevice;
+    public static InputDevice HintDevice => XR.XrSession.Active ? InputDevice.VR
+        : TouchControls.Hinting ? InputDevice.Touch : _lastDevice;
 
     /// <summary>
     /// What a control is called changed without a device switch (the VR controller was recognised,
@@ -301,6 +377,7 @@ public partial class PlayerInput : Node
     /// </summary>
     public static Vector2 Move => Blocked
         ? Vector2.Zero
+        : MoveIsHeldOff ? MoveHeldOff()
         : Input.GetVector(NLeft, NRight, NForward, NBack);
 
     /// <summary>
@@ -326,20 +403,20 @@ public partial class PlayerInput : Node
 
     /// <summary>Held, for buttons. For an axis-bound action it means past the deadzone (a wheel's pedal: half way).</summary>
     public static bool Held(string action) =>
-        !Blocked && (Input.IsActionPressed(ActionName(action)) || SteeringWheel.Strength(action) > 0.5f);
+        !Blocked && (Input.IsActionPressed(ActionName(action)) && !HeldOff(action) || SteeringWheel.Strength(action) > 0.5f);
 
     /// <summary>
     /// Held on a key or a button, leaving out a wheel's pedal: for a control that takes the pedal's
     /// travel separately (<see cref="WheelPedal"/>), as the clutch does (#290).
     /// </summary>
-    public static bool HeldButton(string action) => !Blocked && Input.IsActionPressed(ActionName(action));
+    public static bool HeldButton(string action) => !Blocked && Input.IsActionPressed(ActionName(action)) && !HeldOff(action);
 
     /// <summary>A steering wheel's pedal behind <paramref name="action"/>, 0..1; 0 without one.</summary>
     public static float WheelPedal(string action) => Blocked ? 0f : SteeringWheel.Strength(action);
 
     /// <summary>0..1 — a trigger's or a pedal's travel, or 1 for a pressed key.</summary>
     public static float Strength(string action) =>
-        Blocked ? 0f : Mathf.Max(Input.GetActionStrength(ActionName(action)), SteeringWheel.Strength(action));
+        Blocked ? 0f : Mathf.Max(HeldOff(action) ? 0f : Input.GetActionStrength(ActionName(action)), SteeringWheel.Strength(action));
 
     /// <summary>
     /// Steering axis −1 left .. +1 right, from the left stick or A/D, else a steering wheel turned
@@ -440,6 +517,7 @@ public partial class PlayerInput : Node
 
     public override void _Input(InputEvent e)
     {
+        if (e is InputEventKey key) TrackKey(key);
         // the steering wheel is read through SDL; Godot's copy of it is not a pad
         if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
         // VR replays the controllers as a pad, and points at the UI panel with mouse events: it
@@ -582,11 +660,14 @@ public partial class PlayerInput : Node
         Bind(Couple, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a steamer has nothing to couple: its whistle takes the same key
         Bind(Horn, Keys(Key.H), Button(JoyButton.DpadLeft));
+        // and a UFO's tractor beam (#861): it takes hold of what is under it
+        Bind(TractorBeam, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a passenger never does tricks: the trick keys are free in a seat
         Bind(TakeWheel, Keys(Key.F), Button(JoyButton.RightShoulder));
         // L3 means nothing in a cab: a bus kneels and a farm machine lowers its implement or header (#494)
         Bind(Kneel, Keys(Key.K), Button(JoyButton.LeftStick));
         Bind(Destination, Keys(Key.N));
+        Bind(Guide, Keys(Key.N));
         Bind(ShiftUp, Keys(Key.Shift), Button(JoyButton.RightShoulder));
         Bind(ShiftDown, Keys(Key.Ctrl), Button(JoyButton.LeftShoulder));
         Bind(Clutch, Keys(Key.C), Button(JoyButton.B));
@@ -603,6 +684,8 @@ public partial class PlayerInput : Node
         Bind(DigMode, Keys(Key.C), Button(JoyButton.B));
         Bind(ArmSlewLeft, Keys(Key.A), Axis(JoyAxis.LeftX, -1));
         Bind(ArmSlewRight, Keys(Key.D), Axis(JoyAxis.LeftX, 1));
+        Bind(BowlAimLeft, Keys(Key.Left), Axis(JoyAxis.RightX, -1));
+        Bind(BowlAimRight, Keys(Key.Right), Axis(JoyAxis.RightX, 1));
         Bind(ArmStickOut, Keys(Key.W), Axis(JoyAxis.LeftY, -1));
         Bind(ArmStickIn, Keys(Key.S), Axis(JoyAxis.LeftY, 1));
         Bind(ArmBoomUp, Keys(Key.Up), Axis(JoyAxis.RightY, 1));
@@ -633,11 +716,27 @@ public partial class PlayerInput : Node
         // the picker when there is nothing to interact with (ClientWorld).
         Bind(InteractMount, Keys(Key.E), Button(JoyButton.Y));
         Bind(RideMenu, Keys(Key.R));
+        // every letter is taken: the keys beside Enter and the page keys, which no ride uses
+        Bind(RideRejoin, Keys(Key.Pageup));
+        Bind(RideUTurn, Keys(Key.Pagedown));
+        Bind(RideErg, Keys(Key.Backslash));
+        Bind(RidePowerUp, Keys(Key.Bracketright));
+        Bind(RidePowerDown, Keys(Key.Bracketleft));
         Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
+        // a concert's camera (#885): the operator's zoom on the wheel and the shoulders (nothing else
+        // is held while a camera is driven), the cut on Enter / X
+        Bind(CamZoomIn, Keys(Key.Equal), Mouse(MouseButton.WheelUp), Button(JoyButton.RightShoulder));
+        Bind(CamZoomOut, Keys(Key.Minus), Mouse(MouseButton.WheelDown), Button(JoyButton.LeftShoulder));
+        Bind(CamCut, Keys(Key.Enter), Button(JoyButton.X));
         // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
         Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
+        // the on-foot camera's zoom (#1149, #1369): the plain wheel, whatever is held (Shift is sprint);
+        // the hotbar is on Alt + wheel
+        Bind(ViewZoomIn, Keys(Key.Equal), Mouse(MouseButton.WheelUp));
+        Bind(ViewZoomOut, Keys(Key.Minus), Mouse(MouseButton.WheelDown));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
+        Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));
@@ -673,6 +772,19 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
+        // pinball (#1325): the flippers on A / D, the arrows and Left / Right Shift (each Shift its side), the pad's
+        // shoulders and triggers; the plunger on Enter too (PinballPlay keeps Enter from the chat while at a machine);
+        // Space / S / down, pad A or the right stick pulled back; nudges W (forward), Q and R (sides), pad X with
+        // the left stick for its side. Read only at a machine (PinballPlay), where walking is off.
+        Bind(PinballLeft, Keys(Key.A, Key.Left), KeyAt(Key.Shift, KeyLocation.Left), Button(JoyButton.LeftShoulder), Axis(JoyAxis.TriggerLeft, 1));
+        Bind(PinballRight, Keys(Key.D, Key.Right), KeyAt(Key.Shift, KeyLocation.Right), Button(JoyButton.RightShoulder), Axis(JoyAxis.TriggerRight, 1));
+        Bind(PinballPlunge, Keys(Key.Space, Key.S, Key.Down, Key.Enter), Button(JoyButton.A), Axis(JoyAxis.RightY, 1));
+        Bind(PinballNudge, Keys(Key.W, Key.Up), Button(JoyButton.X));
+        Bind(PinballNudgeLeft, Keys(Key.Q));
+        Bind(PinballNudgeRight, Keys(Key.R));
+        // the phone (#889): Up, as in the games players know it from; no pad button is free on foot
+        // (D-pad up is the emote wheel), so the pad takes it out from the quick menu
+        Bind(Phone, Keys(Key.Up));
         // F2 is free everywhere (F1 help, F3 F4 the perf tools); a pad has no free button, so the
         // quick menu is a hold of Back, whose tap stays the inventory (Ui/QuickMenu tells them apart)
         Bind(QuickMenu, Keys(Key.F2), Button(JoyButton.Back));
@@ -683,14 +795,30 @@ public partial class PlayerInput : Node
         Bind(FightPunch, Mouse(MouseButton.Left), Keys(Key.J), Button(JoyButton.X), Button(JoyButton.RightShoulder));
         Bind(FightKick, Mouse(MouseButton.Right), Keys(Key.K), Button(JoyButton.Y), Button(JoyButton.LeftShoulder));
         Bind(FightBlock, Keys(Key.Shift, Key.L), Button(JoyButton.B));
+        // the sword (#1371): its own context while it is in the hand. The dodge shares Shift (it is also the sprint: a press
+        // dodges, holding on runs) and the pad's B (VR's B too; the pad's crouch gives way to it); the lock shares the middle
+        // button and R3 (the sword in hand takes them first, FootPlayer.Sword) and Z, free on foot
+        Bind(SwordDodge, Keys(Key.Shift), Button(JoyButton.B));
+        Bind(SwordLock, Mouse(MouseButton.Middle), Keys(Key.Z), Button(JoyButton.RightStick));
+        // an aura battle (#907): its own context too, the walk locked and the items off, so Next is
+        // the jump's Space / A, or the left click, or RB (which VR's right trigger sends on foot); the
+        // planner's lock in, take back and suggest are F / Y, Backspace / X, G / R3 (VR: the same buttons)
+        Bind(AuraNext, Mouse(MouseButton.Left), Keys(Key.Space), Button(JoyButton.A), Button(JoyButton.RightShoulder));
+        Bind(AuraLock, Keys(Key.F), Button(JoyButton.Y));
+        Bind(AuraRemove, Keys(Key.Backspace), Button(JoyButton.X));
+        Bind(AuraSuggest, Keys(Key.G), Button(JoyButton.RightStick));
         // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
-        Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
+        Bind(NextItem, AltWheel(MouseButton.WheelDown), Button(JoyButton.DpadRight));
+        Bind(Holster, Keys(Key.Comma));
         for (int s = 0; s < Slots.Length; s++) Bind(Slots[s], Keys(Key.Key1 + s));
-        Bind(PrevItem, Mouse(MouseButton.WheelUp));
+        Bind(PrevItem, AltWheel(MouseButton.WheelUp));
         Bind(BirdJournal, Keys(Key.J));
+        // the Character menu (#1127): P on foot (in a vehicle it is the radio's previous station, so the world reads it
+        // only on foot); no pad button is free on foot, so a pad and VR open it from the quick menu or the pause menu
+        Bind(CharacterMenu, Keys(Key.P));
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
         // the item controller takes either first (Build.BuildTool)
         Bind(BuildTurn, Keys(Key.R), Button(JoyButton.DpadUp));
@@ -719,8 +847,22 @@ public partial class PlayerInput : Node
     private static InputEvent[] Keys(params Key[] keys) =>
         keys.Select(k => (InputEvent)new InputEventKey { PhysicalKeycode = k }).ToArray();
 
+    /// <summary>One side's key of a pair (Left Shift, Right Shift): only that key, not the other.</summary>
+    private static InputEvent[] KeyAt(Key key, KeyLocation location) =>
+        new InputEvent[] { new InputEventKey { PhysicalKeycode = key, Location = location } };
+
     private static InputEvent[] Mouse(MouseButton b) =>
         new InputEvent[] { new InputEventMouseButton { ButtonIndex = b } };
+
+    private static InputEvent[] AltWheel(MouseButton b) =>
+        new InputEvent[] { new InputEventMouseButton { ButtonIndex = b, AltPressed = true } };
+
+    /// <summary>
+    /// Alt + wheel: the hotbar's step (#1369). A modifier-less binding matches whatever is held, so the
+    /// plain wheel's zoom asks first: Alt is the only modifier that moves the wheel to the hotbar.
+    /// </summary>
+    public static bool IsHotbarWheel(InputEvent e) =>
+        e is InputEventMouseButton { AltPressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown };
 
     private static InputEvent[] Button(JoyButton b) =>
         new InputEvent[] { new InputEventJoypadButton { ButtonIndex = b, Device = -1 } };

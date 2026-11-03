@@ -50,7 +50,7 @@ internal sealed partial class XrTeleport : Node3D
     {
         _wait = Mathf.Max(0f, _wait - dt);
         bool can = player is { Ride: RideKind.OnFoot, RidingWith: 0 } && hand.GetHasTrackingData()
-                   && Input.MouseMode == Input.MouseModeEnum.Captured && Core.GameSettings.Current.VrTeleport;
+                   && Core.MouseCapture.Mode == Input.MouseModeEnum.Captured && Core.GameSettings.Current.VrTeleport;
         if (!can)
         {
             Hide();

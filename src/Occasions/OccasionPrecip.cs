@@ -5,7 +5,7 @@ namespace UnitSport.Occasions;
 
 /// <summary>
 /// Falling snow around the camera while the top occasion's <see cref="OccasionAtmosphere.Snowfall"/>
-/// is above zero (Christmas). One static mesh animated entirely by <c>ps1_snowfall.gdshader</c>;
+/// is above zero (Christmas). One static mesh animated entirely by <c>snowfall.gdshader</c>;
 /// this node only builds it once and sets its density. The shader thins it at low altitude and
 /// draws nothing indoors, per camera, so a door portal looking out shows the street's snow. Client only.
 /// </summary>

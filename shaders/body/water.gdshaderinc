@@ -29,8 +29,12 @@ uniform vec3 deep_color : source_color = vec3(0.13, 0.24, 0.36);
 uniform vec3 shallow_color : source_color = vec3(0.25, 0.43, 0.52);
 uniform vec3 glint_color : source_color = vec3(0.62, 0.76, 0.82);
 uniform float wave_speed = 0.35;
-// the scene behind the water (opaque only: the water itself is not in it)
+// the scene behind the water (opaque only: the water itself is not in it). Not on a standalone
+// headset (NO_SCENE_DEPTH, the *_standalone wrappers, #1112): reading it makes a tiled GPU write
+// out and resolve the multisampled frame, 30 ms of a Quest 2's frame
+#ifndef NO_SCENE_DEPTH
 uniform sampler2D water_depth_texture : hint_depth_texture, filter_nearest;
+#endif
 #ifndef STYLE_LIT
 // semitransparency: alpha at the waterline and through `fade_depth` metres of water and more
 uniform float shore_alpha = 0.45;
@@ -86,7 +90,7 @@ void vertex() {
     wave_lift = d.y;
     wave_scale = UV.x;
     world_pos = rest + d;
-    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 // ---- fine ripples: shading only ----------------------------------------------------------
@@ -152,22 +156,34 @@ float wave_height_here() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
+#endif
     vec2 ground = pattern_xz(world_pos);
     float dist = length(VERTEX);
+    // where this surface was drawn (#187): the depth buffer behind it holds curved positions too
+    vec3 drawn = CURVED_FRAGMENT(vec4(VERTEX, 1.0), world_pos).xyz;
     vec3 det = water_detail(ground);
     // far off, the waves' normal is interpolated over a few pixels' worth of triangles: shading by
     // it draws the mesh's own grid over a whole lake (seen from above Nyon), so it eases to up
     vec3 wave_n = normalize(mix(wave_normal, vec3(0.0, 1.0, 0.0), smoothstep(400.0, 1500.0, dist)));
+#ifdef NO_SCENE_DEPTH
+    // no bed to measure: every surface as water a few metres deep, its bands still on it
+    float depth = 6.0;
+#else
     // the water between this surface and what is behind it, along the view
     float scene_depth = texture(water_depth_texture, SCREEN_UV).r;
     vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_depth, 1.0);
-    float through = max(0.0, -behind.z / behind.w + VERTEX.z);
+    float through = max(0.0, -behind.z / behind.w + drawn.z);
     // and straight down to it: the depth of the water here (the sky behind: very deep)
-    vec3 bed = (INV_VIEW_MATRIX * vec4(behind.xyz / behind.w, 1.0)).xyz;
-    float depth = scene_depth <= 0.0 ? 1000.0 : max(0.0, world_pos.y - bed.y);
+    vec3 bed = UNCURVED_FRAGMENT((INV_VIEW_MATRIX * vec4(behind.xyz / behind.w, 1.0)).xyz);
+    // a bed above the surface: on the curved Earth a view grazing the water's bulge leaves it
+    // again and meets the far shore above the water (from 1.7 m up, past ~5 km): deep, not a shore
+    // line drawn along every far coast (#187)
+    float depth = scene_depth <= 0.0 || (world_curvature > 0.0 && bed.y > world_pos.y) ? 1000.0 : max(0.0, world_pos.y - bed.y);
+#endif
 
 #ifndef STYLE_LIT
     // PS1 (#299): the bed shows through the shallows, fading to opaque by `fade_depth` metres
@@ -250,7 +266,9 @@ void fragment() {
     col = FRONT_FACING ? col : toon_underside;
     ALBEDO = style_grade(occasion_mist(mix(col, toon_foam, foam), mist_at, dist));
     ROUGHNESS = 0.6;
+#ifndef NO_SCENE_DEPTH
     ALPHA = FRONT_FACING ? max(mix(0.35, 0.97, smoothstep(0.0, 4.0, depth)), foam) : 0.88;
+#endif
 #endif
 
 #ifdef STYLE_REAL
@@ -265,7 +283,7 @@ void fragment() {
     vec2 ruv = clamp(SCREEN_UV + offset, vec2(0.001), vec2(0.999));
     float rdepth = texture(water_depth_texture, ruv).r;
     vec4 rbehind = INV_PROJECTION_MATRIX * vec4(ruv * 2.0 - 1.0, rdepth, 1.0);
-    float rthrough = -rbehind.z / rbehind.w + VERTEX.z;
+    float rthrough = -rbehind.z / rbehind.w + drawn.z;
     if (rthrough < 0.0) {
         ruv = SCREEN_UV;
         rthrough = through;
@@ -278,10 +296,10 @@ void fragment() {
     vec3 reflected = vec3(0.0);
     if (ssr_steps > 0 && FRONT_FACING) {
         // screen-space reflection (Realistic+): march the reflected ray against the opaque depth
-        vec3 r = reflect(normalize(VERTEX), NORMAL);
+        vec3 r = reflect(normalize(drawn), NORMAL);
         float t = 1.0;
         for (int i = 0; i < ssr_steps; i++) {
-            vec3 p = VERTEX + r * t;
+            vec3 p = drawn + r * t;
             vec4 c = PROJECTION_MATRIX * vec4(p, 1.0);
             if (c.w <= 0.0) {
                 break;

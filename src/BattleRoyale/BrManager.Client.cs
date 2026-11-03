@@ -44,10 +44,8 @@ public partial class BrManager
     private (int Seed, float Side, float Pace, int Field, float Centres) _zoneKey;
     private BrHud? _hud;
     private ZoneWall? _wall;
-    private Camera3D? _spectator;
-    private int _watchIndex;
-    private long _watching;
-    private bool _anchored;
+    /// <summary>The spectator's camera once out (#1268: <see cref="Ui.FollowCam"/>, shared with Versteckis).</summary>
+    private Ui.FollowCam? _follow;
 
     /// <summary>This client was dropped into the running match and has not been released yet.</summary>
     public bool InMatch { get; private set; }
@@ -77,6 +75,12 @@ public partial class BrManager
         AddChild(_map);
         _wall = new ZoneWall { Name = "ZoneWall", Visible = false };
         AddChild(_wall);
+        _follow = new Ui.FollowCam
+        {
+            Name = "FollowCam", LocalPlayer = () => LocalPlayer(), AddAnchor = n => AddAnchor?.Invoke(n), RemoveAnchor = n => RemoveAnchor?.Invoke(n),
+            BodyOf = id => GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(id)),
+        };
+        AddChild(_follow);
     }
 
     public override void _ExitTree()
@@ -290,13 +294,13 @@ public partial class BrManager
     }
 
     /// <summary>Spectating: the player watched, else 0.</summary>
-    public long Watching => _spectator is { Current: true } ? _watching : 0;
+    public long Watching => _follow?.Watching ?? 0;
 
     /// <summary>Out of the match: follow this living entrant (a probe filming bots, #842); false when it is not one.</summary>
     public bool Watch(long id)
     {
         if (_state.Find(id) is not { Alive: true }) return false;
-        _watching = id;
+        _follow?.Prefer(id);
         return true;
     }
 
@@ -335,6 +339,7 @@ public partial class BrManager
             LocalPlayer()?.Announce("WINNER WINNER RACLETTE DINNER", true);
             Sting(BrSounds.Win, 0f);
         }
+        Followable();
         GD.Print($"[br] state {s.Phase}, {s.AliveCount}/{s.Entrants.Count} alive");
         StateChanged?.Invoke();
     }
@@ -474,7 +479,7 @@ public partial class BrManager
         {
             LocalPlayer()?.Announce($"YOU PLACED #{place}", false);
             Sting(BrSounds.Out);
-            _watching = killer;
+            _follow?.Prefer(killer);
         }
     }
 
@@ -610,8 +615,8 @@ public partial class BrManager
 
         // out: watch who is still in it
         bool spectate = InMatch && _state.Phase == BrPhase.Playing && (me?.Eliminated == true || !MeAlive);
-        if (spectate) Spectate(me);
-        else if (_spectator is { Current: true }) StopSpectating();
+        if (spectate) _follow?.Follow(delta);
+        else if (_follow is { Active: true }) StopSpectating();
 
     }
 
@@ -654,59 +659,17 @@ public partial class BrManager
             GetViewport().SetInputAsHandled();
             return;
         }
-        if (_spectator is not { Current: true }) return;
-        if (e.IsActionPressed("ui_left")) _watchIndex--;
-        else if (e.IsActionPressed("ui_right")) _watchIndex++;
-        else return;
-        _watching = 0;
-        GetViewport().SetInputAsHandled();
     }
 
-    private void Spectate(FootPlayer? me)
+    /// <summary>Who an out player may follow (the living, team-mates first, #231): handed to the camera when the state changes.</summary>
+    private void Followable()
     {
-        // team-mates first (#231): you follow your own side before the others
+        if (_follow == null) return;
         int team = MyEntry?.Team ?? 0;
-        var alive = _state.Entrants.Where(x => x.Alive && x.Peer != Me).OrderBy(x => team != 0 && x.Team == team ? 0 : 1)
-            .Select(x => x.Peer).ToList();
-        if (alive.Count == 0) return;
-        if (!alive.Contains(_watching))
-        {
-            _watchIndex = ((_watchIndex % alive.Count) + alive.Count) % alive.Count;
-            _watching = alive[_watchIndex];
-        }
-        var target = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(_watching));
-        if (_spectator == null)
-        {
-            _spectator = new Camera3D { Name = "Spectator", Fov = 70, Far = 20000 };
-            AddChild(_spectator);
-        }
-        if (!_spectator.Current)
-        {
-            _spectator.GlobalPosition = (me?.GlobalPosition ?? Vector3.Zero) + Vector3.Up * 4f;
-            _spectator.Current = true;
-        }
-        if (!_anchored && AddAnchor != null)
-        {
-            AddAnchor(_spectator);
-            _anchored = true;
-        }
-        if (target == null) return;   // not streamed here yet: hold the view until it arrives
-        var behind = new Vector3(Mathf.Sin(target.NetYaw), 0, Mathf.Cos(target.NetYaw)) * 6f + Vector3.Up * 2.8f;
-        var want = target.GlobalPosition + behind;
-        float k = 1f - Mathf.Exp(-6f * (float)GetProcessDeltaTime());
-        _spectator.GlobalPosition = _spectator.GlobalPosition.DistanceTo(want) > 200f ? want : _spectator.GlobalPosition.Lerp(want, k);
-        _spectator.LookAt(target.GlobalPosition + Vector3.Up * 1.5f, Vector3.Up);
+        _follow.SetCandidates(_state.Entrants.Where(x => x.Alive && x.Peer != Me).OrderBy(x => team != 0 && x.Team == team ? 0 : 1).Select(x => x.Peer));
     }
 
-    private void StopSpectating()
-    {
-        if (_spectator == null) return;
-        if (_anchored) RemoveAnchor?.Invoke(_spectator);
-        _anchored = false;
-        _spectator.Current = false;
-        if (LocalPlayer() is { } me) me.Camera.Current = true;
-        _watching = 0;
-    }
+    private void StopSpectating() => _follow?.Stop();
 
     /// <summary>Server: two players the interest service must show each other (everyone in a running match).</summary>
     public bool Together(long a, long b) =>

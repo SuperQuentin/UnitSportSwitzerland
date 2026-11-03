@@ -67,7 +67,7 @@ public partial class Droppings : Node3D
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
     };
 
-    private static readonly StandardMaterial3D White = new() { AlbedoColor = new Color(0.93f, 0.93f, 0.9f) };
+    private static readonly StandardMaterial3D White = Styles.StyleKit.Figure(new() { AlbedoColor = new Color(0.93f, 0.93f, 0.9f) });
 
     /// <summary>Starts one falling. <paramref name="onHit"/> runs when it lands on <paramref name="victim"/>.</summary>
     public void Drop(Vector3 from, Vector3 velocity, Node3D? victim, Action? onHit)

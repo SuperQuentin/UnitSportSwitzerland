@@ -48,7 +48,7 @@ public partial class CampfireNetProbe : ChatProbe
         int slot = SlotOf(ItemId.Campfire);
         me.LookYaw = 0f;
         me.LookPitch = -0.6f;
-        await Seconds(0.3);
+        await Until(() => FlagGhost.Aim(me, Placeables.ForItem(ItemId.Campfire)) is { Kind: FlagAimKind.Plant, Valid: true }, 2);
         var aim = FlagGhost.Aim(me, Placeables.ForItem(ItemId.Campfire));
         Expect(aim is { Kind: FlagAimKind.Plant, Valid: true }, $"a spot for the fire ({aim.Kind}, {aim.Reason})");
         _items.UseSlot(me, slot);

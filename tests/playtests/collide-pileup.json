@@ -1,0 +1,28 @@
+{
+  "id": "collide-pileup",
+  "title": "Truck into the back of a queue",
+  "verdict": "failed",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:09Z",
+  "commit": "e6b105f8",
+  "coverHash": "317d9bfd68b8c485",
+  "covers": [
+    "src/Vehicles/VehicleBody*.cs",
+    "src/Vehicles/VehicleManager.cs",
+    "src/Vehicles/Explosion.cs",
+    "src/Player/FootPlayer.Crash.cs",
+    "src/Player/Rideable.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Player/Truck*.cs",
+    "src/Player/Heavy*.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:09Z",
+      "by": "Quentin Aellen",
+      "verdict": "failed",
+      "text": "the care didn\u0027t get push queue car by car but nothing jitter and explox and the framerate was ok"
+    }
+  ]
+}

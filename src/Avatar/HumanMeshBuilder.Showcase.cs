@@ -23,6 +23,35 @@ public static partial class HumanMeshBuilder
         Each(Enum.GetValues<ItemArmPose>().Where(arm => arm != ItemArmPose.None),
             (arm, i) => BuildPosed(HumanPalette.ForRider(i), HumanPose.Standing, arm, 1f));
 
+    // #1202: skinned figures (built once, posed by their bones on the GPU), to set beside the rebuilt ones
+    [Showcase("Figures", "Skinned")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseSkinned()
+    {
+        var plain = HumanPalette.ForRider(2);
+        HumanPalette Wearing(GarmentShape shape, int rider) =>
+            Garments.All.First(g => g.Shape == shape) is var g ? HumanPalette.ForRider(rider) with { Outfit = Outfit.Empty.With(g.Slot, g.Code) } : plain;
+        var kart = KartMeshBuilder.SeatFor(1.05f);
+        yield return ("Walking", () => Skinned(plain, f => PoseStride(f, 1.6f, 0.3f)));
+        yield return ("Sprinting", () => Skinned(plain, f => PoseStride(f, 7f, 0.2f)));
+        yield return ("Dancing", () => Skinned(plain, f => PoseStride(f, 0f, 0f, dance: new DanceParams(Audio.Cd.MusicStyle.HipHop, 10, 0.55f, 0.3f, 1, 1f))));
+        yield return ("Aiming", () => Skinned(plain, f => PoseStride(f, 1.6f, 0.7f, ItemArmPose.ShoulderAim, 1f)));
+        yield return ("Driving", () => Skinned(plain, f => PoseDriver(f, kart, 1.2f, 0.5f, 0f)));
+        yield return ("Swimming", () => Skinned(plain, f => PoseSwim(f, SwimStyle.Crawl, 0.3f)));
+        yield return ("Wall climbing", () => Skinned(plain, f => PoseWallClimb(f, 0.05f, 0f)));
+        yield return ("Climb-jump", () => Skinned(plain, f => PoseWallClimb(f, 0.3f, 1f)));
+        yield return ("Robe, running", () => Skinned(Wearing(GarmentShape.Robe, 4), f => PoseStride(f, 4.6f, 0.3f)));
+        yield return ("Dress, seated", () => Skinned(Wearing(GarmentShape.Dress, 5), f => PoseDriver(f, kart, 0f, 0.3f, 0f)));
+        yield return ("Ruffle, running", () => Skinned(Wearing(GarmentShape.RuffleMini, 6), f => PoseStride(f, 4.6f, 0.6f)));
+    }
+
+    private static Node3D Skinned(HumanPalette palette, Action<SkinnedFigure> pose)
+    {
+        var figure = new SkinnedFigure { MaterialOverride = FigureMaterial() };
+        figure.Show(new FigureLook(palette));
+        pose(figure);
+        return figure;
+    }
+
     [Showcase("Figures", "Build")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseBuilds() =>
         Each(Enum.GetValues<BodyBuild>(),
@@ -65,6 +94,37 @@ public static partial class HumanMeshBuilder
             Figure(BuildBody(BodyLook.Of(Appearance.ForSeed(i) with { Hair = HairStyle.None })
                 with { Genome = Face.FaceGenome.ForSeed((uint)i * 7919u + 13u) })))));
 
+    // #880: the aliens, the named presets dressed, dancing, waving, and their faces' moods
+    private static HumanPalette Dressed(AlienLook alien, int rider) =>
+        HumanPalette.ForRider(rider).With(alien.Looks) with { Outfit = alien.Outfit };
+
+    [Showcase("Aliens")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseAliens()
+    {
+        for (int i = 0; i < Aliens.Crew.Length; i++)
+        {
+            var alien = Aliens.Crew[i];
+            int rider = i;
+            yield return (alien.Name, () => Figure(Build(Dressed(alien, rider))));
+        }
+        yield return ("Zorp doing the robot", () => Figure(BuildStride(Dressed(Aliens.Zorp, 1), 0f, 0f,
+            dance: new DanceParams(Audio.Cd.MusicStyle.Pop, EmoteMoves + 16, 0.25f, 0.25f, 0, 1f))));
+        yield return ("Zib waving", () => Figure(BuildStride(Dressed(Aliens.Zib, 2), 0f, 0f,
+            dance: new DanceParams(Audio.Cd.MusicStyle.Pop, EmoteMoves, 0.25f, 0.25f, 0, 1f))));
+        foreach (var e in new[] { Face.FaceExpression.Happy, Face.FaceExpression.Surprised, Face.FaceExpression.Sad })
+            yield return ($"Gleeb {e}", () =>
+            {
+                var node = Figure(Build(Dressed(Aliens.Gleeb, 3)));
+                Face.FaceAnimator.Apply(node, Face.FaceExpressions.Of(e));
+                return node;
+            });
+        for (int skin = Appearance.HumanSkins; skin < Appearance.SkinTones.Length; skin++)
+        {
+            var bare = new AlienLook(Appearance.SkinNames[skin], Aliens.Look(skin), []);
+            yield return (bare.Name, () => Figure(Build(HumanPalette.ForRider(0).With(bare.Looks))));
+        }
+    }
+
     [Showcase("Figures")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseMisc()
     {
@@ -105,4 +165,20 @@ public static partial class HumanMeshBuilder
             .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(FightMoves + (int)s, (int)s, 0.5f)))))
             .Concat(Enum.GetValues<FightMove>().Where(m => m != FightMove.None)
                 .Select(m => ($"Move - {m}", (Func<Node3D>)(() => Figure(Danced(FightMoves + FightRules.PoseOf(m), (int)m, 0.4f))))));
+
+    // Schwingen (#1269): the grip, the leans, the ground work and the six throws at their moment of effort
+    [Showcase("Schwingen")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseSchwingen() =>
+        Enum.GetValues<SchwingStance>().Where(s => s is not SchwingStance.None and < SchwingStance.ThrowBase)
+            .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(SchwingMoves + (int)s, (int)s, 0.3f)))))
+            .Concat(SchwingRules.Throws
+                .Select(d => ($"Throw - {d.Name}", (Func<Node3D>)(() => Figure(Danced(SchwingMoves + SchwingRules.PoseOf(d.Throw), (int)d.Throw, 0.5f))))));
+
+    // the aura battle (#907): its stances, then each move most of the way through (the pose held)
+    [Showcase("Aura")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseAura() =>
+        Enum.GetValues<AuraStance>().Where(s => s is not AuraStance.None and < AuraStance.MoveBase)
+            .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(AuraMoves + (int)s, (int)s, 0.5f)))))
+            .Concat(AuraRules.Moves
+                .Select(m => ($"Move - {AuraRules.Name(m)}", (Func<Node3D>)(() => Figure(Danced(AuraMoves + AuraRules.PoseOf(m), (int)m, 0.7f))))));
 }

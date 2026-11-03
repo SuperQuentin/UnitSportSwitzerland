@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using UnitSport.Terrain.Format;
 
@@ -10,8 +11,9 @@ namespace UnitSport.Terrain;
 /// <para>
 /// A decorator on the ordinary chain, like <see cref="NetworkChunkSource"/>: a tile this source
 /// <see cref="Covers"/> is generated here, everything else goes to the inner source untouched. A
-/// tile is covered when it is not real and lies inside the fill domain: the box round the spawn
-/// tile and the real set's bounding box, each grown by <see cref="FillRadiusTiles"/>. So a partial
+/// tile is covered when it is not real and lies inside the fill domain (<see cref="FillDomain"/>): the
+/// box round the spawn tile, the boxes round the places it was asked to <see cref="Reach"/> (a server's
+/// players), and the real set's bounding box, each grown by <see cref="FillRadiusTiles"/>. So a partial
 /// region — a MapSetup zone, a server streaming part of the country, a download with holes — is
 /// surrounded by generated land instead of void, and a fresh clone with no terrain at all is
 /// generated throughout. Clients never ask a server for a generated tile: this sits above
@@ -64,42 +66,29 @@ public sealed partial class FallbackChunkSource : IChunkSource
     /// </summary>
     public string? HorizonCacheDir { get; set; }
 
-    /// <summary>An inclusive tile rectangle.</summary>
-    public readonly record struct TileRect(int MinE, int MinN, int MaxE, int MaxN)
-    {
-        public bool Contains(TileId id) => id.E >= MinE && id.E <= MaxE && id.N >= MinN && id.N <= MaxN;
-        public TileRect Grow(int by) => new(MinE - by, MinN - by, MaxE + by, MaxN + by);
-        public TileRect Union(TileRect o) =>
-            new(Math.Min(MinE, o.MinE), Math.Min(MinN, o.MinN), Math.Max(MaxE, o.MaxE), Math.Max(MaxN, o.MaxN));
-    }
-
-    /// <summary>What is real and what may be generated, as of one <see cref="SetReal"/>.</summary>
+    /// <summary>What is real and what may be generated, as of one <see cref="SetReal"/> or <see cref="Reach"/>.</summary>
     public sealed class Snapshot
     {
         public IReadOnlySet<TileId> Real { get; }
-        public TileRect Spawn { get; }
-
-        /// <summary>The real set's bounding box grown by the fill radius; null with no real tiles yet.</summary>
-        public TileRect? RealBox { get; }
+        public FillDomain Domain { get; }
 
         public bool Enabled { get; }
         public long Version { get; }
 
-        internal Snapshot(IReadOnlySet<TileId> real, TileRect spawn, TileRect? realBox, bool enabled, long version)
+        internal Snapshot(IReadOnlySet<TileId> real, FillDomain domain, bool enabled, long version)
         {
             Real = real;
-            Spawn = spawn;
-            RealBox = realBox;
+            Domain = domain;
             Enabled = enabled;
             Version = version;
         }
 
-        public bool InDomain(TileId id) => Spawn.Contains(id) || RealBox?.Contains(id) == true;
+        public bool InDomain(TileId id) => Domain.Contains(id);
 
         public bool Covers(TileId id) => Enabled && !Real.Contains(id) && InDomain(id);
 
         /// <summary>One rectangle holding the whole domain, for sizing the horizon's coverage texture.</summary>
-        public TileRect Bounds => RealBox is { } r ? Spawn.Union(r) : Spawn;
+        public TileRect Bounds => Domain.Bounds;
     }
 
     /// <param name="spawnE">Where the player starts: the fill always reaches this far round it.</param>
@@ -108,9 +97,8 @@ public sealed partial class FallbackChunkSource : IChunkSource
     {
         _inner = inner;
         World = world;
-        var t = TileId.FromLv95(spawnE, spawnN);
-        var spawn = new TileRect(t.E, t.N, t.E, t.N).Grow(FillRadiusTiles);
-        _snapshot = new Snapshot(new HashSet<TileId>(), spawn, null, enabled, 0);
+        var domain = FillDomain.At(TileId.FromLv95(spawnE, spawnN), FillRadiusTiles);
+        _snapshot = new Snapshot(new HashSet<TileId>(), domain, enabled, 0);
     }
 
     public Snapshot Current => _snapshot;
@@ -120,7 +108,7 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
     /// <summary>
     /// Takes the set of real tiles (a copy is kept) and optionally switches generation on or off.
-    /// The domain only ever grows: the real set only grows, and the spawn box is fixed.
+    /// The domain only ever grows: the real set only grows, and the boxes are only added to.
     /// </summary>
     public Snapshot SetReal(IEnumerable<TileId> real, bool? enabled = null)
     {
@@ -140,11 +128,48 @@ public sealed partial class FallbackChunkSource : IChunkSource
         }
         var old = _snapshot;
         // never shrink: a tile that was generated keeps being generated
-        if (old.RealBox is { } previous) box = box is { } b ? b.Union(previous) : previous;
-        var next = new Snapshot(set, old.Spawn, box, enabled ?? old.Enabled, old.Version + 1);
+        var next = new Snapshot(set, old.Domain.WithReal(box), enabled ?? old.Enabled, old.Version + 1);
         _snapshot = next;
         return next;
     }
+
+    /// <summary>
+    /// Grows the domain so it holds <paramref name="at"/>, <see cref="FillRadiusTiles"/> round it as a fill
+    /// started there would (<see cref="FillDomain.Reach"/>). Returns the box added, or null when the tile
+    /// was already in the domain (or the fill is off). Unloading the tiles it now covers, which were loaded
+    /// as void, is the caller's job (<see cref="ChunkManager.FillFollowsAnchors"/>).
+    /// </summary>
+    public TileRect? Reach(TileId at)
+    {
+        var old = _snapshot;
+        if (!old.Enabled || old.Real.Contains(at)) return null;
+        var domain = old.Domain.Reach(at, FillRadiusTiles);
+        if (ReferenceEquals(domain, old.Domain)) return null;
+        _snapshot = new Snapshot(old.Real, domain, old.Enabled, old.Version + 1);
+        return domain.Boxes[^1];
+    }
+
+    /// <summary>
+    /// The fill wired as every peer serves it: under a <see cref="CachingChunkSource"/>, its blend and
+    /// its roads' halo (the stage's walls and density) reading neighbours through that cache. Without
+    /// <see cref="Neighbours"/> the halo reads the inner source, which has no generated buildings, so
+    /// the stage sees no walls round a generated tile. The client, the server and the checks that test the generated
+    /// world all build the chain here (#943).
+    /// </summary>
+    public CachingChunkSource Cached(long budgetBytes = 256L * 1024 * 1024)
+    {
+        var cache = new CachingChunkSource(this, budgetBytes);
+        Neighbours = cache;
+        return cache;
+    }
+
+    /// <summary>
+    /// The generated world with no terrain under it, as a fresh clone and a <c>--generated-world</c>
+    /// server serve it: what a check reads when it means to test the world that is played (#943),
+    /// never <see cref="ProceduralWorld"/>'s own raw tiles (their roads have not been through the stage).
+    /// </summary>
+    public static CachingChunkSource GeneratedOnly(ProceduralWorld world, double spawnE, double spawnN) =>
+        new FallbackChunkSource(EmptyChunkSource.Instance, world, spawnE, spawnN).Cached();
 
     // ---- IChunkSource ------------------------------------------------------------------------
 
@@ -328,9 +353,17 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
+    public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => _inner.LoadRopewayInfoAsync(ct);
+
+    /// <summary>The real region's places only (#1224): the generated fill has none.</summary>
+    public Task<byte[]?> LoadPoisAsync(CancellationToken ct = default) => _inner.LoadPoisAsync(ct);
+
     /// <summary>Farm fields (#494): the real tile's; a generated tile has none.</summary>
     public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
         Covers(id) ? Task.FromResult<List<FieldPolygon>?>(null) : _inner.LoadFieldsAsync(id, ct);
+
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) =>
+        Covers(id) ? Task.FromResult<PisteTile?>(null) : _inner.LoadPistesAsync(id, ct);
 
     public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {
@@ -387,6 +420,10 @@ public sealed partial class FallbackChunkSource : IChunkSource
             });
         });
 
+        lock (_touchedBlends)
+            for (int t = 0; t < ids.Count; t++)
+                if (blendKeys[t] != 0) _touchedBlends.Add((ids[t], blendKeys[t]));
+
         var tiles = new Dictionary<TileId, ushort[]>(ids.Count + (real?.Count ?? 0));
         if (real != null)
             foreach (var id in real.Tiles)
@@ -404,13 +441,7 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
         Log?.Invoke($"[fallback] horizon: {real?.Count ?? 0} real + {ids.Count} generated tiles "
             + $"({blended} blended, {ids.Count - computed} from cache) in {clock.ElapsedMilliseconds} ms");
-        if (computed > 0)
-        {
-            var current = new List<((TileId, ulong), ushort[])>(ids.Count);
-            for (int t = 0; t < ids.Count; t++)
-                if (blendKeys[t] != 0) current.Add(((ids[t], blendKeys[t]), samples[t]));
-            SaveHorizonCache(current);
-        }
+        if (computed > 0) SaveHorizonCache();
         return new HorizonIndex(tiles, water);
     }
 
@@ -454,15 +485,21 @@ public sealed partial class FallbackChunkSource : IChunkSource
         if (!File.Exists(path)) return;
         try
         {
-            using var reader = new BinaryReader(new BufferedStream(File.OpenRead(path), 1 << 16));
-            if (reader.ReadUInt32() != HorizonCacheMagic || reader.ReadInt32() != HorizonCacheVersion) return;
-            int count = reader.ReadInt32();
+            // one read and slices, not 10 million ReadUInt16 calls: the warm launch's first cost (#1380)
+            var file = File.ReadAllBytes(path).AsSpan();
+            if (file.Length < 12 || BinaryPrimitives.ReadUInt32LittleEndian(file) != HorizonCacheMagic
+                || BinaryPrimitives.ReadInt32LittleEndian(file[4..]) != HorizonCacheVersion) return;
+            int count = BinaryPrimitives.ReadInt32LittleEndian(file[8..]);
+            int sampleBytes = HorizonFormat.SamplesPerTile * sizeof(ushort), record = 16 + sampleBytes;
+            if (file.Length < 12 + (long)count * record) return;
             for (int i = 0; i < count; i++)
             {
-                var id = new TileId(reader.ReadInt32(), reader.ReadInt32());
-                ulong key = reader.ReadUInt64();
+                var entry = file.Slice(12 + i * record, record);
+                var id = new TileId(BinaryPrimitives.ReadInt32LittleEndian(entry), BinaryPrimitives.ReadInt32LittleEndian(entry[4..]));
+                ulong key = BinaryPrimitives.ReadUInt64LittleEndian(entry[8..]);
                 var samples = new ushort[HorizonFormat.SamplesPerTile];
-                for (int j = 0; j < samples.Length; j++) samples[j] = reader.ReadUInt16();
+                var raw = entry[16..];
+                for (int j = 0; j < samples.Length; j++) samples[j] = BinaryPrimitives.ReadUInt16LittleEndian(raw[(j * 2)..]);
                 if (key == 0) _plainHorizon.TryAdd(id, samples);
                 else _blendedHorizon.TryAdd((id, key), samples);
             }
@@ -470,12 +507,29 @@ public sealed partial class FallbackChunkSource : IChunkSource
         catch (Exception e) { Log?.Invoke($"[fallback] generated horizon cache unreadable: {e.Message}"); }
     }
 
-    /// <summary>Every plain tile known, and the blended tiles of the current real set.</summary>
-    private void SaveHorizonCache(List<((TileId Id, ulong Key), ushort[] Samples)> blended)
+    /// <summary>Blends any pass of this process asked for: what a cache bigger than needed is pruned to.</summary>
+    private readonly HashSet<(TileId Id, ulong Key)> _touchedBlends = new();
+
+    /// <summary>
+    /// Every plain tile known, and every blended tile known: the file's, plus what this process computed
+    /// in each pass. A pass used to save only its own blends. The boot pass (the real set the client
+    /// knew) and the one after the server's index merged (the whole region) then each erased the other's,
+    /// so the second recomputed ~4.5 s of blends at every launch (#1380). Keys carry the knots they blend
+    /// on, so both sets live side by side; the file is cut back to this process's blends only when it
+    /// holds over four times as many (a region that changed under it).
+    /// </summary>
+    private void SaveHorizonCache()
     {
         if (HorizonCachePath is not { } path) return;
         try
         {
+            List<((TileId Id, ulong Key), ushort[] Samples)> blended;
+            lock (_touchedBlends)
+            {
+                blended = _blendedHorizon.Select(kv => (kv.Key, kv.Value)).ToList();
+                if (blended.Count > 4 * Math.Max(_touchedBlends.Count, 1000))
+                    blended = blended.Where(b => _touchedBlends.Contains(b.Item1)).ToList();
+            }
             Directory.CreateDirectory(HorizonCacheDir!);
             foreach (var old in Directory.GetFiles(HorizonCacheDir!, "generated-horizon-*.bin"))
                 if (old != path) File.Delete(old);

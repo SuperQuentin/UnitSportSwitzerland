@@ -48,6 +48,36 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     }
 
     [Fact]
+    public void J10s_bike_lanes_lie_between_from_data_and_its_right_turns_go_with_the_through_green()
+    {
+        // OSM's bicycle:lanes puts each bike lane between the through lane and the right pocket (#854): the planner's own rule
+        // would put them at the kerb (every arm turns left, as at J1), and the right turn runs with the through traffic
+        foreach (var (e, w, nn, so) in new[] { (true, false, false, false), (false, true, false, false), (false, false, true, false), (false, false, false, true) })
+        {
+            var a = Approach("J10", e, w, nn, so);
+            var j = region.Junction("J10");
+            var plan = region.Tile(j.E, j.N).Signals[a.Signal].Plan;
+            Assert.Equal("L|T|R", Cars(a));
+            int through = a.Lanes.FindIndex(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Through);
+            int right = a.Lanes.FindIndex(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Right);
+            Assert.Contains(a.Lanes.Skip(through + 1).Take(right - through - 1), l => l.Kind == ApproachLaneKind.Bike);
+            // the right arrow green whenever the through green is: the right turns go with it (riders with a group of their own
+            // where their clearing is long, #979, ride between and do not hold the arrow)
+            int car = plan.Groups.FindIndex(g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.Car && (g.Moves & SignalMoves.Through) != 0);
+            int arrow = plan.Groups.FindIndex(g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.RightArrow);
+            Assert.True(arrow >= 0 && car >= 0);
+            // (each group starting on its own: the arrow may follow the through green by a moment, up to 3 s where the turning cars'
+            // faster entering, 4 m/s² round the bend, holds it for the stream it turns across)
+            Assert.True(Enumerable.Range(0, (int)plan.Cycle * 4).Select(k => k * 0.25)
+                .Count(t => plan.State(car, t) == SignalAspect.Green && plan.State(arrow, t) != SignalAspect.Green) <= 12);
+        }
+        // J1, the same crossroads by the rule: kerbside, a bike signal, the right arrow held while the riders go
+        var j1 = Approach("J1", east: false, west: true);
+        var j1j = region.Junction("J1");
+        Assert.True(region.Tile(j1j.E, j1j.N).Signals[j1.Signal].Plan.ThroughWithRightHeld(j1.SignalArm));
+    }
+
+    [Fact]
     public void The_cross_road_gets_its_pocket_from_data()
     {
         Assert.Equal("L|TR", Cars(Approach("J6", east: false, south: true)));
@@ -109,7 +139,9 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         // each stripe runs from the centre line to the border at 45 degrees: its extent across is the hatch's width there
         var stripes = hatch.SelectMany(p => Enumerable.Range(0, p.Vertices.Length / 12).Select(q => Enumerable.Range(q * 4, 4).Select(i => (double)p.Vertices[i * 3 + 2]).ToList())).ToList();
         double widest = stripes.Max(s => s.Max() - s.Min());
-        Assert.InRange(widest, 2.5, 3.6);
+        // (#818: its edge runs straight from its tip to the closing line's far end, a lane's width less the slant's share there;
+        // the second left lane opens beside it from the through lanes, the user again Oct 18)
+        Assert.InRange(widest, 2.0, 3.6);
     }
 
     /// <summary>Whether a plan point (tile-local x east, z south) lies on a junction cap or a flush pavement patch.</summary>
@@ -139,9 +171,10 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         var id = TileId.FromLv95(j.E, j.N);
         var tile = region.Tile(j.E, j.N);
         double cx = j.E - id.MinE, cz = id.MaxN - j.N;
-        // the north arm is 12 m wide, the east and west arms 8 m: the north-east corner where their edges meet is at (+6, 4 m north)
-        Assert.False(Paved(tile, cx + 7, cz - 5), "the north-east corner is paved past its edges: still rounded");
-        Assert.True(Paved(tile, cx - 7, cz - 5), "the north-west corner should keep its kerb arc");
+        // (#818) at the mouths the north arm runs from 7.5 m west to 6 m east, the east arm's north edge lies 5.75 m north and
+        // the west arm's 7.75 m: a point a metre out from where the edges meet stays off a tight corner, inside a kerb arc
+        Assert.False(Paved(tile, cx + 7, cz - 6.75), "the north-east corner is paved past its edges: still rounded");
+        Assert.True(Paved(tile, cx - 8.5, cz - 8.75), "the north-west corner should keep its kerb arc");
     }
 
     /// <summary>The zebras (yellow bar triangles) within <paramref name="radius"/> m of a point, each as its bars' corner points.</summary>
@@ -185,9 +218,10 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     [Fact]
     public void At_lights_a_left_turn_with_its_bike_lane_is_guided_and_the_centre_line_is_solid_before_the_stop_line()
     {
-        // J3 (#711, the user's review): the west and east pockets' left turns go with a left-turn bike lane into exits without an
-        // island: each guided by two dashed lines (the cars' inner edge, between cars and bikes); the north and south ones toward
-        // an island by one. The north arm (one lane each way) has its centre line solid before the stop line
+        // J3 (#711, the user's review): the west and east pockets' left turns go with a left-turn bike lane, each guided by
+        // dashed lines. #818 (the user's review): the cars' inner edge is guided only toward a raised island on the exit side, the
+        // line between cars and bikes only into an exit that carries the bikes away: four guides here. The north arm (one lane
+        // each way) has its centre line solid before the stop line
         var j3 = region.Junction("J3-");
         var id = TileId.FromLv95(j3.E, j3.N);
         double cx = j3.E - id.MinE, cz = id.MaxN - j3.N;
@@ -195,7 +229,7 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         bool Near(RoadPaint p, double r) => Enumerable.Range(0, p.Vertices.Length / 3)
             .All(i => Math.Abs(p.Vertices[i * 3] - cx) < r && Math.Abs(p.Vertices[i * 3 + 2] - cz) < r);
         int guides = paint.Count(p => p.Type == PaintType.WhiteDashed && p.Dash == 1f && p.Gap == 1f && Near(p, 30));
-        Assert.True(guides >= 6, $"{guides} left-turn guides");
+        Assert.True(guides >= 4, $"{guides} left-turn guides");
         // the north arm runs north (z smaller); its centre line is on its axis, solid from the stop line 20 m out
         Assert.Contains(paint, p => p.Type == PaintType.WhiteSolid && p.Shape == PaintShape.Polyline && p.Vertices.Length >= 6
             && Enumerable.Range(0, p.Vertices.Length / 3).All(i => Math.Abs(p.Vertices[i * 3] - cx) < 0.5 && p.Vertices[i * 3 + 2] < cz - 10)
@@ -203,44 +237,53 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     }
 
     [Fact]
-    public void A_crossing_beside_a_tight_corner_runs_diagonal_at_most_30_degrees()
+    public void A_crossing_beside_a_tight_corner_runs_square_outside_the_mouth()
     {
-        // J7 has no sidewalks: its zebras come from the data, on the north and east arms beside the tight north-east corner
+        // J7 has no sidewalks: its zebras come from the data, on the north and east arms beside the tight north-east corner.
+        // (#818) a crosswalk lies square across its arm outside the mouth, the tight corner or not (no longer diagonal, #700)
         var j = region.Junction("J7");
         var id = TileId.FromLv95(j.E, j.N);
         double cx = j.E - id.MinE, cz = id.MaxN - j.N;
         var zebras = Zebras(region.Tile(j.E, j.N), cx, cz, 45);
         Assert.Equal(2, zebras.Count);
-        // the north arm's: its bars run north-south; the band's ends differ along the arm by up to tan 30 deg x its width
+        // the north arm's: its bars run north-south, the band's two ends level
         var north = zebras.Single(z => z.Average(q => q.Z) < cz - 8);
         double west = north.Where(q => q.X < cx - 4).Average(q => q.Z), east = north.Where(q => q.X > cx + 4).Average(q => q.Z);
-        double span = north.Max(q => q.X) - north.Min(q => q.X);
-        Assert.True(east - west > 2, $"not diagonal: {east - west:F1} m");   // nearer the junction (south, larger z) on the tight east side
-        Assert.True(east - west <= Math.Tan(Math.PI / 6) * span + 0.6, $"more than 30 degrees: {east - west:F1} m over {span:F1} m");
+        Assert.True(Math.Abs(east - west) < 0.3, $"not square: {east - west:F1} m");
     }
 
     [Fact]
     public void Hatch_stripes_lean_the_way_they_push_the_traffic()
     {
-        // J1's west arm: the lead-in hatch (south of the centre line, traffic driving east, in) leans toward the mouth; the exit
-        // hatch (north of it, traffic driving west, out) away from it: going with the traffic, a stripe runs out toward its lane
-        var j = region.Junction("J1");
-        var id = TileId.FromLv95(j.E, j.N);
-        double cx = j.E - id.MinE, cz = id.MaxN - j.N;
-        int leadIn = 0, exit = 0;
-        foreach (var hatch in region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.Hatch && p.Vertices[0] < cx - 15))
+        // J3b's east arm (#818): one hatch strip south of the arriving lanes, its exit part at the mouth (its south edge moving, the
+        // departing lane's, traffic driving east) and further east the lead-in into the left pocket (its north edge moving, the
+        // arriving lanes', traffic driving west). Going with the traffic, a stripe runs out toward its lane (#406): both lean
+        // their north end west. J1's west arm: the exit hatch north of the pocket (traffic driving west, the lane north) the same.
+        int exit = 0, leadIn = 0, west = 0;
+        void Lean(string name, double fromX, double toX, Action count)
         {
-            var v = hatch.Vertices;
-            for (int q = 0; q + 3 < v.Length / 3; q += 4)
+            var j = region.Junction(name);
+            var id = TileId.FromLv95(j.E, j.N);
+            double cx = j.E - id.MinE;
+            foreach (var hatch in region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.Hatch))
             {
-                var pts = Enumerable.Range(q, 4).Select(i => (X: (double)v[i * 3], Z: (double)v[i * 3 + 2])).ToList();
-                bool south = pts.Average(p => p.Z) > cz;
-                var inner = south ? pts.MinBy(p => p.Z) : pts.MaxBy(p => p.Z);   // at the centre line
-                var outer = south ? pts.MaxBy(p => p.Z) : pts.MinBy(p => p.Z);   // at the border
-                if (south) { Assert.True(outer.X > inner.X, "a lead-in stripe leans away from the mouth"); leadIn++; }
-                else { Assert.True(outer.X < inner.X, "an exit stripe leans toward the mouth"); exit++; }
+                var v = hatch.Vertices;
+                for (int q = 0; q + 3 < v.Length / 3; q += 4)
+                {
+                    var pts = Enumerable.Range(q, 4).Select(i => (X: (double)v[i * 3], Z: (double)v[i * 3 + 2])).ToList();
+                    double x = pts.Average(p => p.X) - cx;
+                    if (x < fromX || x > toX) continue;
+                    var north = pts.OrderBy(p => p.Z).Take(2).ToList();
+                    var south = pts.OrderBy(p => p.Z).Skip(2).ToList();
+                    Assert.True(north.Average(p => p.X) < south.Average(p => p.X),
+                        $"{name}: a stripe at {x:F1} m leans its north end east: {string.Join(" ", pts.Select(p => $"({p.X - cx:F1},{p.Z:F1})"))}");
+                    count();
+                }
             }
         }
-        Assert.True(leadIn > 3 && exit > 3, $"{leadIn} lead-in and {exit} exit stripes");
+        Lean("J3b", 5, 34, () => exit++);
+        Lean("J3b", 40, 100, () => leadIn++);
+        Lean("J1", -80, -5, () => west++);
+        Assert.True(exit > 3 && leadIn > 3 && west > 3, $"{exit} exit and {leadIn} lead-in stripes at J3b, {west} at J1");
     }
 }

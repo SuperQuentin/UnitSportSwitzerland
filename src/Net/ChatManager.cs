@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Stadiums;
 
 namespace UnitSport.Net;
 
@@ -67,6 +68,9 @@ public partial class ChatManager : Node
     public Func<Items.ItemStack, int>? GiveOrDrop { get; set; }
     public PlaceSearchUi? PlaceSearch { get; set; }
 
+    /// <summary>Client-side: where this player is, for the nearest venue offline (<c>/stadium</c>).</summary>
+    public Func<GlobalPos?>? Here { get; set; }
+
     /// <summary>
     /// Client-side: nobody to ask — no server connection, so commands run here, on this machine,
     /// with the rights of someone who owns the world. A server's own node never is.
@@ -78,8 +82,29 @@ public partial class ChatManager : Node
 
     private string[] _playerNames = [];
 
+    /// <summary>
+    /// Client: every player's display name by peer id, as last sent by the server, for the tags over
+    /// their heads (<see cref="Player.NameTag"/>, #1136). Empty offline.
+    /// </summary>
+    public IReadOnlyDictionary<long, string> TagNames => _tagNames;
+
+    private readonly Dictionary<long, string> _tagNames = new();
+
+    /// <summary>Client: <see cref="TagNames"/> changed.</summary>
+    public event Action? TagNamesReceived;
+
     /// <summary>Raised on the client for every line to display.</summary>
     public event Action<string, ChatKind>? LineReceived;
+
+    /// <summary>
+    /// Raised on the client when a player said something in the chat (not a command, not a system
+    /// line): who (their peer id; offline, <see cref="OfflineSelf"/>) and what, for the speech
+    /// bubble over their head (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).
+    /// </summary>
+    public event Action<long, string>? Spoken;
+
+    /// <summary>The speaker of <see cref="Spoken"/> offline: oneself.</summary>
+    public const long OfflineSelf = -1;
 
     /// <summary>Raised on the client when the server closes the connection deliberately.</summary>
     public event Action<string>? Kicked;
@@ -113,7 +138,8 @@ public partial class ChatManager : Node
     private void OnAdminChanged(PlayerInfo player)
     {
         if (player.PeerId == ConsolePeerId || _registry?.Find(player.PeerId) == null) return;
-        RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+        if (player.Bodiless) RemoteLine?.Invoke(player.PeerId, player.IsAdmin ? "You are an admin." : "You are no longer an admin.");
+        else RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
     }
 
     /// <summary>
@@ -147,10 +173,34 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(clock, ChatKind.Private);
             return;
         }
+        // the own stamina meter (#1225): the owner's, never replicated
+        if (Player.FootPlayer.StaminaCommand(text.Trim()) is { } stamina)
+        {
+            LineReceived?.Invoke(stamina, ChatKind.Private);
+            return;
+        }
+        // tracking a point and showing it on the map are this screen's alone (#1277)
+        if (World.Locate.LocateClient.Run(text) is var (located, locateFailed))
+        {
+            if (located.Length > 0) LineReceived?.Invoke(located, locateFailed ? ChatKind.Error : ChatKind.Private);
+            return;
+        }
+        // a cinema hall's video (#1298): this client knows the hall it is in, and asks the server as the panel does
+        if (Interiors.CinemaBooths.RunLocal(text.Trim()) is { } cinema)
+        {
+            LineReceived?.Invoke(cinema, ChatKind.Private);
+            return;
+        }
         // the visual style is this screen's alone: never a server's business
         if (Styles.StyleCommand.Run(text.Trim()) is { } style)
         {
             LineReceived?.Invoke(style, ChatKind.Private);
+            return;
+        }
+        // a concert operator's show input and patch (#885): this machine's ports and files
+        if (Concert.ConcertService.RunLocal(text.Trim(), line => LineReceived?.Invoke(line, ChatKind.Private)) is { } show)
+        {
+            LineReceived?.Invoke(show, ChatKind.Private);
             return;
         }
         // a feature clip films this screen (#487)
@@ -218,7 +268,7 @@ public partial class ChatManager : Node
     {
         if (_registry is null) return;
         RpcId(Multiplayer.GetRemoteSenderId(), MethodName.ReceiveNames,
-            _registry.Players.Select(p => p.Name).ToArray());
+            _registry.InWorld.Select(p => p.Name).ToArray());
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
@@ -228,6 +278,23 @@ public partial class ChatManager : Node
         bool changed = !names.SequenceEqual(_playerNames);
         _playerNames = names;
         if (changed) NamesReceived?.Invoke();
+    }
+
+    /// <summary>Server: sends everyone the name of every player in the world, for their name tags (#1136).</summary>
+    private void SendTagNames()
+    {
+        if (_registry is null) return;
+        var players = _registry.InWorld.ToArray();
+        Rpc(MethodName.ReceiveTagNames, players.Select(p => p.PeerId).ToArray(), players.Select(p => p.Name).ToArray());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveTagNames(long[] peers, string[] names)
+    {
+        _tagNames.Clear();
+        for (int i = 0; i < peers.Length && i < names.Length; i++) _tagNames[peers[i]] = names[i];
+        TagNamesReceived?.Invoke();
     }
 
     /// <summary>Client: the server granted items (<c>/spawn</c>, an admin's choice); they go in this machine's inventory.</summary>
@@ -345,6 +412,19 @@ public partial class ChatManager : Node
                 : $"Spawned {count - left} x {def.Name}; {left} did not fit.";
     }
 
+    /// <summary><c>/locate</c> offline (#1277): this machine's own <see cref="World.Locate.LocateService"/>.</summary>
+    private async void LocateLocal(string rest)
+    {
+        if (World.Locate.LocateService.Instance is not { } locate)
+        {
+            LineReceived?.Invoke("No map data to search here.", ChatKind.Error);
+            return;
+        }
+        var (lines, failed) = await locate.Answer(rest, Here?.Invoke());
+        if (!IsInsideTree()) return;
+        foreach (string line in lines) LineReceived?.Invoke(line, failed ? ChatKind.Error : ChatKind.Private);
+    }
+
     /// <summary>
     /// A line typed with no server to send it to: commands run here. Only what makes sense alone
     /// works; the rest says it needs a server rather than silently doing nothing.
@@ -356,6 +436,7 @@ public partial class ChatManager : Node
         if (!text.StartsWith('/'))
         {
             Show($"You: {Scrub(text)}", ChatKind.Say);
+            Spoken?.Invoke(OfflineSelf, Scrub(text));
             return;
         }
 
@@ -368,9 +449,13 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
-                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /speed  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
-                Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
+                if (rest.Length > 0)
+                {
+                    Show(ChatCompleter.HelpFor(rest, online: false, isAdmin: true) ?? $"No command '/{rest.TrimStart('/')}' offline. /help lists them.", ChatKind.Private);
+                    return;
+                }
+                foreach (string line in ChatCompleter.Help(online: false, isAdmin: true)) Show(line, ChatKind.Private);
+                Show("  Offline: races, Battle Royale, parties and the other player commands need a multiplayer game.", ChatKind.Private);
                 return;
 
             case "who":
@@ -379,6 +464,15 @@ public partial class ChatManager : Node
 
             case "me":
                 if (rest.Length > 0) Show($"* {Scrub(rest)}", ChatKind.System);
+                return;
+
+            case "travel" or "pin":
+                if (Adventure.Navigation.AdventureTravel.Instance is not { } travel) Show("The adventure is not running here.", ChatKind.Error);
+                else foreach (string line in travel.Command(Adventure.AdventureService.LocalPeer, verb, rest, admin: true)) Show(line, ChatKind.Private);
+                return;
+
+            case "city" when !Permissions.CanTeleport:
+                Show("You chose the travel network (Settings > Gameplay > Travel): travel from a station sign, or with the GA.", ChatKind.Error);
                 return;
 
             case "city":
@@ -390,6 +484,46 @@ public partial class ChatManager : Node
                     Teleporter.TeleportTo(place.E, place.N, place.Name);
                     Show($"Teleported to {place.Name}", ChatKind.System);
                 }
+                return;
+
+            case "locate" or "find":
+                LocateLocal(rest);
+                return;
+
+            case "go":
+                if (!World.Locate.LocateCoords.TryParse(rest, out double goE, out double goN)) Show("Usage: /go @E,N (LV95 metres, e.g. /go @2533450,1152300)", ChatKind.Error);
+                else if (Teleporter?.TeleportTo(goE, goN, World.Locate.LocateCoords.Format(goE, goN)) == true) Show($"Teleported to {World.Locate.LocateCoords.Format(goE, goN)}", ChatKind.System);
+                else Show("Nothing to teleport here.", ChatKind.Error);
+                return;
+
+            case "stadium" or "venue":
+            {
+                var (lines, venue, refused) = StadiumReply(rest, Here?.Invoke());
+                foreach (string line in lines) Show(line, refused ? ChatKind.Error : ChatKind.Private);
+                if (venue is not null)
+                {
+                    if (Teleporter?.TeleportTo(venue.E, venue.N, venue.Name) == true) Show($"Teleported to {venue.Name}", ChatKind.System);
+                    else Show("Nothing to teleport here.", ChatKind.Error);
+                }
+                return;
+            }
+
+            // straight into a building, no door (#1244): as --enter
+            case "enter":
+                if (rest.Length == 0) Show("/enter <venue name | building key>, e.g. /enter bowlingland or /enter 2510_1140_26", ChatKind.Error);
+                else if (Interiors.InteriorManager.Instance is not { } enterIn) Show("There are no interiors here.", ChatKind.Error);
+                else
+                {
+                    enterIn.Enter(rest, enterIn.LocalPlayer?.Invoke());
+                    Show($"Going inside {rest}...", ChatKind.System);
+                }
+                return;
+
+            case "tp":
+                if (!AdminArgs.TryLv95(rest, out double tpE, out double tpN))
+                    Show("Offline: /tp <E> <N> (LV95, e.g. /tp 2600000 1200000); '/tp <player>' needs a multiplayer game.", ChatKind.Error);
+                else if (Teleporter?.TeleportTo(tpE, tpN) == true) Show($"Teleported to {tpE:F0} {tpN:F0}", ChatKind.System);
+                else Show("Nothing to teleport here.", ChatKind.Error);
                 return;
 
             case "spawn":
@@ -417,6 +551,15 @@ public partial class ChatManager : Node
                 Show(World.WaterField.Command(rest, GetViewport().GetCamera3D()?.GlobalPosition), ChatKind.Private);
                 return;
 
+            case "weather":
+                if (World.Snow.SnowService.Instance is not { } snowHere) Show("There is no ski weather in this world.", ChatKind.Error);
+                else Show(snowHere.Command(rest, mayChange: true, out bool weatherSet), weatherSet ? ChatKind.Admin : ChatKind.Private);
+                return;
+
+            case "cd" or "cds":
+                Show(Audio.Cd.CdLibrary.Instance?.Command(rest, mayChange: true) ?? "There are no CDs here.", ChatKind.Private);
+                return;
+
             case "seastate":
                 if (parts.Length == 1) Show($"The sea is {World.SeaStateCommand.Describe(World.WaterField.SeaState)}.", ChatKind.Private);
                 else if (World.SeaStateCommand.TryParse(rest, out float sea, out string seaError))
@@ -434,6 +577,13 @@ public partial class ChatManager : Node
             case "clear":
                 Show(Clear(null), ChatKind.Admin);
                 return;
+
+            case "despawn":
+            {
+                var (line, refused) = Despawn(parts[1..], GetViewport().GetCamera3D()?.GlobalPosition);
+                Show(line, refused ? ChatKind.Error : ChatKind.Admin);
+                return;
+            }
 
             case "transfer":
                 Show("Offline you are the only player: nobody to transfer to.", ChatKind.Error);
@@ -458,9 +608,67 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "fight" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
-                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
-                Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
+            case "concert" when IsConcertJoin(rest):
+            {
+                var (line, venue) = ConcertJoinReply(Concert.ConcertService.Instance?.HostedVenues(Here?.Invoke()));
+                Show(line, venue is null ? ChatKind.Error : ChatKind.Private);
+                if (venue is not null)
+                {
+                    if (Teleporter?.TeleportTo(venue.E, venue.N, venue.Name) == true) Show($"Teleported to {venue.Name}", ChatKind.System);
+                    else Show("Nothing to teleport here.", ChatKind.Error);
+                }
+                return;
+            }
+
+            case "concert":
+                Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
+                return;
+
+            case "trial":
+                Show(Adventure.Rewards.RewardService.Instance?.Command(Adventure.AdventureService.LocalPeer, string.Join(' ', parts[1..])) ?? "Trials are not running.", ChatKind.Private);
+                return;
+
+            // a hall's lights and film by its number (#1306); the films' words below
+            case "cinema" when parts.Length > 1 && int.TryParse(parts[1], out _):
+                if (Interiors.CinemaBooths.Instance is not { } hallBooths) Show("There are no cinemas here.", ChatKind.Error);
+                else Show(hallBooths.Command(parts[1..], admin: true, Interiors.InteriorManager.Instance?.Current?.Key), ChatKind.Private);
+                return;
+            // the films a cinema can be showing (#1298): offline the player is the admin
+            case "cinema":
+                Show(Interiors.CinemaBooths.Instance?.PoolCommand(1, string.Join(' ', parts[1..]), true, line => Show(line, ChatKind.Private))
+                     ?? "No cinemas here.", ChatKind.Private);
+                return;
+            // pinball (#1325): the venue's machines; step up to one, a robot at the flippers, the top view
+            case "pinball":
+                Show(Interiors.Pinball.PinballTables.Instance?.Command(rest, Interiors.InteriorManager.Instance?.Current?.Key, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "Pinball is not running.", ChatKind.Private);
+                return;
+            // pool, darts, table football, the arcade's games (#1324): list, step up, a bot, an action by numbers
+            case "games":
+                Show(Interiors.Games.TableGames.Instance?.Command(rest, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "The games are not running.", ChatKind.Private);
+                return;
+            // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the player is in
+            case "bowl":
+                Show(Interiors.BowlingLanes.Instance?.Command(1, rest, Interiors.InteriorManager.Instance?.Current?.Key, "You") ?? "Bowling is not running.", ChatKind.Private);
+                return;
+            // playing together (#1266): the rope and the shared pot
+            case "alcohol":
+                Show(Adventure.Alcohol.AlcoholService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "Alcohol needs the Adventure layer.", ChatKind.Private);
+                return;
+
+            case "rope" or "fondue":
+                Show(Adventure.Together.TogetherService.Instance?.Command(Adventure.AdventureService.LocalPeer, verb, rest) is { } said
+                    ? said.Length > 0 ? said : "Asked." : "Playing together needs the Adventure layer.", ChatKind.Private);
+                return;
+
+            // a training dummy for the sword (#1371): offline the one process is its own server
+            case "dummy":
+                Show(Combat.SwordService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "[dummy] Not available here.", ChatKind.Private);
+                return;
+
+            case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
+                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis":
+                // Versteckis has no offline game (#1268): its bots need a server; Host a game from the menu
+                Show(verb is "vs" or "versteckis" ? "Versteckis needs a multiplayer game: Host a game from the menu, and bots fill it." : $"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
             default:
@@ -502,8 +710,32 @@ public partial class ChatManager : Node
         if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
 
         if (text.StartsWith('/')) HandleCommand(sender, text[1..]);
-        else Broadcast($"{NameOf(sender)}: {Scrub(text)}", ChatKind.Say);
+        else Say(sender, text);
     }
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> says <paramref name="text"/> in the chat: the line to
+    /// everyone, and who said it, for the bubble over their head. A server-run player (a bot) talks
+    /// through here too.
+    /// </summary>
+    public void Say(long peer, string text)
+    {
+        text = text.Trim();
+        if (text.Length == 0) return;
+        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        // a round's spectators talk among themselves while it runs (#1268, Core/Rounds): nobody calls out the spots
+        if (Core.Rounds.ChatScope(peer) is { } scope && Versteckis != null)
+        {
+            foreach (long member in Versteckis.ScopeMembers(scope)) ReplyTo(member, $"{NameOf(peer)} (spectating): {Scrub(text)}", ChatKind.Say);
+            return;
+        }
+        Broadcast($"{NameOf(peer)}: {Scrub(text)}", ChatKind.Say);
+        Rpc(MethodName.Said, peer, Scrub(text));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Said(long peer, string text) => Spoken?.Invoke(peer, text);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -514,6 +746,7 @@ public partial class ChatManager : Node
 
         string assigned = _registry.Rename(sender, name);
         NameAssigned?.Invoke(sender);
+        SendTagNames();
         Broadcast($"{assigned} joined", ChatKind.System);
         ReplyTo(sender, "Type /help for commands.", ChatKind.Private);
     }
@@ -545,20 +778,38 @@ public partial class ChatManager : Node
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void NotifyKicked(string reason) => Kicked?.Invoke(reason);
 
+    /// <summary>
+    /// Server: a line for a player who joined through the server console (<see cref="PlayerInfo.Bodiless"/>,
+    /// #1088): <see cref="ConsoleLink"/> sends it, since that game may not share this node's RPCs.
+    /// </summary>
+    public event Action<long, string>? RemoteLine;
+
+    private bool IsBodiless(long peerId) => _registry?.Find(peerId) is { Bodiless: true };
+
     /// <summary>Sends a line to everyone. Server only.</summary>
     public void Broadcast(string line, ChatKind kind)
     {
         GD.Print($"[chat] {line}");
+        _capture?.Add(line);   // what everyone was told answers a website command too (#1211)
         Rpc(MethodName.Deliver, line, (int)kind);
+        if (RemoteLine != null && _registry != null)
+            foreach (var player in _registry.Players)
+                if (player.Bodiless) RemoteLine(player.PeerId, line);
     }
 
     /// <summary>Sends a line to one peer. Server only.</summary>
     private void ReplyTo(long peerId, string line, ChatKind kind)
     {
-        // The console is not a peer; its replies go to the server's own log.
+        // The console is not a peer; its replies go to the server's own log (and to the website's console, #1211)
         if (peerId == ConsolePeerId)
         {
-            GD.Print($"[console] {line}");
+            _capture?.Add(line);
+            if (!_quietCapture) GD.Print($"[console] {line}");
+            return;
+        }
+        if (IsBodiless(peerId))
+        {
+            RemoteLine?.Invoke(peerId, line);
             return;
         }
 
@@ -580,6 +831,33 @@ public partial class ChatManager : Node
         HandleCommand(ConsolePeerId, line);
     }
 
+    /// <summary>
+    /// Server: a line from a player joined through the server console (<see cref="ConsoleLink"/>, #1088), as
+    /// <c>SubmitLine</c> takes one from a game: a command with '/', else said to everyone. The first one joins
+    /// that peer as <paramref name="name"/>, with no body, and the rights a join under that name gets
+    /// (<c>admins.json</c>, or <c>/login</c> after); <paramref name="joined"/> gets it then. A peer that joined
+    /// the game is not taken here.
+    /// </summary>
+    public void SubmitFromConsole(long peer, string name, string text, Action<PlayerInfo> joined)
+    {
+        if (_registry is null) return;
+        if (_registry.Find(peer) is not { } player)
+        {
+            player = _registry.Add(peer, bodiless: true);
+            _registry.Rename(peer, name);
+            joined(player);
+            Broadcast($"{player.Name} joined the server console", ChatKind.System);
+        }
+        else if (!player.Bodiless) return;   // a game's peer: it talks through SubmitLine
+
+        text = text.Trim();
+        if (text.Length == 0) return;
+        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        GD.Print($"[console] {player.Name}: {text}");
+        if (text.StartsWith('/')) HandleCommand(peer, text[1..]);
+        else Say(peer, text);
+    }
+
     // ---- server-side lifecycle --------------------------------------------------------
 
     /// <summary>Called by <see cref="ServerWorld"/> when a peer drops.</summary>
@@ -589,6 +867,7 @@ public partial class ChatManager : Node
         if (_registry?.Find(peerId) is not { } player) return;
         _registry.Remove(peerId);
         Broadcast($"{player.Name} left", ChatKind.System);
+        SendTagNames();
     }
 
     // ---- commands ---------------------------------------------------------------------
@@ -599,11 +878,22 @@ public partial class ChatManager : Node
     /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
 
+    /// <summary>Concerts (<c>/concert</c>, #885), wired by ServerWorld.</summary>
+    public Concert.ConcertService? Concerts { get; set; }
+
     /// <summary>Fist fights (<c>/fight</c>, #495), wired by ServerWorld.</summary>
     public Combat.FightManager? Fight { get; set; }
 
+    /// <summary>Aura battles (<c>/aura</c>, #907), wired by ServerWorld.</summary>
+    public Combat.AuraManager? Aura { get; set; }
+
+    /// <summary>Schwingen (<c>/schwing</c>, #1269), wired by ServerWorld.</summary>
+    public Combat.SchwingManager? Schwing { get; set; }
+
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
+    /// <summary>Versteckis (#1268): <c>/vs …</c>, and the spectators' chat scope.</summary>
+    public Adventure.Versteckis.VersteckisManager? Versteckis { get; set; }
 
     /// <summary>Server: the spawn and teleport rule (#799); <c>/city</c> asks it.</summary>
     public Arrival? Arrival { get; set; }
@@ -614,7 +904,7 @@ public partial class ChatManager : Node
     public void Tell(long peerId, string line, ChatKind kind) => ReplyTo(peerId, line, kind);
 
     private string NameOf(long peerId) => peerId == ConsolePeerId
-        ? "Console"
+        ? _consoleAs ?? "Console"
         : _registry?.Find(peerId)?.Name ?? $"Rider{peerId}";
 
     /// <summary>
@@ -633,8 +923,10 @@ public partial class ChatManager : Node
     /// </summary>
     private bool RefusedInMatch(long sender, long peer)
     {
-        if (BattleRoyale?.Playing(peer) != true) return false;
-        ReplyTo(sender, peer == sender ? NotInMatch : $"{NameOf(peer)} is in a Battle Royale match: everyone plays it on equal terms.", ChatKind.Error);
+        // every round mode (#1268, Core/Rounds): the Battle Royale answers first, in its own words
+        if (Core.Rounds.PlayingIn(peer) is not { } mode) return false;
+        ReplyTo(sender, peer == sender ? (mode.Name == "br" ? NotInMatch : $"Not in {mode.Label}: everyone plays it on equal terms.")
+            : $"{NameOf(peer)} is in {mode.Label}: everyone plays it on equal terms.", ChatKind.Error);
         return true;
     }
 
@@ -656,10 +948,18 @@ public partial class ChatManager : Node
     /// </summary>
     private bool RequiresAvatar(long sender, string verb)
     {
-        if (sender != ConsolePeerId) return true;
-
-        ReplyTo(sender, $"'/{verb}' needs a player; the console has no avatar.", ChatKind.Error);
-        return false;
+        if (sender == ConsolePeerId)
+        {
+            ReplyTo(sender, $"'/{verb}' needs a player; the console has no avatar.", ChatKind.Error);
+            return false;
+        }
+        // a player joined through the server console has rights but no body: /login yes, /tp no
+        if (verb != "login" && IsBodiless(sender))
+        {
+            ReplyTo(sender, $"'/{verb}' needs a body in the world; join the game for it.", ChatKind.Error);
+            return false;
+        }
+        return true;
     }
 
     private void HandleCommand(long sender, string command)
@@ -672,13 +972,19 @@ public partial class ChatManager : Node
 
         switch (verb)
         {
-            case "help": SendHelp(sender); return;
+            case "help": SendHelp(sender, rest); return;
             // invites (#840): answering them, teleport requests anyone may send, parties
             case "invites" or "accept" or "decline" or "tpa" or "tphere" or "party": InviteCommand(sender, verb, rest); return;
             case "stream": ReportStreaming(sender); return;
             case "who": SendWho(sender); return;
             case "name": if (RequiresAvatar(sender, verb)) CommandName(sender, rest); return;
             case "city": if (RequiresAvatar(sender, verb)) CommandCity(sender, rest); return;
+            // the adventure's travel network and pins (#1226)
+            case "travel" or "pin": if (RequiresAvatar(sender, verb)) TravelCommand(sender, verb, rest); return;
+            // the venues (#994): anyone lists them; going to one is a teleport like /city
+            case "stadium" or "venue": CommandStadium(sender, rest); return;
+            case "locate" or "find": CommandLocate(sender, rest); return;
+            case "go": if (RequiresAvatar(sender, verb)) CommandGo(sender, rest); return;
             case "login": if (RequiresAvatar(sender, verb)) CommandLogin(sender, rest); return;
             case "me":
                 if (rest.Length > 0) Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
@@ -688,6 +994,12 @@ public partial class ChatManager : Node
             case "speed": CommandSpeed(sender, rest); return;
             // anyone may ask; setting it is an admin's (checked inside)
             case "seastate": CommandSeaState(sender, rest); return;
+            // CD analysis versions (#1153): anyone may ask, re-analysing is an admin's
+            case "cd" or "cds":
+                ReplyTo(sender, Audio.Cd.CdLibrary.Instance?.Command(rest, IsAdmin(sender)) ?? "There are no CDs on this server.", ChatKind.Private);
+                return;
+            // anyone may ask; changing it is an admin's (#887)
+            case "weather": CommandWeather(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it
             case "water":
                 ReplyTo(sender, World.WaterField.Command(rest,
@@ -713,20 +1025,78 @@ public partial class ChatManager : Node
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
+            // Versteckis (#1268): anyone opens, joins, leaves; the opener starts; an admin closes any
+            case "vs" or "versteckis":
+                if (Versteckis == null) ReplyTo(sender, "Versteckis is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, Versteckis.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
+            // a cinema hall's lights and film by its number (#1306), an admin's (checked inside); the films' words below
+            case "cinema" when parts.Length > 1 && int.TryParse(parts[1], out _):
+                if (Interiors.CinemaBooths.Instance is not { } hallBooths) ReplyTo(sender, "There are no cinemas here.", ChatKind.Error);
+                else ReplyTo(sender, hallBooths.Command(parts[1..], IsAdmin(sender),
+                    Interiors.InteriorManager.Instance is { } im ? im.SpaceOf(sender) is { Length: > 0 } space ? space : im.Current?.Key : null), ChatKind.Private);
+                return;
             case "bot" or "bots":
                 if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
                     id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
+            // the films a server's cinemas can be showing (#1298): anyone lists, an admin changes
+            case "cinema":
+                if (Interiors.CinemaBooths.Instance is not { } booths) ReplyTo(sender, "No cinemas on this server.", ChatKind.Error);
+                else ReplyTo(sender, booths.PoolCommand(sender, rest, IsAdmin(sender), line => ReplyTo(sender, line, ChatKind.Private)), ChatKind.Private);
+                return;
+            // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the sender is in
+            case "bowl":
+                if (Interiors.BowlingLanes.Instance is not { } bowling) ReplyTo(sender, "Bowling is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, bowling.Command(sender, rest, Interiors.InteriorManager.Instance?.SpaceOf(sender), NameOf(sender)), ChatKind.Private);
+                return;
+            // playing together (#1266): the rope and the shared pot
+            case "alcohol":
+                if (Adventure.Alcohol.AlcoholService.Instance is not { } alcohol) ReplyTo(sender, "Alcohol is not available here.", ChatKind.Error);
+                else ReplyTo(sender, alcohol.Command(sender, rest), ChatKind.Private);
+                return;
+            case "rope" or "fondue":
+                if (Adventure.Together.TogetherService.Instance is not { } together) ReplyTo(sender, "Playing together is not available here.", ChatKind.Error);
+                else if (together.Command(sender, verb, rest) is { Length: > 0 } reply) ReplyTo(sender, reply, ChatKind.Private);
+                return;
+            // an adventure trial (#1227): leave the one you run
+            case "trial":
+                if (Adventure.Rewards.RewardService.Instance is not { } rewards) ReplyTo(sender, "Trials are not available here.", ChatKind.Error);
+                else ReplyTo(sender, rewards.Command(sender, rest), ChatKind.Private);
                 return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Race.Command(sender, rest), ChatKind.Private);
                 return;
+            case "concert":
+                if (Concerts == null) ReplyTo(sender, "Concerts are not available on this server.", ChatKind.Error);
+                else if (IsConcertJoin(rest)) CommandConcertJoin(sender);
+                else ReplyTo(sender, Concerts.Command(sender, rest, IsAdmin(sender),
+                    GetNodeOrNull<Player.FootPlayer>("../Players/" + sender)?.Global), ChatKind.Private);
+                return;
             case "fight":
                 if (Fight == null) ReplyTo(sender, "Fights are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId) ReplyTo(sender, "'/fight' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Fight.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "dummy":
+                if (sender == ConsolePeerId) ReplyTo(sender, "'/dummy' needs a body to put it in front of.", ChatKind.Error);
+                else ReplyTo(sender, GetNodeOrNull<Combat.SwordService>("../" + Combat.SwordService.NodeName)?.Command(sender, rest) ?? "[dummy] Not available here.", ChatKind.Private);
+                return;
+
+            case "schwing":
+                if (Schwing == null) ReplyTo(sender, "Schwingen is not available on this server.", ChatKind.Error);
+                else if (sender == ConsolePeerId) ReplyTo(sender, "'/schwing' needs a player.", ChatKind.Error);
+                else ReplyTo(sender, Schwing.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "aura":
+                if (Aura == null) ReplyTo(sender, "Aura battles are not available on this server.", ChatKind.Error);
+                else if (sender == ConsolePeerId) ReplyTo(sender, "'/aura' needs a player.", ChatKind.Error);
+                else ReplyTo(sender, Aura.Command(sender, rest), ChatKind.Private);
                 return;
         }
 
@@ -764,11 +1134,40 @@ public partial class ChatManager : Node
             case "give": CommandGive(sender, parts); return;
             case "money": CommandMoney(sender, parts); return;
             case "bank": CommandBank(sender, parts); return;
+            case "despawn":
+            {
+                var (line, refused) = Despawn(parts[1..], _players?.GetNodeOrNull<Node3D>(sender.ToString())?.GlobalPosition);
+                if (!refused) GD.Print($"[despawn] {NameOf(sender)}: {line}");
+                ReplyTo(sender, line, refused ? ChatKind.Error : ChatKind.Admin);
+                return;
+            }
 
             default:
                 ReplyTo(sender, $"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
                 return;
         }
+    }
+
+    /// <summary>
+    /// <c>/despawn &lt;vehicles | items | all&gt; [radius m | everywhere]</c> (#1200), offline or on the
+    /// server: parked vehicles and dropped items within the radius of <paramref name="at"/> taken out of
+    /// the world. Without a body to measure from (the server console), only <c>everywhere</c>. The line
+    /// for whoever asked, and whether it is a refusal.
+    /// </summary>
+    private static (string Line, bool Refused) Despawn(string[] args, Vector3? at)
+    {
+        if (!AdminArgs.TryDespawn(args, out bool vehicles, out bool items, out float? radius))
+            return ($"{AdminArgs.DespawnUsage}, radius up to {AdminArgs.MaxDespawnRadius:F0} m", true);
+        if (radius is { } && at == null) return ("Nowhere to measure from: /despawn <what> everywhere.", true);
+        Vector3? centre = radius is null ? null : at;
+        float r = radius ?? 0;
+        int v = vehicles ? Vehicles.VehicleManager.Instance?.Despawn(centre, r) ?? 0 : 0;
+        int i = items ? Items.DroppedItems.Instance?.Despawn(centre, r) ?? 0 : 0;
+        var gone = new List<string>();
+        if (vehicles) gone.Add(v == 1 ? "1 vehicle" : $"{v} vehicles");
+        if (items) gone.Add(i == 1 ? "1 item" : $"{i} items");
+        string where = radius is { } m ? FormattableString.Invariant($"within {m:0.#} m") : "everywhere";
+        return ($"Despawned {string.Join(" and ", gone)} {where}.", false);
     }
 
     /// <summary>/pvp on|off: whether foot weapons hurt players (#178). Bare /pvp says which.</summary>
@@ -791,23 +1190,20 @@ public partial class ChatManager : Node
         }
     }
 
-    private void SendHelp(long sender)
+    /// <summary>
+    /// <c>/help [command]</c>: the commands this sender may run, grouped, or one command's arguments,
+    /// from the completer's table (#994, #1173), so a new command shows here the day it is added.
+    /// </summary>
+    private void SendHelp(long sender, string command)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /br join|leave|team|invite|status  /tpa <player>  /tphere <player>  /party [invite|leave|kick]  /invites  /accept  /decline  /occasion  /time  /speed  /seastate  /clear  /transfer me <player>", ChatKind.Private);
-
-        if (_registry?.LoginEnabled == true && !IsAdmin(sender))
-            ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
-
-        if (IsAdmin(sender))
-            ReplyTo(sender,
-                "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
-                + "/kick <player> [reason]  /update  /admin list|add <name>|remove <name>  "
-                + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
-                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  /bot add [n] [easy|normal|hard]|arm <weapon>|fire|clear|list  "
-                + "/bank <player> [set|add|take <amount>]  "
-                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
-                + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
-                ChatKind.Private);
+        if (command.Length > 0)
+        {
+            ReplyTo(sender, ChatCompleter.HelpFor(command, online: true, IsAdmin(sender))
+                ?? $"No command '/{command.TrimStart('/')}' for you. /help lists them.", ChatKind.Private);
+            return;
+        }
+        foreach (string line in ChatCompleter.Help(online: true, IsAdmin(sender)))
+            ReplyTo(sender, line, ChatKind.Private);
     }
 
     /// <summary>Client-side streaming stats, injected by ClientWorld.</summary>
@@ -855,6 +1251,7 @@ public partial class ChatManager : Node
         string assigned = _registry.Rename(sender, requested);
         if (assigned == previous) return;
         NameAssigned?.Invoke(sender);
+        SendTagNames();
 
         Broadcast($"{previous} is now {assigned}", ChatKind.System);
     }
@@ -948,18 +1345,37 @@ public partial class ChatManager : Node
         return true;
     }
 
-    private void CommandCity(long sender, string query)
+    /// <summary>Whether a player may teleport themselves (<c>/city</c>, <c>/stadium</c>); tells them why not.</summary>
+    private bool MayTeleport(long sender)
     {
-        if (BattleRoyale?.Playing(sender) == true)
+        if (Core.Rounds.PlayingIn(sender) is { } mode)
         {
-            ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
-            return;
+            ReplyTo(sender, mode.NoTeleport.Length > 0 ? mode.NoTeleport : $"No teleporting out of {mode.Label}.", ChatKind.Error);
+            return false;
         }
         if (Arrival is { FreeTeleport: false } && !IsAdmin(sender))
         {
             ReplyTo(sender, "This server does not allow teleporting. Walk, ride or fly there.", ChatKind.Error);
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary><c>/travel</c> and <c>/pin</c> (#1226): the travel network's reply lines, the admin forms for operators.</summary>
+    private void TravelCommand(long sender, string verb, string rest)
+    {
+        if (Adventure.Navigation.AdventureTravel.Instance is not { } travel)
+        {
+            ReplyTo(sender, "The adventure is not running here.", ChatKind.Error);
             return;
         }
+        foreach (string line in travel.Command(sender, verb, rest, IsAdmin(sender), PeerByName))
+            ReplyTo(sender, line, ChatKind.Private);
+    }
+
+    private void CommandCity(long sender, string query)
+    {
+        if (!MayTeleport(sender)) return;
         if (query.Length == 0)
         {
             ReplyTo(sender, "Usage: /city <town>", ChatKind.Error);
@@ -971,13 +1387,109 @@ public partial class ChatManager : Node
         RpcId(sender, MethodName.ForceTeleport, place.E, place.N, place.Name);
     }
 
+    /// <summary>
+    /// <c>/locate &lt;thing&gt; [+ selector ...] [in &lt;town&gt;]</c> (#1277): the nearest things the server's map data
+    /// knows, from where the asker stands; each line ends in its <c>@E,N</c>, which the chat turns into buttons.
+    /// </summary>
+    private async void CommandLocate(long sender, string rest)
+    {
+        if (World.Locate.LocateService.Instance is not { } locate)
+        {
+            ReplyTo(sender, "This server has no map data to search.", ChatKind.Error);
+            return;
+        }
+        var (lines, failed) = await locate.Answer(rest, _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global);
+        if (!IsInsideTree()) return;
+        foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
+    }
+
+    /// <summary>
+    /// <c>/go @E,N</c> (#1277): a teleport to a point, what the chat's Teleport button sends, on the same
+    /// terms as <c>/city</c> (<see cref="MayTeleport"/>), where <c>/tp E N</c> stays an admin's.
+    /// </summary>
+    private void CommandGo(long sender, string rest)
+    {
+        if (!World.Locate.LocateCoords.TryParse(rest, out double e, out double n))
+        {
+            ReplyTo(sender, "Usage: /go @E,N (LV95 metres, e.g. /go @2533450,1152300)", ChatKind.Error);
+            return;
+        }
+        if (!MayTeleport(sender)) return;
+        RpcId(sender, MethodName.ForceTeleport, e, n, World.Locate.LocateCoords.Format(e, n));
+    }
+
+    /// <summary>
+    /// <c>/stadium [list [kind] | &lt;name|town|#n&gt;]</c> (#994): the nearest venue and what plays there,
+    /// the numbered list, or a teleport to one, on the same terms as <c>/city</c>.
+    /// </summary>
+    private void CommandStadium(long sender, string rest)
+    {
+        var (lines, venue, failed) = StadiumReply(rest, _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global);
+        foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
+        if (venue is null || !RequiresAvatar(sender, "stadium") || !MayTeleport(sender)) return;
+        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+    }
+
+    private static bool IsConcertJoin(string rest) => rest.Trim().Equals("join", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <c>/concert join</c> (#1173): a teleport to the venue where a set is hosted, the nearest if
+    /// several, on the same terms as <c>/stadium &lt;name&gt;</c>.
+    /// </summary>
+    private void CommandConcertJoin(long sender)
+    {
+        var (line, venue) = ConcertJoinReply(Concerts?.HostedVenues(_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global));
+        ReplyTo(sender, line, venue is null ? ChatKind.Error : ChatKind.Private);
+        if (venue is null || !RequiresAvatar(sender, "concert join") || !MayTeleport(sender)) return;
+        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+    }
+
+    /// <summary><c>/concert join</c>'s answer, the same on a server and offline: the line to show and the venue to go to (null: none).</summary>
+    private static (string Line, StadiumSpec? Go) ConcertJoinReply(List<StadiumSpec>? hosted)
+    {
+        if (hosted is not [var go, ..]) return ("No set is hosted right now. /stadium shows what plays tonight.", null);
+        string also = hosted.Count > 1 ? " Also hosted: " + string.Join(", ", hosted.Skip(1).Select(v => $"#{StadiumLookup.Number(v)} {v.Name}")) + " (/stadium <name>)." : "";
+        return ($"To {StadiumLookup.Label(go)}: {Concert.ConcertService.ShowAt(go)}.{also}", go);
+    }
+
+    /// <summary>
+    /// <c>/stadium</c>'s answer, the same on a server and offline: the lines to show, the venue to go
+    /// to (null: none), and whether it is a refusal. <paramref name="at"/> is where the asker stands.
+    /// </summary>
+    private static (List<string> Lines, StadiumSpec? Go, bool Failed) StadiumReply(string rest, GlobalPos? at)
+    {
+        string[] words = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length > 0 && words[0].Equals("list", StringComparison.OrdinalIgnoreCase))
+        {
+            if (words.Length == 1) return ([.. StadiumLookup.List()], null, false);
+            if (StadiumLookup.TryKind(string.Concat(words[1..]), out var kind)) return ([.. StadiumLookup.List(kind)], null, false);
+            return (["Usage: /stadium list [stadium | arena | openair]"], null, true);
+        }
+
+        if (words.Length == 0)
+        {
+            if (at is not { } here) return ([.. StadiumLookup.List(), "/stadium <name | town | #n> to go to one."], null, false);
+            var (near, metres) = StadiumLookup.Nearest(here.E, here.N);
+            return ([$"Nearest venue: #{StadiumLookup.Number(near)} {StadiumLookup.Label(near)}, {StadiumLookup.Distance(metres)} away; "
+                + $"{Concert.ConcertService.ShowAt(near)}.", "/stadium list for all of them, /stadium <name | town | #n> to go to one."], null, false);
+        }
+
+        var found = StadiumLookup.Find(rest);
+        return found.Count switch
+        {
+            0 => ([$"No venue matching '{rest}'. /stadium list shows them all."], null, true),
+            1 => ([$"{StadiumLookup.Label(found[0])}: {Concert.ConcertService.ShowAt(found[0])}."], found[0], false),
+            _ => ([$"'{rest}' could be: " + string.Join(", ", found.Select(v => $"#{StadiumLookup.Number(v)} {StadiumLookup.Label(v)}"))], null, true),
+        };
+    }
+
     private void CommandTeleportEveryone(long sender, string query)
     {
         if (!TryFindPlace(sender, query, out var place)) return;
 
-        // a Battle Royale is left alone (#425): its entrants stay where the match has them
+        // a Battle Royale is left alone (#425), and every other round (#1268): its entrants stay where the game has them
         foreach (int peer in Multiplayer.GetPeers())
-            if (BattleRoyale?.Playing(peer) != true) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
+            if (!Core.Rounds.Playing(peer)) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
         Broadcast($"{NameOf(sender)} moved everyone to {place.Name}", ChatKind.Admin);
     }
 
@@ -1019,7 +1531,15 @@ public partial class ChatManager : Node
     {
         if (name.Length == 0)
         {
-            ReplyTo(sender, "Usage: /tp <player>", ChatKind.Error);
+            ReplyTo(sender, "Usage: /tp <player> | <E> <N>", ChatKind.Error);
+            return;
+        }
+
+        // an LV95 point (#994): what the F3 overlay and the swisstopo map show
+        if (AdminArgs.TryLv95(name, out double toE, out double toN))
+        {
+            if (RefusedInMatch(sender, sender)) return;
+            RpcId(sender, MethodName.ForceTeleport, toE, toN, $"{toE:F0} {toN:F0}");
             return;
         }
 
@@ -1137,6 +1657,26 @@ public partial class ChatManager : Node
         Broadcast(op != World.TimeOp.Speed ? $"{who} set the time to {World.TimeCommand.Format(hour)}"
             : speed > 0 ? $"{who} set the day to {World.TimeCommand.DescribeSpeed(speed)}"
             : $"{who} stopped the clock at {World.TimeCommand.Format(hour)}", ChatKind.Admin);
+    }
+
+    // ---- /weather (#887) ----------------------------------------------------------------------
+
+    /// <summary>Server <c>/weather</c>: the ski day's weather; an admin changes it for everyone.</summary>
+    private void CommandWeather(long sender, string arg)
+    {
+        if (World.Snow.SnowService.Instance is not { } snow)
+        {
+            ReplyTo(sender, "There is no ski weather on this server.", ChatKind.Error);
+            return;
+        }
+        string reply = snow.Command(arg, IsAdmin(sender), out bool changed);
+        if (!changed)
+        {
+            ReplyTo(sender, reply, ChatKind.Private);
+            return;
+        }
+        GD.Print($"[admin] {NameOf(sender)} set the weather: {arg}");
+        Broadcast($"{NameOf(sender)} changed the weather. {reply}", ChatKind.Admin);
     }
 
     // ---- /seastate (#299) ---------------------------------------------------------------------
@@ -1503,6 +2043,19 @@ public partial class ChatManager : Node
     }
 
     private readonly ServerUpdater _updater = new();
+    private bool _restarting;
+
+    /// <summary>Server: the release updater, shared by <c>/update</c> and the automatic check (<see cref="ServerAutoUpdate"/>).</summary>
+    public ServerUpdater Updater => _updater;
+
+    /// <summary>Server: <c>/update</c> came while a check was already running: restart as soon as it has a release.</summary>
+    public bool RestartRequested { get; set; }
+
+    /// <summary>Server: the connected players who are admins, for the update news (#1088).</summary>
+    public IEnumerable<long> AdminPeers => _registry?.Players.Where(p => p.IsAdmin).Select(p => p.PeerId) ?? [];
+
+    /// <summary>Server: how many players are connected (bots are not players).</summary>
+    public int PlayerCount => _registry?.InWorld.Count() ?? 0;
 
     /// <summary>
     /// /update (#730): installs the newest GitHub release on a server started by <c>start-server.sh</c>.
@@ -1515,15 +2068,22 @@ public partial class ChatManager : Node
             ReplyTo(sender, "This server cannot update itself: only one started by tools/deploy-linux.sh can.", ChatKind.Error);
             return;
         }
+        if (_restarting)
+        {
+            ReplyTo(sender, "The server is already restarting for an update.", ChatKind.Error);
+            return;
+        }
         if (_updater.Busy)
         {
-            ReplyTo(sender, "An update is already under way.", ChatKind.Error);
+            // the automatic check (#1088) is looking or downloading: it restarts the server once it has the release
+            RestartRequested = true;
+            ReplyTo(sender, "A check is already under way: the server restarts as soon as the release is ready.", ChatKind.Private);
             return;
         }
 
-        string current = (string)ProjectSettings.GetSetting("application/config/version", "");
+        string current = ServerUpdater.RunningVersion;
         ReplyTo(sender, "Looking for a newer release...", ChatKind.Private);
-        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl,
+        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl, quiet: false,
             (line, everyone) =>
             {
                 if (everyone) Broadcast(line, ChatKind.Admin);
@@ -1533,8 +2093,10 @@ public partial class ChatManager : Node
     }
 
     /// <summary>The new release is unpacked: everyone out, then quit; <c>start-server.sh</c> starts it.</summary>
-    private void RestartForUpdate(string tag)
+    public void RestartForUpdate(string tag)
     {
+        if (_restarting) return;
+        _restarting = true;
         GD.Print($"[update] {tag} ready: kicking everyone and quitting");
         foreach (var player in _registry?.Players.ToList() ?? new())
             KickPeer(player.PeerId, $"The server is updating to {tag}. Update your game, then reconnect in a minute.");
@@ -1549,7 +2111,9 @@ public partial class ChatManager : Node
     /// </summary>
     public void KickPeer(long peerId, string reason)
     {
-        RpcId(peerId, MethodName.NotifyKicked, reason);
+        // a player at the server console reads it through the link: its game may lack this node's RPCs
+        if (IsBodiless(peerId)) RemoteLine?.Invoke(peerId, $"Disconnected by the server: {reason}");
+        else RpcId(peerId, MethodName.NotifyKicked, reason);
         // Give the notification a moment to reach them before the socket closes under it.
         GetTree().CreateTimer(0.2).Timeout += () =>
         {

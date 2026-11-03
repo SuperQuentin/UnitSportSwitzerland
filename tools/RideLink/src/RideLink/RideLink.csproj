@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>RideLink</RootNamespace>
+    <Description>
+      Transport-agnostic fitness-device engine: BLE/ANT+/simulated transports behind one
+      interface, devices exposed as capabilities rather than brands.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The public stream surface is IObservable&lt;T&gt;; System.Reactive supplies the
+         Subject/operator implementations the capability router merges with. -->
+    <PackageReference Include="System.Reactive" Version="6.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+</Project>

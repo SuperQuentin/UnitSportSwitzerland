@@ -1,7 +1,8 @@
 # UnitSportSwitzerland
 
 Godot 4.7 C# multiplayer game: real swissALTI3D/swissTLM3D/GWR data -> `tools/TerrainPreprocessor` ->
-tiles in `terrain_chunks/` -> streamed by `src/Terrain/ChunkManager` -> low-poly PS1-style Switzerland,
+tiles in `terrain_chunks/` -> streamed by `src/Terrain/ChunkManager` -> low-poly Switzerland in the Cartoon
+style by default (PS1 and Realistic one setting away; new visuals are built in Cartoon first, `styles/style-kit`),
 on foot, mounted, driving or flying, over ENet multiplayer.
 
 ## Notes: read on demand, never up front
@@ -9,22 +10,26 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
-Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, bots, birds, items, crafting, build, loot, trailer,
-occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new or existing note plus one index line — never in this file.
+Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, bots, birds, items, crafting, build, loot, trailer, concert,
+occasions, adventure, core, ui, xr, styles, farming, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
+`build-features` (`UNITSPORT_FEATURES`: an export leaves out the dev tools it does not list, e.g. the trailer studio; `#if TRAILER` at its call sites; the editor has all),
 `release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
 `feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
-`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
-`fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock),
+`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard; heavy checks side by side in lock slots, `TEST_JOBS`),
+`regression-net` (before a coordinate or rendering change: `tools/test.sh coords` + `results.csv` + `tools/test-compare.py` against a `main` baseline; reference screenshots on D: with `tools/refshots.sh` and `tools/refshot-diff.py`, noise floor first),
+`fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock; net checks at `/speed` with `--checkspeed`),
+`check-waits` (wait for the event, never a fixed time: `Until`, `LogIn`, `Finish` ends with the peers, 0.2 s polls, `REAL=1` for the flat-world scripts),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
+`no-mesh-rebuild-per-frame` (what moves never rebuilds its mesh: figures skinned, rigid parts as nodes, cloth and patterns in shaders; #1202),
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
 `new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
 `new-feature-bots` (every new action, item, mount or interactable decided for server-run bots: intent seams, a server path, senses, server collision, a row in `bots/bot-capability-map`; #837),
@@ -33,9 +38,12 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `dotnet-sdk-pin` (`global.json` pins SDK 9: C# 14 binds `array.Reverse()` to the void Span overload),
 `zfight` (`--zfightcheck` baseline, viewer `--zfight`/`--flicker`, F9 z-fight overlay and flicker shot),
 `playtest` (`tools/playtest.sh`: scenarios a person judges in one game, in batches or with Claude live through the in-game MCP server, committed ledger in `tests/playtests/`),
+`human-test-list` (`tests/TO-TEST-BY-HUMAN.md`: what a PR could not verify itself — clicks, pad, VR, real-size regions — added in the same PR, deleted once tested),
 `playtest-recorder` (`--playtest-record`: a session's bundle in `test_output/playtest/sessions/`, `report.md` first; F12 notes),
-`topview` (a recorded session from above: `tools/playtest.sh topview`, Shift+F12 live, server-vs-client offsets),
-`collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table).
+`topview` (a recorded session from above over its terrain, cover, buildings and roads: `tools/playtest.sh topview`, Shift+F12 live, server-vs-client offsets),
+`collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table),
+`session-length` (token cost grows with context: one session per task, `/compact` around 200k; measured breakdown),
+`flat-lv95-ratchet` (#1443: hand-written LV95 distances and tile-corner arithmetic in `src/` may only shrink; `FlatLv95RatchetTests`).
 
 ## Rules
 
@@ -69,9 +77,16 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
   gameplay acts on an intent (`WalkControls`, `RideControls`, an item entry taking the player), never a
   raw `Input` read, every client RPC action has a server method a bot can call, and its row goes in
   `bots/bot-capability-map`; the PR says what a bot would need (`docs/notes/general/new-feature-bots.md`).
+- **Every new or reworked interface follows `ui/ux-guidelines`** (menus, HUDs, popups, VR panels): run
+  its self-review checklist before finishing, and its look comes from `ui/style-guide`.
 - **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
   or extend the set that already covers it (a new enum value or catalog row usually shows by
   itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).
+- **Nothing that moves rebuilds its mesh**: a mesh is built when what it is changes, never per
+  frame or per pose. A human figure is a `SkinnedFigure` posed by its bones, a moving rigid part is
+  its own node (turned, scaled or sheared), cloth and patterns go in a shader
+  (`docs/notes/general/no-mesh-rebuild-per-frame.md`; 24 walking figures cost 131 ms a frame
+  rebuilt, 18 ms skinned). `MeshRebuildDisciplineTests` fails on a build in a per-frame path.
 - **Every new synthesised sound is in the sound player**: a static `SfxBank`/`AudioStreamWav` shows by itself;
   a sound built per call (surface, species, voice) gets a `[SoundShowcase]` set; check with
   `--sounds,check` (`docs/notes/audio/sound-player.md`).

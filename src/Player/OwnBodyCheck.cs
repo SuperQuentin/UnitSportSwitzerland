@@ -131,9 +131,12 @@ public partial class OwnBodyCheck : Node3D
             $"{view}: the body is {(bare ? "drawn for the mirrors only" : "seen by the eye")} (layers {driver.Layers:X})");
     }
 
+    // a skinned figure's twin (#1202) moves by the figure's bones, or its shadow would stand at rest
     private static bool TwinCasts(MeshInstance3D figure) =>
         figure.GetNodeOrNull<MeshInstance3D>("Shadow") is { Visible: true, Layers: Avatar.OwnBody.World } twin
-        && twin.CastShadow == GeometryInstance3D.ShadowCastingSetting.ShadowsOnly && twin.Mesh == figure.Mesh;
+        && twin.CastShadow == GeometryInstance3D.ShadowCastingSetting.ShadowsOnly && twin.Mesh == figure.Mesh
+        && (figure is not Avatar.SkinnedFigure skinned
+            || twin is Avatar.SkinnedFigure { Following: { } leader } && leader == (skinned.Following ?? skinned));
 
     private void Spawn()
     {
@@ -155,6 +158,11 @@ public partial class OwnBodyCheck : Node3D
         Check(p.BodyFromEye && body.Layers == Avatar.OwnBody.Layer, $"the figure is on the own-body layer only (layers {body.Layers:X})");
         // Godot casts no shadow from a layer the camera culls: a shadow-only twin on the world's layer does
         Check(TwinCasts(body), "a shadow-only twin of the figure, on the world's layer, casts its shadow");
+        // by a doorway the figure is copied across (DoorwayGhosts); a copy of the twin is drawn, and the portal showed the head
+        var ghosted = new List<MeshInstance3D>();
+        Interiors.DoorwayGhosts.Collect(p, ghosted);
+        Check(ghosted.Contains(body) && !ghosted.Any(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.ShadowsOnly),
+            "a doorway's ghost copies the figure, never its shadow-only twin");
         Check((p.Camera.CullMask & Avatar.OwnBody.Layer) == 0, "the eye's camera leaves the own-body layer out");
         Check((Interiors.WallMirror.Cull & Avatar.OwnBody.Layer) != 0, "a wall mirror draws the own-body layer");
         Check(p.HandLocal != null, "the figure is posed: its hand is placed");

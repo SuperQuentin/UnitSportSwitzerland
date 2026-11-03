@@ -6,6 +6,13 @@
 #   CHUNKS=<terrain_chunks> GODOT=<exe> tools/locksynccheck.sh [epoch] [E,N]   (default: a random restock period, Riddes)
 # The server writes the lock/take masks to user://loot: test_output/userdata_locksync (lib/twoclient.sh).
 . "$(dirname "$0")/lib/twoclient.sh" locksync
+# the real map's server: without terrain data it never listens, and both clients waited out their joins (#1006)
+if [ -n "${CHUNKS:-}" ] && [ ! -f "$CHUNKS/manifest.json" ]; then
+  echo "[locksynccheck] RESULT: FAILED (no terrain data in CHUNKS=$CHUNKS)"; exit 1
+fi
+if [ -z "${CHUNKS:-}${UNITSPORT_CHUNKS:-}" ] && [ ! -f terrain_location.json ] && [ ! -f terrain_chunks/manifest.json ]; then
+  echo "[locksynccheck] RESULT: FAILED (needs real terrain round Riddes: CHUNKS=<terrain_chunks>)"; exit 1
+fi
 EP=${1:-$((800000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2583250,1113250}
 PORT=7793
@@ -14,7 +21,6 @@ tc_server 420 120 $OUT/locksync_server.log --server --port $PORT --lootepoch "$E
 tc_client 300 $OUT/locksync_a.log --windowed --connect 127.0.0.1:$PORT --name LockA --cache "$OUT/locksync_cache_a" \
     --at "$AT" --lootepoch "$EP" --locksynccheck A ${CH[@]+"${CH[@]}"} &
 A=$!
-sleep 3
 tc_client 300 $OUT/locksync_b.log --windowed --connect 127.0.0.1:$PORT --name LockB --cache "$OUT/locksync_cache_b" \
     --at "$AT" --lootepoch "$EP" --locksynccheck B ${CH[@]+"${CH[@]}"}
 wait $A

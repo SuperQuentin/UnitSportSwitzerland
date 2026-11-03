@@ -7,7 +7,8 @@
   it (`OS.Kill`); leaving asks first, since it stops the game for everyone on it.
 - **Command line**: `--headless --log-file user://logs/hosted-server.log [--path <project>] -- --server
   --port P --server-name N --parent-pid <client pid> --host-token <random> --chunks <the client's chunk dir>`, plus
-  `--generated-world` when there is no manifest and `--query-bind 127.0.0.1` when not LAN visible.
+  `--test-world <id>` for a test world picked in the dialog (`core/test-worlds`, else `--generated-world` when there is
+  no manifest) and `--query-bind 127.0.0.1` when not LAN visible.
   `--path` only outside an export (`OS.HasFeature("template")`); the editor's own binary works too.
 - **Start point and teleporting** (#799): the Host dialog names where players start ("Choose on the
   map…" opens `MapScreen.CreateServerSpawn`, closing the dialog and reopening it with its fields kept)

@@ -40,6 +40,8 @@ public static class TerrainBuild
         public bool Fresh;
         /// <summary>Read every written tile back and compare, then check all seams.</summary>
         public bool Verify;
+        /// <summary>The neighbours' DEMs, for <see cref="ForeignDem.SourceFor"/> tiles and swissALTI3D's gaps (#936, #965).</summary>
+        public IReadOnlyList<ForeignDem>? Foreign;
     }
 
     private static readonly Regex NameRe = new(
@@ -98,6 +100,7 @@ public static class TerrainBuild
         var bySource = sources.ToDictionary(s => s.Id);
         var dataset = new HashSet<TileId>(bySource.Keys);
         var cachedEdges = new ConcurrentDictionary<TileId, uint[]>();
+        var current = new ConcurrentDictionary<TileId, byte>(); // built, with an up-to-date .edge (not read yet)
 
         // previously built tiles, in this run's sources or not, keep counting as neighbours
         var candidates = new HashSet<TileId>(bySource.Keys);
@@ -110,12 +113,12 @@ public static class TerrainBuild
         {
             bySource.TryGetValue(id, out var src);
             bool built = IsValidTerr(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)));
-            uint[]? edges = o.Force || !built ? null
-                : EdgeStrips.TryRead(EdgeStrips.PathFor(cacheDir, id), src?.Length, src?.Ticks);
-            if (edges != null) cachedEdges[id] = edges;
+            // header only: a resume of a nationwide run must not hold every tile's 16 KB of edges at once
+            bool upToDate = !o.Force && built && EdgeStrips.IsCurrent(EdgeStrips.PathFor(cacheDir, id), src?.Length, src?.Ticks);
+            if (upToDate) current[id] = 0;
             else if (src != null) toParse.Add(src);
         });
-        foreach (var id in cachedEdges.Keys) dataset.Add(id);
+        foreach (var id in current.Keys) dataset.Add(id);
 
         // raster order, north row first: a tile completes once the row south of it has parsed,
         // so the set of interiors waiting on neighbours stays a narrow band
@@ -137,8 +140,13 @@ public static class TerrainBuild
         foreach (var id in toWrite)
             foreach (var nb in Hood(id))
                 if (dataset.Contains(nb)) users.AddOrUpdate(nb, 1, (_, v) => v + 1);
-        foreach (var id in cachedEdges.Keys)
-            if (!users.ContainsKey(id)) cachedEdges.TryRemove(id, out _);
+        // only the up-to-date tiles a tile to be written needs have their edges read
+        Parallel.ForEach(current.Keys.Where(users.ContainsKey), new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
+        {
+            bySource.TryGetValue(id, out var src);
+            cachedEdges[id] = EdgeStrips.TryRead(EdgeStrips.PathFor(cacheDir, id), src?.Length, src?.Ticks)
+                ?? throw new InvalidDataException($"{id}: .edge changed during the scan");
+        });
 
         var edgesOf = cachedEdges; // parsed tiles join it as they finish
         var interiors = new ConcurrentDictionary<TileId, ushort[]>();
@@ -204,18 +212,32 @@ public static class TerrainBuild
                 if (!scratchPool.TryTake(out var sc)) sc = new Scratch();
                 try
                 {
-                    long t0 = Stopwatch.GetTimestamp();
-                    // a legacy pass-1 cache file is the parsed grid already: 8 MB read, no inflate
-                    string legacy = Path.Combine(cacheDir, $"{src.Id.E}_{src.Id.N}.raw");
-                    string readPath = !o.Force && new FileInfo(legacy) is { Exists: true, Length: XyzParser.RawFileBytes } li
-                        && li.LastWriteTimeUtc.Ticks >= src.Ticks ? legacy : src.Path;
-                    byte[] data;
-                    ioGate.Wait();
-                    try { data = File.ReadAllBytes(readPath); }
-                    finally { ioGate.Release(); }
-                    long t1 = Stopwatch.GetTimestamp();
+                    long t0 = Stopwatch.GetTimestamp(), t1 = t0;
+                    if (src.Path == ForeignDem.SourcePath)
+                    {
+                        // a foreign tile (#936, #965): resampled from the neighbours' DEMs, which read their own files
+                        var dems = o.Foreign ?? throw new InvalidOperationException("foreign DEM tile without --dem");
+                        long filled = ForeignDem.FillAll(dems, src.Id, sc.Cells, onlyMissing: false);
+                        if (filled < sc.Cells.LongLength) XyzParser.FillMissing(sc.Cells);
+                        // nothing under it at all (a tile only chosen for a probe at its edge): sea level, not 4700 m walls
+                        if (filled == 0) Array.Fill(sc.Cells, ChunkFormat.Quantize(0));
+                    }
+                    else
+                    {
+                        // a legacy pass-1 cache file is the parsed grid already: 8 MB read, no inflate
+                        string legacy = Path.Combine(cacheDir, $"{src.Id.E}_{src.Id.N}.raw");
+                        string readPath = !o.Force && new FileInfo(legacy) is { Exists: true, Length: XyzParser.RawFileBytes } li
+                            && li.LastWriteTimeUtc.Ticks >= src.Ticks ? legacy : src.Path;
+                        byte[] data;
+                        ioGate.Wait();
+                        try { data = File.ReadAllBytes(readPath); }
+                        finally { ioGate.Release(); }
+                        t1 = Stopwatch.GetTimestamp();
+                        Interlocked.Add(ref bytesIn, data.Length);
 
-                    XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text);
+                        XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text,
+                            o.Foreign == null ? null : (id, cells) => ForeignDem.FillAll(o.Foreign, id, cells, onlyMissing: true));
+                    }
                     long t2 = Stopwatch.GetTimestamp();
 
                     var heights = new ushort[n * n];
@@ -227,7 +249,6 @@ public static class TerrainBuild
                     Interlocked.Add(ref tRead, t1 - t0);
                     Interlocked.Add(ref tParse, t2 - t1);
                     Interlocked.Add(ref tReduce, t3 - t2);
-                    Interlocked.Add(ref bytesIn, data.Length);
 
                     interiors[src.Id] = heights;
                     edgesOf[src.Id] = edges;
@@ -286,7 +307,7 @@ public static class TerrainBuild
             foreach (var t in TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles)
                 previous[t.Id] = t;
 
-        var manifest = new TerrainManifest();
+        var manifest = new TerrainManifest { HeightOffsetM = ChunkFormat.MinHeightM };
         foreach (var id in dataset.OrderBy(t => t.N).ThenBy(t => t.E))
         {
             if (written.TryGetValue(id, out var t) || previous.TryGetValue(id, out t))

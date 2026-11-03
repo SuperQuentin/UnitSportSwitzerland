@@ -119,7 +119,9 @@ public sealed class Hearing
                 if (srcIn == earIn)
                 {
                     _poll -= dt;
-                    if (_poll <= 0)
+                    // occlusion off in the settings: no rays, heard as in the open
+                    if (!Core.GameSettings.Current.SoundOcclusion) _blocked = 0f;
+                    else if (_poll <= 0)
                     {
                         _poll = PollSeconds;
                         _blocked = Blocking(parent, listener, source);

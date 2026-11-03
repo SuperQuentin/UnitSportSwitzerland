@@ -357,11 +357,7 @@ public partial class Structures : Node
     /// <summary>Where a peer's body is, in LV95 (what it published), or null if it has none.</summary>
     private GlobalPos? BodyOf(long peer) => GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is { } body ? body.Global : null;
 
-    private static double Distance(Structure s, GlobalPos at)
-    {
-        double de = s.E - at.E, dn = s.N - at.N;
-        return Math.Sqrt(de * de + dn * dn);
-    }
+    private static double Distance(Structure s, GlobalPos at) => GlobalPos.HorizontalDistance(s.E, s.N, at.E, at.N);
 
     /// <summary>Server: sends a peer what came into range, takes back what went out of it.</summary>
     private void UpdateInterest(long peer)
@@ -496,6 +492,10 @@ public partial class Structures : Node
         var placed = new Placed { Piece = piece!.Value, Owner = owner, BuiltAt = Now };
         PutPiece(s, placed, live: true);
         ToKnowers(s.Id, MethodName.AddPiece, s.Id, Pack(placed.Piece), placed.Owner, 0f, placed.BuiltAt, true);
+        // a structure of ten pieces (#1266): the Adventure's build milestone (mentors), raised once per structure
+        if (!s.Match && s.Pieces.Count == StructureBuilt.Pieces && Adventure.AdventureService.Instance is { } adventure
+            && adventure.Progress(Online ? peer : Adventure.AdventureService.LocalPeer) is { } progress)
+            adventure.Events.Raise(new StructureBuilt(Online ? peer : Adventure.AdventureService.LocalPeer, progress.Key, s.Id, s.Pieces.Count));
         if (!s.Match) Save();
         Reply(peer, req, "");
     }
@@ -628,7 +628,7 @@ public partial class Structures : Node
 
     private void Load(string path)
     {
-        _storePath = ProjectSettings.GlobalizePath(path);
+        _storePath = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath(path));
         try
         {
             if (!File.Exists(_storePath)) return;
@@ -656,7 +656,7 @@ public partial class Structures : Node
 
     private void Save()
     {
-        if (_storePath.Length == 0) _storePath = ProjectSettings.GlobalizePath("user://structures/offline.json");
+        if (_storePath.Length == 0) _storePath = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://structures/offline.json"));
         try
         {
             var store = new Store
@@ -676,4 +676,10 @@ public partial class Structures : Node
         }
         catch (Exception ex) { GD.PushError($"[build] saving: {ex.Message}"); }
     }
+}
+
+/// <summary>A player's structure reached <see cref="Pieces"/> pieces (#1266): the Adventure's build milestone, for the mentors and quests.</summary>
+public sealed record StructureBuilt(long Peer, string Key, long StructureId, int PieceCount) : Adventure.AdventureEvent(Peer, Key)
+{
+    public const int Pieces = 10;
 }

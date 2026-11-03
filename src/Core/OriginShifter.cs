@@ -108,6 +108,8 @@ public partial class OriginShifter : Node
     public override void _Process(double delta)
     {
         if (!_allowed() || _focus() is not { } at) return;
+        // a camera gone to NaN would shift the whole world to NaN with it (#1006)
+        if (!at.IsFinite()) return;
         if (new Vector2(at.X, at.Z).Length() <= ThresholdM) return;
 
         var (e, n) = _origin.ToLv95(at);
@@ -125,7 +127,7 @@ public partial class OriginShifter : Node
         if (!_allowed()) return false;
         double step = Math.Max(1, StepM);
         double newE = exact ? e : Math.Round(e / step) * step, newN = exact ? n : Math.Round(n / step) * step;
-        if (newE == _origin.E && newN == _origin.N) return false;
+        if (!_origin.Frame.IsAnchor && newE == _origin.E && newN == _origin.N) return false;
 
         var clock = Stopwatch.StartNew();
         var shift = _origin.MoveTo(newE, newN);

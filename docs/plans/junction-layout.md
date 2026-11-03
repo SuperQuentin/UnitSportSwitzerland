@@ -3,7 +3,7 @@
 
 # Junctions lay their own surface: sections, cores and transitions (#818)
 
-Status: **plan**, settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
+Status: **in progress** on `feat/818-junction-layout` (PR #820): phases 1, 2 and 3 built (`docs/notes/tools/junction-planner.md`; phase 3 writes behind `--junctions write`). Settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
 replaces most of what they built, so it branches from the `main` that has them). Absorbs #709 (traffic follows the
 junction's paths). Part names as in `docs/notes/tools/intersection-parts.md`.
 
@@ -72,23 +72,42 @@ and the transition lengths.
   exits take; pockets where the class and kind allow (`JunctionRules`: left pockets on the main road's arms or every lit
   approach, double lefts from data, right pockets above 50 km/h, none where OSM marks no left lane or forbids the turn);
   equal lane widths across the approach. This logic exists and is data logic: it moves, it is not rewritten.
+- **Forbidden turns** (OSM `no_*` / `only_*` restrictions, `Restrictions.Banned`; arms nobody may leave by, one-way in;
+  turns `turn:lanes` shows no lane for): no lane gets the move or its arrow, no connector is drawn for it (no path for
+  traffic, no signal group), a corner no right turn uses stays tight, and **no pocket is built for a banned turn** (today
+  a left pocket is planned from geometry alone without lane data: 10 in Geneva stand where OSM forbids the left turn).
 - **Lanes out**: as many as the arm's departing lanes, the exit's car lane continuing the facing through lane.
 - **Alignment across the junction** (replaces the veer share, `SetExit`, `SetExitLane`, mirror strips and the exit
   shrink): for every straight pair (approach A, exit B), A's through lane and B's lane are on one line. The planner
   chooses each arm's `Frame` and the width of B's `Hatch` strip so the lines meet; where the room allows it splits the
   offset half on each side (today's 0.5 share), else less (0.25, 0), else the hatch takes it all. A lit exit's hatch
   keeps 1.7 m where an island will stand; an OSM crosswalk on the exit narrows its lane to 3 m for a refuge (#711).
-- **Bike infrastructure**: the bike planner's layout per street (lane, path, layout (a)/(b) at a right pocket, left-turn
-  bike lane at the lights, 3 m car lane beside a bike lane) becomes strips of the mouth section.
+- **Bike infrastructure**: the bike planner's layout per street (lane, path, 3 m car lane beside a bike lane) becomes
+  strips of the mouth section. **One rule for the three bike moves** (the user): a bike lane beside the car lane making
+  the move, where the street it goes into carries riders on, or at the lights (an advanced line or a bike box ends it);
+  no bike box without lights; only the order they go when room is short differs. Through riders before turning ones (the user, Oct 13):
+  a mouth whose riders have no lane or path gets a through bike lane where the straight-on exit carries one on (lit or not)
+  or, at the lights, where a bike box takes them,
+  which survives when possible; the
+  left-turn bike lane goes early. Beside a right pocket the bike lane runs between it and the through lane (b): without
+  lights always, at the lights only where traffic from the arm the pocket turns into cannot turn left (else kerbside, a).
+  In (b) riders turning right get a bike right-turn lane at the kerb, right of the pocket, where there is plenty of room
+  (the first thing the room order gives up), else share the cars' right pocket (no bike symbol in it). The signal plan follows the layout.
 - **Room** (`ArmRoom`, measured once per arm and shared by everything): at every 2.5 m station out to the next
   junction, the free width each side of the axis (facades via `Facades`, other lines via `LineIndex`, the raw ground
   within 1.2 m of the road, the block's halo), and the arm's length to the next junction's own claim. Today this is
   probed three ways (`Widening.Check`, `StreetPlanner.Measure`, `CornerPlanner.Check`).
 - **When the room is short**, the wanted section shrinks in this order until it and its transitions fit (the user's
-  order): (1) verge and buffer, (2) exit hatch and island, (3) lane widths to their minimum (car 3.0 -> 2.75 m, bike
-  1.5 -> 1.25 m), (4) right pocket, (5) sidewalk to 1.5 m, (6) left pocket storage then its lead-in hatch (the sizes
-  #123 tries: 30+40, 25+30, 20+20), (7) left pocket, (8) painted bike lane, last. Car through lanes and the data's lane
+  order, as refined while building): (1) a bike right-turn lane, verge and buffer, (2) island (the exit hatch itself
+  stays: it lines the through lane up), the left-turn bike lane, (3) lane widths to their minimum (car 3.0 -> 2.75 m,
+  bike 1.5 -> 1.25 m), each side only where it lacks room, (4) right pocket, (5) sidewalk to 1.5 m, (6) left pocket
+  storage then its lead-in hatch (the sizes #123 tries: 30+40, 25+30, 20+20), (7) the pocket feeding this exit, left
+  pocket, (8) painted (and added through) bike lane, last. Car through lanes and the data's lane
   count never drop. Each step taken is counted and printed by `--debug-junction`, so a review can ask why.
+  **The pockets' sizes are chosen before any pocket goes** (the user, Oct 13: step 6 ranks before 4 and 7 in effect): the
+  fit tries the sizes longest first and takes the first where every pocket stays (J3 east: 20+20 and 10+15, L|T|R).
+  **Lane widths shrink before a pocket is dropped** (the user, Oct 13): J3 north (houses 1 m from the kerb) gets its
+  pocket with 2.75 m lanes, the road moving 2 m left where there is room (L|TR; the old layout built none).
 
 ### 2. Connect the lanes: the core
 
@@ -99,9 +118,11 @@ and the transition lengths.
   paths get their own). A connector leaves its lane's centre at the mouth along the arm's heading and arrives along the
   exit's: two tangents joined by a circular arc of at least the turning radius (car 6 m on the inner edge, a truck's
   10 m where a Major road is involved), straight runs for the rest. Each carries its lane width, so its two edges are curves too.
-- **The core's outline**: between arm i's right edge and arm j's left edge, the **kerb curve** is the outer edge of
-  the outermost right-turn connector between them (plus its bike lane where riders turn with it), so the corner is as
-  round as the turn that uses it. Where no right turn uses the corner (one-way, OSM, no lane: #700's tight corners) it
+- **The core's outline follows the allowed movements** (the user, Oct 13): only allowed turns get a connector, so the
+  shape depends directly on what may be driven. Between arm i's right edge and arm j's left edge, the **kerb curve** is
+  the outer envelope of every allowed connector passing that corner: usually the right turn between them (plus its bike
+  lane where riders turn with it), but a left turn into a narrow arm or a truck's turn may swing wider. The corner is as
+  round as the turns that use it. Where no turn uses the corner (one-way, OSM, no lane: #700's tight corners) it
   stays tight (`TightKerb` 1.5 m). The mouth station `m` of each arm is pushed out until both its corners' curves start
   at or inside it: the mouth is where the kerb leaves the straight edge (today's kerb allowance and `CurveStops` merge
   into this). Room clips the curve (a building, the other arm's mouth): the radius shrinks, the turn's speed with it.
@@ -121,7 +142,8 @@ All on the arm side of each mouth, read from the arm's sections and the core's c
   mapped arms (OSM crossing nodes, `CrossingsMapped`) or every arm with a sidewalk at unmapped lights; its span is the
   section there (exact, also over a taper: no more re-measuring), refuges cut from the `Hatch` strip where wide enough.
 - **Stop line** behind it (lights 0.5 m, `StopSetback`), across the in-lanes of the section there; the pocket bar
-  without lights; bike box or advanced bike line; give-way rows and signs on yielding arms, moved behind a path
+  without lights; at the lights every bike lane (through, left, right alike, the user) ends at an advanced line where the
+  street its riders go into carries their way on, else in a bike box; give-way rows and signs on yielding arms, moved behind a path
   crossing. The stop distance is one number per arm, computed once (the end of `_stopBack`).
 - **Poles** at the section's kerb beside the stop line, the repeater on its exit island.
 - **Bike crossings** follow the bike connectors; red where a car connector crosses them (in the same phase at the
@@ -169,6 +191,39 @@ normal stretch (one transition, both ends planned together, the closer events me
   the lines the paint draws: the split lead-in, double lefts, tight corners, exits back over the exit taper (#709's
   list). `LANE` stays written as a projection of the plan until the game no longer reads it, then goes.
 - **Size**: a transition record is a few dozen bytes per strip; budget +3 % raw per tile (measured on the Sion tiles).
+
+## Generalizations (the user's aim, Oct 13 2026)
+
+The user wants the rework to look for general rules that replace families of special cases, so the code is reasoned about
+once. Found so far:
+
+- **Transitions**: pockets, lead-ins, exit tapers, a bike lane's lead-in and two close junctions merged (#325) are one object
+  going from one section to another.
+- **The core's outline is the envelope of the allowed connectors**: kerb corners, tight corners, the kerb allowance and the
+  stop line's curve start all follow from which turns may be driven.
+- **The exit hatch is the through lanes' alignment**: veer share, `SetExit`, mirror strips and the exit shrink are one rule.
+- **One room measurement, one shrink order** for every strip of a section.
+- **Allowed moves are one source**: lanes, arrows, connectors, corners and signal groups all read the same moves.
+- **One rule for the three bike moves**: a bike lane beside the car lane making the move, where its destination carries
+  riders on or at the lights; every bike lane at the lights ends at an advanced line or a bike box by its own destination.
+  Only the order they go when room is short, and no box without lights, differ.
+
+- **One pocket rule** (`PocketRules`): a lane added for a move on that move's side; what it displaces follows from the side;
+  a table holds what differs (speed condition, sizes, room step). OSM `turn:lanes` are the truth: their lanes beyond the
+  carriageway's are the pockets, from each end, at any speed, never dropped for room (double rights too).
+
+- **The core's corners are one envelope rule** (phase 2): the least rounding that keeps every allowed connector paved, with
+  1.5 m legs as the floor; #700's tight corner is a corner no connector passes, not a flag.
+- **A turn is its deflection, not its move's name**: 30 degrees or more sets the mouths at its vehicle's radius; a straighter
+  connector (a bend through, a slight "turn" at a fork) fits between them.
+- **A connector's width eases from its lane's to the exit lane's** along its curve: lanes of different widths join with no
+  special case.
+- **Every kerb is an envelope**: a corner's arc and the S between arms in line alike keep every connector paved; a corner is
+  an arc only where a turn can round it (a gap under 180 degrees less a turn's 30).
+
+Candidates to check as the work goes on: every marking as the boundary between two
+strips, its style from the pair of kinds; stop lines, crosswalks and give-way rows as lines across an arm at a station,
+per move group; lights and no lights as nothing but parameters of `JunctionRules`.
 
 ## What exists and where it goes
 
@@ -235,6 +290,134 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 ## Settled with the user (Oct 13 2026, second round)
 
 - **Turning radius by vehicle**: the kerb follows the right-turn connector's outer edge, a car (6 m inner edge) on
-  Minor/Road arms, a truck (10 m) where a Major road is involved; the room clips it smaller.
+  Minor/Road arms, a truck (10 m) where a Major road is involved; the room clips it smaller. **Then refined** (the user, Oct 13,
+  after phase 2's pictures): a truck's radius only between two Major (or bigger) roads, and only where it fits untouched (no
+  building at its corner, no mouth past half the street), else a car's. Trucks elsewhere swing out and yield: #821.
 - **Multi-node cores in #818** (phase 5): car-road junction nodes joined by links under 30 m form one core.
 - **Slip lanes (#708) and continuous sidewalks (#710) stay their own issues**, built on this model afterwards.
+
+## Settled with the user (Oct 13 2026, third round: phase 3)
+
+- **What phase 3 writes** (under `--junctions new`): at every planned single-node junction the core (as its cap: outline,
+  heights), the arms' segments trimmed to the mouths, and the transitions (`TRNS`, paint by rule). The old pocket strips,
+  exit tapers and their paint are skipped there, and so is the old exterior (stop lines, crosswalks, poles, sidewalk corners,
+  signs) until phase 4 rebuilds it from the core. Multi-node junctions stay on the old layout entirely.
+- **The game builds every street from a cross-section per point** (the generalization): ribbon, sides, blend and collision
+  take edges and band widths per point; an ordinary segment is the constant case read from ATR2, a `TRNS` piece the varying
+  one (`ShiftAt` becomes a case of it). One code path.
+- **One timing rule by role** for a transition's strips: a pocket lane held over its storage, then closing over its taper
+  (centre side: it gives way to a lead-in hatch, the closing line the diagonal where the two meet; kerb side: the kerb moves
+  in); an exit hatch closes over 30 m; an added bike lane held 20 m, coming on at 1:6; every other width change (lane widths,
+  a narrowed sidewalk or verge) at 1:6 (6 m at least) just beyond its side's last opening. The exit hatch and a pocket's
+  lead-in hatch are the same median between the two directions, so a #325 merged street is that median running mouth to
+  mouth.
+- **A split lead-in's centre line moves with the pocket's taper** (the user, Oct 14 2026: the 1:6 after it jogged the through lane).
+- **The writing runs behind its own flag, `--junctions write`** (the user, Oct 14 2026; `new` still plans
+  and reports only, so the comparison with the pocket layout and the old checks keep working).
+
+## Settled with the user (Oct 14 2026, phase 4: the exterior)
+
+- **One stack of bars per arm** (the generalization): laid outward from the mouth: the crosswalk, the riders' stop, the cars'
+  stop line or give-way row; poles and signs at the kerb beside the bar they belong to. Each bar spans the strips of its kind in
+  the section at its station (a crosswalk the carriageway, a stop line the arriving car lanes); the stop distance falls out of
+  the stack; `JunctionRules` only decides which bars exist. Kerb ramps wherever a bar crosses a band.
+- **One riders' line per approach at the lights**: every bike lane stops there; the cars' line is 3 m behind it where any has an
+  advanced line, 4 m where any has a bike box; the box (yellow outline, symbol) spans all the arriving car lanes between them.
+- **A path crossing follows the path's curve** (as today): from one arm's path to the other's through the junction, red over the
+  carriageway by the rule, the corners carrying the path to the kerb where the curve meets it. A bike lane turning through the
+  core follows its connector.
+- **Facing edges line up across the whole junction** (Oct 14, after the Geneva review: a split lead-in left the facing arm's
+  edge 2.25 m short, its path crossing diagonal): where an arm's arriving side stops short of the departing side of the arm
+  whose through traffic comes into it, its arriving lanes move out behind a hatch right of the centre line (`LineUpHatchId`)
+  by its share of the jog: one slope from 30 m out on it to the other mouth, the core taking the rest; as far as its room
+  allows. Rejected: mirroring the split exactly (a full extra hatch at the mouth), splitting the jog between the two arms,
+  moving the lead-in to the kerb side, a taper from sidewalk to sidewalk (it narrows the wide side).
+- **A path crossing over a joining road keeps following the street's curve** (Oct 14, shown the old layout's square
+  crossings beside each zebra at the same Geneva junction): also where the street bends at the node; only the kerbs where it
+  ends are fixed.
+- **A road joining an arm short of its mouth leaves the junction to the old layout until phase 5** (Oct 15, on the test
+  region's copy of 2619795,1264700, where the main road divides 6 m from the T): a road dividing, a link or a track meeting
+  the arm's street before (or within 4 m past) its mouth makes it a junction of several nodes.
+- **Junctions under 30 m apart: merged only where their cores overlap** (Oct 15, on four real examples, mostly staggered T's):
+  each junction's core is planned on its own; where two cores' mouths would overlap on the link between them (no room for
+  both), they merge into one core; else they stay two cores and the short street between keeps its markings. Replaces the
+  earlier "always one core" for nodes joined by a link under 30 m.
+- **A merged core follows the planner's rules as any crossroads** (Oct 15, on the test region's staggered T's 8 m apart):
+  left pockets where the rules want them, even where they push the side roads' mouths out (17 m against 10.5 m without)
+  and leave large corners. Rejected: no pockets on unlit merged cores, none on any, only where they fit.
+- **Merge a group only when the streets between its members form a tree** (Oct 16, against SWISSIMAGE and Geneva's
+  marking data: a real crossroads drawn as two nodes merges; a Sion triangle's grass island is real): a pair or a chain
+  merges into one core; streets closing a loop round an island (a triangle, a divided road's square) leave the members as
+  they are. Rejected: pairs only, sampling more first.
+- **A path crossing between two mouths facing each other goes straight across** (Oct 16, on the Geneva crossroads
+  2495103,1120529 merged from two nodes: "the path would not curve, it would go straight across"): a jog is laid straight;
+  a crossing still follows the curve where the street bends (more than 10 degrees between its ends).
+- **A core's sidewalk corner only where both streets have their sidewalk at the mouth** (Oct 16, same place): the old
+  corner code walked on along a street to its first sidewalk (up to 30 m) and laid a wedge over the whole gap; where the
+  crossed street has no sidewalk, a carried side brings its path round the corner but not its sidewalk.
+- **Phase 6 review, red at the lights as the old rule** (Oct 17, on the test region's J2 and J7): a riders' crossing is red
+  on its first half, its second half or both, by where cars cross it while the riders have green (#682), not on the
+  conflict spots alone (patches) nor all along.
+- **Phase 6 review, left-turn guides** (Oct 17): the inner guide (the left edge of the leftmost left turn) only where an
+  island stands on the exit; the outer guide only where a bike lane turns left beside the cars, as the guide between two
+  left lanes.
+- **Phase 6 review, a core's corner is a band along its kerb** (Oct 17, against SWISSIMAGE at Sion 2506169,1137800: grass
+  behind a sidewalk along the kerb): the sidewalk carried round the corner at its width, never the whole corner paved
+  (no squared fill, no fill round a carried side or a crosswalk's ramp).
+- **Phase 6 review, overlapping cores are first held apart** (Oct 17, Sion 2505653,1137735: two junctions with a grass
+  strip and trees between): each mouth held at half the street between, its turns tighter than its vehicle; a group merges
+  only where that fails a check.
+- **Phase 6 review, red without lights only along the main road** (Oct 17, Sion 2505948,1137484): an unlit junction's
+  riders' crossing is red (by halves) only where it runs from one main arm to the other, across a road joining; none
+  across the main road or at a junction without one.
+- **Phase 6 review, bike boxes** (Oct 17): a box only where the riders' exit carries no bike way on (as before); one per bike
+  lane, over it and the car lanes up to the nearest one making its riders' move (not the whole approach); two merged only
+  where they touch; no red surface (yellow sides and the bike symbol).
+- **Phase 6 review, the inner left-turn guide needs a raised island** on the exit; a painted hatch does not count (Oct 17).
+  The outer one (beside a left-turning bike lane) only into an exit carrying a bike lane or path on, as a bike lane marked
+  through the core.
+- **A straight side keeps its street's profile** (Oct 17, J9): a crosswalk at one end folds its piece's grass into the path;
+  the side between two arms in line no longer blends that along its whole length.
+- **Phase 6 review, a bike box has its stop line** (Oct 17): the riders' line runs across the box's whole front. **A bike lane
+  is marked through the core only into an exit carrying the riders' way on**; else they wait in their box and ride on in the
+  traffic, the connector unmarked.
+- **Phase 6 review, an arriving bike lane's lines go solid before its line** (Oct 17): every line between an arriving bike
+  lane and a car lane is solid yellow over the last 10 m, as a car pocket's lane line (a left-turn bike lane between two car
+  lanes and a kerb-side bike lane alike).
+- **Phase 6 review, a bike box only beside its lane** (Oct 17, J1 south): a bike lane stops at a box only where it lies
+  beside a car lane making its riders' move (the lane the box covers) and that move's exit carries no bike way; else at an
+  advanced line (J1 south's kerb lane lies beside the right-turn lane, its riders going straight on). A boxed bike lane's
+  lines end at the box's back.
+- **Phase 6 review, the in-between bike lane** (Oct 17, Geneva 2495580,1120909): where the right pocket beside it opens, the
+  cars cross it: crossing dashes (1 m) on both its lines and red over it; past the opening, toward the mouth, both its lines
+  solid; its right line stays dashed where it does not run on from the kerb-side bike lane (riders cross over to it from
+  the right).
+- **Phase 6 review, a right pocket's bike lane follows the kerb** (Oct 17): the car pocket opens over the taper; the
+  kerb-side (right-turn) bike lane beyond it opens over a short ease just past the taper's outer end and is at full width
+  over the whole taper, its line following the kerb. The in-between bike lane stays straight; it is red from the transition's start
+  to the pocket's full width; its left line is solid from the transition's start to the conflict area, its right line
+  absent while the right-turn bike lane opens beside it (it leads straight into it), crossing dashes over
+  the conflict (where the car pocket opens), solid again from the pocket's full width on.
+- **Phase 6 review, a departing lane widened at the lights keeps its width along the solid centre line** (Oct 17, J7 west):
+  #711's full lane beside a bike lane (no straddling the solid line to pass a cyclist) is held over the 20 m the centre line
+  is solid, then eased back to the street's width at 1:6; it was eased away within 6 m of the mouth (a kink before the turn).
+- **Phase 6 review, departing lanes keep the street's widths** (Oct 17, J7 west): #711's full lane beside a bike lane at the
+  lights is dropped (it kinked the exit kerb before the turn; holding it over the solid stretch only moved the kink). A
+  bike lane through the core follows its connector again (a straight line across the core cut J7's tight north-east
+  corner); only a path crossing goes straight from kerb to kerb (the Oct 16 rule was about the path at Geneva).
+- **Phase 6 review, a bike lane through the core points at the exit's bike infra** (Oct 17, Geneva 2495103,1120529): it runs
+  straight from its mouth to where the exit carries it on (into a path behind the kerb: the path's centre where it starts,
+  that corner's kerb lowered), along its connector where either of its lines would leave the core (J7's tight corner).
+  **No marking is drawn off the road**: lines through the core (bike lanes, red, guides) are cut to the core's surface.
+- **Phase 6 review, no centre line through a core** (Oct 17): the main road's centre line carried through (#121), halfway
+  between the two opposing through lanes, matched no lane where they were offset (pockets, hatches, a split lead-in); it is
+  dropped at every core. The edge guides still run on.
+- **Phase 6 review, a core's corner beside a carried side carries both sides' bands round** (Oct 18, Geneva
+  2495103,1120529 and Sion 2506169,1137800): the arm's path and sidewalk run round the kerb at their own widths and meet
+  the carried side, grass behind; no band narrowing to a point.
+- **The switch: flip now, delete later** (Oct 18): this PR makes the planner the default everywhere (map builds and the
+  game's generated tiles), its junction tests ported; #854 brings the old layout's share to zero and deletes it
+  (phase 6's list above). The generated tiles get it fully in this PR (the user's choice over keeping them on the old
+  layout): every block lays out the junctions that reach it, from the halo's streets built for the planner only.
+- **A double left pocket's lead-in hatch is at most one lane wide** (Oct 18, #700 kept): the lane by the centre line opens
+  out of the hatch, the other lanes first, beside it from the through lanes.

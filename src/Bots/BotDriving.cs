@@ -12,6 +12,12 @@ public sealed class BotDrive
     public Task<RaceRoute?>? Planning;
     public AutoPilot? Pilot;
     public Vector3 Goal;
+    /// <summary>The route's point nearest <see cref="Goal"/> (its index): where it stops when the goal is off the road.</summary>
+    public int Nearest;
+    /// <summary>How far along the route it is: the index of the point it is nearest.</summary>
+    public int At;
+    /// <summary>Why it stopped driving, for the log.</summary>
+    public string Why = "";
     /// <summary>Braking to get out: the pilot's <c>Finished</c>, then out once slow.</summary>
     public bool Stopping;
     /// <summary>Since when it has made no headway (a car on its nose, in a hedge): it gets out and walks.</summary>
@@ -99,24 +105,45 @@ public static class BotDriving
         {
             if (drive.Planning == null)
             {
-                if (body.Terrain?.Source is not { } source || body.Origin is not { } origin) return Progress.Failed;
+                if (body.Terrain?.Source is not { } source || body.Origin is not { } origin) return Stop(drive, Progress.Failed, "no terrain");
                 drive.Goal = goal;
                 drive.Planning = RaceRoute.BuildAsync(source, origin, body.GlobalPosition, default, RoadClass.Minor, goal);
                 return Progress.Planning;
             }
             if (!drive.Planning.IsCompleted) return Progress.Planning;
             if (!drive.Planning.IsCompletedSuccessfully || drive.Planning.Result is not { } route || AutoPilot.For(route, body) is not { } pilot)
-                return Progress.Failed;
+                return Stop(drive, Progress.Failed, "no route");
             drive.Pilot = pilot;
             drive.StillSince = now;
-            GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" drives {route.Centre.Count} points towards {goal}");
+            // the route runs on past the goal (a run-out of up to 8 km): a goal more than Arrive off the
+            // road was never reached, and the bot drove the whole run-out (#1006). It stops at the route's
+            // point nearest the goal; when no point is nearer than the bot already is, it walks. (The
+            // route starts on the nearest road it may take, which can be far: a village's streets are
+            // below Minor, and Riddes' route started 456 m off)
+            int nearest = 0;
+            for (int i = 1; i < route.Centre.Count; i++)
+                if (Flat(route.Centre[i] - goal) < Flat(route.Centre[nearest] - goal)) nearest = i;
+            drive.Nearest = nearest;
+            drive.At = 0;
+            GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" drives {route.Centre.Count} points towards {goal}, from {Flat(route.Centre[0] - body.GlobalPosition):F0} m off, stopping at point {nearest}, {Flat(route.Centre[nearest] - goal):F0} m from it");
+            if (Flat(route.Centre[nearest] - goal) >= Flat(goal - body.GlobalPosition)) return Stop(drive, Progress.Arrived, "no road leads nearer the goal");
         }
         var pos = body.GlobalPosition;
-        var end = drive.Pilot.Route.Centre[^1];
-        if (Flat(goal - pos) < Arrive || Flat(end - pos) < Arrive * 0.5f) return Progress.Arrived;
+        var centre = drive.Pilot.Route.Centre;
+        for (int k = drive.At + 1; k < Mathf.Min(drive.At + 30, centre.Count); k++)
+            if (Flat(centre[k] - pos) < Flat(centre[drive.At] - pos)) drive.At = k;
+        if (Flat(goal - pos) < Arrive) return Stop(drive, Progress.Arrived, "at the goal");
+        if (drive.At >= drive.Nearest && Flat(centre[drive.At] - pos) < Arrive * 0.5f) return Stop(drive, Progress.Arrived, "at the road's nearest point to the goal");
+        if (Flat(centre[^1] - pos) < Arrive * 0.5f) return Stop(drive, Progress.Arrived, "at the route's end");
         if (body.RideSpeed > StuckSpeed) drive.StillSince = now;
-        else if (now - drive.StillSince > StuckSeconds) return Progress.Failed;
+        else if (now - drive.StillSince > StuckSeconds) return Stop(drive, Progress.Failed, "stuck");
         return Progress.Driving;
+    }
+
+    private static Progress Stop(BotDrive drive, Progress how, string why)
+    {
+        drive.Why = why;
+        return how;
     }
 
     /// <summary>Brakes (the pilot's finish), then gets out once slow. True once on foot.</summary>
@@ -128,7 +155,7 @@ public static class BotDriving
         if (bot.Drive.Pilot is { } pilot) pilot.Finished = true;
         if (body.RideSpeed > 1.5f) return false;
         body.ExitVehicle();
-        GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" got out");
+        GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" got out ({(bot.Drive.Why.Length > 0 ? bot.Drive.Why : "stopped")})");
         Forget(bot);
         return true;
     }
@@ -138,6 +165,7 @@ public static class BotDriving
         bot.Drive.Pilot = null;
         bot.Drive.Planning = null;
         bot.Drive.Stopping = false;
+        bot.Drive.Why = "";
     }
 
     /// <summary>What the body's <c>RideControls</c> read: the pilot when there is one, else the handbrake.</summary>

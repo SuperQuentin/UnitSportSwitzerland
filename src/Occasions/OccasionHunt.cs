@@ -24,7 +24,7 @@ namespace UnitSport.Occasions;
 /// </summary>
 public partial class OccasionHunt : Node, Core.IOriginShiftAware
 {
-    private const string File = "user://occasions/claims.json";
+    private static string File => Core.WorldChoice.SavePath("user://occasions/claims.json");
     private const float Reach = 1.4f;
 
     public static OccasionHunt? Instance { get; private set; }

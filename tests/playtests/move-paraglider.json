@@ -1,0 +1,22 @@
+{
+  "id": "move-paraglider",
+  "title": "Paraglider from 400 m",
+  "verdict": "validated",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:13Z",
+  "commit": "e6b105f8",
+  "coverHash": "12f770e6c6668876",
+  "covers": [
+    "src/Player/Flight.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:13Z",
+      "by": "Quentin Aellen",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}

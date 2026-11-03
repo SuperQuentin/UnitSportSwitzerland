@@ -29,7 +29,7 @@ Let the player choose how the world looks, from more than the current PS1 look:
 | Player choice | **One preset per style.** No mix-and-match knobs. |
 | Renderer | Realistic+ uses Forward+. Realistic− and the others work on Mobile. |
 | Switching | Live switching is ideal. Trade-offs below; Realistic+ needs a restart either way. |
-| PS1's status | **Cartoon may replace it** as the main look. Partly an experiment. |
+| PS1's status | **Cartoon replaced it** as the default and the base (phase 5, #849). PS1 stays a choice. |
 | Asset sources | CC0 libraries, Swiss open data, AI-generated. No commissioned art for now. |
 | First step | **Vertical prototype** before any framework. |
 | Scope | **Client-only.** The server never renders, and gameplay must not depend on the style. |
@@ -134,17 +134,19 @@ Instead, each style names a **parent**, and anything it does not define resolves
 chain:
 
 ```
-Realistic+ → Realistic− → Cartoon → PS1 (base)
+Realistic+ → Realistic− → Cartoon (base) ← PS1
 ```
 
-- **Order:** each step goes to the nearest look. Lit styles fall back to lit styles before
-  reaching the unshaded base.
+(Until #849 the chain ended in PS1, the base: Realistic+ → Realistic− → Cartoon → PS1.)
+
+- **Order:** each step goes to the nearest look. The lit styles fall back to lit styles only;
+  PS1, the one unshaded style, borrows Cartoon's lit shaders for what it lacks.
 - **The base style is the only complete one.** Every role, model id and feature exists there. It
-  is PS1 today; if Cartoon becomes the default (phase 5), the chain is reordered and Cartoon
-  becomes the base.
+  was PS1 until phase 5 made Cartoon the default; the chain was then reordered and Cartoon
+  became the base (#849).
 - **Resolution is per item, not per style.** `StyleKit.Material(role)`, the environment pieces,
   `ModelCatalog.Find(id)` and a builder's `MeshDetail` each walk the chain on their own. Realistic−
-  can have its own car models and terrain but still borrow Cartoon's water and PS1's snowfall.
+  can have its own car models and terrain but still borrow Cartoon's water and snowfall.
 - **A fallback must keep working, even if it does not match.** The functional includes
   (portal clipping, door light, occasions) are shared, so a borrowed material is always correct.
   It can still look out of place, for example an unshaded PS1 material in a lit scene. To limit
@@ -355,7 +357,10 @@ allows it (~15–20 ms on the M1 Pro).
 
 ### Phase 5: default style
 
-Decide the default (PS1 or Cartoon) from the phase 2 and 3 results and player feedback.
+**Status (#849):** done. Cartoon is the default for new players (desktop and phone) and the
+base of the fallback chain; PS1 borrows from it. Saved settings that said PS1 from before the
+change (every file stored the style, chosen or not) move to Cartoon once. Not measured: Cartoon's
+frame rate on phones and integrated GPUs.
 
 ## Open questions and risks
 

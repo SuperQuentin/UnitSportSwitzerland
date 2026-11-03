@@ -79,9 +79,16 @@ public partial class WaterSurface : Node
 
     private static void OnSeaState(float _) => WaterField.PushGlobals();
 
+    /// <summary>
+    /// <c>--watertime &lt;s&gt;</c>: the waves drawn at that wave time, still (#1429): reference screenshots
+    /// of a lake otherwise differ between two runs of the same commit. The picture only; what floats
+    /// keeps the real clock.
+    /// </summary>
+    private static readonly double? PinnedTime = Core.CmdArgs.Double("--watertime");
+
     public override void _Process(double delta)
     {
-        WaterField.PushTime(WaterField.Now);
+        WaterField.PushTime(PinnedTime ?? WaterField.Now);
 
         var camera = GetViewport().GetCamera3D();
         bool under = false;

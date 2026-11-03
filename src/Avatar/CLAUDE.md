@@ -10,27 +10,31 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `avatars` — Avatars: (`src/Avatar/`): procedural low-poly figures and a road bike, built from two primitives only — a tapered...
 - `dance-moves` — Dance moves: breakdance floor sets (Posed/Spun/OffTheFloor), section-aware DancePick, new moves and refinements, `--dancesheet` (#728); joint-level spec per style and move, crowd moves (#261), emotes at `EmoteMoves` + catalog index and the #404 moves (YMCA, chicken, cabbage patch, swim, wave, cheer, salute, shrug); `--emotecheck`
 - `riding-position-derived-from-bike` — A riding position is derived from the bike, never eyeballed
-- `model-viewer` — `--models`: every procedural model by category, found by reflection from `[Showcase]` builders (prefer a set over the area's registry); `--models,<dir>` screenshots all, names builders with no entry; `--style` (#760)
+- `model-viewer` — `--models`: every procedural model by category, found by reflection from `[Showcase]` builders (prefer a set over the area's registry); `--models,<dir>` screenshots all, names builders with no entry; `--style` (#760); `--modelsclear` cut-outs (#998)
 - `judge-model-proportions-long-lens` — Judge model proportions with a long lens: The avatar preview's focus camera sits 9 m back at 13° FOV,...
 
 - `car-cabin` — Car cabin (#69): hollow body, glass as panes in a second surface, dash/dials/wheel/pedals/mirrors, the driver's seat derived from the body and the figure posed from it; left-hand drive, automatics, the Prius's centre display and HUD, the `TallHatch`/`Liftback` shapes, rounded Cartoon bodies and cabins (`CarMeshBuilder.Rounded.cs`, hull always from PS1) (#760); `--cockpitcheck`
 - (`VehicleDeck`/`DeckBuilder`, a vehicle's walkable deck built with its model: see the player note `walk-aboard`)
 - `heavy-cabin` — Truck cabs and bus driver's place and saloon (#157): hollow cabs with panes, derived seat and flat wheel (hands' reach at `MaxGrip`), air gauge and gear display, binnacle square to the dials, 2+2 bus seats, seat anchors for passengers
 - `aircraft-cockpit` (player) — `AircraftCockpit` + `CockpitLayout` per airliner, `InstrumentCanvas` atlas, `CockpitInstruments` pure math (tier 0), `HumanMeshBuilder.AppendPilot`; builders keep only the static boxes
+- `skinned-figures` — A moving figure is a `SkinnedFigure` (#1202): its look built once at rest (`HumanMeshBuilder.Skin`), a pose sets bones only (`PoseStride`/`PoseDriver`/…); RS skeleton (mitred joints are not TRS), `Share` for twins and ghosts, `BoundsOf`/`Baked` for what measures meshes, skirt bones per drape point + `skirt_flutter`/`skirt_floor`; `--skincheck`
 - `own-body-from-eye` — First person keeps your third-person figure (on foot, a cockpit's head) on `OwnBody.Layer`: eye cameras cull it, mirrors keep it; a `ShadowsOnly` twin on layer 1 casts the shadow (Godot drops shadows of culled layers); `--ownbodycheck` (#833)
 - `cockpit-kit` — Wheel, column, dials, needles, lamps, pedals and mirrors of cars and heavies come from `CockpitKit` + a per-vehicle `CockpitSpec`; never copy them into a cabin; no static field built from another partial's statics (#221)
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
 - `body-shape` — The figure's body (#394): builds (`Physique`), lofted trunk (`Torso`, spine 0-4) and head (`Head`), limb `Zones`/`LimbBand`, hands, boots, hair and `HairCover`; no allocation per rebuild; `--bodies` pages
 - `procedural-faces` — Pixel faces (#657, was the #394 atlas): `FaceGenome` in the band's UV2 (decode with round), SDF shader, blink in the shader, `FaceState` as instance uniforms via `FaceAnimator`; every figure mesh needs `FigureMaterial`
-- `appearance` — Who a figure is (#394): `Appearance` packed in `FootPlayer.AppearanceBits` from `GameSettings`, chosen in Settings → Character, `Register`/`ForRider` registry for rides, seeds for NPCs and ghosts
+- `appearance` — Who a figure is (#394): `Appearance` packed in `FootPlayer.AppearanceBits` from `GameSettings`, chosen in the Character menu, `Register`/`ForRider` registry for rides, seeds for NPCs and ghosts
+- `aliens` — Aliens (#880): `BodyBuild.Alien`, alien skins 8-11 and faces 16-18 (`EyeShape.Alien`), antennae and the silver suit, `Aliens` presets (Zorp, Zib, Gleeb…) for films, sightings and the odd bot; `--appearance zorp`
 - `clothing` — Clothes (#251): Garments catalog, WearSlot, Outfit bits (OutfitBits), AppendDressed from the rig, draped skirts (HangSkirt + MeshScratch.Drape, #671), finishes in vertex alpha + FigureMaterial/avatar.gdshader; `--outfitcheck`, `--avatars … --outfits`
 
 ## Gotchas
 
-- `perf-pose-mesh-cache` — Never a new ArrayMesh per frame: rebuild in place (`into:`) only when the pose key changes, remote figures 15 Hz far/off-view, cranks/legs/drivers cached by quantised pose (#221)
+- `perf-pose-mesh-cache` — Never a new ArrayMesh per frame (#221); since #1202 figures are skinned (`skinned-figures`): pose keys and the 15 Hz remote throttle remain, the in-place rebuilds are history
 - `perf-shared-materials` — `HumanMeshBuilder.Material()` is one shared instance: never modify it, a variant is its own material (#221)
 - `stopped-figure-slow-walk` — A stopped figure is not a slow walk: `HumanMeshBuilder.Cadence` has a floor — it must, or a figure inching forward...
 - `gait-solved-from-no-slip` — A gait is solved from the no-slip constraint, and the arithmetic has two traps
 - `avatar-meshes-authored-facing-z` — Avatar meshes are authored facing +Z; a Godot node faces −Z
 - `crank-turning-wrong-way-instantly` — A crank turning the wrong way is instantly obvious to anyone who rides
 - `meshscratch-boxes-render-inside-out` — MeshScratch winding, fixed: every face clockwise from outside (Godot front face); `--meshcheck` signed-volume check (#54), smooth primitives too (#311); overlays must stand ~1 cm proud or they z-fight at distance
+- `snow-rig` — Live skier and boarder (#933): `SnowPose` joints from crouch/lean/plough/stride/absorb, two-bone limbs, angulation, the author-space half turn trap, posed (skinned, #1202) only on a new pose key, sent as the ride pose
+- `wall-climb-pose` — Free-climbing figure (#1225): `PoseWallClimb`/`AdvanceWallClimb`, hands and feet on a plane 0.35 m ahead (+Z), diagonal limbs, climb-jump stretch

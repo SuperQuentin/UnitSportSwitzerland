@@ -231,6 +231,8 @@ public partial class ChunkStreamer : Node
                 return;
             }
 
+            // the clock starts now: the deferred call may have waited behind a slow frame
+            lock (_pending) pending.StartedAt = DateTime.UtcNow;
             RpcId(1, MethodName.RequestAsset, requestId, (int)kind, id.E, id.N);
         }).CallDeferred();
 
@@ -307,12 +309,38 @@ public partial class ChunkStreamer : Node
             AssetKind.HttpBase => TilesUrl is { } url ? System.Text.Encoding.UTF8.GetBytes(url) : null,
             _ => ManifestOverride,
         };
-        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(Prepare(peer, requestId, assetKind, path, manifestOverride)));
+        var digestManifest = ManifestOverride;
+        var digestLandings = LandingsOverride;
+        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(assetKind == AssetKind.Digest
+            ? PrepareDigest(peer, requestId, directory, digestManifest, digestLandings)
+            : Prepare(peer, requestId, assetKind, path, manifestOverride)));
     }
 
     private readonly System.Collections.Concurrent.ConcurrentQueue<Prepared> _prepared = new();
 
     private sealed record Prepared(long Peer, uint RequestId, byte[]? Wire, int RawLength, uint Crc, bool Compressed, bool Missing);
+
+    /// <summary>The digest (#1380): hashes of the index as served and of every region file, small and never deflated.</summary>
+    private static Prepared PrepareDigest(long peer, uint requestId, string directory, byte[]? manifestOverride, byte[]? landingsOverride)
+    {
+        try
+        {
+            int before = AssetDigest.Builds;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var built = AssetDigest.BuildCached(directory, manifestOverride, landingsOverride);
+            if (AssetDigest.Builds != before) GD.Print($"[stream] join digest built in {clock.ElapsedMilliseconds} ms");
+            else GD.Print($"[stream] join digest from the cache in {clock.Elapsed.TotalMilliseconds:F1} ms");
+            if (built is not { } digest)
+                return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
+            byte[] payload = digest.ToBytes();
+            return new Prepared(peer, requestId, payload, payload.Length, AssetStream.Crc32(payload), false, false);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] cannot hash {directory}: {e.Message}");
+            return new Prepared(peer, requestId, null, 0, 0, false, Missing: false);
+        }
+    }
 
     private static Prepared Prepare(long peer, uint requestId, AssetKind kind, string path, byte[]? manifestOverride)
     {
@@ -480,14 +508,26 @@ public partial class ChunkStreamer : Node
         }
     }
 
+    /// <summary>Longer than any ordinary frame: a gap past it between two checks is a stall.</summary>
+    private static readonly TimeSpan StallGap = TimeSpan.FromSeconds(1);
+    private DateTime _lastExpiryCheck = DateTime.UtcNow;
+
     private void ExpireClientRequests()
     {
+        // The request clock stops while this client's frames stall (#1032): replies that arrived
+        // meanwhile wait in the queue until the next frame handles them (before this check), so
+        // the stall is not the server's delay. A phone joining stalled for 18 and 65 s and wrote
+        // off its terrain index, for the whole session.
+        var now = DateTime.UtcNow;
+        var gap = now - _lastExpiryCheck;
+        _lastExpiryCheck = now;
         if (_pending.Count == 0) return;
 
         uint[] expired;
         lock (_pending)
         {
-            var now = DateTime.UtcNow;
+            if (gap > StallGap)
+                foreach (var pending in _pending.Values) pending.StartedAt += gap;
             expired = _pending
                 .Where(kv => now - kv.Value.StartedAt > RequestTimeout)
                 .Select(kv => kv.Key)
@@ -525,7 +565,8 @@ public partial class ChunkStreamer : Node
 
         public AssetKind Kind { get; } = kind;
         public TileId Tile { get; } = tile;
-        public DateTime StartedAt { get; } = startedAt;
+        /// <summary>When the request went out (or was queued, until it does); moved on past a stall.</summary>
+        public DateTime StartedAt { get; set; } = startedAt;
 
         public TaskCompletionSource<AssetResult> Completion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);

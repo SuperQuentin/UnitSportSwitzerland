@@ -1,0 +1,345 @@
+{
+  "s03_what": {
+    "en": "WHAT WAS THAT?!",
+    "fr": "C'ÉTAIT QUOI, ÇA ?!",
+    "de": "WAS WAR DAS?!",
+    "it": "COS'ERA QUELLO?!",
+    "rm": "TGE ERA QUAI?!"
+  },
+  "s04_police": {
+    "en": "call the police?",
+    "fr": "on appelle la police ?",
+    "de": "polizei rufen?",
+    "it": "chiamiamo la polizia?",
+    "rm": "clamar la polizia?"
+  },
+  "s04_tv": {
+    "en": "call the TV!",
+    "fr": "appelle la télé !",
+    "de": "ruf das fernsehen!",
+    "it": "chiama la tv!",
+    "rm": "clama la televisiun!"
+  },
+  "s05_blip": {
+    "en": "◉ ◉ ... BLIP?",
+    "fr": "◉ ◉ ... BLIP?",
+    "de": "◉ ◉ ... BLIP?",
+    "it": "◉ ◉ ... BLIP?",
+    "rm": "◉ ◉ ... BLIP?"
+  },
+  "s06_hi": {
+    "en": "...hi?",
+    "fr": "...salut ?",
+    "de": "...hallo?",
+    "it": "...ciao?",
+    "rm": "...allegra?"
+  },
+  "s07_bloop": {
+    "en": "BLOOP ▲✦◆ ☾☾ ↑",
+    "fr": "BLOOP ▲✦◆ ☾☾ ↑",
+    "de": "BLOOP ▲✦◆ ☾☾ ↑",
+    "it": "BLOOP ▲✦◆ ☾☾ ↑",
+    "rm": "BLOOP ▲✦◆ ☾☾ ↑"
+  },
+  "s07_broken": {
+    "en": "it's broken. its mothership comes tomorrow night.",
+    "fr": "c'est cassé. son vaisseau-mère revient demain soir.",
+    "de": "kaputt. sein mutterschiff kommt morgen nacht.",
+    "it": "è rotto. la nave madre torna domani notte.",
+    "rm": "rut. la nav-mamma returna damaun notg."
+  },
+  "s08_alien": {
+    "en": "you speak alien??",
+    "fr": "tu parles extraterrestre ??",
+    "de": "du sprichst alien??",
+    "it": "parli alieno??",
+    "rm": "ti discurras extraterrester??"
+  },
+  "s08_milan": {
+    "en": "i fly to milan a lot",
+    "fr": "je vole souvent à milan",
+    "de": "ich flieg oft nach mailand",
+    "it": "volo spesso a milano",
+    "rm": "jau sgol savens a milaun"
+  },
+  "s09_tour": {
+    "en": "so... want the tour?",
+    "fr": "alors... une petite visite ?",
+    "de": "also... eine tour?",
+    "it": "allora... un giro?",
+    "rm": "pia... ina tura?"
+  },
+  "s09_yes": {
+    "en": "✦✦✦ !!!",
+    "fr": "✦✦✦ !!!",
+    "de": "✦✦✦ !!!",
+    "it": "✦✦✦ !!!",
+    "rm": "✦✦✦ !!!"
+  },
+  "c10_title": {
+    "en": "THE ALIEN TOURIST",
+    "fr": "THE ALIEN TOURIST",
+    "de": "THE ALIEN TOURIST",
+    "it": "THE ALIEN TOURIST",
+    "rm": "THE ALIEN TOURIST"
+  },
+  "c10_title_sub": {
+    "en": "a UnitSport Switzerland film",
+    "fr": "un film UnitSport Switzerland",
+    "de": "ein UnitSport-Switzerland-Film",
+    "it": "un film UnitSport Switzerland",
+    "rm": "in film UnitSport Switzerland"
+  },
+  "s11_no": {
+    "en": "no.",
+    "fr": "non.",
+    "de": "nein.",
+    "it": "no.",
+    "rm": "na."
+  },
+  "s12_no": {
+    "en": "still no.",
+    "fr": "toujours non.",
+    "de": "immer noch nein.",
+    "it": "ancora no.",
+    "rm": "anc adina na."
+  },
+  "s13_perfect": {
+    "en": "perfect. nobody will notice.",
+    "fr": "parfait. personne ne remarquera.",
+    "de": "perfekt. merkt keiner.",
+    "it": "perfetto. nessuno se ne accorgerà.",
+    "rm": "perfect. nagin na vegn a s'accorscher."
+  },
+  "s14_here": {
+    "en": "we're here.",
+    "fr": "on est ici.",
+    "de": "wir sind hier.",
+    "it": "siamo qui.",
+    "rm": "nus essan qua."
+  },
+  "s14_wow": {
+    "en": "◉ ◉ ✦",
+    "fr": "◉ ◉ ✦",
+    "de": "◉ ◉ ✦",
+    "it": "◉ ◉ ✦",
+    "rm": "◉ ◉ ✦"
+  },
+  "s15_shark": {
+    "en": "it bought a shark.",
+    "fr": "il a acheté un requin.",
+    "de": "es hat einen hai gekauft.",
+    "it": "ha comprato uno squalo.",
+    "rm": "el ha cumprà in squagl."
+  },
+  "s16_pedals": {
+    "en": "right pedal go. left pedal STOP.",
+    "fr": "pédale droite : go. gauche : STOP.",
+    "de": "rechts: gas. links: STOPP.",
+    "it": "destra: vai. sinistra: STOP.",
+    "rm": "dretg: gas. sanester: STOP."
+  },
+  "s16_beep": {
+    "en": "BLIP ✓",
+    "fr": "BLIP ✓",
+    "de": "BLIP ✓",
+    "it": "BLIP ✓",
+    "rm": "BLIP ✓"
+  },
+  "s17_again": {
+    "en": "AGAIN!",
+    "fr": "ENCORE !",
+    "de": "NOCHMAL!",
+    "it": "ANCORA!",
+    "rm": "ANC INA GADA!"
+  },
+  "s17_no": {
+    "en": "no.",
+    "fr": "non.",
+    "de": "nein.",
+    "it": "no.",
+    "rm": "na."
+  },
+  "s18_pedal": {
+    "en": "pedal!! PEDAL!",
+    "fr": "pédale !! PÉDALE !",
+    "de": "tritt!! TRETEN!",
+    "it": "pedala!! PEDALA!",
+    "rm": "pedalescha!! PEDALESCHA!"
+  },
+  "s20_pick": {
+    "en": "74 bikes. pick one.",
+    "fr": "74 motos. choisis-en une.",
+    "de": "74 töffs. such dir einen aus.",
+    "it": "74 moto. scegline una.",
+    "rm": "74 motos. tscherna ina."
+  },
+  "s20_all": {
+    "en": "ALL ✦",
+    "fr": "TOUTES ✦",
+    "de": "ALLE ✦",
+    "it": "TUTTE ✦",
+    "rm": "TUTTAS ✦"
+  },
+  "s24_luck": {
+    "en": "beginner's luck.",
+    "fr": "la chance du débutant.",
+    "de": "anfängerglück.",
+    "it": "fortuna del principiante.",
+    "rm": "fortuna da l'emprendist."
+  },
+  "s25_song": {
+    "en": "♪ ♪ ♪",
+    "fr": "♪ ♪ ♪",
+    "de": "♪ ♪ ♪",
+    "it": "♪ ♪ ♪",
+    "rm": "♪ ♪ ♪"
+  },
+  "s26_natural": {
+    "en": "it's a natural.",
+    "fr": "c'est un don.",
+    "de": "ein naturtalent.",
+    "it": "è un talento naturale.",
+    "rm": "in talent natiral."
+  },
+  "s28_home": {
+    "en": "☾ ... ◯ ♥",
+    "fr": "☾ ... ◯ ♥",
+    "de": "☾ ... ◯ ♥",
+    "it": "☾ ... ◯ ♥",
+    "rm": "☾ ... ◯ ♥"
+  },
+  "s28_homesick": {
+    "en": "homesick?",
+    "fr": "le mal du pays ?",
+    "de": "heimweh?",
+    "it": "nostalgia di casa?",
+    "rm": "increschadetgna?"
+  },
+  "s29_matterhorn": {
+    "en": "◉ ◉ ✦ !!!",
+    "fr": "◉ ◉ ✦ !!!",
+    "de": "◉ ◉ ✦ !!!",
+    "it": "◉ ◉ ✦ !!!",
+    "rm": "◉ ◉ ✦ !!!"
+  },
+  "s30_br": {
+    "en": "last stop: battle royale.",
+    "fr": "dernier arrêt : battle royale.",
+    "de": "letzte station: battle royale.",
+    "it": "ultima fermata: battle royale.",
+    "rm": "ultima fermada: battle royale."
+  },
+  "s34_shiny": {
+    "en": "SHINY ✦",
+    "fr": "BRILLANT ✦",
+    "de": "GLÄNZT ✦",
+    "it": "LUCCICA ✦",
+    "rm": "TARLISCHA ✦"
+  },
+  "s36_zone": {
+    "en": "the zone! RUN!",
+    "fr": "la zone ! COURS !",
+    "de": "die zone! RENN!",
+    "it": "la zona! CORRI!",
+    "rm": "la zona! CURRA!"
+  },
+  "s38_won": {
+    "en": "its first game. it WON.",
+    "fr": "sa première partie. il a GAGNÉ.",
+    "de": "erstes spiel. und GEWONNEN.",
+    "it": "prima partita. ha VINTO.",
+    "rm": "l'emprima partida. el ha GUDAGNÀ."
+  },
+  "s40_radio": {
+    "en": "♪ BLIP ♪ BLOOP ♪",
+    "fr": "♪ BLIP ♪ BLOOP ♪",
+    "de": "♪ BLIP ♪ BLOOP ♪",
+    "it": "♪ BLIP ♪ BLOOP ♪",
+    "rm": "♪ BLIP ♪ BLOOP ♪"
+  },
+  "s41_who": {
+    "en": "WHO TAUGHT IT THAT?!",
+    "fr": "QUI LUI A APPRIS ÇA ?!",
+    "de": "WER HAT IHM DAS BEIGEBRACHT?!",
+    "it": "CHI GLIEL'HA INSEGNATO?!",
+    "rm": "TGI CH'AL HA MUSSÀ QUAI?!"
+  },
+  "s44_slow": {
+    "en": "too slow ◇",
+    "fr": "trop lent ◇",
+    "de": "zu langsam ◇",
+    "it": "troppo lento ◇",
+    "rm": "memia plaun ◇"
+  },
+  "s47_dad": {
+    "en": "dad will love this.",
+    "fr": "papa va adorer.",
+    "de": "papa wird das lieben.",
+    "it": "a papà piacerà un sacco.",
+    "rm": "il bab vegn ad avair plaschair."
+  },
+  "s50_party": {
+    "en": "♪ ✦ ♪ ✦ ♪",
+    "fr": "♪ ✦ ♪ ✦ ♪",
+    "de": "♪ ✦ ♪ ✦ ♪",
+    "it": "♪ ✦ ♪ ✦ ♪",
+    "rm": "♪ ✦ ♪ ✦ ♪"
+  },
+  "s51_more": {
+    "en": "MORE HOLIDAYS ✦",
+    "fr": "ENCORE DES FÊTES ✦",
+    "de": "MEHR FEIERTAGE ✦",
+    "it": "ALTRE FESTE ✦",
+    "rm": "DAPLI FESTAS ✦"
+  },
+  "s53_filmed": {
+    "en": "we filmed everything.",
+    "fr": "on a tout filmé.",
+    "de": "wir haben alles gefilmt.",
+    "it": "abbiamo filmato tutto.",
+    "rm": "nus avain filmà tut."
+  },
+  "s54_ride": {
+    "en": "your ride.",
+    "fr": "ton taxi.",
+    "de": "dein taxi.",
+    "it": "il tuo passaggio.",
+    "rm": "tes taxi."
+  },
+  "s55_thanks": {
+    "en": "merci. danke. grazie. grazia. ✦",
+    "fr": "merci. danke. grazie. grazia. ✦",
+    "de": "merci. danke. grazie. grazia. ✦",
+    "it": "merci. danke. grazie. grazia. ✦",
+    "rm": "merci. danke. grazie. grazia. ✦"
+  },
+  "s57_car": {
+    "en": "HEY! MY CAR!",
+    "fr": "HÉ ! MA VOITURE !",
+    "de": "HEY! MEIN AUTO!",
+    "it": "EHI! LA MIA MACCHINA!",
+    "rm": "HE! MES AUTO!"
+  },
+  "c59_title": {
+    "en": "UNITSPORT SWITZERLAND",
+    "fr": "UNITSPORT SWITZERLAND",
+    "de": "UNITSPORT SWITZERLAND",
+    "it": "UNITSPORT SWITZERLAND",
+    "rm": "UNITSPORT SWITZERLAND"
+  },
+  "c59_end_sub": {
+    "en": "The Alien Tourist",
+    "fr": "Le touriste extraterrestre",
+    "de": "Der Alien-Tourist",
+    "it": "Il turista alieno",
+    "rm": "Il turist extraterrester"
+  },
+  "mighty-like-us-kevin-macleod-incompetech-com": {
+    "en": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "fr": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "de": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "it": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "rm": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0"
+  }
+}

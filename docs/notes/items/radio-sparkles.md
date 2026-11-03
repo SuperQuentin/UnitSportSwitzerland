@@ -10,7 +10,7 @@
 - **Why so cheap**: no `GPUParticles3D` (compute pass + buffers per emitter) or `CPUParticles3D`
   (simulation per frame). `RadioSparkles` (a `MeshInstance3D`) shares one static mesh of 40 quads
   and one `ShaderMaterial` across every radio; `shaders/radio_sparkles.gdshader` derives each glint
-  from `TIME` and two per-quad hashes (UV2), the `ps1_snowfall` approach, in the radio's local space
+  from `TIME` and two per-quad hashes (UV2), the `snowfall` shader's approach, in the radio's local space
   (so the floating origin does not matter). Per radio: one additive draw call, `Visible = false`
   while silent, `VisibilityRangeEnd` 40 m, a `CustomAabb` because the shader moves the vertices.
   Per frame: `on` / `pulse` / `beat` instance uniforms through static `StringName`s, each only when

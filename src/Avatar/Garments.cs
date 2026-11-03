@@ -63,13 +63,26 @@ public enum GarmentShape
     ArmWarmers, StripedWarmers, Fingerless, Paws, Gloves,
     // #822: a building site's workwear (head, top)
     HardHat, HiVisVest,
+    // #880: the aliens' (head, head, top: one piece to the ankles)
+    Antennae, LongAntennae, SpaceSuit,
+    // #1227: the Alpine set's (head, neck)
+    FeltHat, Bandana,
 }
 
 /// <summary>The pixel face printed on a <see cref="GarmentShape.Mask"/>.</summary>
 public enum MaskFace { Plain, Uwu, SwirlA, SwirlW, Fang, Tongue, Skull, CatMouth }
 
 /// <summary>Which look a garment belongs to, for the blurb and the loot pools.</summary>
-public enum GarmentStyle { Basic, Gothic, Kawaii, Special, Workwear }
+public enum GarmentStyle
+{
+    Basic, Gothic, Kawaii, Special, Workwear,
+    /// <summary>#880: from another world (antennae, a silver suit): uncommon in a wardrobe, worn by the films' aliens (<see cref="Aliens"/>).</summary>
+    Alien,
+    /// <summary>#1227: the Alpine set, from the Adventure's chests only, never a wardrobe's or a workbench's.</summary>
+    Alpine,
+    /// <summary>#1266: earned playing together only (a mentor's milestone, the tenth punch card), never in a pool, a chest or a workbench.</summary>
+    Together,
+}
 
 /// <summary>
 /// One wearable look: the item it is, where it goes, how it is drawn and in which colours.
@@ -81,7 +94,10 @@ public sealed record Garment(
     Color A, Color B, Color C, Finish Finish = Finish.None, MaskFace Face = MaskFace.Plain)
 {
     /// <summary>A robe or dress: one piece from shoulders to hem, so nothing goes in the bottom slot with it.</summary>
-    public bool CoversBottom => Shape is GarmentShape.Robe or GarmentShape.Dress;
+    public bool CoversBottom => Shape is GarmentShape.Robe or GarmentShape.Dress or GarmentShape.SpaceSuit;
+
+    /// <summary>A robe or dress: its lower half is draped cloth that blows in the wind (a suit's legs are not).</summary>
+    public bool Draped => Shape is GarmentShape.Robe or GarmentShape.Dress;
 
     /// <summary>A rare one with a shader finish (patterns like tartan are not).</summary>
     public bool IsSpecial => Style == GarmentStyle.Special;
@@ -225,6 +241,7 @@ public static class Garments
         new(ItemId.Jeans, "Jeans", WearSlot.Bottom, 8, GarmentShape.Pants, GarmentStyle.Basic, new("3a5a8a"), new("c8a060"), new("2e4a72")),
         new(ItemId.CargoPants, "Black cargo pants", WearSlot.Bottom, 9, GarmentShape.Cargo, GarmentStyle.Gothic, Charcoal, new("2a2a30"), Silver),
         new(ItemId.HoloSkirt, "Holo skirt", WearSlot.Bottom, 10, GarmentShape.PleatedSkirt, GarmentStyle.Special, White, White, White, Finish.Holo),
+        new(ItemId.Schwingerhosen, "Schwingerhosen", WearSlot.Bottom, 13, GarmentShape.Pants, GarmentStyle.Alpine, new("b89a68"), new("8a6e48"), new("a88a5a")),
         new(ItemId.TazTrousers, "TAZ 90 trousers", WearSlot.Bottom, 11, GarmentShape.Cargo, GarmentStyle.Basic, TazGreen, new("3a4428"), new("1f2418"), Finish.Camo),
 
         // ---- legs ----
@@ -258,6 +275,46 @@ public static class Garments
         new(ItemId.HardHat, "Hard hat", WearSlot.Head, 12, GarmentShape.HardHat, GarmentStyle.Workwear, new("f2c21a"), new("3a3a3e"), new("d8a810")),
         // the fluorescent yellow vest, its silver reflective bands, over a grey work T-shirt
         new(ItemId.HiVisVest, "Hi-vis vest", WearSlot.Top, 25, GarmentShape.HiVisVest, GarmentStyle.Workwear, new("d6f01e"), new("c8ccd2"), new("6a6e74")),
+
+        // ---- #880: the aliens' (Aliens). Antennae: the stalks, the headband, the glowing bobbles (neon) ----
+        new(ItemId.AlienAntennae, "Alien antennae", WearSlot.Head, 13, GarmentShape.Antennae, GarmentStyle.Alien, new("7ed957"), new("4a8a34"), new("e8ff5a")),
+        new(ItemId.SilverAntennae, "Silver antennae", WearSlot.Head, 14, GarmentShape.Antennae, GarmentStyle.Alien, Silver, new("6a6e78"), new("ff5ad0")),
+        new(ItemId.LongAntennae, "Tall antennae", WearSlot.Head, 15, GarmentShape.LongAntennae, GarmentStyle.Alien, new("b48cf0"), new("5a3a8a"), new("5af0ff")),
+        // the suit, its collar, belt and cuffs, the badge on the chest (neon)
+        new(ItemId.SilverSuit, "Silver space suit", WearSlot.Top, 26, GarmentShape.SpaceSuit, GarmentStyle.Alien, new("a9bcd6"), new("34426a"), new("5af0ff")),
+
+        // ---- #1227: the Alpine set, the Adventure chests' cosmetics (Adventure/Rewards/ChestLoot.Cosmetics) ----
+        // the herdsman's little black cap and its red band; a blue-and-white checked edelweiss shirt
+        new(ItemId.Sennenkaeppi, "Sennenkäppi", WearSlot.Head, 16, GarmentShape.Beanie, GarmentStyle.Alpine, new("1c1a1a"), new("b8202a"), new("f2efe6")),
+        new(ItemId.EdelweissShirt, "Edelweiss shirt", WearSlot.Top, 27, GarmentShape.Polo, GarmentStyle.Alpine, new("2f5f9e"), new("f4f2ea"), new("2f5f9e"), Finish.Checker),
+        // the mountain guide's green felt hat (crown, brim, band, the edelweiss pin) and his corduroy breeches
+        new(ItemId.GuideHat, "Mountain guide's hat", WearSlot.Head, 17, GarmentShape.FeltHat, GarmentStyle.Alpine, new("3e5a34"), new("2a2018"), new("f4f2ea")),
+        new(ItemId.GuideBreeches, "Bergführer breeches", WearSlot.Bottom, 12, GarmentShape.Pants, GarmentStyle.Alpine, new("6a4a2e"), new("4a3420"), new("6a4a2e")),
+        // a red bandana with its white cross; red and white knee socks and wool gloves
+        new(ItemId.CrossBandana, "Swiss-cross bandana", WearSlot.Neck, 5, GarmentShape.Bandana, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("a01820")),
+        new(ItemId.AlpineSocks, "Alpine knee socks", WearSlot.Legs, 8, GarmentShape.KneeSock, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("c8202a")),
+        new(ItemId.AlpineGloves, "Alpine wool gloves", WearSlot.Hands, 6, GarmentShape.Gloves, GarmentStyle.Alpine, new("c8202a"), new("f4f2ea"), new("c8202a")),
+
+        // ---- #1268: Versteckis, earned by playing (Adventure/Versteckis/VersteckisRewards) ----
+        // the gnome's red Zipfelmütze (10 games); the Treichel, a big cowbell on its embroidered strap (30 rounds survived)
+        new(ItemId.Zipfelmuetze, "Zipfelmütze", WearSlot.Head, 18, GarmentShape.Beanie, GarmentStyle.Alpine, new("c8202a"), new("a01820"), new("f2efe6")),
+        new(ItemId.Treichel, "Treichel", WearSlot.Neck, 6, GarmentShape.BellCollar, GarmentStyle.Alpine, new("3a2418"), new("c99a3a"), new("c8202a")),
+        // ---- #1266: playing together (Adventure/Together/MentorRules, TogetherProgress), earned only ----
+        // a mentored newcomer's: the first summit's cap, the glacier's scarf, the first ride's gloves, the first build's cap
+        new(ItemId.ErstbesteigungCap, "Erstbesteigung cap", WearSlot.Head, 40, GarmentShape.Beanie, GarmentStyle.Together, new("2e6b3a"), new("f4f2ea"), new("c8202a")),
+        new(ItemId.GletscherScarf, "Gletscher scarf", WearSlot.Neck, 40, GarmentShape.Bandana, GarmentStyle.Together, new("8ec8e8"), new("f4f8fc"), new("4a8ab8")),
+        new(ItemId.MitfahrerGloves, "Mitfahrer gloves", WearSlot.Hands, 40, GarmentShape.Gloves, GarmentStyle.Together, new("3a3a3e"), new("e8a020"), new("3a3a3e")),
+        new(ItemId.ZimmermannCap, "Zimmermann hat", WearSlot.Head, 41, GarmentShape.FeltHat, GarmentStyle.Together, new("1c1a1a"), new("3a3028"), new("d8b060")),
+        // the mentor's own for each: the guide's cap, the rope team's scarf, the driving teacher's gloves, the foreman's hat
+        new(ItemId.BergfuehrerCap, "Bergführer cap", WearSlot.Head, 42, GarmentShape.Beanie, GarmentStyle.Together, new("c8202a"), new("f4f2ea"), new("1c1a1a")),
+        new(ItemId.SeilschaftScarf, "Seilschaft scarf", WearSlot.Neck, 41, GarmentShape.Bandana, GarmentStyle.Together, new("dc4a1c"), new("f2c21a"), new("a8320e")),
+        new(ItemId.FahrlehrerGloves, "Fahrlehrer gloves", WearSlot.Hands, 41, GarmentShape.Gloves, GarmentStyle.Together, new("8a5a30"), new("f4f2ea"), new("6a4224")),
+        new(ItemId.PolierHat, "Polier hat", WearSlot.Head, 43, GarmentShape.FeltHat, GarmentStyle.Together, new("f4f2ea"), new("2a2018"), new("c8202a")),
+        // the tenth punch card's: the regular's felt hat with its little Swiss-cross pin
+        new(ItemId.StammgastHat, "Stammgast felt hat", WearSlot.Head, 44, GarmentShape.FeltHat, GarmentStyle.Together, new("6a2a2a"), new("1c1a1a"), new("f4f2ea")),
+        // the hire shoes a bowling centre's counter lends (#1323): two-tone, red and cream with a blue heel; last,
+        // as every new row: a row's place picks its wearer in the model viewer (and the z-fight baseline)
+        new(ItemId.BowlingShoes, "Bowling shoes", WearSlot.Feet, 7, GarmentShape.Sneakers, GarmentStyle.Basic, new("b8202a"), new("efe6d2"), new("2a3c8c")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

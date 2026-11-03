@@ -9,11 +9,14 @@ namespace UnitSport.Terrain.Format;
 /// </summary>
 public static class ChunkCodec
 {
-    public static void Encode(ChunkGrid grid, Stream output)
+    public static void Encode(ChunkGrid grid, Stream output) => Encode(grid, output, ChunkFormat.Current);
+
+    /// <summary>Writes the tile stamped with <paramref name="encoding"/>'s version; the heights must already be quantized with it.</summary>
+    public static void Encode(ChunkGrid grid, Stream output, HeightEncoding encoding)
     {
         Span<byte> header = stackalloc byte[ChunkFormat.HeaderSize];
         // u16 grid size then u16 stride: the tile header's u32 count word, read little-endian
-        new TileHeader(ChunkFormat.Magic, ChunkFormat.Version, 0, grid.Id,
+        new TileHeader(ChunkFormat.Magic, encoding.Version, 0, grid.Id,
             ChunkFormat.GridSize | (uint)(ushort)grid.Stride << 16).Write(header);
         BinaryPrimitives.WriteSingleLittleEndian(header[20..], grid.MinHeight);
         BinaryPrimitives.WriteSingleLittleEndian(header[24..], grid.MaxHeight);
@@ -35,7 +38,16 @@ public static class ChunkCodec
         }
     }
 
+    /// <summary>Reads a version 2 or 3 tile; the process-wide encoding follows the first one (see <see cref="ChunkFormat.Adopt"/>).</summary>
     public static ChunkGrid Decode(Stream input)
+    {
+        var grid = Decode(input, out var encoding);
+        ChunkFormat.Adopt(encoding);
+        return grid;
+    }
+
+    /// <summary>Reads a tile of either version without touching the process-wide choice; says which one it was.</summary>
+    public static ChunkGrid Decode(Stream input, out HeightEncoding encoding)
     {
         Span<byte> bytes = stackalloc byte[ChunkFormat.HeaderSize];
         input.ReadExactly(bytes);
@@ -43,7 +55,9 @@ public static class ChunkCodec
         var tile = header.Tile;
 
         tile.CheckMagic(ChunkFormat.Magic, "chunk");
-        tile.CheckVersion(ChunkFormat.Version, "chunk");
+        encoding = tile.Version is ChunkFormat.LegacyVersion or ChunkFormat.WideVersion
+            ? HeightEncoding.ForVersion(tile.Version)
+            : throw new InvalidDataException($"Unsupported chunk version {tile.Version}");
         if (tile.Flags != 0)
             throw new InvalidDataException($"Unsupported chunk flags 0x{tile.Flags:X4}");
         if (header.GridSize != ChunkFormat.GridSize)

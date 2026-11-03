@@ -11,7 +11,7 @@ public enum IconShape { Box, Can, Bottle, Pouch, Scrap, Tool }
 /// (<see cref="Generic"/>: category silhouette + tint + a 3x5 pixel glyph). See
 /// <c>docs/notes/items/pixel-icons.md</c>.
 /// </summary>
-public static class ItemIcons
+public static partial class ItemIcons
 {
     public const int Size = 16;
 
@@ -452,6 +452,27 @@ public static class ItemIcons
             ".kGGGkkkkkkGGGk.",
             ".kGGGGGGGGGGGGk.",
             ".kkkkkkkkkkkkkk.",
+        };
+
+        // the telescope (#1440): a white refractor up to the right, its dew shield dark, on a tripod
+        d[ItemId.Telescope] = new[]
+        {
+            "...........kkk..",
+            "..........kdddk.",
+            ".........kwwddk.",
+            "........kwwwak..",
+            ".......kwwwak...",
+            "......kwwwak....",
+            ".....kwwwak.....",
+            "....kyawak......",
+            "...kkwak........",
+            "..kdkkg.........",
+            "..kk.kgk........",
+            "....kgkgk.......",
+            "...kg.kg.gk.....",
+            "..kg..kg..gk....",
+            ".kg...kg...gk...",
+            ".k....kk....k...",
         };
 
         d[ItemId.Gps] = new[]
@@ -995,6 +1016,97 @@ public static class ItemIcons
             "....kkkkkkkk....",
         };
 
+        d[ItemId.GluehweinMug] = d[ItemId.Gluehwein];
+
+        d[ItemId.MarmiteChocolate] = Round(p =>
+        {
+            p.Rect(3, 5, 12, 11, 'R');
+            p.Rect(4, 6, 11, 10, 'O');
+            p.Rect(5, 7, 7, 8, 'Y');
+            p.Rect(9, 9, 10, 9, 'R');
+        });
+
+        d[ItemId.SoupeEscalade] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 6f, 3.2f, 'w', 'w', 'a');
+            p.Disc(7.5f, 8.5f, 4.8f, 1.8f, 'y', 'o', 'O');
+            p.Set(5, 8, 'r'); p.Set(9, 9, 'N'); p.Set(8, 7, 'l');
+        });
+
+        d[ItemId.Zwiebelzopf] = Round(p =>
+        {
+            p.Rect(7, 1, 8, 15, 'N');
+            p.Disc(5.5f, 11f, 2.6f, 2.8f, 'y', 'o', 'O');
+            p.Disc(10f, 8f, 2.6f, 2.8f, 'y', 'o', 'O');
+            p.Disc(5.5f, 5.5f, 2.4f, 2.6f, 'y', 'o', 'O');
+        });
+
+        d[ItemId.Zibelechueche] = Round(p =>
+        {
+            p.Disc(7.5f, 9f, 6.4f, 4.4f, 'O', 'o', 'N');
+            p.Disc(7.5f, 8.5f, 5.2f, 3.2f, 'Y', 'y', 'o');
+            p.Set(5, 8, 'N'); p.Set(9, 9, 'N');
+        });
+
+        d[ItemId.Mehlsuppe] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 6f, 3.2f, 'w', 'w', 'a');
+            p.Disc(7.5f, 8.5f, 4.8f, 1.8f, 'O', 'o', 'N');
+        });
+
+        d[ItemId.Konfettiei] = Round(p =>
+        {
+            p.Disc(7.5f, 8.5f, 4.4f, 5.6f, 'w', 'Y', 'O');
+            p.Set(6, 7, 'R'); p.Set(9, 9, 'b'); p.Set(7, 11, 'G'); p.Set(10, 6, 'R');
+        });
+
+        d[ItemId.BooggCervelat] = Round(p =>
+        {
+            p.Rect(2, 7, 13, 11, 'R');
+            p.Rect(3, 8, 12, 10, 'O');
+            p.Set(5, 8, 'N'); p.Set(8, 9, 'N'); p.Set(11, 8, 'N');
+            p.Rect(13, 6, 15, 6, 'a');
+        });
+
+        d[ItemId.JazzPass] = Round(p =>
+        {
+            p.Disc(7.5f, 8f, 6.2f, 5.2f, 'Y', 'o', 'N');
+            p.Disc(7.5f, 8f, 3.4f, 2.6f, 'n', 'n', 'n');
+            p.Rect(2, 7, 13, 8, 'b');
+        });
+
+        d[ItemId.ChalandaTreichel] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 5.4f, 4.6f, 'y', 'o', 'O');
+            p.Rect(7, 3, 8, 6, 'N');
+            p.Rect(5, 3, 10, 3, 'R');
+        });
+
+        d[ItemId.Lampion] = Round(p =>
+        {
+            p.Rect(7, 1, 8, 15, 'N');
+            p.Rect(5, 1, 10, 1, 'N');
+            p.Disc(7.5f, 7f, 3.8f, 4.4f, 'q', 'r', 'R');
+            p.Rect(6, 5, 9, 9, 'Y');
+            p.Set(7, 13, 'k'); p.Set(8, 13, 'k');
+        });
+
+        d[ItemId.FireworkBox] = Round(p =>
+        {
+            p.Rect(2, 6, 13, 13, 'R');
+            p.Rect(2, 6, 13, 7, 'w');
+            p.Rect(5, 9, 10, 11, 'Y');
+            p.Rect(4, 2, 4, 5, 'w'); p.Set(4, 1, 'Y'); p.Set(3, 0, 'O');
+        });
+
+        d[ItemId.ChristmasBauble] = Round(p =>
+        {
+            p.Disc(7.5f, 9f, 5.2f, 4.8f, 'q', 'r', 'R');
+            p.Set(5, 7, 'w'); p.Set(6, 6, 'w');
+            p.Rect(6, 3, 9, 4, 'Y');
+            p.Set(7, 2, 'k'); p.Set(8, 2, 'k'); p.Set(7, 1, 'k'); p.Set(8, 1, 'k');
+        });
+
         d[ItemId.WitchHat] = new[]
         {
             ".......kk.......",
@@ -1109,6 +1221,27 @@ public static class ItemIcons
             ".kkk.kkk........",
         };
 
+        // the sword (#1371): a long blade up to the right, a gold guard, a leather grip
+        d[ItemId.Sword] = new[]
+        {
+            "..............kk",
+            ".............kwk",
+            "............kwak",
+            "...........kwak.",
+            "..........kwak..",
+            ".........kwak...",
+            "........kwak....",
+            "..k....kwak.....",
+            "..kYk.kwak......",
+            "...kYkwak.......",
+            "....kYYk........",
+            "...kNkYYk.......",
+            "..kNnk.kYk......",
+            "..kNk....k......",
+            "...k............",
+            "................",
+        };
+
         d[ItemId.Knife] = new[]
         {
             "................",
@@ -1145,6 +1278,67 @@ public static class ItemIcons
             ".kNnk...........",
             ".knk............",
             "..k.............",
+            "................",
+            "................",
+        };
+
+        // the travelcards (#1226): the red SwissPass card, "GA" or "1/2" in white
+        d[ItemId.GaCard] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".kkkkkkkkkkkkkk.",
+            ".kqrrrrrrrrrrrk.",
+            ".krwwwrrrwwrrRk.",
+            ".krwrrrrwrrwrRk.",
+            ".krwrwwrwwwwrRk.",
+            ".krwrrwrwrrwrRk.",
+            ".krwwwwrwrrwrRk.",
+            ".krrrrrrrrrrrRk.",
+            ".krwwwwwwrrrrRk.",
+            ".kRRRRRRRRRRRRk.",
+            ".kkkkkkkkkkkkkk.",
+            "................",
+            "................",
+        };
+        d[ItemId.HalfFare] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".kkkkkkkkkkkkkk.",
+            ".kqrrrrrrrrrrrk.",
+            ".krrwrrrrrwrrRk.",
+            ".krwwrrrrwrrrRk.",
+            ".krrwrrrwrwwrRk.",
+            ".krrwrrwrrrwrRk.",
+            ".krwwwwrrrwrrRk.",
+            ".krrrrrrrwwwrRk.",
+            ".krwwwwwwrrrrRk.",
+            ".kRRRRRRRRRRRRk.",
+            ".kkkkkkkkkkkkkk.",
+            "................",
+            "................",
+        };
+
+        // the traffic tool (#971): a traffic cone, orange with a white band
+        d[ItemId.TrafficTool] = new[]
+        {
+            "................",
+            ".......kk.......",
+            "......koOk......",
+            "......koOk......",
+            ".....koooOk.....",
+            ".....kwwwak.....",
+            ".....kwwwak.....",
+            "....kooooOOk....",
+            "....kooooOOk....",
+            "...koooooOOOk...",
+            "...koooooOOOk...",
+            "..kkkkkkkkkkkk..",
+            ".kdddddddddddGk.",
+            ".kkkkkkkkkkkkkk.",
             "................",
             "................",
         };
@@ -1937,6 +2131,8 @@ public static class ItemIcons
             p.Disc(7.5f, 7f, 6f, 1.6f, 'o', 'o', 'O');
             p.Set(5, 6, 'e'); p.Set(9, 7, 'e'); p.Set(7, 6, 'y'); p.Set(11, 6, 'y');
         });
+
+        AddErrandIcons(d);   // #1267
 
         d[ItemId.Raclette] = new[]
         {

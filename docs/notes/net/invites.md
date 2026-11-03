@@ -25,6 +25,8 @@
 - **Client**: `InviteService.Client` keeps `Incoming` and `Sent` (`InviteView`: id, kind, peer and name,
   title, detail, `Until` on `GameClock`), raises `Changed` and `Arrived`; `Accept(id)`, `Decline(id)`,
   `Withdraw(id)` go to the server by RPC. `From(peer, kind)` is what the fight prompt reads.
+  `Resolved(kind, name, outcome)` (accepted, declined, lapsed) tells the sender of a direct invite how it ended
+  (protocol 55, #1253): the phone's Contacts result line.
 - **Bots** are never offered one (a negative id in `RpcId` means "every peer but that one"); they join
   activities through each activity's own server method.
 
@@ -38,6 +40,7 @@
 | `tphere` | `/tphere <player>` | that player | the accepter goes to the sender |
 | `party` | `/party invite <player>` (the leader, or anyone with no party) | that player | `PartyBook.Join` |
 | `fight` | E at a player, `/fight <player>` (mutual) | that player | `FightManager.Begin` after the range and on-foot checks |
+| `aura` | `/aura <player>`, Activities (mutual, #907) | that player | `AuraManager.Begin` after the range, on-foot and not-in-a-fight checks |
 | `race` | `/race duel <player>`, once the course is built (key = race id) | that player | `RaceManager.Join`; a decline ends the duel |
 | `race` | `/race start`, once open | everyone | `RaceManager.Join` |
 

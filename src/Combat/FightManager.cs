@@ -34,6 +34,15 @@ public partial class FightManager : Node
     private Node3D? _players;
     private double _clock;
 
+    /// <summary>Server: the aura battles (#907), so nobody is in a fight and a battle at once.</summary>
+    public AuraManager? Aura { get; set; }
+
+    /// <summary>Server: the Schwingen bouts (#1269), so nobody is in a fight and a bout at once.</summary>
+    public SchwingManager? Schwing { get; set; }
+
+    /// <summary>Server: whether <paramref name="peer"/> is in a fight.</summary>
+    public bool InMatch(long peer) => _fightOf.ContainsKey(peer);
+
     // ---- server --------------------------------------------------------------------------
 
     private sealed class Match
@@ -164,6 +173,8 @@ public partial class FightManager : Node
     /// <summary>Why these two cannot fight now, or null: both on foot, up, and close.</summary>
     private string? Refusal(long a, long b)
     {
+        if (Aura?.InMatch(a) == true || Aura?.InMatch(b) == true) return "[fight] Not during an aura battle.";
+        if (Schwing?.InMatch(a) == true || Schwing?.InMatch(b) == true) return "[fight] Not during a Schwingen bout.";
         var pa = Body(a);
         var pb = Body(b);
         if (pa == null || pb == null) return "[fight] That player is not here.";
@@ -180,7 +191,7 @@ public partial class FightManager : Node
         var gb = Body(b)!.Global;
         double de = gb.E - ga.E, dn = gb.N - ga.N;
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = de * de + dn * dn < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
         var match = new Match
         {
             Id = _nextId++,

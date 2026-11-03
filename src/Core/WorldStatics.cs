@@ -24,17 +24,27 @@ public static class WorldStatics
         Audio.Surfaces.Origin = null;
         Audio.Surfaces.Forget();
         Occasions.OccasionTowns.UseGenerated(null);
+        WorldChoice.Active = null;   // back to the open world for the title (#999)
+        Terrain.Fixture.FixtureChunkSource.ForgetWorld();   // a course's venues, stadium and fleet (#1396)
+        World.Fun.FunWorld.Leave();
 
         Items.ItemEvents.ResetEvents();
+        Combat.SwordService.ResetEvents();
         Items.PhotoTransfer.ResetEvents();
         Items.RadioManager.ResetEvents();
         Items.DroppedItems.ResetEvents();
         Audio.Hearing.Ground = null;
         Net.PlayerInfo.ResetEvents();
         Occasions.OccasionTowns.ResetEvents();
+        Occasions.Festivals.FestivalOccasion.ResetSites();
         Vehicles.Explosion.ResetEvents();
         Vehicles.PassengerService.ResetEvents();
         Vehicles.VehicleManager.ResetEvents();
         Vehicles.DormantLooks.Reset();
+        Adventure.Places.PoiCatalogueHost.Reset();
+        Adventure.Places.FogTexture.Reset();
+        Adventure.Places.AtlasFactsStore.Reset();
+        Adventure.Places.AdventureMap.Me = null;
+        Adventure.Places.AdventureMap.PlaceSearch = null;
     }
 }

@@ -3,7 +3,12 @@ namespace UnitSport.Avatar.Face;
 // Plain C#, no Godot: linked into the unit tests (tests/UnitSportSwitzerland.Tests).
 
 /// <summary>The eye's outline (<c>shaders/body/face.gdshaderinc</c>, <c>FACE_EYES</c>).</summary>
-public enum EyeShape { Round, Almond, Droopy, Sharp, Button, Anime, Sleepy, Wide }
+public enum EyeShape
+{
+    Round, Almond, Droopy, Sharp, Button, Anime, Sleepy, Wide,
+    /// <summary>#880: an alien's big dark almond, slanting up to the temples, all pupil, two shines. Its 4th bit is the high half's bit 16.</summary>
+    Alien,
+}
 
 /// <summary>The brows: none, a thin arch, straight, or angled down to the nose.</summary>
 public enum BrowShape { None, Arch, Straight, Angled }
@@ -55,7 +60,7 @@ public readonly record struct FaceGenome(
     /// The two halves of the face, each below 2^24. Low: eyes 0-2, eye size 3-4, spacing 5-6,
     /// height 7-8, iris 9-10, lashes 11, shine 12, brow 13-14, thick brow 15, mouth 16-18, mouth
     /// width 19-20, nose 21-22, blush 23. High: freckles 0, stubble 1, grid 2-3, seed 4-11, brow
-    /// height 12-13, mouth height 14-15.
+    /// height 12-13, mouth height 14-15, the eye shape's 4th bit 16 (#880: <see cref="EyeShape.Alien"/>).
     /// </summary>
     public (int Low, int High) Code
     {
@@ -66,14 +71,14 @@ public readonly record struct FaceGenome(
                 | Bit(Lashes) << 11 | Bit(Shine) << 12 | ((int)Brow & 3) << 13 | Bit(ThickBrow) << 15
                 | ((int)Mouth & 7) << 16 | Step(MouthWidth) << 19 | ((int)Nose & 3) << 21 | Bit(Blush) << 23;
             int high = Bit(Freckles) | Bit(Stubble) << 1 | Step(Resolution) << 2 | (Seed & 0xFF) << 4
-                | Step(BrowHeight) << 12 | Step(MouthHeight) << 14;
+                | Step(BrowHeight) << 12 | Step(MouthHeight) << 14 | ((int)Eyes >> 3 & 1) << 16;
             return (low, high);
         }
     }
 
     /// <summary>The face <see cref="Code"/> packed.</summary>
     public static FaceGenome FromCode(int low, int high) => new(
-        (EyeShape)(low & 7), low >> 3 & 3, low >> 5 & 3, low >> 7 & 3, low >> 9 & 3,
+        (EyeShape)(low & 7 | (high >> 16 & 1) << 3), low >> 3 & 3, low >> 5 & 3, low >> 7 & 3, low >> 9 & 3,
         (low >> 11 & 1) != 0, (low >> 12 & 1) != 0, (BrowShape)(low >> 13 & 3), (low >> 15 & 1) != 0,
         high >> 12 & 3, (MouthShape)(low >> 16 & 7), low >> 19 & 3, high >> 14 & 3, (NoseShape)(low >> 21 & 3),
         (low >> 23 & 1) != 0, (high & 1) != 0, (high >> 1 & 1) != 0, high >> 2 & 3, high >> 4 & 0xFF);
@@ -117,9 +122,13 @@ public readonly record struct FaceGenome(
         ("startled", F(EyeShape.Wide, 1, 1, 1, 0, false, true, BrowShape.Straight, false, 3, MouthShape.Oh, 0, NoseShape.Nostrils)),
         ("dreamy", F(EyeShape.Almond, 2, 1, 1, 3, true, true, BrowShape.Arch, false, 2, MouthShape.Smile, 0, NoseShape.None, blush: true)),
         ("bold", F(EyeShape.Sharp, 1, 1, 1, 2, false, false, BrowShape.Angled, true, 0, MouthShape.Smirk, 2, NoseShape.Hook, stubble: true)),
+        // #880: the aliens' (Avatar.Aliens), big dark eyes and a small mouth, no brows, no nose
+        ("visitor", F(EyeShape.Alien, 2, 2, 1, 0, false, true, BrowShape.None, false, 1, MouthShape.Smile, 1, NoseShape.None)),
+        ("gazer", F(EyeShape.Alien, 3, 2, 1, 0, false, true, BrowShape.None, false, 1, MouthShape.Oh, 0, NoseShape.None)),
+        ("giggler", F(EyeShape.Alien, 2, 2, 1, 0, false, true, BrowShape.None, false, 1, MouthShape.Cat, 1, NoseShape.None, blush: true)),
     };
 
-    /// <summary>How many faces a figure can pick (at most 16: <c>Appearance.Face</c> is 4 bits).</summary>
+    /// <summary>How many faces a figure can pick (at most 32: <c>Appearance.Face</c> is 5 bits since #880).</summary>
     public static int PresetCount => Presets.Length;
 
     /// <summary>Face <paramref name="index"/> (wrapped), seed 0.</summary>

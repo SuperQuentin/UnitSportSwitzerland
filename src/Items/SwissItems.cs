@@ -54,17 +54,30 @@ public static class SwissItems
     {
         if (n.Origin is { } origin) Clouds.Add((origin.ToGlobal(e.Position), Now + SmokeSeconds));
         n.Sound3D(e.Position, Hiss, 1f, -4f, unitSize: 8f, maxDistance: 120f);
-        var cloud = new Node3D { TopLevel = true };
+        var mat = SmokeMaterial();
+        var cloud = SmokeCloud(new Random(e.Position.GetHashCode()), mat);
         n.AddChild(cloud);
         cloud.GlobalPosition = e.Position;
-        var rng = new Random(e.Position.GetHashCode());
-        var mat = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            AlbedoColor = new Color(0.78f, 0.79f, 0.80f, 0.9f),
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        };
+        cloud.Scale = Vector3.One * 0.2f;
+        var t = cloud.CreateTween();
+        t.TweenProperty(cloud, "scale", Vector3.One, 1.2).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Quad);
+        t.TweenInterval(SmokeSeconds - 3.2);
+        t.TweenProperty(mat, "albedo_color:a", 0f, 2.0);
+        t.TweenCallback(Callable.From(cloud.QueueFree));
+    }
+
+    /// <summary>A cloud's grey, lit in the lit styles and flat in PS1 (#1069); one per cloud, as it fades on its own.</summary>
+    private static StandardMaterial3D SmokeMaterial() => Styles.StyleKit.Solid(new StandardMaterial3D
+    {
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        AlbedoColor = new Color(0.78f, 0.79f, 0.80f, 0.9f),
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+    });
+
+    /// <summary>A smoke cloud's puffs round its foot, at full size.</summary>
+    private static Node3D SmokeCloud(Random rng, StandardMaterial3D mat)
+    {
+        var cloud = new Node3D { TopLevel = true };
         for (int i = 0; i < 16; i++)
         {
             float a = (float)(rng.NextDouble() * Math.Tau), d = SmokeRadius * 0.75f * Mathf.Sqrt((float)rng.NextDouble());
@@ -77,13 +90,11 @@ public static class SwissItems
                 Position = new Vector3(Mathf.Cos(a) * d, 0.8f + (float)rng.NextDouble() * 2.2f, Mathf.Sin(a) * d),
             });
         }
-        cloud.Scale = Vector3.One * 0.2f;
-        var t = cloud.CreateTween();
-        t.TweenProperty(cloud, "scale", Vector3.One, 1.2).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Quad);
-        t.TweenInterval(SmokeSeconds - 3.2);
-        t.TweenProperty(mat, "albedo_color:a", 0f, 2.0);
-        t.TweenCallback(Callable.From(cloud.QueueFree));
+        return cloud;
     }
+
+    [Showcase("Items", "Smoke cloud")]
+    private static Node3D ShowcaseSmoke() => SmokeCloud(new Random(478), SmokeMaterial());
 
     // ---- the alphorn --------------------------------------------------------------------------
 

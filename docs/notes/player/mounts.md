@@ -14,9 +14,9 @@
     Nothing is tuned: 180 W gives 32.7 km/h flat, 9.3 km/h up 8%, and 63.8 km/h freewheeling
     down it. Steering is lean-limited, so the turn radius grows with speed. `RiderWatts` is the
     input **because a home trainer measures watts** — RideLink drops straight into it.
-  - `Skis` have no engine. Turning *costs* speed (`EdgeScrub`), which is the whole of skiing:
-    pointed straight down a 30% face you reach 80 km/h, and carving across the fall line is the
-    only brake. W is a capped poling shuffle, because skis on the flat would otherwise strand you.
+  - `Skis` have no engine. A turn carves (the speed kept) or skids (the speed scraped off, the
+    brake), gravity pulls down the fall line, and forward is a stride per press. Off snow they
+    barely move (`player/ski-physics`, #899).
   - `FootPlayer.RideControls` replaces the keyboard when set — one movement path for a keyboard
     rider and a pedalling one, and the seam `RideProbe` and the trainer both use.
   - `RideKindId` is replicated, so remote players are seen on the bike rather than sprinting

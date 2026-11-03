@@ -5,7 +5,7 @@ using UnitSport.Net;
 namespace UnitSport.Core;
 
 /// <summary>
-/// <c>--chatcheck</c>: tab completion, <c>/spawn</c> and <c>/time</c> parsing, and Up/Down through
+/// <c>--chatcheck</c>: tab completion, <c>/spawn</c> and <c>/time</c> parsing, <c>/stadium</c> and <c>/help</c>, and Up/Down through
 /// what was sent, offline and without a world.
 /// Prints each failure and a RESULT line; exits non-zero if any case is wrong.
 /// </summary>
@@ -26,14 +26,16 @@ public static class ChatCheck
         };
 
         // commands
-        ExpectTexts(completer, "/", ["/help ", "/who ", "/me ", "/city ", "/occasion ", "/spawn "], "offline command list");
+        ExpectTexts(completer, "/", ["/help ", "/who ", "/me ", "/city ", "/stadium ", "/occasion "], "offline command list");
         ExpectTexts(completer, "/sp", ["/spawn "], "command prefix");
-        ExpectTexts(completer, "/tp", [], "server-only command hidden offline");
+        ExpectTexts(completer, "/kic", [], "server-only command hidden offline");
 
         // items
         Expect(completer.Complete("/spawn ene").Any(s => s.Text == "/spawn EnergyBar"), "item prefix");
         Expect(completer.Complete("/spawn bar").Any(s => s.Text == "/spawn EnergyBar"), "item substring");
         Expect(completer.Complete("/spawn EnergyBar ").Count == 0, "no suggestions for the count");
+        ExpectTexts(completer, "/despawn ", ["/despawn vehicles", "/despawn items", "/despawn all"], "/despawn completes what");
+        ExpectTexts(completer, "/despawn items e", ["/despawn items everywhere"], "/despawn completes everywhere");
 
         // towns have spaces
         ExpectTexts(completer, "/city La C", ["/city La Chaux-de-Fonds"], "town with spaces");
@@ -59,7 +61,7 @@ public static class ChatCheck
         Expect(completer.Complete("/sp").FirstOrDefault().Detail == "<item> [count]", "command arguments shown");
         Expect(completer.Usage("/spawn ") == "/spawn <item> [count]", "usage of a typed command");
         Expect(completer.Usage("/sp") == null, "no usage while the command is still typed");
-        Expect(completer.Usage("/tp x") == null, "no usage for a command hidden offline");
+        Expect(completer.Usage("/kick x") == null, "no usage for a command hidden offline");
 
         // parsing
         Expect(Parses("energybar", ItemId.EnergyBar, 1), "id name");
@@ -104,6 +106,10 @@ public static class ChatCheck
         ExpectTexts(completer, "/giv", [], "/give needs a server");
         ExpectTexts(completer, "/bank s", ["/bank set"], "bank verbs");
         Offline(host);
+
+        Venues(completer, host);
+
+        Locate(completer, host);
 
         History(host);
 
@@ -202,6 +208,89 @@ public static class ChatCheck
         chat.Send("/debug");
         Expect(debugOpened == 1, $"/debug opens the debug menu offline ({debugOpened}): {last}");
 
+        // /despawn (#1200): measured from the camera, the near stone goes, the far one only "everywhere"
+        chat.Send("/despawn items");
+        Expect(last.StartsWith("Nowhere to measure from"), $"/despawn with no camera wants everywhere: {last}");
+        var camera = new Camera3D();
+        host.AddChild(camera);
+        camera.MakeCurrent();
+        var dropped = DroppedItems.Create(host, WorldOrigin.SwissDefault());
+        dropped.Drop(new ItemStack(ItemId.Stone, 1), new Vector3(5, 0, 0), Vector3.Zero, Vector3.Zero, Vector3.Zero);
+        dropped.Drop(new ItemStack(ItemId.Stone, 1), new Vector3(200, 0, 0), Vector3.Zero, Vector3.Zero, Vector3.Zero);
+        chat.Send("/despawn trees");
+        Expect(last.StartsWith("Usage: /despawn"), $"/despawn of something else: {last}");
+        chat.Send("/despawn items");
+        Expect(last == "Despawned 1 item within 30 m.", $"/despawn items takes the near stone: {last}");
+        chat.Send("/despawn all everywhere");
+        Expect(last == "Despawned 0 vehicles and 1 item everywhere.", $"/despawn all everywhere takes the far one: {last}");
+        Expect(dropped.Items.All(i => i.IsQueuedForDeletion()), "no stone left");
+        dropped.QueueFree();
+        camera.QueueFree();
+
+        chat.QueueFree();
+    }
+
+    /// <summary>
+    /// <c>/stadium</c> (#994): its completion and its replies offline, <c>/tp</c> to coordinates,
+    /// <c>/concert</c>'s completion and the help built from the command table.
+    /// </summary>
+    private static void Venues(ChatCompleter completer, Node host)
+    {
+        // finding a venue is unit-tested (StadiumLookupTests); here, what the chat makes of it
+        ExpectTexts(completer, "/sta", ["/stadium "], "/stadium is offered offline");
+        ExpectTexts(completer, "/stadium ", ["/stadium list", "/stadium Stade de Genève"], "/stadium offers the list and the venues");
+        ExpectTexts(completer, "/stadium wank", ["/stadium Stadion Wankdorf"], "a venue completes from part of its name");
+        ExpectTexts(completer, "/stadium list a", ["/stadium list arena"], "the list's kinds complete");
+        ExpectTexts(completer, "/concert c", ["/concert cue", "/concert camera"], "/concert sub-commands complete");
+        ExpectTexts(completer, "/concert cue fl", ["/concert cue flames"], "/concert cues complete");
+        ExpectTexts(completer, "/concert input ", ["/concert input artnet", "/concert input osc"], "/concert input protocols complete");
+
+        ExpectTexts(completer, "/concert j", ["/concert join"], "/concert join completes");
+        ExpectTexts(completer, "/help sta", ["/help stadium"], "/help completes a command");
+
+        // /help (#1173): one line per group, each command in exactly one of them
+        static string Group(List<string> help, string name) => help.FirstOrDefault(l => l.TrimStart().StartsWith(name + ":")) ?? "";
+        var offline = ChatCompleter.Help(online: false, isAdmin: true).ToList();
+        Expect(Group(offline, "Travel").Contains("/stadium") && Group(offline, "Concerts & media").Contains("/concert") && Group(offline, "World").Contains("/water")
+            && !offline.Any(l => l.Contains("/kick")), $"offline help: {string.Join(" | ", offline)}");
+        var player = ChatCompleter.Help(online: true, isAdmin: false).ToList();
+        Expect(Group(player, "Activities").Contains("/fight") && Group(player, "Travel").Contains("/stadium") && !player.Any(l => l.Contains("/kick"))
+            && Group(player, "Admin") == "", $"a player's help: {string.Join(" | ", player)}");
+        var admin = ChatCompleter.Help(online: true, isAdmin: true).ToList();
+        Expect(Group(admin, "Admin").Contains("/kick") && Group(admin, "Travel").Contains("/tp "), $"an operator's help has the admin commands: {string.Join(" | ", admin)}");
+        var all = admin.Skip(1).SelectMany(l => l[(l.IndexOf(':') + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToList();
+        Expect(all.Count == all.Distinct().Count() && all.Count == ChatCompleter.Visible(true, true).Count(), $"every command in one group: {all.Count} listed");
+        string? stadiumHelp = ChatCompleter.HelpFor("/stadium", online: true, isAdmin: false);
+        Expect(stadiumHelp?.StartsWith("/stadium [list") == true && stadiumHelp.Contains("— "), $"/help stadium: {stadiumHelp}");
+        Expect(ChatCompleter.HelpFor("kick", online: true, isAdmin: false) is null, "/help kick is nothing for a player");
+
+        var chat = ChatManager.CreateClient();
+        host.AddChild(chat);
+        var lines = new List<string>();
+        chat.LineReceived += (line, _) => lines.Add(line);
+        chat.Send("/stadium list arena");
+        Expect(lines.Count == 1 && lines[0].StartsWith("Arenas (") && lines[0].Contains("Hallenstadion"), $"/stadium list arena offline: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/stadium basel");
+        Expect(lines.Count == 1 && lines[0].Contains("could be") && lines[0].Contains("St. Jakobshalle"), $"an ambiguous venue lists its matches: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/stadium letzigrund");
+        Expect(lines.Count == 2 && lines[0].Contains("tonight") && lines[1].Contains("Nothing to teleport"), $"a venue says what plays, then goes there: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/tp 2600000 1200000");
+        Expect(lines.Count == 1 && lines[0].Contains("Nothing to teleport"), $"/tp to coordinates works offline: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/tp Bob");
+        Expect(lines.Count == 1 && lines[0].Contains("multiplayer"), $"/tp to a player needs a server: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/concert join");
+        Expect(lines.Count == 1 && lines[0].StartsWith("No set is hosted"), $"/concert join with nothing hosted: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/help concert");
+        Expect(lines.Count == 1 && lines[0].StartsWith("/concert join |"), $"/help concert offline: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/help");
+        Expect(lines.Count > 3 && lines[0].StartsWith("Commands") && lines.Any(l => l.Contains("Travel:")), $"/help offline: {string.Join(" | ", lines)}");
         chat.QueueFree();
     }
 
@@ -210,6 +299,68 @@ public static class ChatCheck
 
     private static bool Parses(string text, ItemId id, int count) =>
         ItemLookup.TryParse(text, out var def, out int n, out _) && def.Id == id && n == count;
+
+    /// <summary>
+    /// <c>/locate</c> and the chat's coordinates (#1277): the completion of nouns and selectors, the buttons under a
+    /// line carrying <c>@E,N</c>, and the pad's picker walked from "/" to a whole command by its buttons alone.
+    /// </summary>
+    private static void Locate(ChatCompleter completer, Node host)
+    {
+        ExpectTexts(completer, "/loc", ["/locate "], "/locate is offered offline");
+        ExpectTexts(completer, "/locate cas", ["/locate castle "], "a noun completes");
+        ExpectTexts(completer, "/locate church ", ["/locate church + spire ", "/locate church in "], "the selectors after a noun");
+        ExpectTexts(completer, "/locate church + par", ["/locate church + parking entrance "], "a selector completes");
+        ExpectTexts(completer, "/locate castle in La", ["/locate castle in La Chaux-de-Fonds"], "a town after in");
+        Expect(completer.Complete("/").Count > 14, $"a bare / lists every command ({completer.Complete("/").Count})");
+        Expect(ChatUi.BackOneWord("/locate church + spire") == "/locate church + ", "Back takes a word");
+        Expect(ChatUi.BackOneWord("/locate") == "/" && ChatUi.BackOneWord("/") == "", "Back down to nothing");
+
+        var chat = ChatManager.CreateClient();
+        var ui = ChatUi.Create(chat, completer);
+        host.AddChild(chat);
+        host.AddChild(ui);
+        var sent = new List<string>();
+        chat.LineReceived += (line, _) => sent.Add(line);
+
+        // a /locate answer's line: no buttons under it; its pin and coordinates are a link that opens the choices
+        ui.OpenInput();
+        ui.Append("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919", ChatKind.Private);
+        var labels = ui.FindChildren("*", "RichTextLabel", true, false).OfType<RichTextLabel>().ToList();
+        var located = labels.LastOrDefault(l => l.FocusMode == Control.FocusModeEnum.All);
+        Expect(located != null && located.GetParsedText().Replace("⁠", "").Contains("@2538395,1152919"), "the coordinates stay in the line, which a pad can focus");
+        Expect(!ui.FindChildren("*", "Button", true, false).OfType<Button>().Any(b => b.Text == "Track" && b.IsVisibleInTree()), "no buttons until the link is clicked");
+        located?.EmitSignal(RichTextLabel.SignalName.MetaClicked, "2538395,1152919|Château Saint-Maire");
+        var choices = ui.ChoiceLabels.ToList();
+        Expect(choices.Contains("Track") && choices.Contains("Show on map") && choices.Contains("Copy"), $"the link opens the choices [{string.Join(", ", choices)}]");
+        Expect(choices.Contains("Teleport") == Permissions.CanTeleport, "Teleport only where teleporting is allowed");
+        host.GetViewport().PushInput(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+        Expect(!ui.ChoiceLabels.Any() && ui.IsTyping, "Esc closes the choices first, the chat stays open");
+        ui.CloseInput(recaptureMouse: false);
+        Expect(World.Locate.LocateCoords.LabelOf("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919",
+            World.Locate.LocateCoords.FindAll("  Château Saint-Maire (fortress, VD) · 580 m NE · @2538395,1152919")[0]) == "Château Saint-Maire",
+            "the choices name the place");
+
+        // the picker: "/" then locate, castle, Send, by pressing its buttons
+        ui.OpenForPad();
+        Expect(ui.IsTyping && ui.PickerLabels.Contains("/locate"), $"the pad opens the chat on the commands [{string.Join(", ", ui.PickerLabels.Take(8))}...]");
+        void Press(string label)
+        {
+            var b = ui.FindChildren("*", "Button", true, false).OfType<Button>().FirstOrDefault(x => x.Text == label && x.IsVisibleInTree() && !x.IsQueuedForDeletion());
+            Expect(b != null, $"the picker has '{label}'");
+            b?.EmitSignal(BaseButton.SignalName.Pressed);
+        }
+        Press("/locate");
+        Expect(ui.PickerLabels.Contains("castle"), "after /locate the picker offers the nouns");
+        Press("castle");
+        Expect(ui.PickerLabels.Contains("+ spire") && ui.PickerLabels.Contains("Send"), "after a noun the selectors and Send");
+        Press("Back");
+        Expect(ui.PickerLabels.Contains("castle"), "Back returns to the nouns");
+        ui.CloseInput(recaptureMouse: false);
+        Expect(!ui.IsTyping, "Close shuts the chat");
+
+        ui.QueueFree();
+        chat.QueueFree();
+    }
 
     private static void ExpectTexts(ChatCompleter c, string input, string[] want, string what)
     {

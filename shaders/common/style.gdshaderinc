@@ -36,8 +36,12 @@ uniform float toon_rim = 0.22;    // rim strength on the lit side
 void light() {
     float ndl = dot(NORMAL, LIGHT);
     // A face nearly edge-on to the sun self-shadows in stripes (acne), which the hard band
-    // turns into hatching: near the terminator, N.L alone shades it.
-    float shadow = mix(1.0, smoothstep(0.3, 0.6, ATTENUATION), smoothstep(0.1, 0.35, ndl));
+    // turns into hatching: near the terminator, N.L alone shades it. Only the sun: a lamp's
+    // ATTENUATION is its range and cone too, and ground far beyond a lamp's reach sees it edge-on,
+    // so skipping it there lit the whole district with a concert's stage lights (#885).
+    float shadow = LIGHT_IS_DIRECTIONAL
+        ? mix(1.0, smoothstep(0.3, 0.6, ATTENUATION), smoothstep(0.1, 0.35, ndl))
+        : ATTENUATION;
     float lit = smoothstep(0.0, toon_edge, ndl) * shadow;
     DIFFUSE_LIGHT += lit * LIGHT_COLOR / PI;
     float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
@@ -56,14 +60,28 @@ vec3 style_grade(vec3 col) {
 }
 
 // Low-frequency value noise, 0..1: the painted variation BotW has on every large surface.
+#ifdef STANDALONE
+// a standalone headset (#1112): an arithmetic hash, no sin() (the special-function unit is a
+// Quest's slow path, and this ran eight times a pixel on the ground)
+float style_paint_hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+#else
+float style_paint_hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+#endif
+
 float style_paint_noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-    float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
-    float b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
-    float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
-    float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+    float a = style_paint_hash(i);
+    float b = style_paint_hash(i + vec2(1.0, 0.0));
+    float c = style_paint_hash(i + vec2(0.0, 1.0));
+    float d = style_paint_hash(i + vec2(1.0, 1.0));
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 #else

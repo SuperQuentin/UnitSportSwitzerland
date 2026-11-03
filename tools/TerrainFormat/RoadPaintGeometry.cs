@@ -65,6 +65,87 @@ public static class RoadPaintGeometry
         return result.ToArray();
     }
 
+    /// <summary>
+    /// The vertices of a line along a transition's strip boundary (#818): at every point of its segment between stations
+    /// <paramref name="from"/> and <paramref name="to"/> (plan metres from its first point), and at each of the transition's
+    /// stations between (where a boundary bends), the boundary's offset there plus <paramref name="offset"/>, across the
+    /// segment's per-vertex bisector as the ribbon's edges; on the deck of a bridge; simplified. A point running backwards
+    /// (inside a bend tighter than its offset) is dropped. The network stage and the decoder both build it here.
+    /// </summary>
+    public static float[] AlongTransition(RoadTransition t, int boundary, float offset, float from, float to)
+    {
+        var seg = t.Segment;
+        var p = seg.Points;
+        int n = seg.PointCount;
+        float lift = (seg.Flags & RoadFlags.Bridge) != 0 ? BridgeLift : 0f;
+        var at = new float[n];
+        for (int i = 1; i < n; i++)
+        {
+            float dx = p[i * 3] - p[i * 3 - 3], dz = p[i * 3 + 2] - p[i * 3 - 1];
+            at[i] = at[i - 1] + MathF.Sqrt(dx * dx + dz * dz);
+        }
+        float end = Math.Min(to, at[^1]);
+        // the stations sampled: from, every point and transition station strictly between, to (a negative piece: point -1 - piece)
+        var samples = new List<(float S, int Piece)>();
+        int PieceOf(float s)
+        {
+            int piece = 0;
+            while (piece < n - 2 && at[piece + 1] < s) piece++;
+            return piece;
+        }
+        samples.Add((from, PieceOf(from)));
+        int st = 0;
+        for (int i = 0; i < n; i++)
+        {
+            while (st < t.Stations.Length && t.Stations[st] < at[i])
+            {
+                if (t.Stations[st] > from + 1e-4f && t.Stations[st] < end - 1e-4f) samples.Add((t.Stations[st], PieceOf(t.Stations[st])));
+                st++;
+            }
+            if (at[i] > from + 1e-4f && at[i] < end - 1e-4f) samples.Add((at[i], -1 - i));
+        }
+        samples.Add((end, PieceOf(end)));
+        var result = new List<float>(samples.Count * 3);
+        float px = 0, pz = 0;
+        bool any = false;
+        foreach (var (s, piece) in samples)
+        {
+            int vertex = piece < 0 ? -1 - piece : -1;
+            float u = 0;
+            if (piece >= 0)
+            {
+                float len = at[piece + 1] - at[piece];
+                u = len > 1e-6f ? Math.Clamp((s - at[piece]) / len, 0, 1) : 0;
+                if (u <= 1e-5f) vertex = piece;
+                else if (u >= 1 - 1e-5f) vertex = piece + 1;
+            }
+            float x, y, z, fx, fz;
+            if (vertex >= 0)
+            {
+                // at a point itself, its bisector, as the ribbon
+                int i0 = Math.Max(0, vertex - 1), i1 = Math.Min(n - 1, vertex + 1);
+                fx = p[i1 * 3] - p[i0 * 3]; fz = p[i1 * 3 + 2] - p[i0 * 3 + 2];
+                (x, y, z) = (p[vertex * 3], p[vertex * 3 + 1], p[vertex * 3 + 2]);
+            }
+            else
+            {
+                int a = piece, b = piece + 1;
+                fx = p[b * 3] - p[a * 3]; fz = p[b * 3 + 2] - p[a * 3 + 2];
+                x = p[a * 3] + (p[b * 3] - p[a * 3]) * u;
+                y = p[a * 3 + 1] + (p[b * 3 + 1] - p[a * 3 + 1]) * u;
+                z = p[a * 3 + 2] + (p[b * 3 + 2] - p[a * 3 + 2]) * u;
+            }
+            float fl = MathF.Sqrt(fx * fx + fz * fz);
+            if (fl < 1e-4f) { fx = 0; fz = -1; } else { fx /= fl; fz /= fl; }
+            float o = t.BoundaryAt(boundary, s) + offset;
+            float ox = x - fz * o, oz = z + fx * o;
+            if (any && (ox - px) * fx + (oz - pz) * fz <= 0) continue;
+            result.Add(ox); result.Add(y + lift); result.Add(oz);
+            (px, pz, any) = (ox, oz, true);
+        }
+        return Simplify(result.ToArray());
+    }
+
     /// <summary>Horizontal length of an xyz polyline.</summary>
     public static double Length(float[] v)
     {

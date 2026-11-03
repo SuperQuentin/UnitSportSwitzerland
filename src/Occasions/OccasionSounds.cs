@@ -23,6 +23,39 @@ public static class OccasionSounds
         yield return ("sleigh", Dsp.Normalise(SleighBells(new Random(5)), 0.9f));
         yield return ("carol", Dsp.Normalise(Carol(new Random(6)), 0.9f));
         yield return ("jingle_christmas", Dsp.Normalise(ChristmasJingle(), 0.9f));
+        yield return ("ufo_wail", Dsp.Normalise(UfoWail(new Random(7)), 0.9f));
+    }
+
+    /// <summary>
+    /// The UFO sightings' eerie air (#863): a theremin gliding between a few unrelated notes with a
+    /// slow, wide vibrato, over a low shimmering chord, swelling in and dying away. 5-7 s.
+    /// </summary>
+    public static float[] UfoWail(Random rng)
+    {
+        float dur = 5f + (float)rng.NextDouble() * 2f;
+        int n = (int)(dur * R);
+        var s = new float[n];
+        float[] notes = { 620f, 830f, 540f, 930f, 700f };
+        int start = rng.Next(notes.Length);
+        double p = 0, c1 = 0, c2 = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / R, u = t / dur;
+            // glide through three notes
+            float seg = u * 3f;
+            int k = (int)seg;
+            float f = seg - k, glide = f * f * (3f - 2f * f);
+            float a = notes[(start + k) % notes.Length], b = notes[(start + k + 1) % notes.Length];
+            float freq = Mathf.Lerp(a, b, Mathf.Clamp((glide - 0.6f) / 0.4f, 0f, 1f)) * (1f + 0.022f * Mathf.Sin(Mathf.Tau * 5.2f * t));
+            p += Mathf.Tau * freq / R;
+            c1 += Mathf.Tau * 110f / R;
+            c2 += Mathf.Tau * 164.8f / R;
+            float env = Mathf.SmoothStep(0f, 1.2f, t) * (1f - Mathf.SmoothStep(dur - 1.8f, dur, t));
+            float shimmer = 0.5f + 0.5f * Mathf.Sin(Mathf.Tau * 0.7f * t);
+            s[i] = env * (Mathf.Sin((float)p) * 0.55f + Mathf.Sin((float)(2 * p)) * 0.08f
+                + (Mathf.Sin((float)c1) + Mathf.Sin((float)c2) * 0.7f) * 0.12f * shimmer);
+        }
+        return s;
     }
 
     /// <summary>A tawny owl: "hoo … hu-hoooo", a soft tone near 450 Hz with a breathy edge.</summary>

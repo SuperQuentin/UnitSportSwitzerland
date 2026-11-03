@@ -113,8 +113,7 @@ public partial class BedNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -141,7 +140,7 @@ public partial class BedNetProbe : ChatProbe
         Over(me, boom, parked.GlobalTransform, bed);
         await Seconds(1.5);
         await Hold(PlayerInput.ArmBoomDown, 12, () => boom.Carrying == 0);
-        await Seconds(1);
+        await Until(() => Pallets.LoadCarried(parked.BedLoad) == FirstLoad, 5);
         int first = parked.BedLoad;
         Expect(boom.Carrying == 0 && Pallets.LoadCarried(first) == FirstLoad,
             $"A lowers a pallet into its parked tipper: the forks empty, the body's load {first}");

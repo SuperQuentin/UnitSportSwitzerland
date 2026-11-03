@@ -33,32 +33,56 @@ public static partial class BuildingMeshBuilder
     public const float SignFlag = 1f, GarageWallFlag = 2f, BlankWallFlag = 3f;
 
     /// <summary>
+    /// UV2.y of a building whose ground storey is a hall venue's (#1250: a cinema or bowling centre in a
+    /// mall or under offices): plain everywhere, but no windows in its first storey.
+    /// </summary>
+    public const float BlindGroundFlag = 0.25f;
+
+    /// <summary>
+    /// A castle's wall (#859): UV is (metres along, metres above the wall run's foot), UV2.x the
+    /// run's height and CUSTOM0.z its length; UV2.y is <see cref="CastleWallFlag"/>, +1 when its head is
+    /// level (not a gable: it gets the corbel table), +2 when its foot is on the ground (within
+    /// <see cref="CastleFootReach"/> of the solid's base: it gets the damp foot), + 4 x its dress's
+    /// variant (<see cref="CastleRubble"/> to <see cref="CastleTimbered"/>), so 4 to 23.
+    /// </summary>
+    public const float CastleWallFlag = 4f, CastleFootReach = 1.5f;
+
+    /// <summary>
     /// The building mesh plus a front door on each building. The doors are a few boxes appended
     /// after the facades, with no windows (uv.y &lt; 0), so a tile's buildings and all their doors
     /// stay one surface and one draw call.
     /// </summary>
-    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    /// <param name="detail">The visual style's mesh detail: <see cref="Styles.MeshDetail.High"/> adds the roof overhangs (#1067).</param>
+    /// <param name="ground">The tile's terrain: given, a base standing a little above it gets a footing down to it.</param>
     public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
-        Styles.MeshDetail detail = Styles.MeshDetail.Low)
+        Styles.MeshDetail detail = Styles.MeshDetail.Low, ChunkGrid? ground = null)
     {
         Core.ShowcaseTrace.Mark();
-        var data = Build(tile);
-        if (data == null || doors == null || doors.Length == 0) return data;
-
-        var v = new List<Vector3>(doors.Length * 120);
-        var c = new List<Color>(doors.Length * 120);
-        var f = new List<float>(doors.Length * 120); // UV2.y flag per vertex
+        var data = Build(tile, detail);
+        if (data == null) return null;
         var types = BuildingTypes.For(tile);
-        foreach (var d in doors)
+        bool castles = types.HasCastles;
+        if ((doors == null || doors.Length == 0) && !castles && ground == null) return data;
+
+        int capacity = (doors?.Length ?? 0) * 120;
+        var v = new List<Vector3>(capacity);
+        var c = new List<Color>(capacity);
+        var f = new List<float>(capacity); // UV2.y flag per vertex
+        foreach (var d in doors ?? Array.Empty<Interiors.DoorSpot>())
             // a building site's doors are its office's (#822), drawn with the containers
             if (d.Width > 0 && Drawn(tile.Buildings[d.Index])) AppendDoor(v, c, f, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
+        // a castle's crenellations, oriels, flags and finials, and its ruins' broken walls (#859)
+        var ruins = new FacadeSink();
+        if (castles) AppendCastles(tile, types, v, c, f, ruins);
+        // a base a little above the ground carried down to it
+        AppendFootings(tile, types, ground, v, c, f);
 
-        int n = data.Vertices.Length;
-        var vertices = new Vector3[n + v.Count];
-        var colors = new Color[n + v.Count];
-        var uvs = new Vector2[n + v.Count];
-        var uv2s = new Vector2[n + v.Count];
-        var frames = new float[(n + v.Count) * 4];
+        int n = data.Vertices.Length, r = ruins.V.Count;
+        var vertices = new Vector3[n + v.Count + r];
+        var colors = new Color[n + v.Count + r];
+        var uvs = new Vector2[n + v.Count + r];
+        var uv2s = new Vector2[n + v.Count + r];
+        var frames = new float[(n + v.Count + r) * 4];
         Array.Copy(data.Vertices, vertices, n);
         Array.Copy(data.Colors, colors, n);
         Array.Copy(data.Uvs, uvs, n);
@@ -71,6 +95,13 @@ public static partial class BuildingMeshBuilder
             uvs[n + i] = new Vector2(0f, -1f);
             uv2s[n + i] = new Vector2(0f, f[i]);
         }
+        // the ruins' walls last, with their own facade frames
+        int at = n + v.Count;
+        ruins.V.CopyTo(vertices, at);
+        ruins.C.CopyTo(colors, at);
+        ruins.Uv.CopyTo(uvs, at);
+        ruins.Uv2.CopyTo(uv2s, at);
+        ruins.Frames.CopyTo(frames, at * 4);
         return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
@@ -175,13 +206,108 @@ public static partial class BuildingMeshBuilder
     /// </summary>
     public static bool Drawn(Building b) => b.Kind != BuildingKind.UnderConstruction;
 
-    public static MeshData? Build(BuildingTile tile)
+    /// <summary>
+    /// Each building as its roof on walls (#1112): its surveyed roof triangles where they are, in its roof colour, and a
+    /// wall in its wall colour from its floor up to every outer edge of that roof, no window grid (UV.y &lt; 0). The far
+    /// stand-in a standalone headset draws past <see cref="ChunkNode.ProxyFromM"/>: the building's own outline and
+    /// roofline, courtyards and all (a plan box reached across the street of an L or a ring), with a few dozen triangles
+    /// where the drawn building has hundreds. Its windows have faded out by then (building.gdshaderinc), so it takes
+    /// over unseen.
+    /// </summary>
+    public static MeshData? BuildProxies(BuildingTile tile)
     {
-        int triangles = 0;
-        foreach (var b in tile.Buildings) if (Drawn(b)) triangles += b.TriangleCount;
-        if (triangles == 0) return null;
-
         var types = BuildingTypes.For(tile);
+        var verts = new List<Vector3>();
+        var colors = new List<Color>();
+        var edges = new Dictionary<(long, long), (Vector3 A, Vector3 B, Vector2 Inside, int Count)>();
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+        {
+            var b = tile.Buildings[bi];
+            if (!Drawn(b) || b.MaxY <= b.MinY + 0.5f) continue;
+            var type = types.TypeOf(bi);
+            var kind = KindOf(b, type);
+            var wall = WallColor(kind, b.YearBuilt, type).SrgbToLinear();
+            var roof = RoofColor(kind, type).SrgbToLinear();
+            float bottom = b.MinY;
+            // the roof: every triangle with an area seen from above that is not the floor
+            edges.Clear();
+            var t = b.Triangles;
+            for (int i = 0; i + 8 < t.Length; i += 9)
+            {
+                var p0 = new Vector3(t[i], t[i + 1], t[i + 2]);
+                var p1 = new Vector3(t[i + 3], t[i + 4], t[i + 5]);
+                var p2 = new Vector3(t[i + 6], t[i + 7], t[i + 8]);
+                if (MathF.Abs((p1.X - p0.X) * (p2.Z - p0.Z) - (p1.Z - p0.Z) * (p2.X - p0.X)) < 0.01f) continue;   // a wall, edge-on from above
+                if ((p0.Y + p1.Y + p2.Y) / 3f < bottom + 1f) continue;   // the floor
+                ProxyTriangle(verts, colors, p0, p1, p2, roof);
+                var inside = new Vector2((p0.X + p1.X + p2.X) / 3f, (p0.Z + p1.Z + p2.Z) / 3f);
+                Edge(edges, p0, p1, inside);
+                Edge(edges, p1, p2, inside);
+                Edge(edges, p2, p0, inside);
+            }
+            // the walls: under each roof edge no other roof triangle shares, the outline of the plan
+            foreach (var (a, c, inside, count) in edges.Values)
+            {
+                if (count != 1) continue;
+                var outward = new Vector3((a.X + c.X) / 2f - inside.X, 0f, (a.Z + c.Z) / 2f - inside.Y);
+                ProxyQuad(verts, colors, a with { Y = bottom }, c with { Y = bottom }, c, a, outward, wall);
+            }
+        }
+        if (verts.Count == 0) return null;
+        int n = verts.Count;
+        var uvs = new Vector2[n];
+        Array.Fill(uvs, new Vector2(0f, -1f));   // no window grid
+        return new MeshData(verts.ToArray(), colors.ToArray(), uvs, new Vector2[n], new float[n * 4]);
+    }
+
+    /// <summary>A roof edge, counted under its two ends welded to 5 cm in plan, whichever way round it runs.</summary>
+    private static void Edge(Dictionary<(long, long), (Vector3 A, Vector3 B, Vector2 Inside, int Count)> edges,
+        Vector3 a, Vector3 b, Vector2 inside)
+    {
+        long ka = (long)MathF.Round(a.X * 20f) * 1_000_000 + (long)MathF.Round(a.Z * 20f);
+        long kb = (long)MathF.Round(b.X * 20f) * 1_000_000 + (long)MathF.Round(b.Z * 20f);
+        if (ka == kb) return;
+        var key = ka < kb ? (ka, kb) : (kb, ka);
+        edges[key] = edges.TryGetValue(key, out var e) ? e with { Count = e.Count + 1 } : (a, b, inside, 1);
+    }
+
+    /// <summary>A triangle wound to face up (Godot culls the back).</summary>
+    private static void ProxyTriangle(List<Vector3> verts, List<Color> colors, Vector3 a, Vector3 b, Vector3 c, Color color)
+    {
+        if ((b - a).Cross(c - a).Y > 0f) { verts.Add(a); verts.Add(c); verts.Add(b); }
+        else { verts.Add(a); verts.Add(b); verts.Add(c); }
+        for (int i = 0; i < 3; i++) colors.Add(color);
+    }
+
+    /// <summary>A quad as two triangles wound so their front faces <paramref name="outward"/> (Godot culls the back).</summary>
+    private static void ProxyQuad(List<Vector3> verts, List<Color> colors, Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+        Vector3 outward, Color color)
+    {
+        // Godot's front face is clockwise seen from in front: the right-hand normal then points away from the viewer
+        bool flip = (b - a).Cross(c - a).Dot(outward) > 0f;
+        if (flip) { verts.Add(a); verts.Add(c); verts.Add(b); verts.Add(a); verts.Add(d); verts.Add(c); }
+        else { verts.Add(a); verts.Add(b); verts.Add(c); verts.Add(a); verts.Add(c); verts.Add(d); }
+        for (int i = 0; i < 6; i++) colors.Add(color);
+    }
+
+    /// <summary>
+    /// The tile's solids as one mesh. <see cref="Styles.MeshDetail.High"/> (Cartoon and the styles
+    /// above it) carries every pitched roof past its walls (<see cref="RoofOverhangs"/>, #1067);
+    /// Low (PS1) draws the surveyed solid alone. Collision is the solid either way.
+    /// </summary>
+    public static MeshData? Build(BuildingTile tile, Styles.MeshDetail detail = Styles.MeshDetail.Low)
+    {
+        var types = BuildingTypes.For(tile);
+        // a ruin is drawn as its broken walls (AppendRuin), not as its surveyed solid
+        var rebuilt = new bool[tile.Buildings.Count];
+        bool anyRuin = false;
+        for (int bi = 0; types.HasCastles && bi < tile.Buildings.Count; bi++)
+            anyRuin |= rebuilt[bi] = RebuiltRuin(tile, types, bi);
+        int triangles = 0;
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+            if (Drawn(tile.Buildings[bi]) && !rebuilt[bi]) triangles += tile.Buildings[bi].TriangleCount;
+        if (triangles == 0 && !anyRuin) return null;
+
         var vertices = new Vector3[triangles * 3];
         var colors = new Color[triangles * 3];
         // uv.x = metres along the facade, uv.y = storey coordinate (<0 disables windows)
@@ -194,18 +320,29 @@ public static partial class BuildingMeshBuilder
         var roofSpans = new Dictionary<(int, int, int, int), (float Min, float Max)>();
         var runs = new List<WallRun>();
         int v = 0;
+        // High: the overhangs, appended after the solids; the tile's roofs from above, built on first need
+        var overhangs = detail == Styles.MeshDetail.High ? new FacadeSink() : null;
+        RoofCover? cover = null;
 
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
             var b = tile.Buildings[bi];
-            if (!Drawn(b)) continue;
+            if (!Drawn(b) || rebuilt[bi]) continue;
             var part = types.PartOf(bi);
             var type = types.TypeOf(bi);
             var kind = KindOf(b, type);
-            var wall = WallColor(kind, b.YearBuilt, type).SrgbToLinear();
-            var roof = RoofColor(kind, type).SrgbToLinear();
+            // a castle's solid (#859), unless it is a church's nave or tower: dressed stone, no flats
+            int castleOf = part == BuildingPart.None ? types.CastleOf(bi) : -1;
+            bool castle = castleOf >= 0;
+            var dress = castle ? DressOf(castleOf, b, types.Boxes[bi]) : default;
+            var wall = (castle ? dress.Wall : WallColor(kind, b.YearBuilt, type)).SrgbToLinear();
+            // a castle's shutter paint rides in the wall colour's alpha, which nothing else reads
+            if (castle) wall.A = dress.Paint;
+            var roof = (castle ? dress.Roof : RoofColor(kind, type)).SrgbToLinear();
             var (storey, storeyCount) = part switch
             {
+                // facade v in metres; the slits, windows and corbels are the shader's, per wall run
+                _ when castle => (1f, 0),
                 // one tall storey: the shader's window row becomes a church window
                 BuildingPart.Nave => (Math.Max(3f, (types.Boxes[bi]?.Eave ?? b.MaxY) - b.MinY), 1),
                 // a tower's few openings are not a grid of flats
@@ -214,12 +351,16 @@ public static partial class BuildingMeshBuilder
                 // grid of flats painted across 200 m of blue sheet is the one thing that would
                 // stop it reading as an IKEA (#501)
                 _ when type == BuildingType.Ikea => (0f, 0),
+                // a bowling centre or a cinema that is its whole building (#1235, #1238) is a blind box:
+                // lanes and auditoriums have no windows
+                _ when Venues.Planned(Venues.HallOf(types, bi)) && Venues.WholeBuilding(b) => (0f, 0),
                 _ => Storeys(b),
             };
             // a spire's faces are steep enough to count as wall; above the eave they are roof
             float spireFrom = part == BuildingPart.Tower ? (types.Boxes[bi]?.Eave ?? b.MaxY) + 0.3f : float.MaxValue;
             var uv2 = new Vector2(storeyCount, 0f);
-            if (b.Kind == BuildingKind.Garage)
+            if (storeyCount > 0 && part == BuildingPart.None && Venues.Planned(Venues.HallOf(types, bi))) uv2.Y = BlindGroundFlag;
+            if (b.Kind == BuildingKind.Garage && !castle)
             {
                 // the painted stripe runs under the eave; a flat-roofed garage has its eave near
                 // the top, a pitched one lower down (same 0.78 split Storeys uses)
@@ -262,10 +403,18 @@ public static partial class BuildingMeshBuilder
                 roofSpans[key] = roofSpans.TryGetValue(key, out var span)
                     ? (Mathf.Min(span.Min, s0), Mathf.Max(span.Max, s1)) : (s0, s1);
             }
+            // High: the pitched roofs carried past the walls; each plane's tile courses (and its
+            // gutter) then measure from the overhang's edge. A castle, a tower's spire and a
+            // brand's box keep their own outline.
+            if (overhangs != null && roofSpans.Count > 0 && !castle && part != BuildingPart.Tower && type != BuildingType.Ikea)
+            {
+                cover ??= new RoofCover(tile, i => Drawn(tile.Buildings[i]) && !rebuilt[i]);
+                AppendOverhangs(RoofOverhangs.Plan(b, bi, RoofOverhangs.For(kind), cover), roofSpans, roof, wall, kind, overhangs);
+            }
             // the flat roof's extent in the axis frame (along, across); most large flat roofs
             // have panels, a church never
             var across = new Vector3(-axis.Z, 0f, axis.X);
-            bool solar = flatArea >= SolarRoofArea && part == BuildingPart.None
+            bool solar = flatArea >= SolarRoofArea && part == BuildingPart.None && !castle
                 && (uint)(bi * 2654435761u + tile.Buildings.Count) % 10 < 7;
             Vector2 flatMin = new(float.MaxValue, float.MaxValue), flatMax = new(float.MinValue, float.MinValue);
             for (int t = 0; solar && t < b.TriangleCount; t++)
@@ -348,18 +497,27 @@ public static partial class BuildingMeshBuilder
                 {
                     var run = runs[t];
                     tangent = run.Tangent;
-                    uvA = FacadeUv(a, run, b.MinY, storey);
-                    uvB = FacadeUv(c, run, b.MinY, storey);
-                    uvC = FacadeUv(d, run, b.MinY, storey);
+                    // a castle wall measures from its own run: v metres above the run's foot, UV2 =
+                    // (the run's height, the flag saying whether its head is level)
+                    float baseY = castle ? run.Bottom : b.MinY;
+                    uvA = FacadeUv(a, run, baseY, storey);
+                    uvB = FacadeUv(c, run, baseY, storey);
+                    uvC = FacadeUv(d, run, baseY, storey);
+                    if (castle) triUv2 = new Vector2(run.Top - run.Bottom, CastleWallFlag + 4f * dress.Variant
+                        + (run.Level ? 1f : 0f) + (run.Bottom < b.MinY + CastleFootReach ? 2f : 0f));
                     // too short for one window: the wall's bands and plinth, no glass
-                    if (run.Scale == 0f && uv2.Y == 0f) triUv2 = new Vector2(uv2.X, BlankWallFlag);
+                    else if (run.Scale == 0f && uv2.Y == 0f) triUv2 = new Vector2(uv2.X, BlankWallFlag);
                 }
+                // a castle wall's third frame float is its run's length in facade u (the corners the
+                // shader dresses with quoins), not a storey height: its v is metres already
+                float third = castle && !isRoof && storey > 0f
+                    ? runs[t].Length * (runs[t].Scale > 0f ? runs[t].Scale : 1f) : storey;
                 for (int k = 0; k < 3; k++)
                 {
                     int f = (v + k) * 4;
                     frames[f] = tangent.X;
                     frames[f + 1] = tangent.Z;
-                    frames[f + 2] = storey;
+                    frames[f + 2] = third;
                 }
 
                 vertices[v] = a; colors[v] = color; uvs[v] = uvA; uv2s[v++] = triUv2;
@@ -368,6 +526,18 @@ public static partial class BuildingMeshBuilder
             }
         }
 
+        if (overhangs == null || overhangs.V.Count == 0) return new MeshData(vertices, colors, uvs, uv2s, frames);
+        int n = vertices.Length, extra = overhangs.V.Count;
+        Array.Resize(ref vertices, n + extra);
+        Array.Resize(ref colors, n + extra);
+        Array.Resize(ref uvs, n + extra);
+        Array.Resize(ref uv2s, n + extra);
+        Array.Resize(ref frames, (n + extra) * 4);
+        overhangs.V.CopyTo(vertices, n);
+        overhangs.C.CopyTo(colors, n);
+        overhangs.Uv.CopyTo(uvs, n);
+        overhangs.Uv2.CopyTo(uv2s, n);
+        overhangs.Frames.CopyTo(frames, n * 4);
         return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
@@ -386,21 +556,8 @@ public static partial class BuildingMeshBuilder
     /// offset rounded, so the triangles of one roof face group together. The source TINs wind
     /// faces either way, so the normal is turned to face up.
     /// </summary>
-    private static bool PitchedRoof(Vector3 a, Vector3 c, Vector3 d, out Vector3 upSlope, out (int, int, int, int) key)
-    {
-        var n = (c - a).Cross(d - a);
-        upSlope = Vector3.Zero;
-        key = default;
-        float len = n.Length();
-        if (len < 1e-6f) return false;
-        n /= len;
-        if (n.Y < 0f) n = -n;
-        if (n.Y > 0.97f) return false;
-        upSlope = (Vector3.Up - n * n.Y).Normalized();
-        key = ((int)MathF.Round(n.X * 50f), (int)MathF.Round(n.Y * 50f), (int)MathF.Round(n.Z * 50f),
-            (int)MathF.Round(n.Dot(a) * 10f));
-        return true;
-    }
+    private static bool PitchedRoof(Vector3 a, Vector3 c, Vector3 d, out Vector3 upSlope, out (int, int, int, int) key) =>
+        RoofOverhangs.PitchedRoof(a, c, d, out _, out upSlope, out key);
 
     /// <summary>Flat roof area (square metres) from which a building carries solar panels.</summary>
     public const float SolarRoofArea = 250f;
@@ -429,7 +586,12 @@ public static partial class BuildingMeshBuilder
     /// way), where the run starts along it, and how much u is stretched so whole columns fit
     /// the run (0: too short for a window, u in plain metres).
     /// </summary>
-    private readonly record struct WallRun(Vector3 Tangent, float Start, float Scale);
+    /// <remarks>
+    /// <see cref="Bottom"/>/<see cref="Top"/> are the run's lowest and highest point, and
+    /// <see cref="Level"/> whether it is a rectangle (its top a level wall head, not a gable): a
+    /// castle's wall measures its slits and its corbel band from them (#859).
+    /// </remarks>
+    private readonly record struct WallRun(Vector3 Tangent, float Start, float Scale, float Bottom = 0f, float Top = 0f, bool Level = false, float Length = 0f);
 
     /// <summary>
     /// Groups a building's wall triangles into wall runs and gives each triangle its run's frame
@@ -500,6 +662,7 @@ public static partial class BuildingMeshBuilder
         }
         // turned away from the plan's centre, so u runs the same way whatever the winding
         var axes = new Dictionary<int, (Vector3 Tangent, float U0, float U1)>(facing.Count);
+        var heights = new Dictionary<int, (float Y0, float Y1)>(facing.Count);
         foreach (var (r, (sum, weighted, area)) in facing)
         {
             var o = sum.LengthSquared() > 1e-12f ? sum.Normalized() : flats[r];
@@ -515,39 +678,61 @@ public static partial class BuildingMeshBuilder
             var (a, c, d) = b.Tri(t);
             int r = Find(t);
             var (tangent, u0, u1) = axes[r];
+            var (y0, y1) = heights.TryGetValue(r, out var h) ? h : (float.MaxValue, float.MinValue);
             for (int k = 0; k < 3; k++)
             {
                 var p = k == 0 ? a : k == 1 ? c : d;
                 float u = p.X * tangent.X + p.Z * tangent.Z;
                 u0 = Mathf.Min(u0, u);
                 u1 = Mathf.Max(u1, u);
+                y0 = Mathf.Min(y0, p.Y);
+                y1 = Mathf.Max(y1, p.Y);
             }
             axes[r] = (tangent, u0, u1);
+            heights[r] = (y0, y1);
         }
         // whole columns from end to end: the pitch stretched to fit, or none on a sliver
         for (int t = 0; t < count; t++)
         {
             if (flats[t] == Vector2.Zero) continue;
-            var (tangent, u0, u1) = axes[Find(t)];
+            int r = Find(t);
+            var (tangent, u0, u1) = axes[r];
+            var (y0, y1) = heights[r];
             float len = u1 - u0;
             int columns = Mathf.RoundToInt(len / WindowSpacing);
-            runs[t] = new WallRun(tangent, u0, columns > 0 ? columns * WindowSpacing / len : 0f);
+            // a rectangle fills its span: area (the sum is twice it) against width times height
+            bool level = facing[r].Area * 0.5f >= 0.85f * len * (y1 - y0);
+            runs[t] = new WallRun(tangent, u0, columns > 0 ? columns * WindowSpacing / len : 0f, y0, y1, level, len);
         }
     }
 
     /// <summary>Flat triangle list for ConcavePolygonShape3D.</summary>
-    public static Vector3[] BuildCollisionFaces(BuildingTile tile)
+    public static Vector3[] BuildCollisionFaces(BuildingTile tile, ChunkGrid? ground = null)
     {
+        // a ruin collides as its broken walls, open to the sky, as it is drawn (#859)
+        var types = BuildingTypes.For(tile);
+        var ruins = new List<Vector3>();
+        // and a footing like the wall above it
+        FootingCollision(tile, ground, ruins);
+        var rebuilt = new bool[tile.Buildings.Count];
+        for (int bi = 0; types.HasCastles && bi < tile.Buildings.Count; bi++)
+            if (rebuilt[bi] = RebuiltRuin(tile, types, bi))
+                RuinCollision(tile.Buildings[bi], bi, types.Boxes[bi], ruins);
         int triangles = 0;
-        foreach (var b in tile.Buildings) if (Drawn(b)) triangles += b.TriangleCount;
-        var faces = new Vector3[triangles * 3];
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+            if (Drawn(tile.Buildings[bi]) && !rebuilt[bi]) triangles += tile.Buildings[bi].TriangleCount;
+        var faces = new Vector3[triangles * 3 + ruins.Count];
         int v = 0;
-        foreach (var b in tile.Buildings)
-            for (int t = 0; Drawn(b) && t < b.TriangleCount; t++)
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+        {
+            var b = tile.Buildings[bi];
+            for (int t = 0; Drawn(b) && !rebuilt[bi] && t < b.TriangleCount; t++)
             {
                 var (a, c, d) = b.Tri(t);
                 faces[v++] = a; faces[v++] = c; faces[v++] = d;
             }
+        }
+        ruins.CopyTo(faces, v);
         return faces;
     }
 

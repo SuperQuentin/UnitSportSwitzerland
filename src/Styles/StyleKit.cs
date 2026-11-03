@@ -56,9 +56,9 @@ public enum MaterialRole
 ///
 /// <para>
 /// Each style names a parent, and a role a style has no shader for resolves through the chain
-/// Realistic+ → Realistic− → Cartoon → PS1. PS1 is the base: the only complete style, with every
-/// role. A new visual is built once, in the base, and the other styles borrow it until they get
-/// their own. <c>--style-report</c> lists what each style borrows.
+/// Realistic+ → Realistic− → Cartoon and PS1 → Cartoon. Cartoon is the base and the default: the
+/// only complete style, with every role. A new visual is built once, in the base, and the other
+/// styles borrow it until they get their own. <c>--style-report</c> lists what each style borrows.
 /// </para>
 /// </summary>
 public static class StyleKit
@@ -70,6 +70,9 @@ public static class StyleKit
     public static VisualStyle Style => _session ?? GameSettings.Current.VisualStyle;
 
     private static VisualStyle? _session;
+
+    /// <summary>The style a new player starts in (#849), and what an unknown <c>--style</c> name gives.</summary>
+    public const VisualStyle Default = VisualStyle.Cartoon;
 
     /// <summary>
     /// Switches style for this session only, without saving it (<c>/style</c>): the saved setting
@@ -141,11 +144,11 @@ public static class StyleKit
     {
         VisualStyle.RealisticHigh => VisualStyle.RealisticLow,
         VisualStyle.RealisticLow => VisualStyle.Cartoon,
-        VisualStyle.Cartoon => VisualStyle.Ps1,
+        VisualStyle.Ps1 => VisualStyle.Cartoon,
         _ => null,
     };
 
-    private const VisualStyle Base = VisualStyle.Ps1;
+    private const VisualStyle Base = VisualStyle.Cartoon;
 
     /// <summary>Each style's own shaders. The base must have every role (<see cref="Report"/> checks).</summary>
     private static readonly Dictionary<VisualStyle, Dictionary<MaterialRole, string>> Shaders = new()
@@ -161,13 +164,14 @@ public static class StyleKit
             [MaterialRole.Prop] = "res://shaders/ps1_prop.gdshader",
             [MaterialRole.Interior] = "res://shaders/ps1_interior.gdshader",
             [MaterialRole.Path] = "res://shaders/ps1_path.gdshader",
-            [MaterialRole.Precip] = "res://shaders/ps1_snowfall.gdshader",
             [MaterialRole.Figure] = "res://shaders/avatar.gdshader",
         },
-        // snowfall stays PS1's; interiors are unshaded in every style (rooms float in the dark
-        // under the terrain, out of the sun) but lit by the hour and finished like the style (#388)
+        // interiors are unshaded in every style (rooms float in the dark under the terrain, out of
+        // the sun) but lit by the hour and finished like the style (#388); the snow is unshaded
+        // and the same in every style
         [VisualStyle.Cartoon] = new()
         {
+            [MaterialRole.Precip] = "res://shaders/snowfall.gdshader",
             [MaterialRole.Interior] = "res://shaders/cartoon_interior.gdshader",
             [MaterialRole.Terrain] = "res://shaders/cartoon_terrain.gdshader",
             [MaterialRole.Road] = "res://shaders/cartoon_road.gdshader",
@@ -179,7 +183,7 @@ public static class StyleKit
             [MaterialRole.Path] = "res://shaders/cartoon_path.gdshader",
             [MaterialRole.Figure] = "res://shaders/cartoon_avatar.gdshader",
         },
-        // prop and path borrow Cartoon's lit ones; snowfall stays PS1's
+        // prop, path and snowfall are Cartoon's
         [VisualStyle.RealisticLow] = new()
         {
             [MaterialRole.Interior] = "res://shaders/real_interior.gdshader",
@@ -220,6 +224,41 @@ public static class StyleKit
         return m;
     }
 
+    /// <summary>
+    /// Whether the roads, buildings and water draw before the ground (a standalone headset, #1112); settable to
+    /// measure it (<c>--hidetoggle @order</c>), which moves every live material of those roles at once.
+    /// </summary>
+    public static bool CoverFirst
+    {
+        get => _coverFirst;
+        set
+        {
+            _coverFirst = value;
+            lock (Live)
+                foreach (var (weak, role) in Live)
+                    if (role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water && weak.TryGetTarget(out var m))
+                        m.RenderPriority = value ? -1 : 0;
+        }
+    }
+    private static bool _coverFirst = Core.Platform.IsStandaloneVr;
+
+    /// <summary>
+    /// Measuring only (<c>--hidetoggle @plainground</c>, #1112): every live ground material on the cheapest shader
+    /// there is (unshaded vertex colour) and back, to tell what the ground's shading costs from what its triangles do.
+    /// </summary>
+    public static void PlainGround(bool on)
+    {
+        var plain = GD.Load<Shader>("res://shaders/debug_plain_terrain.gdshader");
+        lock (Live)
+            foreach (var (weak, role) in Live)
+                if (role == MaterialRole.Terrain && weak.TryGetTarget(out var m))
+                {
+                    if (on) { if (m.Shader != plain) { m.SetMeta(PlainWas, m.Shader); m.Shader = plain; } }
+                    else if (m.HasMeta(PlainWas)) { m.Shader = m.GetMeta(PlainWas).As<Shader>(); m.RemoveMeta(PlainWas); }
+                }
+    }
+    private static readonly StringName PlainWas = "plain_was";
+
     /// <summary>Every material handed out that is still alive, and its role.</summary>
     private static readonly List<(System.WeakReference<ShaderMaterial> Material, MaterialRole Role)> Live = new();
 
@@ -256,15 +295,18 @@ public static class StyleKit
 
     /// <summary>What a figure material was built with, for PS1 and for going back to it.</summary>
     private readonly record struct PlainFigure(BaseMaterial3D.DiffuseModeEnum Diffuse,
-        BaseMaterial3D.SpecularModeEnum Specular, float Roughness, bool Rim, float RimAmount, float RimTint);
+        BaseMaterial3D.SpecularModeEnum Specular, float Roughness, bool Rim, float RimAmount, float RimTint, bool Solid = false);
 
     private static readonly List<(System.WeakReference<StandardMaterial3D> Material, PlainFigure Plain)> Figures = new();
 
     /// <summary>
     /// The vertex-coloured standard material of avatars, vehicles, birds and items
-    /// (<c>Avatar/HumanMeshBuilder.Material</c>), shaded for the applied style: PS1's as built,
-    /// Cartoon's with a toon diffuse and a rim. Kept like the shader materials, so a restyle
-    /// reaches it. Any thread (mesh builders make figures on workers).
+    /// (<c>Avatar/HumanMeshBuilder.Material</c>), and any other lit solid built as a plain
+    /// <see cref="StandardMaterial3D"/> (the title diorama, build debris, soot, crate planks: #1068),
+    /// shaded for the applied style: PS1's as built, Cartoon's with a toon diffuse and a rim.
+    /// Kept like the shader materials, so a restyle reaches it. Pass it fresh, never a duplicate of
+    /// a shaded one: what it is given is its plain look. Any thread (mesh builders make figures on
+    /// workers).
     /// </summary>
     public static StandardMaterial3D Figure(StandardMaterial3D m)
     {
@@ -278,8 +320,29 @@ public static class StyleKit
         return m;
     }
 
+    /// <summary>
+    /// The plain standard material of a solid object that is not a figure (a smoke cloud, a
+    /// fishing float, a bus-stop sign): unshaded in PS1 as such things always were, lit and shaded
+    /// like a <see cref="Figure"/> in the lit styles, so it does not glow in a sunlit world (#1069).
+    /// Kept and restyled live like a figure. Glows, signs that light themselves, beams, screens,
+    /// debug and UI stay unshaded on their own material. Any thread.
+    /// </summary>
+    public static StandardMaterial3D Solid(StandardMaterial3D m)
+    {
+        var plain = new PlainFigure(m.DiffuseMode, m.SpecularMode, m.Roughness, m.RimEnabled, m.Rim, m.RimTint, Solid: true);
+        lock (Figures)
+        {
+            Figures.RemoveAll(f => !f.Material.TryGetTarget(out _));
+            Figures.Add((new System.WeakReference<StandardMaterial3D>(m), plain));
+        }
+        Shade(m, plain);
+        return m;
+    }
+
     private static void Shade(StandardMaterial3D m, PlainFigure plain)
     {
+        if (plain.Solid)
+            m.ShadingMode = StyleFinish == Finish.Flat ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel;
         if (StyleFinish == Finish.Realistic)
         {
             // one material for paint, cloth and skin alike: a compromise until the builders give
@@ -311,11 +374,25 @@ public static class StyleKit
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
     {
         var (from, path) = Resolve(style, role);
+        // a standalone headset's own variant where a style has one (#1112): no discard (it turned a Quest's
+        // early depth rejection off), no read of the scene's depth, a lighter finish (NO_DISCARD, STANDALONE)
+        if (Core.Platform.IsStandaloneVr && path.Replace(".gdshader", "_standalone.gdshader") is var standalone
+            && ResourceLoader.Exists(standalone))
+            path = standalone;
+        if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--plainterrain")) path = "res://shaders/debug_plain_terrain.gdshader";
+        if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--litterrain")) path = "res://shaders/debug_lit_terrain.gdshader";
+        if (role == MaterialRole.Terrain && Core.CmdArgs.Int("--terrainvariant") is int tv) path = $"res://shaders/debug_terrain_variant_{tv}.gdshader";
         var shader = GD.Load<Shader>(path);
         if (m.Shader != shader) m.Shader = shader;
         // PS1's finish (shaders/common/retro.gdshaderinc) belongs to PS1: off wherever another
         // style draws with a PS1 body, borrowed or wrapped
         if (HasUniform(shader, "retro")) m.SetShaderParameter("retro", style == VisualStyle.Ps1);
+        // a standalone headset (#1112): the trees' dissolve discards, which turns a Quest's early depth
+        // rejection off for every draw after it, so they go last (opaque draws sort by priority first)
+        if (Core.Platform.IsStandaloneVr && role is MaterialRole.Tree or MaterialRole.TreeFar) m.RenderPriority = 2;
+        // and what covers the ground goes before it: the roads on it, the buildings in front of it and the (opaque)
+        // water over the lake bed, so the ground's costly pixels under them are rejected instead of shaded twice
+        if (CoverFirst && role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water) m.RenderPriority = -1;
         switch (role)
         {
             case MaterialRole.Tree:
@@ -456,9 +533,9 @@ public static class StyleKit
 
     private static readonly Dictionary<VisualStyle, Look> Looks = new()
     {
-        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat, TreeNear: 220f,
+        [VisualStyle.Ps1] = new(MeshDetail.Low, Sun: false, Finish: Finish.Flat),
+        [VisualStyle.Cartoon] = new(MeshDetail.High, FinestStride: 1, Sun: true, Finish: Finish.Cartoon, TreeNear: 220f,
             Effects: false, Photos: false),
-        [VisualStyle.Cartoon] = new(MeshDetail.High, Sun: true, Finish: Finish.Cartoon),
         // Textures carry the surface detail, so 2 m quads underfoot rather than 1 m: the
         // prototype's biggest geometry lever (Realistic-, Riddes, M1 Pro: ~25 -> 11-20 ms)
         // ...and 3D trees to 80 m only: an EZ-Tree is ~3k triangles against Cartoon's 50-120
@@ -493,9 +570,10 @@ public static class StyleKit
 
     /// <summary>
     /// Whether the applied style's screen-space and volumetric effects are on: the style asks for
-    /// them and this run is on Forward+. On Mobile a Realistic+ choice draws as Realistic−.
+    /// them and this run is on Forward+. On Mobile a Realistic+ choice draws as Realistic−, and so
+    /// does VR: each effect runs once an eye, at a headset's resolution (#1036).
     /// </summary>
-    public static bool EffectsOn => Pick(Applied, l => l.Effects).Value && OnForwardPlus;
+    public static bool EffectsOn => Pick(Applied, l => l.Effects).Value && OnForwardPlus && !XR.XrSession.Active;
 
     /// <summary>"--sdfgi": global illumination in Realistic+, off until measured on a gaming laptop.</summary>
     private static readonly bool Sdfgi = CmdArgs.Has("--sdfgi");
@@ -552,7 +630,8 @@ public static class StyleKit
         }
         if (StyleFinish == Finish.Cartoon)
         {
-            env.BackgroundMode = Godot.Environment.BGMode.Sky;
+            // "--nosky": the flat background colour, to measure what the sky costs a headset (#1112)
+            if (!Core.CmdArgs.Has("--nosky")) env.BackgroundMode = Godot.Environment.BGMode.Sky;
             env.Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial { SunAngleMax = 20f, SkyCurve = 0.12f } };
             env.TonemapMode = Godot.Environment.ToneMapper.Filmic;
             env.TonemapExposure = 1.05f;
@@ -630,6 +709,14 @@ public static class StyleKit
     /// </summary>
     public static float Dusk(float sunElevationDeg) => Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
 
+    /// <summary>The sun's shadow cascades: 4, or <c>--shadows off|1|2|4</c> to measure their cost (#1112).</summary>
+    private static readonly int ShadowSplits = Core.CmdArgs.Value("--shadows") switch
+    {
+        "off" or "0" => 0, "1" => 1, "2" => 2, "4" => 4,
+        // a standalone headset (#1112): one cascade over the near ground, where a shadow reads
+        _ => Core.Platform.IsStandaloneVr ? 1 : 4,
+    };
+
     /// <summary>
     /// The applied style's sun, or null when it has none (PS1: the shaders light themselves from
     /// <c>world_sun_dir</c>). <c>World/DayNight</c> points and colours it every frame.
@@ -638,11 +725,16 @@ public static class StyleKit
         ? new DirectionalLight3D
         {
             Name = "Sun",
-            ShadowEnabled = true,
+            ShadowEnabled = ShadowSplits > 0,
             // about the 3D trees' reach (the billboards beyond cast none), in cascades of 10, 40,
             // 140 and 400 m: the default 40 m first one left a sawtooth on every near shadow
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
-            DirectionalShadowMaxDistance = 400f,
+            DirectionalShadowMode = ShadowSplits switch
+            {
+                1 => DirectionalLight3D.ShadowMode.Orthogonal,
+                2 => DirectionalLight3D.ShadowMode.Parallel2Splits,
+                _ => DirectionalLight3D.ShadowMode.Parallel4Splits,
+            },
+            DirectionalShadowMaxDistance = ShadowSplits == 1 ? 120f : 400f,
             DirectionalShadowSplit1 = 0.025f,
             DirectionalShadowSplit2 = 0.1f,
             DirectionalShadowSplit3 = 0.35f,
@@ -680,7 +772,7 @@ public static class StyleKit
                 style = s;
                 return true;
             }
-        style = VisualStyle.Ps1;
+        style = Default;
         return false;
     }
 

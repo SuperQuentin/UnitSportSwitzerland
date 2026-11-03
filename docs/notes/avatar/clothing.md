@@ -7,10 +7,13 @@
   `WearSlot`, `Code`, `GarmentShape`, `GarmentStyle` Basic/Gothic/Kawaii/Special, colours A/B/C,
   `Finish`, mask `MaskFace`). The item rows (`ItemDefs.All`) are generated from it (`ItemDefs.Cloth`),
   so a new look is one `Garments` line plus an `ItemId` (65-149, then 354-356 of #716, 357-358 of
-  #822; append only). `GarmentStyle.Workwear` (#822: the building site's hard hat and hi-vis vest)
+  #822, 359-362 of #880: the aliens' antennae and suit, `GarmentStyle.Alien`, see `aliens`; append only). `GarmentStyle.Workwear` (#822: the building site's hard hat and hi-vis vest)
   is in no wardrobe pool: only the site's hard-hat rail and lockers give it (`terrain/construction-sites`).
+  `GarmentStyle.Alpine` (404-410 of #1227: the Alpine set, two shapes of its own, `FeltHat` and `Bandana`) is in no
+  wardrobe pool either: only the Adventure's chests give it, never a workbench (`adventure/reward-gadgets`).
 - **Slots**: `WearSlot` Head, Eyes, Face, Ears, Neck, Top, Bottom, Legs, Feet, Hands. Occasion hats are
-  Head items too. A Robe/Dress (`CoversBottom`) takes the bottom slot as well.
+  Head items too. A Robe/Dress/SpaceSuit (`CoversBottom`) takes the bottom slot as well; only a Robe or
+  Dress is `Draped` (a skirt that blows in the wind).
 - **Replication**: `Outfit` packs 6 bits of `Garment.Code` per slot (1-63, 0 = nothing) into a
   `long`: `FootPlayer.OutfitBits`, OnChange like `HeadwearId`, written on the owner by
   `Occasions.OccasionHats` from `Inventory.Outfit`. **Codes are per slot and never reused or renumbered.**
@@ -53,10 +56,11 @@
   public `HumanMeshBuilder.AppendLeg`; skirts are drawn even when the legs are not (`includeLegs: false`).
 - **Wind**: `HumanPalette.Wind` (author space, m/s of air past the figure). `FigureWind` measures it
   from the figure node's own motion each frame (owner and remote copies alike, nothing replicated);
-  the walker, cyclist and motorcyclist rebuild while `HumanMeshBuilder.Flutters(outfit)` (a skirt, robe
-  or dress). `AppendSkirt` carries the hem downwind (full by ~14 m/s, length kept) and
-  the hem ripples round its edge faster with speed. `BuildStride` with
-  no measured wind uses the stride's own speed. Cars give no wind (closed cabin, driver pose cached).
+  the walker, cyclist and motorcyclist pose their skirt's bones with it while
+  `HumanMeshBuilder.Flutters(outfit)` (a skirt, robe or dress; #1202, `skinned-figures`).
+  `AppendSkirt` carries the hem downwind (full by ~14 m/s, length kept) and the hem ripples round
+  its edge faster with speed: on a skinned figure in the shader (`skirt_flutter`). `PoseStride` with
+  no measured wind uses the stride's own speed. Cars give no wind (closed cabin).
 - Preview: `--avatars <s> <png> --outfits riders [--speed m/s] [--focus 0..3]` moves a dressed cyclist,
   motorcyclist, driver and runner together with the camera, so the skirts blow as in the game.
 - **Skirts, dresses and robes are draped** (#671): `HangSkirt` fills 11 rings × 24 sides

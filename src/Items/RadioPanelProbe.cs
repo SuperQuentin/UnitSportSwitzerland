@@ -87,7 +87,7 @@ public partial class RadioPanelProbe : Node
             Check(RadioUi.Instance?.IsOpen == true, "holding Use opens the radio's panel");
             Check(Visible(RadioUi.LibraryLabel) && !RowsShown(), "on the player view: the library button, no CD row");
             await Wait(0.2);
-            var cursor = Input.MouseMode == Input.MouseModeEnum.Visible && DisplayServer.GetName() != "headless"
+            var cursor = MouseCapture.Mode == Input.MouseModeEnum.Visible && DisplayServer.GetName() != "headless"
                 ? GetViewport().GetMousePosition() : GetViewport().GetVisibleRect().Size / 2f;
             Check(PanelRect() is { } r && !r.HasPoint(cursor), $"the cursor is not on the player ({cursor} vs {PanelRect()})");
             State("open");
@@ -245,7 +245,7 @@ public partial class RadioPanelProbe : Node
     /// <summary>A left click where a player's cursor is: the centre while captured, else wherever it was put.</summary>
     private async Task Click()
     {
-        var at = Input.MouseMode == Input.MouseModeEnum.Visible ? GetViewport().GetMousePosition() : GetViewport().GetVisibleRect().Size / 2f;
+        var at = MouseCapture.Mode == Input.MouseModeEnum.Visible ? GetViewport().GetMousePosition() : GetViewport().GetVisibleRect().Size / 2f;
         foreach (bool down in new[] { true, false })
         {
             // pushed into the viewport like a real click: the GUI sees it first, then the game

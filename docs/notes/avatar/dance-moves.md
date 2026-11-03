@@ -87,6 +87,10 @@ Emotes (#404), outside the tables too: `Move = HumanMeshBuilder.EmoteMoves` (200
 gestures are emote-only (`Wave`, `Cheer`, `Salute`, `Shrug`); the rest of the catalog reuses the
 moves above (the #728 ones too, page 4, #748; the floor emotes run whole break sets). The wheel and the free clock: `docs/notes/player/emote-wheel.md`.
 
+Other ranges past the tables: fight poses at `FightMoves` (3000, #495, `combat/fist-fight`), break sets at
+`BreakMoves` (4000), aura-battle poses at `AuraMoves` (5000, #907, `combat/aura-battle`); `Resolve` checks
+the highest range first.
+
 ## Picking, flowing and crowds (#261, #728)
 
 - **Who does what** (`FootPlayer.StepDance` -> `DanceMoveAt` -> `Avatar.DancePick`, pure C#, tier 0

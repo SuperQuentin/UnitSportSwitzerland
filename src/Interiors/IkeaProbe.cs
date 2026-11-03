@@ -71,10 +71,10 @@ public partial class IkeaProbe : Node
             // need not be the tile its point fell in: look at the ring
             var hits = new List<string>();
             bool any = false;
-            for (int de = -1; de <= 1; de++)
-                for (int dn = -1; dn <= 1; dn++)
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = 1; dz >= -1; dz--)
                 {
-                    var t = new TileId(own.E + de, own.N + dn);
+                    var t = own.Neighbour(dx, dz);
                     string path = dir.PathJoin(BuildingFormat.FileName(t));
                     if (!Godot.FileAccess.FileExists(path)) continue;
                     any = true;
@@ -94,7 +94,7 @@ public partial class IkeaProbe : Node
                         var mine = doors.Where(x => x.Index == i).ToList();
                         var d = mine.FirstOrDefault(x => x.Slot == 0);
                         string door = d.Width > 0
-                            ? $" door E {t.MinE + d.Position.X:F0} N {t.MaxN - d.Position.Z:F0} w{d.Width:F1}"
+                            ? $" door E {t.Global(d.Position.X, d.Position.Z).E:F0} N {t.Global(d.Position.X, d.Position.Z).N:F0} w{d.Width:F1}"
                               + (mine.Count > 1 ? $" (+{mine.Count - 1} more)" : "")
                             : " NO DOOR";
                         hits.Add($"{t} #{i} {box.Area:F0} m2 {box.Width:F0}x{box.Depth:F0} h{b.MaxY - b.MinY:F0} {b.Kind}{door}");
@@ -158,7 +158,7 @@ public partial class IkeaProbe : Node
         Check(layout.Floors.Count == 1 && layout.Below == 0, "one floor, no cellar");
 
         var hall = layout.Floors[0].Rooms[0];
-        Check(layout.Floors[0].Rooms.Count == 1 && hall.Type == RoomType.IkeaMarket, "one market hall");
+        Check(layout.Floors[0].Rooms.Count(r => r.Type == RoomType.IkeaMarket) == 1 && hall.Type == RoomType.IkeaMarket, "one market hall");
         Check(hall.Area > 0.9f * layout.Width * layout.Depth, "the hall is the whole slab");
         Check(hall.Openings.Any(o => o.Kind == OpeningKind.Entry && o.Width >= 3f),
             "the entrance is a store's, not a house's");
@@ -182,6 +182,18 @@ public partial class IkeaProbe : Node
 
         var problems = InteriorValidator.Validate(layout);
         Check(problems.Count == 0, $"the plan validates{(problems.Count == 0 ? "" : ": " + string.Join("; ", problems.Take(4)))}");
+        // the public toilets along the back wall (#1285): a store has room for every set
+        var loo = ToiletCheck.Problems(layout, ToiletSet.Gendered, accessible: true);
+        Check(loo.Count == 0, $"toilets {ToiletCheck.Describe(layout)}{(loo.Count == 0 ? "" : ": " + string.Join("; ", loo))}");
+        // and a slab of each size has the set it has room for
+        foreach (var (w, d, want) in new[] { (9f, 10f, ToiletSet.Pair), (9f, 12f, ToiletSet.Shared), (40f, 30f, ToiletSet.Gendered) })
+        {
+            var small = InteriorGenerator.IkeaOfSize(w, d);
+            if (small == null) { Check(false, $"a {w}x{d} m store is planned"); continue; }
+            var bad = InteriorValidator.Validate(small);
+            bad.AddRange(ToiletCheck.Problems(small, want, accessible: want == ToiletSet.Gendered));
+            Check(bad.Count == 0, $"a {w}x{d} m store: toilets {ToiletCheck.Describe(small)}{(bad.Count == 0 ? "" : ": " + string.Join("; ", bad.Take(4)))}");
+        }
 
         // the plan as a picture, the way SiteProbe writes its sites: the one artefact that shows
         // the rows of bins and the lane in from the door at a glance

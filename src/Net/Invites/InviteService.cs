@@ -156,6 +156,7 @@ public partial class InviteService : Node
         if (gone) SendGone(invite);
         else if (Connected(peer)) RpcId(peer, MethodName.Gone, invite.Id);
         GD.Print($"[invite] #{invite.Id} {invite.Kind} {(accept ? "accepted" : "declined")} by {peer}");
+        TellResolved(invite, Who(peer), accept ? "accepted" : "declined");
         if (!accept)
         {
             if (!invite.ToEveryone && invite.From > 0) _chat?.Tell(invite.From, $"[{k.Label}] {Who(peer)} declines your invite.", ChatKind.System);
@@ -173,7 +174,7 @@ public partial class InviteService : Node
         {
             var to = _book.To(sender).ToList();
             var from = _book.From(sender).ToList();
-            if (to.Count == 0 && from.Count == 0) return "No invites open. /tpa, /party invite, /br invite, /race duel and /fight send one.";
+            if (to.Count == 0 && from.Count == 0) return "No invites open. /tpa, /party invite, /br invite, /race duel, /fight and /aura send one.";
             var lines = to.Select(i => $"#{i.Id} {i.Title}{(i.Detail.Length > 0 ? $" ({i.Detail})" : "")}, {i.Expires - Now:0} s — /accept {i.Kind} or /decline {i.Kind}")
                 .Concat(from.Select(i => $"#{i.Id} you → {(i.ToEveryone ? "everyone" : Who(i.To))}: {i.Title}, {i.Expires - Now:0} s"));
             return "Invites:\n" + string.Join("\n", lines);
@@ -210,11 +211,18 @@ public partial class InviteService : Node
             SendGone(i);
             if (!_kinds.TryGetValue(i.Kind, out var k)) continue;
             if (!i.ToEveryone && i.From > 0) _chat?.Tell(i.From, $"[{k.Label}] {Who(i.To)} did not answer your invite.", ChatKind.System);
+            TellResolved(i, Who(i.To), "lapsed");
             k.Lapsed?.Invoke(i);
         }
     }
 
     private double _expireIn;
+
+    /// <summary>The sender of a direct invite learns how it ended (the phone's Contacts shows it, #1253); bots have no screen.</summary>
+    private void TellResolved(Invite i, string who, string outcome)
+    {
+        if (!i.ToEveryone && Connected(i.From)) RpcId(i.From, MethodName.Ended, i.Id, i.Kind, who, outcome);
+    }
 
     private bool Connected(long peer) => peer > 0 && Peers.Contains(peer);
 
@@ -323,6 +331,12 @@ public partial class InviteService : Node
         });
         Changed?.Invoke();
     }
+
+    /// <summary>An invite the local player sent ended: kind, the other player's name, and "accepted", "declined" or "lapsed".</summary>
+    public event Action<string, string, string>? Resolved;
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Ended(int id, string kind, string who, string outcome) => Resolved?.Invoke(kind, who, outcome);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Gone(int id)

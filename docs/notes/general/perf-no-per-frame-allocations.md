@@ -25,6 +25,8 @@ run in normal play excluded):
 - Server jobs follow the same rule: return early when nobody needs the work
   (`WebRadio.Serve` with no subscriber and no tap), and re-serialise only on change
   (`QueryResponder.Refresh` compares the `ServerStatus` record, value equality).
+- **Meshes**: nothing that moves rebuilds its mesh (`no-mesh-rebuild-per-frame`): a figure is
+  skinned, a moving part is a node, cloth and patterns are shader terms.
 - Something that only has to *notice* things (a group scan, a proximity search) runs at
   10 Hz with a margin, and only the exact per-frame work stays per frame (`DoorwayGhosts.Scan`).
 

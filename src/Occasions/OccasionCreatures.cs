@@ -176,22 +176,37 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
     private void Fly(MultiMeshInstance3D node, Flock flock, Vector3 eye, float night, float dt)
     {
         var multi = node.Multimesh;
+        _buffer = MultiMeshPack.Buffer(multi, _buffers.GetValueOrDefault(multi));
+        _buffers[multi] = _buffer;
         switch (flock.Kind)
         {
             case CritterKind.Bat: FlyBats(multi, eye); break;
             case CritterKind.Crow: FlyCrows(multi, eye, dt); break;
             case CritterKind.Wisp: FlyWisps(multi, eye); break;
         }
+        // one engine call a flock, not two a creature (#1112)
+        multi.Buffer = _buffer;
+    }
+
+    /// <summary>Each flock's instance buffer, reused frame to frame; the one being written.</summary>
+    private readonly Dictionary<MultiMesh, float[]> _buffers = new();
+    private float[] _buffer = [];
+
+    private void Put(MultiMesh multi, int i, in Transform3D t, Color custom)
+    {
+        int stride = MultiMeshPack.Stride(multi), o = i * stride;
+        MultiMeshPack.Transform(_buffer, o, t);
+        MultiMeshPack.Color(_buffer, o + stride - 4, custom);   // custom data last (no colours on these meshes)
     }
 
     /// <summary>Bats wheel round the nearest town's centre, each on its own radius, height and speed.</summary>
     private void FlyBats(MultiMesh multi, Vector3 eye)
     {
         var (e, n) = _origin.ToLv95(eye);
-        var town = OccasionTowns.Near(e, n, 1500).Select(t => (OccasionTowns.Town?)t).FirstOrDefault();
+        var town = OccasionTowns.Nearest(e, n, 1500);
         for (int i = 0; i < multi.InstanceCount; i++)
         {
-            if (town is not { } tw) { multi.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), eye)); continue; }
+            if (town is not { } tw) { Put(multi, i, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), eye), new Color(0, 0, 0, 0)); continue; }
             var centre = _origin.ToWorld(tw.E, tw.N, 0);
             if (_chunks.TryGetSurface(centre, out float g)) centre.Y = g;
             float r = 8f + H(i, 1) * 20f, speed = (0.7f + H(i, 2) * 0.9f) * (H(i, 3) < 0.5f ? 1 : -1);
@@ -203,8 +218,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
             // a flap is the wings folding in: scale across the span, fast and erratic
             float flap = 0.35f + 0.65f * Mathf.Abs(Mathf.Sin((float)_t * (11f + H(i, 6) * 4f) + i));
             var basis = TileContext.Facing(tangent, 0f, 4.0f) * Basis.FromScale(new Vector3(flap, 1, 1));
-            multi.SetInstanceTransform(i, new Transform3D(basis, p));
-            multi.SetInstanceCustomData(i, new Color(0, 0, 0, 0));
+            Put(multi, i, new Transform3D(basis, p), new Color(0, 0, 0, 0));
         }
     }
 
@@ -226,8 +240,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
             float beat = Mathf.Sin((float)_t * 0.6f + i * 2.1f) > 0.3f ? 0.55f + 0.45f * Mathf.Abs(Mathf.Sin((float)_t * 7f + i)) : 1f;
             var basis = TileContext.Facing(tangent, 0f, 2.2f) * Basis.FromScale(new Vector3(beat, 1, 1))
                 * new Basis(Vector3.Forward, -0.25f);   // banked into the turn
-            multi.SetInstanceTransform(i, new Transform3D(basis, p));
-            multi.SetInstanceCustomData(i, new Color(0, 0, 0, 0));
+            Put(multi, i, new Transform3D(basis, p), new Color(0, 0, 0, 0));
         }
     }
 
@@ -259,8 +272,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
                 1.2f + Mathf.Sin((float)_t * 1.3f + i * 2f) * 0.35f,
                 Mathf.Cos((float)_t * 0.27f + i * 1.7f) * 2.5f);
             var basis = new Basis(Vector3.Up, (float)_t * 0.8f + i).Scaled(Vector3.One * Mathf.Max(2.5f * fade, 0.001f));
-            multi.SetInstanceTransform(i, new Transform3D(basis, p));
-            multi.SetInstanceCustomData(i, new Color(H(i, 21), 1.4f * fade, 0, 0));
+            Put(multi, i, new Transform3D(basis, p), new Color(H(i, 21), 1.4f * fade, 0, 0));
         }
     }
 

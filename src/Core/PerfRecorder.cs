@@ -188,13 +188,22 @@ public partial class PerfRecorder : Node, IOriginShiftAware
     public static void EnableRenderTiming(Viewport viewport) =>
         RenderingServer.ViewportSetMeasureRenderTime(viewport.GetViewportRid(), true);
 
-    /// <summary>(GPU ms, render CPU ms) of the viewport's last measured frame.</summary>
+    /// <summary>
+    /// (GPU ms, render CPU ms) of the viewport's last measured frame. In VR, the headset's (#1112):
+    /// the window's is the monitor's, or nothing at all on a standalone headset.
+    /// </summary>
     public static (double Gpu, double Cpu) RenderTimes(Viewport viewport)
     {
+        if (XR.XrSession.Rig is { } rig && !XR.XrSession.Simulated && IsInstanceValid(rig))
+            viewport = rig.HeadsetView;
         var rid = viewport.GetViewportRid();
+        // the rig arrives after the recorder and the overlay turned timing on for the window
+        if (rid != _timed) { RenderingServer.ViewportSetMeasureRenderTime(rid, true); _timed = rid; }
         return (RenderingServer.ViewportGetMeasuredRenderTimeGpu(rid),
             RenderingServer.ViewportGetMeasuredRenderTimeCpu(rid) + RenderingServer.GetFrameSetupTimeCpu());
     }
+
+    private static Rid _timed;
 
     /// <summary>Opens the folder all recordings go into.</summary>
     public static void OpenLogsFolder()

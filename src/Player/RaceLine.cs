@@ -60,7 +60,7 @@ public sealed class RaceLine
     /// <summary>Moves the points into <paramref name="now"/> (the origin moved, #185); a no-op once they are there.</summary>
     public void Follow(OriginFrame now)
     {
-        if (Frame is { } was && !(was.E == now.E && was.N == now.N))
+        if (Frame is { } was && !was.SameFrame(now))
         {
             var shift = now.Since(was);
             for (int i = 0; i < Points.Count; i++) Points[i] = shift.Point(Points[i]);

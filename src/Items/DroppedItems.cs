@@ -260,6 +260,26 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
         foreach (var state in respawn) Spawn(state, keepOid: true);
     }
 
+    /// <summary>
+    /// Server or offline (<c>/despawn</c>, #1200): every item within <paramref name="radius"/> of
+    /// <paramref name="at"/> (null: everywhere) leaves the world for good, as a picked-up one does. Not
+    /// one being picked up, nor a client's stand-in. How many went.
+    /// </summary>
+    public int Despawn(Vector3? at, float radius)
+    {
+        if (Online && !Multiplayer.IsServer()) return 0;
+        int count = 0;
+        foreach (var item in Items)
+            if (!item.Proxy && !item.IsQueuedForDeletion() && !_claimed.Contains(item.Name)
+                && (at is not { } p || item.GlobalPosition.DistanceTo(p) <= radius))
+            {
+                Removing?.Invoke(item);
+                item.QueueFree();
+                count++;
+            }
+        return count;
+    }
+
     private void TrimOffline()
     {
         var all = Items.ToList();

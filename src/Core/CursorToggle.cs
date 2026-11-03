@@ -44,6 +44,8 @@ public partial class CursorToggle : Node
 
     public override void _Input(InputEvent e)
     {
+        // Alt + wheel steps the hotbar (#1369): a chord, not a tap
+        if (e is InputEventMouseButton { Pressed: true, AltPressed: true }) _armed = false;
         // seen before any control takes it: whether Alt was pressed alone
         if (e is not InputEventKey { Echo: false } k) return;
         if (k.PhysicalKeycode == Key.Alt)
@@ -67,26 +69,26 @@ public partial class CursorToggle : Node
     public override void _Process(double delta)
     {
         // someone else took the pointer meanwhile (a menu opened, a UI captured it back): no longer ours
-        if (Free && (Input.MouseMode == Input.MouseModeEnum.Captured || _menuOpen())) { Free = false; _hint.Visible = false; }
+        if (Free && (MouseCapture.Mode == Input.MouseModeEnum.Captured || _menuOpen())) { Free = false; _hint.Visible = false; }
     }
 
     private void Toggle()
     {
         if (UiFocus.TextEntryActive || _menuOpen()) return;
         if (Free) SetFree(false);
-        else if (Input.MouseMode == Input.MouseModeEnum.Captured) SetFree(true);
+        else if (MouseCapture.Mode == Input.MouseModeEnum.Captured) SetFree(true);
     }
 
     private void SetFree(bool free)
     {
         Free = free;
         _hint.Visible = free;
-        if (free) Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (free) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else MouseCapture.Capture();
     }
 
     public override void _ExitTree()
     {
-        if (Free && Input.MouseMode == Input.MouseModeEnum.Visible) Free = false;
+        if (Free && MouseCapture.Mode == Input.MouseModeEnum.Visible) Free = false;
     }
 }

@@ -35,6 +35,21 @@ public sealed class Junction
     public required int Layer { get; init; }
     public List<JunctionArm> Arms { get; } = new();
 
+    /// <summary>
+    /// A junction merged from several nodes (#818 phase 5c, made by the planner only): every member's node id, <see cref="NodeId"/>
+    /// one of them; its arms are the members' arms but the short streets between them. Null for a junction of one node.
+    /// </summary>
+    public IReadOnlySet<int>? Members { get; init; }
+
+    /// <summary>
+    /// A tight roundabout laid whole (#854): its ring as <c>RoundaboutShaper</c> fitted it, the ring's nodes and its splitter
+    /// islands' tips its <see cref="Members"/>. Null for any other junction.
+    /// </summary>
+    public Network.RoundaboutShaper.Ring? Ring { get; init; }
+
+    /// <summary>Whether <paramref name="node"/> is this junction's node or one of its members.</summary>
+    public bool Holds(int node) => node == NodeId || Members?.Contains(node) == true;
+
     /// <summary>Corners left tight (#700): corner i lies between arm i's left edge and the next arm's right edge; no right turn rounds it.</summary>
     public HashSet<int> TightCorners { get; } = new();
 

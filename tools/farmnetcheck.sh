@@ -12,7 +12,7 @@ WORLD="--world fixture --chunks fixture:flat"
 tc_server 300 120 "$OUT/farmnet_server.log" --server --port $PORT $WORLD --farmmonth 7
 tc_client 260 "$OUT/farmnet_A.log" --connect 127.0.0.1:$PORT --name FarmA $WORLD --traffic 0 --farmnet A & A=$!
 # B joins only once A's strip is answered: what it sees first comes from the snapshot
-for _ in $(seq 1 200); do grep -q "say worked" "$OUT/farmnet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 1; done
+for _ in $(seq 1 400); do grep -q "say worked" "$OUT/farmnet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
 tc_client 220 "$OUT/farmnet_B.log" --connect 127.0.0.1:$PORT --name FarmB $WORLD --traffic 0 --farmnet B & B=$!
 wait $A $B
 tc_stop

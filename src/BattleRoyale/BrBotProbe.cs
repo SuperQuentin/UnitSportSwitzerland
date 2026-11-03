@@ -22,7 +22,7 @@ namespace UnitSport.BattleRoyale;
 /// </summary>
 public partial class BrBotProbe : ChatProbe
 {
-    public static bool Requested => CmdArgs.Has("--brbotcheck") || CmdArgs.Has("--brbotwatch");
+    public static bool Requested => CmdArgs.Has("--brbotcheck") || CmdArgs.Has("--brbotwatch") || CmdArgs.Has("--brsquadcheck");
 
     public BrBotProbe(ItemController items) : base(items, "brbots", "BB", "brbots_") { }
     public BrBotProbe() : this(null!) { }
@@ -40,7 +40,7 @@ public partial class BrBotProbe : ChatProbe
     {
         if (!await Joined(150, () => Br != null)) return;
         await Seconds(2.0);
-        if (Watch) await RunWatch(); else await Run();
+        if (Watch) await RunWatch(); else if (SquadCheck) await RunSquad(); else await Run();
         await Finish(1.0);
     }
 
@@ -52,9 +52,13 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        // --checkspeed n: the whole simulation n times faster (/speed; the match follows it since #856), so a
+        // full-pace match, in proportion (no zone outrunning the runners), takes a fraction of the wall clock
+        if (!await SpeedUp("brbots")) return;
         Chat.Send($"/br bots {CmdArgs.Int("--brbotwatch") ?? 9} normal");
         await Seconds(0.5);
-        Chat.Send("/br open 5 short");
+        // --brwatchmode duos|trios|squads (#837 phase 4): bots in teams
+        Chat.Send($"/br open 5 short {CmdArgs.Value("--brwatchmode") ?? "solo"}");
         if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
         Chat.Send("/br join");
         await Until(() => br.State.Phase == BrPhase.Countdown, 10);
@@ -92,11 +96,108 @@ public partial class BrBotProbe : ChatProbe
 
     private FootPlayer? BodyOf(long id) => GetParent().GetNodeOrNull<FootPlayer>("Players/" + PlayerReplication.NodeName(id));
 
+    /// <summary>
+    /// <c>--brsquadcheck</c> (#837 phase 4): a duos match of A and one bot, alone on its side (no enemy to chase).
+    /// The mate jumps after A and lands near, regroups when A moves off, takes A's dogtag to a Postauto stop when
+    /// A is out (in the looting phase: the stops are spread over the first circle, and once circles close the bot
+    /// rightly finds them too far through the zone): A is recalled; then it regroups when A moves off, goes to A's
+    /// ping and revives A when A is down.
+    /// </summary>
+    private static bool SquadCheck => CmdArgs.Has("--brsquadcheck");
+
+    private async Task RunSquad()
+    {
+        var br = Br!;
+        Chat!.Send("/login brbots");
+        if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        // the whole simulation faster (--checkspeed n, /speed): the probe's waits are simulated seconds too
+        if (!await SpeedUp("brbots")) return;
+        Chat.Send("/br bots 2 normal");
+        await Seconds(0.5);
+        // here: A starts in a town with roads enough for the Postauto stops (tools/brsquadcheck.sh); a random
+        // region may have none
+        // long: the looting phase lasts, when no circle is shown yet and any stop is worth the walk
+        Chat.Send("/br open here 5 long duos");
+        if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
+        Chat.Send("/br join");
+        await Until(() => br.State.Phase == BrPhase.Countdown, 10);
+        Chat.Send("/br start");
+        if (!await Until(() => br.InMatch && br.State.Phase == BrPhase.Playing, 60)) { Fail("never dropped"); return; }
+        var mine = br.MyEntry;
+        var mate = br.State.Entrants.FirstOrDefault(e => e.Bot && mine != null && e.Team == mine.Team);
+        Expect(mine is { Team: not 0 } && mate != null, $"A and a bot in one duo (team {mine?.Team}, mate {mate?.Name})");
+        if (mate == null || br.State.Flight is not { } flight) return;
+        long id = mate.Peer;
+        var me = Me!;
+        float ToMe(FootPlayer b) => new Vector2(b.GlobalPosition.X - me.GlobalPosition.X, b.GlobalPosition.Z - me.GlobalPosition.Z).Length();
+
+        // the jump: the mate goes after A, then lands near A
+        await Until(() => flight.DoorsOpen(ClockSync.SimNow), 90);
+        Expect(br.JumpOut(), "A jumped");
+        Expect(await Until(() => br.State.Find(id) is { Jumped: true }, 8), "the mate jumped after A");
+        await Seconds(0.5);
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        var c0 = br.State.Zone().CentreOf(0);
+        br.Teleport(br.State.AreaE + c0.X, br.State.AreaN + c0.Y, "the circle's centre");
+        await Until(() => me.IsOnFloor(), 30);
+        bool near = await Until(() => BodyOf(id) is { Ride: RideKind.OnFoot, Visible: true } b && ToMe(b) < 150f, 240);
+        Expect(near, $"the mate flew after A and landed near ({(BodyOf(id) is { } b0 ? ToMe(b0) : -1):F0} m)");
+        if (!near) return;
+        await Seconds(5);   // its ride as this client sees it can say on foot a moment before the server's body lands
+
+        // out: the mate takes A's dogtag to a Postauto stop and A is back
+        // the stops come with the loot, read from the match square's road tiles after GO: on a generated world the server
+        // runs each through the road stage, which can outlast the mate's drop (#937)
+        if (!await Until(() => br.State.RecallPoints is { Length: > 0 }, 120)) { Fail("no Postauto stops in this region: the recall is not tested"); return; }
+        me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
+        Expect(await Until(() => me.Downed, 5), "A is down, not out (a mate stands)");
+        for (int i = 0; i < 20 && br.MyEntry is { Alive: true }; i++) { me.TakeDamage(500f, 0, DamageCause.Other); await Seconds(0.5); }
+        Expect(await Until(() => br.MyEntry is { Alive: false }, 30), "A is out");
+        Expect(await Until(() => br.MyEntry is { Alive: true, Recalled: true }, 400), "the mate took A's dogtag to a stop: A is recalled");
+        // back over the stop in the wingsuit: down on foot, near the mate again for what follows
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        if (BodyOf(id) is { } mateBody && me.Origin is { } o)
+        {
+            var (me2, mn2) = o.ToLv95(mateBody.GlobalPosition);
+            br.Teleport(me2 + 10, mn2, "beside the mate");
+        }
+        await Until(() => me.IsOnFloor(), 20);
+
+        // A moves off: the mate comes back to within 60 m
+        var (ae, an) = me.Origin!.ToLv95(me.GlobalPosition);
+        br.Teleport(ae + 110, an, "110 m east");
+        await Until(() => me.IsOnFloor(), 20);
+        Expect(await Until(() => BodyOf(id) is { } b && ToMe(b) < 60f, 90), $"the mate regrouped ({(BodyOf(id) is { } b1 ? ToMe(b1) : -1):F0} m)");
+
+        // a ping 70 m off: the mate goes there
+        var (pe, pn) = me.Origin!.ToLv95(me.GlobalPosition);
+        var ping = new Vector2((float)(pe - br.State.AreaE), (float)(pn - br.State.AreaN + 70));
+        Expect(br.PingMap(ping), "A pinged a spot 70 m north");
+        var pingWorld = me.Origin.ToWorld(br.State.AreaE + ping.X, br.State.AreaN + ping.Y, me.GlobalPosition.Y);
+        float ToPing(FootPlayer b) => new Vector2(b.GlobalPosition.X - pingWorld.X, b.GlobalPosition.Z - pingWorld.Z).Length();
+        Expect(await Until(() => BodyOf(id) is { } b && ToPing(b) < 15f, 90), $"the mate went to the ping ({(BodyOf(id) is { } b2 ? ToPing(b2) : -1):F0} m off it)");
+
+        // down, not out (a mate stands), 6 m from the mate: the mate revives A (a revive, not a race against the
+        // 30 s bleed: from 80 m the hold sometimes ended a second late, and 20 m off can be behind a wall)
+        if (BodyOf(id) is { } nearMate && me.Origin is { } o2)
+        {
+            var (ne, nn) = o2.ToLv95(nearMate.GlobalPosition);
+            br.Teleport(ne + 6, nn, "6 m from the mate");
+            await Until(() => me.IsOnFloor(), 20);
+        }
+        me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
+        Expect(await Until(() => me.Downed, 5), "A is down, not out");
+        Expect(await Until(() => !me.Downed && br.MyEntry is { Alive: true, Downed: false }, 90), "the mate revived A");
+    }
+
     private async Task Run()
     {
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        // --checkspeed 4 (tools/brbotcheck.sh, #931): the minutes of falling and floating in a quarter of the wall
+        // clock, the zone keeping its proportion
+        if (!await SpeedUp("brbots")) return;
         Chat.Send("/br bots 3 easy");   // easy: slower to react, so the knife duels go A's way
         await Seconds(0.5);
         Chat.Send("/br open 5 short");
@@ -130,6 +231,9 @@ public partial class BrBotProbe : ChatProbe
         bool landed = await Until(() => bots.All(b => br.State.Find(b.Peer) is { Jumped: true }
             && BodyOf(b.Peer) is { } body && body.Ride == RideKind.OnFoot && body.Visible), 240);
         Expect(landed, "both bots jumped, flew and landed on foot");
+        // the knife duels at normal speed: at x4 a walking bot is 4 times as far along on the server as its copy
+        // here, and stabs at 1.6 m missed it for 20 tries
+        if (!await SpeedBack()) return;
         GD.Print($"{Log} landed: {ZoneLine(me)}");
         int knife = SlotOf(ItemId.Knife);
         _items.Inventory.Select(knife);
@@ -166,6 +270,8 @@ public partial class BrBotProbe : ChatProbe
             }
         }
 
+        // no knife left to swing: the results' 20 s at x4 again (#1007)
+        if (!await SpeedUp("brbots")) return;
         if (!await Until(() => br.State.Phase == BrPhase.Ended, 20)) { Expect(false, "the match ended"); return; }
         var end = br.State;
         Expect(end.Winner == br.Me, $"I won ({end.Find(end.Winner)?.Shown})");
@@ -183,6 +289,9 @@ public partial class BrBotProbe : ChatProbe
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    /// <summary>About what a teleport takes to land, s: a running bot is aimed at where it will be by then.</summary>
+    private const float TeleportLead = 1f;
 
     /// <summary>
     /// "zone 41 s: phase 1, 2 HP/s, me 512 m inside, Beat 498 m inside (health 100)": where the match's clock
@@ -211,11 +320,26 @@ public partial class BrBotProbe : ChatProbe
             // out of a knife's reach: beside it again (not on it: a remote body is solid, and its head is out of reach)
             if (Flat(body.GlobalPosition - me.GlobalPosition) > 1.9f || Mathf.Abs(body.GlobalPosition.Y - me.GlobalPosition.Y) > 0.8f)
             {
-                var (e, n) = br.Origin!.ToLv95(body.GlobalPosition);
-                br.Teleport(e + 1.6, n, "next to the bot");
-                // a teleport lands a few frames later: wait until we really stand by it (it walks on meanwhile)
-                await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
-                    && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 6);
+                // a teleport lands a few frames later: wait until we really stand by it. A running bot is metres on
+                // by then: where it is going, from its pace over the last look, a second ahead; four times in the same
+                // 6 s (one wait of 6 s used to land 30 m behind it, three times in a row, #1007)
+                var was = body.GlobalPosition;
+                ulong wasAt = Time.GetTicksMsec();
+                await Seconds(0.25);
+                for (int t = 0; t < 4 && BodyOf(id) is { } to; t++)
+                {
+                    var now = to.GlobalPosition;
+                    ulong at = Time.GetTicksMsec();
+                    var pace = ((now - was) with { Y = 0 }) / Mathf.Max(0.05f, (at - wasAt) / 1000f);
+                    (was, wasAt) = (now, at);
+                    var (e, n) = br.Origin!.ToLv95(now + pace * TeleportLead);
+                    br.Teleport(e + 1.6, n, "next to the bot");
+                    bool by = await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
+                        && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 1.5);
+                    if (BodyOf(id) is { } seen)
+                        GD.Print(FormattableString.Invariant($"{Log} teleport {t}: the bot at {pace.Length():F1} m/s, {Flat(seen.GlobalPosition - me.GlobalPosition):F1} m off after"));
+                    if (by) break;
+                }
             }
             if (BodyOf(id) is not { } b) break;
             var dir = (b.GlobalPosition + Vector3.Up * 1.1f - me.EyePosition).Normalized();

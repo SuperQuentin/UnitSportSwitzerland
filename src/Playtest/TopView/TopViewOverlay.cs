@@ -12,7 +12,8 @@ namespace UnitSport.Playtest.TopView;
 /// recorder's ring, drawn from the same <see cref="TopViewScene"/> as the offline PNG. Shift + wheel
 /// zooms (25 to 400 m across). Ctrl+F12 stops it on the moment it shows: Ctrl + wheel then scrubs
 /// the last minute, and Ctrl+F12 again goes back to live. The game never pauses.
-/// Redrawn when the ring has a new frame (10 Hz), only while shown.
+/// Redrawn when the ring has a new frame (10 Hz), only while shown. The ground under it (#851) is
+/// read on a worker for a square twice the view's, and read again when the view leaves it.
 /// </summary>
 public partial class TopViewOverlay : CanvasLayer
 {
@@ -25,6 +26,10 @@ public partial class TopViewOverlay : CanvasLayer
     /// <summary>The time shown when stopped; null while live.</summary>
     private double? _held;
     private double _drawnFor = double.NaN;
+    private TopGround? _ground;
+    private ImageTexture? _groundTexture;
+    private bool _loading;
+    private const int GroundPx = 512;
 
     public TopViewOverlay(PlaytestRecorder recorder)
     {
@@ -48,6 +53,7 @@ public partial class TopViewOverlay : CanvasLayer
     {
         _canvas = new Canvas(this)
         {
+            ClipContents = true,
             AnchorTop = 1, AnchorBottom = 1,
             OffsetLeft = Margin, OffsetRight = Margin + Px, OffsetTop = -Margin - Px, OffsetBottom = -Margin,
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -119,6 +125,36 @@ public partial class TopViewOverlay : CanvasLayer
 
     private static Color C(TopColor c, float alpha = 1) => new Color(c.Hex) with { A = alpha };
 
+    /// <summary>The ground read for a square holding <paramref name="s"/>'s, or null while there is none (one is then being read).</summary>
+    private TopGround? GroundFor(TopViewShapes s)
+    {
+        var g = _ground;
+        bool holds = g != null && s.Min.E >= g.Min.E && s.Min.N >= g.Min.N && s.Min.E + s.Side <= g.Min.E + g.Side
+            && s.Min.N + s.Side <= g.Min.N + g.Side && g.Side <= 3 * s.Side;
+        if (!holds && !_loading && _recorder.Ground?.Source is { } source) _ = Load(source, s);
+        return holds ? g : null;
+    }
+
+    private async Task Load(Terrain.IChunkSource source, TopViewShapes s)
+    {
+        _loading = true;
+        double side = s.Side * 2;
+        var min = new EN(s.Min.E + s.Side / 2 - side / 2, s.Min.N + s.Side / 2 - side / 2);
+        try
+        {
+            var ground = await Task.Run(() => TopViewGround.LoadAsync(source, min, side, GroundPx));
+            // back on the main thread
+            if (ground.Tiles > 0)
+            {
+                _groundTexture = ImageTexture.CreateFromImage(Image.CreateFromData(GroundPx, GroundPx, false, Image.Format.Rgba8, ground.Rgba));
+                _ground = ground;
+            }
+        }
+        catch (Exception e) { GD.PushWarning($"[topview] live ground: {e.GetBaseException().Message}"); }
+        _loading = false;
+        _drawnFor = double.NaN;
+    }
+
     /// <summary>The square itself: draws the shapes in <see cref="Control._Draw"/>.</summary>
     private sealed partial class Canvas(TopViewOverlay owner) : Control
     {
@@ -134,6 +170,21 @@ public partial class TopViewOverlay : CanvasLayer
             float k = (float)(Px / s.Side);
             Vector2 P(EN p) => new((float)((p.E - s.Min.E) * k), (float)((s.Min.N + s.Side - p.N) * k));
             bool Inside(Vector2 v) => v.X >= -20 && v.Y >= -20 && v.X <= Px + 20 && v.Y <= Px + 20;
+
+            // the ground, dimmed so the white labels and the tracks stay on top of it
+            if (owner.GroundFor(s) is { } g && owner._groundTexture is { } texture)
+            {
+                float side = (float)(g.Side * k);
+                DrawTextureRect(texture, new Rect2(P(new EN(g.Min.E, g.Min.N + g.Side)), new Vector2(side, side)), false, new Color(0.62f, 0.62f, 0.62f));
+                foreach (var r in g.Roads)
+                {
+                    var pts = r.Points.Select(P).ToArray();
+                    if (!pts.Any(Inside)) continue;
+                    float w = Math.Max(1.2f, (float)(r.Width * k));
+                    if (r.Casing != null) DrawPolyline(pts, (new Color(r.Casing) * 0.62f) with { A = 1 }, w + 2);
+                    DrawPolyline(pts, (new Color(r.Fill) * 0.62f) with { A = r.Dashed ? 0.6f : 1 }, w);
+                }
+            }
 
             // a grid every scale-bar length
             double bar = TopViewScene.ScaleBar(s.Side);

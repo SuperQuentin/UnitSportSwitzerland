@@ -43,6 +43,12 @@ public partial class WebRadio : Node
     /// <summary>Beyond this from the listener a radio is not asked for.</summary>
     public const float HearRadius = 50f;
     private const int MaxWanted = 3;
+    /// <summary>
+    /// A venue's music beyond its reach plus this sleeps (no speaker processing): a city holds hundreds
+    /// of them, and each one's radio and tracker speaker stepping its hearing every frame cost Geneva
+    /// half its main thread.
+    /// </summary>
+    private const float VenueWakeMargin = 15f;
     /// <summary>A station stays asked for this long after its last radio went: getting out of a car hands it to the parked one.</summary>
     private const double KeepFor = 4;
     private const double CloseAfter = 20;
@@ -123,6 +129,9 @@ public partial class WebRadio : Node
                     sources.Add((v, v.Wrecked ? 0 : v.Radio));
                     discs.Add((v, v.Wrecked ? null : RadioPlay.Decode(v.Cd)));
                 }
+        // a venue's music (#1244): its rooms, and the quiet speaker behind its door for the street
+        foreach (var source in VenueMusicSource.All.ToList())
+            if (IsInstanceValid(source)) sources.Add((source, source.Station));
         // a CD in a car stereo (#211) is the boombox's clock-driven speaker, no relay: every
         // client fetches the Ogg once and plays it from ServerNow − StartedAt. Not headless, like
         // a radio in the world (no speaker to drive, no file worth downloading).
@@ -130,9 +139,20 @@ public partial class WebRadio : Node
             foreach (var (node, cd) in discs) UpdateCd(node, cd);
 
         var ear = Listener?.Invoke();
+        // a venue the relay leaves silent plays its tracker modules, the nearest few (#1244)
+        Tracker.TrackerSpeaker.Rank(ear);
         var near = new List<(float Dist, int Station)>();
         foreach (var (node, station) in sources)
         {
+            float d = ear is { } at ? at.DistanceTo(node.GlobalPosition) : 0f;
+            if (node is VenueMusicSource far)
+            {
+                // out of earshot its speakers sleep, the tracker's too (they inherit the mode)
+                bool awake = d < Items.RadioLoudness.Radius(far.Volume) + VenueWakeMargin;
+                var mode = awake ? ProcessModeEnum.Inherit : ProcessModeEnum.Disabled;
+                if (far.ProcessMode != mode) far.ProcessMode = mode;
+                if (!awake) continue;
+            }
             var speaker = node.GetNodeOrNull<WebRadioSpeaker>(SpeakerName);
             if (Stations.For(station) == null)
             {
@@ -145,8 +165,12 @@ public partial class WebRadio : Node
                 node.AddChild(speaker);
             }
             speaker.Station = station;
-            speaker.Volume = node is FootPlayer driver ? driver.RadioVolume : Items.RadioLoudness.Default;
-            float d = ear is { } at ? at.DistanceTo(node.GlobalPosition) : 0f;
+            speaker.Volume = node switch
+            {
+                FootPlayer driver => driver.RadioVolume,
+                VenueMusicSource venue => venue.Volume,
+                _ => Items.RadioLoudness.Default,
+            };
             if (d < HearRadius) near.Add((d, station));
         }
         double now = ClockSync.LocalNow;
@@ -181,6 +205,10 @@ public partial class WebRadio : Node
         speaker.StartedAt = play.StartedAt;
         speaker.Length = play.Length;
         speaker.Volume = node is FootPlayer driver ? driver.RadioVolume : Items.RadioLoudness.Default;
+        // the driver's mix (#1153); a parked car plays its CD as burnt, as at its default volume
+        var mix = node is FootPlayer d ? d.RadioMix : Vector2.One;
+        speaker.Voice = mix.X;
+        speaker.Music = mix.Y;
         speaker.On = true;
     }
 

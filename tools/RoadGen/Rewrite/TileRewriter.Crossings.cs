@@ -31,7 +31,7 @@ public static partial class TileRewriter
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
         double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats, Func<double, double>? leftEdgeAt = null,
-        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null, int linkId = -1, double? riderStop = null)
+        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null, int linkId = -1, double? riderStop = null, bool pavedGrass = true)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -105,7 +105,7 @@ public static partial class TileRewriter
                 });
             }
         }
-        if (linkId < 0)   // (#711: with a ramp the street's own path takes the grass strips' width there)
+        if (linkId < 0 && pavedGrass)   // (#711: with a ramp the street's own path takes the grass strips' width there)
         {
             Cut(rightSide, _ => hi, 1);
             Cut(leftSide, LeftAt, -1);

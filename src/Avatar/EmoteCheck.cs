@@ -99,8 +99,47 @@ public static class EmoteCheck
             }
         }
 
+        // #907: every aura pose over its whole progress, standing and walking, and flowing from the
+        // waiting stance: no vertex lost, none through the floor; each moves the figure and no two match
+        var auraPoses = new List<int>();
+        foreach (var s in System.Enum.GetValues<Combat.AuraStance>())
+            if (s is not Combat.AuraStance.None and < Combat.AuraStance.MoveBase) auraPoses.Add((int)s);
+        foreach (var m in Combat.AuraRules.Moves) auraPoses.Add(Combat.AuraRules.PoseOf(m));
+        var auraSigs = new List<(int Pose, float[] Sig)>();
+        foreach (int pose in auraPoses)
+        {
+            int move = HumanMeshBuilder.AuraMoves + pose;
+            float moved = 0f;
+            var sig = new float[8];
+            for (int f = 0; f < 32; f++)
+            {
+                float r = f / 32f;
+                var dance = new DanceParams(Audio.Cd.MusicStyle.Pop, move, (r * 8f) % 1f, r, 0, 1f,
+                    f < 2 ? HumanMeshBuilder.AuraMoves + (int)Combat.AuraStance.Waiting : -1, f < 2 ? 0.5f : 1f);
+                foreach (float speed in new[] { 0f, 1.4f })
+                {
+                    var v = Vertices(HumanMeshBuilder.BuildStride(palette, speed, r, dance: dance));
+                    built++;
+                    if (Problem(v) is { } why) Fail($"aura pose {pose} at {r:F2}, speed {speed}: {why}");
+                    if (speed == 0f && v.Length == rest.Length)
+                    {
+                        moved = Mathf.Max(moved, Distance(v, rest));
+                        if (f % 4 == 1) sig[f / 4] = Sum(v);
+                    }
+                }
+            }
+            if (moved < 0.05f) Fail($"aura pose {pose} hardly moves the figure ({moved:F3} m)");
+            foreach (var (other, osig) in auraSigs)
+            {
+                float d = 0f;
+                for (int k = 0; k < sig.Length; k++) d += Mathf.Abs(sig[k] - osig[k]);
+                if (d < 1e-3f) Fail($"aura pose {pose} is drawn exactly like {other}");
+            }
+            auraSigs.Add((pose, sig));
+        }
+
         GD.Print(failed == 0
-            ? $"[emotecheck] RESULT: ok ({count} emotes, {built} figures)"
+            ? $"[emotecheck] RESULT: ok ({count} emotes, {auraPoses.Count} aura poses, {built} figures)"
             : $"[emotecheck] RESULT: FAILED — {failed} problems");
         return failed == 0 ? 0 : 1;
     }

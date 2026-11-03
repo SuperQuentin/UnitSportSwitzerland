@@ -48,6 +48,44 @@ public static class ClothingIcons
         "..kkkkkkkkkkkk..",
     };
 
+    /// <summary>#880: two antennae on a headband, their bobbles on top.</summary>
+    private static readonly string[] Antennae =
+    {
+        "................",
+        "..kkk......kkk..",
+        ".k333k....k333k.",
+        ".k333k....k333k.",
+        "..kkk......kkk..",
+        "...k1k....k1k...",
+        "...k1k....k1k...",
+        "....k1k..k1k....",
+        "....k1k..k1k....",
+        "....k1k..k1k....",
+        "...kk1kkkk1kk...",
+        "..k2222222222k..",
+        "..k2kkkkkkkk2k..",
+        "..kk........kk..",
+    };
+
+    /// <summary>#880: a one-piece space suit, its collar, belt and boots in the trim colour, the badge.</summary>
+    private static readonly string[] Suit =
+    {
+        "................",
+        "...kkkk..kkkk...",
+        "..k1111kk1111k..",
+        ".k1111k22k1111k.",
+        "k111k111111k111k",
+        "k11k11133111k11k",
+        "k11k11133111k11k",
+        "k22k11111111k22k",
+        "kkkk22222222kkkk",
+        "...k11111111k...",
+        "...k111kk111k...",
+        "...k111kk111k...",
+        "...k222kk222k...",
+        "...kkkk..kkkk...",
+    };
+
     private static readonly string[] Tank =
     {
         "................",
@@ -325,6 +363,8 @@ public static class ClothingIcons
         GarmentShape.TShirt or GarmentShape.PrintTee or GarmentShape.Polo => Tee,
         GarmentShape.Marcel or GarmentShape.Corset or GarmentShape.HiVisVest => Tank,
         GarmentShape.HardHat => HardHat,
+        GarmentShape.Antennae or GarmentShape.LongAntennae => Antennae,
+        GarmentShape.SpaceSuit => Suit,
         GarmentShape.Longsleeve or GarmentShape.Hoodie or GarmentShape.CroppedJacket or GarmentShape.FieldJacket => Long,
         GarmentShape.CropTop => Crop,
         GarmentShape.Robe or GarmentShape.Dress => Dress,

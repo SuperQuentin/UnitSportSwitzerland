@@ -43,6 +43,8 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   the door, not the building; and driving out of an interior no longer gates on the kind at all.
   **A loading bay is then one line** — `Hang = RollUp, Vehicle = true` on an Industrial `DoorSpot` —
   which is what #496/#497 phase 2 needs.
+- **A raised door** (#827, `raised-doors`): `DoorSpot.Level` / `EntrancePlan.Level`, its doorway on
+  that floor; only a site office's upper containers have one.
 - **Inside, a doorway each** (`InteriorGenerator.Entrances`, run just before `Furnish`). Every
   facade door gets an `EntrancePlan`, the main one first, and an `OpeningKind.Entry` cut in the
   ground-floor room nearest it, on the wall facing the same way, clamped into the plan box.

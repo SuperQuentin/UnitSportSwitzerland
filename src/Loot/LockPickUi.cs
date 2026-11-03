@@ -84,7 +84,7 @@ public partial class LockPickUi : CanvasLayer
         _waiting = false;
         _settle = _flash = _shake = 0;
         _view.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         _service?.PlayAt(SfxSynth.Tick, 0.6f, -6);
     }

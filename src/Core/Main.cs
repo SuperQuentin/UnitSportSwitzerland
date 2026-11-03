@@ -32,6 +32,8 @@ public partial class Main : Node
 
 	public override void _Ready()
 	{
+		// MVR textures Godot decodes: here, not in a module initializer (#1010, Android)
+		Concert.ConcertRig.UseGodotImages();
 		SetWindowTitle(GetWindow());
 		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
 		ClipRecorder.StartFromArgs(GetTree());
@@ -68,6 +70,15 @@ public partial class Main : Node
 			};
 			return;
 		}
+
+#if TRAILER
+		// the films' subtitle files (#862): no world, a file job for tools/trailer.sh
+		if (UnitSport.Trailer.SubtitleCut.Requested)
+		{
+			AddChild(new UnitSport.Trailer.SubtitleCut { Name = "SubtitleCut" });
+			return;
+		}
+#endif
 
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.
@@ -156,7 +167,7 @@ public partial class Main : Node
 		// picked, the world beside it at /root/Main/World. A run that names a session or a tool on
 		// its command line skips the title and builds the world straight away (GameShell.UseTitle).
 		GameSettings.Load();
-		if (GameShell.UseTitle(CmdArgs.All))
+		if (GameShell.UseTitle(CmdArgs.All) || GameShell.PlayAt(CmdArgs.All))
 		{
 			AddChild(new GameShell { Name = "Shell" });
 			return;

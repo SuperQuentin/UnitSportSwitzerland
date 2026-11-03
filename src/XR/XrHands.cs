@@ -64,6 +64,8 @@ internal sealed class XrHands
         public bool EmptySqueeze;
         /// <summary>Closed at the left hip: how long, s; −1 when not (#489).</summary>
         public float AtLeftHip = -1f;
+        /// <summary>Seconds the grip has been closed at the right hip (-1: not there); a long grip holsters (#1369).</summary>
+        public float AtRightHip = -1f;
         /// <summary>Held there long enough: the quick wheel is open until the grip opens.</summary>
         public bool QuickWheel;
         /// <summary>Where the hand was last frame in the play space, for its speed.</summary>
@@ -101,7 +103,7 @@ internal sealed class XrHands
             hand.PrevLocal = local;
             PokeRadio(hand);
 
-            float g = hand.Ctl.GetHasTrackingData() ? hand.Ctl.GetFloat("grip") : 0f;
+            float g = hand.Ctl.GetHasTrackingData() ? hand.Ctl.GetFloat(XrPad.Inputs.Grip) : 0f;
             bool closing = !hand.Closed && g > GripClose;
             if (hand.Closed && g < GripOpen)
             {
@@ -110,11 +112,15 @@ internal sealed class XrHands
                 // the left hip (#489): let go of a held wheel to pick, or a short squeeze steps back
                 if (hand.QuickWheel) XrPad.Press(Core.PlayerInput.QuickWheel, false);
                 else if (hand.AtLeftHip >= 0f) XrPad.Tap(Core.PlayerInput.PrevItem);
+                else if (hand.AtRightHip >= 0f && hand.AtRightHip < HipHold) XrPad.Tap(Core.PlayerInput.NextItem);
                 hand.QuickWheel = false;
                 hand.AtLeftHip = -1f;
+                hand.AtRightHip = -1f;
                 if (hand.OnWheel) LetGo(hand, buzz: false);
+                // a bowling ball held for a throw leaves the opening hand as it moved (#1323)
+                Interiors.XrBowling.LetGo(hand.Ctl);
                 if (hand.EmptySqueeze && hand.Speed > FlingSpeed && player is { Ride: RideKind.OnFoot, RidingWith: 0 }
-                    && Input.MouseMode == Input.MouseModeEnum.Captured)
+                    && Core.MouseCapture.Mode == Input.MouseModeEnum.Captured)
                     XrPad.Tap(Core.PlayerInput.DropItem);
                 hand.EmptySqueeze = false;
             }
@@ -130,6 +136,18 @@ internal sealed class XrHands
                 }
             }
 
+            else if (hand.Closed && hand.AtRightHip >= 0f && hand.AtRightHip < HipHold)
+            {
+                // a long grip at the right hip puts the item away, or takes it out again (#1369)
+                hand.AtRightHip += dt;
+                if (hand.AtRightHip >= HipHold)
+                {
+                    XrPad.Tap(Core.PlayerInput.Holster);
+                    Buzz(hand, 0.3f, 0.04f);
+                }
+            }
+
+            if (hand.Closed) Interiors.XrBowling.Follow(hand.Ctl);
             if (hand.OnWheel && grip == null) LetGo(hand, buzz: false);
             if (closing && !hand.Busy && !(hand == _left ? leftClaimed : rightClaimed)) TryTake(hand, player, grip);
         }
@@ -167,7 +185,22 @@ internal sealed class XrHands
             Buzz(hand, 0.45f, 0.05f);
             return;
         }
+        if (player == null) return;   // before the world is up: nothing to take (an NRE on a Quest, #1112)
+        // a ski lift's station (#912), on skis too: grab the bar or the chair
+        if ((player.Lift != null || player.LiftInReach() != null) && player.TryLift())
+        {
+            hand.Busy = true;
+            Buzz(hand, 0.5f, 0.06f);
+            return;
+        }
         if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 }) return;
+        // up at a bowling lane with the ball: the grip closes on it for a throw (#1323)
+        if (Interiors.XrBowling.Grip(player, hand.Ctl))
+        {
+            hand.Busy = true;
+            Buzz(hand, 0.4f, 0.05f);
+            return;
+        }
         if (player.TryToggleCarDoor(at) || Interiors.InteriorManager.Instance?.TryDoorByHand(player, at) == true
             || TakeAt(at) || AtHip(hand, at) || ReachingOut(player, at))
         {
@@ -180,22 +213,23 @@ internal sealed class XrHands
 
     /// <summary>
     /// A hand at the hip steps the hotbar (#437), as a holster would hand them over: the right hip to
-    /// the next item at once; the left hip to the previous one when the grip opens soon, or, held,
+    /// the next item when the grip opens soon (held, it holsters or draws, #1369); the left hip to the previous one when the grip opens soon, or, held,
     /// opens the quick wheel, aimed by the right hand and picked by letting go (#489).
     /// </summary>
     private bool AtHip(Hand hand, Vector3 at)
     {
-        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;
+        if (Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return false;
         var local = _head.AffineInverse() * at;
         if (local.Y > -HipDrop || Mathf.Abs(local.X) < HipSide) return false;
-        if (local.X > 0f) XrPad.Tap(Core.PlayerInput.NextItem);
+        if (local.X > 0f) hand.AtRightHip = 0f;   // a squeeze steps on when it opens, a long one holsters (#1369)
         else hand.AtLeftHip = 0f;
         return true;
     }
 
     /// <summary>What a prompt calls a gesture that stands for an action with no controller input (#489).</summary>
     public static string? Gesture(string action) =>
-        action == Core.PlayerInput.QuickWheel ? "Hold grip at left hip" : null;
+        action == Core.PlayerInput.QuickWheel ? "Hold grip at left hip"
+        : action == Core.PlayerInput.Holster ? "Hold grip at right hip" : null;
 
     /// <summary>
     /// A hand reaching out in front closes on what E would act on there (#437): a seat, a ladder, a
@@ -203,7 +237,7 @@ internal sealed class XrHands
     /// </summary>
     private bool ReachingOut(FootPlayer player, Vector3 at)
     {
-        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;
+        if (Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return false;
         var to = at - _head.Origin;
         if (to.Length() < ReachOut || (-_head.Basis.Z).Dot(to.Normalized()) < 0.5f) return false;
         return player.TryInteract(byHand: true);
@@ -219,7 +253,7 @@ internal sealed class XrHands
     private static void PokeRadio(Hand hand)
     {
         if (Items.RadioManager.Instance is not { } radios || !hand.Ctl.GetHasTrackingData()
-            || Input.MouseMode != Input.MouseModeEnum.Captured) return;
+            || Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return;
         var tip = hand.Ctl.GlobalPosition;
         Items.RadioBody? nearest = null;
         float best = float.MaxValue;
@@ -243,7 +277,7 @@ internal sealed class XrHands
     /// <summary>A dropped item at the hand goes into the inventory; a radio there opens its panel.</summary>
     private static bool TakeAt(Vector3 at)
     {
-        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;   // a menu is open
+        if (Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return false;   // a menu is open
         Node3D? best = null;
         float bestD = TakeReach;
         if (Items.DroppedItems.Instance is { } dropped)

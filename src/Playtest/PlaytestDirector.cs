@@ -115,6 +115,13 @@ public partial class PlaytestDirector : Node
             Entries = Entries.Where(e => Status.GetValueOrDefault(e.Id) != PlaytestStatus.Validated).ToList();
             GD.Print($"[playtest] retest: {Entries.Count} scenarios due");
         }
+        // --playtest-only id[,id...] (#1292): only the scenarios whose id starts with one of them, a PR's own
+        if (CmdArgs.Value("--playtest-only") is { Length: > 0 } only)
+        {
+            var ids = only.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            Entries = Entries.Where(e => ids.Any(id => e.Id.StartsWith(id, StringComparison.Ordinal))).ToList();
+            GD.Print($"[playtest] only {only}: {Entries.Count} scenarios");
+        }
 
         var protocol = new McpProtocol("unitsport-playtest", "1", Instructions, [.. Tools(), .. RecorderTools()]);
         protocol.Initialized += client => OnMain(() => { Client = client; Say("system", $"{client} connected."); return Task.FromResult(0); });
@@ -222,7 +229,12 @@ public partial class PlaytestDirector : Node
     }
 
     /// <summary>Whether this run can play <paramref name="e"/> without a relaunch (its course is the one loaded).</summary>
-    public bool Playable(PlaytestEntry e) => e.Scenario.Course == null || e.Scenario.Course == Systems.FixtureCourse;
+    public bool Playable(PlaytestEntry e) =>
+        (e.Scenario.Course == null || e.Scenario.Course == Systems.FixtureCourse) && PlaytestLedger.HasFlags(CmdArgs.All, e.Scenario.Flags);
+
+    /// <summary>What a scenario that cannot run here needs, for the lists: its course or its launch flags.</summary>
+    public string Needs(PlaytestEntry e) =>
+        e.Scenario.Course is { } c && c != Systems.FixtureCourse ? c : "relaunches with its flags";
 
     /// <summary>The next scenario due (pending, stale, then failed), after the current one.</summary>
     public PlaytestEntry? NextDue()
@@ -242,9 +254,9 @@ public partial class PlaytestDirector : Node
     {
         if (!Playable(e))
         {
-            Say("system", $"'{e.Title}' needs the {e.Scenario.Course} course: relaunching on it.");
-            Relaunch(e, rebuild: false, course: e.Scenario.Course);
-            return $"relaunching on the {e.Scenario.Course} course for {e.Id}";
+            Say("system", $"'{e.Title}' needs the {Needs(e)}: relaunching.");
+            Relaunch(e, rebuild: false, course: e.Scenario.Course == Systems.FixtureCourse ? null : e.Scenario.Course, flags: e.Scenario.Flags);
+            return $"relaunching for {e.Id} ({Needs(e)})";
         }
         await _ctx.Clear();
         Current = e;
@@ -340,7 +352,7 @@ public partial class PlaytestDirector : Node
         }
         Say("system", "Saving the session…");
         await rec.Stop();
-        string report = Path.GetRelativePath(Root, Path.Combine(rec.Dir, SessionReport.ReportFile)).Replace('\\', '/');
+        string report = rec.ReportPath;
         Say("system", $"Session saved. Tell Claude: read {report} and fix what I noted.");
         Tell($"session ended: {report}");
     }
@@ -357,14 +369,14 @@ public partial class PlaytestDirector : Node
     /// a helper (tools/playtest.sh relaunch) waits for this process to end, so the build can replace
     /// the assembly this one has loaded. The new game reopens the scenario and the conversation.
     /// </summary>
-    public void Relaunch(PlaytestEntry? scenario, bool rebuild, string? course = null)
+    public void Relaunch(PlaytestEntry? scenario, bool rebuild, string? course = null, string[]? flags = null)
     {
         var state = new ResumeState(scenario?.Id ?? Current?.Id, Current == scenario ? _ctx.Params : null,
             Conversation.TakeLast(60).ToList(), rebuild ? "rebuilt" : "relaunched");
         using (var f = Godot.FileAccess.Open(ResumeFile, Godot.FileAccess.ModeFlags.Write))
             f?.StoreString(JsonSerializer.Serialize(state));
 
-        var user = CmdArgs.All.Where(a => a != "--playtest-resume").ToList();
+        var user = PlaytestLedger.WithFlags(CmdArgs.All.Where(a => a != "--playtest-resume"), flags);
         // a recorded session goes on in the same bundle (#844)
         if (PlaytestRecorder.Instance is { } recorder)
         {
@@ -554,12 +566,12 @@ public partial class PlaytestDirector : Node
             McpTool.Schema(("from", "number", "window start, s"), ("to", "number", "window end, s"), ("at", "number", "the instant the boxes stand at (default: the end)"),
                 ("e", "number", "centre LV95 E (with n and radius)"), ("n", "number", "centre LV95 N"), ("radius", "number", "half the square's side, m"),
                 ("size", "number", "px, default 800")),
-            (args, _) => Sync(() =>
+            (args, _) => OnMain(async () =>
             {
                 if (PlaytestRecorder.Instance is not { } rec) return McpToolResult.Error("not recording (--playtest-record)");
                 double to = args.Num("to") ?? rec.Now, from = args.Num("from") ?? to - 20;
                 EN? around = args.Num("e") is { } e && args.Num("n") is { } n ? new EN(e, n) : null;
-                var png = rec.TopView(from, to, args.Num("at"), around, args.Num("radius"), (int)Math.Clamp(args.Num("size") ?? 800, 200, 2000));
+                var png = await rec.TopView(from, to, args.Num("at"), around, args.Num("radius"), (int)Math.Clamp(args.Num("size") ?? 800, 200, 2000));
                 return png == null ? McpToolResult.Error("could not draw it") : McpToolResult.Image(png, $"top view {from:0.0}-{to:0.0} s");
             })),
         new("note", "Adds a note to the recording, as the player's F12 does (with a screenshot), e.g. to mark what you just changed.",
@@ -589,7 +601,7 @@ public partial class PlaytestDirector : Node
         else sb.AppendLine("no scenario running");
         sb.AppendLine("scenarios:");
         foreach (var e in Entries)
-            sb.AppendLine($"  {Status.GetValueOrDefault(e.Id).ToString().ToLowerInvariant(),-9} {e.Id} \"{e.Title}\" [{e.Category}]{(Playable(e) ? "" : $" (needs course {e.Scenario.Course})")}");
+            sb.AppendLine($"  {Status.GetValueOrDefault(e.Id).ToString().ToLowerInvariant(),-9} {e.Id} \"{e.Title}\" [{e.Category}]{(Playable(e) ? "" : $" (needs {Needs(e)})")}");
         return sb.ToString();
     }
 

@@ -72,8 +72,17 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private const float BuildRange = 45f;
     /// <summary>A door with nobody this close to either side of it...</summary>
     private const float QuietRadius = 6f;
-    /// <summary>...for this long shuts by itself.</summary>
-    private const double QuietSeconds = 60;
+    /// <summary>...for this long shuts by itself: a minute, or the server's <c>--doorquiet s</c> (a check that parks behind a door, #1007).</summary>
+    private static readonly double QuietSeconds = CmdArgs.Float("--doorquiet") ?? 60;
+
+    // houses drawn by their owners and approved on the web (#1186): "--house-layouts <path>", else
+    // UNITSPORT_HOUSE_LAYOUTS; whoever plans interiors reads it (the server, an offline game)
+    static InteriorManager()
+    {
+        HouseLayouts.Warn = m => GD.PushWarning("[interior] " + m);
+        HouseLayouts.Path = CmdArgs.Value("--house-layouts", notFlag: true)
+            ?? (System.Environment.GetEnvironmentVariable("UNITSPORT_HOUSE_LAYOUTS") is { Length: > 0 } env ? env : null);
+    }
 
     public static InteriorManager? Instance { get; private set; }
 
@@ -116,6 +125,10 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private InteriorLayout? _current;
     private readonly Dictionary<string, InteriorNode> _built = new();
     private readonly HashSet<string> _building = new();
+    /// <summary>Plans whose interior threw while being built: not retried until a door to them opens again.</summary>
+    private readonly HashSet<string> _failed = new();
+    /// <summary>The door this client last asked open: the one to shut again when its interior cannot be built.</summary>
+    private string? _openedHere;
     /// <summary>Doors whose plan has been asked of the server and not yet received.</summary>
     private readonly HashSet<string> _asked = new();
     private readonly Dictionary<string, DoorLink> _links = new();
@@ -189,6 +202,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         if (Instance == this) Instance = null;
         DoorIndex.Clear();
+        // a box in world space hangs off the scene root: it must not outlive the world (#1286)
+        PointOutline(null, Items.Outranking.None);
     }
 
     /// <summary>The interior the local player is in, and its node — for probes and tools.</summary>
@@ -205,6 +220,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// is harmless), and returns its key; null while no door within <paramref name="reach"/> has
     /// streamed in. Offline only: online a door is the server's, for a player standing at it.
     /// </summary>
+    /// <summary>As <see cref="OpenDoorForCamera(Vector3, float)"/>, through the door <paramref name="key"/> names (a shot's 8th field, #1250).</summary>
+    public string? OpenDoorForCamera(string key)
+    {
+        if (Online) return null;
+        var p = key.Split('_');
+        if (p.Length is < 3 or > 4 || !int.TryParse(p[0], out int e) || !int.TryParse(p[1], out int n) || !int.TryParse(p[2], out int i))
+            return null;
+        var door = new DoorKey(e, n, i, p.Length == 4 && int.TryParse(p[3], out int s) ? s : 0);
+        if (DoorIndex.Find(door) is null) return null;
+        string k = door.ToString();
+        if (!_doors.ContainsKey(k) && _requestingDoor == null) AskDoor(k, true);
+        return k;
+    }
+
     public string? OpenDoorForCamera(Vector3 at, float reach)
     {
         if (Online) return null;
@@ -212,6 +241,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (door != null && !_doors.ContainsKey(door) && _requestingDoor == null) AskDoor(door, true);
         return door;
     }
+
+    /// <summary>A plan's interior node once it is built here, else null (the shot queue's "l" lines, #1306).</summary>
+    public InteriorNode? BuiltNode(string plan) => _built.TryGetValue(plan, out var node) ? node : null;
 
     /// <summary>A door's link once its interior is built here, else null.</summary>
     public DoorLink? BuiltLink(string door) =>
@@ -328,6 +360,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         bool was = _doors.ContainsKey(door);
         if (open) _doors[door] = plan; else _doors.Remove(door);
+        // a door opening again gives an interior that failed to build another try
+        if (open && !was) _failed.Remove(plan);
         _quiet.Remove(door);
         _planKeys[door] = plan;
         if (_requestingDoor == door) _requestingDoor = null;
@@ -353,7 +387,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             door = ExitAt(player)?.Door;
             if (door == null)
             {
-                Hint(_current.AllEntrances().Count > 1
+                Hint(_current.HasRaisedEntrance() ? "The ways out are the doors."
+                    : _current.AllEntrances().Count > 1
                     ? "The ways out are the doors, on the ground floor."
                     : "The way out is the front door, on the ground floor.");
                 return true;
@@ -382,8 +417,10 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (player.Indoors) door = _current == null ? null : ExitAt(player)?.Door;
         else
         {
-            var e = DoorIndex.NearestEntrance(hand, HandDoorReach, OpenReachOutside);
-            door = e is { } d && hand.Y > d.World.Y + 0.3f && hand.Y < d.World.Y + d.Height + 0.3f ? d.Key.ToString() : null;
+            // only the doors whose opening the hand is in: one stacked over another (#827) is not in reach of it
+            static bool InOpening(DoorIndex.Entry d, Vector3 hand) => hand.Y > d.World.Y + 0.3f && hand.Y < d.World.Y + d.Height + 0.3f;
+            var e = DoorIndex.NearestEntrance(hand, HandDoorReach, OpenReachOutside, d => InOpening(d, hand));
+            door = e is { } d && InOpening(d, hand) ? d.Key.ToString() : null;
         }
         if (door == null) return false;
         if (_requestingDoor == null) AskDoor(door, !_doors.ContainsKey(door));
@@ -394,6 +431,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         _requestingDoor = door;
         _requestTimer = 3;
+        if (open) _openedHere = door;
         if (Online) RpcId(1, MethodName.RequestDoor, door, open);
         else _ = ServeDoor(MyId, door, open);
     }
@@ -504,11 +542,11 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
     {
         DoorKey.TryParse(e.Door, out var k);
-        return Origin!.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0) + new Vector3(e.DoorX, e.DoorY, e.DoorZ);
+        return Origin!.TileTransform(k.Tile) * new Vector3(e.DoorX, e.DoorY, e.DoorZ);
     }
 
     /// <summary>The doorway in the interior's wall, world space.</summary>
-    public Vector3 InsideDoorAt(InteriorLayout l, EntrancePlan e) => PlacementFor(l, Origin!) * new Vector3(e.X, 0, e.Z);
+    public Vector3 InsideDoorAt(InteriorLayout l, EntrancePlan e) => PlacementFor(l, Origin!) * new Vector3(e.X, l.EntranceY(e), e.Z);
 
     /// <summary>Server (or offline): shuts every door nobody has been near for a while.</summary>
     private void TickDoors(double delta)
@@ -662,7 +700,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         }
         if (!_built.TryGetValue(plan, out var node))
         {
-            BuildInterior(layout);
+            if (!_failed.Contains(plan)) BuildInterior(layout);
             return;
         }
         var e = layout.EntranceFor(door);
@@ -724,8 +762,29 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (IsInstanceValid(node)) node.AddBody(data.Collision);
         }
+        catch (Exception e)
+        {
+            GD.PushError($"[interior] building {layout.Key} failed: {e}");
+            BuildFailed(layout.Key);
+        }
         finally { _building.Remove(layout.Key); }
         Maintain();
+    }
+
+    /// <summary>
+    /// An interior that threw while being built: never a door left open onto nothing. What was made of it
+    /// goes, the door this client opened to it shuts, and the player is told.
+    /// </summary>
+    private void BuildFailed(string plan)
+    {
+        _failed.Add(plan);
+        if (_built.Remove(plan, out var half) && IsInstanceValid(half)) half.QueueFree();
+        Hint("This building's inside could not be made: the door shuts.");
+        if (_openedHere is { } door && _doors.GetValueOrDefault(door) == plan)
+        {
+            GD.Print($"[interior] shutting {door}: its inside could not be made");
+            AskDoor(door, false);
+        }
     }
 
     /// <summary>The built interior a point far underground is in (nearest by plan position), if any.</summary>
@@ -756,6 +815,24 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (_passing != null && IsInstanceValid(_passing)) p.RemoveCollisionExceptionWith(_passing);
         _passing = pass;
         if (pass != null) p.AddCollisionExceptionWith(pass);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="point"/> (a face a climbing ray hit) is on the facade inside an open or
+    /// opening doorway, jambs and lintel included. The facade has no hole: the climb grabbed the shell a
+    /// walker is let through (<see cref="BeforeMove"/> excepts the body for the move, not for rays).
+    /// </summary>
+    public bool InOpenDoorway(Vector3 point)
+    {
+        foreach (var link in _links.Values)
+        {
+            // swinging open counts too: the walker pushing into it waits for the leaf, not a climb
+            if (!link.Open && link.Swing <= 0f) continue;
+            var p = link.Outside.AffineInverse() * point;
+            if (Math.Abs(p.X) < link.HalfPass + 0.4f && p.Y > -0.5f && p.Y < link.PassHeight + 0.5f && p.Z > -1f && p.Z < 0.5f)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>After the local player moved from <paramref name="before"/>: across a sill, into the other side.</summary>
@@ -862,20 +939,40 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// The door E works for <paramref name="player"/> outside, if any: of the doors in reach, the
     /// one they look at the facade of before a nearer one at their back.
     /// </summary>
-    public string? OutsideDoorInReach(FootPlayer player) =>
-        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside)?.Key.ToString();
+    public string? OutsideDoorInReach(FootPlayer player) => OutsideEntry(player)?.Key.ToString();
+
+    /// <summary>
+    /// The door <see cref="OutsideDoorInReach(FootPlayer)"/> names, as the index has it (its outline, #1286); none
+    /// when a seat in reach is nearer than it (a venue's terrace stands at its own door, #1292, #1385: E sits there).
+    /// </summary>
+    private DoorIndex.Entry? OutsideEntry(FootPlayer player)
+    {
+        if (DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside) is not { } e) return null;
+        if (player.SitInReach() is { } seat)
+        {
+            var at = player.GlobalPosition;
+            if (new Vector2(seat.Hip.X - at.X, seat.Hip.Z - at.Z).Length() < new Vector2(e.World.X - at.X, e.World.Z - at.Z).Length()) return null;
+        }
+        return e;
+    }
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
         DoorLeaf.SwingsOut(e.Hang) && _doors.ContainsKey(e.Key.ToString())
             ? DoorLeaf.OpenReach(e.Hang, e.Width) : 0f;
 
-    /// <summary>The entrance the player is standing at, on the ground floor, if any.</summary>
+    /// <summary>The entrance the player is standing at, on its own floor (the ground floor but for a raised door, #827), if any.</summary>
     private EntrancePlan? ExitAt(FootPlayer player)
     {
         if (!player.Indoors || _current == null || CurrentNode is not { } node) return null;
         var local = node.ToLocal(player.GlobalPosition);
-        if (local.Y > _current.StoreyHeight - 0.5f || local.Y < -0.5f) return null;   // ground floor only, not a cellar
+        var plan = _current;
+        // on the entrance's floor only: never a cellar's, nor the floor under a raised door
+        bool OnItsFloor(EntrancePlan e)
+        {
+            float y = local.Y - plan.EntranceY(e);
+            return y <= plan.StoreyHeight - 0.5f && y >= -0.5f;
+        }
         var at = new Vector2(local.X, local.Z);
         var kind = _current.DressedKind();
         // to the doorway, not its centre: a barn's is 10 m wide. An open leaf swung into the
@@ -892,7 +989,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             return Mathf.Sqrt(along * along + depth * depth);
         }
         return _current.AllEntrances()
-            .Where(e => Distance(e) <= ExitReach)
+            .Where(e => OnItsFloor(e) && Distance(e) <= ExitReach)
             .MinBy(Distance);
     }
 
@@ -921,8 +1018,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         BuildingKey.TryParse(l.Key, out var key);
         var tile = key.Tile;
-        var tileOrigin = origin.ToWorld(tile.MinE, tile.MaxN, 0);
-        var at = tileOrigin + new Vector3(l.CenterX, 0, l.CenterZ);
+        var at = origin.TileTransform(tile) * new Vector3(l.CenterX, 0, l.CenterZ);
         return new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(at.X, InteriorBaseY, at.Z));
     }
 
@@ -985,9 +1081,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             var tile = await Source.LoadBuildingsAsync(k.Tile);
             if (tile == null || k.Index < 0 || k.Index >= tile.Buildings.Count
                 || BuildingTypes.For(tile).Boxes[k.Index] is not { } box) return;
-            var origin = Origin.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0);
+            var xf = Origin.TileTransform(k.Tile);
             var b = tile.Buildings[k.Index];
-            _boxes[plan] = new BuildingSounds.Occupied(origin + new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
+            _boxes[plan] = new BuildingSounds.Occupied(xf * new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
                 box.AxisU, box.Width / 2, box.Depth / 2, 0);
         }
         catch (Exception e) { GD.PushWarning($"[interior] box of {plan}: {e.Message}"); }
@@ -1048,7 +1144,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         float bestD = 12f;
         foreach (var e in _current.AllEntrances())
         {
-            var at = node.GlobalTransform * new Vector3(e.X, 1.2f, e.Z);
+            var at = node.GlobalTransform * new Vector3(e.X, _current.EntranceY(e) + 1.2f, e.Z);
             float d = at.DistanceTo(listener);
             if (d >= bestD) continue;
             bestD = d;
@@ -1057,37 +1153,46 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return best;
     }
 
+    /// <summary>
+    /// What E acts on now when the floating line says it (the bar's own rows aside), its key tag cut off, or null:
+    /// the phone's overlay makes its button from it (#1353, <c>ClientWorld.Prompts</c>).
+    /// </summary>
+    public string? Floating { get; private set; }
+    private string? _floatingRaw;
+
+    /// <summary>"[E] Open the door" without its "[E] ": the overlay's button names the key itself.</summary>
+    private static string Untagged(string text)
+    {
+        string tag = InputHints.Tag(PlayerInput.InteractMount) + " ";
+        return text.StartsWith(tag, StringComparison.Ordinal) ? text[tag.Length..] : text;
+    }
+
     private void UpdatePrompt(double delta)
     {
         if (_prompt == null) return;
-        if (_hintTimer > 0) { _hintTimer -= delta; return; }
+        // a hint holds the line a moment; the outline still follows what E would act on
+        bool hint = _hintTimer > 0;
+        if (hint) _hintTimer -= delta;
         _promptTimer -= delta;
         if (_promptTimer > 0) return;
         _promptTimer = 0.15;
 
         var p = LocalPlayer?.Invoke();
-        string? text = null;
+        Items.Interaction? hit = null;
+        var outranks = Items.Outranking.None;
+        // what E would act on, its words and its outline from one rule (#1286, InteriorManager.Interact)
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
+            hit = Interacting(p, out outranks);
+        PointOutline(hit, outranks);
+        string? floatingNow = hit is { InBar: false } shown ? shown.Text : null;
+        if (floatingNow != _floatingRaw)
         {
-            string? door = null;
-            if (p.Indoors && _current != null)
-            {
-                door = ExitAt(p)?.Door;
-                if (door == null) text = InsidePrompt(p) ?? ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
-            }
-            else if (!p.Indoors) door = OutsideDoorInReach(p);
-            // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
-            if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p);
-            if (door != null)
-                text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
-            // a building site's skip or materials faced outdoors (#627): E searches it before a door
-            if (!p.Indoors && Loot.LootService.Instance?.YardPromptFor(p) is { } yard) text = yard;
-            // a building site crane's ladder, its remote's box, or the climb itself (#618): E takes
-            // them before a skip's search, as TryInteract does
-            if (!p.Indoors && p.CranePrompt() is { } crane) text = crane;
-            // a Battle Royale crate at your feet comes first, as E opens it first (#194)
-            if (BattleRoyale.BrCrates.Instance?.PromptFor(p) is { } crate) text = crate;
+            _floatingRaw = floatingNow;
+            Floating = floatingNow == null ? null : Untagged(floatingNow);
         }
+        if (hint) return;
+        // a bar row's words are in the prompt bar (ClientWorld.Prompts), from the same call
+        string? text = hit is { InBar: false } floating ? floating.Text : null;
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;
     }
@@ -1173,10 +1278,21 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (problems.Count > 0)
             GD.PushWarning($"[interior] {keyText}: {string.Join("; ", problems.Take(3))}");
 
+        // Only a cache, and every writer stores the same plan. Games sharing one user:// (a check's
+        // clients, a server beside its client) plan a building at once: a shared ".part" was open
+        // in another process, and the throw took the caller's plan with it (#1401).
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        string tmp = path + ".part";
-        await File.WriteAllTextAsync(tmp, layout.ToJson());
-        File.Move(tmp, path, overwrite: true);
+        string tmp = $"{path}.{Guid.NewGuid():N}.part";
+        try
+        {
+            await File.WriteAllTextAsync(tmp, layout.ToJson());
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Windows refuses to replace a file another game is reading: it holds the same plan
+            try { File.Delete(tmp); } catch (IOException) { }
+        }
         return layout;
     }
 }
@@ -1348,10 +1464,14 @@ public partial class InteriorNode : Node3D
         return mesh;
     }
 
+    /// <summary>A bare interior node for a plan, nothing built in it: the outline check's (#1286) stand-in.</summary>
+    internal static InteriorNode ForCheck(InteriorLayout layout) => new() { Name = "Interior_" + layout.Key, Layout = layout };
+
     /// <summary>
     /// Builds the node. Given a prebuilt <paramref name="mesh"/>, the caller adds the collision
     /// itself (<see cref="AddBody"/>); without one, both are built here.
     /// </summary>
+
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement,
         ArrayMesh? mesh = null, WorldOrigin? origin = null)
     {
@@ -1377,7 +1497,7 @@ public partial class InteriorNode : Node3D
         foreach (var e in layout.AllEntrances())
         {
             var z = new Vector3(-e.InX, 0, -e.InZ).Normalized();
-            var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, 0, e.Z));
+            var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, layout.EntranceY(e), e.Z));
             var (width, top) = layout.OpeningOf(e);
             var kind = layout.DressedKind();
             // a barn's pair or a garage's roll-up door moves on the facade, with its link; in here
@@ -1393,6 +1513,13 @@ public partial class InteriorNode : Node3D
         AddPallets(node, material);
         AddForklifts(node, origin);
         AddBayCars(node, origin);
+        AddStaff(node);   // a venue's clerk and bartender (#1235)
+        AddPinballs(node, material);   // a venue's pinball machines, each a table to play (#1325)
+        AddLaneRigs(node, material);   // a bowling centre's pins, pinsetters and hood balls (#1323)
+        AddTableRigs(node);   // pool tables, dartboards, table football, the arcade's games (#1324, #1326)
+        AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
+        VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
+        Patrons.VenuePatrons.AddTo(node); // its guests at the tables, the machines, in the queues and the halls (#1244)
         // an apartment block's elevator doors and flats' front doors (#557)
         AddLiftDoors(node, material);
         AddInnerDoors(node, material);

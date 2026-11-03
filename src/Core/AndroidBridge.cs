@@ -57,6 +57,34 @@ public static class AndroidBridge
         });
     }
 
+    /// <summary>
+    /// The file another app handed the game (#1029): "Open with" (<c>ACTION_VIEW</c>, the intent's data)
+    /// or "Share to" (<c>ACTION_SEND</c>, its stream extra), as a <c>content://</c> or <c>file://</c> URI
+    /// that <c>Godot.FileAccess</c> reads; null when there is none. Each intent answers once: its action
+    /// is rewritten, so a resume without a new intent does not open the file again.
+    /// </summary>
+    public static string? OpenedFile()
+    {
+        if (!Available) return null;
+        return Try<string?>("opened file", () =>
+        {
+            var activity = Engine.GetSingleton("AndroidRuntime").Call("getActivity").AsGodotObject();
+            var intent = activity?.Call("getIntent").AsGodotObject();
+            if (intent == null) return null;
+            string action = intent.Call("getAction").AsString();
+            GodotObject? uri = action switch
+            {
+                "android.intent.action.VIEW" => intent.Call("getData").AsGodotObject(),
+                "android.intent.action.SEND" => intent.Call("getParcelableExtra", "android.intent.extra.STREAM").AsGodotObject(),
+                _ => null,
+            };
+            if (uri == null) return null;
+            intent.Call("setAction", "ch.unitsport.switzerland.OPENED");
+            string s = uri.Call("toString").AsString();
+            return s.Length > 0 ? s : null;
+        });
+    }
+
     private static GodotObject? SystemService(string name)
     {
         var context = Engine.GetSingleton("AndroidRuntime").Call("getApplicationContext").AsGodotObject();

@@ -49,11 +49,7 @@ public partial class HallCarProbe : ChatProbe
 
         // the garage nearest the agreed spawn: both clients pick the same one
         DoorIndex.Entry? found = null;
-        for (int i = 0; i < 90 && found == null; i++)
-        {
-            found = DoorIndex.NearestOfKind(me.GlobalPosition, DoorSearch.KindReach, BuildingKind.Apartment, vehicleOnly: true);
-            if (found == null) await Seconds(1);
-        }
+        await Until(() => (found = DoorIndex.NearestOfKind(me.GlobalPosition, DoorSearch.KindReach, BuildingKind.Apartment, vehicleOnly: true)) != null, 90);
         if (found is not { } door) { Fail("no garage door of a block of flats near the spawn"); return; }
         var plan = await interiors.GetOrCreate(door.Key.ToString());
         if (plan == null) { Fail($"no plan for {door.Key}"); return; }
@@ -168,14 +164,14 @@ public partial class HallCarProbe : ChatProbe
         }
         Expect(woke, $"A: aiming at the bay car wakes it (pitch {pitch:F1})");
         if (!woke) { Fail("the bay car did not wake"); return; }
-        await Seconds(0.6);
+        await Until(() => !cp.IsDrawn(mine), 3);
         Expect(!cp.IsDrawn(mine), "A: the sleeping copy is gone once the vehicle exists");
         var real = Vehicle(slot.NodeName)!;
         var want = _origin.ToWorld(slot.E, slot.N, slot.Height);
         Expect(real.GlobalPosition.DistanceTo(want) < 0.6f, $"A: the vehicle stands in its bay ({real.GlobalPosition.DistanceTo(want):F2} m off)");
         if (windowed) Shot("woken");
         Say("woke");
-        await Seconds(4.0);   // B looks at it
+        await Heard("B", "saw woke", 20);   // B looks at it
         // a third client joins now (--late-joiner) and must find the car a vehicle and its sleeper gone
         if (CmdArgs.Has("--late-joiner"))
         {
@@ -213,22 +209,24 @@ public partial class HallCarProbe : ChatProbe
         me.Velocity = Vector3.Zero;
         await Seconds(1.5);
         float startY = me.GlobalPosition.Y;
-        Input.ActionPress(PlayerInput.Throttle);
+        // the ride intent, not a held key: Godot lets go of held actions when the window loses focus (#1401)
+        me.RideControls = () => new RideInput(1f, 0f, 0f, false);
         float peak = 0;
         bool outside = await Until(() => { if (InteriorManager.InInteriorSpace(me.GlobalPosition)) peak = Math.Max(peak, me.GlobalPosition.Y - startY); return !InteriorManager.InInteriorSpace(me.GlobalPosition); }, 40);
-        Input.ActionRelease(PlayerInput.Throttle);
-        Input.ActionPress(PlayerInput.Brake);
+        me.RideControls = () => new RideInput(0f, 1f, 0f, false);
         await Until(() => me.GroundSpeed < 0.3f, 8);
-        Input.ActionRelease(PlayerInput.Brake);
+        me.RideControls = null;
         Expect(outside, $"A: drove the woken car up the ramp ({peak:F1} m up) and out through the door");
         if (windowed) Shot("outside");
         Say("out");
         await Seconds(2.0);
         me.ExitVehicle();
-        await Seconds(1.0);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         Expect(me.Ride == RideKind.OnFoot, "A: got out in the street");
         // far from the bay and from the car, so nobody is near when the slot is restocked
-        me.LeaveInterior(door.World + door.Outward * 90f + Vector3.Up * 2f, 0);
+        // the index's entry, in today's frame: the copy is from before the drive out (#1090)
+        var street = DoorIndex.Find(door.Key) ?? door;
+        me.LeaveInterior(street.World + street.Outward * 90f + Vector3.Up * 2f, 0);
         me.Velocity = Vector3.Zero;
         Say("gone");
         bool refilled = await Heard("B", "refilled", 90);
@@ -315,7 +313,8 @@ public partial class HallCarProbe : ChatProbe
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
     {
-        door = DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+        // the index's own entry, in today's frame: a copy from before an origin shift points kilometres off (#1090)
+        door = DoorIndex.Find(door.Key) ?? door;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
@@ -326,13 +325,10 @@ public partial class HallCarProbe : ChatProbe
         for (int attempt = 0; attempt < 4 && !open; attempt++)
         {
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
-            open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
+            open = await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, DoorSettle, 5 + attempt * 2);
         }
         if (!open) { Fail($"the door {doorKey} never opened"); return false; }
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);
         return true;

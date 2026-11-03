@@ -9,7 +9,8 @@ namespace UnitSport.Net;
 /// <c>--arrival check --expect-spawn E,N</c> with <c>--connect</c> and no <c>--at</c> (driven by
 /// <c>tools/arrivalcheck.sh</c>, #799), against a server started with <c>--spawn E,N --no-teleport</c>:
 /// the player must start where the server said, not where the client would have (Riddes); the client
-/// must know it may not teleport; the server must refuse <c>/city</c>; and a trip on the fly camera
+/// must know it may not teleport; the server must refuse <c>/city</c> and <c>/stadium &lt;venue&gt;</c>
+/// while still listing the venues and naming the nearest (#994); and a trip on the fly camera
 /// must bring the body back where it stood, not under the camera.
 /// </summary>
 public partial class ArrivalProbe : ChatProbe
@@ -32,6 +33,16 @@ public partial class ArrivalProbe : ChatProbe
 
         Chat!.Send("/city Riddes");
         Expect(await Until(() => _heard.Any(l => l.Contains("does not allow teleporting")), 10), "the server refused /city");
+
+        // /stadium on the server (#994): the list and the nearest venue for anyone, the jump refused like /city
+        Chat.Send("/stadium list");
+        Expect(await Until(() => _heard.Any(l => l.StartsWith("Stadiums (")) && _heard.Any(l => l.StartsWith("Open airs (")), 10), "the server lists the venues");
+        Chat.Send("/stadium");
+        Expect(await Until(() => _heard.Any(l => l.StartsWith("Nearest venue: #8 Stade de Tourbillon (Sion)")), 10),
+            $"the server names the nearest venue: {_heard.LastOrDefault(l => l.StartsWith("Nearest"))}");
+        Chat.Send("/stadium wankdorf");
+        Expect(await Until(() => _heard.Any(l => l.StartsWith("Stadion Wankdorf (Bern):"))
+            && _heard.Count(l => l.Contains("does not allow teleporting")) == 2, 10), "the server says what plays at Wankdorf and refuses the jump");
 
         // up on the fly camera, 300 m away, and back: the body must still be where it stood
         if (GetParent() is ClientWorld world)

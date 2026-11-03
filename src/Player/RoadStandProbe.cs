@@ -227,6 +227,36 @@ public partial class RoadStandProbe : Node
             var p = basePos + (widest.Item1 + widest.Item2 + widest.Item3) / 3f;
             if (_chunks.HasCollisionAt(p)) result.Add((p, "turn lane strip", Kind.Body));
         }
+        // transitions (#818): a body on the carriageway where it is widest past the plain street, 0.6 m in from that edge, and on
+        // the middle of each band beside it, at its height: the blend and the side's collision hold them as a ribbon's
+        var transitions = SegmentSections.TransitionsOf(tile);
+        for (int si = 0, taken = 0; si < tile.Segments.Count && taken < 4; si++)
+        {
+            if (transitions[si] is not { } t || tile.Segments[si].PointCount < 3) continue;
+            var s = tile.Segments[si];
+            var sec = SegmentSections.Of(s, t);
+            float half = s.Width * 0.5f;
+            float Wider(int k) => Math.Max(sec.RibbonRight[k] - half, -sec.RibbonLeft[k] - half);
+            int i = Enumerable.Range(1, s.PointCount - 2).MaxBy(Wider);
+            if (Wider(i) < 0.8f) continue;
+            taken++;
+            var at = new Vector3(s.Points[i * 3], s.Points[i * 3 + 1], s.Points[i * 3 + 2]);
+            var d = new Vector3(s.Points[i * 3 + 3] - s.Points[i * 3 - 3], 0, s.Points[i * 3 + 5] - s.Points[i * 3 - 1]).Normalized();
+            var right = new Vector3(-d.Z, 0, d.X);
+            void Add(Vector3 local, string what) { var q = basePos + local; if (_chunks.HasCollisionAt(q)) result.Add((q, what, Kind.Body)); }
+            bool rightWider = sec.RibbonRight[i] - half >= -sec.RibbonLeft[i] - half;
+            Add(at + right * (rightWider ? sec.RibbonRight[i] - 0.6f : sec.RibbonLeft[i] + 0.6f), "transition carriageway");
+            foreach (bool r in (ReadOnlySpan<bool>)[false, true])
+            {
+                if ((r ? sec.RightProfile[i] : sec.LeftProfile[i]) is not { } profile) continue;
+                float start = r ? sec.SideRight[i] : -sec.SideLeft[i];
+                var across = r ? right : -right;
+                for (int m = 0; m + 1 < profile.Count; m++)
+                    if (profile.Surface[m] != StreetSurface.Kerb && profile.D[m + 1] - profile.D[m] > 0.6f)
+                        Add(at + across * (start + (profile.D[m] + profile.D[m + 1]) * 0.5f) + Vector3.Up * profile.H[m + 1],
+                            $"transition {profile.Surface[m].ToString().ToLowerInvariant()}");
+            }
+        }
         return result;
     }
 

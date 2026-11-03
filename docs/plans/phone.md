@@ -1,17 +1,30 @@
 # Foldable smartphone (#889)
 
-Status: **planned**. One PR, built in phases.
+Status: **built** (PR #890), VR a gap. One PR, built in phases.
 
 | Phase | State | What |
 |---|---|---|
-| 1 Model | planned | Book-fold phone mesh: two halves on a hinge, cover screen, inner screen split over both halves; `[Showcase("Items")]` folded / half / open |
-| 2 Take out, put away | planned | `PhoneState` (0 pocket, 1 folded, 2 open) replicated; arm poses `Phone` / `PhoneOpen`; the phone in the right hand on every peer |
-| 3 Camera | planned | Third person: a `PhoneView` blend over the shoulder (folded), then onto the inner screen until it covers the view (open). First person: the phone in camera space, lower right, rising to fill the view |
-| 4 UI | planned | Cover screen (clock, newest call, quick actions); inner screen home + apps in one `SubViewport`, shown on the mesh and, once covered, full screen (input pushed into it) |
-| 5 Apps | planned | Map (search + travel), Contacts (online players: go to, bring here, party, fight), Activities (opens the existing screen) |
-| 6 Hidden travel | planned | Teleport while covered, wait for the ground (`Teleporter.Arrived`), "Travelling…", then fold and pull the camera back at the new place |
-| 7 Calls and sounds | planned | Incoming invite rings / buzzes, answer or decline from the cover; `SfxBank` ringtone, buzz, hinge, tap |
-| 8 Devices, checks, notes | planned | Keyboard / pad / VR rows, `--phonecheck`, notes |
+| 1 Model | done | Book-fold phone mesh: two halves on a hinge, cover screen, inner screen split over both halves; `[Showcase("Items")]` folded / half / open |
+| 2 Take out, put away | done | `PhoneState` (0 pocket, 1 folded, 2 open) replicated; arm poses `Phone` / `PhoneOpen`; the phone in the right hand on every peer |
+| 3 Camera | done | Third person: a `PhoneView` blend over the shoulder (folded), then onto the inner screen until it covers the view (open). First person: the phone in camera space, lower right, rising to fill the view |
+| 4 UI | done | Cover screen (clock, newest call, quick actions); inner screen home + apps in one `SubViewport`, shown on the mesh and, once covered, full screen (input pushed into it) |
+| 5 Apps | done | Map (search + travel), Contacts (online players: go to, bring here, party, fight), Activities (opens the existing screen) |
+| 6 Hidden travel | done | Teleport while covered, wait for the ground (`Teleporter.Arrived`), "Travelling…", then fold and pull the camera back at the new place |
+| 7 Calls and sounds | done | Incoming invite rings / buzzes, answer or decline from the cover; `SfxBank` ringtone, buzz, hinge, tap |
+| 8 Devices, checks, notes | done, VR gap | Keyboard / pad / VR rows, `--phonecheck`, notes |
+
+## Built differently from the plan
+
+- First person does not draw the phone in camera space: it borrows third person, as a throw does, and
+  takes the same over-the-shoulder camera.
+- The shoulder camera stands high over the shoulder (0.6 m above the phone, 0.42 m out) at a 32° FOV:
+  closer in, the head and the hair filled half the picture.
+- The body is hidden from the lens once it leaves for the inner screen (it passes the face); the
+  phone stays drawn.
+- The cover screen shows one quick action at a time (‹ › and dots), readable at its size.
+- A teleport asked while the phone is folded (an answered call) opens it first, then folds it away
+  at the new place; in the pocket, teleports are unchanged.
+- VR: refused for now (a gap in `xr/vr-action-map`).
 
 ## Goal
 

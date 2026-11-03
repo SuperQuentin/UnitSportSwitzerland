@@ -80,13 +80,17 @@ public static class XrSession
         if (Simulated)
         {
             GD.Print("[xr] simulated: no headset, the rig's view on the monitor");
+            // a load test is paced like the headset: no desktop vsync holding it to the monitor
+            if (LoadTest) DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
             return Begin(root);
         }
 
         var xr = XRServer.FindInterface("OpenXR");
         if (xr == null || !xr.IsInitialized())
         {
-            if (asked)
+            if (Platform.IsStandaloneVr)
+                GD.PushError("[xr] OpenXR did not start on this headset: the APK must be the Quest export (tools/quest.sh)");
+            else if (asked)
                 GD.PrintErr("[xr] OpenXR is not running. Start the headset runtime (Quest Link) and launch with "
                     + "`--xr-mode on --rendering-driver vulkan`, see docs/notes/xr/setup.md");
             return false;
@@ -96,21 +100,37 @@ public static class XrSession
         // view (XrMonitor). The headset paces the frames: a desktop vsync on top only adds a wait.
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
 
-        if (xr is OpenXRInterface openxr)
+        // Meta's fixed foveation on a standalone headset (#1112): the Mobile renderer draws it with
+        // a fragment density map; over Link the headset viewport's VRS does it (XrRig.ApplyQuality)
+        ApplyFoveation();
+        // A standalone headset's clocks (#1112): left to the runtime they fell to levels 2 and 3 whenever the GPU
+        // waited on the main thread, slowing that thread, the one holding the frame back. Sustained high keeps
+        // them up; "--perflevel low|high|boost" (sustained low, sustained high, boost) to measure.
+        if (Platform.IsStandaloneVr && xr is OpenXRInterface perf)
         {
-            // 90 Hz when the runtime offers it (Quest 2 over Link does), else its best under that
-            float best = 0f;
-            foreach (var r in openxr.GetAvailableDisplayRefreshRates())
+            var level = CmdArgs.Value("--perflevel") switch
             {
-                float hz = r.AsSingle();
-                if (hz <= 90.5f && hz > best) best = hz;
+                "low" => OpenXRInterface.PerfSettingsLevel.SustainedLow,
+                "boost" => OpenXRInterface.PerfSettingsLevel.Boost,
+                _ => OpenXRInterface.PerfSettingsLevel.SustainedHigh,
+            };
+            void Apply()
+            {
+                perf.SetCpuLevel(level);
+                perf.SetGpuLevel(level);
+                GD.Print($"[xr] performance level {level}");
             }
-            if (best > 0f) openxr.DisplayRefreshRate = best;
-            // (OpenXR's own foveation is for the Compatibility renderer only: the headset viewport
-            // gets variable rate shading instead, XrRig.ApplyQuality)
-            GD.Print($"[xr] OpenXR on, {xr.GetName()} at {openxr.DisplayRefreshRate:F0} Hz");
+            Apply();
+            // and again once the session runs, as the refresh rate: one asked before may be dropped
+            perf.SessionBegun += Apply;
         }
-
+        // "--vrmult 0.85": the eye buffers' size against the runtime's recommendation (a frame-time check)
+        if (xr is OpenXRInterface mult && CmdArgs.Double("--vrmult") is double m)
+        {
+            mult.RenderTargetSizeMultiplier = m;
+            GD.Print($"[xr] render target x{m:F2}");
+        }
+        GD.Print($"[xr] OpenXR on, {xr.GetName()}");
         return Begin(root);
     }
 
@@ -130,9 +150,112 @@ public static class XrSession
     /// <summary>True with <c>--xrsim</c>: VR mode with no headset, for checks on a desktop.</summary>
     public static bool Simulated { get; private set; }
 
+    /// <summary>
+    /// <c>--xrsim --xrload</c>: the simulated headset is drawn at a Quest 2's pixel count and the
+    /// monitor as in a real headset session, and the rig reports frame and GPU times, for
+    /// frame-time checks without a headset (docs/notes/xr/air-link.md).
+    /// </summary>
+    public static bool LoadTest => Simulated && CmdArgs.Has("--xrload");
+
+    /// <summary>
+    /// <c>--xrstats</c>, or a load test: the rig reports the frame and the headset's GPU time every 5 s,
+    /// and a real headset's eye size (#1036).
+    /// </summary>
+    public static bool Stats => LoadTest || CmdArgs.Has("--xrstats");
+
+    /// <summary>
+    /// The headset's refresh rate from <see cref="GameSettings.VrRefreshHz"/> (the nearest the
+    /// runtime offers at or under it, else its lowest), and physics ticking at that rate. Physics
+    /// at 60 under a 72 Hz headset moved the body, and the eye with it, on five frames in six (two
+    /// in three at 90): the whole view juddered while moving, at full frame rate (#1036). Called at
+    /// start and on a settings change; <c>--xrsim</c> takes the setting as the headset's rate.
+    /// </summary>
+    public static void ApplyRefresh()
+    {
+        if (!Active) return;
+        float want = GameSettings.Current.VrRefreshHz, hz = want;
+        if (!Simulated && XRServer.FindInterface("OpenXR") is OpenXRInterface openxr)
+        {
+            if (!_watchingRate)
+            {
+                // the runtime may refuse or delay a rate (the Link app's own choice): follow what it runs at
+                _watchingRate = true;
+                openxr.RefreshRateChanged += r => TickAt((float)r);
+                // a rate asked before the session runs is dropped: a Quest then runs its system rate
+                // (90 there, #1112), so ask again once it has begun
+                openxr.SessionBegun += ApplyRefresh;
+            }
+            hz = VrRefresh.Pick(openxr.GetAvailableDisplayRefreshRates().Select(r => r.AsSingle()), want)
+                ?? openxr.DisplayRefreshRate;
+            if (hz > 0f && Math.Abs(openxr.DisplayRefreshRate - hz) > 0.5f) openxr.DisplayRefreshRate = hz;
+        }
+        TickAt(hz);
+    }
+
+    private static bool _watchingRate;
+
+    /// <summary>
+    /// Meta's fixed foveation on a standalone headset (#1112), from <see cref="GameSettings.VrFoveation"/> (level 3 or
+    /// none; <c>--foveation n</c> for a run), at start and on a settings change. The Mobile renderer draws it with a
+    /// fragment density map, which the headset view's VRS mode stays on for (XrRig.ApplyQuality): switching that
+    /// off instead left a stray image at the bottom of the view and never changed the level.
+    /// </summary>
+    public static void ApplyFoveation(int? level = null)
+    {
+        if (!Platform.IsStandaloneVr || XRServer.FindInterface("OpenXR") is not OpenXRInterface fov || !fov.IsFoveationSupported()) return;
+        int want = level ?? CmdArgs.Int("--foveation") ?? (GameSettings.Current.VrFoveation ? 3 : 0);
+        if (fov.FoveationLevel == want && fov.FoveationDynamic) return;
+        fov.FoveationLevel = want;
+        fov.FoveationDynamic = true;
+        GD.Print($"[xr] foveation level {want}, dynamic");
+    }
+
+    /// <summary>Whether Application SpaceWarp runs (#1112): the game renders at half the headset's rate.</summary>
+    public static bool SpaceWarp { get; private set; }
+
+    private static readonly StringName SpaceWarpName = "OpenXRFbSpaceWarpExtension", SetSpaceWarp = "set_space_warp_enabled",
+        SpaceWarpOn = "is_enabled", SkipSpaceWarp = "skip_space_warp_frame";
+
+    /// <summary>
+    /// Meta's Application SpaceWarp on a standalone headset, as <see cref="GameSettings.VrSpaceWarp"/> says (#1112): the
+    /// vendors plugin's extension, on in the Quest build's project settings (tools/quest.sh), switched here. The game
+    /// then renders every other frame with motion vectors and the runtime makes the one between.
+    /// </summary>
+    public static void ApplySpaceWarp()
+    {
+        if (!Active || Simulated || !Engine.HasSingleton(SpaceWarpName)) return;
+        var ext = Engine.GetSingleton(SpaceWarpName);
+        // only asked for on the command line: a settings file from the builds that offered it may still say on
+        bool want = Platform.IsStandaloneVr && CmdArgs.Has("--spacewarp") && GameSettings.Current.VrSpaceWarp;
+        ext.Call(SetSpaceWarp, want);
+        bool on = ext.Call(SpaceWarpOn).AsBool();
+        if (on != SpaceWarp) GD.Print($"[xr] SpaceWarp {(on ? "on" : "off")}");
+        SpaceWarp = on;
+    }
+
+    /// <summary>
+    /// No frame made between this one and the last (#1112): the view jumped (a teleport, a snap turn, the world's
+    /// origin moved), and a frame made from motion across the jump would smear.
+    /// </summary>
+    public static void SkipSpaceWarpFrame()
+    {
+        if (SpaceWarp) Engine.GetSingleton(SpaceWarpName).Call(SkipSpaceWarp);
+    }
+
+    /// <summary>Physics at the headset's <paramref name="hz"/>: one tick a frame.</summary>
+    private static void TickAt(float hz)
+    {
+        int ticks = Mathf.RoundToInt(hz);
+        if (ticks <= 0 || ticks == Engine.PhysicsTicksPerSecond) return;
+        GameClock.SetTickRate(ticks);
+        GD.Print($"[xr] headset at {hz:F0} Hz, physics at {ticks} ticks a second");
+    }
+
     private static bool Begin(Node root)
     {
         Active = true;
+        ApplyRefresh();
+        ApplySpaceWarp();
         // the PS1 vertex snap and dither off (common/retro.gdshaderinc): the window's view too,
         // which in VR is a spectator's
         RenderingServer.GlobalShaderParameterSet("xr_smooth", true);
@@ -152,8 +275,10 @@ public static class XrSession
     public static bool Relaunch(bool vr, bool asked = false)
     {
         var args = new List<string>();
-        // Vulkan is the well-trodden OpenXR path on Windows (the project default is d3d12)
-        args.AddRange(vr ? new[] { "--xr-mode", "on", "--rendering-driver", "vulkan" } : new[] { "--xr-mode", "off" });
+        // Vulkan is the well-trodden OpenXR path on Windows (the project default is d3d12). The method
+        // has to be named too: a driver alone on the command line starts Godot on Forward+, not the
+        // project's Mobile, which cost a Quest 2 most of its frame (#1036); VR has no Forward+ effects anyway
+        args.AddRange(vr ? new[] { "--xr-mode", "on", "--rendering-driver", "vulkan", "--rendering-method", "mobile" } : new[] { "--xr-mode", "off" });
         // run from the editor binary (`godot --path .`): it has to be told the project again
         if (OS.HasFeature("editor")) args.AddRange(new[] { "--path", ProjectSettings.GlobalizePath("res://") });
         args.Add("--");

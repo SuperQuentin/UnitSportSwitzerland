@@ -213,7 +213,8 @@ public partial class GarageProbe : Node
     private Vector3? _eyeFrom;
     private Vector3 _eyeTo;
     private Vector3 _from;
-    private double _stillFor;
+    private double _stillFor, _goneFor;
+    private bool _wasInside, _cameOut;
 
     /// <summary>
     /// Inside a building or out. From position, so it holds for a remote copy too: the interior it
@@ -328,9 +329,7 @@ public partial class GarageProbe : Node
             Log($"  {Where(me)} out {rel.X * tg.Outward.X + rel.Z * tg.Outward.Z:F2} along {rel.X * -tg.Outward.Z + rel.Z * tg.Outward.X:F2} "
                 + $"y {rel.Y:F2} vel.out {me.Velocity.X * tg.Outward.X + me.Velocity.Z * tg.Outward.Z:F1} vel.along {me.Velocity.X * -tg.Outward.Z + me.Velocity.Z * tg.Outward.X:F1} nose.in {-(fwd.X * tg.Outward.X + fwd.Z * tg.Outward.Z):F2} v {me.GroundSpeed * 3.6f:F0} km/h "
                 + $"door {(Interiors.InteriorManager.Instance?.IsOpen(tg.Key.ToString()) == true ? "open" : "shut")} link {(link == null ? "none" : $"swing {link.Swing:F2}")}"
-                + string.Concat(Enumerable.Range(0, me.GetSlideCollisionCount()).Select(i => me.GetSlideCollision(i))
-                    .Where(c => c.GetNormal().Y < 0.7f)
-                    .Select(c => $" hit {(c.GetCollider() as Node)?.GetPath().ToString().Split('/').LastOrDefault() ?? "?"} n({c.GetNormal().X:F2},{c.GetNormal().Y:F2},{c.GetNormal().Z:F2}) at {c.GetPosition().X:F2},{c.GetPosition().Y - Interiors.InteriorManager.InteriorBaseY:F2},{c.GetPosition().Z:F2}")));
+                + Hits(me, p => p - Vector3.Up * Interiors.InteriorManager.InteriorBaseY));
         }
         float throttleM = CmdArgs.Float("--drive-m") ?? (AutoGarage ? 5f : 15f), brakeM = CmdArgs.Float("--brake-m") ?? (AutoGarage ? 12.5f : throttleM);
         if (_drive == 1 && gone >= throttleM && Input.IsActionPressed(PlayerInput.Throttle))
@@ -363,8 +362,12 @@ public partial class GarageProbe : Node
             _drive = 4;
             _stepAt = _t;
         }
-        if (_drive == 4 && _t - _stepAt > 4 + ParkWait)
+        // with a park wait, back in as soon as the server has shut the door behind the car (its --doorquiet), at the latest after it
+        bool shut = ParkWait > 0 && _target is { } door && Interiors.InteriorManager.Instance?.IsOpen(door.Key.ToString()) == false;
+        if (_drive == 4 && _t - _stepAt > 4 && (shut || _t - _stepAt > 4 + ParkWait))
         {
+            if (ParkWait > 0) Log($"door {(shut ? "shut" : "still open")} {_t - _stepAt - 4:F1} s into the park wait");
+            _doorShut = shut;
             var parked = VehicleManager.Instance?.Nearest(me.GlobalPosition, 6f);
             Log($"parked car still inside: {parked != null && Interiors.InteriorManager.InInteriorSpace(parked.GlobalPosition)}; get back in: {me.TryGetIn()}");
             _drive = 5;
@@ -397,16 +400,19 @@ public partial class GarageProbe : Node
             // an apartment block's garage (#558) is down a ramp: it must have gone down it, a storey
             bool down = TargetKind != Terrain.Format.BuildingKind.Apartment || _descended >= 2f;
             Log($"descended {_descended:F1} m below the door");
-            Log($"RESULT: {(_parkedIn && _outAgain && down ? "ok" : "FAILED")} (parked inside a garage: {_parkedIn}, reversed out: {_outAgain}, down the ramp: {down}), {Where(me)} at {me.GlobalPosition}");
+            // a park wait is there for the way out to open a door the server shut: it must have shut
+            bool shutBehind = ParkWait <= 0 || _doorShut;
+            Log($"RESULT: {(_parkedIn && _outAgain && down && shutBehind ? "ok" : "FAILED")} (parked inside a garage: {_parkedIn}, reversed out: {_outAgain}, down the ramp: {down}, door shut while parked: {shutBehind}), {Where(me)} at {me.GlobalPosition}");
             GetTree().Quit();
         }
         if (at(90 + ParkWait)) { Log($"RESULT: FAILED (timeout at step {_drive}), {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); }
     }
 
     /// <summary>
-    /// <c>--park-wait s</c>: how long the driver leaves the parked car before getting back in. Over a
-    /// minute, the server shuts the door nobody is near (<c>TickDoors</c>), so the way out up a garage's
-    /// ramp has to ask it open again (#558).
+    /// <c>--park-wait s</c>: the most the driver leaves the parked car before getting back in. The server
+    /// shuts a door nobody is near after a minute, or its <c>--doorquiet</c> (<c>TickDoors</c>), so the way
+    /// out up a garage's ramp has to ask it open again (#558); the driver gets back in once it has, and
+    /// fails if it never did (#1007).
     /// </summary>
     private static float ParkWait => CmdArgs.Float("--park-wait") ?? 0f;
 
@@ -539,9 +545,16 @@ public partial class GarageProbe : Node
         {
             _pathLog = 0.5;
             var local = _place.AffineInverse() * pos;
-            Log($"  path {_pathAt}/{last} at ({local.X:F1},{local.Z:F1}) y {pos.Y - Interiors.InteriorManager.InteriorBaseY:F2} err {Mathf.RadToDeg(err):F0} deg v {me.GroundSpeed * 3.6f:F0} km/h");
+            Log($"  path {_pathAt}/{last} at ({local.X:F1},{local.Z:F1}) y {pos.Y - Interiors.InteriorManager.InteriorBaseY:F2} err {Mathf.RadToDeg(err):F0} deg v {me.GroundSpeed * 3.6f:F0} km/h"
+                + Hits(me, p => _place.AffineInverse() * p));
         }
     }
+
+    /// <summary>What the car is pushing against, not the floor: " hit &lt;node&gt; n(normal) at &lt;point in <paramref name="frame"/>&gt;" each.</summary>
+    private static string Hits(FootPlayer me, Func<Vector3, Vector3> frame) =>
+        string.Concat(Enumerable.Range(0, me.GetSlideCollisionCount()).Select(i => me.GetSlideCollision(i))
+            .Where(c => c.GetNormal().Y < 0.7f)
+            .Select(c => $" hit {(c.GetCollider() as Node)?.GetPath().ToString().Split('/').LastOrDefault() ?? "?"} n({c.GetNormal().X:F2},{c.GetNormal().Y:F2},{c.GetNormal().Z:F2}) at {frame(c.GetPosition()).X:F2},{frame(c.GetPosition()).Y:F2},{frame(c.GetPosition()).Z:F2}"));
 
     private static void ReleaseDrive()
     {
@@ -551,7 +564,7 @@ public partial class GarageProbe : Node
     }
 
     private double _stepAt;
-    private bool _parkedIn, _outAgain;
+    private bool _parkedIn, _outAgain, _doorShut;
     private float _descended;
     private readonly HashSet<string> _snapped = new();
 
@@ -579,7 +592,13 @@ public partial class GarageProbe : Node
         _snap = 0;
         if (_clock > 150 + ParkWait) { Log("RESULT: done"); GetTree().Quit(); return; }
         var other = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>().FirstOrDefault(p => p != me);
+        // the driver quits on its RESULT, out of the building again: its player gone for a second after that, there is
+        // nothing left to watch (#1007). Gone before, it is only out of sight (the works can be tiles from the spawn)
+        _goneFor = other == null && _cameOut ? _goneFor + 0.25 : 0;
+        if (_goneFor > 1) { Log("RESULT: done (the driver left)"); GetTree().Quit(); return; }
         if (other == null) return;
+        _wasInside |= InsideTarget(other);
+        _cameOut |= _wasInside && !Interiors.InteriorManager.InInteriorSpace(other.GlobalPosition);
         // with no --at, stand beside the garage the driver will pick (the nearest to the same spawn)
         // (until it is found: the works can be tiles away, and not yet built at the first look, #666)
         if (AutoGarage && !_standing && _clock > 3) { _watchedDoor = StandAtGarage(me, 9f, 3.5f); _standing = _watchedDoor != null; }

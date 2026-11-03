@@ -24,7 +24,7 @@ public partial class FootPlayer
     private const int MaxBreaks = 8;
 
     private Ragdoll? _ragdoll;
-    private MeshInstance3D? _ragdollMesh;
+    private SkinnedFigure? _ragdollMesh;
     private float _ragdollClock, _crackCooldown;
     private int _bonesBroken;
     private readonly Random _crashRng = new();
@@ -65,17 +65,8 @@ public partial class FootPlayer
         var joints = SeatedJoints();
         var state = CaptureVehicle(wrecked: false) with { Velocity = Vector3.Zero };
         Vehicles?.Park(state);
-        if (Npc)
-        {
-            // an NPC has nobody watching it fall: thrown clear, as it always was
-            Announced?.Invoke("THROWN OFF!", false);
-            ApplyRide(RideKind.OnFoot, fwd * hit * 0.25f + Vector3.Up * 4f);
-            GlobalPosition += Vector3.Up * 1.2f;
-            _stunTimer = 1.2f;
-            TakeDamage((hit - 8f) * 3f, 0, DamageCause.Crash);
-            return;
-        }
-
+        // an NPC or a bot goes limp too (#916): the other players, the trailer's and the movie's
+        // cameras watch it fall; it has no camera, so it gets no crash camera
         Announced?.Invoke(car ? "THROUGH THE WINDSCREEN!" : loopOut ? "LOOPED OUT!" : "THROWN OFF!", false);
         // on at most of the speed it hit at, and up: over a low wall, into a tree; off the back of
         // a looped wheelie, on with the bike's speed and only a little up
@@ -279,7 +270,9 @@ public partial class FootPlayer
         // half the crashes leave the body in the vehicle it breaks into, half send it on through: read
         // from the launch, which every peer has (Anim), so every copy picks the same; the owner flips
         // the coin and nudges the launch by a millimetre a second to say which (#751 playtest)
-        if (IsMultiplayerAuthority() && StaysIn(launch) != (_crashRng.Next(2) == 0)) launch.X += 0.001f;
+        // a film pins the coin (#924): the same crash goes the same way every render
+        var coin = RunSeeds.Pinned ? RunSeeds.Rng($"crash/{Name}") : _crashRng;
+        if (IsMultiplayerAuthority() && StaysIn(launch) != (coin.Next(2) == 0)) launch.X += 0.001f;
         bool staysIn = StaysIn(launch);
         _ragdoll = new Ragdoll(joints, launch, axis.Normalized() * spin, GetRid(), RagdollMask) { StaysIn = staysIn, PassesVehicles = passesVehicles };
         if (IsMultiplayerAuthority()) GD.Print($"[crash] thrown at {launch.Length():0.0} m/s, {(staysIn ? "stays in" : "goes through")} what it breaks into");
@@ -300,7 +293,7 @@ public partial class FootPlayer
         }
         if (_ragdollMesh == null)
         {
-            _ragdollMesh = new MeshInstance3D { Name = "Ragdoll", TopLevel = true, MaterialOverride = HumanMeshBuilder.FigureMaterial() };
+            _ragdollMesh = new SkinnedFigure { Name = "Ragdoll", TopLevel = true, MaterialOverride = HumanMeshBuilder.FigureMaterial() };
             // thrown off: seeing stars the whole way (#657)
             Avatar.Face.FaceAnimator.Apply(_ragdollMesh, Avatar.Face.FaceExpressions.Of(Avatar.Face.FaceExpression.Dizzy));
             AddChild(_ragdollMesh);
@@ -349,16 +342,20 @@ public partial class FootPlayer
         RagdollSplash();
         if (IsMultiplayerAuthority() && RagdollIntoWater(dt)) return false;
 
+        if (IsMultiplayerAuthority() && _ragdoll.Resting && _ragdollInWater <= 0f) { EndRagdoll(); return true; }
+        // the dedicated server draws nothing (#842): a bot it runs falls without a mesh rebuilt every frame
+        if (Net.NetworkManager.DedicatedServer) return true;
         var pelvis = _ragdoll.Pelvis;
         var points = _ragdoll.Points;
         Span<Vector3> local = stackalloc Vector3[HumanMeshBuilder.JointCount];
         // relative to the hips, and pre-flipped: the mesh builder turns everything a half turn on the way out
         for (int i = 0; i < local.Length; i++) local[i] = Flip(points[i] - pelvis);
-        _ragdollMesh.Mesh = HumanMeshBuilder.BuildJoints(FigurePalette(RiderIndex()), local, Hat);
+        // its look built once (#1202), the joints its bones every frame
+        if (_ragdollMesh.Skin == null || _ragdollMesh.Skin.Look.Hat != Hat || _ragdollMesh.Skin.Look.Smooth != HumanMeshBuilder.SmoothFigures)
+            _ragdollMesh.Show(new FigureLook(FigurePalette(RiderIndex()), Hat: Hat));
+        HumanMeshBuilder.PoseJoints(_ragdollMesh, local);
         _ragdollMesh.GlobalTransform = new Transform3D(Basis.Identity, pelvis);
         if (_walker != null) _walker.Visible = false;
-
-        if (IsMultiplayerAuthority() && _ragdoll.Resting && _ragdollInWater <= 0f) EndRagdoll();
         return true;
     }
 

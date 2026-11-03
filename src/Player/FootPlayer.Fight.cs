@@ -365,7 +365,7 @@ public partial class FootPlayer
     /// </summary>
     public FootPlayer? PointedFighter()
     {
-        if (_camera == null || Ride != RideKind.OnFoot || Fighting || Downed) return null;
+        if (_camera == null || Ride != RideKind.OnFoot || InDuel || Downed) return null;
         var look = -_camera.GlobalTransform.Basis.Z;
         look.Y = 0;
         if (look.LengthSquared() < 1e-4f) return null;
@@ -375,7 +375,7 @@ public partial class FootPlayer
         foreach (var s in PlayerSnapshot.Of(GetTree()))
         {
             var p = s.Player;
-            if (p == this || p.Npc || s.Ride != RideKind.OnFoot || p.Down != 0 || p.Fighting || !p.Visible) continue;
+            if (p == this || p.Npc || s.Ride != RideKind.OnFoot || p.Down != 0 || p.InDuel || !p.Visible) continue;
             var d = s.Pos - GlobalPosition;
             d.Y = 0;
             float dist = d.Length();
@@ -395,6 +395,16 @@ public partial class FootPlayer
     {
         if (FightManager.Client is not { } fights || !NetLink.Online(this) || PointedFighter() is not { } p) return false;
         if (NetId(p.Name) is not { } peer || peer <= 0) return false;
+        // a breathalyzer in hand (#1271): E offers them a test, not a fight
+        if (Items.ItemController.Instance?.Inventory.HeldId == Items.ItemId.Breathalyzer && Adventure.Alcohol.AlcoholService.Instance is { } alcohol)
+        {
+            alcohol.AskTest(peer);
+            return true;
+        }
+        // they challenged you to an aura battle (#914): E takes that; otherwise E is the fight's
+        if (AuraManager.Client?.AcceptFrom(peer) == true) return true;
+        // a party member (#1266): holding E asks to hold hands, a tap stays the fight's challenge
+        if (BeginTogetherHold(peer, () => fights.Engage(peer))) return true;
         fights.Engage(peer);
         return true;
     }

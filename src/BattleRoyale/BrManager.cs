@@ -258,6 +258,8 @@ public partial class BrManager : Node
     {
         if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return _state.Running ? "A match is running; wait for the next lobby." : "No lobby is open.";
         if (_state.Find(peer) != null) return "You are already in.";
+        // another mode's round (#1268, Core/Rounds): one game at a time
+        if (Rounds.All.Any(m => m.Name != "br" && m.InRound(peer))) return "You are in another game; leave it first.";
         // a party plays as a team unless its members pick one with /br team (#840)
         _state.Entrants.Add(new BrEntrant { Peer = peer, Name = _chat?.NameOfPeer(peer) ?? peer.ToString(), Party = Parties.Server?.Of(peer)?.TeamName ?? "" });
         _chat?.Invites?.Dismiss(InviteId, _state.Seed, peer);
@@ -388,6 +390,8 @@ public partial class BrManager : Node
         // the bots board too, once the line is known (#837), and are in the teams
         BoardBots(bots);
         _state.AssignTeams();
+        PlanTeamDrops();
+        _humanPings.Clear();
         _sidesAtGo = _state.TeamsAlive;
         _pushedOut = false;
         Combat.PvpRules.Override = Allowed;
@@ -531,14 +535,19 @@ public partial class BrManager : Node
 
     /// <summary>Server: a standing team-mate held Interact over a downed one for long enough.</summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestRevive(long target)
+    private void RequestRevive(long target) => ServerRevive(Multiplayer.GetRemoteSenderId(), target);
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> stood <paramref name="target"/> up, a player's request or a bot's (#837):
+    /// a standing team-mate within reach of a downed one. False when refused.
+    /// </summary>
+    public bool ServerRevive(long peer, long target)
     {
-        if (!_server || _state.Phase != BrPhase.Playing) return;
-        long peer = Multiplayer.GetRemoteSenderId();
+        if (!_server || _state.Phase != BrPhase.Playing) return false;
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
-            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return;
+            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return false;
         if (BodyOf(peer) is not { } a || BodyOf(target) is not { } b
-            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return;
+            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return false;
         t.Downed = false;
         t.DownedBy = 0;
         GD.Print($"[br] revived: {t.Name}, by {r.Name}");
@@ -546,6 +555,7 @@ public partial class BrManager : Node
         else RpcId(target, MethodName.Revived);
         Rpc(MethodName.DownNews, target, peer, true);
         Push();
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -713,18 +723,31 @@ public partial class BrManager : Node
     /// to the sender; at most one every <see cref="PingEvery"/> s.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPing(double e, double n, double alt)
+    private void RequestPing(double e, double n, double alt) => ServerPing(Multiplayer.GetRemoteSenderId(), e, n, alt);
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> marks a point for their team, a player's request or a bot's (#837). Sent to the
+    /// team's players (never RpcId a bot) and told to the server's own listeners (<see cref="TeamPinged"/>: the
+    /// team's bots). False when refused (too soon, too far, no team).
+    /// </summary>
+    public bool ServerPing(long peer, double e, double n, double alt)
     {
-        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return;
-        long peer = Multiplayer.GetRemoteSenderId();
-        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
-        if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return;
+        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return false;
+        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || BodyOf(peer) is not { } body) return false;
+        if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return false;
         var (be, bn) = Origin.ToLv95(body.GlobalPosition);
-        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return;
+        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return false;
         _lastPing[peer] = RealNow;
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
-            if (Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+            if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+        TeamPinged?.Invoke(me.Team, peer, e, n, alt);
+        // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
+        if (!me.Bot) _humanPings[me.Team] = (Origin.ToWorld(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        return true;
     }
+
+    /// <summary>Server: a ping went out to a team (team, from, LV95 e, n, alt): the team's bots read it.</summary>
+    public event Action<int, long, double, double, double>? TeamPinged;
 
     private readonly Dictionary<long, double> _lastPing = new();
 
@@ -897,6 +920,12 @@ public partial class BrManager : Node
 
     /// <summary>Server: <paramref name="peer"/> is alive in a running match (no teleporting out of it).</summary>
     public bool Playing(long peer) => _state.Phase == BrPhase.Playing && _state.Find(peer) is { Alive: true };
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> is an entrant of a lobby or a match, alive or out, until the round ends
+    /// (<see cref="Finish"/>). The Adventure layer is off for it then (#1223).
+    /// </summary>
+    public bool InRound(long peer) => _state.Phase != BrPhase.Idle && _state.Find(peer) != null;
 
     /// <summary>Server: a peer left the game. Out of the lobby, or out of the match.</summary>
     public void PeerLeft(long peer)

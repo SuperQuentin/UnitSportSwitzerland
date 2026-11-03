@@ -26,7 +26,7 @@ namespace UnitSport.Net;
 public partial class Sleepers : Node
 {
     public const string NodeName = "Sleepers";
-    private const string StorePath = "user://sleepers/server.json";
+    private static string StorePath => Core.WorldChoice.SavePath("user://sleepers/server.json");
     private const string KeyPath = "user://identity.key";
 
     /// <summary>How flat a sleeper lies: the knocked-out body's angle (<c>FootPlayer.PublishFootPose</c>).</summary>
@@ -39,6 +39,15 @@ public partial class Sleepers : Node
     private SleeperBook _book = new();
     private readonly Dictionary<long, byte[]> _nonces = new();
     private readonly Dictionary<long, string> _keyOf = new();
+
+    /// <summary>
+    /// Server: a peer proved its key (raised after it is that peer's identity, before a sleeper wakes). The
+    /// Adventure progress loads on it (#1223): progress is keyed by this, never by the requested name.
+    /// </summary>
+    public event Action<long, string>? Proven;
+
+    /// <summary>Server: the proven key (<see cref="PlayerKey.Fingerprint"/>) of a peer, or null (not proven, a bot).</summary>
+    public string? KeyOf(long peer) => _keyOf.GetValueOrDefault(peer);
 
     /// <summary>Server: the ground's altitude under an LV95 point, null while it is not loaded.</summary>
     public Func<double, double, double?>? GroundAt { get; set; }
@@ -118,6 +127,7 @@ public partial class Sleepers : Node
         }
         _keyOf[peer] = key;
         GD.Print($"[sleepers] peer {peer} is {key[..8]}");
+        Proven?.Invoke(peer, key);
 
         if (_book.Wake(key) is not { } s) return;
         Unshow(s.Id);
@@ -221,6 +231,9 @@ public partial class Sleepers : Node
     /// <summary>Client: how many sleepers this client shows (checks).</summary>
     public int Count => _shown.Count;
 
+    /// <summary>Client: whether a sleeper of this name is shown (checks).</summary>
+    public bool Shows(string name) => _shown.Values.Any(s => s.Name == name);
+
     /// <summary>Client: where a shown sleeper lies, in world space (checks).</summary>
     public Vector3? AnyShown => _visuals.Values.FirstOrDefault(IsInstanceValid)?.GlobalPosition;
 
@@ -273,6 +286,6 @@ public partial class Sleepers : Node
             // over the middle of the body: lying, the head points forward (-Z) from the feet
             Position = new Vector3(0, 0.8f, -0.85f),
         });
-        return root;
+        return Styles.ZoomRanges.TrackTree(root);
     }
 }

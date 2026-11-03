@@ -1,0 +1,62 @@
+# Nakama, the trainer edition's meta backend (#1121, docs/notes/net/nakama.md): accounts, leaderboards, tournaments.
+# The realtime ride stays on the Godot ENet server; Nakama only stores who rode what, and how fast.
+# Start it with tools/nakama/up.sh (it writes .env with fresh keys first), not with a bare `docker compose up`.
+name: unitsport-nakama
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nakama
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run tools/nakama/up.sh, it writes .env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "nakama"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  nakama:
+    image: heroiclabs/nakama:3.41.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres:${POSTGRES_PASSWORD}@postgres:5432/nakama?sslmode=disable
+      NAKAMA_SERVER_KEY: ${NAKAMA_SERVER_KEY:?}
+      NAKAMA_HTTP_KEY: ${NAKAMA_HTTP_KEY:?}
+      NAKAMA_CONSOLE_USER: ${NAKAMA_CONSOLE_USER:?}
+      NAKAMA_CONSOLE_PASSWORD: ${NAKAMA_CONSOLE_PASSWORD:?}
+      NAKAMA_ENCRYPTION_KEY: ${NAKAMA_ENCRYPTION_KEY:?}
+      # the first admins, by email (#1207): they join the admins group on their first sign-in to the website
+      NAKAMA_ADMIN_EMAILS: ${NAKAMA_ADMIN_EMAILS:-}
+    # Nakama's config file cannot read the environment, so the secrets go in as flags; local.yml holds the rest
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - >
+        /nakama/nakama migrate up --database.address "$$DB" &&
+        exec /nakama/nakama --config /nakama/data/local.yml --database.address "$$DB"
+        --socket.server_key "$$NAKAMA_SERVER_KEY" --runtime.http_key "$$NAKAMA_HTTP_KEY"
+        --console.username "$$NAKAMA_CONSOLE_USER" --console.password "$$NAKAMA_CONSOLE_PASSWORD"
+        --session.encryption_key "$$NAKAMA_ENCRYPTION_KEY" --session.refresh_encryption_key "r$$NAKAMA_ENCRYPTION_KEY"
+        --console.signing_key "c$$NAKAMA_ENCRYPTION_KEY" --runtime.env "ADMIN_EMAILS=$$NAKAMA_ADMIN_EMAILS"
+    volumes:
+      - ./local.yml:/nakama/data/local.yml:ro
+      - ./modules:/nakama/data/modules:ro
+    ports:
+      # API and realtime socket. Loopback by default: a host's Caddy serves it at https://<site>/nakama/ (#1205);
+      # NAKAMA_BIND=0.0.0.0 publishes it on every interface (a host without Caddy)
+      - "${NAKAMA_BIND:-127.0.0.1}:${NAKAMA_PORT:-7350}:7350"
+      - "127.0.0.1:${NAKAMA_CONSOLE_PORT:-7351}:7351"  # admin console: this machine only (ssh -L on a server)
+    healthcheck:
+      test: ["CMD", "/nakama/nakama", "healthcheck"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  db:

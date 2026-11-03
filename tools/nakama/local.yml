@@ -1,0 +1,13 @@
+# Nakama settings without secrets (#1121). The keys and the console login come from .env as flags (docker-compose.yml).
+name: unitsport
+logger:
+  level: INFO
+  stdout: true
+session:
+  token_expiry_sec: 86400          # a day: a rider logs in once per session, not once per ride
+  refresh_token_expiry_sec: 2592000 # 30 days
+runtime:
+  path: /nakama/data/modules
+  js_entrypoint: index.js
+socket:
+  max_message_size_bytes: 8192

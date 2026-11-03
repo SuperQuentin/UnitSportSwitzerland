@@ -19,7 +19,7 @@ public partial class SoloScreen : Screen
 
     public override void _Ready()
     {
-        var (body, _) = Framed("Play solo", "Offline, on this machine", new Vector2(900, 560));
+        var (body, _) = Framed("Play solo", "Offline, on this machine", new Vector2(900, 620));
 
         var cards = UiKit.HBox(16);
         body.AddChild(cards);
@@ -31,13 +31,24 @@ public partial class SoloScreen : Screen
             "Fly over the real Swiss terrain, drop on foot with {toggle_mode}, ride, drive or fly anything. "
             + "{teleport} searches a town and takes you there."), UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
         exploreBody.AddChild(UiKit.Spacer(expand: true));
+        // which world (#999): the open world, or a test world the checks run on
+        var (world, worldBlurb) = WorldPicker.Create(GameSettings.Current.SoloWorld);
+        exploreBody.AddChild(world);
+        exploreBody.AddChild(worldBlurb);
         _explore = UiKit.Button("Start exploring", primary: true);
-        // the map first, to pick where to land (#515)
-        _explore.Pressed += () => Shell.LaunchVia(new WorldLaunch { Mode = GameMode.Explore });
+        _explore.Pressed += () =>
+        {
+            var picked = WorldPicker.Picked(world);
+            GameSettings.Current.SoloWorld = picked.Id;
+            GameSettings.Current.Save();
+            // the open world shows the map first, to pick where to land (#515); a test world starts at its own start
+            Shell.LaunchVia(picked.IsOpen ? new WorldLaunch { Mode = GameMode.Explore }
+                : new WorldLaunch { Mode = GameMode.Explore, World = picked, Landing = picked.Start });
+        };
         exploreBody.AddChild(_explore);
         var exploreCard = UiKit.Card(exploreBody);
         exploreCard.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        exploreCard.CustomMinimumSize = new Vector2(0, 210);
+        exploreCard.CustomMinimumSize = new Vector2(0, 270);
         cards.AddChild(exploreCard);
 
         // --- GPX replay
@@ -84,6 +95,7 @@ public partial class SoloScreen : Screen
         UiKit.SliderRow(right, "Traffic", 0, 150, 5, s.TrafficCars,
             v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
         UiKit.ToggleRow(right, "Trains", s.Trains, on => GameSettings.Current.Trains = on);
+        SettingsScreen.TrafficModeRows(right, s);
         // the sliders are wide in Settings; here two columns share the panel
         foreach (var row in left.GetChildren().Concat(right.GetChildren()).OfType<HBoxContainer>())
             if (row.GetChildCount() > 1 && row.GetChild(1) is Control c) c.CustomMinimumSize = new Vector2(200, 0);

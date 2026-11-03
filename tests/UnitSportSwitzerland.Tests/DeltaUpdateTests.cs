@@ -144,9 +144,11 @@ public class DeltaUpdateTests
     {
         var releases = new[]
         {
-            Rel("v0.10.0", "UnitSportSwitzerland-v0.9.0-to-v0.10.0-windows.delta"),
-            Rel("v0.8.1"),
-            Rel("v0.9.0", "UnitSportSwitzerland-v0.8.1-to-v0.9.0-windows.delta", "UnitSportSwitzerland-v0.8.1-to-v0.9.0-macos.delta"),
+            Rel("v0.10.0", "UnitSportSwitzerland-v0.10.0-windows.zip", "UnitSportSwitzerland-v0.10.0-macos.tar.gz",
+                "UnitSportSwitzerland-v0.9.0-to-v0.10.0-windows.delta"),
+            Rel("v0.8.1", "UnitSportSwitzerland-v0.8.1-windows.zip", "UnitSportSwitzerland-v0.8.1-macos.tar.gz"),
+            Rel("v0.9.0", "UnitSportSwitzerland-v0.9.0-windows.zip", "UnitSportSwitzerland-v0.9.0-macos.tar.gz",
+                "UnitSportSwitzerland-v0.8.1-to-v0.9.0-windows.delta", "UnitSportSwitzerland-v0.8.1-to-v0.9.0-macos.delta"),
             new UpdateInfo.Release("v0.11.0-rc1", "", Array.Empty<UpdateInfo.Asset>(), Prerelease: true),
         };
         var chain = UpdateInfo.DeltaChain(releases, "0.8.1", "Windows");
@@ -156,5 +158,28 @@ public class DeltaUpdateTests
         Assert.Null(UpdateInfo.DeltaChain(releases, "0.8.1", "macOS"));     // a step without a mac delta
         Assert.Null(UpdateInfo.DeltaChain(releases, "0.8.5", "Windows"));   // not a release
         Assert.Null(UpdateInfo.DeltaChain(releases, "0.10.0", "Windows"));  // already the latest
+    }
+
+    [Fact]
+    public void The_chain_steps_over_releases_without_this_platform()
+    {
+        // #1170: v0.104-v0.105 shipped no Windows build; their Windows deltas were empty stubs
+        var releases = new[]
+        {
+            Rel("v0.103.0", "UnitSportSwitzerland-v0.103.0-windows.zip", "UnitSportSwitzerland-v0.103.0-linux-x86_64.tar.gz"),
+            Rel("v0.104.0", "UnitSportSwitzerland-v0.104.0-linux-x86_64.tar.gz",
+                "UnitSportSwitzerland-v0.103.0-to-v0.104.0-linux-x86_64.delta"),
+            Rel("v0.105.0", "UnitSportSwitzerland-v0.105.0-linux-x86_64.tar.gz",
+                "UnitSportSwitzerland-v0.104.0-to-v0.105.0-linux-x86_64.delta", "UnitSportSwitzerland-v0.104.0-to-v0.105.0-windows.delta"),
+        };
+        Assert.Null(UpdateInfo.DeltaChain(releases, "0.103.0", "Windows"));  // no Windows build to go to yet
+        Assert.Equal(new[] { "v0.103.0>v0.104.0", "v0.104.0>v0.105.0" },
+            UpdateInfo.DeltaChain(releases, "0.103.0", "Linux")!.Select(c => $"{c.From}>{c.To}"));
+
+        var fixedUp = releases.Append(Rel("v0.106.0", "UnitSportSwitzerland-v0.106.0-windows.zip",
+            "UnitSportSwitzerland-v0.106.0-linux-x86_64.tar.gz", "UnitSportSwitzerland-v0.105.0-to-v0.106.0-linux-x86_64.delta",
+            "UnitSportSwitzerland-v0.103.0-to-v0.106.0-windows.delta"));
+        Assert.Equal(new[] { "v0.103.0>v0.106.0" },
+            UpdateInfo.DeltaChain(fixedUp, "0.103.0", "Windows")!.Select(c => $"{c.From}>{c.To}"));
     }
 }

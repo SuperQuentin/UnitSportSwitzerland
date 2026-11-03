@@ -78,7 +78,8 @@ public static class BuildingOcclusion
     /// </summary>
     public static (Vector3[] Vertices, int[] Indices)? Occluders(BuildingTile tile)
     {
-        var boxes = BuildingTypes.For(tile).Boxes;
+        var types = BuildingTypes.For(tile);
+        var boxes = types.Boxes;
         var verts = new List<Vector3>();
         var idx = new List<int>();
         for (int i = 0; i < tile.Buildings.Count && i < boxes.Length; i++)
@@ -87,6 +88,8 @@ public static class BuildingOcclusion
             var b = tile.Buildings[i];
             // a building site is an open shell (#608): it hides nothing behind it
             if (!BuildingMeshBuilder.Drawn(b)) continue;
+            // nor is a ruin, drawn as its broken walls (#859)
+            if (types.HasCastles && BuildingMeshBuilder.RebuiltRuin(tile, types, i)) continue;
             float w = box.Width - 2 * Inset, d = box.Depth - 2 * Inset;
             float bottom = b.MinY + Inset, top = box.Eave - Inset;
             if (w < 3f || d < 3f || top - bottom < 2.5f) continue;

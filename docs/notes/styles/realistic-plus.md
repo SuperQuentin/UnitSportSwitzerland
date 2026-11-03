@@ -6,7 +6,7 @@
 Phase 4 of `docs/plans/visual-styles.md` (#255). Realistic− (`realistic`) plus Forward+'s effects
 and the SWISSIMAGE drape (`swissimage`); it borrows every shader and model from Realistic−.
 
-- **Its own look items:** `Effects` and `Photos` (both PS1 false, the base). `--style-report`
+- **Its own look items:** `Effects` and `Photos` (both false in Cartoon, the base). `--style-report`
   lists them with the rest.
 - **Forward+ only.** Godot reads `rendering_method` at startup, so `StyleKit.NeedsForwardPlus`
   styles relaunch (`Styles/RendererRelaunch`): picking Realistic+ in the settings asks and

@@ -11,7 +11,6 @@ PORT=${SHOP_PORT:-7834}
 tc_server 1800 120 $OUT/shopcheck_server.log --server --port $PORT --generated-world --admin-password shopcheck --shopstuck
 tc_client 480 $OUT/shopcheck_A.log --connect 127.0.0.1:$PORT --name ShopA --shopnet A --traffic 0 &
 CLIENT_A=$!
-sleep 2
 tc_client 475 $OUT/shopcheck_B.log --connect 127.0.0.1:$PORT --name ShopB --shopnet B --traffic 0
 wait $CLIENT_A
 code=0

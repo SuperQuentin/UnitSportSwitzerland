@@ -45,18 +45,26 @@ public static class RoadStreetBuilder
 
     /// <summary>
     /// One side of one segment: the ribbon's edge points, the unit vector out across the side at
-    /// each, the forward direction, the profile, and whether each end is open.
+    /// each, the forward direction, the profile at each (#818: one shape along the side, its widths
+    /// per point; the same object at every point of an ordinary segment), and whether each end is open.
     /// </summary>
     private readonly record struct Side(Vector3[] Edge, Vector3[] Across, Vector3[] Forward,
-        RoadStreetSection.Profile Profile, bool OpenStart, bool OpenEnd)
+        RoadStreetSection.Profile[] Profiles, bool OpenStart, bool OpenEnd)
     {
-        /// <summary>The profile point <paramref name="k"/> of <paramref name="p"/> at vertex <paramref name="i"/>.</summary>
-        public Vector3 At(RoadStreetSection.Profile p, int i, int k) => Edge[i] + Across[i] * p.D[k] + new Vector3(0, p.H[k], 0);
+        /// <summary>The side's shape: its surfaces and heights, the same at every point.</summary>
+        public RoadStreetSection.Profile Profile => Profiles[0];
+
+        /// <summary>The profile point <paramref name="k"/> of <paramref name="ps"/> at vertex <paramref name="i"/>.</summary>
+        public Vector3 At(RoadStreetSection.Profile[] ps, int i, int k) => Edge[i] + Across[i] * ps[i].D[k] + new Vector3(0, ps[i].H[k], 0);
 
         /// <summary>The same point on the road surface (height 0 above the road).</summary>
-        public Vector3 Base(RoadStreetSection.Profile p, int i, int k) => Edge[i] + Across[i] * p.D[k];
+        public Vector3 Base(RoadStreetSection.Profile[] ps, int i, int k) => Edge[i] + Across[i] * ps[i].D[k];
 
         public bool Raised => Profile.H.Any(h => h > 0);
+
+        /// <summary>Piece <paramref name="k"/> of the profile has no extent at vertices i and i + 1 (a band a transition closed).</summary>
+        public bool Empty(RoadStreetSection.Profile[] ps, int i, int k) =>
+            ps[i].D[k + 1] - ps[i].D[k] < 1e-4f && ps[i + 1].D[k + 1] - ps[i + 1].D[k] < 1e-4f && Math.Abs(ps[i].H[k + 1] - ps[i].H[k]) < 1e-4f;
     }
 
     private static Color ColorOf(StreetSurface s) => s switch
@@ -78,23 +86,25 @@ public static class RoadStreetBuilder
         foreach (var side in Sides(tile))
         {
             var p = side.Profile;
+            var ps = side.Profiles;
             int n = side.Edge.Length, last = p.Count - 1;
             var drop = new Vector3(0, -Skirt, 0);
             for (int k = 0; k < last; k++)
             {
                 var color = ColorOf(p.Surface[k]).SrgbToLinear();
                 for (int i = 0; i < n - 1; i++)
-                    Quad(vertices, colors, uvs, uv2s, indices, color, side.At(p, i, k), side.At(p, i + 1, k), side.At(p, i + 1, k + 1), side.At(p, i, k + 1));
+                    if (!side.Empty(ps, i, k))
+                        Quad(vertices, colors, uvs, uv2s, indices, color, side.At(ps, i, k), side.At(ps, i + 1, k), side.At(ps, i + 1, k + 1), side.At(ps, i, k + 1));
             }
             for (int i = 0; i < n - 1; i++)
-                Quad(vertices, colors, uvs, uv2s, indices, kerb, side.At(p, i, last), side.At(p, i + 1, last), side.At(p, i + 1, last) + drop, side.At(p, i, last) + drop);
+                Quad(vertices, colors, uvs, uv2s, indices, kerb, side.At(ps, i, last), side.At(ps, i + 1, last), side.At(ps, i + 1, last) + drop, side.At(ps, i, last) + drop);
             if (!side.Raised) continue;
             foreach (var (open, i) in (ReadOnlySpan<(bool, int)>)[(side.OpenStart, 0), (side.OpenEnd, n - 1)])
             {
                 if (!open) continue;
                 for (int k = 0; k < last; k++)
-                    if (p.D[k + 1] - p.D[k] > 1e-4f)
-                        Quad(vertices, colors, uvs, uv2s, indices, kerb, side.Base(p, i, k), side.At(p, i, k), side.At(p, i, k + 1), side.Base(p, i, k + 1));
+                    if (ps[i].D[k + 1] - ps[i].D[k] > 1e-4f)
+                        Quad(vertices, colors, uvs, uv2s, indices, kerb, side.Base(ps, i, k), side.At(ps, i, k), side.At(ps, i, k + 1), side.Base(ps, i, k + 1));
             }
         }
 
@@ -150,12 +160,16 @@ public static class RoadStreetBuilder
         foreach (var side in Sides(tile))
         {
             if (!side.Raised) continue;
-            var p = RoadStreetSection.Chamfered(side.Profile);
+            // each point's profile chamfered (once for an ordinary side's one profile)
+            var ps = new RoadStreetSection.Profile[side.Profiles.Length];
+            for (int i = 0; i < ps.Length; i++)
+                ps[i] = i > 0 && ReferenceEquals(side.Profiles[i], side.Profiles[i - 1]) ? ps[i - 1] : RoadStreetSection.Chamfered(side.Profiles[i]);
+            var p = ps[0];
             int n = side.Edge.Length, count = p.Count;
             var top = new Vector3[n, count];
             for (int i = 0; i < n; i++)
                 for (int k = 0; k < count; k++)
-                    top[i, k] = side.At(p, i, k);
+                    top[i, k] = side.At(ps, i, k);
             float length = 0;
             for (int i = 1; i < n; i++) length += side.Edge[i].DistanceTo(side.Edge[i - 1]);
             float pull = Math.Min(Chamfer, length * 0.25f);
@@ -169,10 +183,12 @@ public static class RoadStreetBuilder
             for (int k = 0; k + 1 < count; k++)
             {
                 for (int i = 0; i < n - 1; i++)
-                    Tri(faces, top[i, k], top[i + 1, k], top[i + 1, k + 1], top[i, k + 1]);
-                if (p.D[k + 1] - p.D[k] < 1e-4f) continue;
-                if (side.OpenStart) Tri(faces, side.Base(p, 0, k), side.Base(p, 0, k + 1), top[0, k + 1], top[0, k]);
-                if (side.OpenEnd) Tri(faces, side.Base(p, n - 1, k), side.Base(p, n - 1, k + 1), top[n - 1, k + 1], top[n - 1, k]);
+                    if (!side.Empty(ps, i, k))
+                        Tri(faces, top[i, k], top[i + 1, k], top[i + 1, k + 1], top[i, k + 1]);
+                if (side.OpenStart && ps[0].D[k + 1] - ps[0].D[k] >= 1e-4f)
+                    Tri(faces, side.Base(ps, 0, k), side.Base(ps, 0, k + 1), top[0, k + 1], top[0, k]);
+                if (side.OpenEnd && ps[n - 1].D[k + 1] - ps[n - 1].D[k] >= 1e-4f)
+                    Tri(faces, side.Base(ps, n - 1, k), side.Base(ps, n - 1, k + 1), top[n - 1, k + 1], top[n - 1, k]);
             }
         }
 
@@ -210,15 +226,18 @@ public static class RoadStreetBuilder
             }
         }
 
+        var transitions = SegmentSections.TransitionsOf(tile);
         for (int s = 0; s < tile.Segments.Count; s++)
         {
             var seg = tile.Segments[s];
             if (!HasSidewalk(seg)) continue;
+            // the section at each point: the segment's sides, or its transition's bands (#818)
+            var sections = SegmentSections.Of(seg, transitions[s]);
             foreach (bool right in new[] { false, true })
             {
-                var mine = right ? seg.Attributes.Right : seg.Attributes.Left;
-                if (RoadStreetSection.For(mine, seg.Attributes.Has(RoadAttrFlags.LoweredKerbs)) is not { } profile) continue;
-                yield return Build(seg, right, profile,
+                var profiles = right ? sections.RightProfile : sections.LeftProfile;
+                if (profiles.Length == 0 || profiles[0] is null) continue;
+                yield return Build(seg, right, sections,
                     !Continues(tile, ends, s, atStart: true, right), !Continues(tile, ends, s, atStart: false, right));
             }
         }
@@ -245,14 +264,13 @@ public static class RoadStreetBuilder
         return false;
     }
 
-    private static Side Build(RoadSegment seg, bool right, RoadStreetSection.Profile profile, bool openStart, bool openEnd)
+    private static Side Build(RoadSegment seg, bool right, SegmentSections sections, bool openStart, bool openEnd)
     {
         int n = seg.PointCount;
         var pts = new Vector3[n];
         for (int i = 0; i < n; i++) pts[i] = new Vector3(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
-        float half = seg.Width * 0.5f, width = profile.Width, sign = right ? 1f : -1f;
-        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
-        var along = RoadStreetSection.Fractions(seg);   // a turn lane's widening pushes the side out (#120)
+        float sign = right ? 1f : -1f;
+        var profiles = right ? sections.RightProfile : sections.LeftProfile;
         var inner = new Vector3[n];
         var outer = new Vector3[n];
         var across = new Vector3[n];
@@ -265,14 +283,23 @@ public static class RoadStreetBuilder
             if (f.LengthSquared() < 1e-8f) f = Vector3.Forward;
             f = f.Normalized();
             across[i] = new Vector3(-f.Z, 0, f.X) * sign;
-            float start = half + side.ShiftAt(along[i]);
+            // where the side starts: the ribbon's edge, past a turn lane's widening (#120), or a transition's kerb (#818)
+            float start = right ? sections.SideRight[i] : -sections.SideLeft[i];
             inner[i] = pts[i] + across[i] * start;
-            outer[i] = pts[i] + across[i] * (start + width);
+            outer[i] = pts[i] + across[i] * (start + profiles[i]!.Width);
             forward[i] = f;
         }
-        var keep = Simplify(inner, outer);
+        // a transition's bands change width along it: every line of its profile is held to the tolerance, not only the two edges
+        var keep = sections.Varies ? Simplify(Enumerable.Range(0, profiles[0]!.Count).Select(k => Line(k)).ToArray()) : Simplify([inner, outer]);
         return new Side(keep.Select(k => inner[k]).ToArray(), keep.Select(k => across[k]).ToArray(),
-            keep.Select(k => forward[k]).ToArray(), profile, openStart, openEnd);
+            keep.Select(k => forward[k]).ToArray(), keep.Select(k => profiles[k]!).ToArray(), openStart, openEnd);
+
+        Vector3[] Line(int k)
+        {
+            var line = new Vector3[n];
+            for (int i = 0; i < n; i++) line[i] = inner[i] + across[i] * profiles[i]!.D[k];
+            return line;
+        }
     }
 
     /// <summary>A slab vertex may be dropped if both edges and the height stay this close to the chord.</summary>
@@ -287,16 +314,17 @@ public static class RoadStreetBuilder
     /// within the tolerance, and every line between the two edges (a band of the profile) too: it
     /// is their blend.
     /// </summary>
-    private static List<int> Simplify(Vector3[] inner, Vector3[] outer)
+    private static List<int> Simplify(Vector3[][] lines)
     {
-        int n = inner.Length;
+        int n = lines[0].Length;
         var keep = new List<int> { 0 };
         int from = 0;
         for (int to = 2; to < n; to++)
         {
             bool fits = true;
             for (int k = from + 1; k < to && fits; k++)
-                fits = Near(inner[from], inner[to], inner[k]) && Near(outer[from], outer[to], outer[k]);
+                foreach (var line in lines)
+                    if (!(fits = Near(line[from], line[to], line[k]))) break;
             if (fits) continue;
             keep.Add(to - 1);
             from = to - 1;

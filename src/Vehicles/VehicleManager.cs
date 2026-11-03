@@ -91,9 +91,12 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
 
     /// <summary>Wrecks are cleared this long after they burn.</summary>
     private const double WreckLifetime = 90;
-    /// <summary>A vehicle this far from every player, for this long, is cleared.</summary>
-    private const float LonelyDistance = 3000f;
-    private const double LonelyTime = 300;
+    /// <summary>
+    /// A vehicle this far from every player, for this long, is cleared. Nearer and sooner where a standalone headset
+    /// decides (#1112, offline): an airport's parked aircraft 4 km off kept its physics step at three times its cost.
+    /// </summary>
+    public static readonly float LonelyDistance = Core.Platform.IsStandaloneVr ? 1500f : 3000f;
+    private static readonly double LonelyTime = Core.Platform.IsStandaloneVr ? 60 : 300;
 
     /// <summary>The manager of this process's world, if there is one.</summary>
     public static VehicleManager? Instance { get; private set; }
@@ -450,6 +453,28 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
                 v.QueueFree();
             }
         foreach (var state in handOver) Restore(state with { Velocity = Vector3.Zero, EngineOn = false });
+    }
+
+    /// <summary>
+    /// Server or offline (<c>/despawn</c>, #1200): every vehicle within <paramref name="radius"/> of
+    /// <paramref name="at"/> (null: everywhere) leaves the world for good, as a claimed one does: off the
+    /// containers' book, then freed, the spawner removing it on every client. Not one being claimed.
+    /// How many went.
+    /// </summary>
+    public int Despawn(Vector3? at, float radius)
+    {
+        if (Online && !Multiplayer.IsServer()) return 0;
+        int count = 0;
+        foreach (var node in GetChildren())
+            if (node is VehicleBody v && !v.IsQueuedForDeletion() && !_claimed.Contains(v.Name)
+                && (at is not { } p || v.GlobalPosition.DistanceTo(p) <= radius))
+            {
+                Removing?.Invoke(v);
+                v.Retire();
+                v.QueueFree();
+                count++;
+            }
+        return count;
     }
 
     /// <summary>

@@ -3,13 +3,14 @@
 
 # Cartoon: how the style is put together
 
-Phase 2 of `docs/plans/visual-styles.md` (#238), from the prototype (#181). Breath-of-the-Wild
+Phase 2 of `docs/plans/visual-styles.md` (#238), from the prototype (#181). **The default style
+and the base of the fallback chain** since #849 (`style-kit`): every role and look item is set here. Breath-of-the-Wild
 -like: flat facets kept, a cel terminator with real sun shadows, cool blue shade, olive-gold
 pastel greens, a soft rim, strong aerial haze.
 
 - **Shaders:** `cartoon_*` wrappers (`STYLE_LIT` + `STYLE_CARTOON`) over the same role bodies as
-  PS1 (`role-bodies`): terrain, road, building, water, tree, tree-far, prop, path. Snowfall
-  stays PS1's. `cartoon_interior` is unshaded (rooms float in the dark under the terrain, out of
+  PS1 (`role-bodies`): terrain, road, building, water, tree, tree-far, prop, path. Snowfall is
+  the shared, unshaded `snowfall.gdshader`, the same in every style. `cartoon_interior` is unshaded (rooms float in the dark under the terrain, out of
   the sun) with the room light in soft bands and the pastel grade (`terrain/interior-light`).
 - **The cel light** (`shaders/common/style.gdshaderinc`): one smoothstep terminator on N·L, the
   sun's shadow as the same band, a faint rim; the shade side is the environment's cool ambient.
@@ -39,6 +40,8 @@ pastel greens, a soft rim, strong aerial haze.
 - **Trees:** `MeshDetail.High` (`ChunkNode.HighDetailTrees`): tiered 7-sided conifers (54
   triangles) and three-puff broadleaves (120), smooth normals. Near: `NearTrees` (`tree-lod`);
   far: billboards tracing the same shapes (`hit_tier`, `hit_puff`, `hit_trunk6`).
+- **Buildings:** `MeshDetail.High` carries pitched roofs past their walls, eaves and gable verges
+  with a fascia and a soffit (`terrain/roof-overhangs`, #1067); collision stays on the solid.
 - **Avatars, vehicles, birds, items:** `HumanMeshBuilder.Material()` goes through
   `StyleKit.Figure`: toon diffuse and specular, rim 0.35. Restyled live with the shader materials.
   Dressed figures: `MaterialRole.Figure` (`cartoon_avatar`).

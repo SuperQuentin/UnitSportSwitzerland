@@ -30,7 +30,7 @@ public static class KerbCheck
         public List<(string What, double H)>? All;
         /// <summary>What the last <see cref="At"/> stood on.</summary>
         public string What = "";
-        private readonly List<(RoadSegment Seg, float[] Frac, double X0, double X1, double Z0, double Z1)> _segs = [];
+        private readonly List<(RoadSegment Seg, SegmentSections Sections, double X0, double X1, double Z0, double Z1)> _segs = [];
         private readonly List<(double[] X, double[] Z, double[] Y)> _caps = [];
         /// <summary>What lies in each 4 m cell (indices into the lists above): a sample looks at its own cell only.</summary>
         private readonly Dictionary<(int, int), (List<int> Raised, List<int> Segs, List<int> Caps)> _cells = [];
@@ -72,18 +72,20 @@ public static class KerbCheck
                     }
                     _caps.Add((x, z, y));
                 }
-            foreach (var s in Tile.Segments)
-                if (s.PointCount >= 2 && s.Class <= RoadClass.Square && s.Class != RoadClass.Railway && (s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0)
+            var transitions = SegmentSections.TransitionsOf(Tile);
+            for (int si = 0; si < Tile.Segments.Count; si++)
+                if (Tile.Segments[si] is var s && s.PointCount >= 2 && s.Class <= RoadClass.Square && s.Class != RoadClass.Railway && (s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0)
                 {
-                    // its box, widened by everything beside the carriageway
-                    double pad = s.Width * 0.5 + Math.Max(s.Attributes.Left.Reach, s.Attributes.Right.Reach) + 0.5;
+                    // its box, widened by everything beside the carriageway; its section at each point, a transition's too (#818)
+                    var sections = SegmentSections.Of(s, transitions[si]);
+                    double pad = Enumerable.Range(0, s.PointCount).Max(i => Math.Max(sections.OuterLeft(i), sections.OuterRight(i))) + 0.5;
                     double x0 = double.MaxValue, x1 = double.MinValue, z0 = double.MaxValue, z1 = double.MinValue;
                     for (int i = 0; i < s.PointCount; i++)
                     {
                         x0 = Math.Min(x0, s.Points[i * 3]); x1 = Math.Max(x1, s.Points[i * 3]);
                         z0 = Math.Min(z0, s.Points[i * 3 + 2]); z1 = Math.Max(z1, s.Points[i * 3 + 2]);
                     }
-                    _segs.Add((s, RoadStreetSection.Fractions(s), x0 - pad, x1 + pad, z0 - pad, z1 + pad));
+                    _segs.Add((s, sections, x0 - pad, x1 + pad, z0 - pad, z1 + pad));
                 }
             for (int k = 0; k < _raised.Count; k++)
             {
@@ -138,12 +140,13 @@ public static class KerbCheck
             if (!_cells.TryGetValue(((int)Math.Floor(px / Cell), (int)Math.Floor(pz / Cell)), out var cell)) return double.NaN;
             foreach (var (x, z, y, what) in cell.Raised.Select(k => _raised[k]))
                 if (InTri(x, z, y, px, pz) is { } h) Take(h, what);
-            foreach (var (seg, frac, sx0, sx1, sz0, sz1) in cell.Segs.Distinct().Select(k => _segs[k]))
+            foreach (var (seg, sections, sx0, sx1, sz0, sz1) in cell.Segs.Distinct().Select(k => _segs[k]))
             {
                 if (px < sx0 || px > sx1 || pz < sz0 || pz > sz1) continue;
-                // nearest point of the centreline: lateral distance (right of travel positive), height, fraction along
+                // nearest point of the centreline: lateral distance (right of travel positive), height, the piece and how far along it
                 var p = seg.Points;
                 double bestD = double.MaxValue, lat = 0, cy = 0, f = 0;
+                int piece = 0;
                 bool inside = false;
                 for (int i = 0; i + 1 < seg.PointCount; i++)
                 {
@@ -158,18 +161,21 @@ public static class KerbCheck
                     inside = t >= -1e-6 && t <= 1 + 1e-6;
                     lat = (-dz * (px - ax) + dx * (pz - az)) / Math.Sqrt(len2);   // right of travel (tile-local right is (-dz, dx))
                     cy = p[i * 3 + 1] + (p[i * 3 + 4] - p[i * 3 + 1]) * tc;
-                    f = frac[i] + (frac[i + 1] - frac[i]) * tc;
+                    (f, piece) = (tc, i);
                 }
                 if (!inside) continue;
-                double half = seg.Width * 0.5, off = Math.Abs(lat);
-                if (off <= half) { Take(cy, "carriageway"); continue; }
-                var side = lat > 0 ? seg.Attributes.Right : seg.Attributes.Left;
-                if (RoadStreetSection.For(side, seg.Attributes.Has(RoadAttrFlags.LoweredKerbs)) is not { } prof) continue;
-                double d = off - half - side.ShiftAt(f);
-                if (d < 0 || d > prof.Width) continue;
+                // the section there, between the piece's two points (the game's per-point section, #818)
+                double L(float[] v) => v[piece] + (v[piece + 1] - v[piece]) * f;
+                if (lat >= L(sections.RibbonLeft) && lat <= L(sections.RibbonRight)) { Take(cy, "carriageway"); continue; }
+                bool right = lat > 0;
+                var profiles = right ? sections.RightProfile : sections.LeftProfile;
+                if (profiles[piece] is not { } prof || profiles[piece + 1] is not { } next) continue;
+                double d = right ? lat - L(sections.SideRight) : L(sections.SideLeft) - lat;
+                double D(int k) => prof.D[k] + (next.D[k] - prof.D[k]) * f;
+                if (d < 0 || d > D(prof.Count - 1)) continue;
                 int k = 1;
-                while (k < prof.Count - 1 && prof.D[k] < d) k++;
-                double d0 = prof.D[k - 1], d1 = prof.D[k];
+                while (k < prof.Count - 1 && D(k) < d) k++;
+                double d0 = D(k - 1), d1 = D(k);
                 double h = d1 - d0 < 1e-6 ? prof.H[k] : prof.H[k - 1] + (prof.H[k] - prof.H[k - 1]) * (d - d0) / (d1 - d0);
                 Take(cy + h, $"side {(prof.Surface[Math.Min(k - 1, prof.Surface.Length - 1)])}{(seg.Attributes.Has(RoadAttrFlags.LoweredKerbs) ? " lowered" : "")}{(Environment.GetEnvironmentVariable("SEAMDBG") == "1" ? $" seg#{Tile.Segments.IndexOf(seg)} {seg.Class} d{d:F2} cy{cy:F2}" : "")}");
             }

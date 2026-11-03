@@ -194,7 +194,7 @@ public partial class PlacedProbe : ChatProbe
                 $"removing A's photo is refused ({r?.Refused})");
         }
 
-        await Seconds(0.5);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.5);
         Shot("b");
 
         // A's Polaroid: in the snapshot by id only; the image must come from the server, by hash
@@ -223,7 +223,7 @@ public partial class PlacedProbe : ChatProbe
             me.RequestReplacement();
             await Until(() => me.IsOnFloor(), 10);
             me.LookPitch = -1.1f;
-            await Seconds(1.0);
+            if (DisplayServer.GetName() != "headless") await Seconds(1.0);
             Shot("b_photo");
         }
 
@@ -250,7 +250,7 @@ public partial class PlacedProbe : ChatProbe
             var to = at.Origin - me.Camera.GlobalPosition;   // look straight at its centre
             me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
             me.LookPitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
-            await Seconds(1.0);
+            if (DisplayServer.GetName() != "headless") await Seconds(1.0);
             Shot("b_poster");
         }
         Say("done");

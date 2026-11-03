@@ -28,7 +28,7 @@ functional parts and only change the finish.
 - **Dissolves keep the dither whatever `retro` says.** The sightline cut, the near fade and the
   tree LOD crossfade discard by `bayer4()`: they are functional, not a finish.
 - Converted: terrain (and the far horizon, which shares its shader), road, building, water, tree
-  and tree-far, prop, interior, path. `ps1_snowfall` has no retro finish. The road's paint
+  and tree-far, prop, interior, path. `snowfall` (shared by every style) has no retro finish. The road's paint
   dissolve (a line under ~1.5 px dithers away instead of aliasing) is anti-aliasing, not the
   finish: it keeps `bayer4()` in every style.
 - **Unshaded vs lit** is a `render_mode`, so it cannot be a uniform: a lit style has its own

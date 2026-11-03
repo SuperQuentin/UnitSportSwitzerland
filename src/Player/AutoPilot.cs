@@ -243,11 +243,12 @@ public sealed class AutoPilot
     private static (float Lean, float Brake)? MeasureLean(RideKind kind)
     {
         if (Rideable.Create(kind) is not { } probe || probe is UnitSport.Player.Car or Flyer) return null;
-        var flat = new RideGround(true, 0f);
+        // skis are measured on snow (off it they barely move, #899), and a turn may skid them a little
+        var flat = new RideGround(true, 0f, probe is SnowRide ? Audio.Surface.Snow : Audio.Surface.Asphalt);
         var turn = new RideMotion { Speed = 10f };
         for (int i = 0; i < 120; i++) probe.Step(new RideInput(0.3f, 0f, 1f, false), flat, SimDt, ref turn);
         float lean = Mathf.Abs(turn.Bank);
-        if (lean < 0.1f || turn.Slip != 0f) return null;
+        if (lean < 0.1f || (turn.Slip != 0f && probe is not SnowRide)) return null;
         var braked = new RideMotion { Speed = 10f };
         var coast = new RideMotion { Speed = 10f };
         var a = Rideable.Create(kind)!;
@@ -1059,6 +1060,9 @@ public sealed class AutoPilot
     /// A rider: pure pursuit to a point ~0.8 s ahead on the line, the bank that arc needs
     /// (<c>tan φ = v²κ/g</c>) as the steering command, pedal/throttle to the profile, brakes over it.
     /// </summary>
+    /// <summary>Seconds of look-ahead per second of <see cref="Rideable.SteerLag"/>.</summary>
+    private const float LagLook = 2.5f;
+
     private RideInput Ride(float dt, bool go, IEnumerable<Other> others)
     {
         if (!go) return new RideInput(0f, 1f, 0f, false);
@@ -1073,7 +1077,11 @@ public sealed class AutoPilot
         float s0 = Along(D.Near, pos);
         CountVerge(dt);
         var line = Route.Line;
-        float look = Mathf.Clamp(v * 0.8f, 5f, 60f);
+        // a mount whose lean lags the steering (Sim's road bike, #1124) is aimed further on: its turns
+        // start with a countersteer, a moment's yaw the wrong way, and chasing a point 0.8 s ahead
+        // through that, it weaves down a straight. Looking further is how a rider steers it smoothly
+        float lag = Player.Vehicle?.SteerLag ?? 0f;
+        float look = Mathf.Clamp(v * (0.8f + LagLook * lag), 5f, 60f);
         var ahead = Aim(s0, look, D.Lateral);
         var travel = RaceRoute.Flat(new Basis(Vector3.Up, m.Yaw) * Vector3.Forward);
         var to = RaceRoute.Flat(ahead - pos);
@@ -1110,8 +1118,16 @@ public sealed class AutoPilot
         if (Finished) want = 0f;
         float throttle = Mathf.Clamp((want - v) * 0.5f, 0f, 1f);
         float brake = Mathf.Clamp((v - want) * 0.4f, 0f, 1f);
+        // skis and the board stride on a press, not a hold (#899): wanting to go, it presses about four times a second
+        if (SnowRide.Is(Player.RideKindId))
+        {
+            _strideClock += dt;
+            throttle = throttle > 0.2f && _strideClock % 0.26f < 0.13f ? 1f : 0f;
+        }
         return new RideInput(throttle, brake, steer, want - v > 2f);
     }
+
+    private float _strideClock;
 
     /// <summary>A runner: toward a point a few metres ahead on the line, running, stopping at the finish.</summary>
     private (Vector3 Wish, bool Run) Walk()

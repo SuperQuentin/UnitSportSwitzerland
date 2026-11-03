@@ -82,5 +82,12 @@ public class TutorialStepsTests
         Assert.Equal(walk.Pad, TutorialSteps.Body(walk, pad: true, vr: true));
         var camera = TutorialSteps.For(true, false).First(s => s.Goal == TutorialGoal.Camera);
         Assert.Equal(camera.Keys, TutorialSteps.Body(camera, pad: true, vr: true));
+        // the phone (#1054): its own words where it has them, else the pad's (whose placeholders
+        // name its on-screen controls), else the keyboard's
+        Assert.Contains("Drag a finger", TutorialSteps.Body(look, pad: true, vr: false, touch: true));
+        Assert.Equal(walk.Pad, TutorialSteps.Body(walk, pad: true, vr: false, touch: true));
+        Assert.Equal(camera.Keys, TutorialSteps.Body(camera, pad: true, vr: false, touch: true));
+        var ride = TutorialSteps.For(true, false).First(s => s.Goal == TutorialGoal.Ride);
+        Assert.DoesNotContain("{interact_mount}", TutorialSteps.Body(ride, pad: true, vr: false, touch: true));
     }
 }

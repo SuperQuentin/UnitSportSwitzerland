@@ -14,6 +14,9 @@ changed is how you get there.
   every door of the building the player is in, and from inside, every open door within 45 m of
   one of its open doorways (seen through it) gets its interior built here and a `DoorLink`.
   Other clients ask for the plan with `RequestPlan`. Interiors nobody can see are freed.
+  An interior that throws while being built (#1250: a cinema whose cat photos were git-lfs pointers)
+  is logged, not retried until a door to it opens again (`_failed`), and the door this client opened
+  shuts with a hint (`BuildFailed`): never a door left open onto nothing.
 - **`DoorLink` = two frames and a map.** The facade doorway (origin on the sill at the facade,
   Z out of the building) and the interior doorway (at the outer end of the 6 cm reveal, i.e. the
   plan box edge). `ToInside = Inside * Outside⁻¹`, and back. Rigid: the 3 km drop plus the small
@@ -147,6 +150,9 @@ changed is how you get there.
   cabin's door was the nearer. A probe that presses E outside must face the door first (as
   `StandOutside` does). The VR hand still takes the door nearest the hand (0.7 m). Client only: the
   server checks the asked door's distance, as before. `--doorcheck` holds that site's three doors.
+  Since #827 a door at the player's level (`DoorIndex.LevelBand`) also goes before one that is not,
+  within the faced and the unfaced alike: with no look there, the office door, not the cabin 2 m
+  below (`raised-doors`).
 - **Check.** `--interiorcheck` also shuts the door from inside and walks into it (must stay in);
   for a barn it asks for the door from where its open leaves' edges stand (in reach) and again shut
   (not in reach).

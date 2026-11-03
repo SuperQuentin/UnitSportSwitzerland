@@ -97,7 +97,7 @@ public partial class FlagGhost : Node
     /// <summary>Called every frame by the item controller with the held placeable (null: an empty hand); a null player or not active hides everything.</summary>
     public void Step(FootPlayer? player, bool active, Placeable? spec = null)
     {
-        if (player == null || !active || Input.MouseMode != Input.MouseModeEnum.Captured)
+        if (player == null || !active || MouseCapture.Mode != Input.MouseModeEnum.Captured)
         {
             _ghost.Visible = false;
             _hint.Visible = false;

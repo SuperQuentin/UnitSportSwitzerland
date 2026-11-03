@@ -58,6 +58,9 @@ public static class BeatAnalyzer
         float[] re = new float[Win], im = new float[Win];
         float[] magA = new float[Bins], magB = new float[Bins], prevLog = new float[Bins];
         int lowBin = Math.Clamp((int)(150f * Win / rate), 1, Bins - 1);
+        // the snare's crack and the hats' sizzle, for the concert desk's accents (v2)
+        int midLo = Math.Clamp((int)(1500f * Win / rate), 1, Bins - 1), midHi = Math.Clamp((int)(5000f * Win / rate), 1, Bins);
+        int hiLo = Math.Clamp((int)(6000f * Win / rate), 1, Bins);
         double lowSum = 0, totSum = 0, cenSum = 0;
 
         for (int f = 0; f < n; f += 2)
@@ -92,7 +95,7 @@ public static class BeatAnalyzer
             {
                 float[] mag = w == 0 ? magA : magB;
                 int idx = f + w;
-                float fl = 0f, tot = 0f, low = 0f, cw = 0f, lfl = 0f;
+                float fl = 0f, tot = 0f, low = 0f, cw = 0f, lfl = 0f, mfl = 0f, hfl = 0f;
                 Array.Clear(bandAcc);
                 for (int k = 1; k < Bins; k++)
                 {
@@ -108,11 +111,15 @@ public static class BeatAnalyzer
                         low += m;
                         if (d > 0f) lfl += d;
                     }
+                    else if (d > 0f && k >= midLo && k < midHi) mfl += d;
+                    else if (d > 0f && k >= hiLo) hfl += d;
                     int band = bandOf[k];
                     if (band >= 0) bandAcc[band] += m;
                 }
                 flux[idx] = idx == 0 ? 0f : fl;
                 ft.LowFlux[idx] = idx == 0 ? 0f : lfl;
+                ft.MidFlux[idx] = idx == 0 ? 0f : mfl;
+                ft.HighFlux[idx] = idx == 0 ? 0f : hfl;
                 ft.Low[idx] = low;
                 ft.Tot[idx] = tot;
                 ft.Cen[idx] = cw;
@@ -140,6 +147,8 @@ public static class BeatAnalyzer
         ft.Rms = frameRms;
         ft.Env = env;
         ft.LowEnv = LocalMeanSubtract(ft.LowFlux, meanWin);
+        ft.MidEnv = LocalMeanSubtract(ft.MidFlux, meanWin);
+        ft.HighEnv = LocalMeanSubtract(ft.HighFlux, meanWin);
         CdAnalysis Block(float bpmFound, float offFound) =>
             Describe(mono, rate, ft, gridBpm > 0f ? gridBpm : bpmFound, gridBpm > 0f ? gridOffset : offFound);
         double envSum = 0;
@@ -371,13 +380,16 @@ public static class BeatAnalyzer
     private sealed class Features
     {
         public readonly int N;
-        public readonly float[] LowFlux, Low, Tot, Cen, Bands;
-        public float[] Rms = Array.Empty<float>(), Env = Array.Empty<float>(), LowEnv = Array.Empty<float>();
+        public readonly float[] LowFlux, MidFlux, HighFlux, Low, Tot, Cen, Bands;
+        public float[] Rms = Array.Empty<float>(), Env = Array.Empty<float>(), LowEnv = Array.Empty<float>(),
+            MidEnv = Array.Empty<float>(), HighEnv = Array.Empty<float>();
 
         public Features(int n)
         {
             N = n;
             LowFlux = new float[n];
+            MidFlux = new float[n];
+            HighFlux = new float[n];
             Low = new float[n];
             Tot = new float[n];
             Cen = new float[n];
@@ -415,10 +427,13 @@ public static class BeatAnalyzer
         float[] starts = { 0f };
         int[] kinds = { (int)SectionKind.Groove };
         if (per > 0.0) (starts, kinds) = Sections(ft, rate, per, offset + downbeat * per, dur);
+        float[] drops = Array.Empty<float>(), builds = Array.Empty<float>();
+        if (per > 0.0) (drops, builds) = Drops(ft, rate, per, offset + downbeat * per, dur);
         return new CdAnalysis
         {
             Version = CdAnalysis.CurrentVersion, Env = env, Downbeat = downbeat,
             SectionStarts = starts, SectionKinds = kinds,
+            Bands = BandEnvelope(rate, ft, dur), Drops = drops, BuildStarts = builds,
         };
     }
 
@@ -449,6 +464,87 @@ public static class BeatAnalyzer
             b[2 * i + 1] = ToByte(kk[i] / kref);
         }
         return Convert.ToBase64String(b);
+    }
+
+    /// <summary>
+    /// 20 Hz frames of the finer bands (v2): the peak snare-band and hi-hat onset in each and the mean
+    /// bass, normalised per track, and the mean brightness on a fixed log scale (200 Hz .. 5 kHz).
+    /// </summary>
+    private static string BandEnvelope(int rate, Features ft, double dur)
+    {
+        int er = CdAnalysis.EnvRate;
+        int m = Math.Max(1, (int)Math.Ceiling(dur * er));
+        float[] sn = new float[m], hh = new float[m], bs = new float[m], br = new float[m];
+        int[] cnt = new int[m];
+        for (int f = 0; f < ft.N; f++)
+        {
+            int i = (int)((f * (double)Hop + OnsetDelay) / rate * er);
+            if (i < m)
+            {
+                if (ft.MidEnv[f] > sn[i]) sn[i] = ft.MidEnv[f];
+                if (ft.HighEnv[f] > hh[i]) hh[i] = ft.HighEnv[f];
+            }
+            int c = (int)((f * (double)Hop + Win * 0.5) / rate * er);
+            if (c >= m) continue;
+            bs[c] += ft.Low[f];
+            br[c] += ft.Tot[f] > 1e-9f ? ft.Cen[f] / ft.Tot[f] * rate / Win : 0f;
+            cnt[c]++;
+        }
+        for (int i = 0; i < m; i++)
+            if (cnt[i] > 0) { bs[i] /= cnt[i]; br[i] /= cnt[i]; }
+        float sref = Reference(sn), href = Reference(hh), bref = Reference(bs);
+        float span = MathF.Log(5000f / 200f);
+        byte[] b = new byte[4 * m];
+        for (int i = 0; i < m; i++)
+        {
+            b[4 * i] = ToByte(sn[i] / sref);
+            b[4 * i + 1] = ToByte(hh[i] / href);
+            b[4 * i + 2] = ToByte(bs[i] / bref);
+            b[4 * i + 3] = br[i] > 0f ? ToByte(MathF.Log(Math.Max(br[i], 200f) / 200f) / span) : (byte)0;
+        }
+        return Convert.ToBase64String(b);
+    }
+
+    /// <summary>
+    /// The drops (v2): a bar whose bass comes back at least 1.8 times the two bars before it, its
+    /// loudness up too, held into the next bar and at least the track's median bass; eight bars
+    /// apart at least. Its build runs back over the bars the bass stayed out (two at least, sixteen at
+    /// most), so the desk can rise into it.
+    /// </summary>
+    private static (float[] drops, float[] builds) Drops(Features ft, int rate, double per, double first, double dur)
+    {
+        double barLen = 4.0 * per;
+        int bars = (int)((dur - first) / barLen);
+        if (bars < 6) return (Array.Empty<float>(), Array.Empty<float>());
+        float[] low = new float[bars], rms = new float[bars];
+        for (int b = 0; b < bars; b++)
+        {
+            double t0 = first + b * barLen;
+            int f0 = Math.Clamp(FrameAt(t0, rate), 0, ft.N), f1 = Math.Clamp(FrameAt(t0 + barLen, rate), f0, ft.N);
+            double sl = 0, sr = 0;
+            for (int f = f0; f < f1; f++) { sl += ft.Low[f]; sr += ft.Rms[f]; }
+            int c = Math.Max(1, f1 - f0);
+            low[b] = (float)(sl / c);
+            rms[b] = (float)(sr / c);
+        }
+        float lowMed = Percentile(low, 0.5f);
+        var drops = new List<float>();
+        var builds = new List<float>();
+        int last = -100;
+        for (int b = 2; b < bars; b++)
+        {
+            if (b - last < 8) continue;
+            float before = Math.Max(low[b - 1], low[b - 2]);
+            bool held = b + 1 >= bars || low[b + 1] > 0.6f * low[b];
+            if (low[b] < 1.8f * before || low[b] < lowMed || rms[b] < 1.15f * 0.5f * (rms[b - 1] + rms[b - 2]) || !held) continue;
+            int s = b - 1;
+            while (s > 0 && b - s < 16 && low[s - 1] < 0.55f * low[b]) s--;
+            s = Math.Max(0, Math.Min(s, b - 2));
+            drops.Add((float)(first + b * barLen));
+            builds.Add((float)(first + s * barLen));
+            last = b;
+        }
+        return (drops.ToArray(), builds.ToArray());
     }
 
     /// <summary>What reads as full scale: the 99th percentile, or most of the peak when hits are rare.</summary>
@@ -799,6 +895,11 @@ public static class BeatAnalyzer
             ok &= pass;
         }
 
+        // 8 (v2): 12 bars of kick, bass and a snare on 2 and 4, 8 bars of build (no kick, no bass, hats
+        // and rising noise), then the drop: kick and bass back. The drop is found on its bar, its build
+        // before it, the snare band hears the snares and not the kicks, the hats in the build.
+        ok &= DropCase();
+
         // 7: a CD without a block reads as nothing, the runtime helpers stay safe.
         {
             var cd = new CdInfo(1, "t", 10f, 120f, 0f, MusicStyle.Pop, 0.5f);
@@ -857,6 +958,87 @@ public static class BeatAnalyzer
         }
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"[beatcheck] case{n} bpm={gotBpm:F1} offset={off:F3} downbeat={an?.Downbeat ?? -1} (want {kickPhase}) kicks missed={missed} stray={stray} {(pass ? "ok" : "FAIL")}"));
+        return pass;
+    }
+
+    private static bool DropCase()
+    {
+        const int rate = 22050;
+        const float bpm = 128f, first = 0.1f;
+        float per = 60f / bpm, bar = 4f * per;
+        int total = (int)((first + 33 * bar) * rate);
+        float[] x = new float[total];
+        var rng = new Rng(8);
+        float buildAt = first + 12 * bar, dropAt = first + 20 * bar;
+        for (int i = 0; i < total; i++)
+        {
+            float t = i / (float)rate;
+            bool build = t >= buildAt && t < dropAt;
+            x[i] = 0.01f * rng.Next();
+            if (!build) x[i] += 0.3f * MathF.Sin(2f * MathF.PI * 55f * t);
+            else x[i] += 0.12f * (t - buildAt) / (dropAt - buildAt) * rng.Next();
+        }
+        var snares = new List<float>();
+        var kicks = new List<float>();
+        int beat = 0;
+        for (float t = first; t < total / (float)rate - 0.4f; t += per, beat++)
+        {
+            bool build = t >= buildAt - 1e-3f && t < dropAt - 1e-3f;
+            if (!build)
+            {
+                AddKick(x, rate, t, 0.8f);
+                if (beat % 2 == 1)
+                {
+                    snares.Add(t);
+                    int s0 = (int)(t * rate);
+                    for (int k = 0; k < (int)(0.12f * rate) && s0 + k < total; k++)
+                        x[s0 + k] += 0.4f * rng.Next() * MathF.Exp(-(k / (float)rate) / 0.04f);
+                }
+                else kicks.Add(t);
+            }
+            // hats on the eighths, differenced noise (all treble)
+            for (int h = 0; h < 2; h++)
+            {
+                int s0 = (int)((t + h * per / 2f) * rate);
+                float prev = 0f;
+                for (int k = 0; k < (int)(0.03f * rate) && s0 + k < total; k++)
+                {
+                    float r = rng.Next();
+                    x[s0 + k] += 0.15f * (r - prev) * MathF.Exp(-(k / (float)rate) / 0.012f);
+                    prev = r;
+                }
+            }
+        }
+        var (_, _, _, _, an) = AnalyseFull(x, rate, bpm, first);
+        bool pass = an != null && an.Drops.Length >= 1 && Math.Abs(an.Drops[0] - dropAt) <= bar * 0.5f
+            && an.BuildStarts.Length == an.Drops.Length && an.BuildStarts[0] <= dropAt - 2 * bar + 0.05f && an.BuildStarts[0] >= buildAt - bar - 0.05f;
+        float onSnare = 0f, onKick = 0f, hatBuild = 0f;
+        if (an != null)
+        {
+            var cd = new CdInfo(1, "t", total / (float)rate, bpm, first, MusicStyle.Electronic, 0.5f, Analysis: an);
+            float Snare(float t) { CdAnalysisRuntime.SampleBands(cd, t + 0.02, out float s, out _, out _, out _); return s; }
+            foreach (float t in snares) onSnare += Snare(t) / snares.Count;
+            foreach (float t in kicks) onKick += Snare(t) / kicks.Count;
+            int hc = 0;
+            for (float t = buildAt + 0.5f; t < dropAt - 0.5f; t += 0.05f, hc++)
+            {
+                CdAnalysisRuntime.SampleBands(cd, t, out _, out float hat, out _, out _);
+                hatBuild += hat;
+            }
+            hatBuild /= Math.Max(1, hc);
+            pass &= onSnare > 2f * onKick && hatBuild > 0.05f;
+            CdAnalysisRuntime.DropAt(cd, dropAt - bar, out float since, out float build);
+            pass &= float.IsPositiveInfinity(since) && build > 0.5f && build < 1f;
+            CdAnalysisRuntime.DropAt(cd, dropAt + 1.0, out since, out build);
+            pass &= MathF.Abs(since - 1f) < bar * 0.5f + 0.05f && build == 0f;
+            foreach (var back in new[] { CdInfo.FromJson(cd.ToJson()), CdInfo.FromDict(cd.ToDict()) })
+                pass &= back?.Analysis is { } b && b.Bands == an.Bands && b.Drops.AsSpan().SequenceEqual(an.Drops)
+                    && b.BuildStarts.AsSpan().SequenceEqual(an.BuildStarts);
+        }
+        string drops = an == null ? "none" : string.Join(",", Array.ConvertAll(an.Drops, s => s.ToString("F2", CultureInfo.InvariantCulture)));
+        string builds = an == null ? "" : string.Join(",", Array.ConvertAll(an.BuildStarts, s => s.ToString("F2", CultureInfo.InvariantCulture)));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"[beatcheck] case8 drops={drops} (want {dropAt:F2}) builds={builds} (from {buildAt:F2}) snare on snares={onSnare:F2} on kicks={onKick:F2} hats in the build={hatBuild:F2} {(pass ? "ok" : "FAIL")}"));
         return pass;
     }
 

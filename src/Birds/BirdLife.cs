@@ -40,7 +40,7 @@ namespace UnitSport.Birds;
 /// </summary>
 public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
-    public const int Budget = 32;
+    public static readonly int Budget = Core.Platform.IsStandaloneVr ? 16 : 32;   // a standalone headset's CPU (#1112)
     private const float SpawnMin = 35f, SpawnMax = 150f;
     public const float DespawnDistance = 240f;
     public const float Range = 55f;
@@ -53,7 +53,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private readonly List<Bird> _birds = new();
     private readonly Dictionary<int, Bird> _byId = new();
     private int _nextId;
-    private readonly Random _rng = new();
+    private Random _rng = new();
     /// <summary>Tree tops per tile, relative to the tile's NW corner (so an origin shift leaves them be),
     /// bucketed in <see cref="TreeCell"/> m cells (a forest tile holds 100k+).</summary>
     private readonly Dictionary<TileId, Dictionary<(int, int), List<Vector3>>?> _trees = new();
@@ -104,7 +104,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     public IReadOnlyList<Bird> Birds => _birds;
 
     /// <summary>Calendar month used for presence and hunting seasons; <c>--birdmonth N</c> overrides it.</summary>
-    public int Month { get; set; } = DateTime.Now.Month;
+    public int Month { get; set; } = Core.Calendar.Month;
 
     /// <summary>False stops the automatic spawning (the probe places its own birds).</summary>
     public bool AutoSpawn { get; set; } = true;
@@ -127,12 +127,34 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        Core.RunSeeds.Reseeded -= OnReseeded;
     }
+
+    /// <summary>
+    /// A film's shot pinned its seeds (#924): this peer's birds go and come again from the shot's own
+    /// stream, so the birds of a shot never depend on the shots filmed before it or on how long its
+    /// ground took to stream in.
+    /// </summary>
+    private void OnReseeded()
+    {
+        if (!Authority) return;
+        for (int i = _birds.Count - 1; i >= 0; i--) RemoveAt(i);
+        _rng = Core.RunSeeds.Rng("birds");
+        _spawnTimer = _aerialTimer = 0;
+        _refill = true;
+    }
+
+    /// <summary>After a reseed: the next frame spawns a dozen at once, as a shot starts.</summary>
+    private bool _refill;
+
+    /// <summary>The stream a bird flushes from (the one every spawn draws from).</summary>
+    internal Random Rng => _rng;
 
     public override void _Ready()
     {
         Name = "Birds";
         if (Headless) return;
+        Core.RunSeeds.Reseeded += OnReseeded;
         Movie.ReplayWatch.Container(this);   // recorded for the movie studio (#775)
         Instance = this;
         Journal = new BirdJournal();
@@ -167,18 +189,25 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         float dt = (float)delta;
         if (Headless) { ProcessServer(dt); return; }
         var cam = GetViewport().GetCamera3D();
+        // once a frame, not once a bird: each asks the multiplayer peer across the engine boundary (#1112)
+        bool authority = Authority;
         if (cam == null) return;
         var player = Player;
         var focus = player?.GlobalPosition ?? cam.GlobalPosition;
         // online, only the server's birds exist: any of this client's own (spawned before it was
         // connected) go, or a server bird with the same number would be taken for one of them
-        if (!Authority)
+        if (!authority)
             for (int i = _birds.Count - 1; i >= 0; i--)
                 if (!_birds[i].Remote) RemoveAt(i);
 
         _spawnTimer -= delta;
         _callCooldown -= delta;
-        if (Authority && AutoSpawn && _spawnTimer <= 0 && _birds.Count < Budget)
+        if (_refill && authority && AutoSpawn)
+        {
+            _refill = false;
+            for (int i = 0; i < 12 && _birds.Count < Budget; i++) TrySpawn(focus);
+        }
+        if (authority && AutoSpawn && _spawnTimer <= 0 && _birds.Count < Budget)
         {
             _spawnTimer = 0.4;
             TrySpawn(focus);
@@ -186,7 +215,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         // Flying fast, the birds that matter are the ones along the flight path, at the height they
         // really fly: without this every bird is near the ground behind a plane that left it.
         _aerialTimer -= delta;
-        if (Authority && AutoSpawn && player is { IsFlying: true } flyer && flyer.GroundSpeed > 12f
+        if (authority && AutoSpawn && player is { IsFlying: true } flyer && flyer.GroundSpeed > 12f
             && _aerialTimer <= 0 && _birds.Count < Budget)
         {
             _aerialTimer = AerialInterval;
@@ -203,7 +232,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         {
             var b = _birds[i];
             b.Step(dt, this, player?.GlobalPosition);
-            if (Authority) MaybeDrop(b, dt, _localWho);
+            if (authority) MaybeDrop(b, dt, _localWho);
             var p = b.Node.GlobalPosition;
             // a puppet lives as long as the server keeps sending it; its own birds go when far
             if (b.Gone || (!b.Remote && Flat(p - focus) > DespawnDistance))
@@ -1265,23 +1294,53 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private static AudioStreamWav CallFor(int pattern) => Calls.TryGetValue(pattern, out var c) ? c
         : Calls[pattern] = Dsp.Encode(Dsp.Normalise(AmbienceDsp.BirdCall(new Random(pattern * 977), AmbienceDsp.BirdPattern(pattern)), 0.8f));
 
+    /// <summary>The feathers' material: vertex colour on camera-facing quads, lit like every solid (StyleKit.Figure), one for every puff.</summary>
+    private static StandardMaterial3D FeatherMaterial => _feather ??= Styles.StyleKit.Figure(new StandardMaterial3D
+    {
+        VertexColorUseAsAlbedo = true, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
+    });
+    private static StandardMaterial3D? _feather;
+
+    /// <summary>A puff of feathers from <paramref name="a"/> to <paramref name="b"/>, not yet emitting.</summary>
+    private static CpuParticles3D FeatherPuff(Color a, Color b, int amount, float speed) => new()
+    {
+        OneShot = true, Amount = amount, Lifetime = 1.8, Explosiveness = 0.95f,
+        Mesh = new QuadMesh { Size = new Vector2(0.06f, 0.025f) },
+        Direction = Vector3.Up, Spread = 180f, InitialVelocityMin = 0.6f, InitialVelocityMax = speed,
+        Gravity = new Vector3(0, -0.7f, 0), DampingMin = 1.5f, DampingMax = 3f,
+        AngularVelocityMin = -360f, AngularVelocityMax = 360f,
+        ColorRamp = new Gradient { Colors = new[] { a, b } },
+        MaterialOverride = FeatherMaterial,
+    };
+
+    /// <summary>A feather puff, looping, in the model viewer (in game it is one burst when a bird is hit).</summary>
+    [Showcase("Birds", "Feather puff")]
+    private static Node3D ShowcaseFeathers()
+    {
+        var puff = FeatherPuff(new Color(0.55f, 0.55f, 0.6f), new Color(0.9f, 0.9f, 0.88f), 60, 1.2f);
+        puff.OneShot = false;
+        puff.Explosiveness = 0f;
+        puff.Gravity = Vector3.Zero;
+        puff.Preprocess = 1.0;
+        puff.Emitting = true;
+        // the viewer frames a model by its meshes' box, and a particle node has none: an invisible
+        // 0.4 m box frames the puff
+        var root = new Node3D();
+        root.AddChild(puff);
+        root.AddChild(new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = Vector3.One * 0.4f },
+            MaterialOverride = new StandardMaterial3D { Transparency = BaseMaterial3D.TransparencyEnum.Alpha, AlbedoColor = new Color(1, 1, 1, 0), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        });
+        return root;
+    }
+
     private void Feathers(Vector3 at, Color a, Color b, int amount = 28, float speed = 2.8f)
     {
         if (Headless) return;
-        var puff = new CpuParticles3D
-        {
-            OneShot = true, Amount = amount, Lifetime = 1.8, Explosiveness = 0.95f,
-            Mesh = new QuadMesh { Size = new Vector2(0.06f, 0.025f) },
-            Direction = Vector3.Up, Spread = 180f, InitialVelocityMin = 0.6f, InitialVelocityMax = speed,
-            Gravity = new Vector3(0, -0.7f, 0), DampingMin = 1.5f, DampingMax = 3f,
-            AngularVelocityMin = -360f, AngularVelocityMax = 360f,
-            ColorRamp = new Gradient { Colors = new[] { a, b } },
-            MaterialOverride = new StandardMaterial3D
-            {
-                VertexColorUseAsAlbedo = true, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
-            },
-        };
+        var puff = FeatherPuff(a, b, amount, speed);
         AddChild(puff);
         puff.GlobalPosition = at;
         puff.Emitting = true;
@@ -1517,7 +1576,7 @@ public sealed class Bird
         var before = p;
         if (player is { } me && State is Mode.Ground or Mode.Perched or Mode.Swimming
             && p.DistanceTo(me) < FlushDistance)
-            Flush(me, Random.Shared);
+            Flush(me, life.Rng);
 
         float flap = 0f;
         switch (State)

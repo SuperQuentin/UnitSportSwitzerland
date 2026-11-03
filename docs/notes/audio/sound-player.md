@@ -6,7 +6,7 @@
   -/+ the volume (starts at -12 dB), a click on the list plays that sound. A dev tool: keyboard and
   pad only, no VR way (`src/Audio/SoundPlayer.cs`).
 - `--sounds,check` (headless works) builds every sound without playing, prints
-  `[sounds] RESULT: ok`, FAILED on a NaN, a clipped (> 1.0001) or a silent one. About 390 sounds.
+  `[sounds] RESULT: ok`, FAILED on a NaN, a clipped (> 1.0001) or a silent one, or a loop whose `LoopEnd` is not inside its frames (Godot reads `LoopEnd` inclusively; build loops with `Dsp.LoopWav`, #1010). About 390 sounds.
 - **No list to keep** (like the model viewer, `avatar/model-viewer`): static `SfxBank` and
   `AudioStreamWav` members of any `UnitSport` class are found by reflection, a bank as one entry per
   variant, under the declaring class as category; a stream that is a bank's variant or the cache

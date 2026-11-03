@@ -80,6 +80,26 @@ public static class CollisionTargets
         yield return new("Doors", "Garage roll-up", (_, at) => Interiors.DoorLeaf.CreateRollUp("collide", at, 2.6f, 2.3f, doorMaterial));
         yield return new("Doors", "Roll-up from inside", (_, at) => Interiors.DoorLeaf.CreateShutter("collide", at, 2.6f, 2.3f, Interiors.DoorHang.RollUp, Terrain.Format.BuildingKind.House, doorMaterial));
         yield return new("Doors", "Barn pair from inside", (_, at) => Interiors.DoorLeaf.CreateShutter("collide", at, 3.2f, 3.2f, Interiors.DoorHang.OutwardPair, Terrain.Format.BuildingKind.Agricultural, doorMaterial));
+
+        // castles (#859): each dress as drawn and collided from its tile; a ruin is its broken
+        // walls, open to the sky, for the drawing and for the collision alike
+        foreach (var (name, castle, size) in Interiors.PortalDemo.CastleSamples())
+            yield return new("Castles", name, (_, at) => Castle(castle, size, at));
+    }
+
+    /// <summary>A castle sample's solid as a tile draws and collides it, its matched point at <paramref name="at"/>.</summary>
+    private static Node3D Castle(int castle, Vector4 size, Transform3D at)
+    {
+        var tile = Interiors.PortalDemo.CastleTile(castle, size, out var point);
+        var shift = new Vector3(-point.X, 0f, -point.Y);
+        var body = new StaticBody3D { Name = $"castle_{castle}", Transform = at };
+        body.AddChild(new MeshInstance3D
+        {
+            Name = "Mesh", Position = shift, MaterialOverride = new StandardMaterial3D(),
+            Mesh = Terrain.ChunkNode.ToArrayMesh(Terrain.BuildingMeshBuilder.Build(tile, Array.Empty<Interiors.DoorSpot>())!, new StandardMaterial3D()),
+        });
+        body.AddChild(new CollisionShape3D { Position = shift, Shape = Terrain.ChunkNode.BuildingShape(Terrain.BuildingMeshBuilder.BuildCollisionFaces(tile)) });
+        return body;
     }
 
     /// <summary>
@@ -96,9 +116,6 @@ public static class CollisionTargets
         ("Doors/Garage roll-up", "*", new[] { "*" }, "a facade leaf is never solid, the building's wall is"),
         // parked under the VehicleManager, as in the game
         ("Aircraft/Airbus A320", "walk", new[] { "end" }, "a walker goes through the parked nose"),
-        // seen since its flaps and spoilers are posed on their hinge lines (#755): before, they sat
-        // yawed off the wing, across the car's lane, and passed for what stopped it
-        ("Aircraft/Airbus A320", "car", new[] { "side" }, "the parked box is solid under the wing root, nothing drawn at a car's height"),
         ("Aircraft/Antonov AN-124", "car", new[] { "side", "end", "end-" }, "a car goes through the parked fuselage"),
         ("Aircraft/Antonov AN-124", "walk", new[] { "side", "end" }, "a walker goes through the parked fuselage"),
         // Excavator.ParkedBox: the tracks and the house, not the boom, stick and bucket
@@ -108,6 +125,10 @@ public static class CollisionTargets
         ("Machines/Wheel loader (forks)", "*", new[] { "side-" }, "the parked box leaves out the arms and forks"),
         ("Machines/Mini excavator", "*", new[] { "side-" }, "the parked box leaves out the boom and bucket"),
         ("Machines/Telehandler", "*", new[] { "side-" }, "the parked box leaves out the boom"),
+        // Ufo.ParkedBox and its leg posts: the ramp is drawn only (E gets in at its foot); across the
+        // middle a car goes through its low part and a walker's head through its high end (#1006), and
+        // a car through its foot on the lane ahead (side-, seen once the lanes are laid over what is shown, #1011)
+        ("Machines/UFO", "*", new[] { "side", "side-" }, "the ramp is drawn only"),
         // Rideable.ParkedBox, measured without the rotor: one box from the ground up, under the tail boom too
         ("Aircraft/Helicopter", "car", new[] { "side+" }, "the parked box is solid under the tail boom"),
         // Steamer.BuildParkedHull: the hull's own sections, the paddle boxes either side left out
@@ -148,26 +169,34 @@ public static class CollisionTargets
     }
 
     /// <summary>
-    /// Every triangle drawn at or under <paramref name="root"/>, in <paramref name="root"/>'s own
-    /// space, three vertices each (as <see cref="Avatar.MeshBounds.Of"/> walks it).
+    /// Every triangle shown at or under <paramref name="root"/>, in <paramref name="root"/>'s own
+    /// space, three vertices each (as <see cref="Avatar.MeshBounds.Of"/> walks it, hidden meshes
+    /// left out). <paramref name="parts"/>, when given, gets the drawing mesh's path for each triangle.
     /// </summary>
-    public static List<Vector3> DrawnTriangles(Node3D root)
+    public static List<Vector3> DrawnTriangles(Node3D root, List<string>? parts = null)
     {
         var tris = new List<Vector3>();
-        Walk(root, Transform3D.Identity, tris);
+        Walk(root, Transform3D.Identity, root.Name, tris, parts);
         return tris;
 
-        static void Walk(Node3D n, Transform3D toRoot, List<Vector3> tris)
+        static void Walk(Node3D n, Transform3D toRoot, string path, List<Vector3> tris, List<string>? parts)
         {
             if (n is MeshInstance3D { Mesh: { } mesh, Visible: true })
-                foreach (var v in mesh.GetFaces()) tris.Add(toRoot * v);
+            {
+                var faces = mesh.GetFaces();
+                foreach (var v in faces) tris.Add(toRoot * v);
+                for (int i = 0; i + 2 < faces.Length; i += 3) parts?.Add(path);
+            }
             foreach (var child in n.GetChildren())
-                if (child is Node3D c) Walk(c, toRoot * c.Transform, tris);
+                if (child is Node3D c) Walk(c, toRoot * c.Transform, parts == null ? path : $"{path}/{c.Name}", tris, parts);
         }
     }
 
     /// <summary>Whether any of <paramref name="tris"/> (three vertices each) reaches into <paramref name="box"/>.</summary>
-    public static bool Crosses(IReadOnlyList<Vector3> tris, Aabb box)
+    public static bool Crosses(IReadOnlyList<Vector3> tris, Aabb box) => Crossing(tris, box).Any();
+
+    /// <summary>The triangles of <paramref name="tris"/> (their index, in triangles) that reach into <paramref name="box"/>.</summary>
+    public static IEnumerable<int> Crossing(IReadOnlyList<Vector3> tris, Aabb box)
     {
         var poly = new List<Vector3>(9);
         var next = new List<Vector3>(9);
@@ -190,9 +219,8 @@ public static class CollisionTargets
                 Clip(poly, next, axis, lo[axis], +1);
                 Clip(next, poly, axis, hi[axis], -1);
             }
-            if (poly.Count > 0) return true;
+            if (poly.Count > 0) yield return t / 3;
         }
-        return false;
 
         // keeps the part of the polygon where sign * (p[axis] - at) >= 0
         static void Clip(List<Vector3> from, List<Vector3> to, int axis, float at, int sign)

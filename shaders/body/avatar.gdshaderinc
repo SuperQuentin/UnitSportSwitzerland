@@ -17,14 +17,37 @@
 // back to its own space (origin at the feet).
 
 #include "res://shaders/body/face.gdshaderinc"
+#include "res://shaders/common/curvature.gdshaderinc"
 
 varying vec3 v_pos;
 varying flat int v_fx;
+
+// A skinned figure's hem flutters here (#1202, HumanMeshBuilder.SkirtFlutter): the ripple and its
+// phase, set on the figure while it moves through the air; CUSTOM1 is each hem point's offset it
+// ripples along (xyz) and its index round the hem plus one (w), -1 the rest of the skirt, 0
+// everywhere else. The skirt never drops under skirt_floor (the figure's, model space).
+instance uniform vec2 skirt_flutter;
+instance uniform float skirt_floor = -1000000.0;
+
+// A figure seen through (#1336, the bowler's own body under the bowling camera): this share of its pixels left out in a
+// 4x4 ordered pattern, so what is behind it shows between them; 0 a solid figure.
+instance uniform float see_through = 0.0;
 
 void vertex() {
     v_pos = CUSTOM0.w > 0.5 ? CUSTOM0.xyz : VERTEX;
     v_fx = int(round((1.0 - COLOR.a) * 255.0));
     v_face = UV2;
+    if (CUSTOM1.w > 0.5 && skirt_flutter.x > 0.0) {
+        // two waves of different speed round the hem, so it never pulses as one (MeshScratch.Skirt)
+        float k = CUSTOM1.w - 1.0;
+        float ph = skirt_flutter.y;
+        float wave = sin(ph + k * 2.4) * 0.7 + sin(ph * 1.7 + k * 1.1) * 0.3;
+        float lift = cos(ph * 1.3 + k * 1.9);
+        VERTEX += CUSTOM1.xyz * (skirt_flutter.x * wave) - vec3(0.0, length(CUSTOM1.xyz) * skirt_flutter.x * 0.6 * lift, 0.0);
+    }
+    if (CUSTOM1.w != 0.0) VERTEX.y = max(VERTEX.y, skirt_floor);
+    // on the curved Earth like the ground under it (#187): an airliner 30 km off is 60 m lower
+    POSITION = PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
 }
 
 float hash13(vec3 p) {
@@ -54,6 +77,11 @@ float around(vec3 p) {
 }
 
 void fragment() {
+    if (see_through > 0.0) {
+        ivec2 q = ivec2(FRAGCOORD.xy) % 4;
+        int bayer[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+        if ((float(bayer[q.y * 4 + q.x]) + 0.5) / 16.0 < see_through) discard;
+    }
     vec3 base = COLOR.rgb;
     ALBEDO = base;
 #if defined(STYLE_CARTOON)

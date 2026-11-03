@@ -6,7 +6,7 @@ using FaceGenome = UnitSport.Avatar.Face.FaceGenome;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings → Character (#806, was the inventory's Body row of #394): who your figure is, one
+/// The Character menu's page (#1127, <see cref="CharacterScreen"/>; a Settings tab from #806, the inventory's Body row in #394): who your figure is, one
 /// option per part (build, face, eyes, skin, hair, its colour) beside a small turning preview.
 /// Each change packs <see cref="GameSettings.AppearanceBits"/>, tells the world
 /// (<see cref="GameSettings.Changed"/>: <c>ClientWorld.PublishAppearance</c> puts it on your
@@ -23,7 +23,8 @@ public static class CharacterPage
         var left = UiKit.VBox(0);
         left.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         split.AddChild(left);
-        var preview = new FigurePreview();
+        // told what to show before it enters the tree: on a page shown at once it builds its world right there
+        var preview = new FigurePreview { Shown = () => Current(rows) };
         split.AddChild(preview);
 
         var a = Current(rows);
@@ -39,7 +40,6 @@ public static class CharacterPage
             }, i == 0 ? "Everyone online sees the figure you choose" : null, Commit);
         }
         Tint(options, a);
-        preview.Shown = () => Current(rows);
         // the network id (and with it the figure of someone who never chose) changes on joining a server
         rows.VisibilityChanged += () =>
         {
@@ -58,6 +58,9 @@ public static class CharacterPage
     }
 
     /// <summary>What the player looks like now: their choice, or the figure their network id gives them.</summary>
+    /// <summary>The player's figure: their choice, or the one their network id gives them (also the profile picture, #1209).</summary>
+    public static Appearance Mine(Node any) => Current(any);
+
     private static Appearance Current(Node any) =>
         Appearance.Unpack(GameSettings.Current.AppearanceBits)
         ?? Appearance.For(any.IsInsideTree() && any.Multiplayer.HasMultiplayerPeer() ? any.Multiplayer.GetUniqueId() : 1);
@@ -67,7 +70,7 @@ public static class CharacterPage
         0 => Enum.GetNames<BodyBuild>(),
         1 => Enumerable.Range(0, FaceGenome.PresetCount).Select(i => Capital(FaceGenome.PresetName(i))).ToArray(),
         2 => Appearance.EyeNames,
-        3 => Enumerable.Range(1, Appearance.SkinTones.Length).Select(i => $"Tone {i}").ToArray(),
+        3 => Appearance.SkinNames,
         4 => Enum.GetNames<HairStyle>(),
         _ => Appearance.HairColourNames,
     };
@@ -104,7 +107,7 @@ public static class CharacterPage
 }
 
 /// <summary>
-/// The figure on a turntable in its own small world: a SubViewport built while the Character tab
+/// The figure on a turntable in its own small world: a SubViewport built while the Character menu
 /// is on screen and freed as soon as it is not, so the menu costs nothing elsewhere. It draws with
 /// the shared figure material as it is (no face_idle change, unlike <see cref="AvatarPreview"/>).
 /// </summary>
@@ -155,7 +158,8 @@ public partial class FigurePreview : SubViewportContainer
             },
         });
         _viewport.AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-35), Mathf.DegToRad(-30), 0), LightEnergy = 1.1f });
-        var camera = new Camera3D { Position = new Vector3(0, 1.05f, 3.4f), Fov = 36, Current = true };
+        // room over the head for an alien's dome and antennae (#880)
+        var camera = new Camera3D { Position = new Vector3(0, 1.12f, 3.9f), Fov = 36, Current = true };
         _viewport.AddChild(camera);
         camera.RotationDegrees = new Vector3(-4, 0, 0);
         _figure = new MeshInstance3D { MaterialOverride = HumanMeshBuilder.FigureMaterial(), Rotation = new Vector3(0, Mathf.Pi, 0) };

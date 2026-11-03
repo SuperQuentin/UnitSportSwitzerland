@@ -49,11 +49,8 @@ static class GeneratedRoadsCheck
             }).ToDictionary(t => t.Id);
 
             // served: the game's chain on an empty region, the block's tiles asked for all at once
-            var fallback = new FallbackChunkSource(new EmptySource(), world, AnchorE, AnchorN);
-            var cache = new CachingChunkSource(fallback);
-            fallback.Neighbours = cache;
             var logs = new ConcurrentBag<string>();
-            fallback.Log = logs.Add;
+            var cache = new FallbackChunkSource(EmptyChunkSource.Instance, world, AnchorE, AnchorN) { Log = logs.Add }.Cached();
             var clock = Stopwatch.StartNew();
             var served = await Task.WhenAll(block.Select(async t => (Id: t, Tile: await cache.LoadRoadsAsync(t))));
             double ms = clock.Elapsed.TotalMilliseconds;
@@ -117,19 +114,5 @@ static class GeneratedRoadsCheck
     {
         int i = Array.IndexOf(args, name);
         return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
-
-    /// <summary>A region with no terrain at all: a fresh clone.</summary>
-    sealed class EmptySource : IChunkSource
-    {
-        public Task<TerrainManifest> LoadManifestAsync(CancellationToken ct = default) => Task.FromResult(new TerrainManifest());
-        public Task<ChunkGrid?> LoadChunkAsync(TileId id, CancellationToken ct = default) => Task.FromResult<ChunkGrid?>(null);
-        public Task<ChunkGrid?> LoadCoarseChunkAsync(TileId id, CancellationToken ct = default) => Task.FromResult<ChunkGrid?>(null);
-        public Task<RoadTile?> LoadRoadsAsync(TileId id, CancellationToken ct = default) => Task.FromResult<RoadTile?>(null);
-        public Task<HashSet<int>?> LoadHolesAsync(TileId id, CancellationToken ct = default) => Task.FromResult<HashSet<int>?>(null);
-        public Task<BuildingTile?> LoadBuildingsAsync(TileId id, CancellationToken ct = default) => Task.FromResult<BuildingTile?>(null);
-        public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default) => Task.FromResult<byte[]?>(null);
-        public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) => Task.FromResult<List<TreeInstance>?>(null);
-        public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) => Task.FromResult<HorizonIndex?>(null);
     }
 }

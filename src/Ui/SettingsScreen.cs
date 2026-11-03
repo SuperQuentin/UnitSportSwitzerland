@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings, in tabs: Video, Audio, Gameplay, Character, Vehicles, Controls, Wheel, World, Performance, About. Every
+/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, Wheel, World, Performance, About. Every
 /// control writes straight into <see cref="GameSettings.Current"/> and commits, so the world
 /// re-applies itself live and the file is saved — there is no Apply button to forget. LB / RB
 /// (or Q / E) change tab. One instance serves the title screen and the in-game pause menu.
@@ -32,15 +32,8 @@ public partial class SettingsScreen : Screen
         {
             names.Add(name);
             var b = new Button { Text = name, ToggleMode = true, ButtonGroup = group, FocusMode = FocusModeEnum.All, CustomMinimumSize = new Vector2(0, 36) };
-            var normal = UiTheme.Flat(new Color(0, 0, 0, 0), 6, 14, 6);
-            var on = UiTheme.Flat(new Color(UiTheme.Amber, 0.12f), 6, 14, 6);
-            on.BorderColor = UiTheme.Amber; on.BorderWidthBottom = 2;
-            b.AddThemeStyleboxOverride("normal", normal);
-            b.AddThemeStyleboxOverride("pressed", on);
-            b.AddThemeStyleboxOverride("hover_pressed", on);
-            b.AddThemeColorOverride("font_color", UiTheme.TextDim);
-            b.AddThemeColorOverride("font_pressed_color", UiTheme.Amber);
-            b.AddThemeColorOverride("font_hover_pressed_color", UiTheme.Amber);
+            // the menu skin's tab (#1135): a slanted tab fills with the accent, a square one is underlined
+            b.ThemeTypeVariation = Skins.SkinTheme.Tab;
             int index = _tabs.Count;
             b.Toggled += pressed => { if (pressed) Show(index); };
             tabRow.AddChild(b);
@@ -65,8 +58,17 @@ public partial class SettingsScreen : Screen
                 SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
                     (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             }
-            ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
-            AntiAliasingRow(rows, s.AntiAliasing);
+            // a standalone headset's window draws no world (#1112): its picture is the VR rows' below
+            if (!Platform.IsStandaloneVr)
+            {
+                ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
+                AntiAliasingRow(rows, s.AntiAliasing);
+            }
+            int[] imag = { 256, 512, 1024 };
+            UiKit.OptionRow(rows, "Concert screens", new[] { "Low (256x144)", "Medium (512x288)", "High (1024x576)" },
+                Math.Max(0, Array.IndexOf(imag, s.ConcertScreenWidth)), i => GameSettings.Current.ConcertScreenWidth = imag[i],
+                "The stadium screens' camera feed; higher is sharper and a little slower");
+            CinemaRow(rows, "Cinema video", s.CinemaVideo, q => GameSettings.Current.CinemaVideo = q);
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
@@ -82,10 +84,13 @@ public partial class SettingsScreen : Screen
                     styleOption.SetItemText(i, $"{Styles.StyleKit.Label(styles[i])} (in development)");
                     styleOption.SetItemDisabled(i, true);
                 }
-            UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
+            if (!Platform.IsStandaloneVr) // the headset paces the frames
+                UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
-            if (Platform.CanSpawnProcesses) // VR is a relaunch with OpenXR (#63)
+            SkinRows(rows);
+            // VR is a relaunch with OpenXR (#63); a standalone headset is always in it (#1112)
+            if (Platform.CanSpawnProcesses || Platform.IsStandaloneVr)
             {
                 rows.AddChild(UiKit.Spacer(6));
                 rows.AddChild(UiKit.Section("Virtual reality"));
@@ -105,22 +110,66 @@ public partial class SettingsScreen : Screen
                 v => GameSettings.Current.MusicVolume = (float)v, Percent);
             UiKit.OptionRow(rows, "Engine voice", new[] { "Realistic", "PS1 SPU", "NES 2A03", "C64 SID", "Genesis FM" }, (int)s.EngineVoice,
                 i => GameSettings.Current.EngineVoice = (UnitSport.Audio.EngineVoice)i, "Which sound chip the engines are rendered as");
+            UiKit.ToggleRow(rows, "Variometer", s.Variometer, on => GameSettings.Current.Variometer = on,
+                "On a paraglider, parachute, wingsuit or pigeon: a beep that rises with the climb, a low tone in sink");
+            UiKit.ToggleRow(rows, "Sound occlusion", s.SoundOcclusion, on => GameSettings.Current.SoundOcclusion = on,
+                "Music muffled behind walls, traced with rays; off saves CPU in busy towns");
         });
 
         Tab("Gameplay", rows =>
         {
             UiKit.OptionRow(rows, "Movement", new[] { "Game (arcade)", "Simulation (real physics)" }, (int)s.RideProfile,
                 i => GameSettings.Current.RideProfile = (RideProfile)i);
+            UiKit.SliderRow(rows, "Rider weight", 40, 160, 1, s.RiderMass, v => GameSettings.Current.RiderMass = (float)v,
+                v => $"{v:F0} kg", $"You in your kit; the Simulation road bike adds its own {Player.BicycleCatalog.Default.Mass:F1} kg");
+            UiKit.SliderRow(rows, "Threshold power", 100, 450, 5, s.RiderCriticalPower, v => GameSettings.Current.RiderCriticalPower = (float)v,
+                v => $"{v:F0} W", "What you hold for an hour (your FTP / 0.95); above it a Simulation sprint drains your reserve");
             UiKit.ToggleRow(rows, "Third-person view", s.ThirdPerson, on => GameSettings.Current.ThirdPerson = on,
                 "Over the shoulder on foot, chase view mounted (V in game)");
+            UiKit.OptionRow(rows, "Hotbar", new[] { "Always", "Fade out", "Hidden" }, (int)s.Hotbar,
+                i => GameSettings.Current.Hotbar = (HotbarMode)i,
+                "Fade shows it a few seconds after a change; the item in hand stays in the bottom-right corner. Touch keeps it always");
+            UiKit.ToggleRow(rows, "Auto holster", s.AutoHolster, on => GameSettings.Current.AutoHolster = on,
+                "The item in hand is put away after 8 seconds of not using it (the key beside M holsters or draws it)");
+            UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,
+                "What players near you say in the chat, in a comic bubble over their head");
             UiKit.SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
+            UiKit.ToggleRow(rows, "Impact frames", s.ImpactFrames, on => GameSettings.Current.ImpactFrames = on,
+                "A brief flash and speed lines when a sword finisher or a full charge lands; turn off if flashes bother you (never shown in VR)");
+            UiKit.OptionRow(rows, "Snowboard stance", new[] { "Regular (left foot forward)", "Goofy (right foot forward)" }, s.Goofy ? 1 : 0,
+                i => GameSettings.Current.Goofy = i == 1, "Which foot leads on the board; riding switch swaps them for a while");
             UiKit.ToggleRow(rows, "Pigeon flies tail first", s.TailFirstPigeon, on => GameSettings.Current.TailFirstPigeon = on,
                 "The backwards bird of old, kept as an option; drawing only, every pigeon on your screen");
             UiKit.SliderRow(rows, "Replay buffer", 0, 15, 1, s.ReplayMinutes, v => GameSettings.Current.ReplayMinutes = (int)v,
                 v => v <= 0 ? "off" : $"{v:F0} min", "The last minutes of everyone in view, for the movie studio (F5 or Pause > Save clip)");
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
+            // the adventure's navigation (#1226)
+            rows.AddChild(UiKit.Spacer(6));
+            rows.AddChild(UiKit.Section("Adventure"));
+            UiKit.ToggleRow(rows, "Compass", s.AdventureCompass, on => GameSettings.Current.AdventureCompass = on,
+                "The strip at the top while exploring: north, what you track, your party, pins, places nearby");
+            UiKit.OptionRow(rows, "Guiding wind", new[] { "On demand", "Always", "Arrow only", "Off" }, Math.Clamp(s.GuideWind, 0, 3),
+                i => GameSettings.Current.GuideWind = i, InputHints.Format("A gust toward what you track: {guide}, or always while tracking"));
+            UiKit.ToggleRow(rows, "High-contrast guide", s.GuideHighContrast, on => GameSettings.Current.GuideHighContrast = on,
+                "An amber arrow on the ground instead of leaves");
+            UiKit.OptionRow(rows, "Travel (your own world)", new[] { "Free: jump anywhere", "Network: the stations you reached" }, s.AdventureTravelNetwork ? 1 : 0,
+                i => GameSettings.Current.AdventureTravelNetwork = i == 1, "Network: travel from a station sign to the points you unlocked, for the fare; the GA card travels from anywhere");
+            // playing together (#1266)
+            UiKit.ToggleRow(rows, "Together chip", s.TogetherChip, on => GameSettings.Current.TogetherChip = on,
+                "Shows how many party friends are near (their bonus) beside the stamina ring");
+            UiKit.ToggleRow(rows, "Fondue stirring guide", s.StirGuide, on => GameSettings.Current.StirGuide = on,
+                "The faint figure-eight behind your trace while you stir a shared pot");
+            UiKit.ToggleRow(rows, "Crevasses", s.Crevasses, on => GameSettings.Current.Crevasses = on,
+                "Hidden crevasses on glaciers: a snow bridge may give way and drop you into the ice; roped to a friend, they hold you. A server's --crevasses off wins");
+            // alcohol (#1271)
+            rows.AddChild(UiKit.Spacer(6));
+            rows.AddChild(UiKit.Section("Alcohol"));
+            UiKit.OptionRow(rows, "Alcohol (your own world)", new[] { "Off: drinks carry no alcohol", "Mild: half the effects, no passing out", "Real: builds up and wears off" }, Math.Clamp(s.AlcoholMode, 0, 2),
+                i => GameSettings.Current.AlcoholMode = i, "On a server, the server decides (--alcohol)");
+            UiKit.ToggleRow(rows, "Alcohol view effects", s.AlcoholViewEffects, on => GameSettings.Current.AlcoholViewEffects = on,
+                "The camera's sway and the blurred edges while drunk; off keeps the input lag. VR never sways, it narrows the view instead");
             // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
             Button replay = null!;
             replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>
@@ -135,9 +184,11 @@ public partial class SettingsScreen : Screen
                 replay.Disabled = true;
             }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
             if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
+            // the first-run welcome (#1131): name, figure and account, again
+            UiKit.ActionRow(rows, "Welcome", "Show again", () => Shell.Push(WelcomeScreen.Create()),
+                "The first-launch pages: your name, your figure, your account");
         });
 
-        Tab("Character", CharacterPage.Fill);
 
         Tab("Vehicles", rows =>
         {
@@ -175,11 +226,30 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
                 v => GameSettings.Current.StickSensitivity = (float)v, v => $"{v:F1}x");
             if (Platform.IsMobile)
+            {
+                // the on-screen controls (#1043)
                 UiKit.SliderRow(rows, "Touch look speed", 0.3, 4, 0.1, s.TouchLookSpeed,
                     v => GameSettings.Current.TouchLookSpeed = (float)v, v => $"{v:F1}x");
+                UiKit.SliderRow(rows, "Button size", 0.75, TouchLayout.MaxScale, 0.05, s.TouchScale,
+                    v => GameSettings.Current.TouchScale = (float)v, v => $"{v * 100:F0} %");
+                UiKit.SliderRow(rows, "Button opacity", 0.2, 1, 0.05, s.TouchOpacity,
+                    v => GameSettings.Current.TouchOpacity = (float)v, v => $"{v * 100:F0} %");
+                UiKit.ToggleRow(rows, "Left-handed", s.TouchLeftHanded, on => GameSettings.Current.TouchLeftHanded = on,
+                    "The stick on the right, the buttons on the left");
+                UiKit.ToggleRow(rows, "Run by pushing the stick past its ring", s.TouchRunPastRing,
+                    on => GameSettings.Current.TouchRunPastRing = on, "Off: a Run button");
+                UiKit.ToggleRow(rows, "Use items by tapping the world", s.TouchTapToUse,
+                    on => GameSettings.Current.TouchTapToUse = on, "A short tap uses the item in hand; no Use button");
+                UiKit.ActionRow(rows, "Touch layout", "Edit", () => TouchLayoutScreen.Open(this),
+                    "Move, resize or hide each control, mode by mode (also More › Edit layout in game)");
+            }
             UiKit.SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
                 v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");
             UiKit.ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
+            UiKit.ToggleRow(rows, "Level flight", s.LevelFlight, on => GameSettings.Current.LevelFlight = on,
+                "Free fly moves flat, Space and Shift for height; off, forward follows the look");
+            UiKit.ToggleRow(rows, "Creative flight through walls", s.CreativeNoclip, on => GameSettings.Current.CreativeNoclip = on,
+                "Fly through the ground, walls and roofs in creative mode");
             UiKit.ToggleRow(rows, "Controller vibration", s.Vibration, on => GameSettings.Current.Vibration = on);
             UiKit.ActionRow(rows, "Every key and button", "Show controls", () => Shell.ShowControls(),
                 InputHints.Format("As bound on your keyboard and pad ({help})"));
@@ -203,6 +273,7 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Traffic", 0, 150, 5, s.TrafficCars,
                 v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
             UiKit.ToggleRow(rows, "Trains", s.Trains, on => GameSettings.Current.Trains = on);
+            TrafficModeRows(rows, s);
             UiKit.ToggleRow(rows, "Generated terrain", s.GeneratedFill, on => GameSettings.Current.GeneratedFill = on,
                 "Fills ground with no survey data, blended into the real tiles");
             rows.AddChild(UiKit.Spacer(6));
@@ -224,7 +295,7 @@ public partial class SettingsScreen : Screen
                 };
                 rows.AddChild(phone);
             }
-            UiKit.SliderRow(rows, "Render distance", GameSettings.MinRings, GameSettings.MaxRings, 1,
+            UiKit.SliderRow(rows, "Render distance", GameSettings.MinRingsHere, GameSettings.MaxRings, 1,
                 s.RenderDistanceRings, v => GameSettings.Current.RenderDistanceRings = (int)v, RingsText);
             UiKit.OptionRow(rows, "Detail", new[] { "Low", "Medium", "High" }, (int)s.Detail,
                 i => GameSettings.Current.Detail = (DetailPreset)i);
@@ -247,6 +318,24 @@ public partial class SettingsScreen : Screen
         Show(StartTab(names));
     }
 
+    /// <summary>
+    /// The densities of the traffic modes beyond cars and trains (#1060): a row each once its mode has landed
+    /// (<see cref="World.Traffic.WalkersReady"/>, <see cref="World.Traffic.RidersReady"/>, <see cref="World.Traffic.TramsReady"/>,
+    /// each in its mode's own file), here and on the solo screen.
+    /// </summary>
+    public static void TrafficModeRows(Container rows, GameSettings s)
+    {
+        if (World.Traffic.WalkersReady)
+            UiKit.SliderRow(rows, "Pedestrians", 0, 300, 10, s.TrafficWalkers,
+                v => GameSettings.Current.TrafficWalkers = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+        if (World.Traffic.RidersReady)
+            UiKit.SliderRow(rows, "Bikes", 0, 150, 5, s.TrafficRiders,
+                v => GameSettings.Current.TrafficRiders = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+        if (World.Traffic.TramsReady)
+            UiKit.SliderRow(rows, "Trams", 0, 20, 1, s.Trams,
+                v => GameSettings.Current.Trams = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+    }
+
     /// <summary>"--settings wheel" opens on that tab, for screenshotting it.</summary>
     private static int StartTab(List<string> names)
     {
@@ -257,6 +346,47 @@ public partial class SettingsScreen : Screen
 
     private int _about;
 
+    /// <summary>
+    /// Copies the log Godot writes (<c>debug/file_logging</c>, on for every platform since #1040) to a
+    /// file the player picks. The system dialog: on Android the document picker, which hands back a
+    /// <c>content://</c> URI that <c>Godot.FileAccess</c> writes, with no permission.
+    /// </summary>
+    private void SaveLog()
+    {
+        string log = ProjectSettings.GetSetting("debug/file_logging/log_path", "user://logs/godot.log").AsString();
+        string stamp = Time.GetDatetimeStringFromSystem(false, true).Replace(":", "").Replace(" ", "-");
+        var dialog = new FileDialog
+        {
+            FileMode = FileDialog.FileModeEnum.SaveFile,
+            Access = FileDialog.AccessEnum.Filesystem,
+            Title = "Save log file",
+            CurrentFile = $"unitsport-log-{stamp}.txt",
+            UseNativeDialog = true,
+            Size = new Vector2I(860, 580),
+        };
+        dialog.AddFilter("*.txt", "Text");
+        dialog.FileSelected += path =>
+        {
+            byte[] bytes = Godot.FileAccess.GetFileAsBytes(log);
+            using (var file = bytes.Length > 0 ? Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write) : null)
+            {
+                if (file == null)
+                    Modal.Inform(this, "Log not saved", bytes.Length == 0
+                        ? $"There is no log at {log} yet."
+                        : $"Could not write the file ({Godot.FileAccess.GetOpenError()}).");
+                else
+                {
+                    file.StoreBuffer(bytes);
+                    Modal.Inform(this, "Log saved", $"{bytes.Length / 1024} KB of log written.");
+                }
+            }
+            dialog.QueueFree();
+        };
+        dialog.Canceled += dialog.QueueFree;
+        AddChild(dialog);
+        dialog.PopupCentered();
+    }
+
     /// <summary>The About tab, the licenses and data sources (<c>--licenses</c>, for screenshotting it).</summary>
     public void ShowLicenses() => Show(_about);
 
@@ -265,8 +395,16 @@ public partial class SettingsScreen : Screen
     /// from and credits, the OpenStreetMap overlay's ODbL among them), then what Godot itself
     /// requires, its licence text and the components built into it.
     /// </summary>
-    private static void LicenseRows(VBoxContainer rows)
+    private void LicenseRows(VBoxContainer rows)
     {
+        // the game's log, for a bug report from a phone (#1040): wherever the system picker points
+        rows.AddChild(UiKit.Section("Diagnostics"));
+        rows.AddChild(UiKit.Text("Save the game's log to send with a bug report: Downloads, Drive, wherever.",
+            UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
+        var save = UiKit.Button("Save log file…");
+        save.Pressed += SaveLog;
+        rows.AddChild(save);
+
         foreach (var e in Licenses.All)
         {
             rows.AddChild(UiKit.Section(e.Name));
@@ -342,28 +480,86 @@ public partial class SettingsScreen : Screen
     }
 
     /// <summary>VR mode (#186): saved, and applied by starting the game again.</summary>
+    /// <summary>
+    /// The menus' look (#1135): Auto or a skin, Auto's day and night skins, Reduce motion. Every skin file found is
+    /// listed; the next page takes the change (pages are built on every push).
+    /// </summary>
+    private static void SkinRows(VBoxContainer rows)
+    {
+        var s = GameSettings.Current;
+        var skins = Skins.MenuSkin.All.Values.ToList();
+        string[] names = skins.Select(k => k.Name).ToArray();
+        int Index(string id) => Math.Max(0, skins.FindIndex(k => k.Id == id));
+        rows.AddChild(UiKit.Spacer(6));
+        rows.AddChild(UiKit.Section("Menus"));
+        var look = new[] { "Auto: day and night" }.Concat(names).ToArray();
+        int at = s.MenuSkin == Skins.SkinRules.Auto ? 0 : Index(s.MenuSkin) + 1;
+        var day = UiKit.OptionRow(rows, "By day", names, Index(s.MenuSkinDay), i => GameSettings.Current.MenuSkinDay = skins[i].Id,
+            "Auto's skin from 07:00 to 19:00 (the world's time in a world)");
+        var night = UiKit.OptionRow(rows, "By night", names, Index(s.MenuSkinNight), i => GameSettings.Current.MenuSkinNight = skins[i].Id);
+        var lookRow = UiKit.OptionRow(rows, "Menu look", look, at, i =>
+        {
+            GameSettings.Current.MenuSkin = i == 0 ? Skins.SkinRules.Auto : skins[i - 1].Id;
+            day.Disabled = night.Disabled = i != 0;
+        }, "A skin is a file in assets/skins (or user://skins): the next page shows a change");
+        // the look first, its day and night under it
+        lookRow.GetParent().GetParent().MoveChild(lookRow.GetParent(), day.GetParent().GetIndex());
+        day.Disabled = night.Disabled = at != 0;
+        UiKit.ToggleRow(rows, "Reduce motion", s.ReduceMotion, on => GameSettings.Current.ReduceMotion = on,
+            "No tilts, pops or moving backgrounds in the menus");
+    }
+
     private void VrRow(Container rows)
     {
-        CheckButton toggle = null!;
-        toggle = UiKit.ToggleRow(rows, "VR mode", XR.XrSession.Active, on =>
+        // a standalone headset (#1112) has no flat mode to go back to and no monitor
+        if (!Platform.IsStandaloneVr)
         {
-            if (on == XR.XrSession.Active) return;
-            AskVr(this, Shell, on, () => toggle.SetPressedNoSignal(!on));
-        }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
-        UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
-            (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
-            "What the computer screen shows while you play in the headset (F8 cycles it)");
+            CheckButton toggle = null!;
+            toggle = UiKit.ToggleRow(rows, "VR mode", XR.XrSession.Active, on =>
+            {
+                if (on == XR.XrSession.Active) return;
+                AskVr(this, Shell, on, () => toggle.SetPressedNoSignal(!on));
+            }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
+            UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
+                (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
+                "What the computer screen shows while you play in the headset (F8 cycles it)");
+        }
         // the headset's picture (#244, docs/notes/xr/air-link.md)
         int[] samples = { 0, 2, 4, 8 };
         UiKit.OptionRow(rows, "VR anti-aliasing", new[] { "Off", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
             Math.Max(0, Array.IndexOf(samples, GameSettings.Current.VrMsaa)), i => GameSettings.Current.VrMsaa = samples[i],
             "Steady edges stream cleanly over Air Link");
-        float[] scales = { 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f };
-        int scale = Array.FindIndex(scales, v => Math.Abs(v - GameSettings.Current.VrRenderScale) < 0.001f);
-        UiKit.OptionRow(rows, "VR resolution", scales.Select(v => $"{v * 100:F0} %").ToArray(), scale < 0 ? 4 : scale,
-            i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
+        if (Platform.IsStandaloneVr)
+        {
+            // dynamic resolution (#1112): the 3D scaling below would cost a standalone headset its single pass
+            float[] floors = { 0.5f, 0.6f, 0.7f, 0.75f, 0.8f, 0.9f, 1f };
+            int floor = Array.FindIndex(floors, v => Math.Abs(v - GameSettings.Current.VrResolutionFloor) < 0.001f);
+            UiKit.OptionRow(rows, "VR minimum resolution", floors.Select(v => v >= 1f ? "Full (no dynamic)" : $"{v * 100:F0} %").ToArray(),
+                floor < 0 ? 3 : floor, i => GameSettings.Current.VrResolutionFloor = floors[i],
+                "The picture shrinks toward this when the frame runs late, and grows back when it can");
+        }
+        else
+        {
+            float[] scales = { 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f };
+            int scale = Array.FindIndex(scales, v => Math.Abs(v - GameSettings.Current.VrRenderScale) < 0.001f);
+            UiKit.OptionRow(rows, "VR resolution", scales.Select(v => $"{v * 100:F0} %").ToArray(), scale < 0 ? 4 : scale,
+                i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
+        }
         UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
             "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
+        // frame pacing and triangles (#1036, docs/notes/xr/air-link.md)
+        int[] rates = GameSettings.VrRefreshRates;
+        UiKit.OptionRow(rows, "VR refresh rate", rates.Select(hz => $"{hz} Hz").ToArray(),
+            Math.Max(0, Array.IndexOf(rates, GameSettings.Current.VrRefreshHz)), i => GameSettings.Current.VrRefreshHz = rates[i],
+            Platform.IsStandaloneVr ? "72 Hz is what a Quest 2 holds; 60 flickers a little but buys time"
+                : "72 Hz holds steady over Air Link; higher only if the frame keeps up");
+        DetailPreset[] vrDetails = { DetailPreset.VeryLow, DetailPreset.Low, DetailPreset.Medium, DetailPreset.High };
+        UiKit.OptionRow(rows, "VR terrain detail", new[] { "Very low", "Low", "Medium", "High" },
+            Math.Max(0, Array.IndexOf(vrDetails, GameSettings.Current.VrDetail)), i => GameSettings.Current.VrDetail = vrDetails[i],
+            "The headset's own Detail. Low draws a third of Medium's triangles, Very low a quarter of Low's");
+        CinemaRow(rows, "VR cinema video", GameSettings.Current.VrCinemaVideo, q => GameSettings.Current.VrCinemaVideo = q);
+        UiKit.ToggleRow(rows, "VR sharp cinema screen", GameSettings.Current.VrCinemaLayer, on => GameSettings.Current.VrCinemaLayer = on,
+            "The film on a layer of its own, drawn at the headset's full resolution (2D films)");
         // comfort (#439, docs/notes/xr/rig.md)
         int[] snaps = { 0, 15, 30, 45 };
         UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },
@@ -482,6 +678,11 @@ public partial class SettingsScreen : Screen
     /// The main view's anti-aliasing (#768), greyed out while the style is PS1, which turns it off
     /// as it keeps its own low resolution (<see cref="DisplaySettings"/>); it follows a live style switch.
     /// </summary>
+    /// <summary>A cinema video quality row (#1319): 480p, 720p, 1080p sources; a playing hall's decoder restarts on a change.</summary>
+    private static void CinemaRow(Container into, string name, Interiors.CinemaVideo.Quality current, Action<Interiors.CinemaVideo.Quality> set) =>
+        UiKit.OptionRow(into, name, new[] { "Low (480p)", "Medium (720p)", "High (1080p)" }, (int)current,
+            i => set((Interiors.CinemaVideo.Quality)i), "A cinema's film decoded on this computer; higher is sharper and costs more CPU");
+
     private static void AntiAliasingRow(Container into, AntiAliasing current)
     {
         var option = UiKit.OptionRow(into, "Anti-aliasing", new[] { "Off", "FXAA", "MSAA 2x", "MSAA 4x", "MSAA 8x" },

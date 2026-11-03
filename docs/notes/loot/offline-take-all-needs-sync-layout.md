@@ -10,3 +10,8 @@
   awaited a door-to-plan lookup on a worker, only the first stack was taken, and
   `--interiorcheck` failed "take all empties it". Known doors are now answered from
   `_planKeys` + `_cache` with `Task.FromResult`. Keep any new async step behind that fast path.
+- **The panel's "Take all" closes the panel once the container is empty** (`TakeAllAndClose`,
+  #929). Probes call `TakeAll` and keep it open. A take-all ends in `AllTaken`, once no take is
+  waiting or pending. Offline every grant comes back inside the loop, so `_takingAll` keeps
+  `AllTaken` from deciding there. Anything left behind (no room in the pack, someone was quicker)
+  keeps the panel open.

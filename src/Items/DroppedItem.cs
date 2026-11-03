@@ -250,6 +250,7 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
 
     public override void _ExitTree()
     {
+        Player.TractorBeams.Unregister(this);
         if (Visual != null) DropFloat.Remove(this);
     }
 
@@ -264,6 +265,7 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
         {
             Floating = true;
             Visual.VisibilityRangeEnd = DropFloat.DrawRange;
+            Styles.ZoomRanges.Track(Visual);
         }
         var b = GlobalBasis.Orthonormalized();
         // the resting collider's centre and its height above the ground, both in world axes

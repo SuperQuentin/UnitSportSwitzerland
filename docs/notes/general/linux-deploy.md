@@ -39,13 +39,40 @@
   `ssh -t user@host tmux attach -t unitsport` (detach Ctrl-b d). A deploy kills the session (no graceful save exists) and
   restarts it, then waits for the UDP port (about 30 s) and prints the log tail. **Ctrl-d in the console ends its stdin**:
   the server keeps running but reads no more commands until a restart. Inside the session `start-server.sh run`
-  loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it).
+  loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it),
+  and so the dashboard's Restart starts the same build again (the `restart-requested` marker, #1211). It puts
+  `$DEPLOY_DIR/server-args.local` (the dashboard's startup arguments, never written by a deploy) first on the command
+  line. Every tmux lookup is exact (`-t =unitsport`): a bare name is a prefix, and `unitsport` matched `unitsport-layouts`.
+- **The dashboard's Server and Console tabs** (#1211, `net/web-dashboard`): `DASHBOARD=1` (default with a web site) starts
+  the server with `--admin-http ADMIN_HTTP_PORT` (7790, loopback) and the Nakama on the host; Caddy serves it at
+  `/server-api/` (a host set up before it needs `--setup` once).
+- **Keeping it current** (#1088): a release-stamped server installs newer releases by itself once nobody plays
+  (`net/server-update`; a `--build` deploy has no version and stays as deployed). When your game is newer than
+  the server, its console (`net/console-link`) still joins it for the chat, with your admin rights there.
+- **Nakama, the account server** (#1121, `net/nakama`): this is the `--nakama` step. It is part of a full deploy only
+  with `NAKAMA=1` in `deploy.env`, which is off by default.
+  - It installs Docker and the compose v2 plugin from apt when they are missing (`docker.io` plus `docker-compose-v2`,
+    else `docker-compose-plugin`, else `docker-compose`). If none of them gives `docker compose`, it stops and points
+    to Docker's install page.
+  - It uploads `tools/nakama/` **without `.env`** to `$NAKAMA_DIR` (default `$DEPLOY_DIR/nakama`), then runs
+    `up.sh up` as root.
+  - The first run makes the host's `.env` (random keys, mode 600). Every later deploy keeps it: a new encryption key
+    would log everyone out, and a new Postgres password would lock Nakama out of its volume.
+  - **Behind Caddy** (#1205, a host with `TILES=1`): Nakama listens on 127.0.0.1 only and Caddy serves it at
+    `https://<site>/nakama/`. The step closes `NAKAMA_PORT/tcp` (7350) in ufw if an older deploy opened it, then checks
+    `/healthcheck` directly and through Caddy. A host set up before #1205 needs `--setup` once, for the new Caddyfile.
+    `NAKAMA_URL` defaults to that public address. Without Caddy (`TILES=0`), 7350 is published and opened in ufw.
+  - It prints what players need (`http://<host>:7350` and the server key) and the `ssh -L` tunnel for the console.
+  - `--check` reports whether Docker, the `.env` and the containers are there.
+  - Simulated locally by running the upload and `up.sh` twice: the keys stayed the same. A real host run was not
+    done yet.
 - **Terrain chunks** (the real set is ~111 GB in ~246k files, one flat directory): the source is MapSetup's
   `terrain_location.json` `"chunks"`, else `terrain_chunks/`, else `CHUNKS_SRC=`; run from the main checkout (worktrees have no tiles).
   Files whose name, size or mtime differ are copied (`--checksum` compares md5 instead: reads every byte on both sides).
   Free space is checked first (new minus replaced bytes plus `SPACE_MARGIN_MB`). Copy is `rsync` when both ends have it,
   else a `tar | ssh tar` stream (keeps mtimes, so the next run is a no-op); `manifest.json` goes last. Server-only files are
   kept unless `--prune`. Lists land in `test_output/deploy/`. Listing 246k files from Git Bash takes minutes.
+- **SMTP check** (#1287, `net/house-layouts`): `tools/deploy-linux.sh --smtp-check you@example.ch` is a step of its own (no build, no other step): over SSH it loads `layouts/layouts.env` and runs `app/LayoutService --smtp-check`, which mails a test message (MailKit: port 465 implicit TLS, 587 or other ports STARTTLS) and prints the exact failure; the password never leaves the host.
 - **Gotchas seen on the first real deploy (Debian 13):** the root partition was 19 GB, so the space check refused the tiles until
   `DEPLOY_CHUNKS_DIR` pointed at `/home` (check `df -h` on the host first). `/etc/os-release` defines `VERSION`, so the setup
   script reads it in a subshell or the mDNS TXT would advertise "13 (trixie)". A server started before the tiles arrive exits

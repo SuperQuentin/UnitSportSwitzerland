@@ -48,6 +48,12 @@ public sealed class SiteDressingPlan
     /// <summary>Which of <see cref="Boxes"/> are the toilet cabins (#822): their walls collide with the buildings too.</summary>
     public (int Start, int Count) ToiletBoxes { get; set; }
 
+    /// <summary>Which of <see cref="Boxes"/> are the office's gallery (#827): the walkway and the stair, the last ones.</summary>
+    public (int Start, int Count) GalleryBoxes { get; set; }
+
+    /// <summary>What a body stands on going up a stair of the yard (#827: the gallery's), collision only, as a shell's flights.</summary>
+    public List<ShellRamp> Ramps { get; } = new();
+
     /// <summary>Whether box <paramref name="i"/> is a wall of a container or cabin with a door: the office's or a toilet's.</summary>
     public bool WithDoor(int i) =>
         i >= OfficeBoxes.Start && i < OfficeBoxes.Start + OfficeBoxes.Count
@@ -67,6 +73,19 @@ public sealed class SiteDressingPlan
 public static class SiteDressings
 {
     public const float FenceHeight = 2.0f;
+
+    /// <summary>The builder's board: this far along the front past the gate's side, this far in from it, this wide by half.</summary>
+    public const float BoardAlong = 2.2f, BoardIn = 0.6f, BoardHalfWidth = 1.5f;
+
+    /// <summary>
+    /// Where the builder's board stands, tile frame, with room round it (#827): the planner keeps the
+    /// office gallery off it, as the dressing puts it by the gate after the planner has run.
+    /// </summary>
+    public static SiteRect BoardRect(Vector2 gate, Vector2 front, float gateWidth)
+    {
+        var along = new Vector2(-front.Y, front.X);
+        return new SiteRect(gate + along * (gateWidth / 2 + BoardAlong) - front * BoardIn, along, 2 * BoardHalfWidth + 0.4f, 0.5f);
+    }
     public const float ContainerLength = 6.06f, ContainerWidth = 2.44f, ContainerHeight = 2.6f;
 
     /// <param name="ground">The ground's height at a point of the site frame (x, z).</param>
@@ -141,18 +160,27 @@ public static class SiteDressings
             float cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
             float g = ground(cx, cz);
             bool longX = x1 - x0 >= z1 - z0;
+            float length = longX ? x1 - x0 : z1 - z0, width = longX ? z1 - z0 : x1 - x0;
+            // the materials keep their low side (the rebar) toward the building and face the yard, where
+            // a machine comes at their pallets from (#619): w then runs from the zone's side nearer the
+            // building, whichever of its sides that is (the building's middle is the frame's origin)
+            bool flip = zone.Kind == SiteZoneKind.Materials && (longX ? cz : cx) < 0;
+            float W(float w) => flip ? width - w : w;
             // a box in the zone's own terms: u along its long side, w across, from its low corner
             void ZoneBox(float u0, float y0, float w0, float u1, float y1, float w1, ShellPart part, bool solid)
             {
+                (w0, w1) = (Math.Min(W(w0), W(w1)), Math.Max(W(w0), W(w1)));
                 if (longX) Box(x0 + u0, y0, z0 + w0, x0 + u1, y1, z0 + w1, part, solid);
                 else Box(x0 + w0, y0, z0 + u0, x0 + w1, y1, z0 + u1, part, solid);
             }
-            // a searchable piece in the same terms (#627)
-            void Stock(int slot, SiteStockKind kind, float u0, float y0, float w0, float u1, float y1, float w1) =>
+            // a searchable piece in the same terms (#627), turned with the materials as their boxes are
+            void Stock(int slot, SiteStockKind kind, float u0, float y0, float w0, float u1, float y1, float w1)
+            {
+                (w0, w1) = (Math.Min(W(w0), W(w1)), Math.Max(W(w0), W(w1)));
                 plan.Stock.Add(longX
                     ? new SiteStockSpot(slot, kind, new Vector3(x0 + u0, y0, z0 + w0), new Vector3(x0 + u1, y1, z0 + w1))
                     : new SiteStockSpot(slot, kind, new Vector3(x0 + w0, y0, z0 + u0), new Vector3(x0 + w1, y1, z0 + u1)));
-            float length = longX ? x1 - x0 : z1 - z0, width = longX ? z1 - z0 : x1 - x0;
+            }
             switch (zone.Kind)
             {
                 case SiteZoneKind.Office:
@@ -202,7 +230,7 @@ public static class SiteDressings
                                 float deck = depth >= Items.Pallets.SquareDepth - 0.01f ? Items.Pallets.SquareDepth : Items.Pallets.NarrowDepth;
                                 // runners along the zone's long side, the deck centred in the slot
                                 float mu = u + Items.Pallets.Length / 2, mw = (w0 + w1) / 2;
-                                var centre = longX ? new Vector3(x0 + mu, g, z0 + mw) : new Vector3(x0 + mw, g, z0 + mu);
+                                var centre = longX ? new Vector3(x0 + mu, g, z0 + W(mw)) : new Vector3(x0 + W(mw), g, z0 + mu);
                                 plan.Pallets.Add(new SitePalletSpot(i, centre, longX, Items.Pallets.LoadOf(bricks ? 0.95f : 0.8f, deck)));
                                 Stock(i, bricks ? SiteStockKind.Bricks : SiteStockKind.Cement, u, g, mw - deck / 2, u + Items.Pallets.Length, g + 1.0f, mw + deck / 2);
                             }
@@ -247,10 +275,10 @@ public static class SiteDressings
             var gate = Local(site.Gate);
             var front = new Vector2(site.Front.Dot(site.Box.AxisU), site.Front.Dot(site.Box.AxisV));
             var along = new Vector2(-front.Y, front.X);
-            var at = gate + along * (site.GateWidth / 2 + 2.2f) - front * 0.6f;
+            var at = gate + along * (site.GateWidth / 2 + BoardAlong) - front * BoardIn;
             float g = ground(at.X, at.Y);
             bool alongX = MathF.Abs(along.X) > 0.5f;
-            float hw = 1.5f;
+            float hw = BoardHalfWidth;
             if (alongX)
             {
                 Box(at.X - hw, g + 1.0f, at.Y - 0.04f, at.X + hw, g + 3.0f, at.Y + 0.04f, ShellPart.SignBoard, true);
@@ -266,6 +294,14 @@ public static class SiteDressings
                 var p = alongX ? new Vector2(at.X + s, at.Y) : new Vector2(at.X, at.Y + s);
                 Box(p.X - 0.05f, g, p.Y - 0.05f, p.X + 0.05f, g + 1.0f, p.Y + 0.05f, ShellPart.Tube, false);
             }
+        }
+        // the office's gallery (#827), last, so no box before it moves: yard boxes, walked on and
+        // collided with the yard, never with the building body an open office door lets a body through
+        if (plan.Office?.Gallery is { } gallery)
+        {
+            plan.GalleryBoxes = (plan.Boxes.Count, gallery.Boxes.Count);
+            plan.Boxes.AddRange(gallery.Boxes);
+            plan.Ramps.AddRange(gallery.Ramps);
         }
         return plan;
     }

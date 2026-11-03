@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Bots;
 using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Net;
@@ -63,28 +64,57 @@ public partial class BrManager
     /// was never recalled) is back in: alive, unplaced, dropped over the stop by their own client.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestRecall()
+    private void RequestRecall() => ServerRecall(Multiplayer.GetRemoteSenderId());
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> used a dogtag at a stop, a player or a bot (#837). The team-mate out last comes
+    /// back: a player by its own client, a bot here (<see cref="RecallBot"/>). A bot user's dogtag is taken here,
+    /// a player's by its client (<c>RecallNews</c>). False when refused.
+    /// </summary>
+    public bool ServerRecall(long peer)
     {
-        if (!_server || !RecallOpen || Origin == null) return;
-        long peer = Multiplayer.GetRemoteSenderId();
+        if (!_server || !RecallOpen || Origin == null) return false;
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
-            || BodyOf(peer) is not { } body) return;
+            || BodyOf(peer) is not { } body) return false;
         var (be, bn) = Origin.ToLv95(body.GlobalPosition);
         var here = new Vector2((float)(be - _state.AreaE), (float)(bn - _state.AreaN));
         var stop = Stops().OrderBy(s => s.At.DistanceTo(here)).FirstOrDefault();
-        if (stop.At.DistanceTo(here) > RecallReach + 4f) return;
-        var t = _state.Entrants.Where(m => m.Team == r.Team && !m.Alive && !m.Recalled && Multiplayer.GetPeers().Contains((int)m.Peer))
+        if (stop.At.DistanceTo(here) > RecallReach + 4f) return false;
+        // a player still connected, or a bot still run here
+        var t = _state.Entrants.Where(m => m.Team == r.Team && !m.Alive && !m.Recalled
+                && (m.Bot ? Director?.Get(m.Peer) != null : Multiplayer.GetPeers().Contains((int)m.Peer)))
             .OrderByDescending(m => m.OutAt).FirstOrDefault();
-        if (t == null) return;
+        if (t == null) return false;
         t.Alive = true;
         t.Recalled = true;
         t.Place = 0;
         t.Downed = false;
         GD.Print($"[br] recalled: {t.Name}, by {r.Name}");
-        RpcId(t.Peer, MethodName.Recalled, _state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, (double)stop.Alt);
+        if (t.Bot) RecallBot(t.Peer, _state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt);
+        else RpcId(t.Peer, MethodName.Recalled, _state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, (double)stop.Alt);
+        if (r.Bot && Director?.Get(peer) is { } user)
+            for (int i = 0; i < Items.Inventory.Size; i++)
+                if (user.Inventory[i].Id == ItemId.Dogtag) { user.Inventory.TakeOne(i); break; }
         Rpc(MethodName.RecallNews, t.Peer, peer);
         Broadcast($"{r.Name} recalled {t.Name} at a Postauto stop!");
         Push();
+        return true;
+    }
+
+    /// <summary>
+    /// Server: a recalled bot (#837) comes back as a player does by its client (<c>Recalled</c>): 180 m over the
+    /// stop in the wingsuit, a knife and two bandages, and its brain flies it down to the stop.
+    /// </summary>
+    private void RecallBot(long id, double e, double n, float alt)
+    {
+        if (Director?.Get(id) is not { } bot || Origin == null) return;
+        var at = Origin.ToWorld(e, n, alt + 180);
+        bot.Body.Respawn(at);
+        bot.Body.Leap(at, new Vector3(0, 0, -20f), RideKind.Wingsuit);
+        bot.Inventory.Clear();
+        bot.Inventory.Put(0, new ItemStack(ItemId.Knife, 1));
+        bot.Inventory.Add(ItemId.Bandage, 2);
+        if (bot.Brain is BrBrain brain) brain.DropTarget = Origin.ToWorld(e, n, alt);
     }
 
     // ---- client ---------------------------------------------------------------------------------
@@ -113,7 +143,7 @@ public partial class BrManager
     {
         if (_server || LocalPlayer() is not { } me || Origin == null) return;
         StopSpectating();
-        _watching = 0;
+        _follow?.Prefer(0);
         var at = Origin.ToWorld(e, n, alt + 180);
         me.Respawn(at);
         me.Leap(at, -me.Camera.GlobalTransform.Basis.Z with { Y = 0 } * 20f, RideKind.Wingsuit);
@@ -174,12 +204,16 @@ public partial class BrManager
         {
             Mesh = new BoxMesh { Size = size },
             Position = at,
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = c, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            // lit in the lit styles (its lamp on it), flat in PS1 (#1069)
+            MaterialOverride = Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = c }),
         };
         root.AddChild(Box(new Vector3(0.08f, 2.6f, 0.08f), new Vector3(0, 1.3f, 0), new Color(0.35f, 0.35f, 0.38f)));
         root.AddChild(Box(new Vector3(0.9f, 0.6f, 0.06f), new Vector3(0, 2.4f, 0), new Color(1f, 0.8f, 0.0f)));          // Postauto yellow
         root.AddChild(Box(new Vector3(0.5f, 0.18f, 0.07f), new Vector3(0, 2.42f, 0), new Color(0.1f, 0.1f, 0.1f)));       // the horn stripe
-        root.AddChild(new OmniLight3D { Position = new Vector3(0, 2.9f, 0), LightColor = new Color(1f, 0.85f, 0.3f), LightEnergy = 1.5f, OmniRange = 8f });
+        // dim: the plate is lit by the sun in the lit styles, and a bright lamp half a metre over it
+        // burnt its yellow out (#1069); PS1 draws the plate and the world unshaded, so only a
+        // player standing under it sees the difference there
+        root.AddChild(new OmniLight3D { Position = new Vector3(0, 2.9f, 0), LightColor = new Color(1f, 0.85f, 0.3f), LightEnergy = 0.15f, OmniRange = 8f });
         return root;
     }
 }

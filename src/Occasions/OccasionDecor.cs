@@ -141,6 +141,9 @@ public partial class OccasionDecor : Node
             return;
         }
 
+        // a tile furnished again before its roads came back, or on a new node: the props drawn for
+        // the old entry go now, or nothing would ever take them off (a /occasion stop left them, #881)
+        if (existing != null) Drop(existing);
         var tile = new Tile { Node = node, Doors = doors };
         _tiles[id] = tile;
         int epoch = _epoch;
@@ -163,8 +166,13 @@ public partial class OccasionDecor : Node
     /// <summary>The tile shed its buildings (#553): the decorations at their doors go, back with the next furnishing.</summary>
     private void OnUnfurnished(TileId id, ChunkNode node)
     {
-        if (!_tiles.Remove(id, out var tile)) return;
+        if (_tiles.Remove(id, out var tile)) Drop(tile);
+    }
+
+    private static void Drop(Tile tile)
+    {
         if (tile.Decor != null && IsInstanceValid(tile.Decor)) tile.Decor.QueueFree();
+        tile.Decor = null;
     }
 
     private void OnReplaced(Func<TileId, bool>? affected)
@@ -173,13 +181,15 @@ public partial class OccasionDecor : Node
         if (affected == null)
         {
             _epoch++;
+            foreach (var tile in _tiles.Values) Drop(tile);
             _tiles.Clear();
             return;
         }
         // real tiles merged into the generated fill: only the tiles whose ground changed were
         // unloaded (TileUnloaded has dropped them already); a decoration still waiting for one
         // finds its entry gone and gives up, the rest carry on
-        foreach (var id in _tiles.Keys.Where(affected).ToList()) _tiles.Remove(id);
+        foreach (var id in _tiles.Keys.Where(affected).ToList())
+            if (_tiles.Remove(id, out var tile)) Drop(tile);
     }
 
     private void RedecorateAll()
@@ -219,7 +229,8 @@ public partial class OccasionDecor : Node
             Id = id,
             Origin = tileOrigin,
             World = _origin,
-            Doors = tile.Doors,
+            // doorsteps on the ground only: a lantern or a gift at a raised door (#827) stood on the walkway
+            Doors = Array.FindAll(tile.Doors, d => d.Level == 0),
             Roads = tile.Roads,
             HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,
@@ -247,28 +258,30 @@ public partial class OccasionDecor : Node
         if (into.Instances.Count == 0 && into.Meshes.Count == 0) return;
 
         var root = new Node3D { Name = "OccasionDecor" };
-        foreach (var (kind, list) in into.Instances)
-        {
-            var multi = new MultiMesh
+        foreach (var (kind, all) in into.Instances)
+            foreach (var list in Cells(all))
             {
-                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-                UseCustomData = true,
-                Mesh = kind.Mesh,
-                InstanceCount = list.Count,
-            };
-            for (int i = 0; i < list.Count; i++)
-            {
-                multi.SetInstanceTransform(i, list[i].Xf);
-                multi.SetInstanceCustomData(i, new Color(list[i].Seed, list[i].Glow, 0, 0));
+                var multi = new MultiMesh
+                {
+                    TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                    UseCustomData = true,
+                    Mesh = kind.Mesh,
+                    InstanceCount = list.Count,
+                };
+                for (int i = 0; i < list.Count; i++)
+                {
+                    multi.SetInstanceTransform(i, list[i].Xf);
+                    multi.SetInstanceCustomData(i, new Color(list[i].Seed, list[i].Glow, 0, 0));
+                }
+                root.AddChild(new MultiMeshInstance3D
+                {
+                    Name = kind.Name,
+                    Multimesh = multi,
+                    MaterialOverride = kind.Candle ? _candle : _steady,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                    VisibilityRangeEnd = Core.Platform.IsStandaloneVr ? StandaloneDrawnM : 0f,
+                });
             }
-            root.AddChild(new MultiMeshInstance3D
-            {
-                Name = kind.Name,
-                Multimesh = multi,
-                MaterialOverride = kind.Candle ? _candle : _steady,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            });
-        }
         foreach (var mesh in into.Meshes)
             root.AddChild(new MeshInstance3D
             {
@@ -277,8 +290,37 @@ public partial class OccasionDecor : Node
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             });
 
-        tile.Node.AddChild(root);
+        tile.Node.AddChild(Styles.ZoomRanges.TrackTree(root));
         tile.Decor = root;
+    }
+
+    /// <summary>
+    /// How far a standalone headset draws the decor, m (#1112): a pumpkin or a gift past it is a few pixels, and
+    /// a Halloween city's were a millisecond of a Quest's frame from the air.
+    /// </summary>
+    private const float StandaloneDrawnM = 150f;
+
+    /// <summary>
+    /// One kind's props as drawn: all in one MultiMesh, or on a standalone headset in the buildings' 125 m cells
+    /// (<see cref="Terrain.BuildingOcclusion.Cells"/>), so each cell's range is measured from where its props stand.
+    /// </summary>
+    private static IEnumerable<List<(Transform3D Xf, float Seed, float Glow)>> Cells(List<(Transform3D Xf, float Seed, float Glow)> all)
+    {
+        if (!Core.Platform.IsStandaloneVr)
+        {
+            yield return all;
+            yield break;
+        }
+        const int n = Terrain.BuildingOcclusion.Cells;
+        const float size = (float)(Terrain.Format.ChunkFormat.TileSizeM / n);
+        var cells = new Dictionary<int, List<(Transform3D Xf, float Seed, float Glow)>>();
+        foreach (var p in all)
+        {
+            int cx = Math.Clamp((int)(p.Xf.Origin.X / size), 0, n - 1), cz = Math.Clamp((int)(p.Xf.Origin.Z / size), 0, n - 1);
+            if (!cells.TryGetValue(cz * n + cx, out var list)) cells[cz * n + cx] = list = new();
+            list.Add(p);
+        }
+        foreach (var list in cells.Values) yield return list;
     }
 
     // ---- queries -------------------------------------------------------------------------------

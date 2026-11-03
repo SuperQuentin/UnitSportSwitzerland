@@ -57,7 +57,7 @@ public partial class PvpProbe : ChatProbe
         for (int tries = 0; tries < 60 && !Said("B", "ready"); tries++)
         {
             Say(pos);
-            await Seconds(2.5);
+            if (await Until(() => Said("B", "ready"), 2.5)) break;
         }
         if (!Said("B", "ready")) { Fail("B never joined"); return; }
         var b = Body(me);

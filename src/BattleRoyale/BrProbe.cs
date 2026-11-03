@@ -63,7 +63,7 @@ public partial class BrProbe : ChatProbe
         for (int i = 0; i < 60 && Br!.State.Entrants.Count < 2; i++)
         {
             Say("lobby");
-            await Seconds(2.0);
+            if (await Until(() => Br!.State.Entrants.Count >= 2, 2.0)) break;
         }
         if (Br!.State.Entrants.Count < 2) { Fail("B never joined"); return; }
         Chat.Send("/br start");
@@ -86,14 +86,14 @@ public partial class BrProbe : ChatProbe
         if (BrCrates.Instance is { } dropped && dropped.All.Where(c => c.Style == CrateStyle.Airdrop).MinBy(Dist) is { } drop)
         {
             await Until(() => dropped.Landed(drop), 60);
-            await Seconds(0.6);
+            await Until(() => dropped.GetNodeOrNull<Node3D>($"C{drop.Id}/Beacon") is { Visible: true }, 3);
             Expect(dropped.GetNodeOrNull<Node3D>($"C{drop.Id}/Beacon") is { Visible: true }, "a landed supply drop shows its beam of light (#231)");
             if (dropped.GetNodeOrNull<Node3D>($"C{drop.Id}") is { } beacon)
             {
                 var to = beacon.GlobalPosition + Vector3.Up * 40f - me.Camera.GlobalPosition;
                 me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
                 me.LookPitch = 0.1f;
-                await Seconds(0.8);
+                if (DisplayServer.GetName() != "headless") await Seconds(0.8);
                 Shot("a_beacon");
             }
         }
@@ -192,7 +192,7 @@ public partial class BrProbe : ChatProbe
                 at = z.NextCentre;
                 Br.Teleport(s.AreaE + z.NextCentre.X, s.AreaN + z.NextCentre.Y, "keeping in the zone");
             }
-            await Seconds(1.0);
+            await Until(() => _heard.Any(l => l.Contains("BR A posA")), 1.0);
         }
         var p = _heard.Last(l => l.Contains("BR A posA")).Split("posA ")[1].Split(' ');
         double e = double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture);
@@ -344,8 +344,8 @@ public partial class BrProbe : ChatProbe
         Expect(!Permissions.InMatch, "the travel menu is open again");
         Expect(await Until(() => BrCrates.Instance?.All.Any() != true && Vehicles() == 0, 10),
             $"the match's crates and vehicles are gone ({BrCrates.Instance?.All.Count()} crates, {Vehicles()} vehicles)");
-        await Seconds(5.0);
         var me = Me!;
+        await Until(() => !me.Eliminated && !me.KnockedOut && me.Global.HorizontalDistanceTo(start) < 30f, 15);
         Expect(!me.Eliminated && !me.KnockedOut, "standing again");
         float d = (float)me.Global.HorizontalDistanceTo(start);
         Expect(d < 30f, $"back where it started ({d:F0} m away)");
@@ -427,7 +427,7 @@ public partial class BrProbe : ChatProbe
         for (int i = 0; i < 60 && Br!.State.Entrants.Count(e => e.Party == "alp") < 2; i++)
         {
             Say("lobby");
-            await Seconds(2.0);
+            if (await Until(() => Br!.State.Entrants.Count(e => e.Party == "alp") >= 2, 2.0)) break;
         }
         if (Br!.State.Entrants.Count(e => e.Party == "alp") < 2) { Fail("B never joined team alp"); return; }
         Chat.Send("/br start");

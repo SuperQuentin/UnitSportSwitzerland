@@ -96,9 +96,31 @@ public partial class DebugMenuCheck : ChatProbe
         Expect(TileGround() is { Visible: true }, "a second click shows the ground again");
 
         await Restyle();
+        await LanePlan();
 
         await Key(Godot.Key.F9);
         Expect(!_menu.IsOpen, "F9 closes it");
+    }
+
+    /// <summary>The lane plan (#1181): a click draws it once (legend shown), a second clears it; it is not redrawn per frame.</summary>
+    private async Task LanePlan()
+    {
+        var lanes = _menu.Lanes;
+        var box = _menu.SwitchBox("lanes");
+        await Click(box);
+        Expect(box.ButtonPressed && lanes.On, "a click turns the lane plan on");
+        if (!await Until(() => lanes.Builds > 0, 15))
+        {
+            Expect(false, "the lane plan is drawn once switched on");
+            return;
+        }
+        Expect(lanes.LegendShown, "with its legend");
+        int builds = lanes.Builds;
+        await Frames(30);
+        Expect(lanes.Builds == builds, $"and not drawn again while the camera stays ({lanes.Builds - builds} more)");
+        GD.Print($"[debugcheck] lane plan: {lanes.StripQuads} strip quads, {lanes.MouthLabels} labels, {lanes.Arrows} arrows");
+        await Click(box);
+        Expect(!lanes.On && lanes.Triangles == 0 && !lanes.LegendShown, "a second click clears it and hides the legend");
     }
 
     /// <summary>Clay on, a restyle, clay still on; Normal gives back the shader of the style now applied.</summary>
@@ -109,6 +131,9 @@ public partial class DebugMenuCheck : ChatProbe
 
         var from = StyleKit.Applied;
         var to = from == VisualStyle.Cartoon ? VisualStyle.Ps1 : VisualStyle.Cartoon;
+        // a solid object's material (#1069): unshaded in PS1 only, and it follows a live restyle
+        var solid = StyleKit.Solid(new StandardMaterial3D());
+        Expect(solid.ShadingMode == ShadingIn(from), $"a solid is {ShadingIn(from)} in {from}");
         Chat!.Send($"/style {(to == VisualStyle.Cartoon ? "cartoon" : "ps1")}");
         if (!await Until(() => StyleKit.Applied == to, 10))
         {
@@ -118,11 +143,15 @@ public partial class DebugMenuCheck : ChatProbe
         await Frames(3);
         Expect(GroundShader() == DebugView.Clay, $"clay survives the restyle to {to}");
         Expect(StyleKit.Material(MaterialRole.Terrain).Shader == DebugView.Clay, "a material made meanwhile is clay too");
+        Expect(solid.ShadingMode == ShadingIn(to), $"the solid follows the restyle to {to} ({solid.ShadingMode})");
 
         await PickView(DebugViewMode.Normal);
         var want = GD.Load<Shader>(StyleKit.Resolve(to, MaterialRole.Terrain).Path);
         Expect(GroundShader() == want, $"Normal gives back {to}'s terrain shader ({GroundShader()?.ResourcePath})");
     }
+
+    private static BaseMaterial3D.ShadingModeEnum ShadingIn(VisualStyle style) =>
+        style == VisualStyle.Ps1 ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel;
 
     private async Task Online()
     {
@@ -142,6 +171,7 @@ public partial class DebugMenuCheck : ChatProbe
         Expect(_menu.IsOpen, "F9 opens it for an admin");
         await Click(_menu.SwitchBox("ground"));
         await Click(_menu.SwitchBox("tiles"));
+        await Click(_menu.SwitchBox("lanes"));
         await PickView(DebugViewMode.Clay);
         Expect((_chunks.HiddenLayers & TileLayers.Ground) != 0 && _menu.Overlay.Tiles && _menu.View == DebugViewMode.Clay,
             "ground hidden, tile boundaries and clay on");
@@ -156,6 +186,7 @@ public partial class DebugMenuCheck : ChatProbe
         Expect(!_menu.IsOpen, "losing admin closes the menu");
         Expect(_chunks.HiddenLayers == TileLayers.None, "and shows every layer again");
         Expect(!_menu.Overlay.Tiles && _menu.View == DebugViewMode.Normal, "and turns the overlay and the clay view off");
+        Expect(!_menu.Lanes.On && !_menu.SwitchBox("lanes").ButtonPressed, "and the lane plan");
         Expect(_menu.SwitchBox("ground").ButtonPressed && !_menu.SwitchBox("tiles").ButtonPressed, "and puts the switches back");
         Expect(GroundShader() is { } shader && shader != DebugView.Clay, "the ground has its own shader again");
         await Key(Godot.Key.F9);

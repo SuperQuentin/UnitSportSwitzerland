@@ -14,7 +14,22 @@ public static class CmdArgs
 {
 #if GODOT
     /// <summary>The user args, cached. Shared: never modify it (copy it first).</summary>
-    public static readonly string[] All = Godot.OS.GetCmdlineUserArgs();
+    public static readonly string[] All = WithFile(Godot.OS.GetCmdlineUserArgs());
+
+    /// <summary>
+    /// On Android the launcher passes no arguments, so <c>user://cmdline.txt</c> (words split on white
+    /// space, put there with <c>adb shell run-as</c> on a debug build) adds them: probes and perf
+    /// runs on a phone or a Quest without a rebuild (#1112).
+    /// </summary>
+    private static string[] WithFile(string[] args)
+    {
+        const string file = "user://cmdline.txt";
+        if (Godot.OS.GetName() != "Android" || !Godot.FileAccess.FileExists(file)) return args;
+        var words = Godot.FileAccess.GetFileAsString(file)
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        Godot.GD.Print($"[args] from {file}: {string.Join(' ', words)}");
+        return [.. args, .. words];
+    }
 
     /// <inheritdoc cref="Has(string[], string)"/>
     public static bool Has(string flag) => Has(All, flag);

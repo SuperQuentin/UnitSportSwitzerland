@@ -46,3 +46,12 @@
 - **New modes**: write an `IBotBrain`, choose the kit, answer the rule hooks, handle `Died`/`Downed`. Never
   touch the body or the director for a mode. Every new feature a player can use follows
   `general/new-feature-bots` and gets a row in `bot-capability-map`.
+- **The bots' clock** (`BotDirector.Clock`, #837 phase 4): the sum of the physics steps, in simulated seconds
+  (`/speed` scales each step). Brains, hands and skills time everything with it.
+  - Not `GameClock.Now`: it counts physics frames, which `/speed` lengthens. At x4 a 5 s revive hold took 20
+    simulated seconds.
+  - Not `ClockSync.SimNow`: it runs on the wall clock, ahead of a server dropping frames. A car was "stuck for
+    6 s" before it had had 6 s to move.
+  - The match's own stamps (zone, flight, crates) stay on `SimNow`, as the match does (#856).
+- **Caught in the geometry** (`BotSkills.Unembed`, every mode, from the director): a body on foot, off the
+  floor, "falling" over 20 m/s and not 0.2 m moved in 1.5 s is put on open ground nearby, still.

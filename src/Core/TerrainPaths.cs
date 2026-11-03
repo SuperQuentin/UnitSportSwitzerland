@@ -32,6 +32,8 @@ public static class TerrainPaths
     /// </summary>
     public static string FindChunkDir()
     {
+        // a test world's own folder (#999); a fixture course has none and falls back as --chunks fixture:x does
+        if (WorldChoice.Active is { ChunksArg: { } testDir } && Directory.Exists(testDir)) return testDir;
         if (_chunkDir != null) return _chunkDir;
         var (dir, source) = ResolveChunkDir();
         GD.Print($"[paths] terrain chunks: {dir} ({source})");
@@ -125,8 +127,8 @@ public static class TerrainPaths
                 "beside the terrain chunks");
     }
 
-    /// <summary>Reads an optional "--chunks &lt;dir&gt;" from the command line.</summary>
-    public static string? ParseChunkDirArg() => CmdArgs.Value("--chunks");
+    /// <summary>Reads an optional "--chunks &lt;dir&gt;" from the command line; a test world's own (#999) wins.</summary>
+    public static string? ParseChunkDirArg() => WorldChoice.Active?.ChunksArg ?? CmdArgs.Value("--chunks");
 
     /// <summary>
     /// Where streamed terrain is cached. Overridable with <c>--cache &lt;dir&gt;</c> so two

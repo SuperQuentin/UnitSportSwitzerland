@@ -99,6 +99,10 @@ public static partial class InteriorMeshBuilder
         RoomType.Kitchen => (C(0.72f, 0.70f, 0.66f), C(0.86f, 0.88f, 0.82f), C(0.95f, 0.95f, 0.93f)),
         RoomType.Bedroom => (C(0.62f, 0.52f, 0.46f), C(0.82f, 0.86f, 0.90f), C(0.95f, 0.95f, 0.95f)),
         RoomType.Bathroom or RoomType.WC => (C(0.78f, 0.80f, 0.82f), C(0.70f, 0.82f, 0.88f), C(0.95f, 0.96f, 0.97f)),
+        // #1285: public toilets: dark tiles underfoot, pale tiled walls, the anteroom a shade warmer
+        RoomType.WomensToilet or RoomType.MensToilet or RoomType.ToiletStall or RoomType.AccessibleToilet
+            => (C(0.36f, 0.38f, 0.40f), C(0.82f, 0.86f, 0.88f), C(0.95f, 0.96f, 0.97f)),
+        RoomType.ToiletLobby => (C(0.36f, 0.38f, 0.40f), C(0.88f, 0.86f, 0.82f), C(0.95f, 0.96f, 0.97f)),
         RoomType.Office or RoomType.Classroom => (C(0.46f, 0.48f, 0.52f), C(0.88f, 0.88f, 0.86f), C(0.93f, 0.93f, 0.93f)),
         RoomType.Shop => (C(0.80f, 0.78f, 0.74f), C(0.94f, 0.93f, 0.90f), C(0.96f, 0.96f, 0.96f)),
         RoomType.Nave => (C(0.66f, 0.62f, 0.56f), C(0.90f, 0.88f, 0.82f), C(0.80f, 0.76f, 0.70f)),
@@ -126,7 +130,7 @@ public static partial class InteriorMeshBuilder
         RoomType.LockerRoom => (C(0.56f, 0.58f, 0.60f), C(0.74f, 0.80f, 0.82f), C(0.92f, 0.92f, 0.92f)),
         RoomType.BreakRoom => (C(0.72f, 0.68f, 0.62f), C(0.90f, 0.88f, 0.80f), C(0.95f, 0.95f, 0.93f)),
         // #822: a site container's grey vinyl floor and white panelled walls
-        RoomType.SiteOffice => (C(0.44f, 0.46f, 0.48f), C(0.90f, 0.90f, 0.88f), C(0.94f, 0.94f, 0.93f)),
+        RoomType.SiteOffice or RoomType.SiteManager or RoomType.DrawingOffice => (C(0.44f, 0.46f, 0.48f), C(0.90f, 0.90f, 0.88f), C(0.94f, 0.94f, 0.93f)),
         RoomType.PartsStore => (Concrete, C(0.76f, 0.76f, 0.73f), C(0.66f, 0.66f, 0.64f)),
         RoomType.PaintBooth => (C(0.62f, 0.64f, 0.66f), C(0.92f, 0.93f, 0.94f), C(0.90f, 0.91f, 0.92f)),
         // #501: sealed grey concrete, a pale shell and the lit ceiling of a big-box shop floor
@@ -140,6 +144,31 @@ public static partial class InteriorMeshBuilder
         RoomType.Stairwell => (C(0.70f, 0.68f, 0.64f), C(0.92f, 0.90f, 0.84f), C(0.95f, 0.95f, 0.93f)),
         // #558: a garage ramp: raw concrete under a pale ceiling, like the car park it runs into
         RoomType.Ramp => (C(0.46f, 0.46f, 0.45f), C(0.72f, 0.72f, 0.70f), C(0.60f, 0.60f, 0.59f)),
+        // #1235: a bowling hall's dark carpet and night-blue walls under a black ceiling; a lit concourse
+        RoomType.BowlingLanes => (C(0.10f, 0.10f, 0.22f), C(0.16f, 0.18f, 0.40f), C(0.07f, 0.07f, 0.10f)),
+        RoomType.Concourse => (C(0.14f, 0.11f, 0.30f), C(0.16f, 0.36f, 0.46f), C(0.16f, 0.16f, 0.22f)),
+        RoomType.Mezzanine => (C(0.46f, 0.30f, 0.18f), C(0.70f, 0.24f, 0.22f), C(0.20f, 0.18f, 0.20f)),
+        // #1238: a red-carpet lobby under a warm ceiling; a hall's dark carpet, wine walls and black ceiling
+        RoomType.CinemaLobby => (C(0.42f, 0.06f, 0.10f), C(0.30f, 0.16f, 0.12f), C(0.86f, 0.80f, 0.66f)),
+        RoomType.Auditorium => (C(0.16f, 0.06f, 0.08f), C(0.24f, 0.07f, 0.10f), C(0.05f, 0.05f, 0.06f)),
+        RoomType.StaffCorridor => (C(0.46f, 0.46f, 0.46f), C(0.82f, 0.82f, 0.80f), C(0.90f, 0.90f, 0.88f)),
+        RoomType.ProjectionRoom => (C(0.30f, 0.30f, 0.32f), C(0.20f, 0.20f, 0.22f), C(0.14f, 0.14f, 0.15f)),
+        // #1240: an arcade's black carpet, dark violet walls, black ceiling
+        RoomType.ArcadeHall => (C(0.08f, 0.06f, 0.14f), C(0.12f, 0.08f, 0.22f), C(0.05f, 0.04f, 0.07f)),
+        // #1250: a billiard hall's wood floor, cream walls, a pale tiled ceiling [S: Bluff Billard Geneva]
+        RoomType.BilliardHall => (C(0.46f, 0.30f, 0.18f), C(0.88f, 0.85f, 0.76f), C(0.90f, 0.90f, 0.88f)),
+        // #1242: a Beiz's dark parquet, cream walls and wood ceiling; a pizzeria's terracotta; a café's pale
+        // tiles; a fast food's yellow; a kebab's white; a bar's dark violet; a pub's oxblood; a club's black;
+        // a kitchen's white tiles
+        RoomType.Gaststube => (C(0.42f, 0.28f, 0.17f), C(0.86f, 0.80f, 0.66f), C(0.50f, 0.34f, 0.20f)),
+        RoomType.Pizzeria => (C(0.66f, 0.36f, 0.24f), C(0.92f, 0.84f, 0.66f), C(0.95f, 0.92f, 0.86f)),
+        RoomType.CafeRoom => (C(0.80f, 0.78f, 0.74f), C(0.90f, 0.86f, 0.76f), C(0.96f, 0.95f, 0.92f)),
+        RoomType.FastFoodRoom => (C(0.74f, 0.72f, 0.70f), C(0.95f, 0.88f, 0.62f), C(0.96f, 0.96f, 0.96f)),
+        RoomType.KebabRoom => (C(0.70f, 0.70f, 0.68f), C(0.92f, 0.92f, 0.90f), C(0.96f, 0.96f, 0.96f)),
+        RoomType.BarRoom => (C(0.20f, 0.14f, 0.10f), C(0.18f, 0.16f, 0.24f), C(0.10f, 0.10f, 0.12f)),
+        RoomType.PubRoom => (C(0.36f, 0.22f, 0.12f), C(0.40f, 0.12f, 0.10f), C(0.30f, 0.20f, 0.12f)),
+        RoomType.ClubRoom => (C(0.06f, 0.06f, 0.08f), C(0.07f, 0.06f, 0.10f), C(0.04f, 0.04f, 0.05f)),
+        RoomType.GastroKitchen => (C(0.62f, 0.60f, 0.56f), C(0.90f, 0.92f, 0.92f), C(0.95f, 0.95f, 0.95f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -202,6 +231,8 @@ public static partial class InteriorMeshBuilder
             // parked forklift one to be woken and driven (#630): InteriorManager.AddPallets and
             // AddForklifts draw them
             if (IsCarvedOut(l, p)) continue;
+            // a dining piece takes its woods and cloths from the room it stands in (#1242)
+            _room = IsDiningPiece(p.Type) ? RoomOf(l, p) : RoomType.Hall;
             Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
         }
 
@@ -277,6 +308,7 @@ public static partial class InteriorMeshBuilder
 
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
     {
+        if (r.Shape != null) { ShapedRoom(s, r, y0, clear); return; }
         var (floorCol, wallCol, ceilCol) = Palette(r.Type);
         const float t = InteriorGenerator.WallInset;
         var inner = new RectPlan(r.X0 + t, r.Z0 + t, r.X1 - t, r.Z1 - t);
@@ -312,13 +344,86 @@ public static partial class InteriorMeshBuilder
     {
         bool along = side is Side.Front or Side.Back;
         float a = along ? inner.X0 : inner.Z0, b = along ? inner.X1 : inner.Z1;
-        float top = y0 + clear;
-        var cuts = r.Openings.Where(o => o.Side == side)
+        var cuts = r.Openings.Where(o => o.Side == side && o.Edge == null)
             .Select(o => (S0: Math.Max(a, o.Center - o.Width / 2), S1: Math.Min(b, o.Center + o.Width / 2), O: o))
             .Where(c => c.S1 - c.S0 > 0.05f)
             .OrderBy(c => c.S0).ToList();
+        WallRun(s, r, (u, y, d) => OnWall(side, inner, u, y, d), a, b, cuts, y0, clear, col,
+            (s0, s1, ob, ot) => BlastDoor(s, side, inner, s0, s1, ob, ot, b));
+    }
 
-        Vector3 P(float u, float y) => OnWall(side, inner, u, y, 0);
+    /// <summary>
+    /// A shaped room (#1290): its floor and ceiling the shape inset by the wall's half thickness,
+    /// triangulated, and a wall along every edge, straight or at an angle. An opening on the
+    /// rectangle's wall line (<see cref="OpeningPlan.Side"/>) sits on the edge that carries that
+    /// line; one on an angled edge names it (<see cref="OpeningPlan.Edge"/>). Never holed: a room
+    /// with a stair or a shaft keeps its rectangle.
+    /// </summary>
+    private static void ShapedRoom(Scratch s, RoomPlan r, float y0, float clear)
+    {
+        var (floorCol, wallCol, ceilCol) = Palette(r.Type);
+        const float t = InteriorGenerator.WallInset;
+        var corners = r.Corners();
+        var inner = RoomShapes.Inset(corners, t);
+        float top = y0 + clear;
+        var grown = RoomShapes.Inset(inner, -Seam);
+        var tris = RoomShapes.Triangulate(grown);
+        for (int i = 0; i + 2 < tris.Count; i += 3)
+        {
+            Vector2 a = grown[tris[i]], b = grown[tris[i + 1]], c = grown[tris[i + 2]];
+            s.Tri(new(a.X, y0, a.Y), new(b.X, y0, b.Y), new(c.X, y0, c.Y), floorCol, true);
+            s.Tri(new(a.X, top, a.Y), new(c.X, top, c.Y), new(b.X, top, b.Y), ceilCol, true);
+        }
+
+        int n = corners.Length;
+        for (int k = 0; k < n; k++)
+        {
+            var p0 = corners[k];
+            var p1 = corners[(k + 1) % n];
+            var q0 = inner[k];
+            var q1 = inner[(k + 1) % n];
+            float len = p0.DistanceTo(p1);
+            if (len < 1e-3f) continue;
+            var dir = (p1 - p0) / len;
+            var outward = new Vector2(dir.Y, -dir.X);
+            // the inner edge's run, measured along the outer one from p0
+            float a = (q0 - p0).Dot(dir), b = (q1 - p0).Dot(dir);
+            // openings on this edge: named by it, or on the rectangle's wall line it lies on
+            var cuts = new List<(float S0, float S1, OpeningPlan O)>();
+            foreach (var o in r.Openings)
+            {
+                float c;
+                if (o.Edge is int e) { if (e != k) continue; c = o.Center; }
+                else
+                {
+                    var (at, _, _) = r.WallFrame(o);
+                    if (RoomShapes.SegmentDistance(p0, p1, at) > 0.03f) continue;
+                    c = (at - p0).Dot(dir);
+                }
+                float s0 = Math.Max(a, c - o.Width / 2), s1 = Math.Min(b, c + o.Width / 2);
+                if (s1 - s0 > 0.05f) cuts.Add((s0, s1, o));
+            }
+            cuts.Sort((x, y) => x.S0.CompareTo(y.S0));
+            // the inner face of this wall: the edge pushed in by the inset, along the outer edge's line
+            var face0 = p0 - outward * t;
+            Vector3 Map(float u, float y, float d)
+            {
+                var q = face0 + dir * u + outward * d;
+                return new Vector3(q.X, y, q.Y);
+            }
+            WallRun(s, r, Map, a, b, cuts, y0, clear, wallCol, null);
+        }
+    }
+
+    /// <summary>
+    /// One wall's run from <paramref name="a"/> to <paramref name="b"/> along it, holed by its
+    /// openings: <paramref name="map"/> takes (along, height, depth out of the room) to interior space.
+    /// </summary>
+    private static void WallRun(Scratch s, RoomPlan r, Func<float, float, float, Vector3> map, float a, float b,
+        List<(float S0, float S1, OpeningPlan O)> cuts, float y0, float clear, Color col, Action<float, float, float, float>? blast)
+    {
+        float top = y0 + clear;
+        Vector3 P(float u, float y) => map(u, y, 0);
         void Panel(float u0, float u1, float ya, float yb)
         {
             if (u1 - u0 < 1e-3f || yb - ya < 1e-3f) return;
@@ -339,10 +444,12 @@ public static partial class InteriorMeshBuilder
             // deeper for an exterior opening so it reads as a real wall's thickness
             // (a doorway's reveal runs a hair past that line, into the neighbour's, so the two meet
             // without a crack)
-            float depth = o.Kind is OpeningKind.Door or OpeningKind.Arch ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
+            // (an inner window, a cinema's ports: to the shared line too, its glass a node of its own, InteriorNode)
+            bool shared = o.Kind is OpeningKind.Door or OpeningKind.Arch || o.Kind == OpeningKind.Window && o.Other >= 0;
+            float depth = shared ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
             var reveal = col * 0.9f;
             reveal.A = 1;
-            Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
+            Vector3 R(float u, float y, float d) => map(u, y, d);
             s.Quad(R(s0, ob, 0), R(s0, ot, 0), R(s0, ot, depth), R(s0, ob, depth), reveal);
             s.Quad(R(s1, ob, 0), R(s1, ob, depth), R(s1, ot, depth), R(s1, ot, 0), reveal);
             // (no soffit where the opening runs up to the ceiling, as a garage ramp's does, #558: a
@@ -354,7 +461,7 @@ public static partial class InteriorMeshBuilder
                 // threshold: floors stop at the wall face, so the doorway needs its own
                 s.Quad(R(s0, y0, 0), R(s0, y0, depth), R(s1, y0, depth), R(s1, y0, 0), Palette(r.Type).Floor);
 
-            if (o.Kind == OpeningKind.Window)
+            if (o.Kind == OpeningKind.Window && o.Other < 0)
             {
                 s.Quad(R(s0, ob, depth), R(s1, ob, depth), R(s1, ot, depth), R(s0, ot, depth), Glass);
                 // a mullion and a transom, so it reads as a window and not a hole
@@ -367,7 +474,7 @@ public static partial class InteriorMeshBuilder
                     R(s1, tr + 0.03f, depth - 0.01f), R(s0, tr + 0.03f, depth - 0.01f), frame, false);
             }
             // the front door's leaf is not baked: it swings (DoorLeaf, see Leaf below)
-            if (r.Type == RoomType.Shelter && o.Kind == OpeningKind.Door) BlastDoor(s, side, inner, s0, s1, ob, ot, b);
+            if (r.Type == RoomType.Shelter && o.Kind == OpeningKind.Door) blast?.Invoke(s0, s1, ob, ot);
             cursor = s1;
         }
         Panel(cursor, b, y0, top);
@@ -609,6 +716,29 @@ public static partial class InteriorMeshBuilder
     private static readonly Color LiftSteel = C(0.66f, 0.68f, 0.70f);
     private static readonly Color LiftButton = C(0.95f, 0.78f, 0.30f);
 
+    /// <summary>The landing's call button plate of the floor at <paramref name="y0"/>, interior-local min and max (#1286: its outline too).</summary>
+    public static (Vector3 Min, Vector3 Max) LiftCallPlate(LiftPlan lift, float y0)
+    {
+        const float wall = InteriorGenerator.WallInset;
+        float ca = lift.CallAlong, cy = y0 + LiftPlan.ButtonHeight;
+        var p = lift.WallPoint(ca - 0.06f, cy - 0.11f, wall);
+        var q = lift.WallPoint(ca + 0.06f, cy + 0.11f, wall + 0.02f);
+        return (new Vector3(Math.Min(p.X, q.X), cy - 0.11f, Math.Min(p.Z, q.Z)), new Vector3(Math.Max(p.X, q.X), cy + 0.11f, Math.Max(p.Z, q.Z)));
+    }
+
+    /// <summary>The cabin's button panel on the floor at <paramref name="y0"/>, interior-local min and max (#1286: its outline too).</summary>
+    public static (Vector3 Min, Vector3 Max) LiftPanel(LiftPlan lift, float y0)
+    {
+        var pc = lift.PanelPoint(y0 + LiftPlan.ButtonHeight);
+        var (nx, nz) = lift.PanelNormal;
+        var normal = new Vector3(nx, 0, nz);
+        var across = new Vector3(-nz, 0, nx);
+        float panelH = LiftPlan.PanelHeight(lift.Top - lift.Bottom + 1);
+        var pmin = pc - across * 0.13f - new Vector3(0, panelH / 2, 0);
+        var pmax = pc + across * 0.13f + new Vector3(0, panelH / 2, 0) + normal * 0.02f;
+        return (pmin.Min(pmax), pmin.Max(pmax));
+    }
+
     /// <summary>
     /// What an elevator has on one floor besides its cabin room: the steel frame round the doors
     /// and the call button on the landing, and in the cabin the button panel and a handrail. The
@@ -631,19 +761,17 @@ public static partial class InteriorMeshBuilder
         Slab(-0.15f, 0.15f, top + 0.16f, top + 0.28f, wall, wall + 0.03f, C(0.08f, 0.08f, 0.09f));
         Slab(-0.05f, 0.05f, top + 0.19f, top + 0.25f, wall + 0.03f, wall + 0.035f, C(0.95f, 0.30f, 0.12f));
         float ca = lift.CallAlong, cy = y0 + LiftPlan.ButtonHeight;
-        Slab(ca - 0.06f, ca + 0.06f, cy - 0.11f, cy + 0.11f, wall, wall + 0.02f, LiftSteel * 0.9f);
+        var (plateMin, plateMax) = LiftCallPlate(lift, y0);
+        s.Box(plateMin, plateMax, LiftSteel * 0.9f);
         Slab(ca - 0.025f, ca + 0.025f, cy - 0.025f, cy + 0.025f, wall + 0.02f, wall + 0.035f, LiftButton);
 
         // inside: the panel on the wall beside the doors, a button a floor, the bottom one lowest
-        var pc = lift.PanelPoint(y0 + LiftPlan.ButtonHeight);
         var (nx, nz) = lift.PanelNormal;
         var normal = new Vector3(nx, 0, nz);
         var across = new Vector3(-nz, 0, nx);
         int buttons = lift.Top - lift.Bottom + 1;
-        float panelH = LiftPlan.PanelHeight(buttons);
-        var pmin = pc - across * 0.13f - new Vector3(0, panelH / 2, 0);
-        var pmax = pc + across * 0.13f + new Vector3(0, panelH / 2, 0) + normal * 0.02f;
-        s.Box(pmin.Min(pmax), pmin.Max(pmax), LiftSteel * 0.85f, false);
+        var (pmin, pmax) = LiftPanel(lift, y0);
+        s.Box(pmin, pmax, LiftSteel * 0.85f, false);
         for (int b = 0; b < buttons; b++)
         {
             var at = lift.ButtonPoint(y0, b);
@@ -739,6 +867,59 @@ public static partial class InteriorMeshBuilder
         var colors = s.C.ToArray();
         for (int i = 0; i < colors.Length; i++) colors[i].A = 1f;
         return new MeshData(s.V.ToArray(), colors, Array.Empty<Vector3>());
+    }
+
+    /// <summary>
+    /// One piece of a plan alone, as <see cref="Build"/> bakes it, interior-local: the outline over the
+    /// piece E would act on (#1286, <see cref="Items.InteractOutline"/>). <paramref name="half"/> keeps one
+    /// side of it, in its own frame: -1 its left (-X), +1 its right, 0 all of it (a booth panel's lights
+    /// and screen halves). Built when the target changes, never per frame.
+    /// </summary>
+    public static Vector3[] Piece(InteriorLayout l, int index, int half = 0)
+    {
+        var p = l.Furniture[index];
+        var s = new Scratch();
+        _room = IsDiningPiece(p.Type) ? RoomOf(l, p) : RoomType.Hall;
+        // where it stands (its rolls are seeded by it) but unturned: a half is cut in the piece's own frame
+        var unturned = new FurniturePlan { Type = p.Type, Floor = p.Floor, X = p.X, Z = p.Z, W = p.W, D = p.D, H = p.H, Lift = p.Lift };
+        Furniture(s, unturned, l.FloorY(p.Floor) + p.Lift, new List<Figure>());
+        var turn = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
+        var pivot = new Vector3(p.X, 0, p.Z);
+        var kept = new List<Vector3>(s.V.Count);
+        Span<Vector3> poly = stackalloc Vector3[4];
+        for (int i = 0; i + 2 < s.V.Count; i += 3)
+        {
+            // a half: the triangle cut at the piece's middle (a box spanning both halves keeps its own side)
+            int n = half == 0 ? Copy(s.V, i, poly) : ClipHalf(s.V, i, p.X, half, poly);
+            for (int k = 1; k + 1 < n; k++)
+            {
+                kept.Add(pivot + turn * (poly[0] - pivot));
+                kept.Add(pivot + turn * (poly[k] - pivot));
+                kept.Add(pivot + turn * (poly[k + 1] - pivot));
+            }
+        }
+        return kept.ToArray();
+    }
+
+    private static int Copy(List<Vector3> v, int i, Span<Vector3> into)
+    {
+        into[0] = v[i]; into[1] = v[i + 1]; into[2] = v[i + 2];
+        return 3;
+    }
+
+    /// <summary>Triangle <paramref name="i"/> clipped to the side <paramref name="half"/> of x = <paramref name="middle"/>: 0, 3 or 4 corners.</summary>
+    private static int ClipHalf(List<Vector3> v, int i, float middle, int half, Span<Vector3> into)
+    {
+        int n = 0;
+        for (int k = 0; k < 3; k++)
+        {
+            var a = v[i + k];
+            var b = v[i + (k + 1) % 3];
+            float da = half * (a.X - middle), db = half * (b.X - middle);
+            if (da >= 0) into[n++] = a;
+            if (da >= 0 != db >= 0) into[n++] = a.Lerp(b, da / (da - db));
+        }
+        return n;
     }
 
     /// <summary>PAUSA's block letters, 3x5, top row first.</summary>
@@ -891,8 +1072,44 @@ public static partial class InteriorMeshBuilder
             or FurnitureType.FloorMarking or FurnitureType.Gantry or FurnitureType.SafetySign
             or FurnitureType.Banner or FurnitureType.Whiteboard or FurnitureType.TimeClock
             // #822: what hangs on a cabin's walls
-            or FurnitureType.PaperRoll or FurnitureType.Mirror or FurnitureType.CoatHook);
+            or FurnitureType.PaperRoll or FurnitureType.Mirror or FurnitureType.CoatHook
+            // #1235: lanes are walked on (their machine end collides by itself); a dart board hangs on the wall
+            or FurnitureType.LanePair or FurnitureType.DartBoard or FurnitureType.Confetti
+            // #1238: a seating bank collides as tiers and aisle ramps; signs, ports and posters are on the wall
+            or FurnitureType.SeatingBank or FurnitureType.ExitSign or FurnitureType.Porthole or FurnitureType.PosterFrame
+            // #1250: a booth's deck collides as its slab and the ramp up its steps
+            or FurnitureType.BoothDeck or FurnitureType.ServiceSteps
+            // #1242: a dance floor is danced on
+            or FurnitureType.DanceFloor
+            // #1285: what hangs on a toilet's walls, and the signs over its doorways
+            or FurnitureType.HandDryer or FurnitureType.GrabRail or FurnitureType.WcSignWomen or FurnitureType.WcSignMen
+            or FurnitureType.WcSignAll or FurnitureType.WcSignAccessible);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
+        if (IsVenuePiece(p.Type))
+        {
+            VenuePiece(s, p, at, basis);
+            return;
+        }
+        if (IsCinemaPiece(p.Type))
+        {
+            CinemaPiece(s, p, at, basis);
+            return;
+        }
+        if (IsArcadePiece(p.Type))
+        {
+            ArcadePiece(s, p, at, basis);
+            return;
+        }
+        if (IsDiningPiece(p.Type))
+        {
+            DiningPiece(s, p, at, basis);
+            return;
+        }
+        if (IsToiletPiece(p.Type))
+        {
+            ToiletPiece(s, p, at, basis);
+            return;
+        }
 
         var wood = C(0.52f, 0.36f, 0.22f);
         var darkWood = C(0.34f, 0.22f, 0.14f);

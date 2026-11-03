@@ -46,7 +46,6 @@ public partial class GadgetNetProbe : Node
             return;
         }
         Chat!.LineReceived += (line, _) => _heard.Add(line);
-        await Seconds(1.5);
         try
         {
             if (_role == "A") await RunA(Me!, PlacedObjects.Instance!);
@@ -63,7 +62,7 @@ public partial class GadgetNetProbe : Node
         // a run that died half way left its gadgets: take them back first (only the owner may)
         foreach (var o in placed.All.Values.Where(o => Gadgets.IsGadget(o.Kind) && o.Owner == "GadgetA").ToList())
             placed.RequestRemove(o.Id);
-        await Seconds(1.0);
+        await Until(() => !placed.All.Values.Any(o => Gadgets.IsGadget(o.Kind) && o.Owner == "GadgetA"), 5);
 
         var low = me.GlobalPosition;
         var lowGlobal = placed.Origin.ToGlobal(low);

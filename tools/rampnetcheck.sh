@@ -9,7 +9,11 @@
 # and then from the car park, so what the REMOTE peer sees is checked and not only the driver's:
 # the door open, the car going in, and the car inside the building one storey below the door.
 #
-#   GODOT=<exe> [PORT=] [WINDOWED=1] [RAMP=along|square] tools/rampnetcheck.sh
+#   GODOT=<exe> [PORT=] [WINDOWED=1] [RAMP=along|square] [DOOR_QUIET=8] [PARK_WAIT=30] tools/rampnetcheck.sh
+#
+# The parked car waits for the server to shut the door behind it (`--doorquiet`, the server's minute
+# shortened to DOOR_QUIET s; at most PARK_WAIT s), so the way out has to open it again (#1007). The
+# watcher ends a second after the driver left.
 #
 # `--traffic 0`: a traffic car shoved the test car off a barn's door once (garage-buildings).
 . "$(dirname "$0")/lib/twoclient.sh" rampnet
@@ -17,14 +21,14 @@ PORT=${PORT:-7868}
 PW=pw558
 # RAMP=along drives the block whose ramp runs along the facade (#694), RAMP=square the others; none: the nearest
 WORLD="--world fixture --chunks fixture:garage --traffic 0 --doorkind Apartment${RAMP:+ --garageramp $RAMP}"
-tc_server 400 120 "$OUT/rampnet_server.log" --server --port $PORT --world fixture --chunks fixture:garage --admin-password $PW
+tc_server 400 120 "$OUT/rampnet_server.log" --server --port $PORT --world fixture --chunks fixture:garage --admin-password $PW --doorquiet ${DOOR_QUIET:-8}
 # B first, so it is already watching the door when A arrives at it
 if [ -z "${NOWATCH:-}" ]; then
-  tc_client 300 "$OUT/rampnet_B.log" --connect 127.0.0.1:$PORT --name RampB $WORLD --garagecheck watch --park-wait ${PARK_WAIT:-66} &
+  tc_client 300 "$OUT/rampnet_B.log" --connect 127.0.0.1:$PORT --name RampB $WORLD --garagecheck watch --park-wait ${PARK_WAIT:-30} &
   B=$!
 else B=; : > "$OUT/rampnet_B.log"; fi
 tc_client 300 "$OUT/rampnet_A.log" --connect 127.0.0.1:$PORT --name RampA $WORLD \
-  --garagecheck drive $PW --drive-m 16 --brake-m 20 --park-wait ${PARK_WAIT:-66}
+  --garagecheck drive $PW --drive-m 16 --brake-m 20 --park-wait ${PARK_WAIT:-30}
 tc_stop
 [ -n "$B" ] && wait $B
 code=0

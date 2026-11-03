@@ -53,7 +53,10 @@ public partial class PlayerFeel : Node3D
     private CanvasLayer _screen = null!;
     private Label _speedLabel = null!, _popup = null!;
     private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!, _airBar = null!;
+    private float _rpmShown = -1f;
     private StyleBoxFlat _airFill = null!;
+    private Ui.StaminaRing _staminaRing = null!;   // #1225
+    private readonly Variometer _vario = new();
     private Label _driftLabel = null!;
     private StyleBoxFlat _rpmFill = null!;
     private Label _engineLabel = null!, _hint = null!;
@@ -138,6 +141,10 @@ public partial class PlayerFeel : Node3D
         };
         _player.Stroked += () => Play(SfxSynth.StrokeBank, 0.22f, 0.9f + (float)_rng.NextDouble() * 0.2f);
         _player.Gasped += () => Play(SfxSynth.GaspBank, 0.55f, 1f);
+        _player.WindedStarted += () => Play(SfxSynth.PantBank, 0.55f, 1f);   // out of breath (#1225)
+        _player.ClimbSlipped += () => Play(SfxSynth.GaspBank, 0.5f, 0.7f);   // empty on a face: a low grunt, the hands slide
+        _player.ClimbStarted += () => Play(SfxSynth.StepsBank, 0.45f, 0.8f);   // hands on the rock
+        _player.ClimbJumped += () => Play(SfxSynth.StepsBank, 0.55f, 0.65f);
         _player.Mantled += () =>
         {
             Play(SfxSynth.StepsBank, 0.6f, 0.75f);   // hands on the lip
@@ -207,7 +214,9 @@ public partial class PlayerFeel : Node3D
         var ride = _player.Ride;
         bool grounded = _player.IsOnFloor();
         float speed = _player.GroundSpeed;
-        float excite = _player.Vehicle is Flyer flyer
+        // creative flight (#1002) is getting about, not a rush: no speed lines, no shake
+        float excite = _player.CreativeFlying ? 0f
+            : _player.Vehicle is Flyer flyer
             ? Mathf.Clamp((speed - flyer.Thrill.Calm) / (flyer.Thrill.Fast - flyer.Thrill.Calm), 0f, 1.5f)
             : Excitement(ride, speed);
 
@@ -240,8 +249,8 @@ public partial class PlayerFeel : Node3D
     {
         var (calm, fast) = ride switch
         {
-            RideKind.RoadBike => (9f, 18f),    // 32 → 65 km/h
-            RideKind.Skis => (9f, 22f),        // 32 → 80 km/h
+            _ when BicycleCatalog.IsBicycle(ride) => (9f, 18f),    // 32 → 65 km/h
+            RideKind.Skis or RideKind.Snowboard => (9f, 22f),        // 32 → 80 km/h
             _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ when MotorbikeCatalog.IsMotorbike(ride) => (15f, 45f),   // 54 → 162 km/h
             _ when Boat.IsBoat(ride) => (9f, 20f),   // 32 → 72 km/h: fast on the water
@@ -287,7 +296,7 @@ public partial class PlayerFeel : Node3D
         var input = _player.LastRideInput;
 
         // tyres: roar with speed, only while they touch something
-        bool bike = ride == RideKind.RoadBike;
+        bool bike = BicycleCatalog.IsBicycle(ride);
         var car = _player.Vehicle as Car;
         bool motor = _player.Vehicle is IEngined;
         SetLoop(_tyre, bike && grounded ? Mathf.Clamp(speed / 14f, 0f, 1f) * 0.55f
@@ -307,7 +316,7 @@ public partial class PlayerFeel : Node3D
         }
 
         // skis: a glide hiss with speed, and the edge biting as the carve deepens
-        bool skis = ride == RideKind.Skis;
+        bool skis = SnowRide.Is(ride);
         float edge = Mathf.Abs(motion.Bank);
         float hiss = skis && grounded
             ? Mathf.Clamp(speed / 20f, 0f, 1f) * 0.3f + edge * Mathf.Clamp(speed / 10f, 0f, 1f) * 0.7f
@@ -475,6 +484,15 @@ public partial class PlayerFeel : Node3D
         Play(SfxSynth.ChimeBank, 0.45f, ChimeSteps[_chimeStep]);
     }
 
+    /// <summary>The variometer (#1225): a beep that rises with the climb on a glider, a low tone in strong sink.</summary>
+    private void UpdateVario(float dt, RideKind ride)
+    {
+        if (!GameSettings.Current.Variometer || !Variometer.Carries(ride)) { _vario.Reset(); return; }
+        int v = _vario.Tick(dt, _player.Velocity.Y);
+        if (v < 0) return;
+        Play(SfxSynth.VarioBank.Variants[v], v == SfxSynth.VarioSink ? 0.3f : 0.22f, 1f);
+    }
+
     private Surface SurfaceUnderfoot() => _player.Terrain is { } chunks
         ? Surfaces.At(chunks, _player.GlobalPosition, _player.Indoors)
         : Surface.Grass;
@@ -513,7 +531,7 @@ public partial class PlayerFeel : Node3D
         // is undone on its own
         if (_player.Camera is { } cam) cam.Fov -= 6f * hard;
 
-        if (fall > 4f) Puff(_player.Ride == RideKind.Skis ? Snow : Dirt, (int)(10 + 30 * hard));
+        if (fall > 4f) Puff(SnowRide.Is(_player.Ride) ? Snow : Dirt, (int)(10 + 30 * hard));
     }
 
     private void UpdateAir(float dt, bool grounded)
@@ -521,7 +539,7 @@ public partial class PlayerFeel : Node3D
         // on foot only: time spent flying a plane is not a jump
         // and neither is being thrown through a windscreen (#214)
         // nor is swimming (#301)
-        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled || _player.IsSwimming) _airTime = 0;
+        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled || _player.IsSwimming || _player.IsClimbing) _airTime = 0;
         else if (!grounded) _airTime += dt;
         else if (!_wasGrounded)
         {
@@ -556,6 +574,13 @@ public partial class PlayerFeel : Node3D
             float f = 22f;
             cam.HOffset = _noise.GetNoise2D(_time * f, 0f) * 0.22f * amp;
             cam.VOffset = _noise.GetNoise2D(0f, _time * f) * 0.22f * amp;
+            // drunk (#1271): a slow sway on top, off with the comfort setting and in VR
+            if (_player.Drunk is { } drunk)
+            {
+                var sway = drunk.Sway(dt);
+                cam.HOffset += sway.X;
+                cam.VOffset += sway.Y;
+            }
         }
 
         // the pad buzzes with the road, lightly, in short overlapping pulses
@@ -579,7 +604,7 @@ public partial class PlayerFeel : Node3D
         // snow thrown off the edges: a little from any glide, a sheet from a hard carve,
         // sprayed to the outside of the turn and back
         float edge = Mathf.Abs(motion.Bank);
-        bool spray = ride == RideKind.Skis && grounded && speed > 3f;
+        bool spray = SnowRide.Is(ride) && grounded && speed > 3f;
         _spray.Emitting = spray;
         if (spray)
         {
@@ -600,7 +625,9 @@ public partial class PlayerFeel : Node3D
 
         // dust behind a slide, or a skidding back wheel
         bool slide = ride == RideKind.OnFoot && _player.IsSliding && grounded;
-        bool skid = ride == RideKind.RoadBike && grounded && input.Brake > 0.5f && speed > 4f;
+        // the rear tyre locked under the braking (#1124); Game's arcade brakes skid on any hard pull
+        bool skid = grounded && (_player.Vehicle is Bicycle { RearLocked: true }
+            || BicycleCatalog.IsBicycle(ride) && Rideable.Arcade && input.Brake > 0.5f && speed > 4f);
         _dust.Emitting = slide || skid;
         if (slide || skid) _dust.AmountRatio = Mathf.Clamp(speed / 10f, 0.2f, 1f);
     }
@@ -787,11 +814,26 @@ public partial class PlayerFeel : Node3D
         _airBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.5f) });
         _screen.AddChild(_airBar);
 
+        // the stamina ring (#1225): beside the shoulder, only while the meter is not full
+        _staminaRing = new Ui.StaminaRing(_player);
+        _screen.AddChild(_staminaRing);
+        Ui.StaminaRing.RunShotIfAsked(_player, _staminaRing);
+
         _engineLabel = HudLabel(16);
         _engineLabel.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
         _engineLabel.GrowHorizontal = Control.GrowDirection.Begin;
         _engineLabel.GrowVertical = Control.GrowDirection.Begin;
         _engineLabel.OffsetRight = -18; _engineLabel.OffsetBottom = -16;
+        if (Core.Platform.IsTouch)
+        {
+            // the pedals take the bottom right on a phone (#1043), the cards the top left: top centre
+            _engineLabel.SetAnchorsPreset(Control.LayoutPreset.CenterTop);
+            _engineLabel.GrowHorizontal = Control.GrowDirection.Both;
+            _engineLabel.GrowVertical = Control.GrowDirection.End;
+            _engineLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            // a little left of centre: between the ride card (top left) and the top bar's Get out on a 20:9 phone
+            _engineLabel.OffsetLeft = -60; _engineLabel.OffsetRight = -60; _engineLabel.OffsetTop = 16;
+        }
         _screen.AddChild(_engineLabel);
 
         // What the next button does, while it matters: the base jump chain has no menu, so a
@@ -959,6 +1001,20 @@ public partial class PlayerFeel : Node3D
                 AppendFarm(sb, t);
                 AppendCruise(sb);
             }
+            else if (_player.Vehicle is Bicycle bike)
+            {
+                // the Di2 junction box's view: the gear and the cadence (#1124)
+                var gears = bike.Gears;
+                sb.Append((int)(speed * 3.6f + 0.5f)).Append(" km/h    ").Append(gears.RingTeeth).Append('×').Append(gears.CogTeeth)
+                  .Append("    ").Append((int)(bike.Cadence + 0.5f)).Append(" rpm");
+                // the e-bike's display (#1159): what the motor is adding
+                // and its mode and battery, as the Purion shows them (#1167)
+                if (bike.Spec.Assist != null)
+                    sb.Append("    ").Append(ElectricAssist.Name(bike.Level)).Append(" +").Append((int)(bike.MotorWatts + 0.5f))
+                      .Append(" W    ").Append((int)(bike.Charge * 100f + 0.5f)).Append("% [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append(']');
+                // and the rider's body in Sim: the heart rate (the reserve is the bar under it)
+                if (!Rideable.Arcade) sb.Append("    ").Append((int)(bike.Body.HeartRate + 0.5f)).Append(" bpm");
+            }
             else if (_player.Vehicle is Car c)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    ");
@@ -997,25 +1053,30 @@ public partial class PlayerFeel : Node3D
 
         // the rev counter, amber turning red toward the limit
         _rpmBar.Visible = _player.Vehicle is IEngined && !dash;
-        if (_player.Vehicle is IEngined rev)
+        // written only when it moves by a visible step: each write is an engine call and a redraw (#1112, a Quest's CPU)
+        if (_player.Vehicle is IEngined rev && Mathf.Abs(rev.Rpm01 - _rpmShown) > 0.005f)
         {
+            _rpmShown = rev.Rpm01;
             _rpmBar.Value = rev.Rpm01;
-            _rpmFill.BgColor = new Color(1f, 0.85f, 0.25f).Lerp(new Color(1f, 0.2f, 0.15f), Mathf.Clamp((rev.Rpm01 - 0.8f) / 0.15f, 0f, 1f));
+            var colour = new Color(1f, 0.85f, 0.25f).Lerp(new Color(1f, 0.2f, 0.15f), Mathf.Clamp((rev.Rpm01 - 0.8f) / 0.15f, 0f, 1f));
+            if (_rpmFill.BgColor != colour) _rpmFill.BgColor = colour;
         }
 
         // health only when it is not full: a bar that is always full is clutter
         _healthBar.Visible = _player.Health < FootPlayer.MaxHealth - 0.5f;
-        _healthBar.Value = _player.Health;
+        if (_healthBar.Visible && _healthBar.Value != _player.Health) _healthBar.Value = _player.Health;
         // air: shown while it is not full, blinking once it runs low
         float air = _player.Air;
         _airBar.Visible = air < FootPlayer.AirMax - 0.05f;
         if (_airBar.Visible)
         {
-            _airBar.Value = air;
+            if (_airBar.Value != air) _airBar.Value = air;
             bool low = air < FootPlayer.AirMax * 0.25f;
             var colour = low && Mathf.PosMod(_time * 3f, 1f) < 0.5f ? new Color(1f, 0.35f, 0.25f) : new Color(0.35f, 0.75f, 1f);
             if (_airFill.BgColor != colour) _airFill.BgColor = colour;
         }
+        _staminaRing.Tick(dt);
+        UpdateVario(dt, ride);
         _hurtFlash.Color = _hurtFlash.Color with { A = Mathf.MoveToward(_hurtFlash.Color.A, 0f, 1.2f * dt) };
 
         var vehicle = _player.Vehicle;
@@ -1023,17 +1084,26 @@ public partial class PlayerFeel : Node3D
         if (_engineLabel.Visible)
         {
             var sb = _engineText.Clear();
+            // on a phone the keys are the touch controls' own buttons and pills, so no key names
+            bool touch = Core.TouchControls.Shown;
             if (vehicle!.HasEngine)
-                sb.Append(_player.EngineOn ? "ENGINE ON  " : "ENGINE OFF  ").Append('[').Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]\n");
-            sb.Append($"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    [{Core.InputHints.Label(Core.PlayerInput.InteractMount)}] get out");
+            {
+                sb.Append(_player.EngineOn ? "ENGINE ON" : "ENGINE OFF");
+                if (!touch) sb.Append("  [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append(']');
+                sb.Append('\n');
+            }
+            sb.Append($"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%");
+            if (!touch) sb.Append("    [").Append(Core.InputHints.Label(Core.PlayerInput.InteractMount)).Append("] get out");
             SetText(_engineLabel, sb, ref _engineShown);
         }
 
         UpdateHint(dt, ride);
 
         // the boost meter, only where boost exists: mounted, Game profile
-        _boostBar.Visible = ride is RideKind.RoadBike or RideKind.Skis && Rideable.Arcade;
-        _boostBar.Value = _player.BoostMeter;
+        _boostBar.Visible = (BicycleCatalog.IsBicycle(ride) || ride is RideKind.Skis or RideKind.Snowboard) && Rideable.Arcade
+            || _player.Vehicle is Bicycle && !Rideable.Arcade;
+        // in Sim the road bike's bar is the rider's reserve above threshold, W′ (#1124)
+        _boostBar.Value = _player.Vehicle is Bicycle cycling && !Rideable.Arcade ? cycling.Body.WFraction : _player.BoostMeter;
         _boostBar.Modulate = _player.Boosting ? new Color(1.6f, 1.6f, 1.6f) : Colors.White;
 
         if (_popupLife > 0)
@@ -1069,6 +1139,10 @@ public partial class PlayerFeel : Node3D
             case RideKind.OnFoot when _player.IsSwimming:
                 // the first moments in the water (#301): how to go down and up
                 if (_player.SwimTime < 5f) text = InputHints.Format("{crouch_slide}  dive     {jump}  up · climb out");
+                break;
+            case RideKind.OnFoot when _player.IsClimbing:
+                // the first climb of the session (#1225): the face's controls
+                if (_player.ClimbHintDue) text = InputHints.Format("{jump} climb-jump · {crouch_slide} let go · {move_back}+{jump} kick off");
                 break;
             case RideKind.OnFoot when _player.SackSource != null:
                 // a loaded tipping trailer or combine tank at hand (#494)

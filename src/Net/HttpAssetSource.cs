@@ -76,12 +76,15 @@ public sealed class HttpAssetSource
             if (response.IsSuccessStatusCode) return new HttpAssetSource(baseUri);
             GD.PushWarning($"[stream] tiles URL {baseUri} answered {(int)response.StatusCode} for manifest.json; streaming over the game link");
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            GD.PushWarning($"[stream] tiles URL {baseUri} unreachable ({e.Message}); streaming over the game link");
+            // any failure, not only the HTTP ones: Android's TLS and HTTP stacks throw their own (#1032)
+            GD.PushWarning($"[stream] tiles URL {baseUri} unreachable ({e.GetType().Name}: {e.Message}{Inner(e)}); streaming over the game link");
         }
         return null;
     }
+
+    private static string Inner(Exception e) => e.InnerException is { } i ? $" <- {i.GetType().Name}: {i.Message}" : "";
 
     /// <summary>
     /// Fetches one file. The file's bytes; <c>(null, true)</c> on a 404; null when the caller should
@@ -109,14 +112,20 @@ public sealed class HttpAssetSource
         {
             return new AssetResult(null, false);
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException)
+        catch (Exception e)
         {
-            return Failed($"{e.Message} for {uri}");
+            // any failure is transient, the game link takes the file: an exception type the old filter
+            // let through failed the tile instead, and on Android the ground never came (#1032)
+            return Failed($"{e.GetType().Name}: {e.Message}{Inner(e)} for {uri}");
         }
     }
 
+    private int _logged;
+
     private AssetResult? Failed(string why)
     {
+        // the first few, so a phone's log says what its HTTP stack does; the rest only count
+        if (Interlocked.Increment(ref _logged) <= 5) GD.PushWarning($"[stream] HTTP mirror: {why}; asking the game link");
         if (Interlocked.Increment(ref _failures) >= MaxFailures && !_disabled)
         {
             _disabled = true;

@@ -109,7 +109,7 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
         var toFrame = frame.AffineInverse();
         foreach (var m in meshes)
         {
-            var box = m.GetAabb();
+            var box = Avatar.SkinnedFigure.BoundsOf(m);
             var centre = toFrame * (m.GlobalTransform * box.GetCenter());
             float radius = box.Size.Length() * 0.5f * m.GlobalBasis.Scale.X;
             if (Mathf.Abs(centre.Z) > Reach + radius) continue;
@@ -120,13 +120,17 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
         return false;
     }
 
-    private static void Collect(Node node, List<MeshInstance3D> into)
+    /// <summary>The meshes of a thing its ghost copies (internal for <c>--ownbodycheck</c>).</summary>
+    internal static void Collect(Node node, List<MeshInstance3D> into)
     {
         foreach (var child in node.GetChildren())
         {
             // the first-person viewmodel (and its print, screen) belongs to the screen's camera only
             if (child is VisualInstance3D v && (v.Layers & Items.HeldItemVisual.ViewmodelLayer) != 0) continue;
-            if (child is MeshInstance3D m && m.Visible && m.Mesh != null && (m.Layers & DoorPortals.AllQuadLayers) == 0)
+            // a shadow-only twin (the own body seen from its eye, #833) casts only: its ghost, which
+            // casts nothing, would draw it, and the portal showed the player's own head
+            if (child is MeshInstance3D m && m.Visible && m.Mesh != null && (m.Layers & DoorPortals.AllQuadLayers) == 0
+                && m.CastShadow != GeometryInstance3D.ShadowCastingSetting.ShadowsOnly)
                 into.Add(m);
             if (child is Node3D { Visible: false }) continue;
             Collect(child, into);
@@ -139,7 +143,8 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
         if (!_ghosts.TryGetValue(thing, out var ghosts)) _ghosts[thing] = ghosts = new List<MeshInstance3D>();
         while (ghosts.Count < _meshes.Count)
         {
-            var g = new MeshInstance3D { Name = "Ghost", TopLevel = true, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+            // a figure's ghost moves by the figure's bones (#1202)
+            var g = new Avatar.SkinnedFigure { Name = "Ghost", TopLevel = true, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(g);
             ghosts.Add(g);
         }
@@ -155,6 +160,8 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
                 for (int s = 0; s < m.GetSurfaceOverrideMaterialCount(); s++)
                     g.SetSurfaceOverrideMaterial(s, m.GetSurfaceOverrideMaterial(s));
             }
+            if (m is Avatar.SkinnedFigure figure) { if (((Avatar.SkinnedFigure)g).Following != figure) figure.Share(g); }
+            else if (((Avatar.SkinnedFigure)g).Following != null) Avatar.SkinnedFigure.Unshare(g);
             g.MaterialOverride = m.MaterialOverride;
             g.Layers = m.Layers;
             g.GlobalTransform = map * m.GlobalTransform;

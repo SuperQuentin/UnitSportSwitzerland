@@ -38,6 +38,10 @@ public static class PbfReader
         /// <summary>Also keeps these ways whatever their tags (the untagged outlines of a multipolygon relation).</summary>
         public Func<long, bool>? KeepWayId { get; init; }
         public Func<Dictionary<string, string>, bool>? KeepTaggedNode { get; init; }
+        /// <summary>Also keeps these nodes' positions wherever they are (a second pass over chosen ways' refs).</summary>
+        public Func<long, bool>? KeepNodeId { get; init; }
+        /// <summary>Keeps a tagged node that passes <see cref="KeepTaggedNode"/> wherever it is, not only where KeepNode says.</summary>
+        public bool TaggedNodesAnywhere { get; init; }
         public IReadOnlySet<string> NodeTags { get; init; } = new HashSet<string>();
         public Func<Dictionary<string, string>, bool>? KeepRelation { get; init; }
         public IReadOnlySet<string> RelationTags { get; init; } = new HashSet<string>();
@@ -162,9 +166,9 @@ public static class PbfReader
         void AddNode(long id, long lat, long lon, List<long>? keys, List<long>? vals)
         {
             double la = 1e-9 * (latOffset + granularity * lat), lo = 1e-9 * (lonOffset + granularity * lon);
-            if (!filter.KeepNode(la, lo)) return;
-            result.Nodes.Add((id, la, lo));
-            if (keys == null || vals == null) return;
+            bool keep = filter.KeepNode(la, lo) || filter.KeepNodeId?.Invoke(id) == true;
+            if (keep) result.Nodes.Add((id, la, lo));
+            if (keys == null || vals == null || !keep && !filter.TaggedNodesAnywhere) return;
             var tags = Tags(keys, vals, filter.NodeTags);
             if (tags.Count > 0 && filter.KeepTaggedNode!(tags)) result.Tagged.Add(new Node(id, la, lo, tags));
         }

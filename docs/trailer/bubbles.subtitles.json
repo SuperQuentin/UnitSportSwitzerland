@@ -1,0 +1,57 @@
+{
+  "who-took-the-fondue": {
+    "en": "Who took the fondue?",
+    "fr": "Qui a pris la fondue ?",
+    "de": "Wer hat das Fondue genommen?",
+    "it": "Chi ha preso la fonduta?",
+    "rm": "Tgi ha prendì la fondue?"
+  },
+  "it-was-right-here": {
+    "en": "It was right here!",
+    "fr": "Elle était juste là !",
+    "de": "Es war genau hier!",
+    "it": "Era proprio qui!",
+    "rm": "Ella era gist qua!"
+  },
+  "psst-look-up": {
+    "en": "psst... look up",
+    "fr": "psst... regarde en haut",
+    "de": "psst... schau nach oben",
+    "it": "psst... guarda su",
+    "rm": "psst... guarda ensi"
+  },
+  "i-should-not-have-eaten-it-all": {
+    "en": "I should not have eaten it all.",
+    "fr": "Je n'aurais pas dû tout manger.",
+    "de": "Ich hätte nicht alles essen sollen.",
+    "it": "Non avrei dovuto mangiarla tutta.",
+    "rm": "Jau na avess betg duì mangiar tut."
+  },
+  "over-there-behind-the-hotel-a-light-in-the-sky": {
+    "en": "Over there, behind the hotel! A light in the sky, coming down fast!",
+    "fr": "Là-bas, derrière l'hôtel ! Une lumière dans le ciel, qui descend vite !",
+    "de": "Da drüben, hinter dem Hotel! Ein Licht am Himmel, es kommt schnell runter!",
+    "it": "Laggiù, dietro l'albergo! Una luce nel cielo, scende veloce!",
+    "rm": "Là, davos l'hotel! Ina glisch en il tschiel, ella vegn giu svelt!"
+  },
+  "that-is-no-plane": {
+    "en": "That is no plane.",
+    "fr": "Ce n'est pas un avion.",
+    "de": "Das ist kein Flugzeug.",
+    "it": "Quello non è un aereo.",
+    "rm": "Quai n'è nagin aviun."
+  },
+  "this-is-zermatt-control-please-stay-calm": {
+    "en": "This is Zermatt control. Please stay calm.",
+    "fr": "Ici le contrôle de Zermatt. Restez calmes, s'il vous plaît.",
+    "de": "Hier spricht die Kontrolle Zermatt. Bitte bleiben Sie ruhig.",
+    "it": "Qui controllo di Zermatt. Per favore, mantenete la calma.",
+    "rm": "Qua è la controlla da Zermatt. Restai quiets, per plaschair."
+  },
+  "nobody-touches-my-cheese": {
+    "en": "Nobody touches my cheese.",
+    "fr": "Personne ne touche à mon fromage.",
+    "de": "Niemand rührt meinen Käse an.",
+    "it": "Nessuno tocca il mio formaggio."
+  }
+}

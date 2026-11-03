@@ -115,9 +115,17 @@ public partial class FlightCheckProbe : Node
             case "pigeoncrash":
                 p.SetRide(RideKind.Pigeon);
                 break;
+            case "ufo":
+                p.SetRide(RideKind.Ufo);
+                break;
             case "plane":
                 p.SetRide(RideKind.Plane);
                 p.DebugLaunch(p.GlobalPosition + Vector3.Up * 400f, new Vector3(0, 0, -50));
+                break;
+            case "thermal":
+            case "pigeon-thermal":
+            case "campfire":
+                BeginLift(p);
                 break;
             case "a320":
             case "freighter":
@@ -223,6 +231,14 @@ public partial class FlightCheckProbe : Node
                     End(how.Text);
                 }
                 break;
+            case "ufo":
+                UfoSortie(t, Hold);
+                break;
+            case "thermal":
+            case "pigeon-thermal":
+            case "campfire":
+                LiftSortie(t, Hold);
+                break;
             case "plane":
                 Hold(PlayerInput.Sprint, t < 3);                  // throttle lever up
                 Hold(PlayerInput.MoveBack, t > 6 && t < 7.5);     // pull up
@@ -230,6 +246,170 @@ public partial class FlightCheckProbe : Node
                 if (t > 20) End("flying");
                 break;
         }
+    }
+
+    // ---- lift (#1225): thermals, a campfire's updraft, a pigeon soaring -------------------------
+
+    private Vector3 _liftAt;
+    private float _liftFrom, _liftTop, _liftBestVy = float.NegativeInfinity, _glideFrom = float.NaN;
+    private float _liftStrength;
+    private const long CheckFireKey = 1_225_000_001;
+    private static readonly float Stick = CmdArgs.Value("--liftstick") is { } v && float.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : 0.7f;
+
+    /// <summary>
+    /// The lift sorties start where the air rises: over the strongest thermal near the start (by the
+    /// hour of <c>--time</c>, 13 by default), or over a lit campfire's updraft.
+    /// </summary>
+    private void BeginLift(FootPlayer p)
+    {
+        float hour = CmdArgs.Value("--time") is { } h && float.TryParse(h, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float hh) ? hh : 13f;
+        World.AirLiftField.HourOverride = hour;
+        World.AirLiftField.Use(_chunks, _origin);
+        var ground = p.GlobalPosition;
+        if (_kind == "campfire")
+        {
+            // a burning fire's updraft (AirLiftField's campfire numbers) 20 m ahead on the flat
+            var fire = ground + new Vector3(0, -1f, -20f);
+            var g = _origin.ToGlobal(fire);
+            World.AirLift.Volumes.Set(CheckFireKey, g.E, g.N, g.Alt, World.AirLiftField.CampfireRadius,
+                World.AirLiftField.CampfireTop, World.AirLiftField.CampfireSpeed);
+            _liftAt = fire;
+            p.SetRide(RideKind.Paraglider);
+            p.DebugLaunch(fire + new Vector3(0, 8f, 14f), new Vector3(0, -1, -9));
+            GD.Print($"[flycheck] campfire: an updraft 20 m ahead, the glider 8 m over it");
+        }
+        else
+        {
+            Span<World.Thermal> found = stackalloc World.Thermal[8];
+            int n = World.AirLiftField.ThermalsNear(ground, 1500, found);
+            if (n > 0)
+            {
+                _liftStrength = found[0].Strength;
+                _liftAt = World.AirLiftField.ToWorld(found[0]) ?? ground;
+            }
+            else _liftAt = ground;
+            GD.Print($"[flycheck] {_kind} at {hour:F1} h: {n} thermals within 1.5 km, the strongest {_liftStrength:F2} "
+                     + $"{MathX.FlatDistance(_liftAt, ground):F0} m away");
+            if (_kind == "thermal")
+            {
+                p.SetRide(RideKind.Paraglider);
+                p.DebugLaunch(_liftAt + Vector3.Up * 150f, new Vector3(0, -1, -9));
+            }
+            else
+            {
+                p.SetRide(RideKind.Pigeon);
+                p.GlobalPosition = _liftAt + Vector3.Up * 1f;
+            }
+        }
+        _liftFrom = p.GlobalPosition.Y;
+        _liftTop = _liftFrom;
+    }
+
+    private void LiftSortie(double t, System.Action<string, bool> hold)
+    {
+        var p = _player!;
+        float y = p.GlobalPosition.Y;
+        _liftTop = Mathf.Max(_liftTop, y);
+        if ((int)(t * 60) % 600 == 0)
+            GD.Print($"[flycheck]   t {t:F0} s: {y - _liftFrom:+0;-0} m, air {p.AirNow.Y:F1} m/s, {MathX.FlatDistance(p.GlobalPosition, _liftAt):F0} m from the core");
+        switch (_kind)
+        {
+            case "thermal":
+            {
+                // circle in the core: 0.7 of the stick (a full one banks so hard the canopy sinks 2.5 m/s; 0.35 drifts out of the core)
+                Input.ActionPress(PlayerInput.MoveRight, Stick);
+                if (t < 90) return;
+                float gain = y - _liftFrom;
+                bool night = _liftStrength <= 0f;
+                GD.Print($"[flycheck] thermal: {gain:F0} m gained in 90 s (air now {p.AirNow.Y:F1} m/s)");
+                // the plan hoped for 150 m: a circling canopy sinks ~2.3 m/s, so a 3.5 m/s core nets ~1 m/s (96 m measured)
+                if (night ? gain > 5f : gain < 80f) _crashed = true;
+                End(night ? "no thermal at night" : "climbed in a thermal");
+                break;
+            }
+            case "campfire":
+            {
+                // straight over the fire: the updraft carries the canopy up while it is in it
+                _liftBestVy = Mathf.Max(_liftBestVy, p.Flight.Velocity.Y);
+                if (t < 6) return;
+                GD.Print($"[flycheck] campfire: best climb {_liftBestVy:F1} m/s over the fire, {_liftTop - _liftFrom:F1} m gained at most");
+                if (_liftBestVy < 2f) _crashed = true;
+                End("over a campfire");
+                World.AirLift.Volumes.Remove(CheckFireKey);
+                break;
+            }
+            default:   // pigeon-thermal: flap up 4 s circling, then glide on circling in the thermal, never flapping
+            {
+                hold(PlayerInput.Jump, t > 0.5 && t < 4.5);
+                hold(PlayerInput.MoveRight, t > 0.5);   // circling from the take-off: stay in the core
+                if (t > 6 && float.IsNaN(_glideFrom)) _glideFrom = y;
+                if (t < 26) return;
+                float held = y - _glideFrom;
+                GD.Print($"[flycheck] pigeon-thermal: {held:+0.0;-0.0} m over 20 s of gliding (air {p.AirNow.Y:F1} m/s)");
+                if (held < -1f || p.Ride != RideKind.Pigeon) _crashed = true;
+                End("soared");
+                break;
+            }
+        }
+    }
+
+    private float _ufoY, _ufoCruise, _ufoDash, _ufoLegsHigh = -1f, _ufoRampStart = -1f;
+    private bool _ufoBeamSeen, _ufoPressed;
+
+    /// <summary>A switch pressed as a key would be: an input event, which the player's handler reads (#861).</summary>
+    private static void Tap(string action)
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true });
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false });
+    }
+
+    /// <summary>
+    /// The saucer (#861): the ramp opens on the ground, climb (legs fold), cruise, boost, let go
+    /// (it stops and holds its height), the beam on and off, descend and land on its legs (the
+    /// ramp opens again). Each step checked against <see cref="UfoFlight"/>'s numbers.
+    /// </summary>
+    private void UfoSortie(double t, System.Action<string, bool> hold)
+    {
+        var p = _player!;
+        if (p.Saucer is not { } ufo) { _crashed = true; End($"not in the saucer: {p.Ride}"); return; }
+        var s = ufo.State;
+        float flat = MathX.FlatLength(p.Flight.Velocity);
+        void Check(bool ok, string what) { GD.Print($"[flycheck] ufo {(ok ? "ok" : "FAIL")}: {what}"); if (!ok) _crashed = true; }
+        void Once(double at, System.Action act) { if (t >= at && t < at + 0.05 && !_ufoPressed) { _ufoPressed = true; act(); } else if (t >= at + 0.05 && t < at + 0.1) _ufoPressed = false; }
+
+        Once(4.4, () => { _ufoRampStart = s.Ramp; Check(s.Landed && s.Ramp > 0.99f, $"landed, the ramp opened by itself ({s.Ramp:F2})"); });
+        hold(PlayerInput.Jump, t > 4.5 && t < 7.5);
+        Once(8, () => { _ufoY = p.GlobalPosition.Y; Check(s.Ramp < 0.01f && !s.Landed, $"lifted off, ramp in ({s.Ramp:F2}), {Agl(p.GlobalPosition):F0} m up"); });
+        hold(PlayerInput.MoveForward, t > 8.3 && t < 15);
+        hold(PlayerInput.Sprint, t > 11.2 && t < 15);
+        Once(11, () => { _ufoCruise = flat; _ufoLegsHigh = s.Legs; Check(flat > UfoFlight.Cruise - 1f && flat < UfoFlight.Cruise + 1f, $"cruising {flat:F1} m/s"); });
+        Once(14.7, () => { _ufoDash = flat; Check(flat > UfoFlight.Dash - 3f, $"boosted {flat:F1} m/s"); });
+        Once(14.8, () => Check(_ufoLegsHigh < 0.01f, $"legs folded up high ({_ufoLegsHigh:F2})"));
+        Once(19.5, () => Check(flat < 0.3f && Mathf.Abs(p.GlobalPosition.Y - _ufoY) < 1.5f,
+            $"let go: stopped ({flat:F2} m/s), height held ({p.GlobalPosition.Y - _ufoY:+0.0;-0.0} m), tilt {s.Tilt.X:F3}"));
+        // windowed with a picture: one braking (the wobble) and one with the beam on, beside it
+        Once(16.2, () => Snap("braking"));
+        Once(20, () => Tap(PlayerInput.TractorBeam));
+        Once(21.4, () => Snap("beam"));
+        if (t > 20.5 && t < 21.5 && s.Beam) _ufoBeamSeen = true;
+        Once(22, () => Tap(PlayerInput.TractorBeam));
+        Once(22.5, () => Check(_ufoBeamSeen && !s.Beam, "beam on, then off"));
+        hold(PlayerInput.CrouchSlide, t > 23 && !s.Landed);
+        if (t > 23 && s.Landed && s.Ramp > 0.99f)
+        {
+            Check(s.Legs > 0.99f, $"down on its legs ({s.Legs:F2}), ramp open, {Agl(p.GlobalPosition):F1} m agl");
+            End("landed, ramp open");
+        }
+        if (t > 50) { _crashed = true; End("never landed"); }
+    }
+
+    /// <summary>A picture beside the end one, <c>&lt;name&gt;_&lt;what&gt;.png</c>, when the run asked for one.</summary>
+    private void Snap(string what)
+    {
+        if (_shot == null) return;
+        string path = _shot.Replace(".png", $"_{what}.png");
+        if (GetViewport().GetTexture().GetImage().SavePng(path) == Error.Ok) GD.Print($"[flycheck] wrote {path}");
     }
 
     /// <summary>Wall-clock frame times, ms, while flying: what a windowed run costs (#421, the cockpit's screens with <c>--instruments off</c> to compare).</summary>

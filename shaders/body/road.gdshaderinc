@@ -8,6 +8,7 @@
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
 #include "res://shaders/world_origin.gdshaderinc"
+#include "res://shaders/body/piste_snow.gdshaderinc"
 
 // Roads share the terrain's PS1 treatment (vertex snap, dither, fog) and take their base
 // colour from baked vertex colours, so one material covers every road class in a tile.
@@ -51,12 +52,16 @@ uniform sampler2D tex_gravel : source_color, filter_linear_mipmap_anisotropic, r
 varying vec2 surf;   // along, lateral
 varying float style;
 varying vec3 world_pos;
+// the tile's own frame, as the terrain's: where the ski slopes' map is (#887)
+varying vec3 local_vertex;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    local_vertex = VERTEX;
     surf = UV;
     style = UV2.x;
-    vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+    // the Earth's drop first (#187), then the lift toward the eye from where it is drawn
+    vec4 view = CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos);
     float dist = length(view.xyz);
     float lift = clamp((dist - far_lift_start) * far_lift_rate, 0.0, far_lift_max);
     view.xyz *= 1.0 - lift / max(dist, 1.0) - road_depth_bias;
@@ -67,9 +72,11 @@ void vertex() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
+#endif
     vec3 col = COLOR.rgb;
     int s = int(style + 0.5);
     if (s == 8 && !FRONT_FACING) {
@@ -96,9 +103,11 @@ void fragment() {
         // of aliasing into broken dots. Triangle paint has a constant lat, so it always draws.
         // Anti-aliasing, not the PS1 finish: it keeps the dither in every style.
         float px = 2.0 / max(fwidth(lat), 1e-4);
+#ifndef NO_DISCARD
         if (clamp(px - 0.5, 0.0, 1.0) < bayer4(FRAGCOORD.xy) + 0.5 / 16.0) {
             discard;
         }
+#endif
     } else if (s == 4) {
         // sleepers across the ballast, roughly prototypical 0.65 m spacing
         if (fract(along / 0.65) < 0.45) {
@@ -126,7 +135,16 @@ void fragment() {
 
     // Snow (a running occasion): carriageways are ploughed, so it lies only along the edges;
     // ballast holds it between the sleepers.
+#ifndef LITE_NO_OCCASION
     col = occasion_snow_amount(col, s == 4 ? 0.65 : s == 6 ? 0.3 : smoothstep(0.7, 1.0, abs(lat)) * 0.85 + 0.08);
+#endif
+
+    // a road under a ski slope (#887) is the run in winter: the slope's snow over it, paint and
+    // all; the signals' poles and heads (7, 8) stand out of it
+    float rough = 1.0;
+    if (s < 7) {
+        col = piste_snow(col, local_vertex.xz, local_vertex.y, vec3(0.0, 1.0, 0.0), normalize(world_sun_dir), rough);
+    }
 
 #ifdef STYLE_LIT
     // the facet, toward the eye: carriageways face up, the walls and railings of the network
@@ -136,16 +154,30 @@ void fragment() {
         n = -n;
     }
     // valley mist of a running occasion; a no-op on an ordinary day
-    col = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
+#ifndef LITE_NO_OCCASION
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+#endif
+    col = style_grade(col);
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
 #ifdef STYLE_REAL
-    ROUGHNESS = s == 6 ? 0.6 : 0.85;
+    ROUGHNESS = min(rough, s == 6 ? 0.6 : 0.85);
 #else
-    ROUGHNESS = 1.0;
+    ROUGHNESS = rough;
 #endif
+#ifndef LITE_NO_EMISSION
     EMISSION = col * door_light(world_pos, vec3(0.0, 1.0, 0.0));
+#endif
 #else
+    // under a slope the road is lit as the terrain's snow round it is (terrain.gdshaderinc), or it
+    // shows as a brighter ribbon through the run
+    float covered = s < 7 ? piste_cover(local_vertex.xz) : 0.0;
+    if (covered > 0.0) {
+        vec3 fn = facet_normal(VERTEX, INV_VIEW_MATRIX);
+        fn = fn.y < 0.0 ? -fn : fn;
+        float light = retro_steps(clamp(dot(fn, normalize(world_sun_dir)), 0.0, 1.0), 5.0) * 0.55 + 0.45;
+        col *= mix(1.0, light, covered);
+    }
     col *= world_tint + door_light(world_pos, vec3(0.0, 1.0, 0.0));
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));

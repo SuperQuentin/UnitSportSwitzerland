@@ -426,6 +426,9 @@ public static class PaintEmitter
         [PaintArrow.Straight | PaintArrow.Left] = Shape(StraightRightOutline, mirror: true),
     };
 
+    /// <summary>A lane arrow of these moves is drawn (no SSV arrow for left and right, nor for all three: a lane making every move has none).</summary>
+    public static bool HasArrow(PaintArrow kind) => ArrowShapes.ContainsKey(kind);
+
     /// <summary>An outline in metres, (forward, left) from the tail, and its triangles.</summary>
     private static (Vec2[] Points, int[] Triangles) Shape((double Tail, double Centre, double[] Xy) o, bool mirror)
     {

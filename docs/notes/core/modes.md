@@ -2,7 +2,7 @@
 
 - **Modes** (`GameMode` in `Core/WorldLaunch`): Explore / GpxReplay / Multiplayer. The title screen
   picks one (`ui/screens`) and builds a `ClientWorld` for it with a `WorldLaunch` (mode, endpoint,
-  GPX paths, name, hosted). The command line does the same with `WorldLaunch.FromArgs()`
+  GPX paths, name, hosted, and the test world, `core/test-worlds`). The command line does the same with `WorldLaunch.FromArgs()`
   (`--connect [host]`, `--gpx <path>` repeatable, else Explore). `ClientWorld.StartLaunch` starts it,
   and `EnterMode` switches inside the world (replay goes back to Explore when it ends). Each mode owns
   the camera while it runs, so `GpxSession.Begin`/`End` activate the playback camera + HUD and hand

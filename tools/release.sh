@@ -75,6 +75,7 @@ section() { # title, ERE on the leading emoji code
 } > "$OUT/notes.md"
 
 echo "Next version: v$V ($bump)"; cat "$OUT/notes.md"
+echo "Build features: ${UNITSPORT_FEATURES:-none} (UNITSPORT_FEATURES, docs/notes/general/build-features.md)"
 [ $DRY = 1 ] && exit 0
 
 WT="$PWD/$OUT/wt"; REPO=$PWD
@@ -92,7 +93,7 @@ ensure_preset() { # name, platform, extra option lines: appended to the (gitigno
   grep -q "^name=\"$1\"" "$f" && return
   n=$(grep -c '^\[preset\.[0-9]*\]$' "$f"); excl=$(sed -n 's/^exclude_filter="\(.*\)"$/\1/p' "$f" | head -1)
   echo "Adding preset.$n \"$1\" to export_presets.cfg"
-  printf '\n[preset.%s]\n\nname="%s"\nplatform="%s"\nrunnable=false\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter="%s"\nexport_path=""\npatches=PackedStringArray()\nencryption_include_filters=""\nencryption_exclude_filters=""\nseed=0\nencrypt_pck=false\nencrypt_directory=false\nscript_export_mode=2\n\n[preset.%s.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ndotnet/include_scripts_content=false\ndotnet/include_debug_symbols=false\ndotnet/embed_build_outputs=false\n%s\n' \
+  printf '\n[preset.%s]\n\nname="%s"\nplatform="%s"\nrunnable=false\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter="assets/music/*"\nexclude_filter="%s"\nexport_path=""\npatches=PackedStringArray()\nencryption_include_filters=""\nencryption_exclude_filters=""\nseed=0\nencrypt_pck=false\nencrypt_directory=false\nscript_export_mode=2\n\n[preset.%s.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ndotnet/include_scripts_content=false\ndotnet/include_debug_symbols=false\ndotnet/embed_build_outputs=false\n%s\n' \
     "$n" "$1" "$2" "$excl" "$n" "$3" >> "$f"
 }
 ensure_preset "Linux" "Linux" 'binary_format/embed_pck=false
@@ -105,8 +106,9 @@ texture_format/etc2_astc=true
 application/bundle_identifier="ch.unitsport.switzerland"
 codesign/codesign=1
 notarization/notarization=0'
-ensure_preset "Android" "Android" 'gradle_build/use_gradle_build=false
+ensure_preset "Android" "Android" 'gradle_build/use_gradle_build=true
 gradle_build/export_format=0
+gradle_build/compress_native_libraries=true
 architectures/armeabi-v7a=false
 architectures/arm64-v8a=true
 architectures/x86=false
@@ -126,8 +128,15 @@ permissions/change_wifi_multicast_state=true
 permissions/internet=true
 permissions/vibrate=true'
 cp "$REPO/export_presets.cfg" .
+# the venues' tracker modules are no Godot resources: every preset packs them by name (#1244)
+sed -i 's|^include_filter=""$|include_filter="assets/music/*"|' export_presets.cfg
 # Android installs an update only over a lower version code, so it follows the semver
 sed -i -E "s|^version/code=.*|version/code=$((MA*10000+MI*100+PA))|; s|^version/name=.*|version/name=\"$V\"|" export_presets.cfg
+# a preset made before #1029 still says no Gradle; only the Android preset has this key
+sed -i -E "s|^gradle_build/use_gradle_build=.*|gradle_build/use_gradle_build=true|" export_presets.cfg
+# ... nor packs its .so files (#1082): Gradle stores them uncompressed, 71 MB of the 126 MB APK
+grep -q '^gradle_build/compress_native_libraries=' export_presets.cfg   || sed -i -E "s|^gradle_build/use_gradle_build=.*|&\ngradle_build/compress_native_libraries=true|" export_presets.cfg
+sed -i -E "s|^gradle_build/compress_native_libraries=.*|gradle_build/compress_native_libraries=true|" export_presets.cfg
 
 # yt-dlp + its QuickJS runtime (else 403s) + ffmpeg (CD burning, GPX video export) ship in bin/ beside the
 # executable (BundledTools), one set per platform, cached in $OUT/tools/<platform>/ between releases; delete it to refresh
@@ -135,22 +144,35 @@ TOOLS="$REPO/$OUT/tools"
 YT=https://github.com/yt-dlp/yt-dlp/releases/latest/download QJ=https://github.com/quickjs-ng/quickjs/releases/latest/download
 FF=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest
 get() { [ -s "$1" ] || curl -fsSL -o "$1" "$2"; }
+# A tool that cannot be downloaded is left out of that platform, never fatal (#1050: the macOS ffmpeg host
+# answered 521 and took the whole release down). The game finds it on PATH then (BundledTools), as an Intel
+# Mac does, and the notes say what is missing.
+MISSING_TOOLS=()
+fetch() { # platform, tool, file, url
+  get "$3" "$4" && return 0
+  rm -f "$3"; echo "WARNING: could not download $2 for $1 ($4); this release ships without it"
+  MISSING_TOOLS+=("$2 ($1)"); return 1
+}
 fetch_tools() { # platform, bin dir
-  local t="$TOOLS/$1"; mkdir -p "$t" "$2"
+  local t="$TOOLS/$1" f; mkdir -p "$t" "$2"
   case $1 in
     windows) # LGPL ffmpeg (BtbN, libvorbis included)
-      get "$t/yt-dlp.exe" $YT/yt-dlp.exe; get "$t/qjs.exe" $QJ/qjs-windows-x86_64.exe
-      [ -s "$t/ffmpeg.exe" ] || { get "$t/ffmpeg.zip" $FF/ffmpeg-master-latest-win64-lgpl.zip; unzip -qjo "$t/ffmpeg.zip" '*/bin/ffmpeg.exe' -d "$t"; }
-      cp "$t/yt-dlp.exe" "$t/qjs.exe" "$t/ffmpeg.exe" "$2/" ;;
+      fetch Windows yt-dlp "$t/yt-dlp.exe" $YT/yt-dlp.exe || true
+      fetch Windows qjs "$t/qjs.exe" $QJ/qjs-windows-x86_64.exe || true
+      [ -s "$t/ffmpeg.exe" ] || { fetch Windows ffmpeg "$t/ffmpeg.zip" $FF/ffmpeg-master-latest-win64-lgpl.zip && unzip -qjo "$t/ffmpeg.zip" '*/bin/ffmpeg.exe' -d "$t"; } || true
+      for f in yt-dlp.exe qjs.exe ffmpeg.exe; do [ -s "$t/$f" ] && cp "$t/$f" "$2/"; done ;;
     linux) # x86_64, LGPL ffmpeg (BtbN)
-      get "$t/yt-dlp" $YT/yt-dlp_linux; get "$t/qjs" $QJ/qjs-linux-x86_64
-      [ -s "$t/ffmpeg" ] || { get "$t/ffmpeg.tar.xz" $FF/ffmpeg-master-latest-linux64-lgpl.tar.xz; tar -xJf "$t/ffmpeg.tar.xz" -C "$t" --wildcards --strip-components=2 '*/bin/ffmpeg'; }
-      cp "$t/yt-dlp" "$t/qjs" "$t/ffmpeg" "$2/" ;;
+      fetch Linux yt-dlp "$t/yt-dlp" $YT/yt-dlp_linux || true
+      fetch Linux qjs "$t/qjs" $QJ/qjs-linux-x86_64 || true
+      [ -s "$t/ffmpeg" ] || { fetch Linux ffmpeg "$t/ffmpeg.tar.xz" $FF/ffmpeg-master-latest-linux64-lgpl.tar.xz && tar -xJf "$t/ffmpeg.tar.xz" -C "$t" --wildcards --strip-components=2 '*/bin/ffmpeg'; } || true
+      for f in yt-dlp qjs ffmpeg; do [ -s "$t/$f" ] && cp "$t/$f" "$2/"; done ;;
     macos) # yt-dlp universal; qjs and ffmpeg (martin-riedl.de, GPL, libvorbis) Apple Silicon only: Intel Macs use PATH
-      get "$t/yt-dlp" $YT/yt-dlp_macos; get "$t/qjs" $QJ/qjs-darwin-arm64
-      [ -s "$t/ffmpeg" ] || { get "$t/ffmpeg.zip" https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip; unzip -qjo "$t/ffmpeg.zip" ffmpeg -d "$t"; }
-      cp "$t/yt-dlp" "$t/qjs" "$t/ffmpeg" "$2/" ;;
+      fetch macOS yt-dlp "$t/yt-dlp" $YT/yt-dlp_macos || true
+      fetch macOS qjs "$t/qjs" $QJ/qjs-darwin-arm64 || true
+      [ -s "$t/ffmpeg" ] || { fetch macOS ffmpeg "$t/ffmpeg.zip" https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip && unzip -qjo "$t/ffmpeg.zip" ffmpeg -d "$t"; } || true
+      for f in yt-dlp qjs ffmpeg; do [ -s "$t/$f" ] && cp "$t/$f" "$2/"; done ;;
   esac
+  return 0
 }
 # tar.gz with Unix modes set explicitly (NTFS has none): $1 archive, $2 dir, then the paths to mark executable
 tarball() {
@@ -162,7 +184,12 @@ tarball() {
 }
 SKIPPED=()
 export_preset() { # preset, output file: returns 1 (never exits) so the caller can skip that platform
-  "$GODOT" --headless --path . --export-release "$1" "$2" || true
+  # Android is a Gradle build (#1029: the .gpx intent filter of addons/unitsport_android); its build
+  # template (android/, gitignored) is installed fresh from the export templates at each export
+  # ... and without the Gradle daemon: it inherits the export's output handles, so Godot (and a CI
+  # step reading it) waited on it long after the APK was written
+  local template=(); [ "$1" = "Android" ] && template=(--install-android-build-template)
+  GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.daemon=false" "$GODOT" --headless --path . "${template[@]}" --export-release "$1" "$2" || true
   if [ ! -e "$2" ]; then echo "WARNING: export \"$1\" produced nothing (template missing on this host?), skipping that platform"
   # a failed dotnet publish still writes the export, just without the game (#548): never ship that
   elif ! has_game "$2"; then echo "WARNING: export \"$1\" has no UnitSportSwitzerland.dll (dotnet publish failed), skipping that platform"
@@ -190,7 +217,7 @@ fi
 if [ $ANDROID_ONLY = 0 ] && export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64; then
   fetch_tools linux build/linux/bin
   TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-linux-x86_64.tar.gz"
-  tarball "$TGZ" build/linux UnitSportSwitzerland.x86_64 bin/yt-dlp bin/qjs bin/ffmpeg
+  tarball "$TGZ" build/linux UnitSportSwitzerland.x86_64 $(cd build/linux && ls bin/* 2>/dev/null)
   ASSETS+=("$TGZ")
 fi
 
@@ -214,7 +241,15 @@ else
   # a failed .NET publish still yields an APK, just without the game: never ship that
   # "A valid Android SDK path is required": Editor Settings > Export > Android > Android SDK Path (ANDROID_HOME
   # only seeds a fresh editor settings file, as on CI)
-  if export_preset "Android" "$APK"; then ASSETS+=("$APK"); fi
+  if export_preset "Android" "$APK"; then
+    ASSETS+=("$APK")
+    # the size gate (#1198): over budget it still ships, but the log, the notes and CI say by how much
+    APK_MB=$(( $(wc -c < "$APK") / 1000000 )); echo "Android APK: $APK_MB MB (budget ${APK_BUDGET_MB:-100} MB)"
+    if [ "$APK_MB" -gt "${APK_BUDGET_MB:-100}" ]; then
+      APK_OVER="the Android APK is $APK_MB MB, $((APK_MB - ${APK_BUDGET_MB:-100})) MB over its ${APK_BUDGET_MB:-100} MB budget"
+      echo "WARNING: $APK_OVER (tools/apksizecheck.sh names what the publish adds)"
+    fi
+  fi
 fi
 
 [ ${#ASSETS[@]} -gt 0 ] || { echo "Every export failed, nothing to release. Are the mono export templates installed?"; exit 1; }
@@ -222,6 +257,11 @@ fi
 if [ ${#SKIPPED[@]} -gt 0 ]; then
   printf '\n_Built on a host that could not export %s, so this release ships without it._\n' \
     "$(IFS=,; echo "${SKIPPED[*]}")" >> "$REPO/$OUT/notes.md"
+fi
+[ -n "${APK_OVER:-}" ] && printf '\n_Size: %s._\n' "$APK_OVER" >> "$REPO/$OUT/notes.md"
+if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
+  printf '\n_Could not download %s for this release: those builds use the copy on your PATH instead._\n' \
+    "$(IFS=,; echo "${MISSING_TOOLS[*]}")" >> "$REPO/$OUT/notes.md"
 fi
 
 if [ $NOUP = 1 ]; then
@@ -242,6 +282,7 @@ if [ -n "$last" ]; then
   (cd "$REPO" && tools/deltas.sh "$last" "v$V" --upload) || echo "Deltas failed; the release stands. Retry with: tools/deltas.sh $last v$V --upload"
 fi
 # On CI, a skipped platform is a run annotation, not only a log line: v0.28-v0.31.1 shipped no APK unnoticed
+[ $CI = 1 ] && [ -n "${APK_OVER:-}" ] && echo "::warning title=Android APK over budget::v$V: $APK_OVER"
 if [ $CI = 1 ] && [ ${#SKIPPED[@]} -gt 0 ]; then
   echo "::warning title=Release skipped platforms::v$V shipped without ${SKIPPED[*]} (see the export log above)"
 fi

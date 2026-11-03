@@ -34,6 +34,10 @@ public enum ItemEventKind
     FishCast = 9,
     /// <summary>A fishing line came in (#493). Position = the float; extra = "", "snap" or the item id landed.</summary>
     FishEnd = 10,
+    /// <summary>A bottled gust landed (#1227). Position = where; an updraft column for 20 s on every peer (<c>Adventure.Rewards.GustFx.OnGust</c>).</summary>
+    Gust = 11,
+    /// <summary>A handful of Räppli thrown (#1357). Position = the hand; direction = the aim; paper on every peer (<c>Occasions.Festivals.Fasnacht.RaeppliFx.OnConfetti</c>).</summary>
+    Confetti = 12,
 }
 
 /// <summary>
@@ -88,6 +92,8 @@ public partial class ItemEvents : Node
         [ItemEventKind.Smoke] = SwissItems.OnSmoke,
         [ItemEventKind.FishCast] = Fishing.FishingVisuals.OnCast,
         [ItemEventKind.FishEnd] = Fishing.FishingVisuals.OnEnd,
+        [ItemEventKind.Gust] = Adventure.Rewards.GustFx.OnGust,
+        [ItemEventKind.Confetti] = Occasions.Festivals.Fasnacht.RaeppliFx.OnConfetti,
     };
 
     /// <summary>
@@ -134,6 +140,26 @@ public partial class ItemEvents : Node
         var at = _origin.ToGlobal(position);
         RpcId(1, MethodName.Relay, (int)kind, at.E, at.N, at.Alt, direction, extra);
     }
+
+    // ---- a film's actors (the trailer director, #882) ---------------------------------------------
+
+    private static readonly Dictionary<long, FootPlayer> Staged = new();
+
+    /// <summary>
+    /// A film's event, as if <paramref name="body"/> (one of the director's actors, no peer of its own)
+    /// had sent it: played on this machine only, never relayed, under a peer id of its own so a
+    /// fishing line runs from that body's rod (<see cref="StagedBody"/>).
+    /// </summary>
+    public void PlayAs(FootPlayer body, ItemEventKind kind, Vector3 position, Vector3 direction, string extra = "")
+    {
+        long peer = -1L - (long)(body.GetInstanceId() & 0x7FFFFFFF);
+        Staged[peer] = body;
+        Run(new ItemEvent(peer, kind, position, direction, extra, Local: false));
+    }
+
+    /// <summary>The actor a film's event came from (<see cref="PlayAs"/>), or null for a real peer.</summary>
+    public static FootPlayer? StagedBody(long peer) =>
+        peer < 0 && Staged.TryGetValue(peer, out var b) && IsInstanceValid(b) ? b : null;
 
     /// <summary>Where a held item's business end is: the hand plus <paramref name="reach"/> along the aim, else in front of the camera.</summary>
     public static Vector3 MuzzleOf(FootPlayer player, Vector3 direction, float reach = 0.55f)

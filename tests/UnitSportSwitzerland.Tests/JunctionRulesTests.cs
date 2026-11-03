@@ -40,9 +40,10 @@ public class JunctionRulesTests(SignalTestRegionFixture region) : IClassFixture<
         Assert.True(lit.GetValueOrDefault((PaintType.YellowSolid, PaintEmitterYellow)) > 0, "no crosswalk at the lights");
         Assert.Equal(0, lit.GetValueOrDefault((PaintType.SharkTooth, PaintEmitterWhite)));
         Assert.True(unlit.GetValueOrDefault((PaintType.SharkTooth, PaintEmitterWhite)) > 0, "no give-way teeth without lights");
-        // and the layout they share is the same: arrows, hatches
-        Assert.Equal(lit.GetValueOrDefault((PaintType.Arrow, PaintEmitterWhite)), unlit.GetValueOrDefault((PaintType.Arrow, PaintEmitterWhite)));
-        Assert.Equal(lit.GetValueOrDefault((PaintType.Hatch, PaintEmitterWhite)), unlit.GetValueOrDefault((PaintType.Hatch, PaintEmitterWhite)));
+        // and the layout they share is there in both: the west approach's arrows (#818: at the lights the east one adds its own,
+        // and a hatch where its lane shifts to meet the far side)
+        Assert.True(unlit.GetValueOrDefault((PaintType.Arrow, PaintEmitterWhite)) > 0, "no arrows without lights");
+        Assert.True(lit.GetValueOrDefault((PaintType.Arrow, PaintEmitterWhite)) >= unlit.GetValueOrDefault((PaintType.Arrow, PaintEmitterWhite)));
     }
 
     [Fact]

@@ -19,9 +19,14 @@
   floating-text look: no box, an outline and a shadow, the changed value in amber. It fades out
   after ~1.6 s and shows on both the monitor and the panel. It announces a monitor-view change
   ("Monitor view  Both eyes"), a manual recentre, and with `--xrsim`, "VR  simulated".
-- **What each view does to the window.** In Both eyes, Third person and Off, the window's own 3D
-  is disabled (`Root.Disable3D`), so nothing renders twice. Each view still costs one render of
-  the world (two for Both eyes) on top of the headset's own render.
+- **What each view does to the window.** The window's own 3D is disabled (`Root.Disable3D`) in
+  every view. First person is the monitor's camera 0 at the head (`Head`, 80° FOV), like the
+  others. Only `--xrsim` without `--xrload` keeps first person on the window's own camera, the
+  only view there.
+- **Cost (#1036).** A view of the world costs its triangles again, whatever its size: first person
+  on the window took a 2080 Ti from 11.9 to 20.5 ms a frame. So the views are drawn at half the
+  window's size (`StretchShrink` 2) and every other frame (`UpdateMode.Once` from `_Process`), the
+  two eyes taking turns: ~2.3 ms a frame on average at Low detail. Off draws nothing.
 - **Render layers:**
   - `XrSession.HeadsetOnlyLayer` (bit 14) holds the vignette, the UI panel and the pointer. The
     vignette is a clip-space quad, so it would cover any camera that drew it. The monitor's

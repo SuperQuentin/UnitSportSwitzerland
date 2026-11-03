@@ -25,6 +25,8 @@ public partial class ChunkNode : Node3D
 
     /// <summary>The tile's ground mesh, once built.</summary>
     public MeshInstance3D? Ground => _meshInstance;
+    /// <summary>The tile's road mesh, for per-tile shader parameters (the ski slopes' layer, #887).</summary>
+    public MeshInstance3D? RoadMesh => _roadInstance;
     private MeshInstance3D? _roadInstance;
     private StaticBody3D? _body;
 
@@ -45,6 +47,7 @@ public partial class ChunkNode : Node3D
         if (_meshInstance != null) _meshInstance.Visible = Shows(TileLayers.Ground);
         if (_roadInstance != null) _roadInstance.Visible = Shows(TileLayers.Roads);
         if (_lamps != null) _lamps.Visible = Shows(TileLayers.Roads);
+        if (_signNames != null) _signNames.Visible = Shows(TileLayers.Roads);
         if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
         if (_siteInstance != null) _siteInstance.Visible = Shows(TileLayers.Buildings);
         if (_siteCranes != null) _siteCranes.Visible = Shows(TileLayers.Buildings);
@@ -70,6 +73,7 @@ public partial class ChunkNode : Node3D
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
+        arrays[(int)Mesh.ArrayType.Normal] = data.Normals;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
         return Finish(arrays, material);
     }
@@ -107,6 +111,64 @@ public partial class ChunkNode : Node3D
         roads.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         roads.SurfaceSetMaterial(roads.GetSurfaceCount() - 1, material);
         return roads;
+    }
+
+    /// <summary>Each cell's mesh (<see cref="SplitByCell(RoadMeshBuilder.MeshData)"/>), null where the cell is empty.</summary>
+    public static ArrayMesh?[] ToArrayMeshes(RoadMeshBuilder.MeshData?[] cells, Material material)
+    {
+        var meshes = new ArrayMesh?[cells.Length];
+        for (int c = 0; c < cells.Length; c++)
+            if (cells[c] is { } cell) meshes[c] = ToArrayMesh(cell, material);
+        return meshes;
+    }
+
+    /// <summary>
+    /// The road mesh's triangles sorted into the buildings' cells (<see cref="BuildingOcclusion.Cells"/>² by
+    /// centroid, tile-local), each with only the vertices it uses. Empty cells are null.
+    /// </summary>
+    public static RoadMeshBuilder.MeshData?[] SplitByCell(RoadMeshBuilder.MeshData data)
+    {
+        const int n = BuildingOcclusion.Cells;
+        const float size = (float)(ChunkFormat.TileSizeM / n);
+        var lists = new List<int>?[n * n];
+        var v = data.Vertices;
+        var idx = data.Indices;
+        for (int t = 0; t + 2 < idx.Length; t += 3)
+        {
+            var mid = (v[idx[t]] + v[idx[t + 1]] + v[idx[t + 2]]) / 3f;
+            int cx = Math.Clamp((int)(mid.X / size), 0, n - 1), cz = Math.Clamp((int)(mid.Z / size), 0, n - 1);
+            (lists[cz * n + cx] ??= new List<int>()).Add(t);
+        }
+        var cells = new RoadMeshBuilder.MeshData?[n * n];
+        var map = new int[v.Length];
+        Array.Fill(map, -1);
+        var used = new List<int>();
+        for (int c = 0; c < cells.Length; c++)
+        {
+            if (lists[c] is not { } tris) continue;
+            used.Clear();
+            var indices = new int[tris.Count * 3];
+            int o = 0;
+            foreach (int t in tris)
+                for (int k = 0; k < 3; k++)
+                {
+                    int i = idx[t + k];
+                    if (map[i] < 0) { map[i] = used.Count; used.Add(i); }
+                    indices[o++] = map[i];
+                }
+            var verts = new Vector3[used.Count];
+            var colors = new Color[used.Count];
+            var uvs = new Vector2[used.Count];
+            var uv2s = new Vector2[used.Count];
+            for (int j = 0; j < used.Count; j++)
+            {
+                int i = used[j];
+                verts[j] = v[i]; colors[j] = data.Colors[i]; uvs[j] = data.Uvs[i]; uv2s[j] = data.Uv2s[i];
+                map[i] = -1;
+            }
+            cells[c] = new RoadMeshBuilder.MeshData(verts, colors, uvs, uv2s, indices);
+        }
+        return cells;
     }
 
     private static Godot.Collections.Array RoadArrays(RoadMeshBuilder.MeshData data)
@@ -177,7 +239,7 @@ public partial class ChunkNode : Node3D
         {
             // the ground, its roads and its water never cast sun shadows (lit styles): millions
             // of triangles under the cascades, for shade the cel light already gives the slopes
-            _meshInstance = new MeshInstance3D { CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Ground) };
+            _meshInstance = new MeshInstance3D { Name = "Ground", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Ground) };
             AddChild(_meshInstance);
         }
         Swap(_meshInstance, mesh);
@@ -193,6 +255,55 @@ public partial class ChunkNode : Node3D
         Swap(_roadInstance, mesh);
     }
 
+    /// <summary>Beyond this the road paint is not drawn on a standalone headset, m: a marking there is under a pixel.</summary>
+    public const float PaintToM = 250f;
+
+    private MeshInstance3D[]? _roadCellInstances;
+
+    /// <summary>
+    /// A standalone headset's roads cut into cells (#1112), children of the roads mesh (which keeps the piers):
+    /// shown and hidden with it, and given its ski-slope layer. Null clears them.
+    /// </summary>
+    public void SetRoadCells(ArrayMesh?[]? roads, ArrayMesh?[]? paint)
+    {
+        ClearRoadCells();
+        if (_roadInstance == null || (roads == null && paint == null)) return;
+        var layer = _roadInstance.GetInstanceShaderParameter(World.Snow.PisteLayer.PisteLayerParam);
+        var list = new List<MeshInstance3D>();
+        void Add(ArrayMesh?[]? meshes, string name, float rangeEnd)
+        {
+            if (meshes == null) return;
+            for (int c = 0; c < meshes.Length; c++)
+            {
+                if (meshes[c] is not { } mesh) continue;
+                var instance = new MeshInstance3D
+                {
+                    Name = $"{name}{c}", Mesh = mesh, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                    VisibilityRangeEnd = rangeEnd,
+                };
+                if (layer.VariantType != Variant.Type.Nil) instance.SetInstanceShaderParameter(World.Snow.PisteLayer.PisteLayerParam, layer);
+                _roadInstance.AddChild(Styles.ZoomRanges.Track(instance));
+                list.Add(instance);
+            }
+        }
+        Add(roads, "RoadCell", 0f);
+        Add(paint, "RoadPaint", PaintToM);
+        _roadCellInstances = list.ToArray();
+    }
+
+    private void ClearRoadCells()
+    {
+        if (_roadCellInstances == null) return;
+        foreach (var cell in _roadCellInstances)
+        {
+            var mesh = cell.Mesh;
+            cell.Mesh = null;
+            mesh?.Dispose();
+            cell.QueueFree();
+        }
+        _roadCellInstances = null;
+    }
+
     private SignalLamps? _lamps;
 
     /// <summary>The traffic lights' lenses (#350), replaced with the roads they stand beside; null removes them.</summary>
@@ -204,6 +315,19 @@ public partial class ChunkNode : Node3D
         _lamps = SignalLamps.Create(lamps);
         _lamps.Visible = Shows(TileLayers.Roads);
         AddChild(_lamps);
+    }
+
+    private Node3D? _signNames;
+
+    /// <summary>The names on the tile's canton signs (#1038, a test world's borders), replaced with the roads; null removes them.</summary>
+    public void SetSignNames(RoadSignBuilder.Label[]? labels)
+    {
+        _signNames?.QueueFree();
+        _signNames = null;
+        if (labels == null) return;
+        _signNames = new Node3D { Name = "SignNames", Visible = Shows(TileLayers.Roads) };
+        foreach (var label in labels) _signNames.AddChild(RoadSignBuilder.Make(label));
+        AddChild(_signNames);
     }
 
     private MeshInstance3D? _buildingInstance;
@@ -273,11 +397,17 @@ public partial class ChunkNode : Node3D
     private OccluderInstance3D? _occluder;
 
     /// <summary>
+    /// A standalone headset draws a building cell's own mesh up to this far from the eye, and its boxes
+    /// (<see cref="BuildingMeshBuilder.BuildProxies"/>) beyond: a 3D distance per cell, whatever tile it is in (#1112).
+    /// </summary>
+    public const float ProxyFromM = 300f;
+
+    /// <summary>
     /// The buildings cut into cells, with the tile's occluders (#553, <see cref="BuildingOcclusion"/>):
     /// what a tile round the camera draws, so a block hidden behind a row of houses is culled.
     /// Replaces the one-mesh buildings; <see cref="SetBuildings"/> replaces these.
     /// </summary>
-    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices)
+    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices, ArrayMesh?[]? proxies = null)
     {
         ClearCells();
         if (_buildingInstance?.Mesh is { } whole)
@@ -290,9 +420,23 @@ public partial class ChunkNode : Node3D
         {
             if (cells[c] is not { } mesh) continue;
             var instance = new MeshInstance3D { Name = $"Buildings{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings) };
-            AddChild(instance);
+            // no fade: Godot's fades dither with a discard, which a standalone headset's GPU cannot afford
+            if (proxies != null) instance.VisibilityRangeEnd = ProxyFromM;
+            AddChild(Styles.ZoomRanges.Track(instance));
             list.Add(instance);
         }
+        if (proxies != null)
+            for (int c = 0; c < proxies.Length; c++)
+            {
+                if (proxies[c] is not { } mesh) continue;
+                var proxy = new MeshInstance3D
+                {
+                    Name = $"BuildingProxies{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings),
+                    VisibilityRangeBegin = ProxyFromM, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                };
+                AddChild(Styles.ZoomRanges.Track(proxy));
+                list.Add(proxy);
+            }
         _cellInstances = list.ToArray();
         if (occluderVertices != null && occluderIndices != null)
         {
@@ -322,6 +466,8 @@ public partial class ChunkNode : Node3D
     public void ClearRoads()
     {
         SetSignalLamps(null);
+        SetSignNames(null);
+        ClearRoadCells();
         if (_roadInstance?.Mesh is not { } mesh) return;
         _roadInstance.Mesh = null;
         mesh.Dispose();
@@ -592,7 +738,11 @@ public partial class ChunkNode : Node3D
         bool billboards = trees.ConifersFar != null || trees.BroadleavesFar != null;
         foreach (var near in new[] { _coniferInstance, _broadleafInstance })
             if (near?.Multimesh is { } multi)
+            {
                 near.VisibilityRangeEnd = billboards ? Styles.StyleKit.TreeNearRange(multi.CustomAabb) : 0f;
+                // zoomed, the shader keeps trees 3D farther (world_lod_scale): the cut follows
+                Styles.ZoomRanges.Track(near);
+            }
         ApplyTreeDensity();
     }
 
@@ -858,6 +1008,7 @@ public partial class ChunkNode : Node3D
     public void ReleaseResources()
     {
         ClearCells();
+        ClearRoadCells();
         NearTrees.Unregister(this);
         foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _siteInstance, _waterInstance })
         {

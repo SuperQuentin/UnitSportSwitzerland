@@ -4,138 +4,107 @@ using UnitSport.Avatar;
 namespace UnitSport.Player;
 
 /// <summary>
-/// Alpine skis: no engine, no pedals, just gravity and how hard you are willing to turn.
+/// Alpine skis: no engine, no pedals, just gravity, the edges and the snow.
 ///
 /// <para>
-/// Included because the terrain is 60% mountain and a bicycle only reaches the parts with roads.
-/// It is also what proves the <see cref="Rideable"/> abstraction is not bicycle-shaped: it shares
-/// the mass, drag and slope model and differs in exactly the two places a ski differs — nothing
-/// drives it forward, and turning costs speed instead of being free.
-/// </para>
-///
-/// <para>
-/// That second point is the whole of skiing. Pointed straight down a 30% face you reach 80 km/h;
-/// the only way to arrive at the bottom slower than that is to turn across the fall line and let
-/// the edges scrub the speed off. So <see cref="EdgeScrub"/> is not a penalty bolted on to stop
-/// the player going too fast — it is the brake, and steering is how you use it.
+/// The force model is <see cref="SkiDynamics"/> (#899, docs/plans/ski-physics.md): the skis keep a
+/// velocity of their own, so a turn either carves (the edges turn the speed into the new line at
+/// no cost) or skids (the sideways speed is scraped off: the brake, and the reason a run is a
+/// series of turns). Gravity pulls down the fall line, so flat skis on a traverse slip down it.
+/// Brake alone is the snowplough; brake with a turn pivots the skis across the travel for a
+/// hockey stop. Off snow they barely slide, and forward is a stride per press, never a hold:
+/// skating on a flat run, small steps on grass or tarmac.
 /// </para>
 /// </summary>
-public sealed class Skis : Rideable
+public sealed class Skis : SnowRide
 {
     public override RideKind Kind => RideKind.Skis;
     public override string Label => "Skis";
-    public override string Blurb => "Gravity only — {move_left}/{move_right} carve to shed speed, {tuck_boost} tuck, {brake} plough";
-
-    private const float Mass = 82f;
-
-    /// <summary>Upright, and tucked with Shift. The tuck is worth about 25 km/h on a long descent.</summary>
-    private const float DragArea = 0.62f;
-    private const float TuckDragArea = 0.34f;
-    private const float AirDensity = 1.05f;      // thinner: this is 2,000 m, not the valley floor
-
-    /// <summary>Kinetic friction of a waxed base on snow. Genuinely this low.</summary>
-    private const float SnowFriction = 0.055f;
-
-    /// <summary>Snowplough. Less than a brake disc, and it fades as you speed up — as it does.</summary>
-    private const float PloughDecel = 4.0f;
+    public override string Blurb =>
+        "Gravity: {move_left}/{move_right} carve, {brake} snowplough, fast: {brake} + turn to skid to a stop (in the air too: a hop turn), tap {move_forward} to skate, hold {tuck_boost} to schuss";
 
     /// <summary>
-    /// Speed lost per second at full lock, per m/s of travel. Skidding a turn at 20 m/s sheds
-    /// far more than at 5, which is why a hard traverse is how you control a steep pitch.
-    /// </summary>
-    private const float EdgeScrub = 0.30f;
-
-    /// <summary>
-    /// Skis turn far more readily than a bicycle — no gyroscopic wheel to fight. ~57°: a World
-    /// Cup giant-slalom skier is past 60°, and at the old 43° the tightest turn at 70 km/h was
-    /// a 45 m arc, the radius of a lazy cruise rather than a carve.
+    /// How far the skis tip onto their edges. ~57 degrees: a World Cup giant-slalom skier is past
+    /// 60, and at 43 the tightest turn at 70 km/h was a 45 m arc.
     /// </summary>
     private const float MaxLean = 1.0f;
-    private const float MaxYawRate = 2.4f;
+    /// <summary>
+    /// The quickest the skis come round, rad/s (#933: 2.4 felt like a snap). 1.5 is a short swing
+    /// at 6 m/s on a 4 m arc; faster, the lean sets a longer one.
+    /// </summary>
+    private const float MaxYawRate = 1.5f;
 
-    /// <summary>Quicker than the bike: there is no machine to tip, only knees and hips.</summary>
-    private const float BankResponse = 7f;
+    /// <summary>The roll onto the edges, 1/s: knees and hips, a quarter second to settle (#933: 7 was a flick).</summary>
+    private const float BankResponse = 4.5f;
 
     /// <summary>Below this you are shuffling and turn the skis directly.</summary>
     private const float SlowSpeed = 1.5f;
 
-    /// <summary>
-    /// Poling and skating, W. Skis on flat ground are close to useless, which is honest but
-    /// would strand the player, so W gives you the shuffle a real skier resorts to.
-    /// </summary>
-    private const float PoleWatts = 110f;
-    private const float PoleSpeedLimit = 6.0f;   // you cannot skate faster than this
+    /// <summary>A hockey stop: brake with a turn swings the skis across at this rate, whatever the speed, to SkiDynamics.StopAngle.</summary>
+    private const float PivotRate = 3f;
 
-    // ---- the Game profile (Rideable.Arcade) ----
-    /// <summary>
-    /// Deeper edges, a quicker roll, and a carve that bites instead of skidding: turning still
-    /// brakes — that is still the whole of skiing — but a clean arc no longer bleeds a run dry.
-    /// Faster skating too, so flats and uphills are a shuffle rather than a strand.
-    /// </summary>
-    private const float ArcadeMaxLean = 1.12f, ArcadeBankResponse = 9f, ArcadeMaxYawRate = 2.7f;
-    private const float ArcadeEdgeScrub = 0.16f, ArcadeSnowFriction = 0.04f;
-    private const float ArcadePoleWatts = 230f, ArcadePoleSpeedLimit = 8.5f;
+    /// <summary>Above this a brake with a turn is a hockey stop; below, a snowplough turn, m/s.</summary>
+    private const float PivotSpeed = 5f;
 
-    /// <summary>The figure's own eye, so first person sits where the drawn head is looking from.</summary>
-    public override Vector3 FirstPersonEye { get; } = HumanMeshBuilder.MountsForPose(HumanPose.Tucked).Eye
-        + new Vector3(0, 0, -0.06f);   // just proud of the face, so the head never fills the lens
+    /// <summary>Above this a brake with a turn in the air is a hop turn (#954), m/s: below it there is little to stop.</summary>
+    private const float HopSpeed = 2f;
+
+    /// <summary>The schuss (Shift, #933): the skis flat and straight, steering only nudges them.</summary>
+    private const float SchussSteer = 0.3f;
+
+    // ---- the Game profile (Rideable.Arcade): deeper edges, a quicker roll ----
+    private const float ArcadeMaxLean = 1.12f, ArcadeBankResponse = 5.5f, ArcadeMaxYawRate = 1.75f;
 
     public override float EyeHeight => 1.32f;
-    public override float ChaseDistance => 4.2f;
-    public override float ChaseHeight => 1.60f;
+    public override float ChaseDistance => 5.4f;
+    public override float ChaseHeight => 1.85f;
     public override float MaxFov => 104f;        // steeper FOV ramp: the speed is the point
     public override float FovSpeed => 22f;
     public override float DismountSpeed => 3.0f;
 
-    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => new MeshInstance3D
-    {
-        Name = "Skier",
-        Mesh = SkierMeshBuilder.BuildSkier(
-            HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, SkiPalette.ForRider(riderIndex)),
-        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
-    };
+    /// <summary>The live skier (#933): the knees, the plough, the skate, the poles move.</summary>
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) =>
+        SnowRig.Skier(HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, SkiPalette.ForRider(riderIndex));
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
-        float v = motion.Speed;
-
-        // --- steering -----------------------------------------------------------------
-        // Same lean-driven turn as the bike, but skis hold an edge rather than balancing on a
-        // contact patch, so the ceiling is higher, the roll-in quicker, and it stays usable slow.
         bool arcade = Arcade;
+        var tuning = arcade ? SkiDynamics.Tuning.Game : SkiDynamics.Tuning.Sim;
         float maxLean = arcade ? ArcadeMaxLean : MaxLean;
-        SteerByLean(ref motion, input.Steer, v, maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
-            arcade ? ArcadeBankResponse : BankResponse, SlowSpeed, dt);
 
-        float dragArea = input.Effort ? TuckDragArea : DragArea;
-
-        if (!ground.OnFloor)
+        // brake with a turn throws the skis across the travel, not into a lean: on the snow a hockey
+        // stop above PivotSpeed; in the air a hop turn (#954), quicker with nothing holding the skis.
+        // Either holds square across (SkiDynamics.StopAngle) and the edges skid the speed off.
+        bool across = input.Brake > 0.3f && Mathf.Abs(input.Steer) > 0.3f;
+        // once across (a hop turn landed, a hockey stop under way) it skids on down to a standstill
+        // rather than turning into a plough on top of the skid below PivotSpeed
+        bool alreadyAcross = Mathf.Abs(motion.Slip) > 0.8f && motion.Speed > 0.5f;
+        bool pivot = across && (ground.OnFloor ? motion.Speed > PivotSpeed || alreadyAcross : motion.Speed > HopSpeed);
+        // the schuss holds the line: the skis flat, a steer only nudges them
+        float steer = input.Effort && ground.OnFloor ? input.Steer * SchussSteer : input.Steer;
+        if (pivot)
         {
-            v -= 0.5f * AirDensity * dragArea * v * v / Mass * dt;
-            motion.Speed = Mathf.Max(0f, v);
-            return;
+            // the heading turns, the velocity does not: it is that much further off the nose
+            float slip = SkiDynamics.SwingAcross(motion.Slip, -Mathf.Sign(input.Steer),
+                ground.OnFloor ? PivotRate : SkiDynamics.HopTurnRate, dt);
+            float turned = motion.Slip - slip;
+            motion.Yaw += turned;
+            motion.YawRate = turned / dt;
+            motion.Slip = slip;
+            motion.Bank = Mathf.MoveToward(motion.Bank, -Mathf.Sign(input.Steer) * maxLean, 4f * dt);
+            motion.Lean = motion.Bank * 0.6f;
+        }
+        else
+        {
+            float before = motion.Yaw;
+            SteerByLean(ref motion, steer, motion.Speed, maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
+                arcade ? ArcadeBankResponse : BankResponse, SlowSpeed, dt);
+            motion.Slip -= motion.Yaw - before;
         }
 
-        float drag = 0.5f * AirDensity * dragArea * v * v;
-        float friction = (arcade ? ArcadeSnowFriction : SnowFriction) * Mass * Gravity;
-
-        // poling: capped hard, and it does nothing once gravity is already doing the work
-        float thrust = 0f;
-        if (input.Throttle > 0.01f && v < (arcade ? ArcadePoleSpeedLimit : PoleSpeedLimit))
-            thrust = Mathf.Min((arcade ? ArcadePoleWatts : PoleWatts) / Mathf.Max(v, 0.6f), 150f) * input.Throttle;
-
-        float accel = (thrust - drag - friction) / Mass + SlopeAccel(ground.Grade);
-        v += accel * dt;
-
-        // The edges: this is the brake, and the reason a run is a series of turns. Scaled by the
-        // SQUARE of how far over you are: a clean carve at moderate edge angle holds its speed,
-        // as it does on snow, and only cranking it right over skids and scrubs. Linear in the
-        // input, every small correction cost speed, so steering at all felt like braking.
-        float edge = motion.Bank / maxLean;
-        v -= edge * edge * (arcade ? ArcadeEdgeScrub : EdgeScrub) * v * dt;
-
-        if (input.Brake > 0.01f) v -= input.Brake * PloughDecel * dt;
-
-        motion.Speed = Mathf.Max(0f, v);
+        float edge = pivot ? 1f : Mathf.Abs(motion.Bank) / maxLean;
+        // brake alone, or slow with a turn, is the snowplough: the tails pushed out into a V
+        float plough = pivot || !ground.OnFloor ? 0f : input.Brake;
+        Glide(input, ground, tuning, edge, plough, 1f, dt, ref motion, plough);
     }
 }

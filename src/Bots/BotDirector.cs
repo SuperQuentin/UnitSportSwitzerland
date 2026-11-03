@@ -120,7 +120,22 @@ public partial class BotDirector : Node
     public int Count => _bots.Count;
     public Bot? Get(long id) => _bots.GetValueOrDefault(id);
 
-    private static double Now => GameClock.Now;
+    /// <summary>
+    /// The bots' clock: the physics the server has actually run, in simulated seconds (the sum of each physics
+    /// step, which <c>/speed</c> scales). So a brain's timers (a revive's hold, a bandage, a reaction, a car
+    /// stuck for 6 s) keep pace with the bodies they time.
+    /// <list type="bullet">
+    /// <item><c>GameClock.Now</c> counts physics frames, which <c>/speed</c> lengthens rather than multiplies: at x4 a
+    /// 5 s revive hold took 20 simulated seconds, and every downed mate bled out first.</item>
+    /// <item><c>ClockSync.SimNow</c> runs on the wall clock: on a server dropping frames it ran ahead of the physics,
+    /// and a bot's car was "stuck for 6 s" before it had had 6 s to move (botcheck: drove 18 m).</item>
+    /// </list>
+    /// </summary>
+    public static double Clock { get; private set; }
+
+    /// <summary>The sword's service (#1371): what a bot's hands call for the moves and hits.</summary>
+    public Combat.SwordService? Swords => GetParent()?.GetNodeOrNull<Combat.SwordService>(Combat.SwordService.NodeName);
+    private static double Now => Clock;
     private InterestService? Interest => GetParent()?.GetNodeOrNull<InterestService>(InterestService.NodeName);
 
     /// <summary>Spawns a bot at <paramref name="at"/> (it drops onto the ground once its collision is built); null when full.</summary>
@@ -133,10 +148,17 @@ public partial class BotDirector : Node
         long id = PlayerReplication.BotId(n);
         if (_spawner.Spawn(PlayerReplication.BotData(n, at, yaw, profile.Name)) is not FootPlayer body) return null;
 
+        // #880: the odd bot is an alien (by its number, so the same bot always is); the rest wear their id's seeded figure
+        if (Avatar.Aliens.IsAlienBot(n))
+        {
+            var alien = Avatar.Aliens.ForSeed(n);
+            body.AppearanceBits = alien.Looks.Pack();
+            body.OutfitBits = alien.Outfit.Bits;
+        }
         var bot = new Bot(id, n, body, profile) { NextThink = Now, World = _world ??= new BotWorld(_players) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
-        body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch);
+        body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch, bot.Intent.Climb);
         // in a car or on a bike: the pilot, else the handbrake (never the keys: a null RideControls reads them)
         body.RideControls = () => BotDriving.Controls(bot, (float)body.GetPhysicsProcessDeltaTime());
         // in the air: the wingsuit follows where it faces (LookYaw/LookPitch), the canopy its stick; the
@@ -159,6 +181,7 @@ public partial class BotDirector : Node
     public void Remove(long id)
     {
         if (!_bots.Remove(id, out var bot)) return;
+        BotUfo.Forget(bot);
         if (GodotObject.IsInstanceValid(bot.Body)) bot.Body.QueueFree();
         Interest?.ForgetPeer(id);
         GD.Print($"[bots] removed {PlayerReplication.NodeName(id)} \"{bot.Profile.Name}\"");
@@ -171,6 +194,7 @@ public partial class BotDirector : Node
 
     public override void _PhysicsProcess(double delta)
     {
+        Clock += delta;
         if (_bots.Count == 0) return;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         using (BodyProfiler.Time(BodyProfiler.Slot.Brains, true)) RunBots();
@@ -190,6 +214,7 @@ public partial class BotDirector : Node
         foreach (var bot in _bots.Values)
         {
             if (!GodotObject.IsInstanceValid(bot.Body)) continue;
+            if (!bot.Body.Eliminated) BotSkills.Unembed(bot, bot.World.Space, now);
             if (now >= bot.NextThink)
             {
                 double wait = bot.Brain.Think(bot, now);
@@ -205,7 +230,9 @@ public partial class BotDirector : Node
             else bot.Body.SquareToView = false;
             // the hands: a shot when the brain asks for one and the weapon is ready; a use runs its time
             BotHands.Tick(bot, now);
-            if (bot.Intent.FireAt is { } target) BotHands.Fire(bot, target);
+            if (bot.Intent.DodgeFrom is { } away) BotHands.Dodge(bot, away);
+            if (bot.Intent.SwordAt is { } swing) BotHands.Swing(bot, swing);
+            else if (bot.Intent.FireAt is { } target) BotHands.Fire(bot, target);
             else if (bot.Body.ItemAction == 1 && now >= bot.NextShotAt + 1.5) bot.Body.ItemAction = 0;   // arms down after a while
         }
         // a body freed under us (a teardown, a kick of the node): forget it
@@ -274,8 +301,8 @@ public partial class BotDirector : Node
             {
                 // /bot arm <weapon> [rounds]: every bot takes it (a check, a test of the hands)
                 string name = args.Length > 1 ? args[1] : "pistol";
-                if (!Enum.TryParse<Items.ItemId>(name, true, out var weapon) || Items.Weapons.Get(weapon) == null)
-                    return $"'{name}' is not a weapon (pistol, rifle, huntingrifle, shotgun, knife).";
+                if (!Enum.TryParse<Items.ItemId>(name, true, out var weapon) || Items.Weapons.Get(weapon) == null && weapon != Items.ItemId.Sword)
+                    return $"'{name}' is not a weapon (pistol, rifle, huntingrifle, shotgun, knife, sword).";
                 int rounds = args.Length > 2 && int.TryParse(args[2], out int r) ? Math.Clamp(r, 0, 300) : 30;
                 foreach (var bot in _bots.Values) BotHands.Arm(bot, weapon, rounds);
                 return $"{_bots.Count} bot(s) armed with a {weapon}.";
@@ -291,6 +318,26 @@ public partial class BotDirector : Node
                         && BotHands.Fire(bot, target.GlobalPosition + Vector3.Up * 1.2f))
                         fired++;
                 return $"{fired} bot(s) fired.";
+            }
+            case "swing":
+            {
+                // /bot swing: every bot with a sword steps up to the sender's nearest dummy (else the sender) and swings the combo
+                // at it: a check of the sword's hands (#1371), the server's own path the way a brain's would take it
+                if (bodyOf(sender) is not { } swinger) return "'/bot swing' needs your body in the world.";
+                var dummyAt = Swords?.NearestDummy(swinger.GlobalPosition);
+                var goal = dummyAt ?? swinger.GlobalPosition;
+                int swung = 0;
+                foreach (var bot in _bots.Values)
+                {
+                    if (!bot.Alive || !BotHands.HasSword(bot)) continue;
+                    var side = (swinger.GlobalPosition - goal) with { Y = 0 };
+                    side = side.LengthSquared() > 0.01f ? side.Normalized() : Vector3.Right;
+                    bot.Body.GlobalPosition = goal + side * 1.15f + Vector3.Up * 0.1f;
+                    bot.SwordWantUntil = Clock + 2.5;
+                    bot.SwordTarget = goal + Vector3.Up * 1.1f;
+                    swung++;
+                }
+                return $"{swung} bot(s) swing at {(dummyAt != null ? "the dummy" : "you")}.";
             }
             case "drive":
             {

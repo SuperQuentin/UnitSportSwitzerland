@@ -87,3 +87,14 @@ Follows the slopes (#887, PR #888). Decided with the owner (Oct 19 2026):
    `bot-capability-map`.
 4. Checks: `--ride skis` on La Pasay (top speed, a skid stop), off snow on grass, `racecheck skis`
    (the AutoPilot still finishes), quick tier. Notes.
+
+## Status (on the branch, Oct 19 2026)
+
+- **Built**: steps 1-4.
+- **Built differently**:
+  - Off-snow friction is 0.30, not 0.45, and the off-snow push is 0.7 m/s. At 0.45 friction ate
+    each push before the next one, and six presses a second went nowhere.
+  - Carving needs the skis on edge: flat skis do not carve.
+  - `--ride skis` taps six times a second.
+- **Found**: ski race courses follow roads, so off snow they are now a walk. Follow-up: build
+  courses from the slopes' centrelines.

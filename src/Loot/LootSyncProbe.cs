@@ -48,6 +48,12 @@ public partial class LootSyncProbe : ChatProbe
         await Seconds(1.0);
         var door = DoorIndex.Nearest(me.GlobalPosition, 400f)!.Value;
         string doorKey = door.Key.ToString();
+        // in one after the other: two walkers in one doorway push each other off its line, into the shell beside it (#1401)
+        if (_role == "B")
+        {
+            if (!await Heard("A", "entered", 120)) { Fail("A never walked in"); return; }
+            door = DoorIndex.Find(door.Key) ?? door;   // in today's frame (#1090)
+        }
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
         me.Velocity = Vector3.Zero;
@@ -57,25 +63,36 @@ public partial class LootSyncProbe : ChatProbe
         // doors are portals (#59): E opens it — unless the other client already did, when E would
         // shut it in their face — it swings, and you walk through
         if (!interiors.IsOpen(doorKey)) me.TryInteract();
-        if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
+        if (!await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, DoorSettle, 15))
         { Fail($"the door {doorKey} never opened"); return; }
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return; }
+        if (_role == "A") Say("entered");
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         var layout = interiors.Current!;
         var node = interiors.CurrentNode!;
         GD.Print($"[lootsync {_role}] inside {layout.Key}");
 
-        // the first ground-floor container with something in it this restock period
+        // the first ground-floor container with something in it this restock period, and not by the way
+        // out: there E is the door (epoch 892892's shelf, #1006). Judged from straight in front, the same
+        // spot on both clients, so both pick the same one
         long epoch = LootTables.Epoch(layout.Key, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        int index = layout.Furniture.FindIndex(f => f.Floor == 0 && LootTables.IsLootable(f.Type) && !LootTables.IsLocked(f.Type)
-            && LootTables.ContentsOf(layout, layout.Furniture.IndexOf(f), epoch).Count >= 2);
-        if (index < 0) { Fail("no ground-floor container holding two stacks"); return; }
+        Vector3 Front(FurniturePlan p) => new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2) * new Vector3(0, 0, p.D / 2 + 0.55f);
+        int index = -1;
+        for (int i = 0; i < layout.Furniture.Count && index < 0; i++)
+        {
+            var c = layout.Furniture[i];
+            if (c.Floor != 0 || !LootTables.IsLootable(c.Type) || LootTables.IsLocked(c.Type) || LootTables.ContentsOf(layout, i, epoch).Count < 2) continue;
+            var ahead = node.GlobalTransform.Basis * -Front(c);
+            me.EnterInterior(layout.Key, node.GlobalTransform * (new Vector3(c.X, 0.1f, c.Z) + Front(c)), Mathf.Atan2(-ahead.X, -ahead.Z));
+            me.Velocity = Vector3.Zero;
+            await Seconds(0.3);
+            if (!interiors.AtExit(me)) index = i;
+            else GD.Print($"[lootsync {_role}] the {c.Type} ({i}) is by the way out, the next one");
+        }
+        if (index < 0) { Fail("no ground-floor container holding two stacks away from the way out"); return; }
         var f = layout.Furniture[index];
-        var front = new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2) * new Vector3(0, 0, f.D / 2 + 0.55f);
+        var front = Front(f);
         var face = node.GlobalTransform.Basis * -front;
         // side by side, or the two bodies shove each other off the spot — but still in front of
         // THIS piece: a step too far sideways and the search finds the cupboard next to it
@@ -90,12 +107,19 @@ public partial class LootSyncProbe : ChatProbe
         }
         Expect(LootService.NearestContainer(me, layout, node) == index, $"standing in front of the {f.Type}");
 
-        Expect(me.TryInteract() && loot.IsOpen, $"opened the {f.Type}");
+        // what E did instead, if not the search: a shop's counter or machine in reach, or the way out
+        // (both clients stand at the same piece, so both stop here at once; #1006)
+        if (!(me.TryInteract() && loot.IsOpen))
+        {
+            string did = ShopService.Instance?.IsOpen == true ? "a shop's panel opened" : interiors.AtExit(me) ? "it is at the way out" : "nothing opened";
+            Fail($"opened the {f.Type}: {did} (in {layout.Key}, shop {layout.Shop})");
+            return;
+        }
         if (!await Until(() => !loot.Waiting, 10)) { Fail("contents never arrived"); return; }
         var start = loot.OpenContents().ToList();
         int total = start.Sum(c => c.Stack.Count);
         GD.Print($"[lootsync {_role}] it holds {string.Join(", ", start.Select(c => $"{c.Stack.Id} x{c.Stack.Count}"))}");
-        Expect(start.Count >= 2, "both see the same container with two or more stacks");
+        if (start.Count < 2) { Fail($"both see the same container with two or more stacks ({start.Count})"); return; }
 
         // said again until the other side answers: it may not have been listening the first time
         bool both = false;
@@ -106,7 +130,6 @@ public partial class LootSyncProbe : ChatProbe
         }
         if (!both) { Fail($"{other} never opened it"); return; }
         Say("open");
-        await Seconds(1.5);
 
         if (_role == "A")
         {
@@ -133,7 +156,7 @@ public partial class LootSyncProbe : ChatProbe
             if (!await Heard("A", "took", 60)) { Fail("A never took"); return; }
             string took = _heard.Last(l => l.Contains("LS A took"));
             int gone = int.Parse(took[(took.LastIndexOf(' ') + 1)..]);
-            await Seconds(1.0);
+            await Until(() => !loot.OpenContents().Any(c => c.Index == gone), 5);
             Expect(!loot.OpenContents().Any(c => c.Index == gone),
                 "B's open panel lost the stack A took, without B doing anything");
 

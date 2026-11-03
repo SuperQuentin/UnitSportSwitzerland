@@ -14,6 +14,8 @@ public enum BodyBuild
     Lean = 3,
     /// <summary>Masculine and heavy: thick waist and neck, big arms.</summary>
     Stocky = 4,
+    /// <summary>#880: a visitor from far away: thin limbs, narrow shoulders, a big domed head with a small pointed chin, no ears (<see cref="Aliens"/>).</summary>
+    Alien = 5,
 }
 
 /// <summary>Hair drawn over the head's crown (#394). Replicated in <see cref="Appearance"/>: append only.</summary>
@@ -44,7 +46,7 @@ public enum HairStyle
 
 /// <summary>
 /// Who a figure is, as opposed to what it wears (#394): build, face, eye colour, skin tone, hair
-/// style and hair colour. A player chooses it in Settings → Character (<c>GameSettings.AppearanceBits</c>) and it replicates
+/// style and hair colour. A player chooses it in the Character menu (<c>GameSettings.AppearanceBits</c>) and it replicates
 /// packed in one int (<c>FootPlayer.AppearanceBits</c>); everyone else gets one from a seed.
 /// Indices into <see cref="SkinTones"/>, <see cref="EyeColours"/> and <see cref="HairColours"/>:
 /// append to those tables only, a packed value must mean the same figure on every peer.
@@ -54,7 +56,16 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
     public static readonly Color[] SkinTones =
     {
         new("f5dbc7"), new("edc7a8"), new("e6bd9e"), new("cc9970"), new("bd9466"), new("946647"), new("6b4730"), new("4d3324"),
+        // #880: the aliens' (Aliens): green, grey, violet, teal
+        new("8fd16a"), new("bcbab2"), new("ad8fe0"), new("5cc8bc"),
     };
+
+    /// <summary>What the Character menu shows for each <see cref="SkinTones"/> entry (same order).</summary>
+    public static readonly string[] SkinNames =
+        { "Tone 1", "Tone 2", "Tone 3", "Tone 4", "Tone 5", "Tone 6", "Tone 7", "Tone 8", "Alien green", "Alien grey", "Alien violet", "Alien teal" };
+
+    /// <summary>The human tones and builds, the first of each table: what a seed draws from (<see cref="ForSeed"/>), so an added alien one changes nobody's seeded figure.</summary>
+    public const int HumanSkins = 8, HumanBuilds = 5;
 
     public static readonly Color[] EyeColours =
     {
@@ -67,10 +78,10 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         new("d8b860"), new("e8e2cf"), new("8a8a8a"), new("33b8bc"), new("1f6fbf"), new("e86aa8"),
     };
 
-    /// <summary>What Settings → Character shows for each <see cref="EyeColours"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="EyeColours"/> entry (same order).</summary>
     public static readonly string[] EyeNames = { "Brown", "Blue", "Green", "Violet", "Red", "Amber", "Grey", "Black" };
 
-    /// <summary>What Settings → Character shows for each <see cref="HairColours"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="HairColours"/> entry (same order).</summary>
     public static readonly string[] HairColourNames =
         { "Black", "Dark brown", "Brown", "Auburn", "Red", "Ginger", "Blonde", "Platinum", "Grey", "Teal", "Blue", "Pink" };
 
@@ -81,17 +92,19 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
     public Color EyeColour => EyeColours[Mathf.PosMod(Eyes, EyeColours.Length)];
     public Color HairTint => HairColours[Mathf.PosMod(HairColour, HairColours.Length)];
 
-    // bit 30 marks a packed value as chosen: 0 (an int's default) is "nobody chose, use the seed"
-    private const int Set = 1 << 30;
-
-    /// <summary>Build 3 bits, face 4, eyes 3, skin 3, hair style 4, hair colour 4, and the chosen flag.</summary>
-    public int Pack() => Set | (int)Build | (Face & 15) << 3 | (Eyes & 7) << 7 | (Skin & 7) << 10
-        | ((int)Hair & 15) << 13 | (HairColour & 15) << 17;
+    /// <summary>The one int it is saved and replicated as (<see cref="AppearanceCode"/>: the bit layout, unit tested).</summary>
+    public int Pack() => new AppearanceCode((int)Build, Face, Eyes, Skin, (int)Hair, HairColour).Pack();
 
     /// <summary>A packed value back, or null when it was never set.</summary>
-    public static Appearance? Unpack(int bits) => (bits & Set) == 0 ? null : new(
-        (BodyBuild)Mathf.Clamp(bits & 7, 0, Builds - 1), bits >> 3 & 15, bits >> 7 & 7, bits >> 10 & 7,
-        (HairStyle)Mathf.Clamp(bits >> 13 & 15, 0, HairStyles - 1), bits >> 17 & 15);
+    public static Appearance? Unpack(int bits) => AppearanceCode.Unpack(bits) is not { } c ? null : new(
+        (BodyBuild)Mathf.Clamp(c.Build, 0, Builds - 1), c.Face, c.Eyes, c.Skin,
+        (HairStyle)Mathf.Clamp(c.Hair, 0, HairStyles - 1), c.HairColour);
+
+    /// <summary>An alien figure in one line (#880, <see cref="Aliens"/>): the alien build, bald, an alien skin and face.</summary>
+    public static Appearance Alien(int skin = Aliens.Green, int face = Aliens.VisitorFace, int eyes = 3) => Aliens.Look(skin, face, eyes);
+
+    /// <summary>An alien's skin (<see cref="SkinTones"/> past the human ones) or build.</summary>
+    public bool IsAlien => Build == BodyBuild.Alien || Mathf.PosMod(Skin, SkinTones.Length) >= HumanSkins;
 
     /// <summary>
     /// A figure for someone who never chose one (an NPC, a ghost runner, a player with default
@@ -101,7 +114,7 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
     {
         uint h = (uint)seed * 2654435761u;
         int Next(int n) { h = h * 1103515245u + 12345u; return (int)(h >> 16) % n; }
-        var build = (BodyBuild)Next(Builds);
+        var build = (BodyBuild)Next(HumanBuilds);
         bool masc = build >= BodyBuild.Broad;
         // the preset faces (FaceGenome), the #657 ones too; the draw advances the same whatever the count
         ReadOnlySpan<int> faces = masc ? [5, 6, 7, 1, 2, 9, 11, 15] : [0, 1, 2, 3, 4, 8, 9, 10, 12, 13, 14];
@@ -112,7 +125,7 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         var hair = hairs[Next(hairs.Length)];
         // natural colours mostly, a dyed one now and then
         int hairColour = Next(10) < 8 ? Next(9) : 9 + Next(3);
-        return new Appearance(build, face, Next(EyeColours.Length), Next(SkinTones.Length), hair, hairColour);
+        return new Appearance(build, face, Next(EyeColours.Length), Next(HumanSkins), hair, hairColour);
     }
 
     public static readonly Appearance Default = new(BodyBuild.Slim, 1, 0, 2, HairStyle.Bob, 2);
@@ -145,10 +158,17 @@ public readonly record struct Physique(
     float Chest, float ChestFront, float ChestBack, float Shoulder, float Neck,
     float ThighTop, float ThighMid, float Knee, float Calf, float Ankle,
     float Deltoid, float UpperArm, float Elbow, float Forearm, float Wrist,
-    float Hand, float Head, float Jaw = 0f)
+    float Hand, float Head, float Jaw = 0f, float Dome = 0f)
 {
     public static Physique Of(BodyBuild build) => build switch
     {
+        // #880: slight and narrow, long hands, a big head (Dome: wide over the brow, a small pointed chin)
+        BodyBuild.Alien => new(
+            Crotch: 0.100f, Hip: 0.118f, HipBack: 0.082f, Waist: 0.094f, UnderBust: 0.102f,
+            Chest: 0.112f, ChestFront: 0.072f, ChestBack: 0.066f, Shoulder: 0.128f, Neck: 0.034f,
+            ThighTop: 0.068f, ThighMid: 0.058f, Knee: 0.041f, Calf: 0.043f, Ankle: 0.028f,
+            Deltoid: 0.043f, UpperArm: 0.037f, Elbow: 0.029f, Forearm: 0.032f, Wrist: 0.023f,
+            Hand: 1.06f, Head: 1.38f, Dome: 1f),
         BodyBuild.Lean => new(
             Crotch: 0.112f, Hip: 0.130f, HipBack: 0.084f, Waist: 0.118f, UnderBust: 0.132f,
             Chest: 0.146f, ChestFront: 0.084f, ChestBack: 0.080f, Shoulder: 0.172f, Neck: 0.052f,
@@ -296,7 +316,7 @@ public static partial class HumanMeshBuilder
             Shape = Physique.Of(build);
             Torso = new Torso(rig, Shape);
             Side = (rig.ShoulderR - rig.ShoulderL).Normalized();
-            Head = new Head(rig, Side, Shape.Head, Shape.Jaw);
+            Head = new Head(rig, Side, Shape.Head, Shape.Jaw, Shape.Dome);
         }
     }
 
@@ -352,7 +372,8 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         // forward as the fallback: the trunk never lies along its own shoulder line
-        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f);
+        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f)
+            with { Part = PartTrunk };
     }
 
     /// <summary>An arm, shoulder to wrist (and the hand, on the forearm).</summary>
@@ -361,7 +382,9 @@ public static partial class HumanMeshBuilder
         var q = RestRig;
         return left
             ? TwoBoneRest(r.ShoulderL, r.ElbowL, r.WristL, ShoulderLine(r), TrunkUp(r), q.ShoulderL, q.ElbowL, q.WristL, ShoulderLine(q), TrunkUp(q), 0.04f)
-            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f);
+                with { Part = PartArmL }
+            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f)
+                with { Part = PartArmR };
     }
 
     /// <summary>A leg from free joints (a cyclist's too), hip to ankle, <paramref name="side"/> across the figure.</summary>
@@ -369,7 +392,8 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         var (rh, rk, ra) = left ? (q.HipL, q.KneeL, q.AnkleL) : (q.HipR, q.KneeR, q.AnkleR);
-        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f);
+        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f)
+            with { Part = left ? PartLegL : PartLegR };
     }
 
     /// <summary>A foot, ankle to toe.</summary>
@@ -377,7 +401,7 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         var (ra, rt) = left ? (q.AnkleL, q.ToeL) : (q.AnkleR, q.ToeR);
-        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up));
+        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up), left ? PartFootL : PartFootR);
     }
 
     /// <summary>The head and the neck under it.</summary>
@@ -385,7 +409,7 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         return MeshScratch.RestMap.Rigid(BoneRest(r.HeadBase, r.HeadTop, ShoulderLine(r), TrunkFwd(r),
-            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)));
+            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)), PartHead);
     }
 
     /// <summary>
@@ -440,7 +464,10 @@ public static partial class HumanMeshBuilder
                 LimbLoft(s, shoulder, elbow, wrist, arm, armZones, fit.Side);
                 var palm = look.Gloves ?? look.Skin;
                 var fingers = look.Gloves is { } gloves && !look.Fingerless ? gloves : look.Skin;
-                Hand(s, elbow, wrist, side, shape.Hand, palm, fingers);
+                // pointing (#889), the hand bends at the wrist along its own way: it is drawn as from an
+                // elbow straight behind it on that line
+                bool point = !left && r.PointDirR != Vector3.Zero;
+                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point, r.Fist);
             }
         }
         if (!head) return fit;
@@ -448,12 +475,14 @@ public static partial class HumanMeshBuilder
         using var headRest = s.Resting(HeadRest(r));
         // a straight neck up into the skull behind the jaw: the jaw's underside overhangs it, so the
         // head reads as a head on a neck rather than one cone running down into the collar
-        s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
+        // from the top of the trunk into the head, so a skinned one (#1202) bends with both
+        using (s.Resting(HeadRest(r) with { Part = PartNeck }))
+            s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
         fit.Head.Draw(s, look.Skin);
         if (cover != HairCover.Head)
         {
             fit.Head.Face(s, look.Genome ?? FaceGenome.Preset(look.Face).WithSeed(FaceSeed(look)), look.Eyes);
-            fit.Head.Ears(s, look.Skin);
+            if (shape.Dome < 0.5f) fit.Head.Ears(s, look.Skin);
             fit.Head.Hair(s, look.HairStyle, look.Hair, look.Skin, cover);
         }
         return fit;
@@ -633,30 +662,83 @@ public static partial class HumanMeshBuilder
     }
 
     /// <summary>
-    /// A hand: palm, four fingers curled a little toward the palm, and a thumb on the side facing
-    /// forward when the arm hangs. The palm faces the body.
+    /// The closed fist of a sword's grip (#1371), from <see cref="HandGrip"/>: each finger a ring of straight boxes round the handle (the flat sides
+    /// tangent to its circle), stacked along the handle's axis, the thumb over the index and middle fingers. Built once, when the sword is equipped.
     /// </summary>
-    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers)
+    private static void FistGrip(MeshScratch s, Vector3 wrist, Vector3 t, Vector3 d, Vector3 n, Color colour)
     {
+        Vector3 At(System.Numerics.Vector3 v) => wrist + t * v.X + d * v.Y + n * v.Z;
+        var axis = HandGrip.Axis;
+        var axisW = (t * axis.X + d * axis.Y).Normalized();
+        Span<System.Numerics.Vector3> pts = stackalloc System.Numerics.Vector3[HandGrip.Segments + 1];
+        for (int i = 0; i < 4; i++)
+        {
+            HandGrip.RingPoints(i, pts);
+            for (int k = 0; k < HandGrip.Segments; k++)
+            {
+                var a = At(pts[k]);
+                var b = At(pts[k + 1]);
+                var along = b - a;
+                float len = along.Length();
+                var y = along / len;
+                var z = axisW.Cross(y).Normalized();
+                s.Box((a + b) * 0.5f, new Vector3(HandGrip.FingerWide, len + 0.003f, HandGrip.FingerThick), colour, new Basis(axisW, y, z));
+            }
+        }
+        Span<System.Numerics.Vector3> th = stackalloc System.Numerics.Vector3[3];
+        HandGrip.ThumbPoints(th);
+        s.Tube(At(th[0]), At(th[1]), HandGrip.ThumbRadius * 1.1f, HandGrip.ThumbRadius, colour, 5);
+        s.Tube(At(th[1]), At(th[2]), HandGrip.ThumbRadius, HandGrip.ThumbRadius * 0.9f, colour, 5);
+    }
+
+    /// <summary>
+    /// A hand: palm, four fingers curled a little toward the palm, and a thumb on the side facing
+    /// forward when the arm hangs. The palm faces the body. <paramref name="point"/>: the index
+    /// straight on along the hand, the others curled into the palm (a finger on a screen, #889).
+    /// </summary>
+    /// <summary>The viewer's close-ups of the grip build the unposed figure with closed fists (the game's is <c>FigureLook.Fist</c>).</summary>
+    [ThreadStatic] private static bool ForceFist;
+
+    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false, bool fist = false)
+    {
+        fist |= ForceFist;
+        if (fist) scale = 1f;   // the grip is described at one hand size (HandGrip), so the sword sits in it whatever the build
         var h = HandFrameOf(elbow, wrist, side, scale);
         var (dir, thumbSide, n, k) = (h.Along, h.Thumb, h.Inward, scale);
         var basis = new Basis(thumbSide, dir, thumbSide.Cross(dir));
         s.Box(h.Palm, new Vector3(0.068f, 0.072f, 0.028f) * k, palm, basis);
+        if (fist)
+        {
+            FistGrip(s, wrist, thumbSide, dir, n, fingers);
+            return;
+        }
 
         // fingers from the knuckle line, the index on the thumb side
-        var curl = (dir * Mathf.Cos(0.35f) + n * Mathf.Sin(0.35f)).Normalized();
-        var fingerBasis = new Basis(thumbSide, curl, thumbSide.Cross(curl));
         var knuckles = h.Palm + dir * 0.036f * k;
         ReadOnlySpan<float> lengths = [0.066f, 0.072f, 0.068f, 0.054f];
         for (int i = 0; i < 4; i++)
         {
+            // pointing: the index straight, the rest folded into the palm
+            // a closed fist (#1371, a sword in the hand): every finger curled right round into the palm
+            float bend = fist ? 1.38f : !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
+            var curl = (dir * Mathf.Cos(bend) + n * Mathf.Sin(bend)).Normalized();
+            var fingerBasis = new Basis(thumbSide, curl, thumbSide.Cross(curl));
             float across = (1.5f - i) * 0.0168f * k;
-            float len = lengths[i] * k;
-            s.Box(knuckles + thumbSide * across + curl * len * 0.5f, new Vector3(0.0145f, len, 0.019f) * k, fingers, fingerBasis);
+            float len = lengths[i] * k * (point && i > 0 ? 0.6f : 1f);
+            if (point && i == 0)
+            {
+                // the pointing index down the hand's middle, ending exactly where ApplyPoint aimed it,
+                // whatever this figure's hand size
+                across = 0f;
+                len = Mathf.Max(0.03f, FingerReach - (0.042f + 0.036f) * k);
+            }
+            var size = point && i == 0 ? new Vector3(0.0145f * k, len, 0.019f * k) : new Vector3(0.0145f, len, 0.019f) * k;
+            s.Box(knuckles + thumbSide * across + curl * len * 0.5f, size, fingers, fingerBasis);
         }
 
         var thumbRoot = wrist + dir * 0.022f * k + thumbSide * 0.028f * k;
-        var thumbDir = (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
+        var thumbDir = fist ? (dir * 0.45f + n * 0.55f - thumbSide * 0.40f).Normalized()   // over the curled fingers
+            : (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
         s.Tube(thumbRoot, thumbRoot + thumbDir * 0.055f * k, 0.013f * k, 0.009f * k, fingers, 5);
     }
 
@@ -903,7 +985,7 @@ public static partial class HumanMeshBuilder
         public readonly Vector3 Side, UpAxis, Fwd;
         /// <summary>Metres of the head per metre of the profile tables below.</summary>
         public readonly float K;
-        private readonly float _jaw;
+        private readonly float _jaw, _dome;
         private const int Sides = 12;
 
         // (half width, front depth, back depth, forward offset) at each height, metres at scale 1
@@ -925,12 +1007,25 @@ public static partial class HumanMeshBuilder
             new(0.076f, 0.068f, 0.090f, -0.010f), new(0.058f, 0.050f, 0.072f, -0.010f),
             new(0.030f, 0.026f, 0.040f, -0.010f),
         };
+        // #880, the aliens': a small pointed chin under a big dome, widest over the brow (Physique.Dome)
+        private static readonly Vector4[] Alien =
+        {
+            new(0.014f, 0.014f, 0.012f, 0.052f), new(0.034f, 0.034f, 0.024f, 0.036f),
+            new(0.052f, 0.054f, 0.046f, 0.020f), new(0.072f, 0.074f, 0.074f, 0.008f),
+            new(0.092f, 0.090f, 0.098f, 0f), new(0.104f, 0.096f, 0.112f, -0.006f),
+            new(0.102f, 0.090f, 0.110f, -0.010f), new(0.088f, 0.076f, 0.096f, -0.010f),
+            new(0.054f, 0.046f, 0.062f, -0.010f),
+        };
+
+        /// <summary>How far the pixel face's band stands off the head (profile metres, #947).</summary>
+        private const float FaceLift = 0.010f;
 
         /// <summary>The height of the top of the scalp, and of the hair cap over it (profile metres).</summary>
         public const float Crown = 0.250f, HairCrown = 0.276f;
 
-        public Head(Rig r, Vector3 shoulderSide, float scale, float jaw)
+        public Head(Rig r, Vector3 shoulderSide, float scale, float jaw, float dome = 0f)
         {
+            _dome = dome;
             var axis = r.HeadTop - r.HeadBase;
             UpAxis = axis.LengthSquared() > 1e-8f ? axis.Normalized() : Vector3.Up;
             Side = (shoulderSide - UpAxis * shoulderSide.Dot(UpAxis)).Normalized();
@@ -948,14 +1043,15 @@ public static partial class HumanMeshBuilder
         /// <summary>(half width, front depth, back depth, forward offset) at height <paramref name="y"/>.</summary>
         public Vector4 Profile(float y)
         {
-            if (y <= Heights[0]) return Soft[0].Lerp(Square[0], _jaw);
+            if (y <= Heights[0]) return Soft[0].Lerp(Square[0], _jaw).Lerp(Alien[0], _dome);
             for (int i = 1; i < Heights.Length; i++)
                 if (y <= Heights[i])
                 {
                     float f = (y - Heights[i - 1]) / (Heights[i] - Heights[i - 1]);
-                    return Soft[i - 1].Lerp(Soft[i], f).Lerp(Square[i - 1].Lerp(Square[i], f), _jaw);
+                    var human = Soft[i - 1].Lerp(Soft[i], f).Lerp(Square[i - 1].Lerp(Square[i], f), _jaw);
+                    return _dome > 0f ? human.Lerp(Alien[i - 1].Lerp(Alien[i], f), _dome) : human;
                 }
-            return Soft[^1];
+            return Soft[^1].Lerp(Alien[^1], _dome);
         }
 
         private Vector3 Vertex(float y, int k, float inflate)
@@ -991,15 +1087,15 @@ public static partial class HumanMeshBuilder
         public Vector3 Seat(bool hair) => Centre(hair ? 0.192f : 0.184f) - Fwd * 0.008f * K;
 
         /// <summary>The hats' radii (authored for a band of about 0.11 m) on this head.</summary>
-        public float HatScale(bool hair) => K * (hair ? 1.06f : 1f);
+        public float HatScale(bool hair) => K * (hair ? 1.06f : 1f) * (1f + 0.12f * _dome);
 
         /// <summary>Half the head's width at its widest, with hair on or not.</summary>
-        public float HalfWidth(bool hair) => (0.086f + (hair ? 0.013f : 0f)) * K;
+        public float HalfWidth(bool hair) => (0.086f + 0.014f * _dome + (hair ? 0.013f : 0f)) * K;
 
-        private Vector3[] Ring(RingPool pool, float y, float inflate)
+        private Vector3[] Ring(RingPool pool, float y, float inflate, float rise = 0f)
         {
             var ring = pool.Ring(Sides);
-            for (int k = 0; k < Sides; k++) ring[k] = Vertex(y, k, inflate);
+            for (int k = 0; k < Sides; k++) ring[k] = Vertex(y, k, inflate) + UpAxis * rise * K;
             return ring;
         }
 
@@ -1011,7 +1107,11 @@ public static partial class HumanMeshBuilder
             s.Loft(pool.Sections, pool.Fill(skin), skin);
         }
 
-        /// <summary>The pixel face: a band over the front of the head, from brow to chin, drawn from <paramref name="face"/> by the shader (#657); its vertex colour is the eye colour.</summary>
+        /// <summary>
+        /// The pixel face: a band over the front of the head, from brow to chin, drawn from <paramref name="face"/>
+        /// by the shader (#657); its vertex colour is the eye colour. 1 cm proud (#947): its rows and columns are
+        /// chords across the head's facets, so at 4 mm parts of it came within 2 mm of the skin and z-fought it.
+        /// </summary>
         public void Face(MeshScratch s, FaceGenome face, Color eyes)
         {
             ReadOnlySpan<float> rows = [0.178f, 0.135f, 0.090f, 0.045f, 0.010f];
@@ -1022,7 +1122,7 @@ public static partial class HumanMeshBuilder
             {
                 var row = pool.Ring(columns);
                 for (int i = 0; i < columns; i++)
-                    row[i] = Point(rows[r], Mathf.DegToRad(Mathf.Lerp(145f, 35f, i / (columns - 1f))), 0.004f);
+                    row[i] = Point(rows[r], Mathf.DegToRad(Mathf.Lerp(145f, 35f, i / (columns - 1f))), FaceLift);
                 pool.Sections.Add(row);
             }
             var (low, high) = face.Code;
@@ -1063,12 +1163,19 @@ public static partial class HumanMeshBuilder
             for (int k = 0; k < Sides; k++)
             {
                 float front = (Mathf.Sin(Mathf.Tau * k / Sides) + 1f) * 0.5f;
-                hairline[k] = Vertex(Mathf.Lerp(0.060f, low + 0.012f, front), k, inflate);
+                // over the brow the hairline comes down onto the face band's top row: stand it 1.2 cm
+                // proud of the band there, or the two z-fight (#947)
+                float over = Mathf.Lerp(inflate, Mathf.Max(inflate, FaceLift + 0.012f), Mathf.SmoothStep(0.7f, 0.93f, front));
+                hairline[k] = Vertex(Mathf.Lerp(0.060f, low + 0.012f, front), k, over);
             }
             pool.Sections.Add(hairline);
             pool.Sections.Add(Ring(pool, 0.200f, inflate));
-            pool.Sections.Add(Ring(pool, 0.238f, inflate));   // over the crown's dome (#671)
-            pool.Sections.Add(Ring(pool, Crown, inflate));
+            // over the crown's dome (#671). The scalp is nearly flat up there (flatter still on the
+            // aliens' dome), so a ring pushed out sideways sits only a few mm over it: raise these two
+            // as well, or the cap's top z-fights the scalp (#947)
+            float rise = inflate * 0.5f;
+            pool.Sections.Add(Ring(pool, 0.238f, inflate, rise));
+            pool.Sections.Add(Ring(pool, Crown, inflate, rise));
             pool.Sections.Add(Ring(pool, Crown + inflate * 2f, inflate - 0.013f));   // the top profile, raised over the scalp
             s.Loft(pool.Sections, pool.Fill(colour), colour);
         }
@@ -1078,7 +1185,9 @@ public static partial class HumanMeshBuilder
         {
             var top = Centre(0.19f) - Fwd * 0.01f * K;
             var bottom = _base + (UpAxis * end - Fwd * Mathf.Lerp(0.012f, 0.03f, Mathf.Clamp(-end * 5f, 0f, 1f))) * K;
-            s.Skirt(top, bottom, 0.100f * K, flare * K, colour, 12, gap: Fwd, gapAngle: gapAngle);
+            // the aliens' dome is wider: start outside its cap (#947: inside, the cap and the fall z-fought)
+            float dome = 0.018f * _dome;
+            s.Skirt(top, bottom, (0.100f + dome) * K, (flare + dome) * K, colour, 12, gap: Fwd, gapAngle: gapAngle);
         }
 
         private enum Fringe { None, Short, Locks, Spiky, Blunt, Swept }

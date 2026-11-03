@@ -83,7 +83,7 @@ public partial class ShopService : Node
 
     public override void _Ready()
     {
-        _storeDir = ProjectSettings.GlobalizePath("user://shops");
+        _storeDir = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://shops"));
         _ledger = new ShopLedger(LoadTile, SaveTile, InteriorLayout.CurrentVersion);
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--shopstuck") >= 0) ForceStuck = true;
         if (DisplayServer.GetName() == "headless" && Multiplayer.IsServer() && Online) return;
@@ -108,7 +108,7 @@ public partial class ShopService : Node
     /// <summary>This month is the hunting season (<c>--birdmonth N</c> pretends another month).</summary>
     private static bool DefaultSeason()
     {
-        int month = DateTime.Now.Month;
+        int month = Core.Calendar.Month;
         var args = OS.GetCmdlineUserArgs();
         int at = Array.IndexOf(args, "--birdmonth");
         if (at >= 0 && at + 1 < args.Length && int.TryParse(args[at + 1], out int m) && m is >= 1 and <= 12) month = m;
@@ -139,13 +139,18 @@ public partial class ShopService : Node
     public bool IsOpen => _shopUi?.IsOpen == true || _vendingUi?.IsOpen == true;
 
     /// <summary>The prompt line for a counter or a machine in reach, or null.</summary>
-    public string? PromptFor(FootPlayer p)
+    public string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt line for a counter or a machine in reach and that piece to outline (#1286), or null.</summary>
+    public UnitSport.Items.Interaction? InteractionFor(FootPlayer p)
     {
         if (IsOpen) return null;
         if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
         string key = InputHints.Tag(PlayerInput.InteractMount);
-        if (NearestMachine(p, layout, node) >= 0) return $"{key} PAUSA vending machine";
-        if (NearestCounter(p, layout, node) >= 0) return $"{key} {ShopTables.Name(layout.Shop)}: buy and sell";
+        if (NearestMachine(p, layout, node) is var machine and >= 0)
+            return new($"{key} PAUSA vending machine", UnitSport.Items.Outline.Piece(node, machine));
+        if (NearestCounter(p, layout, node) is var counter and >= 0)
+            return new($"{key} {ShopTables.Name(layout.Shop)}: buy and sell", UnitSport.Items.Outline.Piece(node, counter));
         return null;
     }
 

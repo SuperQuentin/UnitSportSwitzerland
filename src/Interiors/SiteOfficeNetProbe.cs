@@ -108,7 +108,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
             {
                 Say($"took {index} {first.Index}");
                 if (t == 0) GD.Print($"{Log} took {first.Stack.Id} x{first.Stack.Count} from the {layout.Furniture[index].Type} ({index})");
-                await Seconds(2);
+                await Until(() => _heard.Any(l => l.Contains("SO B done")) && _heard.Any(l => l.Contains("SO C done")), 2);
                 b |= _heard.Any(l => l.Contains("SO B done"));
                 c |= _heard.Any(l => l.Contains("SO C done"));
             }
@@ -176,7 +176,8 @@ public partial class SiteOfficeNetProbe : ChatProbe
     {
         DoorIndex.Entry? last = null;
         foreach (var e in DoorIndex.All())
-            if (e.Key.Building == office.Key.Building && (last == null || e.Key.Slot > last.Value.Key.Slot)) last = e;
+            // the cabins are the last ground doors: an office with its gallery has its upper doors after them (#827)
+            if (e.Key.Building == office.Key.Building && e.Level == 0 && (last == null || e.Key.Slot > last.Value.Key.Slot)) last = e;
         if (last is not { } cabin || cabin.Key.Slot == 0) { Expect(false, "the site has a toilet cabin door"); return; }
         string key = cabin.Key.ToString();
         var inward = -cabin.Outward;
@@ -220,8 +221,9 @@ public partial class SiteOfficeNetProbe : ChatProbe
         if (rail >= 0 && await Search(me, layout, node, loot, rail))
         {
             GD.Print($"{Log} the hard-hat rail holds {string.Join(", ", loot.OpenContents().Select(x => $"{x.Stack.Id} x{x.Stack.Count}"))}");
-            loot.TakeAll();
-            await Until(() => !loot.Waiting && !loot.OpenContents().Any(), 10);
+            // the panel's button (#929): one grant after another from the server, then the panel closes
+            loot.TakeAllAndClose();
+            Expect(await Until(() => !loot.IsOpen, 10), "take all closes the emptied panel");
             loot.Close();
         }
         var inv = _items.Inventory;
@@ -243,10 +245,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
     /// <summary>Walks through the open door into the office: the player's space must become it.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, string doorKey)
     {
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkUntil(me, -me.Camera.GlobalTransform.Basis.Z, () => me.Indoors && interiors.Current != null, 8);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         Expect(interiors.Current!.Kind == BuildingKind.UnderConstruction, $"{_role} walked into the site office {interiors.Current.Key}");

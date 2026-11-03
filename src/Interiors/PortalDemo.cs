@@ -34,7 +34,7 @@ public partial class PortalDemo : Node3D
     private readonly Dictionary<string, InteriorNode> _interiors = new();
     private Camera3D _camera = null!;
     private Node3D _walker = null!;
-    private MeshInstance3D _walkerMesh = null!;
+    private Avatar.SkinnedFigure _walkerMesh = null!;
     private float _walkerZ = 99f, _phase;
     private double _t;
     private int _view = -1;
@@ -104,7 +104,7 @@ public partial class PortalDemo : Node3D
                 spots.Add(new DoorSpot(index, new Vector3(h.Center.X + x, 0, z), new Vector3(0, 0, south ? 1 : -1), h.DoorWidth, h.DoorHeight));
             }
         }
-        var mesh = BuildingMeshBuilder.Build(tile, spots.ToArray())!;
+        var mesh = BuildingMeshBuilder.Build(tile, spots.ToArray(), Styles.StyleKit.Detail)!;
         AddChild(new MeshInstance3D { Name = "Buildings", Mesh = ChunkNode.ToArrayMesh(mesh, buildingMaterial) });
 
         // D has people in it: more lit windows, figures behind the glass
@@ -159,7 +159,8 @@ public partial class PortalDemo : Node3D
 
         // someone who walks in through A's front door
         _walker = new Node3D { Name = "Walker" };
-        _walkerMesh = new MeshInstance3D { MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial() };
+        _walkerMesh = new Avatar.SkinnedFigure { MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial() };
+        _walkerMesh.Show(new Avatar.FigureLook(Avatar.HumanPalette.Default));
         _walker.AddChild(_walkerMesh);
         _walker.AddToGroup(DoorwayGhosts.Group);
         AddChild(_walker);
@@ -184,8 +185,134 @@ public partial class PortalDemo : Node3D
                 },
             };
             var door = new DoorSpot(0, new Vector3(0, 0, 4.03f), new Vector3(0, 0, 1), 1.1f, 2.2f);
-            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) };
+            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door }, Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)) };
         })));
+
+    /// <summary>
+    /// Roof shapes for the overhangs (#1067; <see cref="RoofOverhangs"/>, drawn with the style's
+    /// mesh detail, so only High shows them): a hipped roof, a terraced row whose middle house
+    /// stands taller (its verges reach over the lower neighbours' roofs, theirs stop at its walls),
+    /// a pair of equal houses (no verge on the party wall), and a lean-to shed against a house (no
+    /// overhang along the wall it leans on).
+    /// </summary>
+    [Showcase("Terrain", "Roof")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseRoofs()
+    {
+        Node3D Show(params Building[] solids)
+        {
+            var tile = new BuildingTile { Id = new TileId(0, 0), Buildings = solids.ToList() };
+            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, null, Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)) };
+        }
+        Building House(float[] triangles, float top, BuildingKind kind = BuildingKind.House) =>
+            new() { Kind = kind, Floors = 2, MinY = 0, MaxY = top, Triangles = triangles };
+        yield return ("Hipped", () => Show(House(Hipped(Vector2.Zero, 12f, 9f, 6.2f, 9.5f), 9.5f)));
+        yield return ("Terraced row", () => Show(
+            House(Solid(new Vector2(-7f, 0f), 7f, 9f, 6.2f, 9f), 9f),
+            House(Solid(Vector2.Zero, 7f, 9f, 7.2f, 10.5f), 10.5f),
+            House(Solid(new Vector2(7f, 0f), 7f, 9f, 6.2f, 9f), 9f)));
+        yield return ("Pair", () => Show(
+            House(Solid(new Vector2(-3.5f, 0f), 7f, 9f, 6.2f, 9f), 9f),
+            House(Solid(new Vector2(3.5f, 0f), 7f, 9f, 6.2f, 9f), 9f)));
+        yield return ("Lean-to", () => Show(
+            House(Solid(Vector2.Zero, 8f, 9f, 6.2f, 9f), 9f),
+            House(LeanTo(-4f - 3.5f, -4f, -3f, 3f, 2.6f, 4.2f), 4.2f, BuildingKind.Annex)));
+    }
+
+    /// <summary>A hipped house: four walls to the eave and four roof faces, the hips at 45 degrees in plan.</summary>
+    private static float[] Hipped(Vector2 c, float w, float d, float eave, float ridge)
+    {
+        float x0 = c.X - w / 2, x1 = c.X + w / 2, z0 = c.Y - d / 2, z1 = c.Y + d / 2, h = Mathf.Min(w, d) / 2;
+        var t = new List<float>();
+        void Tri(Vector3 a, Vector3 b, Vector3 e) { t.AddRange(new[] { a.X, a.Y, a.Z, e.X, e.Y, e.Z, b.X, b.Y, b.Z }); }
+        void Quad(Vector3 a, Vector3 b, Vector3 e, Vector3 f) { Tri(a, b, e); Tri(a, e, f); }
+        Quad(new(x0, 0, z1), new(x1, 0, z1), new(x1, eave, z1), new(x0, eave, z1));
+        Quad(new(x1, 0, z0), new(x0, 0, z0), new(x0, eave, z0), new(x1, eave, z0));
+        Quad(new(x0, 0, z0), new(x0, 0, z1), new(x0, eave, z1), new(x0, eave, z0));
+        Quad(new(x1, 0, z1), new(x1, 0, z0), new(x1, eave, z0), new(x1, eave, z1));
+        Quad(new(x0, eave, z1), new(x1, eave, z1), new(x1 - h, ridge, c.Y), new(x0 + h, ridge, c.Y));
+        Quad(new(x1, eave, z0), new(x0, eave, z0), new(x0 + h, ridge, c.Y), new(x1 - h, ridge, c.Y));
+        Tri(new(x0, eave, z0), new(x0, eave, z1), new(x0 + h, ridge, c.Y));
+        Tri(new(x1, eave, z1), new(x1, eave, z0), new(x1 - h, ridge, c.Y));
+        return t.ToArray();
+    }
+
+    /// <summary>A shed from x0 to x1 whose single roof face climbs from <paramref name="low"/> to <paramref name="high"/> at x1.</summary>
+    private static float[] LeanTo(float x0, float x1, float z0, float z1, float low, float high)
+    {
+        var t = new List<float>();
+        void Tri(Vector3 a, Vector3 b, Vector3 e) { t.AddRange(new[] { a.X, a.Y, a.Z, e.X, e.Y, e.Z, b.X, b.Y, b.Z }); }
+        void Quad(Vector3 a, Vector3 b, Vector3 e, Vector3 f) { Tri(a, b, e); Tri(a, e, f); }
+        Quad(new(x0, 0, z1), new(x1, 0, z1), new(x1, high, z1), new(x0, low, z1));
+        Quad(new(x1, 0, z0), new(x0, 0, z0), new(x0, low, z0), new(x1, high, z0));
+        Quad(new(x0, 0, z0), new(x0, 0, z1), new(x0, low, z1), new(x0, low, z0));
+        Quad(new(x1, 0, z1), new(x1, 0, z0), new(x1, high, z0), new(x1, high, z1));
+        Quad(new(x0, low, z0), new(x0, low, z1), new(x1, high, z1), new(x1, high, z0));
+        return t.ToArray();
+    }
+
+    /// <summary>
+    /// Castles (#859), one of each dress: a keep for every building tradition (on a real fortress of
+    /// that region, Chillon for Savoy), Vufflens's brick, a stately home and a ruin (its broken walls). Each solid stands on its castle's
+    /// first point in its own tile, so <see cref="Castles"/> matches it as the game would.
+    /// </summary>
+    [Showcase("Terrain", "Castle")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseCastle() =>
+        CastleSamples().Select(s => (s.Name, (Func<Node3D>)(() =>
+        {
+            var tile = CastleTile(s.Castle, s.Size, out var at);
+            var node = new Node3D();
+            node.AddChild(new MeshInstance3D
+            {
+                Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, Array.Empty<DoorSpot>(), Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)),
+                Position = new Vector3(-at.X, 0f, -at.Y),
+            });
+            return node;
+        })));
+
+    /// <summary>
+    /// One castle solid of each dress (#859), for the model viewer and the collision matrix: the
+    /// castle it stands on (index in <see cref="Castles.List"/>) and its size (width, depth, eave,
+    /// ridge; eave = ridge is a flat top, a wall walk).
+    /// </summary>
+    public static IEnumerable<(string Name, int Castle, Vector4 Size)> CastleSamples()
+    {
+        int First(Func<(string Name, string Canton, CastleKind Kind, double[] Points), bool> match) =>
+            Array.FindIndex(Castles.List, c => match(c));
+        var keep = new Vector4(12f, 12f, 20f, 20f);
+        foreach (var region in Enum.GetValues<CastleRegion>())
+        {
+            int castle = region == CastleRegion.Savoy
+                ? First(c => c.Name == "Château de Chillon")
+                : First(c => c.Kind == CastleKind.Fortress && Castles.RegionOf(c.Canton) == region);
+            if (castle >= 0) yield return ($"{region} keep", castle, keep);
+        }
+        int brick = First(c => c.Name == "Château de Vufflens");
+        if (brick >= 0) yield return ("Brick keep", brick, keep);
+        int manor = First(c => c.Kind == CastleKind.Manor && Castles.RegionOf(c.Canton) == CastleRegion.Plateau);
+        if (manor >= 0) yield return ("Manor", manor, new Vector4(26f, 14f, 10.5f, 14.5f));
+        int ruin = First(c => c.Kind == CastleKind.Ruin);
+        if (ruin >= 0) yield return ("Ruin", ruin, new Vector4(10f, 10f, 14f, 14f));
+    }
+
+    /// <summary>
+    /// A tile holding one solid of <paramref name="size"/> on the castle's first point, so
+    /// <see cref="Castles"/> matches it as the game would; <paramref name="at"/> is that point in the tile.
+    /// </summary>
+    public static BuildingTile CastleTile(int castle, Vector4 size, out Vector2 at)
+    {
+        var points = Castles.List[castle].Points;
+        var id = TileId.FromLv95(points[0], points[1]);
+        var (x, z) = id.Local(points[0], points[1]);
+        at = new Vector2((float)x, (float)z);
+        return new BuildingTile
+        {
+            Id = id,
+            Buildings = new List<Building>
+            {
+                new() { Kind = BuildingKind.Annex, YearBuilt = 1250, MinY = 0, MaxY = size.W, Triangles = Solid(at, size.X, size.Y, size.Z, size.W) },
+            },
+        };
+    }
 
     /// <summary>
     /// A block of flats' underground garage door (#558) with each road link: the pavement with its
@@ -210,7 +337,7 @@ public partial class PortalDemo : Node3D
                 Link = new GarageLink(k.Item1, k.Item2, 0f, new Vector2(1, 0)),
             };
             var node = new Node3D();
-            node.AddChild(new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) });
+            node.AddChild(new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door }, Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)) });
             // the road it meets, so the link has something to join
             node.AddChild(new MeshInstance3D
             {
@@ -378,9 +505,8 @@ public partial class PortalDemo : Node3D
         const float speed = 1.3f;
         _walkerZ -= speed * dt;
         _phase = Avatar.HumanMeshBuilder.AdvancePhase(_phase, speed, dt);
-        // one mesh rebuilt in place, not a new ArrayMesh per frame (#221)
-        _walkerMesh.Mesh = Avatar.HumanMeshBuilder.BuildStride(Avatar.HumanPalette.Default, speed, _phase,
-            into: _walkerMesh.Mesh as ArrayMesh ?? new ArrayMesh());
+        // one skinned figure posed by its bones (#1202)
+        Avatar.HumanMeshBuilder.PoseStride(_walkerMesh, speed, _phase);
         var a = _links.First(l => l.Plan == "0_0_0" && l.Outside.Basis.Z.Z > 0);
         // facing north: the figure is authored facing +Z
         var street = new Transform3D(new Basis(Vector3.Up, Mathf.Pi), new Vector3(0.15f, 0, _walkerZ));
@@ -506,6 +632,7 @@ public partial class PortalDemo : Node3D
             foreach (var (x, z) in new[] { (x0, z0), (x1, z0), (x1, z1), (x0, z0), (x1, z1), (x0, z1) })
             {
                 st.SetColor(c);
+                st.SetNormal(Vector3.Up);   // the terrain body lights steep ground by it (#883)
                 st.AddVertex(new Vector3(x, y, z));
             }
         }

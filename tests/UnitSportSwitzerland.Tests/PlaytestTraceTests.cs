@@ -233,6 +233,39 @@ public class PlaytestTraceTests : IDisposable
         Assert.Contains("- GPU-bound: 80 % of frames", report);
     }
 
+    [Fact]
+    public async Task GroundUnderAJunctionHasItsRoadsAndRelief()
+    {
+        const double e = 2583250, n = 1113250;
+        var source = UnitSport.Terrain.Fixture.FixtureChunkSource.Create("junction", e, n)!;
+        var ground = await TopViewGround.LoadAsync(source, new EN(e - 150, n - 150), 300, 300);
+        Assert.True(ground.Tiles > 0);
+        Assert.Equal(300 * 300 * 4, ground.Rgba.Length);
+        // the junction's roads, at their width, carriageways cased
+        Assert.NotEmpty(ground.Roads);
+        Assert.All(ground.Roads, r => Assert.True(r.Width >= 1 && r.Points.Count > 1));
+        Assert.Contains(ground.Roads, r => r.Casing != null);
+        // every pixel is ground (opaque); the junction is flat, so one colour
+        Assert.All(Enumerable.Range(0, 300 * 300), i => Assert.Equal(255, ground.Rgba[i * 4 + 3]));
+        // the hairpin climbs a slope: shaded relief and contours, many tints
+        var hill = await TopViewGround.LoadAsync(UnitSport.Terrain.Fixture.FixtureChunkSource.Create("hairpin", e, n)!, new EN(e - 200, n - 200), 400, 200);
+        Assert.True(Enumerable.Range(0, 200 * 200).Select(i => hill.Rgba[i * 4] << 16 | hill.Rgba[i * 4 + 1] << 8 | hill.Rgba[i * 4 + 2]).Distinct().Count() > 5);
+        // drawn under the shapes, the page keeps no background of its own
+        var shapes = new TopViewShapes { Min = ground.Min, Side = ground.Side };
+        string svg = TopViewSvg.Render(shapes, 300, pixelText: true, ground);
+        Assert.DoesNotContain("#f4f1ea", svg);
+        Assert.Contains("stroke=\"#fcfbf7\"", svg);
+    }
+
+    [Fact]
+    public async Task NoTileThereIsNoGround()
+    {
+        var source = UnitSport.Terrain.Fixture.FixtureChunkSource.Create("flat", 2583250, 1113250)!;
+        var ground = await TopViewGround.LoadAsync(source, new EN(2700000, 1250000), 100, 50);
+        Assert.Equal(0, ground.Tiles);
+        Assert.Empty(ground.Roads);
+    }
+
     [Theory]
     [InlineData(100, 20)]
     [InlineData(40, 5)]

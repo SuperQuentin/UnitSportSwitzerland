@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# The flag ghost, plant and pull-up over loopback (src/Items/PlantProbe): dedicated server (--generated-world),
+# The flag ghost, plant and pull-up over loopback (src/Items/PlantProbe): dedicated server (the flat test world; REAL=1: --generated-world),
 # client A holds the flag (ghost valid / red, plants, pulls up: test_output/plant_a_*.png), client B screenshots
 # the body of A and the spawned flag in frames after the "go" of A (test_output/plant_b_NN.png).
 #   GODOT=<exe> tools/plantcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" plant
+# the flat test world (#992): nothing here needs real or generated ground; REAL=1 boots the generated world as before
+SW=(--world fixture); CW=(--world fixture)
+[ -n "${REAL:-}" ] && { SW=(--generated-world); CW=(); }
 AT=2583250,1113250
 PORT=7796
-tc_server 300 120 "$OUT/plant_server.log" --server --generated-world --traffic 0 --port $PORT
-client() { tc_client 200 "$OUT/plant_$1.log" --windowed --connect 127.0.0.1:$PORT --name "Plant$1" --cache "$OUT/plant_cache_$1" \
+tc_server 300 120 "$OUT/plant_server.log" --server "${SW[@]}" --traffic 0 --port $PORT
+client() { tc_client 200 "$OUT/plant_$1.log" --windowed --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name "Plant$1" --cache "$OUT/plant_cache_$1" \
     --at "$AT" --view first --traffic 0 --plantcheck "$1" "${@:2}"; }
 client A --hold SwissFlag & A=$!
 client B

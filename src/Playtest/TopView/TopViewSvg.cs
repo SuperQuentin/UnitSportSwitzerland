@@ -13,7 +13,12 @@ public static class TopViewSvg
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    public static string Render(TopViewShapes s, int px, bool pixelText)
+    /// <summary>
+    /// The shapes as an SVG <paramref name="px"/> square. With <paramref name="ground"/> (#851) the
+    /// background is left clear for its raster, drawn under it (<c>TopViewImage</c>, the HTML page),
+    /// and its roads, rails and rivers come first, at their width.
+    /// </summary>
+    public static string Render(TopViewShapes s, int px, bool pixelText, TopGround? ground = null)
     {
         var sb = new StringBuilder(16 * 1024);
         double k = px / s.Side;
@@ -21,11 +26,12 @@ public static class TopViewSvg
         string F(double v) => v.ToString("0.#", Inv);
 
         sb.Append($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{px}\" height=\"{px}\" viewBox=\"0 0 {px} {px}\">");
-        sb.Append($"<rect width=\"{px}\" height=\"{px}\" fill=\"#f4f1ea\"/>");
+        if (ground == null) sb.Append($"<rect width=\"{px}\" height=\"{px}\" fill=\"#f4f1ea\"/>");
+        else Roads(sb, ground.Roads, P, k);
 
         // a grid every scale-bar length, on round LV95 metres
         double bar = TopViewScene.ScaleBar(s.Side);
-        sb.Append("<g stroke=\"#ddd8cc\" stroke-width=\"1\">");
+        sb.Append(ground == null ? "<g stroke=\"#ddd8cc\" stroke-width=\"1\">" : "<g stroke=\"#ffffff\" stroke-opacity=\"0.35\" stroke-width=\"1\">");
         for (double e = Math.Ceiling(s.Min.E / bar) * bar; e <= s.Min.E + s.Side; e += bar)
         {
             double x = (e - s.Min.E) * k;
@@ -127,6 +133,19 @@ public static class TopViewSvg
         return sb.ToString();
     }
 
+    /// <summary>The ground's lines, casings first: a road is its fill between two darker edges.</summary>
+    private static void Roads(StringBuilder sb, List<TopRoad> roads, Func<EN, (double X, double Y)> P, double k)
+    {
+        string Points(TopRoad r) => string.Join(" ", r.Points.Select(p => { var (x, y) = P(p); return x.ToString("0.#", Inv) + "," + y.ToString("0.#", Inv); }));
+        double Px(TopRoad r) => Math.Max(1.2, r.Width * k);
+        sb.Append("<g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">");
+        foreach (var r in roads.Where(r => r.Casing != null))
+            sb.Append($"<polyline stroke=\"{r.Casing}\" stroke-width=\"{(Px(r) + 2).ToString("0.#", Inv)}\" points=\"{Points(r)}\"/>");
+        foreach (var r in roads)
+            sb.Append($"<polyline stroke=\"{r.Fill}\" stroke-width=\"{Px(r).ToString("0.#", Inv)}\"{(r.Dashed ? $" stroke-dasharray=\"{(Px(r) * 3).ToString("0.#", Inv)} {(Px(r) * 2).ToString("0.#", Inv)}\" stroke-linecap=\"butt\"" : "")} points=\"{Points(r)}\"/>");
+        sb.Append("</g>");
+    }
+
     private static string Clip(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
 
     /// <summary>A label, on a pale backing so it reads over the tracks: SVG text, or the pixel font.</summary>
@@ -176,17 +195,20 @@ public static class TopViewSvg
     /// A page with a slider over the window (#844, <c>--topview ... --html</c>): one SVG per step,
     /// drawn in advance, swapped as the slider moves. Self-contained, opened from the disk.
     /// </summary>
-    public static string Html(string title, IReadOnlyList<(double T, string Svg)> steps)
+    public static string Html(string title, IReadOnlyList<(double T, string Svg)> steps, string? groundPngBase64 = null)
     {
         var sb = new StringBuilder(steps.Sum(s => s.Svg.Length) + 4096);
         sb.Append("<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
         sb.Append($"<title>Top view</title><style>body{{font:14px system-ui,sans-serif;margin:16px;background:#faf8f3;color:#222}}"
-            + ".step{display:none}.step.on{display:block}svg{max-width:100%;height:auto;border:1px solid #ccc}"
+            + ".step{display:none}.step.on{display:block}svg{display:block;max-width:100%;height:auto}"
+            + "#map{display:inline-block;border:1px solid #ccc;background-size:100% 100%;max-width:100%}"
             + "input[type=range]{width:100%;max-width:900px}#t{font-variant-numeric:tabular-nums}</style></head><body>");
         sb.Append($"<h3>{System.Net.WebUtility.HtmlEncode(title)}</h3>");
         sb.Append($"<p><input id=\"s\" type=\"range\" min=\"0\" max=\"{Math.Max(0, steps.Count - 1)}\" value=\"{Math.Max(0, steps.Count - 1)}\"> <span id=\"t\"></span></p>");
+        sb.Append(groundPngBase64 == null ? "<div id=\"map\">" : $"<div id=\"map\" style=\"background-image:url(data:image/png;base64,{groundPngBase64})\">");
         for (int i = 0; i < steps.Count; i++)
             sb.Append($"<div class=\"step\" data-t=\"{steps[i].T.ToString("0.0", Inv)}\">{steps[i].Svg}</div>");
+        sb.Append("</div>");
         sb.Append("<script>const s=document.getElementById('s'),t=document.getElementById('t'),d=[...document.querySelectorAll('.step')];"
             + "function show(){d.forEach((e,i)=>e.classList.toggle('on',i==s.value));t.textContent=d.length?'t = '+d[s.value].dataset.t+' s':'empty';}"
             + "s.oninput=show;document.onkeydown=e=>{if(e.key=='ArrowLeft')s.value--;if(e.key=='ArrowRight')s.value++;show();};show();</script>");

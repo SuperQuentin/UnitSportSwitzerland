@@ -11,7 +11,16 @@
   seams of their new neighbours are refreshed from the existing `.terr`. `--force` re-parses,
   `--fresh` drops tiles from earlier runs. Numbers are read by a fixed-point scanner
   (`mantissa / 10^d` is one correctly rounded division, i.e. the same double `Utf8Parser` gives);
-  the tool targets net9.0 for its zlib-ng inflate.
+  the tool targets net8.0 (SDK 9 pinned by `global.json`; the zlib-ng inflate comes with the SDK 9 build).
+- Tile fingerprint (#924): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --manifest-hash`
+  adds each manifest tile's content hash (`hash`: SHA-256 over every `<kind>_E_N.*` file of the
+  tile, 16 hex digits, `TileFingerprint`) and the region files' (`shared`: horizon, places,
+  landings, airports) to `manifest.json` (`manifestVersion` 2; a version-1 manifest still loads,
+  with no hashes). Reads the tiles only. Every preprocessor pass that writes tiles ends with it
+  (`--no-hash` skips that), and MapSetup's last step runs it after RoadGen; incremental through
+  `<chunks>_temp/tile_hashes.tsv` (size + mtime per file): the first pass over the 2,698-tile map
+  reads its 10 GB, later ones only stat. The trailer director records the hashes of the tiles each
+  film touches (`trailer/render-pins`).
 - Coarse companion tiles (needed once for a region built before they existed; a normal build
   emits them): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --coarse --jobs 8`
   — 6,699 tiles in 10 s, 3,207 MB read -> 33 MB written, every tile verified bit-identical.
@@ -24,6 +33,8 @@
 - Landings and jetties (#377, `world/landings`; also after every water pass given `--tlm`):
   `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --tlm <tlm.gpkg> --landings [--landings-file <path>]`
   (reads the built `.terr`/`.water`/`.road`, writes `landings.json`; under a second).
+- Tram stops (#1057, `tram-approaches`): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out <chunks> --tlm <tlm.gpkg> --tram-stops`
+  writes `<chunks>_temp/tram_stops.tsv` (TLM stops within 25 m of a tram track); the next `RoadGen --rewrite` stands their signs.
 - Airports (#422, `world/airports`): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --tlm <tlm.gpkg> --osm <data>/osm/switzerland-YYMMDD.osm.pbf --airports [--airports-file <path>]`
   (reads the manifest, `.terr`, `.bldg` and the PBF, writes `airports.json`; seconds; the game: `--airports <file>` tries one out).
 - Buildings export (needs GDAL, install: `gdal-setup`): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`

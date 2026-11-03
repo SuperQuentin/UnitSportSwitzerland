@@ -463,6 +463,7 @@ Layers AskLayers(Layers current)
         (Layers.Routes, "Cycle and MTB route flags  [grey](ASTRA, ~90 MB)[/]"),
         (Layers.Places, "Place index for the in-game search  [grey](needs the GWR register)[/]"),
         (Layers.Fields, "Real farm fields  [grey](LWB land use per canton, geodienste.ch, ~1.1 GB once; OSM fills the gated cantons if downloaded)[/]"),
+        (Layers.Pistes, "Ski slopes  [grey](OpenStreetMap, ~550 MB once; ODbL)[/]"),
         (Layers.Osm, "OpenStreetMap road attributes: one-way, lanes, sidewalks  [grey](Geofabrik, ~550 MB once; ODbL, needs roads)[/]"),
     };
     var prompt = new MultiSelectionPrompt<string>()
@@ -497,8 +498,9 @@ static Layers ParseLayers(string text)
             "fields" => Layers.Fields,
             // never part of "all": tiles built with it fall under the ODbL (docs/notes/tools/osm-odbl-licence.md)
             "osm" => Layers.Osm | Layers.Roads,
+            "pistes" => Layers.Pistes,
             "all" => Layers.Roads | Layers.Buildings | Layers.Cadastre | Layers.Routes | Layers.Places | Layers.Fields,
-            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, fields, osm, all)"),
+            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, fields, osm, pistes, all)"),
         };
     return result;
 }

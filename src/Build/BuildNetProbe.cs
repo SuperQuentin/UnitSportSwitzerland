@@ -52,7 +52,6 @@ public partial class BuildNetProbe : Node
         }
         Chat!.LineReceived += (line, _) => _heard.Add(line);
         _items.BuildTool.AlwaysShow = true;
-        await Seconds(1.5);
         try
         {
             if (_role == "A") await RunA(Me!, Structures.Instance!);
@@ -85,7 +84,6 @@ public partial class BuildNetProbe : Node
         await Build(structures, s, new Piece(WallB, PieceKind.Wall, 0, BuildMaterial.Stone, true));
         await Build(structures, s, new Piece(Upper, PieceKind.Floor, 0, BuildMaterial.Wood, false));
         Expect(s.Pieces.Count == 4, $"4 pieces here ({s.Pieces.Count})");
-        await Seconds(BuildGrid.Spec(BuildMaterial.Metal).Seconds + 0.5);   // grown before B tries anything
         // chat is not replayed to a late joiner: say it until B answers
         for (int i = 0; i < 60 && !_heard.Any(l => l.Contains("BN B seen")); i++)
         {
@@ -96,6 +94,9 @@ public partial class BuildNetProbe : Node
         Expect(s.Pieces.TryGetValue(WallA, out var w) && w.Damage == 0, "B's shot did nothing to my wall (PvP off)");
 
         // break my own metal wall: 5 shotgun hits of 120 once grown
+        await Until(() => s.Pieces.TryGetValue(WallA, out var g)
+            && g.Hp(SimClock.SimAt(ClockSync.ServerNow)) + g.Damage >= BuildGrid.MaxHp(PieceKind.Wall, BuildMaterial.Metal) - 0.01f,
+            BuildGrid.Spec(BuildMaterial.Metal).Seconds + 10);
         for (int i = 0; i < 6 && s.Pieces.ContainsKey(WallA); i++)
         {
             structures.SendHit(s.Id, WallA, 120f, ItemId.Shotgun);

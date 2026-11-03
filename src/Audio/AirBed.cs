@@ -129,11 +129,7 @@ public partial class AirBed : Node
                 bytes[i * 4 + c * 2] = (byte)(v & 0xFF);
                 bytes[i * 4 + c * 2 + 1] = (byte)((v >> 8) & 0xFF);
             }
-        return new AudioStreamWav
-        {
-            Data = bytes, Format = AudioStreamWav.FormatEnum.Format16Bits, MixRate = rate, Stereo = true,
-            LoopMode = AudioStreamWav.LoopModeEnum.Forward, LoopBegin = 0, LoopEnd = n,
-        };
+        return Dsp.LoopWav(bytes, stereo: true, rate);
     }
 
     /// <summary>A slow gust envelope, 0.25..1: a few incommensurate swells under a random wander.</summary>

@@ -34,7 +34,7 @@ public sealed class LocalChunkSource : IChunkSource
         try
         {
             string json = await File.ReadAllTextAsync(path, ct);
-            return TerrainManifest.FromJson(json);
+            return TerrainManifest.FromJson(json).UseFormat();
         }
         catch (Exception e)
         {
@@ -46,7 +46,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<ChunkGrid?> LoadChunkAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, ChunkFormat.ChunkFileName(id));
             if (!File.Exists(path)) return (ChunkGrid?)null;
@@ -57,7 +57,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<ChunkGrid?> LoadCoarseChunkAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, ChunkFormat.CoarseFileName(id));
             if (!File.Exists(path)) return (ChunkGrid?)null;
@@ -68,7 +68,7 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<HashSet<int>?> LoadHolesAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, HoleFormat.FileName(id));
             if (!File.Exists(path)) return (HashSet<int>?)null;
@@ -79,18 +79,18 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<BuildingTile?> LoadBuildingsAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, BuildingFormat.FileName(id));
             if (!File.Exists(path)) return (BuildingTile?)null;
             using var fs = File.OpenRead(path);
-            return BuildingCodec.Decode(fs);
+            return Stadiums.StadiumClip.Clip(BuildingCodec.Decode(fs));
         }, ct);
     }
 
     public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, CoverFormat.FileName(id));
             if (!File.Exists(path)) return (byte[]?)null;
@@ -102,7 +102,7 @@ public sealed class LocalChunkSource : IChunkSource
     /// <summary>The preprocessor's <c>.water</c> layer (#298), on the runtime's 2 m lattice; null where the tile has no water file.</summary>
     public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, WaterFormat.FileName(id));
             if (!File.Exists(path)) return (WaterTile?)null;
@@ -113,18 +113,18 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, TreeFormat.FileName(id));
             if (!File.Exists(path)) return (List<TreeInstance>?)null;
             using var fs = File.OpenRead(path);
-            return TreeFormat.Decode(fs);
+            return Stadiums.StadiumClip.Trees(id, TreeFormat.Decode(fs));
         }, ct);
     }
 
     public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {
-        return Task.Run(() =>
+        return BuildScheduler.Run(() =>
         {
             string path = Path.Combine(_dir, HorizonFormat.FileName);
             if (!File.Exists(path)) return (HorizonIndex?)null;
@@ -134,6 +134,30 @@ public sealed class LocalChunkSource : IChunkSource
     }
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => ReadLandingsAsync(_dir, ct);
+
+    public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => ReadRopewayInfoAsync(_dir, ct);
+
+    public Task<byte[]?> LoadPoisAsync(CancellationToken ct = default) => ReadPoisAsync(_dir, ct);
+
+    /// <summary><c>pois.bin</c> (#1224) in a directory, raw, or null.</summary>
+    public static Task<byte[]?> ReadPoisAsync(string dir, CancellationToken ct = default) => Task.Run(() =>
+    {
+        string path = Path.Combine(dir, PoiFile.FileName);
+        return File.Exists(path) ? File.ReadAllBytes(path) : null;
+    }, ct);
+
+    /// <summary><c>ropeways.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
+    public static Task<RopewayInfoIndex?> ReadRopewayInfoAsync(string dir, CancellationToken ct = default) => Task.Run(() =>
+    {
+        string path = Path.Combine(dir, RopewayInfoIndex.FileName);
+        if (!File.Exists(path)) return (RopewayInfoIndex?)null;
+        try { return RopewayInfoIndex.FromJson(File.ReadAllText(path)); }
+        catch (System.Exception e)
+        {
+            Godot.GD.PushWarning($"[ropeways] {path} does not parse: {e.Message}");
+            return null;
+        }
+    }, ct);
 
     /// <summary><c>airports.json</c> (#422), or null; a file that does not parse is logged and skipped.</summary>
     public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => Task.Run(() =>
@@ -156,6 +180,18 @@ public sealed class LocalChunkSource : IChunkSource
             if (!File.Exists(path)) return (List<FieldPolygon>?)null;
             using var fs = File.OpenRead(path);
             return FieldFormat.Decode(fs);
+        }, ct);
+    }
+
+    /// <summary>The preprocessor's <c>pistes_E_N.pst</c> (#887); null where no slope touches the tile.</summary>
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, PisteFormat.FileName(id));
+            if (!File.Exists(path)) return (PisteTile?)null;
+            using var fs = File.OpenRead(path);
+            return PisteFormat.Decode(fs);
         }, ct);
     }
 
