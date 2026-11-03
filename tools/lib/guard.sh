@@ -18,6 +18,7 @@
 #   guard_quiet_godot <root>           writes test_window.cfg in the user:// that <root> gives as APPDATA /
 #                                      XDG_DATA_HOME / HOME: project.godot's settings override, read before
 #                                      the window exists, so a test window never takes focus and is silent
+#   guard_docker_up                    Docker answers within 15 s; else false, the reason in GUARD_DOCKER_WHY
 #   guard_watch <pid> [min_free_mb]    background RAM watchdog for a process you started yourself
 #                                      (not through guard_run): kills that PID's tree, and only it,
 #                                      when free RAM falls under the floor. Prints the watchdog's PID.
@@ -33,8 +34,10 @@
 
 GUARD_LOCK_DIR=${GUARD_LOCK_DIR:-${TMPDIR:-${TEMP:-/tmp}}/unitsport-heavy.lock}
 # Slots (#1008): the heavy lock is GUARD_SLOTS directories, $GUARD_LOCK_DIR (slot 0) then $GUARD_LOCK_DIR.1,
-# .2 ...; guard_lock takes any free one and sets GUARD_SLOT. Default: one per 10 GB of RAM, 1 to 4 (32 GB: 3).
+# .2 ...; guard_lock takes any free one and sets GUARD_SLOT. Default: one per 14 GB of RAM, 1 to 4 (32 GB: 2).
 # GUARD_SLOTS=1 is the old single lock, and a script from before #1008 only ever waits for slot 0.
+# (One per 10 GB gave 3 on 32 GB: real-terrain two-client checks ran it to the RAM floor 6 times in one
+# full run, each job lost and run again alone, ~15 min; #1407.)
 _guard_lock_base=${_guard_lock_base:-$GUARD_LOCK_DIR}
 _guard_total_gb() {
   if [ -r /proc/meminfo ]; then awk '/^MemTotal:/ { print int($2 / 1048576) }' /proc/meminfo
@@ -42,7 +45,7 @@ _guard_total_gb() {
   else echo 8; fi
 }
 if [ -z "${GUARD_SLOTS:-}" ]; then
-  GUARD_SLOTS=$(( $(_guard_total_gb) / 10 ))
+  GUARD_SLOTS=$(( $(_guard_total_gb) / 14 ))
   [ "$GUARD_SLOTS" -lt 1 ] && GUARD_SLOTS=1
   [ "$GUARD_SLOTS" -gt 4 ] && GUARD_SLOTS=4
 fi
@@ -73,6 +76,20 @@ guard_quiet_godot() {
   esac
   mkdir -p "$ud"
   printf '[display]\n\nwindow/size/no_focus=true\n\n[audio]\n\ndriver/driver="Dummy"\n\n[unitsport]\n\ntest_window=true\n' > "$ud/test_window.cfg"
+}
+
+# Docker answering within 15 s (#1407): with Docker Desktop's engine down `docker info` hangs instead of
+# failing, and a Nakama check waited out its 10 min timeout. False with the reason in GUARD_DOCKER_WHY.
+GUARD_DOCKER_WHY=
+guard_docker_up() {
+  command -v docker > /dev/null || { GUARD_DOCKER_WHY="no docker on PATH"; return 1; }
+  local t=()
+  command -v timeout > /dev/null && t=(timeout 15)
+  "${t[@]+"${t[@]}"}" docker info > /dev/null 2>&1 && return 0
+  local code=$?
+  if [ "$code" = 124 ]; then GUARD_DOCKER_WHY="Docker did not answer in 15 s: restart Docker Desktop"
+  else GUARD_DOCKER_WHY="no Docker engine: start Docker Desktop"; fi
+  return 1
 }
 
 GUARD_GODOT_ENV=()

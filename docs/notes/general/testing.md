@@ -173,7 +173,15 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   dir: Git Bash and WSL do not see each other's lock.
 - **Slots: the net and full tiers run side by side (#1008).**
   - The lock is `GUARD_SLOTS` directories: `unitsport-heavy.lock` is slot 0, then `.1`, `.2`. The default
-    is one slot per 10 GB of RAM, from 1 to 4 (3 on 32 GB).
+    is one slot per 14 GB of RAM, from 1 to 4 (2 on 32 GB). One per 10 GB gave 3 on 32 GB, and a full
+    run with real terrain hit the RAM floor 6 times: each job lost, then rerun alone, ~15 min (#1407).
+- **A full run wastes nothing it can see coming (#1407)**:
+  - A `--collidecheck` row whose targets another selected row covers, in the same world, is skipped
+    ("[test] skipped …"): with every area selected the 11 runs become 3 (the two combined, `castles/`),
+    1,014 s → ~600 s; a narrow change still runs its own folder's row.
+  - A check that needs Docker asks `guard_docker_up` (15 s): with Docker Desktop's engine down it fails
+    at once with the reason, where `docker info` hung it into the 10 min timeout.
+  - `tools/loadtest.sh` finds the terrain as the game does: `CHUNKS`, else `terrain_location.json`.
   - `guard_lock` takes the first free slot and sets `GUARD_SLOT`. A script from before #1008 only knows
     slot 0.
   - **Ports:** `tc_server`, `tc_client` and `tc_godot` move `--port N` and `127.0.0.1:N` by
