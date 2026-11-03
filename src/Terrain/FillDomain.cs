@@ -4,17 +4,6 @@ using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain;
 
-/// <summary>An inclusive tile rectangle.</summary>
-public readonly record struct TileRect(int MinE, int MinN, int MaxE, int MaxN)
-{
-    public bool Contains(TileId id) => id.E >= MinE && id.E <= MaxE && id.N >= MinN && id.N <= MaxN;
-    public TileRect Grow(int by) => new(MinE - by, MinN - by, MaxE + by, MaxN + by);
-    public TileRect Union(TileRect o) =>
-        new(Math.Min(MinE, o.MinE), Math.Min(MinN, o.MinN), Math.Max(MaxE, o.MaxE), Math.Max(MaxN, o.MaxN));
-    /// <summary>The box <paramref name="radius"/> tiles round one tile.</summary>
-    public static TileRect Around(TileId id, int radius) => new TileRect(id.E, id.N, id.E, id.N).Grow(radius);
-}
-
 /// <summary>
 /// Where the generated fill may generate (<see cref="FallbackChunkSource"/>): the box round the spawn,
 /// the boxes round the places it was asked to <see cref="Reach"/> since, and the real set's bounding box,

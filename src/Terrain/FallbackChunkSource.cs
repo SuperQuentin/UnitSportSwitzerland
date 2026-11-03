@@ -113,19 +113,7 @@ public sealed partial class FallbackChunkSource : IChunkSource
     public Snapshot SetReal(IEnumerable<TileId> real, bool? enabled = null)
     {
         var set = real.ToHashSet();
-        TileRect? box = null;
-        if (set.Count > 0)
-        {
-            int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
-            foreach (var t in set)
-            {
-                minE = Math.Min(minE, t.E);
-                maxE = Math.Max(maxE, t.E);
-                minN = Math.Min(minN, t.N);
-                maxN = Math.Max(maxN, t.N);
-            }
-            box = new TileRect(minE, minN, maxE, maxN).Grow(FillRadiusTiles);
-        }
+        var box = TileRect.Bounding(set)?.Grow(FillRadiusTiles);
         var old = _snapshot;
         // never shrink: a tile that was generated keeps being generated
         var next = new Snapshot(set, old.Domain.WithReal(box), enabled ?? old.Enabled, old.Version + 1);
@@ -379,12 +367,8 @@ public sealed partial class FallbackChunkSource : IChunkSource
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var box = snap.Bounds.Grow(HorizonMarginTiles);
         var ids = new List<TileId>();
-        for (int n = box.MinN; n <= box.MaxN; n++)
-            for (int e = box.MinE; e <= box.MaxE; e++)
-            {
-                var id = new TileId(e, n);
-                if (!snap.Real.Contains(id) && real?.Contains(id) != true) ids.Add(id);
-            }
+        foreach (var id in box.Tiles())
+            if (!snap.Real.Contains(id) && real?.Contains(id) != true) ids.Add(id);
 
         var knots = new Dictionary<TileId, ProceduralWorld.RealTile>();
         if (real != null)
