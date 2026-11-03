@@ -255,6 +255,15 @@ public partial class BotDirector : Node
         }
     }
 
+    /// <summary>The bot called <paramref name="name"/> (case ignored, else a unique prefix): its id and name, for an admin command naming it (<c>/movespeed</c>, #1485).</summary>
+    public (long Id, string Name)? Named(string name)
+    {
+        var exact = _bots.Values.FirstOrDefault(b => b.Profile.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (exact != null) return (exact.Id, exact.Profile.Name);
+        var matches = _bots.Values.Where(b => b.Profile.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        return matches.Count == 1 ? (matches[0].Id, matches[0].Profile.Name) : null;
+    }
+
     // ---- /bot (admin): bots in free roam, for trying them out and for the checks ----
 
     /// <summary>A point of <paramref name="from"/>'s frame in <paramref name="bot"/>'s (the same unless a server region parts them, #1456).</summary>

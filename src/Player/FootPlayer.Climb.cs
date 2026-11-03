@@ -354,7 +354,7 @@ public partial class FootPlayer
             _climbJumpLeft -= dt;
             wish = _climbJumpDir * (ClimbJumpDist / ClimbJumpTime);
         }
-        else wish = up * (sUp * (sUp > 0f ? ClimbUp : ClimbDown)) + right * (sRight * ClimbSide);
+        else wish = (up * (sUp * (sUp > 0f ? ClimbUp : ClimbDown)) + right * (sRight * ClimbSide)) * SpeedFactor;   // #1485
         _climbJump = Mathf.MoveToward(_climbJump, jumping ? 1f : 0f, dt / 0.15f);
 
         // the cost: per second times the stick's share, at least holding on's (a climb-jump paid already)
