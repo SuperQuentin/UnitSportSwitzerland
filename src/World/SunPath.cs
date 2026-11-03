@@ -22,8 +22,8 @@ public enum SunModel { Real, Fixed }
 /// </para>
 ///
 /// <para>
-/// <b>The fixed day</b> (<c>--sun fixed</c>, and the default of check runs and trailer renders, so
-/// their pictures do not move with the date): up at <see cref="Sunrise"/>, due south and
+/// <b>The fixed day</b> (<c>--sun fixed</c>, and the default of checks, test and fixture worlds,
+/// screenshot runs and trailer renders, so their results and pictures do not move with the date): up at <see cref="Sunrise"/>, due south and
 /// <see cref="NoonElevation"/> high at noon, down at <see cref="Sunset"/>.
 /// </para>
 ///
@@ -46,12 +46,20 @@ public static class SunPath
     public static Func<DateOnly> Today { get; set; } = DefaultToday();
 
 #if GODOT
-    /// <summary><c>--sun real|fixed</c>; otherwise fixed for check runs and trailer renders, real in play.</summary>
+    /// <summary>
+    /// <c>--sun real|fixed</c>; otherwise fixed for a check (<c>--*check</c>), a narrowed or fixture
+    /// world, a screenshot run and a trailer render, real in play.
+    /// </summary>
     private static SunModel DefaultModel() => CmdArgs.Value("--sun") switch
     {
         "real" => SunModel.Real,
         "fixed" => SunModel.Fixed,
-        _ => Systems.Narrowed || Trailer.TrailerDirector.Requested ? SunModel.Fixed : SunModel.Real,
+        _ => Systems.Narrowed
+            || TerrainPaths.ParseChunkDirArg()?.StartsWith(Systems.FixturePrefix) == true
+            || Array.Exists(CmdArgs.All, a => a.StartsWith("--") && a.EndsWith("check"))
+            || CmdArgs.Has("--shot") || CmdArgs.Has("--shot-queue")
+            || Trailer.TrailerDirector.Requested
+            ? SunModel.Fixed : SunModel.Real,
     };
 
     private static Func<DateOnly> DefaultToday() => () => Calendar.Today;
