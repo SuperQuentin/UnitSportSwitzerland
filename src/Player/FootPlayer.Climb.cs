@@ -104,7 +104,7 @@ public partial class FootPlayer
         point = normal = Vector3.Zero;
         loose = false;
         why = null;
-        var hit = _climbRay.Cast(GetWorld3D().DirectSpaceState, from, from + toward * reach, CollisionMask, SelfExclude);
+        var hit = _climbRay.Cast(Space, from, from + toward * reach, CollisionMask, SelfExclude);
         if (hit.Count == 0) return false;
         point = hit["position"].AsVector3();
         normal = hit["normal"].AsVector3();

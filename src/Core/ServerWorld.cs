@@ -151,6 +151,21 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _players = new Node3D { Name = "Players" };
         _players.AddToGroup(OriginShifter.ContainerGroup);
         AddChild(_players);
+        // the server's local frames (#1456): this world is the main region; a cluster of bodies far from it
+        // gets a frame and a physics space of its own, with its own collision round its bots
+        var chunks = _chunks;
+        AddChild(new Net.Regions.ServerRegions(new Net.Regions.ServerRegion(Net.Regions.RegionPlanner.Main, origin, chunks, GetWorld3D(), null), _players)
+        {
+            MakeChunks = frame =>
+            {
+                var c = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
+                    FillFollowsAnchors = true, CommitBudgetMs = chunks.CommitBudgetMs };
+                c.Initialize(source, frame, manifest, null);
+                if (fallback != null) c.UseFallback(fallback, source.Invalidate);
+                return c;
+            },
+            MakeExtras = (c, frame) => new World.TreeColliders(c, frame),
+        });
         // who may see whom: decided here for everyone, before any player node exists (each
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
         var horizon = await source.LoadHorizonAsync();
@@ -169,7 +184,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // who sits in whose vehicle (#158): handed out here
         _passengers = Vehicles.PassengerService.Create(this);
         _passengers.Players = _players;
-        _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
+        // in this world's frame wherever a body's region is (#1456): what the lonely checks compare with their entities
+        _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Player.FootPlayer>().Select(p => origin.ToWorld(p.Global));
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
         _radios = Items.RadioManager.Create(this, origin);
         _radios.PlayerPositions = _vehicles.PlayerPositions;
@@ -196,6 +212,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (WorldChoice.FunActive) World.WorldClock.Start(World.Fun.FunWorld.DuskHour, 0);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
+        // two bots far apart on one server, each in a frame of its own (#1456, tools/regioncheck.sh)
+        if (Bots.RegionCheck.Requested) AddChild(new Bots.RegionCheck());
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
         Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
@@ -375,7 +393,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 for (int i = 0; i < _players!.GetChildCount(); i++)
                     if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p)
-                        list.Add(new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                        list.Add(new Birds.BirdLife.Observer(origin.ToWorld(p.Global), p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
                             or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, p.GetMultiplayerAuthority()));
             },
         };
@@ -683,8 +701,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             if (child is Player.FootPlayer p)
             {
                 // the ground this server holds under them: what any server-side check would use
-                string ground = _chunks != null && _chunks.TryGetHeight(p.GlobalPosition, out float h)
-                    ? $"ground {h:F1} m" + (_chunks.IsGenerated(_origin!.TileAt(p.GlobalPosition)) ? " (generated)" : "")
+                var at = _origin!.ToWorld(p.Global);
+                string ground = _chunks != null && _chunks.TryGetHeight(at, out float h)
+                    ? $"ground {h:F1} m" + (_chunks.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
                     : "ground not loaded";
                 GD.Print($"[server] player {p.Name} at {p.Global}, {ground}");
             }

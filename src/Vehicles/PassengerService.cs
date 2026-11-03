@@ -162,7 +162,7 @@ public partial class PassengerService : Node
         if (vehicle is Truck { IsBus: true } && them.BusDoors == 0) return "The doors are shut.";
         if (them.WorldVelocity.Length() > BoardSpeed) return "It is moving.";
         float reach = vehicle.ParkedBox.Size.Z * 0.5f + BoardReach;
-        if (me.GlobalPosition.DistanceTo(them.GlobalPosition) > reach) return "Too far from it.";
+        if (them.WhereIs(me).DistanceTo(them.GlobalPosition) > reach) return "Too far from it.";
 
         var ride = _byHost.GetValueOrDefault(host);
         if (ride is { PendingTo: not 0 }) return "Wait a moment.";
@@ -174,7 +174,7 @@ public partial class PassengerService : Node
         for (int i = 1; i < seats.Length; i++)
         {
             if (taken.Contains(i)) continue;
-            float d = them.ToGlobal(vehicle.SeatPosition(i)).DistanceTo(me.GlobalPosition);
+            float d = them.ToGlobal(vehicle.SeatPosition(i)).DistanceTo(them.WhereIs(me));
             if (d < best) { best = d; seat = i; }
         }
         if (seat == 0) return "It is full.";
@@ -198,7 +198,7 @@ public partial class PassengerService : Node
         // only someone standing at one of that door's buttons (the bus straight: a joint moves little)
         bool there = vehicle.Decks.SelectMany(d => d.Buttons.Where(b => b.Door == door).Select(b =>
             them.ToGlobal(d.Section == 0 || vehicle is not Truck t ? b.At : t.NodeLocal(d.Section) * b.At)))
-            .Any(at => at.DistanceTo(me.GlobalPosition + Vector3.Up * 1.1f) < ButtonReach + 1f);
+            .Any(at => at.DistanceTo(them.WhereIs(me) + Vector3.Up * 1.1f) < ButtonReach + 1f);
         if (there) RpcId(host, MethodName.DoorPress, door);
     }
 
@@ -227,7 +227,7 @@ public partial class PassengerService : Node
         if (me == null || them == null || them.Ride == RideKind.OnFoot || them.RidingAlong) return "Nobody is driving that.";
         var vehicle = CarSetups.Ride(them.Ride, them.CarSetupId, them.TuningBits) ?? Rideable.Create(them.Ride);
         if (seat <= 0 || seat >= vehicle.Seats.Length) return "There is no such seat.";
-        if (me.GlobalPosition.DistanceTo(them.ToGlobal(vehicle.SeatPosition(seat))) > SeatReach) return "Too far from that seat.";
+        if (them.WhereIs(me).DistanceTo(them.ToGlobal(vehicle.SeatPosition(seat))) > SeatReach) return "Too far from that seat.";
         var ride = _byHost.GetValueOrDefault(host);
         if (ride is { PendingTo: not 0 }) return "Wait a moment.";
         int hostSeat = ride?.HostSeat ?? them.SeatIndex;
@@ -254,7 +254,7 @@ public partial class PassengerService : Node
         int hostSeat = ride?.HostSeat ?? them.SeatIndex;
         if (hostSeat == 0) { RpcId(sender, MethodName.Refused, "Somebody is driving."); return; }
         var vehicle = CarSetups.Ride(them.Ride, them.CarSetupId, them.TuningBits) ?? Rideable.Create(them.Ride);
-        if (me.GlobalPosition.DistanceTo(them.ToGlobal(vehicle.SeatPosition(0))) > SeatReach) { RpcId(sender, MethodName.Refused, "Too far from the wheel."); return; }
+        if (them.WhereIs(me).DistanceTo(them.ToGlobal(vehicle.SeatPosition(0))) > SeatReach) { RpcId(sender, MethodName.Refused, "Too far from the wheel."); return; }
         if (ride == null) _byHost[host] = ride = new Ride { Host = host, HostSeat = hostSeat };
         if (ride.PendingTo != 0) return;
         ride.PendingTo = sender;

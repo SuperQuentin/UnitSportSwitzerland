@@ -7,7 +7,8 @@
   `docs/plans/spherical-world.md` (#187).
 - **Online too, and every peer has its own origin**: positions cross the network in LV95, never
   world space (`net/positions-on-the-wire`). The server keeps the manifest's origin and never
-  shifts (its players can be anywhere); it measures with what players publish (`FootPlayer.Global`),
+  shifts (its players can be anywhere); far clusters of bodies get a frame and a physics space of
+  their own (`net/server-regions`, #1456); it measures with what players publish (`FootPlayer.Global`),
   and runs each race in a frame of its own at the host (`RaceManager`). A client's origin is its
   own from boot: joining neither checks nor adopts the server's.
 - **A world-space `Vector3` means a place only in the frame it was computed in.** Anything that

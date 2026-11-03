@@ -56,6 +56,31 @@ public static class WaterField
     /// <summary>The tiles whose water is queried; null when there are none (a flat test world, teardown).</summary>
     public static void Bind(ChunkManager? chunks) => _chunks = chunks;
 
+    /// <summary>
+    /// The water of another terrain, while a scope lasts: a body in a server region of its own steps in
+    /// that region's frame (#1456), so its water comes from the region's terrain, not the one bound.
+    /// Null changes nothing.
+    /// </summary>
+    public static Scope In(ChunkManager? chunks) => new(chunks);
+
+    public readonly struct Scope : IDisposable
+    {
+        private readonly ChunkManager? _was;
+        private readonly bool _set;
+
+        public Scope(ChunkManager? chunks)
+        {
+            _set = chunks != null;
+            _was = _chunks;
+            if (_set) _chunks = chunks;
+        }
+
+        public void Dispose()
+        {
+            if (_set) _chunks = _was;
+        }
+    }
+
     /// <summary>The wave clock now: the synchronized server time modulo <see cref="WaveSpectrum.LoopS"/>.</summary>
     /// <summary>
     /// Wave phase, on the simulation clock (#579): the swell is a physical process and the boats

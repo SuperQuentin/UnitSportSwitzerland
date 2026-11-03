@@ -98,8 +98,8 @@ public partial class ChatManager
             int ping = 0;
             if (enet?.GetPeer((int)p.PeerId) is { } link) ping = (int)link.GetStatistic(ENetPacketPeer.PeerStatistic.RoundTripTime);
             double? e = null, n = null;
-            if (!p.Bodiless && _origin != null && _players?.GetNodeOrNull<Node3D>(p.PeerId.ToString()) is { } body)
-                (e, n) = _origin.ToLv95(body.GlobalPosition);
+            if (!p.Bodiless && _players?.GetNodeOrNull<Player.FootPlayer>(p.PeerId.ToString()) is { } body)
+                (e, n) = (body.Global.E, body.Global.N);
             list.Add(new AdminPlayer(p.PeerId, p.Name, account(p.PeerId), p.IsAdmin, p.Bodiless, ping, e, n));
         }
         return list;
