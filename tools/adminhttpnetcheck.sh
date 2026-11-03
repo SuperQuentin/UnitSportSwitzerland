@@ -7,7 +7,7 @@
 # - a restart: the server quits and leaves the restart-requested marker start-server.sh starts again on.
 #   GODOT=<exe> [PORT=] [APORT=] tools/adminhttpnetcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" adminhttpnet
-if ! docker info > /dev/null 2>&1; then echo "[adminhttpnetcheck] RESULT: FAILED (no Docker: start Docker Desktop, the check needs a Nakama)"; exit 1; fi
+if ! guard_docker_up; then echo "[adminhttpnetcheck] RESULT: FAILED ($GUARD_DOCKER_WHY: the check needs a Nakama)"; exit 1; fi
 . tools/nakama/throwaway.sh
 nk_up unitsport-admincheck 17370 17371 "$OUT/adminhttpnet_nakama" \
   || { echo "[adminhttpnetcheck] RESULT: FAILED (Nakama did not come up, $OUT/adminhttpnet_nakama/up.log)"; exit 1; }

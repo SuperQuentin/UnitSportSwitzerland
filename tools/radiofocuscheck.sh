@@ -9,7 +9,8 @@ GODOT=${GODOT:-godot}
 OUT=test_output; mkdir -p $OUT
 [ -n "$GUARD_LOCK_HELD" ] || { guard_lock; trap guard_unlock EXIT; }
 guard_wait_ram 2
-guard_run 300 $OUT/radiofocuscheck.log "$GODOT" --path . -- --radiofocuscheck --world fixture
+guard_test_userdata $OUT/userdata_radiofocuscheck   # its own user:// (#1378): not the player's, no focus, no sound
+guard_run 300 $OUT/radiofocuscheck.log ${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} "$GODOT" --path . -- --radiofocuscheck --world fixture
 grep -h "\[radiofocus\]" $OUT/radiofocuscheck.log
 grep -q "\[radiofocus\] RESULT: ok" $OUT/radiofocuscheck.log && code=0 || code=1
 echo "[radiofocuscheck] RESULT: $([ $code = 0 ] && echo ok || echo FAILED)"

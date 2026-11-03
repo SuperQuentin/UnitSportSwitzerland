@@ -30,6 +30,9 @@ public partial class CameraGlobal : Node
 {
     public CameraGlobal() => Name = "CameraGlobal";
 
+    /// <summary>The world's origin: the camera's altitude is read through it (#1430 H3: in an anchor frame Y is not the altitude).</summary>
+    public Core.WorldOrigin? Origin { get; set; }
+
     /// <summary>The drop per square metre last pushed (<see cref="Core.Curvature"/>), NaN before the first push.</summary>
     private float _curvature = float.NaN;
 
@@ -44,7 +47,9 @@ public partial class CameraGlobal : Node
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Push;
 
     private static readonly StringName WorldCamPos = "world_cam_pos", WorldLodScale = "world_lod_scale",
-        CurvatureParam = "world_curvature", CurveBlendParam = "world_curve_blend", BaseFogMeta = "base_fog_density";
+        CurvatureParam = "world_curvature", CurveBlendParam = "world_curve_blend", GroundYParam = "world_ground_y",
+        BaseFogMeta = "base_fog_density";
+    private float _groundY = float.NaN;
     private float _curveBlend = float.NaN, _fogScale = float.NaN;
     private Godot.Environment? _fogEnv;
     private float _pushedScale = 1f;
@@ -72,7 +77,7 @@ public partial class CameraGlobal : Node
         // the Earth's curvature in every world shader (#187), by the camera's height (#1430 H1): refraction
         // fades out from 5 to 20 km, the drop gives way to the exact sphere from 20 to 50 km. Pushed when it changes.
         var camera = GetViewport()?.GetCamera3D();
-        double altitude = camera?.GlobalPosition.Y ?? 0;
+        double altitude = camera == null ? 0 : Origin?.AltitudeOf(camera.GlobalPosition) ?? camera.GlobalPosition.Y;
         float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2At(altitude) : 0f;
         if (curvature != _curvature)
         {
@@ -84,6 +89,13 @@ public partial class CameraGlobal : Node
         {
             _curveBlend = blend;
             RenderingServer.GlobalShaderParameterSet(CurveBlendParam, blend);
+        }
+        // where sea level is in world Y: 0, but in the Space regime (the origin rises with the camera, #1430 H3)
+        float groundY = (float)-(Origin?.Alt0 ?? 0);
+        if (groundY != _groundY)
+        {
+            _groundY = groundY;
+            RenderingServer.GlobalShaderParameterSet(GroundYParam, groundY);
         }
         if (camera != null) Climb(camera, altitude);
         ZoomRanges.Tick();

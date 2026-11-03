@@ -58,9 +58,16 @@ public static class SunPath
             || TerrainPaths.ParseChunkDirArg()?.StartsWith(Systems.FixturePrefix) == true
             || Array.Exists(CmdArgs.All, a => a.StartsWith("--") && a.EndsWith("check"))
             || CmdArgs.Has("--shot") || CmdArgs.Has("--shot-queue")
-            || Trailer.TrailerDirector.Requested
+            || TrailerRequested()
             ? SunModel.Fixed : SunModel.Real,
     };
+
+    // a build without the trailer studio (#1074) films nothing
+#if TRAILER
+    private static bool TrailerRequested() => Trailer.TrailerDirector.Requested;
+#else
+    private static bool TrailerRequested() => false;
+#endif
 
     private static Func<DateOnly> DefaultToday() => () => Calendar.Today;
 #else
@@ -167,9 +174,30 @@ public static class SunPath
         return (new Basis(Axis(1, 0, 0), Axis(0, 1, 0), Axis(0, 0, 1)), Ellipsoid.Wgs84.ToEcef(place.Geo));
     }
 
+    /// <summary>
+    /// The world's frame when it is an anchor frame (#1430 H3), set by <see cref="DayNight"/> each frame:
+    /// directions then go from the Earth into its axes, not into grid ones. Null: the ground frame.
+    /// Per thread: the main thread's sky follows the camera's frame, a worker reading the sun (the
+    /// server's thermals) keeps the ground one, and tests running side by side never see each other's.
+    /// </summary>
+    public static OriginFrame? Frame { get => _frame; set => _frame = value; }
+
+    [ThreadStatic] private static OriginFrame? _frame;
+
     /// <summary>True east / north / up into world axes: turned by the meridian convergence to grid north.</summary>
     private static Vector3 ToWorld(Horizontal h, Place place)
     {
+        if (Frame is { IsAnchor: true } frame)
+        {
+            // east / north / up at the place, as Earth-fixed directions, into the anchor's axes
+            double lat = place.Geo.LatDeg * Math.PI / 180, lon = place.Geo.LonDeg * Math.PI / 180;
+            double sl = Math.Sin(lat), cl = Math.Cos(lat), so = Math.Sin(lon), co = Math.Cos(lon);
+            var ecef = new EcefPos(
+                -so * h.East - sl * co * h.North + cl * co * h.Up,
+                co * h.East - sl * so * h.North + cl * so * h.Up,
+                cl * h.North + sl * h.Up);
+            return frame.DirectionOf(ecef);
+        }
         double gridE = h.East * place.NorthN + h.North * place.NorthE;
         double gridN = -h.East * place.NorthE + h.North * place.NorthN;
         return new Vector3((float)gridE, (float)h.Up, (float)-gridN);

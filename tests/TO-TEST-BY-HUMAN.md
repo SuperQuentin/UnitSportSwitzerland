@@ -7,6 +7,32 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Account management on the website ([#1360](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1360))
+
+After the deploy with `--setup` (the new Caddyfile), on https://unitsport.infrack.ch.
+
+- [ ] The site's header, signed in: the name is a link to `account.html`. Change the name there → the header and the page show the new name; a taken name says "That name is taken".
+- [ ] `account.html` → Email me a link: the reset mail arrives and its link opens `reset.html` (no 404).
+- [ ] The dashboard: open an account, Rename it → the list and the detail show the new name.
+- [ ] The game, signed in to the official server: Account screen → Manage your account on the website opens the page in the browser. Rename there, come back to the game → the Account screen shows the new name. With a pad: the button takes focus and A opens it.
+- [ ] On the deployed server, with its saves from before: join under your usual name → your bank balance, buildings, placed things, farm stand and BR career are all there (the server log says each was claimed). Then `/name` something else and rejoin → still yours; `/br stats`, a stand's sign and the pinball board show the new name.
+- [ ] `/admin list` shows names; `/admin add <name>` for an online player and for one who left (last seen); an old admin by name shows "(by name, not seen since)" until they join.
+
+## Player birthdays ([#1423](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1423))
+
+Set your birthday to today on the Account page (title screen, the account button), with a year and "Let other players see it" on.
+
+- [ ] The Account page's Birthday row: pick a day, a month, a year by mouse, by pad and by VR laser; "31 April" says it has no 31st; Clear empties it.
+- [ ] The title screen: "Happy Nth birthday, <name>!" under the account name, in amber; the profile picture wears the party hat, its tip not cut off.
+- [ ] Signed in: set the date, sign out, sign in on another machine (or after deleting the birthday fields in `settings.json`) → the date comes back from the account.
+- [ ] In the world: the party hat on your head (third person); the gift in the pack with a greeting; Open it → a collectible hat, a party hat, a cake, 3 rockets, CHF 30, paper over your head.
+- [ ] Wear each collectible hat (and see `--models,test_output/models`, Headwear) → none clips the face or floats; hair under the propeller cap is hidden.
+- [ ] Set the cake on a restaurant table (seated and standing), on a terrace table and on grass → it sits on the top; E takes slices, the cake loses one each time; gone after 8.
+- [ ] A Polaroid and a phone selfie by the cake → the print has confetti on the border and bunting at the bottom.
+- [ ] Light a rocket at night → a minute of fireworks overhead, the finale of rings; a second rocket at once is refused and kept.
+- [ ] Two players online, the server on today's date: the joining celebrant's chat line with the age; the other player looks at them → "Wish <name> a happy birthday" on E/Y; the wish → paper and chime for both, the celebrant's toast counts the wishes; a second wish is not offered; `/birthday` lists them.
+- [ ] A server with bots free-roaming: a bot within 40 m walks up, wishes you, waves.
+
 ## Buildings meet the ground ([#1417](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1417))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2597738,1119166` (Sion, a hillside door that gets a 3-step stoop); Lausanne `--at 2538476,1152508` (a 12 m plinth).

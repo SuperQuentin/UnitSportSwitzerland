@@ -21,6 +21,8 @@ public sealed class StandState
 {
     public long Id { get; set; }
     public string Owner { get; set; } = "";
+    /// <summary>The owner's name when last seen (#1359): only a fallback for an id that no longer resolves.</summary>
+    public string OwnerName { get; set; } = "";
     public List<StandSlot> Slots { get; set; } = new();
     /// <summary>Francs in the honesty box, waiting for the owner.</summary>
     public int Cash { get; set; }

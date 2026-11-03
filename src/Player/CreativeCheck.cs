@@ -8,7 +8,9 @@ namespace UnitSport.Player;
 /// hurts in survival and not in creative; a double jump takes off, Jump held rises, let go it
 /// hovers, the view looks straight down, forward flies level, Shift sinks and lands (the flight ends,
 /// the pitch held again); Shift+T reads as a chord; a 30 m fall costs nothing;
-/// <see cref="GameSettings.CreativeNoclip"/> sinks through the ground. Prints <c>[creativecheck] RESULT: ok</c>.
+/// <see cref="GameSettings.CreativeNoclip"/> sinks through the ground. The figure (#1219) hovers
+/// upright and lies out flying forward, Superman; windowed, it photographs both into
+/// <c>test_output/creative/</c>. Prints <c>[creativecheck] RESULT: ok</c>.
 /// </summary>
 public partial class CreativeCheck : Node3D
 {
@@ -51,6 +53,34 @@ public partial class CreativeCheck : Node3D
         await Wait(0.05);
     }
 
+    /// <summary>How far the drawn figure leans off upright, radians.</summary>
+    private float Tipped() => Vector3.Up.AngleTo(_me.BodyPose.Basis.Y);
+
+    /// <summary>Windowed, a picture of the figure from the third-person camera.</summary>
+    private async System.Threading.Tasks.Task Shot(string name)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        string dir = ProjectSettings.GlobalizePath("res://test_output/creative");
+        System.IO.Directory.CreateDirectory(dir);
+        string file = System.IO.Path.Combine(dir, $"{name}.png");
+        GetViewport().GetTexture().GetImage().SavePng(file);
+        Log($"wrote {file}");
+        // and from the side, where a lean shows
+        var eye = new Camera3D();
+        AddChild(eye);
+        var body = _me.GlobalPosition + Vector3.Up;
+        eye.LookAtFromPosition(body + _me.GlobalBasis.X * 4f + Vector3.Up * 0.3f, body);
+        eye.MakeCurrent();
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        file = System.IO.Path.Combine(dir, $"{name}_side.png");
+        GetViewport().GetTexture().GetImage().SavePng(file);
+        Log($"wrote {file}");
+        eye.QueueFree();
+        _me.Camera.MakeCurrent();
+    }
+
     private async System.Threading.Tasks.Task Run()
     {
         bool noclip = GameSettings.Current.CreativeNoclip;
@@ -89,6 +119,10 @@ public partial class CreativeCheck : Node3D
             float hover = _me.GlobalPosition.Y;
             await Wait(1.0);
             Expect(Mathf.Abs(_me.GlobalPosition.Y - hover) < 0.3f, $"let go, it hovers ({hover:F1} -> {_me.GlobalPosition.Y:F1} m)");
+            Expect(_me.PoseKind == FootPlayer.PoseFly && _me.Anim.X < 0.1f && Tipped() < 0.2f,
+                $"hovering, the figure stands upright (pose {_me.PoseKind}, lean {_me.Anim.X:F2}, tipped {Tipped():F2})");
+            _me.DebugThirdPerson(true);
+            await Shot("hover");
 
             // flying, the camera itself looks straight down at what is under you and up at the sky,
             // in first and in third person (first person once stayed level: its eye is set in the walk step)
@@ -110,7 +144,12 @@ public partial class CreativeCheck : Node3D
             var from = _me.GlobalPosition;
             Input.ActionPress(PlayerInput.MoveForward);
             await Wait(1.5);
+            Expect(_me.Anim.X > 0.8f && Tipped() > 1.2f,
+                $"flying forward, it lies out along the flight, Superman (lean {_me.Anim.X:F2}, tipped {Tipped():F2} rad)");
+            await Shot("superman");
             Input.ActionRelease(PlayerInput.MoveForward);
+            await Wait(1.5);
+            Expect(_me.Anim.X < 0.3f, $"slowing down, it stands up again (lean {_me.Anim.X:F2})");
             var moved = _me.GlobalPosition - from;
             Expect(MathX.FlatLength(moved) > 10f && Mathf.Abs(moved.Y) < 0.5f,
                 $"forward flies level ({MathX.FlatLength(moved):F1} m on, {moved.Y:+0.0;-0.0} m up)");
@@ -119,6 +158,8 @@ public partial class CreativeCheck : Node3D
             for (int i = 0; i < 300 && _me.CreativeFlying; i++) await Wait(0.05);
             Input.ActionRelease(PlayerInput.Sprint);
             Expect(!_me.CreativeFlying && _me.IsOnFloor(), $"Shift sinks and lands ({_me.GlobalPosition.Y:F1} m)");
+            await Wait(0.1);
+            Expect(_me.PoseKind != FootPlayer.PoseFly && Tipped() < 0.05f, $"landed, the figure is on its feet (pose {_me.PoseKind})");
             // third person keeps the lens off the ground (first person always looked straight down)
             _me.DebugThirdPerson(true);
             _me.LookPitch = -1.5f;

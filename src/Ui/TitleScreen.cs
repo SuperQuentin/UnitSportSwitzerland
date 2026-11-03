@@ -109,6 +109,8 @@ public partial class TitleScreen : Screen
         UpdatePrompt.Found += ShowUpdate;
         UpdatePrompt.Listed += OnListed;
         Net.Accounts.Account.Changed += ShowAccount;
+        Occasions.Birthdays.MyBirthday.Hook();
+        Occasions.Birthdays.MyBirthday.Changed += ShowAccount;
     }
 
     public override void _ExitTree()
@@ -116,6 +118,7 @@ public partial class TitleScreen : Screen
         UpdatePrompt.Found -= ShowUpdate;
         UpdatePrompt.Listed -= OnListed;
         Net.Accounts.Account.Changed -= ShowAccount;
+        Occasions.Birthdays.MyBirthday.Changed -= ShowAccount;
     }
 
     private Button? _account;
@@ -163,6 +166,15 @@ public partial class TitleScreen : Screen
         _badge!.Portrait = a.SignedIn;
         _accountName!.Text = a.SignedIn ? a.Username : "Sign in";
         _accountState!.Text = a.SignedIn ? "Online account" : a.Offline ? "Playing offline" : "Online, not signed in";
+        // the player's birthday (#1423): the greeting takes the state's line, in the highlight colour
+        string name = a.SignedIn ? a.Username : Core.GameSettings.Current.PlayerName;
+        if (Occasions.Birthdays.MyBirthday.Greeting(name) is { } greeting)
+        {
+            _accountState.Text = greeting;
+            _accountState.AddThemeColorOverride("font_color", UiTheme.Amber);
+        }
+        else _accountState.RemoveThemeColorOverride("font_color");
+        _badge!.Refresh();
     }
 
     private void ShowUpdate(string tag)

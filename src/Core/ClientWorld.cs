@@ -483,7 +483,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // far trees as billboards, before the first tile builds them
         var treeFarMaterial = StyleKit.Material(MaterialRole.TreeFar);
         StyleKit.TreeFarMaterial = StyleKit.TreeLod ? treeFarMaterial : null;
-        AddChild(new CameraGlobal());
+        AddChild(new CameraGlobal { Origin = origin });
 
         // Fog is a setting now (off by default: the far horizon is the point). Every world
         // material carries the uniforms, so the toggle just re-pushes two floats to each.
@@ -1058,13 +1058,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // does; the probes started further down are listed.
         var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null || Net.IdsNetProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Items.TelescopeProbe.Requested || Items.TelescopeNetProbe.Role != null || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
+            || Occasions.Birthdays.BirthdayCheck.Requested || Occasions.Birthdays.BirthdayNetProbe.Role != null
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
             || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
@@ -1118,6 +1119,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
         if (Interiors.HallCarProbe.Role != null) AddChild(new Interiors.HallCarProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
+        if (Net.IdsNetProbe.Role != null) AddChild(new Net.IdsNetProbe(items));
         if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
@@ -1259,6 +1261,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
         // who looks through which set-up telescope (#1440), same path as the server's
         Items.Telescopes.Create(this, server: false);
+        // player birthdays (#1423): the gift, the wishes, the cake's slices, the birthday fireworks; offline this client plays the server
+        var birthdays = Occasions.Birthdays.BirthdayService.Create(this, origin, server: false, networked: Launch.Networked);
+        birthdays.Me = () => _onFoot ? LocalPlayer : null;
+        birthdays.BodyOf = peer => peer == Multiplayer.GetUniqueId() || !Launch.Networked && peer == 1
+            ? LocalPlayer : _players?.GetNodeOrNull<FootPlayer>(PlayerReplication.NodeName(peer));
+        birthdays.NameOf = _ => GameSettings.Current.PlayerName;
+        birthdays.Toast = Toast;
+        birthdays.Give = stack => items.Give(stack);
+        if (Occasions.Birthdays.BirthdayCheck.Requested) AddChild(new Occasions.Birthdays.BirthdayCheck(items, () => LocalPlayer));
+        if (Occasions.Birthdays.BirthdayNetProbe.Role != null) AddChild(new Occasions.Birthdays.BirthdayNetProbe(items));
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
         // the Adventure layer (#1223): the server keeps this player's progress and quests, offline this client
@@ -2156,6 +2168,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // a request, not a claim.
         string requested = Launch.PlayerName;
         _chat?.AnnounceName(requested.Length > 0 ? requested : $"Rider{Multiplayer.GetUniqueId()}");
+        // after the name, on the same ordered channel: the chat line about a birthday names the player (#1423)
+        Occasions.Birthdays.BirthdayService.Instance?.SendMine();
         // hosted from the menu: the player who started the server runs it
         if (Launch.HostToken is { } token) _chat?.ClaimHost(token);
 

@@ -1053,6 +1053,8 @@ src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
 src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
 tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Birthdays/     quick  --birthdaycheck --date 2026-11-01 --birthday 01-11-1996 --birthday-public --world fixture --chunks fixture:flat --systems ui,physics,occasions
+src/Occasions/Birthdays/     net    tools/birthdaynetcheck.sh
 src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
 tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
 src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
@@ -1188,3 +1190,8 @@ src/Core/WorldOrigin         quick  --flycheck a320 --world flat --originstress 
 # a shift every 200 m: at 20 the BNR32 spun five times in one of two runs (a shift twice a second at 160 km/h)
 src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
 src/Core/WorldOrigin         quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
+# the same with every shift turning the world 2° (anchor frames, #1430 H3): every handler meets a rotation
+src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShift         quick  --ride car,15 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200 --originyaw 2

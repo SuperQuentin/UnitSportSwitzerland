@@ -119,4 +119,78 @@ public class OriginFrameTests
         var back = f.TileLocal(tile, f.TileToWorld(tile, local));
         Assert.True(back.DistanceTo(local) < 0.004f, $"tile-local round trip ({back})");
     }
+
+    [Fact]
+    public void A_shifts_yaw_is_its_turn_about_up()
+    {
+        Assert.Equal(0f, OriginShift.Identity.Yaw, 6);
+        Assert.False(OriginShift.Identity.Turns);
+        var turned = new OriginShift(new Transform3D(new Basis(Vector3.Up, 0.035f), new Vector3(20, 0, 0)));
+        Assert.True(turned.Turns);
+        Assert.Equal(0.035f, turned.Yaw, 5);
+        // a heading kept as an angle and turned by Yaw points where the turned direction does
+        float heading = 1.2f;
+        var dir = new Basis(Vector3.Up, heading) * Vector3.Forward;
+        var after = new Basis(Vector3.Up, heading + turned.Yaw) * Vector3.Forward;
+        Assert.True(after.DistanceTo(turned.Direction(dir)) < 1e-5f);
+    }
+
+    [Fact]
+    public void Altitude_and_up_in_both_kinds_of_frame()
+    {
+        var ground = GroundAt(BernE, BernN);
+        Assert.Equal(612.5, ground.AltitudeOf(new Vector3(30, 612.5f, -40)), 3);
+        Assert.Equal(Vector3.Up, ground.UpAt(new Vector3(30, 612.5f, -40)));
+        var anchor = AnchorAt(BernE, BernN, 120_000);
+        var p = new GlobalPos(BernE + 15_000, BernN - 8_000, 118_000);
+        Assert.Equal(p.Alt, anchor.AltitudeOf(anchor.ToWorld(p)), 0.01);
+        Assert.True(anchor.UpAt(Vector3.Zero).DistanceTo(Vector3.Up) < 1e-5f, "up at the anchor is its Y");
+        // 17 km away the ground's up has turned ~0.15° from the anchor's
+        float turn = Mathf.RadToDeg(anchor.UpAt(anchor.ToWorld(p)).AngleTo(Vector3.Up));
+        Assert.InRange(turn, 0.1f, 0.2f);
+    }
+
+    [Fact]
+    public void The_sun_from_an_anchor_with_the_grounds_axes_is_where_the_ground_has_it()
+    {
+        var date = new DateOnly(2026, 8, 1);
+        try
+        {
+            World.SunPath.Frame = null;
+            var flat = World.SunPath.Toward(SkyBody.Sun, date, 15, BernE, BernN, out _);
+            // the place cell's centre: the anchor at it has the very axes the ground path turns into
+            World.SunPath.Frame = AnchorAt(BernE + 500, BernN + 500, 0);
+            var anchored = World.SunPath.Toward(SkyBody.Sun, date, 15, BernE, BernN, out _);
+            Assert.True(Mathf.RadToDeg(flat.AngleTo(anchored)) < 0.01f, $"{flat} / {anchored}");
+        }
+        finally { World.SunPath.Frame = null; }
+    }
+
+    [Fact]
+    public void A_ground_frame_with_a_vertical_origin_for_the_Space_regime()
+    {
+        var low = GroundAt(BernE, BernN);
+        var high = new OriginFrame(BernE + 3_000, BernN, 72_000, 1);
+        var p = new GlobalPos(BernE + 3_200, BernN - 100, 71_500);
+        var w = high.ToWorld(p);
+        Assert.Equal(new Vector3(200, -500, 100), w);
+        Assert.Equal(p, high.ToGlobal(w));
+        Assert.Equal(71_500, high.AltitudeOf(w), 6);
+        // the move up is a pure translation, the vertical included
+        var up = high.Since(low);
+        Assert.Equal(Basis.Identity, up.Transform.Basis);
+        Assert.Equal(new Vector3(-3_000, -72_000, 0), up.Transform.Origin);
+        Assert.True(up.Point(low.ToWorld(p)).DistanceTo(w) < 0.01f);
+        Assert.False(high.SameFrame(new OriginFrame(BernE + 3_000, BernN, 1)), "the vertical origin is part of the frame");
+        // a network anchor (altitude 0) in it
+        Assert.Equal(new Vector3(-3_000, -72_000, 0), high.SinceAnchor(BernE, BernN).Transform.Origin);
+    }
+
+    [Theory]
+    [InlineData(false, 59_000, false)]
+    [InlineData(false, 61_000, true)]
+    [InlineData(true, 55_000, true)]
+    [InlineData(true, 49_000, false)]
+    public void The_Space_regime_has_hysteresis(bool inSpace, double altitude, bool expected) =>
+        Assert.Equal(expected, Curvature.SpaceRegime(inSpace, altitude));
 }
