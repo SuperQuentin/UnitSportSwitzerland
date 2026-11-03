@@ -127,6 +127,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.ShopSurvey.Requested, Interiors.ShopSurvey.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
+        (() => Terrain.GroundCheck.Requested, Terrain.GroundCheck.Run),
         (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
         (() => Concert.ConcertCheck.Requested, Concert.ConcertCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
@@ -913,12 +914,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
             }),
+#if TRAILER
             // the trailer (#706): stages and films its shots, moving the spectator camera from place to place
             new(() => Trailer.TrailerDirector.Requested, ToolAnchor.Own, _ =>
             {
                 FreeSpectator();
                 return new Trailer.TrailerDirector(_spectator!, chunks, origin) { RunCommand = line => _chat?.Send(line) };
             }),
+#endif
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var shot = ShotRunner.ParseArgs()!;
@@ -1181,6 +1184,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(soloDrop);
         Vehicles.VehicleManager.Refused += Toast;
         Movie.MovieSession.Said += Toast;
+        Trainer.FtpWatch.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
         Terrain.Construction.CraneService.Said += Toast;
 
@@ -1911,6 +1915,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         StyleKit.Chosen -= OnStyleChosen;
         NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
+        Trainer.FtpWatch.Said -= Toast;
         Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         Terrain.Construction.CraneService.Said -= Toast;

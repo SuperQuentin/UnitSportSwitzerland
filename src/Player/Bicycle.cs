@@ -158,6 +158,9 @@ public sealed class Bicycle : Rideable
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
 
+    /// <summary>The watts the last <see cref="Step"/> put through the pedals (0 coasting).</summary>
+    public float LastWatts { get; private set; }
+
     /// <summary>Shift. Not sustainable, but nothing here is asking it to be.</summary>
     public float SprintWatts { get; set; } = 520f;
 
@@ -258,6 +261,14 @@ public sealed class Bicycle : Rideable
         float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods, Spec.DragArea) * _positionFactor;
         float air = BikePhysics.AirDensity(ground.Altitude);
 
+        // --- the power equation -----------------------------------------------------
+        // Sim keeps RiderWatts, which is what a home trainer writes into; Game ignores it
+        float watts = input.Throttle * (arcade
+            ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
+            : (input.Effort ? SprintWatts : RiderWatts));
+        // the legs still turn in the air off a lip: a trainer keeps measuring
+        LastWatts = watts;
+
         if (!ground.OnFloor)
         {
             // airborne off a lip: no thrust, no rolling resistance, just air
@@ -268,11 +279,6 @@ public sealed class Bicycle : Rideable
             return;
         }
 
-        // --- the power equation -----------------------------------------------------
-        // Sim keeps RiderWatts, which is what a home trainer writes into; Game ignores it
-        float watts = input.Throttle * (arcade
-            ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
-            : (input.Effort ? SprintWatts : RiderWatts));
         // the gear the chain is in sets the cadence, and the keys' watts fall off away from 90 rpm
         bool pedalling = watts > 0f;
         Gears.AutoShift(v, pedalling, dt);

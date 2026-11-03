@@ -125,6 +125,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | a UFO sighting: look up, wave, run from a beam (#863) | `BotIntent.FaceYaw`/`Pitch`, `Wish` + `Run`, `DanceId` (wave) | — (the sightings are the server's) | the plans, `UfoSightings.Nearest` (300 m) | `BotUfo.React` (`WanderBrain`; `BrBrain` roaming, looting, investigating) | ok |
 | pogo at a concert (#1150) | `DanceId` = `PogoQte.PogoDanceId` (the Pogo emote) on the server body | — (`DanceId` replicates from the server for a bot) | `ConcertRig.MusicNear` | — | gap: no skill dances; the QTE and its score are a player's screen only (n/a for a bot) |
 | board a landed sighting saucer and fly it (#863) | — | the parked UFO's `RequestClaim`, like any parked vehicle | the plans | — | gap: bots cannot fly a UFO yet (#861) |
+| hidden FTP test (#902) | — | none: client-side, the local rider's own numbers (`Trainer/FtpWatch`) | — | — | n/a (a bot has no measured watts and no FTP) |
 
 ## Battle Royale
 
