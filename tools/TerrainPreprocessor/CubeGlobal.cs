@@ -133,7 +133,7 @@ public static class CubeGlobal
     }
 
     /// <summary>Every shared lattice point (keyed by its level and ECEF bits) holds one height across a level's tiles.</summary>
-    private static int CheckEdges(ConcurrentDictionary<CubeKey, CubeTile> tiles)
+    internal static int CheckEdges(ConcurrentDictionary<CubeKey, CubeTile> tiles)
     {
         var seen = new Dictionary<(int Level, EcefPos P), float>();
         long points = 0, differ = 0;

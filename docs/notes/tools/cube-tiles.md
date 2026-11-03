@@ -97,6 +97,17 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   0-4, 25 s a month. Blue Marble draws inland lakes black (Ladoga, Onega): to recolour.
 - Sources on D: (`data/global/`, never in git): `etopo2022/` (public domain, NOAA NCEI) and `bmng/`
   (credit "NASA Earth Observatory").
+- Levels 5-13 where leaves exist (`--cube-swiss`, `CubeSwiss`), merged into the same region and manifest:
+  ```
+  tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-swiss     --cube-leaves D:/UnitSportSwitzerland/cube_g1/region14 --etopo D:/UnitSportSwitzerland/data/global/etopo2022     --cube-out D:/UnitSportSwitzerland/cube_global --cube-levels 5-13 --jobs 12 --cube-check
+  ```
+  Each level is the tent mean (¼ ½ ¼ each way) of the next finer level's nine lattice points round a
+  vertex, ETOPO's footprint where the nine are not all there; every tile over the leaves and its three
+  siblings (so a parent can always split). Nov 3 2026, below-normal priority, 12 threads: 39 s,
+  1,340 tiles, 136 MB, peak 9.6 GB (the 2,547 leaves held at once); 0 of 2.7 M edge vertices differ.
+  Run the colour bake again after it. The leaves are G1's local region (825 km² of swissALTI3D
+  0.5 m, all the 0.5 m on D:, plus RGE ALTI samples): the rest of Switzerland's 0.5 m is on the NAS
+  (`france-nas-run`); a `--cube` run over it there gives the rest of the country, then this again.
 
 ## The tiler (`--cube`)
 
