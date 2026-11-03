@@ -3,7 +3,8 @@
 
 # Ellipsoid handover: from the flat world to a real WGS84 Earth at altitude
 
-Status: **planned, follow-up of #187** (after its render-space curvature drop lands). Issue: #1430.
+Status: **H2 built (PR #1435)**; the rest planned, after #187's render-space curvature drop lands.
+Issue: #1430.
 Prerequisites: the floating origin (#185, `docs/plans/floating-origin.md`, done), the round world
 near the ground (#187, `docs/plans/spherical-world.md`) and its regression net (#1429).
 
@@ -60,7 +61,7 @@ so they fit the depth range.
 | Earth model in Space | **WGS84**: a = 6,378,137 m, 1/f = 298.257223563, GM = 3.986004418·10¹⁴ m³/s², ω = 7.292115·10⁻⁵ rad/s. ETRS89 (what LV95 is tied to) and WGS84 differ by ~0.5 m today: ignored. |
 | Global position in Space | **`EcefPos`** (three doubles, earth-centred earth-fixed). `GlobalPos` (LV95) stays the ground type; the two convert through geodetic latitude, longitude and ellipsoidal height. |
 | LV95 ↔ ECEF | The **rigorous** swisstopo chain (Swiss oblique conformal cylinder on Bessel 1841, then the CH1903+ → ETRS89 datum shift ΔX/ΔY/ΔZ ≈ 674.374 / 15.056 / 405.346 m), not the approximate polynomials: the handover must round-trip to under a millimetre, and the landing point can be hundreds of km from Bern. `SwissProjection` keeps the polynomials for GPX. |
-| Heights | swissALTI3D heights are **LHN95 orthometric**. Ellipsoidal h = H + N, with N the geoid undulation (about +50 m in Switzerland, smooth). One coarse geoid grid (EGM2008 at 1°, ~260 KB) serves both the Swiss handover and the global DEM, which is orthometric too (EGM2008). Its absolute error does not matter for continuity: the same N is used both ways. |
+| Heights | swissALTI3D heights are **LHN95 orthometric**. Ellipsoidal h = H + N, with N the geoid undulation (~44 to 58 m in Switzerland). As built (H2): a 20 km grid of swisstopo's CHGeo2004 above Bessel, sampled from REFRAME, held at its edge outside. The global DEM (H4) is orthometric on EGM2008 and brings a coarse EGM2008 grid of its own; the two meet within a few metres at the border. Their absolute error does not matter for continuity: the same N is used both ways. |
 | Anchor in Space | MSFS style: origin **at the camera**, Y = the ellipsoid normal under it, X/Z carried over by the **minimal rotation** from the previous anchor. The first Space anchor copies the ground frame's axes exactly (grid east/north, so meridian convergence included). |
 | Shifts in Space | Through the existing `OriginShift` (already a `Transform3D`): rotation **and** vertical translation, past **20 km** from the anchor in any direction (float step 2 mm there). At 7.7 km/s that is one shift every 2.6 s, each turning the world by 0.17°. |
 | Coming down | Below the Space exit altitude, re-anchor to the **whole-km LV95 tile corner** under the camera at altitude 0, axes grid-aligned: a normal ground frame again. |
@@ -136,18 +137,22 @@ view from altitude.
 data is in view. Until the globe (H4) the fog hides it; with H4 the globe is drawn under and around
 the Swiss tiles already in Transition (below).
 
-### 3. `EcefPos` and the conversions (H2)
+### 3. `EcefPos` and the conversions (H2, built: PR #1435)
 
-- `Core/EcefPos` (double X, Y, Z) and `Core/Geodetic` (lat, lon, h), next to `GlobalPos`, with
-  geodetic ↔ ECEF (closed form one way, Vermeille or a two-step Bowring the other, < 0.1 mm).
-- `Core/Planet`: a, f, GM, ω, plus derived e², radii of curvature, `Gravity(r)`, `Up(lat, lon)`.
-  Earth is the only instance until H7.
-- LV95 ↔ ETRS89 rigorous in `tools/TerrainFormat` (the preprocessor will need it for global data
-  too), unit-tested against swisstopo's published reference points. LHN95 ↔ ellipsoidal heights
-  through the geoid grid.
-- `GlobalPos.ToEcef()` / `EcefPos.ToLv95()`; the `GlobalPos + Vector3` operator's comment already
+As built (`docs/notes/core/swiss-geodesy.md`):
+
+- `EcefPos`, `Geodetic` and `Ellipsoid` (`Wgs84`, `Bessel1841`; geodetic ↔ ECEF by iterated
+  Bowring, exact from below ground out past the moon) live in `tools/TerrainFormat`, beside the
+  projection, so the preprocessor has them for global data too.
+- `SwissGeodesy`: the rigorous LV95 ↔ CH1903+ cylinder and the CH1903+ → CHTRS95 translation.
+  Against swisstopo's REFRAME it matches to < 2 mm in Switzerland, France and Bavaria; LV95 → ECEF
+  → LV95 comes back within 0.1 mm from −3 km to 400 km up and 1,400 km out. LHN95 ↔ ellipsoidal
+  heights through `BesselGeoid`, a 20 km CHGeo2004 grid (within 0.25 m of REFRAME between nodes).
+- `Core/Planet` (Godot-free): the shape, GM, ω, `Gravity(r)`, `CircularSpeed(r)`; Earth only until H7.
+  Radii of curvature and `Up` come with their first caller (H3).
+- `GlobalPos.ToEcef()` / `GlobalPos.FromEcef`; the `GlobalPos + Vector3` operator's comment already
   marks itself as "the place to change" for a rotating frame.
-- Pure maths, linked into the unit tests, no game change: it can land any time.
+- Pure maths, linked into the unit tests, no game change.
 
 ### 4. The rotating 3D anchor (H3)
 
@@ -393,7 +398,7 @@ speed).
 | Phase | What | Depends on | Done when |
 |---|---|---|---|
 | **H1** Refraction fade and exact-sphere blend | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
-| **H2** `EcefPos` and conversions | `EcefPos`, `Geodetic`, `Planet`, rigorous LV95 ↔ ETRS89, geoid grid | none | unit tests: swisstopo reference points to < 1 mm, round trips < 0.1 mm |
+| **H2** `EcefPos` and conversions (**built**, PR #1435) | `EcefPos`, `Geodetic`, `Planet`, rigorous LV95 ↔ ETRS89, geoid grid | none | unit tests: REFRAME points to < 2 mm, round trips < 0.1 mm |
 | **H3** Rotating 3D anchor | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space, `EcefPos` on the wire | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
 | **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check | H3 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
 | **H5** Orbital gravity | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ |
