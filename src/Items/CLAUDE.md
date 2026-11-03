@@ -35,10 +35,10 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `adventure/reward-gadgets` (in docs/notes/adventure/) — Bergkristall, the treasure detector (`ItemUse.Detector`), the travel flag (`PlacedKind.TravelFlag`), the bottled gust (`ItemUse.Gust`, `ItemEventKind.Gust`), the Alpine set; ItemId 400-410 (#1227)
 - `adventure/alcohol` (in docs/notes/adventure/) — a drink with `ItemDef.DrinkMl` / `Abv` is logged by `ItemController` (and drinkable at full health), the Breathalyzer, the Breath test and the alcohol-free beer (ItemId 486-488), `ItemUse.Breath` (hold Use 5 s) (#1271)
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
+- `telescope` — Telescope on a tripod (#1440): `Placeables` item, one viewer at a time (`Telescopes`), `TelescopeView` zoom 100-8,000 mm and moon lock, `CameraLens` frustum below 1°, the moon in the sky (`World/MoonDisc`, NASA LROC map), `--telescopecheck`, `tools/telescopecheck.sh`
 
 - `vehicles/pallets` (in docs/notes/vehicles/) — `Pallets` (load byte, ids, fork rule), `PalletNode`, `PalletService` at World/Pallets (server-owned, session-only), `PalletCheck`, `PalletNetProbe` (#583)
 
 ## Commands
 
 - `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh, tools/bonkcheck.sh, --interactcheck, --churchstagecheck, --fishcheck, tools/fishcheck.sh
-- `telescope` — Telescope on a tripod (#1440): `Placeables` item, one viewer at a time (`Telescopes`), `TelescopeView` zoom 100-8,000 mm and moon lock, `CameraLens` frustum below 1°, the moon in the sky (`World/MoonDisc`, NASA LROC map), `--telescopecheck`, `tools/telescopecheck.sh`

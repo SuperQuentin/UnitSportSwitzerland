@@ -28,6 +28,8 @@
   (any `--*check`), narrowed and fixture worlds (`--world`, `--systems`, `--chunks fixture:`),
   screenshot runs (`--shot`, `--shot-queue`), trailer renders and the fun world, so their results
   and pictures do not move with the date; `--sun real` (with `--date`) forces the real one there. Unit tests: `EphemerisTests`, `RealSunPathTests`.
+  The moon is drawn in the sky too (`World/MoonDisc`, #1440, `items/telescope`): `DayNight.Sky` holds
+  the real sun and moon in world axes and the moon's own axes for its face.
 - **Online, one clock for everyone** (#452, `World/WorldClock`): the server always owns it, from its
   own settings at start (`StartHour`, `DayLengthMinutes`, `--time`), or, on a dedicated server, from `user://world_clock.cfg`
   where it stopped last (saved every 60 s, on `/time` and on exit; not when hosted from the menu,
