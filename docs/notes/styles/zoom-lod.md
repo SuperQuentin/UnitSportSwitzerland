@@ -25,8 +25,10 @@ big on screen as one 180 m off walking, and was drawn for 2 km. Phase C0 of #143
   a new step and the refill. A step change or a 5° turn while zoomed refills at once. A zoomed cone
   over a forest overflows 16 000 trees a kind: the buffers double, up to 65 536.
 - **Sun shadows** (`CameraGlobal.ScaleShadows`): the sun's `DirectionalShadowMaxDistance` is
-  multiplied by the step. Without it, Cartoon's 3D trees past the 400 m cascades lost the shade on
-  their lower tiers and looked paler than the billboards they replaced (picture in #1434).
+  multiplied by the step (the user's choice over capping the trees at the shadow range). Without
+  it, the 3D trees a zoomed view reaches past the 400 m cascades neither cast nor received a
+  shadow. The cascades keep their split fractions, so at x9.31 the last one runs 1.3-3.7 km:
+  coarser texels, which the lens magnifies.
 - **Visibility ranges** (`Styles/ZoomRanges`): Godot's ranges have no FOV term. Every node with a
   range is tracked (`ZoomRanges.Track(node)` once its range is set, `TrackTree(root)` for a built
   sign), and on a step change its begin, end and margins are multiplied by the step straight on
