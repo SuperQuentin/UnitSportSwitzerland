@@ -32,9 +32,11 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
     }
 
     /// <summary>
-    /// This place moved by <paramref name="d"/>, a world-space offset (x east, y up, z south). The
-    /// world axes are the same in every frame while a shift has no rotation; the round world
-    /// (#187) makes them depend on where the frame is, and this is the place to change then.
+    /// This place moved by <paramref name="d"/>, an offset in the local axes at <paramref name="p"/>
+    /// (x east, y up, z south). Today those are the world's axes in every frame. With the global
+    /// tiling (#1443) they stay the local east-up-south at <paramref name="p"/>, which the anchor
+    /// frame's axes match to 0.03° within a few km: the metre-scale callers (interpolation, docking)
+    /// need no change, only this body.
     /// </summary>
     public static GlobalPos operator +(GlobalPos p, Vector3 d) => new(p.E + d.X, p.N - d.Z, p.Alt + d.Y);
 
