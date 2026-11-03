@@ -8,7 +8,8 @@
 - **The server decides**, every 0.5 s for every pair: range = the target's size at the 1152 px render
   width, cut at 1.5 px (walker ~0.9 km, car ~2.2 km, plane/heli ~5 km; ×1.6 above 25 m AGL — a
   silhouette against the sky carries), clamped to the viewer's reported `CameraFar`; line of sight
-  over `horizon.bin` (100 m lattice, 12 m margin); always within 150 m and always for the same race
+  over `horizon.bin` (100 m lattice, 12 m margin) and the Earth's bulge between the two
+  (`Curvature.Bulge`, #187: what the client draws, `world/earth-curvature`); always within 150 m and always for the same race
   or the same vehicle (`Together`: `RaceManager.SameRace` or `PassengerService.Together`, #158); hysteresis ×1.15 and at most one flip per pair per second. A newcomer sees nobody
   until its first round (0.5 s) instead of being sent everyone and having most taken back.
 - **The server rebroadcasts; owners send once.** `Sync` (owner authority) goes to the server ONLY.

@@ -15,9 +15,10 @@
   when the server locked the occasion. Everything reacts to `OccasionManager.Changed`.
   Rendering reaches every world shader through `shaders/world_occasion.gdshaderinc` and five
   globals `DayNight` writes each frame (`world_snow`, `world_mist_color/density/top`,
-  `world_lights`); all zero is a strict no-op, and `DayNight` takes its sunrise/sunset/noon
-  and colour grade from the top occasion's `Atmosphere`, reducing exactly to the old 6/18/62°
-  day without one. Overrides: `--occasion <id|none>` (repeatable; replaces the calendar for the
+  `world_lights`); all zero is a strict no-op, and `DayNight` takes its colour grade from
+  the top occasion's `Atmosphere`, and under the fixed sun (`--sun fixed`, check runs) its
+  sunrise/sunset/noon too, reducing exactly to the old 6/18/62° day without one; the real sun
+  (#1430) has the date's own day. Overrides: `--occasion <id|none>` (repeatable; replaces the calendar for the
   session), `--date YYYY-MM-DD`, and `/occasion list|start|stop|auto` in chat or the server
   console.
   **Content hooks** (all on `Occasion`, all no-ops by default): `Decorate`/`PlaceHunt` per tile

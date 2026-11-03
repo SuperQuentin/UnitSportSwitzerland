@@ -57,7 +57,7 @@ public static class ShapedCheck
             }
             string what = $"a {p.Shape} {p.Kind} at {p.E:F0},{p.N:F0}";
             // the planned outline in the tile's frame (X east, Z south)
-            var rings = p.Rings.Select(r => r.Select(q => new Vector2((float)(q.E - id.MinE), (float)(id.MaxN - q.N))).ToArray()).ToArray();
+            var rings = p.Rings.Select(r => r.Select(q => Plan(id, q.E, q.N)).ToArray()).ToArray();
             int index = t.Tile == null ? -1 : Find(t.Tile, rings[0]);
             if (index < 0)
             {
@@ -184,6 +184,13 @@ public static class ShapedCheck
 
     private static double Sq(double v) => v * v;
 
+    // an LV95 point in the tile's own frame (x east, z south from its north-west corner; #1443)
+    private static Vector2 Plan(TileId id, double e, double n)
+    {
+        var (x, z) = id.Local(e, n);
+        return new((float)x, (float)z);
+    }
+
     /// <summary>
     /// The generated shaped building of a shape nearest the default spawn, as built, its kind
     /// changed if asked (<c>--flattour --block shaped:L:House</c>), or null.
@@ -196,7 +203,7 @@ public static class ShapedCheck
         {
             var id = TileId.FromLv95(p.E, p.N);
             if (world.BuildBuildings(id) is not { } tile) continue;
-            var outer = p.Rings[0].Select(q => new Vector2((float)(q.E - id.MinE), (float)(id.MaxN - q.N))).ToArray();
+            var outer = p.Rings[0].Select(q => Plan(id, q.E, q.N)).ToArray();
             int index = Find(tile, outer);
             if (index < 0) continue;
             if (kind is not { } k) return (tile, index);

@@ -14,7 +14,10 @@ namespace UnitSport.Interiors;
 public static class VenueMusic
 {
     /// <summary>A room's speaker, and the one behind the door that the street hears.</summary>
-    public const float RoomVolume = 0.5f, DoorVolume = 0.12f;
+    public const float RoomVolume = 0.5f, DoorVolume = 0.2f;
+
+    /// <summary>How far out from the door's wall the street's source stands, m (#1386).</summary>
+    public const float DoorOut = 0.25f;
 
     /// <summary>What a cinema hall plays while its screen is on (#1279): Radio Swiss Classic, the nearest the relay has to film music.</summary>
     public const int FilmStation = 10;
@@ -148,7 +151,9 @@ public static class VenueMusic
             Volume = DoorVolume,
             Mood = MoodFor(v.Type, v.Cuisine),
             Salt = (uint)Core.Fnv.Hash(building.ToString()),
-            Position = d.Position - outward.Normalized() * 0.5f + Vector3.Up * 1.6f,
+            // over the door, a hand out from the wall: from the pavement nothing stands between (inside it, Hearing
+            // took the building's wall: 10 dB and the highs, on top of its low level, #1386); distance still dulls it
+            Position = d.Position + outward.Normalized() * DoorOut + Vector3.Up * 1.8f,
         };
     }
 }

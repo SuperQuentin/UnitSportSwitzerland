@@ -68,6 +68,8 @@ public partial class PinballPlay : CanvasLayer
     {
         Current = this;
         UiFocus.Set(this, true);
+        // the phone keeps its controls, in the pinball layout (#1353)
+        TouchControls.Takeover = this;
         var tables = PinballTables.Instance!;
         tables.RunHere += OnRun;
         tables.JoinHere += OnJoin;
@@ -91,6 +93,7 @@ public partial class PinballPlay : CanvasLayer
     {
         if (Current == this) Current = null;
         UiFocus.Set(this, false);
+        if (TouchControls.Takeover == this) TouchControls.Takeover = null;
         if (PinballTables.Instance is { } tables)
         {
             tables.RunHere -= OnRun;
@@ -278,11 +281,26 @@ public partial class PinballPlay : CanvasLayer
         AddChild(box);
     }
 
+    /// <summary>The prompt bar's rows while at the machine: on a phone, Start becomes a pill (#1353).</summary>
+    public IEnumerable<(string, string)> Prompts()
+    {
+        if (_game != null)
+        {
+            yield return (PlayerInput.PinballPlunge, "Hold to pull the plunger");
+            yield return (PlayerInput.PinballNudge, "Nudge");
+        }
+        yield return (PlayerInput.InteractMount, _game != null ? "Start / add a player" : "Start a game");
+        yield return (PlayerInput.CameraToggle, _top ? "Player's view" : "Top view");
+        yield return ("ui_cancel", "Step back");
+    }
+
     private string _hintShown = "";
 
     private void UpdateHint()
     {
-        string text = _game != null
+        // on a phone the keys and pills say it all (#1353)
+        string text = TouchControls.Hinting ? ""
+            : _game != null
             ? $"{InputHints.Prompt(PlayerInput.PinballLeft, "")}{InputHints.Prompt(PlayerInput.PinballRight, "flippers (or Left / Right Shift)")}   " +
               $"{InputHints.Prompt(PlayerInput.PinballPlunge, "hold to pull the plunger (or Enter)")}   {InputHints.Prompt(PlayerInput.PinballNudge, "nudge")}\n" +
               $"{InputHints.Prompt(PlayerInput.CameraToggle, _top ? "player's view" : "top view")}   {InputHints.Prompt(PlayerInput.InteractMount, "start / add a player")}   " +

@@ -158,8 +158,9 @@ public class FestivalCalendarTests
         Assert.True(OccasionWeekdays.Contains("fri#1", "+1", new DateOnly(2026, 11, 6), out _));
         Assert.True(OccasionWeekdays.Contains("fri#1", "+1", new DateOnly(2026, 11, 7), out _));
         Assert.False(OccasionWeekdays.Contains("fri#1", "+1", new DateOnly(2026, 11, 8), out _));
-        // a tail that is a typo (a fortnight and a half) is refused, as before
-        Assert.False(OccasionWeekdays.Contains("fri#1", "+14", new DateOnly(2026, 11, 6), out _));
+        // a tail that is a typo (a month) is refused, as before; sixteen days (Montreux Jazz, #1394) is the longest festival
+        Assert.False(OccasionWeekdays.Contains("fri#1", "+16", new DateOnly(2026, 11, 6), out _));
+        Assert.True(OccasionWeekdays.Contains("07-fri#1", "+15", new DateOnly(2026, 7, 18), out _));
     }
 
     // ---- the instance's days -----------------------------------------------------------------------

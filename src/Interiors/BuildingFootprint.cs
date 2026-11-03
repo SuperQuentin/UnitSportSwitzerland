@@ -9,6 +9,12 @@ namespace UnitSport.Interiors;
 /// </summary>
 public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height)
 {
+    /// <summary>A stoop of this many steps down from the sill to the ground in front (#1417); 0 for a door level with its ground.</summary>
+    public int Steps { get; init; }
+
+    /// <summary>The rise of each step of the stoop, metres (at most <see cref="BuildingFootprint.MaxStoopRise"/>).</summary>
+    public float Rise { get; init; }
+
     /// <summary>Which of its building's doors this is: 0 the main one, 1 and up the extra ones (#498).</summary>
     public int Slot { get; init; }
 
@@ -45,7 +51,8 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
 
     /// <summary>
     /// The entertainment venue the building is (#1232): one more than its index for <see cref="Venues.At"/>,
-    /// 0 for none (so a default spot is none). On the main door only, like <see cref="Shop"/>: its neon sign hangs there.
+    /// 0 for none (so a default spot is none). On the main door, like <see cref="Shop"/>: its neon sign hangs there;
+    /// a dining venue with a door of its own (<see cref="Unit"/>, #1292) is on that door instead, each venue on one door.
     /// </summary>
     public int Venue { get; init; }
 
@@ -63,6 +70,21 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     /// wall's piece): how wide a hall's glazed entrance can be (#1250). Not part of its key.
     /// </summary>
     public float Run { get; init; }
+
+    /// <summary>
+    /// A door of its own unit (#1292): a shop unit's under flats, or a dining venue's (<see cref="Venue"/> says
+    /// which). It opens straight into that unit's room, never into a stairwell, and builds no stairwell of its own.
+    /// </summary>
+    public bool Unit { get; init; }
+
+    /// <summary>
+    /// The width of the glazed front round the door (#1292), m, centred on it along its wall: the unit's room
+    /// as wide as it is on the street. 0 for none. Not part of its key.
+    /// </summary>
+    public float Span { get; init; }
+
+    /// <summary>The top of that front's glass over the door's foot (#1292), m: <see cref="VenueFront.Top"/>, under the ground storey's ceiling.</summary>
+    public float FrontTop { get; init; }
 
     /// <summary>
     /// Storeys above its building's ground floor the door opens onto (#827): a site office's upper
@@ -179,6 +201,21 @@ public static class BuildingFootprint
     /// </summary>
     public const float MinDoorHeight = 2.0f;
 
+    /// <summary>Metres: how far in front of a door the ground is read (#1417), and the most of a wide door's half width that is spread to the jambs.</summary>
+    public const float FrontReach = 0.8f, MaxJambReach = 1.5f;
+
+    /// <summary>Metres: ground this far above a sill buries the door, this far below it floats it (#1417); the doorstep covers the rest.</summary>
+    public const float BuriedTolerance = 0.1f, FloatTolerance = 0.15f;
+
+    /// <summary>Metres: the most a sill is raised to meet the ground in front of it, and the most a stoop is asked to close (three steps).</summary>
+    public const float MaxLandingRaise = 0.9f, MaxStoopDrop = 0.9f;
+
+    /// <summary>The most steps in a door's stoop.</summary>
+    public const int MaxStoopSteps = 3;
+
+    /// <summary>The most one step of a door's stoop rises (#1417): a walker climbs it without a jump.</summary>
+    public const float MaxStoopRise = 0.3f;
+
     /// <summary>A barn's pair is never planned shorter than this, low eave or not.</summary>
     public const float MinBarnDoorHeight = 2.5f;
 
@@ -251,6 +288,13 @@ public static class BuildingFootprint
     /// <summary>The front door's street-side handle, linear: on the facade and on the swinging leaf.</summary>
     public static readonly Color DoorHandleColor = DoorFrameColor * 0.7f;
 
+    /// <summary>The terrain mesh's height under a tile-local plan point (x east, y south; #1443).</summary>
+    private static double MeshHeight(ChunkGrid grid, TileId id, Vector2 xz)
+    {
+        var (e, n) = id.Global(xz.X, xz.Y);
+        return grid.SampleMeshHeight(e, n);
+    }
+
     /// <summary>
     /// Every door of every building of a tile, in building order and, within a building, main door
     /// first (#498). A building with no wall to hang one on still contributes its empty door spot,
@@ -289,9 +333,12 @@ public static class BuildingFootprint
             // an empty spot still names its own building, so the array can be read by Index
             // the sign over the door, and the shop behind it, belong to the building: they go on
             // its main door only, or a long shop front would grow a sign per entrance
+            // the venue the building is hangs its sign on the main door, unless it has a door of its own (#1292)
+            int venue = types.VenueOf(i) + 1;
+            if (fp != null && fp.Door.Venue != venue && fp.Extra.Any(e => e.Venue == venue)) venue = 0;
             doors.Add((fp?.Door ?? new DoorSpot(i, Vector3.Zero, Vector3.Forward, 0f, 0f)) with
             {
-                Kind = kind, Bank = fp != null && IsBank(fp), Shop = shop, Venue = types.VenueOf(i) + 1,
+                Kind = kind, Bank = fp != null && IsBank(fp), Shop = shop, Venue = venue,
                 Top = types.VenueOf(i) >= 0 ? tile.Buildings[i].MaxY : 0f,
                 WholeHall = Venues.Planned(Venues.HallOf(types, i)) && Venues.WholeBuilding(tile.Buildings[i]),
             });
@@ -439,7 +486,7 @@ public static class BuildingFootprint
             // triangle's full width: a gable, or an upper storey over a porch roof, is wall where
             // no door can go, and taking its whole extent put doors in mid-air under it.
             float groundHere = grid != null
-                ? (float)grid.SampleMeshHeight(tile.Id.MinE + mid.X, tile.Id.MaxN - mid.Y)
+                ? (float)MeshHeight(grid, tile.Id, mid)
                 : b.MinY + 0.8f;
             if (!CutAt(a, c, d, Math.Max(groundHere, b.MinY) + 1.0f, out var p0, out var p1)) continue;
             cuts.Add(((p0 + p1) * 0.5f, n, Math.Max(groundHere, b.MinY)));
@@ -465,6 +512,46 @@ public static class BuildingFootprint
         bool barn = DoorLeaf.SwingsOut(kind);
         var roadTarget = roads.Streets.Nearest(center, 60f) ?? roads.Paths.Nearest(center, 40f);
 
+        // ---- the ground in front of a door (#1417) ------------------------------------------
+        // One sample in the wall plane buried a door on ground rising in front of it and left a downhill one
+        // over a gap the 0.3 m step does not close. The ground is read 0.8 m out at both jambs and in the
+        // middle, and in the wall plane: a sill below it is raised to it (a level landing) when the wall
+        // has the headroom and the rise is a landing's; a sill above the lowest of the three gets a stoop of
+        // up to three steps (mesh and collision), and the wall a penalty when it is a climb rather than a stoop.
+        // Doors a vehicle drives through are left as they are.
+        DoorSpot Settle(DoorSpot d, out float penalty)
+        {
+            penalty = 0;
+            if (grid == null || d.Width <= 0 || d.Vehicle) return d;
+            var o2 = new Vector2(d.Outward.X, d.Outward.Z);
+            var side = new Vector2(-o2.Y, o2.X) * Math.Min(d.Width / 2, MaxJambReach);
+            var at = new Vector2(d.Position.X, d.Position.Z);
+            float G(Vector2 q) { var (e, n) = tile.Id.Global(q.X, q.Y); return (float)grid.SampleMeshHeight(e, n); }
+            var front = at + o2 * FrontReach;
+            float gm = G(front), gl = G(front - side), gr = G(front + side), gw = G(at);
+            float high = Math.Max(Math.Max(gm, gl), Math.Max(gr, gw)), low = Math.Min(gm, Math.Min(gl, gr));
+            float sill = d.Position.Y;
+            if (high > sill + BuriedTolerance)
+            {
+                float room = box.Eave - high - DoorUnderEave;
+                if (high - sill <= MaxLandingRaise && room >= Math.Min(d.Height, MinDoorHeight))
+                {
+                    d = d with { Position = d.Position with { Y = high }, Height = FitUnderEave(d.Height, box.Eave - high, barn: false) };
+                    sill = high;
+                }
+                else penalty += 3f;                        // buried: another wall wins
+            }
+            float drop = sill - low;
+            if (drop > FloatTolerance)
+            {
+                int steps = Math.Min(MaxStoopSteps, (int)Math.Ceiling(drop / MaxStoopRise - 1e-4f));
+                if (drop > MaxStoopDrop) penalty += 4f;    // more than a stoop: a climb
+                penalty += 0.2f * steps;                   // a level door wins a tie
+                d = d with { Steps = steps, Rise = Math.Min(MaxStoopRise, drop / steps) };
+            }
+            return d;
+        }
+
         var ranked = new List<Cand>();
         foreach (var f in facets.Values)
         {
@@ -478,7 +565,7 @@ public static class BuildingFootprint
             if (Covered(xz)) continue;
 
             float ground = grid != null
-                ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                ? (float)MeshHeight(grid, tile.Id, xz)
                 : b.MinY + 0.8f;
             float baseY = Math.Max(ground, b.MinY);
             // every door stops under the eave, not just a barn's (#509): a 2.6 m shed used to take
@@ -504,11 +591,11 @@ public static class BuildingFootprint
             if (headroom - DoorUnderEave < doorH - 0.01f) score -= LowWallPenalty;
 
             var pos = new Vector3(xz.X + f.Normal.X * 0.03f, baseY, xz.Y + f.Normal.Y * 0.03f);
-            ranked.Add(new Cand(score, f.Normal, f.Offset, s0, s1,
-                new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)
-                {
-                    Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind), Run = length,
-                }));
+            var spot0 = Settle(new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)
+            {
+                Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind), Run = length,
+            }, out float landing);
+            ranked.Add(new Cand(score - landing, f.Normal, f.Offset, s0, s1, spot0));
         }
 
         // best-scoring door that is actually on a wall; the score alone can pick a run whose
@@ -526,11 +613,11 @@ public static class BuildingFootprint
             var open = cuts.Where(k => !Covered(k.Mid)).ToList();
             var cut = (open.Count > 0 ? open : cuts).MaxBy(k => k.Normal.Dot((aim - k.Mid).Normalized()) - k.Mid.DistanceTo(aim) * 0.01f);
             var pos = new Vector3(cut.Mid.X + cut.Normal.X * 0.03f, cut.Ground, cut.Mid.Y + cut.Normal.Y * 0.03f);
-            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f),
+            door = Settle(new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f),
                 FitUnderEave(plainH, box.Eave - cut.Ground, barn: false))
             {
                 Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind),
-            };
+            }, out _);
             found = true;
         }
         if (!found && ranked.Count > 0) { main = ranked.MaxBy(r => r.Score); door = main!.Door; found = true; }
@@ -580,7 +667,7 @@ public static class BuildingFootprint
                 var xz = main.Normal * main.Offset + t * (mid + off);
                 if (Covered(xz)) continue;
                 float ground = grid != null
-                    ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                    ? (float)MeshHeight(grid, tile.Id, xz)
                     : b.MinY + 0.8f;
                 float baseY = Math.Max(ground, b.MinY);
                 if (ground < b.MinY - 0.6f || ground > b.MaxY - bays.Height - 0.3f) continue;
@@ -636,7 +723,7 @@ public static class BuildingFootprint
                 Vector2 AtX(float x) => main.Normal * main.Offset + tw * ((x - wallX0) / along);
                 planX = xz => (xz - center).Dot(planU) - wingX;
                 float GroundAt(Vector2 xz) => grid != null
-                    ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                    ? (float)MeshHeight(grid, tile.Id, xz)
                     : b.MinY + 0.8f;
 
                 DoorSpot? Why(string why) { GarageWhyNot = why; return null; }
@@ -663,7 +750,7 @@ public static class BuildingFootprint
                             {
                                 float at = i / 16f, o = link.Length * at;
                                 var p = xz + main.Normal * o + tw * side;
-                                float gy = (float)grid.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Y);
+                                float gy = (float)MeshHeight(grid, tile.Id, p);
                                 samples.Add((at, gy - (baseY + (link.RoadY - baseY) * at) - 0.03f));
                             }
                         if (!GarageLink.Humpable(samples)) return Why("the ground rises too far to the road");
@@ -782,7 +869,7 @@ public static class BuildingFootprint
                     var xz = c.Normal * c.Offset + t * (mid + off);
                     if (Covered(xz) || Courtyard(xz, c.Normal)) continue;
                     float ground = grid != null
-                        ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                        ? (float)MeshHeight(grid, tile.Id, xz)
                         : b.MinY + 0.8f;
                     float baseY = Math.Max(ground, b.MinY);
                     // not on stilts over a slope, not on the buried side of a hillside house, and
@@ -799,6 +886,8 @@ public static class BuildingFootprint
                         // swings into the hall and no tractor comes through it
                         Slot = placed.Count, Hang = DoorHang.Inward, Vehicle = false,
                     };
+                    spot = Settle(spot, out float buried);
+                    if (buried >= 3f) continue;        // a side door in the hill: no door rather than a buried one
                     if (!DoorOnWall(b, spot)) continue;
                     if (placed.Any(q => TooClose(q, spot))) continue;
                     // a block of flats is entered by its stairwells (#1304), and the planner builds one behind each
@@ -830,11 +919,222 @@ public static class BuildingFootprint
         bool alongU = Mathf.Abs(axisU.Dot(u)) > 0.5f;
         float width2 = alongU ? w : dpt, depth2 = alongU ? dpt : w;
 
-        return new Footprint(key, kind, center, axisU,
+        var built = new Footprint(key, kind, center, axisU,
             Mathf.Clamp(width2, MinSide, MaxSide), Mathf.Clamp(depth2, MinSide, MaxSide), door)
         {
             Extra = extras,
         };
+
+        // ---- doors of their own (#1292): each shop unit's and each dining venue's -------------------
+        if (!found || door.Width <= 0) return built;
+        float GroundOf(Vector2 xz) => grid != null
+            ? (float)MeshHeight(grid, tile.Id, xz)
+            : b.MinY + 0.8f;
+        var own = OwnDoors(tile, index, map, built, ranked, Covered, Under, Courtyard, GroundOf, box.Eave, d => Settle(d, out _));
+        return own.Count == 0 ? built : built with { Extra = extras.Concat(own).ToList() };
+    }
+
+    /// <summary>Time spent asking the apartment planner for a block's units (#1292), Stopwatch ticks, for <c>--shopsurvey</c>.</summary>
+    internal static long StreetUnitsTicks;
+
+    /// <summary>A unit's own street door (#1292): a shop door, man-sized.</summary>
+    public const float UnitDoorWidth = 1.2f;
+
+    /// <summary>
+    /// The doors a building's shop units and dining venues get of their own (#1292), beyond its door budget, each
+    /// <see cref="DoorSpot.Unit"/> with its glazed front's <see cref="DoorSpot.Span"/>. A block of flats with shops on its
+    /// ground floor (a mixed block, or one holding a venue) gets a door in the middle of each unit's street wall, where the
+    /// apartment planner puts its units (<see cref="InteriorGenerator.StreetUnits"/>); its venues take the unit doors nearest
+    /// their points. Anywhere else each venue gets a door on the wall nearest its point, its front as wide as its kind
+    /// (<see cref="VenueFront.SpanFor"/>).
+    /// Only where the planner gives a venue a room: not an industrial site, a church, a landmark, a hall venue or a shed.
+    /// </summary>
+    private static List<DoorSpot> OwnDoors(BuildingTile tile, int index, BuildingTypeMap map, Footprint fp,
+        List<Cand> ranked, Func<Vector2, bool> covered, Func<Vector2, bool> under, Func<Vector2, Vector2, bool> courtyard,
+        Func<Vector2, float> groundAt, float eave, Func<DoorSpot, DoorSpot> settle)
+    {
+        var b = tile.Buildings[index];
+        var extra = new List<DoorSpot>();
+        var dining = map.DiningOf(index);
+        if (map.TypeOf(index) != BuildingType.None || Venues.HallOf(map, index) != VenueType.None
+            || b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex or BuildingKind.Garage
+                or BuildingKind.UnderConstruction or BuildingKind.Sacral
+            || BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY) != BuildingType.None)
+            return extra;
+        var (_, storeys) = InteriorGenerator.Storeys(b);
+        var flats = InteriorGenerator.ApartmentTypeFor(fp, b.Kind, storeys, IsBank(fp) && dining.Count == 0);
+        bool shops = flats == BuildingType.MixedUse || flats != BuildingType.None && dining.Count > 0;
+        if (!shops && dining.Count == 0) return extra;
+
+        var placed = fp.Doors.ToList();
+        int slot = placed.Max(d => d.Slot) + 1;
+        // the glass stops under the ground storey's ceiling; a storey too low for glass over a door has none
+        float glassTop = Math.Min(VenueFront.Top, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.3f);
+        bool glazed = glassTop >= DoorBudget.ServiceHeight + 0.3f;
+        var tid = tile.Id;
+        Vector2 PointOf(VenueRecord v)
+        {
+            var (x, z) = tid.Local(v.E, v.N);
+            return new((float)x, (float)z);
+        }
+
+        // a door at s along wall run c, its front `span` wide round it (cut to what the run holds), or null
+        DoorSpot? At(Cand c, float s, float span)
+        {
+            const float w = UnitDoorWidth, h = DoorBudget.ServiceHeight;
+            if (s - w / 2 < c.S0 + 0.3f || s + w / 2 > c.S1 - 0.3f) return null;
+            var t = new Vector2(-c.Normal.Y, c.Normal.X);
+            var xz = c.Normal * c.Offset + t * s;
+            // never on a courtyard the roof closes round (#1304): no street there, no room planned on that wall
+            if (covered(xz) || courtyard(xz, c.Normal)) return null;
+            float ground = groundAt(xz), baseY = Math.Max(ground, b.MinY);
+            if (ground < b.MinY - 0.6f || ground > b.MaxY - h - 0.3f || eave - baseY - DoorUnderEave < h) return null;
+            span = Math.Min(span, 2 * Math.Min(s - c.S0, c.S1 - s) - 0.2f);
+            // the glass stops short of every other door on the wall: a front never runs over the lobby's door
+            foreach (var q in placed)
+            {
+                var qp = new Vector2(q.Position.X, q.Position.Z);
+                if (Math.Abs(c.Normal.Dot(qp) - c.Offset) > 0.5f || new Vector2(q.Outward.X, q.Outward.Z).Dot(c.Normal) < 0.9f) continue;
+                span = Math.Min(span, 2 * (Math.Abs(t.Dot(qp) - s) - q.Width / 2 - 0.3f));
+            }
+            var spot = new DoorSpot(index, new Vector3(xz.X + c.Normal.X * 0.03f, baseY, xz.Y + c.Normal.Y * 0.03f),
+                new Vector3(c.Normal.X, 0, c.Normal.Y), w, h)
+            {
+                Slot = slot, Hang = DoorHang.Inward, Vehicle = false, Unit = true, Span = glazed && span >= VenueFront.MinSpan ? span : 0f,
+                FrontTop = glazed ? glassTop : 0f, Run = c.S1 - c.S0,
+            };
+            spot = settle(spot);
+            if (!DoorOnWall(b, spot) || placed.Any(q => TooClose(q, spot))) return null;
+            return spot;
+        }
+        void Add(DoorSpot d)
+        {
+            placed.Add(d);
+            extra.Add(d);
+            slot++;
+        }
+
+        if (shops)
+        {
+            var mainOut = new Vector2(fp.Door.Outward.X, fp.Door.Outward.Z);
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            var units = InteriorGenerator.StreetUnits(fp, b, flats, dining.Count > 0);
+            Interlocked.Add(ref StreetUnitsTicks, System.Diagnostics.Stopwatch.GetTimestamp() - t0);
+            foreach (var u in units)
+            {
+                // its street wall: a side with no roof outside it and a wall run along it, the main door's way first, then the longest
+                var options = new List<(Cand C, float S, float Lo, float Hi, float Rank)>();
+                foreach (var (fx, fz) in new[] { (0f, -1f), (1f, 0f), (0f, 1f), (-1f, 0f) })
+                {
+                    bool alongX = fz != 0;
+                    float mx = fx == 0 ? (u.X0 + u.X1) / 2 : fx > 0 ? u.X1 : u.X0;
+                    float mz = fz == 0 ? (u.Z0 + u.Z1) / 2 : fz > 0 ? u.Z1 : u.Z0;
+                    var p = fp.Center + fp.AxisU * mx + fp.AxisV * mz;
+                    var dir = fp.AxisU * fx + fp.AxisV * fz;
+                    if (under(p + dir * 1.2f)) continue;
+                    var half = (alongX ? fp.AxisU : fp.AxisV) * ((alongX ? u.X1 - u.X0 : u.Z1 - u.Z0) / 2);
+                    foreach (var c in ranked)
+                    {
+                        if (c.Normal.Dot(dir) < 0.95f || Math.Abs(c.Normal.Dot(p) - c.Offset) > 1.5f) continue;
+                        var t = new Vector2(-c.Normal.Y, c.Normal.X);
+                        float a0 = t.Dot(p - half), a1 = t.Dot(p + half);
+                        float lo = Math.Max(Math.Min(a0, a1), c.S0), hi = Math.Min(Math.Max(a0, a1), c.S1);
+                        if (hi - lo < UnitDoorWidth + 0.8f) continue;
+                        options.Add((c, t.Dot(p), lo, hi, dir.Dot(mainOut) * 100f + (hi - lo)));
+                    }
+                }
+                foreach (var (c, s, lo, hi, _) in options.OrderByDescending(o => o.Rank))
+                {
+                    float at = Mathf.Clamp(s, lo + UnitDoorWidth / 2 + 0.3f, hi - UnitDoorWidth / 2 - 0.3f);
+                    // the front fills the unit's street wall either side of its door, the door kept in its middle bay
+                    if (At(c, at, 2 * Math.Min(at - lo, hi - at) - 0.4f) is { } d) { Add(d); break; }
+                }
+            }
+            // each venue takes the free unit door nearest its point
+            foreach (int vi in dining)
+            {
+                var p = PointOf(Venues.At(vi));
+                int best = -1;
+                for (int i = 0; i < extra.Count; i++)
+                    if (extra[i].Venue == 0 && (best < 0 || new Vector2(extra[i].Position.X, extra[i].Position.Z).DistanceSquaredTo(p)
+                            < new Vector2(extra[best].Position.X, extra[best].Position.Z).DistanceSquaredTo(p)))
+                        best = i;
+                if (best >= 0) extra[best] = extra[best] with { Venue = vi + 1 };
+            }
+            return extra;
+        }
+
+        // a building planned wing by wing (#1304: its outline peels into two or more) has rooms only where a wing stands:
+        // a venue's door, and its glass, go only on a wall a wing is behind, or the plan has no room for them (the
+        // wedge between two wings of an angled block). The door goes where the plan has a way in (#1292 with #1304).
+        var wings = PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
+        bool Backed(Vector2 xz, Vector2 n)
+        {
+            if (wings is not { Count: >= 2 }) return true;
+            var q = xz - n * 1.0f - fp.Center;
+            float x = q.Dot(fp.AxisU), z = q.Dot(fp.AxisV);
+            return wings.Any(w => x >= w.X0 - 0.3f && x <= w.X1 + 0.3f && z >= w.Z0 - 0.3f && z <= w.Z1 + 0.3f);
+        }
+
+        // every venue its own door, even where the building has the one: the planner puts the stair behind the main
+        // door, so the café beside it gets a door of its own rather than a lobby in front of it (owner, #1292)
+        foreach (int vi in dining)
+        {
+            var v = Venues.At(vi);
+            float want = VenueFront.SpanFor(v.Type, UnitDoorWidth);
+            // the wall run nearest its point, the door as near the point as the front's span lets it stand, slid a bay
+            // at a time off the doors already there
+            var p = PointOf(v);
+            // the main door's wall, the street front, unless the point is plainly nearer another (a point in the middle
+            // of a block is no side's)
+            foreach (var c in ranked.OrderBy(c => RunDistance(c, p) - (OnWall(c, fp.Door) ? StreetPull : 0f)))
+            {
+                var t = new Vector2(-c.Normal.Y, c.Normal.X);
+                float half = Math.Min(want, c.S1 - c.S0 - 0.6f) / 2;
+                float s0 = Mathf.Clamp(t.Dot(p), c.S0 + half + 0.3f, Math.Max(c.S0 + half + 0.3f, c.S1 - half - 0.3f));
+                DoorSpot? d = null;
+                // a quarter metre at a time either way, nearest first, over the whole run
+                int slides = 2 * (int)MathF.Ceiling((c.S1 - c.S0) / SlideStep);
+                for (int k = 0; k <= slides && d == null; k++)
+                {
+                    float s = s0 + (k % 2 == 1 ? 1 : -1) * ((k + 1) / 2) * SlideStep;
+                    var xz = c.Normal * c.Offset + t * s;
+                    if (!Backed(xz, c.Normal)) continue;
+                    d = At(c, s, want);
+                    // the glass only where a wing is behind it: a bay pair off at a time until both its ends are
+                    if (d is { Span: > 0 } fronted)
+                    {
+                        float span = fronted.Span;
+                        while (span >= VenueFront.MinSpan && !(Backed(xz + t * (span / 2), c.Normal) && Backed(xz - t * (span / 2), c.Normal)))
+                            span -= 2 * VenueFront.Bay;
+                        d = fronted with { Span = span >= VenueFront.MinSpan ? span : 0f };
+                    }
+                }
+                if (d is not { } door) continue;
+                Add(door with { Venue = vi + 1 });
+                break;
+            }
+        }
+        return extra;
+    }
+
+    /// <summary>How far a venue's door slides at a time along its wall to clear the doors already there, m.</summary>
+    private const float SlideStep = 0.25f;
+
+    /// <summary>How much nearer than the street front another wall must be to a venue's point to take its door, m.</summary>
+    private const float StreetPull = 4f;
+
+    /// <summary>Whether a door stands on wall run <paramref name="c"/>.</summary>
+    private static bool OnWall(Cand c, DoorSpot d) =>
+        new Vector2(d.Outward.X, d.Outward.Z).Dot(c.Normal) > 0.95f && Math.Abs(c.Normal.Dot(new Vector2(d.Position.X, d.Position.Z)) - c.Offset) < 0.5f;
+
+    /// <summary>How far a point is from a wall run, m.</summary>
+    private static float RunDistance(Cand c, Vector2 p)
+    {
+        var t = new Vector2(-c.Normal.Y, c.Normal.X);
+        float s = t.Dot(p), off = c.Normal.Dot(p) - c.Offset;
+        float along = Math.Max(0, Math.Max(c.S0 - s, s - c.S1));
+        return MathF.Sqrt(along * along + off * off);
     }
 
     /// <summary>One wall run a door could stand on: its plane, the run along it, and the door it would be.</summary>

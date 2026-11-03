@@ -29,10 +29,13 @@ public partial class ConcertDirector : Node
 
     public ConcertDirector() : this(null!) { }
 
-    /// <summary>The seed forced on the command line, if any; <c>off</c> gives -1.</summary>
+    /// <summary>The seed forced on the command line, if any (<c>off</c> gives -1), else the world's own (<see cref="WorldSeed"/>).</summary>
     public static int? ForcedSeed => CmdArgs.Value("--concert") is { } v
         ? v == "off" ? -1 : int.TryParse(v, out int s) ? s : null
-        : null;
+        : WorldSeed;
+
+    /// <summary>A world whose stage always plays (#1396, the fun world's arena): its set's seed; null in the open world.</summary>
+    public static int? WorldSeed { get; set; }
 
     /// <summary>
     /// The event in a stadium: the set an operator hosts (<see cref="ConcertService"/>), else the one
@@ -44,7 +47,7 @@ public partial class ConcertDirector : Node
         {
             -1 => null,
             { } seed => ConcertPlanner.Plan(s, seed),
-            _ => ConcertPlanner.Tonight(s, Core.Calendar.Now.Date),
+            _ => ConcertPlanner.Open(s, Core.Calendar.Now.Date) ? ConcertPlanner.Tonight(s, Core.Calendar.Now.Date) : null,
         };
 
     /// <summary>The tile nodes holding each stadium's rig, so a hosted set can replace it.</summary>
@@ -89,7 +92,8 @@ public partial class ConcertDirector : Node
     {
         if (ConcertService.Instance?.SeedFor(index) != null || ForcedSeed is >= 0) return true;
         if (ForcedSeed == -1) return false;
-        return ConcertPlanner.Tonight(StadiumCatalog.All[index], Core.Calendar.Now.Date).Standing(World.WorldClock.CurrentHour);
+        var venue = StadiumCatalog.All[index];
+        return ConcertPlanner.Open(venue, Core.Calendar.Now.Date) && ConcertPlanner.Tonight(venue, Core.Calendar.Now.Date).Standing(World.WorldClock.CurrentHour);
     }
 
     /// <summary>The stage, its rig, its floor and its crowd taken away.</summary>

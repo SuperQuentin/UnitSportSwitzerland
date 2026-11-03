@@ -24,13 +24,21 @@ public sealed record WorldChoice(string Id, string Title, string Blurb, string? 
 
     public const string SignalsId = "signals";
 
+    /// <summary>The fun world (#1396): a small synthwave world with the game's activities side by side.</summary>
+    public const string FunId = "fun";
+
+    /// <summary>The index in <see cref="All"/> of the first test world: the pickers head the rest "Test worlds".</summary>
+    public const int FirstTestWorld = 2;
+
     public static readonly WorldChoice Open = new(OpenId, "UnitSport open world",
         "The real Switzerland where its terrain is on this machine, generated everywhere else.");
 
-    /// <summary>Every world the pickers offer, the open world first.</summary>
+    /// <summary>Every world the pickers offer, the open world and the fun world first, then the test worlds.</summary>
     public static readonly WorldChoice[] All =
     {
         Open,
+        new(FunId, "Neon fun world",
+            "A small synthwave world at dusk: a race track, bowling, an arcade, a cinema, a café, an arena, a runway with air rings, a stunt park, a ski slope, a lake, a festival, a truck yard and a PvP block.", FunId),
         new(SignalsId, "Traffic lights region",
             "Designed junctions with traffic lights on flat ground, built by the real road pipeline. The place search finds them (J1, J2...)."),
         new("junction", "Junction course", "A 9 m road through a T junction and a crossroads with 6 m side roads.", "junction"),
@@ -48,6 +56,9 @@ public sealed record WorldChoice(string Id, string Title, string Blurb, string? 
     };
 
     public bool IsOpen => Id == OpenId;
+
+    /// <summary>Whether the fun world (#1396) is being played.</summary>
+    public static bool FunActive => Active?.Id == FunId;
 
     /// <summary>The world for an id, or null when no world has it (an older or newer peer's).</summary>
     public static WorldChoice? Find(string? id) => id == null ? null : Array.Find(All, w => w.Id == id);

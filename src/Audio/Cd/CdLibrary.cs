@@ -69,6 +69,16 @@ public partial class CdLibrary : Node
         "https://www.youtube.com/watch?v=PGNiXGX2nLU",
     };
 
+    /// <summary>
+    /// The jazz playlist of the Montreux Jazz stage (#1394), burnt like <see cref="DefaultUrls"/> but played only there (<see cref="IsJazz"/>): copyright-free
+    /// tracks only (CC BY ones credited), never committed as audio. Empty until the owner picks the tracks; the stage then runs on its made-up songs, lights only.
+    /// </summary>
+    public static readonly string[] JazzUrls = Array.Empty<string>();
+
+    /// <summary>Whether a CD is one of the <see cref="JazzUrls"/>: the jazz stage plays these and only these, every other stage everything else.</summary>
+    public static bool IsJazz(CdInfo cd) =>
+        JazzUrls.Length > 0 && cd.Source.StartsWith("default:", StringComparison.Ordinal) && Array.IndexOf(JazzUrls, cd.Source["default:".Length..]) >= 0;
+
     /// <summary><see cref="CdInfo.Source"/> of the CD burnt from a <see cref="DefaultUrls"/> link.</summary>
     public static string DefaultSource(string url) => "default:" + url;
 
@@ -390,6 +400,7 @@ public partial class CdLibrary : Node
                 GD.Print($"[cd] personal CD {cd.Id} ready: {cd.Describe()}");
                 BurnStatus?.Invoke($"Burnt for you only: {cd.Title}");
                 Changed?.Invoke();
+                QueueVocal(cd.Id, true);
                 continue;
             }
             _all[cd.Id] = Note(cd);
@@ -397,17 +408,32 @@ public partial class CdLibrary : Node
             GD.Print($"[cd] CD {cd.Id} ready: {cd.Describe()}");
             Changed?.Invoke();
             if (_server && Online) Rpc(MethodName.Added, _all[cd.Id].ToDict());
+            QueueVocal(cd.Id, false);
         }
-        if (!_burning && _fixtures.TryDequeue(out string? next))
+        // online, the server's library is what plays (#1414): a client's default queue and backfill wait
+        // for the next offline start, so they never take the cores the radio's audio thread needs
+        bool owns = Owns;
+        if (owns && !_burning && _fixtures.TryDequeue(out string? next))
         {
             Begin(0, next, false, out string refusal);
             if (refusal.Length > 0) GD.PushWarning($"[cd] fixture refused: {refusal}");
         }
         while (_reanalysed.TryDequeue(out var r)) Reanalysed(r.Id, r.Personal, r.Analysis, r.NoFfmpeg);
-        if (!_reanalysing && !_noFfmpeg && _stale.TryDequeue(out var stale)) Reanalyse(stale.Id, stale.Personal);
+        if (owns && !_reanalysing && !_noFfmpeg && _stale.TryDequeue(out var stale)) Reanalyse(stale.Id, stale.Personal);
     }
 
     // ---- analysis backfill (#725) ---------------------------------------------------------------
+
+    /// <summary>
+    /// A CD just burnt, listed and playable, gets its singer on the backfill (#1405): separation and
+    /// stems on a worker, the block to every client through <see cref="Reanalysed"/>. Not on a headless
+    /// client (#1169: a check, never a player), as at start.
+    /// </summary>
+    private void QueueVocal(int id, bool personal)
+    {
+        if (!_server && DisplayServer.GetName() == "headless") return;
+        if (!_stale.Contains((id, personal))) _stale.Enqueue((id, personal));
+    }
 
     /// <summary>
     /// Queues every CD of this library (the shared one where this copy owns it, and this player's
@@ -647,7 +673,7 @@ public partial class CdLibrary : Node
     {
         if (!Owns || !(OS.HasFeature("template") || CmdArgs.Has("--defaultcds"))) return;
         var have = _all.Values.Select(c => c.Source).ToHashSet();
-        foreach (string url in DefaultUrls)
+        foreach (string url in DefaultUrls.Concat(JazzUrls))
         {
             if (have.Contains(DefaultSource(url)) || (url == RatBeatUrl && (RatBeatId >= 0 || _sources.ContainsValue(RatBeatSource)))) continue;
             _sources[url] = DefaultSource(url);

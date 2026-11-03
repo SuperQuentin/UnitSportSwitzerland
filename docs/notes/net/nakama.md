@@ -41,9 +41,17 @@
   - Nakama looks registered functions up by name, so each one is a **top-level `function` declaration**. An arrow
     function or a function expression fails at load.
   - `healthcheck` returns `{ok, module}`.
-  - `submit_result` takes `{course, playerKey, name?, timeMs, avgWatts?, event?}` and returns
+  - `submit_result` takes `{course, playerKey, accountId?, name?, timeMs, avgWatts?, event?}` and returns
     `{leaderboard, rank, best}`. It is called as `POST /v2/rpc/submit_result?http_key=<key>&unwrap` with the raw
     JSON body.
+  - **Names are never stored in a record** (#1359). With `accountId` (a signed-in rider, checked by the race server's
+    `AccountGate`) the record is that account's; without, it is the PlayerKey fingerprint's user, whose display name
+    holds the offline rider's plain name, one copy refreshed by each result. Records carry `account: true|false`. Each
+    record also keeps `metadata.name`, the name it was set under: a backup shown only once its user is gone (a deleted
+    account).
+  - `scoreboard {course, limit?, cursor?}` reads a board with every name looked up now: the account's username, or
+    the offline user's display name (a record from before #1359, without the flag, falls back to the name stored in
+    it). **Read boards through it**, not `GET /v2/leaderboard`, whose record usernames are Nakama's copy from the write.
 - **Forgotten passwords** (#1257): Nakama sends no mail, so the layout service (`net/house-layouts`, which has `SMTP_*`) does.
   - The module holds the token. `password_reset_issue {email}` and `password_reset_apply {token, password}` are
     **http key only** (a player's session gets 403). Issue returns `{token}` for an account with that email (banned
@@ -65,7 +73,7 @@
     get **400**.
   - The `course:<id>` leaderboards are **authoritative** (only the server writes), **ascending** (lower time
     wins) and use the **best** operator (a slower ride never replaces a faster one).
-  - Players read them with their own session: `GET /v2/leaderboard/course%3A<id>`.
+  - Players read them with their own session through the `scoreboard` RPC.
   - Watts are still the rider's own word, as in Zwift.
 - **Accounts**: a rider's Nakama user is created on their first result, with their **PlayerKey fingerprint as the
   custom id** (`nk.authenticateCustom`, 6 to 128 characters of `[A-Za-z0-9_-]`).

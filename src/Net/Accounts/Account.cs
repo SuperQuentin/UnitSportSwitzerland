@@ -123,6 +123,36 @@ public static class Account
         catch (NakamaException e) { return e.Message; }
     }
 
+    /// <summary>
+    /// Reads the account's name again (#1359): renamed on the website (<c>account.html</c>), the game follows when its
+    /// Account screen opens or the window gets focus back. Quiet when offline, signed out or the server does not answer.
+    /// </summary>
+    public static async Task RefreshName()
+    {
+        if (!SignedIn || Transient || _refreshing) return;
+        _refreshing = true;
+        try
+        {
+            string server = Url, token = await TokenFor(server);
+            if (token.Length == 0 || !AccountRules.SameServer(server, Url)) return;
+            if (await NakamaRest.Account(server, token) is { Username.Length: > 0 } account && account.Username != _current.Username && SignedIn)
+            {
+                _current.Username = account.Username;
+                Save();
+            }
+        }
+        catch (Exception e) when (e is NakamaException or JsonException or InvalidOperationException or System.Collections.Generic.KeyNotFoundException)
+        {
+            GD.Print($"[accounts] the name could not be read again: {e.Message}");
+        }
+        finally { _refreshing = false; }
+    }
+
+    private static bool _refreshing;
+
+    /// <summary>The website's account page (#1359), or "" when the account server sits behind no site.</summary>
+    public static string ManagePage => AccountRules.SiteOf(Url) is { Length: > 0 } site ? site + "/account.html" : "";
+
     public static void SignOut()
     {
         ForgetSession();

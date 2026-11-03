@@ -23,6 +23,12 @@ namespace UnitSport.Playtest;
 /// view, Free play and End session. In batch mode the conversation with Claude is hidden and what
 /// is sent from the box is a note.
 /// </para>
+/// <para>
+/// Each note and the session's end confirm themselves (#1383): under that row and on the card, the
+/// recording's state ("Recording · 5 notes", "Saving the session…", "Not recording: session ended"
+/// with where <c>report.md</c> is) and, for 4 s, "✔ Note 5 saved", whichever way the note came (F12,
+/// the box, the Note button, a pad, VR, Claude). Once ended, Note and End session are disabled.
+/// </para>
 /// </summary>
 public partial class PlaytestPanel : CanvasLayer
 {
@@ -44,10 +50,23 @@ public partial class PlaytestPanel : CanvasLayer
     private HBoxContainer _listButtons = null!;
     private PlaytestEntry? _foldedFor;
     private string _shownClaude = "";
+    private Button? _note, _end, _top;
+    private VBoxContainer? _rec, _cardRec;
+    /// <summary>The note to confirm (its id; -1: a note that was not saved) until <see cref="_flashUntil"/> (#1383).</summary>
+    private int _flash;
+    private double _flashUntil;
+
+    private const double FlashSeconds = 4;
 
     public static PlaytestPanel Create(PlaytestDirector director) => new() { Name = NodeName, _director = director };
 
     public bool IsOpen => _panel.Visible;
+
+    /// <summary>What the recording's line says now, the confirmation included (the recorder's check reads it).</summary>
+    internal string Confirmation { get; private set; } = "";
+
+    /// <summary>Opens or closes it as F10 does (the recorder's check pictures both).</summary>
+    internal void Show(bool open) => Open(open);
 
     public override void _Ready()
     {
@@ -56,13 +75,34 @@ public partial class PlaytestPanel : CanvasLayer
         BuildCard();
         _director.Changed += () => _dirty = true;
         PlayerInput.DeviceChanged += () => _dirty = true;
+        if (PlaytestRecorder.Instance is { } rec) rec.Changed += OnRecorder;
         Open(true);
+    }
+
+    public override void _ExitTree()
+    {
+        if (PlaytestRecorder.Instance is { } rec) rec.Changed -= OnRecorder;
+    }
+
+    /// <summary>A note saved (its id) or the recording stopping (0).</summary>
+    private void OnRecorder(int note)
+    {
+        if (note > 0) Flash(note);
+        _dirty = true;
+    }
+
+    private void Flash(int note)
+    {
+        _flash = note;
+        _flashUntil = GameClock.Now + FlashSeconds;
+        _dirty = true;
     }
 
     public override void _Process(double delta)
     {
         // open, it is there to be clicked: the world's start (or a menu closing) captures the pointer under it
         if (IsOpen && MouseCapture.Mode == Input.MouseModeEnum.Captured) MouseCapture.Mode = Input.MouseModeEnum.Visible;
+        if (_flash != 0 && GameClock.Now > _flashUntil) { _flash = 0; _dirty = true; }
         if (_dirty) Refresh();
         // the "listening" dot follows time, not events: checked twice a second, drawn only on change
         if (Engine.GetProcessFrames() % 30 == 0) UpdateClaude();
@@ -174,9 +214,9 @@ public partial class PlaytestPanel : CanvasLayer
             note.Pressed += () =>
             {
                 string text = TakeInput();
-                _ = _director.NoteWithShot(text.Length > 0 ? text : "(marked from the panel)", "panel");
+                _ = Note(text.Length > 0 ? text : "(marked from the panel)");
             };
-            var top = UiKit.Button("Top view");
+            var top = _top = UiKit.Button("Top view");
             top.TooltipText = "The top-down view of the last seconds (Shift+F12)";
             top.Pressed += () => PlaytestRecorder.Instance?.GetNodeOrNull<TopViewOverlay>("TopViewOverlay")?.Toggle();
             var free = UiKit.Button("Free play");
@@ -191,6 +231,8 @@ public partial class PlaytestPanel : CanvasLayer
                 rec.AddChild(b);
             }
             col.AddChild(rec);
+            (_note, _end) = (note, end);
+            col.AddChild(_rec = UiKit.VBox(4));
         }
 
         // batch mode (#844): no Claude in the loop, the box takes notes
@@ -247,6 +289,7 @@ public partial class PlaytestPanel : CanvasLayer
         col.MouseFilter = Control.MouseFilterEnum.Ignore;
         _card.AddChild(col);
         col.AddChild(_cardBody = UiKit.VBox(2));
+        if (PlaytestRecorder.Instance != null) col.AddChild(_cardRec = UiKit.VBox(2));
         col.AddChild(_cardClaude = UiKit.Text("", UiTheme.FontSmall, UiTheme.Amber, wrap: true));
     }
 
@@ -259,6 +302,7 @@ public partial class PlaytestPanel : CanvasLayer
         RefreshCurrent();
         RefreshTalk();
         RefreshCard();
+        RefreshRecording();
         UpdateClaude();
     }
 
@@ -274,7 +318,8 @@ public partial class PlaytestPanel : CanvasLayer
     {
         // a scenario just started: fold the list (the toggle opens it again)
         if (_director.Current != _foldedFor) { _foldedFor = _director.Current; _listOpen = _director.Current == null; }
-        int due = _director.Status.Values.Count(v => v != PlaytestStatus.Validated);
+        // of the scenarios listed: --playtest-retest and --playtest-only list fewer than the ledger knows
+        int due = _director.Entries.Count(e => _director.Status.GetValueOrDefault(e.Id) != PlaytestStatus.Validated);
         _listToggle.Text = $"{(_listOpen ? "▾" : "▸")}  SCENARIOS  ·  {due} of {_director.Entries.Count} due";
         _listScroll.Visible = _listButtons.Visible = _listOpen;
         foreach (var c in _list.GetChildren()) c.QueueFree();
@@ -356,6 +401,50 @@ public partial class PlaytestPanel : CanvasLayer
         _cardClaude.Visible = last.Length > 0;
     }
 
+    /// <summary>The recording's state and the last note's confirmation, in the panel and on the card (#1383).</summary>
+    private void RefreshRecording()
+    {
+        if (PlaytestRecorder.Instance is not { } rec || _rec == null || _cardRec == null) return;
+        foreach (var c in _rec.GetChildren()) c.QueueFree();
+        foreach (var c in _cardRec.GetChildren()) c.QueueFree();
+        bool ended = rec.Ended, off = !rec.Running || rec.Ending;
+        if (_note != null && _end != null)
+        {
+            // a pad's focus on a button that goes grey moves to its neighbour
+            if (off && (_note.HasFocus() || _end.HasFocus())) _top?.GrabFocus();
+            _note.Disabled = _end.Disabled = off;
+            _end.Text = ended ? "Session ended" : rec.Ending ? "Saving…" : "End session";
+        }
+
+        var (dot, state) = ended ? (UiTheme.TextFaint, "Not recording: session ended")
+            : rec.Ending ? (UiTheme.Warn, "Saving the session…")
+            : rec.Running ? (UiTheme.Bad, $"Recording  ·  {rec.NoteCount} {(rec.NoteCount == 1 ? "note" : "notes")}")
+            : (UiTheme.TextFaint, "Not recording");
+        string flash = _flash > 0 ? $"✔ Note {_flash} saved" : _flash < 0 ? "Not recording: the note was not saved" : "";
+        _rec.AddChild(StateRow(dot, state, flash, UiTheme.FontSmall));
+        _cardRec.AddChild(StateRow(dot, state, flash, UiTheme.FontTiny));
+        Confirmation = string.Join(" | ", new[] { state, flash, ended ? rec.ReportPath : "" }.Where(t => t.Length > 0));
+        if (!ended) return;
+        _rec.AddChild(UiKit.Text($"✔ Saved: the notes, report.md, the trace{(rec.Movie ? " and the 3D replay" : "")}", UiTheme.FontSmall, UiTheme.Good, wrap: true));
+        _rec.AddChild(UiKit.Text(rec.ReportPath, UiTheme.FontSmall, UiTheme.Text, wrap: true));
+        _rec.AddChild(UiKit.Text("The game keeps running, unrecorded. Tell Claude to read the report: it fixes what you noted.",
+            UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
+        _cardRec.AddChild(UiKit.Text(rec.ReportPath, UiTheme.FontTiny, UiTheme.Text, wrap: true));
+        _cardRec.AddChild(UiKit.Text("Claude reads it next", UiTheme.FontTiny, UiTheme.TextDim, wrap: true));
+    }
+
+    private static HBoxContainer StateRow(Color dot, string state, string flash, int size)
+    {
+        var row = UiKit.HBox(8);
+        row.MouseFilter = Control.MouseFilterEnum.Ignore;
+        row.AddChild(UiKit.StatusDot(dot));
+        row.AddChild(UiKit.Text(state, size, UiTheme.TextDim));
+        row.AddChild(UiKit.Spacer(expand: true));
+        // on the state's line, so a note's confirmation never pushes the rest of the panel down
+        if (flash.Length > 0) row.AddChild(UiKit.Text(flash, size, flash[0] == '✔' ? UiTheme.Good : UiTheme.Bad, bold: true));
+        return row;
+    }
+
     private void UpdateClaude()
     {
         string text = _director.Client == null ? "Claude not connected" : _director.Listening ? "Claude is listening" : "Claude is working…";
@@ -386,10 +475,16 @@ public partial class PlaytestPanel : CanvasLayer
         }
         if (PlaytestDirector.Batch)
         {
-            if (text.Length > 0) _ = _director.NoteWithShot(text, "panel");
+            if (text.Length > 0) _ = Note(text);
             return;
         }
         _director.PlayerSays(text);
+    }
+
+    /// <summary>A note from the panel; a saved one confirms itself through the recorder, one that was not says so.</summary>
+    private async Task Note(string text)
+    {
+        if (await _director.NoteWithShot(text, "panel") == 0) Flash(-1);
     }
 
     /// <summary>Fail asks why first: the text in the box is the reason, or the next one sent.</summary>

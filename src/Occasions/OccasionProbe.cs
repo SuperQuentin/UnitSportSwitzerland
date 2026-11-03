@@ -45,7 +45,12 @@ public static class OccasionProbe
         Expect("ufo: morning after", defaults, "2026-11-07", "christmas-2026", "ufo-2026");
         Expect("ufo: gone sunday", defaults, "2026-11-08", "christmas-2026");
         Expect("ufo: second friday", defaults, "2026-11-13", "christmas-2026");
-        Expect("summer", defaults, "2027-07-14");
+        // Montreux Jazz (#1394): the first Friday of July and fifteen days on (2027-07-02 to 07-17), whatever else runs
+        Expect("montreux jazz: opens (with the ufo night)", defaults, "2027-07-02", "ufo-2027", "montreuxjazz-2027");
+        Expect("montreux jazz: mid-festival", defaults, "2027-07-14", "montreuxjazz-2027");
+        Expect("montreux jazz: closes", defaults, "2027-07-17", "montreuxjazz-2027");
+        Expect("summer", defaults, "2027-07-18");
+        Expect("montreux jazz: day before", defaults, "2027-07-01");
 
         var wrap = new List<OccasionEntry>
         {

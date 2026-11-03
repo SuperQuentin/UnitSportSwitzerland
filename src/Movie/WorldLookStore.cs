@@ -93,5 +93,6 @@ public static class WorldLookStore
         for (int s = 0; s < look.Surfaces.Length; s++) m.SetSurfaceOverrideMaterial(s, look.Surfaces[s]);
         m.VisibilityRangeEnd = look.RangeEnd;
         m.CastShadow = look.Shadow;
+        Styles.ZoomRanges.Track(m);
     }
 }

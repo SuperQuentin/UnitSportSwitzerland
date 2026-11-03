@@ -194,8 +194,7 @@ public static class TrackAnalyser
                     {
                         if (Math.Abs(s[i].Time - s[j].Time) < ApartSeconds) continue;
 
-                        double de = s[i].E - s[j].E, dn = s[i].N - s[j].N;
-                        if (de * de + dn * dn < NearM * NearM) { revisited[i] = true; break; }
+                        if (GlobalPos.HorizontalDistanceSquared(s[i].E, s[i].N, s[j].E, s[j].N) < NearM * NearM) { revisited[i] = true; break; }
                     }
                 }
         }

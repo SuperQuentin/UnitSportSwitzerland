@@ -82,6 +82,14 @@ public partial class FondueCheck : ChatProbe
         _partner.DebugLaunch(fireAt + new Vector3(1.4f, 0.3f, 0.4f), Vector3.Zero);
         await Seconds(0.8);
 
+        // a pot on a table (#1384): only a dining venue's, and only one the player stands at (no venue on this course)
+        var g = me.Global;
+        Expect(Svc.ServeStartAt(AdventureService.LocalPeer, false, g.E + 8, g.N, (float)g.Alt) == "Come to the table first.",
+            "no pot on a table out of reach");
+        Expect(Svc.ServeStartAt(AdventureService.LocalPeer, false, g.E + 0.6, g.N, (float)g.Alt + 0.75f) == "Not a restaurant's table.",
+            "no pot on a table that is no restaurant's");
+        Expect(Svc.MyPot == null, "nothing started by either");
+
         // a fondue pot used at it: the shared pot, not the old share
         Expect(Svc.ServeStart(AdventureService.LocalPeer, atFire: false) != null, "no pot started at a fire without bringing one");
         _items.UseSlot(me, Hold(ItemId.FonduePot));
