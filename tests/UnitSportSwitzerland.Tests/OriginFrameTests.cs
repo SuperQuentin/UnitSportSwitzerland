@@ -165,4 +165,32 @@ public class OriginFrameTests
         }
         finally { World.SunPath.Frame = null; }
     }
+
+    [Fact]
+    public void A_ground_frame_with_a_vertical_origin_for_the_Space_regime()
+    {
+        var low = GroundAt(BernE, BernN);
+        var high = new OriginFrame(BernE + 3_000, BernN, 72_000, 1);
+        var p = new GlobalPos(BernE + 3_200, BernN - 100, 71_500);
+        var w = high.ToWorld(p);
+        Assert.Equal(new Vector3(200, -500, 100), w);
+        Assert.Equal(p, high.ToGlobal(w));
+        Assert.Equal(71_500, high.AltitudeOf(w), 6);
+        // the move up is a pure translation, the vertical included
+        var up = high.Since(low);
+        Assert.Equal(Basis.Identity, up.Transform.Basis);
+        Assert.Equal(new Vector3(-3_000, -72_000, 0), up.Transform.Origin);
+        Assert.True(up.Point(low.ToWorld(p)).DistanceTo(w) < 0.01f);
+        Assert.False(high.SameFrame(new OriginFrame(BernE + 3_000, BernN, 1)), "the vertical origin is part of the frame");
+        // a network anchor (altitude 0) in it
+        Assert.Equal(new Vector3(-3_000, -72_000, 0), high.SinceAnchor(BernE, BernN).Transform.Origin);
+    }
+
+    [Theory]
+    [InlineData(false, 59_000, false)]
+    [InlineData(false, 61_000, true)]
+    [InlineData(true, 55_000, true)]
+    [InlineData(true, 49_000, false)]
+    public void The_Space_regime_has_hysteresis(bool inSpace, double altitude, bool expected) =>
+        Assert.Equal(expected, Curvature.SpaceRegime(inSpace, altitude));
 }

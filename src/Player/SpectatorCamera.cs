@@ -91,8 +91,9 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
             float speed = Speed * amount
                 * (UnitSport.Core.PlayerInput.Held(UnitSport.Core.PlayerInput.FlyBoost) ? BoostMultiplier : 1f);
             Position += dir.Normalized() * speed * dt;
-            // no higher than the round world is drawn for until the Space regime (#1430 H3)
-            if (Position.Y > Core.Curvature.CeilingM) Position = Position with { Y = (float)Core.Curvature.CeilingM };
+            // no higher than the ceiling; the altitude through the frame (in the Space regime Y is not the altitude, #1430 H3)
+            double altitude = Core.OriginShifter.Instance?.Origin.AltitudeOf(Position) ?? Position.Y;
+            if (altitude > Core.Curvature.CeilingM) Position -= Vector3.Up * (float)(altitude - Core.Curvature.CeilingM);
         }
     }
 }

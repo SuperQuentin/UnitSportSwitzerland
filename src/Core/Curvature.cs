@@ -57,8 +57,17 @@ public static class Curvature
     /// <summary>The drop gives way to the exact sphere between these two altitudes, metres.</summary>
     public const double SphereFromM = 20_000, SphereAtM = 50_000;
 
-    /// <summary>How high the spectator and the UFO may climb until the Space regime exists (H3), metres.</summary>
-    public const double CeilingM = 50_000;
+    /// <summary>
+    /// How high the spectator and the UFO may climb, metres: past the Space regime (60 km, #1430 H3) to
+    /// the plan's 100 km climb, until orbits (H5) and the globe (H4) make higher worth reaching.
+    /// </summary>
+    public const double CeilingM = 120_000;
+
+    /// <summary>The Space regime (#1430 H3) starts above this camera altitude and ends below <see cref="SpaceExitM"/> (hysteresis), metres.</summary>
+    public const double SpaceEnterM = 60_000, SpaceExitM = 50_000;
+
+    /// <summary>The regime for a camera at <paramref name="altitude"/>, coming from <paramref name="inSpace"/>: <c>OriginShifter</c> follows it.</summary>
+    public static bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
 
     /// <summary>A smooth 0 → 1 from <paramref name="a"/> to <paramref name="b"/>.</summary>
     private static double SmoothStep(double a, double b, double x)
