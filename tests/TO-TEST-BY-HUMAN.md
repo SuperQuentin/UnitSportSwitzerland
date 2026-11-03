@@ -49,6 +49,14 @@ An arcade (`/enter` one; Billard Bluff, Geneva, has one on its ground floor).
 - [ ] E at a table → your end, looking down it; the stick drives the mallet as you see it, Shift for full speed; the puck clacks off the mallet and rails, a goal buzzes and counts on the scorer; first to 7.
 - [ ] E again alone → a bot takes the other end; online, the other player's mallet and the puck move smoothly.
 
+## Arcade coins, tickets and prizes ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade, with some cash in your pocket (`/enter` one; Billard Bluff, Geneva).
+
+- [ ] E at the change machine → 5 CHF become 5 Batzen (a clatter, a toast); with less than 5 CHF it says so.
+- [ ] At air hockey, Jump → a Batzen goes in and the puck comes out; with none, it points you to the change machine. At the game's end, tickets print into your pack (two a goal, eight more for the winner).
+- [ ] E at the prize counter → the panel: your tickets, each prize and its price, the ones you can't afford greyed with how many more; Swap gives the prize (it's in the pack, the plush throws like the Blåhaj). Pad and VR pointer work it; Esc / B / E closes it.
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.

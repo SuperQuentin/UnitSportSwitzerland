@@ -2828,6 +2828,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
             if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
             if (Interiors.Games.TableGames.TryUse(this)) return true;   // a pool table, a dartboard, a game (#1324, #1326)
+            if (Interiors.Games.ArcadeCounters.TryUse(this)) return true;   // the change machine, the prize counter (#1326)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)

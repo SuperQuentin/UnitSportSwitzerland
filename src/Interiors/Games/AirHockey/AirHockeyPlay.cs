@@ -32,9 +32,9 @@ public sealed class AirHockeyPlay : TableGamePlay.Mode
     public override void Process(TableGame? game, int seat, double delta)
     {
         if (game is not AirHockeyGame g || seat < 0) return;
-        if (g.Winner >= 0)
+        if (!g.Running)
         {
-            if (Input.IsActionJustPressed(Again)) Games.AskAct(Key, Index, AirHockeyGame.ActRestart);
+            if (Input.IsActionJustPressed(Again) && Games.PayCoin()) Games.AskAct(Key, Index, AirHockeyGame.ActCoin);
             return;
         }
         _sendAt -= delta;
@@ -50,7 +50,7 @@ public sealed class AirHockeyPlay : TableGamePlay.Mode
     public override IEnumerable<(string Action, string Text)> Prompts(TableGame? game, int seat)
     {
         if (game is not AirHockeyGame g || seat < 0) yield break;
-        if (g.Winner >= 0) { yield return (Again, "New game"); yield break; }
+        if (!g.Running) { yield return (Again, "Insert a Batzen"); yield break; }
         yield return (Fwd, "Move your mallet");
         yield return (Fast, "Hold for full speed");
     }

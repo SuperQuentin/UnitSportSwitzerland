@@ -12,7 +12,10 @@ public sealed class AirHockeyGame : TableGame
 {
     public const float Puck = 0.031f, Mallet = 0.048f, GoalHalf = 0.14f, MalletSpeed = 3.2f, MaxPuck = 7f;
     public const int Win = 7;
-    public const int ActRestart = 1;
+    /// <summary>A coin in the slot (a Batzen the client paid; a bot pays none): a game starts when none is on.</summary>
+    public const int ActCoin = 1;
+    /// <summary>Tickets a game pays each player: so many a goal, so many more to the winner.</summary>
+    public const int TicketsPerGoal = 2, TicketsToWin = 8;
 
     public override GameKind Kind => GameKind.AirHockey;
     public override int MaxSeats => 2;
@@ -49,12 +52,8 @@ public sealed class AirHockeyGame : TableGame
 
     public override bool Awake => AnyHuman || InPlay;
 
-    public override string? Sit(long peer, int seat)
-    {
-        Seats[seat] = peer;
-        if (!InPlay && Winner < 0) ServeAt = -1;
-        return null;
-    }
+    /// <summary>A game is on: a coin went in and nobody has won it yet.</summary>
+    public bool Running => ServeAt != 0 && Winner < 0;
 
     /// <summary>A seat's mallet velocity for the wire: each axis −1 to 1 of <see cref="MalletSpeed"/>, x across and z along the table.</summary>
     public static byte[] Pack(Vector2 v) =>
@@ -67,8 +66,8 @@ public sealed class AirHockeyGame : TableGame
 
     public override string? Act(int seat, int action, int[] args, double now, Random rng)
     {
-        if (action != ActRestart) return "?";
-        if (Winner < 0 && Goals[0] + Goals[1] > 0) return "The game is on.";
+        if (action != ActCoin) return "?";
+        if (Running) return "A game is on.";
         Goals[0] = Goals[1] = 0;
         Winner = -1;
         InPlay = false;
@@ -83,8 +82,7 @@ public sealed class AirHockeyGame : TableGame
         bool changed = false;
         if (!InPlay)
         {
-            if (Winner >= 0 || Seated == 0) return false;
-            if (ServeAt < 0) ServeAt = now + 1.2;
+            if (!Running || Seated == 0) return false;
             if (now >= ServeAt)
             {
                 InPlay = true;
@@ -117,7 +115,12 @@ public sealed class AirHockeyGame : TableGame
             InPlay = false;
             _serveTo = 1 - scorer;
             Call = $"Goal! {Goals[0]} : {Goals[1]}";
-            if (Goals[scorer] >= Win) { Winner = scorer; Call = $"{NameAt(scorer)} wins {Goals[0]} : {Goals[1]}"; }
+            if (Goals[scorer] >= Win)
+            {
+                Winner = scorer;
+                Call = $"{NameAt(scorer)} wins {Goals[0]} : {Goals[1]}";
+                for (int s = 0; s < 2; s++) Pay(s, Goals[s] * TicketsPerGoal + (s == scorer ? TicketsToWin : 0), "air hockey");
+            }
             else ServeAt = now + 1.5;
             return true;
         }
@@ -154,10 +157,11 @@ public sealed class AirHockeyGame : TableGame
 
     public override string Summary(Func<long, string> name)
     {
-        if (Seated == 0) return "Air hockey";
+        if (Seated == 0) return "Air hockey: a Batzen a game";
         string Who(int s) => Seats[s] == 0 ? "—" : name(Seats[s]);
         string score = $"{Who(0)} {Goals[0]} : {Goals[1]} {Who(1)}";
-        return Winner >= 0 ? $"{score}\n{Call}. Jump for a new game." : $"{score}\n{Call}";
+        if (!Running) return $"{score}\n{(Winner >= 0 ? Call + ". " : "")}A Batzen for a game.";
+        return $"{score}\n{Call}";
     }
 
     // ---- a bot at the table ---------------------------------------------------------------------
@@ -167,7 +171,8 @@ public sealed class AirHockeyGame : TableGame
 
     public override (int Action, int[] Args)? Bot(int seat, double now, Random rng)
     {
-        if (Winner >= 0) return Seats.Any(x => x > 0) ? null : (ActRestart, Array.Empty<int>());
+        // bots alone at the table play on; with a human, the human puts the coin in
+        if (!Running) return Seats.Any(x => x > 0) ? null : (ActCoin, Array.Empty<int>());
         float side = seat == 0 ? -1 : 1;
         var goal = new Vector2(0, side * Hz);
         var me = MalletAt[seat];

@@ -60,6 +60,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Table football: kick", PlayerInput.Jump),
             new("Table football: hold to lift your rods (the ball passes under)", PlayerInput.Sprint),
             new("Air hockey: move your mallet (hold Shift for full speed)", PlayerInput.MoveForward),
+            new("The arcade: E at the change machine swaps 5 CHF for 5 Batzen; at the prize counter, tickets for prizes", PlayerInput.InteractMount),
+            new("The arcade: put a Batzen in a machine for a game", PlayerInput.Jump),
             new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
             new("Bowling: move your spot", PlayerInput.MoveLeft),
             new("Bowling: turn your line", PlayerInput.BowlAimLeft),
