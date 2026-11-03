@@ -126,13 +126,16 @@ public sealed class Corridor
 
     private static IEnumerable<TileId> Sharing(double e, double n)
     {
+        // on the tile's west or south edge, in its own frame (x east, z south; #1443)
         var id = TileId.FromLv95(e, n);
-        bool onE = Math.Abs(e - id.MinE) < 0.001;
-        bool onN = Math.Abs(n - (id.MaxN - ChunkFormat.TileSizeM)) < 0.001;
+        var (x, z) = id.Local(e, n);
+        bool onWest = Math.Abs(x) < 0.001;
+        bool onSouth = Math.Abs(ChunkFormat.TileSizeM - z) < 0.001;
 
-        if (onE) yield return new TileId(id.E - 1, id.N);
-        if (onN) yield return new TileId(id.E, id.N - 1);
-        if (onE && onN) yield return new TileId(id.E - 1, id.N - 1);
+        if (onWest) yield return id.Neighbour(-1, 0);
+        if (onSouth) yield return id.Neighbour(0, 1);
+        if (onWest && onSouth) yield return id.Neighbour(-1, 1);
+
     }
 
     public BuildingTile? Buildings(TileId id) => _buildings.GetValueOrDefault(id);

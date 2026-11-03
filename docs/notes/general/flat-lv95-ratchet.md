@@ -27,6 +27,12 @@
     (`Tiles()`, `Bounding`), next to `TileId` in `tools/TerrainFormat`. LV95 differences are exact
     (Sterbenz), so a reach test moved into local metres gives the same bits.
     `TileKeyTests` pins each to the arithmetic it replaces.
+- **Moved so far**: Audio (#1450), Interiors (#1454), Terrain (#1482, #1486), World and systems (#1481), and the gameplay folders (BattleRoyale, Player, Ui,
+  Loot, Occasions, Adventure, Gpx, Playtest; `TileKeyMovesTests` pins their rewrites bit for bit). Left
+  there **on purpose, still counted**: the download map's LV95 km grid (`Ui/MapCanvas`, `MapView`,
+  `MapRelief`: the swisstopo source tiles) and Adventure's LV95 records, the fog-of-war lattice
+  (`FogMask`) and the lakes' boxes (`PoiCatalogue`), which G2 converts with the saves. They are all
+  that is left of the tile corners (26) and neighbours (1) in `src/`.
 - A change that removes some lowers the baseline in the same commit (the test prints the new
   count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` and `src/Core/WorldOrigin.cs`
   are the seam and are not counted, nor is `src/Terrain/ProceduralWorld.Network.cs`, the generated

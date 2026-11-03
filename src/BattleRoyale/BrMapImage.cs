@@ -66,11 +66,7 @@ public static class BrMapImage
                     // normal in (east, up, south)
                     var normal = new Vector3(-dx, 1f, dn).Normalized();
                     float shade = Mathf.Clamp(normal.Dot(light), 0f, 1f);
-                    var id = TileId.FromLv95(e, n);
-                    var cover = covers.TryGetValue(id, out var cells)
-                        ? (CoverClass)cells[Math.Clamp((int)(id.MaxN - n), 0, CoverFormat.Size - 1) * CoverFormat.Size
-                                            + Math.Clamp((int)(e - id.MinE), 0, CoverFormat.Size - 1)]
-                        : CoverClass.Open;
+                    var cover = CoverAt(covers, e, n);
                     var c = Ground(cover, (float)h);
                     px[y * Size + x] = cover == CoverClass.Water ? c : (c * (0.45f + 0.75f * shade)) with { A = 1f };
                 }
@@ -117,12 +113,26 @@ public static class BrMapImage
 
     private static byte Q(float v) => (byte)(((int)(Mathf.Clamp(v, 0f, 1f) * 255f) & 0xF8) | 0x04);
 
+    /// <summary>
+    /// The land cover at LV95 (<paramref name="e"/>, <paramref name="n"/>): the 1 m cell of its tile's cover
+    /// grid, in the tile's own frame (#1443); open ground where no cover is loaded.
+    /// </summary>
+    internal static CoverClass CoverAt(Dictionary<TileId, byte[]> covers, double e, double n)
+    {
+        var id = TileId.FromLv95(e, n);
+        if (!covers.TryGetValue(id, out var cells)) return CoverClass.Open;
+        var (x, z) = id.Local(e, n);
+        return (CoverClass)cells[Math.Clamp((int)z, 0, CoverFormat.Size - 1) * CoverFormat.Size + Math.Clamp((int)x, 0, CoverFormat.Size - 1)];
+    }
+
     /// <summary>Terrain height from the 100 m lattice, bilinear; 500 m where there is no data.</summary>
     internal static double Height(HorizonIndex? horizon, double e, double n)
     {
         var id = TileId.FromLv95(e, n);
         if (horizon == null || !horizon.Contains(id)) return 500;
-        double u = (e - id.MinE) / HorizonFormat.SpacingM, v = (id.MaxN - n) / HorizonFormat.SpacingM;
+        // the lattice runs in the tile's own frame (x east, z south from its north-west corner; #1443)
+        var (x, z) = id.Local(e, n);
+        double u = x / HorizonFormat.SpacingM, v = z / HorizonFormat.SpacingM;
         int last = HorizonFormat.SamplesPerSide - 1;
         int c0 = Math.Clamp((int)u, 0, last - 1), r0 = Math.Clamp((int)v, 0, last - 1);
         double fu = Math.Clamp(u - c0, 0, 1), fv = Math.Clamp(v - r0, 0, 1);
@@ -137,8 +147,9 @@ public static class BrMapImage
         var id = TileId.FromLv95(e, n);
         if (horizon == null || !horizon.TryGet(id, out var heights) || !horizon.TryGetWater(id, out var levels)) return false;
         int last = HorizonFormat.SamplesPerSide - 1;
-        int c = Math.Clamp((int)Math.Round((e - id.MinE) / HorizonFormat.SpacingM), 0, last);
-        int r = Math.Clamp((int)Math.Round((id.MaxN - n) / HorizonFormat.SpacingM), 0, last);
+        var (x, z) = id.Local(e, n);
+        int c = Math.Clamp((int)Math.Round(x / HorizonFormat.SpacingM), 0, last);
+        int r = Math.Clamp((int)Math.Round(z / HorizonFormat.SpacingM), 0, last);
         int i = r * HorizonFormat.SamplesPerSide + c;
         HorizonIndex.Surface(heights[i], levels, i, out bool wet);
         return wet;
@@ -181,8 +192,11 @@ public static class BrMapImage
     };
 
     /// <summary>Tile-local metres (X east, Z south from the NW corner) to map pixels.</summary>
-    private static Vector2 ToPixel(TileId id, float x, float z, double west, double north, double mpp) =>
-        new((float)((id.MinE + x - west) / mpp), (float)((north - (id.MaxN - z)) / mpp));
+    private static Vector2 ToPixel(TileId id, float x, float z, double west, double north, double mpp)
+    {
+        var (e, n) = id.Global(x, z);
+        return new((float)((e - west) / mpp), (float)((north - n) / mpp));
+    }
 
     private static void Line(Color[] px, Vector2 a, Vector2 b, int width, Color color)
     {

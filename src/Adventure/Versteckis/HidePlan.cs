@@ -130,12 +130,13 @@ public static class HidePlan
         }
         if (churchDoor is { } door)
         {
-            double de = door.E - ce, dn = door.N - cn;
-            // in front of the door, facing it: out of the church along the door's own outward when known
+            // in front of the door, facing it: out of the church along the door's own outward when known,
+            // else away from the centre
             var church = buildings.Where(b => b.Kind == BuildingKind.Sacral)
-                .OrderBy(b => (b.DoorE - door.E) * (b.DoorE - door.E) + (b.DoorN - door.N) * (b.DoorN - door.N)).Select(b => (VsBuilding?)b).FirstOrDefault();
-            if (church is { } c) { de = c.OutE; dn = c.OutN; }
-            double l = Math.Sqrt(de * de + dn * dn);
+                .OrderBy(b => GlobalPos.HorizontalDistanceSquared(b.DoorE, b.DoorN, door.E, door.N)).Select(b => (VsBuilding?)b).FirstOrDefault();
+            double de, dn, l;
+            if (church is { } c) { de = c.OutE; dn = c.OutN; l = Math.Sqrt(c.OutE * c.OutE + c.OutN * c.OutN); }
+            else { de = door.E - ce; dn = door.N - cn; l = GlobalPos.HorizontalDistance(door.E, door.N, ce, cn); }
             if (l > 0.01) Add(VsProp.Bench, door.E + de / l * 6, door.N + dn / l * 6, YawOf(-de, -dn), 2f);
         }
 

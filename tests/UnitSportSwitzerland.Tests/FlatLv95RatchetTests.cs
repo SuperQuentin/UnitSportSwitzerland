@@ -26,7 +26,7 @@ public class FlatLv95RatchetTests
         // de * de + dn * dn: an LV95 distance by hand; breaks when E/N stop being metres on a plane
         new("hand-written LV95 distance",
             new(@"\b(d[eE]\w*)\s*\*\s*\1\s*\+\s*(d[nN]\w*)\s*\*\s*\2\b", RegexOptions.Compiled),
-            Baseline: 9, Instead: "GlobalPos.HorizontalDistanceTo / DistanceTo (or its raw E/N HorizontalDistance)"),
+            Baseline: 7, Instead: "GlobalPos.HorizontalDistanceTo / DistanceTo (or its raw E/N HorizontalDistance)"),
         // swisstopo's approximate polynomials: 10 m off at Paris, 276 m at Brest
         new("SwissProjection in the game",
             new(@"\bSwissProjection\.", RegexOptions.Compiled),
@@ -34,11 +34,11 @@ public class FlatLv95RatchetTests
         // a tile's LV95 corners: the tile-local frame of the 1 km LV95 grid
         new("LV95 tile corner",
             new(@"\.(MinE|MaxE|MinN|MaxN)\b", RegexOptions.Compiled),
-            Baseline: 112, Instead: "the tile's own frame (G0c)"),
+            Baseline: 26, Instead: "the tile's own frame (G0c)"),
         // a neighbour by LV95 kilometre arithmetic
         new("LV95 tile neighbour arithmetic",
             new(@"new\s+TileId\(\s*[\w.]+\s*[+-]", RegexOptions.Compiled),
-            Baseline: 17, Instead: "a neighbour lookup on the tile key (G0c)"),
+            Baseline: 1, Instead: "a neighbour lookup on the tile key (G0c)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);

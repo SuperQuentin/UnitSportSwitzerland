@@ -72,13 +72,7 @@ public static class BrStructures
             t.Heights.TryGetValue(TileId.FromLv95(e, n), out var g) ? (float)g.SampleMeshHeight(e, n) : null;
         Vector2 Gradient(double e, double n, double step) => new(
             (float)((Relief(e + step, n) - Relief(e - step, n)) / (2 * step)), (float)((Relief(e, n + step) - Relief(e, n - step)) / (2 * step)));
-        CoverClass Cover(double e, double n)
-        {
-            var id = TileId.FromLv95(e, n);
-            return t.Cover.TryGetValue(id, out var c)
-                ? (CoverClass)c[Math.Clamp((int)(id.MaxN - n), 0, CoverFormat.Size - 1) * CoverFormat.Size + Math.Clamp((int)(e - id.MinE), 0, CoverFormat.Size - 1)]
-                : CoverClass.Open;
-        }
+        CoverClass Cover(double e, double n) => BrMapImage.CoverAt(t.Cover, e, n);
         bool Open(CoverClass c) => c is CoverClass.Open or CoverClass.Vineyard;
         bool Wooded(CoverClass c) => c is CoverClass.Forest or CoverClass.OpenForest;
         bool Free(double e, double n, float r) => area.Contains(e, n)
@@ -256,7 +250,7 @@ public static class BrStructures
                 if (s.Class != RoadClass.Watercourse) continue;
                 for (int i = 0; i + 1 < s.PointCount; i += 4)
                 {
-                    double e = id.MinE + s.Points[i * 3], n = id.MaxN - s.Points[i * 3 + 2];
+                    var (e, n) = id.Global(s.Points[i * 3], s.Points[i * 3 + 2]);
                     if (!area.Contains(e, n)) continue;
                     var along = new Vector2(s.Points[i * 3 + 3] - s.Points[i * 3], -(s.Points[i * 3 + 5] - s.Points[i * 3 + 2]));
                     if (along.LengthSquared() < 1e-4f) continue;
