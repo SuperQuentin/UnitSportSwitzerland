@@ -4,9 +4,62 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Core;
 
 /// <summary>
+/// An anchor frame's place on the Earth (#1430 H3): its origin and its world X, Y, Z axes as
+/// Earth-fixed unit vectors (metres, doubles). A world point w is ECEF <c>Origin + X·w.x + Y·w.y + Z·w.z</c>.
+/// </summary>
+public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
+{
+    public static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    /// <summary>A world point (in doubles) as ECEF.</summary>
+    public EcefPos ToEcef(double x, double y, double z) => new(
+        Origin.X + X.X * x + Y.X * y + Z.X * z,
+        Origin.Y + X.Y * x + Y.Y * y + Z.Y * z,
+        Origin.Z + X.Z * x + Y.Z * y + Z.Z * z);
+
+    /// <summary>An ECEF point in this frame's world axes, in doubles.</summary>
+    public (double X, double Y, double Z) FromEcef(EcefPos p)
+    {
+        var d = p - Origin;
+        return (Dot(d, X), Dot(d, Y), Dot(d, Z));
+    }
+
+    /// <summary>
+    /// The LV95 ground frame's own axes at a place, as Earth-fixed unit vectors: grid east, the
+    /// ellipsoid's up, grid south (world +X, +Y, +Z there), orthonormal. Grid north turns from true
+    /// north by the meridian convergence, so these turn with it. What a ground frame looks like seen
+    /// from the Earth, near that place: the first Space anchor copies them (H3).
+    /// </summary>
+    public static FrameAxes GroundAt(double e, double n, double alt)
+    {
+        var o = SwissGeodesy.ToEcef(e, n, alt);
+        var g = SwissGeodesy.ToWgs84(e, n, alt);
+        double lat = g.LatDeg * System.Math.PI / 180, lon = g.LonDeg * System.Math.PI / 180;
+        var up = new EcefPos(System.Math.Cos(lat) * System.Math.Cos(lon), System.Math.Cos(lat) * System.Math.Sin(lon), System.Math.Sin(lat));
+        // grid east: a step along the grid, made square to up
+        var east = SwissGeodesy.ToEcef(e + 1, n, alt) - o;
+        double along = Dot(east, up);
+        east = new EcefPos(east.X - up.X * along, east.Y - up.Y * along, east.Z - up.Z * along);
+        double len = east.Length;
+        east = new EcefPos(east.X / len, east.Y / len, east.Z / len);
+        // +Z is south: X x Y
+        var south = new EcefPos(east.Y * up.Z - east.Z * up.Y, east.Z * up.X - east.X * up.Z, east.X * up.Y - east.Y * up.X);
+        return new FrameAxes(o, east, up, south);
+    }
+}
+
+/// <summary>
 /// One state of the world origin: the LV95 point that is world (0, 0, 0). Immutable, so a worker
 /// thread that took one computes its whole result in one consistent frame, and the main thread
 /// then maps that result into whatever the origin has become (<see cref="WorldOrigin.Since"/>).
+///
+/// <para>
+/// Two kinds (#1430 H3). The ground frame (<see cref="Axes"/> null, everything today): the flat
+/// LV95 plane, x east, y altitude, z south from a whole-km corner. The anchor frame: an origin
+/// and axes on the Earth (<see cref="FrameAxes"/>), the frame of the Space regime; positions map
+/// through ECEF in doubles, y is no longer altitude, and a move between two frames may turn the
+/// world (<see cref="Since"/>). Its <see cref="E"/> / <see cref="N"/> are its origin's LV95 place.
+/// </para>
 /// </summary>
 public sealed class OriginFrame
 {
@@ -16,12 +69,31 @@ public sealed class OriginFrame
     /// <summary>Bumped by every move of the origin; two frames with the same epoch are the same.</summary>
     public int Epoch { get; }
 
+    /// <summary>The anchor frame's place on the Earth; null for the flat LV95 ground frame.</summary>
+    public FrameAxes? Axes { get; }
+
+    public bool IsAnchor => Axes != null;
+
     public OriginFrame(double e, double n, int epoch)
     {
         E = e;
         N = n;
         Epoch = epoch;
     }
+
+    /// <summary>An anchor frame (#1430 H3): world (0, 0, 0) at <paramref name="axes"/>' origin, its axes the world's.</summary>
+    public OriginFrame(FrameAxes axes, int epoch)
+    {
+        var (e, n, _) = SwissGeodesy.FromEcef(axes.Origin);
+        E = e;
+        N = n;
+        Epoch = epoch;
+        Axes = axes;
+    }
+
+    /// <summary>The same place and axes (whatever the epoch): nothing to map between them.</summary>
+    public bool SameFrame(OriginFrame other) =>
+        ReferenceEquals(this, other) || (Axes == null ? other.Axes == null && E == other.E && N == other.N : Axes.Equals(other.Axes));
 
     /// <summary>
     /// A frame that is no peer's origin: the anchor a list of points travels with on the network
@@ -35,14 +107,25 @@ public sealed class OriginFrame
     public static OriginFrame AnchorNear(GlobalPos p) =>
         Anchor(System.Math.Round(p.E / 1000) * 1000, System.Math.Round(p.N / 1000) * 1000);
 
-    public Vector3 ToWorld(double lv95E, double lv95N, double altitude) =>
-        new((float)(lv95E - E), (float)altitude, (float)-(lv95N - N));
+    public Vector3 ToWorld(double lv95E, double lv95N, double altitude)
+    {
+        if (Axes == null) return new((float)(lv95E - E), (float)altitude, (float)-(lv95N - N));
+        var (x, y, z) = Axes.FromEcef(SwissGeodesy.ToEcef(lv95E, lv95N, altitude));
+        return new((float)x, (float)y, (float)z);
+    }
 
     public Vector3 ToWorld(GlobalPos p) => ToWorld(p.E, p.N, p.Alt);
 
-    public (double E, double N) ToLv95(Vector3 world) => (E + world.X, N - world.Z);
+    public (double E, double N) ToLv95(Vector3 world)
+    {
+        if (Axes == null) return (E + world.X, N - world.Z);
+        var g = ToGlobal(world);
+        return (g.E, g.N);
+    }
 
-    public GlobalPos ToGlobal(Vector3 world) => new(E + world.X, N - world.Z, world.Y);
+    public GlobalPos ToGlobal(Vector3 world) => Axes == null
+        ? new(E + world.X, N - world.Z, world.Y)
+        : GlobalPos.FromEcef(Axes.ToEcef(world.X, world.Y, world.Z));
 
     public TileId TileAt(Vector3 world)
     {
@@ -56,7 +139,18 @@ public sealed class OriginFrame
     /// so code that places tile-local points goes through this (or <see cref="TileToWorld"/>), never
     /// through the tile's LV95 corners.
     /// </summary>
-    public Transform3D TileTransform(TileId id) => new(Basis.Identity, ToWorld(id.MinE, id.MaxN, 0));
+    public Transform3D TileTransform(TileId id)
+    {
+        var corner = ToWorld(id.MinE, id.MaxN, 0);
+        if (Axes == null) return new(Basis.Identity, corner);
+        // in an anchor frame the tile's grid axes at its corner, seen in this world's
+        var g = FrameAxes.GroundAt(id.MinE, id.MaxN, 0);
+        return new(new Basis(Turn(g.X, Axes), Turn(g.Y, Axes), Turn(g.Z, Axes)), corner);
+    }
+
+    /// <summary>An Earth-fixed direction in the world axes of <paramref name="axes"/>.</summary>
+    private static Vector3 Turn(EcefPos v, FrameAxes axes) =>
+        new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
 
     /// <summary>A point in a tile's local frame (x east, y up, z south from its north-west corner) in world space, through doubles.</summary>
     public Vector3 TileToWorld(TileId id, Vector3 local) => ToWorld(id.MinE + local.X, id.MaxN - local.Z, local.Y);
@@ -64,20 +158,51 @@ public sealed class OriginFrame
     /// <summary>The inverse of <see cref="TileToWorld"/>: a world point in a tile's local frame, through doubles.</summary>
     public Vector3 TileLocal(TileId id, Vector3 world)
     {
-        var (e, n) = ToLv95(world);
-        var (x, z) = id.Local(e, n);
-        return new Vector3((float)x, world.Y, (float)z);
+        if (Axes == null)
+        {
+            var (e, n) = ToLv95(world);
+            var (x, z) = id.Local(e, n);
+            return new Vector3((float)x, world.Y, (float)z);
+        }
+        var p = ToGlobal(world);
+        var (lx, lz) = id.Local(p.E, p.N);
+        return new Vector3((float)lx, (float)p.Alt, (float)lz);
     }
 
-    /// <summary>What turns a position in <paramref name="earlier"/>'s world space into this one's.</summary>
-    public OriginShift Since(OriginFrame earlier) => SinceAnchor(earlier.E, earlier.N);
+    /// <summary>
+    /// What turns a position in <paramref name="earlier"/>'s world space into this one's. Between two
+    /// ground frames the exact translation; with an anchor frame on either side (#1430 H3) a rigid
+    /// transform through the Earth, the ground frame taken as its own axes at the anchor's place
+    /// (<see cref="FrameAxes.GroundAt"/>): exact at that place, the flat plane's own curvature away from it.
+    /// </summary>
+    public OriginShift Since(OriginFrame earlier)
+    {
+        if (Axes == null && earlier.Axes == null) return SinceAnchor(earlier.E, earlier.N);
+        var at = Axes?.Origin ?? earlier.Axes!.Origin;
+        var a = earlier.Embedding(at);
+        var b = Embedding(at);
+        // w_b = R_b^T (O_a - O_b + R_a w_a)
+        return new(new Transform3D(new Basis(Turn(a.X, b), Turn(a.Y, b), Turn(a.Z, b)), Turn(a.Origin - b.Origin, b)));
+    }
+
+    /// <summary>This frame as a rigid one on the Earth: an anchor its own axes, the ground frame its axes at <paramref name="at"/>.</summary>
+    private FrameAxes Embedding(EcefPos at)
+    {
+        if (Axes != null) return Axes;
+        var (e, n, h) = SwissGeodesy.FromEcef(at);
+        var g = FrameAxes.GroundAt(e, n, h);
+        // the ground world point there, and the origin that puts it at g's origin along g's axes
+        double wx = e - E, wy = h, wz = -(n - N);
+        return g with { Origin = g.ToEcef(-wx, -wy, -wz) };
+    }
 
     /// <summary>
     /// The same from an anchor given as LV95 (<see cref="Anchor"/> without the object): what turns a
     /// position relative to it into this frame. Nothing allocated, for code that runs every tick.
     /// </summary>
-    public OriginShift SinceAnchor(double e, double n) =>
-        new(new Transform3D(Basis.Identity, new Vector3((float)(e - E), 0, (float)-(n - N))));
+    public OriginShift SinceAnchor(double e, double n) => Axes == null
+        ? new(new Transform3D(Basis.Identity, new Vector3((float)(e - E), 0, (float)-(n - N))))
+        : Since(Anchor(e, n));
 }
 
 /// <summary>
