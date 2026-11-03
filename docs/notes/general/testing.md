@@ -41,6 +41,12 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   can be. `--nocapture` alone keeps only the mouse.
 - **Never kill by name or pattern** (`taskkill /im`, `pkill`, `Stop-Process` on a match): other
   agents run Godot at the same time. Only the PIDs you started; `guard_run` already does it.
+- **Stopping a run: `tools/test.sh stop`** (#1409), never by stopping the shell that started it (that left
+  `test.sh` and its checks running). It kills the tree from `test_output/tests/test.pid`, then every
+  process still carrying the run's exported `TEST_RUN` id (`/proc/*/environ`: late forks, orphans).
+- **A run that died goes on**: every result is appended to `test_output/tests/results.tsv` as it lands
+  (time, check, verdict, seconds, log); `TEST_RESUME=1 tools/test.sh <tier>` skips what it holds as PASS,
+  the 10 min unit stage included. A full run once died after 5 h with only an in-memory table.
 - Network, authority or replicated state changed: `tools/test.sh net` before the PR (root `CLAUDE.md`).
 
 ## Why: the tiers and what they cost (PR #232)

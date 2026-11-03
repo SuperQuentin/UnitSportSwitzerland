@@ -103,6 +103,24 @@ guard_test_userdata() {
   guard_quiet_godot "$d"
 }
 
+# free RAM in whole MB into GUARD_FREE, starting no process where /proc/meminfo is there (#1409): the
+# watchdogs poll it every 2 s each, and $(guard_free_mb) cost a subshell and an awk every time; a full
+# run's dozen watchdogs then started ~30 processes a second, and Git Bash ran out ("fork: retry")
+_guard_free_into() {
+  if [ -r /proc/meminfo ]; then
+    local key kb avail= free=
+    while read -r key kb _; do
+      case $key in
+        MemAvailable:) avail=$kb ;;
+        MemFree:) free=$kb ;;
+      esac
+    done < /proc/meminfo
+    GUARD_FREE=$(( ${avail:-${free:-0}} / 1024 ))
+  else
+    GUARD_FREE=$(guard_free_mb)
+  fi
+}
+
 # free RAM in whole MB
 guard_free_mb() {
   # Git Bash and Linux both have /proc/meminfo (Git Bash: MemFree = Windows' free physical memory)
@@ -122,7 +140,7 @@ guard_free_mb() {
 guard_wait_ram() {
   local need_mb=$(( $1 * 1024 )) max=${2:-1800} waited=0 free
   while :; do
-    free=$(guard_free_mb)
+    _guard_free_into; free=$GUARD_FREE
     [ "$free" -ge "$need_mb" ] && return 0
     if [ "$waited" -ge "$max" ]; then
       echo "[guard] only ${free} MB free after ${waited}s, need $1 GB: giving up" >&2
@@ -311,7 +329,7 @@ guard_run() {
         echo 124 > "$why"; _guard_kill_tree "$pid"; exit 0
       fi
       if [ $(( elapsed % GUARD_MEM_EVERY )) -eq 0 ]; then
-        free=$(guard_free_mb)
+        _guard_free_into; free=$GUARD_FREE
         if [ "$free" -lt "$GUARD_MIN_FREE_MB" ]; then
           echo "[guard] only ${free} MB free (floor ${GUARD_MIN_FREE_MB} MB): killing PID $pid and its children" | tee -a "$log" >&2
           echo 137 > "$why"; _guard_kill_tree "$pid"; exit 0
@@ -341,7 +359,7 @@ guard_watch() {
     local me c
     me=$(exec sh -c 'echo $PPID')   # this watchdog's own PID (no BASHPID in bash 3.2)
     while kill -0 "$target" 2>/dev/null; do
-      free=$(guard_free_mb)
+      _guard_free_into; free=$GUARD_FREE
       if [ "$free" -lt "$floor" ]; then
         echo "[guard] only ${free} MB free (floor ${floor} MB): killing PID $target and its children" >&2
         # a TERM, then its children, never this watchdog (target may be the script that started it, $$):
