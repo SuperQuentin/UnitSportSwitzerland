@@ -14,6 +14,19 @@ A server on the real map (`tools/wt.ps1 1456 net`, or `--server --chunks D:/Unit
 - [ ] At Riddes, `/bot add 3`, then `/bot drive 400` → the bots walk to a parked car, get in and drive; they bump into parked cars and trunks, not through them.
 - [ ] A Battle Royale on the real map with bots (`/br bots 6`) → the bots land, loot crates, fight and use the Postauto stops as before; none falls through the ground or freezes after the landing.
 - [ ] Two players, one at Geneva and one at Riddes, with bots round each → each sees its bots walk smoothly; `/bot list` on both; nothing jumps when a player teleports to the other (`/city`).
+
+## The globe and the air from above ([#1478](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1478))
+
+With the `--cube-global` region on D: (`D:/UnitSportSwitzerland/cube_global`, or `--globe <dir>`), spectator or UFO, real sky (play, not a shot run).
+
+- [ ] Desktop, live: the spectator from a Lausanne street (`--origin 2538300,1151200`) straight up to ~12,000 km and back, boost held → the globe fades in above 15 km with no pop; the sky darkens to black by 40 km; the generated fill dissolves at 50-80 km and every flat tile at 150-250 km without a hole; nothing jumps at 60 or 50 km; the whole Earth sits under you with the stars; coming down, the flat world comes back in the same order.
+- [ ] VR, live (PC VR, then the Quest standalone with the shipped levels 0-2 only): the same climb as far as the headset's flight allows → no flicker or swimming of the globe in either eye; on the Quest the flat world sinks out of sight at its half-way heights instead of dissolving; frame rate holds.
+- [ ] A clean clone with Git LFS, no D: data: the globe still draws from `assets/globe` (levels 0-2), softer below ~1,000 km.
+- [ ] At 120 km by day, then at dusk and at night → stars by day up there; the limb is a blue band over black; the terminator lies where the real sun puts it (not where the moon is at night).
+- [ ] Frame time at 120 km looking at the horizon, and while climbing fast (tiles streaming) → no hitch over ~30 ms.
+- [ ] The same on a phone or the Quest (Mobile renderer, maybe a 24-bit depth buffer) → no flicker between globe tiles or against the flat tiles far out.
+- [ ] Stay up across midnight at the end of a month (or start a game on the 1st with a save from the day before) → the globe's colour changes to the new month's without holes.
+
 ## Account management on the website ([#1360](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1360))
 
 After the deploy with `--setup` (the new Caddyfile), on https://unitsport.infrack.ch.

@@ -110,6 +110,15 @@ public static partial class Preprocessor
 
     private static async Task<int> RunPassAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
     {
+        // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
+        if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
+        // the globe's coarse levels from ETOPO 2022 (#1430 H4), in the same format
+        if (CubeGlobal.Wants(args)) return CubeGlobal.Run(args, ct);
+        // and its finer levels averaged from a --cube build's leaves
+        if (CubeSwiss.Wants(args)) return CubeSwiss.Run(args, ct);
+        // the levels the game ships, on their own
+        if (CubeSubset.Wants(args)) return CubeSubset.Run(args);
+
         void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
 
         var inDirs = new List<string>();

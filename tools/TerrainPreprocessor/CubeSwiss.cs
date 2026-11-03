@@ -1,0 +1,185 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Globalization;
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.Tools.Preprocessor;
+
+/// <summary>
+/// The globe's finer levels where leaves exist (#1430 H4; docs/plans/ellipsoid-handover.md §6a,
+/// tools/cube-tiles note): levels 13 down to 5 averaged from a <c>--cube</c> build's level-14 leaves
+/// (swissALTI3D, RGE ALTI), merged into a <c>--cube-global</c> region beside its levels 0-4, so one
+/// pyramid runs from the leaves to the whole Earth (agreed with #1443's coordinator).
+///
+/// <code>
+/// --cube-swiss --cube-leaves DIR --etopo DIR --cube-out GLOBAL_DIR [--cube-levels 5-13] [--jobs N] [--cube-check]
+/// </code>
+///
+/// <para>
+/// <b>Each height is a function of its lattice point</b>, as G1 asked (#1455): a level's vertex is the
+/// tent-weighted mean (¼ ½ ¼ each way) of the next finer level's nine lattice points round it, the
+/// same points from either neighbour, so edges stay the same bits. A vertex whose nine are not all
+/// there (past the leaves' edge) takes ETOPO's footprint mean instead, as levels 0-4 do; so does every
+/// vertex of a tile with no leaves under it. Built for every tile over the leaves and its three
+/// siblings, so the renderer can always split a parent into all four.
+/// </para>
+/// </summary>
+public static class CubeSwiss
+{
+    public static bool Wants(IReadOnlyList<string> args) => args.Contains("--cube-swiss");
+
+    public static int Run(IReadOnlyList<string> args, CancellationToken ct)
+    {
+        string? leavesDir = null, etopo = null, outDir = null;
+        int minLevel = 5, maxLevel = 13, jobs = Environment.ProcessorCount;
+        bool check = false;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--cube-swiss": break;
+                case "--cube-leaves": leavesDir = args[++i]; break;
+                case "--etopo": etopo = args[++i]; break;
+                case "--cube-out": outDir = args[++i]; break;
+                case "--cube-levels":
+                    var r = args[++i].Split('-');
+                    minLevel = int.Parse(r[0], CultureInfo.InvariantCulture);
+                    maxLevel = int.Parse(r[^1], CultureInfo.InvariantCulture);
+                    break;
+                case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+                case "--cube-check": check = true; break;
+                default: Console.Error.WriteLine($"--cube-swiss: unknown option {args[i]}"); return 2;
+            }
+        }
+        if (leavesDir == null || etopo == null || outDir == null)
+        {
+            Console.Error.WriteLine("--cube-swiss needs --cube-leaves DIR, --etopo DIR and --cube-out DIR (a --cube-global region)");
+            return 2;
+        }
+        string manifestPath = Path.Combine(outDir, CubeManifest.FileName);
+        var manifest = CubeManifest.FromJson(File.ReadAllText(manifestPath));
+
+        var sw = Stopwatch.StartNew();
+        var leafManifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(leavesDir, CubeManifest.FileName)));
+        int leafLevel = leafManifest.LeafLevel;
+        if (maxLevel >= leafLevel) { Console.Error.WriteLine($"--cube-levels must stay above the leaves' level {leafLevel}"); return 2; }
+        // the finer level's heights, level by level: the leaves first
+        var finer = new ConcurrentDictionary<CubeKey, CubeTile>();
+        Parallel.ForEach(Directory.GetFiles(leavesDir, "*.cubb"), new ParallelOptions { MaxDegreeOfParallelism = jobs }, file =>
+        {
+            foreach (var t in CubeBundle.ReadAll(file)) finer[t.Key] = t;
+        });
+        Console.WriteLine($"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s");
+        var grid = EtopoGrid.Load(etopo, jobs);
+
+        // the tiles of each level: every ancestor of a leaf, and its siblings
+        var leafKeys = finer.Keys.ToList();
+        manifest.Tiles.RemoveAll(t => CubeKey.Parse(t.Key).Level is var l && l >= minLevel && l <= maxLevel);
+        manifest.Levels.RemoveAll(l => l.Level >= minLevel && l.Level <= maxLevel);
+        long bytes = 0;
+        var built = new ConcurrentDictionary<CubeKey, CubeTile>();
+        for (int level = maxLevel; level >= minLevel; level--)
+        {
+            ct.ThrowIfCancellationRequested();
+            var keys = new HashSet<CubeKey>();
+            foreach (var leaf in leafKeys)
+                foreach (var sibling in leaf.AncestorAt(level).Parent.Children())
+                    keys.Add(sibling);
+            int bits = CubeKey.LatticeBits(level), finerBits = CubeKey.LatticeBits(level + 1);
+            var source = finer;
+            var made = new ConcurrentDictionary<CubeKey, CubeTile>();
+            long fromLeaves = 0, fromEtopo = 0;
+            Parallel.ForEach(keys, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, key =>
+            {
+                var (h, own, etopoCount) = Averaged(source, grid, key, bits, finerBits);
+                Interlocked.Add(ref fromLeaves, own);
+                Interlocked.Add(ref fromEtopo, etopoCount);
+                var tile = new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(level), Heights = h };
+                // what the file holds feeds the next level and the check, so all agree on the stored bits
+                made[key] = CubeTileCodec.Decode(CubeTileCodec.Encode(tile));
+            });
+            foreach (var bundle in made.Keys.GroupBy(k => k.AncestorAt(CubeKey.PyramidBundleLevel(k.Level))))
+            {
+                var list = bundle.OrderBy(k => k.Y).ThenBy(k => k.X).Select(k => (k, CubeTileCodec.Encode(made[k]))).ToList();
+                CubeBundle.Write(Path.Combine(outDir, CubeBundle.FileName(bundle.Key)), bundle.Key, list);
+                foreach (var (key, bb) in list)
+                {
+                    var (_, _, min, max) = CubeTileCodec.ReadHeader(bb);
+                    manifest.Tiles.Add(new CubeManifestTile { Key = key.ToString(), Min = min, Max = max, Bytes = bb.Length });
+                    bytes += bb.Length;
+                }
+            }
+            manifest.Levels.Add(new CubeManifestLevel { Level = level, Bits = bits, BundleLevel = CubeKey.PyramidBundleLevel(level) });
+            if (check) foreach (var (k, t) in made) built[k] = t;
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"cube-swiss: level {level}: {made.Count} tiles, {100.0 * fromLeaves / Math.Max(1, fromLeaves + fromEtopo):F1} % of vertices from the finer level (the rest ETOPO), {sw.Elapsed.TotalSeconds:F0} s"));
+            // the next level averages this one
+            finer = made;
+        }
+        manifest.Levels.Sort((a, b) => a.Level.CompareTo(b.Level));
+        manifest.LeafLevel = manifest.Levels[^1].Level;
+        manifest.Bits = manifest.Levels[^1].Bits;
+        manifest.BundleLevel = manifest.Levels[^1].BundleLevel;
+        string leafSources = string.Join("; ", leafManifest.Sources);
+        manifest.Sources.RemoveAll(s => s.StartsWith("levels ", StringComparison.Ordinal));
+        manifest.Sources.Add($"levels {minLevel}-{maxLevel}: averaged from {leafManifest.Tiles.Count} level-{leafLevel} leaves ({leafSources}), ETOPO past them");
+        File.WriteAllText(manifestPath, manifest.ToJson());
+        Console.WriteLine($"cube-swiss: {bytes / 1e6:F1} MB in levels {minLevel}-{maxLevel}, {sw.Elapsed.TotalSeconds:F0} s, peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
+        return check ? CubeGlobal.CheckEdges(built) : 0;
+    }
+
+    /// <summary>
+    /// A tile's heights from the finer level: each vertex the tent mean of the nine finer lattice
+    /// points round it (when all nine exist), else ETOPO's footprint mean. Also how many came from each.
+    /// </summary>
+    private static (float[] Heights, long Own, long Etopo) Averaged(ConcurrentDictionary<CubeKey, CubeTile> finer, EtopoGrid grid,
+        CubeKey key, int bits, int finerBits)
+    {
+        int n = (1 << bits) + 1;
+        var h = new float[n * n];
+        long own = 0, etopo = 0;
+        // a vertex at (level + bits) is the finer level's point 2i at (level + 1 + finerBits) when the lattices
+        // are one level apart: level + bits + 1 == level + 1 + finerBits (bits capped at 9 on both)
+        int scale = (key.Level + 1 + finerBits) - (key.Level + bits);
+        long gi0 = (long)key.X << bits, gj0 = (long)key.Y << bits;
+        long finerSide = 1L << (key.Level + 1 + finerBits);
+        float[]? etopoHeights = null;
+        Span<float> w = stackalloc float[] { 0.25f, 0.5f, 0.25f };
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                long fi = (gi0 + i) << scale, fj = (gj0 + j) << scale;
+                double sum = 0;
+                bool all = true;
+                for (int b = -1; b <= 1 && all; b++)
+                    for (int a = -1; a <= 1; a++)
+                    {
+                        if (FinerAt(finer, key.Face, key.Level + 1, finerBits, finerSide, fi + a, fj + b) is not { } v) { all = false; break; }
+                        sum += w[a + 1] * w[b + 1] * v;
+                    }
+                if (all)
+                {
+                    h[j * n + i] = (float)sum;
+                    own++;
+                }
+                else
+                {
+                    etopoHeights ??= CubeGlobal.Heights(grid, key, bits);
+                    h[j * n + i] = etopoHeights[j * n + i];
+                    etopo++;
+                }
+            }
+        return (h, own, etopo);
+    }
+
+    /// <summary>The finer level's height at its face lattice point (gi, gj), or null when no finer tile holds it (or it has no data there).</summary>
+    private static float? FinerAt(ConcurrentDictionary<CubeKey, CubeTile> finer, int face, int level, int bits, long side, long gi, long gj)
+    {
+        if (gi < 0 || gj < 0 || gi > side || gj > side) return null;
+        // a point on a tile edge is in either tile, the same bits: take the one it starts
+        long tx = Math.Min(gi >> bits, (1L << level) - 1), ty = Math.Min(gj >> bits, (1L << level) - 1);
+        if (!finer.TryGetValue(new CubeKey(face, level, (int)tx, (int)ty), out var t)) return null;
+        float v = t.HeightAt((int)(gi - (tx << bits)), (int)(gj - (ty << bits)));
+        return float.IsNaN(v) ? null : v;
+    }
+}

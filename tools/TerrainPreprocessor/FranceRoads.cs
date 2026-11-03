@@ -112,7 +112,7 @@ public static class FranceRoads
     /// roundabouts out of the width ordering where they would be drawn as major roads.
     /// </para>
     /// </summary>
-    private static RoadClass? Classify(BdFeature feature)
+    internal static RoadClass? Classify(BdFeature feature)
     {
         if (feature.Text("etat_de_l_objet") == "En construction") return null;
 
@@ -189,7 +189,7 @@ public static class FranceRoads
     /// present, and only falls back to the class default when it is missing or absurd.
     /// </para>
     /// </summary>
-    private static float Width(BdFeature feature, RoadClass cls, RoadFlags flags)
+    internal static float Width(BdFeature feature, RoadClass cls, RoadFlags flags)
     {
         double? measured = feature.Number("largeur_de_chaussee");
         if (measured is > 1.0 and < 40.0) return (float)measured.Value;

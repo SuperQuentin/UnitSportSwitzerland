@@ -147,6 +147,20 @@ public partial class Main : Node
 			return;
 		}
 
+		// G1's cube-tile streaming and collision harness (#1443): a region on its own, no game
+		if (UnitSport.Terrain.CubeHarness.Requested())
+		{
+			AddChild(new UnitSport.Terrain.CubeHarness { Name = "CubeHarness" });
+			return;
+		}
+
+		// the globe's colour bake into a --cube-global region (#1430 H4): a tool, no game
+		if (UnitSport.World.GlobeAlbedoBake.Requested())
+		{
+			AddChild(new UnitSport.World.GlobeAlbedoBake { Name = "GlobeAlbedoBake" });
+			return;
+		}
+
 		if (UnitSport.Avatar.ModelViewer.Requested())
 		{
 			// shaded for the visual style, as the turntable above: the saved one, or --style (#760:

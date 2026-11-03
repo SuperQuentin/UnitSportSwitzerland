@@ -63,6 +63,13 @@ public static class Curvature
     /// </summary>
     public const double CeilingM = 120_000;
 
+    /// <summary>
+    /// The spectator's own ceiling, metres: far enough to see the whole Earth (#1430 H4: the globe, the
+    /// air and the stars draw there; the flat tiles are gone above 250 km). A camera, no physics, so its
+    /// float position (4 m steps out there) jitters nothing; the UFO keeps <see cref="CeilingM"/>.
+    /// </summary>
+    public const double SpectatorCeilingM = 50_000_000;
+
     /// <summary>The Space regime (#1430 H3) starts above this camera altitude and ends below <see cref="SpaceExitM"/> (hysteresis), metres.</summary>
     public const double SpaceEnterM = 60_000, SpaceExitM = 50_000;
 

@@ -389,6 +389,8 @@ public partial class ModelViewer : Node3D
         var offset = new Vector3(0, 0, _distance).Rotated(Vector3.Right, _pitch).Rotated(Vector3.Up, _yaw);
         _camera.Position = _target + offset;
         _camera.Near = Mathf.Max(_distance * 0.002f, 0.01f);
+        // and far enough for a planet (the globe, #1430 H4): 2 km held for everything smaller
+        _camera.Far = Mathf.Max(2000f, _distance * 4f);
         // built by hand rather than LookAt: right = forward x up, see the handedness gotcha
         var forward = -offset.Normalized();
         var right = forward.Cross(Vector3.Up).Normalized();

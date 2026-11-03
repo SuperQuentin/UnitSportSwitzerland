@@ -57,11 +57,11 @@ public static class XyzParser
                 var entry = zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".xyz", StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidDataException($"No .xyz entry in {sourcePath}");
                 using var stream = entry.Open();
-                filled = ParseText(stream, sourcePath, tile, grid, textBuffer);
+                filled = ParseText(stream, sourcePath, tile, new UshortSink(grid), textBuffer);
             }
             else
             {
-                filled = ParseText(ms, sourcePath, tile, grid, textBuffer);
+                filled = ParseText(ms, sourcePath, tile, new UshortSink(grid), textBuffer);
             }
         }
 
@@ -79,7 +79,7 @@ public static class XyzParser
         }
     }
 
-    private static long ParseText(Stream stream, string sourceName, TileId tile, ushort[] grid, byte[] buffer)
+    private static long ParseText<TSink>(Stream stream, string sourceName, TileId tile, TSink grid, byte[] buffer) where TSink : struct, ISink
     {
         double baseE = tile.MinE;
         double topN = tile.MaxN;
@@ -110,7 +110,7 @@ public static class XyzParser
         return filled;
     }
 
-    private static long ParseLines(ReadOnlySpan<byte> s, ushort[] grid, double baseE, double topN, string sourceName)
+    private static long ParseLines<TSink>(ReadOnlySpan<byte> s, TSink grid, double baseE, double topN, string sourceName) where TSink : struct, ISink
     {
         long filled = 0;
         int i = 0;
@@ -139,11 +139,58 @@ public static class XyzParser
             // swisstopo's no-data (-9999, past the border) is a missing cell, not a 0 m pit
             if (z < -1000) continue;
 
-            int idx = row * CellsPerSide + col;
-            if (grid[idx] == MissingCell) filled++;
-            grid[idx] = ChunkFormat.Quantize(z);
+            if (grid.Set(row * CellsPerSide + col, z)) filled++;
         }
         return filled;
+    }
+
+    /// <summary>Where parsed heights go: the build's quantised grid, or the cube tiler's floats (#1443).</summary>
+    private interface ISink
+    {
+        /// <summary>Stores a height; true when the cell was missing until now.</summary>
+        bool Set(int index, double z);
+    }
+
+    private readonly struct UshortSink(ushort[] grid) : ISink
+    {
+        public bool Set(int index, double z)
+        {
+            bool was = grid[index] == MissingCell;
+            grid[index] = ChunkFormat.Quantize(z);
+            return was;
+        }
+    }
+
+    private readonly struct FloatSink(float[] grid) : ISink
+    {
+        public bool Set(int index, double z)
+        {
+            bool was = float.IsNaN(grid[index]);
+            grid[index] = (float)z;
+            return was;
+        }
+    }
+
+    /// <summary>
+    /// Parses a swissALTI3D tile into metres as they are (floats, NaN where missing), not the build's
+    /// 7 cm quantisation: the cube tiler (#1443, G1) resamples them with a 1 cm budget. No gap fill.
+    /// </summary>
+    public static void ParseFloat(byte[] data, string sourcePath, TileId tile, float[] grid, byte[] textBuffer)
+    {
+        Array.Fill(grid, float.NaN);
+        using var ms = new MemoryStream(data, writable: false);
+        if (sourcePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
+            var entry = zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".xyz", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidDataException($"No .xyz entry in {sourcePath}");
+            using var stream = entry.Open();
+            ParseText(stream, sourcePath, tile, new FloatSink(grid), textBuffer);
+        }
+        else
+        {
+            ParseText(ms, sourcePath, tile, new FloatSink(grid), textBuffer);
+        }
     }
 
     private static bool ReadNumber(ReadOnlySpan<byte> s, ref int i, out double value)

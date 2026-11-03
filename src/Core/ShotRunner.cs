@@ -29,7 +29,9 @@ namespace UnitSport.Core;
 /// A line starting with '/' is typed into the chat between two shots (<c>/style cartoon</c>,
 /// <c>/time set 19:30</c>), so one launch can picture a live change.
 /// A line whose path is "~ease", "~lin", "~in" or "~out" is a glide: the camera moves there from the last line's pose over
-/// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>).
+/// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>). "~exp" (#1430 H4, the street-to-Earth
+/// pull-back) eases like "~ease" but grows the height geometrically (the same zoom every second, 2 m to 12,000 km),
+/// above the ground for a "g" line.
 /// "fov 6.87" sets the camera's vertical field of view, degrees, for the shots after it (#1433: a lens's
 /// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>); below 1° it is a
 /// frustum of that angle (<see cref="CameraLens"/>, the telescope's, #1440).
@@ -154,8 +156,11 @@ public partial class ShotRunner : Node
 
     private static bool HideHudRequested() => CmdArgs.Has("--nohud");
 
+    /// <summary>A canvas layer in this group is part of the picture (a film's overlay, <c>World/Globe/AltitudeReadout</c>): <c>--nohud</c> leaves it.</summary>
+    public static readonly StringName FilmOverlay = "film_overlay";
+
     /// <summary>
-    /// Hides every CanvasLayer. The tree is walked once, then followed through
+    /// Hides every CanvasLayer but the film's overlays. The tree is walked once, then followed through
     /// <c>NodeAdded</c>: a whole-tree <c>FindChildren</c> every frame visited each tile node and
     /// was 90 % of the main thread at 40 rings, the very cost the shots were measuring (#221).
     /// </summary>
@@ -169,7 +174,8 @@ public partial class ShotRunner : Node
             GetTree().NodeAdded += OnNodeAdded;
         }
         _hudLayers.RemoveAll(layer => !IsInstanceValid(layer));
-        foreach (var layer in _hudLayers) layer.Visible = false;
+        foreach (var layer in _hudLayers)
+            if (!layer.IsInGroup(FilmOverlay)) layer.Visible = false;
     }
 
     private void OnNodeAdded(Node node)
@@ -334,8 +340,11 @@ public partial class ShotRunner : Node
         var g = _shot!.Value;
         _elapsed += delta;
         float t = g.SettleSeconds <= 0 ? 1f : Mathf.Clamp((float)(_elapsed / g.SettleSeconds), 0f, 1f);
-        float k = g.OutPath == "~ease" ? t * t * (3f - 2f * t) : g.OutPath == "~in" ? t * t : g.OutPath == "~out" ? 1f - (1f - t) * (1f - t) : t; // "~lin"
+        bool exp = g.OutPath == "~exp";
+        float k = g.OutPath is "~ease" or "~exp" ? t * t * (3f - 2f * t) : g.OutPath == "~in" ? t * t : g.OutPath == "~out" ? 1f - (1f - t) * (1f - t) : t; // "~lin"
         var p = _glideFrom.Lerp(g.Position, k);
+        // the height geometrically, from its own easing: each second the same zoom
+        if (exp && g.AboveGround == null) p = p with { Y = Geometric(_glideFrom.Y, g.Position.Y, k) };
         float pitch = Mathf.Lerp(_glideFromPitch, g.PitchDeg, k);
         float yaw = _glideFromYaw + Mathf.Wrap(g.YawDeg - _glideFromYaw, -180f, 180f) * k; // the short way round
         if (g.Local)
@@ -349,7 +358,7 @@ public partial class ShotRunner : Node
         {
             // above the ground: hold the height until the ground under the camera has streamed in
             float y = _camera.Position.Y;
-            if (GroundHeight?.Invoke(world) is { } ground) y = ground + Mathf.Lerp(_glideFromAbove, to, k);
+            if (GroundHeight?.Invoke(world) is { } ground) y = ground + (exp ? Geometric(_glideFromAbove, to, k) : Mathf.Lerp(_glideFromAbove, to, k));
             world = world with { Y = y };
         }
         _camera.Position = world;
@@ -360,6 +369,10 @@ public partial class ShotRunner : Node
             _shot = null;
         }
     }
+
+    /// <summary>From <paramref name="a"/> to <paramref name="b"/> by a constant factor (both above a metre), at <paramref name="k"/> 0..1.</summary>
+    private static float Geometric(float a, float b, float k) =>
+        (float)(Math.Max(a, 1.0) * Math.Pow(Math.Max(b, 1.0) / Math.Max(a, 1.0), k));
 
     /// <summary>Starts the next queued shot, reading lines appended since the last poll. False while idle.</summary>
     private bool NextFromQueue(double delta)
