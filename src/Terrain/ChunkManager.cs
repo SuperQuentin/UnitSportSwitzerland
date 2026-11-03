@@ -1780,17 +1780,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
     /// </summary>
     private readonly List<(TileId Tile, bool Collision, long Reach)> _desiredKey = new(), _keyNow = new();
-    private (LodPolicy? Lod, long Version, bool Meshes, int Zoom, ViewCone ZoomView) _desiredKeyRest;
+    private (LodPolicy? Lod, long Version, bool Meshes, int Zoom, ZoomView ZoomView) _desiredKeyRest;
 
     private bool RingKeyChanged()
     {
         _keyNow.Clear();
         foreach (var anchor in _anchors)
             _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor), ReachKey(anchor)));
-        // zoomed, the detail depends on where the camera points too (ZoomedDist): its tile and heading sector
+        // zoomed, the detail depends on where the camera points too (ZoomedDist): its tile and heading
         int zoom = BuildMeshes ? Styles.LodScale.StepIndex : 0;
-        (LodPolicy? Lod, long Version, bool Meshes, int Zoom, ViewCone ZoomView) rest
-            = (Lod, _worldVersion, BuildMeshes, zoom, zoom > 0 ? CurrentView() with { HalfFovDeg = 0 } : default);
+        (LodPolicy? Lod, long Version, bool Meshes, int Zoom, ZoomView ZoomView) rest
+            = (Lod, _worldVersion, BuildMeshes, zoom, zoom > 0 ? CurrentZoomView() : default);
         if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
             && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
             return false;
@@ -1918,28 +1918,46 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
+    /// What the zoomed detail is keyed on: the camera's tile and its heading in
+    /// <see cref="ZoomHeadingDeg"/> steps (<see cref="int.MinValue"/>: looking straight down or up,
+    /// every heading). Much finer than the load order's 16 sectors: a 200 mm view is 12° wide, and
+    /// a sector's rounding alone would refine five times what is on screen.
+    /// </summary>
+    private readonly record struct ZoomView(TileId Tile, int Heading);
+
+    private const double ZoomHeadingDeg = 2.5;
+
+    private ZoomView CurrentZoomView()
+    {
+        double e = ViewDirection.X, n = -ViewDirection.Z;
+        if (e * e + n * n < 0.04) return new ZoomView(_origin!.TileAt(ViewPosition), int.MinValue);
+        return new ZoomView(_origin!.TileAt(ViewPosition), (int)Math.Round(Mathf.RadToDeg(Math.Atan2(n, e)) / ZoomHeadingDeg));
+    }
+
+    /// <summary>
     /// The ring a tile's detail is picked by while the camera zooms (#1433): inside the view cone a
     /// tile at ring d is as big on screen as one at d / zoom walking, so it gets that ring's
-    /// stride, roads, buildings and trees. Collision and unloading stay by the ring.
-    /// <paramref name="view"/> is <see cref="CurrentView"/> (sector -1: no cone, every heading).
+    /// stride, roads, buildings and trees (<see cref="Styles.ZoomRule.Ring"/>). Collision and
+    /// unloading stay by the ring. The angle is taken from the camera (<paramref name="camE"/>,
+    /// <paramref name="camN"/>, in km) to the tile's nearest edge, as the load order does.
     /// </summary>
-    private static int ZoomedDist(TileId id, int dist, ViewCone view, float step, double coneHalfDeg)
+    private static int ZoomedDist(TileId id, int dist, ZoomView view, double camE, double camN, float step, double coneHalfDeg)
     {
         if (dist <= 0) return dist;
-        if (view.Sector >= 0)
+        if (view.Heading != int.MinValue)
         {
-            double sector = 2 * Math.PI / ViewSectors;
-            double de = id.E + 0.5 - (view.Tile.E + 0.5), dn = id.N + 0.5 - (view.Tile.N + 0.5);
+            double heading = Mathf.DegToRad(view.Heading * ZoomHeadingDeg);
+            double de = id.E + 0.5 - camE, dn = id.N + 0.5 - camN;
             double r = Math.Sqrt(de * de + dn * dn);
             if (r > TileHalfDiagonal)
             {
-                double off = Mathf.RadToDeg(Math.Acos(Math.Clamp((de * Math.Cos(view.Sector * sector) + dn * Math.Sin(view.Sector * sector)) / r, -1, 1))
+                double off = Mathf.RadToDeg(Math.Acos(Math.Clamp((de * Math.Cos(heading) + dn * Math.Sin(heading)) / r, -1, 1))
                     - Math.Asin(TileHalfDiagonal / r));
-                // the heading is rounded to its sector: half a sector more
-                if (off > coneHalfDeg + 180.0 / ViewSectors) return dist;
+                // the heading is rounded to its step: half a step more
+                if (off > coneHalfDeg + ZoomHeadingDeg / 2) return dist;
             }
         }
-        return Math.Max(1, (int)Math.Floor(dist / step + 0.5));
+        return Styles.ZoomRule.Ring(dist, step);
     }
 
     private void RecomputeDesired()
@@ -1949,6 +1967,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var zoomView = _desiredKeyRest.ZoomView;
         float zoomStep = _desiredKeyRest.Zoom > 0 ? Styles.LodScale.Step : 1f;
         double coneHalf = Styles.LodScale.ConeHalfDeg;
+        var (camE, camN) = _origin!.ToLv95(ViewPosition);
+        camE /= ChunkFormat.TileSizeM;
+        camN /= ChunkFormat.TileSizeM;
         foreach (var anchor in _anchors)
         {
             var center = _origin!.TileAt(anchor.GlobalPosition);
@@ -1966,7 +1987,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     // the ring the detail is chosen by: further out the higher the anchor flies, never
                     // past the last ring (a tile under a high flight stays loaded at the coarsest stride)
                     int dist = VerticalLod ? Math.Min(LodPolicy.WithAltitude(ring, agl), Lod.MaxDist) : ring;
-                    if (zoomStep > 1f) dist = ZoomedDist(id, dist, zoomView, zoomStep, coneHalf);
+                    if (zoomStep > 1f) dist = ZoomedDist(id, dist, zoomView, camE, camN, zoomStep, coneHalf);
                     int stride = BuildMeshes ? Lod.StrideFor(dist) : 0;
                     if (stride < 0) continue;
                     // Only a body needs ground to stand on. The fly camera and a replay's ghosts

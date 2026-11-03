@@ -15,21 +15,22 @@ namespace UnitSport.Styles;
 /// <see cref="ZoomRanges"/>.
 ///
 /// <para>
-/// tan(<see cref="ReferenceFov"/> / 2) / tan(fov / 2), never below 1: a wider view than walking
+/// tan(<see cref="ZoomRule.ReferenceFov"/> / 2) / tan(fov / 2), never below 1: a wider view than walking
 /// (a fast car, a plane) keeps the detail it has. The camera item's 35 mm is x2, its 200 mm x11,
 /// the binoculars x8.6. Set by <see cref="CameraGlobal"/> before each frame is drawn.
 /// </para>
 /// </summary>
 public static class LodScale
 {
-    /// <summary>The walking view's vertical field of view, the one every distance LOD was tuned on.</summary>
-    public const float ReferenceFov = Player.FootPlayer.BaseFov;
-
     /// <summary>The step between <see cref="Step"/>s: managers rebuild on a step, never per frame of a zoom ease.</summary>
-    public const float StepRatio = 1.25f;
+    public const float StepRatio = ZoomRule.StepRatio;
 
-    /// <summary>The view cone's margin past the horizontal half field of view, degrees: a turn is not a hole at the edge.</summary>
-    public const float ConeMarginDeg = 15f;
+    /// <summary>
+    /// The view cone's margin past the horizontal half field of view, degrees: half the half
+    /// angle, 2° to 15°, so a turn is not a hole at the edge, and a 200 mm view (±6°) refines
+    /// ±9°, not ±21°.
+    /// </summary>
+    public static float ConeMarginDeg(float halfDeg) => Mathf.Clamp(halfDeg * 0.5f, 2f, 15f);
 
     /// <summary><c>--zoom-lod off</c>: every LOD by distance only, as before (the before/after check).</summary>
     public static bool Enabled { get; } = CmdArgs.Value("--zoom-lod") is not ("off" or "0" or "false");
@@ -57,24 +58,6 @@ public static class LodScale
     /// <summary>The horizontal half angle of the view cone, margin included, degrees.</summary>
     public static float ConeHalfDeg { get; private set; } = 180f;
 
-    /// <summary>The zoom of a vertical field of view of <paramref name="fovDeg"/>.</summary>
-    public static float Of(float fovDeg)
-    {
-        if (fovDeg <= 0f || fovDeg >= 179f) return 1f;
-        return Mathf.Max(1f, Mathf.Tan(Mathf.DegToRad(ReferenceFov) * 0.5f) / Mathf.Tan(Mathf.DegToRad(fovDeg) * 0.5f));
-    }
-
-    /// <summary>The step index for <paramref name="value"/>, from <paramref name="current"/> (hysteresis of 5 %).</summary>
-    public static int StepFor(float value, int current)
-    {
-        float k = Mathf.Log(Mathf.Max(1f, value)) / Mathf.Log(StepRatio);
-        int down = (int)Mathf.Floor(k);
-        // stay on the current step until the value is 5 % below it: a zoom resting on a boundary
-        // does not flap
-        if (current == down + 1 && value >= Mathf.Pow(StepRatio, current) / 1.05f) return current;
-        return down;
-    }
-
     /// <summary>From the camera that draws the frame. Main thread, before drawing.</summary>
     internal static void Update(Camera3D cam)
     {
@@ -87,19 +70,19 @@ public static class LodScale
             float aspect = size.Y > 0 ? size.X / size.Y : 16f / 9f;
             if (cam.KeepAspect == Camera3D.KeepAspectEnum.Width)
                 fov = Mathf.RadToDeg(2f * Mathf.Atan(Mathf.Tan(Mathf.DegToRad(fov) * 0.5f) / aspect));
-            value = Of(fov);
+            value = ZoomRule.Of(fov);
             float halfH = Mathf.RadToDeg(Mathf.Atan(Mathf.Tan(Mathf.DegToRad(fov) * 0.5f) * aspect));
-            ConeHalfDeg = Mathf.Min(180f, halfH + ConeMarginDeg);
+            ConeHalfDeg = Mathf.Min(180f, halfH + ConeMarginDeg(halfH));
         }
         else ConeHalfDeg = 180f;
         Value = value;
         ViewPosition = cam.GlobalPosition;
         ViewDirection = -cam.GlobalTransform.Basis.Z;
-        int index = StepFor(value, StepIndex);
+        int index = ZoomRule.StepFor(value, StepIndex);
         if (index != StepIndex)
         {
             StepIndex = index;
-            Step = Mathf.Pow(StepRatio, index);
+            Step = ZoomRule.Step(index);
             Version++;
         }
     }

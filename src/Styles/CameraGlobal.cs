@@ -22,7 +22,8 @@ namespace UnitSport.Styles;
 /// <para>
 /// It also sets <c>world_lod_scale</c>, how much the camera zooms over the walking view
 /// (<see cref="LodScale"/>, #1433), and carries a zoom step on to the visibility ranges
-/// (<see cref="ZoomRanges"/>).
+/// (<see cref="ZoomRanges"/>) and to the sun's shadow distance: zoomed, the 3D trees reach
+/// range x zoom, and past the 400 m cascades they lost the shade their billboards draw.
 /// </para>
 /// </summary>
 public partial class CameraGlobal : Node
@@ -35,6 +36,10 @@ public partial class CameraGlobal : Node
 
     private static readonly StringName WorldCamPos = "world_cam_pos", WorldLodScale = "world_lod_scale";
     private float _pushedScale = 1f;
+
+    // the sun whose shadow distance follows the zoom, and its own distance (a restyle makes a new sun)
+    private DirectionalLight3D? _sun;
+    private float _sunBase, _sunScale = 1f;
 
     private void Push()
     {
@@ -53,5 +58,20 @@ public partial class CameraGlobal : Node
             }
         }
         ZoomRanges.Tick();
+        ScaleShadows();
+    }
+
+    private void ScaleShadows()
+    {
+        var sun = World.DayNight.Instance?.Sun;
+        if (sun != _sun)
+        {
+            _sun = sun;
+            _sunScale = 1f;
+            if (sun != null) _sunBase = sun.DirectionalShadowMaxDistance;
+        }
+        if (_sun == null || !IsInstanceValid(_sun) || _sunScale == LodScale.Step) return;
+        _sunScale = LodScale.Step;
+        _sun.DirectionalShadowMaxDistance = _sunBase * _sunScale;
     }
 }
