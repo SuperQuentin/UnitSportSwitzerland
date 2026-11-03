@@ -302,7 +302,8 @@ public partial class PortalDemo : Node3D
     {
         var points = Castles.List[castle].Points;
         var id = TileId.FromLv95(points[0], points[1]);
-        at = new Vector2((float)(points[0] - id.MinE), (float)(id.MaxN - points[1]));
+        var (x, z) = id.Local(points[0], points[1]);
+        at = new Vector2((float)x, (float)z);
         return new BuildingTile
         {
             Id = id,
