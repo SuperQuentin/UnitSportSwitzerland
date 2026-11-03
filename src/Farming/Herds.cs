@@ -387,11 +387,10 @@ public partial class Herds : Node3D, IOriginContainer
         var plan = cow.Herd.Plan;
         double now = Now;
         var pure = CowMotion.At(plan, cow.Index, now - cow.Herd.Epoch);
-        double de = plan.E + pure.Offset.X - o.E, dn = plan.N + pure.Offset.Y - o.N;
         var down = new Override
         {
             Air = false, E = o.E, N = o.N, Alt = o.Alt, Yaw = o.Yaw, Since = now,
-            Distance = (float)Math.Sqrt(de * de + dn * dn),
+            Distance = (float)GlobalPos.HorizontalDistance(plan.E + pure.Offset.X, plan.N + pure.Offset.Y, o.E, o.N),
         };
         _over[cow.Key] = down;
         GD.Print($"[herds] cow {plan.Tile}/{plan.Index}/{cow.Index} set down at LV95 {o.E:F1}/{o.N:F1}, {down.Distance:F0} m from its herd");

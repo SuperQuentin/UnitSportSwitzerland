@@ -31,6 +31,27 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
         return System.Math.Sqrt(de * de + dn * dn + da * da);
     }
 
+    /// <summary>The square of <see cref="HorizontalDistanceTo"/>, for comparisons that skip the root.</summary>
+    public double HorizontalDistanceSquaredTo(GlobalPos other) => HorizontalDistanceSquared(E, N, other.E, other.N);
+
+    /// <summary>
+    /// The horizontal distance between two LV95 points held as raw eastings and northings rather than
+    /// <see cref="GlobalPos"/> values (#1443). The same metric as <see cref="HorizontalDistanceTo"/>, kept here
+    /// so that both become Earth distances together.
+    /// </summary>
+    public static double HorizontalDistance(double e1, double n1, double e2, double n2)
+    {
+        double de = e1 - e2, dn = n1 - n2;
+        return System.Math.Sqrt(de * de + dn * dn);
+    }
+
+    /// <summary>The square of <see cref="HorizontalDistance"/>, for comparisons that skip the root.</summary>
+    public static double HorizontalDistanceSquared(double e1, double n1, double e2, double n2)
+    {
+        double de = e1 - e2, dn = n1 - n2;
+        return de * de + dn * dn;
+    }
+
     /// <summary>
     /// This place moved by <paramref name="d"/>, an offset in the local axes at <paramref name="p"/>
     /// (x east, y up, z south). Today those are the world's axes in every frame. With the global

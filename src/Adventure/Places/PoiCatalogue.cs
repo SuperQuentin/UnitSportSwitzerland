@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Places;
@@ -181,8 +182,7 @@ public sealed class PoiCatalogue
                 foreach (var p in bucket)
                 {
                     if (p.Outline != null || kind is { } k && p.Kind != k) continue;
-                    double de = p.E - e, dn = p.N - n;
-                    if (de * de + dn * dn <= r2) into.Add(p);
+                    if (GlobalPos.HorizontalDistanceSquared(p.E, p.N, e, n) <= r2) into.Add(p);
                 }
             }
         if (kind is not (null or PoiKind.Lake)) return;

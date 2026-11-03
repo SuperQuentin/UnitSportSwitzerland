@@ -20,13 +20,13 @@ public class FlatLv95RatchetTests
 
     private sealed record Pattern(string Name, Regex Find, int Baseline, string Instead);
 
-    // counted on 2026-11-03 after G0a (#1446)
+    // counted on 2026-11-03 after G0a (#1446); hand-written distances lowered after G0b
     private static readonly Pattern[] Patterns =
     {
         // de * de + dn * dn: an LV95 distance by hand; breaks when E/N stop being metres on a plane
         new("hand-written LV95 distance",
             new(@"\b(d[eE]\w*)\s*\*\s*\1\s*\+\s*(d[nN]\w*)\s*\*\s*\2\b", RegexOptions.Compiled),
-            Baseline: 61, Instead: "GlobalPos.HorizontalDistanceTo / DistanceTo"),
+            Baseline: 12, Instead: "GlobalPos.HorizontalDistanceTo / DistanceTo (or its raw E/N HorizontalDistance)"),
         // swisstopo's approximate polynomials: 10 m off at Paris, 276 m at Brest
         new("SwissProjection in the game",
             new(@"\bSwissProjection\.", RegexOptions.Compiled),

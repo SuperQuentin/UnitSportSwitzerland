@@ -8,7 +8,12 @@
   counts, over `src/` (comments and strings left out), the code that treats LV95 as metres on a
   plane, and fails if a count goes **up**:
   - **hand-written LV95 distances** (`de * de + dn * dn`): use `GlobalPos.HorizontalDistanceTo` /
-    `DistanceTo` (they become Earth distances inside `GlobalPos`);
+    `DistanceTo` / `HorizontalDistanceSquaredTo`, or for places held as raw doubles the static
+    `GlobalPos.HorizontalDistance(e1, n1, e2, n2)` / `HorizontalDistanceSquared` (all become Earth
+    distances inside `GlobalPos`; same formula, so moving a site is bit-identical). G0b moved 49 of 61;
+    the 12 left are not distances between two LV95 places (grid offsets, velocities, km tile rings,
+    directions, float maths, the point-to-lake-box test) or sit in `ProceduralWorld*.cs`, which the
+    Godot-free `tools/BlendCheck` and `tools/GeneratedRoadsSpike` link without `GlobalPos`;
   - **`SwissProjection` in the game** (0): latitude and longitude go through
     `SwissGeodesy.ToLv95` / `ToLatLon` (`core/swiss-geodesy`);
   - **LV95 tile corners** (`.MinE/.MaxE/.MinN/.MaxN`) and **tile neighbours by kilometre
