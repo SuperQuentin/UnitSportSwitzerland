@@ -3,7 +3,7 @@
 
 # Ellipsoid handover: from the flat world to a real WGS84 Earth at altitude
 
-Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445); H1 the curvature at altitude built (PR #1458)**; the rest planned, after #187's render-space curvature drop lands.
+Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445); H1 the curvature at altitude built (PR #1458)**; #187's curvature merged (PR #1432); the rest planned, H3 next.
 Issue: #1430.
 Prerequisites: the floating origin (#185, `docs/plans/floating-origin.md`, done), the round world
 near the ground (#187, `docs/plans/spherical-world.md`) and its regression net (#1429).
