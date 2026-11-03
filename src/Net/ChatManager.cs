@@ -156,7 +156,7 @@ public partial class ChatManager : Node
             : "You are no longer an admin.", ChatKind.System);
     }
 
-    /// <summary>Server: a peer's name was set or changed — the key of its bank account.</summary>
+    /// <summary>Server: a peer's name was set or changed (shown only: saved data is keyed by its id, <see cref="PlayerIds"/>).</summary>
     public event Action<long>? NameAssigned;
 
     /// <summary>Server: operator rights for the other server-side systems (vehicle spawning).</summary>
@@ -1314,17 +1314,14 @@ public partial class ChatManager : Node
                 return;
 
             case "add" when name.Length > 0:
-                if (_registry.GrantAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} is already an operator.", ChatKind.Error);
+                // by the player's id (#1359): a name only finds them
+                if (_registry.GrantAdmin(name) is { } notGranted) ReplyTo(sender, notGranted, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
                 return;
 
             case "remove" when name.Length > 0:
-                if (_registry.RevokeAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} was not an operator.", ChatKind.Error);
+                if (_registry.RevokeAdmin(name) is { } notRevoked) ReplyTo(sender, notRevoked, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
                 return;
 
             default:

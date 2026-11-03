@@ -48,7 +48,8 @@ public class PinballHighScoresTests
         t.Offer("Anna", 123_456);
         t.Offer("Beat", 99);
         var back = PinballHighScores.Unpack(t.Pack());
-        Assert.Equal(t.Entries, back.Entries);
+        // on the wire an entry is its name and score: the id stays on the server
+        Assert.Equal(t.Entries.Select(e => (e.Name, e.Score)), back.Entries.Select(e => (e.Name, e.Score)));
         Assert.Empty(PinballHighScores.Unpack(Array.Empty<byte>()).Entries);
     }
 

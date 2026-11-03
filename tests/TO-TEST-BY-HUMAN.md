@@ -7,6 +7,17 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Account management on the website ([#1360](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1360))
+
+After the deploy with `--setup` (the new Caddyfile), on https://unitsport.infrack.ch.
+
+- [ ] The site's header, signed in: the name is a link to `account.html`. Change the name there → the header and the page show the new name; a taken name says "That name is taken".
+- [ ] `account.html` → Email me a link: the reset mail arrives and its link opens `reset.html` (no 404).
+- [ ] The dashboard: open an account, Rename it → the list and the detail show the new name.
+- [ ] The game, signed in to the official server: Account screen → Manage your account on the website opens the page in the browser. Rename there, come back to the game → the Account screen shows the new name. With a pad: the button takes focus and A opens it.
+- [ ] On the deployed server, with its saves from before: join under your usual name → your bank balance, buildings, placed things, farm stand and BR career are all there (the server log says each was claimed). Then `/name` something else and rejoin → still yours; `/br stats`, a stand's sign and the pinball board show the new name.
+- [ ] `/admin list` shows names; `/admin add <name>` for an online player and for one who left (last seen); an old admin by name shows "(by name, not seen since)" until they join.
+
 ## Player birthdays ([#1423](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1423))
 
 Set your birthday to today on the Account page (title screen, the account button), with a year and "Let other players see it" on.

@@ -95,7 +95,7 @@ public partial class Sleepers : Node
         var list = _book.All.OrderBy(s => s.Id).ToList();
         RpcId(peer, MethodName.Snapshot,
             list.Select(s => s.Id).ToArray(),
-            list.Select(s => s.Name).ToArray(),
+            list.Select(s => s.NameShown(PlayerIds.Server)).ToArray(),
             list.SelectMany(s => new[] { s.E, s.N, s.Alt }).ToArray(),
             list.Select(s => s.Yaw).ToArray(),
             list.Select(s => s.Rider).ToArray(),
@@ -120,10 +120,14 @@ public partial class Sleepers : Node
             return;
         }
         string key = PlayerKey.Fingerprint(publicKey);
+        // the same install connected twice (two windows, two test clients on one user://): the next copy is a player
+        // of its own, KEY:2, KEY:3..., so it keeps its own saved data apart from the first (#1359)
         if (_keyOf.ContainsValue(key))
         {
-            GD.Print($"[sleepers] peer {peer}: identity {key[..8]} already connected, no sleeper for it");
-            return;
+            int copy = 2;
+            while (_keyOf.ContainsValue($"{key}:{copy}")) copy++;
+            GD.Print($"[sleepers] peer {peer}: identity {key[..8]} already connected, this copy is {key[..8]}:{copy}");
+            key = $"{key}:{copy}";
         }
         _keyOf[peer] = key;
         GD.Print($"[sleepers] peer {peer} is {key[..8]}");
@@ -169,7 +173,7 @@ public partial class Sleepers : Node
     private void Show(Sleeper s)
     {
         foreach (int p in Multiplayer.GetPeers())
-            RpcId(p, MethodName.Add, s.Id, s.Name, s.E, s.N, s.Alt, s.Yaw, s.Rider, s.Outfit, s.Appearance, s.Headwear);
+            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), s.E, s.N, s.Alt, s.Yaw, s.Rider, s.Outfit, s.Appearance, s.Headwear);
     }
 
     private void Unshow(long id)

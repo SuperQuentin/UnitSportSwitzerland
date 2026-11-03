@@ -45,7 +45,7 @@ public partial class FarmSales : Node
 
     /// <summary>Client: the pack, the pocket and the toasts.</summary>
     public ItemController? Items { get; set; }
-    /// <summary>Server: a peer's display name (contracts are kept by name, like bank accounts).</summary>
+    /// <summary>Server: a peer's display name; only the fallback when no <see cref="PlayerIds"/> runs (#1359).</summary>
     public Func<long, string>? NameOf { get; set; }
 
     public static FarmSales Create(Node world, WorldOrigin origin, bool server, ItemController? items = null)
@@ -59,6 +59,8 @@ public partial class FarmSales : Node
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        if (_claim != null && PlayerIds.Server is { } ids) ids.Identified -= _claim;
+        _claim = null;
     }
 
     private bool Online => NetLink.Online(this);
@@ -248,7 +250,51 @@ public partial class FarmSales : Node
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AskAccept(string coop, long week, int index) => ServeAccept(Multiplayer.GetRemoteSenderId(), coop, week, index);
 
-    private string PlayerOf(long peer) => Online ? NameOf?.Invoke(peer) ?? $"Rider{peer}" : "local";
+    /// <summary>
+    /// What a peer's contracts are kept under (#1359): its player id, "local" offline, null while an online player is
+    /// not proven yet (it takes and fills none then).
+    /// </summary>
+    private string? PlayerOf(long peer) =>
+        !Online ? "local"
+        : PlayerIds.Server is { } ids ? ids.IdOf(peer)
+        : NameOf?.Invoke(peer) ?? $"Rider{peer}";
+
+    /// <summary>A key of <see cref="_contracts"/> as a name for the log and the lapse note.</summary>
+    private string Shown(string player) => Online && PlayerIds.Server is { } ids && PlayerIds.IsId(player)
+        ? ids.NameOfId(player, _contracts.TryGetValue(player, out var l) ? l.Select(c => c.OwnerName).FirstOrDefault(n => n.Length > 0) : null) : player;
+
+    /// <summary>Keeps the player's name beside their contracts, as the fallback for an id that stops resolving.</summary>
+    private void StampName(long peer, string player)
+    {
+        if (!Online || PlayerIds.Server is not { } ids || ids.NameOf(peer) is not { Length: > 0 } name) return;
+        foreach (var c in ListOf(player)) c.OwnerName = name;
+    }
+
+    private Action<long, string, string>? _claim;
+
+    public override void _EnterTree()
+    {
+        if (!_server || PlayerIds.Server is not { } ids) return;
+        _claim = ClaimLegacy;
+        ids.Identified += _claim;
+    }
+
+    /// <summary>
+    /// Server: a peer has its id and name. The contracts still kept under that name (before #1359) move to the id, when
+    /// the id has none of its own yet.
+    /// </summary>
+    private void ClaimLegacy(long peer, string id, string name)
+    {
+        string? key = _contracts.Keys.FirstOrDefault(k => !PlayerIds.IsId(k) && k.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (key == null || (_contracts.TryGetValue(id, out var own) && own.Count > 0)) return;
+        var list = _contracts[key];
+        _contracts.Remove(key);
+        _contracts[id] = list;
+        foreach (var c in list) c.OwnerName = name;
+        GD.Print($"[sell] {name} claimed {list.Count} legacy contract(s) as {id}");
+        SaveContracts();
+        PushContracts(peer);
+    }
 
     private List<FarmContract> ListOf(string player)
     {
@@ -276,10 +322,13 @@ public partial class FarmSales : Node
         if (refused == null)
         {
             var order = FarmContracts.Orders(coop, week, ValueOf)[index];
-            refused = FarmContracts.Accept(ListOf(PlayerOf(peer)), coop, week, order, ValueOf(order.Item), Now);
+            string? player = PlayerOf(peer);
+            refused = player == null ? "Your identity is not confirmed yet, try again in a moment."
+                : FarmContracts.Accept(ListOf(player), coop, week, order, ValueOf(order.Item), Now);
             if (refused == null)
             {
-                GD.Print($"[sell] {PlayerOf(peer)} took order {index} of {coop} (week {week}): {order.Count} {order.Item} x{FormattableString.Invariant($"{order.Multiplier:0.0}")} in {order.Days} d");
+                GD.Print($"[sell] {Shown(player!)} took order {index} of {coop} (week {week}): {order.Count} {order.Item} x{FormattableString.Invariant($"{order.Multiplier:0.0}")} in {order.Days} d");
+                StampName(peer, player!);
                 SaveContracts();
             }
         }
@@ -293,14 +342,16 @@ public partial class FarmSales : Node
     /// </summary>
     public void Counted(long peer, string coop, ItemId item, int count)
     {
-        var list = ListOf(PlayerOf(peer));
+        if (PlayerOf(peer) is not { } player) return;
+        var list = ListOf(player);
         if (list.Count == 0) return;
+        StampName(peer, player);
         var step = FarmContracts.Deliver(list, coop, item, count, Now);
         if (step.Counted <= 0) return;
         foreach (var c in step.Completed)
         {
             int bonus = FarmContracts.Bonus(c);
-            GD.Print($"[sell] {PlayerOf(peer)} completed {c.Count} {c.Item} for {c.Coop}: bonus {bonus} CHF");
+            GD.Print($"[sell] {Shown(player)} completed {c.Count} {c.Item} for {c.Coop}: bonus {bonus} CHF");
             Reply(peer, MethodName.Note, $"Contract complete: {c.Count} × {NameOfItem(c.Item)}, bonus +{bonus} CHF cash", bonus);
         }
         SaveContracts();
@@ -319,7 +370,7 @@ public partial class FarmSales : Node
             long peer = PeerOf(player);
             foreach (var c in gone)
             {
-                GD.Print($"[sell] {player}'s contract lapsed: {c.Delivered}/{c.Count} {c.Item} for {c.Coop}");
+                GD.Print($"[sell] {Shown(player)}'s contract lapsed: {c.Delivered}/{c.Count} {c.Item} for {c.Coop}");
                 if (peer != 0) Reply(peer, MethodName.Note, $"Contract lapsed: {c.Delivered} of {c.Count} × {NameOfItem(c.Item)} delivered in time.", 0);
             }
             if (peer != 0) PushContracts(peer);
@@ -327,10 +378,11 @@ public partial class FarmSales : Node
         if (changed) SaveContracts();
     }
 
-    /// <summary>The connected peer playing <paramref name="player"/>, 0 when none (offline: the local one).</summary>
+    /// <summary>The connected peer playing <paramref name="player"/> (a key of the contracts), 0 when none (offline: the local one).</summary>
     private long PeerOf(string player)
     {
         if (!Online) return player == "local" ? 1 : 0;
+        if (PlayerIds.Server is { } ids && PlayerIds.IsId(player)) return ids.PeerOf(player);
         foreach (int p in Multiplayer.GetPeers())
             if (PlayerOf(p) == player) return p;
         return 0;
@@ -338,7 +390,7 @@ public partial class FarmSales : Node
 
     private void PushContracts(long peer)
     {
-        var list = ListOf(PlayerOf(peer));
+        var list = PlayerOf(peer) is { } player ? ListOf(player) : new List<FarmContract>();
         int k = list.Count;
         var coops = new string[k];
         var weeks = new long[k];
