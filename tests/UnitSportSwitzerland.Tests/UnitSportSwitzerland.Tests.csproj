@@ -66,6 +66,10 @@
     <Compile Include="..\..\src\Styles\ZoomRule.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Curvature.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the tile key's frame (#1443, G0c): OriginFrame against the LV95 arithmetic it replaces -->
+    <Compile Include="..\..\src\Core\WorldOrigin.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\OriginShift.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\GlobalPos.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />

@@ -12,9 +12,14 @@
   - **`SwissProjection` in the game** (0): latitude and longitude go through
     `SwissGeodesy.ToLv95` / `ToLatLon` (`core/swiss-geodesy`);
   - **LV95 tile corners** (`.MinE/.MaxE/.MinN/.MaxN`) and **tile neighbours by kilometre
-    arithmetic** (`new TileId(id.E + 1, …)`): G0c puts them behind the tile key.
+    arithmetic** (`new TileId(id.E + 1, …)`): ask the tile key instead (G0c). `TileId.Local(e, n)` /
+    `Global(x, z)` (metres from its north-west corner, z south), `Centre`, `Contains`,
+    `Neighbour(dx, dz)` (in the tile's local axes), `RingDistance`; and the origin's
+    `TileTransform(id)` / `TileToWorld(id, local)` / `TileLocal(id, world)`. Place tile-local points
+    with the full transform (`xf * local`): in G2 a tile's frame turns a little against the world's.
+    `TileKeyTests` pins each to the arithmetic it replaces.
 - A change that removes some lowers the baseline in the same commit (the test prints the new
-  count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` is the seam and is
-  not counted.
+  count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` and `src/Core/WorldOrigin.cs`
+  are the seam and are not counted.
 - Local maths near the player is fine and not counted: world `Vector3`s, `dx * dx + dz * dz`, +Y
   up and −Z north stay true in the anchor frame (the plan's findings).

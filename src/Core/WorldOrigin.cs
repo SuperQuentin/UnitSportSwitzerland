@@ -50,6 +50,25 @@ public sealed class OriginFrame
         return TileId.FromLv95(e, n);
     }
 
+    /// <summary>
+    /// Where a tile's local frame sits in this world (#1443, G0c): its north-west corner at altitude 0,
+    /// its axes the world's. With the global tiling a tile's frame turns a little against the world's,
+    /// so code that places tile-local points goes through this (or <see cref="TileToWorld"/>), never
+    /// through the tile's LV95 corners.
+    /// </summary>
+    public Transform3D TileTransform(TileId id) => new(Basis.Identity, ToWorld(id.MinE, id.MaxN, 0));
+
+    /// <summary>A point in a tile's local frame (x east, y up, z south from its north-west corner) in world space, through doubles.</summary>
+    public Vector3 TileToWorld(TileId id, Vector3 local) => ToWorld(id.MinE + local.X, id.MaxN - local.Z, local.Y);
+
+    /// <summary>The inverse of <see cref="TileToWorld"/>: a world point in a tile's local frame, through doubles.</summary>
+    public Vector3 TileLocal(TileId id, Vector3 world)
+    {
+        var (e, n) = ToLv95(world);
+        var (x, z) = id.Local(e, n);
+        return new Vector3((float)x, world.Y, (float)z);
+    }
+
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into this one's.</summary>
     public OriginShift Since(OriginFrame earlier) => SinceAnchor(earlier.E, earlier.N);
 
@@ -132,4 +151,10 @@ public sealed class WorldOrigin
     public GlobalPos ToGlobal(Vector3 world) => _frame.ToGlobal(world);
 
     public TileId TileAt(Vector3 world) => _frame.TileAt(world);
+
+    public Transform3D TileTransform(TileId id) => _frame.TileTransform(id);
+
+    public Vector3 TileToWorld(TileId id, Vector3 local) => _frame.TileToWorld(id, local);
+
+    public Vector3 TileLocal(TileId id, Vector3 world) => _frame.TileLocal(id, world);
 }
