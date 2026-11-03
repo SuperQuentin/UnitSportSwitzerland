@@ -48,6 +48,46 @@ public static partial class Ephemeris
     /// <summary>The obliquity of J2000, the frame the elements are in.</summary>
     private static readonly double ObliquityJ2000 = 23.43928 * Deg;
 
+    /// <summary>
+    /// A body's own axes in the Earth-fixed frame, as <see cref="MoonAxes"/>: the IAU WGCCRE rotation
+    /// models (2015; the gas giants' prime meridians are their System III), taken at the moment the
+    /// light we see left the planet (Jupiter turns 26° in its 43 light-minutes).
+    /// </summary>
+    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc)
+    {
+        if (body == SkyBody.Moon) return MoonAxes(utc);
+        double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0;
+        if (body != SkyBody.Sun) d -= Equatorial(body, utc).Distance / AuMetres / LightAuPerDay;
+        double t = d / 36525.0;
+        double n = (357.85 + 52.316 * t) * Deg;   // Neptune's pole wobble
+        var (a0, d0, w) = body switch
+        {
+            SkyBody.Sun => (286.13, 63.87, 84.176 + 14.1844 * d),
+            SkyBody.Mercury => (281.0103 - 0.0328 * t, 61.4155 - 0.0049 * t, 329.5988 + 6.1385108 * d),
+            SkyBody.Venus => (272.76, 67.16, 160.20 - 1.4813688 * d),
+            SkyBody.Mars => (317.68143 - 0.1061 * t, 52.88650 - 0.0609 * t, 176.630 + 350.89198226 * d),
+            SkyBody.Jupiter => (268.056595 - 0.006499 * t, 64.495303 + 0.002413 * t, 284.95 + 870.5360000 * d),
+            SkyBody.Saturn => (40.589 - 0.036 * t, 83.537 - 0.004 * t, 38.90 + 810.7939024 * d),
+            SkyBody.Uranus => (257.311, -15.175, 203.81 - 501.1600928 * d),
+            _ => (299.36 + 0.70 * Math.Sin(n), 43.46 - 0.51 * Math.Cos(n), 249.978 + 541.1397757 * d - 0.48 * Math.Sin(n)),
+        };
+        return Frame(a0, d0, w, utc, t);
+    }
+
+    /// <summary>A body's equatorial and polar radii, metres (IAU): the gas giants are visibly flattened.</summary>
+    public static (double Equator, double Pole) Radii(SkyBody body) => body switch
+    {
+        SkyBody.Sun => (695_700_000, 695_700_000),
+        SkyBody.Moon => (1_737_400, 1_737_400),
+        SkyBody.Mercury => (2_440_530, 2_438_260),
+        SkyBody.Venus => (6_051_800, 6_051_800),
+        SkyBody.Mars => (3_396_190, 3_376_200),
+        SkyBody.Jupiter => (71_492_000, 66_854_000),
+        SkyBody.Saturn => (60_268_000, 54_364_000),
+        SkyBody.Uranus => (25_559_000, 24_973_000),
+        _ => (24_764_000, 24_341_000),
+    };
+
     /// <summary>A planet's apparent place of date: right ascension, declination (radians) and its distance (m).</summary>
     private static (double Ra, double Dec, double Distance) PlanetEquatorial(SkyBody body, double t)
     {

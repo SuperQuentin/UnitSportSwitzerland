@@ -337,6 +337,65 @@ public class EphemerisTests
         Console.WriteLine(string.Join(", ", worst.Select(w => $"{w.Key} {w.Value:F4}")));
     }
 
+    /// <summary>
+    /// Each planet's face from Bern: Horizons' sub-observer longitude and latitude (QUANTITIES 14;
+    /// west longitude for the planets) and its north pole's position angle (17, from ICRF north).
+    /// The latitude is how far the pole tips towards us: Saturn's rings open by it.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-Jan-01 03:07:12", SkyBody.Mercury, 226.295138, -3.970730, 5.8743)]
+    [InlineData("2026-Apr-23 18:00:00", SkyBody.Mercury, 93.148067, -1.579070, 331.4481)]
+    [InlineData("2026-Aug-13 16:33:36", SkyBody.Mercury, 306.703727, 6.129869, 13.1983)]
+    [InlineData("2026-Dec-03 15:07:12", SkyBody.Mercury, 164.916312, -2.134425, 20.5432)]
+    [InlineData("2026-Jan-01 03:07:12", SkyBody.Venus, 324.286512, 0.954811, 357.1013)]
+    [InlineData("2026-Apr-23 18:00:00", SkyBody.Venus, 271.230184, -1.653469, 346.9401)]
+    [InlineData("2026-Aug-13 16:33:36", SkyBody.Venus, 204.360269, 2.372547, 22.8222)]
+    [InlineData("2026-Dec-03 15:07:12", SkyBody.Venus, 32.927598, -0.540545, 20.5282)]
+    [InlineData("2026-Jan-01 03:07:12", SkyBody.Mars, 244.516029, -7.952012, 19.8002)]
+    [InlineData("2026-Apr-23 18:00:00", SkyBody.Mars, 70.908098, -24.710633, 328.3766)]
+    [InlineData("2026-Aug-13 16:33:36", SkyBody.Mars, 32.215090, 3.535768, 334.2018)]
+    [InlineData("2026-Dec-03 15:07:12", SkyBody.Mars, 12.317619, 22.828086, 11.5342)]
+    [InlineData("2026-Jan-01 03:07:12", SkyBody.Jupiter, 89.860515, 1.577721, 10.4972)]
+    [InlineData("2026-Apr-23 18:00:00", SkyBody.Jupiter, 207.018643, 1.509197, 9.0535)]
+    [InlineData("2026-Aug-13 16:33:36", SkyBody.Jupiter, 68.766404, 0.641422, 17.4909)]
+    [InlineData("2026-Dec-03 15:07:12", SkyBody.Jupiter, 305.958680, -0.430131, 22.1942)]
+    [InlineData("2026-Jan-01 03:07:12", SkyBody.Saturn, 77.162219, -1.174813, 4.4381)]
+    [InlineData("2026-Apr-23 18:00:00", SkyBody.Saturn, 294.903667, -8.118140, 3.5037)]
+    [InlineData("2026-Aug-13 16:33:36", SkyBody.Saturn, 336.767247, -10.957803, 2.9589)]
+    [InlineData("2026-Dec-03 15:07:12", SkyBody.Saturn, 22.348839, -7.469997, 3.5149)]
+    [InlineData("2026-Jan-01 03:07:12", SkyBody.Uranus, 68.893999, 69.512714, 278.1440)]
+    [InlineData("2026-Apr-23 18:00:00", SkyBody.Uranus, 347.049032, 71.232351, 280.8363)]
+    [InlineData("2026-Aug-13 16:33:36", SkyBody.Uranus, 297.428473, 75.930446, 291.0065)]
+    [InlineData("2026-Dec-03 15:07:12", SkyBody.Uranus, 237.155242, 74.234406, 286.7221)]
+    [InlineData("2026-Jan-01 03:07:12", SkyBody.Neptune, 3.014625, -20.795938, 317.4064)]
+    [InlineData("2026-Apr-23 18:00:00", SkyBody.Neptune, 100.528578, -19.592394, 316.1915)]
+    [InlineData("2026-Aug-13 16:33:36", SkyBody.Neptune, 199.770542, -19.140523, 315.8769)]
+    [InlineData("2026-Dec-03 15:07:12", SkyBody.Neptune, 296.138652, -20.012325, 316.6654)]
+    public void The_planets_faces_match_Horizons(string utc, SkyBody body, double subLon, double subLat, double poleAngle)
+    {
+        var at = DateTime.SpecifyKind(DateTime.ParseExact(utc, "yyyy-MMM-dd HH:mm:ss", CultureInfo.InvariantCulture), DateTimeKind.Utc);
+        var (pole, prime, east) = Ephemeris.Axes(body, at);
+        var bern = Ellipsoid.Wgs84.ToEcef(new Geodetic(46.9511, 7.4386, 550));
+        var v = bern - Ephemeris.Ecef(body, at);
+        double len = v.Length;
+        static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+        double lonEast = Math.Atan2(Dot(v, east), Dot(v, prime)) / Deg, centric = Math.Asin(Dot(v, pole) / len);
+        // Horizons' latitude is planetodetic: on the flattened body, steeper than the centre's
+        var (re, rp) = Ephemeris.Radii(body);
+        double lat = Math.Atan(Math.Tan(centric) * (re / rp) * (re / rp)) / Deg;
+        Assert.Equal(subLat, lat, 0.3);
+        // west longitude for a prograde planet, east for the retrograde ones (IAU)
+        double lon = body is SkyBody.Venus or SkyBody.Uranus ? lonEast : -lonEast;
+        Assert.True(Math.Abs(Math.IEEERemainder(lon - subLon, 360)) < 2.0, $"{body}: longitude {lon:F2}, Horizons {subLon:F2}");
+        var u = new EcefPos(-v.X / len, -v.Y / len, -v.Z / len);
+        var z = new EcefPos(0, 0, 1);
+        var north = z - new EcefPos(u.X * u.Z, u.Y * u.Z, u.Z * u.Z);
+        var eastSky = new EcefPos(-u.Y, u.X, 0);
+        var q = pole - new EcefPos(u.X * Dot(pole, u), u.Y * Dot(pole, u), u.Z * Dot(pole, u));
+        double pa = Math.Atan2(Dot(q, eastSky) / Math.Sqrt(Dot(eastSky, eastSky)), Dot(q, north) / Math.Sqrt(Dot(north, north))) / Deg;
+        Assert.Equal(0, Math.IEEERemainder(pa - poleAngle, 360), 0.6);
+    }
+
     [Fact]
     public void Swiss_civil_time_to_UTC()
     {

@@ -115,9 +115,19 @@ public static partial class Ephemeris
             - 0.0642 * Math.Sin(e3) + 0.0158 * Math.Sin(e4) + 0.0252 * Math.Sin(e5) - 0.0066 * Math.Sin(e6)
             - 0.0047 * Math.Sin(e7) - 0.0046 * Math.Sin(e8) + 0.0028 * Math.Sin(e9) + 0.0052 * Math.Sin(e10)
             + 0.0040 * Math.Sin(e11) + 0.0019 * Math.Sin(e12) - 0.0044 * Math.Sin(e13);
+        return Frame(a0, d0, w, utc, t);
+    }
+
+    /// <summary>
+    /// A body's axes in the Earth-fixed frame from its IAU pole (<paramref name="a0"/>, <paramref name="d0"/>,
+    /// ICRF, degrees) and prime meridian angle <paramref name="w"/> (degrees), precessed to the date
+    /// (<paramref name="t"/>, Julian centuries) and turned by sidereal time at <paramref name="utc"/>.
+    /// </summary>
+    private static (EcefPos Pole, EcefPos Prime, EcefPos East) Frame(double a0, double d0, double w, DateTime utc, double t)
+    {
         a0 *= Deg; d0 *= Deg; w *= Deg;
 
-        // ICRF: the pole, the node of the moon's equator on the ICRF equator, the prime meridian W past it
+        // ICRF: the pole, the node of the body's equator on the ICRF equator, the prime meridian W past it
         var pole = new EcefPos(Math.Cos(d0) * Math.Cos(a0), Math.Cos(d0) * Math.Sin(a0), Math.Sin(d0));
         var node = new EcefPos(-Math.Sin(a0), Math.Cos(a0), 0);
         var across = Cross(pole, node);
