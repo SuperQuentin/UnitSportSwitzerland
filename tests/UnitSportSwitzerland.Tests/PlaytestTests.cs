@@ -169,4 +169,17 @@ public class PlaytestTests
         }
         finally { Directory.Delete(root, true); }
     }
+
+    [Fact]
+    public void Launch_flags_are_checked_and_merged_pairwise()
+    {
+        string[] wanted = ["--festival", "test", "--systems", "ui,adventure"];
+        Assert.True(PlaytestLedger.HasFlags(["--x", "--festival", "test", "--systems", "ui,adventure"], wanted));
+        Assert.False(PlaytestLedger.HasFlags(["--festival", "test"], wanted));
+        Assert.False(PlaytestLedger.HasFlags(["--festival", "test", "--systems", "ui"], wanted));
+        Assert.True(PlaytestLedger.HasFlags(["--x"], null));
+        Assert.Equal(["--systems", "ui,adventure", "--festival", "test", "--world", "fixture"],
+            PlaytestLedger.WithFlags(["--systems", "ui", "--festival", "test", "--world", "fixture"], wanted));
+        Assert.Equal(["--world", "fixture", "--festival", "test", "--systems", "ui,adventure"], PlaytestLedger.WithFlags(["--world", "fixture"], wanted));
+    }
 }

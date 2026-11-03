@@ -31,9 +31,27 @@ public partial class CinemaBooths
     /// <summary>Per cinema, per hall: the code and list the pick was drawn for, the pick (-1 the slides), the loop's phase.</summary>
     private readonly Dictionary<string, (int Code, int Version, int Pick, double Phase)[]> _showings = new();
 
-    private int FilmCount => CinemaVideo.OpenFilms.Length + _pool.Count;
+    /// <summary>The cinema's films, the open ones then the server's (the panel's picker, #1367).</summary>
+    public int FilmCount => CinemaVideo.OpenFilms.Length + _pool.Count;
 
-    private CinemaVideo.Film FilmAt(int i) => i < CinemaVideo.OpenFilms.Length ? CinemaVideo.OpenFilms[i] : _pool[i - CinemaVideo.OpenFilms.Length];
+    /// <summary>The server's list changes this (a client's copy too): the panel fills its picker again.</summary>
+    public int PoolVersion => _poolVersion;
+
+    /// <summary>The films halls draw their showings from (indices into the list), for <see cref="_rotationFor"/>'s list.</summary>
+    private int[] _rotation = Array.Empty<int>();
+    private int _rotationFor = -1;
+
+    private int[] Rotation()
+    {
+        if (_rotationFor == _poolVersion) return _rotation;
+        _rotationFor = _poolVersion;
+        var all = new List<int>();
+        for (int i = 0; i < FilmCount; i++)
+            if (FilmAt(i).Rotation) all.Add(i);
+        return _rotation = all.ToArray();
+    }
+
+    public CinemaVideo.Film FilmAt(int i) => i < CinemaVideo.OpenFilms.Length ? CinemaVideo.OpenFilms[i] : _pool[i - CinemaVideo.OpenFilms.Length];
 
     /// <summary>
     /// The film a hall nobody chose for shows now, and its loop's start on the shared clock; ("", 0) for the slides, the
@@ -54,12 +72,23 @@ public partial class CinemaBooths
         {
             s.Code = code;
             s.Version = _poolVersion;
-            s.Pick = CinemaVideo.PickShowing((uint)Core.Fnv.Hash($"{plan}#{hall}#{ReelOf(code)}#film"), FilmCount);
+            // only the films in the halls' rotation (#1367); an index into the whole list
+            var rotation = Rotation();
+            int pick = CinemaVideo.PickShowing((uint)Core.Fnv.Hash($"{plan}#{hall}#{ReelOf(code)}#film"), rotation.Length);
+            s.Pick = pick < 0 ? -1 : rotation[pick];
             s.Phase = Core.Fnv.Unit($"{plan}#{hall}#{ReelOf(code)}#phase");
         }
         if (s.Pick < 0 || s.Pick >= FilmCount) return ("", 0);
         var film = FilmAt(s.Pick);
         return (film.Link, CinemaVideo.LoopStart(ClockSync.ServerNow, film.Seconds, s.Phase * film.Seconds));
+    }
+
+    /// <summary>A link's place in the server's own list, 1 the first (<c>/cinema pool remove</c>), 0 when it is not in it.</summary>
+    public int PoolIndexOf(string link)
+    {
+        for (int i = 0; i < _pool.Count; i++)
+            if (_pool[i].Link == link) return i + 1;
+        return 0;
     }
 
     /// <summary>The title of a showing's film, for the panel; "" when the link is no film of the list.</summary>
@@ -102,21 +131,38 @@ public partial class CinemaBooths
         var titles = _pool.Select(f => f.Title).ToArray();
         var links = _pool.Select(f => f.Link).ToArray();
         var seconds = _pool.Select(f => f.Seconds).ToArray();
-        if (peer == 0) Rpc(MethodName.SetPool, titles, links, seconds);
-        else RpcId(peer, MethodName.SetPool, titles, links, seconds);
+        var rotation = _pool.Select(f => (byte)(f.Rotation ? 1 : 0)).ToArray();
+        if (peer == 0) Rpc(MethodName.SetPool, titles, links, seconds, rotation);
+        else RpcId(peer, MethodName.SetPool, titles, links, seconds, rotation);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void SetPool(string[] titles, string[] links, double[] seconds)
+    private void SetPool(string[] titles, string[] links, double[] seconds, byte[] rotation)
     {
         _pool.Clear();
-        for (int i = 0; i < Math.Min(links.Length, Math.Min(titles.Length, seconds.Length)) && i < 200; i++)
-            if (CinemaVideo.Allowed(links[i]) && seconds[i] > 0) _pool.Add(new CinemaVideo.Film(titles[i], links[i], seconds[i]));
+        int n = Math.Min(Math.Min(links.Length, rotation.Length), Math.Min(titles.Length, seconds.Length));
+        for (int i = 0; i < n && i < 200; i++)
+            if (CinemaVideo.Allowed(links[i]) && seconds[i] > 0) _pool.Add(new CinemaVideo.Film(titles[i], links[i], seconds[i], rotation[i] != 0));
         _poolVersion++;
     }
 
     /// <summary>
-    /// Server (and offline): <c>/cinema pool [add &lt;link&gt; | remove &lt;n&gt;]</c> from <paramref name="peer"/>; the answer now,
+    /// The words after a link or a number: <c>norotation</c> first takes the film out of the halls' rotation
+    /// (<c>rotation</c> puts it back), the rest is its title ("" keeps the one it has or the one looked up).
+    /// </summary>
+    private static (string Title, bool? Rotation) FilmWords(string words)
+    {
+        words = words.Trim();
+        int space = words.IndexOf(' ');
+        string first = (space < 0 ? words : words[..space]).ToLowerInvariant();
+        bool? rotation = first switch { "norotation" => false, "rotation" => true, _ => null };
+        string title = rotation == null ? words : space < 0 ? "" : words[(space + 1)..].Trim();
+        return (title.Length > 80 ? title[..80] : title, rotation);
+    }
+
+    /// <summary>
+    /// Server (and offline): <c>/cinema pool [add &lt;link&gt; [norotation] [title] | set &lt;n&gt; [rotation|norotation] [title] |
+    /// remove &lt;n&gt;]</c> from <paramref name="peer"/>; the answer now,
     /// and <paramref name="later"/> once a link's title and length are looked up (on a worker).
     /// </summary>
     public string PoolCommand(long peer, string args, bool admin, Action<string> later)
@@ -130,9 +176,10 @@ public partial class CinemaBooths
             {
                 var f = FilmAt(i);
                 bool own = i >= CinemaVideo.OpenFilms.Length;
-                lines.Add($"{(own ? $"{i - CinemaVideo.OpenFilms.Length + 1}." : " -")} {f.Title} ({(int)(f.Seconds / 60)} min){(own ? $"  {f.Link}" : "")}");
+                lines.Add($"{(own ? $"{i - CinemaVideo.OpenFilms.Length + 1}." : " -")} {f.Title} ({(int)(f.Seconds / 60)} min)"
+                          + $"{(f.Rotation ? "" : ", not in the halls' rotation")}{(own ? $"  {f.Link}" : "")}");
             }
-            if (admin) lines.Add("/cinema pool add <link>, /cinema pool remove <n>");
+            if (admin) lines.Add("/cinema pool add <link> [norotation] [title], /cinema pool set <n> [rotation|norotation] [title], /cinema pool remove <n>");
             return string.Join('\n', lines);
         }
         if (!admin) return "Only an admin changes this server's films.";
@@ -145,9 +192,25 @@ public partial class CinemaBooths
             SendPool();
             return $"Removed {gone.Title}.";
         }
+        if (verb == "set" && parts.Length > 2)
+        {
+            var bits = parts[2].Split(' ', 2, StringSplitOptions.TrimEntries);
+            if (!int.TryParse(bits[0], out int k) || k < 1 || k > _pool.Count) return "No such film on this server's list (/cinema pool).";
+            var (title, rotation) = FilmWords(bits.Length > 1 ? bits[1] : "");
+            var was = _pool[k - 1];
+            var now = was with { Title = title.Length > 0 ? title : was.Title, Rotation = rotation ?? was.Rotation };
+            if (now == was) return $"{was.Title}: nothing to change.";
+            _pool[k - 1] = now;
+            _poolVersion++;
+            SavePool();
+            SendPool();
+            return $"{now.Title}: {(now.Rotation ? "in the halls' rotation" : "picked at the projector only")}.";
+        }
         if (verb == "add" && parts.Length > 2)
         {
-            string link = parts[2];
+            var bits = parts[2].Split(' ', 2, StringSplitOptions.TrimEntries);
+            string link = bits[0];
+            var (title, rotation) = FilmWords(bits.Length > 1 ? bits[1] : "");
             if (!CinemaVideo.Allowed(link)) return "That is not a web link (https://…).";
             if (_pool.Any(f => f.Link == link)) return "That film is in the list already.";
             if (_pool.Count >= 200) return "The list is full (200 films).";
@@ -156,17 +219,19 @@ public partial class CinemaBooths
                 var found = CinemaLookup.Probe(link, out string why);
                 Callable.From(() =>
                 {
-                    if (found is not { } f) { later($"Not added: {why}"); return; }
+                    if (found is not { } looked) { later($"Not added: {why}"); return; }
+                    var f = looked with { Title = title.Length > 0 ? title : looked.Title, Rotation = rotation ?? true };
                     if (_pool.Any(x => x.Link == link)) return;
                     _pool.Add(f);
                     _poolVersion++;
                     SavePool();
                     SendPool();
-                    later($"Added {f.Title} ({(int)(f.Seconds / 60)} min): cinemas may be showing it now.");
+                    later($"Added {f.Title} ({(int)(f.Seconds / 60)} min): "
+                          + (f.Rotation ? "cinemas may be showing it now." : "picked at the projector only."));
                 }).CallDeferred();
             });
             return $"Looking up {CinemaVideo.Title(link)}…";
         }
-        return "Usage: /cinema pool  |  /cinema pool add <link>  |  /cinema pool remove <n>";
+        return "Usage: /cinema pool  |  /cinema pool add <link> [norotation] [title]  |  /cinema pool set <n> [rotation|norotation] [title]  |  /cinema pool remove <n>";
     }
 }

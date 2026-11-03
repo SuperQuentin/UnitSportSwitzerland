@@ -122,6 +122,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/World/StarField      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/SkyBodies      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -205,6 +213,9 @@ src/Interiors/Pinball/ quick --pinballcheck --systems ui
 src/Interiors/Pinball/ quick --zfightcheck Pinball
 shaders/pinball_display quick --pinballcheck --systems ui
 src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
+# #1324: table games: pool played by two bots through its rig (the solver and rules: unit tests), and over the net
+src/Interiors/Games/ quick --poolcheck --systems ui
+src/Interiors/Games/ net    tools/poolnetcheck.sh
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
@@ -424,6 +435,7 @@ src/Crafting/            net    tools/campfirecheck.sh
 src/Items/Fishing        net    tools/fishcheck.sh
 src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
+src/Items/Telescope      net    tools/telescopecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/Farming/             net    tools/farmnetcheck.sh
 src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
@@ -693,6 +705,12 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+# the holster, Alt + wheel and the wheel's zoom (#1369): the phone check drives them, the phone net check replicates them
+src/Items/Inventory      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/ItemController quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Core/PlayerInput     quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/Inventory      net    tools/phonenetcheck.sh
+src/Items/ItemController net    tools/phonenetcheck.sh
 src/Phone/               net    tools/phonenetcheck.sh
 src/Player/FootPlayer.Phone net  tools/phonenetcheck.sh
 # the Swiss match items (#478): fondue, smoke and alphorn between two clients
@@ -705,6 +723,11 @@ shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
+# the sword (#1371): moves, hits, dummies and bots between two clients
+src/Combat/Sword         net    tools/swordnetcheck.sh
+src/Combat/TrainingDummy net    tools/swordnetcheck.sh
+src/Player/FootPlayer.Sword net tools/swordnetcheck.sh
+src/Bots/BotHands        net    tools/swordnetcheck.sh
 # aura battles (#907): plan, cut on the beat, the server grades
 src/Combat/Aura          net    tools/auranetcheck.sh
 src/Player/FootPlayer.Aura net  tools/auranetcheck.sh
@@ -833,6 +856,7 @@ src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Playtest/Scenarios/Adv3 quick --playtest --playtest-smoke --world fixture --chunks fixture:flat --festival test --systems terrain,npcs,birds,physics,audio,network,sky,interiors,loot,occasions,ui,build,airports,farming,containers,snow,lifts,adventure --pois fixture --givers fixture --crevasses on --adventure-dir res://test_output/playtest/adv3
 # the playtest recorder (#844): a 20 s recorded session read back (trace, note, report, top view)
 src/Playtest/            quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Movie/ReplayWatch    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
@@ -995,6 +1019,7 @@ src/Adventure/Together/Fondue quick --fonduecheck --world fixture --systems ui,t
 src/Adventure/Together/Pot  quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/TogetherService.Pots quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Together/Stir quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Interiors/PotTables     quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
 src/Adventure/Rewards/Seals.cs quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
 
 # #1268 Versteckis: the offline check on the hamlet, the two-client game, the bot game; Rounds and FollowCam keep BR whole
@@ -1033,6 +1058,13 @@ src/Occasions/Festivals/FestivalService.Christmas quick  --christmascheck --fest
 src/Occasions/Festivals/Christmas/ net    tools/christmasnetcheck.sh
 src/Occasions/Festivals/FestivalService.Christmas net    tools/christmasnetcheck.sh
 tools/christmasnetcheck.sh    net    tools/christmasnetcheck.sh
+# #1373: the Zibelemaerit: four onion-market stalls (taste, buy), the Marktgang, the confetti fight's pay and cap (offline quick probe; server + two clients)
+src/Occasions/Festivals/Zibelemaerit/ quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Zibelemaerit/ net    tools/zibelenetcheck.sh
+src/Occasions/Festivals/FestivalService.Zibelemaerit net    tools/zibelenetcheck.sh
+tools/zibelenetcheck.sh    net    tools/zibelenetcheck.sh
 # #1351: the Escalade: the Marmite's pair, the soup pot, the Course's gates and pay (offline quick probe; server + two clients)
 src/Occasions/Festivals/Escalade/ quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
 src/Occasions/Festivals/FestivalCatalog.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
@@ -1040,6 +1072,29 @@ src/Occasions/Festivals/FestivalService.Escalade quick  --escaladecheck --escala
 src/Occasions/Festivals/Escalade/ net    tools/escaladenetcheck.sh
 src/Occasions/Festivals/FestivalService.Escalade net    tools/escaladenetcheck.sh
 tools/escaladenetcheck.sh    net    tools/escaladenetcheck.sh
+# #1357: the Fasnacht: Larven stall, Raeppli, Guggenmusik, Basel's Morgestraich (offline quick probe; server + two clients)
+src/Occasions/Festivals/Fasnacht/ quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalCatalog.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalService.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/Fasnacht/ net    tools/fasnachtnetcheck.sh
+src/Occasions/Festivals/FestivalService.Fasnacht net    tools/fasnachtnetcheck.sh
+tools/fasnachtnetcheck.sh    net    tools/fasnachtnetcheck.sh
+# #1358: the Sechseläuten: the purse, the bet on the Böögg, the light, the bang and the shares, the stage (offline quick probe; server + two clients)
+src/Occasions/Festivals/Sechselaeuten/ quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+shaders/sechse_flame quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Sechselaeuten/ net    tools/sechsenetcheck.sh
+src/Occasions/Festivals/FestivalService.Sechselaeuten net    tools/sechsenetcheck.sh
+tools/sechsenetcheck.sh    net    tools/sechsenetcheck.sh
+# #1355: the 1 August: the lampion, the stands, the lampion walk, the volleys, the lake show, the Höhenfeuer (offline quick probe; server + two clients)
+src/Occasions/Festivals/August1/ quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+shaders/hoehenfeuer quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/August1/ net    tools/august1netcheck.sh
+src/Occasions/Festivals/FestivalService.August1 net    tools/august1netcheck.sh
+tools/august1netcheck.sh    net    tools/august1netcheck.sh
 src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
 tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
 src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
@@ -1075,3 +1130,53 @@ src/Occasions/Festivals/Horn/   quick  --hornscheck --festival test --date 2027-
 src/Occasions/Festivals/FestivalService.Horn   net  tools/hornnetcheck.sh
 src/Occasions/Festivals/Horn/   net    tools/hornnetcheck.sh
 tools/hornnetcheck.sh           net    tools/hornnetcheck.sh
+# #1356: the Chalandamarz: the march beat, the Treichel rings graded by stamp, the loop's stations, the pay (offline quick probe; server + two clients)
+src/Occasions/Festivals/Chalanda/ quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Chalanda/ net    tools/chalandanetcheck.sh
+src/Occasions/Festivals/FestivalService.Chalanda net    tools/chalandanetcheck.sh
+tools/chalandanetcheck.sh    net    tools/chalandanetcheck.sh
+# #1372: the hidden crevasse's slot: fall, climb out, rescue, rope and haul (offline quick probe)
+src/Adventure/Together/CrevasseCheck quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNode quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/TogetherService.Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNetProbe net tools/crevassenetcheck.sh
+tools/crevassenetcheck.sh  net  tools/crevassenetcheck.sh
+src/Net/StaminaWatch net tools/crevassenetcheck.sh
+# #1394: Montreux Jazz: the quay's lake stage, the set's clock, Listening (a song heard pays at its end), the Encore (the crowd meter), the Jazz Night and the finale (offline quick probe; server + two clients)
+src/Occasions/Festivals/MontreuxJazz/ quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.MontreuxJazz quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.MontreuxJazz quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Concert/JazzSet quick  --concertcheck --systems ui
+src/Concert/JazzInstruments quick  --concertcheck --systems ui
+src/Occasions/Festivals/MontreuxJazz/ net    tools/montreuxnetcheck.sh
+src/Occasions/Festivals/FestivalService.MontreuxJazz net    tools/montreuxnetcheck.sh
+tools/montreuxnetcheck.sh    net    tools/montreuxnetcheck.sh
+
+# #1429: the regression net before a coordinate or rendering change (docs/notes/general/regression-net.md)
+# the far horizon at its LV95 corners across origin shifts; a GPX course drawn and run across shifts
+src/Terrain/HorizonLayer     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Terrain/HorizonCheck     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Gpx/                     quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+src/Core/OriginShifter       quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+# probes that existed without a row
+src/World/Traffic            quick  --trafficcheck --chunks fixture:junction
+src/World/LaneGraph          quick  --trafficcheck --chunks fixture:junction
+src/Birds/                   quick  --birdcheck --world fixture
+src/Birds/                   quick  --birdstrikecheck --world fixture
+src/Player/VoidProbe         quick  --voidcheck --world fixture
+src/Player/FootPlayer.cs     quick  --voidcheck --world fixture
+# the origin under load: probes that pass with a shift every 20 m (--originstress)
+src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --ride car,15 --world flat --originstress 20
+src/Core/OriginShifter       quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/WorldOrigin         quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --flycheck a320 --world flat --originstress 20
+# a shift every 200 m: at 20 the BNR32 spun five times in one of two runs (a shift twice a second at 160 km/h)
+src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
+src/Core/WorldOrigin         quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200

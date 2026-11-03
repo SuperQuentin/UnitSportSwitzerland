@@ -96,11 +96,11 @@ public sealed class DoorLink
     public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth, float? outsideHeight = null)
     {
         DoorKey.TryParse(e.Door, out var door);
-        var tileOrigin = origin.ToWorld(door.Tile.MinE, door.Tile.MaxN, 0);
+        var xf = origin.TileTransform(door.Tile);
 
         // the door spot stands 3 cm proud of the facade; the plane is the facade itself
         var outward = new Vector3(e.DoorOutX, 0, e.DoorOutZ).Normalized();
-        var sill = tileOrigin + new Vector3(e.DoorX, e.DoorY, e.DoorZ) - outward * 0.03f;
+        var sill = xf * new Vector3(e.DoorX, e.DoorY, e.DoorZ) - outward * 0.03f;
         var outside = Frame(sill, outward);
 
         var placement = InteriorManager.PlacementFor(layout, origin);

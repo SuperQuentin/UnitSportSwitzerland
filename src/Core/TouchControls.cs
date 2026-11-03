@@ -28,6 +28,12 @@ public partial class TouchControls : CanvasLayer
     private static TouchControls? _current;
 
     /// <summary>
+    /// A mode that freezes the walker through <see cref="UiFocus"/> but is played on these controls (bowling's
+    /// aim, #1353): the overlay stays while it holds the input. Null for none.
+    /// </summary>
+    public static object? Takeover { get; set; }
+
+    /// <summary>
     /// Hints name the on-screen controls (#1054, <see cref="InputDevice.Touch"/>): the overlay exists
     /// and no real pad is in hand. Menus too, though the overlay hides there.
     /// </summary>
@@ -245,7 +251,7 @@ public partial class TouchControls : CanvasLayer
         // holds it, so it counts as in game
         bool inGame = MouseCapture.Mode != Input.MouseModeEnum.Visible || MouseCapture.Disabled
             || DisplayServer.GetName() == "headless";
-        bool show = !_padInUse && inGame && !UiFocus.TextEntryActive && !TouchLayoutScreen.IsOpen;
+        bool show = !_padInUse && inGame && (!UiFocus.TextEntryActive || UiFocus.HeldOnlyBy(Takeover)) && !TouchLayoutScreen.IsOpen;
         if (show != Shown)
         {
             Shown = show;

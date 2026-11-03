@@ -60,7 +60,8 @@ public static partial class InteriorGenerator
             2 => ((-1, 0), (0, -1)),
             _ => ((0, -1), (1, 0)),
         };
-        double cx = h.E - tile.MinE - fp.Center.X, cz = tile.MaxN - h.N - fp.Center.Y;
+        var (hx, hz) = tile.Local(h.E, h.N);
+        double cx = hx - fp.Center.X, cz = hz - fp.Center.Y;
         double tx = cx * Ux + cz * Uz, tz = cx * V.X + cz * V.Z;
         (double X, double Z) P(double x, double z) => (ex.Item1 * x + ez.Item1 * z + tx, ex.Item2 * x + ez.Item2 * z + tz);
         (double X0, double Z0, double X1, double Z1) R(double x0, double z0, double x1, double z1)

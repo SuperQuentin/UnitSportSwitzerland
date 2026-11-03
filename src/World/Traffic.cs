@@ -2248,8 +2248,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     private Node3D Unit(ArrayMesh body, ArrayMesh lamps, float drawn = 0f)
     {
         var node = new AnimatableBody3D { SyncToPhysics = false };
-        node.AddChild(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial, VisibilityRangeEnd = drawn });
-        node.AddChild(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial, VisibilityRangeEnd = drawn });
+        node.AddChild(Styles.ZoomRanges.Track(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial, VisibilityRangeEnd = drawn }));
+        node.AddChild(Styles.ZoomRanges.Track(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial, VisibilityRangeEnd = drawn }));
         var box = body.GetAabb().Merge(lamps.GetAabb());
         node.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.GetCenter() });
         return node;

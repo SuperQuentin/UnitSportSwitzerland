@@ -3,6 +3,7 @@
 // style's shader for a role reads the same globals (docs/notes/styles/role-bodies.md).
 #ifndef COMMON_WORLD
 #define COMMON_WORLD
+#include "res://shaders/common/curvature.gdshaderinc"
 global uniform vec3 world_sun_dir;
 global uniform vec3 world_tint;
 global uniform vec3 world_sky;

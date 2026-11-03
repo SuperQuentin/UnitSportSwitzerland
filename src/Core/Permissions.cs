@@ -87,6 +87,23 @@ public static class Permissions
 
     internal static void SetServerAlcohol(int mode) => ServerAlcohol = Math.Clamp(mode, 0, 2);
 
+    /// <summary>The server's <c>--crevasses off|on</c> (#1372), as <c>Net/Arrival</c> carried it. Meaningless offline (always on).</summary>
+    public static bool ServerCrevasses { get; private set; } = true;
+
+    internal static void SetServerCrevasses(bool on) => ServerCrevasses = on;
+
+    /// <summary>
+    /// Hidden crevasses open under an unroped player on a glacier (#1372): the server allows them, not in a Battle Royale match,
+    /// and the player's <c>Settings › Gameplay › Crevasses</c> is on; a <c>--crevasses off|on</c> on this command line wins over the setting
+    /// (offline and checks).
+    /// </summary>
+    public static bool CrevassesOn => ServerCrevasses && !InMatch && (CmdArgs.Value("--crevasses")?.ToLowerInvariant() switch
+    {
+        "off" => false,
+        "on" => true,
+        _ => GameSettings.Current.Crevasses,
+    });
+
     internal static void SetServerBody(bool stamina, bool lift)
     {
         if (ServerStamina == stamina && ServerLift == lift) return;

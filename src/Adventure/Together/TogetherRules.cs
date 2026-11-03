@@ -1,3 +1,5 @@
+using UnitSport.Core;
+
 namespace UnitSport.Adventure.Together;
 
 /// <summary>
@@ -52,8 +54,7 @@ public static class TogetherRules
         foreach (var m in mates)
         {
             if (!m.Active || m.Down) continue;
-            double de = m.E - e, dn = m.N - n;
-            if (de * de + dn * dn > r2 || Math.Abs(m.Alt - alt) > VerticalRadius) continue;
+            if (GlobalPos.HorizontalDistanceSquared(m.E, m.N, e, n) > r2 || Math.Abs(m.Alt - alt) > VerticalRadius) continue;
             if (++count >= MaxCounted) return MaxCounted;
         }
         return count;

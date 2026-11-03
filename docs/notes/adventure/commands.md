@@ -98,6 +98,7 @@
 
 ## Together (#1266)
 
+- `--crevassecheck` (quick, `--world fixture --systems ui,terrain,physics,adventure`), `tools/crevassenetcheck.sh` (net), `--crevasses off|on`: `crevasses`.
 - `--togethercheck`, `--fonduecheck` (quick, `--world fixture --systems ui,terrain,physics,adventure`; `--rewardspots res://tools/lib/together_spots.txt`, `--fondueseed 2`), `tools/togethernetcheck.sh` (net).
 - Server: `--forfeits off|mild|all`, `--fondueseed N`, `--together-test` (opens `/rope test veteran|<milestone>`), `--together-day-seconds N`. Any peer: `--together-glacier E,N,R`.
 - Chat: `/rope [hands] <player>`, `/rope off`, `/fondue [start|raclette|sit|invite <p>|leave|forfeit 1-3]`.

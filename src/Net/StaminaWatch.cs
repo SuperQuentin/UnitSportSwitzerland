@@ -21,9 +21,13 @@ public partial class StaminaWatch : Node
     private readonly Node3D _players;
     private readonly Func<long, string>? _nameOf;
     private readonly Dictionary<long, (float From, bool Told)> _climbs = new();
+    private readonly Dictionary<long, double> _crevasse = new();
     private readonly List<long> _gone = new();
     private readonly HashSet<long> _seen = new();
     private double _next;
+
+    /// <summary>Falls into a hidden crevasse (#1372) the watch let pass since the server started.</summary>
+    public int CrevassesSeen { get; private set; }
 
     /// <summary>Climbs logged as implausible since the server started.</summary>
     public int Implausible { get; private set; }
@@ -50,6 +54,24 @@ public partial class StaminaWatch : Node
             if (adventure == null || !adventure.Active(peer)) continue;
             _seen.Add(peer);
             float y = (float)p.NetGlobal.Alt;
+            // down a hidden crevasse (#1372): ten metres under the ground and climbing out is the plan, not a cheat. Skipped for at
+            // most the rescue time (the owner is set on the lip after that); the climb counts again from where it comes out
+            if (p.PoseKind == FootPlayer.PoseCrevasse)
+            {
+                _crevasse.TryGetValue(peer, out double since);
+                if (since == 0)
+                {
+                    _crevasse[peer] = since = now;
+                    CrevassesSeen++;
+                    GD.Print($"[stamina] {_nameOf?.Invoke(peer) ?? peer.ToString()} is down a crevasse: not watched");
+                }
+                if (now - since < Adventure.Together.Crevasses.RescueSeconds + 5)
+                {
+                    _climbs[peer] = (y, false);
+                    continue;
+                }
+            }
+            else _crevasse.Remove(peer);
             bool climbing = p.PoseKind == FootPlayer.PoseWallClimb;
             if (!climbing)
             {
@@ -70,7 +92,7 @@ public partial class StaminaWatch : Node
         }
         foreach (long peer in _climbs.Keys)
             if (!_seen.Contains(peer)) _gone.Add(peer);
-        foreach (long peer in _gone) _climbs.Remove(peer);
+        foreach (long peer in _gone) { _climbs.Remove(peer); _crevasse.Remove(peer); }
         _gone.Clear();
         ServerStats.Ran("stamina", start);
     }

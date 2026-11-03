@@ -78,7 +78,7 @@ public static partial class HumanMeshBuilder
         var headwear = o[WearSlot.Head];
         // head clothes replace an occasion hat; a helmet replaces both
         if (helmet || fullFace || headwear != null) hat = Headwear.None;
-        var cover = fullFace || hat == Headwear.PumpkinHead ? HairCover.Head
+        var cover = fullFace || hat == Headwear.PumpkinHead || hat >= Headwear.LarveWaggis ? HairCover.Head
             : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape is GarmentShape.Beanie or GarmentShape.HardHat or GarmentShape.FeltHat ? HairCover.Hat
             : HairCover.None;
 

@@ -3,7 +3,7 @@
 
 # Adventure together: group yield, the shared pot, rope-up, mentors, the punch card
 
-Status: **built** (PR #1274). Tracking issue: #1266 (phase 3: #1270). Parts 1-7 and the checks are in; see "Built differently" at the end for what changed.
+Status: **built** (PR #1274; the hidden crevasse slot #1372). Tracking issue: #1266 (phase 3: #1270). Parts 1-7 and the checks are in; see "Built differently" at the end for what changed.
 
 One of four Adventure phase 3 plans, written in parallel: `adventure-errands` (errand givers,
 Postkarte errands, world events, canton reputation), `adventure-versteckis` (prop hunt),
@@ -584,7 +584,7 @@ declared in `TogetherProgress.cs`:
 
 ## Built differently
 
-- **Crevasses**: the plan's fallback only. A step onto a hidden strip breaks the bridge: unroped, the body is pushed back and left winded (stamina 0) with a blue slot marking the spot for 30 s; roped to a standing partner, a stumble. No slot with its own collision, no terrain-layer drop, no `PoseKind.Crevasse`: follow-up. Behind `Settings > Gameplay > Crevasses`.
+- **Crevasses** (#1372, `docs/notes/adventure/crevasses.md`): built in full. The first build (#1266) shipped only the stumble and winded fallback; the slot is now real: a `CrevasseNode` with its own collision layer, the terrain layer out of the owner's mask while inside, `PoseKind` 9 (`PoseCrevasse`) replicated, `StaminaWatch` skipping it, the climb out, the 60 s rescue. Differences from the text above: roped, the partner does not stop the fall at the lip but the rope holds it 3 m under it (it runs over the lip) and the partner hauls with the held E, which makes the "remote sees the rescue" visible; the strip's heading is the cell's hash (the pure function has no slope); the slot opens on the strip's line under the body and is 14 m long. Behind `Settings > Gameplay > Crevasses` and the server's `--crevasses off|on` (`Arrival.Rules`).
 - **VR**: the grip gestures (`XrHandHold`, gripping the rope, the wheel, a real fork) are not built; VR reaches every action through the pad route (`XrPad`). Rows in `xr/vr-action-map` say so.
 - **Server and campfires**: `PlacedObjects.Instance` is client-only, so the server's `TogetherService` takes its placed objects from `PlacedSource` (set by `ServerWorld`).
 - **Test seams**: `--together-glacier E,N,R` (a pretend glacier), `--together-test` (server: `/rope test veteran|<milestone>`), `--together-day-seconds`, `--fondueseed`, `--forfeits`.

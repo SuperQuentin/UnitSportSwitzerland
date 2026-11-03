@@ -542,7 +542,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
     {
         DoorKey.TryParse(e.Door, out var k);
-        return Origin!.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0) + new Vector3(e.DoorX, e.DoorY, e.DoorZ);
+        return Origin!.TileTransform(k.Tile) * new Vector3(e.DoorX, e.DoorY, e.DoorZ);
     }
 
     /// <summary>The doorway in the interior's wall, world space.</summary>
@@ -941,9 +941,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// </summary>
     public string? OutsideDoorInReach(FootPlayer player) => OutsideEntry(player)?.Key.ToString();
 
-    /// <summary>The door <see cref="OutsideDoorInReach(FootPlayer)"/> names, as the index has it (its outline, #1286).</summary>
-    private DoorIndex.Entry? OutsideEntry(FootPlayer player) =>
-        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside);
+    /// <summary>
+    /// The door <see cref="OutsideDoorInReach(FootPlayer)"/> names, as the index has it (its outline, #1286); none
+    /// when a seat in reach is nearer than it (a venue's terrace stands at its own door, #1292, #1385: E sits there).
+    /// </summary>
+    private DoorIndex.Entry? OutsideEntry(FootPlayer player)
+    {
+        if (DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside) is not { } e) return null;
+        if (player.SitInReach() is { } seat)
+        {
+            var at = player.GlobalPosition;
+            if (new Vector2(seat.Hip.X - at.X, seat.Hip.Z - at.Z).Length() < new Vector2(e.World.X - at.X, e.World.Z - at.Z).Length()) return null;
+        }
+        return e;
+    }
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
@@ -1007,8 +1018,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         BuildingKey.TryParse(l.Key, out var key);
         var tile = key.Tile;
-        var tileOrigin = origin.ToWorld(tile.MinE, tile.MaxN, 0);
-        var at = tileOrigin + new Vector3(l.CenterX, 0, l.CenterZ);
+        var at = origin.TileTransform(tile) * new Vector3(l.CenterX, 0, l.CenterZ);
         return new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(at.X, InteriorBaseY, at.Z));
     }
 
@@ -1071,9 +1081,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             var tile = await Source.LoadBuildingsAsync(k.Tile);
             if (tile == null || k.Index < 0 || k.Index >= tile.Buildings.Count
                 || BuildingTypes.For(tile).Boxes[k.Index] is not { } box) return;
-            var origin = Origin.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0);
+            var xf = Origin.TileTransform(k.Tile);
             var b = tile.Buildings[k.Index];
-            _boxes[plan] = new BuildingSounds.Occupied(origin + new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
+            _boxes[plan] = new BuildingSounds.Occupied(xf * new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
                 box.AxisU, box.Width / 2, box.Depth / 2, 0);
         }
         catch (Exception e) { GD.PushWarning($"[interior] box of {plan}: {e.Message}"); }
@@ -1143,6 +1153,20 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return best;
     }
 
+    /// <summary>
+    /// What E acts on now when the floating line says it (the bar's own rows aside), its key tag cut off, or null:
+    /// the phone's overlay makes its button from it (#1353, <c>ClientWorld.Prompts</c>).
+    /// </summary>
+    public string? Floating { get; private set; }
+    private string? _floatingRaw;
+
+    /// <summary>"[E] Open the door" without its "[E] ": the overlay's button names the key itself.</summary>
+    private static string Untagged(string text)
+    {
+        string tag = InputHints.Tag(PlayerInput.InteractMount) + " ";
+        return text.StartsWith(tag, StringComparison.Ordinal) ? text[tag.Length..] : text;
+    }
+
     private void UpdatePrompt(double delta)
     {
         if (_prompt == null) return;
@@ -1160,6 +1184,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
             hit = Interacting(p, out outranks);
         PointOutline(hit, outranks);
+        string? floatingNow = hit is { InBar: false } shown ? shown.Text : null;
+        if (floatingNow != _floatingRaw)
+        {
+            _floatingRaw = floatingNow;
+            Floating = floatingNow == null ? null : Untagged(floatingNow);
+        }
         if (hint) return;
         // a bar row's words are in the prompt bar (ClientWorld.Prompts), from the same call
         string? text = hit is { InBar: false } floating ? floating.Text : null;
@@ -1248,10 +1278,21 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (problems.Count > 0)
             GD.PushWarning($"[interior] {keyText}: {string.Join("; ", problems.Take(3))}");
 
+        // Only a cache, and every writer stores the same plan. Games sharing one user:// (a check's
+        // clients, a server beside its client) plan a building at once: a shared ".part" was open
+        // in another process, and the throw took the caller's plan with it (#1401).
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        string tmp = path + ".part";
-        await File.WriteAllTextAsync(tmp, layout.ToJson());
-        File.Move(tmp, path, overwrite: true);
+        string tmp = $"{path}.{Guid.NewGuid():N}.part";
+        try
+        {
+            await File.WriteAllTextAsync(tmp, layout.ToJson());
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Windows refuses to replace a file another game is reading: it holds the same plan
+            try { File.Delete(tmp); } catch (IOException) { }
+        }
         return layout;
     }
 }
@@ -1475,6 +1516,7 @@ public partial class InteriorNode : Node3D
         AddStaff(node);   // a venue's clerk and bartender (#1235)
         AddPinballs(node, material);   // a venue's pinball machines, each a table to play (#1325)
         AddLaneRigs(node, material);   // a bowling centre's pins, pinsetters and hood balls (#1323)
+        AddTableRigs(node);   // pool tables, dartboards, table football, the arcade's games (#1324, #1326)
         AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
         VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
         Patrons.VenuePatrons.AddTo(node); // its guests at the tables, the machines, in the queues and the halls (#1244)

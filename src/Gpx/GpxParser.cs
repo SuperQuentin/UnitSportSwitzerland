@@ -227,7 +227,7 @@ public static class GpxParser
 
         for (int i = 0; i < n; i++)
         {
-            var (e, nn) = SwissProjection.ToLv95(lats[i], lons[i]);
+            var (e, nn) = SwissGeodesy.ToLv95(lats[i], lons[i]);
             if (i > 0)
                 distance += Math.Sqrt((e - prevE) * (e - prevE) + (nn - prevN) * (nn - prevN));
             prevE = e;

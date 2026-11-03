@@ -10,8 +10,8 @@
 - **What people see**: `ArmHold` (an arm override made of bones, from the book and both bodies' replicated positions) and `RopeNode` (one shared tube mesh stretched by its transform; the sag is a shader instance uniform). Nothing rebuilds a mesh.
 - **Two-player routes** (`TogetherService.Routes`): a leg-up (crouch facing a wall, the partner jumps for a free 2.6 m), the two-handle gate (`GateMeshes`, `AskHandle`/`ServeHandle`, both wheels within 1.5 s), `SealKind.Roped` chests (a roped pair within 8 m).
 
-## Crevasses (built as the plan's fallback)
+## Crevasses
 
-`Crevasses` (pure, tier 0): 12 m cells of glacier cover, 4 % hold a hidden strip 1.5 m wide. `TogetherService.Crevasses` is owner-side only, behind `Settings › Gameplay › Crevasses`: a step onto a strip breaks the snow bridge. Roped to a partner who stands, the rope catches it (a stumble and the zip, no harm). Unroped, the body is pushed back from the lip and left winded (stamina 0); a `CrevasseNode` (the opening, shown 30 s) marks it. **Not built**: the slot with its own collision and a terrain-layer drop on the body, and the `PoseKind.Crevasse` flag; they stay a follow-up (the plan's risky part). Nothing is sent: the server never sees a crevasse.
+Hidden glacier crevasses (the slot, the fall, the rope catch, the climb out, `PoseKind` 9) are in `crevasses`. `Crevasses` (pure, tier 0): 12 m cells of glacier cover, 4 % hold a hidden strip 1.5 m wide.
 
 `--together-glacier E,N,R` (any peer) pretends glacier cover in a box, for checks on the fixture.

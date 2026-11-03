@@ -25,6 +25,6 @@ Chests, edelweiss, cairns and trials are untouched.
 
 ## Checks
 
-- Tier 0: `TogetherRulesTests`, `TogetherProgressTests`, `CrevassesTests`, and the others named in the other notes.
+- Tier 0: `TogetherRulesTests`, `TogetherProgressTests`, `CrevassesTests` (see `crevasses`), and the others named in the other notes.
 - Quick: `--togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt` and `--fonduecheck ...` (see `links`, `fondue`).
 - Net: `tools/togethernetcheck.sh` (Lea and Tom): the party, hands seen on the remote peer, the follow with no input, a fondue at a campfire, the forfeit line on the other peer, a seeded mentor, and a Battle Royale lobby breaking the link. `--together-test` on that server opens `/rope test veteran` and `/rope test <milestone>`.

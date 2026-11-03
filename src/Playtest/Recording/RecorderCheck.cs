@@ -10,6 +10,8 @@ namespace UnitSport.Playtest.Recording;
 /// places a car, drops a scripted note, ends the session after 20 s and reads the bundle back: the
 /// trace has the player and the car where the scenario put it, the note has its top view (and its
 /// screenshot, with a screen), report.md lists both, and <c>--topview</c>'s drawing works on it.
+/// The playtest panel confirms the note and the end (#1383), pictured with a screen in
+/// <c>test_output/playtest/recordcheck_{note,ended}{,_card}.png</c>.
 /// </summary>
 public partial class RecorderCheck : Node
 {
@@ -55,6 +57,10 @@ public partial class RecorderCheck : Node
         var cars = director.Placed().Where(IsInstanceValid).Select(v => (Name: v.Name.ToString(), At: v.Global)).ToList();
         int note = _recorder.Note("scripted note: the car looks fine", "check", NoteTaker.Grab(GetViewport()));
         Expect(note > 0, "a note is taken");
+        var panel = director.GetNodeOrNull<PlaytestPanel>(PlaytestPanel.NodeName);
+        await Picture(panel, "recordcheck_note");
+        Expect(panel != null && panel.Confirmation.Contains($"Note {note} saved", StringComparison.Ordinal)
+            && panel.Confirmation.Contains("Recording", StringComparison.Ordinal), $"the panel confirms the note: {panel?.Confirmation}");
         // with a screen: the live top view over the game, kept as a picture to look at
         if (DisplayServer.GetName() != "headless" && _recorder.GetNodeOrNull<TopViewOverlay>("TopViewOverlay") is { } overlay)
         {
@@ -68,7 +74,10 @@ public partial class RecorderCheck : Node
         await Wait(14);   // the note's top view waits for the 10 s after it
         bool notePicture = File.Exists(Path.Combine(_recorder.Dir, $"notes/{note:000}_top.png"));
         Expect(notePicture, "the note's top view is drawn 10 s after it");
-        await _recorder.Stop();
+        await director.EndSession();   // as the panel's End session button does
+        await Picture(panel, "recordcheck_ended");
+        Expect(panel != null && panel.Confirmation.Contains("session ended", StringComparison.Ordinal)
+            && panel.Confirmation.Contains(_recorder.ReportPath, StringComparison.Ordinal), $"the panel says the session ended and where the report is: {panel?.Confirmation}");
 
         string dir = _recorder.Dir;
         var reader = new TraceReader(dir);
@@ -109,6 +118,22 @@ public partial class RecorderCheck : Node
         }
         catch (Exception e) { Expect(false, $"--topview: {e.Message}"); }
         Done();
+    }
+
+    /// <summary>A few frames for the panel to refresh; with a screen, the panel open then its card, as pictures.</summary>
+    private async Task Picture(PlaytestPanel? panel, string name)
+    {
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (panel == null || DisplayServer.GetName() == "headless") return;
+        foreach (bool open in new[] { true, false })
+        {
+            panel.Show(open);
+            for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            string png = Path.Combine(PlaytestDirector.Root, "test_output", "playtest", name + (open ? "" : "_card") + ".png");
+            Expect(GetViewport().GetTexture().GetImage().SavePng(png) == Error.Ok, $"pictured ({png})");
+        }
+        panel.Show(true);
     }
 
     private void Done()

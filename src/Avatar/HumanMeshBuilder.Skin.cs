@@ -14,7 +14,7 @@ namespace UnitSport.Avatar;
 /// </remarks>
 public readonly record struct FigureLook(HumanPalette Palette, bool Legs = true, bool Helmet = false,
     Headwear Hat = Headwear.None, bool Body = true, bool Head = true, bool FullFace = false, bool Point = false,
-    bool Pedalling = false)
+    bool Pedalling = false, bool Fist = false)
 {
     /// <summary>Whether it is built for a lit style (<see cref="HumanMeshBuilder.SmoothFigures"/>): read when the look is made.</summary>
     public bool Smooth { get; init; } = HumanMeshBuilder.SmoothFigures;
@@ -131,6 +131,7 @@ public static partial class HumanMeshBuilder
     {
         var r = RestRig;
         if (look.Point) r = r with { PointDirR = (r.WristR - r.ElbowR).Normalized() };
+        if (look.Fist) r = r with { Fist = true };   // a sword in the hand (#1371): both hands built closed
         // a pedalling foot points straight ahead along its pedal (PoseCyclist)
         if (look.Pedalling) r = r with { ToeL = r.AnkleL + PedalToe, ToeR = r.AnkleR + PedalToe };
         return r;

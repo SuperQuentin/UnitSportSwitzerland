@@ -28,7 +28,9 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `arcades` — #1240: `TryArcade` (one dark hall in the lane frame, service strip at the back, mall cap 32 m), prize counter with a clerk, machines by the door, big machines on the side walls, pinball row, whole islands of uprights spread over a grid, air hockey; pieces in `InteriorMeshBuilder.Arcade`; `--arcadecheck`
 - `pinball` — #1325: real pinball sizes and conventions (playfield 51 x 107 cm at 6.5°, 3 in flippers, inlanes/outlanes, slings, shots, rules vocabulary, display eras), the four original tables, sources; the solver/rules/tables in `src/Interiors/Pinball/`
 - `pinball-play` — #1325: the playable machines: pure core (solver tuning, shot layout), the cabinet (shared meshes, nodes, lamps, era displays), the client-run table with the server mirroring the rules from the events, the turn handed over by the log, controls on three devices, `/pinball`, checks
+- `table-games` — #1324, #1326: pool, darts, table football and the arcade's games on one server-owned framework (`TableGames`, seats, turn and live games, bots, `GameCatalog`, `TableGamePlay`)
 - `venue-looks` — #1250: signs by kind (neon, `PlankSign`, awning valance), whole halls up to 20 m blind with `HallFront` (glass, canopy, posters, big word near the roof), cat slideshow, fuller foyers/arcades (`InteriorGenerator.Fill`), billiard halls, dining kitchens carved and big rooms split, auditorium speakers and the picture-coloured beam, the projection POC and `--projectionperf`
+- `venue-own-door` — #1292: every dining venue and shop unit its own street door (`DoorSpot.Unit`, `OwnDoors`, `StreetUnits`), wide shops cut into ~8 m units, the guest room walled to its front, the glazed front (`VenueFront`, `shop_glass`, `room_behind` include), windows at the bays, the WC pair
 - `terraces` — #1243: `VenueTerraces` lays bistro sets, parasols or an awning, planters and a menu board in front of dining venues (OSM outdoor_seating or odds), 1.5 m clear of the carriageway, on level ground; client-only collision on the trees' layer; MeshScratch's half turn; `--terracecheck`, `--terracelog`
 - `venue-patrons` — #1244: decoration guests (`VenuePatrons`) at tables, stools, machines, queues, settees, bar games, dance floors, showing halls and terraces; spots off the furniture (`PatronSpots`), a shared-clock schedule by venue and hour (`PatronSchedule`), changes only out of view, a hall's audience only while nobody is in it, 32 skinned and the rest still; `--patronhour`, `--enter`
 - `dining` — #1242: `DiningUnits` hands each dining venue of a solid a ground-floor room (shop units under flats, a house's living room) and its kitchen; kinds by type, cuisine and name; `DiningLayout` (bar by the kitchen door, Stammtisch, pizza oven, pastry case, counters, games by odds, offset table grids); pieces take their looks from their room; `--diningcheck`, `--venuedoors`
@@ -56,6 +58,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `runtime` — Runtime: (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers build arrays, main thread...
 - `coarse-tiles` — Coarse tiles: every `.terr` has a `.terrc` companion — the same grid point-decimated at stride 10 (51x51, 5.2 KB...
 - `far-horizon` — Far horizon: (`HorizonLayer`, `horizon.bin`, `tools/TerrainFormat/HorizonFormat.cs`): every tile decimated to a 100...
+- `height-format-v3` — Tile height format v3 (#1399): the same `.terr` over -50..4900 m (7.55 cm), v2 (0..4700 m) still read; one encoding per region (`ChunkFormat.Use`/`Adopt`, manifest `formatVersion`), `HeightEncoding`, what is and is not affected
 - `stutter-main-thread-commit-problem` — Stutter is a main-thread commit problem, and every commit is now cheap
 - `build-cancellation` — Build cancellation: (`ChunkState.Cts`/`Generation`): every `source.Load*Async` gets the tile's token and the worker...
 - `view-cone-priority` — The load queue is `ring × view weight`: on-screen tiles first, from the live camera's cone (FOV, 16 sectors, cheap re-sort)
@@ -76,6 +79,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `perf-static-city` — what a city's static things cost (#553): CPU-bound frames, buildings 1.1–1.6 ms of GPU, the dormant layer ~0.3 ms, shop signs 1 300 draws → drawn to 200 m; tiles past the building/road ring shed them (`TileUnfurnished`)
 - `occlusion-culling` — buildings as occluders near the ground (#553): 125 m building cells round the camera, box occluders inset 0.5 m for buildings that fill their plan box, cells only under 40 m above ground, off in VR and during a sightline cut
 - `perf-ring-key` — `EvaluateRings` compares its inputs in `RingKeyChanged()` (no string key); a new desired-set input goes there
+- `loading-cpu` — Loading must not starve the PC (#1381): desktop build cap `Max(2, cores-2)`, BelowNormal `BuildScheduler` threads, loading-screen frame cap, cache trim off the write path
 
 ## Commands
 

@@ -137,8 +137,11 @@ public static class CinemaVideo
         return $"split[a][b];[a]{left},{unsqueeze},{fit}[l];[b]{right},{unsqueeze},{fit}[r];[l][r]hstack";
     }
 
-    /// <summary>A film a hall can be showing when the cinema is first seen: its title, its link, its length in seconds.</summary>
-    public readonly record struct Film(string Title, string Link, double Seconds);
+    /// <summary>
+    /// A film a hall can be showing when the cinema is first seen: its title, its link, its length in seconds; out of the
+    /// halls' rotation (<paramref name="Rotation"/> false, a server's list only, #1367) it is only picked at the panel.
+    /// </summary>
+    public readonly record struct Film(string Title, string Link, double Seconds, bool Rotation = true);
 
     /// <summary>
     /// The open films every cinema can be showing (#1298, the owner's: "free open films"): Blender's open movies, CC-BY,

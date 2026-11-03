@@ -212,6 +212,8 @@ public static class ShopTables
         {
             L(ItemId.Camera, 0.75f, 1, 3), L(ItemId.Gps, 0.6f, 1, 2), L(ItemId.Radio, 0.6f, 1, 2),
             L(ItemId.Electronics, 0.9f, 3, 10), L(ItemId.CopperWire, 0.7f, 3, 10), L(ItemId.CarBattery, 0.3f, 1, 2),
+            // the telescope (#1440), appended: a slot's index is its ledger key
+            L(ItemId.Telescope, 0.35f, 1, 1),
         },
         [ShopType.GunShop] = new[]
         {

@@ -23,6 +23,10 @@ public partial class TogetherService
         public FootPlayer? PartnerBody;
         public float RopeLen = LinkBook.RopeLength;
         public bool Hauled, Hanging;
+        /// <summary>A crevasse's roped fall is held: the rope's length stays what the catch set until the body is out (#1372).</summary>
+        public bool Crevasse;
+        /// <summary>Where that rope runs over the lip (the break, on the surface): the fall hangs from here, not from the partner.</summary>
+        public Vector3 Lip;
         public StaminaCompany Company;
         public float DropCheck;
         public Func<(Vector3 Wish, bool Run), (Vector3 Wish, bool Run)> TetherFn = null!;
@@ -83,7 +87,7 @@ public partial class TogetherService
         if (Links.ModeOf(self) != LinkMode.Rope || !me.IsOnFloor()) return 0;
         return Hangs(Links.LeaderOf(self)) ? Links.LeaderOf(self) : Hangs(Links.FollowerOf(self)) ? Links.FollowerOf(self) : 0;
 
-        bool Hangs(long other) => other != 0 && Body(other) is { } b && b.PoseKind is FootPlayer.PoseAir or FootPlayer.PoseFall
+        bool Hangs(long other) => other != 0 && Body(other) is { } b && b.PoseKind is FootPlayer.PoseAir or FootPlayer.PoseFall or FootPlayer.PoseCrevasse
             && b.GlobalPosition.Y < me.GlobalPosition.Y - 1.5f;
     }
 
@@ -154,13 +158,28 @@ public partial class TogetherService
         // crouched still while linked: a step offered to the partner (a leg-up)
         Offer(peer, Crouching(body, own: body == Me?.Invoke()) && body.IsOnFloor() && body.Velocity.Length() < 0.4f);
         // a rope that caught a fall: back on the floor, the rope's full length again
-        if (body.IsOnFloor() || climbing)
+        if ((body.IsOnFloor() || climbing) && !o.Crevasse)
         {
             if (o.Hanging) GD.Print($"[together] {(climbing ? "climbing" : "standing")} again off the rope");
             o.Hanging = false;
             if (!o.Hauled) o.RopeLen = LinkBook.RopeLength;
         }
-        else if (o.Hanging && o.Hauled) o.RopeLen = Mathf.Max(1.2f, o.RopeLen - HaulSpeed * dt);
+        else if (o.Hanging && o.Hauled) o.RopeLen = Mathf.Max(o.Crevasse ? 0f : 1.2f, o.RopeLen - HaulSpeed * dt);
+    }
+
+    /// <summary>A roped fall into a crevasse: the rope holds it <see cref="Crevasses.CatchDepth"/> under the lip, until <see cref="UnpinCrevasseRope"/>.</summary>
+    private void PinCrevasseRope(long peer, Vector3 lip)
+    {
+        var o = OwnedFor(peer);
+        o.Crevasse = true;
+        o.Lip = lip;
+        o.RopeLen = (float)Crevasses.CatchDepth;
+        o.Hauled = false;
+    }
+
+    private void UnpinCrevasseRope(long peer)
+    {
+        if (_owned.TryGetValue(peer, out var o)) o.Crevasse = false;
     }
 
     /// <summary>Hauled up the rope this fast, m/s.</summary>
@@ -186,7 +205,8 @@ public partial class TogetherService
         bool partnerHolds = pb.PoseKind == FootPlayer.PoseStride && pb.RideKindId == 0
             || pb.PoseKind == FootPlayer.PoseWallClimb && pb.WorldVelocity.Length() < 0.5f;
         if (!partnerHolds) return (v, false);
-        var anchor = pb.GlobalPosition + Vector3.Up * HarnessHeight;
+        // down a crevasse the rope runs over the lip: the body hangs from there, the partner holds the other end
+        var anchor = (o.Crevasse ? o.Lip : pb.GlobalPosition) + Vector3.Up * HarnessHeight;
         var d = body.GlobalPosition + Vector3.Up * HarnessHeight - anchor;
         float dist = d.Length();
         if (dist <= o.RopeLen || dist < 1e-3f) return (v, o.Hanging);

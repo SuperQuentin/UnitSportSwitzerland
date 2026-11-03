@@ -26,6 +26,11 @@ public partial class UpdatePrompt : Node
     /// <summary>The release list, kept once it holds a release newer than this build.</summary>
     private static List<UpdateInfo.Release>? _pending;
 
+    /// <summary>Every release of the list once GitHub answered, newer than this build or not (the "What's new" notes, #1413).</summary>
+    public static IReadOnlyList<UpdateInfo.Release>? Releases { get; private set; }
+    /// <summary>Raised when <see cref="Releases"/> arrives.</summary>
+    public static event Action? Listed;
+
     /// <summary>The newest release's tag when it is newer than this build, else null.</summary>
     public static string? Available { get; private set; }
     /// <summary>Raised with the tag when the check finds a newer release.</summary>
@@ -50,7 +55,7 @@ public partial class UpdatePrompt : Node
     private Task? _install;
     private UpdatePackage.Staging? _staging;
 
-    private static string CurrentVersion =>
+    public static string CurrentVersion =>
         CmdArgs.Value("--fakeversion") ?? (string)ProjectSettings.GetSetting("application/config/version", "");
     private static bool AutoAccept => CmdArgs.Has("--updateaccept");
 
@@ -82,6 +87,8 @@ public partial class UpdatePrompt : Node
                 return;
             }
             var releases = UpdateInfo.ParseList(body.GetStringFromUtf8()).ToList();
+            Releases = releases;
+            Listed?.Invoke();
             var latest = UpdateInfo.Latest(releases);
             if (latest == null || !UpdateInfo.IsNewer(latest.Tag, CurrentVersion)) return;
             GD.Print($"[update] {latest.Tag} is out (this build is v{CurrentVersion})");

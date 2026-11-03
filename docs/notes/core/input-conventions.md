@@ -30,7 +30,8 @@ with patches, so check a game before quoting it as a hard fact.
   - Ctrl / C: crouch.
   - Shift: sprint.
   - MMB: ping.
-  - Wheel: cycles slots.
+  - Wheel: cycles slots in those games; here (#1369) the plain wheel zooms the third-person camera (Genshin) and
+    **Alt + wheel** cycles slots, because Shift is sprint and the old Shift + wheel fought it.
   - Numbers: slots, in screen order.
   - Inside a menu, Shift / Ctrl / Alt + click are quick-transfer modifiers.
 - **Hold or tap.**

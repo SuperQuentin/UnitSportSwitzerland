@@ -212,7 +212,8 @@ else if (args.Contains("--rewrite"))
         SkipRewritten: args.Contains("--skip-rewritten"),
         SitgSigns: args.Contains("--no-sitg") ? null : Path.Combine(temp, "sitg_signs.tsv"), Places: Path.Combine(chunks, "places.json"),
         GantryFacts: Path.Combine(temp, "gantry_facts.tsv"), Gantries: !args.Contains("--no-gantries"),
-        NewJunctions: ArgValue("--junctions") != "old", WriteJunctions: ArgValue("--junctions") is null or "write"), Console.WriteLine);
+        NewJunctions: ArgValue("--junctions") != "old", WriteJunctions: ArgValue("--junctions") is null or "write",
+        KeepPlans: !args.Contains("--drop-plans")), Console.WriteLine);   // #1425: --drop-plans = the nationwide memory bound
     }
     catch (TileRewriter.AlreadyRewrittenException e)
     {

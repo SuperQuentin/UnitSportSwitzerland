@@ -47,6 +47,7 @@ public partial class SiteCranes : Node3D
         public float JibBottom;
         /// <summary>The pose drawn last frame.</summary>
         public CranePose Last;
+        public bool Posed;
         /// <summary>The pallet on its hook, drawn, its slings, and its load byte (−1: none).</summary>
         public Node3D? Carried, Slings;
         public int CarriedLoad = -1;
@@ -241,16 +242,21 @@ public partial class SiteCranes : Node3D
             CraneService.Hold? hold = null;
             var pose = service != null && service.PoseOf(c.Job, sim, hour, day, dt, out var held, out hold)
                 ? held : CraneMotion.Pose(c.Job, sim, hour, day);
+            // a crane at rest (or waiting on the clock) writes nothing: each write is an engine call (#1344)
+            if (!c.Posed || pose != c.Last)
+            {
+                c.Pivot.Rotation = new Vector3(0, pose.Yaw, 0);
+                c.Trolley.Position = new Vector3(0, c.JibBottom, -pose.Trolley);
+                // the hook hangs from the trolley, its height in the pivot's frame
+                float hookY = pose.HookY - c.Pivot.Position.Y;
+                c.Hook.Position = new Vector3(0, hookY, -pose.Trolley);
+                float ropeTop = c.JibBottom - 0.35f;
+                c.Rope.Position = new Vector3(0, ropeTop, -pose.Trolley);
+                c.Rope.Scale = new Vector3(1, Math.Max(0.05f, ropeTop - hookY), 1);
+                c.Load.Visible = pose.Loaded;
+                c.Posed = true;
+            }
             c.Last = pose;
-            c.Pivot.Rotation = new Vector3(0, pose.Yaw, 0);
-            c.Trolley.Position = new Vector3(0, c.JibBottom, -pose.Trolley);
-            // the hook hangs from the trolley, its height in the pivot's frame
-            float hookY = pose.HookY - c.Pivot.Position.Y;
-            c.Hook.Position = new Vector3(0, hookY, -pose.Trolley);
-            float ropeTop = c.JibBottom - 0.35f;
-            c.Rope.Position = new Vector3(0, ropeTop, -pose.Trolley);
-            c.Rope.Scale = new Vector3(1, Math.Max(0.05f, ropeTop - hookY), 1);
-            c.Load.Visible = pose.Loaded;
             Hang(c, pose, hold);
         }
     }

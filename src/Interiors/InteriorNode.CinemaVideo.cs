@@ -199,11 +199,14 @@ public partial class InteriorNode
         if (s.Projector != null) VideoOwned.Add(s.Projector);
         Bind(s);
 
-        // the sound from the screen, filling the hall as its surround speakers would
+        // the sound from the screen, filling the hall as its surround speakers would; a few metres into the hall, not on
+        // the screen, whose mesh and wall the occlusion rays would hit (heard muffled, as if behind a wall, #1365)
+        var into = s.Hall.GetCenter() - s.Picture.Position;
+        into.Y = 0;
         _videoSpeaker = new CinemaVideoSpeaker
         {
             Name = "VideoSound",
-            Position = s.Picture.Position,
+            Position = s.Picture.Position + into.LimitLength(3f),
             Spread = Math.Max(4f, new Vector2(s.Hall.Size.X, s.Hall.Size.Z).Length() / 2),
         };
         AddChild(_videoSpeaker);

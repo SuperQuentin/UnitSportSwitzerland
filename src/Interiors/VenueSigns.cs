@@ -82,26 +82,30 @@ public partial class VenueSigns : Node
     {
         if (Frame(d) is not { } frame) return null;
         float doorTop = Math.Max(2.1f, d.Height);
+        // a door with a glazed front (#1292): its name on the fascia over the glass, as wide as the front
+        bool front = VenueFront.Has(d);
         if (!Neon(v.Type))
         {
             if (VenueTerraces.HasAwning(v)) return null; // lettered on the valance
-            var plank = PlankSign.Make(Venues.NameOf(v), prop, maxWidth: Math.Max(2.4f, d.Width * 3f));
-            plank.Transform = frame.Translated(frame.Basis * new Vector3(0, doorTop + 0.15f + PlankSign.BoardH / 2, 0.07f));
+            var plank = PlankSign.Make(Venues.NameOf(v), prop, maxWidth: front ? d.Span - 0.4f : Math.Max(2.4f, d.Width * 3f));
+            float y = front ? d.FrontTop + VenueFront.FasciaH / 2 : doorTop + 0.15f + PlankSign.BoardH / 2;
+            plank.Transform = frame.Translated(frame.Basis * new Vector3(0, y, front ? 0.12f : 0.07f));
             return plank;
         }
         var root = new Node3D { Name = "VenueDress" };
-        var front = HallFront.ShapeOf(d);
-        if (front is { } shape)
+        var hall = HallFront.ShapeOf(d);
+        if (hall is { } shape)
         {
             var built = HallFront.Make(d, v, shape, prop);
             built.Transform = frame;
             root.AddChild(built);
         }
-        float nameY = front?.NameY ?? doorTop + 0.75f;
+        float nameY = hall?.NameY ?? (front ? d.FrontTop + VenueFront.FasciaH / 2 : doorTop + 0.75f);
         var sign = NeonSign.Make(Venues.NameOf(v), v.Type, v.Cuisine,
-            letterHeight: Venues.IsHall(v.Type) ? 0.6f : 0.42f,
-            maxWidth: front is { } f ? f.Width : Math.Max(3.2f, d.Width * 3.5f));
-        sign.Transform = frame.Translated(frame.Basis * new Vector3(0, nameY, 0.10f));
+            letterHeight: Venues.IsHall(v.Type) ? 0.6f : front ? 0.3f : 0.42f,
+            maxWidth: hall is { } f ? f.Width : front ? d.Span - 0.4f : Math.Max(3.2f, d.Width * 3.5f));
+        // over a fascia: far enough out that the tubes' glow behind them clears it
+        sign.Transform = frame.Translated(frame.Basis * new Vector3(0, nameY, front ? 0.20f : 0.10f));
         root.AddChild(sign);
         // a hall's own word, big (#1235): near the roof of a building that is all hall (#1250), else
         // high over its door. What tells a bowling centre from a warehouse across the car park.

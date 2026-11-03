@@ -316,7 +316,7 @@ public partial class RewardCheck : ChatProbe
         var g = Me!.Global;
         double de = spot.TargetE - g.E, dn = spot.TargetN - g.N;
         float yaw = (float)(Math.Atan2(de, dn) * 180 / Math.PI);
-        float pitch = (float)(Math.Atan2(spot.TargetAlt - (g.Alt + 1.6), Math.Sqrt(de * de + dn * dn)) * 180 / Math.PI);
+        float pitch = (float)(Math.Atan2(spot.TargetAlt - (g.Alt + 1.6), GlobalPos.HorizontalDistance(spot.TargetE, spot.TargetN, g.E, g.N)) * 180 / Math.PI);
         Svc.ReportPhoto(spot.Id, yaw + 90, pitch, 40);
         Expect(await Until(() => _photos.Any(p => p.Spot == spot.Id && !p.Taken), 3) && !Adv.Mine.Get(PhotosProgress.Section).Taken.Contains(spot.Id),
             "a photo aimed 90° off is not counted");
@@ -332,6 +332,7 @@ public partial class RewardCheck : ChatProbe
 
     private async Task Gadgets(RewardSpot chest)
     {
+        UnitSport.Core.GameSettings.Current.AutoHolster = false;   // the walk runs and idles: the holster is PhoneProbe's (#1369)
         int slot = Inventory.HotbarSize - 1;
         _items.Inventory.Put(slot, new ItemStack(ItemId.TreasureDetector, 1));
         _items.Inventory.Select(slot);
@@ -408,7 +409,7 @@ public partial class RewardCheck : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = Math.Sqrt(de * de + dn * dn);
+            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
             if (d < 0.3) break;
             double s = Math.Min(d, step);
             me.GlobalPosition += new Vector3((float)(de / d * s), 0.2f, (float)(-dn / d * s));

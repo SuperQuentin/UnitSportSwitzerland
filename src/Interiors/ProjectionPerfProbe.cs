@@ -34,7 +34,7 @@ public partial class ProjectionPerfProbe : Node3D
         var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, 18, 34, 9, BuildingKind.Commercial) } };
         Venues.Override = new List<VenueRecord>
         {
-            new("n1", VenueType.Cinema, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", "Town"),
+            new("n1", VenueType.Cinema, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, "", "Town"),
         };
         var layout = InteriorGenerator.Generate(tile, 0, null, null)!;
         Venues.Override = null;

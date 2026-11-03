@@ -642,6 +642,10 @@ public partial class ChatManager : Node
             case "pinball":
                 Show(Interiors.Pinball.PinballTables.Instance?.Command(rest, Interiors.InteriorManager.Instance?.Current?.Key, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "Pinball is not running.", ChatKind.Private);
                 return;
+            // pool, darts, table football, the arcade's games (#1324): list, step up, a bot, an action by numbers
+            case "games":
+                Show(Interiors.Games.TableGames.Instance?.Command(rest, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "The games are not running.", ChatKind.Private);
+                return;
             // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the player is in
             case "bowl":
                 Show(Interiors.BowlingLanes.Instance?.Command(1, rest, Interiors.InteriorManager.Instance?.Current?.Key, "You") ?? "Bowling is not running.", ChatKind.Private);
@@ -654,6 +658,11 @@ public partial class ChatManager : Node
             case "rope" or "fondue":
                 Show(Adventure.Together.TogetherService.Instance?.Command(Adventure.AdventureService.LocalPeer, verb, rest) is { } said
                     ? said.Length > 0 ? said : "Asked." : "Playing together needs the Adventure layer.", ChatKind.Private);
+                return;
+
+            // a training dummy for the sword (#1371): offline the one process is its own server
+            case "dummy":
+                Show(Combat.SwordService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "[dummy] Not available here.", ChatKind.Private);
                 return;
 
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
@@ -1071,6 +1080,11 @@ public partial class ChatManager : Node
                 if (Fight == null) ReplyTo(sender, "Fights are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId) ReplyTo(sender, "'/fight' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Fight.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "dummy":
+                if (sender == ConsolePeerId) ReplyTo(sender, "'/dummy' needs a body to put it in front of.", ChatKind.Error);
+                else ReplyTo(sender, GetNodeOrNull<Combat.SwordService>("../" + Combat.SwordService.NodeName)?.Command(sender, rest) ?? "[dummy] Not available here.", ChatKind.Private);
                 return;
 
             case "schwing":

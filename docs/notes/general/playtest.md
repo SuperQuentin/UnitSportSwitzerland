@@ -33,6 +33,10 @@ tools/playtest.sh last | report [dir] | topview [dir] ...   # the newest session
 3. **Retest**: `tools/playtest.sh retest`. A fix changes the covered files' hash, so its scenario
    turns stale and is due again; a FAILED one stays due until validated.
 
+- **One PR's scenarios, on real terrain** (#1292): `--playtest-only <id prefix>[,...]` keeps only the scenarios
+  whose id starts with one of them; with `--at E,N` and `--chunks <dir>` the run loads through the loading
+  screen like any play launch: `<godot> --path . -- --chunks D:/.../terrain_chunks --at 2499794.3,1117466.5
+  --playtest --playtest-batch --playtest-record --playtest-only pr1327`.
 - Debug builds only: `src/Playtest/**` and the `PLAYTEST` symbol exist only in the `Debug`
   configuration (the csproj), so exports never carry the server. It starts only with
   `--playtest`, offline, on `127.0.0.1:7801` (`--playtest-port N` otherwise; `.mcp.json` names 7801).
@@ -71,6 +75,21 @@ A static method returning `PlaytestScenario`, tagged `[PlaytestScenario("id", "T
   `FootPlayer.cs` makes the verdict stale on every player change.
 - `Course` when it needs one (`junction`, `hairpin`...), `Params` for knobs Claude may turn.
 - A feature PR whose look or feel no check can judge adds one (category `PR #N`).
+- `Flags`: launch flags the scenario needs, as `--flag value` pairs in one list. A game that lacks one is relaunched with it
+  (like `Course`; `PlaytestLedger.HasFlags`/`WithFlags`), so a scenario never fails for a missing system.
+
+### The Adventure phase 3 set (`adv3-*`, #1390)
+
+`src/Playtest/Scenarios/Adventure3Scenarios.cs` (helpers in `Adv3.cs`), category "Adventure phase 3": one scenario per phase 3
+feature (together hands, fondue, two crevasse scenarios, errands, world events, alcohol, Schwingen, flag swinging, alphorn, Steinstossen,
+fireworks, Fasnacht Luzern and Basel, Sechseläuten, Chalandamarz, 1 August, Zibelemärit, Escalade, Christmas market, Désalpe). They turn
+the matching sections of `tests/TO-TEST-BY-HUMAN.md` (which stay until a person has tested them) into a batch: `tools/playtest.sh`
+(or `retest`) plays them in one game. They share `Adv3.Flags` (the check-only festival `--festival test`, the adventure systems, the fixture
+POIs and givers, scratch progress in `test_output/playtest/adv3`), so the first one relaunches the game once. Each scenario sets the
+festival's date with `OccasionManager.OverrideDate`, the clock with `/time set`, gives items and Batzen, and stands the player at the spot.
+A stand-in Partner (peer 2, a body that stands still) replaces a friend where one is needed; what really needs a second client, the real
+map (glacier look, Höhenfeuer, lake fireworks, echoes, slopes and forest for the world events) or a headset says so in its text and stays
+in the TO-TEST list. Quick check: `--playtest --playtest-smoke ...` with the adv3 flags (`tools/lib/checkmap.txt`).
 
 ## Ledger
 

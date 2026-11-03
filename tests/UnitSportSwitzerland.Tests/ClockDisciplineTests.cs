@@ -125,6 +125,11 @@ public class ClockDisciplineTests
         ["src/Concert/ConcertService.Songs.cs"] = "presentation: /concert song reads where the setlist is on the shared clock the music plays to",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
         ["src/Occasions/Festivals/Fahnen/FahnenGame.cs"] = "presentation: the flag swinger's figures are judged against a drum that plays on the shared clock in real time, like the pogo's beat",
+        ["src/Occasions/Festivals/MontreuxJazz/JazzGame.cs"] = "presentation: the call's closing ring and the stamp of a clap are on the show's shared real clock (the light desk's, not the simulated one /speed scales), like the pogo's beat",
+        ["src/Occasions/Festivals/FestivalService.MontreuxJazz.cs"] = "clock: the set, its songs, the call and a clap's stamp are on the shared real clock the light desk plays the show on (beat = seconds x BPM / 60), not the simulated one /speed scales",
+        ["src/Playtest/Scenarios/Adventure3Scenarios.cs"] = "plumbing: the Montreux Jazz scenario's stand-in claps on the show's shared real clock, as the games' server does",
+        ["src/Occasions/Festivals/Chalanda/ChalandaGame.cs"] = "presentation: the march drum and the HUD's closing ring are on the shared server clock, and a press is stamped with it, like the pogo's beat",
+        ["src/Occasions/Festivals/FestivalService.Chalanda.cs"] = "clock: the march beat is the server's real clock (120 BPM), a ring's stamp is graded against it and checked for plausibility, not the simulated clock /speed scales",
         ["src/Occasions/Festivals/FestivalService.Fahnen.cs"] = "clock: a routine's start, its stamps and its settlement are on the server's real clock (the drum's beat, 96 BPM), not the simulated one /speed scales",
         ["src/Concert/PogoQte.cs"] = "presentation: the pogo QTE judges a press against the beat of the music as heard, which plays on the shared clock in real time",
         ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
@@ -177,6 +182,7 @@ public class ClockDisciplineTests
         ["src/World/Traffic.cs"] = "presentation: a car's age in the debug readout",
 
         // ---- calendar: the real date, on purpose ----
+        ["src/World/Satellites.cs"] = "plumbing: the satellites' elements are fetched again once they are a real day old: the age of a file on disk, not anything in the game (#1444)",
         ["src/Core/Calendar.cs"] = "calendar: the one reader of today's date for the occasions, the farm, the birds, fishing, shops and tonight's concert; --date or a film's date pins it (#924)",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",
         ["src/Loot/LootService.cs"] = "calendar: a building restocks once a real day (LootTables.RestockSeconds)",

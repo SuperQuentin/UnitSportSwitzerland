@@ -315,6 +315,7 @@ public static class WaterStage
         {
             foreach (var key in held.Keys)
                 if (key.E < column.Key - 1) held.TryRemove(key, out _);
+            bathy?.ReleaseBefore(column.Key - 1);   // survey kilometres: the same three columns
             Parallel.ForEach(column, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
             {
                 var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
@@ -415,36 +416,51 @@ public static class WaterStage
         var dry = written.SelectMany(id => Enumerable.Range(-1, 3).SelectMany(dy => Enumerable.Range(-1, 3).Select(dx => new TileId(id.E + dx, id.N + dy))))
             .Where(nb => region.Contains(nb) && !wetTiles.Contains(nb) && !written.Contains(nb)).Distinct()
             .OrderBy(t => t.E).ThenBy(t => t.N).ToList();
-        var cache = new Dictionary<TileId, ushort[]>();
-        ushort[] HeightsOf(TileId id)
+        // A written tile is read only for its four edges (8 KB), never kept whole: nationwide, whole
+        // grids cached here were 2 MB x 17,000 tiles and ran the pass out of memory (#1439).
+        var edgeCache = new Dictionary<TileId, ushort[][]>();
+        ushort[][] EdgesOfWritten(TileId id)
         {
-            if (cache.TryGetValue(id, out var h)) return h;
-            using var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)));
-            return cache[id] = ChunkCodec.Decode(fs).Heights;
+            if (edgeCache.TryGetValue(id, out var e)) return e;
+            ushort[] h;
+            using (var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)))) h = ChunkCodec.Decode(fs).Heights;
+            e = new ushort[4][] { new ushort[S], new ushort[S], new ushort[S], new ushort[S] };
+            for (int k = 0; k < S; k++)
+            {
+                e[0][k] = h[k];                  // row 0
+                e[1][k] = h[(S - 1) * S + k];    // row S-1
+                e[2][k] = h[k * S];              // column 0
+                e[3][k] = h[k * S + S - 1];      // column S-1
+            }
+            return edgeCache[id] = e;
         }
 
         foreach (var nb in dry)
         {
-            var mine = (ushort[])HeightsOf(nb).Clone();
+            ushort[] mine;
+            using (var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(nb)))) mine = ChunkCodec.Decode(fs).Heights;
             bool any = false;
             void Take(int c, int r, ushort v) { if (mine[r * S + c] != v) { mine[r * S + c] = v; any = true; } }
-            foreach (var w in written.Where(w => Math.Abs(w.E - nb.E) <= 1 && Math.Abs(w.N - nb.N) <= 1).OrderBy(t => t.E).ThenBy(t => t.N))
-            {
-                var theirs = HeightsOf(w);
-                int dx = w.E - nb.E, dy = w.N - nb.N; // dy +1: w lies north (its row S-1 is our row 0)
-                for (int k = 0; k < S; k++)
+            for (int wE = nb.E - 1; wE <= nb.E + 1; wE++)
+                for (int wN = nb.N - 1; wN <= nb.N + 1; wN++)
                 {
-                    if (dx == 1 && dy == 0) Take(S - 1, k, theirs[k * S]);
-                    else if (dx == -1 && dy == 0) Take(0, k, theirs[k * S + S - 1]);
-                    else if (dx == 0 && dy == 1) Take(k, 0, theirs[(S - 1) * S + k]);
-                    else if (dx == 0 && dy == -1) Take(k, S - 1, theirs[k]);
+                    var w = new TileId(wE, wN);
+                    if (!written.Contains(w)) continue;
+                    var th = EdgesOfWritten(w);   // top, bottom, left, right
+                    int dx = w.E - nb.E, dy = w.N - nb.N; // dy +1: w lies north (its row S-1 is our row 0)
+                    for (int k = 0; k < S; k++)
+                    {
+                        if (dx == 1 && dy == 0) Take(S - 1, k, th[2][k]);
+                        else if (dx == -1 && dy == 0) Take(0, k, th[3][k]);
+                        else if (dx == 0 && dy == 1) Take(k, 0, th[1][k]);
+                        else if (dx == 0 && dy == -1) Take(k, S - 1, th[0][k]);
+                    }
+                    // a diagonal neighbour shares one corner
+                    if (dx == 1 && dy == 1) Take(S - 1, 0, th[1][0]);
+                    else if (dx == -1 && dy == 1) Take(0, 0, th[1][S - 1]);
+                    else if (dx == 1 && dy == -1) Take(S - 1, S - 1, th[0][0]);
+                    else if (dx == -1 && dy == -1) Take(0, S - 1, th[0][S - 1]);
                 }
-                // a diagonal neighbour shares one corner
-                if (dx == 1 && dy == 1) Take(S - 1, 0, theirs[(S - 1) * S]);
-                else if (dx == -1 && dy == 1) Take(0, 0, theirs[(S - 1) * S + S - 1]);
-                else if (dx == 1 && dy == -1) Take(S - 1, S - 1, theirs[0]);
-                else if (dx == -1 && dy == -1) Take(0, S - 1, theirs[S - 1]);
-            }
             if (!any) continue;
 
             ushort qMin = ushort.MaxValue, qMax = 0;

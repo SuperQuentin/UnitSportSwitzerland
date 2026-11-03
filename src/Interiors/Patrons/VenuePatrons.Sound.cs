@@ -27,7 +27,7 @@ public partial class VenuePatrons
         public float Db = -80f, Target = -80f;
         public int Count;
         public Vector3 Sum;
-        public bool Dining, Lobby, Cafe, Bar, Arcade;
+        public bool Dining, Lobby, Hall, Cafe, Bar, Arcade;
         public Vector3? Counter, Tap, Cabinet;
     }
 
@@ -51,7 +51,8 @@ public partial class VenuePatrons
         }
         foreach (var (key, r) in _rooms)
         {
-            r.Target = r.Count == 0 ? -80f : MurmurOne + MurmurPerDoubling * MathF.Log2(r.Count);
+            // a cinema hall's audience is there only while its screen is on: silent through the showing (#1365)
+            r.Target = r.Count == 0 || r.Hall ? -80f : MurmurOne + MurmurPerDoubling * MathF.Log2(r.Count);
             // a terrace's murmur follows its guests; a room's stays in its middle
             if (key < 0 && r.Count > 0) r.Murmur.Position = r.Sum / r.Count + Vector3.Up;
             if (r.Count == 0) continue;
@@ -107,6 +108,7 @@ public partial class VenuePatrons
                 middle = new Vector3((rp.X0 + rp.X1) / 2, l.FloorY(piece.Floor) + 1.6f, (rp.Z0 + rp.Z1) / 2);
                 var type = rp.Type;
                 room.Lobby = type == RoomType.CinemaLobby;
+                room.Hall = type == RoomType.Auditorium;
                 room.Arcade = type == RoomType.ArcadeHall;
                 room.Cafe = type == RoomType.CafeRoom;
                 room.Bar = type is RoomType.BarRoom or RoomType.PubRoom or RoomType.ClubRoom or RoomType.Gaststube or RoomType.Concourse;

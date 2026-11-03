@@ -111,6 +111,30 @@ public sealed class FireworkShow
         return new FireworkShow(seed, duration, heading, list.OrderBy(s => s.T).ToArray());
     }
 
+    /// <summary>Seconds a player's own volley (the 1 August firework box) lasts.</summary>
+    public const double VolleySeconds = 40;
+
+    /// <summary>
+    /// A small show for one box of fireworks (#1355): 14 shells and a little Swiss cross over 40 s, 20-60 m out, 55-95 m high; from a seed alone like
+    /// <see cref="Plan"/>, so every peer that is told the seed and the start plays the same volley.
+    /// </summary>
+    public static FireworkShow Volley(int seed)
+    {
+        var rng = new Random(seed);
+        float heading = (float)(rng.NextDouble() * Math.Tau);
+        var list = new List<Shell>(16);
+        ShellKind[] kinds = [ShellKind.Peony, ShellKind.Chrysanthemum, ShellKind.Willow, ShellKind.Ring, ShellKind.Crossette];
+        for (int i = 0; i < 14; i++)
+        {
+            double side = (rng.NextDouble() * 2 - 1) * 30, depth = 20 + rng.NextDouble() * 40;
+            float east = (float)(Math.Sin(heading) * depth + Math.Cos(heading) * side);
+            float north = (float)(Math.Cos(heading) * depth - Math.Sin(heading) * side);
+            list.Add(new Shell(2.5 + i * 2.4 + rng.NextDouble() * 0.6, east, north, 55 + (float)rng.NextDouble() * 40, kinds[rng.Next(kinds.Length)], rng.Next(Colours)));
+        }
+        list.Add(new Shell(VolleySeconds - 4, (float)(Math.Sin(heading) * 40), (float)(Math.Cos(heading) * 40), 80, ShellKind.SwissCross, 0));
+        return new FireworkShow(seed, VolleySeconds, heading, list.OrderBy(s => s.T).ToArray());
+    }
+
     private static void Salvo(List<Shell> list, Random rng, float heading, double t, int count, ShellKind[] kinds)
     {
         for (int i = 0; i < count; i++) list.Add(Make(rng, heading, t + i * 0.4, kinds[rng.Next(kinds.Length)]));

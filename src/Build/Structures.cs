@@ -362,11 +362,7 @@ public partial class Structures : Node
     /// <summary>Where a peer's body is, in LV95 (what it published), or null if it has none.</summary>
     private GlobalPos? BodyOf(long peer) => GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is { } body ? body.Global : null;
 
-    private static double Distance(Structure s, GlobalPos at)
-    {
-        double de = s.E - at.E, dn = s.N - at.N;
-        return Math.Sqrt(de * de + dn * dn);
-    }
+    private static double Distance(Structure s, GlobalPos at) => GlobalPos.HorizontalDistance(s.E, s.N, at.E, at.N);
 
     /// <summary>Server: sends a peer what came into range, takes back what went out of it.</summary>
     private void UpdateInterest(long peer)

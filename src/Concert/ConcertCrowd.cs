@@ -52,6 +52,8 @@ public partial class ConcertCrowd : Node3D
     public override void _Ready()
     {
         _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/concert/crowd.gdshader") };
+        // a seated lawn: the people lowered by the shader, nothing per person (#1394)
+        if (_plan.Event.Genre == Genre.Jazz) _material.SetShaderParameter("seated", 1f);
         var places = Places();
         People = places.Count;
         var mesh = Figure();
@@ -76,11 +78,11 @@ public partial class ConcertCrowd : Node3D
                 buffer[k + 12] = custom.R; buffer[k + 13] = custom.G; buffer[k + 14] = custom.B; buffer[k + 15] = custom.A;
             }
             mm.Buffer = buffer;
-            AddChild(new MultiMeshInstance3D
+            AddChild(Styles.ZoomRanges.Track(new MultiMeshInstance3D
             {
                 Name = $"Crowd{b}", Multimesh = mm, MaterialOverride = _material,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, VisibilityRangeEnd = Range,
-            });
+            }));
         }
     }
 
@@ -130,6 +132,23 @@ public partial class ConcertCrowd : Node3D
             // some wear the artist's colour
             if (rng.NextDouble() < 0.18) shirt = _plan.Event.Palette[0] * 0.8f;
             list.Add((t, new Color((float)rng.NextDouble(), shirt.R, shirt.G, shirt.B)));
+        }
+
+        // a jazz night's lawn (#1394): seated in rows facing the band, 80 % of the places taken, a centre aisle left to walk through, nobody under the stage or in
+        // a crew zone; the lawn's own bounds are the fence (the quay's walkway is outside it)
+        if (_plan.Event.Genre == Genre.Jazz)
+        {
+            var lawn = _plan.Event.Stadium;
+            var onStage = _plan.BlockedTester(0.6f);
+            for (float ahead = 4.5f; ahead < 2 * lawn.FrontHalfV - 12f; ahead += 1.0f)
+                for (float across = -lawn.FrontHalfU + 2.5f; across < lawn.FrontHalfU - 2.5f; across += 0.85f)
+                {
+                    if (MathF.Abs(across) < 1.1f || rng.NextDouble() > Occupancy) continue;
+                    var spot = _plan.Origin + _plan.Forward * ahead + new Vector2(-_plan.Forward.Y, _plan.Forward.X) * across;
+                    if (onStage(spot)) continue;
+                    Person(new Vector3(spot.X, Ground?.Invoke(spot) ?? 0f, spot.Y), -_plan.Forward);
+                }
+            return list;
         }
 
         // the seats: not behind the stage, a share of them taken

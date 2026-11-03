@@ -112,8 +112,10 @@ public partial class ConcertSound : Node3D
         foreach (var h in hangs) { _paCentre += h.Hang; _paFacing += h.Facing; }
         if (hangs.Count > 0) _paCentre /= hangs.Count;
         _paFacing = _paFacing.LengthSquared() > 0.1f ? _paFacing.Normalized() : Vector3.Zero;
-        _roar = new AudioStreamPlayer { Name = "Roar", Stream = CrowdRoar, Bus = CrowdBus, VolumeDb = -80f };
-        _clap = new AudioStreamPlayer { Name = "Applause", Stream = CrowdApplause, Bus = CrowdBus, VolumeDb = -80f };
+        // a seated jazz lawn murmurs and applauds softly (#1394): its own, quieter loops with a longer tail
+        bool jazz = _e.Genre == Genre.Jazz;
+        _roar = new AudioStreamPlayer { Name = "Roar", Stream = jazz ? JazzMurmur : CrowdRoar, Bus = CrowdBus, VolumeDb = -80f };
+        _clap = new AudioStreamPlayer { Name = "Applause", Stream = jazz ? JazzApplause : CrowdApplause, Bus = CrowdBus, VolumeDb = -80f };
         AddChild(_roar);
         AddChild(_clap);
         if (ConcertSoundProbe.Requested) ConcertSoundProbe.Start(this);
@@ -301,7 +303,13 @@ public partial class ConcertSound : Node3D
     private static readonly Lazy<AudioStreamWav> _roarWav = new(MakeRoar), _clapWav = new(MakeApplause);
 
     /// <summary>Synthesises both loops (0.7 s of DSP) off the main thread, so the first stage built nearby finds them made.</summary>
-    public static void Prewarm() { _ = _roarWav.Value; _ = _clapWav.Value; }
+    public static void Prewarm()
+    {
+        _ = _roarWav.Value;
+        _ = _clapWav.Value;
+        // the quay's seated lawn too, but only while its stage stands (#1394)
+        if (StadiumCatalog.MontreuxJazzOpenAir.InSeason(DateOnly.FromDateTime(Core.Calendar.Now.Date))) { _ = _murmurWav.Value; _ = _jazzClapWav.Value; }
+    }
 
     /// <summary>
     /// A stadium crowd's roar, 8 s stereo loop: a low hubbub, sixty yells a side ("woo", "yeah": a
@@ -374,6 +382,77 @@ public partial class ConcertSound : Node3D
         }
         return s;
     });
+
+    private static readonly Lazy<AudioStreamWav> _murmurWav = new(() => StereoLoop(12f, 1394, JazzMurmurSamples)), _jazzClapWav = new(() => StereoLoop(8f, 1395, JazzApplauseSamples));
+
+    /// <summary>A seated lawn's murmur, 12 s stereo loop (#1394): a low hubbub, a few quiet voices and the odd glass, softer than the stadium's roar.</summary>
+    public static AudioStreamWav JazzMurmur => _murmurWav.Value;
+
+    /// <summary>A seated crowd's applause, 8 s stereo loop (#1394): a few dozen hands, slow and warm, over a thin far hiss.</summary>
+    public static AudioStreamWav JazzApplause => _jazzClapWav.Value;
+
+    private static float[] JazzMurmurSamples(Random rng, int n)
+    {
+        var s = new float[n];
+        var hub = BandPass(Noise(rng, n), Coef(140f), Coef(700f));
+        for (int i = 0; i < n; i++) s[i] = hub[i] * 0.45f;
+        for (int v = 0; v < 14; v++)
+        {
+            int len = (int)(Rate * (0.5f + 1.5f * (float)rng.NextDouble())), start = rng.Next(n);
+            float f0 = 110f + 150f * (float)rng.NextDouble(), f1 = 400f + 300f * (float)rng.NextDouble(), f2 = 900f + 500f * (float)rng.NextDouble();
+            float amp = 0.08f + 0.2f * (float)rng.NextDouble();
+            var talk = new float[len];
+            float ph = 0f;
+            for (int i = 0; i < len; i++)
+            {
+                ph = (ph + f0 * (1f + 0.15f * MathF.Sin(i * 0.002f)) / Rate) % 1f;
+                talk[i] = (2f * ph - 1f) + 0.5f * (float)(rng.NextDouble() * 2 - 1);
+            }
+            var voiced = new float[len];
+            Resonate(talk, voiced, f1, 5f);
+            Resonate(talk, voiced, f2, 7f);
+            for (int i = 0; i < len; i++)
+            {
+                float t = (float)i / len, env = MathF.Sin(MathF.PI * t);
+                s[(start + i) % n] += voiced[i] * amp * env;
+            }
+        }
+        // a glass now and then: a short ring
+        for (int g = 0; g < 4; g++)
+        {
+            int start = rng.Next(n);
+            float f = 2400f + 1200f * (float)rng.NextDouble();
+            for (int i = 0; i < Rate / 3; i++)
+                s[(start + i) % n] += MathF.Sin(MathF.Tau * f * i / Rate) * 0.04f * MathF.Exp(-i / (0.06f * Rate));
+        }
+        return s;
+    }
+
+    private static float[] JazzApplauseSamples(Random rng, int n)
+    {
+        var far = new float[n];
+        int claps = (int)(n / (float)Rate * 350f);
+        for (int c = 0; c < claps; c++) Clap(far, rng.Next(n), 0.3f + 0.7f * (float)rng.NextDouble(), 0.006f, rng);
+        var s = BandPass(far, Coef(400f), Coef(3500f));
+        for (int i = 0; i < n; i++) s[i] *= 0.4f;
+        for (int p = 0; p < 24; p++)
+        {
+            var hands = new float[n];
+            float rate = 2.4f + 1.2f * (float)rng.NextDouble(), amp = 0.25f + 0.5f * (float)rng.NextDouble();
+            for (float t = (float)rng.NextDouble() / rate; t * Rate < n; t += (1f + 0.12f * ((float)rng.NextDouble() * 2 - 1)) / rate)
+                Clap(hands, (int)(t * Rate), amp, 0.011f, rng);
+            Resonate(hands, s, 700f + 900f * (float)rng.NextDouble(), 2f);
+        }
+        return s;
+    }
+
+    /// <summary>The seated lawn's two loops in the sound player (<c>--sounds</c>, #1394).</summary>
+    [SoundShowcase("Concert")]
+    private static IEnumerable<(string Category, string Name, Func<float[]> Make)> JazzShowcase()
+    {
+        yield return ("Concert", "Jazz crowd: murmur", () => JazzMurmurSamples(new Random(1394), Rate * 6));
+        yield return ("Concert", "Jazz crowd: applause", () => JazzApplauseSamples(new Random(1395), Rate * 4));
+    }
 
     /// <summary>One clap into <paramref name="s"/>: a noise burst with a sharp attack and a short decay.</summary>
     private static void Clap(float[] s, int at, float amp, float decay, Random rng)

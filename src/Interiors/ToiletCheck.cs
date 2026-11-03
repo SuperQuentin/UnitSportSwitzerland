@@ -100,6 +100,9 @@ public static class ToiletCheck
             case ToiletSet.Shared:
                 if (Count(FurnitureType.WcSignAll) < 1 || Count(FurnitureType.WcSignWomen) < 1 || Count(FurnitureType.WcSignMen) < 1) bad.Add("the shared anteroom's signs are missing");
                 break;
+            case ToiletSet.Pair:
+                if (Count(FurnitureType.WcSignWomen) < 1 || Count(FurnitureType.WcSignMen) < 1) bad.Add("the pair of WCs has no women's or men's sign");
+                break;
             case ToiletSet.Single:
                 if (Count(FurnitureType.WcSignAll) < 1) bad.Add("the WC has no sign");
                 break;
