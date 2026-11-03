@@ -68,7 +68,7 @@ so they fit the depth range.
 | Gravity | **GM/r²** toward the centre in Space and Transition; the ground game keeps its tuned 9.81 m/s². At 60 km GM/r² is 9.63 (−2 %), at 400 km 8.68. |
 | Orbital integration | **Doubles, in an inertial frame** (ECI), velocity Verlet at the physics rate. ECEF rotates: Coriolis at orbital speed is 2ωv ≈ 1.1 m/s², far too big to ignore. Jolt only ever holds the craft's local transform in the anchor frame, for contacts. |
 | Ceiling until H3 lands | Spectator and UFO **capped at 50 km** (the top of the Transition regime), so no one reaches a model that does not exist yet. |
-| Ephemeris on the ground | **Open question for the user.** In Space the real sun is mandatory (the terminator must match). On the ground a real sun changes gameplay: Bern's day is about 8 h 30 min in December and 15 h 55 min in June, and the thermals (`AirLift`) read `SunPath`. Proposal: real sun everywhere, `--sun fixed` keeps today's day for checks and trailers. |
+| Ephemeris on the ground | **Decided: the real sun everywhere**, ground included. A real moon under a stylised sun would be wrong (the moon's phase is the angle between them), and Space needs the real one anyway. It changes gameplay: Bern's day is about 8 h 30 min in December and 15 h 55 min in June, and the thermals (`AirLift`) read `SunPath`. `--sun fixed` keeps today's day for checks and reference shots. |
 
 ### The three regimes
 
@@ -234,6 +234,12 @@ records which one it is:
   (sun ~0.01°, moon ~0.3°) or JPL's approximate positions. `SunPath` keeps its API and returns the
   ephemeris direction in the current frame; `DayNight`'s moon stops being "opposite the sun".
   Check: Bern at the June solstice, noon elevation 66.5° (today's constant: 62°).
+- **The real sun on the ground** (decided): the game hour stays local civil time (CET/CEST,
+  `Europe/Zurich`), converted to UTC for the ephemeris; in Space the HUD shows UTC. The callers of
+  `SunPath.Direction` today: `DayNight` (which also takes an occasion's own sunrise, sunset and noon
+  elevation, a hand-made short winter day that the real date now gives by itself: those overrides
+  go), `AirLift` (thermals follow the season) and `FunBackdrop` (a fixed dusk in a world that is not
+  on Earth: stays fixed). `GameSettings.StartHour` keeps meaning a clock time.
 - **North**: the compass, map, minimap and GPX overlays keep **grid north** on the ground (the map
   is LV95). In Space the HUD heading uses true north computed from the anchor frame (the ECEF Z
   axis projected on the tangent plane).
@@ -278,6 +284,104 @@ The same pattern one level up:
 - Each body's ground regime is a flat local frame like LV95 is for Earth: the same global tiling
   question as #187's phase D.
 
+### 9. Features that ride on it (C0-C3)
+
+Small features that make the frame playable early, each a separate issue when it starts.
+
+**A telescope.** A telescope on a tripod for looking at the moon and the planets from the ground (or
+at the Earth from the moon), and at where other players are out there.
+
+- **Set up, then look through (decided: a tripod)**: carried as an item, set down with Use where a
+  ghost shows it would stand (the planted flag's pattern, `items/flag-plant`: one raycast decides
+  set down, refuse or pick up), and picked up again the same way. A set-up telescope is a
+  replicated object (`NetPlace`) anyone can look through, one at a time, with the interact key, like
+  taking a seat; the same key leaves. It is steady at any zoom because it does not move with you.
+- **Zoom**: the camera's focal-length zoom (`items/camera-zoom`: FOV = 2·atan(12 / f)), with a much
+  longer range. The moon is 0.52° wide, so it fills the view at ~2,300 mm; Jupiter (~45″) needs a
+  0.1° view, ~14,000 mm. At that zoom one pixel on the moon is ~0.6 km, so lunar data at ~0.5-1 km
+  covers the telescope: NASA's LROC mosaic and LOLA elevation, down-sampled (~60 Mpx at 1 km;
+  coarser levels ship, finer ones stream like the Earth's globe data).
+- **Tracking**: the sky turns 15″ per second, so at 0.1° a planet crosses the view in 24 s. Locking
+  on the body under the crosshair keeps it centred (a go-to mount).
+- **Markers**: a 2 m player on the moon is invisible from Earth, so the telescope labels them. The
+  server sends every client a small **far-marker list** (players off the Earth or in orbit, their
+  position in the body's frame, ~1 Hz), outside the normal interest range. From the moon, the Earth
+  is 1.9° wide and Switzerland fills half of a 0.1° view, so the same list shows players at home.
+- **Devices**: looking through it, the mouse turns the tube (slowed with the zoom, the camera's
+  `LookScale = fov / 76`), the wheel zooms and the left button locks; on the pad the right stick
+  turns it, the D-pad zooms (as the camera) and RT locks; in VR you grip the tube to swing it, the
+  view is drawn on the eyepiece (a `SubViewport` on the lens), the stick zooms through `XrPad` and
+  the trigger locks. Rows in `InputHints` and `xr/vr-action-map`.
+- **Bots**: no gameplay effect, so bots do not look through it (a row saying so in
+  `bots/bot-capability-map`); a set-up telescope is a small static prop in the server's collision,
+  like a planted flag.
+- **Detail on the target**: see "Detail by size on screen" below. Without it, a ~400× zoom shows
+  the far mountains at the detail picked for their true distance.
+- **Needs**: H6 only for the moon (a textured sphere at its ephemeris place in the sky, no globe or
+  anchor needed); H7 for the planets and the markers.
+
+**Detail by size on screen.** Today every level-of-detail choice is by distance only: 41
+`VisibilityRangeEnd`s on props and signs, the tree shaders' 3D/billboard handover (`tree_near`
+measured from `world_cam_pos`, `shaders/body/tree.gdshaderinc`) and the terrain rings
+(`RenderDistanceRings`). Zooming breaks that: the camera's 200 mm is already a 5.7× zoom over its
+35 mm (a house 300 m away looks 50 m away but is drawn for 300 m), and the telescope zooms ~400×.
+What should decide detail is how big a thing is **on screen**, in pixels:
+size · H / (2 · d · tan(fov / 2)), with H the viewport's height.
+
+- **One zoom factor for everything that picks detail by distance**: `CameraGlobal` already pushes
+  `world_cam_pos` each frame before drawing; it also pushes a `world_lod_scale` global, the active
+  camera's tan(fov_ref / 2) / tan(fov / 2) (1 at the normal FOV, ~5.7 at 200 mm, ~400 in the
+  telescope), and keeps it in C# for the managers. Each distance LOD compares d / scale instead of
+  d: the tree shaders directly; the terrain rings and horizon blocks prefer the view cone, where
+  the extra detail goes (a narrow FOV sees a thin cone, so the cost per pixel stays about the same);
+  Godot's visibility ranges, which have no FOV term, get their ranges rescaled while zoomed, only
+  for what is in the cone.
+- **The globe and the moon are built on it from the start**: their cube-sphere patches split when
+  their geometric error exceeds ~1 px on screen (the usual screen-space-error rule), so the
+  telescope gets lunar detail from the same code that draws the globe from orbit.
+- **What else benefits**: the camera item's zoom, the movie studio's cameras, the GPX zoom inset,
+  scope-like views in combat if they come. The retrofit of today's distance LODs does not need
+  any of this plan and can land on its own first.
+
+**A spaceplane.** A craft that takes off from a runway like a plane, flies to space and moves at
+deliberately unrealistic speeds, for easy exploration rather than real rocketry (decided: no top
+speed).
+
+- **In the air it is an aircraft**: a new `AirlinerSpec` in `AirlinerCatalog`, flown by
+  `AirlinerFlight` with the same controls, gear and runway, plus a rocket thrust that does not lapse
+  with altitude. Back in the air it glides home and lands on a runway like the airliners
+  (the US Standard Atmosphere of H5 gives it lift up high).
+- **In space, a cruise drive** that can be switched on above 60 km (the Space regime). Its speed
+  grows with the distance to the nearest surface: v = throttle · d / τ, with τ ≈ 10 s. It slows
+  down by itself near any body, which also gives the globe time to stream in (from ten radii out
+  down to 100 km above the surface takes about a minute), and the trip time grows only with the
+  logarithm of the distance:
+
+  | Trip | Time with τ = 10 s | Top speed on the way |
+  |---|---|---|
+  | 400 km orbit → lunar orbit | ~2 min | ~19,000 km/s |
+  | Earth → Mars (closest, 55 M km) | ~4 min | ~9 times light |
+  | Earth → Jupiter (closest, ~590 M km) | ~5 min | ~100 times light |
+
+  Switching the drive off leaves the craft in a circular orbit where it is (an arcade convenience),
+  and the orbital physics of H5 take over from there.
+- **Precision at those speeds**: while the drive is on, the anchor re-centres on the craft every
+  frame (the MSFS way) instead of every 20 km, which is cheap in space: no tiles, only the craft
+  and the globe patches, whose transforms are recomputed from doubles. The craft is kinematic,
+  integrated in doubles; Jolt plays no part until the drive is off.
+- **Network**: its position goes on the wire in the frame of its body (or the heliocentric one) as
+  doubles; receivers extrapolate with its velocity rather than interpolate. Out of interest range
+  it is still on the far-marker list.
+- **Devices**: the airliner's controls, plus a drive switch: a key, a pad button, and in VR a
+  switch in the cockpit to grip. Rows in `InputHints` and `xr/vr-action-map`.
+- **Bots**: `AirlinerFlight.Controls` is already the intent, so the drive switch is a field on it
+  and a bot pilot is possible later; in the first version bots only ride as passengers.
+- **Rules that apply**: its own procedural model in the model viewer (`[Showcase]`), its rocket and
+  drive sounds in the sound player, Cartoon first.
+- **Landing elsewhere**: the moon has no air and no runway, so landing there needs vertical thrust
+  and the moon's ground regime (the global tiling question). The first version stays in Earth orbit
+  and lands only on Earth's runways.
+
 ## Phases
 
 | Phase | What | Depends on | Done when |
@@ -287,10 +391,17 @@ The same pattern one level up:
 | **H3** Rotating 3D anchor | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space, `EcefPos` on the wire | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
 | **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check | H3 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
 | **H5** Orbital gravity | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ |
-| **H6** Ephemeris sky | sun and moon from date and lat/lon, stars, true north in Space, the ground-sun decision | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
+| **H6** Ephemeris sky | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
 | **H7** Planets | registry, frame tree, SOI handovers, scaled space | H4, H5 | a transfer from Earth orbit to lunar orbit with both handovers invisible |
 
-H2 and the sky part of H6 can land early and in parallel; H1 needs only #187.
+| **C0** Detail by size on screen | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
+| **C1** Telescope on the moon | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
+| **C2** Spaceplane to orbit | spec, model, sounds, rocket thrust, the cruise drive round the Earth, glide home and runway landing | H4, H5 | take off at an airfield, reach 400 km, drive round the Earth, drop into orbit, re-enter and land on a runway |
+| **C3** Out to the moon and planets | the drive between bodies, the far-marker list, planets and markers in the telescope | H7, C1, C2 | A drives to lunar orbit; B on the ground locks the telescope on the moon and sees A's marker at the right place |
+
+H2 and the sky part of H6 can land early and in parallel; H1 needs only #187. C0 can land at any
+time and helps the camera item now; C1 is the earliest playable piece: it needs only the ephemeris
+and C0.
 
 ## Tests
 
@@ -330,14 +441,18 @@ H2 and the sky part of H6 can land early and in parallel; H1 needs only #187.
   the 2·sin²(θ/2) form; anything else shakes by half a metre.
 - **Two height systems**: a wrong sign on the geoid offset puts the globe 100 m off the Swiss tiles
   where they meet. One function, one grid, tested both ways.
-- **Gameplay change from a real sun** (if accepted): the thermals, night length and trailer dates.
+- **Gameplay change from the real sun**: thermals by season, and evening events that assume
+  darkness. In June the sun sets at Bern around 21:30 CEST, so a concert at 20:30
+  (`ConcertEvent.StartHour`) and fireworks at 21:30 (`FireworkShow.StartHour`) start in daylight.
+  Trailer renders run on their film's date (`TrailerDirector.FilmDate`), so their light changes
+  with that date: re-check each film. Reference screenshots pin `--sun fixed` or a `--date`.
 
 ## Out of scope
 
 - Global tiling for ground-level play outside the preprocessed area (#187's phase D).
 - Weather, clouds and their shadows seen from orbit; oceans with waves; tides.
-- Re-entry heating, rocket engines, docking gameplay and any other Space feature content: this plan
-  is the frame they stand on.
+- Re-entry heating, realistic rocketry, docking and landing on other bodies: this plan is the frame
+  they stand on (the spaceplane and telescope above are the only content it carries).
 - Perturbations (J2, drag decay, third bodies), n-body physics, time warp beyond the existing
   time scale.
 - A double-precision Godot build (rejected in `docs/plans/floating-origin.md`).
