@@ -61,7 +61,8 @@ public static class ConstructionCheck
             var want = (SitePhase)p.Phase;
             string what = $"a {want} site at {p.E:F0},{p.N:F0}";
             // the planned centre in the tile's frame (X east, Z south)
-            var at = new Vector2((float)(p.E - id.MinE), (float)(id.MaxN - p.N));
+            var (ax, az) = id.Local(p.E, p.N);
+            var at = new Vector2((float)ax, (float)az);
             var site = t.Sites.FirstOrDefault(s => s.Box.Center.DistanceTo(at) < 1f);
             if (site == null || t.Tile == null)
             {
@@ -79,7 +80,8 @@ public static class ConstructionCheck
             double low = double.MaxValue, high = double.MinValue;
             foreach (var corner in site.Box.Corners())
             {
-                double g = world.Height(id.MinE + corner.X, id.MaxN - corner.Y);
+                var (ce, cn) = id.Global(corner.X, corner.Y);
+                double g = world.Height(ce, cn);
                 low = Math.Min(low, g);
                 high = Math.Max(high, g);
             }
@@ -149,7 +151,8 @@ public static class ConstructionCheck
         {
             var id = TileId.FromLv95(p.E, p.N);
             var t = TileOf(id);
-            var at = new Vector2((float)(p.E - id.MinE), (float)(id.MaxN - p.N));
+            var (ax, az) = id.Local(p.E, p.N);
+            var at = new Vector2((float)ax, (float)az);
             if (t.Sites.FirstOrDefault(s => s.Box.Center.DistanceTo(at) < 1f) is not { } s1 || !s1.Zones.Any(z => z.Kind == SiteZoneKind.Office)) continue;
             all++;
             if (s1.GallerySide != 0) galleries++;
@@ -174,7 +177,8 @@ public static class ConstructionCheck
         {
             var id = TileId.FromLv95(e, n);
             var t = TileOf(id);
-            var near = t.Sites.Where(s => s.Box.Center.DistanceTo(new Vector2((float)(e - id.MinE), (float)(id.MaxN - n))) < 60f).ToList();
+            var (ax, az) = id.Local(e, n);
+            var near = t.Sites.Where(s => s.Box.Center.DistanceTo(new Vector2((float)ax, (float)az)) < 60f).ToList();
             var office = near.Count == 1 && t.Tile != null ? SiteShellBuilder.Office(t.Tile, near[0], GridOf(id)) : null;
             Expect(near.Count == 1 && near[0].Phase == phase && office != null && office.Rooms.Count >= containers
                     && office.Toilets.Count > 0 && office.Gallery != null,
@@ -232,7 +236,8 @@ public static class ConstructionCheck
                 if (yard.Office is { Rooms.Count: > 1 } two && ++twoStacks <= 3 && two.Gallery is { } g2)
                 {
                     var foot = SiteShellBuilder.ToTile(site, g2.Foot);
-                    GD.Print($"[constructioncheck]      {site.Key}: a two-container office with its gallery, its stair foot --at {id.MinE + foot.X:F0},{id.MaxN - foot.Z:F0}");
+                    var footAt = id.Global(foot.X, foot.Z);
+                    GD.Print($"[constructioncheck]      {site.Key}: a two-container office with its gallery, its stair foot --at {footAt.E:F0},{footAt.N:F0}");
                 }
                 var (g0, gn) = yard.GalleryBoxes;
                 for (int i = g0; i < g0 + gn; i++)
@@ -288,10 +293,11 @@ public static class ConstructionCheck
         {
             var spot = doors[i];
             var sill = SiteShellBuilder.ToTile(site, office.Doors[i].Sill);
+            var spotAt = tile.Id.Global(spot.Position.X, spot.Position.Z);
             expect(Math.Abs(spot.Position.Y - office.Doors[i].Sill.Y) < 0.001f
                 && new Vector2(spot.Position.X - spot.Outward.X * 0.03f - sill.X, spot.Position.Z - spot.Outward.Z * 0.03f - sill.Z).Length() < 0.001f,
                 $"{what}: door {i} on its {(office.IsCabin(i) ? "cabin" : office.Doors[i].Level > 0 ? "upper container" : "container")}'s door, its sill at {spot.Position.Y:F2} m (its ground {office.Doors[i].Sill.Y:F2}), "
-                + $"--at {tile.Id.MinE + spot.Position.X:F1},{tile.Id.MaxN - spot.Position.Z:F1} facing E {spot.Outward.X:F2} N {-spot.Outward.Z:F2}");
+                + $"--at {spotAt.E:F1},{spotAt.N:F1} facing E {spot.Outward.X:F2} N {-spot.Outward.Z:F2}");
         }
 
         // a way in: nothing of the yard stands in the 0.6 m in front of a door
@@ -335,7 +341,8 @@ public static class ConstructionCheck
             }
             expect(inside == 0 && yard.Ramps.Count == 1, $"{what}: the gallery ({gallery.Steps} steps, {yard.Ramps.Count} ramp) stands clear of the yard ({inside} overlap(s))");
             var foot = SiteShellBuilder.ToTile(site, gallery.Foot);
-            GD.Print($"[constructioncheck]      {what}: the gallery's stair foot --at {tile.Id.MinE + foot.X:F1},{tile.Id.MaxN - foot.Z:F1}");
+            var footAt = tile.Id.Global(foot.X, foot.Z);
+            GD.Print($"[constructioncheck]      {what}: the gallery's stair foot --at {footAt.E:F1},{footAt.N:F1}");
         }
 
         var plan = InteriorGenerator.Generate(tile, index, roads, grid);

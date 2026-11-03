@@ -97,10 +97,11 @@ public partial class PhotoLayer : Node
             _free.Push(_shown[id].Slot);
             _shown.Remove(id);
         }
-        for (int dn = -Radius; dn <= Radius; dn++)
-            for (int de = -Radius; de <= Radius; de++)
+        // dz (south) from +Radius down: south to north, the order the tiles were always visited in
+        for (int dz = Radius; dz >= -Radius; dz--)
+            for (int dx = -Radius; dx <= Radius; dx++)
             {
-                var id = new TileId(centre.E + de, centre.N + dn);
+                var id = centre.Neighbour(dx, dz);
                 if (_shown.TryGetValue(id, out var shown))
                 {
                     // a tile rebuilt or reloaded has a new ground node: tell it its slot again

@@ -147,13 +147,16 @@ public partial class SiteSounds : Node
     /// <summary>Plans, on a worker, every tile within reach that has not been.</summary>
     private void Request(IChunkSource source, TileId here, double e, double n)
     {
-        for (int dE = -1; dE <= 1; dE++)
-            for (int dN = -1; dN <= 1; dN++)
+        // dz (south) from +1 down to -1: the order the tiles were always visited in
+        for (int sx = -1; sx <= 1; sx++)
+            for (int sz = 1; sz >= -1; sz--)
             {
-                var id = new TileId(here.E + dE, here.N + dN);
+                var id = here.Neighbour(sx, sz);
                 if (_tiles.ContainsKey(id) || _loading.ContainsKey(id)) continue;
-                double dx = Math.Max(0, Math.Max(id.MinE - e, e - (id.MinE + 1000)));
-                double dz = Math.Max(0, Math.Max(id.MinN - n, n - (id.MinN + 1000)));
+                // how far the listener is from the tile's square, in its own frame (#1443)
+                var (x, z) = id.Local(e, n);
+                double dx = Math.Max(0, Math.Max(-x, x - 1000));
+                double dz = Math.Max(0, Math.Max(z - 1000, -z));
                 if (dx * dx + dz * dz > TileReach * TileReach) continue;
                 _loading[id] = Task.Run(() => PlanTile(source, id));
             }
@@ -205,8 +208,9 @@ public partial class SiteSounds : Node
         foreach (var (id, sites) in _tiles)
         {
             if (sites.Length == 0) continue;
-            var at = origin.ToWorld(id.MinE, id.MaxN, 0);
-            var local = new Vector2(pos.X - at.X, pos.Z - at.Z);
+            // the listener in the tile's frame (#1443)
+            var inTile = origin.TileTransform(id).AffineInverse() * pos;
+            var local = new Vector2(inTile.X, inTile.Z);
             foreach (var p in sites)
             {
                 float d = SiteSoundPlan.Distance(p.Site, local);
@@ -266,7 +270,7 @@ public partial class SiteSounds : Node
             var b = _queue[i];
             _queue[i].Used = false;
             if (_chunks.Origin is not { } origin) continue;
-            Play(b.Kind, origin.ToWorld(b.Tile.MinE, b.Tile.MaxN, 0) + b.Local, b.Db);
+            Play(b.Kind, origin.TileTransform(b.Tile) * b.Local, b.Db);
         }
     }
 

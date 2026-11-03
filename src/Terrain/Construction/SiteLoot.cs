@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain.Construction;
 
@@ -55,9 +56,8 @@ public static class SiteLoot
     public static bool IsYard(int index) => index >= FirstYardIndex;
 
     /// <summary>A site's yard containers, in the order the dressing stood them.</summary>
-    /// <param name="minE">The tile's west edge (<c>TileId.MinE</c>).</param>
-    /// <param name="maxN">The tile's north edge (<c>TileId.MaxN</c>).</param>
-    public static List<YardStock> Of(ConstructionSite site, SiteDressingPlan plan, double minE, double maxN)
+    /// <param name="id">The site's tile: its frame places the containers (#1443).</param>
+    public static List<YardStock> Of(ConstructionSite site, SiteDressingPlan plan, TileId id)
     {
         var list = new List<YardStock>(plan.Stock.Count);
         var u = site.Box.AxisU;
@@ -71,7 +71,8 @@ public static class SiteLoot
             if (s.Kind is SiteStockKind.Bricks or SiteStockKind.Cement && s.Slot < RebarSlot)
                 foreach (var p in plan.Pallets)
                     if (p.Slot == s.Slot) { pallet = true; break; }
-            list.Add(new YardStock(site.Key, FirstYardIndex + s.Slot, s.Kind, minE + at.X, maxN - at.Y,
+            var (e, n) = id.Global(at.X, at.Y);
+            list.Add(new YardStock(site.Key, FirstYardIndex + s.Slot, s.Kind, e, n,
                 s.Min.Y, s.Max.Y, u, v, (s.Max.X - s.Min.X) / 2, (s.Max.Z - s.Min.Z) / 2, pallet));
         }
         return list;
