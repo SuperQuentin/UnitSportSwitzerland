@@ -18,6 +18,13 @@ namespace UnitSport.Styles;
 /// through a doorway past the handover: a billboard through the portal, 3D seen directly. So
 /// there it is carried up through the building's doorway first, to where the portal camera stands.
 /// </para>
+///
+/// <para>
+/// It also sets <c>world_lod_scale</c>, how much the camera zooms over the walking view
+/// (<see cref="LodScale"/>, #1433), and carries a zoom step on to the visibility ranges
+/// (<see cref="ZoomRanges"/>) and to the sun's shadow distance: zoomed, the 3D trees reach
+/// range x zoom, and past the 400 m cascades they lost the shade their billboards draw.
+/// </para>
 /// </summary>
 public partial class CameraGlobal : Node
 {
@@ -27,13 +34,44 @@ public partial class CameraGlobal : Node
 
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Push;
 
+    private static readonly StringName WorldCamPos = "world_cam_pos", WorldLodScale = "world_lod_scale";
+    private float _pushedScale = 1f;
+
+    // the sun whose shadow distance follows the zoom, and its own distance (a restyle makes a new sun)
+    private DirectionalLight3D? _sun;
+    private float _sunBase, _sunScale = 1f;
+
     private void Push()
     {
         if (GetViewport()?.GetCamera3D() is { } cam)
         {
             var at = cam.GlobalPosition;
             if (Interiors.InteriorManager.Instance is { } interiors) at = interiors.ThroughNearestDoor(at);
-            RenderingServer.GlobalShaderParameterSet("world_cam_pos", at);
+            RenderingServer.GlobalShaderParameterSet(WorldCamPos, at);
+            LodScale.Update(cam);
+            // the step, not the value: NearTrees and the visibility ranges gather by the step, and
+            // a tree the shader made 3D past their reach would be neither 3D nor a billboard
+            if (LodScale.Step != _pushedScale)
+            {
+                _pushedScale = LodScale.Step;
+                RenderingServer.GlobalShaderParameterSet(WorldLodScale, _pushedScale);
+            }
         }
+        ZoomRanges.Tick();
+        ScaleShadows();
+    }
+
+    private void ScaleShadows()
+    {
+        var sun = World.DayNight.Instance?.Sun;
+        if (sun != _sun)
+        {
+            _sun = sun;
+            _sunScale = 1f;
+            if (sun != null) _sunBase = sun.DirectionalShadowMaxDistance;
+        }
+        if (_sun == null || !IsInstanceValid(_sun) || _sunScale == LodScale.Step) return;
+        _sunScale = LodScale.Step;
+        _sun.DirectionalShadowMaxDistance = _sunBase * _sunScale;
     }
 }
