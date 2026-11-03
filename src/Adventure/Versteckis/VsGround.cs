@@ -45,16 +45,14 @@ public sealed class VsGround
         if (!_tiles.TryGetValue(id, out var t)) return false;
         if (t.Cover is { } cover)
         {
-            int x = (int)(e - id.MinE), z = (int)(id.MaxN - n);
+            var (lx, lz) = id.Local(e, n);
+            int x = (int)lx, z = (int)lz;
             const int side = ChunkFormat.GridSize;
             if ((uint)x < side && (uint)z < side && cover.Length >= side * side && (CoverClass)cover[z * side + x] != CoverClass.Open) return false;
         }
-        if (t.Fields is { } f)
-        {
-            int cx = (int)((e - id.MinE) / FieldFormat.CellSize), cy = (int)((n - id.MinN) / FieldFormat.CellSize);
-            if ((uint)cx < FieldFormat.CellsPerSide && (uint)cy < FieldFormat.CellsPerSide
-                && f.CropAt(cy * FieldFormat.CellsPerSide + cx) is not (CropKind.None or CropKind.Meadow or CropKind.Pasture)) return false;
-        }
+        // the farm layer's cell under the point: the point is on this tile, so its cell is too
+        if (t.Fields is { } f && f.CropAt(FieldFormat.CellAt(e, n).Cell) is not (CropKind.None or CropKind.Meadow or CropKind.Pasture))
+            return false;
         return true;
     }
 
@@ -118,12 +116,15 @@ public sealed class VsGround
                 var b = buildings.Buildings[i];
                 if (b.Kind == BuildingKind.UnderConstruction || b.Triangles.Length < 9) continue;
                 // a quick test on the first vertex before the footprint's work
-                double ve = id.MinE + b.Triangles[0], vn = id.MaxN - b.Triangles[2];
+                var (ve, vn) = id.Global(b.Triangles[0], b.Triangles[2]);
                 if (!VsRules.Inside(E, N, Radius + 40, ve, vn)) continue;
                 if (BuildingFootprint.Compute(buildings, i, roads, grid) is not { } fp) continue;
                 var door = fp.Door;
-                Buildings.Add(new VsBuilding(id.MinE + fp.Center.X, id.MaxN - fp.Center.Y, fp.AxisU.X, -fp.AxisU.Y, fp.Width, fp.Depth, b.Kind,
-                    id.MinE + door.Position.X, id.MaxN - door.Position.Z, door.Outward.X, -door.Outward.Z));
+                // the footprint's plan and the door are tile-local (x east, z south)
+                var (ce, cn) = id.Global(fp.Center.X, fp.Center.Y);
+                var (doorE, doorN) = id.Global(door.Position.X, door.Position.Z);
+                Buildings.Add(new VsBuilding(ce, cn, fp.AxisU.X, -fp.AxisU.Y, fp.Width, fp.Depth, b.Kind,
+                    doorE, doorN, door.Outward.X, -door.Outward.Z));
             }
         // the herds' grazing spots: the farm layer's, else the land's
         var plans = fieldTile != null ? HerdPlan.For(fieldTile)
@@ -157,7 +158,9 @@ public sealed class VsGround
                 var id = TileId.FromLv95(pe, pn);
                 if (_tiles.TryGetValue(id, out var t) && t.Cover is { Length: >= ChunkFormat.GridSize * ChunkFormat.GridSize } cover)
                 {
-                    int cx = (int)(pe - id.MinE), cz = (int)(id.MaxN - pn);
+                    var (lx, lz) = id.Local(pe, pn);
+                    int cx = (int)lx, cz = (int)lz;
+
                     if ((uint)cx < ChunkFormat.GridSize && (uint)cz < ChunkFormat.GridSize && (CoverClass)cover[cz * ChunkFormat.GridSize + cx] == CoverClass.Water) wet++;
                 }
                 if (GroundAt(pe, pn) is float h0 && GroundAt(pe + 5, pn) is float h1 && GroundAt(pe, pn + 5) is float h2

@@ -41,11 +41,13 @@ public partial class RewardStats : Node
         int r = (int)Math.Ceiling(km);
         int tiles = 0;
         var counts = new Dictionary<string, int>();
-        foreach (var de in Enumerable.Range(-r, 2 * r))
-            foreach (var dn in Enumerable.Range(-r, 2 * r))
+        for (int dx = -r; dx < r; dx++)
+            for (int dz = r; dz > -r; dz--)
             {
-                var spots = await svc.Map.TileAsync(new TileId(centre.E + de, centre.N + dn));
-                if (svc.Map.GridOf(new TileId(centre.E + de, centre.N + dn)) == null) continue;
+                var id = centre.Neighbour(dx, dz);
+                var spots = await svc.Map.TileAsync(id);
+                if (svc.Map.GridOf(id) == null) continue;
+
                 tiles++;
                 foreach (var s in spots)
                 {

@@ -76,13 +76,14 @@ public sealed class ExportPrefetcher
 
             var centre = TileId.FromLv95(p.E, p.N);
             for (int ring = 0; ring <= lod.MaxDist; ring++)
-                for (int de = -ring; de <= ring; de++)
-                    for (int dn = -ring; dn <= ring; dn++)
+                for (int dx = -ring; dx <= ring; dx++)
+                    for (int dz = ring; dz >= -ring; dz--)
                     {
                         // only the new perimeter, so each tile is first seen at its own ring
-                        if (Math.Max(Math.Abs(de), Math.Abs(dn)) != ring) continue;
+                        var id = centre.Neighbour(dx, dz);
+                        if (id.RingDistance(centre) != ring) continue;
 
-                        var id = new TileId(centre.E + de, centre.N + dn);
+
                         if (!chunks.AvailableTiles.Contains(id)) continue;
 
                         // A tile on the horizon of one part of the route can be underfoot on

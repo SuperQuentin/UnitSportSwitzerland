@@ -110,7 +110,7 @@ public partial class RoadStandProbe : Node
             if (FloorAtArg() is { } fa && _roads.Result is { } ft && _grid?.Result is { } fg)
             {
                 // --floorat E,N: the blend's height at the four lattice vertices around a point
-                var b = _origin.ToWorld(tile.MinE, tile.MaxN, 0);
+                var b = _origin.TileTransform(tile).Origin;
                 var ground = TerrainMeshBuilder.GroundHeights(fg, TerrainMeshBuilder.ComputeRoadBlend(ft), 0.0);
                 var pt = _origin.ToWorld(fa.E, fa.N, 0) - b;
                 foreach (var (dc, dr) in new[] { (0, 0), (1, 0), (0, 1), (1, 1) })
@@ -192,7 +192,7 @@ public partial class RoadStandProbe : Node
     {
         var result = new List<(Vector3, string, Kind)>();
         if (tile == null) return result;
-        var basePos = _origin.ToWorld(id.MinE, id.MaxN, 0);
+        var basePos = _origin.TileTransform(id).Origin;
 
         var candidates = tile.Segments
             .Where(s => (Bridges
@@ -304,7 +304,7 @@ public partial class RoadStandProbe : Node
     private List<(Vector3, string, Kind)> PickSidewalkPoints(RoadTile tile, ChunkGrid grid, TileId id)
     {
         var result = new List<(Vector3, string, Kind)>();
-        var basePos = _origin.ToWorld(id.MinE, id.MaxN, 0);
+        var basePos = _origin.TileTransform(id).Origin;
         var ground = TerrainMeshBuilder.GroundHeights(grid, TerrainMeshBuilder.ComputeRoadBlend(tile), 0.0);
         int last = ChunkFormat.GridSize - 1;
         var walls = tile.LinearProps.Where(RoadWallBuilder.IsWall).ToList();
@@ -375,7 +375,7 @@ public partial class RoadStandProbe : Node
     private List<(Vector3, string, Kind)> PickEmbankmentPoints(RoadTile tile, ChunkGrid grid, TileId id)
     {
         var result = new List<(Vector3, string, Kind)>();
-        var basePos = _origin.ToWorld(id.MinE, id.MaxN, 0);
+        var basePos = _origin.TileTransform(id).Origin;
         var ground = TerrainMeshBuilder.GroundHeights(grid, TerrainMeshBuilder.ComputeRoadBlend(tile), 0.0);
         int last = ChunkFormat.GridSize - 1;
         void Lattice(float x, float z, string what)

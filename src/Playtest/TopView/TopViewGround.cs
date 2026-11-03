@@ -117,8 +117,9 @@ public static class TopViewGround
         int size = (int)Math.Round(Math.Sqrt(cells.Length));
         if (size < 2) return CoverClass.Open;
         double step = ChunkFormat.TileSizeM / (size - 1);
-        int col = Math.Clamp((int)Math.Round((e - id.MinE) / step), 0, size - 1);
-        int row = Math.Clamp((int)Math.Round((id.MaxN - n) / step), 0, size - 1);
+        var (x, z) = id.Local(e, n);
+        int col = Math.Clamp((int)Math.Round(x / step), 0, size - 1);
+        int row = Math.Clamp((int)Math.Round(z / step), 0, size - 1);
         return (CoverClass)cells[row * size + col];
     }
 
@@ -149,8 +150,9 @@ public static class TopViewGround
             for (int i = 0; i + 8 < t.Length; i += 9)
             {
                 // tile-local metres: X east, Z south
-                double X(int v) => (tile.MinE + t[i + v * 3] - g.Min.E) * k;
-                double Y(int v) => (g.Min.N + g.Side - (tile.MaxN - t[i + v * 3 + 2])) * k;
+                double X(int v) => (tile.Global(t[i + v * 3], t[i + v * 3 + 2]).E - g.Min.E) * k;
+                double Y(int v) => (g.Min.N + g.Side - tile.Global(t[i + v * 3], t[i + v * 3 + 2]).N) * k;
+
                 FillTriangle(g, X(0), Y(0), X(1), Y(1), X(2), Y(2), (168, 156, 148));
             }
         }

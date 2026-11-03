@@ -399,9 +399,10 @@ public partial class MapScreen : Screen
 
         var tile = TileId.FromLv95(at.E, at.N);
         int near = 0;
-        for (int de = -4; de <= 4; de++)
-            for (int dn = -4; dn <= 4; dn++)
-                if (_local.Built.Contains(new TileId(tile.E + de, tile.N + dn))) near++;
+        for (int dx = -4; dx <= 4; dx++)
+            for (int dz = -4; dz <= 4; dz++)
+                if (_local.Built.Contains(tile.Neighbour(dx, dz))) near++;
+
         bool covered = _country.Covered(tile);
 
         var row = UiKit.HBox(8);

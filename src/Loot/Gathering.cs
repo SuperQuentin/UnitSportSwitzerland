@@ -514,9 +514,11 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     {
         if (!_trees.TryGetValue(tile, out var cells) || cells == null) return null;
         // the index is relative to the tile: so is the search, and the answer goes back to world
-        var corner = _origin.ToWorld(tile.MinE, tile.MaxN, 0);
-        feet -= corner;
-        ahead -= corner;
+        // through the tile's frame (#1443)
+        var xf = _origin.TileTransform(tile);
+        var toLocal = xf.AffineInverse();
+        feet = toLocal * feet;
+        ahead = toLocal * ahead;
         Vector3? best = null;
         float bestD = TreeReach;
         int cx = Mathf.FloorToInt(ahead.X / 10f), cz = Mathf.FloorToInt(ahead.Z / 10f);
@@ -534,14 +536,15 @@ public partial class Gathering : Node, Core.IOriginShiftAware
                     if (d < bestD) { bestD = d; best = t; }
                 }
             }
-        return best + corner;
+        return best is { } b ? xf * b : null;
     }
 
     private bool NearStream(TileId tile, Vector3 feet, Vector3 ahead)
     {
         if (!_streams.TryGetValue(tile, out var segs) || segs == null) return false;
         var (e, n) = _origin.ToLv95(ahead);
-        double lx = e - tile.MinE, lz = tile.MaxN - n;
+        var (lx, lz) = tile.Local(e, n);
+
         foreach (var s in segs)
         {
             float reach = s.Width / 2 + StreamReach;

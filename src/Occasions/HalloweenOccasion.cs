@@ -280,16 +280,20 @@ public sealed class HalloweenOccasion : Occasion
     private static void PumpkinPatches(TileContext t, DecorBuilder into)
     {
         if (t.Towns.Count == 0) return;
-        int c0 = (int)Math.Floor(t.Id.MinE / PatchCell), c1 = (int)Math.Floor((t.Id.MinE + 1000) / PatchCell);
-        int r0 = (int)Math.Floor((t.Id.MaxN - 1000) / PatchCell), r1 = (int)Math.Floor(t.Id.MaxN / PatchCell);
+        // the grid stays anchored on LV95; the tile gives its extent from its own corners (#1443)
+        var (west, north) = t.Id.Global(0, 0);
+        var (east, south) = t.Id.Global(1000, 1000);
+        int c0 = (int)Math.Floor(west / PatchCell), c1 = (int)Math.Floor(east / PatchCell);
+        int r0 = (int)Math.Floor(south / PatchCell), r1 = (int)Math.Floor(north / PatchCell);
         for (int ce = c0; ce <= c1; ce++)
             for (int cn = r0; cn <= r1; cn++)
             {
                 if (OccasionHash.Unit(ce, cn, 0, Salt + 10) > 0.33f) continue;
                 double e = (ce + 0.2 + 0.6 * OccasionHash.Unit(ce, cn, 1, Salt + 11)) * PatchCell;
                 double n = (cn + 0.2 + 0.6 * OccasionHash.Unit(ce, cn, 2, Salt + 11)) * PatchCell;
-                if (e < t.Id.MinE + HalfW || e >= t.Id.MinE + 1000 - HalfW
-                    || n <= t.Id.MaxN - 1000 + HalfD || n > t.Id.MaxN - HalfD) continue;   // whole patch in this tile
+                if (e < west + HalfW || e >= east - HalfW
+                    || n <= south + HalfD || n > north - HalfD) continue;   // whole patch in this tile
+
                 double town = t.Towns.Min(tw => Math.Sqrt((tw.E - e) * (tw.E - e) + (tw.N - n) * (tw.N - n)));
                 if (town > 1500 || town < 180) continue;   // the village edge, not the square
 

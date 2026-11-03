@@ -106,7 +106,8 @@ public sealed class RewardMap
         // the POIs on main: the catalogue is replaced whole there; the lakes whose box may cross this tile too
         var pois = cat.InTile(id).ToArray();
         var lakes = new List<Poi>();
-        cat.Near(id.MinE + 500, id.MinN + 500, 900, lakes, PoiKind.Lake);
+        cat.Near(id.Centre.E, id.Centre.N, 900, lakes, PoiKind.Lake);
+
         RewardSpot[] spots = Array.Empty<RewardSpot>();
         ChunkGrid? grid = null;
         try

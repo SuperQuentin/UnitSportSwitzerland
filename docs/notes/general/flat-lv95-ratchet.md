@@ -23,7 +23,13 @@
     `TileTransform(id)` / `TileToWorld(id, local)` / `TileLocal(id, world)`. Place tile-local points
     with the full transform (`xf * local`): in G2 a tile's frame turns a little against the world's.
     `TileKeyTests` pins each to the arithmetic it replaces.
-- A change that removes some lowers the baseline in the same commit (the test prints the new
+- **Moved so far**: Audio (#1450), Interiors (#1454), and the gameplay folders (BattleRoyale, Player, Ui,
+  Loot, Occasions, Adventure, Gpx, Playtest; `TileKeyMovesTests` pins their rewrites bit for bit). Left
+  there **on purpose, still counted**: the download map's LV95 km grid (`Ui/MapCanvas`, `MapView`,
+  `MapRelief`: the swisstopo source tiles) and Adventure's LV95 records, the fog-of-war lattice
+  (`FogMask`) and the lakes' boxes (`PoiCatalogue`), which G2 converts with the saves.
+- A change that removes some lowers the baseline in the same commit
+ (the test prints the new
   count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` and `src/Core/WorldOrigin.cs`
   are the seam and are not counted.
 - Local maths near the player is fine and not counted: world `Vector3`s, `dx * dx + dz * dz`, +Y
