@@ -7,6 +7,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 
 ## Architecture
 
+- `cube-tiles` (tools) — #1443 G1: `--cubeharness` streams and collides cube tiles in one ENU anchor frame (`CubeHarness`: flight with LOD, height field vs trimesh vs patch against the mesh, `--cubeshot`); the format and tiler
 - `roads-merged-into-terrain-collision` — Roads are merged into terrain collision, not just draped over it
 - `sidewalks-tunnels-runtime` — #119 runtime: sidewalk slabs + chamfered kerb collision, blend under slabs/caps/bores, road depth bias, tunnel mouths (punch at surface ends only), bore floor/wall collision, safety nets skip bores and cut ramps, checks; #120 side profiles (grass, bike path, sloped kerbs) from `RoadStreetSection`
 - `road-embankments-walls` — Road embankments (#125): level cross-section, 2:3 fill / 1:1 cut clamp in RoadBlend, retaining walls planned in RoadGen (LPRP), 40 cm crown with a cover over the heightfield step, cost

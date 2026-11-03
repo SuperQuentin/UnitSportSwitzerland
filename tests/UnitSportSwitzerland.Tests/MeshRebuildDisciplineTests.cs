@@ -58,6 +58,7 @@ public class MeshRebuildDisciplineTests
     private static readonly Dictionary<string, string> Allowed = new()
     {
         // ---- built when what it is changes ----
+        ["src/Terrain/CubeHarness.cs:Commit"] = "on change: a streamed cube tile when it loads or its LOD step changes, one commit a frame at most (#1443 G1 harness)",
         ["src/Farming/FarmField.Draw.cs:Commit"] = "on change: a field chunk when its version, LOD, month or growth step changes, one commit a frame at most",
         ["src/Interiors/Bowling/BowlingAim.cs:UpdateCurve"] = "on change: the ball's curve on the lane when the spot, line or hook changes (#1323)",
         ["src/Gpx/TrackRibbon.cs:Rebuild"] = "on change: the ribbon when its resolved sample count changes",

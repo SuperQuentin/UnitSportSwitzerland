@@ -12,6 +12,9 @@ public sealed class BdFeature
     /// <summary>Rings for a polygon feature, or a single list for a line. LV95 metres.</summary>
     public required List<List<(double E, double N)>> Rings { get; init; }
 
+    /// <summary>The same rings as they came (WGS84 / ETRS89 degrees): the cube tiler (#1443, G1) converts these rigorously.</summary>
+    public required List<List<(double Lat, double Lon)>> LatLonRings { get; init; }
+
     public string? Text(string key) =>
         Properties.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String
             ? v.GetString() : null;
@@ -126,19 +129,20 @@ public sealed class BdTopoClient : IDisposable
             || !geometry.TryGetProperty("coordinates", out var coordinates)) return null;
 
         var rings = new List<List<(double, double)>>();
+        var latLon = new List<List<(double, double)>>();
         switch (typeElement.GetString())
         {
             case "Polygon":
-                ReadPolygon(coordinates, rings);
+                ReadPolygon(coordinates, rings, latLon);
                 break;
             case "MultiPolygon":
-                foreach (var polygon in coordinates.EnumerateArray()) ReadPolygon(polygon, rings);
+                foreach (var polygon in coordinates.EnumerateArray()) ReadPolygon(polygon, rings, latLon);
                 break;
             case "LineString":
-                rings.Add(ReadRing(coordinates));
+                ReadRing(coordinates, rings, latLon);
                 break;
             case "MultiLineString":
-                foreach (var line in coordinates.EnumerateArray()) rings.Add(ReadRing(line));
+                foreach (var line in coordinates.EnumerateArray()) ReadRing(line, rings, latLon);
                 break;
             default:
                 return null;
@@ -151,17 +155,18 @@ public sealed class BdTopoClient : IDisposable
             && props.ValueKind == JsonValueKind.Object)
             foreach (var p in props.EnumerateObject()) properties[p.Name] = p.Value.Clone();
 
-        return new BdFeature { Properties = properties, Rings = rings };
+        return new BdFeature { Properties = properties, Rings = rings, LatLonRings = latLon };
     }
 
-    private static void ReadPolygon(JsonElement polygon, List<List<(double, double)>> into)
+    private static void ReadPolygon(JsonElement polygon, List<List<(double, double)>> into, List<List<(double, double)>> latLon)
     {
-        foreach (var ring in polygon.EnumerateArray()) into.Add(ReadRing(ring));
+        foreach (var ring in polygon.EnumerateArray()) ReadRing(ring, into, latLon);
     }
 
-    private static List<(double E, double N)> ReadRing(JsonElement ring)
+    private static void ReadRing(JsonElement ring, List<List<(double, double)>> into, List<List<(double, double)>> latLon)
     {
         var points = new List<(double, double)>();
+        var raw = new List<(double, double)>();
         foreach (var position in ring.EnumerateArray())
         {
             // GeoJSON is x,y = lon,lat — the opposite order to the WFS bbox parameter, which
@@ -169,8 +174,10 @@ public sealed class BdTopoClient : IDisposable
             double lon = position[0].GetDouble();
             double lat = position[1].GetDouble();
             points.Add(SwissProjection.ToLv95(lat, lon));
+            raw.Add((lat, lon));
         }
-        return points;
+        into.Add(points);
+        latLon.Add(raw);
     }
 
     public void Dispose() => _http.Dispose();

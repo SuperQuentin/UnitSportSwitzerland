@@ -53,6 +53,7 @@ public class ClockDisciplineTests
     {
         ["src/Adventure/Alcohol/Bac.cs"] = "clock: blood alcohol runs on real time, so a player who logs off drunk comes back sober (#1271); pure, linked into tier 0",
         // ---- the clocks themselves ----
+        ["src/Terrain/CubeHarness.cs"] = "clock: a performance harness (#1443 G1) measures real frame times, not game time",
         ["src/Core/RealClock.cs"] = "clock: it is the wall clock",
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",
         ["src/Net/ClockSync.cs"] = "clock: LocalNow's fallback off --fixed-fps, and the server's Unix offset",

@@ -58,9 +58,16 @@ public static class SunPath
             || TerrainPaths.ParseChunkDirArg()?.StartsWith(Systems.FixturePrefix) == true
             || Array.Exists(CmdArgs.All, a => a.StartsWith("--") && a.EndsWith("check"))
             || CmdArgs.Has("--shot") || CmdArgs.Has("--shot-queue")
-            || Trailer.TrailerDirector.Requested
+            || TrailerRequested()
             ? SunModel.Fixed : SunModel.Real,
     };
+
+    // a build without the trailer studio (#1074) films nothing
+#if TRAILER
+    private static bool TrailerRequested() => Trailer.TrailerDirector.Requested;
+#else
+    private static bool TrailerRequested() => false;
+#endif
 
     private static Func<DateOnly> DefaultToday() => () => Calendar.Today;
 #else
