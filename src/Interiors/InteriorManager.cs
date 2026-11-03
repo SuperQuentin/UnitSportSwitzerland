@@ -1505,6 +1505,7 @@ public partial class InteriorNode : Node3D
         AddStaff(node);   // a venue's clerk and bartender (#1235)
         AddPinballs(node, material);   // a venue's pinball machines, each a table to play (#1325)
         AddLaneRigs(node, material);   // a bowling centre's pins, pinsetters and hood balls (#1323)
+        AddTableRigs(node);   // pool tables, dartboards, table football, the arcade's games (#1324, #1326)
         AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
         VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
         Patrons.VenuePatrons.AddTo(node); // its guests at the tables, the machines, in the queues and the halls (#1244)
