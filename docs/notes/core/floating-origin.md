@@ -42,6 +42,8 @@
   in the physics world, right under the shifted player and swept off at 1,860 m/s carrying them.
   The shifter makes every kinematic body static, sets its transform and makes it kinematic again
   (`OriginShifter.Teleport`). Removing it from the space and re-adding works too.
+- **The Earth's curvature is drawn round the camera, not the origin** (#187, `world/earth-curvature`):
+  a shift changes nothing in it.
 - **Shader patterns read `pattern_xz(world_pos)`** (`shaders/world_origin.gdshaderinc`): world XZ
   plus the `world_origin_offset` global, the origin modulo 9.6 km (a multiple of every pattern
   period). Raw `world_pos.xz` in a pattern jumps at every shift; normals from `dFdx(world_pos)` and

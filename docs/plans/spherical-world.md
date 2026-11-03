@@ -7,6 +7,10 @@ Status: **re-planned Nov 2026, in progress** (#187). The floating origin (`docs/
 #185) is done; a regression net comes first (#1429: `docs/notes/general/regression-net.md`). The true
 ellipsoid at altitude is the follow-up, `docs/plans/ellipsoid-handover.md` (#1430).
 
+**Nov 3, 2026**: the flat CPU world below is a stage, not the end state. With the neighbours being
+imported and the whole Earth to follow, tiles move to true Earth positions on a cube sphere
+(`docs/plans/global-tiling.md`, #1443); this drop then shrinks to refraction only.
+
 ## Why
 
 The world is flat: LV95 east/north become Godot X/-Z, and altitude becomes Y. The surface really drops

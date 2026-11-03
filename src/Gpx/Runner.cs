@@ -292,7 +292,9 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
             // the facing on a fixed rate meant that at 8x the body kept up with the course while
             // its heading lagged eight times as far behind every corner.
             float turn = 5f * Mathf.Max(1f, (float)clockSpeed);
-            Heading = delta > 0
+            // already facing it (a straight stretch): Slerp would normalise a near-zero axis and throw
+            // "Argument is not normalized" every frame, which stopped the runner on a dead straight course
+            Heading = delta > 0 && Heading.Dot(target) < 0.99999f
                 ? Heading.Slerp(target, MathX.Damp(turn, (float)delta)).Normalized()
                 : target;
         }
