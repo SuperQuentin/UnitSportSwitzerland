@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Server regions ([#1456](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1456))
+
+A server on the real map (`tools/wt.ps1 1456 net`, or `--server --chunks D:/UnitSportSwitzerland/terrain_chunks`): its manifest origin is ~45 km from Riddes, so play there now runs in a region of its own (the server log says `[regions] made region ...`).
+
+- [ ] At Riddes, `/bot add 3`, then `/bot drive 400` → the bots walk to a parked car, get in and drive; they bump into parked cars and trunks, not through them.
+- [ ] A Battle Royale on the real map with bots (`/br bots 6`) → the bots land, loot crates, fight and use the Postauto stops as before; none falls through the ground or freezes after the landing.
+- [ ] Two players, one at Geneva and one at Riddes, with bots round each → each sees its bots walk smoothly; `/bot list` on both; nothing jumps when a player teleports to the other (`/city`).
+
 ## Pool ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
 
 BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a pool table by the bar.
