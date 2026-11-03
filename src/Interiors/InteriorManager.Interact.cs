@@ -46,7 +46,7 @@ public partial class InteriorManager
         // chest, a seal's stack, a burrow (#1227); a summit cross, a board (#1224): all before a vehicle
         outranks = Outranking.Vehicle;
         if (p.CraneInteraction() is { } crane) return crane;
-        if ((Farming.FarmSales.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
+        if ((Farming.FarmSales.InteractionFor(p) ?? Items.Telescopes.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
             ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p) ?? Adventure.Errands.WorldEvents.InteractionFor(p)
             ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p) ?? Occasions.Festivals.Desalpe.DesalpeGame.InteractionFor(p)
             ?? Occasions.Festivals.Christmas.ChristmasGame.InteractionFor(p) ?? Occasions.Festivals.Escalade.EscaladeGame.InteractionFor(p)

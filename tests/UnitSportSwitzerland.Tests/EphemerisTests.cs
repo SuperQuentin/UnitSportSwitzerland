@@ -193,6 +193,44 @@ public class EphemerisTests
         Assert.Equal(waxing, isWaxing);
     }
 
+    /// <summary>
+    /// The moon's face from Bern: JPL Horizons' sub-observer longitude (east) and latitude
+    /// (QUANTITIES 14, the libration) and the north pole's position angle (17, from ICRF north).
+    /// </summary>
+    [Theory]
+    [InlineData("2026-01-01 03:07:12", 358.161386, -6.033781, 350.5117)]
+    [InlineData("2026-02-07 16:04:48", 4.159256, 5.617309, 20.1802)]
+    [InlineData("2026-03-17 05:02:24", 354.584058, 1.584402, 340.2214)]
+    [InlineData("2026-04-23 18:00:00", 5.461357, -3.669580, 10.8855)]
+    [InlineData("2026-05-30 14:38:24", 2.215542, 6.888749, 12.0702)]
+    [InlineData("2026-07-07 03:36:00", 352.769292, -3.213961, 337.9244)]
+    [InlineData("2026-08-13 16:33:36", 4.777215, 1.301513, 19.5853)]
+    [InlineData("2026-09-20 05:31:12", 358.872432, 5.297161, 355.7550)]
+    [InlineData("2026-10-27 02:09:36", 356.600995, -6.090675, 342.9513)]
+    [InlineData("2026-12-03 15:07:12", 6.366648, 5.589458, 22.2393)]
+    public void The_moons_face_matches_Horizons(string utc, double subLon, double subLat, double poleAngle)
+    {
+        var at = DateTime.SpecifyKind(DateTime.ParseExact(utc, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), DateTimeKind.Utc);
+        var (pole, prime, east) = Ephemeris.MoonAxes(at);
+        var bern = Ellipsoid.Wgs84.ToEcef(new Geodetic(46.9511, 7.4386, 550));
+        var moon = Ephemeris.Ecef(SkyBody.Moon, at);
+        var v = bern - moon;
+        double len = v.Length;
+        static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+        double lon = Math.Atan2(Dot(v, east), Dot(v, prime)) / Deg, lat = Math.Asin(Dot(v, pole) / len) / Deg;
+        Assert.Equal(0, Math.IEEERemainder(lon - subLon, 360), 0.15);
+        Assert.Equal(subLat, lat, 0.15);
+
+        // the pole's position angle on the sky, from north through east (celestial north of date)
+        var u = new EcefPos(-v.X / len, -v.Y / len, -v.Z / len);
+        var z = new EcefPos(0, 0, 1);
+        var north = z - new EcefPos(u.X * u.Z, u.Y * u.Z, u.Z * u.Z);
+        var eastSky = new EcefPos(-u.Y, u.X, 0);   // Z x u
+        var q = pole - new EcefPos(u.X * Dot(pole, u), u.Y * Dot(pole, u), u.Z * Dot(pole, u));
+        double pa = Math.Atan2(Dot(q, eastSky) / Math.Sqrt(Dot(eastSky, eastSky)), Dot(q, north) / Math.Sqrt(Dot(north, north))) / Deg;
+        Assert.Equal(0, Math.IEEERemainder(pa - poleAngle, 360), 0.5);
+    }
+
     [Fact]
     public void Swiss_civil_time_to_UTC()
     {

@@ -28,6 +28,12 @@ namespace UnitSport.World;
 /// </summary>
 public partial class DayNight : Node
 {
+    /// <summary>
+    /// The real sky in world axes: unit directions to the sun and the moon from the camera's place,
+    /// the moon's distance (metres) and its own axes (<see cref="SunPath.MoonFace"/>).
+    /// </summary>
+    public readonly record struct RealSky(Vector3 Sun, Vector3 Moon, double MoonDistance, Basis MoonFace);
+
     public static DayNight? Instance { get; private set; }
 
     /// <summary>A running occasion's snow on the ground, 0..1 (the <c>world_snow</c> global): skis glide on it (#899).</summary>
@@ -40,6 +46,9 @@ public partial class DayNight : Node
     public double Hour { get; set; } = 10.0;
 
     public float SunElevationDeg { get; private set; }
+
+    /// <summary>The real sun and moon this frame, in world axes (#1440): null under the fixed sun.</summary>
+    public RealSky? Sky { get; private set; }
 
     /// <summary>
     /// Where the sky is read from (the camera's LV95 place) and this world's origin to find it. Bern
@@ -251,10 +260,13 @@ public partial class DayNight : Node
             var date = SunPath.Today();
             sun = SunPath.Toward(SkyBody.Sun, date, Hour, _placeE, _placeN, out float elevationDeg);
             SunElevationDeg = elevationDeg;
-            shade = SunElevationDeg > 3f ? sun : MoonShade(SunPath.Toward(SkyBody.Moon, date, Hour, _placeE, _placeN, out _));
+            var moon = SunPath.Toward(SkyBody.Moon, date, Hour, _placeE, _placeN, out _, out double moonDistance);
+            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(date, Hour, _placeE, _placeN));
+            shade = SunElevationDeg > 3f ? sun : MoonShade(moon);
         }
         else
         {
+            Sky = null;
             float rise = atmo?.Sunrise ?? 6f, set = atmo?.Sunset ?? 18f, noon = atmo?.NoonElevation ?? NoonElevation;
             sun = SunPath.Direction((float)Hour, out float elevationDeg, rise, set, noon);
             SunElevationDeg = elevationDeg;

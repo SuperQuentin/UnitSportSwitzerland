@@ -620,3 +620,14 @@ Launch: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2548600,1148500` (
 - [ ] Debug menu → Terrain → "Earth curvature" off and on while looking at the far horizon → the far ground drops and rises; nearby nothing moves.
 - [ ] Fly the Cessna across several km (origin shifts) looking at the horizon → no jump in the horizon at a shift.
 - [ ] Navigate to a place 20-30 km away (adventure map) → the diamond sits on the place, not tens of metres above it.
+
+## Telescope and the moon in the sky (PR [#1441](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1441), [#1440](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1440))
+
+`/spawn telescope`, any region, a night with the moon up (`--date 2026-12-23 --time 23` for a full moon).
+
+- [ ] The moon in the night sky with the naked eye: a small bright disc where the moon really is (a sky app), the right phase; by day a pale disc, its dark side the sky's blue.
+- [ ] Set the telescope up (Use), E at it: the view opens, the wheel zooms, the mouse turns it slowly; LMB locks on the moon and holds it while the hours pass; E steps back.
+- [ ] Pad: D-pad ↑ ↓ zoom, right stick turns, RT locks, B steps back.
+- [ ] VR: Y or grip at the tripod; the eyepiece's picture floats before the eyes and follows the head; the right stick zooms, the trigger locks.
+- [ ] Pointed at far mountains at 8,000 mm: the frame rate holds (the zoom-aware detail has no cap yet).
+- [ ] Online: a second player at the tripod reads "Someone is looking through the telescope" and gets in once you step back.

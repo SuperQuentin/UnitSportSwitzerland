@@ -34,6 +34,8 @@ public enum PlacedKind
     FarmStand = 11,
     /// <summary>A planted travel flag (#1227): a waypoint of one's own; what travel to it means is the navigation plan's (#1226). Only its owner pulls it up.</summary>
     TravelFlag = 12,
+    /// <summary>A telescope on its tripod (#1440): one player at a time looks through it (<c>Items.Telescopes</c>). Only its owner packs it up, and not while someone looks.</summary>
+    Telescope = 13,
 }
 
 /// <summary>
@@ -106,6 +108,7 @@ public partial class PlacedObjects : Node
         [PlacedKind.HayHideout] = Build.GadgetMeshes.Visual,
         [PlacedKind.FarmStand] = Farming.FarmStandVisual.Visual,
         [PlacedKind.TravelFlag] = _ => FlagVisual(ItemDefs.PlantedTravelFlagMesh()),
+        [PlacedKind.Telescope] = TelescopeVisual.Visual,
     };
 
     /// <summary>
@@ -401,7 +404,7 @@ public partial class PlacedObjects : Node
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
             : !AnyoneMayRemove(o) && o.Owner != OwnerName(peer) ? "That is not yours."
             : !InReachOfEnd(peer, o.Kind, o.E, o.N, o.Altitude, o.Payload) ? "Too far away."
-            : Farming.FarmStands.RemoveProblem(o);
+            : Farming.FarmStands.RemoveProblem(o) ?? Telescopes.RemoveProblem(o);
         if (refused != null)
         {
             Reply(peer, req, 0, refused);

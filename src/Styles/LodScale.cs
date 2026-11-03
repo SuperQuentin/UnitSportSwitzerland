@@ -62,9 +62,10 @@ public static class LodScale
     internal static void Update(Camera3D cam)
     {
         float value = 1f;
-        if (Enabled && cam.Projection == Camera3D.ProjectionType.Perspective && !XR.XrSession.Active)
+        if (Enabled && cam.Projection != Camera3D.ProjectionType.Orthogonal && !XR.XrSession.Active)
         {
-            float fov = cam.Fov;
+            // below 1° (the telescope, #1440) the camera is a frustum of the same angle
+            float fov = Core.CameraLens.FovOf(cam);
             // Fov is the horizontal angle when the camera keeps its width: the vertical one is what is compared
             var size = cam.GetViewport().GetVisibleRect().Size;
             float aspect = size.Y > 0 ? size.X / size.Y : 16f / 9f;

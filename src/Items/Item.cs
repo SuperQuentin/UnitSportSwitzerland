@@ -185,6 +185,8 @@ public static class ItemDefs
             ItemUse.Place, 3, new Color(0.85f, 0.42f, 0.12f), "CF", 0, ItemCategory.Gear, 7f),
         new(ItemId.Torch, "Torch", "A light in your hand: it burns while you hold it, and everyone sees it.",
             ItemUse.Readout, 5, new Color(0.95f, 0.55f, 0.15f), "TO", 0, ItemCategory.Gear, 6f),
+        new(ItemId.Telescope, "Telescope", "A refractor on its tripod. {use_item} sets it up where you look; {interact_mount} at it looks through: the wheel zooms up to 8,000 mm and {use_item} locks on the moon. {use_item} on it with an empty hand packs it up.",
+            ItemUse.Place, 1, new Color(0.9f, 0.9f, 0.86f), "TS", 0, ItemCategory.Gear, 380f),
         new(ItemId.FieldWorkbench, "Field workbench", "{use_item} sets it up where you look: a workbench to craft at, anywhere. {use_item} on it with an empty hand packs it up again.",
             ItemUse.Place, 1, new Color(0.62f, 0.44f, 0.24f), "WB", 0, ItemCategory.Gear, 15f),
 

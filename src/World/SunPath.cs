@@ -109,12 +109,35 @@ public static class SunPath
     /// at <paramref name="hour"/> (Swiss civil time) on <paramref name="date"/>, in world axes, and its
     /// elevation in degrees. Whatever the <see cref="Model"/>.
     /// </summary>
-    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg)
+    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg) =>
+        Toward(body, date, hour, e, n, out elevationDeg, out _);
+
+    /// <summary><see cref="Toward(SkyBody, DateOnly, double, double, double, out float)"/>, and how far the body is, metres.</summary>
+    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg, out double distance)
     {
         var place = PlaceAt(e, n);
         var h = Ephemeris.Topocentric(body, SwissTime.ToUtc(date, hour), place.Geo);
         elevationDeg = (float)h.ElevationDeg;
-        // true east and north into grid east and north: turned by the meridian convergence
+        distance = h.Distance;
+        return ToWorld(h, place);
+    }
+
+    /// <summary>
+    /// The moon's own axes in world axes (#1440): X its 0° N 0° E (the near side's centre), Y 90° E,
+    /// Z its north pole. A point of its surface with world normal <c>n</c> is at longitude
+    /// atan2(n·Y, n·X), latitude asin(n·Z): the moon's map, the right way round, with its libration.
+    /// </summary>
+    public static Basis MoonFace(DateOnly date, double hour, double e, double n)
+    {
+        var place = PlaceAt(e, n);
+        var (pole, prime, east) = Ephemeris.MoonAxes(SwissTime.ToUtc(date, hour));
+        Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
+        return new Basis(Axis(prime), Axis(east), Axis(pole));
+    }
+
+    /// <summary>True east / north / up into world axes: turned by the meridian convergence to grid north.</summary>
+    private static Vector3 ToWorld(Horizontal h, Place place)
+    {
         double gridE = h.East * place.NorthN + h.North * place.NorthE;
         double gridN = -h.East * place.NorthE + h.North * place.NorthN;
         return new Vector3((float)gridE, (float)h.Up, (float)-gridN);

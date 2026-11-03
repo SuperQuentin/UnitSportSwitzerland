@@ -27,13 +27,17 @@ public static class Placeables
         // the Adventure's travel flag (#1227): planted like the Swiss flag; travel to it is the navigation plan's (#1226)
         new(ItemId.TravelFlag, PlacedKind.TravelFlag, "plant your travel flag", "Travel flag planted.", "Too steep to plant a flag.", 0.6f,
             ItemDefs.PlantedTravelFlagMesh, true),
+        // the telescope (#1440): E looks through it (Items.Telescopes), Use with an empty hand packs it up
+        new(ItemId.Telescope, PlacedKind.Telescope, "set up the telescope", "Telescope set up: look through it with E.", "Too steep for the tripod.",
+            0.8f, TelescopeVisual.SetUpMesh, false),
     };
 
     public static Placeable? ForItem(ItemId id) => All.FirstOrDefault(p => p.Item == id);
     public static Placeable? ForKind(PlacedKind kind) => All.FirstOrDefault(p => p.Kind == kind);
 
     /// <summary>Taken back with an empty hand (a fire to put out, a bench to pack up); a flag is picked up holding a flag.</summary>
-    public static bool TakenByHand(PlacedKind kind) => kind is PlacedKind.Campfire or PlacedKind.FieldWorkbench or PlacedKind.FarmStand;
+    public static bool TakenByHand(PlacedKind kind) =>
+        kind is PlacedKind.Campfire or PlacedKind.FieldWorkbench or PlacedKind.FarmStand or PlacedKind.Telescope;
 
     /// <summary>What taking one back gives: the flag and the bench come back, a fire is spent.</summary>
     public static ItemId Refund(PlacedKind kind) => kind == PlacedKind.Campfire ? ItemId.None : ForKind(kind)?.Item ?? ItemId.None;
@@ -42,7 +46,7 @@ public static class Placeables
     public static string TakeVerb(PlacedObject o) => o.Kind switch
     {
         PlacedKind.Campfire => Crafting.CampfireClock.Burning(o.Payload, World.WorldClock.EnvNow) ? "put it out" : "clear the ashes",
-        PlacedKind.FieldWorkbench or PlacedKind.FarmStand => "pack it up",
+        PlacedKind.FieldWorkbench or PlacedKind.FarmStand or PlacedKind.Telescope => "pack it up",
         _ => "pick up",
     };
 }

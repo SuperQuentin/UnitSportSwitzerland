@@ -2859,6 +2859,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
+        // a set-up telescope at hand (#1440): look through it
+        if (Items.Telescopes.TryInteract(this)) return true;
         // Versteckis (#1268): an objective's hold; a prop opens no door and drives nothing
         if (Adventure.Versteckis.VersteckisManager.TryInteract(this)) return true;
         // a chest, a seal's stack or cowbell, a guide's burrow, a trial's post, an offering box (#1227)
