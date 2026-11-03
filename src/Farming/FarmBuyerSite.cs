@@ -44,7 +44,8 @@ public static class FarmBuyerSite
             var p = seg.Points;
             for (int i = 0; i + 5 < p.Length; i += 3)
             {
-                double ae = tile.MinE + p[i], an = tile.MaxN - p[i + 2], be = tile.MinE + p[i + 3], bn = tile.MaxN - p[i + 5];
+                var (ae, an) = tile.Global(p[i], p[i + 2]);
+                var (be, bn) = tile.Global(p[i + 3], p[i + 5]);
                 double ve = be - ae, vn = bn - an, len = Math.Sqrt(ve * ve + vn * vn);
                 if (len < 0.5) continue;
                 // the left normal; both sides are tried
@@ -82,12 +83,10 @@ public static class FarmBuyerSite
             var t = house.Triangles;
             for (int i = 0; i + 8 < t.Length; i += 9)
             {
-                var tri = new[]
-                {
-                    tile.MinE + t[i], tile.MaxN - t[i + 2],
-                    tile.MinE + t[i + 3], tile.MaxN - t[i + 5],
-                    tile.MinE + t[i + 6], tile.MaxN - t[i + 8],
-                };
+                var (e0, n0) = tile.Global(t[i], t[i + 2]);
+                var (e1, n1) = tile.Global(t[i + 3], t[i + 5]);
+                var (e2, n2) = tile.Global(t[i + 6], t[i + 8]);
+                var tri = new[] { e0, n0, e1, n1, e2, n2 };
                 double area = (tri[2] - tri[0]) * (tri[5] - tri[1]) - (tri[4] - tri[0]) * (tri[3] - tri[1]);
                 if (Math.Abs(area) < 0.01) continue;
                 if (Dist(tri[0], tri[1], b.E, b.N) > near + 200) continue;   // a factory hall can be 200 m long

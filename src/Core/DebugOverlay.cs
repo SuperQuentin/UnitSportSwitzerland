@@ -188,13 +188,14 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
     private void AddTile(TileId id, int stride, bool generated, int dist, float fallback)
     {
         var colour = StrideColour(stride);
-        var nw = _origin.ToWorld(id.MinE, id.MaxN, 0);
+        var xf = _origin.TileTransform(id);
+        var nw = xf.Origin;
         const float inset = 4f;
         int steps = dist <= 3 ? 20 : 5;
-        var a = nw + new Vector3(inset, 0, inset);
-        var b = nw + new Vector3(TileSize - inset, 0, inset);
-        var c = nw + new Vector3(TileSize - inset, 0, TileSize - inset);
-        var d = nw + new Vector3(inset, 0, TileSize - inset);
+        var a = xf * new Vector3(inset, 0, inset);
+        var b = xf * new Vector3(TileSize - inset, 0, inset);
+        var c = xf * new Vector3(TileSize - inset, 0, TileSize - inset);
+        var d = xf * new Vector3(inset, 0, TileSize - inset);
         float h = fallback;
         Edge(a, b, steps, colour, generated, ref h);
         Edge(b, c, steps, colour, generated, ref h);
@@ -241,7 +242,7 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
             _tileLabels.Add(label);
         }
         var l = _tileLabels[index];
-        var centre = _origin.ToWorld(id.MinE + TileSize / 2, id.MaxN - TileSize / 2, 0);
+        var centre = _origin.TileToWorld(id, new Vector3(TileSize / 2, 0, TileSize / 2));
         float ground = _chunks.TryGetHeight(centre, out float at) ? at : fallback;
         l.Position = new Vector3(centre.X, ground + 40f, centre.Z);
         string strideText = stride < 0 ? "not built" : stride == 0 ? "grid only" : $"stride {stride}";

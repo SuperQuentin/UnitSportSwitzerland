@@ -395,10 +395,10 @@ public static class ContainerRules
     {
         var wake = new List<TileId>();
         foreach (var p in players)
-            for (int de = -WakeRings; de <= WakeRings; de++)
-                for (int dn = -WakeRings; dn <= WakeRings; dn++)
+            for (int dx = -WakeRings; dx <= WakeRings; dx++)
+                for (int dz = WakeRings; dz >= -WakeRings; dz--)
                 {
-                    var id = new TileId(p.E + de, p.N + dn);
+                    var id = p.Neighbour(dx, dz);
                     if (hasFile(id) && !wake.Contains(id)) wake.Add(id);
                 }
         return wake;

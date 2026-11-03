@@ -53,7 +53,7 @@ public static class OriginCheck
         Expect(origin.Since(origin.Frame).IsIdentity, "no move, no shift");
 
         // a tile corner stays an exact integer, whatever the frame
-        var corner = origin.ToWorld(new TileId(2641, 1150).MinE, new TileId(2641, 1150).MaxN, 0);
+        var corner = origin.TileTransform(new TileId(2641, 1150)).Origin;
         Expect(corner.X == 983 && corner.Z == -997, $"tile corner exact ({corner})");
     }
 

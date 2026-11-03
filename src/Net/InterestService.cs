@@ -298,7 +298,8 @@ public partial class InterestService : Node
         var (e, n) = (at.E, at.N);
         var id = TileId.FromLv95(e, n);
         if (!index.TryGet(id, out _)) return null;
-        double fc = (e - id.MinE) / HorizonFormat.SpacingM, fr = (id.MaxN - n) / HorizonFormat.SpacingM;
+        var (lx, lz) = id.Local(e, n);
+        double fc = lx / HorizonFormat.SpacingM, fr = lz / HorizonFormat.SpacingM;
         int last = HorizonFormat.SamplesPerSide - 1;
         int c0 = Math.Clamp((int)fc, 0, last - 1), r0 = Math.Clamp((int)fr, 0, last - 1);
         double tx = Math.Clamp(fc - c0, 0, 1), ty = Math.Clamp(fr - r0, 0, 1);

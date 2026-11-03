@@ -182,7 +182,8 @@ public partial class FarmStands : Node
                 var p = seg.Points;
                 for (int i = 0; i + 5 < p.Length; i += 3)
                 {
-                    double ax = tile.MinE + p[i], an = tile.MaxN - p[i + 2], bx = tile.MinE + p[i + 3], bn = tile.MaxN - p[i + 5];
+                    var (ax, an) = tile.Global(p[i], p[i + 2]);
+                    var (bx, bn) = tile.Global(p[i + 3], p[i + 5]);
                     double vx = bx - ax, vn = bn - an, len2 = vx * vx + vn * vn;
                     double u = len2 > 1e-9 ? Math.Clamp(((e - ax) * vx + (n - an) * vn) / len2, 0, 1) : 0;
                     double dx = ax + vx * u - e, dn = an + vn * u - n;
@@ -232,7 +233,7 @@ public partial class FarmStands : Node
                 foreach (var house in b.Buildings)
                 {
                     if (house.Triangles.Length < 3) continue;
-                    double he = tile.MinE + house.Triangles[0], hn = tile.MaxN - house.Triangles[2];
+                    var (he, hn) = tile.Global(house.Triangles[0], house.Triangles[2]);
                     if ((he - o.E) * (he - o.E) + (hn - o.N) * (hn - o.N) < FarmStandRules.TownRadius * FarmStandRules.TownRadius) houses++;
                 }
             }

@@ -128,7 +128,7 @@ public partial class ParkingNetProbe : Node
             if (tile is null || tile.Parking.Count == 0) continue;
             foreach (var bay in tile.Parking)
             {
-                var at = _origin.ToWorld(id.MinE + bay.X, id.MaxN - bay.Z, bay.Y);
+                var at = _origin.TileToWorld(id, new Vector3(bay.X, bay.Y, bay.Z));
                 if (dormant.Nearest(at, awakeToo: !_wakes) is { } s) return s;
             }
         }
