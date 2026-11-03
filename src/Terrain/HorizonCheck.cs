@@ -111,9 +111,10 @@ public partial class HorizonCheck : Node
         var (ce, cn) = _origin.ToLv95(Camera());
         foreach (var child in horizon.GetChildren())
         {
-            if (child is not MeshInstance3D block || !block.Name.ToString().StartsWith("Horizon_")) continue;
+            // every block, also one Godot renamed past a sibling of the same name (@Horizon_E_N@2), which this used to skip
+            if (child is not MeshInstance3D block) continue;
             var parts = block.Name.ToString().Split('_');
-            if (parts.Length != 3 || !int.TryParse(parts[1], out int be) || !int.TryParse(parts[2], out int bn))
+            if (parts.Length != 3 || parts[0] != "Horizon" || !int.TryParse(parts[1], out int be) || !int.TryParse(parts[2], out int bn))
             {
                 _faults.Add($"{when}: unexpected block name {block.Name}");
                 continue;

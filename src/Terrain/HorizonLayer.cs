@@ -375,6 +375,9 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         var mesh = block.Mesh;
         block.Mesh = null;
         mesh?.Dispose();
+        // out of the tree now: a rebuild adds its block under the same name this frame, and Godot
+        // would rename it past a sibling still waiting to be freed (#1489)
+        block.GetParent()?.RemoveChild(block);
         block.QueueFree();
     }
 }
