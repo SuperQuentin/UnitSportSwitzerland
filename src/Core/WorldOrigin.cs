@@ -259,6 +259,14 @@ public sealed class WorldOrigin
         return _frame.Since(old);
     }
 
+    /// <summary>The same to an anchor frame (#1430 H3): world (0, 0, 0) and its axes at <paramref name="axes"/>.</summary>
+    internal OriginShift MoveTo(FrameAxes axes)
+    {
+        var old = _frame;
+        _frame = new OriginFrame(axes, old.Epoch + 1);
+        return _frame.Since(old);
+    }
+
     internal void RaiseShifted(OriginShift shift) => Shifted?.Invoke(shift);
 
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into the current one's.</summary>

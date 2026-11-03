@@ -119,4 +119,19 @@ public class OriginFrameTests
         var back = f.TileLocal(tile, f.TileToWorld(tile, local));
         Assert.True(back.DistanceTo(local) < 0.004f, $"tile-local round trip ({back})");
     }
+
+    [Fact]
+    public void A_shifts_yaw_is_its_turn_about_up()
+    {
+        Assert.Equal(0f, OriginShift.Identity.Yaw, 6);
+        Assert.False(OriginShift.Identity.Turns);
+        var turned = new OriginShift(new Transform3D(new Basis(Vector3.Up, 0.035f), new Vector3(20, 0, 0)));
+        Assert.True(turned.Turns);
+        Assert.Equal(0.035f, turned.Yaw, 5);
+        // a heading kept as an angle and turned by Yaw points where the turned direction does
+        float heading = 1.2f;
+        var dir = new Basis(Vector3.Up, heading) * Vector3.Forward;
+        var after = new Basis(Vector3.Up, heading + turned.Yaw) * Vector3.Forward;
+        Assert.True(after.DistanceTo(turned.Direction(dir)) < 1e-5f);
+    }
 }

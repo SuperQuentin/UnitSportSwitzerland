@@ -183,12 +183,21 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         _material?.SetShaderParameter("use_cover", true);
     }
 
-    /// <summary>The coverage texture is sampled by world XZ, so its corner moves with the origin.</summary>
+    /// <summary>
+    /// The coverage texture is sampled by world XZ, so its corner moves with the origin, and its axes
+    /// turn with an anchor frame's (#1430 H3): grid east and south at the corner, in world XZ.
+    /// </summary>
     private void PushCoverOrigin()
     {
         if (_coverImage == null) return;
-        var nw = _origin!.ToWorld(_coverMinE * ChunkFormat.TileSizeM, (_coverMaxN + 1) * ChunkFormat.TileSizeM, 0);
+        double e = _coverMinE * ChunkFormat.TileSizeM, n = (_coverMaxN + 1) * ChunkFormat.TileSizeM;
+        var nw = _origin!.ToWorld(e, n, 0);
+        var east = _origin.ToWorld(e + 1000, n, 0) - nw;
+        var south = _origin.ToWorld(e, n - 1000, 0) - nw;
+        var ex = new Vector2(east.X, east.Z).Normalized();
+        var sx = new Vector2(south.X, south.Z).Normalized();
         _material?.SetShaderParameter("cover_origin", new Vector2(nw.X, nw.Z));
+        _material?.SetShaderParameter("cover_axes", new Vector4(ex.X, ex.Y, sx.X, sx.Y));
     }
 
     /// <summary>The blocks are children and have moved already (#185); the coverage has not.</summary>

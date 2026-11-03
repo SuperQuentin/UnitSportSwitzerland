@@ -3485,6 +3485,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _mantleForward = shift.Direction(_mantleForward);
         _camFwd = shift.Direction(_camFwd);
         Velocity = shift.Direction(Velocity);
+        if (shift.Turns)
+        {
+            // an anchor frame's turn (#1430 H3): the headings kept as angles, and the flight state
+            float yaw = shift.Yaw;
+            _viewYaw += yaw;
+            _flight.Velocity = shift.Direction(_flight.Velocity);
+            _flight.Yaw += yaw;
+            _flight.Attitude = shift.Transform.Basis * _flight.Attitude;
+        }
+        _ride?.OnOriginShifted(shift);
         ShiftDeck(shift);
         ShiftCrash(shift);
     }
