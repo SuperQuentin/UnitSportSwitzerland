@@ -13,7 +13,9 @@ uniform float atmo_r = 6471000.0;
 // toward the sun, world axes
 uniform vec3 sun_dir = vec3(0.0, 1.0, 0.0);
 uniform float intensity = 1.0;
-uniform float sun_power = 12.0;
+// the sun as the scene lights the ground (energy 1, no 1/π in Godot's lighting): scattered light is π times
+// the phase-weighted sum, so ~3-4 here; 12 washed a bright palette out
+uniform float sun_power = 4.0;
 // the shell's vertices are pulled in to this distance, short of the far plane
 uniform float clamp_dist = 1000000.0;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;

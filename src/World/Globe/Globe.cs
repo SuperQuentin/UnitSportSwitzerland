@@ -46,6 +46,11 @@ public partial class Globe : Node
 
     public const float SplitPixels = 6;
 
+    private static readonly StringName Cartoon = "cartoon", Ambient = "ambient", SunColor = "sun_color";
+
+    // the environment's light as the globe's tiles are lit by it, kept on change
+    private static Vector3 _ambient = new(0.40f, 0.48f, 0.74f), _sunColor = Vector3.One;
+
     private const double EarthR = 6_371_000;
 
     public WorldOrigin? Origin { get; set; }
@@ -120,6 +125,7 @@ public partial class Globe : Node
             _nextPlan = 0;
         }
         if (!show) return;
+        Relight();
 
         var (ce, cn) = Origin.ToLv95(cam.GlobalPosition);
         if (Origin.Frame.Epoch != _epoch || double.IsNaN(_axesE) || Math.Abs(ce - _axesE) > ReembedM || Math.Abs(cn - _axesN) > ReembedM)
@@ -148,6 +154,27 @@ public partial class Globe : Node
         _loading.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         GD.Print($"[globe] month {month}: built again");
+    }
+
+    /// <summary>
+    /// The tiles lit as the style lights the world: its ambient (colour by energy) and its sun's colour by
+    /// energy, written to every tile when they change (the night's moonlight never: the sun stays the real one).
+    /// </summary>
+    private void Relight()
+    {
+        if (GetViewport()?.FindWorld3D()?.Environment is not { } env) return;
+        var a = env.AmbientLightColor * env.AmbientLightEnergy;
+        var ambient = new Vector3(a.R, a.G, a.B);
+        var sun = DayNight.Instance?.Sun is { } light && IsInstanceValid(light) && (DayNight.Instance?.Night ?? 0) < 0.5f
+            ? new Vector3(light.LightColor.R, light.LightColor.G, light.LightColor.B) * light.LightEnergy : _sunColor;
+        if (ambient.IsEqualApprox(_ambient) && sun.IsEqualApprox(_sunColor)) return;
+        (_ambient, _sunColor) = (ambient, sun);
+        foreach (var node in _patches.Values)
+        {
+            var m = (ShaderMaterial)node.MaterialOverride;
+            m.SetShaderParameter(Ambient, ambient);
+            m.SetShaderParameter(SunColor, sun);
+        }
     }
 
     /// <summary>Which tiles to draw: from the six faces down, by size on screen and the horizon.</summary>
@@ -353,6 +380,9 @@ public partial class Globe : Node
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         var material = new ShaderMaterial { Shader = shader };
+        material.SetShaderParameter(Cartoon, Styles.StyleKit.Style == Styles.VisualStyle.Cartoon);
+        material.SetShaderParameter(Ambient, _ambient);
+        material.SetShaderParameter(SunColor, _sunColor);
         if (colour != null) material.SetShaderParameter("albedo_tex", ImageTexture.CreateFromImage(colour));
         return new MeshInstance3D
         {
