@@ -8,6 +8,9 @@ shader_type spatial;
 render_mode unshaded, fog_disabled, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
 
 global uniform float world_night;
+// 0 in the air, 1 above it (#1430 H4, World/Globe/Atmosphere): no sky to hide the stars by day, and
+// the horizon far below the horizontal (the Earth hides what is behind it, by depth)
+global uniform float world_space;
 
 // world axes: the celestial sphere's (stars), or a body's direction in its first column (a planet)
 uniform mat3 sky = mat3(1.0);
@@ -32,8 +35,8 @@ void vertex() {
 	float px = instanced ? INSTANCE_CUSTOM.x : single ? point_size : UV2.x;
 	clip.xy += corner * px * 2.0 / VIEWPORT_SIZE * clip.w;
 	POSITION = clip;
-	float horizon = smoothstep(-0.01, 0.1, dir.y);
-	float dark = max(smoothstep(0.35, 0.95, world_night), daylight);
+	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), 1.0, world_space);
+	float dark = max(max(smoothstep(0.35, 0.95, world_night), daylight), world_space);
 	vec4 c = single ? point_color : COLOR;
 	// a satellite shows only while it is sunlit over a dark sky: the node hides the rest
 	if (instanced) dark = 1.0;
