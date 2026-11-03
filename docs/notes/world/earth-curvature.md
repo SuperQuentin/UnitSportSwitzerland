@@ -26,6 +26,20 @@
     the bonfires (`hoehenfeuer`), the signal lamps' lens and bloom (`SignalLamps`).
   - **Flat on purpose**: interiors (only ever near), the Sechseläuten pyre, wake foam, snowfall and
     other camera-relative effects (near).
+- **At altitude** (#1430 H1, `docs/plans/ellipsoid-handover.md`): `Styles/CameraGlobal` pushes
+  `world_curvature` = `Curvature.DropPerM2At(camera height)`: refraction k = 0.13 up to 5 km,
+  smoothstep to 0 at 20 km (the planet looks geometric from the stratosphere). And
+  `world_curve_blend` = `SphereBlendAt`, 0 below 20 km, 1 from 50 km: `curve_offset` in the include
+  blends the drop into the **exact sphere** through the camera's nadir (the flat distance read as arc
+  length: drawn in by s − (R + y)·sin θ, down by (R + y)·(1 − cos θ)), worked camera-relative in floats
+  (no R + y, 1 − cos θ as 2·sin²(θ/2), series near 0). `Curvature.OffsetAsShader` is the same recipe
+  in C#: `CurvatureTests` hold it to a centimetre of doubles out to 1,000 km. Below 20 km the shader
+  takes the drop's old path (blend 0: one branch). Also by height: the far plane reaches
+  √(2Rh + h²) + 200 km above 5 km; the style's haze (`Environment.FogDensity`) thins above 3 km,
+  exp(−(h − 3 km)/10 km), kept at a sixth so the edge of the terrain data stays hazy until the globe
+  (H4); the horizon blocks' cull margin uses the unrefracted drop. The spectator and the UFO stop at
+  `Curvature.CeilingM` = 50 km until the Space regime (H3). Normals are not turned (only `POSITION`
+  curves, as before): the lit styles shade far ground as flat. The server's rules keep the ground k.
 - **The global** `world_curvature` (1/2R per m², 0 flat) is pushed by `Styles/CameraGlobal` when it
   changes. Its default is 0: the model viewer and anything without `CameraGlobal` draws flat.
   `Curvature.Drawn` turns the picture off: `--curvature 0` or the debug menu's "Earth curvature".

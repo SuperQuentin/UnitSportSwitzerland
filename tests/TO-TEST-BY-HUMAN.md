@@ -641,3 +641,12 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] The telescope on Jupiter (lock with LMB) at 20,000 mm: its belts, its four moons beside it; Saturn's rings and Titan.
 - [ ] After dusk or before dawn, satellites drift across as points; the ISS on a pass (Heavens-Above times for your town) where and when it should be. Online first: the game fetches fresh elements once a day (`[satellites] fetched` in the log).
 - [ ] The frame rate with the night sky up, and with Starlink's ten thousand after the first fetch.
+
+## The curvature at altitude (PR [#1458](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1458), [#1430](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1430) H1)
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538300,1151200 --occasion none`, the spectator (T), boost up.
+
+- [ ] Climb steadily from the street to 50 km: the ground falls away smoothly, no jump or shimmer at 5, 20 or 50 km; it stops at 50 km.
+- [ ] The UFO the same way: it stops climbing at 50 km.
+- [ ] VR: the same climb, both eyes agree on the horizon all the way.
+- [ ] From 20-50 km: no z-fighting on the ground (the far plane grows to ~1,000 km), frame rate as on the ground.

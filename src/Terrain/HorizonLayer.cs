@@ -50,7 +50,8 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     /// drop round the camera, 340 m at the far edge of a 60 km horizon, and a box culled as flat would
     /// lose the peaks along the top of the screen. The farthest a block's corner can be from the camera.
     /// </summary>
-    private float CullMargin() => (float)Curvature.Drop(_distanceM + UnloadSlackM + BlockM * Math.Sqrt(2));
+    // without refraction's share: from 20 km up the drop is the true sphere's (#1430 H1), 15 % more
+    private float CullMargin() => (float)(Curvature.Drop(_distanceM + UnloadSlackM + BlockM * Math.Sqrt(2)) / (1 - Curvature.Refraction));
 
     private IChunkSource? _source;
     private WorldOrigin? _origin;
