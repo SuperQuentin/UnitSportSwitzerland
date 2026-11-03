@@ -47,6 +47,8 @@ public partial class TableGames : Node
     private bool IsServer => !Online || Multiplayer.IsServer();
     public long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
     private static double Clock => ClockSync.SimNow;
+    /// <summary>The shared clock the games' times are on (a shot's start, a goal).</summary>
+    public double ClockNow => Clock;
 
     public static TableGames Create(Node world)
     {
