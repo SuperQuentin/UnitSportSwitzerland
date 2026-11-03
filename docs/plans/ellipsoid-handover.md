@@ -394,13 +394,14 @@ speed).
 | **H6** Ephemeris sky | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
 | **H7** Planets | registry, frame tree, SOI handovers, scaled space | H4, H5 | a transfer from Earth orbit to lunar orbit with both handovers invisible |
 
-| **C0** Detail by size on screen | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
+| **C0** Detail by size on screen (**done**, #1433) | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
 | **C1** Telescope on the moon | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
 | **C2** Spaceplane to orbit | spec, model, sounds, rocket thrust, the cruise drive round the Earth, glide home and runway landing | H4, H5 | take off at an airfield, reach 400 km, drive round the Earth, drop into orbit, re-enter and land on a runway |
 | **C3** Out to the moon and planets | the drive between bodies, the far-marker list, planets and markers in the telescope | H7, C1, C2 | A drives to lunar orbit; B on the ground locks the telescope on the moon and sees A's marker at the right place |
 
-H2 and the sky part of H6 can land early and in parallel; H1 needs only #187. C0 can land at any
-time and helps the camera item now; C1 is the earliest playable piece: it needs only the ephemeris
+H2 and the sky part of H6 can land early and in parallel; H1 needs only #187. C0 is done (#1433,
+`docs/notes/styles/zoom-lod.md`: at 200 mm the step is x9.31, GPU time unchanged, VRAM +1.15 GB,
+hitches for ~7 s while the cone's tiles refine); C1 is the earliest playable piece: it needs only the ephemeris
 and C0.
 
 ## Tests
