@@ -52,3 +52,12 @@ Riddes viewpoints, M1 Pro: 33–36M primitives a frame on `main`, 25–30M with 
   underside traced flat; `hit_puff`: ellipsoids, the low-poly puffs traced smooth;
   `hit_trunk6`). Far billboards cast no shadow: traced from the rendering camera, a shadow pass
   would trace them from the light.
+- **Both kinds light by the mesh's smooth normals and take snow by its facets** (#1437). Godot
+  turns a MultiMesh instance's normals by its basis, not the inverse transpose, so a conifer's
+  (0.26 h, h, 0.26 h) tipped the smooth normals nearly straight up: the 3D trees had no shade
+  side and read pale under snow beside the billboards. The vertex stage divides `NORMAL` by the
+  squared scale (Cartoon only: Realistic's trees are left as they were, and PS1 is unlit). The billboard lights a
+  tier by the normal the GPU interpolates across its face (`tier_smooth`) and snows a puff by the
+  6x4 mesh's facet under the hit (`puff_facet`), as `facet_normal` does on the 3D tree.
+  Check the pair with one pose shot twice: `--tree-near 40` (billboards from 40 m) and
+  `--tree-lod off`.
