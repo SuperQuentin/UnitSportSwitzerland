@@ -55,6 +55,9 @@ public partial class ServerRegions : Node
     private readonly List<RegionPlanner.Body> _bodies = new();
     private readonly List<RegionPlanner.Region> _known = new();
     private readonly List<FootPlayer> _scratch = new();
+    private readonly RegionMirrors _mirrors = new();
+    private readonly List<GlobalPos> _botsAt = new();
+    private List<FootPlayer> _decided = new();
     private int _nextId = 1;
     private double _clock, _decideAt;
 
@@ -144,13 +147,23 @@ public partial class ServerRegions : Node
             if (!body.Region.IsMain) CallDeferred(MethodName.Shadow, body);
             return;
         }
-        if (node is not CollisionObject3D) return;
-        for (var up = node.GetParent(); up != null && up != _players; up = up.GetParent())
-            if (up is FootPlayer { Region: { IsMain: false } } owner)
+        if (node is not CollisionObject3D co) return;
+        for (var up = node.GetParent(); up != null; up = up.GetParent())
+        {
+            if (up is FootPlayer owner)
             {
-                FootPlayer.SetSpace(node, owner.Region.Space);
+                if (owner.Region is { IsMain: false } r) FootPlayer.SetSpace(node, r.Space);
                 return;
             }
+            // the regions' own, the terrains and trunks (every region has its own), other worlds
+            if (up == this || up == _players || up is ChunkManager or World.TreeColliders or Viewport) return;
+            if (up == GetParent())
+            {
+                // the server's own world: solid things the far regions copy round their bots
+                if (co is not Area3D) _mirrors.Track(co);
+                return;
+            }
+        }
     }
 
     public override void _PhysicsProcess(double delta)
@@ -163,6 +176,7 @@ public partial class ServerRegions : Node
         }
         Advance();
         FollowShadows();
+        _mirrors.Follow(Main);
     }
 
     /// <summary>Clusters the bodies again and starts the handovers and the regions that takes.</summary>
@@ -188,7 +202,21 @@ public partial class ServerRegions : Node
             if (want != now) Start(body, want);
         }
         FreeEmpty(bodies);
+        _decided = bodies;
+        _mirrors.Update(Main, _regions.Values, BotsIn);
     }
+
+    /// <summary>Where the bots the server runs in <paramref name="region"/> are (players' proxies bump into nothing here).</summary>
+    private IEnumerable<GlobalPos> BotsIn(ServerRegion region)
+    {
+        _botsAt.Clear();
+        foreach (var body in _decided)
+            if (body.Region == region && body.IsMultiplayerAuthority() && GodotObject.IsInstanceValid(body)) _botsAt.Add(Global(body));
+        return _botsAt;
+    }
+
+    /// <summary>For checks: how many main-frame objects are copied into far regions now.</summary>
+    public int Mirrors => _mirrors.Count;
 
     private ServerRegion Create(GlobalPos anchor, int id = -1)
     {

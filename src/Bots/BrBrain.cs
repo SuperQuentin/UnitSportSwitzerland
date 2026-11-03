@@ -101,7 +101,7 @@ public sealed class BrBrain : IBotBrain
             _lookCarAt = now + 1.5;
             if (BotDriving.Spot(bot, BotSenses.SightRange) is { } seen
                 && (_knownCar is not { } known || !GodotObject.IsInstanceValid(known)
-                    || seen.GlobalPosition.DistanceTo(bot.Body.GlobalPosition) < known.GlobalPosition.DistanceTo(bot.Body.GlobalPosition)))
+                    || bot.Body.WhereIs(seen).DistanceTo(bot.Body.GlobalPosition) < bot.Body.WhereIs(known).DistanceTo(bot.Body.GlobalPosition)))
                 _knownCar = seen;
         }
         var s = Situation(bot, now, out var enemy, out var downed, out var crate, out var zone);
@@ -614,7 +614,7 @@ public sealed class BrBrain : IBotBrain
     {
         if (_knownCar is not { } car || !GodotObject.IsInstanceValid(car) || VehicleManager.Instance?.Enterable(car) != true) return _knownCar = null;
         var pos = bot.Body.GlobalPosition;
-        var toCar = (car.GlobalPosition - pos) with { Y = 0 };
+        var toCar = (bot.Body.WhereIs(car) - pos) with { Y = 0 };
         var toGoal = (target - pos) with { Y = 0 };
         if (toCar.Length() > CarDetour) return null;
         return toCar.Length() < 40f || toCar.Normalized().Dot(toGoal.Normalized()) > -0.2f ? car : null;
@@ -672,11 +672,11 @@ public sealed class BrBrain : IBotBrain
             {
                 _car = BotDriving.Spot(bot, CarSpot) ?? Remembered(bot, target);
                 // a car not much nearer than the goal is no shortcut
-                if (_car != null && _car.GlobalPosition.DistanceTo(pos) > straight * CarShare) _car = null;
+                if (_car != null && bot.Body.WhereIs(_car).DistanceTo(pos) > straight * CarShare) _car = null;
                 _carSince = now;
                 // patience for the walk there too: a remembered car can be 100 m off along the streets
-                if (_car != null) _carPatience = CarPatience + _car.GlobalPosition.DistanceTo(pos) / 4f;
-                if (_car != null) GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} \"{bot.Profile.Name}\" goes for {_car.Name} ({_car.Kind}) {_car.GlobalPosition.DistanceTo(pos):F0} m off, {straight:F0} m to go"));
+                if (_car != null) _carPatience = CarPatience + bot.Body.WhereIs(_car).DistanceTo(pos) / 4f;
+                if (_car != null) GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} \"{bot.Profile.Name}\" goes for {_car.Name} ({_car.Kind}) {bot.Body.WhereIs(_car).DistanceTo(pos):F0} m off, {straight:F0} m to go"));
             }
             // a car it cannot get to (behind a fence, across a river) is given up, and it walks a while:
             // without this, bots stood against a wall going for a car while the zone closed on them
@@ -690,7 +690,7 @@ public sealed class BrBrain : IBotBrain
             }
             if (_car != null)
             {
-                var carAt = _car.GlobalPosition;
+                var carAt = bot.Body.WhereIs(_car);
                 // far from it: along the streets (GoTo's own), close: to its door and in
                 bool walked = new Vector2(carAt.X - pos.X, carAt.Z - pos.Z).Length() > 30f && Streets(bot, carAt, space, now);
                 if (!walked && BotDriving.GetIn(bot, _car, space, now)) { _travel = target; _car = null; }

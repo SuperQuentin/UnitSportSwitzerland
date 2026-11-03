@@ -3,8 +3,10 @@
 # docs/notes/net/server-regions.md). A dedicated server (--generated-world) runs --regioncheck three times:
 # both sites at once (a: the spawn, in the main region; b: 300 km east, in a region of its own), then
 # each site alone. At each site a walker walks east into a blocker 4 m ahead; tools/regioncheck-compare.py
-# compares each site's tracks with and without the other site (tolerance 1 cm). BEFORE=1 adds a run
-# with --noregions (every body in the server's one frame) and reports what the far frame cost.
+# compares each site's tracks with and without the other site (tolerance 1 cm). A second walker at each site
+# heads into a car the server parked in its main frame: in the far region it meets the car's copy
+# (RegionMirrors). BEFORE=1 adds a run with --noregions (every body in the server's one frame: what the far
+# frame cost) and one of the far site with --nomirrors (its walker goes through the car).
 #   GODOT=<exe> [BEFORE=1] tools/regioncheck.sh      tracks: test_output/regions/*.csv
 . "$(dirname "$0")/lib/twoclient.sh" regions
 DIR="$OUT/regions"
@@ -19,7 +21,10 @@ run() {   # <name> <regioncheck args...>
 run both both
 run a a
 run b b
-[ -n "${BEFORE:-}" ] && run noregions both --noregions
+if [ -n "${BEFORE:-}" ]; then
+  run noregions both --noregions
+  run nomirrors b --nomirrors   # expected to FAIL: the walker goes through the parked car
+fi
 if tc_ok 3 "$DIR"/both.log "$DIR"/a.log "$DIR"/b.log && python3 tools/regioncheck-compare.py "$DIR" ${BEFORE:+--before}; then
     echo "[regioncheck] RESULT: ok"; exit 0
 fi

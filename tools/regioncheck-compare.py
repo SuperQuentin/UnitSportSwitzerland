@@ -23,7 +23,7 @@ def worst(a, b):
         return float("inf")
     d = 0.0
     for ra, rb in zip(a, b):
-        for i in range(1, 7):
+        for i in range(1, len(ra)):
             d = max(d, abs(ra[i] - rb[i]))
     return d
 

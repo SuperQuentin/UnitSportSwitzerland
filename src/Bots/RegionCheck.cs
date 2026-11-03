@@ -17,9 +17,11 @@ namespace UnitSport.Bots;
 /// a walker walks straight east for <see cref="WalkTicks"/> physics steps into a blocker standing
 /// <see cref="BlockerGap"/> m ahead. Both tracks, relative to where each started, go to
 /// <c>&lt;out&gt;/&lt;run&gt;.csv</c>; the script compares a run with both sites against each site alone. Here: each
-/// walker walked, never passed through its blocker (they touched), and each site's bots share one region.
+/// walker walked, never passed through its blocker (they touched), and each site's bots share one region. A second walker
+/// heads north into a car the server parked in its main frame <see cref="CarGap"/> m ahead: in a far region
+/// it meets the car's copy there (<c>RegionMirrors</c>), and stops at its side as at home.
 /// <c>--noregions</c> runs the same with every body in the server's one frame: the "before".
-/// <c>--regionat E,N --regionfar E,N</c> put the sites elsewhere (a real-terrain run: Geneva and Val Müstair);
+/// <c>--regionat E,N --regionfar E,N</c> put the sites elsewhere (a real-terrain run: Geneva and Riddes);
 /// <c>--regionwander S</c> then lets every bot stroll S seconds among the trunks and houses (WanderBrain) and
 /// reports how far each went, whether it stayed on its ground and how many trunks its region holds.
 /// </summary>
@@ -30,6 +32,8 @@ public partial class RegionCheck : Node
     /// <summary>The far site: this far east of the spawn.</summary>
     public const double FarM = 300_000;
     public const float BlockerGap = 4f;
+    /// <summary>The second walker's parked car: this far north of it, its side towards it.</summary>
+    public const float CarGap = 6f;
     /// <summary>12 s at 60 Hz.</summary>
     public const int WalkTicks = 720;
     /// <summary>Standing still this long on the ground before the walk starts.</summary>
@@ -41,21 +45,23 @@ public partial class RegionCheck : Node
     {
         public readonly string Name = name;
         public readonly GlobalPos At = at;
-        public Bot? Walker, Blocker;
-        public GlobalPos WalkerStart, BlockerStart;
-        public double MinGap = double.MaxValue;
+        public Bot? Walker, Blocker, Driver;
+        public GlobalPos WalkerStart, BlockerStart, DriverStart, CarAt;
+        public double MinGap = double.MaxValue, MinCar = double.MaxValue;
         /// <summary>At the end of the walk: how far the walker went, how far the blocker was pushed.</summary>
-        public double Walked, Pushed;
+        public double Walked, Pushed, ToCar;
         public readonly StringBuilder Csv = new();
     }
 
-    private sealed class Script(bool walk) : IBotBrain
+    private sealed class Script(Vector3 wish) : IBotBrain
     {
         public bool Go;
+        public BotIntent Walk => wish == Vector3.Zero ? BotIntent.Stand
+            : new BotIntent { Wish = wish, FaceYaw = Mathf.Atan2(-wish.X, -wish.Z) };
         public double Think(Bot bot, double now)
         {
-            // east, at a walk: the same wish every step at both sites
-            bot.Intent = walk && Go ? new BotIntent { Wish = Vector3.Right, FaceYaw = -Mathf.Pi / 2 } : BotIntent.Stand;
+            // straight on, at a walk: the same wish every step at both sites
+            bot.Intent = Go ? Walk : BotIntent.Stand;
             return 0.05;
         }
     }
@@ -64,6 +70,7 @@ public partial class RegionCheck : Node
     private readonly string _run;
     private string _out = "";
     private int _tick, _settled, _walked = -1, _wander, _wandered = -1;
+    private bool _parked;
     private readonly Dictionary<Bot, (GlobalPos From, int Ticks, int OnFloor, double Path, GlobalPos Last)> _strolls = new();
 
     public RegionCheck()
@@ -96,9 +103,11 @@ public partial class RegionCheck : Node
         {
             s.Walker = director.Add(s.At, 0f, BotProfile.For(1, 0, BotDifficulty.Normal, new HashSet<string>()));
             s.Blocker = director.Add(s.At with { E = s.At.E + BlockerGap }, 0f, BotProfile.For(1, 1, BotDifficulty.Normal, new HashSet<string>()));
-            if (s.Walker == null || s.Blocker == null) { Fail($"site {s.Name}: no bots"); return; }
-            s.Walker.Brain = new Script(walk: true);
-            s.Blocker.Brain = new Script(walk: false);
+            s.Driver = director.Add(s.At with { E = s.At.E - 10 }, 0f, BotProfile.For(1, 2, BotDifficulty.Normal, new HashSet<string>()));
+            if (s.Walker == null || s.Blocker == null || s.Driver == null) { Fail($"site {s.Name}: no bots"); return; }
+            s.Walker.Brain = new Script(Vector3.Right);
+            s.Blocker.Brain = new Script(Vector3.Zero);
+            s.Driver.Brain = new Script(Vector3.Forward);
         }
     }
 
@@ -111,18 +120,32 @@ public partial class RegionCheck : Node
             // every body on its ground, still, for a second
             bool ready = true;
             foreach (var s in _sites)
-                foreach (var b in new[] { s.Walker!, s.Blocker! })
+                foreach (var b in new[] { s.Walker!, s.Blocker!, s.Driver! })
                     ready &= b.Body.Placed && b.Body.IsOnFloor() && b.Body.Velocity.Length() < 0.05f;
             _settled = ready ? _settled + 1 : 0;
             if (_settled < SettleTicks) return;
+            if (!_parked)
+            {
+                // a car the server parks in its main frame, across the second walker's way; then a second
+                // for its copy to be made in a far region (the regions decide every 0.5 s)
+                _parked = true;
+                _settled = 0;
+                if (!Park()) return;
+                return;
+            }
             foreach (var s in _sites)
             {
                 s.WalkerStart = s.Walker!.Body.Global;
                 s.BlockerStart = s.Blocker!.Body.Global;
-                ((Script)s.Walker.Brain).Go = true;
-                // at once, not at its next think (up to 0.5 s away, unwatched): the same step in every run
-                s.Walker.Intent = new BotIntent { Wish = Vector3.Right, FaceYaw = -Mathf.Pi / 2 };
-                s.Csv.Append("tick,we,wn,walt,be,bn,balt\n");
+                s.DriverStart = s.Driver!.Body.Global;
+                foreach (var b in new[] { s.Walker, s.Driver })
+                {
+                    var script = (Script)b.Brain;
+                    script.Go = true;
+                    // at once, not at its next think (up to 0.5 s away, unwatched): the same step in every run
+                    b.Intent = script.Walk;
+                }
+                s.Csv.Append("tick,we,wn,walt,be,bn,balt,de,dn,dalt\n");
                 GD.Print($"{Log} site {s.Name}: walker {s.Walker.Body.Name} in {s.Walker.Body.Region}, blocker in {s.Blocker.Body.Region}, start {s.WalkerStart}");
             }
             _walked = 0;
@@ -134,9 +157,11 @@ public partial class RegionCheck : Node
         {
             var w = s.Walker!.Body.Global;
             var b = s.Blocker!.Body.Global;
+            var d = s.Driver!.Body.Global;
             s.MinGap = Math.Min(s.MinGap, w.HorizontalDistanceTo(b));
+            s.MinCar = Math.Min(s.MinCar, d.HorizontalDistanceTo(s.CarAt));
             s.Csv.Append(string.Create(CultureInfo.InvariantCulture,
-                $"{_walked},{w.E - s.WalkerStart.E:F5},{w.N - s.WalkerStart.N:F5},{w.Alt - s.WalkerStart.Alt:F5},{b.E - s.BlockerStart.E:F5},{b.N - s.BlockerStart.N:F5},{b.Alt - s.BlockerStart.Alt:F5}\n"));
+                $"{_walked},{w.E - s.WalkerStart.E:F5},{w.N - s.WalkerStart.N:F5},{w.Alt - s.WalkerStart.Alt:F5},{b.E - s.BlockerStart.E:F5},{b.N - s.BlockerStart.N:F5},{b.Alt - s.BlockerStart.Alt:F5},{d.E - s.DriverStart.E:F5},{d.N - s.DriverStart.N:F5},{d.Alt - s.DriverStart.Alt:F5}\n"));
         }
         if (_walked < WalkTicks) return;
         if (_walked == WalkTicks)
@@ -144,13 +169,14 @@ public partial class RegionCheck : Node
             {
                 s.Walked = s.Walker!.Body.Global.HorizontalDistanceTo(s.WalkerStart);
                 s.Pushed = s.Blocker!.Body.Global.HorizontalDistanceTo(s.BlockerStart);
+                s.ToCar = s.Driver!.Body.Global.HorizontalDistanceTo(s.DriverStart);
             }
         if (_wander <= 0) { Finish(); return; }
         if (_wandered < 0)
         {
             // the walk is done: every bot strolls among the trunks and houses round its site
             foreach (var s in _sites)
-                foreach (var b in new[] { s.Walker!, s.Blocker! })
+                foreach (var b in new[] { s.Walker!, s.Blocker!, s.Driver! })
                 {
                     b.Brain = new WanderBrain();
                     _strolls[b] = (b.Body.Global, 0, 0, 0, b.Body.Global);
@@ -165,11 +191,29 @@ public partial class RegionCheck : Node
         if (++_wandered >= _wander * 60) Finish();
     }
 
+    /// <summary>Parks a car <see cref="CarGap"/> m north of each site's second walker, side on, through the server's own path.</summary>
+    private bool Park()
+    {
+        if (Vehicles.VehicleManager.Instance is not { } vehicles) { Fail("no vehicle manager"); return false; }
+        var kind = (RideKind)CarCatalog.First;
+        if (Rideable.Create(kind) is not { IsVehicle: true } ride) { Fail("no car to park"); return false; }
+        foreach (var s in _sites)
+        {
+            var at = s.Driver!.Body.Global;
+            s.CarAt = at with { N = at.N + CarGap };
+            var state = new Vehicles.VehicleState(kind, s.CarAt, Mathf.Pi / 2, Vector3.Zero, ride.MaxHealth,
+                EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
+            if (vehicles.Place(state, $"regioncheck_car_{s.Name}", settled: true) == null) { Fail($"site {s.Name}: the car was not parked"); return false; }
+        }
+        GD.Print($"{Log} parked a car at each site; copies in far regions: {ServerRegions.Instance?.Mirrors ?? 0} (made at the next decision)");
+        return true;
+    }
+
     private string Status()
     {
         var sb = new StringBuilder();
         foreach (var s in _sites)
-            foreach (var b in new[] { s.Walker, s.Blocker })
+            foreach (var b in new[] { s.Walker, s.Blocker, s.Driver })
                 if (b != null) sb.Append($"{b.Body.Name} {b.Body.Global} placed {b.Body.Placed} floor {b.Body.IsOnFloor()}; ");
         return sb.ToString();
     }
@@ -185,10 +229,12 @@ public partial class RegionCheck : Node
             bool shared = s.Walker.Body.Region == s.Blocker!.Body.Region;
             // the two capsules (0.32 m each) touched and never went through each other
             bool touched = s.MinGap < 0.8, through = s.MinGap < 0.4;
-            bool ok = walked > 3 && touched && !through && shared;
+            // the car's side is ~0.9 m from its centre: the walker stops there, never at the centre (through it)
+            bool atCar = s.MinCar > 0.9 && s.ToCar < CarGap;
+            bool ok = walked > 3 && touched && !through && shared && atCar;
             if (!ok) failures++;
             GD.Print(string.Create(CultureInfo.InvariantCulture,
-                $"{Log} site {s.Name}: walked {walked:F3} m, nearest the blocker {s.MinGap:F3} m, blocker moved {s.Pushed:F3} m, one region {shared} ({s.Walker.Body.Region}){(ok ? "" : " FAILED")} -> {file}"));
+                $"{Log} site {s.Name}: walked {walked:F3} m, nearest the blocker {s.MinGap:F3} m, blocker moved {s.Pushed:F3} m, one region {shared} ({s.Walker.Body.Region}); second walker {s.ToCar:F3} m towards the parked car, nearest its centre {s.MinCar:F3} m{(ok ? "" : " FAILED")} -> {file}"));
         }
         foreach (var (b, st) in _strolls)
         {

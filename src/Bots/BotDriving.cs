@@ -51,9 +51,7 @@ public static class BotDriving
     /// </summary>
     public static VehicleBody? Spot(Bot bot, float range)
     {
-        // parked vehicles stand in the server's main frame and space (#1456): a bot in a far region has
-        // none to take until they live in regions too
-        if (VehicleManager.Instance is not { } vehicles || !bot.Body.InMainFrame) return null;
+        if (VehicleManager.Instance is not { } vehicles) return null;
         var eye = bot.Body.EyePosition;
         VehicleBody? best = null;
         float bestD = range;
@@ -61,10 +59,12 @@ public static class BotDriving
         {
             // the cheap test first: most of a match's vehicles are far off
             if (node is not VehicleBody v) continue;
-            float d = v.GlobalPosition.DistanceTo(bot.Body.GlobalPosition);
+            // in the bot's frame: parked vehicles stand in the server's main one, the bot may be in a region's (#1456)
+            var at = bot.Body.WhereIs(v);
+            float d = at.DistanceTo(bot.Body.GlobalPosition);
             if (d >= bestD || v.Kind == RideKind.OnFoot || !vehicles.Enterable(v) || !AutoPilot.Drives(v.Kind)) continue;
             // in sight, or close enough to know it is there
-            if (d > 25f && !BotRays.Clear(bot.World.Space, eye, v.GlobalPosition + Vector3.Up * 0.8f, bot.Body.GetRid())) continue;
+            if (d > 25f && !BotRays.Clear(bot.World.Space, eye, at + Vector3.Up * 0.8f, bot.Body.GetRid())) continue;
             best = v;
             bestD = d;
         }
@@ -75,7 +75,7 @@ public static class BotDriving
     public static bool GetIn(Bot bot, VehicleBody car, PhysicsDirectSpaceState3D space, double now)
     {
         if (!GodotObject.IsInstanceValid(car)) return false;
-        var entry = car.Ride.EntryPoint != Vector3.Zero ? car.ToGlobal(car.Ride.EntryPoint) : car.GlobalPosition;
+        var entry = bot.Body.FromFrame(car.Origin, car.Ride.EntryPoint != Vector3.Zero ? car.ToGlobal(car.Ride.EntryPoint) : car.GlobalPosition);
         if (entry.DistanceTo(bot.Body.GlobalPosition) > Reach + car.Ride.ParkedBox.Size.X * 0.5f)
         {
             BotSkills.MoveTo(bot, entry, run: true, 1.5f, space, now);

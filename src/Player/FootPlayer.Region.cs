@@ -31,6 +31,21 @@ public partial class FootPlayer
     public Vector3 WhereIs(FootPlayer other) =>
         other.Region == Region || Origin is not { } frame ? other.GlobalPosition : frame.ToWorld(other.Global);
 
+    /// <summary>
+    /// A point of <paramref name="frame"/> (a main-frame object's, on the server: a parked car, a saucer)
+    /// in this body's frame; unchanged when they are the same frame, or on a client.
+    /// </summary>
+    public Vector3 FromFrame(WorldOrigin? frame, Vector3 p) =>
+        frame == null || Origin is not { } mine || frame == mine ? p : mine.ToWorld(frame.ToGlobal(p));
+
+    /// <summary>A point of this body's frame in <paramref name="frame"/>'s: the way back of <see cref="FromFrame"/>.</summary>
+    public Vector3 ToFrame(WorldOrigin? frame, Vector3 p) =>
+        frame == null || Origin is not { } mine || frame == mine ? p : frame.ToWorld(mine.ToGlobal(p));
+
+    /// <summary>Where a vehicle is in this body's frame: from its exact Earth position when the frames differ.</summary>
+    public Vector3 WhereIs(Vehicles.VehicleBody v) =>
+        Origin is { } mine && v.Origin is { } theirs && mine != theirs ? mine.ToWorld(v.Global) : v.GlobalPosition;
+
     /// <summary>The terrain of the region this body is in when that is not the main one (the statics bound to the main terrain step aside for it), else null.</summary>
     public ChunkManager? RegionTerrain => Region is { IsMain: false } r ? r.Chunks : null;
 
