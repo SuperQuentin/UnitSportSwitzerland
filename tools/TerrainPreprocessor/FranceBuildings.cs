@@ -126,7 +126,7 @@ public static class FranceBuildings
     /// every fallback building a storey too tall.
     /// </para>
     /// </summary>
-    private static (double Wall, double Ridge)? Heights(BdFeature feature)
+    internal static (double Wall, double Ridge)? Heights(BdFeature feature)
     {
         double? groundZ = feature.Number("altitude_minimale_sol");
         double? eaveZ = feature.Number("altitude_minimale_toit");

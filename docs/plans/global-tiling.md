@@ -33,7 +33,9 @@ no interim LV95 fix, France is rebuilt once, in the new format).
 | The goal | Whole-Earth geodata is data work only. Switzerland and France are the first two regions. |
 | Tiles hold | **True Earth positions.** The preprocessor converts every source sample to ECEF in doubles and stores the tile relative to its own anchor: the east-north-up (ENU) frame at the tile's centre on the ellipsoid, floats in metres. Neighbouring tiles share their edge points exactly. |
 | Addressing | **A cube sphere** (decided with the user over a lat/lon quadtree): six faces, each a quadtree, with the **equal-angle** mapping (cells within ~1.4x in area everywhere). No singular point: a pole is an ordinary point of a face; at the 8 corners 3 cells meet at 120°, no pinching. The cube is **oriented with a face centred on Switzerland**, turned about that axis to put as many corners as possible in oceans (G1 computes it). Rejected: a lat/lon quadtree (poles pinch, as in Google Earth and MSFS) and lat/lon plus polar grids (a stitched ring seam). |
-| Leaf size | **Measured in G1**: level 13 (~1.2 km at a face centre, ~0.9 km near a corner, closest to today's 1 km) against level 14 (~0.6 km): frame time, draw calls, streaming hitches, memory. Detail inside a tile (1 m in CH and FR, 30 m from Copernicus) is independent of its size. Parent levels serve the far view (they replace `horizon.bin`). |
+| Leaf size | **Level 14** (decided with the user on G1's numbers, below): ~0.6 km a side at a face centre, 512 cells of ~1.2 m. Against level 13 it costs the same to preprocess and store per area, and in a streaming flight it had a third of the hitches, a quarter of the worst commit (31 against 123 ms) and half the memory; it costs 4x the keys (~400 M land tiles for the Earth, bundled). Detail inside a tile (1 m in CH and FR, 30 m from Copernicus) is independent of its size. Parent levels serve the far view (they replace `horizon.bin`). |
+| Collision | **Trimesh patches round bodies** (decided with the user on G1's numbers): the mesh's own triangles, ~128 x 128 cells (~150 m) a patch, built on workers round players, vehicles and bots. A tangent-plane `HeightMapShape3D` misses the 2 cm target on 1 m terrain at either level; a whole-tile trimesh is too heavy. |
+| Far view outlines | Where no DEM exists, the coarse levels take land and sea from **Natural Earth** (public domain), as today's coarse Swiss geometry does for the horizon (the user, in G1); G2. |
 | The game's frame | **Still one flat Cartesian frame, Y up**: #1430's anchor frame, used on the ground too. It is the ENU frame at an anchor near the camera; travelling re-anchors it with a small rotation (0.027° per 3 km). Physics, builders and gameplay keep their flat, Y-up world: within a few km of the anchor "up" tilts at most ~0.03° and the ground falls d²/2R below the plane (8 cm at 1 km, 70 cm at 3 km). |
 | Curvature | **Geometry**: tiles are round because their points are true. #187's shader drop becomes the refraction part only: `world_curvature` = 1/2R_eff − 1/2R = −k/2R (a small lift), through the same `CURVED_CLIP` sites. The server's sight lines see the real bulge in the geometry. |
 | Position type | `GlobalPos` (LV95 doubles) becomes an **Earth position in ECEF doubles** (H2's `EcefPos`, #1435), with geodetic and LV95 views. LV95 stays an input and display notation for Swiss data and UI. |
@@ -87,6 +89,55 @@ From a full sweep of `src/`, `tools/`, `tests/` (regex counts, approximate):
   server**, one per region with players or bots in it (Godot physics spaces per region), and
   measuring done there in Earth positions. A G2 prerequisite of its own (G2a below).
 
+## G1 results (2026-11-03, #1452, PR #1455)
+
+Code and commands: `docs/notes/tools/cube-tiles.md`. Measured on the local region (825 km² of
+swissALTI3D, Geneva to Valais) plus RGE ALTI samples (63 km² on the Geneva border, 9 km² in Paris,
+9 km² in Brest, fetched from the Géoplateforme while the NAS was out of reach).
+
+- **Orientation**: face 0 on 46.95108° N 7.43863° E, twisted 28.5°: all eight corners in oceans,
+  the nearest 151 km from a 1:110m coast. The North Pole is an ordinary point of face 0, the South
+  Pole of face 2. Pinned by `CubeSphereTests`.
+- **Mapping**: the cube direction is the geodetic normal itself (no iteration for lat/lon; a height
+  moves the point along it). Round trips under 0.1 mm everywhere, poles and edges included.
+- **Exact edges**: shared lattice points are bit-identical from every face (tested to level 23);
+  in the built regions every pair of built neighbours holds identical edge heights (1.19 M edge
+  vertices at level 13, 2.38 M at 14, 0 differ). The tiler computes edge vertices rigorously and
+  only the interior from control points.
+- **Accuracy**: the 17 × 17 control-point resampling is within 0.28 mm of the exact one; mesh
+  vertices are within 5.3 mm of their rigorous ground point (target 1 cm), the 1 cm height quantum
+  being most of it.
+- **Height encoding**: 1 cm quanta, planar prediction, varints, Brotli: 111 KB a level-14 tile,
+  290 MB for the region (today's LV95 `.terr`: 1.6 GB at 7 cm). A per-tile offset and scale over
+  16 bits would miss 1 cm on any tile spanning over 1,310 m.
+- **Heights' datum**: ellipsoidal (WGS84) from LHN95 through `SwissGeodesy`; French IGN69 heights
+  plus dz are taken as LHN95 (as the LV95 build does), so the border is continuous but absolute
+  heights far from Switzerland are off by the Swiss geoid's edge value against the real one
+  (metres). G3 needs a geoid for each source (RAF20 for France, EGM2008 elsewhere).
+- **France fixed**: BD TOPO placed from its own lat/lon on the vertex normal: on the terrain by
+  construction (median 1 cm from the 1.2 m mesh below). `SwissProjection` had them 9.7 m off in
+  Paris and 276 m in Brest (0.2 m by Geneva).
+- **Level 13 against 14** (heights only, warm cache, 16 threads):
+
+  | | Level 13 | Level 14 |
+  |---|---|---|
+  | tiles in the region | 709 | 2,547 |
+  | heights a tile / in all | 391 KB / 284 MB | 111 KB / 290 MB |
+  | preprocessing | 113 s (2.5 CPU-s a tile) | 119 s (0.75 CPU-s a tile) |
+  | flight 95 km at 200 m/s, 4 km radius: hitches > 33 ms | 22 | 7 |
+  | worst main-thread commit / worker build p95 | 123 / 313 ms | 31 / 86 ms |
+  | draw calls max / working set | 17 / 1.2 GB | 51 / 0.6 GB |
+
+  Features (swissTLM3D roads and footprints, BD TOPO) add ~1 s a tile today, mostly GeoPackage
+  and WFS reads; peak memory ~11 GB with a 300-tile source cache.
+- **Collision** (`--cubeharness`, Jolt, rays against the mesh): a tangent-plane height field
+  (1024² at 1.2 m) misses: median 3-22 mm, p99 0.1-1.3 m, 11-53 % of rays over 2 cm (rough 1 m
+  terrain sampled twice at 1.2 m disagrees). The mesh's own triangles match (median under 2 mm;
+  the rare misses are cliffs where the projected mesh folds), at 6 s and 185 MB a level-13 tile,
+  1.1 s and 25 MB a level-14 tile, 50-60 ms and 1-3 MB a 128-cell patch. Hence the patches.
+- **Natural Earth**: the 1:110m land, used to choose the twist, also gives the far view its
+  outlines where no DEM exists (G2).
+
 ## Design
 
 ### 1. The cube sphere
@@ -116,11 +167,9 @@ From a full sweep of `src/`, `tools/`, `tests/` (regex counts, approximate):
   traffic endpoints. Builders mesh in the tile frame and keep a local up, so they change only in
   where their frame comes from.
 - **Rendering mesh**: vertices at the cube grid's true points, so neighbours meet exactly.
-- **Collision**: a `HeightMapShape3D` per tile needs a regular grid in a plane, so it is sampled
-  separately from the same surface on a regular grid in the tile's tangent frame, overlapping its
-  neighbours by one sample. Two collision fields sample one continuous surface, so they agree to
-  the surface's own interpolation error. G1 measures it against the 2 cm target and falls back to
-  a trimesh only if it is not met.
+- **Collision**: trimesh patches of the mesh's own triangles round bodies (~128 × 128 cells each,
+  built on workers). G1 measured the tangent-plane `HeightMapShape3D` this bullet first proposed:
+  it misses 2 cm on 1 m terrain (G1 results above).
 - **Patterns** (`pattern_xz`, waves, cover noise) stop coming from `world_origin_offset`: under a
   rotating frame they would jump at every re-anchor (0.027° is 5 cm at 100 m). They come from
   per-vertex coordinates baked in the tiles (the face's (u, v) in metres, continuous within a
@@ -150,7 +199,8 @@ From a full sweep of `src/`, `tools/`, `tests/` (regex counts, approximate):
 - `ChunkManager` rings become quadtree rings: leaves near the camera, parent levels farther out,
   chosen by on-screen size (#1434's `world_lod_scale` already picks detail that way).
 - `horizon.bin` and `HorizonLayer`'s 10 km blocks are replaced by the coarse quadtree levels: one
-  pyramid from the leaves to the whole globe, which is also #1430's H4 globe.
+  pyramid from the leaves to the whole globe, which is also #1430's H4 globe. Where no DEM exists
+  yet, Natural Earth's land and sea outlines shape it (decided in G1).
 - Data-source borders (CH/FR today, Copernicus elsewhere) keep the edge masks and blends the
   French import already has, now on the cube grid.
 
@@ -193,7 +243,7 @@ All on `main`, each small and verified by #1429's net (`tools/test.sh coords`, r
 | **G0a** Geodesy | H2's module (#1435) as the one source: rigorous LV95 ↔ ETRS89 ↔ ECEF both ways, the geoid; the game's lat/lon catalogues (`PhotoSpots`, `Landmarks`, `SteamerBerth`, ...) and GPX through it | #1435 | unit tests against swisstopo and IGN reference points; coords and shots unchanged in CH |
 | **G0b** Position seam | `GlobalPos`'s operators through a frame (5 files); then, area by area, raw `e, n` arithmetic (hand-written distances, offsets) and the records holding LV95 moved onto `GlobalPos`; stored headings marked as grid north for G2's conversion. No helpers for up, north or altitude (findings above) | G0a | no behaviour change: coords tier and shots within the floor after each area |
 | **G0c** Tile-key seam | a `TileKey` abstraction in front of `TileId`: neighbours, ring distance, bounds, frame, file name; the 1,887 uses moved to it area by area, LV95 still behind it | none | the same; `TileId` arithmetic only inside the LV95 implementation |
-| **G1** Cube format and preprocessor | mapping and orientation, keys, the format, packing, the tiler with control-point resampling; Switzerland and France re-tiled; level 13 against 14 measured; collision error measured | G0a | every edge and corner shared exactly in unit tests; any vertex within 1 cm of its rigorous ECEF point; collision within 2 cm of the mesh; French roads on their terrain (was 10-276 m off); a level chosen with numbers |
+| **G1** Cube format and preprocessor | mapping and orientation, keys, the format, packing, the tiler with control-point resampling; Switzerland and France re-tiled; level 13 against 14 measured; collision error measured | G0a | **Done in #1452** (G1 results above): edges and corners exact; vertices within 5.3 mm; collision: the height field missed 2 cm, trimesh patches decided; French roads on their terrain; level 14 chosen. All of France on the NAS still to run with the same `--cube` |
 | **G2a** Server frames | the server's physics and measuring in several local frames, one per region with players or bots, on today's LV95 world first (`docs/plans/server-regions.md`) | G0b | two bots 300 km apart on one server collide and walk as alone; `tools/test.sh net` unchanged |
 | **G2** The switch | the game on cube tiles in the anchor frame, re-anchoring with rotation (G2 switches it on: `OriginShifter.ReanchorMode.Rotates`, off since #1430 H3 while tiles are flat, for the ground with a 3 km threshold and for Space); quadtree streaming and the pyramid for the far view; the wire and saves migrated (protocol bump); true-north headings; patterns from tile coordinates; `world_curvature` to refraction only | G0b, G0c, G1, G2a, #1430's H3 anchor | the global Swiss world against the LV95 one: coords with no regression, reference shots within tolerance (curvature now in geometry: far shots match #187's); a drive Geneva → Val Müstair and a flight Geneva → Brest with no pop at any re-anchor; `--originstress` with rotation clean; two clients agree |
 | **G3** Data only | one more region from Copernicus and OSM (and the poles in a coarse test world) without touching code | G2 | a region added by running the preprocessor alone; a car crosses a data border and a cube face edge with no seam, pop or jolt; a flight over the North Pole draws no pinching |
@@ -222,8 +272,8 @@ is retired.
   it is months, not weeks; areas must not be half-moved at the G2 switch.
 - **Parallel work**: new code written against LV95 during G0 adds to the migration. Once G0b/G0c
   land, new code uses the seams (a note and a check that flags new raw `TileId` arithmetic).
-- **Collision from a separate field**: if 2 cm is not met, trimesh collision costs memory and
-  build time per tile (G1 measures).
+- **Collision patches**: G1 found the separate height field misses 2 cm, so G2 builds trimesh
+  patches round bodies (50-60 ms, 1-3 MB each): the server's bots need them too (G2a).
 - **Every `OriginShift` handler meets a rotation for the first time** (as in #1430).
 - **Data volume and licences** for the whole Earth: packing, a CDN or download-on-demand
   (`docs/plans/in-game-map-downloader.md`), attribution.
