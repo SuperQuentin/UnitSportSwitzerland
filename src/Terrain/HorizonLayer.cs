@@ -154,8 +154,10 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private bool _coverDirty;
 
     /// <summary>(Re)sizes the coverage texture to hold every tile the world knows about.</summary>
-    public void EnsureCoverage(int minE, int maxE, int minN, int maxN)
+    public void EnsureCoverage(TileRect cover)
     {
+        // the texture is a raster over the LV95 tile keys (a far-view pyramid replaces it in G2, #1443)
+        var (minE, minN, maxE, maxN) = cover;
         int cols = maxE - minE + 1, rows = maxN - minN + 1;
         if (_coverImage != null && minE >= _coverMinE && maxN <= _coverMaxN
             && minE + cols <= _coverMinE + _coverCols && maxN - rows >= _coverMaxN - _coverRows)

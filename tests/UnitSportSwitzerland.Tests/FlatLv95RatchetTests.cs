@@ -34,11 +34,11 @@ public class FlatLv95RatchetTests
         // a tile's LV95 corners: the tile-local frame of the 1 km LV95 grid
         new("LV95 tile corner",
             new(@"\.(MinE|MaxE|MinN|MaxN)\b", RegexOptions.Compiled),
-            Baseline: 285, Instead: "the tile's own frame (G0c)"),
+            Baseline: 112, Instead: "the tile's own frame (G0c)"),
         // a neighbour by LV95 kilometre arithmetic
         new("LV95 tile neighbour arithmetic",
             new(@"new\s+TileId\(\s*[\w.]+\s*[+-]", RegexOptions.Compiled),
-            Baseline: 20, Instead: "a neighbour lookup on the tile key (G0c)"),
+            Baseline: 17, Instead: "a neighbour lookup on the tile key (G0c)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);
@@ -54,9 +54,11 @@ public class FlatLv95RatchetTests
         foreach (string file in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
         {
             // the seam itself: GlobalPos is where the distances live, WorldOrigin where a tile's frame is
-            // placed (both change inside in G2)
+            // placed (both change inside in G2); and the generated world's LV95 source, the road network
+            // traced over its relief, whose boxes are the source's own (no tile in it: the generator asks
+            // each tile's key where its points are, then samples this source there)
             string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
-            if (relative is "src/Core/GlobalPos.cs" or "src/Core/WorldOrigin.cs") continue;
+            if (relative is "src/Core/GlobalPos.cs" or "src/Core/WorldOrigin.cs" or "src/Terrain/ProceduralWorld.Network.cs") continue;
             string text = Strings.Replace(Comment.Replace(File.ReadAllText(file), ""), "\"\"");
             for (int i = 0; i < Patterns.Length; i++)
             {

@@ -22,9 +22,14 @@
     `Neighbour(dx, dz)` (in the tile's local axes), `RingDistance`; and the origin's
     `TileTransform(id)` / `TileToWorld(id, local)` / `TileLocal(id, world)`. Place tile-local points
     with the full transform (`xf * local`): in G2 a tile's frame turns a little against the world's.
+    Code that asks an LV95 *source* what lies on a tile (the generator's lines, plans, lattices) takes
+    the tile's `Lv95Box` or `Touches(minE, minN, maxE, maxN)`; a range of tiles is a `TileRect`
+    (`Tiles()`, `Bounding`), next to `TileId` in `tools/TerrainFormat`. LV95 differences are exact
+    (Sterbenz), so a reach test moved into local metres gives the same bits.
     `TileKeyTests` pins each to the arithmetic it replaces.
 - A change that removes some lowers the baseline in the same commit (the test prints the new
   count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` and `src/Core/WorldOrigin.cs`
-  are the seam and are not counted.
+  are the seam and are not counted, nor is `src/Terrain/ProceduralWorld.Network.cs`, the generated
+  world's LV95 source (its road network, no tile in it).
 - Local maths near the player is fine and not counted: world `Vector3`s, `dx * dx + dz * dz`, +Y
   up and −Z north stay true in the anchor frame (the plan's findings).

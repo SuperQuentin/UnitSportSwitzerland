@@ -121,7 +121,7 @@ public static class StadiumClip
     /// <summary>The tile's trees without those inside a stadium (the bowl stands on mapped ground); the same list when none is.</summary>
     public static List<TreeInstance>? Trees(TileId id, List<TreeInstance>? trees)
     {
-        if (trees == null || !Lv95.Any(o => Near(id, o.E0 + o.Min.X, o.N0 + o.Min.Y, o.E0 + o.Max.X, o.N0 + o.Max.Y))) return trees;
+        if (trees == null || !Lv95.Any(o => id.Touches(o.E0 + o.Min.X, o.N0 + o.Min.Y, o.E0 + o.Max.X, o.N0 + o.Max.Y))) return trees;
         trees.RemoveAll(t =>
         {
             var (e, n) = id.Global(t.X, t.Z);
@@ -130,13 +130,6 @@ public static class StadiumClip
         return trees;
     }
 
-    /// <summary>Whether an LV95 box touches the tile's square, compared in the tile's frame (#1443: z south).</summary>
-    private static bool Near(TileId id, double e0, double n0, double e1, double n1)
-    {
-        var (west, north) = id.Local(e0, n1);
-        var (east, south) = id.Local(e1, n0);
-        return east >= 0 && west <= ChunkFormat.TileSizeM && north <= ChunkFormat.TileSizeM && south >= 0;
-    }
 
     /// <summary>Even-odd test of a point against a closed polygon (x, z).</summary>
     public static bool Inside(Vector2[] poly, Vector2 p)

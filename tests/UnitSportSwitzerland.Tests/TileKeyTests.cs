@@ -110,4 +110,38 @@ public class TileKeyTests
             Assert.Equal(((float)(e - T.MinE), (float)(T.MaxN - n)), ((float)T.Local(e, n).X, (float)T.Local(e, n).Z));
         }
     }
+
+    [Fact]
+    public void Touches_is_the_closed_box_test_and_Lv95Box_the_corners()
+    {
+        Assert.Equal((T.MinE, T.MinN, T.MinE + 1000, T.MaxN), T.Lv95Box);
+        foreach (var (e, n) in Around())
+        {
+            double e1 = e + 37.5, n1 = n + 37.5;
+            // what StadiumClip, the fixture's pistes and fields and the generator's seam wrote
+            Assert.Equal(e1 >= T.MinE && e <= T.MinE + 1000 && n1 >= T.MinN && n <= T.MaxN, T.Touches(e, n, e1, n1));
+            Assert.Equal(!(e < T.MinE || e > T.MinE + 1000 || n < T.MinN || n > T.MaxN), T.Touches(e, n, e, n));
+        }
+    }
+
+    [Fact]
+    public void South_west_ring_points_from_the_local_frame_are_the_old_ones()
+    {
+        // the field and piste formats hold rings from the tile's south-west corner (FixtureChunkSource)
+        foreach (var (e, n) in Around())
+        {
+            var (x, z) = T.Local(e, n);
+            Assert.Equal(n - T.MinN, 1000 - z);
+            Assert.Equal((float)(e - T.MinE), (float)x);
+        }
+    }
+
+    [Fact]
+    public void A_tile_rectangle_lists_its_tiles_south_to_north_and_bounds_a_set()
+    {
+        var rect = new TileRect(2583, 1113, 2584, 1114);
+        Assert.Equal(new[] { new TileId(2583, 1113), new TileId(2584, 1113), new TileId(2583, 1114), new TileId(2584, 1114) }, rect.Tiles());
+        Assert.Equal(rect, TileRect.Bounding(rect.Tiles()));
+        Assert.Null(TileRect.Bounding([]));
+    }
 }
