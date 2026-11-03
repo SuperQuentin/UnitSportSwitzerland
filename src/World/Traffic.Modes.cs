@@ -149,8 +149,8 @@ public partial class Traffic
     private AnimatableBody3D BoxUnit(MoverKind kind, Vector3 size, float drawn, out CollisionShape3D shape, Mesh body, Mesh? lamps = null)
     {
         var node = new AnimatableBody3D { SyncToPhysics = false, Name = kind.ToString() };
-        node.AddChild(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial, VisibilityRangeEnd = drawn });
-        if (lamps is not null) node.AddChild(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial, VisibilityRangeEnd = drawn });
+        node.AddChild(Styles.ZoomRanges.Track(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial, VisibilityRangeEnd = drawn }));
+        if (lamps is not null) node.AddChild(Styles.ZoomRanges.Track(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial, VisibilityRangeEnd = drawn }));
         shape = new CollisionShape3D { Shape = new BoxShape3D { Size = size }, Position = new Vector3(0f, size.Y * 0.5f, 0f) };
         node.AddChild(shape);
         return node;

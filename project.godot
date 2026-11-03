@@ -157,6 +157,10 @@ world_curvature={
 "type": "float",
 "value": 0.0
 }
+world_lod_scale={
+"type": "float",
+"value": 1.0
+}
 world_door_light_0={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)

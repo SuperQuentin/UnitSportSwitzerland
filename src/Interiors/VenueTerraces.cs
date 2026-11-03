@@ -238,7 +238,7 @@ public partial class VenueTerraces : Node
         float textW = Math.Max(1, text.Length) * em * 0.55f;
         em *= Math.Min(1f, (it.Span - 0.4f) / textW);
         const int fontSize = 64;
-        return new Label3D
+        return Styles.ZoomRanges.Track(new Label3D
         {
             Name = "Valance",
             Text = text,
@@ -252,7 +252,7 @@ public partial class VenueTerraces : Node
             VisibilityRangeEnd = NeonSign.DrawnM,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Transform = new Transform3D(basis, it.At + basis * TerraceProps.ValanceFront),
-        };
+        });
     }
 
     private void Build(ChunkNode node, DoorSpot[] doors, RoadTile? roads)

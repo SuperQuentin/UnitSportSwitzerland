@@ -132,7 +132,7 @@ public static class VenueFront
             VisibilityRangeEnd = 400f,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         });
-        return root;
+        return Styles.ZoomRanges.TrackTree(root);
     }
 
     /// <summary>One door's front into the tile's meshes: its frame's boxes, its panes.</summary>

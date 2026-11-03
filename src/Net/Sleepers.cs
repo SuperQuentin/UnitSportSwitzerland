@@ -286,6 +286,6 @@ public partial class Sleepers : Node
             // over the middle of the body: lying, the head points forward (-Z) from the feet
             Position = new Vector3(0, 0.8f, -0.85f),
         });
-        return root;
+        return Styles.ZoomRanges.TrackTree(root);
     }
 }

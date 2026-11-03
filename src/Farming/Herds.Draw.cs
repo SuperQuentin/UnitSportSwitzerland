@@ -111,8 +111,8 @@ public partial class Herds
             CustomAabb = new Aabb(new Vector3(-400, -50, -400), new Vector3(800, 450, 800)),
             VisibilityRangeEnd = DrawRange,
         };
-        h.Bodies = Make("Cows", CowMeshBuilder.Body(h.Plan.Breed));
-        h.Heads = Make("Heads", CowMeshBuilder.Head(h.Plan.Breed));
+        h.Bodies = Styles.ZoomRanges.Track(Make("Cows", CowMeshBuilder.Body(h.Plan.Breed)));
+        h.Heads = Styles.ZoomRanges.Track(Make("Heads", CowMeshBuilder.Head(h.Plan.Breed)));
         AddChild(h.Bodies);
         AddChild(h.Heads);
     }
