@@ -65,7 +65,7 @@ public static class CubeStage
             }
         }
         if (o.Out == null) { Console.Error.WriteLine("--cube needs --cube-out DIR"); return 2; }
-        if (o.Bits < 0) o.Bits = 23 - o.Level; // ~1.2 m at a face centre whatever the level
+        if (o.Bits < 0) o.Bits = CubeKey.LatticeBits(o.Level); // ~1.2 m at the leaves, at most 512 cells above them
         if (o.Bundle < 0) o.Bundle = o.Level - 5;
         o.Cache ??= o.Out.TrimEnd('/', '\\') + "_temp";
         Directory.CreateDirectory(o.Out);

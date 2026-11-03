@@ -13,6 +13,18 @@ public readonly record struct CubeKey(int Face, int Level, int X, int Y)
     /// <summary>Cells a side at this level.</summary>
     public int Side => 1 << Level;
 
+    /// <summary>The finest lattice any level carries, as log2 of its cells a side: 9 (the level-14 leaves).</summary>
+    public const int MaxBits = 9;
+
+    /// <summary>
+    /// log2 of the lattice cells a side a tile at <paramref name="level"/> carries (#1430 H4, agreed on
+    /// #1455): ~1.2 m at a face centre down to the leaves (23 − level), and at most 512 cells a side
+    /// above them, so the coarse pyramid holds (level 0 is 19.6 km a cell, level 4 1.2 km: ETOPO
+    /// 2022's own spacing). Every coarse lattice point is a leaf lattice point, so edges stay exact.
+    /// The one source every writer and reader takes the lattice from.
+    /// </summary>
+    public static int LatticeBits(int level) => Math.Min(23 - level, MaxBits);
+
     /// <summary>The cell's west (u) and south (v) edges and its size in face coordinates, exact.</summary>
     public double U0 => CubeSphere.Lattice(Level, X);
 

@@ -50,6 +50,28 @@ path: nothing in the game reads it yet (G2 switches). Code in `tools/TerrainForm
   (i, j)–(i+1, j+1). `MeshHeightAt` finds the mesh height below a tangent-plane point;
   `CollisionField` samples a regular height field from it.
 
+## Coarse levels: the pyramid (#1430 H4, agreed on #1455)
+
+The globe (H4) and G2's far view are one pyramid in this format, from the leaves up to the faces.
+
+- **Lattice cap**: `CubeKey.LatticeBits(level)` = min(23 − level, 9), the one source of a level's
+  lattice (the tiler's `--cube-bits` default too): the level-14 leaves keep 512 cells, every level
+  above has 512 (level 0: 19.6 km a cell, level 4: 1.2 km, ETOPO 2022's spacing). A coarse lattice
+  point is a leaf lattice point to the bit (`CubePyramidTests`). `--cube-level 13` now defaults to 512
+  cells too (G1 measured it with 1024: pass `--cube-bits 10` to repeat that).
+- **Control points by distance**: `CubeGeometry.ControlStep(level, bits)` keeps the leaves' 32 (a 39 m
+  span) and halves the step until a span is under 100 m, so coarse tiles are rigorous at every vertex
+  (the leaves' step would sag 30 m at level 4, 7.7 km at level 0). The resampler takes the same step.
+- **A coarse height is a function of its lattice point**, never of its tile: an average of the leaves
+  takes the leaf vertices within half a coarse step of the point, the same from either neighbour, or
+  the seams break (`--cube-check`'s shared-edge test catches it; run it on coarse levels too).
+- **Manifest version 2**: `levels`, one `CubeManifestLevel` each (bits, bundle level, colour size and
+  colour bundle level); a version-1 manifest is its leaf level alone (`LevelsOrLeaf`).
+- **Colour** (`CubeAlbedo`, `CubeAlbedoCodec`, entries `CUBC`): 12 monthly images (or one) per tile,
+  WebP, row-major from the south-west like the heights, pixel centres a half pixel in. Bundled by their
+  own level in `.cuba` files (`CubeBundle.AlbedoMagic` "CUBA", the same index layout as `.cubb`);
+  leaves carry none. Encoded and decoded by Godot's `Image`: the tools have no image library.
+
 ## The tiler (`--cube`)
 
 ```
