@@ -359,7 +359,7 @@ public partial class PinballCabinet : Node3D
     /// <summary>The playfield: its art, walls, rubbers, posts, bumpers, slings, targets, scoops, lanes, the apron and wire forms.</summary>
     private static ArrayMesh FieldMesh(PinballTable t)
     {
-        var s = new PinballMesh();
+        var s = new PinballMesh { SelfLit = true };
         var ground = t.Ground.SrgbToLinear();
         var a = t.AccentA.SrgbToLinear();
         var b = t.AccentB.SrgbToLinear();
@@ -536,7 +536,7 @@ public partial class PinballCabinet : Node3D
     private static ArrayMesh FlipperMesh(PinballTable t)
     {
         // a tapered bat along +X from its pivot, its rubber ring round it
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         var body = t.Trim.SrgbToLinear();
         var f = t.Flippers[0];
         const int n = 10;
@@ -574,7 +574,7 @@ public partial class PinballCabinet : Node3D
 
     private static ArrayMesh DropMesh(PinballTable t)
     {
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         s.Box(new Vector3(-0.011f, 0, -0.003f), new Vector3(0.011f, 0.032f, 0.003f), t.AccentB.SrgbToLinear());
         s.Box(new Vector3(-0.008f, 0.012f, -0.0035f), new Vector3(0.008f, 0.026f, 0.0035f), Rubber);
         return s.Build();
@@ -583,14 +583,14 @@ public partial class PinballCabinet : Node3D
     private static ArrayMesh SpinnerMesh()
     {
         // a flag hanging from its axle (the node turns round X)
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         s.Box(new Vector3(-0.02f, -0.026f, -0.0015f), new Vector3(0.02f, -0.003f, 0.0015f), PinballMesh.Lit(PinballMesh.Col(1f, 0.8f, 0.2f)));
         return s.Build();
     }
 
     private static ArrayMesh BallMesh(Color col)
     {
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         const int rings = 6, seg = 10;
         const float r = BallRadius;
         col = PinballMesh.Col(col.R, col.G, col.B);

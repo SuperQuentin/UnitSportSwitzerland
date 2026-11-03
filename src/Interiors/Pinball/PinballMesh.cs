@@ -5,7 +5,7 @@ namespace UnitSport.Interiors.Pinball;
 /// <summary>
 /// A triangle soup with vertex colours for the pinball cabinet's parts (#1325): boxes, slabs along a
 /// line, cylinders, flat polygons and strips. Built once per table and shared (the interior material
-/// draws it in every style: vertex alpha 0.2-0.5 lights itself, 1 is lit by the room).
+/// draws it in every style: vertex alpha 0.2-0.5 lights itself, 1 is lit by the room; <see cref="SelfLit"/> for the playfield).
 /// </summary>
 internal sealed class PinballMesh
 {
@@ -13,12 +13,18 @@ internal sealed class PinballMesh
     public readonly List<Color> C = new();
     /// <summary>Every triangle both ways round: for small parts seen from any side (the flipper, the ball).</summary>
     public bool TwoSided;
+    /// <summary>
+    /// Every room-lit colour lit by itself instead (alpha 0.35): what is under the glass, lit by the machine's own
+    /// lamps as a real playfield is, so the table reads the same in a dim room at night as in the model viewer.
+    /// </summary>
+    public bool SelfLit;
 
     public static Color Col(float r, float g, float b) => new Color(r, g, b).SrgbToLinear();
     public static Color Lit(Color c) => c with { A = 0.35f };
 
     public void Tri(Vector3 a, Vector3 b, Vector3 c, Color col)
     {
+        if (SelfLit && col.A >= 0.5f) col = Lit(col);
         V.Add(a); V.Add(b); V.Add(c);
         C.Add(col); C.Add(col); C.Add(col);
         if (TwoSided)

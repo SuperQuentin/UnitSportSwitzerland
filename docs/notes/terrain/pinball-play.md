@@ -19,7 +19,8 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   proves every named shot; `PINBALL_PNG=<dir> dotnet test --filter Draw_tables` draws the tables and their shots.
 - **The cabinet** (`PinballCabinet`): the piece's frame (back −Z, player +Z), playfield front at (0, 0.80, 0.60)
   tilted 6.5°. One static mesh per table (body, field, plastic ramps) shared by every machine; flippers, balls,
-  drops, spinners, plunger are nodes; lamps two MultiMeshes (colours set on change); the backbox
+  drops, spinners, plunger are nodes; everything under the glass is self-lit (`PinballMesh.SelfLit`, the machine's
+  own lamps: room-lit, a venue at night flattened every table and the model viewer looked brighter than the game); lamps two MultiMeshes (colours set on change); the backbox
   (`PinballBackbox`) an image drawn on change through `shaders/pinball_display.gdshader` (reels, segments,
   round dots, LCD). Decals are thin plates, never quads on a surface; the backglass art 9 mm a layer (zfight).
   Headless, the lamps' MultiMesh instances read at the playfield's origin: most of the tables' z-fight baseline.
