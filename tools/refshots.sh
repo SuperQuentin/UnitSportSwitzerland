@@ -52,15 +52,15 @@ mkdir -p "$caches"
 # the views, as "name class E N height pitch bearing hour date"
 views=$(grep -vE '^\s*(#|$)' tests/refshots/views.txt | awk -v h="$HOUR0" -v d="$DATE0" \
   '{ printf "%s %s %s %s %s %s %s %s %s\n", $1, $2, $3, $4, $5, $6, $7, ($8 == "" ? h : $8), ($9 == "" ? d : $9) }')
+# the origin every queue's coordinates are relative to: the catalogue's first view's whole km, also
+# for a VIEWS subset (from another origin the floats round otherwise: 8 % of a shot's pixels differed)
+OE=$(awk 'NR == 1 { printf "%d", int($3 / 1000) * 1000 }' <<< "$views")
+ON=$(awk 'NR == 1 { printf "%d", int($4 / 1000) * 1000 }' <<< "$views")
 if [ -n "${VIEWS:-}" ]; then
   views=$(awk -v want=" $VIEWS " 'index(want, " " $1 " ")' <<< "$views")
 fi
 [ -n "$views" ] || { echo "no view matches VIEWS=$VIEWS" >&2; exit 2; }
 dates=$(awk '{ print $9 }' <<< "$views" | sort -u)
-
-# the origin every queue's coordinates are relative to: the first view's whole km
-OE=$(awk 'NR == 1 { printf "%d", int($3 / 1000) * 1000 }' <<< "$views")
-ON=$(awk 'NR == 1 { printf "%d", int($4 / 1000) * 1000 }' <<< "$views")
 
 # one queue per date: x,y,z,pitch,yaw,settle,path per view (yaw = -bearing), a /time line where the hour changes
 queue() { # date style dir
