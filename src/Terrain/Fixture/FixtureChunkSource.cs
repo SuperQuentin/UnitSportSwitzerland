@@ -53,9 +53,10 @@ public sealed class FixtureChunkSource : IChunkSource
                 var xyz = new float[piece.Count * 3];
                 for (int i = 0; i < piece.Count; i++)
                 {
-                    xyz[i * 3] = (float)(piece[i].E - tile.MinE);
+                    var (x, z) = tile.Local(piece[i].E, piece[i].N);
+                    xyz[i * 3] = (float)x;
                     xyz[i * 3 + 1] = (float)piece[i].Z;
-                    xyz[i * 3 + 2] = (float)(tile.MaxN - piece[i].N);
+                    xyz[i * 3 + 2] = (float)z;
                 }
                 Add(_roads, tile, new RoadSegment
                 {
@@ -85,14 +86,15 @@ public sealed class FixtureChunkSource : IChunkSource
         {
             double e = startE + block.X, n = startN + block.Y;
             var tile = TileId.FromLv95(e, n);
-            Add(_buildings, tile, FixtureBlocks.Solid(block, (float)(e - tile.MinE), (float)(tile.MaxN - n)));
+            var (bx, bz) = tile.Local(e, n);
+            Add(_buildings, tile, FixtureBlocks.Solid(block, (float)bx, (float)bz));
         }
         foreach (var (x, y, _, height) in course.Trees)
         {
             double e = startE + x, n = startN + y;
             var tile = TileId.FromLv95(e, n);
-            Add(_trees, tile, new TreeInstance((float)(e - tile.MinE), (float)course.Ground(x, y),
-                (float)(tile.MaxN - n), height, 0));
+            var (tx, tz) = tile.Local(e, n);
+            Add(_trees, tile, new TreeInstance((float)tx, (float)course.Ground(x, y), (float)tz, height, 0));
         }
     }
 
@@ -141,10 +143,12 @@ public sealed class FixtureChunkSource : IChunkSource
             var at = TileId.FromLv95((e0 + e1) / 2, (n0 + n1) / 2);
             if (!_tiles.Contains(at)) continue;
             float Y(double x, double y) => (float)_course.Ground(x, y) + 0.02f;
+            var (ax, az) = at.Local(e0, n0);
+            var (bx, bz) = at.Local(e1, n1);
             Add(_parkPaint, at, new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = 0xE0DED1FF, Width = 0.15f,
-                Vertices = [(float)(e0 - at.MinE), Y(x0, y0), (float)(at.MaxN - n0), (float)(e1 - at.MinE), Y(x1, y1), (float)(at.MaxN - n1)],
+                Vertices = [(float)ax, Y(x0, y0), (float)az, (float)bx, Y(x1, y1), (float)bz],
                 Indices = [],
             });
         }
@@ -172,9 +176,12 @@ public sealed class FixtureChunkSource : IChunkSource
             {
                 double minX = slope.Outline.Min(p => p.X), maxX = slope.Outline.Max(p => p.X);
                 double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
-                if (_startE + maxX < tile.MinE || _startE + minX > tile.MinE + ChunkFormat.TileSizeM
-                    || _startN + maxY < tile.MinN || _startN + minY > tile.MaxN) continue;
-                var path = slope.Outline.SelectMany(p => new[] { (float)(_startE + p.X - tile.MinE), (float)(_startN + p.Y - tile.MinN) }).ToArray();
+                if (!tile.Touches(_startE + minX, _startN + minY, _startE + maxX, _startN + maxY)) continue;
+                var path = slope.Outline.SelectMany(p =>
+                {
+                    var (x, y) = FromSouthWest(tile, _startE + p.X, _startN + p.Y);
+                    return new[] { (float)x, (float)y };
+                }).ToArray();
                 double low = _course.Ground((minX + maxX) / 2, minY), high = _course.Ground((minX + maxX) / 2, maxY);
                 double steep = Math.Atan2(Math.Abs(high - low), maxY - minY) * 180 / Math.PI;
                 records.Add(new PisteRecord(0xF0F0_0000UL + (ulong)_course.Slopes.IndexOf(slope), PisteType.Downhill, slope.Difficulty,
@@ -184,7 +191,8 @@ public sealed class FixtureChunkSource : IChunkSource
                 for (int r = 0; r < size; r++)
                     for (int col = 0; col < size; col++)
                     {
-                        double x = tile.MinE + col - _startE, y = tile.MaxN - r - _startN;
+                        var (ce, cn) = tile.Global(col, r);
+                        double x = ce - _startE, y = cn - _startN;
                         if (!Inside(slope.Outline, x, y)) continue;
                         double edge = Math.Min(Math.Min(x - minX, maxX - x), Math.Min(y - minY, maxY - y));
                         slot[r * size + col] = index;
@@ -255,13 +263,26 @@ public sealed class FixtureChunkSource : IChunkSource
         }
     }
 
+    /// <summary>
+    /// An LV95 point as the field and piste formats hold a ring: metres east and north of the tile's
+    /// south-west corner, from the tile's own frame (#1443; its z runs south from the north-west corner).
+    /// </summary>
+    private static (double X, double Y) FromSouthWest(TileId tile, double e, double n)
+    {
+        var (x, z) = tile.Local(e, n);
+        return (x, ChunkFormat.TileSizeM - z);
+    }
+
     /// <summary>The ground every 10 m over a tile (row 0 the north edge), built once per tile.</summary>
     private double[] Lattice(TileId id) => _lattices.GetOrAdd(id, t => new Lazy<double[]>(() =>
     {
         var h = new double[LatticeSize * LatticeSize];
         for (int r = 0; r < LatticeSize; r++)
             for (int c = 0; c < LatticeSize; c++)
-                h[r * LatticeSize + c] = _course.Ground(t.MinE + c * LatticeStride - _startE, t.MaxN - r * LatticeStride - _startN);
+            {
+                var (e, n) = t.Global(c * LatticeStride, r * LatticeStride);
+                h[r * LatticeSize + c] = _course.Ground(e - _startE, n - _startN);
+            }
         return h;
     })).Value;
 
@@ -277,8 +298,9 @@ public sealed class FixtureChunkSource : IChunkSource
             SuggestedOriginLv95 = new Lv95Point { E = _startE, N = _startN },
             BoundsLv95 = new Lv95Bounds
             {
-                MinE = _tiles.Min(t => t.MinE), MinN = _tiles.Min(t => t.MinN),
-                MaxE = _tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM, MaxN = _tiles.Max(t => t.MaxN),
+                // the tiles' south-west and north-east corners
+                MinE = _tiles.Min(t => t.Global(0, ChunkFormat.TileSizeM).E), MinN = _tiles.Min(t => t.Global(0, ChunkFormat.TileSizeM).N),
+                MaxE = _tiles.Max(t => t.Global(ChunkFormat.TileSizeM, 0).E), MaxN = _tiles.Max(t => t.Global(ChunkFormat.TileSizeM, 0).N),
             },
         };
         foreach (var t in _tiles.OrderBy(t => t.E).ThenBy(t => t.N))
@@ -299,7 +321,10 @@ public sealed class FixtureChunkSource : IChunkSource
             // a course whose ground is a function (the lake's river and drop-off): every metre of it
             for (int r = 0; r < size; r++)
                 for (int c = 0; c < size; c++)
-                    q[r * size + c] = ChunkFormat.Quantize(terrain(id.MinE + c - _startE, id.MaxN - r - _startN));
+                {
+                    var (e, n) = id.Global(c, r);
+                    q[r * size + c] = ChunkFormat.Quantize(terrain(e - _startE, n - _startN));
+                }
             return Task.FromResult<ChunkGrid?>(Grid(id, q, 1));
         }
         // bilinear between the lattice's 10 m points
@@ -410,9 +435,10 @@ public sealed class FixtureChunkSource : IChunkSource
             var v = new float[12];
             for (int i = 0; i < 4; i++)
             {
-                v[i * 3] = (float)(area.Ring[i * 2] - at.MinE);
+                var (x, z) = at.Local(area.Ring[i * 2], area.Ring[i * 2 + 1]);
+                v[i * 3] = (float)x;
                 v[i * 3 + 1] = (float)area.Y;
-                v[i * 3 + 2] = (float)(at.MaxN - area.Ring[i * 2 + 1]);
+                v[i * 3 + 2] = (float)z;
             }
             Add(_parkAreas, at, new RoadAreaProp
             {
@@ -435,9 +461,10 @@ public sealed class FixtureChunkSource : IChunkSource
             var v = new float[mark.Line.Length / 2 * 3];
             for (int i = 0; i < mark.Line.Length / 2; i++)
             {
-                v[i * 3] = (float)(mark.Line[i * 2] - at.MinE);
+                var (x, z) = at.Local(mark.Line[i * 2], mark.Line[i * 2 + 1]);
+                v[i * 3] = (float)x;
                 v[i * 3 + 1] = (float)mark.Y;
-                v[i * 3 + 2] = (float)(at.MaxN - mark.Line[i * 2 + 1]);
+                v[i * 3 + 2] = (float)z;
             }
             // the glyphs are built by the paint layer in the tools; the fixture only needs the
             // lines, so a glyph becomes a short line across its bay rather than nothing at all
@@ -453,10 +480,10 @@ public sealed class FixtureChunkSource : IChunkSource
         {
             var at = TileId.FromLv95(f.E, f.N);
             if (!_tiles.Contains(at)) continue;
+            var (fx, fz) = at.Local(f.E, f.N);
             if (f.Kind == ParkingPlanner.FixtureKind.Tree)
             {
-                Add(_trees, at, new TreeInstance(
-                    (float)(f.E - at.MinE), (float)f.Y, (float)(at.MaxN - f.N), 5.5f, 3));
+                Add(_trees, at, new TreeInstance((float)fx, (float)f.Y, (float)fz, 5.5f, 3));
                 continue;
             }
             var (type, height) = f.Kind switch
@@ -467,7 +494,7 @@ public sealed class FixtureChunkSource : IChunkSource
                 _ => (PointPropType.ParkingSign, 2.1f),
             };
             Add(_parkProps, at, new RoadPointProp(type, f.Variant, PropFlags.Solid,
-                (float)(f.E - at.MinE), (float)f.Y, (float)(at.MaxN - f.N),
+                (float)fx, (float)f.Y, (float)fz,
                 (float)ParkingPlanner.ToGodotHeading(f.HeadingRad), height));
         }
 
@@ -475,8 +502,9 @@ public sealed class FixtureChunkSource : IChunkSource
         {
             var at = TileId.FromLv95(b.E, b.N);
             if (!_tiles.Contains(at)) continue;
+            var (bx, bz) = at.Local(b.E, b.N);
             Add(_parkBays, at, new ParkingBay(
-                (float)(b.E - at.MinE), (float)b.Y, (float)(at.MaxN - b.N),
+                (float)bx, (float)b.Y, (float)bz,
                 (float)ParkingPlanner.ToGodotHeading(b.HeadingRad), b.Kind, b.Flags));
         }
     }
@@ -508,7 +536,10 @@ public sealed class FixtureChunkSource : IChunkSource
         if (_course.Cover is { } fn)
             for (int r = 0; r < CoverFormat.Size; r++)
                 for (int c = 0; c < CoverFormat.Size; c++)
-                    cover[r * CoverFormat.Size + c] = (byte)fn(id.MinE + c - _startE, id.MaxN - r - _startN);
+                {
+                    var (e, n) = id.Global(c, r);
+                    cover[r * CoverFormat.Size + c] = (byte)fn(e - _startE, n - _startN);
+                }
         return Task.FromResult<byte[]?>(cover);
     }
 
@@ -523,7 +554,8 @@ public sealed class FixtureChunkSource : IChunkSource
         for (int r = 0; r < n; r++)
             for (int c = 0; c < n; c++)
             {
-                var (l, f) = water(id.MinE + c * WaterTile.Stride - _startE, id.MaxN - r * WaterTile.Stride - _startN);
+                var (e, nn) = id.Global(c * WaterTile.Stride, r * WaterTile.Stride);
+                var (l, f) = water(e - _startE, nn - _startN);
                 level[r * n + c] = (float)l;
                 fetch[r * n + c] = (float)f;
                 any |= !double.IsNaN(l);
@@ -547,12 +579,13 @@ public sealed class FixtureChunkSource : IChunkSource
         {
             double minE = outline.Min(p => p.X) + _startE, maxE = outline.Max(p => p.X) + _startE;
             double minN = outline.Min(p => p.Y) + _startN, maxN = outline.Max(p => p.Y) + _startN;
-            if (maxE < id.MinE || minE > id.MinE + ChunkFormat.TileSizeM || maxN < id.MinN || minN > id.MaxN) continue;
+            if (!id.Touches(minE, minN, maxE, maxN)) continue;
             var ring = new float[outline.Length * 2];
             for (int i = 0; i < outline.Length; i++)
             {
-                ring[i * 2] = (float)(_startE + outline[i].X - id.MinE);
-                ring[i * 2 + 1] = (float)(_startN + outline[i].Y - id.MinN);
+                var (x, y) = FromSouthWest(id, _startE + outline[i].X, _startN + outline[i].Y);
+                ring[i * 2] = (float)x;
+                ring[i * 2 + 1] = (float)y;
             }
             fields.Add(new FieldPolygon(fid, crop, FieldSource.Osm, 0, [ring]));
         }

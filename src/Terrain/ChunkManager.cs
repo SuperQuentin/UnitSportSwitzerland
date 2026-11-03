@@ -926,24 +926,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private void FitHorizonCoverage()
     {
         if (Horizon == null) return;
-        int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
-        foreach (var t in _available)
-        {
-            minE = Math.Min(minE, t.E);
-            maxE = Math.Max(maxE, t.E);
-            minN = Math.Min(minN, t.N);
-            maxN = Math.Max(maxN, t.N);
-        }
+        var cover = TileRect.Bounding(_available);
         if (_fallback?.Current is { Enabled: true } snap)
-        {
-            var b = snap.Bounds;
-            minE = Math.Min(minE, b.MinE);
-            maxE = Math.Max(maxE, b.MaxE);
-            minN = Math.Min(minN, b.MinN);
-            maxN = Math.Max(maxN, b.MaxN);
-        }
-        if (minE > maxE) return;
-        Horizon.EnsureCoverage(minE, maxE, minN, maxN);
+            cover = cover is { } real ? real.Union(snap.Bounds) : snap.Bounds;
+        if (cover is { } box) Horizon.EnsureCoverage(box);
     }
 
     // ---- debug menu (#339) -------------------------------------------------------------

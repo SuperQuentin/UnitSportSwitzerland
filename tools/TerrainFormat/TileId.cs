@@ -27,11 +27,22 @@ public readonly record struct TileId(int E, int N)
     /// <summary>The inverse of <see cref="Local"/>: a local x and z as LV95.</summary>
     public (double E, double N) Global(double x, double z) => (MinE + x, MaxN - z);
 
+    /// <summary>
+    /// The LV95 box the tile covers: what to ask an LV95 source (the generator's lines, plans and lattices)
+    /// for what lies on the tile. Points on the tile still go through <see cref="Local"/> / <see cref="Global"/>;
+    /// with the global tiling this is the box round a cube tile.
+    /// </summary>
+    public (double West, double South, double East, double North) Lv95Box => (MinE, MinN, MinE + 1000.0, MaxN);
+
     /// <summary>The middle of the tile, LV95.</summary>
     public (double E, double N) Centre => (MinE + 500.0, MaxN - 500.0);
 
     /// <summary>Whether an LV95 point is on this tile (west and south edges in, east and north out).</summary>
     public bool Contains(double e, double n) => FromLv95(e, n) == this;
+
+    /// <summary>Whether an LV95 box reaches onto this tile: the two touch, edges and corners included.</summary>
+    public bool Touches(double minE, double minN, double maxE, double maxN) =>
+        maxE >= MinE && minE <= MinE + 1000.0 && maxN >= MinN && minN <= MaxN;
 
     /// <summary>The tile <paramref name="dx"/> along the local x axis and <paramref name="dz"/> along the local z axis from this one (z is southward).</summary>
     public TileId Neighbour(int dx, int dz) => new(E + dx, N - dz);

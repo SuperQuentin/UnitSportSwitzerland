@@ -194,10 +194,11 @@ public sealed partial class ProceduralWorld
     /// <summary>Tiles whose real data a blend for <paramref name="tile"/> would use.</summary>
     public static IEnumerable<TileId> BlendWindow(TileId tile)
     {
-        for (int dn = -NearWindow; dn <= NearWindow; dn++)
-            for (int de = -NearWindow; de <= NearWindow; de++)
+        // dz (south) from +NearWindow down: south to north, the (N, E) order the window always had
+        for (int dz = NearWindow; dz >= -NearWindow; dz--)
+            for (int dx = -NearWindow; dx <= NearWindow; dx++)
             {
-                var k = new TileId(tile.E + de, tile.N + dn);
+                var k = tile.Neighbour(dx, dz);
                 if (k != tile && SquareGap(tile, k) <= NearReach) yield return k;
             }
     }
@@ -247,8 +248,9 @@ public sealed partial class ProceduralWorld
     private static double LatticeAt(double[] values, int side, double spacing, TileId k, double e, double n)
     {
         int last = side - 1;
-        double u = (e - k.MinE) / spacing;
-        double v = (k.MaxN - n) / spacing;
+        var (x, z) = k.Local(e, n);
+        double u = x / spacing;
+        double v = z / spacing;
         int c = Math.Min((int)u, last), r = Math.Min((int)v, last);
         double fu = u - c, fv = v - r;
         double Row(int rr)
@@ -270,8 +272,8 @@ public sealed partial class ProceduralWorld
     /// <summary>Nearest point of a tile's square, and the distance to it (0 inside).</summary>
     private static double Nearest(TileId k, double e, double n, out double qe, out double qn)
     {
-        qe = Math.Clamp(e, k.MinE, k.MinE + ChunkFormat.TileSizeM);
-        qn = Math.Clamp(n, k.MinN, k.MaxN);
+        var (x, z) = k.Local(e, n);
+        (qe, qn) = k.Global(Math.Clamp(x, 0, ChunkFormat.TileSizeM), Math.Clamp(z, 0, ChunkFormat.TileSizeM));
         double de = e - qe, dn = n - qn;
         return Math.Sqrt(de * de + dn * dn);
     }
@@ -282,7 +284,8 @@ public sealed partial class ProceduralWorld
     /// </summary>
     private static double RealAt(ChunkGrid grid, double e, double n)
     {
-        double u = (e - grid.Id.MinE) / grid.Spacing, v = (grid.Id.MaxN - n) / grid.Spacing;
+        var (x, z) = grid.Id.Local(e, n);
+        double u = x / grid.Spacing, v = z / grid.Spacing;
         if (u == Math.Floor(u) && v == Math.Floor(v) && u >= 0 && v >= 0 && u < grid.Size && v < grid.Size)
             return ChunkFormat.Dequantize(grid.Heights[(int)v * grid.Size + (int)u]);
         return grid.SampleMeshHeight(e, n);
@@ -322,12 +325,12 @@ public sealed partial class ProceduralWorld
             Tile = tile;
             Version = version;
             _near = near;
-            _i0 = (long)(tile.MinE / SStep) - SBorder;
-            _j0 = (long)(tile.MinN / SStep) - SBorder;
-            _minE = tile.MinE;
-            _maxE = tile.MinE + ChunkFormat.TileSizeM;
-            _minN = tile.MinN;
-            _maxN = tile.MaxN;
+            // the tile's LV95 box, from its south-west and north-east corners; the source's lattice
+            // window starts there (grid-shaped: the global tiling's G2 takes the box round a cube tile)
+            (_minE, _minN) = tile.Global(0, ChunkFormat.TileSizeM);
+            (_maxE, _maxN) = tile.Global(ChunkFormat.TileSizeM, 0);
+            _i0 = (long)(_minE / SStep) - SBorder;
+            _j0 = (long)(_minN / SStep) - SBorder;
             _details = near
                 .Where(x => x.Real.Grid != null && BlendGridStride(tile, x.Real.Id, true) != 0)
                 .ToArray();
@@ -529,8 +532,11 @@ public sealed partial class ProceduralWorld
             return value;
         }
 
-        private static bool IsCorner(TileId k, double e, double n) =>
-            (e == k.MinE || e == k.MinE + ChunkFormat.TileSizeM) && (n == k.MinN || n == k.MaxN);
+        private static bool IsCorner(TileId k, double e, double n)
+        {
+            var (x, z) = k.Local(e, n);
+            return (x == 0 || x == ChunkFormat.TileSizeM) && (z == ChunkFormat.TileSizeM || z == 0);
+        }
 
         /// <summary>Index of a whole-metre point on the tile's boundary, or -1.</summary>
         private int EdgeSlot(double e, double n)
@@ -603,8 +609,9 @@ public sealed partial class ProceduralWorld
             {
                 var g = x.Real.Grid!;
                 var k = g.Id;
-                if (e < k.MinE || e > k.MinE + ChunkFormat.TileSizeM || n < k.MinN || n > k.MaxN) continue;
-                double u = (e - k.MinE) / g.Spacing, v = (k.MaxN - n) / g.Spacing;
+                if (!k.Touches(e, n, e, n)) continue;
+                var (lx, lz) = k.Local(e, n);
+                double u = lx / g.Spacing, v = lz / g.Spacing;
                 if (u != Math.Floor(u) || v != Math.Floor(v)) continue;
                 height = g.Heights[(int)v * g.Size + (int)u];
                 return true;
@@ -619,8 +626,9 @@ public sealed partial class ProceduralWorld
             foreach (var x in _near)
             {
                 var k = x.Real.Id;
-                if (e < k.MinE || e > k.MinE + ChunkFormat.TileSizeM || n < k.MinN || n > k.MaxN) continue;
-                double u = (e - k.MinE) / HorizonFormat.SpacingM, v = (k.MaxN - n) / HorizonFormat.SpacingM;
+                if (!k.Touches(e, n, e, n)) continue;
+                var (lx, lz) = k.Local(e, n);
+                double u = lx / HorizonFormat.SpacingM, v = lz / HorizonFormat.SpacingM;
                 if (u != Math.Floor(u) || v != Math.Floor(v)) continue;
                 height = x.Real.KnotsQ[(int)v * HorizonFormat.SamplesPerSide + (int)u];
                 return true;

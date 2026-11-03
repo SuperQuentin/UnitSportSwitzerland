@@ -88,6 +88,13 @@ From a full sweep of `src/`, `tools/`, `tests/` (regex counts, approximate):
   sit tilted in it and floats lose centimetres. **G2 needs physics in several local frames on the
   server**, one per region with players or bots in it (Godot physics spaces per region), and
   measuring done there in Earth positions. A G2 prerequisite of its own (G2a below).
+- **The tile makers ask the key too** (G0c, `src/Terrain`, PRs #1482 and the makers' PR): the
+  generated world, the fixture courses and the fill keep sampling their LV95 source (noise, relief,
+  network) but ask each tile where its points are (`Local` / `Global`) and which LV95 box it covers
+  (`Lv95Box`, `Touches`), so they can fill a cube tile in G2 without a rewrite. Grid-shaped and left
+  for G2: the generator's lattice windows start at the box's south-west corner, the fill's domain and
+  the horizon's coverage texture are `TileRect`s of LV95 keys, and the generator's road network
+  (`ProceduralWorld.Network.cs`, a ratchet seam) is LV95 throughout.
 
 ## G1 results (2026-11-03, #1452, PR #1455)
 

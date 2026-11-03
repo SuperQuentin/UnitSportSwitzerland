@@ -254,7 +254,7 @@ public sealed partial class ProceduralWorld
         for (int r = 0; r < side; r++)
             for (int c = 0; c < side; c++)
             {
-                double e = id.MinE + c * HorizonFormat.SpacingM, n = id.MaxN - r * HorizonFormat.SpacingM;
+                var (e, n) = id.Global(c * HorizonFormat.SpacingM, r * HorizonFormat.SpacingM);
                 if (LakeField(e, n, out double level, out _) < 0.5) continue;
                 (levels ??= new ushort[HorizonFormat.SamplesPerTile])[r * side + c] = ChunkFormat.Quantize(level);
             }
@@ -490,12 +490,14 @@ public sealed partial class ProceduralWorld
 
         if (lattice == null)
         {
+            // the source's lattice window over the tile's LV95 box (grid-shaped: G2 takes the box round a cube tile)
+            var (west, south, _, _) = id.Lv95Box;
             lattice = new Lattice
             {
-                CI0 = (long)(id.MinE / CoarseM) - CoarseBorder,
-                CJ0 = (long)(id.MinN / CoarseM) - CoarseBorder,
-                FI0 = (long)(id.MinE / FineM) - FineBorder,
-                FJ0 = (long)(id.MinN / FineM) - FineBorder,
+                CI0 = (long)(west / CoarseM) - CoarseBorder,
+                CJ0 = (long)(south / CoarseM) - CoarseBorder,
+                FI0 = (long)(west / FineM) - FineBorder,
+                FJ0 = (long)(south / FineM) - FineBorder,
             };
             for (int lj = 0; lj < CoarseSide; lj++)
                 for (int li = 0; li < CoarseSide; li++)
@@ -547,10 +549,10 @@ public sealed partial class ProceduralWorld
         // row-major, so the writes and the lattice reads both walk memory in order
         for (int r = 0; r < size; r++)
         {
-            double n = id.MaxN - r * step;
+            double n = id.Global(0, r * step).N;
             for (int c = 0; c < size; c++)
             {
-                double e = id.MinE + c * step;
+                double e = id.Global(c * step, 0).E;
                 double h = onFine
                     ? FineHeight(lattice, (long)Math.Floor(e / FineM), (long)Math.Floor(n / FineM))
                     : Height(lattice, e, n);
@@ -567,8 +569,11 @@ public sealed partial class ProceduralWorld
             {
                 bool edgeRow = r == 0 || r == size - 1;
                 for (int c = 0; c < size; c += edgeRow ? 1 : size - 1)
-                    if (blend.TryRealVertex(id.MinE + c * step, id.MaxN - r * step, out ushort real))
+                {
+                    var (e, n) = id.Global(c * step, r * step);
+                    if (blend.TryRealVertex(e, n, out ushort real))
                         heights[r * size + c] = real;
+                }
             }
 
         ushort min = ushort.MaxValue, max = 0;
@@ -599,10 +604,10 @@ public sealed partial class ProceduralWorld
         var tile = new ushort[HorizonFormat.SamplesPerTile];
         for (int c = 0; c < side; c++)
         {
-            double e = id.MinE + c * HorizonFormat.SpacingM;
+            double e = id.Global(c * HorizonFormat.SpacingM, 0).E;
             for (int r = 0; r < side; r++)
             {
-                double n = id.MaxN - r * HorizonFormat.SpacingM;
+                double n = id.Global(0, r * HorizonFormat.SpacingM).N;
                 double h = HeightOnLattice(e, n);
                 if (blend != null)
                 {
@@ -686,7 +691,7 @@ public sealed partial class ProceduralWorld
                     fetch = new float[n * n];
                     Array.Fill(level, float.NaN);
                 }
-                double e = id.MinE + col, nn = id.MaxN - row;
+                var (e, nn) = id.Global(col, row);
                 var coarse = SampleCoarse(lattice, e, nn);
                 var fine = FineNear(e, nn);
                 double l, f;
@@ -730,7 +735,7 @@ public sealed partial class ProceduralWorld
         for (int r = 0; r < n; r++)
             for (int c = 0; c < n; c++)
             {
-                double e = id.MinE + c * WaterTile.Stride, nn = id.MaxN - r * WaterTile.Stride;
+                var (e, nn) = id.Global(c * WaterTile.Stride, r * WaterTile.Stride);
                 var near = FineNear(e, nn);
                 if (near.Dr > near.Bank + 10 || near.Keep < 1) continue;
                 var ch = ChannelAt(e, nn);
@@ -787,10 +792,10 @@ public sealed partial class ProceduralWorld
         var fine = new Fine[ext * ext];
         for (int j = 0; j < ext; j++)
         {
-            double n = id.MaxN - (j - 1) * CoverStep;
+            double n = id.Global(0, (j - 1) * CoverStep).N;
             for (int i = 0; i < ext; i++)
             {
-                double e = id.MinE + (i - 1) * CoverStep;
+                double e = id.Global((i - 1) * CoverStep, 0).E;
                 int k = j * ext + i;
                 coarse[k] = SampleCoarse(lattice, e, n);
                 fine[k] = FineAt((long)Math.Floor(e / FineM), (long)Math.Floor(n / FineM));
@@ -822,8 +827,8 @@ public sealed partial class ProceduralWorld
                     double cy = (corr[x + ext] - corr[x - ext]) / (2 * CoverStep);
                     tilt = Math.Sqrt(cx * cx + cy * cy);
                 }
-                inputs[k] = Inputs(id.MinE + i * CoverStep, id.MaxN - j * CoverStep, h[x], gx, gy,
-                    coarse[x], fine[x], Blend.WaterAllowed(tilt));
+                var (ie, inn) = id.Global(i * CoverStep, j * CoverStep);
+                inputs[k] = Inputs(ie, inn, h[x], gx, gy, coarse[x], fine[x], Blend.WaterAllowed(tilt));
                 classes[k] = (byte)Classify(inputs[k]);
             }
 
@@ -860,7 +865,8 @@ public sealed partial class ProceduralWorld
                         // ground mixed from the banks' corners is not asked.
                         if (nearWater && at.River - CornerOverreach < at.Half)
                         {
-                            bool inside = InWetChannel(id.MinE + col, id.MaxN - row, 0.5);
+                            var (we, wn) = id.Global(col, row);
+                            bool inside = InWetChannel(we, wn, 0.5);
                             at.River = inside ? 0 : float.MaxValue;
                             at.Half = 1;
                             at.Wet = inside ? at.Keep : 0;
@@ -1023,8 +1029,9 @@ public sealed partial class ProceduralWorld
                 int ge = id.E * 1000 + col, gn = id.N * 1000 - row;
                 if (Noise.Hash01(ge, gn, 71) > perCell) continue;
 
-                double e = id.MinE + col + (Noise.Hash01(ge, gn, 73) - 0.5);
-                double n = id.MaxN - row + (Noise.Hash01(ge, gn, 79) - 0.5);
+                var (ce, cn) = id.Global(col, row);
+                double e = ce + (Noise.Hash01(ge, gn, 73) - 0.5);
+                double n = cn + (Noise.Hash01(ge, gn, 79) - 0.5);
                 // field trees stand in clumps and lines along field edges, not evenly sprinkled
                 if (cls == CoverClass.Open
                     && Math.Abs(Noise.Fbm((e - NoiseE) / 90, (n - NoiseN) / 90, 2, 97)) > 0.06)
@@ -1041,21 +1048,23 @@ public sealed partial class ProceduralWorld
                     CoverClass.Shrub => (2.5f + r * 2f, KindShrub),
                     _ => (9f + r * 7f, KindSolitary),
                 };
-                trees.Add(new TreeInstance((float)(e - id.MinE), (float)h, (float)(id.MaxN - n), height, kind));
+                var (tx, tz) = id.Local(e, n);
+                trees.Add(new TreeInstance((float)tx, (float)h, (float)tz, height, kind));
             }
 
         // orchards: 6 m rows anchored to world coordinates, so they run on across tile seams
         const double spacing = 6;
-        for (double e = Math.Ceiling(id.MinE / spacing) * spacing; e < id.MinE + ChunkFormat.TileSizeM; e += spacing)
-            for (double n = Math.Ceiling(id.MinN / spacing) * spacing; n < id.MaxN; n += spacing)
+        var (west, south, east, north) = id.Lv95Box;
+        for (double e = Math.Ceiling(west / spacing) * spacing; e < east; e += spacing)
+            for (double n = Math.Ceiling(south / spacing) * spacing; n < north; n += spacing)
             {
-                int col = (int)Math.Round(e - id.MinE), row = (int)Math.Round(id.MaxN - n);
+                var (x, z) = id.Local(e, n);
+                int col = (int)Math.Round(x), row = (int)Math.Round(z);
                 if ((uint)col >= size || (uint)row >= size) continue;
                 int cell = row * size + col;
                 if ((CoverClass)cells[cell] != CoverClass.Orchard || blocked[cell]) continue;
                 float r = (float)Noise.Hash01((int)e, (int)n, 89);
-                trees.Add(new TreeInstance((float)(e - id.MinE), (float)Ground(site, e, n), (float)(id.MaxN - n),
-                    3.4f + r * 1.4f, KindFruit));
+                trees.Add(new TreeInstance((float)x, (float)Ground(site, e, n), (float)z, 3.4f + r * 1.4f, KindFruit));
             }
 
         return trees;
