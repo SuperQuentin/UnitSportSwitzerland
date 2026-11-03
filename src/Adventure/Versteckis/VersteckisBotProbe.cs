@@ -93,7 +93,7 @@ public partial class VersteckisBotProbe : ChatProbe
         for (int i = 0; i < 300 && Vs.Mine?.Phase is VsPhase.Hide; i++)
         {
             var g = me.Global;
-            double de = te - g.E, dn = tn - g.N, d = Math.Sqrt(de * de + dn * dn);
+            double de = te - g.E, dn = tn - g.N, d = GlobalPos.HorizontalDistance(te, tn, g.E, g.N);
             if (d < 1) break;
             me.GlobalPosition += new Vector3((float)(de / d), 0.1f, (float)(-dn / d));
             me.Velocity = Vector3.Zero;

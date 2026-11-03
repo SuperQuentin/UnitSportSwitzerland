@@ -142,8 +142,8 @@ public partial class TrialRunner : Node3D
         // a gate the server did not count (the body's published position lagged) is reported again a second later
         if (t.Next >= t.Gates.Length || t.Next == _sent && now - _sentAt < 1.0) return;
         var g = t.Gates[t.Next];
-        double de = at.E - g.E, dn = at.N - g.N, dz = at.Alt - g.Alt;
-        double d2 = de * de + dn * dn + (_glide ? dz * dz : 0);
+        double dz = at.Alt - g.Alt;
+        double d2 = GlobalPos.HorizontalDistanceSquared(at.E, at.N, g.E, g.N) + (_glide ? dz * dz : 0);
         if (d2 > g.Radius * g.Radius || !_glide && Math.Abs(dz) > 15) return;
         _sent = t.Next;
         _sentAt = now;

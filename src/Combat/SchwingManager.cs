@@ -207,7 +207,7 @@ public partial class SchwingManager : Node
         var gb = Body(b)!.Global;
         double de = gb.E - ga.E, dn = gb.N - ga.N;
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = de * de + dn * dn < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
         var centre = new GlobalPos((ga.E + gb.E) * 0.5, (ga.N + gb.N) * 0.5, (ga.Alt + gb.Alt) * 0.5);
         var match = new Match
         {

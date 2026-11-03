@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnitSport.Adventure.Places;
+using UnitSport.Core;
 using UnitSport.Player;
 using UnitSport.Terrain.Format;
 
@@ -102,7 +103,7 @@ public static class TravelNetwork
         {
             var k = KindOf(p.Kind);
             if (k == TravelKind.None || book.Has(p.Id)) continue;
-            double de = p.E - e, dn = p.N - n, d2 = de * de + dn * dn;
+            double d2 = GlobalPos.HorizontalDistanceSquared(p.E, p.N, e, n);
             float r = UnlockRadius(k);
             if (d2 <= (double)r * r && d2 < bd) { bd = d2; best = p; }
         }

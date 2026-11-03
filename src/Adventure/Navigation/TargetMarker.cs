@@ -95,7 +95,7 @@ public partial class TargetMarker : CanvasLayer
             Hide(true);
             return;
         }
-        double de = t.E - at.E, dn = t.N - at.N, d = Math.Sqrt(de * de + dn * dn);
+        double d = GlobalPos.HorizontalDistance(t.E, t.N, at.E, at.N);
         float alt = NavTarget.Alt ?? (float)at.Alt;
         var world = origin.ToWorld(t.E, t.N, alt + HeightM);
         // where the place is drawn: lower by the Earth's drop round the camera (#187, 61 m at 30 km)
