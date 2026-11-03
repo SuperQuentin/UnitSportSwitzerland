@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
 using Xunit;
@@ -229,6 +230,111 @@ public class EphemerisTests
         var q = pole - new EcefPos(u.X * Dot(pole, u), u.Y * Dot(pole, u), u.Z * Dot(pole, u));
         double pa = Math.Atan2(Dot(q, eastSky) / Math.Sqrt(Dot(eastSky, eastSky)), Dot(q, north) / Math.Sqrt(Dot(north, north))) / Deg;
         Assert.Equal(0, Math.IEEERemainder(pa - poleAngle, 360), 0.5);
+    }
+
+    /// <summary>JPL Horizons from Bern (QUANTITIES 4 and 20) for the seven planets at the table's times.</summary>
+    private static readonly (string Utc, SkyBody Body, double Az, double El, double Au)[] PlanetRows =
+    [
+        ("2026-Jan-01 03:07:12", SkyBody.Mercury, 90.644805647, -33.243300585, 1.37856123127135),
+        ("2026-Feb-07 16:04:48", SkyBody.Mercury, 233.408689911, 14.484077827, 1.23528253708939),
+        ("2026-Mar-17 05:02:24", SkyBody.Mercury, 100.053171742, 0.607590504, 0.65193581767846),
+        ("2026-Apr-23 18:00:00", SkyBody.Mercury, 291.644708519, -15.248226709, 1.16365966909344),
+        ("2026-May-30 14:38:24", SkyBody.Mercury, 236.855358708, 58.717237145, 1.12844178116159),
+        ("2026-Jul-07 03:36:00", SkyBody.Mercury, 49.220303639, -11.028732220, 0.57424417773870),
+        ("2026-Aug-13 16:33:36", SkyBody.Mercury, 282.444293612, 14.956042645, 1.16505765188610),
+        ("2026-Sep-20 05:31:12", SkyBody.Mercury, 83.666316763, -14.620217693, 1.29338177787297),
+        ("2026-Oct-27 02:09:36", SkyBody.Mercury, 50.291634149, -55.040069964, 0.73896843562792),
+        ("2026-Dec-03 15:07:12", SkyBody.Mercury, 245.360931361, -1.963838346, 1.26197945120216),
+        ("2026-Jan-01 03:07:12", SkyBody.Venus, 81.450004194, -40.794163112, 1.71001547452856),
+        ("2026-Feb-07 16:04:48", SkyBody.Venus, 235.996021806, 10.495127428, 1.69261393317897),
+        ("2026-Mar-17 05:02:24", SkyBody.Venus, 68.399833472, -13.316848085, 1.61689394092703),
+        ("2026-Apr-23 18:00:00", SkyBody.Venus, 271.907350776, 26.984279132, 1.47405706503647),
+        ("2026-May-30 14:38:24", SkyBody.Venus, 203.140293034, 66.280137463, 1.26526328125675),
+        ("2026-Jul-07 03:36:00", SkyBody.Venus, 18.273425744, -27.303057401, 0.99623372928383),
+        ("2026-Aug-13 16:33:36", SkyBody.Venus, 218.730967123, 31.826289142, 0.69862921954863),
+        ("2026-Sep-20 05:31:12", SkyBody.Venus, 79.929988317, -35.192090244, 0.41433029010707),
+        ("2026-Oct-27 02:09:36", SkyBody.Venus, 71.426217058, -38.684518902, 0.27342272369409),
+        ("2026-Dec-03 15:07:12", SkyBody.Venus, 269.594036863, -12.880470305, 0.44441263018309),
+        ("2026-Jan-01 03:07:12", SkyBody.Mars, 78.396439420, -43.380918174, 2.41062568633323),
+        ("2026-Feb-07 16:04:48", SkyBody.Mars, 244.433633236, -1.433858125, 2.37038313417284),
+        ("2026-Mar-17 05:02:24", SkyBody.Mars, 98.888775794, -2.990964906, 2.31765401152230),
+        ("2026-Apr-23 18:00:00", SkyBody.Mars, 294.256369394, -16.630115827, 2.25805576948529),
+        ("2026-May-30 14:38:24", SkyBody.Mars, 271.365120181, 17.775425646, 2.18711806580022),
+        ("2026-Jul-07 03:36:00", SkyBody.Mars, 83.873807676, 23.614702608, 2.08754836600458),
+        ("2026-Aug-13 16:33:36", SkyBody.Mars, 312.241937967, -4.370279483, 1.94224452522817),
+        ("2026-Sep-20 05:31:12", SkyBody.Mars, 128.232068231, 56.250467401, 1.73647392052540),
+        ("2026-Oct-27 02:09:36", SkyBody.Mars, 96.925220142, 30.472086523, 1.47189253792965),
+        ("2026-Dec-03 15:07:12", SkyBody.Mars, 328.526291702, -24.972538414, 1.15451687407166),
+        ("2026-Jan-01 03:07:12", SkyBody.Jupiter, 248.130354658, 48.117230295, 4.24229548323228),
+        ("2026-Feb-07 16:04:48", SkyBody.Jupiter, 79.689551522, 21.916057531, 4.36464267318913),
+        ("2026-Mar-17 05:02:24", SkyBody.Jupiter, 332.730346252, -15.480445511, 4.83724174385555),
+        ("2026-Apr-23 18:00:00", SkyBody.Jupiter, 219.901115229, 60.949553882, 5.43335041804586),
+        ("2026-May-30 14:38:24", SkyBody.Jupiter, 178.705744896, 64.789582402, 5.93870268988573),
+        ("2026-Jul-07 03:36:00", SkyBody.Jupiter, 40.706549725, -12.550577398, 6.24559160655764),
+        ("2026-Aug-13 16:33:36", SkyBody.Jupiter, 279.663442136, 16.181606911, 6.28114798159922),
+        ("2026-Sep-20 05:31:12", SkyBody.Jupiter, 108.823759443, 38.084287657, 6.03712838894198),
+        ("2026-Oct-27 02:09:36", SkyBody.Jupiter, 93.937665832, 23.320715173, 5.57290707319414),
+        ("2026-Dec-03 15:07:12", SkyBody.Jupiter, 335.233094413, -26.396492171, 4.99279551439012),
+        ("2026-Jan-01 03:07:12", SkyBody.Saturn, 328.995284413, -42.521155790, 9.71734709448858),
+        ("2026-Feb-07 16:04:48", SkyBody.Saturn, 212.892939552, 35.683724106, 10.2355701219203),
+        ("2026-Mar-17 05:02:24", SkyBody.Saturn, 78.179153361, -11.473930917, 10.4811809373478),
+        ("2026-Apr-23 18:00:00", SkyBody.Saturn, 294.367263936, -19.398977732, 10.3825835293986),
+        ("2026-May-30 14:38:24", SkyBody.Saturn, 281.514571099, -6.908814119, 9.98455175899321),
+        ("2026-Jul-07 03:36:00", SkyBody.Saturn, 142.563223804, 40.369915045, 9.39458508413060),
+        ("2026-Aug-13 16:33:36", SkyBody.Saturn, 29.483045614, -35.584503483, 8.81248132378401),
+        ("2026-Sep-20 05:31:12", SkyBody.Saturn, 262.006702827, 10.678742685, 8.46561899541461),
+        ("2026-Oct-27 02:09:36", SkyBody.Saturn, 252.411328107, 17.511341985, 8.51141775804291),
+        ("2026-Dec-03 15:07:12", SkyBody.Saturn, 110.985184375, 19.532313508, 8.93426803473988),
+        ("2026-Jan-01 03:07:12", SkyBody.Uranus, 290.036032368, 8.053917394, 18.7567886564531),
+        ("2026-Feb-07 16:04:48", SkyBody.Uranus, 129.686399648, 53.807614717, 19.3120038206488),
+        ("2026-Mar-17 05:02:24", SkyBody.Uranus, 22.006857218, -20.606577379, 19.9308532228522),
+        ("2026-Apr-23 18:00:00", SkyBody.Uranus, 270.973775345, 26.936700908, 20.3665712145484),
+        ("2026-May-30 14:38:24", SkyBody.Uranus, 258.794495324, 38.280261277, 20.4686959877022),
+        ("2026-Jul-07 03:36:00", SkyBody.Uranus, 85.511697693, 24.800429293, 20.2118673412407),
+        ("2026-Aug-13 16:33:36", SkyBody.Uranus, 334.970338921, -18.216186548, 19.6773847073913),
+        ("2026-Sep-20 05:31:12", SkyBody.Uranus, 227.496621828, 56.872259784, 19.0504402487102),
+        ("2026-Oct-27 02:09:36", SkyBody.Uranus, 205.338875583, 62.130370467, 18.5791982853339),
+        ("2026-Dec-03 15:07:12", SkyBody.Uranus, 58.243910523, -0.478176068, 18.4533266163249),
+        ("2026-Jan-01 03:07:12", SkyBody.Neptune, 326.723213218, -39.517183450, 30.0601590565449),
+        ("2026-Feb-07 16:04:48", SkyBody.Neptune, 212.752176995, 36.999811530, 30.6158444586329),
+        ("2026-Mar-17 05:02:24", SkyBody.Neptune, 79.897387201, -10.040303185, 30.8736597749145),
+        ("2026-Apr-23 18:00:00", SkyBody.Neptune, 297.906904513, -23.622145360, 30.7431244680320),
+        ("2026-May-30 14:38:24", SkyBody.Neptune, 285.868879718, -13.832819094, 30.2923497574615),
+        ("2026-Jul-07 03:36:00", SkyBody.Neptune, 155.803945216, 40.949764651, 29.6754890834236),
+        ("2026-Aug-13 16:33:36", SkyBody.Neptune, 42.183928920, -34.321437637, 29.1316973977665),
+        ("2026-Sep-20 05:31:12", SkyBody.Neptune, 266.973553725, 2.760933291, 28.8793216387609),
+        ("2026-Oct-27 02:09:36", SkyBody.Neptune, 256.905840664, 11.375460749, 29.0256181187682),
+        ("2026-Dec-03 15:07:12", SkyBody.Neptune, 117.204937947, 22.331678974, 29.5223541729994),
+    ];
+
+    /// <summary>
+    /// How far each planet may be from Horizons, degrees: JPL's table 1 is good to tens of
+    /// arcseconds for the inner planets and Neptune, a few arcminutes for Jupiter and Saturn.
+    /// </summary>
+    private static double PlanetTolerance(SkyBody b) => b switch
+    {
+        SkyBody.Jupiter or SkyBody.Saturn => 0.12,
+        SkyBody.Uranus => 0.03,
+        _ => 0.02,
+    };
+
+    [Fact]
+    public void Planets_match_JPL_Horizons_from_Bern()
+    {
+        var bern = new Geodetic(46.9511, 7.4386, 550);
+        var worst = new System.Collections.Generic.Dictionary<SkyBody, double>();
+        foreach (var r in PlanetRows)
+        {
+            var utc = DateTime.SpecifyKind(DateTime.ParseExact(r.Utc, "yyyy-MMM-dd HH:mm:ss", CultureInfo.InvariantCulture), DateTimeKind.Utc);
+            var h = Ephemeris.Topocentric(r.Body, utc, bern);
+            double az = r.Az * Deg, el = r.El * Deg;
+            double dot = h.East * Math.Sin(az) * Math.Cos(el) + h.North * Math.Cos(az) * Math.Cos(el) + h.Up * Math.Sin(el);
+            double off = Math.Acos(Math.Min(1, dot)) / Deg;
+            worst[r.Body] = Math.Max(worst.GetValueOrDefault(r.Body), off);
+            Assert.True(off < PlanetTolerance(r.Body), $"{r.Body} {r.Utc}: {off:F4} deg from Horizons");
+            Assert.True(Math.Abs(h.Distance / Ephemeris.AuMetres - r.Au) / r.Au < 2e-3, $"{r.Body} {r.Utc}: {h.Distance / Ephemeris.AuMetres:F5} au, Horizons {r.Au:F5}");
+        }
+        Console.WriteLine(string.Join(", ", worst.Select(w => $"{w.Key} {w.Value:F4}")));
     }
 
     [Fact]

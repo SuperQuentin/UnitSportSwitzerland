@@ -6,7 +6,7 @@ namespace UnitSport.Core;
 // Plain C# (linked into the unit tests).
 
 /// <summary>The bodies <see cref="Ephemeris"/> places.</summary>
-public enum SkyBody { Sun, Moon }
+public enum SkyBody { Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune }
 
 /// <summary>
 /// A body as seen from a place: a unit vector in the local east / north / up of the ellipsoid
@@ -34,7 +34,7 @@ public readonly record struct Horizontal(double East, double North, double Up, d
 /// 0.008° and 1e-4 AU, the moon within 0.0013° and 40 km (the series is truncated in distance).
 /// </para>
 /// </summary>
-public static class Ephemeris
+public static partial class Ephemeris
 {
     public const double AuMetres = 149_597_870_700.0;
 
@@ -55,6 +55,7 @@ public static class Ephemeris
     public static (double Ra, double Dec, double Distance) Equatorial(SkyBody body, DateTime utc)
     {
         double t = (JulianDay(utc) + DeltaT / 86400.0 - 2451545.0) / 36525.0;
+        if (body > SkyBody.Moon) return PlanetEquatorial(body, t);
         var (dPsi, eps) = Nutation(t);
         var (lon, lat, dist) = body == SkyBody.Sun ? Sun(t) : Moon(t);
         lon += dPsi;
