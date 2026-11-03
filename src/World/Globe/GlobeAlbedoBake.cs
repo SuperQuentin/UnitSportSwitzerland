@@ -54,7 +54,9 @@ public partial class GlobeAlbedoBake : Node
             var src = Image.LoadFromFile(file);
             if (src == null || src.IsEmpty()) { Fail($"cannot read {file}"); return; }
             if (src.GetFormat() != Image.Format.Rgb8) src.Convert(Image.Format.Rgb8);
-            var map = new EquirectMap(src.GetData(), src.GetWidth(), src.GetHeight());
+            var rgb = src.GetData();
+            int lakes = PaintLakes(rgb);
+            var map = new EquirectMap(rgb, src.GetWidth(), src.GetHeight());
             src.Dispose();
             int month = m;
             await Task.Run(() => Parallel.ForEach(keys, key =>
@@ -66,7 +68,7 @@ public partial class GlobeAlbedoBake : Node
                 images[key][month - first] = img.SaveWebpToBuffer(true, 0.85f);
                 img.Dispose();
             }));
-            GD.Print($"[globealbedo] month {m}: {sw.Elapsed.TotalSeconds:F0} s");
+            GD.Print($"[globealbedo] month {m}: {lakes} lake pixels painted, {sw.Elapsed.TotalSeconds:F0} s");
         }
 
         long bytes = 0;
@@ -98,6 +100,35 @@ public partial class GlobeAlbedoBake : Node
     {
         GD.PrintErr($"[globealbedo] RESULT: FAILED — {why}");
         GetTree().Quit(1);
+    }
+
+    /// <summary>The colour Blue Marble's black inland water is painted, sRGB: a deep lake's blue, darker than the shelf seas.</summary>
+    public static readonly (byte R, byte G, byte B) Lake = (22, 46, 92);
+
+    /// <summary>
+    /// Blue Marble draws inland water black (Ladoga, Onega, the Great Lakes, Geneva's): every pixel with
+    /// all three channels under 12 becomes <see cref="Lake"/>. The sea is never that dark, nor land by
+    /// day (the darkest forests are ~20). Returns how many were painted.
+    /// </summary>
+    public static int PaintLakes(byte[] rgb)
+    {
+        int painted = 0;
+        object gate = new();
+        Parallel.For(0, rgb.Length / 3 / 65536 + 1, chunk =>
+        {
+            int count = 0, from = chunk * 65536, to = Math.Min(from + 65536, rgb.Length / 3);
+            for (int p = from; p < to; p++)
+            {
+                int o = p * 3;
+                if (rgb[o] < 12 && rgb[o + 1] < 12 && rgb[o + 2] < 12)
+                {
+                    rgb[o] = Lake.R; rgb[o + 1] = Lake.G; rgb[o + 2] = Lake.B;
+                    count++;
+                }
+            }
+            lock (gate) painted += count;
+        });
+        return painted;
     }
 
     /// <summary>A tile's size² RGB pixels, row-major from its south-west corner (row 0 along its south edge).</summary>
