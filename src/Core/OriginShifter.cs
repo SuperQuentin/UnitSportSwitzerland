@@ -57,13 +57,14 @@ public partial class OriginShifter : Node
     public readonly record struct ReanchorMode(double ThresholdM, bool Vertical, bool Rotates);
 
     /// <summary>
-    /// The Space regime's mode: every 20 km, no turn yet (#1443 G2), and for now no rise either: up to the
-    /// 120 km ceiling a float still holds 8 mm at the camera, and world Y below about -2 km is the
-    /// interiors' band (<c>InteriorManager.InteriorBaseY</c>), which a risen origin puts the camera in
-    /// on the way down. The vertical origin (<see cref="OriginFrame.Alt0"/>) is ready for orbits (H5),
-    /// once the interiors' band is told apart by altitude rather than by raw Y.
+    /// The Space regime's mode: every 20 km, turned to the ellipsoid under the camera (#1430 H5: an orbit
+    /// goes round the whole Earth, where the flat LV95 plane would stretch and break; the ground keeps its
+    /// flat frame until round tiles, #1443 G2). No rise yet: at 400 km a float still holds 3 cm at the
+    /// camera, and world Y below about -2 km is the interiors' band (<c>InteriorManager.InteriorBaseY</c>),
+    /// which a risen origin puts the camera in on the way down. The vertical origin
+    /// (<see cref="OriginFrame.Alt0"/>) waits until the interiors' band is told apart by altitude rather than by raw Y.
     /// </summary>
-    public static ReanchorMode SpaceMode { get; set; } = new(20_000, Vertical: false, Rotates: false);
+    public static ReanchorMode SpaceMode { get; set; } = new(20_000, Vertical: false, Rotates: true);
 
     /// <summary>Whether the origin follows the camera in Space (above 60 km climbing, until below 50 km).</summary>
     public bool InSpace { get; private set; }
@@ -154,7 +155,8 @@ public partial class OriginShifter : Node
             InSpace = space;
             var (se, sn) = _origin.ToLv95(at);
             GD.Print(string.Create(CultureInfo.InvariantCulture, $"[origin] {(space ? "into" : "out of")} the Space regime at {altitude / 1000:F1} km"));
-            if (space) ShiftTo(se, sn, exact: true, alt0: SpaceMode.Vertical ? altitude : 0);
+            double enterAlt0 = SpaceMode.Vertical ? altitude : 0;
+            if (space) ShiftTo(se, sn, exact: true, alt0: enterAlt0, axes: SpaceMode.Rotates ? SpaceAnchor(at, enterAlt0) : null);
             else ShiftTo(se, sn);
             return;
         }
@@ -162,7 +164,8 @@ public partial class OriginShifter : Node
         {
             if (SpaceMode.Vertical ? at.Length() <= SpaceMode.ThresholdM : new Vector2(at.X, at.Z).Length() <= SpaceMode.ThresholdM) return;
             var (pe, pn) = _origin.ToLv95(at);
-            ShiftTo(pe, pn, exact: true, alt0: SpaceMode.Vertical ? altitude : _origin.Alt0);
+            double alt0 = SpaceMode.Vertical ? altitude : _origin.Alt0;
+            ShiftTo(pe, pn, exact: true, alt0: alt0, axes: SpaceMode.Rotates ? SpaceAnchor(at, alt0) : null);
             return;
         }
         if (new Vector2(at.X, at.Z).Length() <= ThresholdM) return;
@@ -177,7 +180,8 @@ public partial class OriginShifter : Node
     /// Returns false when shifting is not allowed or would change nothing. <paramref name="exact"/>
     /// puts the origin on the point itself rather than snapping it to <see cref="StepM"/>.
     /// </summary>
-    public bool ShiftTo(double e, double n, bool exact = false, double alt0 = 0)
+    /// <param name="axes">The anchor to move to (a turning Space shift, <see cref="SpaceAnchor"/>); null for one built from <paramref name="e"/> / <paramref name="n"/>.</param>
+    public bool ShiftTo(double e, double n, bool exact = false, double alt0 = 0, FrameAxes? axes = null)
     {
         if (!_allowed()) return false;
         double step = Math.Max(1, StepM);
@@ -186,6 +190,7 @@ public partial class OriginShifter : Node
 
         var clock = Stopwatch.StartNew();
         var shift = _stressYaw != 0 ? _origin.MoveTo(StressAxes(newE, newN))
+            : axes != null ? _origin.MoveTo(axes)
             // a turning re-anchor (round tiles, #1443 G2): the ellipsoid's own axes at the camera
             : InSpace && SpaceMode.Rotates ? _origin.MoveTo(FrameAxes.GroundAt(newE, newN, alt0))
             : _origin.MoveTo(newE, newN, alt0);
@@ -207,6 +212,28 @@ public partial class OriginShifter : Node
                 + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms, "
                 + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all");
         return true;
+    }
+
+    /// <summary>
+    /// The turning Space anchor under the camera (#1430 H5): built in ECEF (<see cref="FrameAxes.Tangent"/>),
+    /// its axes the current ones turned by the least rotation, its origin <paramref name="alt0"/> high
+    /// (LV95 heights, as the ground frame's) under the camera. No LV95 in it: an orbit goes everywhere.
+    /// </summary>
+    private FrameAxes SpaceAnchor(Vector3 camera, double alt0)
+    {
+        var frame = _origin.Frame;
+        var at = frame.ToEcef(camera);
+        double drop = frame.AltitudeOf(camera) - alt0;
+        // LV95's heights fail only at its two singular points: the ellipsoid's there, near enough
+        if (!double.IsFinite(drop)) drop = Ellipsoid.Wgs84.ToGeodetic(at).H - alt0;
+        // from the flat ground frame (entering Space, near Switzerland): its grid axes under the camera
+        var previous = frame.Axes;
+        if (previous == null)
+        {
+            var g = frame.ToGlobal(camera);
+            previous = FrameAxes.GroundAt(g.E, g.N, alt0);
+        }
+        return FrameAxes.Tangent(at, drop, previous);
     }
 
     /// <summary>

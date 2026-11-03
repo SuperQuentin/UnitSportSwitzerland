@@ -46,6 +46,40 @@ public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
         var south = new EcefPos(east.Y * up.Z - east.Z * up.Y, east.Z * up.X - east.X * up.Z, east.X * up.Y - east.Y * up.X);
         return new FrameAxes(o, east, up, south);
     }
+
+    /// <summary>
+    /// The Space anchor under an ECEF point (#1430 H5), with no LV95 in it, so it holds anywhere on the
+    /// Earth (LV95 breaks down at two points 90° from Bern, which a polar orbit flies over): its origin on
+    /// the WGS84 normal through <paramref name="at"/>, <paramref name="drop"/> metres below it; up the
+    /// normal; X and Z <paramref name="previous"/>'s, turned by the least rotation that takes its up to
+    /// the new one, so the world turns no more than the Earth's curve under the move.
+    /// </summary>
+    public static FrameAxes Tangent(EcefPos at, double drop, FrameAxes previous)
+    {
+        var g = Ellipsoid.Wgs84.ToGeodetic(at);
+        double lat = g.LatDeg * System.Math.PI / 180, lon = g.LonDeg * System.Math.PI / 180;
+        var up = new EcefPos(System.Math.Cos(lat) * System.Math.Cos(lon), System.Math.Cos(lat) * System.Math.Sin(lon), System.Math.Sin(lat));
+        var o = new EcefPos(at.X - up.X * drop, at.Y - up.Y * drop, at.Z - up.Z * drop);
+        // the least rotation from the old up to the new (Rodrigues, about their cross product)
+        var u = previous.Y;
+        var k = new EcefPos(u.Y * up.Z - u.Z * up.Y, u.Z * up.X - u.X * up.Z, u.X * up.Y - u.Y * up.X);
+        double c = Dot(u, up);
+        EcefPos Turn(EcefPos v)
+        {
+            // v cos + (k × v) + k (k·v) / (1 + cos), k = u × up (its length the sine)
+            var kv = new EcefPos(k.Y * v.Z - k.Z * v.Y, k.Z * v.X - k.X * v.Z, k.X * v.Y - k.Y * v.X);
+            double f = Dot(k, v) / (1 + c);
+            return new EcefPos(v.X * c + kv.X + k.X * f, v.Y * c + kv.Y + k.Y * f, v.Z * c + kv.Z + k.Z * f);
+        }
+        var x = Turn(previous.X);
+        // made square to up again, so rounding never builds up shift after shift
+        double along = Dot(x, up);
+        x = new EcefPos(x.X - up.X * along, x.Y - up.Y * along, x.Z - up.Z * along);
+        double len = x.Length;
+        x = new EcefPos(x.X / len, x.Y / len, x.Z / len);
+        var z = new EcefPos(x.Y * up.Z - x.Z * up.Y, x.Z * up.X - x.X * up.Z, x.X * up.Y - x.Y * up.X);
+        return new FrameAxes(o, x, up, z);
+    }
 }
 
 /// <summary>
@@ -172,6 +206,46 @@ public sealed class OriginFrame
     /// where H1 wraps the flat world round. An anchor frame is its own axes everywhere.
     /// </summary>
     public FrameAxes EcefAxesAt(double e, double n) => Axes ?? Embedding(SwissGeodesy.ToEcef(e, n, 0));
+
+    /// <summary>A world point as ECEF (#1430 H5): through the anchor's axes, or the point's LV95 place in the ground frame.</summary>
+    public EcefPos ToEcef(Vector3 world) => Axes?.ToEcef(world.X, world.Y, world.Z) ?? ToGlobal(world).ToEcef();
+
+    /// <summary>An ECEF point in this world (#1430 H5), the inverse of <see cref="ToEcef(Vector3)"/>.</summary>
+    public Vector3 FromEcef(EcefPos p)
+    {
+        if (Axes == null) return ToWorld(GlobalPos.FromEcef(p));
+        var (x, y, z) = Axes.FromEcef(p);
+        return new((float)x, (float)y, (float)z);
+    }
+
+    /// <summary>
+    /// A world direction at a world point as Earth-fixed (#1430 H5), in doubles: the anchor's axes, or the
+    /// grid axes at the point's LV95 place in the ground frame (the flat plane's own axes there).
+    /// </summary>
+    public EcefPos EcefDirection(Vector3 at, Vector3 dir)
+    {
+        var axes = Axes;
+        if (axes == null)
+        {
+            var g = ToGlobal(at);
+            axes = FrameAxes.GroundAt(g.E, g.N, g.Alt);
+        }
+        return new(axes.X.X * dir.X + axes.Y.X * dir.Y + axes.Z.X * dir.Z,
+            axes.X.Y * dir.X + axes.Y.Y * dir.Y + axes.Z.Y * dir.Z,
+            axes.X.Z * dir.X + axes.Y.Z * dir.Y + axes.Z.Z * dir.Z);
+    }
+
+    /// <summary>An Earth-fixed direction in world axes at a world point (#1430 H5), the inverse of <see cref="EcefDirection"/>.</summary>
+    public Vector3 WorldDirection(Vector3 at, EcefPos dir)
+    {
+        var axes = Axes;
+        if (axes == null)
+        {
+            var g = ToGlobal(at);
+            axes = FrameAxes.GroundAt(g.E, g.N, g.Alt);
+        }
+        return Turn(dir, axes);
+    }
 
     /// <summary>An Earth-fixed direction in this frame's world axes (the ground frame: grid axes at its own origin).</summary>
     public Vector3 DirectionOf(EcefPos ecef)

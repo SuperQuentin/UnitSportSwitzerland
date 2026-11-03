@@ -1210,6 +1210,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // path the server's node routes RPCs to, so the name cannot change between the two.
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
+        _chat.PutInOrbit = km => LocalPlayer?.PutInOrbit(km) ?? "No player to put in orbit.";
         _chat.Inventory = inventory;
         _chat.GiveOrDrop = items.Give;
         _chat.PlaceSearch = _places;

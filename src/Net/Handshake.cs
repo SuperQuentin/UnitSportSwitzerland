@@ -123,7 +123,8 @@ public partial class Handshake : Node
     /// 89: creative flight's figure (#1219): FootPlayer.PoseKind 10 (PoseFly), Anim.X the lean, BodyPose the tilt.
     /// 90: World/Birthdays (#1423: Tell, RequestWish, RequestSlice, RequestShow, SetCelebrants, CakeState, Sliced, Told, WishTaken, Show), ItemIds 545-553,
     /// ItemUse.Open, ItemEventKind.BirthdayWish, PlacedKind.BirthdayCake 14, Headwear 21-26 (the birthday hats).
-    public const int Protocol = 90;
+    /// 91: World/Chat ForceOrbit (#1480: an admin's /orbit, for the saucer the client flies).
+    public const int Protocol = 91;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
