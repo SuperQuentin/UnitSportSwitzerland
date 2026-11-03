@@ -234,6 +234,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
             return;
         }
+        // an air hockey table played by two bots through its rig (#1326)
+        if (Interiors.Games.AirHockey.AirHockeyProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.AirHockey.AirHockeyProbe { Name = "AirHockeyProbe" });
+            return;
+        }
         // a table football table played by two bots through its rig (#1324)
         if (Interiors.Games.Foosball.FoosballProbe.ParseArgs())
         {

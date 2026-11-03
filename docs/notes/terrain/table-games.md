@@ -83,3 +83,18 @@ Code: `src/Interiors/Games/`, one folder per game beside it.
 - **Controls** (`FoosballPlay`): from your side, looking across; W / S push and pull, Jump kicks, Sprint lifts.
 - **Checks**: `--foosballcheck --systems ui` (both orientations, two bots to ten), `GAME=TableFootball
   tools/tablenetcheck.sh` (each player's push seen by the other, the ball streamed, the same score, a bot's rods).
+
+## Air hockey (#1326)
+
+- **Game** (`AirHockeyGame`, pure and live, `AirHockeyTests`): the field inside the rails (piece less 8 cm a side; x
+  across, z along), puck 31 mm, mallets 48 mm, goal slots 28 cm; the puck keeps 0.9 off a rail and takes the mallet's
+  speed (up to 7 m/s); each mallet stays in its half; seat 0 defends −z. First to 7; a goal serves the puck, still, in
+  the conceder's half.
+- **Wire**: a seat's controls are its mallet's velocity (two sbytes of 3.2 m/s), 30 a second; poses 32 bytes, 20 a second.
+- **Bot**: comes at a puck on its side from behind towards the other goal, else guards a quarter of the way out.
+- **Rig** (`AirHockeyRig`): puck and mallets nodes (eased, the puck carried on by its speed), the scorer a lit board on
+  a post at the table's side (both faces), clack and goal sounds. The room mesh draws the table with the goals' slots
+  in its end rails, no longer a puck and mallets.
+- **Controls** (`AirHockeyPlay`): from your end; the stick drives the mallet as you see it, Shift full speed.
+- **Checks**: `--airhockeycheck --systems ui`, `GAME=AirHockey tools/tablenetcheck.sh` (the live branch reads table
+  football's rods; air hockey's own live checks are the probe's for now).
