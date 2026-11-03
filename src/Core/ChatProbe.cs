@@ -166,6 +166,74 @@ public abstract partial class ChatProbe : Node
     protected async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
 
     /// <summary>
+    /// Walks <paramref name="me"/> along <paramref name="way"/> (world, flattened) until <paramref name="there"/>, at
+    /// most <paramref name="seconds"/>, and <paramref name="past"/> s on, through the walk intent (<see
+    /// cref="FootPlayer.WalkControls"/>, a bot's seam). Never a held <c>Input.ActionPress</c>: Godot lets go of every
+    /// held action when the window loses focus (another test window opening, a click elsewhere), and a player walking
+    /// in through a door stopped on the doorstep now and then (#1401). Says where it stopped when it never got there.
+    /// </summary>
+    protected Task<bool> WalkUntil(FootPlayer me, Vector3 way, Func<bool> there, double seconds, double past = 0.4)
+    {
+        var wish = (way with { Y = 0 }).Normalized();
+        return WalkUntil(me, () => wish, there, seconds, past);
+    }
+
+    /// <summary>
+    /// In through the doorway whose outside frame is <paramref name="doorway"/> (<c>DoorLink.Outside</c>: the sill's
+    /// middle, Z out of the building): aimed at the doorway's middle line a little ahead, so a player off that line is drawn back between the jambs.
+    /// The building's shell has no hole, it lets a walker through only with their feet inside the doorway's width
+    /// (<c>DoorLink.InOutsideDoorway</c>), and a player set down beside another on the same doorstep was eased half a
+    /// metre aside and walked into the wall next to the door (#1401).
+    /// </summary>
+    protected Task<bool> WalkInThrough(FootPlayer me, Transform3D doorway, Func<bool> there, double seconds = 8)
+    {
+        var door = doorway.Origin;
+        var o = (doorway.Basis.Z with { Y = 0 }).Normalized();
+        return WalkUntil(me, () =>
+        {
+            // over the sill the body is in the interior's frame, 3 km down and turned: walk on the way it faces,
+            // as a held key would, or the aim at the street's doorway took it back out (#1401)
+            if (me.Indoors) return (-me.Camera.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+            float along = (me.GlobalPosition - door).Dot(o);
+            var aim = door + o * (along - DoorAimAhead) - me.GlobalPosition;
+            return (aim with { Y = 0 }).Normalized();
+        }, there, seconds, 0.4);
+    }
+
+    /// <summary>
+    /// How long a door must have stood open before a probe walks at it, s: two clients reaching for one door
+    /// at once, the second E shuts what the first opened a round trip later, and a walker who set off on the
+    /// first frame it read open met the shell (no hole in it) and climbed the facade (#1401).
+    /// </summary>
+    protected const double DoorSettle = 1.0;
+
+    /// <summary>How far ahead on the doorway's middle line <see cref="WalkInThrough"/> aims, m: a player half a metre off it is back within a metre.</summary>
+    private const float DoorAimAhead = 0.6f;
+
+    private async Task<bool> WalkUntil(FootPlayer me, Func<Vector3> wish, Func<bool> there, double seconds, double past)
+    {
+        var from = me.GlobalPosition;
+        me.WalkControls = () => (wish(), false);
+        bool ok = await Until(there, seconds);
+        await Seconds(past);
+        me.WalkControls = null;
+        if (!ok)
+        {
+            var near = PlayerSnapshot.Of(GetTree()).Where(s => s.Player != me && s.Pos.DistanceTo(me.GlobalPosition) < 3f)
+                .Select(s => $"{s.Player.Name} {s.Pos - me.GlobalPosition}");
+            GD.Print($"{Log} walked {(me.GlobalPosition - from).Length():F2} m of the way in {seconds} s, from {from} to {me.GlobalPosition}, "
+                + $"on the floor {me.IsOnFloor()}, velocity {me.Velocity}, players within 3 m: [{string.Join("; ", near)}]");
+        }
+        return ok;
+    }
+
+    /// <summary>Logged, for a check whose window loses focus: Godot lets go of every held action then (#1401).</summary>
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusOut) GD.Print($"{Log} the window lost focus");
+    }
+
+    /// <summary>
     /// <c>--checkspeed n</c> (#931): the whole simulation n times faster through <c>/speed</c>, for a net check whose
     /// time is simulated waiting (bots falling, fight rounds). Logs in with <paramref name="password"/> (the server's
     /// <c>--admin-password</c>) unless already admin, and waits until the scale is on this peer; every peer follows,
