@@ -19,6 +19,9 @@ namespace UnitSport.Bots;
 /// <c>&lt;out&gt;/&lt;run&gt;.csv</c>; the script compares a run with both sites against each site alone. Here: each
 /// walker walked, never passed through its blocker (they touched), and each site's bots share one region.
 /// <c>--noregions</c> runs the same with every body in the server's one frame: the "before".
+/// <c>--regionat E,N --regionfar E,N</c> put the sites elsewhere (a real-terrain run: Geneva and Val Müstair);
+/// <c>--regionwander S</c> then lets every bot stroll S seconds among the trunks and houses (WanderBrain) and
+/// reports how far each went, whether it stayed on its ground and how many trunks its region holds.
 /// </summary>
 public partial class RegionCheck : Node
 {
@@ -41,6 +44,8 @@ public partial class RegionCheck : Node
         public Bot? Walker, Blocker;
         public GlobalPos WalkerStart, BlockerStart;
         public double MinGap = double.MaxValue;
+        /// <summary>At the end of the walk: how far the walker went, how far the blocker was pushed.</summary>
+        public double Walked, Pushed;
         public readonly StringBuilder Csv = new();
     }
 
@@ -58,7 +63,8 @@ public partial class RegionCheck : Node
     private readonly List<Site> _sites = new();
     private readonly string _run;
     private string _out = "";
-    private int _tick, _settled, _walked = -1;
+    private int _tick, _settled, _walked = -1, _wander, _wandered = -1;
+    private readonly Dictionary<Bot, (GlobalPos From, int Ticks, int OnFloor, double Path, GlobalPos Last)> _strolls = new();
 
     public RegionCheck()
     {
@@ -72,9 +78,12 @@ public partial class RegionCheck : Node
     {
         _out = ProjectSettings.GlobalizePath(CmdArgs.Value("--regionout") ?? "res://test_output/regions");
         Directory.CreateDirectory(_out);
-        var spawn = new GlobalPos(SpawnPoint.DefaultLv95E + 250, SpawnPoint.DefaultLv95N + 250, 0);
+        var spawn = SpawnPoint.ParseLv95("--regionat") is var (ae, an) ? new GlobalPos(ae, an, 0)
+            : new GlobalPos(SpawnPoint.DefaultLv95E + 250, SpawnPoint.DefaultLv95N + 250, 0);
+        var far = SpawnPoint.ParseLv95("--regionfar") is var (be, bn) ? new GlobalPos(be, bn, 0) : spawn with { E = spawn.E + FarM };
+        _wander = CmdArgs.Int("--regionwander") ?? 0;
         if (_run is "both" or "a") _sites.Add(new Site("a", spawn));
-        if (_run is "both" or "b") _sites.Add(new Site("b", spawn with { E = spawn.E + FarM }));
+        if (_run is "both" or "b") _sites.Add(new Site("b", far));
         GD.Print($"{Log} run {_run}{(ServerRegions.Off ? " (no regions)" : "")}: {string.Join(", ", _sites.ConvertAll(s => $"{s.Name} at {s.At}"))}");
         // the director takes its first frame; the bots come a moment after
         GetTree().CreateTimer(1.0).Timeout += Spawn;
@@ -119,7 +128,8 @@ public partial class RegionCheck : Node
             _walked = 0;
             return;
         }
-        _walked++;
+        // the walk's steps; the stroll after it is not recorded
+        if (++_walked <= WalkTicks)
         foreach (var s in _sites)
         {
             var w = s.Walker!.Body.Global;
@@ -128,7 +138,31 @@ public partial class RegionCheck : Node
             s.Csv.Append(string.Create(CultureInfo.InvariantCulture,
                 $"{_walked},{w.E - s.WalkerStart.E:F5},{w.N - s.WalkerStart.N:F5},{w.Alt - s.WalkerStart.Alt:F5},{b.E - s.BlockerStart.E:F5},{b.N - s.BlockerStart.N:F5},{b.Alt - s.BlockerStart.Alt:F5}\n"));
         }
-        if (_walked >= WalkTicks) Finish();
+        if (_walked < WalkTicks) return;
+        if (_walked == WalkTicks)
+            foreach (var s in _sites)
+            {
+                s.Walked = s.Walker!.Body.Global.HorizontalDistanceTo(s.WalkerStart);
+                s.Pushed = s.Blocker!.Body.Global.HorizontalDistanceTo(s.BlockerStart);
+            }
+        if (_wander <= 0) { Finish(); return; }
+        if (_wandered < 0)
+        {
+            // the walk is done: every bot strolls among the trunks and houses round its site
+            foreach (var s in _sites)
+                foreach (var b in new[] { s.Walker!, s.Blocker! })
+                {
+                    b.Brain = new WanderBrain();
+                    _strolls[b] = (b.Body.Global, 0, 0, 0, b.Body.Global);
+                }
+            _wandered = 0;
+        }
+        foreach (var (b, st) in _strolls)
+        {
+            var g = b.Body.Global;
+            _strolls[b] = (st.From, st.Ticks + 1, st.OnFloor + (b.Body.IsOnFloor() ? 1 : 0), st.Path + g.HorizontalDistanceTo(st.Last), g);
+        }
+        if (++_wandered >= _wander * 60) Finish();
     }
 
     private string Status()
@@ -147,15 +181,23 @@ public partial class RegionCheck : Node
         {
             string file = Path.Combine(_out, $"{_run}{(ServerRegions.Off ? "-noregions" : "")}-{s.Name}.csv");
             File.WriteAllText(file, s.Csv.ToString());
-            var w = s.Walker!.Body.Global;
-            double walked = w.HorizontalDistanceTo(s.WalkerStart);
+            double walked = s.Walked;
             bool shared = s.Walker.Body.Region == s.Blocker!.Body.Region;
             // the two capsules (0.32 m each) touched and never went through each other
             bool touched = s.MinGap < 0.8, through = s.MinGap < 0.4;
             bool ok = walked > 3 && touched && !through && shared;
             if (!ok) failures++;
             GD.Print(string.Create(CultureInfo.InvariantCulture,
-                $"{Log} site {s.Name}: walked {walked:F3} m, nearest the blocker {s.MinGap:F3} m, blocker moved {s.Blocker.Body.Global.HorizontalDistanceTo(s.BlockerStart):F3} m, one region {shared} ({s.Walker.Body.Region}){(ok ? "" : " FAILED")} -> {file}"));
+                $"{Log} site {s.Name}: walked {walked:F3} m, nearest the blocker {s.MinGap:F3} m, blocker moved {s.Pushed:F3} m, one region {shared} ({s.Walker.Body.Region}){(ok ? "" : " FAILED")} -> {file}"));
+        }
+        foreach (var (b, st) in _strolls)
+        {
+            int trunks = 0;
+            if (b.Body.Region?.Root is { } root)
+                foreach (var n in root.GetChildren()) if (n is World.TreeColliders t) trunks = t.GetChildCount();
+            GD.Print(string.Create(CultureInfo.InvariantCulture,
+                $"{Log} stroll {b.Body.Name} in {b.Body.Region}: {st.Path:F1} m walked, {b.Body.Global.HorizontalDistanceTo(st.From):F1} m from where it began, on the ground {100.0 * st.OnFloor / Math.Max(1, st.Ticks):F0} % of the time, alt {b.Body.Global.Alt:F1}{(trunks > 0 ? $", {trunks} trunk bodies in its region" : "")}"));
+            if (st.Path < 5 || b.Body.Global.Alt < st.From.Alt - 30) failures++;
         }
         GD.Print(failures == 0 ? $"{Log} RESULT: ok" : $"{Log} RESULT: FAILED ({failures})");
         GetTree().Quit(failures == 0 ? 0 : 1);
