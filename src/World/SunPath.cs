@@ -220,7 +220,7 @@ public static class SunPath
         var geo = SwissGeodesy.ToWgs84(pe, pn, 500);
         // a step due north in latitude, measured on the grid
         var (ne, nn, _) = SwissGeodesy.FromWgs84(geo with { LatDeg = geo.LatDeg + 0.01 });
-        double de = ne - pe, dn = nn - pn, len = Math.Sqrt(de * de + dn * dn);
+        double de = ne - pe, dn = nn - pn, len = GlobalPos.HorizontalDistance(pe, pn, ne, nn);
         var place = new Place(ce, cn, geo, de / len, dn / len);
         _place = place;
         return place;
