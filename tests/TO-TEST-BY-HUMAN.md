@@ -87,13 +87,11 @@ Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
 - [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
 - [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
 
-## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
+## Phone: interact pills, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
 
 On the Android phone (a test APK).
 
 - [ ] Walk up to a building's door, a shop counter, a loot cupboard: a cyan pill names it ("Open the door") on the right edge; a tap does it.
-- [ ] In a bowling centre: the shoe counter, a ball rack and the approach each show their pill. Step up: the overlay stays, with Bowl, Back and Pins; the stick walks the spot, a drag turns the line; Bowl sets it, then hold Bowl to swing and slide the thumb sideways for hook, let go to roll. Back steps back. Is a whole frame comfortable?
-- [ ] At a pinball machine: the overlay stays with a Flip under each thumb, Plunger and Nudge on the right, Back on the left, a Start pill. Hold Plunger and let go to launch; both flippers at once work; Left-handed in Settings keeps the left flipper on the left. Is a whole game comfortable?
 - [ ] II (pause) on a phone held sideways: every entry down to Quit can be reached (it scrolls when it does not fit), Leave to main menu works.
 
 ## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
@@ -514,7 +512,7 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] E at a machine's front → the eye view over the lockdown bar, the backbox's display at the top; a game starts (the ball on the plunger). V → straight down; V → back.
 - [ ] Hold Space and let go → the ball goes up the shooter lane; soft → into the top lanes (the lit one: "SKILL SHOT"); hard → round the arch.
 - [ ] Left Shift flips only the left flipper, Right Shift only the right; Enter pulls the plunger and does not open the chat (Enter away from a machine still does).
-- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD); restart the server → still there.
+- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD). (A server restart keeping them is in `tools/pinballnetcheck.sh`.)
 - [ ] A / D (and the arrows) flip; a ball rolling down an inlane can be cradled and aimed. Do the flippers feel strong enough, too strong? Can you make each ramp and orbit on purpose?
 - [ ] W nudges (Q / R to the sides): a few hard nudges → "DANGER", then TILT (flippers dead, the ball drains, no bonus).
 - [ ] Play a whole game on each of the four tables (Clockwork, Space Mission, Haunted Castle, Alpine Ski Race): the lit scoop starts a mission, its shots blink, the timer runs; lock lights, two locks → multiball; ball save; the bonus at the drain; GAME OVER and MATCH. Is it fun? Is any shot impossible or too easy?

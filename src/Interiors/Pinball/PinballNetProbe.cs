@@ -14,6 +14,9 @@ namespace UnitSport.Interiors.Pinball;
 /// server hands the table to B's client, which runs it from the game's log, and A watches. At the game's end both
 /// must read the same scores on the backbox, and they must be the scores the last runner's own rules counted:
 /// the server's mirror scored the same game from the events alone.
+/// <c>--pinballnet R</c> (the script's second half, after the server was stopped and started again on the same saved
+/// state): a client with a user:// of its own walks in and must find both players' scores on the machine's high scores,
+/// so they came back from the server's file.
 /// </summary>
 public partial class PinballNetProbe : ChatProbe
 {
@@ -53,6 +56,18 @@ public partial class PinballNetProbe : ChatProbe
         GD.Print($"{Log} in {key}, machine #{index}: {PinballLayouts.Get(PinballTables.TableOf(layout, index)).Title}");
         Stand(me, node, layout, index, _role == "A" ? -0.1f : 0.5f);
         await Seconds(1.0);
+        string Highs() => tables.HighsOf(key, index) is { } h ? string.Join(",", h.Entries.Select(x => $"{x.Name}:{x.Score}")) : "";
+        bool Named(string who) => tables.HighsOf(key, index)?.Entries.Any(x => x.Name.StartsWith(who)) == true;
+
+        if (_role == "R")
+        {
+            Expect(await Until(() => Named("PinNetA") && Named("PinNetB"), 20), $"after the server's restart, the high scores are back ({Highs()})");
+            var shown = node.PinballOf(index);
+            Expect(await Until(() => shown != null && shown.Display.Shown.Contains("PinNet"), 12), "and on the backbox in attract");
+            GD.Print($"{Log} high scores after the restart {Highs()}");
+            await Finish(3);
+            return;
+        }
 
         if (_role == "B") await Heard("A", "playing", 90);
         PinballPlay.Begin(me, key, index);
@@ -96,9 +111,8 @@ public partial class PinballNetProbe : ChatProbe
         }
 
         // the machine's high scores: both games on its table under the players' names, here and on the backbox
-        string Highs() => tables.HighsOf(key, index) is { } h ? string.Join(",", h.Entries.Select(x => $"{x.Name}:{x.Score}")) : "";
         bool BothListed() => screen != null && screen.Scores.All(s => tables.HighsOf(key, index)?.Entries.Any(x => x.Score == s) == true)
-            && tables.HighsOf(key, index)!.Entries.Any(x => x.Name.StartsWith("PinNetA")) && tables.HighsOf(key, index)!.Entries.Any(x => x.Name.StartsWith("PinNetB"));
+            && Named("PinNetA") && Named("PinNetB");
         Expect(await Until(BothListed, 10), $"the high scores list both players ({Highs()})");
         var cabinet = node.PinballOf(index);
         Expect(await Until(() => cabinet != null && cabinet.Display.Shown.Contains("PinNet"), 12), "the backbox shows the high scores in attract");
