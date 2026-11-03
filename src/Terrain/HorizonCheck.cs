@@ -11,8 +11,9 @@ namespace UnitSport.Terrain;
 /// to the millimetre), that no block is there twice, that none is farther than the unload slack and
 /// that the coverage texture's corner is the cover's LV95 corner. Then shifts the origin three
 /// times (whole km, a fraction of a metre, and back) and checks the same in each new frame.
-/// RESULT ok or FAILED with the first faults. Runs on the generated world (no map):
-/// <c>--systems terrain,generated</c>.
+/// RESULT ok or FAILED with the first faults. Runs on the generated world (no map), with a horizon the test
+/// profile leaves off (#1411):
+/// <c>--horizon 20 --systems terrain,generated</c>.
 /// </summary>
 public partial class HorizonCheck : Node
 {
@@ -44,6 +45,13 @@ public partial class HorizonCheck : Node
         }
         var horizon = _chunks.Horizon;
         if (horizon == null || !horizon.HasData) return;
+        // the test profile has no horizon (#1411): this check asks for one with --horizon
+        if (horizon.DistanceM <= 0)
+        {
+            GD.Print("[horizoncheck] RESULT: FAILED the horizon is off (0 km): run with --horizon N");
+            GetTree().Quit(2);
+            return;
+        }
         if (horizon.Progress() is not { } p || p.Total == 0 || p.Done < p.Total) { _settled = 0; return; }
         _settled += delta;
         if (_settled < SettleS) return;
