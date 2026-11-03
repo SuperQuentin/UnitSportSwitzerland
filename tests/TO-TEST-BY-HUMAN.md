@@ -592,3 +592,12 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 
 - [ ] In a real exported build, update from an older release (delta patch, then again by unpacking the archive by hand) and reach the title: the "What's new" popup lists every release since, newest first, once; the next launch shows none. Offline at the first launch after an update: no popup, it comes at the next online launch.
 - [ ] Pad and VR: the "What's new" title entry opens the notes; the stick scrolls them, B closes (VR: pointer on Close). Is the text readable at the panel's distance?
+
+## The real sun and moon (PR [#1436](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1436), [#1430](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1430) H6)
+
+Normal play (no check flags), any region; `--date` pins the day.
+
+- [ ] Play an evening today: the sun sets around the time a weather app gives for your town, in the south-west in winter, the north-west in summer; `/time set sunset` goes there.
+- [ ] Night with the moon up: hills keep a lit side facing the moon, its glow sits where the real moon is; a night with no moon (around a new moon) still reads, not flat.
+- [ ] `--date 2026-12-24`: Christmas snow under a short day, dusk before 17:00; a paraglider finds weaker thermals than in June.
+- [ ] Online, a client joining a server: both see the same sun.
