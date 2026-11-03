@@ -235,6 +235,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
             return;
         }
+        // the arcade's machines with a screen, their small games drawn into it (#1326)
+        if (Interiors.Games.Cabinet.CabinetProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.Cabinet.CabinetProbe { Name = "CabinetProbe" });
+            return;
+        }
         // a claw machine played by a bot through its rig (#1326)
         if (Interiors.Games.Claw.ClawProbe.ParseArgs())
         {

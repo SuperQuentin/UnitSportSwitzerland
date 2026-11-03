@@ -64,6 +64,13 @@ An arcade's claw machines (by the door), with a few Batzen.
 - [ ] E at the machine's front → looking in; Jump puts a Batzen in (the countdown starts at 30), the stick steers the claw as you see it, V looks from the side to judge depth, Jump drops: down, closed, up, back to the chute. A win drops the plush into your pack with a jingle; a near miss says so.
 - [ ] Does it feel fair? (right over a prize wins about half the time, a few cm off much less, and a prize can slip on the way up.)
 
+## Arcade machines' games ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade with uprights, a racer twin, a dance machine (Pixel Paradise in the fun world has them all).
+
+- [ ] E at an upright → its screen fills the view, attract mode (title, INSERT BATZEN, high scores by turns); Jump puts a Batzen in and Snowball Patrol (or Col Rush, by the machine) starts on the screen; play it to the end → tickets, and your name in its high scores; a friend online sees "NOW PLAYING" with your name, then your score.
+- [ ] The racer twin's Col Rush (steer, forward faster) and the dance machine's Yodel Beat (the four directions on the beat): are they fun for a minute, and readable on the screen at that distance?
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.
