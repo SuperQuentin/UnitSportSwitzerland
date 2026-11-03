@@ -419,14 +419,18 @@ public partial class SwordService : Node
     // what the swinger's client asks
     // ================================================================================================
 
-    /// <summary>Server: the standing dummy nearest <paramref name="world"/> (this origin's world space), or null.</summary>
-    public Vector3? NearestDummy(Vector3 world)
+    /// <summary>
+    /// Server: the standing dummy nearest <paramref name="world"/>, or null; both in <paramref name="frame"/>
+    /// (a body's own, on a server with regions, #1456), this origin's world space by default.
+    /// </summary>
+    public Vector3? NearestDummy(Vector3 world, WorldOrigin? frame = null)
     {
+        frame ??= _origin;
         Vector3? best = null;
         float bestD = float.MaxValue;
         foreach (var d in _dummyData.Values)
         {
-            var p = _origin.ToWorld(d.Pos);
+            var p = frame.ToWorld(d.Pos);
             float dist = p.DistanceTo(world);
             if (d.Hp > 0f && dist < bestD) { bestD = dist; best = p; }
         }

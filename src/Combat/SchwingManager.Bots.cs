@@ -122,7 +122,7 @@ public partial class SchwingManager
 
         // ---- the body: on its mark, facing the rival ----
         var other = id == r.A ? m.BodyB : m.BodyA;
-        var toRival = other != null && GodotObject.IsInstanceValid(other) ? other.GlobalPosition - body.GlobalPosition : m.CentreWorld - body.GlobalPosition;
+        var toRival = other != null && GodotObject.IsInstanceValid(other) ? body.WhereIs(other) - body.GlobalPosition : m.CentreWorld - body.GlobalPosition;
         toRival.Y = 0;
         var dir = toRival.LengthSquared() > 0.01f ? toRival.Normalized() : Vector3.Forward;
         s.Hold.Target = s.Mark;

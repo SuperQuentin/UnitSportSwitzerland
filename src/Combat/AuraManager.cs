@@ -236,7 +236,8 @@ public partial class AuraManager : Node
             BodyA = Body(a),
             BodyB = Body(b),
         };
-        match.CentreWorld = (match.BodyA!.GlobalPosition + match.BodyB!.GlobalPosition) * 0.5f;
+        // in A's frame; the two stand face to face, so in one server region (#1456)
+        match.CentreWorld = (match.BodyA!.GlobalPosition + match.BodyA.WhereIs(match.BodyB!)) * 0.5f;
         // the beat of the music playing here (#914), or the fixed 120
         PickBeat(match);
         _matches[match.Id] = match;

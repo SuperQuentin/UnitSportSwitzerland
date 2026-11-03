@@ -101,6 +101,24 @@ public partial class ServerRegions : Node
         return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }));
     }
 
+    /// <summary>
+    /// Puts <paramref name="body"/> at <paramref name="at"/> at once, in the region that place belongs to:
+    /// a bot called to a human's side from another region changes frame now, not after the next decision.
+    /// On a client (no regions) it is a plain move in the body's frame.
+    /// </summary>
+    public static void Put(FootPlayer body, GlobalPos at)
+    {
+        if (Instance is not { } regions || body.Region == null)
+        {
+            if (body.Origin is { } frame) body.GlobalPosition = frame.ToWorld(at);
+            return;
+        }
+        var target = regions.For(at);
+        if (regions._pending.Remove(body, out var h)) regions.DropGhost(h);
+        if (target == body.Region) body.GlobalPosition = target.Origin.ToWorld(at);
+        else regions.Finish(body, target, at);
+    }
+
     /// <summary>Where a body is, exactly: what a proxy's owner published, or the frame's reading of a body the server runs.</summary>
     private static GlobalPos Global(FootPlayer body) => body.IsMultiplayerAuthority() ? body.Global : body.NetGlobal;
 
@@ -204,7 +222,7 @@ public partial class ServerRegions : Node
         if (target == from) return;
         if (!body.IsMultiplayerAuthority())
         {
-            Finish(body, target);
+            Finish(body, target, Global(body));
             return;
         }
         // a bot: the target builds collision round a ghost where the bot is before the bot goes there
@@ -241,17 +259,17 @@ public partial class ServerRegions : Node
                 || _clock - h.Since > HandoverTimeoutSeconds;
             if (!ready) continue;
             (done ??= new()).Add(body);
-            Finish(body, h.Target);
+            Finish(body, h.Target, Global(body));
         }
         if (done == null) return;
         foreach (var body in done)
             if (_pending.Remove(body, out var h)) DropGhost(h);
     }
 
-    private void Finish(FootPlayer body, ServerRegion target)
+    private void Finish(FootPlayer body, ServerRegion target, GlobalPos at)
     {
         var from = body.Region ?? Main;
-        body.EnterRegion(target, Global(body));
+        body.EnterRegion(target, at);
         GD.Print($"[regions] {body.Name} from {from.Id} to {target}");
         if (target.IsMain && _shadows.Remove(body, out var shadow))
         {
