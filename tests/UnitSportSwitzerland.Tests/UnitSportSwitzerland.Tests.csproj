@@ -160,6 +160,8 @@
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Planet.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Atmosphere.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Orbit.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.Planets.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Sgp4.cs" Link="Game\%(Filename)%(Extension)" />
