@@ -30,6 +30,8 @@ namespace UnitSport.Core;
 /// <c>/time set 19:30</c>), so one launch can picture a live change.
 /// A line whose path is "~ease", "~lin", "~in" or "~out" is a glide: the camera moves there from the last line's pose over
 /// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>).
+/// "fov 6.87" sets the camera's vertical field of view, degrees, for the shots after it (#1433: a lens's
+/// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>).
 /// "shift dE,dN" moves the floating origin by that many metres with the camera still (#185), then
 /// logs the CPU and GPU time of the frames after it against the frames before: what a shift costs
 /// the renderer (SDFGI relights, <c>docs/notes/core/floating-origin.md</c>). Shots before and
@@ -45,7 +47,7 @@ public partial class ShotRunner : Node
 {
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
         float? AboveGround = null, string? Command = null, float? Inside = null, Vector2? ShiftBy = null, string? Door = null,
-        bool Local = false);
+        bool Local = false, float? Fov = null);
 
     /// <summary>How far from an "i" shot's point its door may be, m.</summary>
     private const float InsideDoorReach = 50f;
@@ -383,6 +385,12 @@ public partial class ShotRunner : Node
             ShiftOrigin(by);
             return false;
         }
+        if (next is { Fov: { } fov })
+        {
+            GD.Print(string.Create(CultureInfo.InvariantCulture, $"[shot-queue] fov {fov}"));
+            _camera.Fov = fov;
+            return false;
+        }
         if (next is { } shot)
         {
             Aim(shot);
@@ -416,6 +424,8 @@ public partial class ShotRunner : Node
             if (line.Length == 0 || line.StartsWith('#')) continue;
             if (line == "quit") _pending.Enqueue(null);
             else if (line.StartsWith('/')) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Command: line));
+            else if (line.StartsWith("fov ") && float.TryParse(line[4..], NumberStyles.Float, CultureInfo.InvariantCulture, out float fov))
+                _pending.Enqueue(new Shot(default, 0, 0, 0, "", Fov: fov));
             else if (TryParseShift(line, out var by))
             {
                 _pending.Enqueue(new Shot(default, 0, 0, 0, "", ShiftBy: by));
@@ -607,7 +617,8 @@ public partial class ShotRunner : Node
                  $"prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} " +
                  $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} " +
                  $"mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB" +
-                 (_frames > 0 ? $" frame={_frameMs / _frames:F1}ms" : ""));
+                 (_frames > 0 ? $" frame={_frameMs / _frames:F1}ms" : "") +
+                 (Styles.LodScale.StepIndex > 0 ? $" zoomlod=x{Styles.LodScale.Step:F2} ranges={Styles.ZoomRanges.Count} pass={Styles.ZoomRanges.LastPassMs:F2}ms/{Styles.ZoomRanges.LastPassSet}" : ""));
         _frameMs = 0;
         _frames = 0;
         return err == Error.Ok;

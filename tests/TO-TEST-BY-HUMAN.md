@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.
+
+- [ ] Aim the camera and zoom from 35 to 200 mm and back over the town and a forest → no holes in the forest (trees neither 3D nor billboards), no flicker at the zoom steps beyond the usual crossfade band; far houses, signs and parked cars appear while zoomed.
+- [ ] At 200 mm, pan slowly across the town for ~20 s → no stutter beyond the tiles refining; the terrain sharpens in the new direction within a few seconds.
+- [ ] Binoculars (9°) and a gun's aim do the same; leaving the aim, nothing stays refined in a way that costs frames for long.
+
 ## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
 
 An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.

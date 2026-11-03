@@ -201,7 +201,7 @@ public partial class ConcertCrew : Node3D
             Name = name, Mesh = ChunkNode.ToPropMesh(g.Data()!, material), VisibilityRangeEnd = 300f,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
-        parent.AddChild(mi);
+        parent.AddChild(Styles.ZoomRanges.Track(mi));
         return mi;
     }
 
