@@ -120,7 +120,8 @@ public partial class Handshake : Node
     /// 86: World/Adventure/Festivals RequestMontreux, TellMontreux (#1394: Montreux Jazz's listening mark and the encore's claps), ItemId 511, Genre.Jazz (the jazz night's event is built from the festival's year and day, nothing is sent).
     /// 87: Adventure/Together RequestStartAt (#1384: a fondue pot on a dining venue's table, the table's place sent).
     /// 88: World/Telescopes AskLook, AskLeave, Answered, Busy (#1440: one player at a time at a set-up telescope), PlacedKind.Telescope 13, ItemId 640.
-    public const int Protocol = 88;
+    /// 89: creative flight's figure (#1219): FootPlayer.PoseKind 10 (PoseFly), Anim.X the lean, BodyPose the tilt.
+    public const int Protocol = 89;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
