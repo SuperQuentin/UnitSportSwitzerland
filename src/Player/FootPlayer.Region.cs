@@ -23,6 +23,17 @@ public partial class FootPlayer
     public PhysicsDirectSpaceState3D Space => Region is { IsMain: false } r ? r.DirectSpace : GetWorld3D().DirectSpaceState;
 
     /// <summary>
+    /// Where <paramref name="other"/> is in this body's frame: its own position when both are in one
+    /// region (or on a client), else through its Earth position. A brain comparing itself with a
+    /// teammate never compares floats of two frames.
+    /// </summary>
+    public Vector3 WhereIs(FootPlayer other) =>
+        other.Region == Region || Origin is not { } frame ? other.GlobalPosition : frame.ToWorld(other.Global);
+
+    /// <summary>Whether this body is in the server's main frame (always on a client): where parked vehicles, crates and stops are placed.</summary>
+    public bool InMainFrame => Region is null or { IsMain: true };
+
+    /// <summary>
     /// Moves this body into <paramref name="target"/>'s frame and space, standing at
     /// <paramref name="at"/>: its terrain anchor, its frame (what it keeps in world space moves as at
     /// an origin shift), its position exact from the Earth position, then its collision.

@@ -57,14 +57,12 @@ public partial class BotDirector : Node
     private void OnHeard(long who, Items.ItemEventKind kind, GlobalPos at)
     {
         if (kind != Items.ItemEventKind.Shot || _bots.Count == 0) return;
-        var origin = GetParent()?.GetNodeOrNull<Items.ItemEvents>(Items.ItemEvents.NodeName)?.Origin;
-        if (origin == null) return;
-        var world = origin.ToWorld(at);
         double now = Now;
         // the relay passes the kind, not the gun: a rifle's earshot for every shot
         float earshot = BotSenses.HearShot(Items.ItemId.Rifle);
+        // in each bot's own frame: on a server with regions (#1456) they are not all the same
         foreach (var bot in _bots.Values)
-            if (bot.Alive) bot.Senses.Hear(bot, world, who, earshot, now);
+            if (bot.Alive && bot.Body.Origin is { } frame) bot.Senses.Hear(bot, frame.ToWorld(at), who, earshot, now);
     }
 
     /// <summary>

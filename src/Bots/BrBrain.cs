@@ -149,7 +149,7 @@ public sealed class BrBrain : IBotBrain
                 if (GoTo(bot, heard.At, run: false, 6f, space, now)) bot.Senses.Heard = null;
                 return 0.3;
             case BrGoal.Regroup when team.LeaderBody is { } leader:
-                GoTo(bot, leader.GlobalPosition, run: true, 12f, space, now);
+                GoTo(bot, body.WhereIs(leader), run: true, 12f, space, now);
                 return 0.3;
             case BrGoal.Assist when team.Fight is { } fight:
                 GoTo(bot, fight, run: true, 20f, space, now);
@@ -165,14 +165,14 @@ public sealed class BrBrain : IBotBrain
                     else if (now >= _pingHereUntil) { _pingAt = null; _pingHereUntil = 0; }
                 }
                 return 0.3;
-            case BrGoal.Recall when _br.NearestStop(body.GlobalPosition, body.Health) is { } stop:
+            case BrGoal.Recall when _br.NearestStop(body.GlobalPosition, body.Health, body.Origin) is { } stop:
                 if (GoTo(bot, stop, run: true, 3.5f, space, now) && _br.ServerRecall(bot.Id))
                     GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" used a dogtag at a Postauto stop");
                 return 0.3;
             default:
                 // a follower keeps near its leader, loot and fights aside: a short walk back from 25 m
-                if (team.LeaderBody is { } lead && lead.GlobalPosition.DistanceTo(body.GlobalPosition) > 25f)
-                    GoTo(bot, lead.GlobalPosition, run: false, 10f, space, now);
+                if (team.LeaderBody is { } lead && body.WhereIs(lead).DistanceTo(body.GlobalPosition) > 25f)
+                    GoTo(bot, body.WhereIs(lead), run: false, 10f, space, now);
                 else Roam(bot, zone, space, now);
                 return 0.4;
         }
@@ -205,13 +205,14 @@ public sealed class BrBrain : IBotBrain
             if (!m.Downed && (leader == null || (!m.Bot && leader.Bot) || (m.Bot == leader.Bot && (m.Bot ? m.Peer > leader.Peer : m.Peer < leader.Peer))))
                 leader = m;
             if (m.Peer == me.Peer || _br.BodyOfPeer(m.Peer) is not { } b) continue;
-            float d = b.GlobalPosition.DistanceTo(pos);
+            var bAt = bot.Body.WhereIs(b);
+            float d = bAt.DistanceTo(pos);
             if (m.Downed) { if (d < downedD) (downed, downedBody, downedD) = (m, b, d); continue; }
             if (d < nearestD) (nearest, nearestD) = (b, d);
             bool fighting = m.Bot
                 ? BotDirector.Instance?.Get(m.Peer)?.Brain is BrBrain { Goal: BrGoal.Fight or BrGoal.Finish }
                 : Core.GameClock.Now - b.LastAttackedAt < 5;
-            if (fighting && d < fightD) (fight, fightD) = (b.GlobalPosition, d);
+            if (fighting && d < fightD) (fight, fightD) = (bAt, d);
         }
         if (leader != null && leader.Peer != me.Peer) leaderBody = _br.BodyOfPeer(leader.Peer);
         return new TeamSight(true, leaderBody, downed, downedBody, fight, nearest, human);
@@ -245,7 +246,7 @@ public sealed class BrBrain : IBotBrain
         {
             _pingSeen = ping.When;
             _pingFrom = now;
-            _pingAt = ping.At;
+            _pingAt = bot.Body.Origin?.ToWorld(ping.At);
             _pingHereUntil = 0;
         }
         if (_pingAt != null && now - _pingFrom > PingFollow) _pingAt = null;
@@ -267,10 +268,10 @@ public sealed class BrBrain : IBotBrain
             _downReportAt = now + 10;
             GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} mate {dm.Name} down {db.GlobalPosition.DistanceTo(pos):F0} m off; enemy {s.EnemyDistance:F0} m, {s.SecondsSinceEnemy:F0} s since one, hurt {s.HurtRecently}, goal {Goal}"));
         }
-        if (bot.Inventory.Contains(ItemId.Dogtag) && _br.NearestStop(pos, bot.Body.Health) == null && now >= _stopReportAt)
+        if (bot.Inventory.Contains(ItemId.Dogtag) && _br.NearestStop(pos, bot.Body.Health, bot.Body.Origin) == null && now >= _stopReportAt)
         {
             _stopReportAt = now + 10;
-            GD.Print($"[bots] {bot.Body.Name} carries a dogtag, no stop: {_br.StopReport(pos)}");
+            GD.Print($"[bots] {bot.Body.Name} carries a dogtag, no stop: {_br.StopReport(pos, bot.Body.Origin)}");
         }
         return s with
         {
@@ -279,7 +280,7 @@ public sealed class BrBrain : IBotBrain
             MateFightDistance = Dist(team.Fight),
             EnemyNearMate = team.DownedBody is { } down ? EnemyNear(bot, down.GlobalPosition) : float.PositiveInfinity,
             CarriesTag = bot.Inventory.Contains(ItemId.Dogtag),
-            StopDistance = Dist(_br.NearestStop(pos, bot.Body.Health)),
+            StopDistance = Dist(_br.NearestStop(pos, bot.Body.Health, bot.Body.Origin)),
             PingDistance = Dist(_pingAt),
         };
     }
@@ -299,9 +300,10 @@ public sealed class BrBrain : IBotBrain
     /// <summary>To the downed mate, then the hold: <see cref="BrManager.ReviveSeconds"/> beside them, still, and the server stands them up.</summary>
     private void Revive(Bot bot, FootPlayer hurt, long who, PhysicsDirectSpaceState3D space, double now)
     {
-        if (!GoTo(bot, hurt.GlobalPosition, run: true, 2.2f, space, now)) { _reviveWho = 0; return; }
+        var hurtAt = bot.Body.WhereIs(hurt);
+        if (!GoTo(bot, hurtAt, run: true, 2.2f, space, now)) { _reviveWho = 0; return; }
         bot.Intent.Wish = Vector3.Zero;
-        bot.Intent.FaceYaw = Mathf.Atan2(-(hurt.GlobalPosition.X - bot.Body.GlobalPosition.X), -(hurt.GlobalPosition.Z - bot.Body.GlobalPosition.Z));
+        bot.Intent.FaceYaw = Mathf.Atan2(-(hurtAt.X - bot.Body.GlobalPosition.X), -(hurtAt.Z - bot.Body.GlobalPosition.Z));
         if (_reviveWho != who) { _reviveWho = who; _reviveFrom = now; }
         if (now - _reviveFrom < BrManager.ReviveSeconds) return;
         _reviveWho = 0;
@@ -338,13 +340,13 @@ public sealed class BrBrain : IBotBrain
         var pos = body.GlobalPosition;
         // after its human: where they are now, a few metres to the side (they choose where the team lands)
         if (JumpWith != 0 && _br.BodyOfPeer(JumpWith) is { } human && _br.State.Find(JumpWith) is { Alive: true })
-            DropTarget = human.GlobalPosition + new Vector3(Mathf.Cos((float)JumpDelay * 2.1f), 0, Mathf.Sin((float)JumpDelay * 2.1f)) * 10f;
+            DropTarget = body.WhereIs(human) + new Vector3(Mathf.Cos((float)JumpDelay * 2.1f), 0, Mathf.Sin((float)JumpDelay * 2.1f)) * 10f;
         var spot = DropTarget ?? pos;
         var to = new Vector3(spot.X - pos.X, 0, spot.Z - pos.Z);
         float dist = to.Length();
         float desired = dist > 1f ? Mathf.Atan2(-to.X, -to.Z) : body.Flight.Yaw;
         // its height over the ground: the loaded ground under it, else the lattice (no tile loaded that far)
-        float lattice = _br.GroundAt(pos) is { } g ? pos.Y - g : 999f;
+        float lattice = _br.GroundAt(pos, body.Origin) is { } g ? pos.Y - g : 999f;
         float height = Mathf.Min(body.Clearance < 900f ? body.Clearance : 999f, lattice);
 
         if (ride == Player.RideKind.Wingsuit)
@@ -436,7 +438,7 @@ public sealed class BrBrain : IBotBrain
             _near.Clear();
             foreach (var c in _crates.All)
             {
-                if (_emptied.Contains(c.Id) || c.Locked || SimNow < c.LandsAt || _crates.WorldOf(c, body.GlobalPosition.Y) is not { } at) continue;
+                if (_emptied.Contains(c.Id) || c.Locked || SimNow < c.LandsAt || BrCrates.WorldOf(c, body.GlobalPosition.Y, body.Origin) is not { } at) continue;
                 float d = new Vector2(at.X - body.GlobalPosition.X, at.Z - body.GlobalPosition.Z).Length();
                 if (d <= BrTactics.CrateDraw) _near.Add((c, at, d));
             }
@@ -445,7 +447,7 @@ public sealed class BrBrain : IBotBrain
             if (BotSkills.AlsoWants?.Invoke(bot, new ItemStack(ItemId.Dogtag, 1)) == true)
                 foreach (var c in _crates.All)
                     if (c.Style == CrateStyle.DeathBox && !_emptied.Contains(c.Id) && c.Stacks().Any(st => st.Id == ItemId.Dogtag)
-                        && _crates.WorldOf(c, body.GlobalPosition.Y) is { } tagAt && Flat(tagAt - body.GlobalPosition) is var td && td <= BrTactics.TagDraw
+                        && BrCrates.WorldOf(c, body.GlobalPosition.Y, body.Origin) is { } tagAt && Flat(tagAt - body.GlobalPosition) is var td && td <= BrTactics.TagDraw
                         && td < crateDistance)
                     {
                         crate = c;
@@ -567,8 +569,8 @@ public sealed class BrBrain : IBotBrain
 
     private void Loot(Bot bot, Crate c, PhysicsDirectSpaceState3D space, double now)
     {
-        if (_crates!.WorldOf(c, bot.Body.GlobalPosition.Y) is not { } at) { _emptied.Add(c.Id); return; }
-        if (!_crates.Reachable(c, bot.Body.GlobalPosition))
+        if (BrCrates.WorldOf(c, bot.Body.GlobalPosition.Y, bot.Body.Origin) is not { } at) { _emptied.Add(c.Id); return; }
+        if (!_crates.Reachable(c, bot.Body.Global))
         {
             bool there = GoTo(bot, at, run: true, 1.2f, space, now);
             // a crate it cannot get to (on a roof, behind a fence) is given up after a while; and one it stands

@@ -51,7 +51,9 @@ public static class BotDriving
     /// </summary>
     public static VehicleBody? Spot(Bot bot, float range)
     {
-        if (VehicleManager.Instance is not { } vehicles) return null;
+        // parked vehicles stand in the server's main frame and space (#1456): a bot in a far region has
+        // none to take until they live in regions too
+        if (VehicleManager.Instance is not { } vehicles || !bot.Body.InMainFrame) return null;
         var eye = bot.Body.EyePosition;
         VehicleBody? best = null;
         float bestD = range;

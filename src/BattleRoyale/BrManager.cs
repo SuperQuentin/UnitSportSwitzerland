@@ -217,8 +217,8 @@ public partial class BrManager : Node
         string query = string.Join(' ', place);
         if (query.Equals("here", StringComparison.OrdinalIgnoreCase))
         {
-            if (_players?.GetNodeOrNull<Node3D>(sender.ToString()) is not { } body || Origin == null) return "'/br open here' needs a player.";
-            var (e, n) = Origin.ToLv95(body.GlobalPosition);
+            if (_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString()) is not { } body) return "'/br open here' needs a player.";
+            var (e, n) = (body.Global.E, body.Global.N);
             area = new BrArea(Math.Round(e / 50) * 50, Math.Round(n / 50) * 50, size, NearestTown(e, n) ?? "here");
         }
         else if (query.Length > 0)
@@ -547,7 +547,7 @@ public partial class BrManager : Node
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
             || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return false;
         if (BodyOf(peer) is not { } a || BodyOf(target) is not { } b
-            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return false;
+            || a.Global.DistanceTo(b.Global) > ServerReviveReach) return false;
         t.Downed = false;
         t.DownedBy = 0;
         GD.Print($"[br] revived: {t.Name}, by {r.Name}");
@@ -693,10 +693,10 @@ public partial class BrManager : Node
     {
         if (!_server || _state.Phase != BrPhase.Playing || _crates == null || Origin == null) return;
         long peer = Multiplayer.GetRemoteSenderId();
-        if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
+        if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is not { } body) return;
         if (_lastFlare.TryGetValue(peer, out double last) && RealNow - last < 20) return;
         _lastFlare[peer] = RealNow;
-        var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
+        var (pe, pn) = (body.Global.E, body.Global.N);
         var rng = new Random(_state.Seed ^ (int)peer ^ (int)Now);
         float a = (float)(rng.NextDouble() * Math.Tau), r = 20f + (float)rng.NextDouble() * 30f;
         var drop = new Crate
@@ -735,14 +735,14 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return false;
         if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || BodyOf(peer) is not { } body) return false;
         if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return false;
-        var (be, bn) = Origin.ToLv95(body.GlobalPosition);
-        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return false;
+        var (be, bn) = (body.Global.E, body.Global.N);
+        if (GlobalPos.HorizontalDistance(e, n, be, bn) > PingReach) return false;
         _lastPing[peer] = RealNow;
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
             if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
         TeamPinged?.Invoke(me.Team, peer, e, n, alt);
         // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
-        if (!me.Bot) _humanPings[me.Team] = (Origin.ToWorld(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        if (!me.Bot) _humanPings[me.Team] = (new GlobalPos(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
         return true;
     }
 
@@ -778,7 +778,7 @@ public partial class BrManager : Node
         // a squad player's dogtag (#480): a team-mate can bring them back with it
         if (LeavesTag(e)) stacks.Add(new Items.ItemStack(Items.ItemId.Dogtag, 1));
         if (stacks.Count == 0) return;
-        var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
+        var (pe, pn) = (body.Global.E, body.Global.N);
         var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
         box.SetStacks(stacks);
         _crates.Spawn(new[] { box });

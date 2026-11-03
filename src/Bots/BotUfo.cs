@@ -29,7 +29,8 @@ public static class BotUfo
     public static bool React(Bot bot, double now)
     {
         var body = bot.Body;
-        if (UfoSightings.Instance?.Nearest(body.EyePosition, SeeRange) is not { } craft)
+        // the sightings are played in the server's main frame (#1456): a bot in a far region sees none
+        if (!body.InMainFrame || UfoSightings.Instance?.Nearest(body.EyePosition, SeeRange) is not { } craft)
         {
             StopWave(bot);
             return false;
