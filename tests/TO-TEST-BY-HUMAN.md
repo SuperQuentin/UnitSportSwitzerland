@@ -42,6 +42,13 @@ A bar with a table (`/enter` a pub or a bar; the arcade's grouped tables too).
 - [ ] E again alone → a bot takes blue and plays; online with a friend, each sees the other's rods and the ball smoothly (it's streamed 20 times a second).
 - [ ] Pad and phone the same; VR through the pad (gripping the handles is a gap). Does it feel playable, and are the kicks strong enough?
 
+## Air hockey ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade (`/enter` one; Billard Bluff, Geneva, has one on its ground floor).
+
+- [ ] E at a table → your end, looking down it; the stick drives the mallet as you see it, Shift for full speed; the puck clacks off the mallet and rails, a goal buzzes and counts on the scorer; first to 7.
+- [ ] E again alone → a bot takes the other end; online, the other player's mallet and the puck move smoothly.
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.

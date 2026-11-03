@@ -59,6 +59,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Table football: push and pull your rods", PlayerInput.MoveForward),
             new("Table football: kick", PlayerInput.Jump),
             new("Table football: hold to lift your rods (the ball passes under)", PlayerInput.Sprint),
+            new("Air hockey: move your mallet (hold Shift for full speed)", PlayerInput.MoveForward),
             new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
             new("Bowling: move your spot", PlayerInput.MoveLeft),
             new("Bowling: turn your line", PlayerInput.BowlAimLeft),

@@ -230,7 +230,7 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.AirHockey:
             {
-                // the table, its lit field and centre line, the rails round it, two mallets and the puck
+                // the table, its lit field and centre line, the rails round it with the goals' slots (the puck and mallets are the game's, Games.AirHockey.AirHockeyRig, #1326)
                 const float field = 0.78f;
                 B(-w, 0, -d, w, field, d, body, true);
                 B(-w + 0.08f, field - sink, -d + 0.08f, w - 0.08f, field + sink, d - 0.08f, Lit(0.84f, 0.92f, 0.98f));
@@ -239,16 +239,16 @@ public static partial class InteriorMeshBuilder
                 foreach (float sz in new[] { -1f, 1f })
                 {
                     float z0 = sz < 0 ? -d + 0.015f : d - 0.075f;
-                    B(-w + 0.015f, field - sink, z0, w - 0.015f, H, z0 + 0.06f, railCol);
+                    // each end's rail broken by its goal's slot
+                    B(-w + 0.015f, field - sink, z0, -0.14f, H, z0 + 0.06f, railCol);
+                    B(0.14f, field - sink, z0, w - 0.015f, H, z0 + 0.06f, railCol);
+                    B(-0.14f, field - 0.06f, z0, 0.14f, field - 0.02f, z0 + 0.06f, railCol);
                 }
                 foreach (float sx in new[] { -1f, 1f })
                 {
                     float x0 = sx < 0 ? -w + 0.03f : w - 0.075f;
                     B(x0, field - sink, -d + 0.06f, x0 + 0.045f, H, d - 0.06f, railCol);
                 }
-                B(-0.06f, field, d - 0.35f, 0.06f, 0.86f, d - 0.23f, C(0.85f, 0.10f, 0.12f));
-                B(-0.06f, field, -d + 0.23f, 0.06f, 0.86f, -d + 0.35f, C(0.10f, 0.30f, 0.85f));
-                B(-0.04f, field, -0.25f, 0.04f, 0.81f, -0.17f, dark);
                 break;
             }
         }
