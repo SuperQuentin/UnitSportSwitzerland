@@ -66,7 +66,8 @@ public static class SunPath
 #else
     private static SunModel DefaultModel() => SunModel.Fixed;
 
-    private static Func<DateOnly> DefaultToday() => () => DateOnly.FromDateTime(DateTime.Now);
+    // the unit tests: a fixed day, never the wall clock (Calendar is the game's one reader of the date)
+    private static Func<DateOnly> DefaultToday() => () => new DateOnly(2026, 6, 21);
 #endif
 
     /// <summary>
