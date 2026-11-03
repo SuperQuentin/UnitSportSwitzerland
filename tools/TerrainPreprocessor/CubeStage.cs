@@ -103,50 +103,52 @@ public static class CubeStage
         foreach (var bundle in bundles)
         {
             ct.ThrowIfCancellationRequested();
-            var tiles = new ConcurrentDictionary<CubeKey, CubeTile>();
-            var hs = Stopwatch.StartNew();
-            Parallel.ForEach(bundle.OrderBy(k => k.Y).ThenBy(k => k.X), new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, key =>
-            {
-                var cur = new CubeHeightSource.Cursors(dems.Count);
-                if (resampler.Heights(key, o.Bits, cur) is { } h)
-                    tiles[key] = new CubeTile { Key = key, Bits = o.Bits, Heights = h };
-            });
-            heightSeconds += hs.Elapsed.TotalSeconds;
-
+            // features first, into empty holders: the heights are then encoded the moment they exist, so
+            // a bundle never holds its tiles' heights all at once (1,024 x 4 MB at level 13)
+            var holders = bundle.ToDictionary(k => k, k => new CubeTile { Key = k, Bits = o.Bits, Heights = Array.Empty<float>() });
             var fs = Stopwatch.StartNew();
-            if (tiles.Count > 0 && (tlm != null || bdtopo != null))
+            if (tlm != null || bdtopo != null)
             {
                 var cur = new CubeHeightSource.Cursors(dems.Count);
                 var raw = new List<CubeFeatures.Raw>();
                 if (tlm != null && swiss != null)
                 {
-                    var box = Lv95Box(tiles.Keys, o.Bits);
+                    var box = Lv95Box(holders.Keys, o.Bits);
                     raw.AddRange(features.SwissRoads(tlm, box, cur));
                     raw.AddRange(features.SwissBuildings(tlm, b3d, box, cur));
                 }
-                if (bdtopo != null && tiles.Keys.Any(french.Contains))
+                if (bdtopo != null && holders.Keys.Any(french.Contains))
                 {
-                    var (minLat, minLon, maxLat, maxLon) = LatLonBox(tiles.Keys.Where(french.Contains));
+                    var (minLat, minLon, maxLat, maxLon) = LatLonBox(holders.Keys.Where(french.Contains));
                     var r = await bdtopo.FetchAsync("BDTOPO_V3:troncon_de_route", minLat, minLon, maxLat, maxLon).ConfigureAwait(false);
                     var b = await bdtopo.FetchAsync("BDTOPO_V3:batiment", minLat, minLon, maxLat, maxLon).ConfigureAwait(false);
                     var fr = features.French(r, b, cur);
                     oldOffsets.AddRange(fr.Select(f => f.OldOffsetM));
                     raw.AddRange(fr);
                 }
-                CubeFeatures.AddTo(raw, tiles);
+                CubeFeatures.AddTo(raw, holders);
             }
             featureSeconds += fs.Elapsed.TotalSeconds;
 
             var encoded = new ConcurrentBag<(CubeKey Key, byte[] Bytes)>();
-            Parallel.ForEach(tiles.Values, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, t => encoded.Add((t.Key, CubeTileCodec.Encode(t))));
+            var hs = Stopwatch.StartNew();
+            Parallel.ForEach(bundle.OrderBy(k => k.Y).ThenBy(k => k.X), new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, key =>
+            {
+                var cur = new CubeHeightSource.Cursors(dems.Count);
+                if (resampler.Heights(key, o.Bits, cur) is not { } h) return;
+                var holder = holders[key];
+                encoded.Add((key, CubeTileCodec.Encode(new CubeTile { Key = key, Bits = o.Bits, Heights = h, Roads = holder.Roads, Buildings = holder.Buildings })));
+            });
+            heightSeconds += hs.Elapsed.TotalSeconds;
+
             var list = encoded.OrderBy(e => e.Key.Y).ThenBy(e => e.Key.X).ToList();
             if (list.Count > 0) CubeBundle.Write(Path.Combine(o.Out, CubeBundle.FileName(bundle.Key)), bundle.Key, list);
-            foreach (var (key, b) in list)
+            foreach (var (key, bb) in list)
             {
-                var t = tiles[key];
-                var (_, _, min, max) = CubeTileCodec.ReadHeader(b);
-                manifest.Tiles.Add(new CubeManifestTile { Key = key.ToString(), Min = min, Max = max, Roads = t.Roads.Count, Buildings = t.Buildings.Count, Bytes = b.Length });
-                bytes += b.Length;
+                var t = holders[key];
+                var (_, _, min, max) = CubeTileCodec.ReadHeader(bb);
+                manifest.Tiles.Add(new CubeManifestTile { Key = key.ToString(), Min = min, Max = max, Roads = t.Roads.Count, Buildings = t.Buildings.Count, Bytes = bb.Length });
+                bytes += bb.Length;
                 roads += t.Roads.Count;
                 buildings += t.Buildings.Count;
             }
@@ -161,7 +163,7 @@ public static class CubeStage
         int n = manifest.Tiles.Count;
         Console.WriteLine($"cube: {n} tiles in {bundles.Count} bundles, {bytes / 1e6:F1} MB ({(n > 0 ? bytes / n / 1024.0 : 0):F0} KB a tile), "
             + $"{roads} road runs, {buildings} buildings; {sw.Elapsed.TotalSeconds:F0} s "
-            + $"(heights {heightSeconds:F0} s = {(n > 0 ? heightSeconds * o.Jobs / n : 0):F2} CPU-s a tile on {o.Jobs} threads, features {featureSeconds:F0} s), "
+            + $"(heights and encoding {heightSeconds:F0} s = {(n > 0 ? heightSeconds * o.Jobs / n : 0):F2} CPU-s a tile on {o.Jobs} threads, features {featureSeconds:F0} s), "
             + $"peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
         if (oldOffsets.Count > 0)
         {

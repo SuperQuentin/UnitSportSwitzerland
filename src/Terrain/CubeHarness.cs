@@ -119,8 +119,10 @@ public partial class CubeHarness : Node3D
 
     private async Task Collision()
     {
-        var byRange = _manifest.Tiles.Where(t => t.Max > t.Min).OrderByDescending(t => t.Max - t.Min).ToList();
-        var picks = new[] { byRange[0], byRange[byRange.Count / 2] }.Select(t => CubeKey.Parse(t.Key)).Distinct().ToList();
+        // the steepest tile with data everywhere, and a middling one
+        var byRange = _manifest.Tiles.Where(t => t.Max > t.Min).OrderByDescending(t => t.Max - t.Min).Select(t => CubeKey.Parse(t.Key)).ToList();
+        bool Full(CubeKey k) => !Load(k).Heights.Any(float.IsNaN);
+        var picks = new[] { byRange.First(Full), byRange.Skip(byRange.Count / 2).First(Full) }.Distinct().ToList();
         _report.AppendLine("## Collision against the mesh");
         _report.AppendLine();
         _report.AppendLine("| Tile | Shape | Build (ms) | First step (ms) | Memory (MB) | Rays | Median (mm) | p99 (mm) | Max (mm) | Over 2 cm |");
@@ -159,8 +161,9 @@ public partial class CubeHarness : Node3D
                 {
                     int a = j * n + i, b = a + 1, c = a + n, d = c + 1;
                     if (float.IsNaN(verts[a * 3 + 1]) || float.IsNaN(verts[b * 3 + 1]) || float.IsNaN(verts[c * 3 + 1]) || float.IsNaN(verts[d * 3 + 1])) continue;
-                    faces.Add(V(verts, a)); faces.Add(V(verts, b)); faces.Add(V(verts, d));
-                    faces.Add(V(verts, a)); faces.Add(V(verts, d)); faces.Add(V(verts, c));
+                    // clockwise seen from above, as the render mesh: Godot's front faces, and a trimesh collides with those only
+                    faces.Add(V(verts, a)); faces.Add(V(verts, d)); faces.Add(V(verts, b));
+                    faces.Add(V(verts, a)); faces.Add(V(verts, c)); faces.Add(V(verts, d));
                 }
             mem0 = WorkingSet();
             sw.Restart();
@@ -172,6 +175,23 @@ public partial class CubeHarness : Node3D
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             double tmStep = sw.Elapsed.TotalMilliseconds;
             long tmMem = WorkingSet() - mem0;
+
+            // a patch of it: what collision near a body would build (128 x 128 cells, ~150 m)
+            var patch = new List<Vector3>();
+            for (int j = n / 2 - 64; j < n / 2 + 64; j++)
+                for (int i = n / 2 - 64; i < n / 2 + 64; i++)
+                {
+                    int a = j * n + i, b = a + 1, c = a + n, d = c + 1;
+                    patch.Add(V(verts, a)); patch.Add(V(verts, d)); patch.Add(V(verts, b));
+                    patch.Add(V(verts, a)); patch.Add(V(verts, c)); patch.Add(V(verts, d));
+                }
+            mem0 = WorkingSet();
+            sw.Restart();
+            var pBody = Body(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = patch.ToArray() } }, xf, 1u << 22);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            double patchMs = sw.Elapsed.TotalMilliseconds;
+            long patchMem = WorkingSet() - mem0;
+            pBody.QueueFree();
 
             // rays straight down the tile's up, inside its middle 80 %
             var space = GetWorld3D().DirectSpaceState;
@@ -194,12 +214,26 @@ public partial class CubeHarness : Node3D
                     into.Add(Math.Abs(local.Y - y));
                 }
             }
+            // alignment: rays exactly at the field's own samples must read the field's values
+            var align = new List<double>();
+            for (int k = 0; k < 300; k++)
+            {
+                int col = rng.Next(100, Side - 100), row = rng.Next(100, Side - 100);
+                float fy = field[row * Side + col] * (float)spacing;
+                if (float.IsNaN(fy)) continue;
+                double x = -(Side - 1) * spacing / 2 + col * spacing, z = -(Side - 1) * spacing / 2 + row * spacing;
+                var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(xf * new Vector3((float)x, fy + 60, (float)z), xf * new Vector3((float)x, fy - 60, (float)z), 1u << 20));
+                if (hit.Count > 0) align.Add(Math.Abs((xf.AffineInverse() * hit["position"].AsVector3()).Y - fy));
+            }
+            align.Sort();
+            GD.Print($"[cubeharness] height field alignment: {align.Count} rays at its samples, median {(align.Count > 0 ? align[align.Count / 2] * 1000 : -1):F1} mm, max {(align.Count > 0 ? align[^1] * 1000 : -1):F1} mm");
             hfBody.QueueFree();
             tmBody.QueueFree();
             var mt = _manifest.Tiles.First(t => t.Key == key.ToString());
             string name = $"{key} ({mt.Max - mt.Min:F0} m relief)";
             Row(name, $"height field 1024² at {spacing:F2} m (sampled in {sampleMs:F0} ms)", hfBuild, hfStep, hfMem, errHf);
             Row(name, $"trimesh, {faces.Count / 3:N0} triangles", tmBuild, tmStep, tmMem, errTm);
+            _report.AppendLine($"| {name} | trimesh patch, 128² cells ({patch.Count / 3:N0} triangles) | {patchMs:F0} (with a physics frame) | | {patchMem / 1e6:F1} | | | | | |");
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         _report.AppendLine();
@@ -370,14 +404,16 @@ public partial class CubeHarness : Node3D
         var v = CubeGeometry.Vertices(key, sbits, sub);
         var pos = new Vector3[m * m];
         var nor = new Vector3[m * m];
-        for (int k = 0; k < pos.Length; k++) pos[k] = new Vector3(v[k * 3], v[k * 3 + 1], v[k * 3 + 2]);
+        // a vertex with no data is in no triangle; kept finite so the mesh's bounds stay finite
+        for (int k = 0; k < pos.Length; k++) pos[k] = float.IsNaN(v[k * 3 + 1]) ? Vector3.Zero : new Vector3(v[k * 3], v[k * 3 + 1], v[k * 3 + 2]);
         for (int j = 0; j < m; j++)
             for (int i = 0; i < m; i++)
             {
                 var dx = pos[j * m + Math.Min(i + 1, m - 1)] - pos[j * m + Math.Max(i - 1, 0)];
                 var dz = pos[Math.Min(j + 1, m - 1) * m + i] - pos[Math.Max(j - 1, 0) * m + i];
-                var nn = dz.Cross(dx).Normalized();
-                nor[j * m + i] = nn.Y < 0 ? -nn : nn;
+                var nn = dz.Cross(dx);
+                // next to a hole (no data) there is no normal: up, and no warning per vertex
+                nor[j * m + i] = !nn.IsFinite() || nn.LengthSquared() == 0 ? Vector3.Up : nn.Y < 0 ? -nn.Normalized() : nn.Normalized();
             }
         var idx = new List<int>((m - 1) * (m - 1) * 6);
         for (int j = 0; j < m - 1; j++)
