@@ -127,7 +127,7 @@ public partial class OriginShifter : Node
         if (!_allowed()) return false;
         double step = Math.Max(1, StepM);
         double newE = exact ? e : Math.Round(e / step) * step, newN = exact ? n : Math.Round(n / step) * step;
-        if (newE == _origin.E && newN == _origin.N) return false;
+        if (!_origin.Frame.IsAnchor && newE == _origin.E && newN == _origin.N) return false;
 
         var clock = Stopwatch.StartNew();
         var shift = _origin.MoveTo(newE, newN);

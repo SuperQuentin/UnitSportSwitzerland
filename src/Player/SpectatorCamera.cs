@@ -85,6 +85,8 @@ public partial class SpectatorCamera : Camera3D
             float speed = Speed * amount
                 * (UnitSport.Core.PlayerInput.Held(UnitSport.Core.PlayerInput.FlyBoost) ? BoostMultiplier : 1f);
             Position += dir.Normalized() * speed * dt;
+            // no higher than the round world is drawn for until the Space regime (#1430 H3)
+            if (Position.Y > Core.Curvature.CeilingM) Position = Position with { Y = (float)Core.Curvature.CeilingM };
         }
     }
 }

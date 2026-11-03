@@ -47,7 +47,7 @@ public partial class SteamerBerth : Node
     {
         Name = "SteamerBerth";
         _chunks = chunks;
-        (_e, _n) = SwissProjection.ToLv95(Lat, Lon);
+        (_e, _n) = SwissGeodesy.ToLv95(Lat, Lon);
     }
 
     /// <summary>Nyon's berth alongside its pier, when the landings have one that floats the steamer.</summary>

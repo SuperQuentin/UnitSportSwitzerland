@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Versteckis;
@@ -112,7 +113,7 @@ public static class HidePlan
             double next = 20 + Unit(rk, 1) * 30, walked = 0;
             for (int i = 1; i < line.Length; i++)
             {
-                double de = line[i].E - line[i - 1].E, dn = line[i].N - line[i - 1].N, len = Math.Sqrt(de * de + dn * dn);
+                double de = line[i].E - line[i - 1].E, dn = line[i].N - line[i - 1].N, len = GlobalPos.HorizontalDistance(line[i].E, line[i].N, line[i - 1].E, line[i - 1].N);
                 if (len < 0.01) continue;
                 while (walked + len >= next)
                 {

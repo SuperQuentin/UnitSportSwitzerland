@@ -163,7 +163,7 @@ public partial class RewardService : Node
     {
         why = "";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) { why = "No body."; return false; }
-        double de = at.E - e, dn = at.N - n, d = Math.Sqrt(de * de + dn * dn);
+        double d = GlobalPos.HorizontalDistance(at.E, at.N, e, n);
         if (d > reach) { why = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Too far ({d:F0} m)."); return false; }
         if (Math.Abs(at.Alt - alt) > RewardRules.ClaimSlackUpM) { why = "Not there."; return false; }
         return true;

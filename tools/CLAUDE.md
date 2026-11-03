@@ -53,6 +53,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `direction-signs` — #1110: geodata for direction signs over lanes (OSM `destination*` motorway-only in Geneva; SITG `OTC_SV_SIGNAL`/`OTC_SV_SUPPORT`/`BOITEFEUX` complete for Geneva; nothing elsewhere), SSV Art. 51-53/70-71, where embedded horizontal heads stand, the approved plan
 - `urban-streets` — #119 build side: UrbanField (walls, local + city scale), RoadHeights (rural +8 cm, town ground − kerb), StreetPlanner sidewalks (facade rays, medians, splits), CornerPlanner, ramp shoulders, TownPaving/TunnelRoof cover, tram PavedBed, cost, --street-svg
 - `bike-infrastructure` — #120: candidates (Major/Road, Minor on Veloland; rural parallel-alternative rule), Radstreifen widths, looser Kernfahrbahn, five path layouts per street (strokes), sloped kerbs, symbols, red crossings at main-road junctions (#406 at lights: straight, red only on a same-phase conflict), Wartelinie/sign moves, format (BufferDm, TrackMid, OuterDm), cost, Nyon test region
+- `network-stage-memory` — #1425: the nationwide network stage ran out of memory; per-block footprint cache, plans kept only for small regions, numbers
 - `parking-lots` — Car parks laid out, not painted (#499): pure `ParkingPlanner` (axis from the lot or its street, modules by depth, planters replacing end bays, entrance + barrier), `RawParking` rings from the road stage, `TileRewriter.Parking`, shared SSV arrows, the bay pattern taken off in CoverStage
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
@@ -96,3 +97,4 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `tunnel-segment-ends-always-portals` — Tunnel segment ends are not always portals: A long tunnel is several TLM segments, so an endpoint may sit...
 - `tree-collides-godot-tree` — `Tree` collides with `Godot.Tree`: (the UI node) — the format type is `TreeInstance`
 - `drape-road-feature-polylines-only` — Drape road/feature polylines only after densifying them
+- `water-pass-memory` — #1439: the nationwide water pass ran out of memory in the dry-neighbour stitch (whole grids cached) and kept every survey kilometre; edges only, survey released by column, numbers

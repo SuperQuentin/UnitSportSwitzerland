@@ -186,8 +186,7 @@ public partial class ErrandGivers : Node3D
         {
             _live.Add(g.Id);
             if (_shown.ContainsKey(g.Id)) continue;
-            double de = g.E - at.E, dn = g.N - at.N;
-            if (de * de + dn * dn > ShowM * ShowM) { _live.Remove(g.Id); continue; }
+            if (GlobalPos.HorizontalDistanceSquared(g.E, g.N, at.E, at.N) > ShowM * ShowM) { _live.Remove(g.Id); continue; }
             _material ??= HumanMeshBuilder.FigureMaterial();
             Add(g);
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnitSport.Adventure.Places;
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Errands;
@@ -59,8 +60,7 @@ public sealed class GiverCatalogue
                 if (!_tiles.TryGetValue((te, tn), out var bucket)) continue;
                 foreach (var g in bucket)
                 {
-                    double de = g.E - e, dn = g.N - n;
-                    if (de * de + dn * dn <= r2) into.Add(g);
+                    if (GlobalPos.HorizontalDistanceSquared(g.E, g.N, e, n) <= r2) into.Add(g);
                 }
             }
     }

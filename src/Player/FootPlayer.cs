@@ -2827,6 +2827,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
             if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
             if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
+            if (Interiors.Games.TableGames.TryUse(this)) return true;   // a pool table, a dartboard, a game (#1324, #1326)
             if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;   // a slice of a birthday cake (#1423)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
@@ -2864,6 +2865,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
+        // a set-up telescope at hand (#1440): look through it
+        if (Items.Telescopes.TryInteract(this)) return true;
         // Versteckis (#1268): an objective's hold; a prop opens no door and drives nothing
         if (Adventure.Versteckis.VersteckisManager.TryInteract(this)) return true;
         // a chest, a seal's stack or cowbell, a guide's burrow, a trial's post, an offering box (#1227)

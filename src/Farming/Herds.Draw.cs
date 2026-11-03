@@ -67,8 +67,7 @@ public partial class Herds
 
         foreach (var h in _all)
         {
-            double de = h.Plan.E - ee, dn = h.Plan.N - en;
-            float dist = (float)Math.Sqrt(de * de + dn * dn);
+            float dist = (float)GlobalPos.HorizontalDistance(h.Plan.E, h.Plan.N, ee, en);
             bool any = false;
             foreach (var c in h.Cows) if (_over.ContainsKey(c.Key)) { any = true; break; }
             if (dist > DrawRange && !any)
@@ -111,8 +110,8 @@ public partial class Herds
             CustomAabb = new Aabb(new Vector3(-400, -50, -400), new Vector3(800, 450, 800)),
             VisibilityRangeEnd = DrawRange,
         };
-        h.Bodies = Make("Cows", CowMeshBuilder.Body(h.Plan.Breed));
-        h.Heads = Make("Heads", CowMeshBuilder.Head(h.Plan.Breed));
+        h.Bodies = Styles.ZoomRanges.Track(Make("Cows", CowMeshBuilder.Body(h.Plan.Breed)));
+        h.Heads = Styles.ZoomRanges.Track(Make("Heads", CowMeshBuilder.Head(h.Plan.Breed)));
         AddChild(h.Bodies);
         AddChild(h.Heads);
     }
@@ -209,8 +208,7 @@ public partial class Herds
         float palt = float.NaN;
         foreach (var h in _all)
         {
-            double de = h.Plan.E - ee, dn = h.Plan.N - en;
-            if (de * de + dn * dn > (range + 60) * (range + 60)) continue;
+            if (GlobalPos.HorizontalDistanceSquared(h.Plan.E, h.Plan.N, ee, en) > (range + 60) * (range + 60)) continue;
             for (int i = 0; i < h.Cows.Length; i++)
             {
                 var (e, n, alt, _, _, _) = Where(h, i, now);

@@ -66,6 +66,8 @@ public static partial class TileRewriter
         /// <see cref="NetworkStats.Layouts"/> and reported.
         /// </summary>
         bool NewJunctions = true,
+        /// <summary>Keep every block's junction plans for the summary lines (#1425); false = nationwide, where they would never fit in memory.</summary>
+        bool KeepPlans = true,
         /// <summary>
         /// Write the planner's junctions into the tiles (#818, the default; <c>--junctions new</c> plans only): cores, trims,
         /// transitions, exteriors and paths where its checks pass; the old layout builds the rest (and nothing of its own there).
@@ -250,6 +252,7 @@ public static partial class TileRewriter
 
     public static Stats Run(string chunkDir, IReadOnlyList<TileId> tiles, Options options, Action<string> log)
     {
+        _plannerFailures = 0;
         string rawDir = options.RawDir ?? RawRoads.DirFor(RawRoads.DefaultTempDir(chunkDir));
         // the car park rings are written to their own directory beside the raw roads, not into it
         // (#499, ParkingAreaExtractor -> RawParking.DirFor), so they are found from the temp dir
@@ -392,7 +395,8 @@ public static partial class TileRewriter
         private readonly RoadHeights.Stats heightStats = new();
         private readonly RailingPlanner.Stats railings = new();
         private readonly ParkingStats parkingStats = new();
-        private readonly Footprints buildings = new(inputs.Buildings);
+        // one block's, made in Block: a session-long cache held every building tile it ever saw (#1425)
+        private Footprints buildings = null!;
         /// <summary>The region's tram stops (#1057, <see cref="Options.TramStops"/>), none without the file.</summary>
         private readonly List<(string Name, Vec2 At)> tramStops = options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : [];
 
@@ -410,6 +414,7 @@ public static partial class TileRewriter
             var crossingNodes = inputs.Crossings;
             var built = new List<RoadTile>();
 
+            buildings = new Footprints(inputs.Buildings);
             var context = WithHalo(block, options.Halo);
 
             var net = new RoadNetwork();
@@ -794,7 +799,7 @@ public static partial class TileRewriter
                 var layouts = options.NewJunctions
                     ? PlanAndMerge(priority, result, layoutSegmentOf, layoutOutput, block, wanted, nearJunctions, rings, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
                     : null;
-                if (layouts is not null) netStats.Layouts.AddRange(layouts.Where(p => !p.Beyond));
+                if (layouts is not null && options.KeepPlans) netStats.Layouts.AddRange(layouts.Where(p => !p.Beyond));
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only
                 var writtenNodes = layouts is not null && options.WriteJunctions ? WritableLayouts(layouts, result, layoutSegmentOf, netStats.LayoutWrite) : [];
                 var oldPriority = WithoutWritten(priority, writtenNodes);
@@ -1019,6 +1024,7 @@ public static partial class TileRewriter
             log(embankments.Format());
             log(railings.Format());
             log(parkingStats.Format());
+            if (_plannerFailures > 0) log($"  junction planner: {_plannerFailures:N0} plans threw on degenerate geometry and fell back (see the [WARN] lines, #1427)");
             return new Stats(tilesRead, TilesWritten, junctionCount, written, dropped,
                 overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, Net);
         }

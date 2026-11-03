@@ -199,11 +199,7 @@ public static partial class InteriorMeshBuilder
                 foreach (float px in new[] { -w + 0.1f, w - 0.1f })
                     foreach (float pz in new[] { -d + 0.1f, 0f, d - 0.1f })
                         B(px - 0.06f, 0.81f, pz - 0.06f, px + 0.06f, 0.835f, pz + 0.06f, dark);
-                for (int i = 0; i < 6; i++)
-                {
-                    float bx = (Hash(p, 20 + i) - 0.5f) * (p.W - 0.5f), bz = (Hash(p, 40 + i) - 0.5f) * (p.D - 0.6f);
-                    B(bx - 0.03f, 0.77f, bz - 0.03f, bx + 0.03f, 0.84f, bz + 0.03f, BallColors[i % BallColors.Length]);
-                }
+                // the balls are the table's game (Games.Pool.PoolRig, #1324): nodes, not the room's mesh
                 // the lamp over it, lit underneath, on its chains
                 B(-0.32f, 1.72f, -0.85f, 0.32f, 1.84f, 0.85f, C(0.08f, 0.26f, 0.14f));
                 B(-0.27f, 1.69f, -0.8f, 0.27f, 1.705f, 0.8f, Lit(1.00f, 0.92f, 0.70f));

@@ -234,6 +234,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
             return;
         }
+        // a pool table played by two bots through its rig (#1324)
+        if (Interiors.Games.Pool.PoolProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.Pool.PoolProbe { Name = "PoolProbe" });
+            return;
+        }
         // arcades planned in hand-made buildings (#1240)
         if (Interiors.ArcadeProbe.ParseArgs())
         {
@@ -572,6 +579,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball machines, played and watched (#1325)
+        Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
@@ -699,8 +707,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _dayNight = new World.DayNight(environment)
             {
                 GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
+                Origin = origin,
             };
             AddChild(_dayNight);
+            // the real moon in the sky (#1440), drawn under the real sun only
+            AddChild(new World.MoonDisc());
+            // the stars (#1444), the real sky's too
+            AddChild(new World.StarField());
+            AddChild(new World.SkyBodies());
+            AddChild(new World.Satellites());
         }
         ApplySun();
         // the fun world (#1396): its sky held at dusk, the synthwave backdrop, the air rings
@@ -798,6 +813,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
             new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
+            // the far horizon at its corners, across origin shifts (#1429)
+            new(Terrain.HorizonCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.HorizonCheck(chunks, origin)),
+            // a GPX course drawn and run where it belongs, across origin shifts (#1429)
+            new(Gpx.GpxCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.GpxCheck(chunks, origin)),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -859,12 +878,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
             }),
+#if TRAILER
             // the trailer (#706): stages and films its shots, moving the spectator camera from place to place
             new(() => Trailer.TrailerDirector.Requested, ToolAnchor.Own, _ =>
             {
                 FreeSpectator();
                 return new Trailer.TrailerDirector(_spectator!, chunks, origin) { RunCommand = line => _chat?.Send(line) };
             }),
+#endif
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var shot = ShotRunner.ParseArgs()!;
@@ -998,7 +1019,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Items.TelescopeProbe.Requested || Items.TelescopeNetProbe.Role != null || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
             || Occasions.Birthdays.BirthdayCheck.Requested || Occasions.Birthdays.BirthdayNetProbe.Role != null
@@ -1011,7 +1032,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
             || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null || Interiors.Games.Pool.PoolNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -1047,6 +1068,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
         if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
         if (Interiors.Pinball.PinballNetProbe.Role != null) AddChild(new Interiors.Pinball.PinballNetProbe(items, origin));
+        if (Interiors.Games.Pool.PoolNetProbe.Role != null) AddChild(new Interiors.Games.Pool.PoolNetProbe(items, origin));
         if (Interiors.BowlingNetProbe.Role != null) AddChild(new Interiors.BowlingNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
@@ -1091,6 +1113,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (BattleRoyale.BrBotProbe.Requested) AddChild(new BattleRoyale.BrBotProbe(items));
         if (Bots.BotFilmProbe.Requested) AddChild(new Bots.BotFilmProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
+        if (Items.TelescopeProbe.Requested) AddChild(new Items.TelescopeProbe(items));
+        if (World.SkyProbe.Requested) AddChild(new World.SkyProbe());
+        if (Items.TelescopeNetProbe.Role != null) AddChild(new Items.TelescopeNetProbe(items));
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.ClimbNetProbe.Role != null) AddChild(new Player.ClimbNetProbe(items));   // #1225
@@ -1188,6 +1213,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
+        // who looks through which set-up telescope (#1440), same path as the server's
+        Items.Telescopes.Create(this, server: false);
         // player birthdays (#1423): the gift, the wishes, the cake's slices, the birthday fireworks; offline this client plays the server
         var birthdays = Occasions.Birthdays.BirthdayService.Create(this, origin, server: false, networked: Launch.Networked);
         birthdays.Me = () => _onFoot ? LocalPlayer : null;
@@ -2381,6 +2408,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             foreach (var row in pinball.Prompts()) yield return row;
             yield break;
         }
+        if (Interiors.Games.TableGamePlay.Current is { } game)
+        {
+            foreach (var row in game.Prompts()) yield return row;
+            yield break;
+        }
         // what E acts on, where the screen says it in a floating line (a door, a counter, a rack, loot):
         // a phone needs it as a row too, for its button (#1353)
         if (TouchControls.Shown && Interiors.InteriorManager.Instance?.Floating is { } floating)
@@ -2583,6 +2615,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (Interiors.BowlingAim.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
         if (Interiors.Pinball.PinballPlay.Current != null) return new TouchState(TouchMode.Pinball, TouchFlags.None);
+        // at a pool table, a dartboard, a game (#1324): the stick aims, the Bowl button strikes or throws
+        if (Interiors.Games.TableGamePlay.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
         if (Viewer is not { } p || !IsInstanceValid(p))
         {
             var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();

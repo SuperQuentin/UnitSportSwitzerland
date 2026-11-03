@@ -71,10 +71,10 @@ public partial class IkeaProbe : Node
             // need not be the tile its point fell in: look at the ring
             var hits = new List<string>();
             bool any = false;
-            for (int de = -1; de <= 1; de++)
-                for (int dn = -1; dn <= 1; dn++)
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = 1; dz >= -1; dz--)
                 {
-                    var t = new TileId(own.E + de, own.N + dn);
+                    var t = own.Neighbour(dx, dz);
                     string path = dir.PathJoin(BuildingFormat.FileName(t));
                     if (!Godot.FileAccess.FileExists(path)) continue;
                     any = true;
@@ -94,7 +94,7 @@ public partial class IkeaProbe : Node
                         var mine = doors.Where(x => x.Index == i).ToList();
                         var d = mine.FirstOrDefault(x => x.Slot == 0);
                         string door = d.Width > 0
-                            ? $" door E {t.MinE + d.Position.X:F0} N {t.MaxN - d.Position.Z:F0} w{d.Width:F1}"
+                            ? $" door E {t.Global(d.Position.X, d.Position.Z).E:F0} N {t.Global(d.Position.X, d.Position.Z).N:F0} w{d.Width:F1}"
                               + (mine.Count > 1 ? $" (+{mine.Count - 1} more)" : "")
                             : " NO DOOR";
                         hits.Add($"{t} #{i} {box.Area:F0} m2 {box.Width:F0}x{box.Depth:F0} h{b.MaxY - b.MinY:F0} {b.Kind}{door}");

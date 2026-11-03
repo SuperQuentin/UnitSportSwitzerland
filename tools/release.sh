@@ -75,6 +75,7 @@ section() { # title, ERE on the leading emoji code
 } > "$OUT/notes.md"
 
 echo "Next version: v$V ($bump)"; cat "$OUT/notes.md"
+echo "Build features: ${UNITSPORT_FEATURES:-none} (UNITSPORT_FEATURES, docs/notes/general/build-features.md)"
 [ $DRY = 1 ] && exit 0
 
 WT="$PWD/$OUT/wt"; REPO=$PWD

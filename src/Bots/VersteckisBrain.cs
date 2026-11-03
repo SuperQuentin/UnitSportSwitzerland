@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Adventure.Versteckis;
+using UnitSport.Core;
 
 namespace UnitSport.Bots;
 
@@ -290,7 +291,7 @@ public sealed class VersteckisBrain : IBotBrain
         for (int i = 0; i < decor.Count; i++)
         {
             var d = decor[i];
-            double de = d.E - be, dn = d.N - bn, dd = de * de + dn * dn;
+            double dd = GlobalPos.HorizontalDistanceSquared(d.E, d.N, be, bn);
             if (dd > SeekSight * SeekSight || !VsTactics.Facing(be, bn, fe, fn, d.E, d.N) && dd > 36) continue;
             sus.Look("d" + i, d.Kind, d.E, d.N, now, inPlace: true);
         }

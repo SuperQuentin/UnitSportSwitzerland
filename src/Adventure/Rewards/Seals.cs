@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Rewards;
 
@@ -189,8 +190,7 @@ public static class Seals
         foreach (var (key, me, mn) in party)
         {
             if (key == doer || keys.Contains(key)) continue;
-            double de = me - e, dn = mn - n;
-            if (de * de + dn * dn <= CoopRadiusM * CoopRadiusM) keys.Add(key);
+            if (GlobalPos.HorizontalDistanceSquared(me, mn, e, n) <= CoopRadiusM * CoopRadiusM) keys.Add(key);
         }
         return keys;
     }

@@ -118,6 +118,8 @@ public sealed class Ufo : Flyer
             // nobody aboard: an empty saucer sinks gently onto its legs and stays there, beam off
             c = new UfoFlight.Controls(Vector2.Zero, 0f, env.OnFloor ? 0f : 0.3f, false, m.Yaw);
         State = UfoFlight.Step(State, c, new UfoFlight.Env(env.OnFloor, below), dt);
+        // no higher than the round world is drawn for, until the Space regime exists (#1430 H3)
+        if (env.Altitude >= Core.Curvature.CeilingM && State.Velocity.Y > 0f) State.Velocity = State.Velocity with { Y = 0f };
         if (!input.Piloted) State.Beam = false;
 
         m.Velocity = State.Velocity;

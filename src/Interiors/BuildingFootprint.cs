@@ -267,6 +267,13 @@ public static class BuildingFootprint
     /// <summary>The front door's street-side handle, linear: on the facade and on the swinging leaf.</summary>
     public static readonly Color DoorHandleColor = DoorFrameColor * 0.7f;
 
+    /// <summary>The terrain mesh's height under a tile-local plan point (x east, y south; #1443).</summary>
+    private static double MeshHeight(ChunkGrid grid, TileId id, Vector2 xz)
+    {
+        var (e, n) = id.Global(xz.X, xz.Y);
+        return grid.SampleMeshHeight(e, n);
+    }
+
     /// <summary>
     /// Every door of every building of a tile, in building order and, within a building, main door
     /// first (#498). A building with no wall to hang one on still contributes its empty door spot,
@@ -458,7 +465,7 @@ public static class BuildingFootprint
             // triangle's full width: a gable, or an upper storey over a porch roof, is wall where
             // no door can go, and taking its whole extent put doors in mid-air under it.
             float groundHere = grid != null
-                ? (float)grid.SampleMeshHeight(tile.Id.MinE + mid.X, tile.Id.MaxN - mid.Y)
+                ? (float)MeshHeight(grid, tile.Id, mid)
                 : b.MinY + 0.8f;
             if (!CutAt(a, c, d, Math.Max(groundHere, b.MinY) + 1.0f, out var p0, out var p1)) continue;
             cuts.Add(((p0 + p1) * 0.5f, n, Math.Max(groundHere, b.MinY)));
@@ -497,7 +504,7 @@ public static class BuildingFootprint
             if (Covered(xz)) continue;
 
             float ground = grid != null
-                ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                ? (float)MeshHeight(grid, tile.Id, xz)
                 : b.MinY + 0.8f;
             float baseY = Math.Max(ground, b.MinY);
             // every door stops under the eave, not just a barn's (#509): a 2.6 m shed used to take
@@ -599,7 +606,7 @@ public static class BuildingFootprint
                 var xz = main.Normal * main.Offset + t * (mid + off);
                 if (Covered(xz)) continue;
                 float ground = grid != null
-                    ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                    ? (float)MeshHeight(grid, tile.Id, xz)
                     : b.MinY + 0.8f;
                 float baseY = Math.Max(ground, b.MinY);
                 if (ground < b.MinY - 0.6f || ground > b.MaxY - bays.Height - 0.3f) continue;
@@ -655,7 +662,7 @@ public static class BuildingFootprint
                 Vector2 AtX(float x) => main.Normal * main.Offset + tw * ((x - wallX0) / along);
                 planX = xz => (xz - center).Dot(planU) - wingX;
                 float GroundAt(Vector2 xz) => grid != null
-                    ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                    ? (float)MeshHeight(grid, tile.Id, xz)
                     : b.MinY + 0.8f;
 
                 DoorSpot? Why(string why) { GarageWhyNot = why; return null; }
@@ -682,7 +689,7 @@ public static class BuildingFootprint
                             {
                                 float at = i / 16f, o = link.Length * at;
                                 var p = xz + main.Normal * o + tw * side;
-                                float gy = (float)grid.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Y);
+                                float gy = (float)MeshHeight(grid, tile.Id, p);
                                 samples.Add((at, gy - (baseY + (link.RoadY - baseY) * at) - 0.03f));
                             }
                         if (!GarageLink.Humpable(samples)) return Why("the ground rises too far to the road");
@@ -801,7 +808,7 @@ public static class BuildingFootprint
                     var xz = c.Normal * c.Offset + t * (mid + off);
                     if (Covered(xz) || Courtyard(xz, c.Normal)) continue;
                     float ground = grid != null
-                        ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                        ? (float)MeshHeight(grid, tile.Id, xz)
                         : b.MinY + 0.8f;
                     float baseY = Math.Max(ground, b.MinY);
                     // not on stilts over a slope, not on the buried side of a hillside house, and
@@ -858,7 +865,7 @@ public static class BuildingFootprint
         // ---- doors of their own (#1292): each shop unit's and each dining venue's -------------------
         if (!found || door.Width <= 0) return built;
         float GroundOf(Vector2 xz) => grid != null
-            ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+            ? (float)MeshHeight(grid, tile.Id, xz)
             : b.MinY + 0.8f;
         var own = OwnDoors(tile, index, map, built, ranked, Covered, Under, Courtyard, GroundOf, box.Eave);
         return own.Count == 0 ? built : built with { Extra = extras.Concat(own).ToList() };
@@ -902,7 +909,11 @@ public static class BuildingFootprint
         float glassTop = Math.Min(VenueFront.Top, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.3f);
         bool glazed = glassTop >= DoorBudget.ServiceHeight + 0.3f;
         var tid = tile.Id;
-        Vector2 PointOf(VenueRecord v) => new((float)(v.E - tid.MinE), (float)(tid.MaxN - v.N));
+        Vector2 PointOf(VenueRecord v)
+        {
+            var (x, z) = tid.Local(v.E, v.N);
+            return new((float)x, (float)z);
+        }
 
         // a door at s along wall run c, its front `span` wide round it (cut to what the run holds), or null
         DoorSpot? At(Cand c, float s, float span)

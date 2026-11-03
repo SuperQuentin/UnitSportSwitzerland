@@ -20,6 +20,14 @@ public sealed class PinDeck : IDisposable
     public const float PinMass = 1.55f, BallMass = 6.35f;
     /// <summary>A roll is over once nothing moves, or after this long whatever moves.</summary>
     public const float MaxTime = 6f;
+
+    /// <summary>
+    /// The surfaces, tuned so a straight ball strikes rarely (about one in four: head-on leaves the 4-6-7-10, a flat
+    /// pocket hit a corner pin) and a hook into the pocket about two times in three. Bouncier, slicker pins flew about
+    /// and nearly every ball struck. The engine combines bounce as the larger of two, so the pins' 0 holds on the deck
+    /// too. <c>--bowlingrollcheck --pindeck pinBounce,pinFriction,deckBounce,deckFriction,ballFriction</c> sweeps them.
+    /// </summary>
+    public static float PinBounce = 0f, PinFriction = 0.7f, DeckBounce = 0f, DeckFriction = 0.5f, BallFriction = 0.3f;
     /// <summary>Pins and ball standing still for this long end the roll early.</summary>
     private const float StillFor = 0.6f;
 
@@ -63,19 +71,25 @@ public sealed class PinDeck : IDisposable
         // the pit's floor reaches under the deck too: nothing that drops in can fall out of the world
         AddBox(floor, new Vector3(-wall, -0.6f, z0), new Vector3(wall, -0.5f, pit));
         AddBox(floor, new Vector3(-wall, -0.6f, pit), new Vector3(wall, 0.9f, pit + 0.1f));
-        ps.BodySetParam(floor, PhysicsServer3D.BodyParameter.Friction, 0.2f);
-        ps.BodySetParam(floor, PhysicsServer3D.BodyParameter.Bounce, 0.25f);
+        ps.BodySetParam(floor, PhysicsServer3D.BodyParameter.Friction, DeckFriction);
+        ps.BodySetParam(floor, PhysicsServer3D.BodyParameter.Bounce, DeckBounce);
 
+        // the body and the head, each a hull, the thin neck between them: one hull filled the neck out, and pins
+        // knocked each other down at head height a real pin's neck passes under
         var pinShape = ps.ConvexPolygonShapeCreate();
-        ps.ShapeSetData(pinShape, PinHull());
+        ps.ShapeSetData(pinShape, PinHull(0, NeckRing));
         _shapes.Add(pinShape);
+        var headShape = ps.ConvexPolygonShapeCreate();
+        ps.ShapeSetData(headShape, PinHull(NeckRing, PinOutline.Length - 1));
+        _shapes.Add(headShape);
         for (int i = 0; i < 10; i++)
         {
             _present[i] = (standing & (1 << i)) != 0;
             if (!_present[i]) continue;
             var body = Body(pinShape, PinMass, new Transform3D(Basis.Identity, Spot(lane, i)));
-            ps.BodySetParam(body, PhysicsServer3D.BodyParameter.Friction, 0.3f);
-            ps.BodySetParam(body, PhysicsServer3D.BodyParameter.Bounce, 0.55f);
+            ps.BodyAddShape(body, headShape);
+            ps.BodySetParam(body, PhysicsServer3D.BodyParameter.Friction, PinFriction);
+            ps.BodySetParam(body, PhysicsServer3D.BodyParameter.Bounce, PinBounce);
             _pins[i] = body;
         }
 
@@ -84,7 +98,7 @@ public sealed class PinDeck : IDisposable
         _shapes.Add(ballShape);
         // the deck is the lane's height here: the ball's centre a radius above it
         _ball = Body(ballShape, BallMass, new Transform3D(Basis.Identity, ball.Pos with { Y = BowlingSizes.BallRadius }));
-        ps.BodySetParam(_ball, PhysicsServer3D.BodyParameter.Friction, 0.2f);
+        ps.BodySetParam(_ball, PhysicsServer3D.BodyParameter.Friction, BallFriction);
         ps.BodySetParam(_ball, PhysicsServer3D.BodyParameter.Bounce, 0.1f);
         ps.BodySetState(_ball, PhysicsServer3D.BodyState.LinearVelocity, ball.Vel);
         ps.BodySetState(_ball, PhysicsServer3D.BodyState.AngularVelocity, ball.Spin);
@@ -208,12 +222,13 @@ public sealed class PinDeck : IDisposable
         return body;
     }
 
-    /// <summary>A pin's hull: the turned outline at eight points round each of its rings.</summary>
-    private static Vector3[] PinHull()
+    /// <summary>A pin's hull: the turned outline's rings <paramref name="from"/> to <paramref name="to"/>, eight points round each.</summary>
+    private static Vector3[] PinHull(int from, int to)
     {
         var pts = new List<Vector3>();
-        foreach (var (y, r) in PinOutline)
+        for (int i = from; i <= to; i++)
         {
+            var (y, r) = PinOutline[i];
             if (r <= 0) { pts.Add(new Vector3(0, y, 0)); continue; }
             for (int k = 0; k < 8; k++)
             {
@@ -225,14 +240,17 @@ public sealed class PinDeck : IDisposable
     }
 
     /// <summary>
-    /// The pin's outline for its hull: the body only, the neck filled out (a hull is convex anyway),
-    /// the same base, belly and height as the drawn pin [S].
+    /// The pin's outline for its two hulls (body and head, split at <see cref="NeckRing"/>), the same base,
+    /// belly, neck and height as the drawn pin [S]: the centre of mass 0.155 m up, a real pin's ~0.15.
     /// </summary>
     private static readonly (float Y, float R)[] PinOutline =
     {
         (0f, 0.0258f), (0.019f, 0.036f), (0.057f, 0.0478f), (0.102f, 0.0567f), (0.143f, 0.0605f), (0.19f, 0.0548f),
         (0.2286f, 0.0416f), (0.27f, 0.026f), (0.3302f, 0.0315f), (0.3683f, 0.022f), (0.381f, 0f),
     };
+
+    /// <summary>The neck's ring in <see cref="PinOutline"/>: where the body's hull ends and the head's starts.</summary>
+    private const int NeckRing = 7;
 
     private bool _disposed;
 

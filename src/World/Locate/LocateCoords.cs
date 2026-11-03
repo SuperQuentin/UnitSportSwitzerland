@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using UnitSport.Core;
 
 namespace UnitSport.World.Locate;
 
@@ -90,7 +91,7 @@ public static partial class LocateCoords
     public static string Compass(double fromE, double fromN, double toE, double toN)
     {
         double de = toE - fromE, dn = toN - fromN;
-        if (de * de + dn * dn < 25 * 25) return "here";
+        if (GlobalPos.HorizontalDistanceSquared(toE, toN, fromE, fromN) < 25 * 25) return "here";
         double bearing = Math.Atan2(de, dn) * 180 / Math.PI;
         if (bearing < 0) bearing += 360;
         return Points[(int)Math.Round(bearing / 45) % 8];
