@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnitSport.Core;
 using UnitSport.Player;
 using UnitSport.Terrain.Format;
 
@@ -131,7 +132,7 @@ public static class DiscoveryRules
     {
         var travel = PlacesRules.Class(b.RideKind);
         if (travel == TravelClass.None || b.Out) return false;
-        double de = b.E - p.E, dn = b.N - p.N, d2 = de * de + dn * dn;
+        double d2 = GlobalPos.HorizontalDistanceSquared(b.E, b.N, p.E, p.N);
         float r = RadiusOf(p);
         double dz = Math.Abs(b.Alt - p.Elevation);
         // above the ground: unknown ground counts as height above the place itself
@@ -178,8 +179,7 @@ public static class DiscoveryRules
         discovered.Clear();
         if (t.HasLast)
         {
-            double de = b.E - t.LastE, dn = b.N - t.LastN;
-            if (IsJump(Math.Sqrt(de * de + dn * dn), seconds, b.RideKind))
+            if (IsJump(GlobalPos.HorizontalDistance(b.E, b.N, t.LastE, t.LastN), seconds, b.RideKind))
             {
                 t.Anchored = true;
                 (t.AnchorE, t.AnchorN) = (b.E, b.N);

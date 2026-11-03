@@ -226,7 +226,7 @@ public partial class AuraManager : Node
         var gb = Body(b)!.Global;
         double de = gb.E - ga.E, dn = gb.N - ga.N;
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = de * de + dn * dn < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
         var match = new Match
         {
             Id = _nextId++,

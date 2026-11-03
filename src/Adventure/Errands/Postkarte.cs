@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnitSport.Adventure.Navigation;
 using UnitSport.Adventure.Places;
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Terrain.Format;
 
@@ -397,8 +398,7 @@ public static class Postkarte
         ulong bestScore = ulong.MaxValue;
         foreach (var p in pois.OfKind(PoiKind.ShipLanding))
         {
-            double de = p.E - from.E, dn = p.N - from.N;
-            if (de * de + dn * dn < 4000.0 * 4000 || p.Name == from.Name || !PoiCatalogue.InLake(lake, p.E, p.N, 300)) continue;
+            if (GlobalPos.HorizontalDistanceSquared(p.E, p.N, from.E, from.N) < 4000.0 * 4000 || p.Name == from.Name || !PoiCatalogue.InLake(lake, p.E, p.N, 300)) continue;
             ulong score = ErrandHash.Of(seed, (long)p.Hash);
             if (score < bestScore) { bestScore = score; best = p; }
         }

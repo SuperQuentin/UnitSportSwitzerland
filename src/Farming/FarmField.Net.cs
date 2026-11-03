@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Net;
 using UnitSport.Player;
 using UnitSport.Terrain.Format;
@@ -125,8 +126,7 @@ public partial class FarmField
             if (at is { } g)
             {
                 var (ce, cn) = FieldFormat.CellCentre(cell);
-                double de = t.Id.MinE + ce - g.E, dn = t.Id.MinN + cn - g.N;
-                near = de * de + dn * dn <= WorkReach * WorkReach;
+                near = GlobalPos.HorizontalDistanceSquared(t.Id.MinE + ce, t.Id.MinN + cn, g.E, g.N) <= WorkReach * WorkReach;
             }
             if (near && fieldCrop != CropKind.None
                 && FarmRules.Work(tool, fieldCrop, t.Cells.Get(cell), seed, _month, now) is { } after
