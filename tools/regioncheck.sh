@@ -18,7 +18,7 @@ run() {   # <name> <regioncheck args...>
       --no-query --regionout "$DIR" --regioncheck "$@"
   grep -h "\[regioncheck\] \(site\|RESULT\)" "$DIR/$name.log" | grep -v " start "
 }
-run both both
+run both both --regionhop
 run a a
 run b b
 if [ -n "${BEFORE:-}" ]; then

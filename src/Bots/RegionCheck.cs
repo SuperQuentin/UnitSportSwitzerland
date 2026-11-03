@@ -71,6 +71,12 @@ public partial class RegionCheck : Node
     private string _out = "";
     private int _tick, _settled, _walked = -1, _wander, _wandered = -1;
     private bool _parked;
+    /// <summary><c>--regionhop</c> (both sites): after the walk the far walker is put beside the home site.</summary>
+    private readonly bool _hop = CmdArgs.Has("--regionhop");
+    private int _hopped = -1;
+    private const int HopTicks = 300;
+    private string _hopLine = "";
+    private bool _hopOk = true;
     private readonly Dictionary<Bot, (GlobalPos From, int Ticks, int OnFloor, double Path, GlobalPos Last)> _strolls = new();
 
     public RegionCheck()
@@ -171,6 +177,10 @@ public partial class RegionCheck : Node
                 s.Pushed = s.Blocker!.Body.Global.HorizontalDistanceTo(s.BlockerStart);
                 s.ToCar = s.Driver!.Body.Global.HorizontalDistanceTo(s.DriverStart);
             }
+        if (_hop && _sites.Count == 2 && _hopped < HopTicks)
+        {
+            if (Hop()) return;
+        }
         if (_wander <= 0) { Finish(); return; }
         if (_wandered < 0)
         {
@@ -189,6 +199,33 @@ public partial class RegionCheck : Node
             _strolls[b] = (st.From, st.Ticks + 1, st.OnFloor + (b.Body.IsOnFloor() ? 1 : 0), st.Path + g.HorizontalDistanceTo(st.Last), g);
         }
         if (++_wandered >= _wander * 60) Finish();
+    }
+
+    /// <summary>
+    /// The far walker put 6 m south of the home walker (<c>ServerRegions.Put</c>): it must be in the home
+    /// site's region at once, then stand on that ground. True while it is still settling.
+    /// </summary>
+    private bool Hop()
+    {
+        var home = _sites[0].Walker!.Body;
+        var hopper = _sites[1].Walker!.Body;
+        if (_hopped < 0)
+        {
+            var from = hopper.Region;
+            var to = home.Global with { N = home.Global.N - 6, Alt = home.Global.Alt + 1 };
+            ServerRegions.Put(hopper, to);
+            _hopLine = $"hop {hopper.Name} from {from} to {hopper.Region}";
+            _hopOk = hopper.Region == home.Region;
+            _hopped = 0;
+            return true;
+        }
+        if (++_hopped < HopTicks) return true;
+        double drop = hopper.Global.Alt - home.Global.Alt;
+        bool stands = hopper.IsOnFloor() && System.Math.Abs(drop) < 3;
+        _hopOk &= stands && hopper.Region == home.Region;
+        GD.Print(string.Create(CultureInfo.InvariantCulture,
+            $"{Log} {_hopLine}: now in {hopper.Region}, on the ground {hopper.IsOnFloor()}, {drop:F2} m from the home walker's height{(_hopOk ? "" : " FAILED")}"));
+        return false;
     }
 
     /// <summary>Parks a car <see cref="CarGap"/> m north of each site's second walker, side on, through the server's own path.</summary>
@@ -245,6 +282,7 @@ public partial class RegionCheck : Node
                 $"{Log} stroll {b.Body.Name} in {b.Body.Region}: {st.Path:F1} m walked, {b.Body.Global.HorizontalDistanceTo(st.From):F1} m from where it began, on the ground {100.0 * st.OnFloor / Math.Max(1, st.Ticks):F0} % of the time, alt {b.Body.Global.Alt:F1}{(trunks > 0 ? $", {trunks} trunk bodies in its region" : "")}"));
             if (st.Path < 5 || b.Body.Global.Alt < st.From.Alt - 30) failures++;
         }
+        if (!_hopOk) failures++;
         GD.Print(failures == 0 ? $"{Log} RESULT: ok" : $"{Log} RESULT: FAILED ({failures})");
         GetTree().Quit(failures == 0 ? 0 : 1);
     }
