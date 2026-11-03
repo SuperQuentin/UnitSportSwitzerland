@@ -114,10 +114,20 @@ public partial class BoatCheck : Node
     }
 
     /// <summary>The helm: throttle, astern, steer, or hold a heading by the helm.</summary>
+    /// <summary>How far the world's axes are turned from the grid's here: 0 in a ground frame.</summary>
+    private static float GridYaw(FootPlayer me)
+    {
+        if (me.Origin is not { } origin) return 0f;
+        var here = origin.ToGlobal(me.GlobalPosition);
+        var north = origin.ToWorld(here.E, here.N + 100, here.Alt) - origin.ToWorld(here);
+        return Mathf.Atan2(-north.X, -north.Z);
+    }
+
     private static Func<RideInput> Helm(FootPlayer me, float throttle, float steer = 0f, float? hold = null, float reverse = 0f) => () =>
     {
         float s = steer;
-        if (hold is { } yaw) s = Mathf.Clamp(-2f * Mathf.AngleDifference(me.Rotation.Y, yaw), -1f, 1f);
+        // a compass heading (grid east / west), whatever way a turned frame (#1430 H3) has the world
+        if (hold is { } yaw) s = Mathf.Clamp(-2f * Mathf.AngleDifference(me.Rotation.Y, yaw + GridYaw(me)), -1f, 1f);
         return new RideInput(throttle, reverse, s, false);
     };
 

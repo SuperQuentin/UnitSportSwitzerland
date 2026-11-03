@@ -1188,3 +1188,8 @@ src/Core/WorldOrigin         quick  --flycheck a320 --world flat --originstress 
 # a shift every 200 m: at 20 the BNR32 spun five times in one of two runs (a shift twice a second at 160 km/h)
 src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
 src/Core/WorldOrigin         quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
+# the same with every shift turning the world 2° (anchor frames, #1430 H3): every handler meets a rotation
+src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShift         quick  --ride car,15 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200 --originyaw 2
