@@ -54,6 +54,22 @@ public class AtmosphereTests
         for (double z = 0; z <= 11_000; z += 500)
             Assert.InRange(Atmosphere.Density(z) / (1.225 * Math.Pow(1 - 2.25577e-5 * z, 4.2559)), 0.9999, 1.0025);
     }
+
+    [Fact]
+    public void Airliners_and_their_instruments_fly_the_old_air_below_11_km_and_the_standard_above()
+    {
+        for (float z = -500; z <= 11_000; z += 250)
+        {
+            // bit for bit what they flew on before H5
+            Assert.Equal(1.225f * Godot.Mathf.Pow(Godot.Mathf.Max(1f - 2.25577e-5f * z, 0.05f), 4.2559f), UnitSport.Player.AirlinerFlight.Density(z));
+            Assert.Equal(MathF.Pow(Math.Clamp(1f - 2.25577e-5f * z, 0.2f, 1.2f), 4.2559f), UnitSport.Avatar.CockpitInstruments.Sigma(z));
+        }
+        // the old formula was 60x too thin at 40 km and stuck at 3.6e-6 above 42 km
+        Assert.Equal(1, UnitSport.Player.AirlinerFlight.Density(40_000) / 3.9957e-3, 3);
+        Assert.Equal(1, UnitSport.Player.AirlinerFlight.Density(100_000) / 5.604e-7, 4);
+        Assert.Equal(0f, UnitSport.Player.AirlinerFlight.Density(200_000));
+        Assert.Equal(1, UnitSport.Avatar.CockpitInstruments.Sigma(20_000) / (0.08891 / 1.225), 3);
+    }
 }
 
 /// <summary>The orbit integrator (#1430 H5, src/Core/Orbit.cs): the phase's acceptance.</summary>
