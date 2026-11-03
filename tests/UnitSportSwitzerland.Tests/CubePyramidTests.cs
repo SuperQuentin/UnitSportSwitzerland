@@ -67,6 +67,24 @@ public class CubePyramidTests
     }
 
     [Fact]
+    public void A_coarse_tile_keeps_its_heights_to_half_its_own_quantum()
+    {
+        Assert.Equal(0.01f, CubeKey.QuantumFor(14));
+        Assert.Equal(0.01f, CubeKey.QuantumFor(13));
+        Assert.Equal(1f, CubeKey.QuantumFor(4));
+        Assert.Equal(1f, CubeKey.QuantumFor(0));
+
+        var key = CubeKey.FromLatLon(11.35, 142.2, 4); // the Mariana Trench
+        int bits = CubeKey.LatticeBits(4), n = (1 << bits) + 1;
+        var h = new float[n * n];
+        var rng = new Random(4);
+        for (int k = 0; k < h.Length; k++) h[k] = (float)(-10900 + rng.NextDouble() * 19800);
+        var back = CubeTileCodec.Decode(CubeTileCodec.Encode(new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(4), Heights = h }));
+        Assert.Equal(1f, back.Quantum);
+        for (int k = 0; k < h.Length; k += 97) Assert.InRange(Math.Abs(back.Heights[k] - h[k]), 0, 0.5001);
+    }
+
+    [Fact]
     public void A_version_one_manifest_is_its_leaf_level_alone()
     {
         var old = CubeManifest.FromJson("""{"version":1,"leafLevel":14,"bits":9,"bundleLevel":9,"tiles":[]}""");

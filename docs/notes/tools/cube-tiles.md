@@ -65,12 +65,38 @@ The globe (H4) and G2's far view are one pyramid in this format, from the leaves
 - **A coarse height is a function of its lattice point**, never of its tile: an average of the leaves
   takes the leaf vertices within half a coarse step of the point, the same from either neighbour, or
   the seams break (`--cube-check`'s shared-edge test catches it; run it on coarse levels too).
+- **Quantum by level**: `CubeKey.QuantumFor(level)`, a thousandth of the lattice step, 1 cm to 1 m
+  (1 cm at the leaves, 1 m from level 4 up), carried in each tile's header (`CubeTile.Quantum`): one
+  value a level, so shared edges quantise alike. At 1 cm the global levels 0-4 were 882 MB, at 1 m 359.
 - **Manifest version 2**: `levels`, one `CubeManifestLevel` each (bits, bundle level, colour size and
   colour bundle level); a version-1 manifest is its leaf level alone (`LevelsOrLeaf`).
 - **Colour** (`CubeAlbedo`, `CubeAlbedoCodec`, entries `CUBC`): 12 monthly images (or one) per tile,
   WebP, row-major from the south-west like the heights, pixel centres a half pixel in. Bundled by their
   own level in `.cuba` files (`CubeBundle.AlbedoMagic` "CUBA", the same index layout as `.cubb`);
   leaves carry none. Encoded and decoded by Godot's `Image`: the tools have no image library.
+
+### The global levels (`--cube-global`, `World/Globe/GlobeAlbedoBake`)
+
+```
+tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-global \
+  --etopo D:/UnitSportSwitzerland/data/global/etopo2022 --cube-out D:/UnitSportSwitzerland/cube_global \
+  [--cube-levels 0-4] [--cube-check]
+<godot> --headless --path . -- --globealbedo D:/UnitSportSwitzerland/cube_global \
+  [--bmng D:/UnitSportSwitzerland/data/global/bmng] [--months 1-12]
+```
+
+- Heights (`CubeGlobal`, `EtopoGrid`): ETOPO 2022 60″ surface plus its EGM2008 geoid grid, h = H + N,
+  in memory (0.9 GB, loaded in seconds); each lattice point the mean of up to 8 × 8 bilinear samples
+  over its own footprint. Bundles by `CubeKey.PyramidBundleLevel` (levels 0-3 under their face, then
+  three levels up). `--cube-check` keys every edge vertex of a level by its ECEF bits: 4.2 M edge
+  vertices, 0 differ, every face edge included. Levels 0-4: 2,046 tiles, 359 MB, 21 s; levels 0-2
+  (shipped) 34 MB of heights.
+- Colour (`GlobeAlbedoBake`, a Godot tool mode: Godot decodes the 21600 × 10800 JPEGs and encodes
+  WebP): Blue Marble NG topography and bathymetry, a month at a time, each pixel the mean of up to
+  6 × 6 bilinear samples over its footprint; 256² a tile (512² at level 3); 15 MB a month for levels
+  0-4, 25 s a month. Blue Marble draws inland lakes black (Ladoga, Onega): to recolour.
+- Sources on D: (`data/global/`, never in git): `etopo2022/` (public domain, NOAA NCEI) and `bmng/`
+  (credit "NASA Earth Observatory").
 
 ## The tiler (`--cube`)
 

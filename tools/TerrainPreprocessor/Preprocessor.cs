@@ -112,6 +112,8 @@ public static partial class Preprocessor
     {
         // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
         if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
+        // the globe's coarse levels from ETOPO 2022 (#1430 H4), in the same format
+        if (CubeGlobal.Wants(args)) return CubeGlobal.Run(args, ct);
 
         void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
 
