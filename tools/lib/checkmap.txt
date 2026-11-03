@@ -218,6 +218,7 @@ src/Interiors/Games/ quick --poolcheck --systems ui
 src/Interiors/Games/ net    tools/poolnetcheck.sh
 src/Interiors/Games/ quick --dartscheck --systems ui
 src/Interiors/Games/ net    tools/tablenetcheck.sh
+src/Interiors/Games/ quick --foosballcheck --systems ui
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck

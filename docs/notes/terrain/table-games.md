@@ -64,3 +64,22 @@ Code: `src/Interiors/Games/`, one folder per game beside it.
   (`--modelsyaw 0 --modelslook 0,1.73,0.02,0.9` faces the board).
 - **Reach**: a `GameSpec.Reach` per game; E searches `GameCatalog.MaxReach` and the game's `UseFrom` decides (a board
   from its throw line, 3.2 m).
+
+## Table football
+
+- **Game** (`FoosballGame`, pure and live, `FoosballTests`): the pitch 1.11 x 0.63 m (x along, z across), goals 19 cm,
+  ball 17 mm; eight rods (1, 2, 3, 5, 5, 3, 2, 1, red's goalie at −x), each a slide and a turn θ (0 hanging); a figure
+  blocks while |θ| < 0.55, its foot reaching sin θ x 7.5 cm; a kick swings at 28 rad/s and the foot's speed goes into
+  the ball. A ball still for 2.5 s is dead and served again from the side (the middle of two rods is out of every
+  foot's reach). First to 10. Seats: 0 red, 1 blue run all their rods; 2 and 3, if taken, the front rods (midfield,
+  attack).
+- **Wire**: a seat's controls are two bytes (slide −127..127 as +z, kick and lift flags), 30 a second, unreliable; the
+  poses (ball, its speed, the rods) 48 bytes, 20 a second; goals and calls in the state, on change.
+- **Bot** (`FoosballGame.Bot`, asked ten times a second): lines up the nearest figure of its rod nearest the ball with
+  where the ball was a moment ago, kicks a ball just in front, lifts a front rod for a ball behind it.
+- **Rig** (`FoosballRig`): the whole table (the venues place it 1.5 x 0.8 and 0.75 x 1.4: laid along the longer side),
+  box and pitch as shared meshes, each rod a node carrying its figures and handle (red's handles at −z), the ball a
+  node, the score as beads; poses eased and the ball carried on by its speed. The room mesh draws nothing for it.
+- **Controls** (`FoosballPlay`): from your side, looking across; W / S push and pull, Jump kicks, Sprint lifts.
+- **Checks**: `--foosballcheck --systems ui` (both orientations, two bots to ten), `GAME=TableFootball
+  tools/tablenetcheck.sh` (each player's push seen by the other, the ball streamed, the same score, a bot's rods).

@@ -37,14 +37,26 @@ public partial class TableNetProbe : ChatProbe
         var games = TableGames.Instance!;
         if (!Enum.TryParse<FurnitureType>(CmdArgs.Value("--tablegame") ?? "", out var type) || GameCatalog.Of(type) is not { } spec) { Fail("--tablegame names no playable piece"); return; }
         string doorArg = CmdArgs.Value("--tabledoor") ?? "";
-        if (!DoorKey.TryParse(doorArg, out var doorKey)) { Fail($"--tabledoor {doorArg} is not a door"); return; }
+        string? venue = CmdArgs.Value("--tablevenue");
         var (e, n) = SpawnPoint.ParseTarget();
         var spot = _origin.ToWorld(e, n, 0);
         me.GlobalPosition = new Vector3(spot.X, me.GlobalPosition.Y + 2, spot.Z);
         me.Velocity = Vector3.Zero;
         me.RequestReplacement();
         DoorIndex.Entry? door = null;
-        if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.Find(doorKey)) != null, 150)) { Fail($"no door {doorArg} near"); return; }
+        if (venue != null)
+        {
+            // a venue by name: its first door the index holds
+            if (await interiors.BuildingFor(venue) is not { } building) { Fail($"no venue \"{venue}\""); return; }
+            if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.All().Where(d => d.Key.Building == building).OrderBy(d => d.Key.Slot).Cast<DoorIndex.Entry?>().FirstOrDefault()) != null, 150))
+            { Fail($"no door of {venue} ({building}) near"); return; }
+            GD.Print($"{Log} {venue}: building {building}, door {door!.Value.Key}");
+        }
+        else
+        {
+            if (!DoorKey.TryParse(doorArg, out var doorKey)) { Fail($"--tabledoor {doorArg} is not a door"); return; }
+            if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.Find(doorKey)) != null, 150)) { Fail($"no door {doorArg} near"); return; }
+        }
         if (!await WalkIn(me, interiors, door!.Value)) return;
         var layout = interiors.Current!;
         var node = interiors.CurrentNode!;
@@ -69,6 +81,11 @@ public partial class TableNetProbe : ChatProbe
         if (_role == "A") Expect(await Until(() => Game()?.Seated == 2, 300), "both seats are taken");
         else await Until(() => Game()?.Seated == 2, 60);
 
+        if (Game() is { Live: true })
+        {
+            await Live(games, key, index, myId);
+            return;
+        }
         var rng = new Random(_role == "A" ? 1 : 2);
         int mine = 0, compared = 0;
         string last = State(Game());
@@ -132,6 +149,73 @@ public partial class TableNetProbe : ChatProbe
                 await Seconds(0.5);
             }
             Expect(botMoved, "the bot played its turn on the server");
+            TableGamePlay.Current?.QueueFree();
+            Expect(await Until(() => Game()?.Seated == 0, 10), "the bot left with the last player");
+        }
+        await Finish(3);
+    }
+
+    /// <summary>
+    /// A live game (table football): each player in turn pushes their rods for a moment through the controls; the other
+    /// must see those rods slide in the streamed poses, and the ball move. Both read the same score from the state.
+    /// B steps back; A adds a bot, whose rods the server moves.
+    /// </summary>
+    private async Task Live(TableGames games, string key, int index, long myId)
+    {
+        TableGame? Game() => games.GameAt(key, index);
+        string other = _role == "A" ? "B" : "A";
+        int myTeam = Foosball.FoosballGame.TeamOf(Game()!.SeatOf(myId));
+        float RodsOf(int team)
+        {
+            if (Game() is not Foosball.FoosballGame f) return 0;
+            float sum = 0;
+            for (int rod = 0; rod < 8; rod++) if (Foosball.FoosballGame.Team[rod] == team) sum += f.Slide[rod];
+            return sum;
+        }
+        var ballFrom = (Game() as Foosball.FoosballGame)?.BallAt ?? Vector2.Zero;
+        Expect(await Until(() => Game() is Foosball.FoosballGame { InPlay: true } f && f.BallAt.DistanceTo(ballFrom) > 0.02f, 20), $"{_role} sees the ball run");
+        foreach (string pusher in new[] { "A", "B" })
+        {
+            if (pusher == _role)
+            {
+                await Heard(other, "watching", 20);
+                Input.ActionPress(PlayerInput.MoveForward);
+                await Seconds(1.0);
+                Input.ActionRelease(PlayerInput.MoveForward);
+                Say("pushed");
+            }
+            else
+            {
+                int team = 1 - myTeam;
+                float before = RodsOf(team);
+                Say("watching");
+                await Heard(pusher, "pushed", 20);
+                // the pusher's rods moved away from them: red's towards +z, blue's towards −z
+                float moved = (RodsOf(team) - before) * (team == 0 ? 1 : -1);
+                Expect(moved > 0.05f, $"{_role} saw {pusher}'s rods slide ({moved * 100:F1} cm in all)");
+            }
+        }
+        await Seconds(1.0);
+        string score = Game() is Foosball.FoosballGame g ? $"{g.Goals[0]}:{g.Goals[1]}" : "";
+        Say($"score {score}");
+        string? theirs = await HeardStarting(other, "score ", 20);
+        Expect(theirs == $"score {score}", $"both read the same score ({score} / {theirs})");
+        Say("done turns");
+        await Heard(other, "done turns", 60);
+        if (_role == "B")
+        {
+            TableGamePlay.Current?.QueueFree();
+            Expect(await Until(() => Game()?.SeatOf(myId) < 0, 10), "B stepped back");
+            Say("left");
+        }
+        else
+        {
+            await Heard("B", "left", 30);
+            games.AskBot(key, index);
+            Expect(await Until(() => Game()?.Seats.Any(TableGame.IsBot) == true, 10), "a bot took the free seat");
+            float before = RodsOf(1 - myTeam);
+            bool moved = await Until(() => Mathf.Abs(RodsOf(1 - myTeam) - before) > 0.03f, 20);
+            Expect(moved, "the bot's rods move on the server");
             TableGamePlay.Current?.QueueFree();
             Expect(await Until(() => Game()?.Seated == 0, 10), "the bot left with the last player");
         }

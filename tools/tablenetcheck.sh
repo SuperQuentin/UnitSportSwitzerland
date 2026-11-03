@@ -10,11 +10,14 @@ if [ -z "${CHUNKS:-}" ] || [ ! -d "$CHUNKS" ]; then echo "[tablenetcheck] no CHU
 # BowlinGland's side door on the lanes' wall (its main door reads as one with no doorway)
 AT=${AT:-2510427,1140980}
 DOOR=${DOOR:-2510_1140_26_2}
-WORLD="--chunks $CHUNKS --origin 2510000,1140000 --traffic 0 --at $AT --tabledoor $DOOR --tablegame ${GAME:-DartBoard}"
+ORIGIN=${ORIGIN:-2510000,1140000}
+# a venue by name instead of a door (VENUE="Billard Bluff" ORIGIN=2501000,1117000 AT=2501440,1117640: its table football)
+if [ -n "${VENUE:-}" ]; then PLACE=(--tablevenue "$VENUE"); else PLACE=(--tabledoor "$DOOR"); fi
+WORLD="--chunks $CHUNKS --origin $ORIGIN --traffic 0 --at $AT --tablegame ${GAME:-DartBoard}"
 rm -f "$OUT"/tablenet_A.log "$OUT"/tablenet_B.log
-tc_server 1200 150 "$OUT/tablenet_server.log" --server --port $PORT --chunks "$CHUNKS" --origin 2510000,1140000
-tc_client 1100 "$OUT/tablenet_A.log" --connect 127.0.0.1:$PORT --name TableNetA $WORLD --tablenet A & A=$!
-tc_client 1100 "$OUT/tablenet_B.log" --connect 127.0.0.1:$PORT --name TableNetB $WORLD --tablenet B & B=$!
+tc_server 1200 150 "$OUT/tablenet_server.log" --server --port $PORT --chunks "$CHUNKS" --origin $ORIGIN
+tc_client 1100 "$OUT/tablenet_A.log" --connect 127.0.0.1:$PORT --name TableNetA $WORLD "${PLACE[@]}" --tablenet A & A=$!
+tc_client 1100 "$OUT/tablenet_B.log" --connect 127.0.0.1:$PORT --name TableNetB $WORLD "${PLACE[@]}" --tablenet B & B=$!
 wait $A $B
 tc_stop
 grep -ah "\[tablenet\|\[games\]" "$OUT/tablenet_server.log" "$OUT/tablenet_A.log" "$OUT/tablenet_B.log" | head -60

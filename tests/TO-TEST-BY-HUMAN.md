@@ -34,6 +34,14 @@ BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2
 - [ ] Three darts, then the next player; a bust goes back; the checkout hint (e.g. "out: T20 D20") is right; E alone adds a bot that throws its visits.
 - [ ] The same on a pad and a phone; VR through the pad (throwing by hand is a gap).
 
+## Table football ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+A bar with a table (`/enter` a pub or a bar; the arcade's grouped tables too).
+
+- [ ] E at the table → your side (red first), looking across; W / S slides your rods towards and away from you, Space kicks (the ball shoots up the table), Shift lifts the rods; the ball is served from the side; a goal moves a bead and says the score; first to 10.
+- [ ] E again alone → a bot takes blue and plays; online with a friend, each sees the other's rods and the ball smoothly (it's streamed 20 times a second).
+- [ ] Pad and phone the same; VR through the pad (gripping the handles is a gap). Does it feel playable, and are the kicks strong enough?
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.
