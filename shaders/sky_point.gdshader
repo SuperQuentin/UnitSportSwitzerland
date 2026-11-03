@@ -16,22 +16,27 @@ uniform float distance = 1000.0;
 uniform float daylight = 0.0;
 // a planet's point: its size (px) and colour from the uniforms, not the vertex
 uniform bool single = false;
+// satellites (src/World/Satellites.cs): a MultiMesh whose instances stand at their directions (unit
+// vectors from the camera), their colour the instance's, their size its custom x
+uniform bool instanced = false;
 uniform vec4 point_color : source_color = vec4(1.0);
 uniform float point_size = 2.0;
 
 varying vec4 tint;
 
 void vertex() {
-	vec3 dir = single ? normalize(sky[0]) : normalize(sky * VERTEX);
+	vec3 dir = instanced ? normalize(MODEL_MATRIX[3].xyz) : single ? normalize(sky[0]) : normalize(sky * VERTEX);
 	vec3 cam = INV_VIEW_MATRIX[3].xyz;
 	vec4 clip = PROJECTION_MATRIX * (VIEW_MATRIX * vec4(cam + dir * distance, 1.0));
 	vec2 corner = UV * 2.0 - 1.0;
-	float px = single ? point_size : UV2.x;
+	float px = instanced ? INSTANCE_CUSTOM.x : single ? point_size : UV2.x;
 	clip.xy += corner * px * 2.0 / VIEWPORT_SIZE * clip.w;
 	POSITION = clip;
 	float horizon = smoothstep(-0.01, 0.1, dir.y);
 	float dark = max(smoothstep(0.35, 0.95, world_night), daylight);
 	vec4 c = single ? point_color : COLOR;
+	// a satellite shows only while it is sunlit over a dark sky: the node hides the rest
+	if (instanced) dark = 1.0;
 	tint = vec4(c.rgb, c.a * horizon * dark);
 }
 

@@ -48,7 +48,7 @@ public partial class TelescopeView : CanvasLayer
     private Label _readout = null!, _hint = null!;
     private Control _mask = null!;
     private string _hintShown = "";
-    private (float Focal, bool Locked, SkyBody Target) _readoutShown = (-1f, false, SkyBody.Moon);
+    private (float Focal, bool Locked, string Target) _readoutShown = (-1f, false, "");
 
     /// <summary>Opens the view through telescope <paramref name="id"/> (its node <paramref name="scope"/>).</summary>
     public static void Begin(Telescopes service, long id, Node3D scope, Player.FootPlayer? player)
@@ -150,23 +150,30 @@ public partial class TelescopeView : CanvasLayer
         }
         var (target, off) = (SkyBody.Moon, Mathf.RadToDeg(Direction.AngleTo(sky.Moon)));
         if (World.SkyBodies.Instance?.Nearest(Direction) is { } planet && planet.OffDeg < off) (target, off) = (planet.Id, planet.OffDeg);
+        string? satellite = null;
+        if (World.Satellites.Instance?.Nearest(Direction) is { } sat && Mathf.RadToDeg(sat.Direction.AngleTo(Direction)) is var satOff && satOff < off)
+            (satellite, off) = (sat.Name, satOff);
         if (!TelescopeOptics.CanLock(off, Focal))
         {
-            ItemController.Instance?.Toast("Point it at the moon or a planet first.");
+            ItemController.Instance?.Toast("Point it at the moon, a planet or a satellite first.");
             return false;
         }
         Target = target;
+        Satellite = satellite;
         Locked = true;
         return true;
     }
 
+    /// <summary>The satellite it follows while <see cref="Locked"/> (its name), or null for <see cref="Target"/>.</summary>
+    public string? Satellite { get; private set; }
+
     /// <summary>Where <see cref="Target"/> is this frame, if the sky shows it.</summary>
-    private Vector3? TargetDirection() => Target == SkyBody.Moon
-        ? World.DayNight.Instance?.Sky?.Moon
+    private Vector3? TargetDirection() => Satellite != null ? World.Satellites.Instance?.DirectionOf(Satellite)
+        : Target == SkyBody.Moon ? World.DayNight.Instance?.Sky?.Moon
         : World.SkyBodies.Instance?.DirectionOf(Target);
 
     /// <summary>The target's name for the readout.</summary>
-    private string TargetName => Target == SkyBody.Moon ? "the moon" : Target.ToString();
+    private string TargetName => Satellite ?? (Target == SkyBody.Moon ? "the moon" : Target.ToString());
 
     /// <summary>The tube's direction in world axes.</summary>
     public Vector3 Direction => new Basis(Vector3.Up, Yaw) * new Basis(Vector3.Right, Pitch) * Vector3.Forward;
@@ -322,9 +329,9 @@ public partial class TelescopeView : CanvasLayer
 
     private void UpdateHud()
     {
-        if (_readoutShown != (Focal, Locked, Target))
+        if (_readoutShown != (Focal, Locked, TargetName))
         {
-            _readoutShown = (Focal, Locked, Target);
+            _readoutShown = (Focal, Locked, TargetName);
             _readout.Text = $"{Focal:0} mm   ×{TelescopeOptics.Magnification(Focal):0.#}{(Locked ? $"   locked on {TargetName}" : "")}";
         }
         string hint = Hint();

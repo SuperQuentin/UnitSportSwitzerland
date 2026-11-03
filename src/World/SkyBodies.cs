@@ -75,6 +75,10 @@ public partial class SkyBodies : Node3D
         RenderingServer.FramePreDraw -= Place;
     }
 
+    // placed in the frame too, where a headless run never draws (the checks, the telescope's lock); again
+    // just before drawing, from where the camera ended up (the ephemeris is not worked out twice)
+    public override void _Process(double delta) => Place();
+
     public override void _Ready()
     {
         TopLevel = true;

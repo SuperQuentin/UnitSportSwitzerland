@@ -151,6 +151,22 @@ public static class SunPath
         return new Basis(Axis(x), Axis(y), Axis(z));
     }
 
+    /// <summary>
+    /// The Earth-fixed frame at LV95 <paramref name="e"/> / <paramref name="n"/> (#1444): the basis taking an
+    /// Earth-fixed offset (metres) into world axes, and the place itself on the ellipsoid. A satellite's
+    /// direction is <c>Basis * (its ECEF - Observer)</c>.
+    /// </summary>
+    public static (Basis ToWorld, EcefPos Observer) EarthFrame(double e, double n)
+    {
+        var place = PlaceAt(e, n);
+        Vector3 Axis(double x, double y, double z)
+        {
+            var h = Ephemeris.Local(new EcefPos(x, y, z), place.Geo);
+            return ToWorld(h, place);
+        }
+        return (new Basis(Axis(1, 0, 0), Axis(0, 1, 0), Axis(0, 0, 1)), Ellipsoid.Wgs84.ToEcef(place.Geo));
+    }
+
     /// <summary>True east / north / up into world axes: turned by the meridian convergence to grid north.</summary>
     private static Vector3 ToWorld(Horizontal h, Place place)
     {
