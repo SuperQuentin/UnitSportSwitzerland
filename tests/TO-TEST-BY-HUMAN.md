@@ -47,6 +47,13 @@ An arcade, with some cash in your pocket (`/enter` one; Billard Bluff, Geneva).
 - [ ] At air hockey, Jump → a Batzen goes in and the puck comes out; with none, it points you to the change machine. At the game's end, tickets print into your pack (two a goal, eight more for the winner).
 - [ ] E at the prize counter → the panel: your tickets, each prize and its price, the ones you can't afford greyed with how many more; Swap gives the prize (it's in the pack, the plush throws like the Blåhaj). Pad and VR pointer work it; Esc / B / E closes it.
 
+## Claw machine ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade's claw machines (by the door), with a few Batzen.
+
+- [ ] E at the machine's front → looking in; Jump puts a Batzen in (the countdown starts at 30), the stick steers the claw as you see it, V looks from the side to judge depth, Jump drops: down, closed, up, back to the chute. A win drops the plush into your pack with a jingle; a near miss says so.
+- [ ] Does it feel fair? (right over a prize wins about half the time, a few cm off much less, and a prize can slip on the way up.)
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.

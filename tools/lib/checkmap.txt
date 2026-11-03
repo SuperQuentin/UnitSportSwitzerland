@@ -221,6 +221,7 @@ src/Interiors/Games/ net    tools/tablenetcheck.sh
 src/Interiors/Games/ quick --foosballcheck --systems ui
 src/Interiors/Games/ quick --airhockeycheck --systems ui
 src/Interiors/Games/ quick --prizecheck --systems ui
+src/Interiors/Games/ quick --clawcheck --systems ui
 src/Items/ItemIcons quick --prizecheck --systems ui
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck

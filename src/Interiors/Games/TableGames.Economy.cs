@@ -31,27 +31,31 @@ public partial class TableGames
     private void PayOut(TableGame g)
     {
         if (g.Payouts.Count == 0) return;
-        foreach (var (peer, tickets, why) in g.Payouts)
+        foreach (var (peer, item, count, why) in g.Payouts)
         {
             if (IsBot(peer)) continue;
-            GD.Print($"[games] {NameOf(peer)} wins {tickets} tickets ({why})");
-            if (peer == MyId || !Online) Tickets(tickets, why);
-            else if (peer > 0 && Multiplayer.GetPeers().Contains((int)peer)) RpcId(peer, MethodName.Tickets, tickets, why);
+            GD.Print($"[games] {NameOf(peer)} wins {count} {item} ({why})");
+            if (peer == MyId || !Online) Won((int)item, count, why);
+            else if (peer > 0 && Multiplayer.GetPeers().Contains((int)peer)) RpcId(peer, MethodName.Won, (int)item, count, why);
         }
         g.Payouts.Clear();
     }
 
-    /// <summary>Client: tickets won, into the pack.</summary>
+    /// <summary>Client: tickets or a prize won, into the pack (a prize that does not fit drops at the player's feet).</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Tickets(int tickets, string why)
+    private void Won(int item, int count, string why)
     {
-        TicketsWon += tickets;
+        var id = (ItemId)item;
+        if (id == ItemId.PrizeTicket) TicketsWon += count;
+        else PrizesWon += count;
         if (Items == null) return;
-        Items.Inventory.Add(ItemId.PrizeTicket, tickets);
-        Items.Toast($"+{tickets} prize tickets ({why})");
-        ArcadeSounds.Play(ArcadeSounds.Tickets);
+        int left = Items.Inventory.Add(id, count);
+        if (left > 0) Items.DropStack(null, new ItemStack(id, left));
+        Items.Toast(id == ItemId.PrizeTicket ? $"+{count} prize tickets ({why})" : $"{ItemDefs.Get(id)?.Name} from {why}!");
+        ArcadeSounds.Play(id == ItemId.PrizeTicket ? ArcadeSounds.Tickets : ArcadeSounds.Coins);
     }
 
-    /// <summary>Client: the tickets this peer was paid since it started (the checks read it).</summary>
+    /// <summary>Client: the tickets and prizes this peer was paid since it started (the checks read them).</summary>
     public int TicketsWon { get; private set; }
+    public int PrizesWon { get; private set; }
 }

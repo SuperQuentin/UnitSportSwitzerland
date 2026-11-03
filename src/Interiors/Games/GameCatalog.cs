@@ -31,6 +31,7 @@ public static class GameCatalog
         Add(Darts.DartsPlay.Spec);
         Add(Foosball.FoosballPlay.Spec);
         Add(AirHockey.AirHockeyPlay.Spec);
+        Add(Claw.ClawPlay.Spec);
     }
 
     public static void Add(GameSpec spec) => Specs.Add(spec);

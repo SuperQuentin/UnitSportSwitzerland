@@ -202,7 +202,7 @@
     <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />
-    <!-- table games (#1324): the shared game base, pool's solver and rules, darts' board and rules, table football, air hockey, Godot maths only -->
+    <!-- table games (#1324): the shared game base, pool's solver and rules, darts' board and rules, table football, air hockey, the claw, Godot maths only -->
     <Compile Include="..\..\src\Interiors\Games\TableGame.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Games\Pool\PoolSolver.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Games\Pool\PoolGame.cs" Link="Game\%(Filename)%(Extension)" />
@@ -210,6 +210,7 @@
     <Compile Include="..\..\src\Interiors\Games\Darts\DartsGame.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Games\Foosball\FoosballGame.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Games\AirHockey\AirHockeyGame.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Games\Claw\ClawGame.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- pinball (#1325): the table as data, the ball's solver and the rules, Godot maths only -->
     <Compile Include="..\..\src\Interiors\Pinball\PinballTable.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Pinball\PinballLayouts.cs" Link="Game\%(Filename)%(Extension)" />
