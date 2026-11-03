@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
-# Install Godot mono and its export templates on a CI runner. Used by .github/workflows/release.yml.
-# Env: GODOT_VERSION (4.7.2-stable), GODOT (where to put the binary: <dir>/godot).
+# Install Godot mono and its export templates on a CI runner. Used by .github/workflows/release.yml (Linux)
+# and ios.yml (macOS, #1025).
+# Env: GODOT_VERSION (4.7.2-stable), GODOT (where to put the binary: <dir>/godot; on macOS a wrapper script
+# that runs the binary inside the .app, which has to stay whole: GodotSharp/ is in its Resources).
 # The templates must land in <version>.<status>.mono ("4.7.2.stable.mono"), the name Godot looks for;
 # anything else and every export silently produces nothing.
 set -euo pipefail
 GODOT_VERSION=${GODOT_VERSION:-4.7.2-stable}
 GODOT=${GODOT:?set GODOT to the path the binary should have}
 base=https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION
-templates="$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-/.}.mono"
+if [ "$(uname)" = Darwin ]; then templates="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION/-/.}.mono"
+else templates="$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-/.}.mono"; fi
 
 mkdir -p "$(dirname "$GODOT")" "$(dirname "$templates")"
 
+if [ "$(uname)" = Darwin ]; then
+curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}_mono_macos.universal.zip"
+unzip -q /tmp/godot.zip -d /tmp/godot
+app=$(find /tmp/godot -maxdepth 2 -type d -name '*.app' | head -1)
+[ -n "$app" ] || { echo "No .app in $base/Godot_v${GODOT_VERSION}_mono_macos.universal.zip"; ls -R /tmp/godot | head -30; exit 1; }
+rm -rf "$(dirname "$GODOT")/Godot_mono.app"; mv "$app" "$(dirname "$GODOT")/Godot_mono.app"
+printf '#!/bin/sh\nexec "%s/Godot_mono.app/Contents/MacOS/Godot" "$@"\n' "$(dirname "$GODOT")" > "$GODOT"
+chmod +x "$GODOT"
+else
 # Editor (~100 MB). The zip may or may not wrap everything in a folder, so find the binary itself;
 # GodotSharp/ has to stay beside it, which is why the whole directory is copied.
 curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
@@ -20,6 +32,7 @@ bin=$(find /tmp/godot -type f -name 'Godot_v*_mono_linux.x86_64' | head -1)
 cp -r "$(dirname "$bin")/." "$(dirname "$GODOT")/"
 mv "$(dirname "$GODOT")/$(basename "$bin")" "$GODOT"
 chmod +x "$GODOT"
+fi
 
 # Export templates (~1.15 GB): the tpz is a zip holding a single templates/ directory.
 curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}_mono_export_templates.tpz"

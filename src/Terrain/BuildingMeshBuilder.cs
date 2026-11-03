@@ -209,7 +209,7 @@ public static partial class BuildingMeshBuilder
     /// <summary>
     /// Each building as its roof on walls (#1112): its surveyed roof triangles where they are, in its roof colour, and a
     /// wall in its wall colour from its floor up to every outer edge of that roof, no window grid (UV.y &lt; 0). The far
-    /// stand-in a standalone headset draws past <see cref="ChunkNode.ProxyFromM"/>: the building's own outline and
+    /// stand-in drawn past <see cref="LodPolicy.BuildingBoxFromM"/>: the building's own outline and
     /// roofline, courtyards and all (a plan box reached across the street of an L or a ring), with a few dozen triangles
     /// where the drawn building has hundreds. Its windows have faded out by then (building.gdshaderinc), so it takes
     /// over unseen.
