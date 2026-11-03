@@ -45,6 +45,20 @@ public partial class GlobeAlbedoBake : Node
         var sw = Stopwatch.StartNew();
         GD.Print($"[globealbedo] {keys.Count} tiles, months {first}-{last}");
 
+        // the world's own colour over its region (--ours <chunk dir>, default the D: build; "off" none):
+        // worked out once a tile, then blended into every month
+        string? oursDir = CmdArgs.Value("--ours") ?? "D:/UnitSportSwitzerland/terrain_chunks";
+        var oursByKey = new ConcurrentDictionary<CubeKey, (Vector3[] Stored, float[] Weight)>();
+        if (oursDir != "off" && Directory.Exists(oursDir))
+        {
+            var ours = new OurColours(oursDir);
+            await Task.Run(() => Parallel.ForEach(keys, key =>
+            {
+                if (OursFor(ours, key, SizeFor(key.Level)) is { } o) oursByKey[key] = o;
+            }));
+            GD.Print($"[globealbedo] the world's own colour from {ours.Count} tiles into {oursByKey.Count} globe tiles, {sw.Elapsed.TotalSeconds:F0} s");
+        }
+
         // month by month: one 21600 x 10800 image (700 MB) at a time
         var images = new ConcurrentDictionary<CubeKey, byte[][]>();
         foreach (var k in keys) images[k] = new byte[last - first + 1][];
@@ -63,6 +77,7 @@ public partial class GlobeAlbedoBake : Node
             {
                 int size = SizeFor(key.Level);
                 var px = Pixels(map, key, size);
+                if (oursByKey.TryGetValue(key, out var o)) Blend(px, o.Stored, o.Weight);
                 // WebP from Godot on a worker: Image is a Resource, created and encoded per tile
                 var img = Image.CreateFromData(size, size, false, Image.Format.Rgb8, px);
                 images[key][month - first] = img.SaveWebpToBuffer(true, 0.85f);
@@ -88,7 +103,8 @@ public partial class GlobeAlbedoBake : Node
             lv.Albedo = SizeFor(lv.Level);
             lv.AlbedoBundleLevel = CubeKey.PyramidBundleLevel(lv.Level);
         }
-        manifest.Sources.RemoveAll(s => s.StartsWith("NASA", StringComparison.Ordinal));
+        manifest.Sources.RemoveAll(s => s.StartsWith("NASA", StringComparison.Ordinal) || s.StartsWith("the world's", StringComparison.Ordinal));
+        if (!oursByKey.IsEmpty) manifest.Sources.Add($"the world's own ground colour (CoverPalette) over its region, feathered {OurColours.FeatherM / 1000:F0} km into it, stored for the Cartoon globe");
         manifest.Sources.Add("NASA Earth Observatory, Blue Marble Next Generation with topography and bathymetry, 2004, monthly, 21600 x 10800 (credit NASA Earth Observatory)");
         File.WriteAllText(manifestPath, manifest.ToJson());
         GD.Print(string.Create(CultureInfo.InvariantCulture,
@@ -129,6 +145,60 @@ public partial class GlobeAlbedoBake : Node
             lock (gate) painted += count;
         });
         return painted;
+    }
+
+    /// <summary>
+    /// The world's colour for a globe tile over its region: per pixel what to store (for the Cartoon
+    /// shader, <see cref="OurColours.ForCartoonShader"/>) and how much it counts; null when the tile is
+    /// nowhere near the region.
+    /// </summary>
+    public static (Vector3[] Stored, float[] Weight)? OursFor(OurColours ours, CubeKey key, int size)
+    {
+        // near Switzerland at all (the tile's angular radius plus 3°), then its LV95 box against the data's
+        var c = key.Centre;
+        double radius = 90.0 / key.Side * 0.8 + 3;
+        if (Math.Abs(c.LatDeg - 46.8) > radius + 2 || Math.Abs(c.LonDeg - 8.2) * Math.Cos(46.8 * Math.PI / 180) > radius + 3) return null;
+        double minE = double.MaxValue, minN = double.MaxValue, maxE = double.MinValue, maxN = double.MinValue;
+        foreach (var (u, v) in new[] { (0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.0), (0.0, 0.5), (1.0, 0.5), (0.5, 1.0), (0.5, 0.5) })
+        {
+            var (e, n, _) = SwissGeodesy.FromEcef(CubeSphere.ToEcef(key.Face, key.U0 + u * key.Size, key.V0 + v * key.Size, 0));
+            minE = Math.Min(minE, e); maxE = Math.Max(maxE, e); minN = Math.Min(minN, n); maxN = Math.Max(maxN, n);
+        }
+        if (!ours.Touches(minE, minN, maxE, maxN)) return null;
+
+        var stored = new Vector3[size * size];
+        var weight = new float[size * size];
+        double step = key.Size / size, half = 0.5 * (Math.PI / 2 * 6_371_000 / key.Side / size);
+        bool any = false;
+        for (int py = 0; py < size; py++)
+            for (int px = 0; px < size; px++)
+            {
+                var (e, n, _) = SwissGeodesy.FromEcef(CubeSphere.ToEcef(key.Face, key.U0 + (px + 0.5) * step, key.V0 + (py + 0.5) * step, 0));
+                if (!ours.Touches(e - half, n - half, e + half, n + half)) continue;
+                var (colour, w) = ours.At(e, n, half);
+                if (w <= 0) continue;
+                stored[py * size + px] = OurColours.ForCartoonShader(colour);
+                weight[py * size + px] = w;
+                any = true;
+            }
+        return any ? (stored, weight) : null;
+    }
+
+    /// <summary>The month's sRGB pixels with the world's colour mixed in, in linear light, by its weight.</summary>
+    public static void Blend(byte[] px, Vector3[] stored, float[] weight)
+    {
+        for (int p = 0; p < weight.Length; p++)
+        {
+            float w = weight[p];
+            if (w <= 0) continue;
+            int o = p * 3;
+            for (int c = 0; c < 3; c++)
+            {
+                float photo = Mathf.Pow(px[o + c] / 255f, 2.2f);
+                float mixed = Mathf.Lerp(photo, stored[p][c], w);
+                px[o + c] = (byte)Math.Clamp(Math.Round(Mathf.Pow(mixed, 1 / 2.2f) * 255), 0, 255);
+            }
+        }
     }
 
     /// <summary>A tile's size² RGB pixels, row-major from its south-west corner (row 0 along its south edge).</summary>
