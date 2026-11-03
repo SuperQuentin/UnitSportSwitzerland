@@ -90,6 +90,72 @@ public static class Ephemeris
     }
 
     /// <summary>
+    /// The moon's own axes in the Earth-fixed frame (#1440): <c>Pole</c> its north pole, <c>Prime</c>
+    /// the point 0° N 0° E of its surface (the near side's centre), <c>East</c> 90° E, all unit
+    /// vectors. The IAU WGCCRE 2009 rotation model (pole and prime meridian with their periodic
+    /// terms, in the ICRF), precessed to the equator of date (Meeus 21.3) and turned by sidereal
+    /// time. Libration falls out of it: the sub-Earth point wanders ±7° round 0° / 0°.
+    /// </summary>
+    public static (EcefPos Pole, EcefPos Prime, EcefPos East) MoonAxes(DateTime utc)
+    {
+        double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0, t = d / 36525.0;
+        double E(double a, double b) => (a + b * d) * Deg;
+        double e1 = E(125.045, -0.0529921), e2 = E(250.089, -0.1059842), e3 = E(260.008, 13.0120009),
+            e4 = E(176.625, 13.3407154), e5 = E(357.529, 0.9856003), e6 = E(311.589, 26.4057084),
+            e7 = E(134.963, 13.0649930), e8 = E(276.617, 0.3287146), e9 = E(34.226, 1.7484877),
+            e10 = E(15.134, -0.1589763), e11 = E(119.743, 0.0036096), e12 = E(239.961, 0.1643573),
+            e13 = E(25.053, 12.9590088);
+        double a0 = 269.9949 + 0.0031 * t - 3.8787 * Math.Sin(e1) - 0.1204 * Math.Sin(e2) + 0.0700 * Math.Sin(e3)
+            - 0.0172 * Math.Sin(e4) + 0.0072 * Math.Sin(e6) - 0.0052 * Math.Sin(e10) + 0.0043 * Math.Sin(e13);
+        double d0 = 66.5392 + 0.0130 * t + 1.5419 * Math.Cos(e1) + 0.0239 * Math.Cos(e2) - 0.0278 * Math.Cos(e3)
+            + 0.0068 * Math.Cos(e4) - 0.0029 * Math.Cos(e6) + 0.0009 * Math.Cos(e7) + 0.0008 * Math.Cos(e10)
+            - 0.0009 * Math.Cos(e13);
+        double w = 38.3213 + 13.17635815 * d - 1.4e-12 * d * d + 3.5610 * Math.Sin(e1) + 0.1208 * Math.Sin(e2)
+            - 0.0642 * Math.Sin(e3) + 0.0158 * Math.Sin(e4) + 0.0252 * Math.Sin(e5) - 0.0066 * Math.Sin(e6)
+            - 0.0047 * Math.Sin(e7) - 0.0046 * Math.Sin(e8) + 0.0028 * Math.Sin(e9) + 0.0052 * Math.Sin(e10)
+            + 0.0040 * Math.Sin(e11) + 0.0019 * Math.Sin(e12) - 0.0044 * Math.Sin(e13);
+        a0 *= Deg; d0 *= Deg; w *= Deg;
+
+        // ICRF: the pole, the node of the moon's equator on the ICRF equator, the prime meridian W past it
+        var pole = new EcefPos(Math.Cos(d0) * Math.Cos(a0), Math.Cos(d0) * Math.Sin(a0), Math.Sin(d0));
+        var node = new EcefPos(-Math.Sin(a0), Math.Cos(a0), 0);
+        var across = Cross(pole, node);
+        var prime = Scale(node, Math.Cos(w)) + Scale(across, Math.Sin(w));
+
+        double gast = SiderealTime(utc);
+        EcefPos ToEarth(EcefPos v) => Spin(Precess(v, t), -gast);
+        var p = ToEarth(pole);
+        var m = ToEarth(prime);
+        return (p, m, Cross(p, m));
+    }
+
+    /// <summary>A J2000 (ICRF) direction to the mean equator and equinox of date (Meeus 21.3).</summary>
+    private static EcefPos Precess(EcefPos v, double t)
+    {
+        double zeta = (2306.2181 * t + 0.30188 * t * t + 0.017998 * t * t * t) / 3600 * Deg;
+        double z = (2306.2181 * t + 1.09468 * t * t + 0.018203 * t * t * t) / 3600 * Deg;
+        double theta = (2004.3109 * t - 0.42665 * t * t - 0.041833 * t * t * t) / 3600 * Deg;
+        double ra = Math.Atan2(v.Y, v.X), dec = Math.Asin(Math.Clamp(v.Z, -1, 1));
+        double a = Math.Cos(dec) * Math.Sin(ra + zeta);
+        double b = Math.Cos(theta) * Math.Cos(dec) * Math.Cos(ra + zeta) - Math.Sin(theta) * Math.Sin(dec);
+        double c = Math.Sin(theta) * Math.Cos(dec) * Math.Cos(ra + zeta) + Math.Cos(theta) * Math.Sin(dec);
+        double ra2 = Math.Atan2(a, b) + z, dec2 = Math.Asin(Math.Clamp(c, -1, 1));
+        return new EcefPos(Math.Cos(dec2) * Math.Cos(ra2), Math.Cos(dec2) * Math.Sin(ra2), Math.Sin(dec2));
+    }
+
+    /// <summary>Turned by <paramref name="angle"/> about Z.</summary>
+    private static EcefPos Spin(EcefPos v, double angle)
+    {
+        double c = Math.Cos(angle), s = Math.Sin(angle);
+        return new EcefPos(c * v.X - s * v.Y, s * v.X + c * v.Y, v.Z);
+    }
+
+    private static EcefPos Cross(EcefPos a, EcefPos b) =>
+        new(a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X);
+
+    private static EcefPos Scale(EcefPos a, double k) => new(a.X * k, a.Y * k, a.Z * k);
+
+    /// <summary>
     /// The fraction of the moon's disc that is lit, 0 (new) to 1 (full), and whether it is waxing.
     /// Geocentric; from the ground the difference is under a percent.
     /// </summary>
