@@ -79,7 +79,7 @@ public static class GroundCheck
 
     private static void Walls(BuildingTile bt, ChunkGrid full, ChunkGrid drawn, int stride, Action<string> say)
     {
-        float Ground(ChunkGrid g, Vector3 p) => (float)g.SampleMeshHeight(bt.Id.MinE + p.X, bt.Id.MaxN - p.Z);
+        float Ground(ChunkGrid g, Vector3 p) { var (e, n) = bt.Id.Global(p.X, p.Z); return (float)g.SampleMeshHeight(e, n); }
         var footings = BuildingMeshBuilder.FootingsForRing(bt, full, stride);
         var byBuilding = footings.GroupBy(f => f.Building).ToDictionary(g => g.Key, g => g.ToList());
         var hist = new int[5];
@@ -118,7 +118,7 @@ public static class GroundCheck
                     {
                         uncovered++;
                         bare[bin]++;
-                        if (gap > worstBare) { worstBare = gap; worstAtE = bt.Id.MinE + e0.X; worstAtN = bt.Id.MaxN - e0.Z; }
+                        if (gap > worstBare) { worstBare = gap; (worstAtE, worstAtN) = bt.Id.Global(e0.X, e0.Z); }
                     }
                 }
             }
@@ -149,7 +149,7 @@ public static class GroundCheck
 
     private static void Doors(BuildingTile bt, DoorSpot[] doors, ChunkGrid drawn, int stride, Action<string> say)
     {
-        float Ground(Vector3 p) => (float)drawn.SampleMeshHeight(bt.Id.MinE + p.X, bt.Id.MaxN - p.Z);
+        float Ground(Vector3 p) { var (e, n) = bt.Id.Global(p.X, p.Z); return (float)drawn.SampleMeshHeight(e, n); }
         int total = 0, buried = 0, floating = 0, stoops = 0, level = 0;
         var worst = new List<(float Off, string What)>();
         foreach (var d in doors)

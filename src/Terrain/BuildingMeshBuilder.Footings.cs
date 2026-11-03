@@ -124,7 +124,7 @@ public static partial class BuildingMeshBuilder
     {
         var footings = new List<Footing>();
         if (ground == null) return footings;
-        float Ground(Vector3 p) => (float)ground.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z);
+        float Ground(Vector3 p) { var (e, n) = tile.Id.Global(p.X, p.Z); return (float)ground.SampleMeshHeight(e, n); }
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
             var b = tile.Buildings[bi];

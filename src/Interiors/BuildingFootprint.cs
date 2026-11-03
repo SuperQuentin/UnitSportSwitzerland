@@ -526,7 +526,7 @@ public static class BuildingFootprint
             var o2 = new Vector2(d.Outward.X, d.Outward.Z);
             var side = new Vector2(-o2.Y, o2.X) * Math.Min(d.Width / 2, MaxJambReach);
             var at = new Vector2(d.Position.X, d.Position.Z);
-            float G(Vector2 q) => (float)grid.SampleMeshHeight(tile.Id.MinE + q.X, tile.Id.MaxN - q.Y);
+            float G(Vector2 q) { var (e, n) = tile.Id.Global(q.X, q.Y); return (float)grid.SampleMeshHeight(e, n); }
             var front = at + o2 * FrontReach;
             float gm = G(front), gl = G(front - side), gr = G(front + side), gw = G(at);
             float high = Math.Max(Math.Max(gm, gl), Math.Max(gr, gw)), low = Math.Min(gm, Math.Min(gl, gr));
