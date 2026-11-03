@@ -64,6 +64,9 @@ The coverage map found far rendering, GPX and the origin under load with no chec
   (`REFSHOTS=` elsewhere), and `meta.json` (commit, flags, GPU, time). The pictures never go in git.
   - Pinned like the trailer's renders (`trailer/render-pins`): a fresh `user://` per run (only the
     shader caches carry over), the default settings plus `RENDER`, `--date`, `--time`, `--origin`.
+  - The waves are drawn at a fixed wave time (`--watertime 100`, `World/WaterSurface`): without it a
+    lake shot changed 15-65 % of its pixels between two runs of the same commit. Fire and smoke
+    models animate on the shader's own `TIME` and keep their floor (up to 26 %).
   - What moves by itself is left out (`SYSTEMS`: no traffic, trains, NPCs, birds, loot, network,
     audio), and the run is muted (`--audio-driver Dummy`).
   - `MODELS=1` adds the model viewer's PNG run per style (`<style>/models/`, ~1000 models):

@@ -17,7 +17,8 @@
 #   ARGS      more game arguments, e.g. ARGS="--curvature 0" for a branch's flat picture
 #   GODOT     the Godot executable (as tools/test.sh)
 # Every run plays in a fresh user:// of its own (no player's settings), muted (Dummy audio), at low
-# priority, never on top; only the compiled shader caches carry over between runs.
+# priority, never on top; only the compiled shader caches carry over between runs. The waves stand
+# still (--watertime): a lake differed by up to 65 % of its pixels between two runs of one commit.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . tools/lib/guard.sh
@@ -110,7 +111,7 @@ for style in $STYLES; do
     # shellcheck disable=SC2086
     guard_run 3600 "$log" env "$envset" "$GODOT" --resolution "$SIZE" --position 24,48 --audio-driver Dummy --path . -- \
       --chunks "$CHUNKS" --shot-queue "$q" --origin "$OE,$ON" --nohud --nocapture --date "$date" --time "$HOUR0" \
-      --style "$(style_flag "$style")" --systems "$SYSTEMS" --title "refshots $tag $style" "${render[@]}" ${extra[@]+"${extra[@]}"} || echo "[refshots] exit $?"
+      --style "$(style_flag "$style")" --systems "$SYSTEMS" --watertime 100 --title "refshots $tag $style" "${render[@]}" ${extra[@]+"${extra[@]}"} || echo "[refshots] exit $?"
     keep_caches "$prof"
     grep -aE '\[shot\] (wrote|FAILED)|WARNING' "$log" | sed 's/^/  /' | tail -40
     grep -aE 'SHADER ERROR|ERROR:' "$log" | head -5 | sed 's/^/  /' || true
