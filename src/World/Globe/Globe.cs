@@ -71,7 +71,7 @@ public partial class Globe : Node
     private readonly Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
     private readonly Dictionary<CubeKey, MeshInstance3D> _patches = new();
     private readonly Dictionary<CubeKey, EnuFrame> _anchors = new();
-    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour)> _ready = new();
+    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour, int Month)> _ready = new();
     private readonly HashSet<CubeKey> _loading = new(), _want = new();
     private readonly SemaphoreSlim _workers = new(3);
     private Shader _shader = null!;
@@ -109,7 +109,8 @@ public partial class Globe : Node
         if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
 
         // what the workers built, a few a frame
-        for (int k = 0; k < 4 && _ready.TryDequeue(out var r); k++) Commit(r.Key, r.Arrays, r.Colour);
+        for (int k = 0; k < 4 && _ready.TryDequeue(out var r); k++)
+            if (r.Month == _month && !_patches.ContainsKey(r.Key)) Commit(r.Key, r.Arrays, r.Colour);
 
         bool show = Origin.AltitudeOf(cam.GlobalPosition) > ShowAboveM;
         if (show != _shown)
@@ -133,7 +134,20 @@ public partial class Globe : Node
         _nextPlan -= delta;
         if (_nextPlan > 0) return;
         _nextPlan = 0.2;
+        // a new month (the game's date moved on, or /time set another): the season's colour, built again
+        if (DayNight.Instance is { Sky: { } sky } && sky.Date.Month != _month) Rebuild(sky.Date.Month);
         Plan(cam);
+    }
+
+    /// <summary>Every tile dropped and the six faces asked for again, coloured for <paramref name="month"/>; tiles still on a worker are dropped as they land.</summary>
+    private void Rebuild(int month)
+    {
+        _month = month;
+        foreach (var node in _patches.Values) node.QueueFree();
+        _patches.Clear();
+        _loading.Clear();
+        for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
+        GD.Print($"[globe] month {month}: built again");
     }
 
     /// <summary>Which tiles to draw: from the six faces down, by size on screen and the horizon.</summary>
@@ -209,7 +223,7 @@ public partial class Globe : Node
                     if (colour.LoadWebpFromBuffer(a.ForMonth(month)) == Error.Ok) colour.GenerateMipmaps();
                     else colour = null;
                 }
-                _ready.Enqueue((key, arrays, colour));
+                _ready.Enqueue((key, arrays, colour, month));
             }
             catch (Exception e)
             {
@@ -326,31 +340,78 @@ public partial class Globe : Node
     private void Commit(CubeKey key, Godot.Collections.Array arrays, Image? colour)
     {
         _loading.Remove(key);
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        var material = new ShaderMaterial { Shader = _shader };
-        if (colour != null) material.SetShaderParameter("albedo_tex", ImageTexture.CreateFromImage(colour));
-        var node = new MeshInstance3D
-        {
-            Name = key.FileStem,
-            Mesh = mesh,
-            MaterialOverride = material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            Visible = false,
-        };
+        var node = Patch(key, arrays, colour, _shader);
+        node.Visible = false;
         AddChild(node);
         node.Transform = Place(key);
         _patches[key] = node;
     }
 
-    /// <summary>A tile's anchor (x east, y up, z south) in this world, composed in doubles.</summary>
-    private Transform3D Place(CubeKey key)
+    /// <summary>A tile's drawn patch: its mesh and its colour, in its anchor frame.</summary>
+    private static MeshInstance3D Patch(CubeKey key, Godot.Collections.Array arrays, Image? colour, Shader shader)
     {
-        var axes = Axes ?? Origin!.EcefAxes;
-        var a = AnchorOf(key);
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        var material = new ShaderMaterial { Shader = shader };
+        if (colour != null) material.SetShaderParameter("albedo_tex", ImageTexture.CreateFromImage(colour));
+        return new MeshInstance3D
+        {
+            Name = key.FileStem,
+            Mesh = mesh,
+            MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+    }
+
+    /// <summary>A tile's anchor (x east, y up, z south) in this world, composed in doubles.</summary>
+    private Transform3D Place(CubeKey key) => PlaceIn(Axes ?? Origin!.EcefAxes, AnchorOf(key));
+
+    private static Transform3D PlaceIn(FrameAxes axes, EnuFrame a)
+    {
         Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
         var (ox, oy, oz) = axes.FromEcef(a.Origin);
         var south = new EcefPos(-a.North.X, -a.North.Y, -a.North.Z);
         return new Transform3D(new Basis(Turn(a.East), Turn(a.Up), Turn(south)), new Vector3((float)ox, (float)oy, (float)oz));
+    }
+
+    /// <summary>
+    /// The globe in the model viewer: the whole Earth at level 1 (24 tiles, Earth-fixed axes, north up)
+    /// and one level-4 tile over Switzerland, built as the game builds them, coloured for July and
+    /// lit from +Y. Needs a <c>--cube-global</c> region (<see cref="DataDir"/>); none, nothing shown.
+    /// </summary>
+    [Showcase("Space", "Globe")]
+    private static IEnumerable<(string Name, Func<Node3D> Make)> GlobeShowcase()
+    {
+        if (DataDir is not { } dir) yield break;
+        yield return ("whole Earth, level 1", () => Showcase(dir, k => k.Level == 1, earthFixed: true));
+        var bern = CubeKey.FromLatLon(46.95, 7.44, 4);
+        yield return ("a level-4 tile over Switzerland", () => Showcase(dir, k => k == bern, earthFixed: false));
+    }
+
+    private static Node3D Showcase(string dir, Func<CubeKey, bool> which, bool earthFixed)
+    {
+        var root = new Node3D { Name = "Globe" };
+        var heights = new Dictionary<CubeKey, (string, long, int)>();
+        var albedo = new Dictionary<CubeKey, (string, long, int)>();
+        foreach (var file in Directory.GetFiles(dir, "*.cubb")) Index(file, CubeBundle.Magic, heights);
+        foreach (var file in Directory.GetFiles(dir, "*.cuba")) Index(file, CubeBundle.AlbedoMagic, albedo);
+        var shader = GD.Load<Shader>("res://shaders/globe.gdshader");
+        // Earth-fixed with the north pole up (+Y), or one tile in its own frame
+        var earth = new FrameAxes(new EcefPos(0, 0, 0), new EcefPos(0, 1, 0), new EcefPos(0, 0, 1), new EcefPos(1, 0, 0));
+        foreach (var (key, at) in heights)
+        {
+            if (!which(key)) continue;
+            var tile = CubeTileCodec.Decode(ReadBytes(at));
+            Image? colour = null;
+            if (albedo.TryGetValue(key, out var c))
+            {
+                colour = new Image();
+                if (colour.LoadWebpFromBuffer(CubeAlbedoCodec.Decode(ReadBytes(c)).ForMonth(7)) != Error.Ok) colour = null;
+            }
+            var node = Patch(key, Build(tile), colour, shader);
+            root.AddChild(node);
+            if (earthFixed) node.Transform = PlaceIn(earth, key.Anchor);
+        }
+        return root;
     }
 }

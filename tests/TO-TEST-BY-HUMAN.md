@@ -7,6 +7,16 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The globe and the air from above ([#1478](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1478))
+
+With the `--cube-global` region on D: (`D:/UnitSportSwitzerland/cube_global`, or `--globe <dir>`), spectator or UFO, real sky (play, not a shot run).
+
+- [ ] Climb from a Lausanne street to 120 km and back → the globe fades in above 15 km with no pop; the sky darkens to black by 40 km; nothing jumps at 60 or 50 km; the haze never turns into a white wall.
+- [ ] At 120 km by day, then at dusk and at night → stars by day up there; the limb is a blue band over black; the terminator lies where the real sun puts it (not where the moon is at night).
+- [ ] Frame time at 120 km looking at the horizon, and while climbing fast (tiles streaming) → no hitch over ~30 ms.
+- [ ] The same on a phone or the Quest (Mobile renderer, maybe a 24-bit depth buffer) → no flicker between globe tiles or against the flat tiles far out.
+- [ ] Stay up across midnight at the end of a month (or start a game on the 1st with a save from the day before) → the globe's colour changes to the new month's without holes.
+
 ## Account management on the website ([#1360](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1360))
 
 After the deploy with `--setup` (the new Caddyfile), on https://unitsport.infrack.ch.
