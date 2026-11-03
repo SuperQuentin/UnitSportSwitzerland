@@ -56,6 +56,13 @@ public partial class ChatManager : Node
 
     private Node3D? _players;
     private WorldOrigin? _origin;
+
+    /// <summary>
+    /// Where a peer's body is in this server's world frame: from its Earth position, so it is right
+    /// whichever region the body's own physics is in (#1456).
+    /// </summary>
+    private Vector3? WorldOf(long peer) =>
+        _origin != null && _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is { } body ? _origin.ToWorld(body.Global) : null;
     private PlaceIndex? _places;
 
     /// <summary>Client-side only: where a forced teleport is applied.</summary>
@@ -998,8 +1005,7 @@ public partial class ChatManager : Node
             case "weather": CommandWeather(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it
             case "water":
-                ReplyTo(sender, World.WaterField.Command(rest,
-                    _players?.GetNodeOrNull<Node3D>(sender.ToString())?.GlobalPosition), ChatKind.Private);
+                ReplyTo(sender, World.WaterField.Command(rest, WorldOf(sender)), ChatKind.Private);
                 return;
             // anyone may list; start/stop/auto are checked inside, against the same IsAdmin
             case "occasion" or "occasions":
@@ -1132,7 +1138,7 @@ public partial class ChatManager : Node
             case "bank": CommandBank(sender, parts); return;
             case "despawn":
             {
-                var (line, refused) = Despawn(parts[1..], _players?.GetNodeOrNull<Node3D>(sender.ToString())?.GlobalPosition);
+                var (line, refused) = Despawn(parts[1..], WorldOf(sender));
                 if (!refused) GD.Print($"[despawn] {NameOf(sender)}: {line}");
                 ReplyTo(sender, line, refused ? ChatKind.Error : ChatKind.Admin);
                 return;

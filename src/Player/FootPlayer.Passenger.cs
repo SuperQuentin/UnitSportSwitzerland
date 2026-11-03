@@ -206,7 +206,7 @@ public partial class FootPlayer
         var centre = s.Who.GlobalPosition + Vector3.Up * ride.EyeHeight;
         float yaw = s.Who.GlobalRotation.Y + _lookYaw;
         var wanted = centre + new Basis(Vector3.Up, yaw) * new Vector3(0, ride.ChaseHeight, ride.ChaseDistance);
-        var hit = _camRay.Cast(GetWorld3D().DirectSpaceState, centre, wanted, CameraMask, SeatExclude(s.Who));
+        var hit = _camRay.Cast(Space, centre, wanted, CameraMask, SeatExclude(s.Who));
         var at = hit.Count > 0 ? centre.Lerp(hit["position"].AsVector3(), 0.85f) : wanted;
         _camera.GlobalTransform = Transform3D.Identity.LookingAt(centre - at, Vector3.Up).Translated(at);
         _camera.RotateObjectLocal(Vector3.Right, _pitch + ride.ChasePitch + 0.1f);

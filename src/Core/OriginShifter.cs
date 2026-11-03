@@ -131,7 +131,7 @@ public partial class OriginShifter : Node
 
         var clock = Stopwatch.StartNew();
         var shift = _origin.MoveTo(newE, newN);
-        var pass = new Pass(shift);
+        var pass = new Pass(shift) { Owner = this };
         Visit(GetTree().Root, pass, childrenAreGlobal: true);
         foreach (var body in pass.Kinematic) Teleport(body);
         foreach (var node in pass.Doppler) ResetDoppler(node);
@@ -151,10 +151,31 @@ public partial class OriginShifter : Node
         return true;
     }
 
+    /// <summary>
+    /// Moves one node placed in world space, and what it holds, into another frame: what a whole-world
+    /// shift does to every node, done to this one only. A server region hands a body to another region
+    /// this way (#1456): its node keeps its path, its frame changes. Kinematic bodies are teleported, the
+    /// handlers told, as in <see cref="ShiftTo"/>.
+    /// </summary>
+    public static void Move(Node3D node, OriginShift shift)
+    {
+        var pass = new Pass(shift);
+        if (node is IOriginShiftAware handler) pass.Aware.Add(handler);
+        node.GlobalTransform = shift.Apply(node.GlobalTransform);
+        pass.Moved++;
+        if (node is PhysicsBody3D body && PhysicsServer3D.BodyGetMode(body.GetRid()) == PhysicsServer3D.BodyMode.Kinematic)
+            pass.Kinematic.Add(body);
+        Visit(node, pass, childrenAreGlobal: false);
+        foreach (var kinematic in pass.Kinematic) Teleport(kinematic);
+        foreach (var aware in pass.Aware) aware.OnOriginShifted(shift);
+    }
+
     /// <summary>What one shift has moved and found so far.</summary>
     private sealed class Pass(OriginShift shift)
     {
         public readonly OriginShift Shift = shift;
+        /// <summary>The shifter doing a whole-world shift (it warns about containers under <c>--originstress</c>); null for <see cref="Move"/>.</summary>
+        public OriginShifter? Owner;
         public int Moved;
         public readonly List<IOriginShiftAware> Aware = new();
         public readonly List<PhysicsBody3D> Kinematic = new();
@@ -200,7 +221,7 @@ public partial class OriginShifter : Node
     /// the body is made static for the move and kinematic again after.
     /// </para>
     /// </summary>
-    private static void Teleport(PhysicsBody3D body)
+    public static void Teleport(PhysicsBody3D body)
     {
         var rid = body.GetRid();
         PhysicsServer3D.BodySetMode(rid, PhysicsServer3D.BodyMode.Static);
@@ -213,7 +234,7 @@ public partial class OriginShifter : Node
     /// of <paramref name="node"/> have no Node3D parent transform to follow (or follow a container
     /// that stays at the identity), so their own transform is their world position.
     /// </summary>
-    private void Visit(Node node, Pass pass, bool childrenAreGlobal)
+    private static void Visit(Node node, Pass pass, bool childrenAreGlobal)
     {
         int count = node.GetChildCount();
         for (int i = 0; i < count; i++)
@@ -245,7 +266,7 @@ public partial class OriginShifter : Node
             if (global)
             {
                 // a node that handles the shift itself (ThrowAim) knows what it holds
-                if (_stress && spatial is not IOriginShiftAware) WarnIfContainer(spatial);
+                if (pass.Owner is { _stress: true } owner && spatial is not IOriginShiftAware) owner.WarnIfContainer(spatial);
                 spatial.Transform = pass.Shift.Apply(spatial.Transform);
                 pass.Moved++;
             }

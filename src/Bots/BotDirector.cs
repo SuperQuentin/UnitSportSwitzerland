@@ -37,7 +37,6 @@ public partial class BotDirector : Node
     private MultiplayerSpawner _spawner = null!;
     private Node3D _players = null!;
     private readonly Dictionary<long, Bot> _bots = new();
-    private BotWorld? _world;
     private double _watchAt;
 
     /// <summary>A bot fell for good or was knocked out: (bot, killer id or 0, cause). Raised on the server.</summary>
@@ -155,7 +154,7 @@ public partial class BotDirector : Node
             body.AppearanceBits = alien.Looks.Pack();
             body.OutfitBits = alien.Outfit.Bits;
         }
-        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = _world ??= new BotWorld(_players) };
+        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = new BotWorld(_players, body) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
         body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch, bot.Intent.Climb);

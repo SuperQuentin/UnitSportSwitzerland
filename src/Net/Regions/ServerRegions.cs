@@ -1,0 +1,329 @@
+using System;
+using System.Collections.Generic;
+using Godot;
+using UnitSport.Core;
+using UnitSport.Player;
+using UnitSport.Terrain;
+
+namespace UnitSport.Net.Regions;
+
+/// <summary>
+/// The dedicated server's regions (#1456, G2a of #1443), at <c>World/Regions</c>: one local frame and
+/// physics space per cluster of bodies (<see cref="RegionPlanner"/>), so a bot 300 km from the server's
+/// origin walks at the same float precision as one beside it, and with the global tiling no flat frame
+/// has to serve players 500 km apart.
+/// <list type="bullet">
+/// <item>The main region is the server's world as before: every body near the start stays in it, so
+/// play there runs exactly as it did.</item>
+/// <item>The main <see cref="ChunkManager"/> keeps loading the tiles round every body, wherever its
+/// region: a body in another region leaves a plain anchor (a shadow, no collision) in the main frame.
+/// The data the server serves and reads (heights, the steamer, the airport stands, the dormant fleets)
+/// comes from there as before; a region only adds the physics.</item>
+/// <item>A handover moves a body to another region: a bot only once the target has built collision
+/// under it (a ghost anchor asks for it first), a player's proxy at once.</item>
+/// </list>
+/// Bodies never measure each other across regions in floats: across regions, the server measures in
+/// <see cref="GlobalPos"/>.
+/// </summary>
+public partial class ServerRegions : Node
+{
+    public const string NodeName = "Regions";
+    /// <summary>How often the clusters are decided again.</summary>
+    public const double DecideEverySeconds = 0.5;
+    /// <summary>A bot waits at most this for collision under it in the region it is handed to.</summary>
+    public const double HandoverTimeoutSeconds = 15;
+    /// <summary>An empty region is freed after this (a body passing back and forth keeps its terrain).</summary>
+    public const double EmptyGraceSeconds = 10;
+
+    public static ServerRegions? Instance { get; private set; }
+    /// <summary><c>--noregions</c>: every body in the main region, as before #1456 (a check's "before").</summary>
+    public static bool Off => CmdArgs.Has("--noregions");
+
+    /// <summary>Makes a region's terrain (and its trunks) in a frame: the server's own settings and tile cache.</summary>
+    public Func<WorldOrigin, ChunkManager>? MakeChunks { get; set; }
+    /// <summary>Whatever else a region holds beside its terrain (its trunks).</summary>
+    public Func<ChunkManager, WorldOrigin, Node>? MakeExtras { get; set; }
+
+    public ServerRegion Main { get; }
+    public IEnumerable<ServerRegion> All => _regions.Values;
+
+    private readonly Node3D _players;
+    private readonly Dictionary<int, ServerRegion> _regions = new();
+    private readonly Dictionary<FootPlayer, Handover> _pending = new();
+    private readonly Dictionary<FootPlayer, Node3D> _shadows = new();
+    private readonly Dictionary<int, double> _emptySince = new();
+    private readonly List<RegionPlanner.Body> _bodies = new();
+    private readonly List<RegionPlanner.Region> _known = new();
+    private readonly List<FootPlayer> _scratch = new();
+    private int _nextId = 1;
+    private double _clock, _decideAt;
+
+    private sealed class Handover(ServerRegion target, Node3D? ghost, double since)
+    {
+        public ServerRegion Target = target;
+        public Node3D? Ghost = ghost;
+        public double Since = since;
+    }
+
+    public ServerRegions(ServerRegion main, Node3D players)
+    {
+        Name = NodeName;
+        Main = main;
+        _players = players;
+        _regions[main.Id] = main;
+        // before the bodies' own physics: a handover happens between steps, never within one
+        ProcessPriority = int.MinValue;
+        ProcessPhysicsPriority = int.MinValue;
+    }
+
+    public override void _EnterTree()
+    {
+        Instance = this;
+        GetTree().NodeAdded += OnNodeAdded;
+    }
+
+    public override void _ExitTree()
+    {
+        GetTree().NodeAdded -= OnNodeAdded;
+        if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// The region a new body at <paramref name="at"/> starts in: the main one near home, else the region
+    /// of a body within <see cref="RegionPlanner.LinkM"/>, else a new one there. The next decision may
+    /// still move it; a bot spawned far away starts in its own frame and never loses precision.
+    /// </summary>
+    public ServerRegion For(GlobalPos at)
+    {
+        if (Off || at.HorizontalDistanceTo(Main.Anchor) <= RegionPlanner.HomeM) return Main;
+        foreach (var body in Bodies())
+            if (body.Region is { } r && Global(body).HorizontalDistanceTo(at) <= RegionPlanner.LinkM) return r;
+        return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }));
+    }
+
+    /// <summary>Where a body is, exactly: what a proxy's owner published, or the frame's reading of a body the server runs.</summary>
+    private static GlobalPos Global(FootPlayer body) => body.IsMultiplayerAuthority() ? body.Global : body.NetGlobal;
+
+    private IEnumerable<FootPlayer> Bodies()
+    {
+        _scratch.Clear();
+        for (int i = 0; i < _players.GetChildCount(); i++)
+            if (_players.GetChild(i) is FootPlayer { Puppet: false } p && p.IsInsideTree()) _scratch.Add(p);
+        return _scratch;
+    }
+
+    /// <summary>
+    /// A body's physics follows its region when Godot puts it (or anything under it with collision, a
+    /// truck's trailer sections) into a world: entering the tree resets a body to the viewport's space.
+    /// </summary>
+    private void OnNodeAdded(Node node)
+    {
+        if (node is FootPlayer body && body.GetParent() == _players)
+        {
+            body.Region ??= Main;
+            body.ApplyRegionSpace();
+            // spawned straight into its own region (a bot far away, For)
+            if (!body.Region.IsMain) CallDeferred(MethodName.Shadow, body);
+            return;
+        }
+        if (node is not CollisionObject3D) return;
+        for (var up = node.GetParent(); up != null && up != _players; up = up.GetParent())
+            if (up is FootPlayer { Region: { IsMain: false } } owner)
+            {
+                FootPlayer.SetSpace(node, owner.Region.Space);
+                return;
+            }
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        _clock += delta;
+        if (!Off && _clock >= _decideAt)
+        {
+            _decideAt = _clock + DecideEverySeconds;
+            Decide();
+        }
+        Advance();
+        FollowShadows();
+    }
+
+    /// <summary>Clusters the bodies again and starts the handovers and the regions that takes.</summary>
+    private void Decide()
+    {
+        _bodies.Clear();
+        var bodies = new List<FootPlayer>(Bodies());
+        foreach (var body in bodies)
+        {
+            int region = _pending.TryGetValue(body, out var h) ? h.Target.Id : (body.Region ?? Main).Id;
+            _bodies.Add(new RegionPlanner.Body((long)body.GetInstanceId(), Global(body), region));
+        }
+        _known.Clear();
+        foreach (var r in _regions.Values) _known.Add(new RegionPlanner.Region(r.Id, r.Anchor));
+        var plan = RegionPlanner.Decide(_bodies, _known, Main.Anchor, ref _nextId);
+        foreach (var made in plan.Create) Create(made.Anchor, made.Id);
+
+        int i = 0;
+        foreach (var body in bodies)
+        {
+            var want = _regions[plan.RegionOf[_bodies[i++].Id]];
+            var now = _pending.TryGetValue(body, out var h) ? h.Target : body.Region ?? Main;
+            if (want != now) Start(body, want);
+        }
+        FreeEmpty(bodies);
+    }
+
+    private ServerRegion Create(GlobalPos anchor, int id = -1)
+    {
+        if (id < 0) id = _nextId++;
+        var origin = new WorldOrigin(anchor.E, anchor.N);
+        // a world of its own, so a physics space of its own (OwnWorld3D would keep it out of reach: World3D null)
+        var world = new World3D();
+        var root = new SubViewport
+        {
+            Name = $"Region{id}",
+            World3D = world,
+            Disable3D = false,
+            Size = new Vector2I(2, 2),
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+        };
+        AddChild(root);
+        var chunks = MakeChunks!(origin);
+        root.AddChild(chunks);
+        if (MakeExtras?.Invoke(chunks, origin) is { } extras) root.AddChild(extras);
+        var region = new ServerRegion(id, origin, chunks, world, root);
+        _regions[id] = region;
+        GD.Print($"[regions] made {region}");
+        return region;
+    }
+
+    /// <summary>Starts moving <paramref name="body"/> to <paramref name="target"/>: at once for a proxy, after its ground for a bot.</summary>
+    private void Start(FootPlayer body, ServerRegion target)
+    {
+        if (_pending.Remove(body, out var old)) DropGhost(old);
+        var from = body.Region ?? Main;
+        if (target == from) return;
+        if (!body.IsMultiplayerAuthority())
+        {
+            Finish(body, target);
+            return;
+        }
+        // a bot: the target builds collision round a ghost where the bot is before the bot goes there
+        var ghost = new Node3D { Name = $"Ghost_{body.Name}", Position = target.Origin.ToWorld(Global(body)) };
+        GhostParent(target).AddChild(ghost);
+        target.Chunks.AddAnchor(ghost, collision: true);
+        _pending[body] = new Handover(target, ghost, _clock);
+    }
+
+    private Node GhostParent(ServerRegion region) => region.Root ?? (Node)this;
+
+    private void DropGhost(Handover h)
+    {
+        if (h.Ghost == null || !GodotObject.IsInstanceValid(h.Ghost)) return;
+        h.Target.Chunks.RemoveAnchor(h.Ghost);
+        h.Ghost.QueueFree();
+        h.Ghost = null;
+    }
+
+    /// <summary>The bots whose ground is ready in their next region go there.</summary>
+    private void Advance()
+    {
+        if (_pending.Count == 0) return;
+        List<FootPlayer>? done = null;
+        foreach (var (body, h) in _pending)
+        {
+            if (!GodotObject.IsInstanceValid(body) || !body.IsInsideTree()) { (done ??= new()).Add(body); continue; }
+            var at = h.Target.Origin.ToWorld(Global(body));
+            if (h.Ghost != null) h.Ghost.Position = at;
+            // ready when the target has collision there, when the body has none where it is either (in the
+            // air, not placed yet), or after the timeout (a body never waits for good)
+            bool ready = h.Target.Chunks.HasCollisionAt(at)
+                || body.Terrain?.HasCollisionAt(body.GlobalPosition) != true
+                || _clock - h.Since > HandoverTimeoutSeconds;
+            if (!ready) continue;
+            (done ??= new()).Add(body);
+            Finish(body, h.Target);
+        }
+        if (done == null) return;
+        foreach (var body in done)
+            if (_pending.Remove(body, out var h)) DropGhost(h);
+    }
+
+    private void Finish(FootPlayer body, ServerRegion target)
+    {
+        var from = body.Region ?? Main;
+        body.EnterRegion(target, Global(body));
+        GD.Print($"[regions] {body.Name} from {from.Id} to {target}");
+        if (target.IsMain && _shadows.Remove(body, out var shadow))
+        {
+            Main.Chunks.RemoveAnchor(shadow);
+            shadow.QueueFree();
+        }
+        else if (!target.IsMain) EnsureShadow(body);
+    }
+
+    /// <summary>The main terrain keeps the tiles round a body in another region loaded, as for every body before regions.</summary>
+    private void EnsureShadow(FootPlayer body)
+    {
+        if (_shadows.ContainsKey(body)) return;
+        var shadow = new Node3D { Name = $"Shadow_{body.Name}", Position = Main.Origin.ToWorld(Global(body)) };
+        AddChild(shadow);
+        _shadows[body] = shadow;
+        Main.Chunks.AddAnchor(shadow, collision: false);
+    }
+
+    private void Shadow(FootPlayer body)
+    {
+        if (GodotObject.IsInstanceValid(body) && body.IsInsideTree() && body.Region is { IsMain: false }) EnsureShadow(body);
+    }
+
+    /// <summary>Each shadow where its body is, in the main frame (float precision is no matter for which tiles load).</summary>
+    private void FollowShadows()
+    {
+        if (_shadows.Count == 0) return;
+        List<FootPlayer>? gone = null;
+        foreach (var (body, shadow) in _shadows)
+        {
+            if (!GodotObject.IsInstanceValid(body) || !body.IsInsideTree())
+            {
+                (gone ??= new()).Add(body);
+                continue;
+            }
+            shadow.Position = Main.Origin.ToWorld(Global(body));
+        }
+        if (gone == null) return;
+        foreach (var body in gone)
+            if (_shadows.Remove(body, out var shadow))
+            {
+                Main.Chunks.RemoveAnchor(shadow);
+                shadow.QueueFree();
+            }
+    }
+
+    /// <summary>A region nobody is in nor heading to, for <see cref="EmptyGraceSeconds"/>, is freed with its terrain.</summary>
+    private void FreeEmpty(List<FootPlayer> bodies)
+    {
+        if (_regions.Count == 1) return;
+        List<int>? free = null;
+        foreach (var r in _regions.Values)
+        {
+            if (r.IsMain) continue;
+            bool used = false;
+            foreach (var body in bodies)
+                if (body.Region == r) { used = true; break; }
+            foreach (var h in _pending.Values)
+                if (h.Target == r) { used = true; break; }
+            if (used) { _emptySince.Remove(r.Id); continue; }
+            double since = _emptySince.TryGetValue(r.Id, out var s) ? s : _emptySince[r.Id] = _clock;
+            if (_clock - since > EmptyGraceSeconds) (free ??= new()).Add(r.Id);
+        }
+        if (free == null) return;
+        foreach (int id in free)
+        {
+            var r = _regions[id];
+            _regions.Remove(id);
+            _emptySince.Remove(id);
+            r.Root!.QueueFree();
+            GD.Print($"[regions] freed {r}");
+        }
+    }
+}

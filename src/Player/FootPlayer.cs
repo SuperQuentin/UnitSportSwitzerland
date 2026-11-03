@@ -2564,7 +2564,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         float span = Mathf.Max(0.01f, (to - from).Length());
         float Shorten(float d) => Mathf.Clamp((d - margin) / span * scale, min, 1f);
-        var space = GetWorld3D().DirectSpaceState;
+        var space = Space;
         through = 2f;
         across = Transform3D.Identity;
         if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, from, to, out float t, out var map, out var shell) == true)
@@ -3230,7 +3230,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 CollisionMask = CollisionMask,
                 Exclude = new Godot.Collections.Array<Rid> { GetRid() },
             };
-            if (GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0)
+            if (Space.IntersectShape(query, 1).Count == 0)
                 return candidate + Vector3.Up * 0.1f;
         }
         return over + Vector3.Up * 0.2f;
@@ -3245,7 +3245,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public Vector3? StandingSpotBelow(Vector3 from, float reach = 400f)
     {
         _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
-        var space = GetWorld3D().DirectSpaceState;
+        var space = Space;
         var exclude = new Godot.Collections.Array<Rid> { GetRid() };
         var start = from;
         var end = from + Vector3.Down * reach;
@@ -4363,7 +4363,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private bool TryBeginMantle(Vector3 forward, float speed, float beyond = 0.45f)
     {
-        var space = GetWorld3D().DirectSpaceState;
+        var space = Space;
         var exclude = new Godot.Collections.Array<Rid> { GetRid() };
         var feet = GlobalPosition;
         float reach = MantleMax + 0.25f;
@@ -4817,7 +4817,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var wanted = pivot - fwd * flyer.CameraDistance + Vector3.Up * flyer.CameraHeight;
 
         float want = 1f;
-        var hit = _camRay.Cast(GetWorld3D().DirectSpaceState, pivot, wanted, CameraMask, SelfExclude);
+        var hit = _camRay.Cast(Space, pivot, wanted, CameraMask, SelfExclude);
         if (hit.Count > 0)
         {
             float span = Mathf.Max(0.01f, (wanted - pivot).Length());
@@ -5465,7 +5465,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             CollisionMask = CollisionMask,
             Exclude = new Godot.Collections.Array<Rid> { GetRid() },
         };
-        return GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0;
+        return Space.IntersectShape(query, 1).Count == 0;
     }
 
     /// <summary>

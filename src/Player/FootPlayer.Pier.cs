@@ -22,7 +22,7 @@ public partial class FootPlayer
     /// </summary>
     private bool StepOntoPier(Vector3 at, Vector3 right, float side)
     {
-        var space = GetWorld3D().DirectSpaceState;
+        var space = Space;
         _pierExclude ??= new Godot.Collections.Array<Rid> { GetRid() };
         _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
         for (float d = side - 0.4f; d <= side + PierReach; d += 0.4f)
