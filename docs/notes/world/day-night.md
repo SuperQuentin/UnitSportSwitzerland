@@ -5,8 +5,8 @@
   frame reach every `ps1_*` world shader (each multiplies by the tint just before its Bayer
   quantise and fogs toward the sky) with no material touched. The environment background and
   ambient follow the sky, because avatars and vehicles are standard materials lit only by that.
-  Simple Swiss-summer sun (up 6h, 62° at noon, down 18h); below the horizon the shading follows a
-  moon so mountains keep a lit side. **Tint and sky are authored as seen and converted
+  The real sun and moon (#1430, next bullet); below the horizon the shading follows the moon, held
+  at least ~25° up, so mountains keep a lit side. **Tint and sky are authored as seen and converted
   `SrgbToLinear` before upload** — the shaders multiply linear values, and unconverted night's 0.13
   displayed as 0.40. Buildings light far more windows at night and those glow through the dark.
   Settings → Time of day (start hour, day length, default 24 min, 0 = stopped); `--time <h>` fixes
@@ -14,6 +14,20 @@
   `set <hh:mm|sunrise|day|noon|sunset|night|midnight>`, `add <hours>`, `speed <min a day, 0 stops>`;
   bare `/time` answers from this screen's clock. Offline it moves this machine's clock
   (`DayNight.DayLengthOverride` for speed).
+- **The real sky** (#1430 phase H6, `World/SunPath`, `Core/Ephemeris`, `Core/SwissTime`): the
+  sun and moon by Meeus (sun 0.008°, moon 0.0013° against JPL Horizons) on `Calendar.Today` at the
+  game's hour, read as Swiss civil time (CET/CEST, the EU rule, no `TimeZoneInfo`), from the
+  camera's LV95 place (`DayNight.Origin`; Bern before a camera is out, the last place indoors),
+  turned from true north to grid north (the meridian convergence, ±1-2° at the borders). Bern's day
+  runs 08:13-16:44 at the December solstice and 05:36-21:29 in June, 66.5° high at noon.
+  `/time set sunrise|sunset` are today's at Bern (`SunPath.RiseOrSet`). The thermals read the same
+  sun at the thermal's place (`AirLift`), so they follow the season. One date per process: the
+  server's and the clients' are each their own `Calendar.Today` (`--date` pins it).
+  **The fixed day** (`SunModel.Fixed`): up 6h, due south and 62° at noon, down 18h, the moon
+  opposite the sun, an occasion's own sunrise/sunset/noon. `--sun fixed`, and the default of checks
+  (any `--*check`), narrowed and fixture worlds (`--world`, `--systems`, `--chunks fixture:`),
+  screenshot runs (`--shot`, `--shot-queue`), trailer renders and the fun world, so their results
+  and pictures do not move with the date; `--sun real` (with `--date`) forces the real one there. Unit tests: `EphemerisTests`, `RealSunPathTests`.
 - **Online, one clock for everyone** (#452, `World/WorldClock`): the server always owns it, from its
   own settings at start (`StartHour`, `DayLengthMinutes`, `--time`), or, on a dedicated server, from `user://world_clock.cfg`
   where it stopped last (saved every 60 s, on `/time` and on exit; not when hosted from the menu,

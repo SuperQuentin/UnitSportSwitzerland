@@ -17,10 +17,13 @@ namespace UnitSport.World;
 /// </para>
 ///
 /// <para>
-/// The sun is a simple model of a Swiss summer day rather than an ephemeris: up at 6, due
-/// south and 62° high at noon, down at 18. What matters in a game is that dawn, dusk and night
-/// look right and come round at a pace you can play through — 24 real minutes to the day by
-/// default (<see cref="GameSettings.DayLengthMinutes"/>, 0 stops the clock).
+/// The sun and the moon are the real ones (#1430, <see cref="SunPath"/>): today's date at the
+/// game's hour, from the camera's latitude and longitude, so December days are short and the
+/// night's shading comes from wherever the moon really is. The hours come round at a pace you can
+/// play through — 24 real minutes to the day by default (<see cref="GameSettings.DayLengthMinutes"/>,
+/// 0 stops the clock). Check runs, trailers (<see cref="SunModel.Fixed"/>) and the fun world keep
+/// the old fixed summer day: up at 6, due south and 62° high at noon, down at 18, the moon opposite
+/// the sun, and an occasion's own short day.
 /// </para>
 /// </summary>
 public partial class DayNight : Node
@@ -37,6 +40,14 @@ public partial class DayNight : Node
     public double Hour { get; set; } = 10.0;
 
     public float SunElevationDeg { get; private set; }
+
+    /// <summary>
+    /// Where the sky is read from (the camera's LV95 place) and this world's origin to find it. Bern
+    /// until a camera is out in the world; a camera in the interiors' space keeps the last place.
+    /// </summary>
+    public WorldOrigin? Origin { get; set; }
+
+    private double _placeE = SunPath.BernE, _placeN = SunPath.BernN;
 
     /// <summary>0 in daylight, 1 at night. Headlights, lamps and windows read this.</summary>
     public float Night { get; private set; }
@@ -226,20 +237,31 @@ public partial class DayNight : Node
 
     private void Apply(float delta)
     {
-        // A running occasion may move the sun (a short winter day) and re-grade the colours.
+        // A running occasion may re-grade the colours, and under the fixed sun move it (a short winter day).
         var occasion = Occasions.OccasionManager.Instance?.Atmosphere;
         var atmo = occasion?.Atmosphere;
-        float rise = atmo?.Sunrise ?? 6f, set = atmo?.Sunset ?? 18f, noon = atmo?.NoonElevation ?? NoonElevation;
 
-        // the sun's place by the hour: World/SunPath, shared with the thermals (AirLift)
-        var sun = SunPath.Direction((float)Hour, out float elevationDeg, rise, set, noon);
-        SunElevationDeg = elevationDeg;
-
-        // Below the horizon the shading follows the moon instead — opposite the sun and never
-        // lower than ~25°, so a night-time mountain still has a lit side and a dark one rather
-        // than going flat.
-        var shade = SunElevationDeg > 3f ? sun
-            : new Vector3(-sun.X, Mathf.Max(0.42f, -sun.Y), -sun.Z).Normalized();
+        // the sun's place by the hour: World/SunPath, shared with the thermals (AirLift). Below the
+        // horizon the shading follows the moon instead, never lower than ~25°, so a night-time
+        // mountain still has a lit side and a dark one rather than going flat.
+        Vector3 sun, shade;
+        if (SunPath.Model == SunModel.Real && !WorldChoice.FunActive)
+        {
+            TrackPlace();
+            var date = SunPath.Today();
+            sun = SunPath.Toward(SkyBody.Sun, date, Hour, _placeE, _placeN, out float elevationDeg);
+            SunElevationDeg = elevationDeg;
+            shade = SunElevationDeg > 3f ? sun : MoonShade(SunPath.Toward(SkyBody.Moon, date, Hour, _placeE, _placeN, out _));
+        }
+        else
+        {
+            float rise = atmo?.Sunrise ?? 6f, set = atmo?.Sunset ?? 18f, noon = atmo?.NoonElevation ?? NoonElevation;
+            sun = SunPath.Direction((float)Hour, out float elevationDeg, rise, set, noon);
+            SunElevationDeg = elevationDeg;
+            // the fixed day's moon: opposite the sun
+            shade = SunElevationDeg > 3f ? sun
+                : new Vector3(-sun.X, Mathf.Max(0.42f, -sun.Y), -sun.Z).Normalized();
+        }
         if (SunElevationDeg > 0f && SunElevationDeg <= 3f)
             shade = shade with { Y = Mathf.Max(shade.Y, 0.05f) };
 
@@ -273,6 +295,25 @@ public partial class DayNight : Node
         _appliedDisco = Disco;
         if (_indoor != null) DriveIndoor(_indoor, tint, sky, moved, disco);
         if (_portalIndoor != null) DriveIndoor(_portalIndoor, tint, sky, moved, disco);
+    }
+
+    /// <summary>The camera's LV95 place, while it is out in the world.</summary>
+    private void TrackPlace()
+    {
+        if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
+        var at = cam.GlobalPosition;
+        if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return;
+        var place = Origin.ToGlobal(at);
+        (_placeE, _placeN) = (place.E, place.N);
+    }
+
+    /// <summary>The night's shading from the real moon: its bearing, at least ~25° up (sin 25° = 0.42).</summary>
+    private static Vector3 MoonShade(Vector3 moon)
+    {
+        var flat = new Vector2(moon.X, moon.Z);
+        flat = flat.LengthSquared() > 1e-6f ? flat.Normalized() : new Vector2(0, 1);   // overhead: from the south
+        float up = Mathf.Max(moon.Y, 0.42f), across = Mathf.Sqrt(1f - up * up);
+        return new Vector3(flat.X * across, up, flat.Y * across);
     }
 
     private void DriveIndoor(Godot.Environment env, Color tint, Color sky, bool moved, bool disco)
