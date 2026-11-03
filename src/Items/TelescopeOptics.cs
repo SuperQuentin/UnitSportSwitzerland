@@ -7,12 +7,13 @@ namespace UnitSport.Items;
 /// <summary>
 /// The telescope's lens (#1440): a focal length in 35 mm-equivalent millimetres, as the camera's
 /// (<c>items/camera-zoom</c>), from a wide finder view to the moon filling the view and past it.
-/// The moon is 0.52° wide: it fills the view at ~2,300 mm; at the longest end a pixel on it is about
-/// 2 km. Each notch zooms by <see cref="Step"/>.
+/// The moon is 0.52° wide: it fills the view at ~2,300 mm; Jupiter (~45″) is a fifth of the view at
+/// the longest end, 20,000 mm, where the moon goes soft (its map is 2.7 km a texel, a pixel 0.45 km).
+/// Each notch zooms by <see cref="Step"/>.
 /// </summary>
 public static class TelescopeOptics
 {
-    public const float FocalMin = 100f, FocalMax = 8000f, FocalStart = 400f, Step = 1.25f;
+    public const float FocalMin = 100f, FocalMax = 20000f, FocalStart = 400f, Step = 1.25f;
 
     /// <summary>The vertical field of view, degrees, of a focal length: 2·atan(12 / f), the camera's rule.</summary>
     public static float Fov(float focalMm) => MathF.Atan(12f / focalMm) * 2f * 180f / MathF.PI;

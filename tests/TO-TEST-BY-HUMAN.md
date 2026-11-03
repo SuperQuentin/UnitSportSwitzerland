@@ -631,3 +631,13 @@ Launch: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2548600,1148500` (
 - [ ] VR: Y or grip at the tripod; the eyepiece's picture floats before the eyes and follows the head; the right stick zooms, the trigger locks.
 - [ ] Pointed at far mountains at 8,000 mm: the frame rate holds (the zoom-aware detail has no cap yet).
 - [ ] Online: a second player at the tripod reads "Someone is looking through the telescope" and gets in once you step back.
+
+## The night sky: stars, planets, satellites (PR [#1445](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1445), [#1444](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1444))
+
+Normal play, a clear night (`--occasion none` in December: the snowfall hides the sky).
+
+- [ ] The stars against a sky app tonight: Orion, the Plough, Cassiopeia where they are; they come out at dusk and sink into the haze at the horizon.
+- [ ] Venus, Jupiter, Saturn, Mars as bright points where a sky app has them; Venus also by day.
+- [ ] The telescope on Jupiter (lock with LMB) at 20,000 mm: its belts, its four moons beside it; Saturn's rings and Titan.
+- [ ] After dusk or before dawn, satellites drift across as points; the ISS on a pass (Heavens-Above times for your town) where and when it should be. Online first: the game fetches fresh elements once a day (`[satellites] fetched` in the log).
+- [ ] The frame rate with the night sky up, and with Starlink's ten thousand after the first fetch.

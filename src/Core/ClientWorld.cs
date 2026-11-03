@@ -704,6 +704,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(_dayNight);
             // the real moon in the sky (#1440), drawn under the real sun only
             AddChild(new World.MoonDisc());
+            // the stars (#1444), the real sky's too
+            AddChild(new World.StarField());
+            AddChild(new World.SkyBodies());
+            AddChild(new World.Satellites());
         }
         ApplySun();
         // the fun world (#1396): its sky held at dusk, the synthwave backdrop, the air rings
@@ -1098,6 +1102,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Bots.BotFilmProbe.Requested) AddChild(new Bots.BotFilmProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
         if (Items.TelescopeProbe.Requested) AddChild(new Items.TelescopeProbe(items));
+        if (World.SkyProbe.Requested) AddChild(new World.SkyProbe());
         if (Items.TelescopeNetProbe.Role != null) AddChild(new Items.TelescopeNetProbe(items));
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
