@@ -36,14 +36,26 @@ public partial class TableNetProbe : ChatProbe
         var games = TableGames.Instance!;
         if (!Enum.TryParse<FurnitureType>(CmdArgs.Value("--tablegame") ?? "", out var type) || GameCatalog.Of(type) is not { } spec) { Fail("--tablegame names no playable piece"); return; }
         string doorArg = CmdArgs.Value("--tabledoor") ?? "";
-        if (!DoorKey.TryParse(doorArg, out var doorKey)) { Fail($"--tabledoor {doorArg} is not a door"); return; }
+        string? venue = CmdArgs.Value("--tablevenue");
         var (e, n) = SpawnPoint.ParseTarget();
         var spot = _origin.ToWorld(e, n, 0);
         me.GlobalPosition = new Vector3(spot.X, me.GlobalPosition.Y + 2, spot.Z);
         me.Velocity = Vector3.Zero;
         me.RequestReplacement();
         DoorIndex.Entry? door = null;
-        if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.Find(doorKey)) != null, 150)) { Fail($"no door {doorArg} near"); return; }
+        if (venue != null)
+        {
+            // a venue by name: its first door the index holds
+            if (await interiors.BuildingFor(venue) is not { } building) { Fail($"no venue \"{venue}\""); return; }
+            if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.All().Where(d => d.Key.Building == building).OrderBy(d => d.Key.Slot).Cast<DoorIndex.Entry?>().FirstOrDefault()) != null, 150))
+            { Fail($"no door of {venue} ({building}) near"); return; }
+            GD.Print($"{Log} {venue}: building {building}, door {door!.Value.Key}");
+        }
+        else
+        {
+            if (!DoorKey.TryParse(doorArg, out var doorKey)) { Fail($"--tabledoor {doorArg} is not a door"); return; }
+            if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.Find(doorKey)) != null, 150)) { Fail($"no door {doorArg} near"); return; }
+        }
         if (!await WalkIn(me, interiors, door!.Value)) return;
         var layout = interiors.Current!;
         var node = interiors.CurrentNode!;
