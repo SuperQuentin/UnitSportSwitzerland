@@ -122,6 +122,9 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
