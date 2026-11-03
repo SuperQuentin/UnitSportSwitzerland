@@ -252,13 +252,8 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.DartBoard:
             {
-                // a wall cabinet, open, the board in it at 1.73 m [S]
+                // a wall cabinet, open; the board in it at 1.73 m [S] is the game's (Games.Darts.DartsRig, #1324)
                 B(-w, 1.3f, -d, w, 2.15f, -d + 0.05f, darkWood);
-                B(-0.23f, 1.5f, -d + 0.05f, 0.23f, 1.96f, -d + 0.09f, dark);
-                B(-0.19f, 1.54f, -d + 0.07f, 0.19f, 1.92f, -d + 0.095f, C(0.85f, 0.80f, 0.62f));
-                B(-0.13f, 1.6f, -d + 0.07f, 0.13f, 1.86f, -d + 0.11f, C(0.12f, 0.50f, 0.20f));
-                B(-0.07f, 1.66f, -d + 0.07f, 0.07f, 1.8f, -d + 0.125f, C(0.80f, 0.10f, 0.12f));
-                B(-0.02f, 1.71f, -d + 0.07f, 0.02f, 1.75f, -d + 0.14f, C(0.98f, 0.92f, 0.20f));
                 break;
             }
             case FurnitureType.CueRack:

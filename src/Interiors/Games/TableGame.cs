@@ -119,6 +119,9 @@ public abstract class TableGame
     /// <summary>Live games: seat <paramref name="seat"/>'s controls, as its client packed them.</summary>
     public virtual void Input(int seat, byte[] input) { }
 
+    /// <summary>Whether something still plays out (balls rolling, a dart in flight) and the next action must wait.</summary>
+    public virtual bool Busy(double now) => false;
+
     /// <summary>Whether this live game needs stepping now (someone at it, or something still moving).</summary>
     public virtual bool Awake => false;
 
