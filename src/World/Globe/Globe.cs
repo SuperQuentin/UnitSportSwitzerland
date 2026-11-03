@@ -53,6 +53,17 @@ public partial class Globe : Node
     /// <summary>Whether a globe is drawn past the edge of the data (the altitude haze need not hide it).</summary>
     public static bool Present { get; private set; }
 
+    /// <summary>
+    /// The world in Earth positions as the globe is placed: the flat world's embedding under the camera
+    /// (<see cref="OriginFrame.EcefAxesAt"/>), redone past <see cref="ReembedM"/>; the atmosphere uses it too.
+    /// </summary>
+    public static FrameAxes? Axes { get; private set; }
+
+    /// <summary>The camera's nadir may move this far before the globe is placed again: the flat plane leaves the embedding by 8 cm there.</summary>
+    public const double ReembedM = 1000;
+
+    private double _axesE = double.NaN, _axesN;
+
     public string Dir { get; set; } = DefaultDir;
 
     private CubeManifest _manifest = null!;
@@ -81,7 +92,11 @@ public partial class Globe : Node
         Present = true;
     }
 
-    public override void _ExitTree() => Present = false;
+    public override void _ExitTree()
+    {
+        Present = false;
+        Axes = null;
+    }
 
     private static void Index(string file, uint magic, Dictionary<CubeKey, (string, long, int)> into)
     {
@@ -105,9 +120,12 @@ public partial class Globe : Node
         }
         if (!show) return;
 
-        if (Origin.Frame.Epoch != _epoch)
+        var (ce, cn) = Origin.ToLv95(cam.GlobalPosition);
+        if (Origin.Frame.Epoch != _epoch || double.IsNaN(_axesE) || Math.Abs(ce - _axesE) > ReembedM || Math.Abs(cn - _axesN) > ReembedM)
         {
             _epoch = Origin.Frame.Epoch;
+            (_axesE, _axesN) = (ce, cn);
+            Axes = Origin.Frame.EcefAxesAt(ce, cn);
             foreach (var (key, node) in _patches) node.Transform = Place(key);
         }
 
@@ -121,7 +139,7 @@ public partial class Globe : Node
     /// <summary>Which tiles to draw: from the six faces down, by size on screen and the horizon.</summary>
     private void Plan(Camera3D cam)
     {
-        var axes = Origin!.EcefAxes;
+        var axes = Axes ?? Origin!.EcefAxes;
         var c = cam.GlobalPosition;
         var eye = axes.ToEcef(c.X, c.Y, c.Z);
         double eyeR = Math.Sqrt(FrameAxes.Dot(eye, eye));
@@ -328,7 +346,7 @@ public partial class Globe : Node
     /// <summary>A tile's anchor (x east, y up, z south) in this world, composed in doubles.</summary>
     private Transform3D Place(CubeKey key)
     {
-        var axes = Origin!.EcefAxes;
+        var axes = Axes ?? Origin!.EcefAxes;
         var a = AnchorOf(key);
         Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
         var (ox, oy, oz) = axes.FromEcef(a.Origin);

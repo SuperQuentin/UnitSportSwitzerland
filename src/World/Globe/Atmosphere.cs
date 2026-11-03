@@ -91,7 +91,7 @@ public partial class Atmosphere : Node3D
         }
 
         // the planet's centre and its radius under the camera, in this world
-        var axes = Origin.EcefAxes;
+        var axes = Globe.Axes ?? Origin.EcefAxes;
         var (px, py, pz) = axes.FromEcef(new EcefPos(0, 0, 0));
         var centre = new Vector3((float)px, (float)py, (float)pz);
         _shell.GlobalPosition = centre;

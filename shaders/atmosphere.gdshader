@@ -24,7 +24,10 @@ const float BETA_M = 4e-6;
 const float H_R = 8000.0;
 const float H_M = 1200.0;
 const float G = 0.76;
-const int STEPS = 16;
+const int STEPS = 20;
+// the Earth's shadow fades over this much height at its edge instead of cutting the light off a
+// sample at a time (that banded near the terminator)
+const float SHADOW_SOFT = 2000.0;
 const int LIGHT_STEPS = 4;
 
 void vertex() {
@@ -32,6 +35,20 @@ void vertex() {
 	float d = length(view.xyz);
 	if (d > clamp_dist) view.xyz *= clamp_dist / d;
 	POSITION = PROJECTION_MATRIX * view;
+}
+
+// interleaved gradient noise: a per-pixel offset for the samples and the dither
+float ign(vec2 p) {
+	return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
+// how much sunlight reaches p, 0 deep in the Earth's shadow: the sun ray's closest approach to the
+// centre against the ground, softened
+float sunlit(vec3 p, vec3 s) {
+	float along = dot(p, s);
+	if (along >= 0.0) return 1.0;
+	float closest = length(p - along * s) - planet_r;
+	return smoothstep(-SHADOW_SOFT, SHADOW_SOFT, closest);
 }
 
 // the ray's entry and exit of a sphere round the origin, or (-1, -1) when it misses (both behind)
@@ -67,18 +84,19 @@ void fragment() {
 	float phase_m = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) / ((2.0 + g2) * pow(1.0 + g2 - 2.0 * G * mu, 1.5));
 
 	float ds = (t1 - t0) / float(STEPS);
+	float jitter = ign(FRAGCOORD.xy);
 	float od_r = 0.0, od_m = 0.0;
 	vec3 sum_r = vec3(0.0), sum_m = vec3(0.0);
 	for (int i = 0; i < STEPS; i++) {
-		vec3 p = o + dir * (t0 + (float(i) + 0.5) * ds);
+		vec3 p = o + dir * (t0 + (float(i) + jitter) * ds);
 		float h = length(p) - planet_r;
 		float dr = exp(-h / H_R) * ds, dm = exp(-h / H_M) * ds;
 		od_r += dr;
 		od_m += dm;
 		// the light's way in from the sun: none when the ground is in the way
+		float lit = sunlit(p, sun_dir);
+		if (lit <= 0.0) continue;
 		vec2 out_air = sphere(p, sun_dir, atmo_r);
-		vec2 shade = sphere(p, sun_dir, planet_r);
-		if (shade.x > 0.0) continue;
 		float ls = out_air.y / float(LIGHT_STEPS), lr = 0.0, lm = 0.0;
 		for (int j = 0; j < LIGHT_STEPS; j++) {
 			float lh = length(p + sun_dir * ((float(j) + 0.5) * ls)) - planet_r;
@@ -87,12 +105,14 @@ void fragment() {
 		}
 		vec3 tau = BETA_R * (od_r + lr) + BETA_M * 1.1 * (od_m + lm);
 		vec3 att = exp(-tau);
-		sum_r += dr * att;
-		sum_m += dm * att;
+		sum_r += dr * att * lit;
+		sum_m += dm * att * lit;
 	}
 	{
 		vec3 through = exp(-(BETA_R * od_r + BETA_M * 1.1 * od_m));
-		ALBEDO = intensity * sun_power * (sum_r * BETA_R * phase_r + sum_m * BETA_M * phase_m);
+		// dithered: the dark gradients near the shadow banded at 8 bits
+		ALBEDO = intensity * sun_power * (sum_r * BETA_R * phase_r + sum_m * BETA_M * phase_m)
+			+ (ign(FRAGCOORD.yx + 17.0) - 0.5) / 255.0;
 		ALPHA = intensity * (1.0 - dot(through, vec3(0.3333)));
 	}
 }

@@ -164,6 +164,15 @@ public sealed class OriginFrame
 
     private FrameAxes? _ecefAxes;
 
+    /// <summary>
+    /// <see cref="EcefAxes"/> made exact at another place of the flat world, LV95 <paramref name="e"/> /
+    /// <paramref name="n"/>: the ground frame's tangent frame there, its origin put where that place's
+    /// world point (at sea level) is. The flat plane leaves a tangent plane by d²/2R (31 m 20 km out), so
+    /// real geometry drawn among flat tiles (the globe) is placed through the embedding under the camera,
+    /// where H1 wraps the flat world round. An anchor frame is its own axes everywhere.
+    /// </summary>
+    public FrameAxes EcefAxesAt(double e, double n) => Axes ?? Embedding(SwissGeodesy.ToEcef(e, n, 0));
+
     /// <summary>An Earth-fixed direction in this frame's world axes (the ground frame: grid axes at its own origin).</summary>
     public Vector3 DirectionOf(EcefPos ecef)
     {
