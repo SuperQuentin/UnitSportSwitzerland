@@ -37,6 +37,7 @@ public partial class NameTag : Label3D
         VisibilityRangeEnd = 60f;
         CastShadow = ShadowCastingSetting.Off;
         TopLevel = true;   // placed at the head each frame: a rider's or a passenger's is not over the body's origin
+        Styles.ZoomRanges.Track(this);
     }
 
     public override void _Ready()

@@ -98,3 +98,4 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `tunnel-segment-ends-always-portals` — Tunnel segment ends are not always portals: A long tunnel is several TLM segments, so an endpoint may sit...
 - `tree-collides-godot-tree` — `Tree` collides with `Godot.Tree`: (the UI node) — the format type is `TreeInstance`
 - `drape-road-feature-polylines-only` — Drape road/feature polylines only after densifying them
+- `water-pass-memory` — #1439: the nationwide water pass ran out of memory in the dry-neighbour stitch (whole grids cached) and kept every survey kilometre; edges only, survey released by column, numbers

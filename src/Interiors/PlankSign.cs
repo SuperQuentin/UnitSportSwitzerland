@@ -74,7 +74,7 @@ public static class PlankSign
             // painted on: 1.2 cm proud of the board, inside the frame's 2.4 cm
             Position = new Vector3(0, 0, Depth + 0.012f),
         });
-        return root;
+        return Styles.ZoomRanges.TrackTree(root);
     }
 
     private static readonly Dictionary<(int, Color), PropKind> Meshes = new();

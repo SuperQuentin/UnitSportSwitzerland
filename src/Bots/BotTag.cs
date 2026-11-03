@@ -26,5 +26,6 @@ public partial class BotTag : Label3D
         VisibilityRangeEnd = 60f;
         CastShadow = ShadowCastingSetting.Off;
         Position = new Vector3(0, Height, 0);
+        Styles.ZoomRanges.Track(this);
     }
 }

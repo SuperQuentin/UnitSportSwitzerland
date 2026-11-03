@@ -970,7 +970,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         };
         // recorded for the movie studio (#782): a wake redraws the tile, so a new instancer is the change
         Movie.ReplayWatch.Instanced(node);
-        return node;
+        return Styles.ZoomRanges.Track(node);
     }
 
 
