@@ -30,8 +30,8 @@ public static class PhotoSpots
 
     private static PhotoSpot W(string id, string name, double standLat, double standLon, double targetLat, double targetLon, float targetAlt, string target)
     {
-        var (se, sn) = SwissProjection.ToLv95(standLat, standLon);
-        var (te, tn) = SwissProjection.ToLv95(targetLat, targetLon);
+        var (se, sn) = SwissGeodesy.ToLv95(standLat, standLon);
+        var (te, tn) = SwissGeodesy.ToLv95(targetLat, targetLon);
         return new PhotoSpot("ph:" + id, name, Math.Round(se), Math.Round(sn), StandRadius, Math.Round(te), Math.Round(tn), targetAlt, target, Review: true);
     }
 

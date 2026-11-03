@@ -10,6 +10,12 @@
   uses `SwissGeodesy`: the rigorous oblique conformal cylinder on Bessel 1841, then CH1903+ to
   CHTRS95/ETRS89, which is a pure translation by definition (674.374 / 15.056 / 405.346 m).
   LV95 → ECEF → LV95 comes back within 0.1 mm, even 1,400 km out and 400 km up.
+- **The way in from latitude and longitude** (GPS, OSM, IGN): `SwissGeodesy.ToLv95(lat, lon[, hEll])`
+  and back `ToLatLon(e, n[, hLhn95])`, rigorous however far out. The game uses only these (#1443,
+  G0a: GPX import and export, photo spots, landmarks, berths, the 1 August quays); the preprocessor's
+  stages still use `SwissProjection` until G1. A point without a height is taken at 500 m
+  ellipsoidal; the height moves it by 2.6-2.8 cm per km (the datums' normals are not parallel), so
+  pass it when it is known.
 - **Types**: `EcefPos` (earth-centred doubles), `Geodetic` (degrees, ellipsoidal height),
   `Ellipsoid` (`Wgs84`, `Bessel1841`; geodetic ↔ ECEF), all in TerrainFormat so the preprocessor
   has them too; `Core/Planet` (`Earth`: GM, rotation, `Gravity(r)`, `CircularSpeed(r)`);
