@@ -8,7 +8,7 @@ namespace UnitSport.Occasions.Festivals.August1;
 public sealed record Lake(string Name, double Lat, double Lon, double BearingDeg)
 {
     /// <summary>The quay: the shore point the lat/lon names (LV95).</summary>
-    public (double E, double N) Quay => SwissProjection.ToLv95(Lat, Lon);
+    public (double E, double N) Quay => SwissGeodesy.ToLv95(Lat, Lon);
 
     public double Bearing => BearingDeg * Math.PI / 180;
 

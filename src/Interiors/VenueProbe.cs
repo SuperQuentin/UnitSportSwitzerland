@@ -71,8 +71,8 @@ public partial class VenueProbe : Node
                 Box(700, 500, 12, 10, 9, BuildingKind.House),
             },
         };
-        double E(float x) => id.MinE + x;
-        double N(float z) => id.MaxN - z;
+        double E(float x) => id.Global(x, 0).E;
+        double N(float z) => id.Global(0, z).N;
         Venues.Override = new List<VenueRecord>
         {
             new("n1", VenueType.Restaurant, E(190), N(290), VenueFix.Inside, VenueFlags.Outdoor, 0, "pizza", "Pizzeria Test"),
@@ -89,7 +89,7 @@ public partial class VenueProbe : Node
         Check(Venues.NameOf(Venues.At(map.VenueOf(1))) == "Café", "a venue with no name shows its type's");
 
         // the same tile seen from its neighbour: points within Reach of it are looked at, matched only by containment
-        var west = new BuildingTile { Id = new TileId(id.E - 1, id.N), Buildings = new List<Building> { Box(990, 300, 40, 20, 8, BuildingKind.Commercial) } };
+        var west = new BuildingTile { Id = id.Neighbour(-1, 0), Buildings = new List<Building> { Box(990, 300, 40, 20, 8, BuildingKind.Commercial) } };
         Check(Venues.Match(west) == null, "a neighbouring tile's solid does not take a point it does not cover");
 
         var doors = BuildingFootprint.ComputeDoors(tile, null, null);
@@ -137,8 +137,8 @@ public partial class VenueProbe : Node
         }
         var list = Venues.List;
         var tiles = list.Select(r => TileId.FromLv95(r.E, r.N)).Distinct()
-            .SelectMany(t => new[] { t, t with { E = t.E - 1 }, t with { E = t.E + 1 }, t with { N = t.N - 1 }, t with { N = t.N + 1 },
-                new TileId(t.E - 1, t.N - 1), new TileId(t.E + 1, t.N + 1), new TileId(t.E - 1, t.N + 1), new TileId(t.E + 1, t.N - 1) })
+            .SelectMany(t => new[] { t, t.Neighbour(-1, 0), t.Neighbour(1, 0), t.Neighbour(0, 1), t.Neighbour(0, -1),
+                t.Neighbour(-1, 1), t.Neighbour(1, -1), t.Neighbour(-1, -1), t.Neighbour(1, 1) })
             .Distinct()
             .Where(t => Godot.FileAccess.FileExists(dir.PathJoin(BuildingFormat.FileName(t)))).ToList();
         GD.Print($"[venues] {tiles.Count} built tiles hold or touch a venue");
@@ -173,7 +173,7 @@ public partial class VenueProbe : Node
                     doors ??= BuildingFootprint.ComputeDoors(tile, Roads(dir, t), null);
                     var d = doors.FirstOrDefault(x => x.Index == i && x.Slot == 0);
                     doorAt[(t, i)] = d.Width > 0
-                        ? $" door E {t.MinE + d.Position.X:F0} N {t.MaxN - d.Position.Z:F0} out {d.Outward.X:F2},{-d.Outward.Z:F2}"
+                        ? $" door E {t.Global(d.Position.X, d.Position.Z).E:F0} N {t.Global(d.Position.X, d.Position.Z).N:F0} out {d.Outward.X:F2},{-d.Outward.Z:F2}"
                         : " NO DOOR";
                     if (asked)
                     {
@@ -188,7 +188,7 @@ public partial class VenueProbe : Node
                                 var e = plan.EntranceOf(new DoorKey(fp.Key, own.Slot).ToString());
                                 int? ri = e == null ? null : InteriorGenerator.EntryRoom(plan.GroundFloor.Rooms, e);
                                 string into = ri is int k ? $"{plan.GroundFloor.Rooms[k].Type} {plan.GroundFloor.Rooms[k].Width:F1}x{plan.GroundFloor.Rooms[k].Depth:F1} m" : "no doorway (locked)";
-                                GD.Print($"[venues]   own door of {Venues.NameOf(Venues.At(own.Venue - 1))}: slot {own.Slot} E {t.MinE + own.Position.X:F1} N {t.MaxN - own.Position.Z:F1} "
+                                GD.Print($"[venues]   own door of {Venues.NameOf(Venues.At(own.Venue - 1))}: slot {own.Slot} E {t.Global(own.Position.X, own.Position.Z).E:F1} N {t.Global(own.Position.X, own.Position.Z).N:F1} "
                                     + $"out {own.Outward.X:F2},{-own.Outward.Z:F2}, front {own.Span:F1} m to {own.FrontTop:F1} m, into {into}");
                             }
                             // every room (#1250: a hall's auditoriums and booth too), and the plan beside the shots
@@ -198,7 +198,7 @@ public partial class VenueProbe : Node
                                     var c = fp.Center + fp.AxisU * ((r.X0 + r.X1) / 2) + fp.AxisV * ((r.Z0 + r.Z1) / 2);
                                     var inside = plan.Furniture.Where(p => p.Floor == fl && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1)
                                         .GroupBy(p => p.Type).Select(g => $"{g.Key} {g.Count()}");
-                                    GD.Print($"[venues]   floor {fl - plan.Below} {r.Type} {r.Width:F1}x{r.Depth:F1} m at E {t.MinE + c.X:F1} N {t.MaxN - c.Y:F1}: {string.Join(", ", inside)}");
+                                    GD.Print($"[venues]   floor {fl - plan.Below} {r.Type} {r.Width:F1}x{r.Depth:F1} m at E {t.Global(c.X, c.Y).E:F1} N {t.Global(c.X, c.Y).N:F1}: {string.Join(", ", inside)}");
                                 }
                             try
                             {

@@ -434,7 +434,7 @@ public partial class DriveProbe : Node
         if (en.SinceFix < 0.2) return;
         en.SinceFix = 0;
         var (e, n) = _origin.ToLv95(en.Player.GlobalPosition);
-        var (lat, lon) = SwissProjection.ToWgs84(e, n);
+        var (lat, lon) = SwissGeodesy.ToLatLon(e, n, en.Player.GlobalPosition.Y);
         var ic = CultureInfo.InvariantCulture;
         var time = new System.DateTime(2026, 9, 30, 12, 0, 0, System.DateTimeKind.Utc).AddSeconds(_t);
         en.Gpx.Append(ic, $"<trkpt lat=\"{lat:F7}\" lon=\"{lon:F7}\"><ele>{en.Player.GlobalPosition.Y:F1}</ele>")

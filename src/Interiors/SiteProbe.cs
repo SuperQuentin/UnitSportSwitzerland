@@ -212,7 +212,7 @@ public partial class SiteProbe : Node3D
             AddChild(node);
             _built.Add((spec.Want, layout, node));
             _sites.Add((spec.Want, tile!, index));
-            HallForklift(spec.Want, layout, node, new WorldOrigin(tile!.Id.MinE, tile.Id.MaxN));
+            HallForklift(spec.Want, layout, node, AtCorner(tile!.Id));
         }
 
         Check(_built.Count == Specs.Length, $"all {Specs.Length} sites built ({_built.Count})");
@@ -233,6 +233,27 @@ public partial class SiteProbe : Node3D
     /// vehicle's own yaw convention, because a slot's yaw and a rig's node frame are two mirrors
     /// that can each be wrong and agree.
     /// </summary>
+    // an LV95 point in a tile's own frame (x east, z south from its north-west corner; #1443), as a plan
+    // point and on the ground of a row laid out tile-locally
+    private static Vector2 Plan(TileId id, double e, double n)
+    {
+        var (x, z) = id.Local(e, n);
+        return new((float)x, (float)z);
+    }
+
+    private static Vector3 Ground(TileId id, double e, double n)
+    {
+        var (x, z) = id.Local(e, n);
+        return new((float)x, 0, (float)z);
+    }
+
+    // a world whose origin is the tile's north-west corner, so the tile's frame is the world's
+    private static WorldOrigin AtCorner(TileId id)
+    {
+        var (e, n) = id.Global(0, 0);
+        return new WorldOrigin(e, n);
+    }
+
     private void HallForklift(BuildingType site, InteriorLayout layout, InteriorNode node, WorldOrigin origin)
     {
         var lifts = layout.Furniture.Select((f, i) => (f, i)).Where(t => HallForklifts.IsParked(t.f)).ToList();
@@ -298,7 +319,7 @@ public partial class SiteProbe : Node3D
             var box = BuildingTypes.For(tile).Boxes[index]!.Value;
             foreach (var s in slots)
             {
-                var at = new Vector2((float)(s.E - tile.Id.MinE), (float)(tile.Id.MaxN - s.N));
+                var at = Plan(tile.Id, s.E, s.N);
                 if (box.DistanceTo(at) >= 1f) continue;
                 Check(false, $"{site}: a {s.KindId} stands inside its own building");
                 break;
@@ -313,7 +334,7 @@ public partial class SiteProbe : Node3D
             // not care which convention is right.
             foreach (var s in slots.Take(6))
             {
-                var at = new Vector2((float)(s.E - tile.Id.MinE), (float)(tile.Id.MaxN - s.N));
+                var at = Plan(tile.Id, s.E, s.N);
                 var facing = new Vector2(-Mathf.Sin(s.Yaw), -Mathf.Cos(s.Yaw));   // RoadSignBuilder.Frame
                 float nose = box.DistanceTo(at + facing * 2.5f), tail = box.DistanceTo(at - facing * 2.5f);
                 // a working yard faces either way, so only the forecourt's tidy rows can be judged
@@ -338,7 +359,7 @@ public partial class SiteProbe : Node3D
             var fp = BuildingFootprint.Compute(tile, index, null, null)!;
             foreach (var p in pallets)
             {
-                var at = new Vector2((float)(p.E - tile.Id.MinE), (float)(tile.Id.MaxN - p.N));
+                var at = Plan(tile.Id, p.E, p.N);
                 if (box.DistanceTo(at) < Items.SitePallets.Out - 0.7f) { Check(false, $"{site}: pallet {p.Id} stands in its building"); break; }
                 if (fp.Doors.FirstOrDefault(d => new Vector2(d.Position.X, d.Position.Z).DistanceTo(at) < d.Width / 2 + 0.9f) is { Width: > 0 } door)
                 {
@@ -351,9 +372,9 @@ public partial class SiteProbe : Node3D
             Check(wantsLift == (lift != null), $"{site} {(wantsLift ? "keeps a" : "keeps no")} forklift on its apron");
             if (lift is { } forklift)
             {
-                var at = new Vector2((float)(forklift.E - tile.Id.MinE), (float)(tile.Id.MaxN - forklift.N));
+                var at = Plan(tile.Id, forklift.E, forklift.N);
                 float clear = pallets.Count == 0 ? float.MaxValue
-                    : pallets.Min(p => at.DistanceTo(new Vector2((float)(p.E - tile.Id.MinE), (float)(tile.Id.MaxN - p.N))));
+                    : pallets.Min(p => at.DistanceTo(Plan(tile.Id, p.E, p.N)));
                 Check(box.DistanceTo(at) >= 1.5f && clear >= 2f,
                     $"{site}'s forklift stands clear of the building ({box.DistanceTo(at):F1} m) and of its pallets ({clear:F1} m)");
                 Check(fp.Doors.All(d => new Vector2(d.Position.X, d.Position.Z).DistanceTo(at) >= d.Width / 2 + 1.5f),
@@ -366,7 +387,7 @@ public partial class SiteProbe : Node3D
             if (site == BuildingType.Warehouse && lift is { } shown)
             {
                 // for the apron shot: between the forklift and its nearest pallet, seen from the yard
-                Vector3 Local(double e, double n) => origin + new Vector3((float)(e - tile.Id.MinE), 0, (float)(tile.Id.MaxN - n));
+                Vector3 Local(double e, double n) => origin + Ground(tile.Id, e, n);
                 var at = Local(shown.E, shown.N);
                 var near = pallets.Count == 0 ? at : pallets.Select(p => Local(p.E, p.N)).MinBy(p => p.DistanceTo(at));
                 float h = front.Yard.Heading;
@@ -387,7 +408,7 @@ public partial class SiteProbe : Node3D
                 if (state.CreateRide() is not { } ride) { Check(false, $"{site}: slot {s.Ordinal} builds no ride"); continue; }
                 var node = new Node3D
                 {
-                    Position = origin + new Vector3((float)(s.E - tile.Id.MinE), 0, (float)(tile.Id.MaxN - s.N)),
+                    Position = origin + Ground(tile.Id, s.E, s.N),
                     Basis = new Basis(Vector3.Up, s.Yaw),
                 };
                 // drawn through the dormant layer's own look (#552): the merged parked model, every
@@ -403,7 +424,7 @@ public partial class SiteProbe : Node3D
             {
                 var node = Items.PalletNode.Create(p.Id, p.Load, Avatar.HumanMeshBuilder.FigureMaterial());
                 node.Transform = new Transform3D(new Basis(Vector3.Up, p.Yaw),
-                    origin + new Vector3((float)(p.E - tile.Id.MinE), 0, (float)(tile.Id.MaxN - p.N)));
+                    origin + Ground(tile.Id, p.E, p.N));
                 AddChild(node);
             }
         }

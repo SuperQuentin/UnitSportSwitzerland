@@ -299,8 +299,7 @@ public partial class PlacesService : Node
         if (!_adventure.Active(peer) || _adventure.Progress(peer) is not { } p || StateOf(peer) is not { } s) return "No adventuring now.";
         if (Catalogue.Resolve(poiId) is not { } poi || !HasMarker(Catalogue, poi)) return "Nothing to use there.";
         if (BodyOf?.Invoke(peer) is not { } body) return "No body.";
-        double de = body.E - poi.E, dn = body.N - poi.N;
-        if (de * de + dn * dn > (double)InteractReachM * InteractReachM) return $"Too far from {poi.Name}.";
+        if (GlobalPos.HorizontalDistanceSquared(body.E, body.N, poi.E, poi.N) > (double)InteractReachM * InteractReachM) return $"Too far from {poi.Name}.";
         var places = p.Get(PlacesProgress.Section);
         if (!places.Has(poi)) Discover(peer, p, s, poi, PlacesRules.Reveals(body.RideKind) ? PlacesRules.ModeOf(body.RideKind) : StampMode.Given);
         if (poi.Is(PoiFlags.Viewpoint) && places.Synced.Add(poi.Id))

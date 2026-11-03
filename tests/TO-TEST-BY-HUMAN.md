@@ -17,6 +17,23 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] A door whose ground rises in front of it: the sill sits on a level landing, the door opens and you walk in with the interior floor at the sill.
 - [ ] Realistic style: the plinth wall and stoop show plain masonry, not a roof texture.
 
+## Pool ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a pool table by the bar.
+
+- [ ] E at a table → a place, the camera down behind the cue ball (ball in hand from above for the break); A / D aims, Shift fine, W / S follow or draw (the prompt shows it); hold Space and let go → the power swings up and down and the shot goes off at the power shown.
+- [ ] The same on a pad (left stick aims, right stick nudges, A strikes, B steps back) and on a phone (stick aims, Bowl strikes).
+- [ ] E again alone → a bot sits opposite and shoots on its turn; the balls roll and turn, the stripes read as stripes, the clack, cushion and pocket sounds play; the HUD line says whose turn and what the last shot did.
+- [ ] VR: E by grip at the table, then the pad's stick and A through `XrPad` play it (holding the cue is a gap).
+
+## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.
+
+- [ ] Aim the camera and zoom from 35 to 200 mm and back over the town and a forest → no holes in the forest (trees neither 3D nor billboards), no flicker at the zoom steps beyond the usual crossfade band; far houses, signs and parked cars appear while zoomed.
+- [ ] At 200 mm, pan slowly across the town for ~20 s → no stutter beyond the tiles refining; the terrain sharpens in the new direction within a few seconds.
+- [ ] Binoculars (9°) and a gun's aim do the same; leaving the aim, nothing stays refined in a way that costs frames for long.
+
 ## No CD burns on an online client ([#1414](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1414))
 
 An exported build, a fresh `user://` (so the default CDs are still to burn), joining a remote server alone.
@@ -602,3 +619,53 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 
 - [ ] In a real exported build, update from an older release (delta patch, then again by unpacking the archive by hand) and reach the title: the "What's new" popup lists every release since, newest first, once; the next launch shows none. Offline at the first launch after an update: no popup, it comes at the next online launch.
 - [ ] Pad and VR: the "What's new" title entry opens the notes; the stick scrolls them, B closes (VR: pointer on Close). Is the text readable at the panel's distance?
+
+## The real sun and moon (PR [#1436](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1436), [#1430](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1430) H6)
+
+Normal play (no check flags), any region; `--date` pins the day.
+
+- [ ] Play an evening today: the sun sets around the time a weather app gives for your town, in the south-west in winter, the north-west in summer; `/time set sunset` goes there.
+- [ ] Night with the moon up: hills keep a lit side facing the moon, its glow sits where the real moon is; a night with no moon (around a new moon) still reads, not flat.
+- [ ] `--date 2026-12-24`: Christmas snow under a short day, dusk before 17:00; a paraglider finds weaker thermals than in June.
+- [ ] Online, a client joining a server: both see the same sun.
+
+## Earth curvature drawn round the camera (PR for [#187](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/187))
+
+Launch: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2548600,1148500` (Lavaux, the Alps across the lake).
+
+- [ ] PC VR (Quest via Link): look at the far side of the lake and the Alps → both eyes agree, nothing swims or doubles at the horizon as you turn your head.
+- [ ] Standalone Quest: the same view → the horizon and the far peaks sit where they do on PC, no seam or gap under the far ridges.
+- [ ] Compare a known panorama with a photo (Lavaux → Dents du Midi, or La Dôle → the Alps) → the far peaks stand as high above the lake as in the photo, no longer ~170 m too tall at 50 km.
+- [ ] Debug menu → Terrain → "Earth curvature" off and on while looking at the far horizon → the far ground drops and rises; nearby nothing moves.
+- [ ] Fly the Cessna across several km (origin shifts) looking at the horizon → no jump in the horizon at a shift.
+- [ ] Navigate to a place 20-30 km away (adventure map) → the diamond sits on the place, not tens of metres above it.
+
+## Telescope and the moon in the sky (PR [#1441](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1441), [#1440](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1440))
+
+`/spawn telescope`, any region, a night with the moon up (`--date 2026-12-23 --time 23` for a full moon).
+
+- [ ] The moon in the night sky with the naked eye: a small bright disc where the moon really is (a sky app), the right phase; by day a pale disc, its dark side the sky's blue.
+- [ ] Set the telescope up (Use), E at it: the view opens, the wheel zooms, the mouse turns it slowly; LMB locks on the moon and holds it while the hours pass; E steps back.
+- [ ] Pad: D-pad ↑ ↓ zoom, right stick turns, RT locks, B steps back.
+- [ ] VR: Y or grip at the tripod; the eyepiece's picture floats before the eyes and follows the head; the right stick zooms, the trigger locks.
+- [ ] Pointed at far mountains at 8,000 mm: the frame rate holds (the zoom-aware detail has no cap yet).
+- [ ] Online: a second player at the tripod reads "Someone is looking through the telescope" and gets in once you step back.
+
+## The night sky: stars, planets, satellites (PR [#1445](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1445), [#1444](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1444))
+
+Normal play, a clear night (`--occasion none` in December: the snowfall hides the sky).
+
+- [ ] The stars against a sky app tonight: Orion, the Plough, Cassiopeia where they are; they come out at dusk and sink into the haze at the horizon.
+- [ ] Venus, Jupiter, Saturn, Mars as bright points where a sky app has them; Venus also by day.
+- [ ] The telescope on Jupiter (lock with LMB) at 20,000 mm: its belts, its four moons beside it; Saturn's rings and Titan.
+- [ ] After dusk or before dawn, satellites drift across as points; the ISS on a pass (Heavens-Above times for your town) where and when it should be. Online first: the game fetches fresh elements once a day (`[satellites] fetched` in the log).
+- [ ] The frame rate with the night sky up, and with Starlink's ten thousand after the first fetch.
+
+## The curvature at altitude (PR [#1458](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1458), [#1430](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1430) H1)
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538300,1151200 --occasion none`, the spectator (T), boost up.
+
+- [ ] Climb steadily from the street to 50 km: the ground falls away smoothly, no jump or shimmer at 5, 20 or 50 km; it stops at 50 km.
+- [ ] The UFO the same way: it stops climbing at 50 km.
+- [ ] VR: the same climb, both eyes agree on the horizon all the way.
+- [ ] From 20-50 km: no z-fighting on the ground (the far plane grows to ~1,000 km), frame rate as on the ground.

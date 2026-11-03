@@ -100,6 +100,7 @@ public partial class SignalLamps : Node3D
         _shader ??= new Shader { Code = @"
 shader_type spatial;
 render_mode unshaded, cull_disabled;
+#include ""res://shaders/common/curvature.gdshaderinc""
 uniform float lens_radius;
 uniform float min_pixels;   // the smallest radius a lit lens is drawn at; 0 keeps it at its size
 // shaders/body/road.gdshaderinc's defaults: the pull of the road mesh the heads belong to
@@ -118,7 +119,8 @@ void vertex() {
     float pixel = 2.0 * depth / (abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y);
     float glare = min_pixels * (1.0 - smoothstep(GLARE_FADE_START, GLARE_FADE_END, depth));
     float grow = facing * mix(1.0, max(1.0, glare * pixel / lens_radius), lit);
-    vec4 view = MODELVIEW_MATRIX * vec4(VERTEX.xy * grow, VERTEX.z, 1.0);
+    // on the curved Earth as the head is (#187), then pulled toward the eye like it
+    vec4 view = CURVED(MODELVIEW_MATRIX * vec4(VERTEX.xy * grow, VERTEX.z, 1.0), MODEL_MATRIX[3].xyz);
     float dist = length(view.xyz);
     float lift = clamp((dist - FAR_LIFT_START) * FAR_LIFT_RATE, 0.0, FAR_LIFT_MAX);
     view.xyz *= 1.0 - lift / max(dist, 1.0) - ROAD_DEPTH_BIAS - LENS_BIAS * (1.0 + lit);
@@ -148,6 +150,7 @@ void fragment() {
     private static Material HaloMaterial() => _haloMaterial ??= new ShaderMaterial { Shader = new Shader { Code = @"
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
+#include ""res://shaders/common/curvature.gdshaderinc""
 global uniform float world_night;
 // shaders/body/road.gdshaderinc's defaults, and the lens shader's pull of a lit lens
 const float ROAD_DEPTH_BIAS = 0.0004, FAR_LIFT_START = 800.0, FAR_LIFT_RATE = 0.001, FAR_LIFT_MAX = 2.0;
@@ -170,7 +173,7 @@ void vertex() {
     float radius = max(mix(RADIUS_M.x, RADIUS_M.y, night), mix(RADIUS_PX.x, RADIUS_PX.y, night) * pixel);
     strength = lit * beam * fade * mix(STRENGTH.x, STRENGTH.y, night);
     corner = VERTEX.xy;
-    vec4 view = vec4(centre + vec3(VERTEX.xy * radius * step(0.001, strength), 0.0), 1.0);
+    vec4 view = CURVED(vec4(centre + vec3(VERTEX.xy * radius * step(0.001, strength), 0.0), 1.0), MODEL_MATRIX[3].xyz);
     float dist = length(view.xyz);
     float lift = clamp((dist - FAR_LIFT_START) * FAR_LIFT_RATE, 0.0, FAR_LIFT_MAX);
     view.xyz *= 1.0 - lift / max(dist, 1.0) - ROAD_DEPTH_BIAS - LIT_BIAS;

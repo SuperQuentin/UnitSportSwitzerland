@@ -16,7 +16,11 @@ public static class OccasionIds
 /// </summary>
 public sealed record OccasionAtmosphere
 {
-    /// <summary>Hours. The default 6 / 18 / 62° is <see cref="World.DayNight"/>'s own summer day.</summary>
+    /// <summary>
+    /// Hours. The default 6 / 18 / 62° is <see cref="World.DayNight"/>'s fixed summer day. Only the
+    /// fixed sun (<see cref="World.SunModel.Fixed"/>: check runs, trailers) reads these; the real sun
+    /// has the date's own day (#1430).
+    /// </summary>
     public float Sunrise { get; init; } = 6f;
     public float Sunset { get; init; } = 18f;
     public float NoonElevation { get; init; } = 62f;

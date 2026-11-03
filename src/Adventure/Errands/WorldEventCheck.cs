@@ -214,7 +214,7 @@ public partial class WorldEventCheck : ChatProbe
         for (int guard = 0; guard < 400; guard++)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = Math.Sqrt(de * de + dn * dn);
+            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
             if (d < 3) return;
             double step = Math.Min(d, 1.5);
             me.GlobalPosition += new Vector3((float)(de / d * step), 0.1f, (float)(-dn / d * step));
@@ -229,7 +229,7 @@ public partial class WorldEventCheck : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = Math.Sqrt(de * de + dn * dn);
+            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
             if (d < 0.5) break;
             double step = Math.Min(d, 20);
             me.GlobalPosition += new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step));

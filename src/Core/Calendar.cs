@@ -26,7 +26,11 @@ public static class Calendar
 
 #if GODOT
     private static readonly Lazy<DateOnly?> PinnedDate = new(() =>
+#if TRAILER
         DateFrom(CmdArgs.All) ?? (Trailer.TrailerDirector.Requested && !Trailer.TrailerDirector.Unpinned ? Trailer.TrailerDirector.FilmDate : null));
+#else
+        DateFrom(CmdArgs.All)); // a build without the trailer studio (#1074) films nothing
+#endif
 
     /// <summary>The date pinned for this process (<c>--date</c>, or a film's), null in normal play.</summary>
     public static DateOnly? Pinned => PinnedDate.Value;

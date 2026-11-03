@@ -241,7 +241,7 @@ public partial class RewardNetProbe : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = Math.Sqrt(de * de + dn * dn);
+            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
             if (d < 0.3) break;
             double s = Math.Min(d, step);
             me.GlobalPosition += new Vector3((float)(de / d * s), 0.2f, (float)(-dn / d * s));

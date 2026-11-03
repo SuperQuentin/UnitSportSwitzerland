@@ -293,6 +293,9 @@ public enum ItemId
     // ---- the action-RPG combat (#1370; 600-619 are its block) ----
     /// <summary>The sword (#1371): held, the combat controls are on (<see cref="ItemUse.Sword"/>, <c>docs/notes/combat/sword-combat.md</c>).</summary>
     Sword = 600,
+    // ---- space (#1430, docs/plans/ellipsoid-handover.md; 640-649 are its block) ----
+    /// <summary>A telescope on its tripod (#1440): Use sets it up, E looks through it at the moon (<c>items/telescope</c>).</summary>
+    Telescope = 640,
 
     // ---- the Zibelemärit (#1373, docs/notes/occasions/festival-zibelemaerit.md; 525-529 are its block) ----
     /// <summary>A braid of onions, bought at the Zwiebelzopf stall: worth nothing but the look in the hand.</summary>

@@ -290,7 +290,7 @@ public partial class OccasionDecor : Node
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             });
 
-        tile.Node.AddChild(root);
+        tile.Node.AddChild(Styles.ZoomRanges.TrackTree(root));
         tile.Decor = root;
     }
 

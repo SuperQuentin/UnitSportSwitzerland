@@ -556,4 +556,24 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.InRange(CorePlanner.SignedArea(ring), 199, 202);
         Assert.DoesNotContain(new UnitSport.Tools.RoadGen.Geometry.Vec2(20, 8), ring);
     }
+
+    [Fact]
+    public void A_one_point_centre_line_is_not_offset_and_does_not_throw()
+    {
+        var point = new UnitSport.Tools.RoadGen.Geometry.Vec2(5, 7);
+        var offset = CorePlanner.Offset(new[] { point }, 2.0);
+        Assert.Equal(new[] { point }, offset);
+    }
+
+    [Fact]
+    public void An_empty_leg_is_not_spliced_and_does_not_throw()
+    {
+        // the nationwide pass aborted on an index out of range here (#1427): the merge declines instead
+        var axis = ArmAxis.Straight(new(0, 0), 0);
+        var line = new List<UnitSport.Tools.RoadGen.Geometry.Vec2> { new(0, 0), new(5, 0) };
+        Assert.False(MergedCore.Splice(line, [], axis, 0));
+        Assert.False(MergedCore.Splice([], line, axis, 0));
+        Assert.Equal(2, line.Count);
+        Assert.True(MergedCore.Splice(line, [new(8, 0), new(12, 0)], axis, 0));
+    }
 }

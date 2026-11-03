@@ -78,7 +78,7 @@ public partial class CinemaProbe : Node
         var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, c.W, c.D, c.H, c.Kind) } };
         Venues.Override = new List<VenueRecord>
         {
-            new("n1", VenueType.Cinema, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", $"Cinéma {c.Name}"),
+            new("n1", VenueType.Cinema, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, "", $"Cinéma {c.Name}"),
         };
         string what = $"{c.Name} ({c.W}x{c.D} m, {c.H} m, {c.Kind})";
         Check(Venues.HallOf(BuildingTypes.For(tile), 0) == VenueType.Cinema, $"{what}: the solid is a cinema");
