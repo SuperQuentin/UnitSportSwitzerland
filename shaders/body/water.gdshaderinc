@@ -90,7 +90,7 @@ void vertex() {
     wave_lift = d.y;
     wave_scale = UV.x;
     world_pos = rest + d;
-    POSITION = retro_snap(PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 // ---- fine ripples: shading only ----------------------------------------------------------
@@ -179,7 +179,10 @@ void fragment() {
     float through = max(0.0, -behind.z / behind.w + drawn.z);
     // and straight down to it: the depth of the water here (the sky behind: very deep)
     vec3 bed = UNCURVED_FRAGMENT((INV_VIEW_MATRIX * vec4(behind.xyz / behind.w, 1.0)).xyz);
-    float depth = scene_depth <= 0.0 ? 1000.0 : max(0.0, world_pos.y - bed.y);
+    // a bed above the surface: on the curved Earth a view grazing the water's bulge leaves it
+    // again and meets the far shore above the water (from 1.7 m up, past ~5 km): deep, not a shore
+    // line drawn along every far coast (#187)
+    float depth = scene_depth <= 0.0 || (world_curvature > 0.0 && bed.y > world_pos.y) ? 1000.0 : max(0.0, world_pos.y - bed.y);
 #endif
 
 #ifndef STYLE_LIT

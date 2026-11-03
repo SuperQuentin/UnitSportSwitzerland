@@ -16,7 +16,17 @@ vec4 curved_view(vec4 view, vec3 world, vec3 eye, mat4 view_matrix) {
     return view;
 }
 
-// The two as a vertex() writes them: POSITION = PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * v, world_pos).
+// The same on a clip-space position: the flat product PROJECTION_MATRIX * MODELVIEW_MATRIX * v less the
+// projected drop. Flat (world_curvature 0) it is that product bit for bit; P * (MV * v) rounds differently
+// and speckled grass and leaves in the Realistic style (0.65 % of a near shot's pixels, #187).
+vec4 curved_clip(vec4 clip, vec3 world, vec3 eye, mat4 view_matrix, mat4 projection) {
+    vec2 d = world.xz - eye.xz;
+    return clip - projection * vec4(view_matrix[1].xyz * (dot(d, d) * world_curvature), 0.0);
+}
+
+// As a vertex() writes them: POSITION = CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * v, world_pos), or
+// CURVED on a view-space position that is worked on further (the road's far lift, the lamps' pull to the eye).
+#define CURVED_CLIP(clip, world) curved_clip(clip, world, MAIN_CAM_INV_VIEW_MATRIX[3].xyz, VIEW_MATRIX, PROJECTION_MATRIX)
 #define CURVED(view, world) curved_view(view, world, MAIN_CAM_INV_VIEW_MATRIX[3].xyz, VIEW_MATRIX)
 // In fragment(), which has no MAIN_CAM_INV_VIEW_MATRIX and only runs for the view's own camera (a
 // shadow pass has no fragment of ours), round CAMERA_POSITION_WORLD: the same point.

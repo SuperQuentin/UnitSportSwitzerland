@@ -26,7 +26,7 @@ varying vec3 world_pos;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    POSITION = retro_snap(PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 void fragment() {

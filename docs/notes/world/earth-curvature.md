@@ -8,7 +8,9 @@
   refraction, what a photo shows): R_eff ≈ 7,332 km. 7 cm at 1 km, 6.8 m at 10 km, 246 m at 60 km,
   682 m at 100 km. One source: `src/Core/Curvature.cs` (plain C#, `CurvatureTests`).
 - **Shaders**: `shaders/common/curvature.gdshaderinc` (included by `common/world.gdshaderinc` and
-  the avatar body). A body writes `POSITION = PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * v, world_pos)`;
+  the avatar body). A body writes `POSITION = CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * v, world_pos)`
+  (flat, that is the old product bit for bit; `P * (MV * v)` rounds differently and speckled the
+  Realistic grass), or `CURVED(view, world)` on a view-space position it works on further (road, lamps);
   a depth-buffer read is put back with `UNCURVED_FRAGMENT(world)` (the water's depth and refraction).
   - **Only `POSITION` curves.** `VERTEX` and `world_pos` stay flat: facet normals, `pattern_xz`,
     portal clipping, the sightline cut, the horizon cover, the far-tree ray tracing and the mist

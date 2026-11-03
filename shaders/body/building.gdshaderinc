@@ -579,7 +579,7 @@ void vertex() {
     // a roof's UV2 is its own frame, not a storey count or a garage flag
     storey_count = roof_kind > 0.5 ? 0.0 : UV2.x;
     garage_flag = roof_kind > 0.5 ? 0.0 : UV2.y;
-    POSITION = retro_snap(PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 void fragment() {

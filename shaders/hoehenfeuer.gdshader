@@ -24,7 +24,7 @@ void vertex() {
 	float flick = 0.90 + 0.10 * sin(TIME * 9.0 + v_phase * 40.0) + 0.06 * sin(TIME * 23.0 + v_phase * 91.0);
 	vec3 right = normalize(vec3(INV_VIEW_MATRIX[0].x, 0.0, INV_VIEW_MATRIX[0].z));
 	vec3 pos = centre + right * (VERTEX.x * width * grow) + vec3(0.0, VERTEX.y * height * grow * flick, 0.0);
-	POSITION = PROJECTION_MATRIX * CURVED(VIEW_MATRIX * vec4(pos, 1.0), pos);
+	POSITION = CURVED_CLIP(PROJECTION_MATRIX * VIEW_MATRIX * vec4(pos, 1.0), pos);
 }
 
 void fragment() {

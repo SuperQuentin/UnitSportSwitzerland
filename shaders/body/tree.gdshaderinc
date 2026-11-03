@@ -113,7 +113,7 @@ void vertex() {
     NORMAL = -fwd;
     world_pos = wp;
     view_pos = (VIEW_MATRIX * vec4(wp, 1.0)).xyz;
-    POSITION = retro_snap(PROJECTION_MATRIX * CURVED(VIEW_MATRIX * vec4(wp, 1.0), wp));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * VIEW_MATRIX * vec4(wp, 1.0), wp));
 #else
     lod_keep = 1.0;
     if (tree_lod) {
@@ -136,7 +136,7 @@ void vertex() {
         world_pos += (side * swing * 0.05 + away * world_music_beat.x * 0.035) * tall * mr * up * up;
     }
     view_pos = (VIEW_MATRIX * vec4(world_pos, 1.0)).xyz;
-    POSITION = retro_snap(PROJECTION_MATRIX * CURVED(VIEW_MATRIX * vec4(world_pos, 1.0), world_pos));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * VIEW_MATRIX * vec4(world_pos, 1.0), world_pos));
 #endif
 }
 
