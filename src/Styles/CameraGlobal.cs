@@ -47,7 +47,9 @@ public partial class CameraGlobal : Node
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Push;
 
     private static readonly StringName WorldCamPos = "world_cam_pos", WorldLodScale = "world_lod_scale",
-        CurvatureParam = "world_curvature", CurveBlendParam = "world_curve_blend", BaseFogMeta = "base_fog_density";
+        CurvatureParam = "world_curvature", CurveBlendParam = "world_curve_blend", GroundYParam = "world_ground_y",
+        BaseFogMeta = "base_fog_density";
+    private float _groundY = float.NaN;
     private float _curveBlend = float.NaN, _fogScale = float.NaN;
     private Godot.Environment? _fogEnv;
     private float _pushedScale = 1f;
@@ -87,6 +89,13 @@ public partial class CameraGlobal : Node
         {
             _curveBlend = blend;
             RenderingServer.GlobalShaderParameterSet(CurveBlendParam, blend);
+        }
+        // where sea level is in world Y: 0, but in the Space regime (the origin rises with the camera, #1430 H3)
+        float groundY = (float)-(Origin?.Alt0 ?? 0);
+        if (groundY != _groundY)
+        {
+            _groundY = groundY;
+            RenderingServer.GlobalShaderParameterSet(GroundYParam, groundY);
         }
         if (camera != null) Climb(camera, altitude);
         ZoomRanges.Tick();

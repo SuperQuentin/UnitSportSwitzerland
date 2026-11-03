@@ -69,6 +69,13 @@ public sealed class OriginFrame
     /// <summary>Bumped by every move of the origin; two frames with the same epoch are the same.</summary>
     public int Epoch { get; }
 
+    /// <summary>
+    /// The ground frame's vertical origin (#1430 H3): the altitude that is world Y = 0. 0 on the ground,
+    /// where Y is the altitude; high up (the Space regime, while tiles are flat LV95) the origin rises
+    /// with the camera, so floats stay small up there too, and Y is altitude less this.
+    /// </summary>
+    public double Alt0 { get; }
+
     /// <summary>The anchor frame's place on the Earth; null for the flat LV95 ground frame.</summary>
     public FrameAxes? Axes { get; }
 
@@ -80,6 +87,9 @@ public sealed class OriginFrame
         N = n;
         Epoch = epoch;
     }
+
+    /// <summary>A ground frame whose world Y = 0 is at altitude <paramref name="alt0"/> (#1430 H3, the Space regime).</summary>
+    public OriginFrame(double e, double n, double alt0, int epoch) : this(e, n, epoch) => Alt0 = alt0;
 
     /// <summary>An anchor frame (#1430 H3): world (0, 0, 0) at <paramref name="axes"/>' origin, its axes the world's.</summary>
     public OriginFrame(FrameAxes axes, int epoch)
@@ -93,7 +103,9 @@ public sealed class OriginFrame
 
     /// <summary>The same place and axes (whatever the epoch): nothing to map between them.</summary>
     public bool SameFrame(OriginFrame other) =>
-        ReferenceEquals(this, other) || (Axes == null ? other.Axes == null && E == other.E && N == other.N : Axes.Equals(other.Axes));
+        ReferenceEquals(this, other) || (Axes == null
+            ? other.Axes == null && E == other.E && N == other.N && Alt0 == other.Alt0
+            : Axes.Equals(other.Axes));
 
     /// <summary>
     /// A frame that is no peer's origin: the anchor a list of points travels with on the network
@@ -109,7 +121,7 @@ public sealed class OriginFrame
 
     public Vector3 ToWorld(double lv95E, double lv95N, double altitude)
     {
-        if (Axes == null) return new((float)(lv95E - E), (float)altitude, (float)-(lv95N - N));
+        if (Axes == null) return new((float)(lv95E - E), (float)(altitude - Alt0), (float)-(lv95N - N));
         var (x, y, z) = Axes.FromEcef(SwissGeodesy.ToEcef(lv95E, lv95N, altitude));
         return new((float)x, (float)y, (float)z);
     }
@@ -124,14 +136,14 @@ public sealed class OriginFrame
     }
 
     public GlobalPos ToGlobal(Vector3 world) => Axes == null
-        ? new(E + world.X, N - world.Z, world.Y)
+        ? new(E + world.X, N - world.Z, world.Y + Alt0)
         : GlobalPos.FromEcef(Axes.ToEcef(world.X, world.Y, world.Z));
 
     /// <summary>
     /// The altitude (LV95 heights: above sea level) of a world point (#1430 H3): its Y in the ground
     /// frame, its place's height in an anchor frame, where Y is height over the anchor's tangent plane.
     /// </summary>
-    public double AltitudeOf(Vector3 world) => Axes == null ? world.Y : ToGlobal(world).Alt;
+    public double AltitudeOf(Vector3 world) => Axes == null ? world.Y + Alt0 : ToGlobal(world).Alt;
 
     /// <summary>The way up at a world point, in world axes (#1430 H3): +Y in the ground frame, the ellipsoid's up in an anchor frame.</summary>
     public Vector3 UpAt(Vector3 world)
@@ -184,7 +196,7 @@ public sealed class OriginFrame
         {
             var (e, n) = ToLv95(world);
             var (x, z) = id.Local(e, n);
-            return new Vector3((float)x, world.Y, (float)z);
+            return new Vector3((float)x, (float)(world.Y + Alt0), (float)z);
         }
         var p = ToGlobal(world);
         var (lx, lz) = id.Local(p.E, p.N);
@@ -199,7 +211,9 @@ public sealed class OriginFrame
     /// </summary>
     public OriginShift Since(OriginFrame earlier)
     {
-        if (Axes == null && earlier.Axes == null) return SinceAnchor(earlier.E, earlier.N);
+        if (Axes == null && earlier.Axes == null)
+            return new(new Transform3D(Basis.Identity,
+                new Vector3((float)(earlier.E - E), (float)(earlier.Alt0 - Alt0), (float)-(earlier.N - N))));
         var at = Axes?.Origin ?? earlier.Axes!.Origin;
         var a = earlier.Embedding(at);
         var b = Embedding(at);
@@ -214,7 +228,7 @@ public sealed class OriginFrame
         var (e, n, h) = SwissGeodesy.FromEcef(at);
         var g = FrameAxes.GroundAt(e, n, h);
         // the ground world point there, and the origin that puts it at g's origin along g's axes
-        double wx = e - E, wy = h, wz = -(n - N);
+        double wx = e - E, wy = h - Alt0, wz = -(n - N);
         return g with { Origin = g.ToEcef(-wx, -wy, -wz) };
     }
 
@@ -223,7 +237,7 @@ public sealed class OriginFrame
     /// position relative to it into this frame. Nothing allocated, for code that runs every tick.
     /// </summary>
     public OriginShift SinceAnchor(double e, double n) => Axes == null
-        ? new(new Transform3D(Basis.Identity, new Vector3((float)(e - E), 0, (float)-(n - N))))
+        ? new(new Transform3D(Basis.Identity, new Vector3((float)(e - E), (float)-Alt0, (float)-(n - N))))
         : Since(Anchor(e, n));
 }
 
@@ -274,12 +288,15 @@ public sealed class WorldOrigin
     /// <see cref="OriginShifter"/>'s first step: the new frame, and how world space moved. The
     /// caller then moves every node and calls <see cref="RaiseShifted"/>.
     /// </summary>
-    internal OriginShift MoveTo(double e, double n)
+    internal OriginShift MoveTo(double e, double n, double alt0 = 0)
     {
         var old = _frame;
-        _frame = new OriginFrame(e, n, old.Epoch + 1);
+        _frame = new OriginFrame(e, n, alt0, old.Epoch + 1);
         return _frame.Since(old);
     }
+
+    /// <summary>The ground frame's vertical origin now (#1430 H3): 0 but in the Space regime.</summary>
+    public double Alt0 => _frame.Alt0;
 
     /// <summary>The same to an anchor frame (#1430 H3): world (0, 0, 0) and its axes at <paramref name="axes"/>.</summary>
     internal OriginShift MoveTo(FrameAxes axes)
