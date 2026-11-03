@@ -396,6 +396,92 @@ public class EphemerisTests
         Assert.Equal(0, Math.IEEERemainder(pa - poleAngle, 360), 0.6);
     }
 
+    /// <summary>JPL Horizons from Bern (QUANTITIES 4) for Jupiter's four big moons and Titan at the table's times.</summary>
+    private static readonly (string Utc, SkyBody Body, double Az, double El)[] MoonRows =
+    [
+        ("2026-Jan-01 03:07:12", SkyBody.Io, 248.172560292, 48.098668252),
+        ("2026-Feb-07 16:04:48", SkyBody.Io, 79.702021807, 21.934017842),
+        ("2026-Mar-17 05:02:24", SkyBody.Io, 332.706609925, -15.474956523),
+        ("2026-Apr-23 18:00:00", SkyBody.Io, 219.851358426, 60.957616304),
+        ("2026-May-30 14:38:24", SkyBody.Io, 178.654542901, 64.785070139),
+        ("2026-Jul-07 03:36:00", SkyBody.Io, 40.690919942, -12.565078335),
+        ("2026-Aug-13 16:33:36", SkyBody.Io, 279.669831414, 16.178107124),
+        ("2026-Sep-20 05:31:12", SkyBody.Io, 108.839581277, 38.107827921),
+        ("2026-Oct-27 02:09:36", SkyBody.Io, 93.942548332, 23.330942194),
+        ("2026-Dec-03 15:07:12", SkyBody.Io, 335.268536047, -26.393679449),
+        ("2026-Jan-01 03:07:12", SkyBody.Europa, 248.125068465, 48.118214145),
+        ("2026-Feb-07 16:04:48", SkyBody.Europa, 79.671328747, 21.893154828),
+        ("2026-Mar-17 05:02:24", SkyBody.Europa, 332.773772092, -15.489729396),
+        ("2026-Apr-23 18:00:00", SkyBody.Europa, 219.811085786, 60.964778563),
+        ("2026-May-30 14:38:24", SkyBody.Europa, 178.752239901, 64.793538991),
+        ("2026-Jul-07 03:36:00", SkyBody.Europa, 40.684869419, -12.570018694),
+        ("2026-Aug-13 16:33:36", SkyBody.Europa, 279.697409567, 16.164519712),
+        ("2026-Sep-20 05:31:12", SkyBody.Europa, 108.799078858, 38.047487278),
+        ("2026-Oct-27 02:09:36", SkyBody.Europa, 93.948068887, 23.343161440),
+        ("2026-Dec-03 15:07:12", SkyBody.Europa, 335.186571102, -26.400548026),
+        ("2026-Jan-01 03:07:12", SkyBody.Ganymede, 248.229740475, 48.073092430),
+        ("2026-Feb-07 16:04:48", SkyBody.Ganymede, 79.717116496, 21.956729800),
+        ("2026-Mar-17 05:02:24", SkyBody.Ganymede, 332.656521776, -15.464103896),
+        ("2026-Apr-23 18:00:00", SkyBody.Ganymede, 219.816128849, 60.962249188),
+        ("2026-May-30 14:38:24", SkyBody.Ganymede, 178.744617521, 64.791740989),
+        ("2026-Jul-07 03:36:00", SkyBody.Ganymede, 40.755375399, -12.506017083),
+        ("2026-Aug-13 16:33:36", SkyBody.Ganymede, 279.667931802, 16.180212921),
+        ("2026-Sep-20 05:31:12", SkyBody.Ganymede, 108.784502927, 38.025715842),
+        ("2026-Oct-27 02:09:36", SkyBody.Ganymede, 93.911347911, 23.265928421),
+        ("2026-Dec-03 15:07:12", SkyBody.Ganymede, 335.281095658, -26.392186769),
+        ("2026-Jan-01 03:07:12", SkyBody.Callisto, 248.202441608, 48.090096659),
+        ("2026-Feb-07 16:04:48", SkyBody.Callisto, 79.589848890, 21.785036811),
+        ("2026-Mar-17 05:02:24", SkyBody.Callisto, 332.690511095, -15.475210174),
+        ("2026-Apr-23 18:00:00", SkyBody.Callisto, 220.144700181, 60.906819905),
+        ("2026-May-30 14:38:24", SkyBody.Callisto, 178.873085404, 64.806654010),
+        ("2026-Jul-07 03:36:00", SkyBody.Callisto, 40.644779759, -12.604857839),
+        ("2026-Aug-13 16:33:36", SkyBody.Callisto, 279.576013225, 16.225424847),
+        ("2026-Sep-20 05:31:12", SkyBody.Callisto, 108.856406979, 38.132049899),
+        ("2026-Oct-27 02:09:36", SkyBody.Callisto, 93.994665836, 23.437225549),
+        ("2026-Dec-03 15:07:12", SkyBody.Callisto, 335.222568933, -26.398464886),
+        ("2026-Jan-01 03:07:12", SkyBody.Titan, 329.011123519, -42.525546894),
+        ("2026-Feb-07 16:04:48", SkyBody.Titan, 212.842946525, 35.697722305),
+        ("2026-Mar-17 05:02:24", SkyBody.Titan, 78.202304299, -11.447545654),
+        ("2026-Apr-23 18:00:00", SkyBody.Titan, 294.365695186, -19.404202368),
+        ("2026-May-30 14:38:24", SkyBody.Titan, 281.480499989, -6.878425545),
+        ("2026-Jul-07 03:36:00", SkyBody.Titan, 142.603413752, 40.391625513),
+        ("2026-Aug-13 16:33:36", SkyBody.Titan, 29.487090519, -35.591896572),
+        ("2026-Sep-20 05:31:12", SkyBody.Titan, 261.975689726, 10.710693306),
+        ("2026-Oct-27 02:09:36", SkyBody.Titan, 252.452887536, 17.484994459),
+        ("2026-Dec-03 15:07:12", SkyBody.Titan, 110.979917837, 19.520443292),
+    ];
+
+    /// <summary>
+    /// Each big moon's offset from its planet on the sky against Horizons': within a tenth of its
+    /// orbit's size (the circles leave out eccentricity and resonance).
+    /// </summary>
+    [Fact]
+    public void Big_moons_sit_beside_their_planets_as_Horizons_has_them()
+    {
+        var bern = new Geodetic(46.9511, 7.4386, 550);
+        static (double E, double N, double U) Dir(double az, double el) =>
+            (Math.Sin(az * Deg) * Math.Cos(el * Deg), Math.Cos(az * Deg) * Math.Cos(el * Deg), Math.Sin(el * Deg));
+        double worst = 0;
+        foreach (var m in MoonRows)
+        {
+            var utc = DateTime.SpecifyKind(DateTime.ParseExact(m.Utc, "yyyy-MMM-dd HH:mm:ss", CultureInfo.InvariantCulture), DateTimeKind.Utc);
+            var parent = Ephemeris.ParentOf(m.Body);
+            var p = PlanetRows.First(r => r.Utc == m.Utc && r.Body == parent);
+            var (pe, pn, pu) = Dir(p.Az, p.El);
+            var (me, mn, mu) = Dir(m.Az, m.El);
+            var hp = Ephemeris.Topocentric(parent, utc, bern);
+            var hm = Ephemeris.Topocentric(m.Body, utc, bern);
+            // the offsets moon - planet in the observer's frame, radians: Horizons' against ours
+            double ex = me - pe, ey = mn - pn, ez = mu - pu;
+            double cx = hm.East - hp.East, cy = hm.North - hp.North, cz = hm.Up - hp.Up;
+            double err = Math.Sqrt((ex - cx) * (ex - cx) + (ey - cy) * (ey - cy) + (ez - cz) * (ez - cz));
+            double orbit = Ephemeris.OrbitOf(m.Body) / hp.Distance;
+            worst = Math.Max(worst, err / orbit);
+            Assert.True(err < 0.1 * orbit, $"{m.Body} {m.Utc}: off by {err / orbit:P1} of its orbit");
+        }
+        Console.WriteLine($"worst {worst:P2} of an orbit");
+    }
+
     [Fact]
     public void Swiss_civil_time_to_UTC()
     {

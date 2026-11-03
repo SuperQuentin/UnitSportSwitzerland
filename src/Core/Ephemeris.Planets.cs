@@ -56,11 +56,19 @@ public static partial class Ephemeris
     public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc)
     {
         if (body == SkyBody.Moon) return MoonAxes(utc);
+        body = ParentOf(body);   // a big moon: its planet's frame (it keeps a face to it)
         double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0;
         if (body != SkyBody.Sun) d -= Equatorial(body, utc).Distance / AuMetres / LightAuPerDay;
         double t = d / 36525.0;
+        var (a0, d0, w) = Rotation(body, d, t);
+        return Frame(a0, d0, w, utc, t);
+    }
+
+    /// <summary>The IAU pole (ICRF right ascension, declination) and prime meridian angle, degrees, at <paramref name="d"/> days and <paramref name="t"/> centuries from J2000.</summary>
+    private static (double A0, double D0, double W) Rotation(SkyBody body, double d, double t)
+    {
         double n = (357.85 + 52.316 * t) * Deg;   // Neptune's pole wobble
-        var (a0, d0, w) = body switch
+        return body switch
         {
             SkyBody.Sun => (286.13, 63.87, 84.176 + 14.1844 * d),
             SkyBody.Mercury => (281.0103 - 0.0328 * t, 61.4155 - 0.0049 * t, 329.5988 + 6.1385108 * d),
@@ -71,7 +79,50 @@ public static partial class Ephemeris
             SkyBody.Uranus => (257.311, -15.175, 203.81 - 501.1600928 * d),
             _ => (299.36 + 0.70 * Math.Sin(n), 43.46 - 0.51 * Math.Cos(n), 249.978 + 541.1397757 * d - 0.48 * Math.Sin(n)),
         };
-        return Frame(a0, d0, w, utc, t);
+    }
+
+    /// <summary>
+    /// The big moons (#1444) as circles in their planet's equator: the semi-major axis (m), their
+    /// longitude from the node of that equator on the ICRF's (degrees, fitted to JPL Horizons on
+    /// 2026-01-01 0h TDB), their mean motion (degrees a day) and their radius (m). Good to a few
+    /// percent of their orbit: their eccentricities (Titan's 0.03) and resonances are left out.
+    /// </summary>
+    private static readonly (SkyBody Parent, double A, double Lambda0, double Rate, double Radius)[] Satellites =
+    [
+        (SkyBody.Jupiter, 421_700_000, 333.294, 360 / 1.769137786, 1_821_600),
+        (SkyBody.Jupiter, 671_034_000, 278.787, 360 / 3.551181041, 1_560_800),
+        (SkyBody.Jupiter, 1_070_412_000, 343.003, 360 / 7.15455296, 2_634_100),
+        (SkyBody.Jupiter, 1_882_709_000, 91.443, 360 / 16.6890184, 2_410_300),
+        (SkyBody.Saturn, 1_221_870_000, 209.374, 360 / 15.945421, 2_574_730),
+    ];
+
+    private const double SatelliteEpoch = 2461041.5;
+
+    /// <summary>The planet a big moon goes round, or the body itself.</summary>
+    public static SkyBody ParentOf(SkyBody body) => body >= SkyBody.Io ? Satellites[body - SkyBody.Io].Parent : body;
+
+    /// <summary>A big moon's orbit radius, metres (0 for anything else).</summary>
+    public static double OrbitOf(SkyBody body) => body >= SkyBody.Io ? Satellites[body - SkyBody.Io].A : 0;
+
+    /// <summary>A big moon's apparent place: its planet's, plus its place on its circle as the light left it.</summary>
+    private static (double Ra, double Dec, double Distance) SatelliteEquatorial(SkyBody body, double t)
+    {
+        var s = Satellites[body - SkyBody.Io];
+        var (ra, dec, dist) = PlanetEquatorial(s.Parent, t);
+        double tLeft = t - dist / AuMetres / LightAuPerDay / 36525.0;
+        double d = tLeft * 36525.0;
+        var (a0, d0, _) = Rotation(s.Parent, d, tLeft);
+        a0 *= Deg;
+        d0 *= Deg;
+        var pole = new Terrain.Format.EcefPos(Math.Cos(d0) * Math.Cos(a0), Math.Cos(d0) * Math.Sin(a0), Math.Sin(d0));
+        var node = new Terrain.Format.EcefPos(-Math.Sin(a0), Math.Cos(a0), 0);
+        var across = Cross(pole, node);
+        double lam = (s.Lambda0 + s.Rate * (d + 2451545.0 - SatelliteEpoch)) * Deg;
+        var dir = Precess(Scale(node, Math.Cos(lam)) + Scale(across, Math.Sin(lam)), tLeft);
+        var planet = new Terrain.Format.EcefPos(dist * Math.Cos(dec) * Math.Cos(ra), dist * Math.Cos(dec) * Math.Sin(ra), dist * Math.Sin(dec));
+        var g = planet + Scale(dir, s.A);
+        double len = g.Length;
+        return (Math.Atan2(g.Y, g.X), Math.Asin(g.Z / len), len);
     }
 
     /// <summary>A body's equatorial and polar radii, metres (IAU): the gas giants are visibly flattened.</summary>
@@ -85,7 +136,8 @@ public static partial class Ephemeris
         SkyBody.Jupiter => (71_492_000, 66_854_000),
         SkyBody.Saturn => (60_268_000, 54_364_000),
         SkyBody.Uranus => (25_559_000, 24_973_000),
-        _ => (24_764_000, 24_341_000),
+        SkyBody.Neptune => (24_764_000, 24_341_000),
+        _ => (Satellites[body - SkyBody.Io].Radius, Satellites[body - SkyBody.Io].Radius),
     };
 
     /// <summary>A planet's apparent place of date: right ascension, declination (radians) and its distance (m).</summary>
