@@ -30,6 +30,9 @@ public partial class CameraGlobal : Node
 {
     public CameraGlobal() => Name = "CameraGlobal";
 
+    /// <summary>The world's origin: the camera's altitude is read through it (#1430 H3: in an anchor frame Y is not the altitude).</summary>
+    public Core.WorldOrigin? Origin { get; set; }
+
     /// <summary>The drop per square metre last pushed (<see cref="Core.Curvature"/>), NaN before the first push.</summary>
     private float _curvature = float.NaN;
 
@@ -72,7 +75,7 @@ public partial class CameraGlobal : Node
         // the Earth's curvature in every world shader (#187), by the camera's height (#1430 H1): refraction
         // fades out from 5 to 20 km, the drop gives way to the exact sphere from 20 to 50 km. Pushed when it changes.
         var camera = GetViewport()?.GetCamera3D();
-        double altitude = camera?.GlobalPosition.Y ?? 0;
+        double altitude = camera == null ? 0 : Origin?.AltitudeOf(camera.GlobalPosition) ?? camera.GlobalPosition.Y;
         float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2At(altitude) : 0f;
         if (curvature != _curvature)
         {

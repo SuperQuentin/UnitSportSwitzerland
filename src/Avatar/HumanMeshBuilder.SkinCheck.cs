@@ -100,6 +100,8 @@ public static partial class HumanMeshBuilder
         poses.Add(("vr up", ApplyVr(RigFor(HumanPose.Standing), new VrArms(new Vector3(0.2f, 0.5f, -0.1f), new Vector3(-0.4f, -0.5f, 0.1f)))));
         foreach (float t in new[] { 0.1f, 0.4f, 0.9f })
             poses.Add(($"fall {t}", FallRig(t)));
+        foreach (float lean in new[] { 0f, 0.5f, 1f })
+            poses.Add(($"fly {lean}", FlyRig(lean, 0.7f)));
         foreach (var style in Enum.GetValues<SwimStyle>())
             foreach (float phase in new[] { 0f, 0.3f, 0.7f })
                 poses.Add(($"swim {style} {phase}", SwimRig(style, phase)));

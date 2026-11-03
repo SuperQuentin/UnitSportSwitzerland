@@ -158,7 +158,7 @@ public sealed class PoolPlay : TableGamePlay.Mode
 
     public static GameSpec Spec => new(
         FurnitureType.PoolTable, GameKind.Pool, "Pool table",
-        f => { var c = PoolGame.Cloth(f.W, f.D); return new PoolGame(c.Hx, c.Hz, System.Environment.TickCount); },
+        f => { var c = PoolGame.Cloth(f.W, f.D); return new PoolGame(c.Hx, c.Hz, System.Random.Shared.Next()); },
         (local, f) => GameCatalog.Round(local, f, 1.0f),
         f => (new Vector3(0, 0.45f, 0), new Vector3(f.W, 0.9f, f.D)),
         PoolRig.Create,

@@ -296,6 +296,18 @@ public enum ItemId
     // ---- space (#1430, docs/plans/ellipsoid-handover.md; 640-649 are its block) ----
     /// <summary>A telescope on its tripod (#1440): Use sets it up, E looks through it at the moon (<c>items/telescope</c>).</summary>
     Telescope = 640,
+    // ---- the arcade (#1326, docs/notes/terrain/table-games.md; 660-669 are its block) ----
+    /// <summary>An arcade's token, a Batzen, from the change machine (1 CHF each): a machine takes one a game.</summary>
+    ArcadeCoin = 660,
+    /// <summary>A prize ticket, paid by the arcade's games; the prize counter swaps them for prizes.</summary>
+    PrizeTicket = 661,
+    /// <summary>The arcade's prizes, from the claw machine and the prize counter: plush toys (throwable, as the Blåhaj), small things, sweets.</summary>
+    PlushCow = 662,
+    PlushMarmot = 663,
+    PlushBernese = 664,
+    Keyring = 665,
+    BouncyBall = 666,
+    SweetsBag = 667,
 
     // ---- the Zibelemärit (#1373, docs/notes/occasions/festival-zibelemaerit.md; 525-529 are its block) ----
     /// <summary>A braid of onions, bought at the Zwiebelzopf stall: worth nothing but the look in the hand.</summary>

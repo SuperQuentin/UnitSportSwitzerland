@@ -39,7 +39,7 @@ public partial class InteriorManager
             // a cinema seat from its row's lane (#1279), as E takes it before a cupboard; a bowling centre's
             // shoe counter, ball rack, hood and approach (#1323); a pinball machine (#1325)
             return InsideInteraction(p) ?? ChurchRadios.InteractionFor(p) ?? CinemaBooths.InteractionFor(p) ?? BowlingLanes.InteractionFor(p)
-                ?? Pinball.PinballTables.InteractionFor(p) ?? Games.TableGames.InteractionFor(p) ?? Occasions.Birthdays.BirthdayService.InteractionFor(p) ?? p.SeatInteraction()
+                ?? Pinball.PinballTables.InteractionFor(p) ?? Games.TableGames.InteractionFor(p) ?? Games.ArcadeCounters.InteractionFor(p) ?? Occasions.Birthdays.BirthdayService.InteractionFor(p) ?? p.SeatInteraction()
                 ?? (ExitAt(p) is { } exit ? ExitInteraction(exit) : Loot.LootService.Instance?.InteractionFor(p));
         }
         // a building site crane's ladder or its remote's box (#618); a farm stand or a buyer (#494); a

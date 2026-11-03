@@ -28,8 +28,11 @@ public static class Venues
 
     private static readonly Lazy<Index> Loaded = new(Load, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    /// <summary>Every venue, sorted by E then N. Empty if the resource is missing or unreadable.</summary>
-    public static IReadOnlyList<VenueRecord> List => Loaded.Value.Rows;
+    /// <summary>
+    /// Every venue, sorted by E then N: a world's own (<see cref="Override"/>: a test world's boulevard) when it has them,
+    /// else the embedded list. Empty if the resource is missing or unreadable.
+    /// </summary>
+    public static IReadOnlyList<VenueRecord> List => Current.Rows;
 
     /// <summary>
     /// Replaces the embedded list (the checks' hand-made venues); null restores it. Set before the
