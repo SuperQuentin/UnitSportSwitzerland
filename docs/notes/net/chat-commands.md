@@ -50,7 +50,7 @@
   directly (`tools/watercheck.sh`).
 - **`/movespeed [<factor> | normal] [player]`** (#1485, `player/move-speed`): an admin's movement speed factor, no
   upper cap, `1` / `normal` back to normal; offline the player, online admins only (the single check), not in a
-  round. The server sends it to the body's owner (`MoveSpeedSet`) or sets a bot's body (`SetMoveSpeed`).
+  round. The server sends it to the body's owner (`SpeedFactorSet`) or sets a bot's body (`SetMoveSpeed`).
 - **Venues and getting around (#994)**: `/stadium` (alias `/venue`, anyone, offline too): bare it gives the nearest of the
   33 `StadiumCatalog` venues, how far away it is and what plays there today (`ConcertService.ShowAt`: a hosted set or tonight's
   artist and hours). `/stadium list [stadium|arena|openair]` numbers them by kind; `/stadium <name|town|#n>` goes there

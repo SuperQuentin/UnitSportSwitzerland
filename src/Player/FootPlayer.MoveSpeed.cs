@@ -6,7 +6,7 @@ namespace UnitSport.Player;
 /// <c>/movespeed</c> (#1485): an admin's movement speed factor, no upper cap. It scales the body's own
 /// paths: walking, running, crawling, swimming, free climbing and creative flight (not vehicles, the
 /// equipment rides or the spectator camera, which has its own wheel speed). Foot movement is the
-/// owner's, so online the server decides and tells the owner (<c>ChatManager.MoveSpeedSet</c>); the
+/// owner's, so online the server decides and tells the owner (<c>ChatManager.SpeedFactorSet</c>); the
 /// other peers see the body move through the usual snapshots.
 /// </summary>
 public partial class FootPlayer

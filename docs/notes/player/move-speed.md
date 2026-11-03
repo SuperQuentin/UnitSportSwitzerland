@@ -20,7 +20,7 @@
   admin check: anyone else gets "'/movespeed' is an admin command". `RefusedInMatch`: nobody playing a round
   (`Core/Rounds`). The completer offers it to admins only.
 - **Online**: foot movement is the owner's, so the server sets its record and sends the factor to the owner
-  (`MoveSpeedSet`); the other peers see the body move through the usual snapshots, and nothing on the server snaps
+  (`SpeedFactorSet`); the other peers see the body move through the usual snapshots, and nothing on the server snaps
   it back (there are no movement checks). `ChatManager.SetMoveSpeed(peer, factor)` is the one server path: the
   command, a bot (`/movespeed 3 <bot name>`, `BotDirector.Named`), and the reset when an admin loses the rights
   (`OnAdminChanged`). Leaving a server resets the own factor (`Permissions.Reset`).

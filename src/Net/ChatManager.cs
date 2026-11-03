@@ -1915,7 +1915,7 @@ public partial class ChatManager : Node
     /// <summary>
     /// Server (#1485): a body's movement speed factor (<see cref="Player.FootPlayer.SpeedFactor"/>), the path
     /// <c>/movespeed</c> and a bot's brain take. A server-run bot's body moves at it here; a player's body is
-    /// its owner's, so the owner is told (<see cref="MoveSpeedSet"/>) and the server keeps it on its copy.
+    /// its owner's, so the owner is told (<see cref="SpeedFactorSet"/>) and the server keeps it on its copy.
     /// False when there is no such body or player.
     /// </summary>
     public bool SetMoveSpeed(long peer, float factor)
@@ -1928,14 +1928,14 @@ public partial class ChatManager : Node
         }
         if (_registry?.Find(peer) is not { Bodiless: false }) return false;
         if (body != null) body.SpeedFactor = factor;
-        RpcId(peer, MethodName.MoveSpeedSet, factor);
+        RpcId(peer, MethodName.SpeedFactorSet, factor);
         return true;
     }
 
     /// <summary>Client: the server set this player's movement speed (<c>/movespeed</c>, an admin's choice).</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void MoveSpeedSet(float factor) => Player.FootPlayer.SetOwnSpeedFactor(factor);
+    private void SpeedFactorSet(float factor) => Player.FootPlayer.SetOwnSpeedFactor(factor);
 
     /// <summary><c>/give &lt;player&gt; &lt;item&gt; [count]</c>: <c>/spawn</c> into someone else's inventory.</summary>
     private void CommandGive(long sender, string[] parts)
