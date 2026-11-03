@@ -18,7 +18,10 @@ vec4 curved_view(vec4 view, vec3 world, vec3 eye, mat4 view_matrix) {
 
 // The two as a vertex() writes them: POSITION = PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * v, world_pos).
 #define CURVED(view, world) curved_view(view, world, MAIN_CAM_INV_VIEW_MATRIX[3].xyz, VIEW_MATRIX)
-#define UNCURVED(world) uncurve(world, MAIN_CAM_INV_VIEW_MATRIX[3].xyz)
+// In fragment(), which has no MAIN_CAM_INV_VIEW_MATRIX and only runs for the view's own camera (a
+// shadow pass has no fragment of ours), round CAMERA_POSITION_WORLD: the same point.
+#define CURVED_FRAGMENT(view, world) curved_view(view, world, CAMERA_POSITION_WORLD, VIEW_MATRIX)
+#define UNCURVED_FRAGMENT(world) uncurve(world, CAMERA_POSITION_WORLD)
 
 // A world point rebuilt from the depth buffer (it was drawn curved), put back where the flat world has it.
 vec3 uncurve(vec3 world, vec3 eye) {

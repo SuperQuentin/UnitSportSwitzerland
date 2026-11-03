@@ -9,11 +9,11 @@
   682 m at 100 km. One source: `src/Core/Curvature.cs` (plain C#, `CurvatureTests`).
 - **Shaders**: `shaders/common/curvature.gdshaderinc` (included by `common/world.gdshaderinc` and
   the avatar body). A body writes `POSITION = PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * v, world_pos)`;
-  a depth-buffer read is put back with `UNCURVED(world)` (the water's depth and refraction).
+  a depth-buffer read is put back with `UNCURVED_FRAGMENT(world)` (the water's depth and refraction).
   - **Only `POSITION` curves.** `VERTEX` and `world_pos` stay flat: facet normals, `pattern_xz`,
     portal clipping, the sightline cut, the horizon cover, the far-tree ray tracing and the mist
     are as before. A fragment comparing itself with the depth buffer uses the drawn position
-    (`CURVED(vec4(VERTEX, 1.0), world_pos)`), as the water does.
+    (`CURVED_FRAGMENT(vec4(VERTEX, 1.0), world_pos)`: a fragment has no `MAIN_CAM_INV_VIEW_MATRIX`, `CAMERA_POSITION_WORLD` is the same point there), as the water does.
   - **Round the view's own main camera** (`MAIN_CAM_INV_VIEW_MATRIX`), not `world_cam_pos`: a
     shadow pass drops round the camera it shadows for, a mirror or portal round its own eye, and a
     preview viewport (character page) round its camera. With the global, a figure in a preview

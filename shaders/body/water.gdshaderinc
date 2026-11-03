@@ -164,7 +164,7 @@ void fragment() {
     vec2 ground = pattern_xz(world_pos);
     float dist = length(VERTEX);
     // where this surface was drawn (#187): the depth buffer behind it holds curved positions too
-    vec3 drawn = CURVED(vec4(VERTEX, 1.0), world_pos).xyz;
+    vec3 drawn = CURVED_FRAGMENT(vec4(VERTEX, 1.0), world_pos).xyz;
     vec3 det = water_detail(ground);
     // far off, the waves' normal is interpolated over a few pixels' worth of triangles: shading by
     // it draws the mesh's own grid over a whole lake (seen from above Nyon), so it eases to up
@@ -178,7 +178,7 @@ void fragment() {
     vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_depth, 1.0);
     float through = max(0.0, -behind.z / behind.w + drawn.z);
     // and straight down to it: the depth of the water here (the sky behind: very deep)
-    vec3 bed = UNCURVED((INV_VIEW_MATRIX * vec4(behind.xyz / behind.w, 1.0)).xyz);
+    vec3 bed = UNCURVED_FRAGMENT((INV_VIEW_MATRIX * vec4(behind.xyz / behind.w, 1.0)).xyz);
     float depth = scene_depth <= 0.0 ? 1000.0 : max(0.0, world_pos.y - bed.y);
 #endif
 
