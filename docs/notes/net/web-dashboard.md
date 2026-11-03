@@ -11,15 +11,18 @@
     and `admin.html` do.
   - **The control**: "Sign in" opens a dialog with two tabs. **Sign in** asks for email and password. **Create
     account** adds a name in the game: 2 to 20 letters, digits, `-` and `_`, or empty to let Nakama pick one.
-  - **Signed in**, it shows the name, **Dashboard** for an admin, and Sign out.
+  - **Signed in**, it shows the name (a link to `account.html`), **Dashboard** for an admin, and Sign out.
+- **`account.html`** (#1359): the player's own account. **Change name** is Nakama's own `PUT /v2/account` (no module
+  RPC; the creation rule, a taken name answers 409), **Password** mails the reset link of #1257 to the account's email
+  (hidden for an account without one), Sign out. The game's Account screen opens it (`net/accounts`).
 - **Forgot your password?** (#1257) in the Sign in tab asks only for the email and mails a link to `reset.html`, where the
   new password is chosen (`net/nakama`).
 - **The server key** comes from `nakama.json`, which `--nakama` writes beside the pages. It is not a secret.
 - **The session** (Nakama's token and refresh token) lives in `localStorage`, under `unitsport.session`.
   - It is renewed a minute before it runs out.
   - Sign out calls `/v2/session/logout`.
-- **`window.UnitSportAccount`** exposes `ready`, `me()`, `onChange`, `rpc(id, payload)`, `token()`, `signOut()` and
-  `open()`.
+- **`window.UnitSportAccount`** exposes `ready`, `me()`, `onChange`, `rpc(id, payload)`, `rename(name)`,
+  `forgotPassword(email)` (null or what went wrong), `refresh()`, `token()`, `signOut()` and `open()`.
 
 ## Admins
 
@@ -38,6 +41,7 @@
   - Search by name or email: `admin_users {q}`, a SQL `ILIKE` over `users`, 50 newest. `%` and `_` typed by the admin
     match themselves.
   - Open an account: `admin_user {id}`.
+  - **Rename**: `admin_rename {id, username}` (#1359), the creation rule; invalid 400, taken 409.
   - **Make admin / Remove admin**: `admin_set_admin {id, admin}`. An admin cannot remove their own rights.
   - **Ban / Unban**: `admin_ban {id, ban}`, which uses `nk.usersBanId`. The page asks for a second click before a ban,
     and an admin cannot ban themselves. A banned account cannot sign in ("User account banned."), its sessions end, and
@@ -82,7 +86,8 @@
 
 ## Deploy and Caddy
 
-- **Caddy** serves `/admin.html`, `/account.js` and `/nakama.json` (`no-store`), and `/server-api/*` (prefix stripped,
+- **Caddy** serves `/admin.html`, `/account.html`, `/reset.html`, `/account.js` and `/nakama.json` (`no-store`; the
+  allow-list is the `@hidden` line, a new page needs adding there and `--setup` once: `reset.html` was missing until #1359), and `/server-api/*` (prefix stripped,
   body up to 64 KB) to `127.0.0.1:ADMIN_HTTP_PORT` (7790).
 - **`--nakama`** uploads `account.js` and `admin.html`, writes `nakama.json`, and sets `NAKAMA_ADMIN_EMAILS` in the
   host's `.env` (through sudo).
@@ -97,7 +102,9 @@
   - the bootstrap email becomes admin;
   - search finds an account;
   - make and remove admin; removing one's own rights gets 400;
-  - a ban makes sign-in fail, and an unban restores it.
+  - a ban makes sign-in fail, and an unban restores it;
+  - a player renames their own account, a taken name gets 409; `admin_rename` is admin-only, refuses an invalid or taken
+    name, and renames (#1359).
 - **A browser run** (Edge through `playwright-core`, against a throwaway Nakama behind Caddy in Docker):
   - sign up as a player: no Dashboard button, and `admin.html` shows the gate;
   - sign up as the bootstrap admin: the Dashboard button;

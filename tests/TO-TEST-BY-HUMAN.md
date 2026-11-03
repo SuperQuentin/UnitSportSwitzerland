@@ -14,6 +14,41 @@ A server on the real map (`tools/wt.ps1 1456 net`, or `--server --chunks D:/Unit
 - [ ] At Riddes, `/bot add 3`, then `/bot drive 400` → the bots walk to a parked car, get in and drive; they bump into parked cars and trunks, not through them.
 - [ ] A Battle Royale on the real map with bots (`/br bots 6`) → the bots land, loot crates, fight and use the Postauto stops as before; none falls through the ground or freezes after the landing.
 - [ ] Two players, one at Geneva and one at Riddes, with bots round each → each sees its bots walk smoothly; `/bot list` on both; nothing jumps when a player teleports to the other (`/city`).
+## Account management on the website ([#1360](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1360))
+
+After the deploy with `--setup` (the new Caddyfile), on https://unitsport.infrack.ch.
+
+- [ ] The site's header, signed in: the name is a link to `account.html`. Change the name there → the header and the page show the new name; a taken name says "That name is taken".
+- [ ] `account.html` → Email me a link: the reset mail arrives and its link opens `reset.html` (no 404).
+- [ ] The dashboard: open an account, Rename it → the list and the detail show the new name.
+- [ ] The game, signed in to the official server: Account screen → Manage your account on the website opens the page in the browser. Rename there, come back to the game → the Account screen shows the new name. With a pad: the button takes focus and A opens it.
+- [ ] On the deployed server, with its saves from before: join under your usual name → your bank balance, buildings, placed things, farm stand and BR career are all there (the server log says each was claimed). Then `/name` something else and rejoin → still yours; `/br stats`, a stand's sign and the pinball board show the new name.
+- [ ] `/admin list` shows names; `/admin add <name>` for an online player and for one who left (last seen); an old admin by name shows "(by name, not seen since)" until they join.
+
+## Player birthdays ([#1423](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1423))
+
+Set your birthday to today on the Account page (title screen, the account button), with a year and "Let other players see it" on.
+
+- [ ] The Account page's Birthday row: pick a day, a month, a year by mouse, by pad and by VR laser; "31 April" says it has no 31st; Clear empties it.
+- [ ] The title screen: "Happy Nth birthday, <name>!" under the account name, in amber; the profile picture wears the party hat, its tip not cut off.
+- [ ] Signed in: set the date, sign out, sign in on another machine (or after deleting the birthday fields in `settings.json`) → the date comes back from the account.
+- [ ] In the world: the party hat on your head (third person); the gift in the pack with a greeting; Open it → a collectible hat, a party hat, a cake, 3 rockets, CHF 30, paper over your head.
+- [ ] Wear each collectible hat (and see `--models,test_output/models`, Headwear) → none clips the face or floats; hair under the propeller cap is hidden.
+- [ ] Set the cake on a restaurant table (seated and standing), on a terrace table and on grass → it sits on the top; E takes slices, the cake loses one each time; gone after 8.
+- [ ] A Polaroid and a phone selfie by the cake → the print has confetti on the border and bunting at the bottom.
+- [ ] Light a rocket at night → a minute of fireworks overhead, the finale of rings; a second rocket at once is refused and kept.
+- [ ] Two players online, the server on today's date: the joining celebrant's chat line with the age; the other player looks at them → "Wish <name> a happy birthday" on E/Y; the wish → paper and chime for both, the celebrant's toast counts the wishes; a second wish is not offered; `/birthday` lists them.
+- [ ] A server with bots free-roaming: a bot within 40 m walks up, wishes you, waves.
+
+## Buildings meet the ground ([#1417](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1417))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2597738,1119166` (Sion, a hillside door that gets a 3-step stoop); Lausanne `--at 2538476,1152508` (a 12 m plinth).
+
+- [ ] Walk up to the Sion door: the stoop's steps climb on foot (keyboard, then pad) up to the sill, no jump, no catching on a tread; walk off it back down.
+- [ ] A downhill house in Lausanne/Zermatt: no dark slot or daylight under its uphill-to-downhill walls, the plinth reads as a basement storey, in Cartoon and PS1.
+- [ ] Fly out over the building rings (strides 2, 4, 10, about 1-3 km): no sliver of daylight under a house at the ring change, and no footing poking out of the ground.
+- [ ] A door whose ground rises in front of it: the sill sits on a level landing, the door opens and you walk in with the interior floor at the sill.
+- [ ] Realistic style: the plinth wall and stoop show plain masonry, not a roof texture.
 
 ## Pool ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
 
@@ -23,6 +58,51 @@ BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2
 - [ ] The same on a pad (left stick aims, right stick nudges, A strikes, B steps back) and on a phone (stick aims, Bowl strikes).
 - [ ] E again alone → a bot sits opposite and shoots on its turn; the balls roll and turn, the stripes read as stripes, the clack, cushion and pocket sounds play; the HUD line says whose turn and what the last shot did.
 - [ ] VR: E by grip at the table, then the pad's stick and A through `XrPad` play it (holding the cue is a gap).
+
+## Darts ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a dartboard on a wall.
+
+- [ ] E within the throw line → the board fills the view, a yellow ring sways over the treble 20; W / A / S / D moves it, Shift finely; hold Space → the sway settles for a second or so, then grows; let go → the dart flies in an arc and sticks where the ring was (give or take a few mm), the thunk plays, the HUD says what it scored.
+- [ ] Three darts, then the next player; a bust goes back; the checkout hint (e.g. "out: T20 D20") is right; E alone adds a bot that throws its visits.
+- [ ] The same on a pad and a phone; VR through the pad (throwing by hand is a gap).
+
+## Table football ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+A bar with a table (`/enter` a pub or a bar; the arcade's grouped tables too).
+
+- [ ] E at the table → your side (red first), looking across; W / S slides your rods towards and away from you, Space kicks (the ball shoots up the table), Shift lifts the rods; the ball is served from the side; a goal moves a bead and says the score; first to 10.
+- [ ] E again alone → a bot takes blue and plays; online with a friend, each sees the other's rods and the ball smoothly (it's streamed 20 times a second).
+- [ ] Pad and phone the same; VR through the pad (gripping the handles is a gap). Does it feel playable, and are the kicks strong enough?
+
+## Air hockey ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade (`/enter` one; Billard Bluff, Geneva, has one on its ground floor).
+
+- [ ] E at a table → your end, looking down it; the stick drives the mallet as you see it, Shift for full speed; the puck clacks off the mallet and rails, a goal buzzes and counts on the scorer; first to 7.
+- [ ] E again alone → a bot takes the other end; online, the other player's mallet and the puck move smoothly.
+
+## Arcade coins, tickets and prizes ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade, with some cash in your pocket (`/enter` one; Billard Bluff, Geneva).
+
+- [ ] E at the change machine → 5 CHF become 5 Batzen (a clatter, a toast); with less than 5 CHF it says so.
+- [ ] At air hockey, Jump → a Batzen goes in and the puck comes out; with none, it points you to the change machine. At the game's end, tickets print into your pack (two a goal, eight more for the winner).
+- [ ] E at the prize counter → the panel: your tickets, each prize and its price, the ones you can't afford greyed with how many more; Swap gives the prize (it's in the pack, the plush throws like the Blåhaj). Pad and VR pointer work it; Esc / B / E closes it.
+
+## Claw machine ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade's claw machines (by the door), with a few Batzen.
+
+- [ ] E at the machine's front → looking in; Jump puts a Batzen in (the countdown starts at 30), the stick steers the claw as you see it, V looks from the side to judge depth, Jump drops: down, closed, up, back to the chute. A win drops the plush into your pack with a jingle; a near miss says so.
+- [ ] Does it feel fair? (right over a prize wins about half the time, a few cm off much less, and a prize can slip on the way up.)
+
+## Arcade machines' games ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade with uprights, a racer twin, a dance machine (Pixel Paradise in the fun world has them all).
+
+- [ ] E at an upright → its screen fills the view, attract mode (title, INSERT BATZEN, high scores by turns); Jump puts a Batzen in and Snowball Patrol (or Col Rush, by the machine) starts on the screen; play it to the end → tickets, and your name in its high scores; a friend online sees "NOW PLAYING" with your name, then your score.
+- [ ] The racer twin's Col Rush (steer, forward faster) and the dance machine's Yodel Beat (the four directions on the beat): are they fun for a minute, and readable on the screen at that distance?
 
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
@@ -95,13 +175,11 @@ Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
 - [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
 - [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
 
-## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
+## Phone: interact pills, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
 
 On the Android phone (a test APK).
 
 - [ ] Walk up to a building's door, a shop counter, a loot cupboard: a cyan pill names it ("Open the door") on the right edge; a tap does it.
-- [ ] In a bowling centre: the shoe counter, a ball rack and the approach each show their pill. Step up: the overlay stays, with Bowl, Back and Pins; the stick walks the spot, a drag turns the line; Bowl sets it, then hold Bowl to swing and slide the thumb sideways for hook, let go to roll. Back steps back. Is a whole frame comfortable?
-- [ ] At a pinball machine: the overlay stays with a Flip under each thumb, Plunger and Nudge on the right, Back on the left, a Start pill. Hold Plunger and let go to launch; both flippers at once work; Left-handed in Settings keeps the left flipper on the left. Is a whole game comfortable?
 - [ ] II (pause) on a phone held sideways: every entry down to Quit can be reached (it scrolls when it does not fit), Leave to main menu works.
 
 ## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
@@ -522,7 +600,7 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] E at a machine's front → the eye view over the lockdown bar, the backbox's display at the top; a game starts (the ball on the plunger). V → straight down; V → back.
 - [ ] Hold Space and let go → the ball goes up the shooter lane; soft → into the top lanes (the lit one: "SKILL SHOT"); hard → round the arch.
 - [ ] Left Shift flips only the left flipper, Right Shift only the right; Enter pulls the plunger and does not open the chat (Enter away from a machine still does).
-- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD); restart the server → still there.
+- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD). (A server restart keeping them is in `tools/pinballnetcheck.sh`.)
 - [ ] A / D (and the arrows) flip; a ball rolling down an inlane can be cradled and aimed. Do the flippers feel strong enough, too strong? Can you make each ramp and orbit on purpose?
 - [ ] W nudges (Q / R to the sides): a few hard nudges → "DANGER", then TILT (flippers dead, the ball drains, no bonus).
 - [ ] Play a whole game on each of the four tables (Clockwork, Space Mission, Haunted Castle, Alpine Ski Race): the lit scoop starts a mission, its shots blink, the timer runs; lock lights, two locks → multiball; ball save; the bonus at the drain; GAME OVER and MATCH. Is it fun? Is any shot impossible or too easy?

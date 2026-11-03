@@ -41,6 +41,25 @@ public abstract class TableGame
 
     protected string NameAt(int seat) => Names?.Invoke(Seats[seat]) ?? $"Player {seat + 1}";
 
+    /// <summary>
+    /// What a game paid out since the server last looked (#1326): to whom (a seat's peer, as it was), which item (prize
+    /// tickets, a claw's plush), how many, what for. The server gives them to the humans (<see cref="TableGames"/>) and
+    /// clears the list; bots keep none.
+    /// </summary>
+    public readonly List<(long Peer, Items.ItemId Item, int Count, string Why)> Payouts = new();
+
+    /// <summary>Pays seat <paramref name="seat"/>'s player <paramref name="tickets"/> prize tickets.</summary>
+    protected void Pay(int seat, int tickets, string why)
+    {
+        if (tickets > 0 && Seats[seat] != 0) Payouts.Add((Seats[seat], Items.ItemId.PrizeTicket, tickets, why));
+    }
+
+    /// <summary>Gives seat <paramref name="seat"/>'s player a prize.</summary>
+    protected void Give(int seat, Items.ItemId item, string why)
+    {
+        if (Seats[seat] != 0) Payouts.Add((Seats[seat], item, 1, why));
+    }
+
     protected TableGame() { }
 
     /// <summary>Sizes the seats: called once by the maker.</summary>
@@ -118,6 +137,9 @@ public abstract class TableGame
 
     /// <summary>Live games: seat <paramref name="seat"/>'s controls, as its client packed them.</summary>
     public virtual void Input(int seat, byte[] input) { }
+
+    /// <summary>Whether something still plays out (balls rolling, a dart in flight) and the next action must wait.</summary>
+    public virtual bool Busy(double now) => false;
 
     /// <summary>Whether this live game needs stepping now (someone at it, or something still moving).</summary>
     public virtual bool Awake => false;

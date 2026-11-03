@@ -187,6 +187,22 @@ public static class ItemDefs
             ItemUse.Readout, 5, new Color(0.95f, 0.55f, 0.15f), "TO", 0, ItemCategory.Gear, 6f),
         new(ItemId.Telescope, "Telescope", "A refractor on its tripod. {use_item} sets it up where you look; {interact_mount} at it looks through: the wheel zooms up to 20,000 mm and {use_item} locks on the moon or a planet. {use_item} on it with an empty hand packs it up.",
             ItemUse.Place, 1, new Color(0.9f, 0.9f, 0.86f), "TS", 0, ItemCategory.Gear, 380f),
+        // #1326: the arcade's coins, tickets and prizes; plush is Material so {aim_item} + {use_item} throws it (as the Blåhaj)
+        new(ItemId.ArcadeCoin, "Batzen coin", "An arcade's token: the change machine gives one for each franc, a machine takes one a game.",
+            ItemUse.Material, 200, new Color(0.85f, 0.70f, 0.30f), "BZ", 0, ItemCategory.Gear, 1f),
+        new(ItemId.PrizeTicket, "Prize ticket", "Paid by the arcade's games. Swap them at the prize counter for a prize.",
+            ItemUse.Material, 999, new Color(0.95f, 0.45f, 0.55f), "TK", 0, ItemCategory.Gear, 0.01f),
+        new(ItemId.PlushCow, "Plush cow", "A spotted cow with a bell, 30 cm. {aim_item} + {use_item} throws it.",
+            ItemUse.Material, 3, new Color(0.95f, 0.95f, 0.92f), "PC", 0, ItemCategory.Cosmetic, 15f),
+        new(ItemId.PlushMarmot, "Plush marmot", "A round marmot, 25 cm. {aim_item} + {use_item} throws it.",
+            ItemUse.Material, 3, new Color(0.65f, 0.48f, 0.30f), "PM", 0, ItemCategory.Cosmetic, 15f),
+        new(ItemId.PlushBernese, "Plush Bernese", "A Bernese mountain dog, 40 cm: the counter's top shelf. {aim_item} + {use_item} throws it.",
+            ItemUse.Material, 3, new Color(0.20f, 0.18f, 0.18f), "PB", 0, ItemCategory.Cosmetic, 30f),
+        new(ItemId.Keyring, "Arcade keyring", "A little pixel heart on a ring. Proof you were there.",
+            ItemUse.Material, 10, new Color(0.90f, 0.25f, 0.35f), "KR", 0, ItemCategory.Cosmetic, 2f),
+        new(ItemId.BouncyBall, "Bouncy ball", "A glittery rubber ball. {aim_item} + {use_item} throws it.",
+            ItemUse.Material, 10, new Color(0.40f, 0.70f, 0.95f), "BB", 0, ItemCategory.Cosmetic, 1f),
+        Eat(ItemId.SweetsBag, "Bag of sweets", 5, "#f27a9a", "SW", 15, ItemCategory.Food, 2),
         new(ItemId.FieldWorkbench, "Field workbench", "{use_item} sets it up where you look: a workbench to craft at, anywhere. {use_item} on it with an empty hand packs it up again.",
             ItemUse.Place, 1, new Color(0.62f, 0.44f, 0.24f), "WB", 0, ItemCategory.Gear, 15f),
 
@@ -308,6 +324,20 @@ public static class ItemDefs
             { Blurb = "{use_item} to eat. The Zibelemärit's flour soup from the kettle: warm for 3 minutes.", Buff = Player.StaminaBuff.Warm, BuffSeconds = 180f },
         new(ItemId.Konfettiei, "Confetti egg", "{use_item} throws it as a burst of confetti. Everyone near sees it; thrown at the Zibelemärit it counts towards the party's score.",
             ItemUse.Confetti, 30, new Color("#f0e0b0"), "KE", 0, ItemCategory.Cosmetic, 1f),
+        // player birthdays (#1423, docs/notes/occasions/birthdays.md): the party hat, the yearly collectibles, the gift, the cake, the rockets
+        Hat(ItemId.PartyHat, "Party hat", "#ec5c9e", "PH") with
+            { Blurb = "A paper party hat from a birthday gift. {use_item} puts it on; on your birthday you wear one anyway, while nothing else is on your head." },
+        Hat(ItemId.BirthdayCrown, "Birthday crown", "#eeb833", "BC") with { Blurb = Collectible("A gold paper crown"), Value = 25 },
+        Hat(ItemId.CandleHat, "Candle hat", "#3f8ceb", "CH") with { Blurb = Collectible("A party hat with one big candle on top, lit"), Value = 25 },
+        Hat(ItemId.CakeHat, "Cake hat", "#d29462", "KH") with { Blurb = Collectible("A little two-tier cake with three candles, to wear"), Value = 25 },
+        Hat(ItemId.PropellerCap, "Propeller cap", "#fad138", "PC") with { Blurb = Collectible("A beanie in four colours with a propeller"), Value = 25 },
+        Hat(ItemId.BalloonHat, "Balloon hat", "#ec5c9e", "BH") with { Blurb = Collectible("A headband with three balloons"), Value = 25 },
+        new(ItemId.BirthdayGift, "Birthday gift", "Happy birthday! {use_item} opens it.",
+            ItemUse.Open, 1, new Color("#e6609e"), "GI", 0, ItemCategory.Cosmetic, 0f),
+        new(ItemId.BirthdayCake, "Birthday cake", "{use_item} sets it down where the ghost shows: a table is best. Everyone near takes a slice with {interact_mount}, for a burst of stamina.",
+            ItemUse.Place, 1, new Color("#d29462"), "CK", 0, ItemCategory.Food, 0f),
+        new(ItemId.BirthdayRocket, "Birthday rocket", "{use_item} lights a minute of fireworks of your own where you stand, on your birthday. Everyone near sees it.",
+            ItemUse.Firework, 3, new Color("#3f8ceb"), "BR", 0, ItemCategory.Gear, 0f),
         // Montreux Jazz (#1394): the festival wristband, given on the first song heard
         new(ItemId.JazzPass, "Jazz pass", "The Montreux Jazz wristband, given for the first song you heard at the lake stage. Worth nothing but the look in the hand.",
             ItemUse.Material, 1, new Color("#e0a030"), "JP", 0, ItemCategory.Cosmetic, 2f),
@@ -427,6 +457,12 @@ public static class ItemDefs
     /// <summary>Errand cargo (#1267): carried for a hand-over, worth nothing, never bought by a shop.</summary>
     private static ItemDef Cargo(ItemId id, string name, string blurb, string tint, string glyph) =>
         new(id, name, blurb, ItemUse.Material, 20, new Color(tint), glyph, 0, ItemCategory.Gear, 0f);
+
+    /// <summary>The five birthday collectibles (#1423): the gift of a year holds <c>BirthdayRules.CollectibleIndex(year, 5)</c>.</summary>
+    public static readonly ItemId[] BirthdayCollectibles = [ItemId.BirthdayCrown, ItemId.CandleHat, ItemId.CakeHat, ItemId.PropellerCap, ItemId.BalloonHat];
+
+    private static string Collectible(string what) =>
+        $"{what}: a birthday collectible, one a year in the birthday gift, a new one each year. {{use_item}} puts it on.";
 
     private static ItemDef Hat(ItemId id, string name, string tint, string glyph) =>
         new(id, name, "{use_item} puts it on your head, in place of what was there. Others see you wearing it.",
@@ -746,7 +782,8 @@ public static class ItemDefs
                 break;
             }
             case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers
-                or ItemId.LarveWaggis or ItemId.LarveDante or ItemId.LarveHarlekin or ItemId.LarveTeufel:
+                or ItemId.LarveWaggis or ItemId.LarveDante or ItemId.LarveHarlekin or ItemId.LarveTeufel
+                or ItemId.PartyHat or ItemId.BirthdayCrown or ItemId.CandleHat or ItemId.CakeHat or ItemId.PropellerCap or ItemId.BalloonHat:
                 // the real hat, the one a figure wears
                 HumanMeshBuilder.AppendHat(s, UnitSport.Occasions.OccasionHats.ForItem(id), new Vector3(0, -0.02f, 0), Vector3.Up * 0.2f);
                 break;
@@ -837,6 +874,15 @@ public static class ItemDefs
                 s.Tube(new Vector3(0.05f, 0.07f, 0), new Vector3(0.05f, 0.085f, 0), 0.03f, 0.03f, new Color(0.3f, 0.2f, 0.12f), 8);
                 break;
             }
+            case ItemId.BirthdayGift:
+                Occasions.Birthdays.BirthdayMeshes.AppendGift(s);
+                break;
+            case ItemId.BirthdayCake:
+                Occasions.Birthdays.BirthdayMeshes.AppendHeldCake(s);
+                break;
+            case ItemId.BirthdayRocket:
+                Occasions.Birthdays.BirthdayMeshes.AppendRocket(s);
+                break;
             case ItemId.FireworkBox:
                 s.Box(new Vector3(0, 0, 0), new Vector3(0.22f, 0.12f, 0.14f), new Color(0.75f, 0.17f, 0.15f));
                 s.Box(new Vector3(0, 0.061f, 0), new Vector3(0.23f, 0.012f, 0.15f), new Color(0.95f, 0.9f, 0.8f));

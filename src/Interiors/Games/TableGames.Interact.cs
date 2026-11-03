@@ -8,12 +8,10 @@ namespace UnitSport.Interiors.Games;
 // targeting rule (At) for the prompt, the outline and the use.
 public partial class TableGames
 {
-    private const float UseReach = 1.6f;
-
     private (InteriorNode Node, int Index, GameSpec Spec)? At(FootPlayer p)
     {
         if (!p.Indoors || TableGamePlay.Current != null || InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
-        int index = Loot.LootService.NearestOf(p, layout, node, GameCatalog.Playable, UseReach);
+        int index = Loot.LootService.NearestOf(p, layout, node, GameCatalog.Playable, GameCatalog.MaxReach);
         if (index < 0 || node.TableRigOf(index) == null || GameCatalog.Of(layout.Furniture[index].Type) is not { } spec) return null;
         var f = layout.Furniture[index];
         var local = PieceFrame(layout, f).AffineInverse() * node.ToLocal(p.GlobalPosition);

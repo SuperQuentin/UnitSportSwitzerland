@@ -52,12 +52,14 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   took the Start but stayed in attract, so BowlinGland's two tables are two launches. Each launch runs on a user:// of its
   own (APPDATA) seeded with high scores. `stills` keeps the HUD (`/pinball`'s list names the live indices: the plans
   regenerate, so check them before filming). ~25 min to film, a minute to cut, 93 s at 1080p.
-- **Checks**: `--pinballcheck --systems ui` (cabinets played through their nodes: flippers, balls, drops, lamps,
+- **Checks**: `tools/pinballnetcheck.sh` (server + two clients play a game; then the server restarts on its saved
+  `pinball_scores.json` and a third client, `--pinballnet R` with a user:// of its own, must find both scores on the
+  machine and its backbox), `--pinballcheck --systems ui` (cabinets played through their nodes: flippers, balls, drops, lamps,
   the backbox, no mesh rebuilt, the screen over the wire), `--zfightcheck Pinball`, `--sounds,check`.
 - **High scores** (`PinballHighScores`, `PinballScoreBook`, unit tested): the best five per machine, keyed like the
   table choice (plan key, furniture index, and the table: a plan that puts another table there starts afresh), kept by
-  the server in `user://pinball_scores.json`. A game over offers every player's score under their own name (the
-  chat name, no initials), a new one is told to its player. The table rides the machine's `State` (and a peer walking
+  the server in `user://pinball_scores.json`. A game over offers every player's score under their id (#1359; shown with the name it has now,
+  resolved when the table is packed; scores of an old file keep their name until `Identified` claims them by exact name), a new one is told to its player. The table rides the machine's `State` (and a peer walking
   in gets every machine of the venue with scores, played or not); offline the local book goes onto the machines.
   The backbox's attract cycle, 3 s a step: title or game over, press start or match, the high scores, each era its
   way (reels turned to the best four with "HIGH SCORE TO DATE", the alphanumeric line naming each champion in turn,

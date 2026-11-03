@@ -35,6 +35,8 @@ public partial class Main : Node
 		// MVR textures Godot decodes: here, not in a module initializer (#1010, Android)
 		Concert.ConcertRig.UseGodotImages();
 		SetWindowTitle(GetWindow());
+		MouseCapture.PassTestWindowThrough();
+		GameSettings.LowerTestPriority();
 		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
 		ClipRecorder.StartFromArgs(GetTree());
 
@@ -71,12 +73,14 @@ public partial class Main : Node
 			return;
 		}
 
+#if TRAILER
 		// the films' subtitle files (#862): no world, a file job for tools/trailer.sh
 		if (UnitSport.Trailer.SubtitleCut.Requested)
 		{
 			AddChild(new UnitSport.Trailer.SubtitleCut { Name = "SubtitleCut" });
 			return;
 		}
+#endif
 
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.

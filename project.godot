@@ -16,6 +16,7 @@ run/flush_stdout_on_print=true
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 config/icon="res://icon.svg"
 config/quit_on_go_back=false
+config/project_settings_override="user://test_window.cfg"
 
 [autoload]
 
@@ -84,6 +85,10 @@ world_sky={
 world_night={
 "type": "float",
 "value": 0.0
+}
+world_building_box_from={
+"type": "float",
+"value": 1000.0
 }
 world_snow={
 "type": "float",
@@ -158,6 +163,10 @@ world_curvature={
 "value": 0.0
 }
 world_curve_blend={
+"type": "float",
+"value": 0.0
+}
+world_ground_y={
 "type": "float",
 "value": 0.0
 }

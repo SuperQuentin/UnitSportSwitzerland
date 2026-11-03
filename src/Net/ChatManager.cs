@@ -163,7 +163,7 @@ public partial class ChatManager : Node
             : "You are no longer an admin.", ChatKind.System);
     }
 
-    /// <summary>Server: a peer's name was set or changed — the key of its bank account.</summary>
+    /// <summary>Server: a peer's name was set or changed (shown only: saved data is keyed by its id, <see cref="PlayerIds"/>).</summary>
     public event Action<long>? NameAssigned;
 
     /// <summary>Server: operator rights for the other server-side systems (vehicle spawning).</summary>
@@ -662,6 +662,13 @@ public partial class ChatManager : Node
                 Show(Adventure.Alcohol.AlcoholService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "Alcohol needs the Adventure layer.", ChatKind.Private);
                 return;
 
+            case "birthday":
+                // offline (#1423): only this player; their day, or when it is
+                Show(Occasions.Birthdays.MyBirthday.IsToday ? Occasions.Birthdays.MyBirthday.Greeting(GameSettings.Current.PlayerName)!
+                    : Occasions.Birthdays.MyBirthday.Date.IsSet ? "It is not your birthday today." : "Enter your birthday on the Account page, from the title screen.",
+                    ChatKind.Private);
+                return;
+
             case "rope" or "fondue":
                 Show(Adventure.Together.TogetherService.Instance?.Command(Adventure.AdventureService.LocalPeer, verb, rest) is { } said
                     ? said.Length > 0 ? said : "Asked." : "Playing together needs the Adventure layer.", ChatKind.Private);
@@ -1062,6 +1069,11 @@ public partial class ChatManager : Node
                 if (Adventure.Alcohol.AlcoholService.Instance is not { } alcohol) ReplyTo(sender, "Alcohol is not available here.", ChatKind.Error);
                 else ReplyTo(sender, alcohol.Command(sender, rest), ChatKind.Private);
                 return;
+
+            case "birthday":
+                // who celebrates today, and the wishes of one's own (#1423)
+                ReplyTo(sender, Occasions.Birthdays.BirthdayService.Server?.Command(sender) ?? "Birthdays are not kept here.", ChatKind.Private);
+                return;
             case "rope" or "fondue":
                 if (Adventure.Together.TogetherService.Instance is not { } together) ReplyTo(sender, "Playing together is not available here.", ChatKind.Error);
                 else if (together.Command(sender, verb, rest) is { Length: > 0 } reply) ReplyTo(sender, reply, ChatKind.Private);
@@ -1308,17 +1320,14 @@ public partial class ChatManager : Node
                 return;
 
             case "add" when name.Length > 0:
-                if (_registry.GrantAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} is already an operator.", ChatKind.Error);
+                // by the player's id (#1359): a name only finds them
+                if (_registry.GrantAdmin(name) is { } notGranted) ReplyTo(sender, notGranted, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
                 return;
 
             case "remove" when name.Length > 0:
-                if (_registry.RevokeAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} was not an operator.", ChatKind.Error);
+                if (_registry.RevokeAdmin(name) is { } notRevoked) ReplyTo(sender, notRevoked, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
                 return;
 
             default:

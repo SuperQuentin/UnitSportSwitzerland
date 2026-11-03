@@ -179,6 +179,7 @@ public partial class BotDirector : Node
     {
         if (!_bots.Remove(id, out var bot)) return;
         BotUfo.Forget(bot);
+        BotBirthday.Forget(bot);
         if (GodotObject.IsInstanceValid(bot.Body)) bot.Body.QueueFree();
         Interest?.ForgetPeer(id);
         GD.Print($"[bots] removed {PlayerReplication.NodeName(id)} \"{bot.Profile.Name}\"");

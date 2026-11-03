@@ -53,9 +53,10 @@ public static partial class BuildingMeshBuilder
     /// stay one surface and one draw call.
     /// </summary>
     /// <param name="detail">The visual style's mesh detail: <see cref="Styles.MeshDetail.High"/> adds the roof overhangs (#1067).</param>
-    /// <param name="ground">The tile's terrain: given, a base standing a little above it gets a footing down to it.</param>
+    /// <param name="ground">The tile's terrain: given, a base standing above it gets a footing or a plinth wall down to it.</param>
+    /// <param name="ringStride">The stride the tile's ring draws the ground at: the footings follow that ground, not the finer grid <paramref name="ground"/> may be.</param>
     public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
-        Styles.MeshDetail detail = Styles.MeshDetail.Low, ChunkGrid? ground = null)
+        Styles.MeshDetail detail = Styles.MeshDetail.Low, ChunkGrid? ground = null, int ringStride = 1)
     {
         Core.ShowcaseTrace.Mark();
         var data = Build(tile, detail);
@@ -75,7 +76,7 @@ public static partial class BuildingMeshBuilder
         var ruins = new FacadeSink();
         if (castles) AppendCastles(tile, types, v, c, f, ruins);
         // a base a little above the ground carried down to it
-        AppendFootings(tile, types, ground, v, c, f);
+        AppendFootings(tile, types, FootingsForRing(tile, ground, ringStride), v, c, f);
 
         int n = data.Vertices.Length, r = ruins.V.Count;
         var vertices = new Vector3[n + v.Count + r];
@@ -196,8 +197,10 @@ public static partial class BuildingMeshBuilder
             float hx = -hw * 0.7f;
             Box(hx - 0.04f, hx + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, BuildingFootprint.DoorHandleColor);
         }
-        // a doorstep: the cue that says "this is a way in" from across the street
-        Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
+        // a stoop down to the ground in front (#1417), or the doorstep: the cue that says "this is a way in" from across the street
+        if (d.Steps > 0)
+            foreach (var (a0, a1, u0, u1, o0, o1) in StoopBoxes(d)) Box(a0, a1, u0, u1, o0, o1, step);
+        else Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
     }
 
     /// <summary>
@@ -209,7 +212,7 @@ public static partial class BuildingMeshBuilder
     /// <summary>
     /// Each building as its roof on walls (#1112): its surveyed roof triangles where they are, in its roof colour, and a
     /// wall in its wall colour from its floor up to every outer edge of that roof, no window grid (UV.y &lt; 0). The far
-    /// stand-in a standalone headset draws past <see cref="ChunkNode.ProxyFromM"/>: the building's own outline and
+    /// stand-in drawn past <see cref="LodPolicy.BuildingBoxFromM"/>: the building's own outline and
     /// roofline, courtyards and all (a plan box reached across the street of an L or a ring), with a few dozen triangles
     /// where the drawn building has hundreds. Its windows have faded out by then (building.gdshaderinc), so it takes
     /// over unseen.

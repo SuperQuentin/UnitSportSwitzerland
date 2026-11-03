@@ -31,6 +31,14 @@ uniform bool use_cover = false;
 uniform sampler2D detail_cover : filter_nearest, repeat_disable;
 uniform vec2 cover_origin = vec2(0.0);   // world XZ of the texture's NW corner
 uniform vec2 cover_extent = vec2(1.0);   // world metres the texture spans
+// the texture's east and south in world XZ (#1430 H3: an anchor frame turns the world against the grid)
+uniform vec4 cover_axes = vec4(1.0, 0.0, 0.0, 1.0);
+
+// a world XZ point in the coverage texture's 0..1 square
+vec2 cover_uv(vec2 xz) {
+    vec2 d = xz - cover_origin;
+    return vec2(dot(d, cover_axes.xy), dot(d, cover_axes.zw)) / cover_extent;
+}
 
 
 #ifdef STYLE_REAL
@@ -80,7 +88,7 @@ void vertex() {
         float covered = 1.0;
         for (int i = 0; i < 4; i++) {
             vec2 probe = world_pos.xz + vec2(i < 2 ? -1.0 : 1.0, (i & 1) == 0 ? -1.0 : 1.0);
-            vec2 uv = (probe - cover_origin) / cover_extent;
+            vec2 uv = cover_uv(probe);
             covered *= (uv == clamp(uv, vec2(0.0), vec2(1.0)) && textureLod(detail_cover, uv, 0.0).r > 0.5) ? 1.0 : 0.0;
         }
         VERTEX.y -= covered * 400.0;
@@ -113,7 +121,7 @@ void fragment() {
         discard;
     }
     if (use_cover) {
-        vec2 uv = (world_pos.xz - cover_origin) / cover_extent;
+        vec2 uv = cover_uv(world_pos.xz);
         if (uv == clamp(uv, vec2(0.0), vec2(1.0)) && texture(detail_cover, uv).r > 0.5) {
             discard;
         }

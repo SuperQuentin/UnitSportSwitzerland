@@ -26,6 +26,8 @@ public sealed class FarmContract
     public float Unit { get; set; }
     /// <summary>Environment seconds (<c>World.WorldClock.EnvNow</c>).</summary>
     public double Deadline { get; set; }
+    /// <summary>The player's name when last seen (#1359): only a fallback for an id that no longer resolves.</summary>
+    public string OwnerName { get; set; } = "";
 
     public int Missing => Math.Max(0, Count - Delivered);
 }

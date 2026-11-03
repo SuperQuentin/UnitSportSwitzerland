@@ -507,7 +507,8 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.Equal(7.5f + 1.5f, s.OuterRight(0), 3);
     }
 
-    [Fact]
+    // builds the whole signal test region: 556 s of a 14 min unit run (#1407), so only the full tier runs it
+    [Fact, Trait("Speed", "Slow")]
     public void The_written_test_region_holds_its_cores_and_transitions_and_decodes_them_alike()
     {
         string dir = Path.Combine(Path.GetTempPath(), "unitsport-818w-" + Guid.NewGuid().ToString("N"));
@@ -563,5 +564,17 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         var point = new UnitSport.Tools.RoadGen.Geometry.Vec2(5, 7);
         var offset = CorePlanner.Offset(new[] { point }, 2.0);
         Assert.Equal(new[] { point }, offset);
+    }
+
+    [Fact]
+    public void An_empty_leg_is_not_spliced_and_does_not_throw()
+    {
+        // the nationwide pass aborted on an index out of range here (#1427): the merge declines instead
+        var axis = ArmAxis.Straight(new(0, 0), 0);
+        var line = new List<UnitSport.Tools.RoadGen.Geometry.Vec2> { new(0, 0), new(5, 0) };
+        Assert.False(MergedCore.Splice(line, [], axis, 0));
+        Assert.False(MergedCore.Splice([], line, axis, 0));
+        Assert.Equal(2, line.Count);
+        Assert.True(MergedCore.Splice(line, [new(8, 0), new(12, 0)], axis, 0));
     }
 }

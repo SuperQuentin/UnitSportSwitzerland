@@ -34,7 +34,7 @@ public class FlatLv95RatchetTests
         // a tile's LV95 corners: the tile-local frame of the 1 km LV95 grid
         new("LV95 tile corner",
             new(@"\.(MinE|MaxE|MinN|MaxN)\b", RegexOptions.Compiled),
-            Baseline: 526, Instead: "the tile's own frame (G0c)"),
+            Baseline: 524, Instead: "the tile's own frame (G0c)"),
         // a neighbour by LV95 kilometre arithmetic
         new("LV95 tile neighbour arithmetic",
             new(@"new\s+TileId\(\s*[\w.]+\s*[+-]", RegexOptions.Compiled),

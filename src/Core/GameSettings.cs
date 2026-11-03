@@ -18,7 +18,10 @@ public enum DetailPreset
     Low = 0,
     Medium = 1,
     High = 2,
-    /// <summary>Under Low, for a standalone headset's GPU (#1112): offered in VR only.</summary>
+    /// <summary>
+    /// Under Low: what a standalone headset's GPU affords (#1112), on every device since #1216 (lighter shaders, one
+    /// shadow cascade, sparse far trees, the coarse horizon; <see cref="GameSettings.Lean"/>).
+    /// </summary>
     VeryLow = 3,
 }
 
@@ -218,6 +221,28 @@ public sealed class GameSettings
     /// <summary>Whether the client streams as Low data now: chosen, or the data saver with auto on.</summary>
     [JsonIgnore]
     public bool LowDataActive => Data == DataPreset.Low || AutoLowData && DataSaverOn;
+
+    /// <summary>The detail preset in use: the headset's own in VR (<see cref="VrDetail"/>), at most Low on low data.</summary>
+    public DetailPreset EffectiveDetail
+    {
+        get
+        {
+            var preset = XR.XrSession.Active ? VrDetail : Detail;
+            return LowDataActive && preset != DetailPreset.VeryLow ? DetailPreset.Low : preset;
+        }
+    }
+
+    /// <summary>
+    /// Very low in use (#1216): the cuts a Quest 2 needed (#1112), on any device that picks it. The lighter
+    /// shader variants, one shadow cascade, the 200 m horizon lattice.
+    /// </summary>
+    public static bool Lean => Current.EffectiveDetail == DetailPreset.VeryLow;
+
+    /// <summary>
+    /// Low or Very low in use (#1216): the cheaper half, unseen at a glance. Two shadow cascades, decorations and
+    /// parked cars drawn nearer, herds and birds posed less often.
+    /// </summary>
+    public static bool Cheap => Current.EffectiveDetail is DetailPreset.Low or DetailPreset.VeryLow;
 
     /// <summary>Low data's render distance cap, in rings: past it the horizon draws the land.</summary>
     public const int LowDataRings = 5;
@@ -438,6 +463,24 @@ public sealed class GameSettings
     public List<string> VehicleIntrosSeen { get; set; } = new();
 
     /// <summary>
+    /// The player's birthday (#1423, <see cref="Occasions.Birthdays.MyBirthday"/>), from the Account page: day and month (0 = not
+    /// entered) and the year, 0 when not given (it only shows the age in the chat). Signed in, the account's copy wins
+    /// (<c>Nakama</c> storage <c>profile/birthday</c>); this is the offline copy.
+    /// </summary>
+    public int BirthdayDay { get; set; }
+    public int BirthdayMonth { get; set; }
+    public int BirthdayYear { get; set; }
+
+    /// <summary>Other players may see it is this player's birthday (#1423): the chat line, the wishes. Off by default.</summary>
+    public bool BirthdayPublic { get; set; }
+
+    /// <summary>A party hat on the birthday when the head slot is empty (#1423). On by default; off takes it off.</summary>
+    public bool BirthdayHat { get; set; } = true;
+
+    /// <summary>The year the last birthday gift was given (#1423): one a year, whatever the date is changed to.</summary>
+    public int BirthdayGiftYear { get; set; }
+
+    /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
     /// the Character menu (#806; till then the figure comes from the player's network id).
     /// Saved alone with <see cref="SaveOnly"/>; <c>ClientWorld.PublishAppearance</c> puts it on the player.
@@ -569,6 +612,18 @@ public sealed class GameSettings
     /// <summary>Reads the file (if any), then the command line. Call once at boot.</summary>
     public static void Load()
     {
+        // a test run (#1411): the fixed profile, never the machine's file, then the check's own flags
+        if (TestRun)
+        {
+            var test = TestProfile();
+            test.Clamp();
+            test.ApplyCommandLine(CmdArgs.All);
+            if (WantsGeneratedWorld(CmdArgs.All)) test.GeneratedFill = true;
+            Current = test;
+            GD.Print($"[settings] test profile: rings={test.RenderDistanceRings} horizon={test.HorizonKm}km detail={test.Detail} "
+                + $"scale={test.RenderScale} aa={test.AntiAliasing} window={test.WindowWidth}x{test.WindowHeight}");
+            return;
+        }
         // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
         if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
@@ -605,6 +660,47 @@ public sealed class GameSettings
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
             + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} aa={loaded.AntiAliasing} vsync={loaded.VSync} "
             + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
+    }
+
+    /// <summary>
+    /// A test run (#1411): its user:// holds test_window.cfg (tools/lib/guard.sh), so it never reads or
+    /// writes settings.json and plays on <see cref="TestProfile"/>, the same on every machine.
+    /// </summary>
+    public static bool TestRun => MouseCapture.TestWindow;
+
+    /// <summary>
+    /// What every check runs on (#1411): the code defaults, fixed with the repo, at the least a world needs
+    /// to stand up, so a full run leaves the machine to the person at it. Detail Low, not VeryLow: the
+    /// near terrain's LOD rings stay as a player's. A check that needs more asks on its command line
+    /// (--rings, --horizon, --detail, --render-scale, --aa, --mirrors ...), which <see cref="ApplyCommandLine"/> lays on top.
+    /// </summary>
+    public static GameSettings TestProfile() => new()
+    {
+        RenderDistanceRings = MinRings,
+        HorizonKm = 0,
+        Detail = DetailPreset.Low,
+        RenderScale = 0.5f,
+        AntiAliasing = AntiAliasing.Off,
+        ConcertScreenWidth = 256,
+        CockpitMirrors = false,
+        WindowWidth = 640,
+        WindowHeight = 360,
+        FirstRunDone = false,   // as a fresh user:// before: the welcome stays a probe's own choice
+    };
+
+    /// <summary>
+    /// A test run's process below normal priority (#1411), headless or windowed, server or client: the
+    /// person at the machine is served first; its ffmpeg and yt-dlp children inherit the class.
+    /// </summary>
+    public static void LowerTestPriority()
+    {
+        if (!TestRun) return;
+        try
+        {
+            System.Diagnostics.Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
+            GD.Print("[settings] test run: below normal priority");
+        }
+        catch (Exception e) { GD.Print($"[settings] could not lower the test run's priority: {e.Message}"); }
     }
 
     /// <summary>
@@ -673,6 +769,7 @@ public sealed class GameSettings
 
     public void Save()
     {
+        if (TestRun) return;   // the fixed profile stays fixed (#1411)
         try
         {
             JsonStore.Save(File, this, JsonOptions);

@@ -13,7 +13,7 @@ namespace UnitSport.Occasions;
 ///
 /// <para>
 /// A hat the player chose to wear (in the head slot, a hunt find) comes first; else, with nothing
-/// on the head, the hat of the highest-priority running occasion with the Hats facet. That facet
+/// on the head, the party hat on the player's birthday (#1423), else the hat of the highest-priority running occasion with the Hats facet. That facet
 /// is cosmetic, so a player who turned the occasion off simply has none — no separate hat setting
 /// needed. Clothes on the head (cat ears) are drawn from the outfit, so they take the head too.
 /// </para>
@@ -43,6 +43,12 @@ public partial class OccasionHats : Node
         ItemId.LarveDante => Headwear.LarveDante,
         ItemId.LarveHarlekin => Headwear.LarveHarlekin,
         ItemId.LarveTeufel => Headwear.LarveTeufel,
+        ItemId.PartyHat => Headwear.PartyHat,
+        ItemId.BirthdayCrown => Headwear.BirthdayCrown,
+        ItemId.CandleHat => Headwear.CandleHat,
+        ItemId.CakeHat => Headwear.CakeHat,
+        ItemId.PropellerCap => Headwear.PropellerCap,
+        ItemId.BalloonHat => Headwear.BalloonHat,
         _ => Headwear.None,
     };
 
@@ -54,7 +60,10 @@ public partial class OccasionHats : Node
 
         if (_player() is not { } p || !IsInstanceValid(p) || !p.IsMultiplayerAuthority()) return;
         var hat = ForItem(_inventory.Worn);
-        if (_inventory.Worn == ItemId.None && OccasionManager.Instance?.Top(OccasionFacets.Hats) is { } top)
+        // on the player's birthday (#1423) the party hat, before any occasion's; the player's own switch takes it off
+        if (_inventory.Worn == ItemId.None && Birthdays.MyBirthday.IsToday && Birthdays.MyBirthday.Hat)
+            hat = Headwear.PartyHat;
+        else if (_inventory.Worn == ItemId.None && OccasionManager.Instance?.Top(OccasionFacets.Hats) is { } top)
             hat = top.Content.Hat;
         if (p.HeadwearId != (int)hat) p.HeadwearId = (int)hat;
         var worn = _inventory.Outfit;

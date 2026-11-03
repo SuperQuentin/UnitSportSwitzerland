@@ -13,12 +13,15 @@
 #define COMMON_CURVATURE
 global uniform float world_curvature;
 global uniform float world_curve_blend;
+// the world Y of altitude 0 (#1430 H3): 0 on the ground; in the Space regime the origin rises with
+// the camera (Core/OriginFrame.Alt0) and this is -Alt0, so the sphere still sits at sea level
+global uniform float world_ground_y;
 
 // LV95's projection sphere's radius (Core/Curvature.EarthRadiusM)
 const float CURVE_EARTH_R = 6378815.904;
 
-// Where a flat world point is drawn, as an offset from it in world axes, seen from `eye`. Its y is its
-// altitude (the world's y is the altitude above the sphere).
+// Where a flat world point is drawn, as an offset from it in world axes, seen from `eye`. Its altitude
+// above the sphere is its y less world_ground_y.
 vec3 curve_offset(vec3 world, vec3 eye) {
     vec2 d = world.xz - eye.xz;
     float s2 = dot(d, d);
@@ -30,9 +33,10 @@ vec3 curve_offset(vec3 world, vec3 eye) {
     float th = s / CURVE_EARTH_R, half_th = th * 0.5;
     float sinc_half = half_th < 1e-3 ? 1.0 - half_th * half_th / 6.0 : sin(half_th) / half_th;
     float sinc_m1 = th < 1e-2 ? -th * th / 6.0 + th * th * th * th / 120.0 : sin(th) / th - 1.0;
-    float along = s * sinc_m1 + world.y * sin(th);
+    float alt = world.y - world_ground_y;
+    float along = s * sinc_m1 + alt * sin(th);
     float sin_half = sin(half_th);
-    float down = s2 / (2.0 * CURVE_EARTH_R) * sinc_half * sinc_half + world.y * 2.0 * sin_half * sin_half;
+    float down = s2 / (2.0 * CURVE_EARTH_R) * sinc_half * sinc_half + alt * 2.0 * sin_half * sin_half;
     float b = world_curve_blend;
     return vec3(u.x * along * b, -((1.0 - b) * drop + b * down), u.y * along * b);
 }

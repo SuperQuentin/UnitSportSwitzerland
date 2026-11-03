@@ -59,11 +59,11 @@ tbody tr:focus-visible { outline: 2px solid var(--glow); outline-offset: -2px; }
 .detail dt { color: var(--dim); }
 .detail dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.actions button { font: 600 14px system-ui, sans-serif; padding: 9px 16px; border-radius: 999px; cursor: pointer;
+.actions button, .rename button { font: 600 14px system-ui, sans-serif; padding: 9px 16px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--text); }
 .actions button.danger { border-color: rgba(224, 86, 122, .6); color: var(--rose); }
 .actions button.confirm { background: var(--rose); color: #1a0d10; border-color: transparent; }
-.actions button[disabled] { opacity: .5; cursor: default; }
+.actions button[disabled], .rename button[disabled] { opacity: .5; cursor: default; }
 .note { color: var(--dim); font-size: 13px; }
 .err { color: var(--rose); font-size: 13px; min-height: 1em; margin-top: 10px; }
 /* server and console (#1211) */
@@ -336,6 +336,20 @@ td.act button.confirm { background: var(--rose); color: #1a0d10; }
       .forEach(function (p) { dl.appendChild(el("dt", null, p[0])); dl.appendChild(el("dd", null, p[1])); });
     detail.appendChild(dl);
     var actions = el("div", "actions"), err = el("div", "err"); err.setAttribute("role", "alert");
+
+    // rename (#1359): the rule of account creation; a taken name says so
+    var rename = el("form", "search rename"), nameIn = el("input"), nameBtn = el("button", null, "Rename");
+    nameIn.type = "text"; nameIn.maxLength = 20; nameIn.value = u.username; nameIn.setAttribute("aria-label", "New name for " + u.username);
+    nameBtn.type = "submit";
+    rename.appendChild(nameIn); rename.appendChild(nameBtn);
+    rename.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var n = nameIn.value.trim();
+      if (n === u.username) return;
+      if (!/^[A-Za-z0-9_-]{2,20}$/.test(n)) { err.textContent = "The name: 2 to 20 letters, digits, - and _."; return; }
+      act(nameBtn, err, "admin_rename", { id: u.id, username: n }, u.id);
+    });
+    detail.appendChild(rename);
     var self = me && me.id === u.id;
 
     var adminBtn = el("button", null, u.admin ? "Remove admin" : "Make admin"); adminBtn.type = "button";
@@ -359,7 +373,9 @@ td.act button.confirm { background: var(--rose); color: #1a0d10; }
 
   function act(button, err, rpc, payload, id) {
     button.disabled = true; err.textContent = "";
-    A.rpc(rpc, payload).then(function () { open(id); search(q.value); }, function (e) { err.textContent = e.message; button.disabled = false; });
+    // the header follows an admin who renamed their own account
+    A.rpc(rpc, payload).then(function () { if (rpc === "admin_rename" && A.me() && A.me().id === id) A.refresh(); open(id); search(q.value); },
+      function (e) { err.textContent = e.message; button.disabled = false; });
   }
 
   // ---- the game server's admin API (#1211) ---------------------------------------------------------------------------

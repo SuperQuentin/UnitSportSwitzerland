@@ -114,13 +114,21 @@ public partial class Fireworks : Node3D, IOriginContainer
         public double Start, E, N;
         public int Seed;
         public bool Done;
+        /// <summary>A birthday show (#1423): a minute, <see cref="FireworkShow.Birthday"/>, seen whatever festival runs.</summary>
+        public bool Birthday;
+        public double Seconds => Birthday ? FireworkShow.BirthdaySeconds : FireworkShow.VolleySeconds;
     }
 
     /// <summary>A player's own volley (the 1 August firework box) is queued: it plays from its server start, over the show on the books if one plays.</summary>
-    public void QueueOwn(double start, int seed, double e, double n)
+    public void QueueOwn(double start, int seed, double e, double n) => Queue(start, seed, e, n, false);
+
+    /// <summary>A player's birthday show (#1423, <c>Birthdays.BirthdayService</c>) is queued: a minute from its server start, at the spot it was lit.</summary>
+    public void QueueBirthday(double start, int seed, double e, double n) => Queue(start, seed, e, n, true);
+
+    private void Queue(double start, int seed, double e, double n, bool birthday)
     {
-        _owns.RemoveAll(o => o.Done || Clock + Skew > o.Start + FireworkShow.VolleySeconds + FestivalShows.Tail);
-        if (_owns.Count < 6) _owns.Add(new Own { Start = start, Seed = seed, E = e, N = n });
+        _owns.RemoveAll(o => o.Done || Clock + Skew > o.Start + o.Seconds + FestivalShows.Tail);
+        if (_owns.Count < 6) _owns.Add(new Own { Start = start, Seed = seed, E = e, N = n, Birthday = birthday });
     }
 
     /// <summary>Whether the show playing now is a player's own volley (checks).</summary>
@@ -287,22 +295,23 @@ public partial class Fireworks : Node3D, IOriginContainer
     private Own? NextOwn(double now)
     {
         foreach (var o in _owns)
-            if (!o.Done && now >= o.Start - 1 && now < o.Start + FireworkShow.VolleySeconds + 6) return o;
+            if (!o.Done && now >= o.Start - 1 && now < o.Start + o.Seconds + 6) return o;
         return null;
     }
 
     private void FindShow()
     {
-        var svc = FestivalService.Instance;
-        if (svc == null) return;
         if (NextOwn(Clock + Skew) is { } own)
         {
             var om0 = OccasionManager.Instance;
-            _sees = om0 == null || om0.IsActive(August1.August1Rules.FestivalId, OccasionFacets.Decorations);
-            _hears = om0 == null || om0.IsActive(August1.August1Rules.FestivalId, OccasionFacets.Audio);
-            Begin(own.Start, own.Seed, own.E, own.N, float.NaN, true);
+            // a birthday is nobody's festival: no festival's switch hides it
+            _sees = own.Birthday || om0 == null || om0.IsActive(August1.August1Rules.FestivalId, OccasionFacets.Decorations);
+            _hears = own.Birthday || om0 == null || om0.IsActive(August1.August1Rules.FestivalId, OccasionFacets.Audio);
+            Begin(own.Start, own.Seed, own.E, own.N, float.NaN, true, own.Birthday);
             return;
         }
+        var svc = FestivalService.Instance;
+        if (svc == null) return;
         var running = svc.Running;
         for (int i = 0; i < running.Count; i++)
         {
@@ -323,9 +332,9 @@ public partial class Fireworks : Node3D, IOriginContainer
         }
     }
 
-    private void Begin(double start, int seed, double e, double n, float bearing = float.NaN, bool own = false)
+    private void Begin(double start, int seed, double e, double n, float bearing = float.NaN, bool own = false, bool birthday = false)
     {
-        _show = own ? FireworkShow.Volley(seed) : FireworkShow.Plan(seed);
+        _show = birthday ? FireworkShow.Birthday(seed) : own ? FireworkShow.Volley(seed) : FireworkShow.Plan(seed);
         _playingOwn = own;
         _rot = float.IsNaN(bearing) ? 0f : bearing - _show.Heading;
         _start = start;
