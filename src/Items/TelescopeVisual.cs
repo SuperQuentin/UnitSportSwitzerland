@@ -62,13 +62,15 @@ public static class TelescopeVisual
             float a = i * Mathf.Tau / 3f + Mathf.Pi / 6f;
             var foot = new Vector3(Mathf.Cos(a) * 0.42f, 0f, Mathf.Sin(a) * 0.42f);
             var top = new Vector3(Mathf.Cos(a) * 0.06f, Head.Y - 0.1f, Mathf.Sin(a) * 0.06f);
-            Strut(st, foot, top, 0.035f, Leg);
-            Strut(st, foot + (top - foot) * 0.02f, foot + (top - foot) * 0.08f, 0.05f, Dark);   // a rubber foot
+            // a rubber foot, then the leg from its top: end to end, no faces lying along each other (zfight)
+            var knee = foot + (top - foot) * 0.08f;
+            Strut(st, foot, knee, 0.05f, Dark);
+            Strut(st, knee, top, 0.035f, Leg);
         }
         // the spreader tray half way up, meeting the legs, and the mount head
         Box(st, new Vector3(0, 0.55f, 0), Basis.Identity, new Vector3(0.36f, 0.03f, 0.36f), Leg);
         Box(st, new Vector3(0, Head.Y - 0.1f, 0), Basis.Identity, new Vector3(0.16f, 0.1f, 0.16f), Dark);
-        Box(st, new Vector3(0, Head.Y - 0.03f, 0), Basis.Identity, new Vector3(0.08f, 0.06f, 0.08f), Dark);
+        Box(st, new Vector3(0, Head.Y - 0.025f, 0), Basis.Identity, new Vector3(0.1f, 0.05f, 0.1f), Dark);
     }
 
     private static void TubeParts(SurfaceTool st) => TubeParts(st, Vector3.Zero);
@@ -76,13 +78,14 @@ public static class TelescopeVisual
     private static void TubeParts(SurfaceTool st, Vector3 at)
     {
         var b = Basis.Identity;
-        Box(st, at + new Vector3(0, 0.07f, -0.08f), b, new Vector3(0.12f, 0.12f, 0.86f), Tube);       // the tube
-        Box(st, at + new Vector3(0, 0.07f, -0.58f), b, new Vector3(0.135f, 0.135f, 0.16f), Dark);      // the dew shield
-        Box(st, at + new Vector3(0, 0.07f, -0.5f), b, new Vector3(0.127f, 0.127f, 0.02f), Trim);       // a brass ring
+        // the parts butt end to end or stand ~1 cm proud: nothing lies along another face (zfight)
+        Box(st, at + new Vector3(0, 0.07f, -0.075f), b, new Vector3(0.12f, 0.12f, 0.85f), Tube);      // the tube
+        Box(st, at + new Vector3(0, 0.07f, -0.58f), b, new Vector3(0.14f, 0.14f, 0.16f), Dark);        // the dew shield
+        Box(st, at + new Vector3(0, 0.07f, -0.39f), b, new Vector3(0.14f, 0.14f, 0.02f), Trim);        // a brass ring
         Box(st, at + new Vector3(0, 0.07f, 0.38f), b, new Vector3(0.07f, 0.07f, 0.1f), Dark);          // the focuser
         Box(st, at + new Vector3(0, 0.14f, 0.43f), b, new Vector3(0.04f, 0.1f, 0.04f), Dark);          // the eyepiece, up
-        Box(st, at + new Vector3(0, 0.155f, -0.1f), b, new Vector3(0.03f, 0.03f, 0.3f), Dark);         // the finder
-        Box(st, at + new Vector3(0, 0f, 0f), b, new Vector3(0.06f, 0.05f, 0.18f), Dark);              // the saddle
+        Box(st, at + new Vector3(0, 0.165f, -0.1f), b, new Vector3(0.03f, 0.03f, 0.3f), Dark);         // the finder
+        Box(st, at + new Vector3(0, 0f, 0f), b, new Vector3(0.06f, 0.04f, 0.18f), Dark);              // the saddle
     }
 
     private static ArrayMesh Build(System.Action<SurfaceTool> parts)
