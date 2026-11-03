@@ -58,7 +58,9 @@ public partial class FunBackdrop : Node3D, IOriginContainer
         var (minX, minY, maxX, maxY) = course.Bounds(0);
         var lo = TileId.FromLv95(StartE + minX, StartN + minY);
         var hi = TileId.FromLv95(StartE + maxX, StartN + maxY);
-        (_tilesMinE, _tilesMinN, _tilesMaxE, _tilesMaxN) = (lo.MinE, lo.MinN, hi.MinE + ChunkFormat.TileSizeM, hi.MaxN);
+        // lo's south-west corner and hi's north-east one, in the tiles' own frames
+        (_tilesMinE, _tilesMinN) = lo.Global(0, ChunkFormat.TileSizeM);
+        (_tilesMaxE, _tilesMaxN) = hi.Global(ChunkFormat.TileSizeM, 0);
         _floor = new MeshInstance3D
         {
             Name = "GridFloor",

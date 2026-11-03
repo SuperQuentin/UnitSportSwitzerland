@@ -323,7 +323,7 @@ public partial class LocateService : Node
             }
             if (!doors.TryGetValue((b.TileE, b.TileN, b.Index), out var found) || found is not { } door) continue;
             // the door is tile-local (X east, Z south from the tile's north-west corner)
-            double de = id.MinE + door.Position.X, dn = id.MaxN - door.Position.Z;
+            var (de, dn) = id.Global(door.Position.X, door.Position.Z);
             kept.Add(hit with { E = de, N = dn, Detail = hit.Detail.Length > 0 ? hit.Detail + ", garage door" : "garage door" });
             if (kept.Count >= max) break;
         }

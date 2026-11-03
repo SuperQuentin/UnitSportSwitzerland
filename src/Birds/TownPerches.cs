@@ -43,7 +43,7 @@ public sealed class TownPerches
     {
         var town = new TownPerches();
         var id = tile.Id;
-        Vector3 W(float x, float y, float z) => origin.ToWorld(id.MinE + x, id.MaxN - z, y);
+        Vector3 W(float x, float y, float z) => origin.TileToWorld(id, new Vector3(x, y, z));
 
         // every building's flat box, so a street spot is never inside a house
         var boxes = new List<Rect2>(tile.Buildings.Count);

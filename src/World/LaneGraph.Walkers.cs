@@ -524,7 +524,7 @@ public sealed partial class LaneGraph
         // half a bar and a step on past the outer bars: onto the kerb
         var a = centres[ilo] - across * 0.6f;
         var bEnd = centres[ihi] + across * 0.6f;
-        Vector3 World(Vector3 p) => origin.ToWorld(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z, p.Y);
+        Vector3 World(Vector3 p) => origin.TileToWorld(tile.Id, p);
         return (World(a), World(bEnd));
     }
 

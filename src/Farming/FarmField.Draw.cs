@@ -97,8 +97,9 @@ public partial class FarmField
                 for (int k = 0; k < FieldTile.ChunkCount; k++)
                 {
                     if (t.Data.ChunkCellCounts[k] == 0) continue;
-                    double ce = t.Id.MinE + (k % FieldTile.ChunksPerSide + 0.5) * FieldTile.ChunkCells * FieldFormat.CellSize;
-                    double cn = t.Id.MinN + (k / FieldTile.ChunksPerSide + 0.5) * FieldTile.ChunkCells * FieldFormat.CellSize;
+                    // field cells count east and north from the tile's south-west corner: z = size - north
+                    var (ce, cn) = t.Id.Global((k % FieldTile.ChunksPerSide + 0.5) * FieldTile.ChunkCells * FieldFormat.CellSize,
+                        ChunkFormat.TileSizeM - (k / FieldTile.ChunksPerSide + 0.5) * FieldTile.ChunkCells * FieldFormat.CellSize);
                     double d = Math.Sqrt((ce - fe) * (ce - fe) + (cn - fn) * (cn - fn));
                     var dc = t.Draw[k];
                     if (d > DrawRadius + 60)
@@ -158,7 +159,7 @@ public partial class FarmField
         int version = t.Cells.ChunkVersions[k];
         int month = _month;
         int generation = _generation;
-        double e0 = t.Id.MinE + c0 * FieldFormat.CellSize, n0 = t.Id.MinN + r0 * FieldFormat.CellSize;
+        var (e0, n0) = t.Id.Global(c0 * FieldFormat.CellSize, ChunkFormat.TileSizeM - r0 * FieldFormat.CellSize);
         Task.Run(() =>
         {
             var watch = Stopwatch.StartNew();
@@ -214,7 +215,7 @@ public partial class FarmField
         }
         else { DrawnVertices -= dc.Verts; DrawnTriangles -= dc.Tris; }
         int c0 = b.Chunk % FieldTile.ChunksPerSide * FieldTile.ChunkCells, r0 = b.Chunk / FieldTile.ChunksPerSide * FieldTile.ChunkCells;
-        dc.Node.Position = _origin.ToWorld(t.Id.MinE + c0 * FieldFormat.CellSize, t.Id.MinN + r0 * FieldFormat.CellSize, 0);
+        dc.Node.Position = _origin.TileToWorld(t.Id, new Vector3(c0 * FieldFormat.CellSize, 0, (float)ChunkFormat.TileSizeM - r0 * FieldFormat.CellSize));
         dc.Node.Mesh = mesh;
         dc.Verts = b.Verts.Length;
         dc.Tris = b.Indices.Length / 3;

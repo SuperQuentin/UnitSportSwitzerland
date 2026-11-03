@@ -240,7 +240,7 @@ public partial class TrafficProbe : Node
             using (var f = System.IO.File.OpenRead(System.IO.Path.Combine(TerrainPaths.FindChunkDir(), RoadFormat.FileName(id))))
                 _grooves = RoadCodec.Decode(f).Paint.Where(p => p.Type == PaintType.RailGroove)
                     .SelectMany(p => Enumerable.Range(0, p.Vertices.Length / 3)
-                        .Select(i => Origin.ToWorld(id.MinE + p.Vertices[i * 3], id.MaxN - p.Vertices[i * 3 + 2], p.Vertices[i * 3 + 1] + 0.02f)))
+                        .Select(i => Origin.TileToWorld(id, new Vector3(p.Vertices[i * 3], p.Vertices[i * 3 + 1] + 0.02f, p.Vertices[i * 3 + 2]))))
                     .ToList();
             if (GrooveBelow(_at) is not { } g0) { GD.Print("[trafficcheck] no groove paint at --at"); _t = 40; return; }
             _at.Y = g0;

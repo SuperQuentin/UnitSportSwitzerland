@@ -126,7 +126,8 @@ public partial class FarmField
             if (at is { } g)
             {
                 var (ce, cn) = FieldFormat.CellCentre(cell);
-                near = GlobalPos.HorizontalDistanceSquared(t.Id.MinE + ce, t.Id.MinN + cn, g.E, g.N) <= WorkReach * WorkReach;
+                var (cellE, cellN) = t.Id.Global(ce, ChunkFormat.TileSizeM - cn);   // cells count north from the south-west corner
+                near = GlobalPos.HorizontalDistanceSquared(cellE, cellN, g.E, g.N) <= WorkReach * WorkReach;
             }
             if (near && fieldCrop != CropKind.None
                 && FarmRules.Work(tool, fieldCrop, t.Cells.Get(cell), seed, _month, now) is { } after
