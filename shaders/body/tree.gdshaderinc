@@ -47,7 +47,9 @@ float near_keep(vec3 v) {
 // --- tree LOD (Styles/StyleKit) -----------------------------------------------------------
 // The 3D tree inside tree_near of the camera, a billboard beyond, with a dithered crossfade
 // between. Measured from world_cam_pos (the player's camera, Styles/CameraGlobal), not
-// CAMERA_POSITION_WORLD, so every view of the world agrees on which trees are 3D.
+// CAMERA_POSITION_WORLD, so every view of the world agrees on which trees are 3D. The distance
+// is divided by world_lod_scale, how much the camera zooms over the walking view (Styles/LodScale,
+// #1433): through a 200 mm lens a tree 2 km off is as big on screen as one 180 m off walking.
 //
 // The billboard is not a picture of a tree but a quad that ray-traces one: each pixel intersects
 // its view ray with the unit mesh of Terrain/ChunkNode (ConeMesh, CrownMesh). Both crowns are
@@ -55,6 +57,7 @@ float near_keep(vec3 v) {
 // and the silhouette and the flat facets match the 3D tree from any angle: a camera-facing
 // sprite would shrink to a sliver seen from above, and the forest floor would show through.
 global uniform vec3 world_cam_pos;
+global uniform float world_lod_scale;
 #include "res://shaders/common/music.gdshaderinc"
 uniform bool tree_lod = false;   // the 3D trees: collapse beyond tree_near (the tile has billboards)
 uniform float tree_near = 220.0;
@@ -91,7 +94,7 @@ void vertex() {
     vec3 origin = MODEL_MATRIX[3].xyz;
     float r = length(MODEL_MATRIX[0].xyz);
     float h = length(MODEL_MATRIX[1].xyz);
-    lod_keep = smoothstep(tree_near, tree_near + tree_fade, distance(origin, world_cam_pos));
+    lod_keep = smoothstep(tree_near, tree_near + tree_fade, distance(origin, world_cam_pos) / world_lod_scale);
     vec3 centre = origin + vec3(0.0, h * 0.5, 0.0);
     vec3 fwd = normalize(centre - CAMERA_POSITION_WORLD);
     vec3 right = cross(fwd, vec3(0.0, 1.0, 0.0));
@@ -117,7 +120,7 @@ void vertex() {
 #else
     lod_keep = 1.0;
     if (tree_lod) {
-        lod_keep = 1.0 - smoothstep(tree_near, tree_near + tree_fade, distance(MODEL_MATRIX[3].xyz, world_cam_pos));
+        lod_keep = 1.0 - smoothstep(tree_near, tree_near + tree_fade, distance(MODEL_MATRIX[3].xyz, world_cam_pos) / world_lod_scale);
         if (lod_keep <= 0.0) {
             VERTEX = vec3(0.0);  // collapsed: the billboard stands here
         }

@@ -129,7 +129,7 @@ public partial class BankSigns : Node
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 Transform = new Transform3D(new Basis(Vector3.Up, side > 0 ? 0 : Mathf.Pi), new Vector3(0, 0, 0.06f * side)),
             });
-        return sign;
+        return Styles.ZoomRanges.TrackTree(sign);
     }
 
     /// <summary>The bank's sign and every shop's, in the model viewer (#1069), standing on its ground.</summary>

@@ -38,6 +38,8 @@ Riddes viewpoints, M1 Pro: 33–36M primitives a frame on `main`, 25–30M with 
   through the nearest interior doorway (`InteriorManager.ThroughNearestDoor`), to where the
   portal camera stands: else every tree seen out a door portal was past the handover, a
   billboard through the doorway and 3D seen directly.
+- **Zoomed** (#1433, `zoom-lod`), the handover distance is divided by `world_lod_scale`: through
+  a 200 mm lens 3D trees reach ~2 km. `NearTrees` gathers the view cone that far.
 - `--tree-lod off` restores every tree as 3D (pixel-identical to before, the check for changes
   here); `--tree-near m` moves the handover.
 - **Heavier trees (Cartoon, `MeshDetail.High`) are culled per tree on the CPU: `NearTrees`.** A
