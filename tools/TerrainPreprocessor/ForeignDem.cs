@@ -248,19 +248,21 @@ public sealed class ForeignDem
 
     /// <summary>
     /// The LV95 tiles box (km, max exclusive) that holds this DEM, found by probing a 5 km lattice
-    /// of LV95 points for rasters and padding by 10 km: the box for <c>--dem-box auto</c>.
+    /// of LV95 points for rasters and padding by 10 km: the box for <c>--dem-box auto</c>. A DEM
+    /// smaller than that lattice (a few sample kilometres, #1443) is probed again every kilometre.
     /// </summary>
     public (int MinE, int MinN, int MaxE, int MaxN) BoundsLv95Km()
     {
         int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
-        for (int n = 0; n <= 2400; n += 5)
-            for (int e = 800; e <= 3800; e += 5)
-            {
-                var (x, y) = DemProjection.FromLv95(Crs, e * 1000.0 + 2500, n * 1000.0 + 2500);
-                if (!Covers(x, y) || FindAt(x, y) < 0) continue;
-                minE = Math.Min(minE, e); maxE = Math.Max(maxE, e);
-                minN = Math.Min(minN, n); maxN = Math.Max(maxN, n);
-            }
+        for (int step = 5; step >= 1 && minE == int.MaxValue; step -= 4)
+            for (int n = 0; n <= 2400; n += step)
+                for (int e = 800; e <= 3800; e += step)
+                {
+                    var (x, y) = DemProjection.FromLv95(Crs, e * 1000.0 + step * 500.0, n * 1000.0 + step * 500.0);
+                    if (!Covers(x, y) || FindAt(x, y) < 0) continue;
+                    minE = Math.Min(minE, e); maxE = Math.Max(maxE, e);
+                    minN = Math.Min(minN, n); maxN = Math.Max(maxN, n);
+                }
         if (minE == int.MaxValue) throw new InvalidOperationException($"{Name}: no raster lands in the LV95 window E 800..3800 km, N 0..2400 km");
         return (minE - 10, minN - 10, maxE + 15, maxN + 15);
     }

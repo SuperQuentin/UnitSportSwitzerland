@@ -110,6 +110,9 @@ public static partial class Preprocessor
 
     private static async Task<int> RunPassAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
     {
+        // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
+        if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
+
         void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
 
         var inDirs = new List<string>();
