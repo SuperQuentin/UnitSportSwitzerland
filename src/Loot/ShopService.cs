@@ -139,13 +139,18 @@ public partial class ShopService : Node
     public bool IsOpen => _shopUi?.IsOpen == true || _vendingUi?.IsOpen == true;
 
     /// <summary>The prompt line for a counter or a machine in reach, or null.</summary>
-    public string? PromptFor(FootPlayer p)
+    public string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt line for a counter or a machine in reach and that piece to outline (#1286), or null.</summary>
+    public UnitSport.Items.Interaction? InteractionFor(FootPlayer p)
     {
         if (IsOpen) return null;
         if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
         string key = InputHints.Tag(PlayerInput.InteractMount);
-        if (NearestMachine(p, layout, node) >= 0) return $"{key} PAUSA vending machine";
-        if (NearestCounter(p, layout, node) >= 0) return $"{key} {ShopTables.Name(layout.Shop)}: buy and sell";
+        if (NearestMachine(p, layout, node) is var machine and >= 0)
+            return new($"{key} PAUSA vending machine", UnitSport.Items.Outline.Piece(node, machine));
+        if (NearestCounter(p, layout, node) is var counter and >= 0)
+            return new($"{key} {ShopTables.Name(layout.Shop)}: buy and sell", UnitSport.Items.Outline.Piece(node, counter));
         return null;
     }
 

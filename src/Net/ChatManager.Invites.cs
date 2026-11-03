@@ -39,7 +39,7 @@ public partial class ChatManager
     private InviteService? _invites;
 
     /// <summary>Server: the players online, past the handshake (invites go only to them).</summary>
-    public long[] OnlinePeers => _registry?.Players.Select(p => p.PeerId).Where(id => id > 0).ToArray() ?? Array.Empty<long>();
+    public long[] OnlinePeers => _registry?.InWorld.Select(p => p.PeerId).Where(id => id > 0).ToArray() ?? Array.Empty<long>();
 
     /// <summary>Server: parties (#840), wired by ServerWorld.</summary>
     public Parties? Parties { get; set; }
@@ -98,7 +98,7 @@ public partial class ChatManager
         foreach (long peer in new[] { a, b })
         {
             string who = peer == asking ? "You are" : $"{NameOf(peer)} is";
-            if (BattleRoyale?.Playing(peer) == true) return $"{who} in a Battle Royale match.";
+            if (Core.Rounds.PlayingIn(peer) is { } mode) return $"{who} in {mode.Label}.";
             if (Race?.RaceOf(peer) is > 0) return $"{who} in a race.";
         }
         return null;
@@ -111,6 +111,8 @@ public partial class ChatManager
         if (_players?.GetNodeOrNull<Player.FootPlayer>(to.ToString()) is not { } target) return $"{NameOf(to)} has no position yet.";
         if (_players.GetNodeOrNull<Player.FootPlayer>(mover.ToString()) == null) return $"{NameOf(mover)} is no longer here.";
         RpcId(mover, MethodName.ForceTeleport, target.Global.E, target.Global.N, NameOf(to));
+        // an accepted invite is a sanctioned move (#1224): it lands where nothing is found until walked away from
+        Adventure.Places.PlacesService.Instance?.Arrived(mover, target.Global.E, target.Global.N);
         GD.Print($"[chat] teleport request: {mover} to {to}");
         if (mover == accepter)
         {

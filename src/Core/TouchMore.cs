@@ -40,16 +40,21 @@ internal sealed class TouchMore
     /// <summary>A pill was held: pin or unpin it.</summary>
     public Action<Entry>? Held;
 
+    /// <summary>Not an input action: the entry that opens the layout editor (#1048).</summary>
+    public const string EditLayout = "touch_edit_layout";
+
     /// <summary>The actions every mode can reach from here.</summary>
     private static readonly (string Label, string Action)[] Always =
     {
+        ("Edit layout", EditLayout),
         ("Travel", PlayerInput.RideMenu),
         ("Creative / survival", PlayerInput.ToggleMode),
         ("Spectator camera", PlayerInput.Spectator),
         ("Quick menu", PlayerInput.QuickMenu),
         ("Emotes", PlayerInput.EmoteWheel),
         ("Drop item", PlayerInput.DropItem),
-        ("Bird journal", PlayerInput.BirdJournal),
+        ("Journal", PlayerInput.BirdJournal),
+        ("Character", PlayerInput.CharacterMenu),
         ("All controls", PlayerInput.Help),
     };
 
@@ -68,6 +73,8 @@ internal sealed class TouchMore
             "Steamer" => new[] { "Paddle steamer" },
             "Airliner" => new[] { "Airliners" },
             "Ufo" => new[] { "UFO" },
+            // the e-bike's remote (#1167) before "Riding and driving", so its button reads "assist level"
+            "Bicycle" => new[] { "E-bike" },
             _ => Array.Empty<string>(),
         };
         string[] mode = s.Mode switch
@@ -83,6 +90,19 @@ internal sealed class TouchMore
             _ => Array.Empty<string>(),
         };
         return ride.Concat(mode).ToArray();
+    }
+
+    /// <summary>The words More shows for an action in this mode, or null if it does not list it (#1054).</summary>
+    public static string? LabelFor(TouchState state, string action)
+    {
+        foreach (var prefix in GroupsFor(state))
+            foreach (var (title, rows) in ControlsHelp.Groups)
+                if (title.StartsWith(prefix, StringComparison.Ordinal))
+                    foreach (var row in rows)
+                        if (ActionOf(row) == action) return Short(row.What);
+        foreach (var (label, a) in Always)
+            if (a == action) return label;
+        return null;
     }
 
     /// <summary>Opens the sheet over <paramref name="rect"/>; <paramref name="onScreen"/> says an action already has a control.</summary>
@@ -136,6 +156,7 @@ internal sealed class TouchMore
 
     private bool Wanted(string action, Func<string, bool> onScreen)
     {
+        if (action == EditLayout) return _seen.Add(action);
         if (!InputMap.HasAction(action) || onScreen(action) || !_seen.Add(action)) return false;
         // a stick's axis is the stick, on screen or not: a tap could never hold it
         foreach (var e in InputMap.ActionGetEvents(action))

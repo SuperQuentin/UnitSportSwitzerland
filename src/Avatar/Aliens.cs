@@ -15,7 +15,7 @@ public sealed record AlienLook(string Name, Appearance Looks, ItemId[] Wears)
 
 /// <summary>
 /// The aliens (#880, docs/notes/avatar/aliens.md): everything a player can also pick in
-/// Settings → Character (the <see cref="BodyBuild.Alien"/> build, the alien skin tones, the alien
+/// the Character menu (the <see cref="BodyBuild.Alien"/> build, the alien skin tones, the alien
 /// faces) and find in a wardrobe (antennae, the silver suit), put together as named presets for the
 /// UFO films (#864-#866), the UFO sightings' pilots (#863) and the odd bot.
 /// </summary>

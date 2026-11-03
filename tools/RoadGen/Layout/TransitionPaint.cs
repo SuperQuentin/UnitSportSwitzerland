@@ -156,6 +156,16 @@ public static class TransitionPaint
                 // transition's start, carried on from the opening)
                 Strip? right = p + 1 < here.Count ? t.Strips[here[p + 1]].Strip : null;
                 if (!ArrivingBike(x) || !t.Strips[here[p - 1]].Strip.IsCarLane) continue;
+                // a left-turn bike lane where the left pocket on its left opens (#1165, the user: "dashed at the start of the pocket
+                // opening, similar to the center running bike lane when a right pocket opens. This allows cars to cross it"): both
+                // its lines crossing dashes while that pocket widens, solid again along its storage
+                if (x.Moves == SignalMoves.Left && right is { IsCarLane: true } && CentreSidePocket(t.Strips[here[p - 1]].Strip.Id)
+                    && Math.Abs(t.Strips[here[p - 1]].Widths[i] - t.Strips[here[p - 1]].Widths[i + 1]) > 0.05)
+                {
+                    between[(here[p], 0)] = Style.BikeCross;
+                    between[(here[p + 1], 0)] = Style.BikeCross;
+                    continue;
+                }
                 if (right is { } r0 ? !(r0.IsCarLane || ArrivingBike(r0)) : !openBefore.Contains(x.Id)) continue;
                 // opening, red from the transition's start (the user, Oct 17), while any lane on its right still widens: the kerb-side
                 // bike lane, then the car pocket

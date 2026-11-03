@@ -40,6 +40,8 @@ pastel greens, a soft rim, strong aerial haze.
 - **Trees:** `MeshDetail.High` (`ChunkNode.HighDetailTrees`): tiered 7-sided conifers (54
   triangles) and three-puff broadleaves (120), smooth normals. Near: `NearTrees` (`tree-lod`);
   far: billboards tracing the same shapes (`hit_tier`, `hit_puff`, `hit_trunk6`).
+- **Buildings:** `MeshDetail.High` carries pitched roofs past their walls, eaves and gable verges
+  with a fascia and a soffit (`terrain/roof-overhangs`, #1067); collision stays on the solid.
 - **Avatars, vehicles, birds, items:** `HumanMeshBuilder.Material()` goes through
   `StyleKit.Figure`: toon diffuse and specular, rim 0.35. Restyled live with the shader materials.
   Dressed figures: `MaterialRole.Figure` (`cartoon_avatar`).

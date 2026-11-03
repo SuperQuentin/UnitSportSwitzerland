@@ -2,66 +2,6 @@ using Godot;
 
 namespace UnitSport.Player;
 
-/// <summary>What the player is currently travelling as. Replicated, so it must stay stable.</summary>
-public enum RideKind
-{
-    OnFoot = 0,
-    RoadBike = 1,
-    Skis = 2,
-    // the flying things (Flight.cs); appended, never reordered, because this travels as an int
-    Wingsuit = 3,
-    Parachute = 4,
-    Paraglider = 5,
-    Helicopter = 6,
-    Plane = 7,
-    // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
-    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
-    // entries 32 onwards continue at 129..192 (MotorbikeCatalog.First2, #410).
-    // 96..119 are trucks and buses (and the pickup, 101, #463): HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
-    /// <summary>
-    /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
-    /// says which). Nobody rides it; a truck backs under it and couples.
-    /// </summary>
-    Trailer = 120,
-    // 121.. are boats (#302): BoatCatalog.All[kind - BoatCatalog.First], append-only; the steamer (#303) is 123.
-    Jetski = 121,
-    Speedboat = 122,
-    /// <summary>The CGN Belle Époque paddle steamer (#303), walkable.</summary>
-    Steamer = 123,
-    /// <summary>Play as a feral pigeon (#217, <see cref="Player.Pigeon"/>). Not a boat: a new boat must skip 124.</summary>
-    Pigeon = 124,
-    /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
-    A320 = 125,
-    /// <summary>A mobile airstairs truck (#417): <see cref="Player.Airstairs"/>, docks to aircraft doors.</summary>
-    Airstairs = 126,
-    /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
-    Freighter = 127,
-    /// <summary>The Antonov AN-124 Ruslan (#419): an <see cref="Player.Airliner"/>, walkable, a visor, two ramps, kneeling, a drive-through hold.</summary>
-    An124 = 128,
-    // 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
-    /// <summary>A counterbalance forklift (#583): a <see cref="Player.Forklift"/>, a mast that lifts pallets.</summary>
-    Forklift = 193,
-    /// <summary>A tracked excavator (#611): an <see cref="Player.Excavator"/>, a slewing house and a three-joint arm.</summary>
-    Excavator = 194,
-    /// <summary>An articulated wheel loader (#612): a <see cref="Player.WheelLoader"/>, frame steering, a lift arm and a bucket.</summary>
-    WheelLoader = 195,
-    /// <summary>A 2.7 t mini excavator (#614): an <see cref="Player.Excavator"/> at the mini's size, with a dozer blade.</summary>
-    MiniExcavator = 196,
-    /// <summary>A compact tandem roller (#614): a <see cref="Player.CompactRoller"/>, frame steering and vibrating drums.</summary>
-    CompactRoller = 197,
-    /// <summary>A telehandler (#614): a <see cref="Player.Telehandler"/>, a telescopic boom with forks and three steering modes.</summary>
-    Telehandler = 198,
-    /// <summary>A wheel loader with a fork carriage instead of its bucket (#615): a <see cref="Player.WheelLoader"/> that lifts pallets.</summary>
-    WheelLoaderForks = 199,
-    /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
-    MiniDumper = 200,
-    /// <summary>The flying saucer (#861): a <see cref="Player.Ufo"/>, hover flight, landing legs, a ramp and a tractor beam.</summary>
-    Ufo = 201,
-    /// <summary>A snowboard (#922): a <see cref="Player.Snowboard"/>, on the ski model like the skis.</summary>
-    Snowboard = 202,
-    // The next other mount is 203.
-}
-
 /// <summary>
 /// A mount with a combustion engine and a gearbox (cars, motorbikes): what the engine sound, the
 /// rev counter and a parked machine's tick-over read.
@@ -105,19 +45,23 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// </param>
 /// <param name="Surface">
 /// What the wheels are on (<see cref="Audio.Surfaces.At"/>: the road under them, else the cover).
-/// The motorbikes and cars read it, for grip (cars also for how rough it is); the default is tarmac.
+/// The motorbikes and cars read it, for grip (cars also for how rough it is), the road bike for its
+/// rolling resistance (#1124); the default is tarmac.
 /// </param>
 /// <param name="Draft">
 /// Share of the air drag taken away by a vehicle close ahead (slipstream, 0..<see cref="MaxDraft"/>);
-/// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out.
+/// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out; for the road bike,
+/// <see cref="WheelDraftBehind"/>.
 /// </param>
+/// <param name="Altitude">Metres above sea level, for the road bike's air density (#1124); 500 m, a Swiss valley floor, when nobody says.</param>
 /// <param name="SnowFriction">Skis: the slope's snow against a groomed run's friction (#887), 1 off a slope.</param>
 /// <param name="SlopeAlong">Skis: gravity's pull down the slope along the heading, m/s² (#899, <see cref="SkiDynamics.Slope"/>).</param>
 /// <param name="SlopeAcross">Skis: the same across the heading, + to the left.</param>
 /// <param name="SnowGrip">Skis: the slope's snow against a groomed run's edge grip (#887), 1 off a slope.</param>
 public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f,
-    float SnowFriction = 1f, float SlopeAlong = 0f, float SlopeAcross = 0f, float SnowGrip = 1f)
+    float SnowFriction = 1f, float SlopeAlong = 0f, float SlopeAcross = 0f, float SnowGrip = 1f, float Altitude = 500f)
 {
+
     /// <summary>Drag taken away right behind another vehicle (2 m): a car in a tow loses 30-45%.</summary>
     public const float MaxDraft = 0.45f;
     /// <summary>The tow reaches this far back, m, and this far off the leader's axis, rad (±15°).</summary>
@@ -129,6 +73,31 @@ public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surfac
     /// and going the same way at 10 m/s or more — falling off linearly with the gap. Positions and
     /// velocities are what every peer has (a remote's replicated <c>WorldVelocity</c>).
     /// </summary>
+    /// <summary>A road bike nose to tail, m: wheelbase and both wheels (#1124).</summary>
+    public const float BikeLength = 1.66f;
+
+    /// <summary>
+    /// A cyclist's shelter at <paramref name="me"/> (#1124): the best of every rider or vehicle ahead
+    /// along <paramref name="travel"/> (flat, unit), level with it and going the same way at 4 m/s or
+    /// more, by the wheel-to-wheel gap and how far off its line (<see cref="BikePhysics.WheelDraft"/>).
+    /// Unlike a car's tow it works close in and at riding speed: half a wheel back is 40%.
+    /// The gap is measured as if the one ahead were a bike, so behind a car it reads a little long.
+    /// </summary>
+    public static float WheelDraftBehind(Vector3 me, Vector3 travel, List<(Vector3 At, Vector3 Velocity)> others)
+    {
+        float best = 0f;
+        foreach (var (at, vel) in others)
+        {
+            var rel = at - me;
+            if (Mathf.Abs(rel.Y) > 2f) continue;
+            float along = rel.X * travel.X + rel.Z * travel.Z;
+            if (along < BikeLength || vel.X * travel.X + vel.Z * travel.Z < 4f) continue;
+            float lateral = rel.X * travel.Z - rel.Z * travel.X;
+            best = Mathf.Max(best, BikePhysics.WheelDraft(along - BikeLength, lateral));
+        }
+        return best;
+    }
+
     public static float DraftBehind(Vector3 me, Vector3 travel, List<(Vector3 At, Vector3 Velocity)> others)
     {
         float best = 0f;
@@ -261,6 +230,12 @@ public abstract class Rideable
 
     /// <summary>Space hops (bike, skis). False on a car, where Space is the handbrake.</summary>
     public virtual bool CanHop => true;
+
+    /// <summary>
+    /// How long a lean-steered mount takes to answer the steering, s: 0 when the bank follows the
+    /// input at once (<see cref="SteerByLean"/>). The autopilot looks that much further ahead (#1124).
+    /// </summary>
+    public virtual float SteerLag => 0f;
 
     /// <summary>
     /// How far its steering wheel turns from lock to lock, radians; 0 for anything not steered by a
@@ -514,6 +489,7 @@ public abstract class Rideable
     public static Rideable? Create(RideKind kind) => kind switch
     {
         RideKind.RoadBike => new Bicycle(),
+        _ when BicycleCatalog.For(kind) is { } bicycle => new Bicycle(bicycle),
         RideKind.Skis => new Skis(),
         RideKind.Snowboard => new Snowboard(),
         RideKind.Wingsuit => new Wingsuit(),

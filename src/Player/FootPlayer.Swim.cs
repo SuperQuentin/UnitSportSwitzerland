@@ -240,6 +240,9 @@ public partial class FootPlayer
             scripted = true;
         }
 
+        // the sprint stroke and a sprinted dive are muscles (#1225): empty, the easy stroke only
+        if (sprint && (amount > 0.1f || dive) && !SpendStamina(dive ? StaminaKind.SwimDive : StaminaKind.SwimSprint, dt)) sprint = false;
+
         float eye = GlobalPosition.Y + EyeHeight;
         bool under = eye < level - (HeadUnderwater ? 0f : 0.08f);
         bool deep = sub > SwimFloat + 0.3f;
@@ -425,7 +428,8 @@ public partial class FootPlayer
             _poseKey = key;
             _mountsKey = key;
             _poseWait = 0f;
-            _walker.Mesh = HumanMeshBuilder.BuildSwim(_walkPalette, style, _swimDrawPhase, Hat, _poseMesh ??= new ArrayMesh());
+            _walker.Show(new FigureLook(_walkPalette, Hat: Hat));
+            HumanMeshBuilder.PoseSwim(_walker, style, _swimDrawPhase);
             _poseMounts = HumanMeshBuilder.MountsForSwim(style, _swimDrawPhase);
         }
         _walker.Transform = BodyPose * FlinchPose(dt);

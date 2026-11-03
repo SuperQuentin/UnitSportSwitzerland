@@ -49,7 +49,7 @@ public partial class BodySteps : Node
         _speed = Mathf.Lerp(_speed, horizontal, 1f - Mathf.Exp(-dt / 0.15f));
 
         bool walking = _body.Ride == RideKind.OnFoot && _body.RidingWith == 0 && !_body.Ragdolled
-                       && !_body.IsSwimming && Mathf.Abs(move.Y / dt) < 2.5f && _speed > 0.5f;
+                       && !_body.IsSwimming && !_body.IsClimbing && Mathf.Abs(move.Y / dt) < 2.5f && _speed > 0.5f;
         if (!walking || Ears.Of(this) is not { } ear || ear.DistanceSquaredTo(at) > Reach * Reach)
         {
             _accum = 0.6f;

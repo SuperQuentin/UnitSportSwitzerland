@@ -29,7 +29,27 @@ public partial class FootPlayer
     // moving stands up only once the move that walked you there has been let go
     private bool _sitArmed;
 
-    /// <summary>The seat a press of E would sit on, here and now; null when there is none.</summary>
+    /// <summary>
+    /// A seat to sit on: the hip's place (world), how far under it the feet rest, the way it faces, and where
+    /// standing up puts the body. A stand's (#885) or a cinema's (#1279).
+    /// </summary>
+    public readonly record struct SitSpot(Vector3 Hip, float Drop, float Yaw, Vector3 Stand);
+
+    /// <summary>
+    /// The seat a press of E would sit on, here and now: a stand's (outdoors) or a cinema's, else a chair, a stool, a
+    /// sofa, a bench or a pew indoors and a terrace's chairs and benches outdoors (#1385); null when there is none.
+    /// </summary>
+    public SitSpot? SitInReach()
+    {
+        if (Sitting || !CanEmote || _ride != null || RidingWith != 0 || Aboard || !IsOnFloor()) return null;
+        if (Indoors) return Interiors.CinemaSeats.At(this) ?? Interiors.ChairSeats.At(this);
+        if (SeatInReach() is not { } seat || Origin is not { } origin) return Interiors.ChairSeats.At(this);
+        var at = origin.ToWorld(seat.E, seat.N, 0);
+        float hipY = GlobalPosition.Y + seat.Hip;
+        return new SitSpot(new Vector3(at.X, hipY, at.Z), seat.Drop, seat.Yaw, new Vector3(at.X, hipY - seat.Hip + 0.05f, at.Z));
+    }
+
+    /// <summary>The stand's seat a press of E would sit on, here and now; null when there is none.</summary>
     public global::UnitSport.Terrain.Stadiums.StadiumSeat? SeatInReach()
     {
         if (Sitting || !CanEmote || _ride != null || RidingWith != 0 || Aboard || Indoors || !IsOnFloor() || Origin is not { } origin) return null;
@@ -37,16 +57,14 @@ public partial class FootPlayer
         return global::UnitSport.Terrain.Stadiums.StadiumSeats.At(e, n);
     }
 
-    /// <summary>Sits on the seat in reach, if any: the body still, turned to the pitch, drawn seated.</summary>
+    /// <summary>Sits on the seat in reach, if any: the body still, turned to the pitch or the screen, drawn seated.</summary>
     public bool TrySit()
     {
-        if (SeatInReach() is not { } seat || Origin is not { } origin) return false;
-        var at = origin.ToWorld(seat.E, seat.N, 0);
-        float hipY = GlobalPosition.Y + seat.Hip;
-        _sitStand = new Vector3(at.X, hipY - seat.Hip + 0.05f, at.Z);
+        if (SitInReach() is not { } seat) return false;
+        _sitStand = seat.Stand;
         _sitDrop = seat.Drop;
         _sitYaw = seat.Yaw;
-        GlobalPosition = new Vector3(at.X, hipY - seat.Drop, at.Z);
+        GlobalPosition = seat.Hip - new Vector3(0, seat.Drop, 0);
         Velocity = Vector3.Zero;
         _viewYaw = _sitYaw;
         Rotation = new Vector3(0, _sitYaw, 0);
@@ -92,9 +110,12 @@ public partial class FootPlayer
             StandUpFromSeat();
             return false;
         }
-        float wish = WalkControls?.Invoke() is { } walk ? walk.Wish.Length() : Npc ? 0f : PlayerInput.Move.Length();
-        if (wish < 0.1f) _sitArmed = true;
-        else if (_sitArmed && wish > SitStandWish)
+        var walk = WalkControls?.Invoke();
+        float wish = walk is { } w ? w.Wish.Length() : Npc ? 0f : PlayerInput.Move.Length();
+        // a player's jump stands up too (#1385: at a table E is the fondue, not standing up); a bot walks off
+        bool jump = walk == null && !Npc && PlayerInput.Held(PlayerInput.Jump);
+        if (wish < 0.1f && !jump) _sitArmed = true;
+        else if (_sitArmed && (wish > SitStandWish || jump))
         {
             StandUpFromSeat();
             return false;
@@ -103,15 +124,4 @@ public partial class FootPlayer
         return true;
     }
 
-    /// <summary>The seated figure for <see cref="ApplyFootPose"/>: built around the hip, the feet <c>Anim.X</c> under it.</summary>
-    private ArrayMesh SeatedWalker(Avatar.HumanPalette palette)
-    {
-        var key = (palette, Hat, Mathf.Round(Anim.X * 100f), Mathf.Round(Anim.Y * 100f));
-        if (_sitMesh != null && key.Equals(_sitKey)) return _sitMesh;
-        _sitKey = key;
-        return _sitMesh = Avatar.SeatedFigure.Build(palette, new Avatar.SeatAnchor(0, new Vector3(0, Anim.X, 0), Anim.Y, 0f), Hat);
-    }
-
-    private ArrayMesh? _sitMesh;
-    private (Avatar.HumanPalette, Avatar.Headwear, float, float) _sitKey;
 }

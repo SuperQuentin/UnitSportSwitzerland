@@ -19,6 +19,10 @@ public enum TouchMode
     Passenger,
     Fight,
     Aura,
+    /// <summary>Stepped up to bowl (#1353): the stick walks the spot and hooks, Bowl held swings.</summary>
+    Bowl,
+    /// <summary>At a pinball machine: a flipper under each thumb, no stick.</summary>
+    Pinball,
 }
 
 /// <summary>What else changes the layout within a mode.</summary>
@@ -50,8 +54,8 @@ public readonly record struct TouchState(TouchMode Mode, TouchFlags Flags, strin
 
 public enum TouchShape { Round, Pedal, Rocker, Stick, Top }
 
-/// <summary>The corner a control is placed from. Mirrored for the left-handed.</summary>
-public enum TouchCorner { BottomRight, TopRight }
+/// <summary>The corner a control is placed from. Mirrored for the left-handed, unless it is <see cref="TouchFeel.Sided"/>.</summary>
+public enum TouchCorner { BottomRight, TopRight, BottomLeft }
 
 public enum TouchSendKind
 {
@@ -98,6 +102,22 @@ public enum TouchFeel
     NotWithHotbar = 8,
     /// <summary>Releases a <see cref="Lockable"/> control that is locked down (the brake).</summary>
     Unlocks = 16,
+    /// <summary>Its side is the game's, not the hand's: never mirrored for the left-handed (a pinball flipper).</summary>
+    Sided = 32,
+}
+
+/// <summary>
+/// A player's change to one control (#1048): where it sits (mm from its corner, as
+/// <see cref="TouchKey.Mm"/>), how big against its own size, or hidden (still in More).
+/// </summary>
+public sealed class TouchOverride
+{
+    public float X { get; set; }
+    public float Y { get; set; }
+    public float Size { get; set; } = 1f;
+    public bool Hidden { get; set; }
+
+    public TouchOverride Copy() => new() { X = X, Y = Y, Size = Size, Hidden = Hidden };
 }
 
 /// <summary>
@@ -129,6 +149,20 @@ public static class TouchLayout
     public const float PillHeightMm = 7f, PillGapMm = 1.5f;
     /// <summary>Extra touch margin round every control, mm.</summary>
     public const float HitMarginMm = 2f;
+
+    /// <summary>The phone app's finger (#1253): a touch moving less than 2 mm is a tap, a sideways stroke of 10 mm is a back swipe, targets are 7 mm (9 mm primary).</summary>
+    public const float TapSlopMm = 2f, BackSwipeMm = 10f, MinTargetMm = 7f, PrimaryTargetMm = 9f;
+
+    /// <summary>Whether a press that has moved <paramref name="moved"/> pixels is a drag rather than a tap (slop in pixels).</summary>
+    public static bool Beyond(Vector2 moved, float slopPx) => moved.Length() > slopPx;
+
+    /// <summary>A mostly sideways stroke of at least <paramref name="minPx"/>: 1 to the right, -1 to the left, 0 when it is neither.</summary>
+    public static int SideSwipe(Vector2 moved, float minPx) =>
+        Mathf.Abs(moved.X) > Mathf.Abs(moved.Y) * 1.5f && Mathf.Abs(moved.X) >= minPx ? (moved.X > 0f ? 1 : -1) : 0;
+
+    /// <summary>A mostly vertical stroke of at least <paramref name="minPx"/>: 1 down, -1 up, 0 when it is neither.</summary>
+    public static int DownSwipe(Vector2 moved, float minPx) =>
+        Mathf.Abs(moved.Y) > Mathf.Abs(moved.X) * 1.5f && Mathf.Abs(moved.Y) >= minPx ? (moved.Y > 0f ? 1 : -1) : 0;
 
     /// <summary>The largest size setting: past it a 16:9 phone has no room for the hotbar beside the buttons.</summary>
     public const float MaxScale = 1.2f;
@@ -163,6 +197,10 @@ public static class TouchLayout
             k.Add(new TouchKey("rstick", label, TouchShape.Stick, TouchSend.RightStick, TouchCorner.BottomRight,
                 new Vector2(22f, 20f), new Vector2(2 * StickRadiusMm, 2 * StickRadiusMm)));
 
+        // an activity's own layout may use the left corner: its mode has no stick (HasStick)
+        void sided(string id, string label, TouchSend send, TouchCorner corner, Vector2 at, float d, TouchFeel feel = TouchFeel.None) =>
+            k.Add(new TouchKey(id, label, TouchShape.Round, send, corner, at, new Vector2(d, d), feel | TouchFeel.Sided));
+
         switch (mode)
         {
             case TouchMode.Foot:
@@ -191,12 +229,15 @@ public static class TouchLayout
                     round("gearup", "Gear +", TouchSend.Pad(JoyButton.RightShoulder), new Vector2(37f, 30f), 8f);
                     round("geardown", "Gear −", TouchSend.Pad(JoyButton.LeftShoulder), new Vector2(37f, 20f), 8f);
                 }
+                // the cards' "Handbrake: A" (#1054): a car's slide, a stop on a hill
+                round("handbrake", "Handbrake", TouchSend.Pad(JoyButton.A), new Vector2(49f, 20f), 8f);
                 if (has(TouchFlags.Clutch)) round("clutch", "Clutch", TouchSend.Pad(JoyButton.B), new Vector2(49f, 9f), 8f);
                 else if (has(TouchFlags.WorkMode)) round("work", "Work", TouchSend.Pad(JoyButton.B), new Vector2(49f, 9f), 8f);
                 break;
             case TouchMode.Ride:
                 pedals("Pedal");
                 round("tuck", "Tuck", TouchSend.Pad(JoyButton.X), new Vector2(37f, 9f), 8f);
+                round("hop", "Hop", TouchSend.Pad(JoyButton.A), new Vector2(37f, 20f), 8f);
                 break;
             case TouchMode.Snow:
                 round("jump", "Jump", TouchSend.Pad(JoyButton.A), Main, MainD, TouchFeel.Primary);
@@ -242,6 +283,20 @@ public static class TouchLayout
             case TouchMode.Aura:
                 round("next", "Next move", TouchSend.Pad(JoyButton.A), new Vector2(21f, 21f), 20f, TouchFeel.Primary);
                 break;
+            case TouchMode.Bowl:
+                // held through the swing; the thumb sliding off it sideways is the hook (a look drag)
+                round("bowl", "Bowl", TouchSend.Pad(JoyButton.A), Main, MainD, TouchFeel.Primary | TouchFeel.DragLook);
+                round("back", "Back", TouchSend.Pad(JoyButton.B), Second, SecondD);
+                round("pins", "Pins", TouchSend.Pad(JoyButton.LeftStick), Fourth, FourthD);
+                break;
+            case TouchMode.Pinball:
+                // a flipper under each thumb, held; the plunger pulls while held, as on the cabinet's right
+                sided("lflip", "Flip", TouchSend.Pad(JoyButton.LeftShoulder), TouchCorner.BottomLeft, new Vector2(15f, 16f), 16f, TouchFeel.Primary);
+                sided("rflip", "Flip", TouchSend.Pad(JoyButton.RightShoulder), TouchCorner.BottomRight, new Vector2(15f, 16f), 16f, TouchFeel.Primary);
+                sided("plunge", "Plunger", TouchSend.Pad(JoyButton.A), TouchCorner.BottomRight, new Vector2(32f, 9f), 11f);
+                sided("nudge", "Nudge", TouchSend.Pad(JoyButton.X), TouchCorner.BottomRight, new Vector2(33f, 26f), 9.5f);
+                sided("back", "Back", TouchSend.Pad(JoyButton.B), TouchCorner.BottomLeft, new Vector2(32f, 9f), 9.5f);
+                break;
         }
 
         // the top bar: rare and deliberate, a stretch away on purpose (action names as PlayerInput
@@ -257,11 +312,118 @@ public static class TouchLayout
             top("exit", "Get out", TouchSend.Pad(JoyButton.Y), 51.5f, 12f);
         else if (mode is TouchMode.Foot or TouchMode.Passenger)
             top("bag", "BAG", TouchSend.Act("inventory"), 49f, 8f, TouchFeel.NotWithHotbar);
+        if (mode == TouchMode.Foot) top("phone", "PHONE", TouchSend.Act("phone"), 60f, 9f);
         return k;
     }
 
-    /// <summary>Whether the left stick is on screen (a passenger and an aura battle only look).</summary>
-    public static bool HasStick(TouchMode mode) => mode is not (TouchMode.Passenger or TouchMode.Aura);
+    /// <summary>Smallest and largest a control can be made in the editor, against its own size.</summary>
+    public const float MinOverrideSize = 0.6f, MaxOverrideSize = 1.6f;
+
+    /// <summary>The flag sets that change which controls a mode shows: every layout a mode can have.</summary>
+    public static readonly TouchFlags[] FlagSets =
+    {
+        TouchFlags.None, TouchFlags.ItemInHand, TouchFlags.ItemInHand | TouchFlags.RunButton,
+        TouchFlags.ItemInHand | TouchFlags.TapToUse, TouchFlags.Gears | TouchFlags.Clutch,
+        TouchFlags.Gears | TouchFlags.WorkMode, TouchFlags.Armed, TouchFlags.Airliner, TouchFlags.Ufo,
+        TouchFlags.Pigeon, TouchFlags.Wingsuit, TouchFlags.RunButton,
+    };
+
+    /// <summary>The flags that show the most of a mode's controls at once, for the editor's still view.</summary>
+    public static TouchFlags Fullest(TouchMode mode) => mode switch
+    {
+        TouchMode.Foot => TouchFlags.ItemInHand,
+        TouchMode.Drive => TouchFlags.Gears | TouchFlags.Clutch,
+        TouchMode.Fly or TouchMode.Hover => TouchFlags.Armed,
+        TouchMode.Glide => TouchFlags.Pigeon,
+        _ => TouchFlags.None,
+    };
+
+    /// <summary>An override for this control in this mode only.</summary>
+    public static string ModeKey(TouchMode mode, TouchKey key) => $"{mode}:{key.Id}";
+
+    /// <summary>
+    /// An override shared by every mode with the same control (same id and shape: Jump on foot and
+    /// in a fight, the top bar, the pedals), unless a mode has its own.
+    /// </summary>
+    public static string SharedKey(TouchKey key) => $"*:{key.Id}:{key.Shape}";
+
+    /// <summary>The override that applies to a control here: this mode's own, else the shared one, else null.</summary>
+    public static TouchOverride? OverrideFor(TouchMode mode, TouchKey key, IReadOnlyDictionary<string, TouchOverride>? overrides) =>
+        overrides == null ? null
+        : overrides.TryGetValue(ModeKey(mode, key), out var own) ? own
+        : overrides.TryGetValue(SharedKey(key), out var shared) ? shared : null;
+
+    /// <summary>The controls with the player's overrides applied: moved, resized, hidden ones left out.</summary>
+    public static List<TouchKey> Apply(List<TouchKey> keys, TouchMode mode, IReadOnlyDictionary<string, TouchOverride>? overrides)
+    {
+        if (overrides == null || overrides.Count == 0) return keys;
+        var result = new List<TouchKey>(keys.Count);
+        foreach (var key in keys)
+        {
+            if (OverrideFor(mode, key, overrides) is not { } o) result.Add(key);
+            else if (!o.Hidden)
+                result.Add(key with { Mm = new Vector2(o.X, o.Y), SizeMm = key.SizeMm * Math.Clamp(o.Size, MinOverrideSize, MaxOverrideSize) });
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The first thing these overrides break on this screen, or null: in every mode and layout
+    /// variant that has the control <paramref name="id"/> (all of them when null), two controls
+    /// overlapping, one leaving the screen, or the hotbar running under one on foot.
+    /// </summary>
+    public static string? Conflict(IReadOnlyDictionary<string, TouchOverride> overrides, Rect2 safe, float pxPerMm, float scale,
+        bool leftHanded, string? id = null)
+    {
+        foreach (var mode in Enum.GetValues<TouchMode>())
+            foreach (var flags in FlagSets)
+            {
+                var all = For(mode, flags);
+                if (id != null && !all.Exists(k => k.Id == id)) continue;
+                var keys = Apply(all, mode, overrides);
+                var rects = keys.Select(k => Place(k, safe, pxPerMm, scale, leftHanded)).ToList();
+                var bar = mode == TouchMode.Foot ? Hotbar(safe, pxPerMm, scale, leftHanded, 6) : (Rect2?)null;
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    if (id != null && keys[i].Id != id) continue;
+                    if (!safe.Encloses(rects[i])) return $"{keys[i].Label} would leave the screen";
+                    if (bar is { } b && b.Intersects(rects[i])) return $"{keys[i].Label} would cover the hotbar";
+                    for (int j = 0; j < keys.Count; j++)
+                        if (j != i && Overlap(keys[i], rects[i], keys[j], rects[j], gap: 0.5f * pxPerMm))
+                            return $"{keys[i].Label} would cover {keys[j].Label} ({ModeName(mode)})";
+                }
+            }
+        return null;
+    }
+
+    /// <summary>What the player calls a mode, for the editor.</summary>
+    public static string ModeName(TouchMode mode) => mode switch
+    {
+        TouchMode.Foot => "on foot",
+        TouchMode.Spectator => "fly camera",
+        TouchMode.CreativeFly => "creative flight",
+        TouchMode.Drive => "driving",
+        TouchMode.Ride => "bike",
+        TouchMode.Snow => "skis",
+        TouchMode.Dig => "digging",
+        TouchMode.Crane => "crane",
+        TouchMode.Fly => "plane",
+        TouchMode.Hover => "helicopter",
+        TouchMode.Glide => "gliding",
+        TouchMode.Passenger => "passenger",
+        TouchMode.Fight => "fist fight",
+        TouchMode.Aura => "aura battle",
+        TouchMode.Bowl => "bowling",
+        TouchMode.Pinball => "pinball",
+        _ => mode.ToString(),
+    };
+
+    /// <summary>Whether the left stick is on screen (a passenger and an aura battle only look; pinball's left thumb flips).</summary>
+    public static bool HasStick(TouchMode mode) => mode is not (TouchMode.Passenger or TouchMode.Aura or TouchMode.Pinball);
+
+    /// <summary>Whether a control's x is measured from the left edge: its corner, mirrored for the left-handed unless it is sided.</summary>
+    public static bool FromLeft(TouchKey key, bool leftHanded) =>
+        (key.Corner == TouchCorner.BottomLeft) != (leftHanded && !key.Has(TouchFeel.Sided));
 
     /// <summary>The word under the left stick.</summary>
     public static string StickLabel(TouchMode mode) => mode switch
@@ -272,6 +434,7 @@ public static class TouchLayout
         TouchMode.Crane => "Slew / trolley",
         TouchMode.Fly => "Pitch / roll",
         TouchMode.Fight => "Step",
+        TouchMode.Bowl => "Spot / hook",
         TouchMode.Spectator or TouchMode.CreativeFly => "Fly",
         _ => "Move",
     };
@@ -287,7 +450,7 @@ public static class TouchLayout
     public static Rect2 Place(TouchKey key, Rect2 safe, float pxPerMm, float scale, bool leftHanded)
     {
         float k = pxPerMm * scale;
-        float x = leftHanded ? safe.Position.X + key.Mm.X * k : safe.End.X - key.Mm.X * k;
+        float x = FromLeft(key, leftHanded) ? safe.Position.X + key.Mm.X * k : safe.End.X - key.Mm.X * k;
         float y = key.Corner == TouchCorner.TopRight ? safe.Position.Y + key.Mm.Y * k : safe.End.Y - key.Mm.Y * k;
         var size = key.SizeMm * k;
         return new Rect2(new Vector2(x, y) - size / 2, size);

@@ -59,9 +59,12 @@ public partial class ModelViewer : Node3D
         }
         // screenshots are stills: no face caught mid-blink (#657)
         if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
+        // --modelsfrontlight: the sun from behind the camera, a little above and to its side, on the faces the camera sees (#1105:
+        // a signal head's white plate read grey with its default light from behind)
+        bool front = CmdArgs.Has("--modelsfrontlight");
         AddChild(new DirectionalLight3D
         {
-            Rotation = new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
+            Rotation = front ? new Vector3(Mathf.DegToRad(-30), _yaw + Mathf.DegToRad(25), 0) : new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
             LightEnergy = 1.1f,
         });
         if (_clear) GetViewport().TransparentBg = true;
@@ -234,6 +237,13 @@ public partial class ModelViewer : Node3D
         }
         _target = box.GetCenter();
         _distance = Fit(box);
+        // --modelslook x,y,z,distance: the camera on that point of the model, from that far (a close clip of a part, #1105)
+        if (CmdArgs.Value("--modelslook")?.Split(',') is { Length: 4 } look)
+        {
+            float F(int i) => float.Parse(look[i], System.Globalization.CultureInfo.InvariantCulture);
+            _target = new Vector3(F(0), F(1), F(2));
+            _distance = F(3);
+        }
         string zfight = _zfight ? ZFightLine() : "";
 
         _label.Text = $"{_categories[_category].Name}  ({_category + 1}/{_categories.Count})   ›   " +
@@ -265,7 +275,7 @@ public partial class ModelViewer : Node3D
             // hidden parts (a pigeon's folded wings, a door left out) do not count
             if (node is VisualInstance3D vi and not Light3D && vi.IsVisibleInTree())
             {
-                var b = inverse * vi.GlobalTransform * vi.GetAabb();
+                var b = inverse * vi.GlobalTransform * SkinnedFigure.BoundsOf(vi);
                 box = box is { } a ? a.Merge(b) : b;
             }
         return box;
@@ -308,6 +318,9 @@ public partial class ModelViewer : Node3D
                 // two frames: one for _Ready-built meshes, one to render them
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                // a wall mirror renders every other frame once picked, its picture the frame after (#1285)
+                if (GetTree().GetNodeCountInGroup(Interiors.WallMirror.Group) > 0)
+                    for (int k = 0; k < 4; k++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 var entry = _categories[c].Entries[i];
                 string file = $"{_shots}/{c:00}-{i:000}-{Slug(entry.Category)}-{Slug(entry.Name)}.png";

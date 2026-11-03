@@ -33,8 +33,14 @@ public readonly struct RadioGroove
     public float Burst { get; init; }
     /// <summary>The CD has its loudness envelope (not just the beat grid).</summary>
     public bool HasEnvelope { get; init; }
+    /// <summary>The singer's level now, 0..1 (#1153); -1 without a vocal analysis.</summary>
+    public float Voice { get; init; }
+    /// <summary>A sung syllable's onset, 0..1, decaying.</summary>
+    public float Syllable { get; init; }
+    /// <summary>-1 "oo" .. +1 "ee".</summary>
+    public float Vowel { get; init; }
 
-    public static readonly RadioGroove Silent = new() { Level = 0f, Peak = 0.5f, Section = SectionKind.Groove };
+    public static readonly RadioGroove Silent = new() { Level = 0f, Peak = 0.5f, Section = SectionKind.Groove, Voice = -1f };
 
     /// <summary>The groove of CD <paramref name="cdId"/> started at <paramref name="startedAt"/>, at <paramref name="serverNow"/>.</summary>
     public static RadioGroove Of(int cdId, double startedAt, double serverNow)
@@ -46,6 +52,7 @@ public readonly struct RadioGroove
         int inBar = ((beat % 4) + 4) % 4;   // BeatOf already counts from the bar's one (#728)
         float beatKick = Mathf.Exp(-phase * 6f);
         bool env = CdAnalysisRuntime.Sample(cd, t, out float level, out float kick);
+        bool sung = CdAnalysisRuntime.SampleVocal(cd, t, out float voice, out float syllable, out float vowel, out _);
         var kind = CdAnalysisRuntime.SectionAt(cd, t, out int section);
         float burst = 0f;
         if (section > 0 && cd.Analysis is { SectionStarts: { } starts } && section < starts.Length)
@@ -67,6 +74,9 @@ public readonly struct RadioGroove
             Section = kind,
             Peak = kind switch { SectionKind.Calm => 0.1f, SectionKind.Peak => 0.85f, SectionKind.Chorus => 1f, _ => 0.5f },
             Burst = burst,
+            Voice = sung ? voice : -1f,
+            Syllable = syllable,
+            Vowel = vowel,
         };
     }
 

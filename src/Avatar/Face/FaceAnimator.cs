@@ -19,6 +19,9 @@ public sealed class FaceAnimator
 
     /// <summary>How fast a face follows its expression, 1/s.</summary>
     private const float Ease = 9f;
+
+    /// <summary>How fast lips follow a voice (#1153), 1/s: a syllable lasts a tenth of a second.</summary>
+    public const float LipEase = 30f;
     /// <summary>The eyes follow a target this far off the nose at most, rad (gaze 1).</summary>
     private const float GazeReach = 0.7f;
 
@@ -44,7 +47,7 @@ public sealed class FaceAnimator
     /// One frame towards a face worked out by the caller (a dancer following the music, #728,
     /// <see cref="DanceFace"/>); a hit's grimace still wins over it.
     /// </summary>
-    public void Step(GeometryInstance3D node, FaceState face, Vector3? look, float dt, float headHeight = 1.62f)
+    public void Step(GeometryInstance3D node, FaceState face, Vector3? look, float dt, float headHeight = 1.62f, float ease = Ease)
     {
         var target = _pain > 0f ? FaceExpressions.Of(FaceExpression.Pain) : face;
         _pain = Mathf.Max(0f, _pain - dt);
@@ -60,7 +63,7 @@ public sealed class FaceAnimator
                 target.GazeY = Mathf.Clamp(target.GazeY + pitch / GazeReach, -1f, 1f);
             }
         }
-        _state = FaceState.Lerp(_state, target, 1f - Mathf.Exp(-Ease * dt));
+        _state = FaceState.Lerp(_state, target, 1f - Mathf.Exp(-ease * dt));
         // the special eyes switch at once, not halfway through the ease
         _state.Special = target.Special;
         Send(node);

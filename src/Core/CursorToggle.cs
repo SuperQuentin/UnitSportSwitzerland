@@ -44,6 +44,8 @@ public partial class CursorToggle : Node
 
     public override void _Input(InputEvent e)
     {
+        // Alt + wheel steps the hotbar (#1369): a chord, not a tap
+        if (e is InputEventMouseButton { Pressed: true, AltPressed: true }) _armed = false;
         // seen before any control takes it: whether Alt was pressed alone
         if (e is not InputEventKey { Echo: false } k) return;
         if (k.PhysicalKeycode == Key.Alt)

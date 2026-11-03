@@ -135,9 +135,10 @@ public partial class UseAnimProbe : ChatProbe
         for (int i = 1; i < Outfit.Length; i++) inv.Wear(Inventory.HotbarSize + i);
         Expect(inv.Outfit.Bits == Dressed.Bits, "every piece is in its body slot");
         Expect(await Until(() => me.OutfitBits == Dressed.Bits, 5), "the outfit is published on A's player");
-        // and a figure of A's choosing (#394), as Settings → Character sets it (in memory: the probe saves nothing; ClientWorld publishes it)
+        // and a figure of A's choosing (#394), as the Character menu sets it (in memory: the probe saves nothing; ClientWorld publishes it)
         Core.GameSettings.Current.AppearanceBits = Chosen;
         Expect(await Until(() => me.AppearanceBits == Chosen, 5), "the appearance is published on A's player");
+        Expect(await Until(() => me.DrawnAppearance == Chosen, 5), "A's own body is redrawn as the chosen figure");
         Say("dressed");
         // dressed on a bike too: B must see the cyclist in the same clothes
         await Heard("B", "seen", 60);

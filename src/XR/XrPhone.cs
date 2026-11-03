@@ -42,7 +42,7 @@ internal sealed class XrPhone
     /// <summary>The free hand's grip centre within this of the front half's loose edge takes the hinge, m.</summary>
     private const float EdgeReach = 0.06f;
     /// <summary>The screen this near the eyes covers them (a travel runs behind it); the cover this near an ear answers, m.</summary>
-    private const float EyesReach = 0.14f, EarReach = 0.10f;
+    private const float EyesReach = 0.40f, EyesFacing = 0.7f, EarReach = 0.10f;
     /// <summary>The phone's back this square to the face (cosine), this long, is a selfie; back past <see cref="SelfieOff"/>, it ends.</summary>
     private const float SelfieOn = 0.5f, SelfieOff = 0.2f, SelfieHold = 0.3f;
     /// <summary>The aim ray reaches the screen this far, m.</summary>
@@ -129,13 +129,13 @@ internal sealed class XrPhone
         bool simulated = XrSession.Simulated && SimHold != null;
         var hold = simulated ? SimHold!.Value : holdingGrip.GlobalTransform;
         bool tracked = simulated || holdingGrip.GetHasTrackingData();
-        float g = simulated ? (SimGrip ? 1f : 0f) : tracked ? _left.GetFloat("grip") : 0f;
+        float g = simulated ? (SimGrip ? 1f : 0f) : tracked ? _left.GetFloat(XrPad.Inputs.Grip) : 0f;
         bool closing = !_gripClosed && g > GripClose, opening = _gripClosed && g < GripOpen;
         if (closing) _gripClosed = true;
         if (opening) _gripClosed = false;
         bool simFree = XrSession.Simulated && SimFree != null;
         var freeAt = simFree ? SimFree!.Value : freeGrip.GlobalPosition;
-        float fg = simFree ? (SimFreeGrip ? 1f : 0f) : freeGrip.GetHasTrackingData() ? _right.GetFloat("grip") : 0f;
+        float fg = simFree ? (SimFreeGrip ? 1f : 0f) : freeGrip.GetHasTrackingData() ? _right.GetFloat(XrPad.Inputs.Grip) : 0f;
         bool freeClosing = !_freeClosed && fg > GripClose, freeOpening = _freeClosed && fg < GripOpen;
         if (freeClosing) _freeClosed = true;
         if (freeOpening) _freeClosed = false;
@@ -217,7 +217,7 @@ internal sealed class XrPhone
         var frame = model.GlobalTransform.Orthonormalized();
 
         Hinge(phone, frame, model.Fold, freeAt, freeClosing, freeOpening);
-        Camera(phone, frame, head, tracked && !simulated ? _left.GetFloat("trigger") : SimTrigger ? 1f : 0f, dt);
+        Camera(phone, frame, head, tracked && !simulated ? _left.GetFloat(XrPad.Inputs.Trigger) : SimTrigger ? 1f : 0f, dt);
         Near(phone, frame, model.Fold, head);
 
         // the pointing fingertip on the glass (not while that hand holds the hinge); off it, the ray
@@ -262,7 +262,7 @@ internal sealed class XrPhone
     {
         bool simulated = XrSession.Simulated && SimRay != null;
         bool tracked = simulated || _right.GetHasTrackingData();
-        float trigger = simulated ? (SimRayTrigger ? 1f : 0f) : tracked ? _right.GetFloat("trigger") : 0f;
+        float trigger = simulated ? (SimRayTrigger ? 1f : 0f) : tracked ? _right.GetFloat(XrPad.Inputs.Trigger) : 0f;
         bool pulled = _rayTrigger ? trigger > 0.3f : trigger > 0.7f;
         bool pull = pulled && !_rayTrigger;
         _rayTrigger = pulled;
@@ -291,7 +291,6 @@ internal sealed class XrPhone
             // a press that slides off the screen lets go
             _rayDown = false;
             phone.VrPointer(null, cover, false);
-            if (pull && phone.CameraApp) phone.VrZoom();
             return;
         }
         bool down = _rayDown ? pulled : pull;
@@ -370,7 +369,8 @@ internal sealed class XrPhone
     private void Near(PhoneController phone, Transform3D frame, float fold, Transform3D head)
     {
         var screen = frame * (fold > 0.5f ? PhoneModel.InnerScreenCentre : PhoneModel.CoverScreenCentre);
-        AtEyesNow = screen.DistanceTo(head.Origin) < EyesReach;
+        // anywhere from arm's length in, as long as the glass faces the eyes (a travel's curtain; #1253)
+        AtEyesNow = screen.DistanceTo(head.Origin) < EyesReach && frame.Basis.Z.Dot((head.Origin - screen).Normalized()) > EyesFacing;
         phone.VrAtEyes = AtEyesNow;
         int call = phone.RingingId;
         if (call < 0 || call == _answered) return;

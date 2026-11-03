@@ -82,7 +82,115 @@ public sealed class CdBurner
     {
         var pcm = await DecodeMonoAsync(ogg, ct);
         if (pcm == null || pcm.Length < AnalysisRate) return null;
-        return BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, bpm, beatOffset).analysis;
+        var analysis = BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, bpm, beatOffset).analysis;
+        return analysis == null ? null : await WithVocalAsync(analysis, ogg, bpm, ogg, ct);
+    }
+
+    /// <summary>
+    /// <c>--vocalstem &lt;audio file&gt;</c> (#1153): separates the file both ways (the model when it
+    /// is here, and the centre fallback), writes each vocal as a WAV and its 20 Hz lanes as CSV to
+    /// <c>test_output/vocal/</c> to listen to and plot, and prints what the analyser found and how
+    /// long it took. True when every pass gave a vocal with some singing in it.
+    /// </summary>
+    public static bool VocalStemProbe(string? file)
+    {
+        if (file == null || !File.Exists(file)) { Godot.GD.PrintErr($"[vocalstem] no file '{file}'"); return false; }
+        return Task.Run(async () =>
+        {
+            var stereo = await DecodeStereoAsync(file, CancellationToken.None);
+            var mono = await DecodeMonoAsync(file, CancellationToken.None);
+            if (stereo == null || mono == null) { Godot.GD.PrintErr("[vocalstem] ffmpeg could not decode it"); return false; }
+            float bpm = BeatAnalyzer.AnalyseFull(mono, AnalysisRate, 0f, 0f).bpm;
+            string dir = Path.Combine(Godot.ProjectSettings.GlobalizePath("res://"), "test_output", "vocal");
+            Directory.CreateDirectory(dir);
+            string name = Path.GetFileNameWithoutExtension(file);
+            bool ok = true;
+            foreach (bool model in VocalSeparator.ModelName != null ? new[] { true, false } : new[] { false })
+            {
+                var watch = Stopwatch.StartNew();
+                var (vocal, how, _) = VocalSeparator.Separate(stereo, CancellationToken.None, model);
+                double sep = watch.Elapsed.TotalSeconds;
+                var r = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
+                double all = watch.Elapsed.TotalSeconds;
+                WriteWav(Path.Combine(dir, $"{name}_{how}.wav"), vocal, AnalysisRate);
+                var csv = new StringBuilder().AppendLine("t,level,syllable,vowel,pitch");
+                for (int o = 0; o < r.Frames.Length / 4; o++)
+                    csv.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                        $"{o / (float)CdAnalysis.EnvRate:F2},{r.Frames[4 * o]},{r.Frames[4 * o + 1]},{r.Frames[4 * o + 2]},{r.Frames[4 * o + 3]}"));
+                File.WriteAllText(Path.Combine(dir, $"{name}_{how}.csv"), csv.ToString());
+                int sung = 0, voiced = 0;
+                for (int o = 0; o < r.Frames.Length / 4; o++) { if (r.Frames[4 * o] > 0) sung++; if (r.Frames[4 * o + 3] > 0) voiced++; }
+                int frames = Math.Max(1, r.Frames.Length / 4);
+                Godot.GD.Print($"[vocalstem] {how}: separated in {sep:F1} s, analysed in {all - sep:F1} s; sung {100f * sung / frames:F0} %, "
+                    + $"pitched {100f * voiced / frames:F0} %; {r.Rises.Length / 2} rise(s) {r.Falls.Length / 2} fall(s) "
+                    + $"{r.Holds.Length / 2} long note(s) {r.VocalIns.Length} entr(ies) at bpm {bpm:F0}");
+                ok &= sung > 0;
+            }
+            return ok;
+        }).GetAwaiter().GetResult();
+    }
+
+    private static void WriteWav(string path, float[] x, int rate)
+    {
+        using var w = new BinaryWriter(File.Create(path));
+        w.Write("RIFF"u8); w.Write(36 + x.Length * 2); w.Write("WAVEfmt "u8);
+        w.Write(16); w.Write((short)1); w.Write((short)1); w.Write(rate); w.Write(rate * 2); w.Write((short)2); w.Write((short)16);
+        w.Write("data"u8); w.Write(x.Length * 2);
+        foreach (float v in x) w.Write((short)Math.Clamp(v * 32767f, -32768f, 32767f));
+    }
+
+    /// <summary>The voice/music mix's stems beside a CD's Ogg (#1153): <c>&lt;id&gt;.voc.ogg</c> and <c>&lt;id&gt;.inst.ogg</c>.</summary>
+    public static string StemPath(string ogg, CdStem stem) =>
+        Path.Combine(Path.GetDirectoryName(ogg) ?? "", Path.GetFileNameWithoutExtension(ogg) + (stem == CdStem.Voice ? ".voc.ogg" : ".inst.ogg"));
+
+    /// <summary>
+    /// The block with the singer (#1153): the source decoded again to stereo 44.1 kHz, the vocal
+    /// separated (<see cref="VocalSeparator"/>) and analysed, and the two stems of the voice/music mix
+    /// written beside <paramref name="ogg"/> (the vocal, and the mix without it). The block as it was
+    /// when ffmpeg fails; without stems when their encoding does.
+    /// </summary>
+    private static async Task<CdAnalysis> WithVocalAsync(CdAnalysis analysis, string source, float bpm, string ogg, CancellationToken ct)
+    {
+        var stereo = await DecodeStereoAsync(source, ct);
+        if (stereo == null) return analysis;
+        var watch = Stopwatch.StartNew();
+        var (vocal, how, stem) = await Task.Run(() => VocalSeparator.Separate(stereo, ct), ct);
+        var result = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
+        bool stems = await EncodeStemAsync(stem, StemPath(ogg, CdStem.Voice), ct)
+            && await EncodeStemAsync(VocalSeparator.Instrumental(stereo, stem), StemPath(ogg, CdStem.Music), ct);
+        Godot.GD.Print($"[cd] vocal ({how}) in {watch.Elapsed.TotalSeconds:F1} s: {result.Rises.Length / 2} rise(s), "
+            + $"{result.Falls.Length / 2} fall(s), {result.Holds.Length / 2} long note(s), {result.VocalIns.Length} entr(ies){(stems ? ", stems written" : ", no stems")}");
+        return analysis.WithVocal(result, how, stems);
+    }
+
+    /// <summary>Interleaved stereo 44.1 kHz PCM to an Ogg like the CD's own, through a WAV beside it.</summary>
+    private static async Task<bool> EncodeStemAsync(short[] stereo, string ogg, CancellationToken ct)
+    {
+        string wav = ogg + ".part.wav";
+        try
+        {
+            using (var w = new BinaryWriter(File.Create(wav)))
+            {
+                int bytes = stereo.Length * 2;
+                w.Write("RIFF"u8); w.Write(36 + bytes); w.Write("WAVEfmt "u8);
+                w.Write(16); w.Write((short)1); w.Write((short)2); w.Write(VocalSeparator.Rate); w.Write(VocalSeparator.Rate * 4);
+                w.Write((short)4); w.Write((short)16);
+                w.Write("data"u8); w.Write(bytes);
+                var raw = new byte[bytes];
+                Buffer.BlockCopy(stereo, 0, raw, 0, bytes);
+                w.Write(raw);
+            }
+            return await EncodeOggAsync(wav, ogg, ct);
+        }
+        catch (IOException e)
+        {
+            Godot.GD.PushWarning($"[cd] could not write the stem {ogg}: {e.Message}");
+            return false;
+        }
+        finally
+        {
+            try { File.Delete(wav); } catch (IOException) { }
+        }
     }
 
     /// <summary>
@@ -121,9 +229,11 @@ public sealed class CdBurner
             var (bpm, offset, style, energy, analysis) =
                 BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, Grid?.Bpm ?? 0f, Grid?.Offset ?? 0f);
             float duration = pcm.Length / (float)AnalysisRate;
+            string ogg = Path.Combine(CdDirectory, $"{id}.ogg");
+            status.Report("Listening for the singer…");
+            if (analysis != null) analysis = await WithVocalAsync(analysis, source, bpm, ogg, ct);
 
             status.Report("Encoding…");
-            string ogg = Path.Combine(CdDirectory, $"{id}.ogg");
             if (!await EncodeOggAsync(source, ogg, ct))
             {
                 status.Report("ffmpeg could not encode the CD");
@@ -206,6 +316,22 @@ public sealed class CdBurner
         var pcm = new float[n];
         for (int i = 0; i < n; i++)
             pcm[i] = BitConverter.ToInt16(bytes, i * 2) / 32768f;
+        return pcm;
+    }
+
+    /// <summary>Interleaved stereo 44.1 kHz 16-bit PCM off ffmpeg's stdout, for <see cref="VocalSeparator"/> (a mono file comes out as two equal channels).</summary>
+    private static async Task<short[]?> DecodeStereoAsync(string source, CancellationToken ct)
+    {
+        using var raw = new MemoryStream();
+        int code = await RunAsync("ffmpeg", new[]
+        {
+            "-nostdin", "-loglevel", "error",
+            "-i", source, "-t", MaxSeconds.ToString(),
+            "-vn", "-ac", "2", "-ar", VocalSeparator.Rate.ToString(), "-f", "s16le", "-",
+        }, null, raw, ct);
+        if (code != 0 || raw.Length < 4) return null;
+        var pcm = new short[raw.Length / 2];
+        Buffer.BlockCopy(raw.GetBuffer(), 0, pcm, 0, pcm.Length * 2);
         return pcm;
     }
 

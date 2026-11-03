@@ -23,13 +23,7 @@ public class TouchLayoutTests
     public static IEnumerable<object[]> Layouts()
     {
         foreach (var mode in Enum.GetValues<TouchMode>())
-            foreach (var flags in new[]
-                     {
-                         TouchFlags.None, TouchFlags.ItemInHand, TouchFlags.ItemInHand | TouchFlags.RunButton,
-                         TouchFlags.ItemInHand | TouchFlags.TapToUse, TouchFlags.Gears | TouchFlags.Clutch,
-                         TouchFlags.Gears | TouchFlags.WorkMode, TouchFlags.Armed, TouchFlags.Airliner, TouchFlags.Ufo,
-                         TouchFlags.Pigeon, TouchFlags.Wingsuit, TouchFlags.RunButton,
-                     })
+            foreach (var flags in TouchLayout.FlagSets)
                 yield return new object[] { mode, flags };
     }
 
@@ -60,7 +54,8 @@ public class TouchLayoutTests
     public void TheRightThumbKeepsOutOfTheStickZone(TouchMode mode, TouchFlags flags)
     {
         // the stick takes the lower 70 % of the left 42 %; at the default size and below a phone's
-        // buttons must leave it all to the left thumb
+        // buttons must leave it all to the left thumb (a mode without the stick may use it)
+        if (!TouchLayout.HasStick(mode)) return;
         foreach (var screen in Screens.Take(4))
             foreach (var scale in new[] { 0.75f, 1f })
             {
@@ -92,6 +87,21 @@ public class TouchLayoutTests
                     foreach (var key in keys)
                         Assert.False(bar.Grow(0.5f).Intersects(TouchLayout.Place(key, safe, 1f, scale, left)), $"the hotbar runs under {key.Id}: {where}");
                 }
+    }
+
+    [Fact]
+    public void PinballsFlippersKeepTheirSidesForEitherHand()
+    {
+        // the left flipper is under the left thumb even for the left-handed: the table's sides are fixed
+        var keys = TouchLayout.For(TouchMode.Pinball, TouchFlags.None);
+        Assert.False(TouchLayout.HasStick(TouchMode.Pinball));
+        var safe = new Rect2(Vector2.Zero, Screens[1]);
+        foreach (bool left in new[] { false, true })
+        {
+            var l = TouchLayout.Place(keys.First(k => k.Id == "lflip"), safe, 1f, 1f, left).GetCenter();
+            var r = TouchLayout.Place(keys.First(k => k.Id == "rflip"), safe, 1f, 1f, left).GetCenter();
+            Assert.True(l.X < safe.Size.X / 2 && r.X > safe.Size.X / 2, $"flippers swapped{(left ? ", left-handed" : "")}");
+        }
     }
 
     [Fact]
@@ -131,6 +141,52 @@ public class TouchLayoutTests
     }
 
     [Fact]
+    public void AModesOwnOverrideBeatsTheSharedOneAndHiddenKeysGo()
+    {
+        var foot = TouchLayout.For(TouchMode.Foot, TouchFlags.None);
+        var jump = foot.First(k => k.Id == "jump");
+        var o = new Dictionary<string, TouchOverride>
+        {
+            [TouchLayout.SharedKey(jump)] = new() { X = 20, Y = 20, Size = 1.2f },
+            [TouchLayout.ModeKey(TouchMode.Fight, jump)] = new() { X = 30, Y = 30 },
+            [TouchLayout.SharedKey(foot.First(k => k.Id == "crouch"))] = new() { Hidden = true },
+        };
+        var applied = TouchLayout.Apply(foot, TouchMode.Foot, o);
+        var moved = applied.First(k => k.Id == "jump");
+        Assert.Equal(new Vector2(20, 20), moved.Mm);
+        Assert.Equal(jump.SizeMm.X * 1.2f, moved.SizeMm.X, 3);
+        Assert.DoesNotContain(applied, k => k.Id == "crouch");
+        // the shared move reaches the fist fight's Jump too, unless the fight has its own
+        var fight = TouchLayout.For(TouchMode.Fight, TouchFlags.None);
+        Assert.Equal(new Vector2(30, 30), TouchLayout.Apply(fight, TouchMode.Fight, o).First(k => k.Id == "jump").Mm);
+        // a size out of range is held to it
+        o[TouchLayout.SharedKey(jump)].Size = 9;
+        Assert.Equal(jump.SizeMm.X * TouchLayout.MaxOverrideSize, TouchLayout.Apply(foot, TouchMode.Foot, o).First(k => k.Id == "jump").SizeMm.X, 3);
+    }
+
+    [Fact]
+    public void ConflictNamesAMoveThatCoversAControl()
+    {
+        var safe = new Rect2(0, 0, 151, 68);
+        var foot = TouchLayout.For(TouchMode.Foot, TouchFlags.ItemInHand);
+        var jump = foot.First(k => k.Id == "jump");
+        var none = new Dictionary<string, TouchOverride>();
+        Assert.Null(TouchLayout.Conflict(none, safe, 1f, 1f, false));
+        // Jump onto Crouch (28, 8)
+        var onCrouch = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 28, Y = 8 } };
+        Assert.Contains("Crouch", TouchLayout.Conflict(onCrouch, safe, 1f, 1f, false, "jump"));
+        // off the screen
+        var off = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 2, Y = 2 } };
+        Assert.Contains("leave the screen", TouchLayout.Conflict(off, safe, 1f, 1f, false, "jump"));
+        // a free spot up the right edge is fine in every mode with Jump (foot, fight, snow...)
+        var free = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 60, Y = 40 } };
+        Assert.Null(TouchLayout.Conflict(free, safe, 1f, 1f, false, "jump"));
+        // hidden, it covers nothing
+        var hidden = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 28, Y = 8, Hidden = true } };
+        Assert.Null(TouchLayout.Conflict(hidden, safe, 1f, 1f, false, "jump"));
+    }
+
+    [Fact]
     public void LeftHandedMirrorsTheControls()
     {
         var safe = new Rect2(0, 0, 150, 68);
@@ -141,5 +197,37 @@ public class TouchLayoutTests
             Assert.Equal(150 - right.GetCenter().X, left.GetCenter().X, 3);
             Assert.Equal(right.GetCenter().Y, left.GetCenter().Y, 3);
         }
+    }
+
+    /// <summary>The phone app's finger (#1253): millimetres turned into pixels on every screen density.</summary>
+    [Theory]
+    [InlineData(6f)]
+    [InlineData(10f)]
+    [InlineData(17f)]
+    public void ThePhoneAppsFingerCountsInMillimetres(float pxPerMm)
+    {
+        float slop = TouchLayout.TapSlopMm * pxPerMm, back = TouchLayout.BackSwipeMm * pxPerMm;
+        // 1.5 mm of wobble is a tap, 2.5 mm is a drag
+        Assert.False(TouchLayout.Beyond(new Vector2(1.5f * pxPerMm, 0f), slop));
+        Assert.True(TouchLayout.Beyond(new Vector2(2.5f * pxPerMm, 0f), slop));
+        // a back swipe needs 10 mm, mostly sideways
+        Assert.Equal(1, TouchLayout.SideSwipe(new Vector2(11f * pxPerMm, 2f * pxPerMm), back));
+        Assert.Equal(-1, TouchLayout.SideSwipe(new Vector2(-11f * pxPerMm, 0f), back));
+        Assert.Equal(0, TouchLayout.SideSwipe(new Vector2(9f * pxPerMm, 0f), back));
+        Assert.Equal(0, TouchLayout.SideSwipe(new Vector2(11f * pxPerMm, 9f * pxPerMm), back));
+        // a swipe down (put the folded phone away) likewise
+        Assert.Equal(1, TouchLayout.DownSwipe(new Vector2(1f * pxPerMm, 11f * pxPerMm), back));
+        Assert.Equal(-1, TouchLayout.DownSwipe(new Vector2(0f, -11f * pxPerMm), back));
+        Assert.Equal(0, TouchLayout.DownSwipe(new Vector2(11f * pxPerMm, 11f * pxPerMm), back));
+    }
+
+    [Fact]
+    public void ThePhoneAppsTargetsAreAtLeastSevenMillimetres()
+    {
+        Assert.True(TouchLayout.MinTargetMm >= 7f);
+        Assert.True(TouchLayout.PrimaryTargetMm >= 9f);
+        Assert.True(TouchLayout.PrimaryTargetMm > TouchLayout.MinTargetMm);
+        // the slop stays under the back swipe, or a tap could be a swipe
+        Assert.True(TouchLayout.TapSlopMm * 2f < TouchLayout.BackSwipeMm);
     }
 }

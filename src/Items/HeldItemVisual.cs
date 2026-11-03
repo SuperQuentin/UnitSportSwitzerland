@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using UnitSport.Combat;
 using UnitSport.Player;
 using UnitSport.Core;
 
@@ -205,6 +206,9 @@ void fragment() {{
     private SubViewport? _screenVp;
     private Label? _screenLabel;
     private MeshInstance3D? _screenQuad;
+    private Material? _screenNearest, _screenLinear;
+    /// <summary>The style the screen was sized and filtered for (#1070); it follows a restyle on the next frame.</summary>
+    private Styles.VisualStyle _screenStyle;
 
     /// <summary>Position and euler rotation (camera space, full scale) of a pose for the held item.</summary>
     private (Vector3 pos, Vector3 rot) PoseTransform(ViewPose pose)
@@ -219,7 +223,7 @@ void fragment() {{
             ViewPose.Eye when use == ItemUse.Optic => (new Vector3(0f, -0.03f, -0.20f), Vector3.Zero),
             ViewPose.Eye => (new Vector3(0f, -0.12f, -0.38f), Vector3.Zero),
             // a bottle is upright in the hand: tipped ~70 degrees so its neck comes to the mouth; food jabs up and in
-            ViewPose.Mouth when _shown is ItemId.WaterBottle or ItemId.BeerBottle => (new Vector3(0.06f, -0.17f, -0.30f), new Vector3(1.25f, 0, -0.25f)),
+            ViewPose.Mouth when _shown is ItemId.WaterBottle or ItemId.BeerBottle or ItemId.BeerAlcoholFree => (new Vector3(0.06f, -0.17f, -0.30f), new Vector3(1.25f, 0, -0.25f)),
             ViewPose.Mouth => (new Vector3(0.0f, -0.10f, -0.26f), new Vector3(0.45f, 0, 0)),
             // GPS held up: low centre, top tipped away so the screen faces the eye
             ViewPose.Read => (new Vector3(0.0f, -0.16f, -0.30f), new Vector3(-0.65f, 0, 0)),
@@ -308,6 +312,90 @@ void fragment() {{
         _inHand.AddChild(_handFore);
     }
 
+    private MeshInstance3D? _ribbon;
+    private ShaderMaterial? _ribbonMat;
+    private int _ribbonKey = -1;
+    private float _ribbonReveal = -1f, _ribbonFade = -1f;
+    private bool _ribbonPinned;
+
+    /// <summary>
+    /// The blade's trail (#1371, <see cref="SwordTrails"/>): the ribbon of the swing being drawn, pinned in the world at the strike's start and
+    /// revealed along the arc through the active frames, faded over 0.15 s. Only a mesh swap when the swing changes and shader parameters when
+    /// they change; nothing is rebuilt per frame.
+    /// </summary>
+    private void StepTrail()
+    {
+        bool on = _shown == ItemId.Sword && _player != null
+            && _player.SwordTrailState(out var move, out int variant, out int seed, out float reveal, out float fade);
+        if (!on)
+        {
+            if (_ribbon != null && _ribbon.Visible) _ribbon.Visible = false;
+            _ribbonPinned = false;
+            return;
+        }
+        _player!.SwordTrailState(out var m, out int v, out int sd, out float rev, out float fd);
+        if (_ribbon == null)
+        {
+            _ribbonMat = SwordTrails.NewMaterial();
+            _ribbon = new MeshInstance3D
+            {
+                Name = "SwordTrail", TopLevel = true, MaterialOverride = _ribbonMat, Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, ExtraCullMargin = 3f,
+            };
+            AddChild(_ribbon);
+        }
+        int key = (int)m | (v << 4) | (sd << 6);
+        if (key != _ribbonKey)
+        {
+            _ribbonKey = key;
+            _ribbon.Mesh = SwordTrails.Get(m, v, sd);
+            _ribbonPinned = false;
+            _ribbonMat!.SetShaderParameter(GainParam, m is SwordMove.Slash5 or SwordMove.Charged ? 1.5f : 1f);
+        }
+        if (!_ribbonPinned)
+        {
+            // where the body stands as the strike begins: the ribbon stays there while it follows through
+            var t = _player.GlobalTransform;
+            _ribbon.GlobalTransform = new Transform3D(t.Basis.Orthonormalized(), t.Origin);
+            _ribbonPinned = true;
+        }
+        if (!_ribbon.Visible) _ribbon.Visible = true;
+        if (Mathf.Abs(rev - _ribbonReveal) > 0.004f) { _ribbonReveal = rev; _ribbonMat!.SetShaderParameter(RevealParam, rev); }
+        if (Mathf.Abs(fd - _ribbonFade) > 0.004f) { _ribbonFade = fd; _ribbonMat!.SetShaderParameter(FadeParam, fd); }
+    }
+
+    private static readonly StringName RevealParam = "reveal", FadeParam = "fade", GainParam = "gain";
+
+    // the glint at full charge: a small star at the tip, shown only while the charge is full
+    private MeshInstance3D? _glint;
+    private bool _glintOn;
+
+    private void StepGlint()
+    {
+        bool full = _shown == ItemId.Sword && _player != null && _player.SwordShown == SwordMove.Charge && _player.SwordState.Charging
+            && _player.SwordState.ChargeShare(GameClock.Now) >= 0.99f;
+        if (full == _glintOn) return;
+        _glintOn = full;
+        if (_glint == null)
+        {
+            var aabb = ItemDefs.HandMesh(ItemId.Sword)!.GetAabb();
+            float sign = aabb.End.Z > -aabb.Position.Z ? 1f : -1f;
+            _glint = new MeshInstance3D
+            {
+                Name = "Glint", Mesh = new QuadMesh { Size = new Vector2(0.28f, 0.28f) }, Position = new Vector3(0, 0, sign * 0.86f),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = false,
+                MaterialOverride = new StandardMaterial3D
+                {
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha, BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+                    AlbedoColor = new Color(1f, 0.97f, 0.85f, 0.9f),
+                },
+            };
+            _inHand.AddChild(_glint);
+        }
+        _glint.Visible = full;
+    }
+
     private static MeshInstance3D NewForeEnd() => new()
     {
         Name = "ForeEnd",
@@ -324,7 +412,7 @@ void fragment() {{
 
         var id = (ItemId)_player.HeldItemId;
         // holstered swimming (#301), and limp after a crash: the hand it hung from is not drawn (#380)
-        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong && !_player.IsSwimming && !_player.Ragdolled;
+        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong && !_player.IsSwimming && !_player.IsClimbing && !_player.Ragdolled;
         if (id != _shown || HeldData != _shownData)
         {
             if (id != _shown)
@@ -377,16 +465,22 @@ void fragment() {{
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
             var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
-            _inHand.Transform = new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f))
-                * RadioBounce(0.7f);
+            // a sword sits in the closed fist by its grip frame (the skinned hand's own); anything else by the wrist
+            _inHand.Transform = id == ItemId.Sword && _player.GripLocal is { } grip
+                ? SwordBlade.NodeFor(grip.Origin, grip.Basis)
+                : new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f)) * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
         StepSparkles(_inHand.Visible, dt);
-        StepTorch(id == ItemId.Torch && any, dt);
+        StepTrail();
+        StepGlint();
+        StepTorch((id == ItemId.Torch || id == ItemId.Lampion) && any, dt, id == ItemId.Lampion);
 
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
-        bool firstPerson = (_player.IsFirstPerson || _player.ScopeView) && !vrGun;
+        // in VR the item is the one in the figure's hand, where the controller holds it (above): a viewmodel
+        // before the eyes was a second copy of every item, not just the gun (#460, #1112)
+        bool firstPerson = (_player.IsFirstPerson || _player.ScopeView) && !XR.XrSession.Active;
         StepShot(dt);
         EnsureViewmodel();
         if (_viewmodel == null) return;
@@ -439,6 +533,7 @@ void fragment() {{
         _viewmodel.Position = (pos + _sway * swayScale + new Vector3(rc * 0.012f, -lowered + rc * 0.03f, Kick * 0.06f + rc * 0.13f)) * ViewScale;
         _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f + rc * 0.22f, rc * 0.03f, rc * 0.07f);
         if (_shown == ItemId.Radio) _viewmodel.Transform *= RadioBounce(0.45f);
+        else if (_shown == ItemId.Sword) _viewmodel.Transform *= SwordSwing();
 
         if (_print != null && IsInstanceValid(_print))
         {
@@ -461,7 +556,7 @@ void fragment() {{
     /// A torch in the hand lights the world round it (#272), on every copy of the player: it follows
     /// the replicated <see cref="FootPlayer.HeldItemId"/>, so others see it with no extra state.
     /// </summary>
-    private void StepTorch(bool lit, float dt)
+    private void StepTorch(bool lit, float dt, bool lampion = false)
     {
         if (lit && _torchLight == null)
         {
@@ -476,10 +571,12 @@ void fragment() {{
         _torchLight.Visible = lit;
         if (!lit) return;
         _torchT += dt;
-        _torchLight.LightEnergy = 1.4f + 0.25f * Mathf.Sin(_torchT * 13f) + 0.15f * Mathf.Sin(_torchT * 29f);
+        // a lampion (#1355, the 1 August) is the same light, softer, redder and a little lower in the hand
+        _torchLight.LightColor = lampion ? new Color(1f, 0.5f, 0.3f) : new Color(1f, 0.66f, 0.32f);
+        _torchLight.LightEnergy = lampion ? 0.9f + 0.08f * Mathf.Sin(_torchT * 7f) : 1.4f + 0.25f * Mathf.Sin(_torchT * 13f) + 0.15f * Mathf.Sin(_torchT * 29f);
         // at the flame on the figure's hand; with no figure drawn, about where a hand would hold it up
         _torchLight.GlobalPosition = _inHand.Visible && _inHand.IsInsideTree()
-            ? _inHand.GlobalTransform * new Vector3(0, 0.42f, 0)
+            ? _inHand.GlobalTransform * new Vector3(0, lampion ? 0.14f : 0.42f, 0)
             : _player.GlobalPosition + Vector3.Up * 1.7f;
     }
 
@@ -495,6 +592,17 @@ void fragment() {{
         }
         if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles { Layers = _inHand.Layers });
         _sparkles.Step(true, RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow), dt);
+    }
+
+    /// <summary>
+    /// The sword's swing (#1371): the rigid node turned about the grip along the move's arc (<c>SwordRules.Arc</c>), on every peer
+    /// from its replicated state; identity when the sword is at rest or not in the hand. Nothing is rebuilt.
+    /// </summary>
+    private Transform3D SwordSwing()
+    {
+        if (_shown != ItemId.Sword || _player == null) return Transform3D.Identity;
+        _player.SwordWristNow(out float pitch, out float yaw, out float roll, out float forward);
+        return new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll)), new Vector3(0, 0, forward));
     }
 
     /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>
@@ -520,16 +628,22 @@ void fragment() {{
         }
         if (_screenVp == null)
         {
-            _screenVp = new SubViewport { Size = new Vector2I(96, 84), RenderTargetUpdateMode = SubViewport.UpdateMode.Always, TransparentBg = false };
+            _screenVp = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Always, TransparentBg = false };
             var bg = new ColorRect { Color = new Color(0.62f, 0.78f, 0.55f) };
             bg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             _screenVp.AddChild(bg);
-            _screenLabel = new Label { Position = new Vector2(4, 3), Size = new Vector2(90, 78) };
-            _screenLabel.AddThemeFontSizeOverride("font_size", 13);
+            _screenLabel = new Label();
             _screenLabel.AddThemeColorOverride("font_color", new Color(0.08f, 0.16f, 0.08f));
-            _screenLabel.AddThemeConstantOverride("line_spacing", -2);
             _screenVp.AddChild(_screenLabel);
             AddChild(_screenVp);
+            StandardMaterial3D Face(BaseMaterial3D.TextureFilterEnum filter) => new()
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoTexture = _screenVp.GetTexture(),
+                TextureFilter = filter,
+            };
+            _screenNearest = ForView(Face(BaseMaterial3D.TextureFilterEnum.Nearest));
+            _screenLinear = ForView(Face(BaseMaterial3D.TextureFilterEnum.Linear));
             _screenQuad = new MeshInstance3D
             {
                 Name = "GpsScreen",
@@ -537,18 +651,32 @@ void fragment() {{
                 Position = new Vector3(0, 0.075f, 0.0153f),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 Layers = ViewmodelLayer,
-                MaterialOverride = ForView(new StandardMaterial3D
-                {
-                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    AlbedoTexture = _screenVp.GetTexture(),
-                    TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
-                }),
             };
             _viewmodel!.AddChild(_screenQuad);
+            _screenStyle = (Styles.VisualStyle)(-1);
         }
+        if (_screenStyle != Styles.StyleKit.Applied) StyleScreen();
         _screenVp.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         _screenQuad!.Visible = _viewmodel!.Visible;
         if (_screenLabel != null && _screenLabel.Text != (ScreenText ?? "")) _screenLabel.Text = ScreenText ?? "";
+    }
+
+    /// <summary>
+    /// PS1: a 96x84 screen, nearest filtered, its pixels showing; the lit styles (#1070): twice the
+    /// pixels, the text drawn at twice the size, and linear filtering, so the readout is smooth
+    /// like the rest of the picture. Polled against <see cref="Styles.StyleKit.Applied"/>, which
+    /// both <c>/style</c> and the settings menu move.
+    /// </summary>
+    private void StyleScreen()
+    {
+        _screenStyle = Styles.StyleKit.Applied;
+        int k = _screenStyle == Styles.VisualStyle.Ps1 ? 1 : 2;
+        _screenVp!.Size = new Vector2I(96 * k, 84 * k);
+        _screenLabel!.Position = new Vector2(4 * k, 3 * k);
+        _screenLabel.Size = new Vector2(90 * k, 78 * k);
+        _screenLabel.AddThemeFontSizeOverride("font_size", 13 * k);
+        _screenLabel.AddThemeConstantOverride("line_spacing", -2 * k);
+        _screenQuad!.MaterialOverride = k == 1 ? _screenNearest : _screenLinear;
     }
 
     /// <summary>

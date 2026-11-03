@@ -81,7 +81,7 @@ public partial class RideStage : SubViewport
             _floor = new MeshInstance3D
             {
                 Mesh = disc,
-                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.16f, 0.17f, 0.2f), Roughness = 0.85f },
+                MaterialOverride = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.16f, 0.17f, 0.2f), Roughness = 0.85f }),
             };
             AddChild(_floor);
         }
@@ -217,7 +217,7 @@ public partial class RideStage : SubViewport
         foreach (var g in Descendants<GeometryInstance3D>(root).Prepend(root as GeometryInstance3D).OfType<GeometryInstance3D>())
         {
             if (!g.Visible) continue;
-            var b = (inv * g.GlobalTransform) * g.GetAabb();
+            var b = (inv * g.GlobalTransform) * Avatar.SkinnedFigure.BoundsOf(g);
             box = box is { } a ? a.Merge(b) : b;
         }
         return box ?? new Aabb();

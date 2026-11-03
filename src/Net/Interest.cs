@@ -44,7 +44,7 @@ public static class Interest
     public static float SizeOf(RideKind kind) => kind switch
     {
         RideKind.OnFoot or RideKind.Skis or RideKind.Snowboard => 1.8f,
-        RideKind.RoadBike => 1.9f,
+        _ when Player.BicycleCatalog.IsBicycle(kind) => 1.9f,
         RideKind.Wingsuit => 2.0f,
         RideKind.Parachute => 8f,
         RideKind.Paraglider => 11f,
@@ -93,6 +93,12 @@ public static class Interest
     /// The 100 m horizon lattice rounds ridges off, so the margin errs toward "visible": a player
     /// on a ridge line is kept rather than lost, and the cost of that mistake is one packet stream.
     /// </para>
+    ///
+    /// <para>
+    /// The ground counts with the Earth's bulge between the two (<see cref="Core.Curvature.Bulge"/>, #187):
+    /// what the client draws curved, so two players 90 km apart over a level plain, 100 m up, are hidden
+    /// from each other as on screen.
+    /// </para>
     /// </summary>
     public static bool Clear(Vector3 eye, Vector3 target, Func<Vector3, float?> ground, float step = 100f, float margin = 12f)
     {
@@ -103,7 +109,7 @@ public static class Interest
         {
             float t = i / (float)n;
             var p = eye.Lerp(target, t);
-            if (ground(p) is { } g && g > p.Y + margin) return false;
+            if (ground(p) is { } g && g + (float)Core.Curvature.Bulge(t * length, length) > p.Y + margin) return false;
         }
         return true;
     }
@@ -134,6 +140,10 @@ public static class Interest
         Expect(Clear(new Vector3(0, 2, 0), new Vector3(800, 1, 0), ridge), false, "ridge blocks");
         Expect(Clear(new Vector3(0, 2, 0), new Vector3(800, 600, 0), ridge), true, "plane over the ridge");
         Expect(Clear(new Vector3(0, 2, 0), new Vector3(800, 1, 0), _ => 0f), true, "flat ground");
+        // long range over a level plain, the Earth's bulge between (#187; flat before it, #1429 pinned
+        // 90 km as clear): 61 m halfway at 60 km leaves eyes 100 m up in sight, 138 m at 90 km hides them
+        Expect(Clear(new Vector3(0, 100, 0), new Vector3(60_000, 100, 0), _ => 0f), true, "60 km over a level plain, 100 m up");
+        Expect(Clear(new Vector3(0, 100, 0), new Vector3(90_000, 100, 0), _ => 0f), false, "90 km over a level plain: behind the Earth's bulge");
         return ok;
     }
 }

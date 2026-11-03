@@ -17,7 +17,7 @@ public static class UpdateInfo
     public const double DeltaWorthIt = 0.6;
 
     public sealed record Asset(string Name, string Url, long Size);
-    public sealed record Release(string Tag, string PageUrl, IReadOnlyList<Asset> Assets, bool Prerelease = false);
+    public sealed record Release(string Tag, string PageUrl, IReadOnlyList<Asset> Assets, bool Prerelease = false, string Body = "");
 
     /// <summary>"v1.2.3" or "1.2.3" as a <see cref="Version"/>; null when it is not one.</summary>
     public static Version? ParseVersion(string? text)
@@ -67,12 +67,26 @@ public static class UpdateInfo
                 long size = a.TryGetProperty("size", out var s) && s.TryGetInt64(out long z) ? z : 0;
                 if (name != null && url != null) assets.Add(new Asset(name, url, size));
             }
-        return new Release(tagName, page, assets, pre);
+        string body = root.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() ?? "" : "";
+        return new Release(tagName, page, assets, pre, body);
     }
 
     /// <summary>The newest stable release, by version (not by date).</summary>
     public static Release? Latest(IEnumerable<Release> releases) =>
         Stable(releases).LastOrDefault();
+
+    /// <summary>
+    /// The stable releases to show in "What's new" (#1413): newer than <paramref name="lastSeen"/> (all of
+    /// them when it is not a version) up to <paramref name="current"/>, newest first, at most <paramref name="max"/>.
+    /// </summary>
+    public static IReadOnlyList<Release> NotesBetween(IEnumerable<Release> releases, string? lastSeen, string? current, int max = 10)
+    {
+        var cur = ParseVersion(current);
+        if (cur == null) return Array.Empty<Release>();
+        var seen = ParseVersion(lastSeen);
+        return Stable(releases).Where(r => ParseVersion(r.Tag) <= cur && (seen == null || ParseVersion(r.Tag) > seen))
+            .AsEnumerable().Reverse().Take(max).ToList();
+    }
 
     /// <summary>The stable releases with a version tag, oldest first.</summary>
     private static List<Release> Stable(IEnumerable<Release> releases) =>
@@ -101,14 +115,18 @@ public static class UpdateInfo
 
     /// <summary>
     /// The deltas that take <paramref name="current"/> to the latest stable release, one per step
-    /// between consecutive releases, oldest first; null when this version is not a release or a
-    /// step has no delta for this platform (then the full archive).
+    /// between consecutive releases of this platform, oldest first; null when this version is not a
+    /// release, the latest has no build for this platform, or a step has no delta (then the full archive).
+    /// A release without this platform's archive is stepped over (#1170: v0.104-v0.106 shipped no Windows
+    /// build): nobody can be on it, so <c>tools/deltas.sh</c> makes the next delta from the one before.
     /// </summary>
     public static IReadOnlyList<(string From, string To, Asset Delta)>? DeltaChain(IEnumerable<Release> releases, string current, string osName)
     {
         var cur = ParseVersion(current);
         if (cur == null || PlatformFor(osName) is not { } platform) return null;
-        var list = Stable(releases);
+        var all = Stable(releases);
+        if (all.Count == 0 || AssetFor(all[^1], osName) == null) return null;
+        var list = all.Where(r => ParseVersion(r.Tag) == cur || AssetFor(r, osName) != null).ToList();
         int at = list.FindIndex(r => ParseVersion(r.Tag) == cur);
         if (at < 0 || at == list.Count - 1) return null;
         var chain = new List<(string, string, Asset)>();

@@ -25,6 +25,11 @@ src/Player/FootPlayer.cs  quick  --creativecheck --world flat
 src/Player/FootPlayer.Creative quick --creativecheck --world flat
 src/Player/CreativeCheck  quick  --creativecheck --world flat
 src/Core/ClientWorld.cs   quick  --creativecheck --world flat
+# #1131: the first-run welcome over the title (name, figure, account)
+src/Ui/Welcome            quick  --welcomecheck
+src/Ui/CharacterPage      quick  --welcomecheck
+src/Ui/AccountPage        quick  --welcomecheck
+src/Core/GameShell        quick  --welcomecheck
 src/Core/ClientWorld.cs   quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --creativecheck --world flat
@@ -47,6 +52,9 @@ src/Items/Radio          quick  --radiopanelcheck --world fixture
 src/Player/FootPlayer.Ears quick --earscheck --world fixture --view third
 src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
+# #1202: every look's skinned figure posed as the rebuilt one, across poses (looks x poses, ~70 s)
+src/Avatar/              quick  --skincheck
+src/Avatar/MeshScratch   quick  --skincheck
 # #788: every model of the model viewer scanned for faces that z-fight, against tests/zfight-baseline.txt
 src/Avatar/              quick  --zfightcheck
 src/Build/               quick  --zfightcheck
@@ -65,6 +73,11 @@ src/Phone/               quick  --phonecheck --world fixture --photo-dir test_ou
 src/Player/FootPlayer    quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Core/Teleporter      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Phone/               quick  --phonevrcheck --xrsim --world fixture
+src/Trainer/             quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+src/Phone/               quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+tools/RideLink/          quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+src/Trainer/             quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
+src/Gpx/RoadNetwork      quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
 src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
@@ -83,6 +96,9 @@ src/Terrain/Stadiums/     quick --stadiumcheck --systems ui
 # #885: concerts: the generator's events, rigs, patches and stages, and the desk's DMX
 src/Concert/             quick --concertcheck --systems ui
 src/Concert/             quick --concertwalkcheck --world flat
+# #1150: the concert pogo QTE: jump on the beat, the Pogo emote on and off
+src/Concert/Pogo         quick --pogocheck --world fixture
+src/Player/FootPlayer.cs quick --pogocheck --world fixture
 src/Concert/             net   tools/concertnetcheck.sh
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat
@@ -106,6 +122,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/World/StarField      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/SkyBodies      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -128,12 +152,87 @@ src/Loot/LootTables      quick  --sitecheck --systems ui
 src/Interiors/           quick  --doorcheck
 src/Interiors/           quick  --flatcheck
 src/Interiors/           quick  --stairwalkcheck
+src/Interiors/           quick  --houselayoutcheck
+tools/TerrainFormat/HouseLayout quick --houselayoutcheck
 # #598: the generated world's shaped buildings: outline, doors, interiors that follow it
 src/Interiors/           quick  --shapedcheck --systems ui
 src/Interiors/Church     quick  --churchstagecheck
 src/Interiors/Landmarks  quick  --ikeacheck --systems ui
 src/Interiors/Ikea       quick  --ikeacheck --systems ui
 src/Interiors/BuildingTypes quick  --ikeacheck --systems ui
+# #1233: entertainment venues from OSM, matched by footprint; neon signs
+src/Interiors/Venue        quick  --venuecheck --systems ui
+src/Interiors/NeonSign     quick  --venuecheck --systems ui
+src/Interiors/BuildingTypes quick  --venuecheck --systems ui
+src/Interiors/BuildingFootprint quick --venuecheck --systems ui
+src/Interiors/venues.tsv.gz quick  --venuecheck --systems ui
+tools/TerrainFormat/VenueFormat quick --venuecheck --systems ui
+# #1235: bowling centres planned in hand-made buildings
+src/Interiors/InteriorGenerator.Bowling quick --bowlingcheck --systems ui
+src/Interiors/InteriorMeshBuilder.Venues quick --bowlingcheck --systems ui
+src/Interiors/BowlingProbe quick --bowlingcheck --systems ui
+# #1323: playable bowling: the lane rig in every centre; balls rolled into the pins in their own physics space
+src/Interiors/Bowling/ quick --bowlingcheck --systems ui
+src/Interiors/Bowling/ quick --bowlingrollcheck --systems physics
+src/Interiors/Bowling/ net    tools/bowlingnetcheck.sh
+# #1238: cinemas planned in hand-made buildings; the booth over the network
+src/Interiors/InteriorGenerator.Cinema quick --cinemacheck --systems ui
+src/Interiors/InteriorMeshBuilder.Cinema quick --cinemacheck --systems ui
+src/Interiors/CinemaProbe   quick  --cinemacheck --systems ui
+# #1286: what E's outline draws (pieces alone, booth panel halves, lift buttons, the outline on and off)
+src/Items/InteractOutline   quick  --outlinecheck --systems ui
+src/Interiors/InteriorMeshBuilder quick  --outlinecheck --systems ui
+src/Interiors/InteriorManager.Interact quick  --outlinecheck --systems ui
+src/Interiors/CinemaBooths  net    tools/cinemanetcheck.sh
+src/Interiors/CinemaNetProbe net   tools/cinemanetcheck.sh
+# #1298: a hall's video (link + T0 on the server, every client decodes it on the shared clock)
+src/Interiors/CinemaVideo   net    tools/cinemanetcheck.sh
+src/Interiors/InteriorNode.CinemaVideo net tools/cinemanetcheck.sh
+src/Interiors/CinemaRelay   net    tools/cinemanetcheck.sh
+src/Interiors/CinemaFeed    net    tools/cinemanetcheck.sh
+src/Interiors/CinemaCapture net    tools/cinemanetcheck.sh
+src/Interiors/CinemaBooths.Display net tools/cinemanetcheck.sh
+src/Interiors/PcSoundLoopback net  tools/cinemanetcheck.sh
+# #1285: public toilets, planned by every public building's generator
+src/Interiors/InteriorGenerator.Toilets quick --cinemacheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --bowlingcheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --arcadecheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --diningcheck --systems ui
+src/Interiors/InteriorGenerator.Toilets quick --ikeacheck --systems ui
+src/Interiors/ToiletCheck   quick  --cinemacheck --systems ui
+src/Interiors/ToiletCheck   quick  --diningcheck --systems ui
+src/Interiors/ToiletSizing  quick  --cinemacheck --systems ui
+src/Interiors/InteriorMeshBuilder.Toilets quick --cinemacheck --systems ui
+src/Interiors/RoomLights    quick  --cinemacheck --systems ui
+# #1240: arcades planned in hand-made buildings
+src/Interiors/InteriorGenerator.Arcade quick --arcadecheck --systems ui
+src/Interiors/InteriorMeshBuilder.Arcade quick --arcadecheck --systems ui
+src/Interiors/ArcadeProbe   quick  --arcadecheck --systems ui
+# #1325: pinball: the four cabinets built and played through their nodes (the solver and rules: unit tests)
+src/Interiors/Pinball/ quick --pinballcheck --systems ui
+src/Interiors/Pinball/ quick --zfightcheck Pinball
+shaders/pinball_display quick --pinballcheck --systems ui
+src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
+# #1324: table games: pool played by two bots through its rig (the solver and rules: unit tests), and over the net
+src/Interiors/Games/ quick --poolcheck --systems ui
+src/Interiors/Games/ net    tools/poolnetcheck.sh
+# #1243: terraces in front of restaurants, cafés and bars
+src/Interiors/VenueTerraces quick  --terracecheck
+src/Interiors/TerraceProbe  quick  --terracecheck
+# #1242: restaurants, cafés, bars and clubs in hand-made buildings
+src/Interiors/InteriorGenerator.Dining quick --diningcheck --systems ui
+src/Interiors/InteriorMeshBuilder.Dining quick --diningcheck --systems ui
+src/Interiors/DiningProbe   quick  --diningcheck --systems ui
+src/Interiors/InteriorGenerator.Apartments quick --diningcheck --systems ui
+src/Interiors/Venues        quick  --diningcheck --systems ui
+# #1244: venue music on the radio relay
+src/Interiors/VenueMusic    quick  --venuecheck --systems ui
+src/Audio/Live/VenueMusicSource quick --venuecheck --systems ui
+src/Audio/Tracker/           quick  --trackercheck
+assets/music/                quick  --trackercheck
+src/Interiors/InteriorGenerator.cs quick --bowlingcheck --systems ui
+src/Interiors/RoomLights   quick  --bowlingcheck --systems ui
+shaders/body/interior      quick  --bowlingcheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
@@ -180,6 +279,7 @@ src/Ui/WorldPick         quick  --worldpickcheck --world fixture
 src/Ui/SoloScreen        quick  --worldpickcheck --world fixture
 src/Core/TerrainPaths    quick  --worldpickcheck --world fixture
 src/Core/Debug           quick  --debugcheck --systems ui
+src/Terrain/LanePlanDebug quick  --debugcheck --systems ui
 src/Styles/StyleKit      quick  --debugcheck --systems ui
 src/Terrain/ChunkNode    quick  --debugcheck --systems ui
 src/BattleRoyale/        quick  --brcheck
@@ -285,6 +385,12 @@ src/Core/GameSettings    quick  --exitcheck --world fixture
 src/Core/SimClock        net    tools/speednetcheck.sh
 src/Core/SpeedNetProbe   net    tools/speednetcheck.sh
 src/Net/ClockSync        net    tools/speednetcheck.sh
+# #262, #1200: the admin item, money and vehicle commands, /despawn, from a client against a server (fixture)
+src/Items/EconomyProbe   net    tools/econcheck.sh
+src/Net/AdminArgs        net    tools/econcheck.sh
+src/Items/DroppedItems   net    tools/econcheck.sh
+src/Vehicles/VehicleManager net tools/econcheck.sh
+src/Core/Chat            net    tools/econcheck.sh
 src/Net/                 net    @netsmoke
 src/Net/Sleeper          net    tools/sleepercheck.sh
 src/Net/PlayerKey        net    tools/sleepercheck.sh
@@ -297,6 +403,22 @@ src/Net/Arrival          net    tools/worldpicknetcheck.sh
 src/Core/WorldChoice     net    tools/worldpicknetcheck.sh
 src/Ui/WorldPick         net    tools/worldpicknetcheck.sh
 src/Ui/MultiplayerScreen net    tools/worldpicknetcheck.sh
+src/Ui/MultiplayerScreen net    tools/consolelinknetcheck.sh
+src/Ui/ServerConsole     net    tools/consolelinknetcheck.sh
+src/Ui/ConsoleLinkCheck  net    tools/consolelinknetcheck.sh
+src/Net/ConsoleLink      net    tools/consolelinknetcheck.sh
+# #1123: the account step after the version check (needs Docker for its throwaway Nakama)
+src/Net/Accounts         net    tools/accountnetcheck.sh
+src/Net/Handshake        net    tools/accountnetcheck.sh
+src/Net/AdminHttp        net    tools/adminhttpnetcheck.sh
+src/Net/AdminApi         net    tools/adminhttpnetcheck.sh
+src/Net/ChatManager.Web  net    tools/adminhttpnetcheck.sh
+tools/deploy/start-server net   tools/adminhttpnetcheck.sh
+src/Net/Handshake        net    tools/consolelinknetcheck.sh
+src/Net/Handshake        net    tools/autoupdatenetcheck.sh
+src/Net/ServerAutoUpdate net    tools/autoupdatenetcheck.sh
+src/Net/ServerUpdater    net    tools/autoupdatenetcheck.sh
+src/Core/AutoUpdateNetPr net    tools/autoupdatenetcheck.sh
 src/Net/ChatManager      net    tools/transfercheck.sh
 src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke
@@ -313,6 +435,7 @@ src/Crafting/            net    tools/campfirecheck.sh
 src/Items/Fishing        net    tools/fishcheck.sh
 src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
+src/Items/Telescope      net    tools/telescopecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/Farming/             net    tools/farmnetcheck.sh
 src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
@@ -582,6 +705,12 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+# the holster, Alt + wheel and the wheel's zoom (#1369): the phone check drives them, the phone net check replicates them
+src/Items/Inventory      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/ItemController quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Core/PlayerInput     quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Items/Inventory      net    tools/phonenetcheck.sh
+src/Items/ItemController net    tools/phonenetcheck.sh
 src/Phone/               net    tools/phonenetcheck.sh
 src/Player/FootPlayer.Phone net  tools/phonenetcheck.sh
 # the Swiss match items (#478): fondue, smoke and alphorn between two clients
@@ -594,6 +723,11 @@ shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
+# the sword (#1371): moves, hits, dummies and bots between two clients
+src/Combat/Sword         net    tools/swordnetcheck.sh
+src/Combat/TrainingDummy net    tools/swordnetcheck.sh
+src/Player/FootPlayer.Sword net tools/swordnetcheck.sh
+src/Bots/BotHands        net    tools/swordnetcheck.sh
 # aura battles (#907): plan, cut on the beat, the server grades
 src/Combat/Aura          net    tools/auranetcheck.sh
 src/Player/FootPlayer.Aura net  tools/auranetcheck.sh
@@ -722,6 +856,7 @@ src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Playtest/Scenarios/Adv3 quick --playtest --playtest-smoke --world fixture --chunks fixture:flat --festival test --systems terrain,npcs,birds,physics,audio,network,sky,interiors,loot,occasions,ui,build,airports,farming,containers,snow,lifts,adventure --pois fixture --givers fixture --crevasses on --adventure-dir res://test_output/playtest/adv3
 # the playtest recorder (#844): a 20 s recorded session read back (trace, note, report, top view)
 src/Playtest/            quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Movie/ReplayWatch    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
@@ -783,3 +918,265 @@ src/Farming/CowMotion       net    tools/sightingnetcheck.sh
 src/Player/TractorBeams     net    tools/sightingnetcheck.sh
 src/Net/LiveMapFile      net    tools/livemapcheck.sh
 tools/deploy/web/map     net    tools/livemapcheck.sh
+# name tags over other players' heads, VR / MOBILE (#1136)
+src/Player/NameTag       net    tools/nametagnetcheck.sh
+src/Net/ChatManager      net    tools/nametagnetcheck.sh
+# #1167: the e-bike's remote and battery, the picker's Bicycles tab by pad / VR, two players watching each other ride
+src/Player/Bicycle        quick  --ebikecheck --world flat --systems physics,ui
+src/Player/BicycleCatalog quick  --ebikecheck --world flat --systems physics,ui
+src/Player/BikePhysics    quick  --ebikecheck --world flat --systems physics,ui
+src/Player/EBikeCheck     quick  --ebikecheck --world flat --systems physics,ui
+src/Vehicles/VehicleState quick  --ebikecheck --world flat --systems physics,ui
+src/XR/XrCabControls      quick  --ebikecheck --world flat --systems physics,ui
+src/Core/TouchMore        quick  --ebikecheck --world flat --systems physics,ui
+src/Player/RideUi         quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/RideMenuCheck  quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/BicycleCatalog quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/Bicycle        net    tools/ebikenetcheck.sh
+src/Player/BicycleCatalog net    tools/ebikenetcheck.sh
+src/Avatar/Cyclist        net    tools/ebikenetcheck.sh
+src/Player/EBikeNetProbe  net    tools/ebikenetcheck.sh
+# #1198: what the Android export packs (the .NET publish, no Godot): no dead natives (ONNX's .aar), a size budget
+UnitSportSwitzerland.csproj  quick  tools/apksizecheck.sh
+tools/ci/export_presets.cfg  quick  tools/apksizecheck.sh
+tools/release.sh             quick  tools/apksizecheck.sh
+tools/apksizecheck.sh        quick  tools/apksizecheck.sh
+# #1224 adventure places: the POI catalogue loads at boot (fixture POIs) and from a pois.bin through the chunk source
+src/Adventure/Places/     quick  --poischeck --world fixture --pois fixture
+tools/TerrainFormat/PoiFile quick --poischeck --world fixture --pois fixture
+src/Terrain/IChunkSource  quick  --poischeck --world fixture --pois fixture
+src/Terrain/LocalChunkSource quick --poischeck --world fixture --pois fixture
+src/Net/ClientTerrainSync net    @netsmoke
+# #1224 adventure places part 2: discovery, fog, viewpoints, the adventure map and the Atlas (offline quick probe; server + two clients)
+src/Adventure/Places/     quick  --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Quests/     quick  --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Ui/MapView            quick  --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Interiors/InteriorManager quick --placescheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Places/     net    tools/placesnetcheck.sh
+src/Adventure/AdventureService net tools/placesnetcheck.sh
+src/Net/ChatManager.Invites net  tools/placesnetcheck.sh
+tools/placesnetcheck.sh   net    tools/placesnetcheck.sh
+# #1226 adventure navigation: compass, marker, gust, pins, travel network and fares (offline quick probes; server + two clients)
+src/Adventure/Navigation/ quick  --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Navigation/ quick  --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Ui/CompassStrip       quick  --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Ui/CompassStrip       quick  --brcheck
+src/BattleRoyale/BrCompass quick --brcheck
+src/XR/XrWatch            quick  --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Places/AdventureMap quick --navcheck --world fixture --systems ui,physics,adventure --pois fixture
+src/Adventure/Places/PoiMarkers quick --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Items/Bank            quick  --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Adventure/Quests/     quick  --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+assets/adventure/fares.json quick --travelcheck --world fixture --systems ui,physics,adventure --pois fixture --adventure-travel network
+src/Adventure/Navigation/ net    tools/navnetcheck.sh
+src/Net/Invites/Parties   net    tools/navnetcheck.sh
+src/Net/Arrival           net    tools/navnetcheck.sh
+tools/navnetcheck.sh      net    tools/navnetcheck.sh
+# #1223: the Adventure layer: progress store, quests, the Journal (offline quick probe; server + clients over loopback)
+src/Adventure/           quick  --adventurecheck --systems ui,physics,adventure
+src/Ui/AdventureLog      quick  --adventurecheck --systems ui,physics,adventure
+src/Ui/Quest             quick  --adventurecheck --systems ui,physics,adventure
+src/Birds/BirdJournal    quick  --adventurecheck --systems ui,physics,adventure
+src/Items/Bank           quick  --adventurecheck --systems ui,physics,adventure
+src/Adventure/           net    tools/adventurenetcheck.sh
+src/Net/Sleepers         net    tools/adventurenetcheck.sh
+src/Items/Bank           net    tools/adventurenetcheck.sh
+src/BattleRoyale/BrManager.cs net tools/adventurenetcheck.sh
+tools/adventurenetcheck.sh net  tools/adventurenetcheck.sh
+# #1227: adventure rewards: chests and seals, edelweiss and cairns, guides, trials, photos, gadgets (offline quick probe; server + two clients)
+src/Adventure/Rewards/   quick  --rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture
+src/Loot/Gathering       quick  --rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture
+src/Items/ItemController quick  --rewardcheck --world fixture --systems ui,physics,loot,adventure --pois fixture --rewardspots fixture
+src/Adventure/Rewards/   net    tools/rewardnetcheck.sh
+tools/rewardnetcheck.sh  net    tools/rewardnetcheck.sh
+# #1225: stamina, free climbing, the crag; thermals, ridge lift and campfire updrafts
+src/Player/FootPlayer.Climb    quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Stamina  quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/ClimbCheck          quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/Stamina             quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/Climbable           quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/StaminaUpgrades  quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Terrain/Fixture/FixtureCrag quick --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/XR/XrClimb                 quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Ui/StaminaRing             quick  --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Avatar/HumanMeshBuilder.WallClimb quick --skincheck
+src/World/AirLift              quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/World/AirLift              quick  --flycheck thermal --time 22 --chunks fixture:crag
+src/World/AirLift              quick  --flycheck campfire --chunks fixture:crag
+src/World/AirLift              quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+src/World/SunPath              quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/World/DayNight             quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/Player/FlightCheckProbe    quick  --flycheck thermal --time 13 --chunks fixture:crag
+src/Player/Flight.cs           quick  --flycheck campfire --chunks fixture:crag
+src/Player/PigeonFlight        quick  --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+src/Net/Arrival                net    tools/climbnetcheck.sh
+src/Player/FootPlayer.Climb    net    tools/climbnetcheck.sh
+# #1266: playing together: the together rule, links (hands, the rope, the tether, belays), the shared pot (offline quick probes; server + two clients)
+src/Adventure/Together/  quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Player/FootPlayer.Together quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Avatar/HumanMeshBuilder quick  --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+src/Adventure/Together/Fondue quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Together/Pot  quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Together/TogetherService.Pots quick --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Together/Stir quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Interiors/PotTables     quick  --fonduecheck --world fixture --systems ui,terrain,physics,adventure --fondueseed 2
+src/Adventure/Rewards/Seals.cs quick --togethercheck --world fixture --systems ui,terrain,physics,adventure --rewardspots res://tools/lib/together_spots.txt
+
+# #1268 Versteckis: the offline check on the hamlet, the two-client game, the bot game; Rounds and FollowCam keep BR whole
+src/Adventure/Versteckis/ quick  --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Terrain/Fixture/FixtureCourse quick --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Adventure/Versteckis/VersteckisManager net tools/versteckisnetcheck.sh
+src/Net/InterestService   net    tools/versteckisnetcheck.sh
+src/Bots/VersteckisBrain  net    tools/versteckisbotcheck.sh
+src/Adventure/Versteckis/VsTactics net tools/versteckisbotcheck.sh
+src/Core/Rounds           quick  --brcheck
+src/Ui/FollowCam          quick  --brcheck
+src/Core/Rounds           net    tools/brbotcheck.sh
+src/Ui/FollowCam          net    tools/brbotcheck.sh
+# /locate (#1277): the index, the lists and the garage doors offline on the garage course; the server's answers and /go
+src/World/Locate/          quick  --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
+src/Interiors/BuildingTypes quick --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
+src/World/Locate/          net    tools/locatenetcheck.sh
+src/Net/ChatManager        net    tools/locatenetcheck.sh
+tools/locatenetcheck.sh    net    tools/locatenetcheck.sh
+# #1269 festival framework: the offline check (the test festival, Batzen, caps, the party board, the Journal tab, the conversion) and the two-client check
+src/Occasions/Festivals/    quick  --festivalcheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
+src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
+tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
+src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
+tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
+src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Desalpe/ net    tools/desalpenetcheck.sh
+tools/desalpenetcheck.sh    net    tools/desalpenetcheck.sh
+src/Occasions/Festivals/Desalpe/ quick  --desalpecheck --festival test --date 2027-09-24 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+# #1348: the Christmas market: stalls, the taste and the ware, the Glühwein mug and its alcohol, the Samichlaus (offline quick probe; server + two clients)
+src/Occasions/Festivals/Christmas/ quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Christmas quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Christmas quick  --christmascheck --festival test --date 2027-11-30 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Christmas/ net    tools/christmasnetcheck.sh
+src/Occasions/Festivals/FestivalService.Christmas net    tools/christmasnetcheck.sh
+tools/christmasnetcheck.sh    net    tools/christmasnetcheck.sh
+# #1373: the Zibelemaerit: four onion-market stalls (taste, buy), the Marktgang, the confetti fight's pay and cap (offline quick probe; server + two clients)
+src/Occasions/Festivals/Zibelemaerit/ quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Zibelemaerit quick  --zibelecheck --festival test --date 2027-11-22 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Zibelemaerit/ net    tools/zibelenetcheck.sh
+src/Occasions/Festivals/FestivalService.Zibelemaerit net    tools/zibelenetcheck.sh
+tools/zibelenetcheck.sh    net    tools/zibelenetcheck.sh
+# #1351: the Escalade: the Marmite's pair, the soup pot, the Course's gates and pay (offline quick probe; server + two clients)
+src/Occasions/Festivals/Escalade/ quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Escalade quick  --escaladecheck --escaladefast --festival test --date 2027-12-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Escalade/ net    tools/escaladenetcheck.sh
+src/Occasions/Festivals/FestivalService.Escalade net    tools/escaladenetcheck.sh
+tools/escaladenetcheck.sh    net    tools/escaladenetcheck.sh
+# #1357: the Fasnacht: Larven stall, Raeppli, Guggenmusik, Basel's Morgestraich (offline quick probe; server + two clients)
+src/Occasions/Festivals/Fasnacht/ quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalCatalog.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/FestivalService.Fasnacht quick  --fasnachtcheck --festival test --date 2027-02-04 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure,sky
+src/Occasions/Festivals/Fasnacht/ net    tools/fasnachtnetcheck.sh
+src/Occasions/Festivals/FestivalService.Fasnacht net    tools/fasnachtnetcheck.sh
+tools/fasnachtnetcheck.sh    net    tools/fasnachtnetcheck.sh
+# #1358: the Sechseläuten: the purse, the bet on the Böögg, the light, the bang and the shares, the stage (offline quick probe; server + two clients)
+src/Occasions/Festivals/Sechselaeuten/ quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Sechselaeuten quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+shaders/sechse_flame quick  --sechscheck --sechsefast --festival test --date 2027-04-19 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Sechselaeuten/ net    tools/sechsenetcheck.sh
+src/Occasions/Festivals/FestivalService.Sechselaeuten net    tools/sechsenetcheck.sh
+tools/sechsenetcheck.sh    net    tools/sechsenetcheck.sh
+# #1355: the 1 August: the lampion, the stands, the lampion walk, the volleys, the lake show, the Höhenfeuer (offline quick probe; server + two clients)
+src/Occasions/Festivals/August1/ quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.August1 quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+shaders/hoehenfeuer quick  --august1check --august1fast --festival test --date 2027-07-31 --world fixture --chunks fixture:flat --pois fixture --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/August1/ net    tools/august1netcheck.sh
+src/Occasions/Festivals/FestivalService.August1 net    tools/august1netcheck.sh
+tools/august1netcheck.sh    net    tools/august1netcheck.sh
+src/Occasions/OccasionManager net  tools/festivalnetcheck.sh
+tools/festivalnetcheck.sh   net    tools/festivalnetcheck.sh
+src/Adventure/Together/TogetherNetProbe net tools/togethernetcheck.sh
+tools/togethernetcheck.sh  net  tools/togethernetcheck.sh
+src/Adventure/Together/ net tools/togethernetcheck.sh
+
+# #1269 part 3 Steinstossen: the offline check (prompt, attempt, perfect put, foul, forged put, bots, the day's three puts) and the two-client check
+src/Occasions/Festivals/    quick  --steincheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/    net    tools/steinnetcheck.sh
+tools/steinnetcheck.sh      net    tools/steinnetcheck.sh
+src/Combat/Schwing       net    tools/schwingnetcheck.sh
+src/Player/FootPlayer.Schwing net tools/schwingnetcheck.sh
+src/Avatar/HumanMeshBuilder.Schwing net tools/schwingnetcheck.sh
+
+# #1271: alcohol: the drink log, the curve, the effects on the intents, the climb gate, passing out, the two breathalyzers (offline quick probe; server + two clients)
+src/Adventure/Alcohol/  quick  --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Player/FootPlayer.Drunk quick --alcoholcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Adventure/Alcohol/AlcoholNetProbe net tools/alcoholnetcheck.sh
+tools/alcoholnetcheck.sh  net  tools/alcoholnetcheck.sh
+src/Adventure/Alcohol/ net tools/alcoholnetcheck.sh
+# #1267: adventure errands: the givers, the dialogue, the daily Postkarten, reputation (offline quick probe; server + two clients)
+src/Adventure/Errands/  quick  --errandcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/WorldEvent  quick  --worldeventcheck --world fixture --pois fixture --givers fixture --systems ui,terrain,physics,adventure
+src/Adventure/Errands/WorldEventNetProbe net tools/worldeventnetcheck.sh
+tools/worldeventnetcheck.sh  net  tools/worldeventnetcheck.sh
+src/Adventure/Errands/WorldEvents.cs net tools/worldeventnetcheck.sh
+src/Adventure/Errands/ErrandNetProbe net tools/errandnetcheck.sh
+tools/errandnetcheck.sh  net  tools/errandnetcheck.sh
+src/Adventure/Errands/ErrandService net tools/errandnetcheck.sh
+
+# #1269 the alphorn and yodel game: the offline check (a four-voice song, harmony, pay, forged and early songs refused, the valley echo) and the two-client check
+src/Occasions/Festivals/Horn/   quick  --hornscheck --festival test --date 2027-03-11 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Horn   net  tools/hornnetcheck.sh
+src/Occasions/Festivals/Horn/   net    tools/hornnetcheck.sh
+tools/hornnetcheck.sh           net    tools/hornnetcheck.sh
+# #1356: the Chalandamarz: the march beat, the Treichel rings graded by stamp, the loop's stations, the pay (offline quick probe; server + two clients)
+src/Occasions/Festivals/Chalanda/ quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.Chalanda quick  --chalandacheck --chalandafast --festival test --date 2027-03-01 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/Chalanda/ net    tools/chalandanetcheck.sh
+src/Occasions/Festivals/FestivalService.Chalanda net    tools/chalandanetcheck.sh
+tools/chalandanetcheck.sh    net    tools/chalandanetcheck.sh
+# #1372: the hidden crevasse's slot: fall, climb out, rescue, rope and haul (offline quick probe)
+src/Adventure/Together/CrevasseCheck quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNode quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/TogetherService.Crevasses quick --crevassecheck --world fixture --systems ui,terrain,physics,adventure
+src/Adventure/Together/CrevasseNetProbe net tools/crevassenetcheck.sh
+tools/crevassenetcheck.sh  net  tools/crevassenetcheck.sh
+src/Net/StaminaWatch net tools/crevassenetcheck.sh
+# #1394: Montreux Jazz: the quay's lake stage, the set's clock, Listening (a song heard pays at its end), the Encore (the crowd meter), the Jazz Night and the finale (offline quick probe; server + two clients)
+src/Occasions/Festivals/MontreuxJazz/ quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalCatalog.MontreuxJazz quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Festivals/FestivalService.MontreuxJazz quick  --montreuxcheck --festival test --date 2027-07-10 --jazzbpm 300 --festivalhour 21.5 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Concert/JazzSet quick  --concertcheck --systems ui
+src/Concert/JazzInstruments quick  --concertcheck --systems ui
+src/Occasions/Festivals/MontreuxJazz/ net    tools/montreuxnetcheck.sh
+src/Occasions/Festivals/FestivalService.MontreuxJazz net    tools/montreuxnetcheck.sh
+tools/montreuxnetcheck.sh    net    tools/montreuxnetcheck.sh
+
+# #1429: the regression net before a coordinate or rendering change (docs/notes/general/regression-net.md)
+# the far horizon at its LV95 corners across origin shifts; a GPX course drawn and run across shifts
+src/Terrain/HorizonLayer     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Terrain/HorizonCheck     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Gpx/                     quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+src/Core/OriginShifter       quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+# probes that existed without a row
+src/World/Traffic            quick  --trafficcheck --chunks fixture:junction
+src/World/LaneGraph          quick  --trafficcheck --chunks fixture:junction
+src/Birds/                   quick  --birdcheck --world fixture
+src/Birds/                   quick  --birdstrikecheck --world fixture
+src/Player/VoidProbe         quick  --voidcheck --world fixture
+src/Player/FootPlayer.cs     quick  --voidcheck --world fixture
+# the origin under load: probes that pass with a shift every 20 m (--originstress)
+src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --ride car,15 --world flat --originstress 20
+src/Core/OriginShifter       quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/WorldOrigin         quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --flycheck a320 --world flat --originstress 20
+# a shift every 200 m: at 20 the BNR32 spun five times in one of two runs (a shift twice a second at 160 km/h)
+src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
+src/Core/WorldOrigin         quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200

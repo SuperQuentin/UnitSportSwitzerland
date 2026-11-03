@@ -46,8 +46,14 @@ public partial class SpectatorSwitchCheck : Node
         while (GameClock.Now < until) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
-    private static void Key(Key key, bool down, bool shift) =>
-        Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = key, Pressed = down, ShiftPressed = shift });
+    /// <summary>A key as the keyboard sends it: its device, keycode and label, not a bare physical key on device 0.</summary>
+    private static InputEventKey KeyEvent(Key key, bool down, bool shift) => new()
+    {
+        Device = (int)InputEvent.DeviceIdKeyboard, PhysicalKeycode = key, Keycode = key, KeyLabel = key,
+        Pressed = down, ShiftPressed = shift,
+    };
+
+    private static void Key(Key key, bool down, bool shift) => Input.ParseInputEvent(KeyEvent(key, down, shift));
 
     private async Task Run()
     {
@@ -105,6 +111,17 @@ public partial class SpectatorSwitchCheck : Node
         await Wait(0.1);
         Expect(!me.Creative, "T again: survival");
 
+        // the key-up made for a stuck key lets go of the action and the key as a real one does (#1283):
+        // one on device 0 without the keycode left both held
+        var down = KeyEvent(Godot.Key.W, true, false);
+        Input.ParseInputEvent(down);
+        await Wait(0.05);
+        bool held = Input.IsActionPressed(PlayerInput.MoveForward) && Input.IsKeyPressed(Godot.Key.W);
+        Input.ParseInputEvent(PlayerInput.KeyUp(down));
+        await Wait(0.05);
+        Expect(held && !Input.IsActionPressed(PlayerInput.MoveForward) && !Input.IsKeyPressed(Godot.Key.W) && !Input.IsPhysicalKeyPressed(Godot.Key.W),
+            "the stuck-key release lets go of the action, the keycode and the physical key");
+
         // windowed on Windows: a key Godot thinks is down while Windows says it is up (a key-up lost
         // in a hitch) is let go within a few checks
         if (OS.GetName() == "Windows" && DisplayServer.GetName() != "headless")
@@ -117,7 +134,7 @@ public partial class SpectatorSwitchCheck : Node
                 bool stuck = Input.IsActionPressed(PlayerInput.MoveForward);
                 double at = RealClock.Now;
                 while (Input.IsActionPressed(PlayerInput.MoveForward) && RealClock.Now - at < 2.0) await Wait(0.05);
-                Expect(stuck && !Input.IsActionPressed(PlayerInput.MoveForward),
+                Expect(stuck && !Input.IsActionPressed(PlayerInput.MoveForward) && !Input.IsKeyPressed(Godot.Key.W),
                     $"a key up for Windows but down for Godot is let go ({RealClock.Now - at:F2} s)");
             }
         }

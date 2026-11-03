@@ -80,6 +80,39 @@ public class CatenaryPlannerTests
     }
 
     [Fact]
+    public void Two_single_tram_tracks_side_by_side_share_centre_masts()
+    {
+        // Geneva maps each tram track as its own line (#1094): 3.6 m apart, drawn in opposite directions, nothing built near
+        var south = new CatenaryPlanner.Rail([new Vec2(2600000, 1200498.2), new Vec2(2600070, 1200498.2)], [500f, 500f], RoadFlags.Tramway, false, false, 0, Tile);
+        var north = new CatenaryPlanner.Rail([new Vec2(2600070, 1200501.8), new Vec2(2600000, 1200501.8)], [500f, 500f], RoadFlags.Tramway, false, false, 0, Tile);
+        var (supports, wires, stats) = Plan([south, north]);
+        Assert.Equal(2, wires.Count);
+        // the south track's grid (0, 30, 60 m) puts the masts; every north support hangs from one of them
+        Assert.Equal(3, stats.CentreMasts);
+        Assert.Equal(3, stats.CentreMastsShared);
+        Assert.Equal(0, stats.Cantilevers);
+        Assert.All(supports, s => Assert.Equal(CatenarySupportKind.CentreMast, s.Kind));
+        Assert.All(supports, s => Assert.Equal(500f, s.AZ, 2));
+        // a house near: each track keeps its own cantilever outside
+        var (_, _, built) = Plan([south, north], building: p => p.Y > 1200510 && p.Y < 1200520);
+        Assert.Equal(0, built.CentreMasts);
+        Assert.Equal(6, built.Cantilevers);
+    }
+
+    [Fact]
+    public void A_town_tram_on_its_own_bed_gets_centre_masts_but_one_in_the_carriageway_spans()
+    {
+        // town paving (Street) off the carriageway, nothing built near: centre masts; laid in the carriageway (Embedded): spans
+        var bed = new CatenaryPlanner.Rail([new Vec2(2600000, 1200500), new Vec2(2600070, 1200500)], [500f, 500f],
+            RoadFlags.Tramway | RoadFlags.DoubleTrack, true, false, 0, Tile);
+        Assert.Equal(3, Plan([bed]).Stats.CentreMasts);
+        var laid = bed with { Embedded = true };
+        var (_, _, stats) = Plan([laid], clear: p => Math.Abs(p.Y - 1200500) > 6);
+        Assert.Equal(0, stats.CentreMasts);
+        Assert.Equal(3, stats.Spans);
+    }
+
+    [Fact]
     public void A_building_near_or_a_blocked_centre_line_keeps_masts_outside()
     {
         // a house 10 m north: no centre masts, masts outside the tracks instead

@@ -18,14 +18,40 @@ namespace UnitSport.Styles;
 /// through a doorway past the handover: a billboard through the portal, 3D seen directly. So
 /// there it is carried up through the building's doorway first, to where the portal camera stands.
 /// </para>
+///
+/// <para>
+/// It also sets <c>world_lod_scale</c>, how much the camera zooms over the walking view
+/// (<see cref="LodScale"/>, #1433), and carries a zoom step on to the visibility ranges
+/// (<see cref="ZoomRanges"/>) and to the sun's shadow distance: zoomed, the 3D trees reach
+/// range x zoom, and past the 400 m cascades they lost the shade their billboards draw.
+/// </para>
 /// </summary>
 public partial class CameraGlobal : Node
 {
     public CameraGlobal() => Name = "CameraGlobal";
 
+    /// <summary>The drop per square metre last pushed (<see cref="Core.Curvature"/>), NaN before the first push.</summary>
+    private float _curvature = float.NaN;
+
+    /// <summary><c>--curvature 0</c>: the flat world, as before #187 (a picture to compare with main's).</summary>
+    public override void _Ready()
+    {
+        if (Core.CmdArgs.Double("--curvature") is 0) Core.Curvature.Drawn = false;
+    }
+
     public override void _EnterTree() => RenderingServer.FramePreDraw += Push;
 
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Push;
+
+    private static readonly StringName WorldCamPos = "world_cam_pos", WorldLodScale = "world_lod_scale",
+        CurvatureParam = "world_curvature", CurveBlendParam = "world_curve_blend", BaseFogMeta = "base_fog_density";
+    private float _curveBlend = float.NaN, _fogScale = float.NaN;
+    private Godot.Environment? _fogEnv;
+    private float _pushedScale = 1f;
+
+    // the sun whose shadow distance follows the zoom, and its own distance (a restyle makes a new sun)
+    private DirectionalLight3D? _sun;
+    private float _sunBase, _sunScale = 1f;
 
     private void Push()
     {
@@ -33,7 +59,71 @@ public partial class CameraGlobal : Node
         {
             var at = cam.GlobalPosition;
             if (Interiors.InteriorManager.Instance is { } interiors) at = interiors.ThroughNearestDoor(at);
-            RenderingServer.GlobalShaderParameterSet("world_cam_pos", at);
+            RenderingServer.GlobalShaderParameterSet(WorldCamPos, at);
+            LodScale.Update(cam);
+            // the step, not the value: NearTrees and the visibility ranges gather by the step, and
+            // a tree the shader made 3D past their reach would be neither 3D nor a billboard
+            if (LodScale.Step != _pushedScale)
+            {
+                _pushedScale = LodScale.Step;
+                RenderingServer.GlobalShaderParameterSet(WorldLodScale, _pushedScale);
+            }
         }
+        // the Earth's curvature in every world shader (#187), by the camera's height (#1430 H1): refraction
+        // fades out from 5 to 20 km, the drop gives way to the exact sphere from 20 to 50 km. Pushed when it changes.
+        var camera = GetViewport()?.GetCamera3D();
+        double altitude = camera?.GlobalPosition.Y ?? 0;
+        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2At(altitude) : 0f;
+        if (curvature != _curvature)
+        {
+            _curvature = curvature;
+            RenderingServer.GlobalShaderParameterSet(CurvatureParam, curvature);
+        }
+        float blend = Core.Curvature.Drawn ? (float)Core.Curvature.SphereBlendAt(altitude) : 0f;
+        if (blend != _curveBlend)
+        {
+            _curveBlend = blend;
+            RenderingServer.GlobalShaderParameterSet(CurveBlendParam, blend);
+        }
+        if (camera != null) Climb(camera, altitude);
+        ZoomRanges.Tick();
+        ScaleShadows();
+    }
+
+    /// <summary>
+    /// High up (#1430 H1): the view reaches past the geometric horizon (√(2Rh + h²) + 200 km above 5 km),
+    /// and the style's haze thins with the air, kept at a sixth so the edge of the terrain data stays
+    /// in the haze until the globe (H4). Below 3 km nothing changes.
+    /// </summary>
+    private void Climb(Camera3D camera, double altitude)
+    {
+        float far = Core.GameSettings.Current.CameraFar;
+        if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
+        if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
+
+        float scale = HazeAt(altitude);
+        if (GetViewport()?.FindWorld3D()?.Environment is not { } env || (scale == _fogScale && env == _fogEnv)) return;
+        _fogScale = scale;
+        _fogEnv = env;   // a restyle hands over a new one: its own ground haze is the base
+        if (!env.HasMeta(BaseFogMeta)) env.SetMeta(BaseFogMeta, env.FogDensity);
+        env.FogDensity = (float)env.GetMeta(BaseFogMeta) * scale;
+    }
+
+    /// <summary>The style's haze at a camera height, as a share of the ground's: 1 to 3 km, then thinning with the air, never under a sixth.</summary>
+    public static float HazeAt(double altitude) =>
+        altitude <= 3_000 ? 1f : Mathf.Max(1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
+
+    private void ScaleShadows()
+    {
+        var sun = World.DayNight.Instance?.Sun;
+        if (sun != _sun)
+        {
+            _sun = sun;
+            _sunScale = 1f;
+            if (sun != null) _sunBase = sun.DirectionalShadowMaxDistance;
+        }
+        if (_sun == null || !IsInstanceValid(_sun) || _sunScale == LodScale.Step) return;
+        _sunScale = LodScale.Step;
+        _sun.DirectionalShadowMaxDistance = _sunBase * _sunScale;
     }
 }

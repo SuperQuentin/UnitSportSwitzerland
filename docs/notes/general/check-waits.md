@@ -26,6 +26,10 @@ polls and lingers.
   - The ramp has no state to wait on headless, so those waits stay.
 - **`IsOnFloor()` right after a teleport** can still read the old ground. Wait a physics frame first, or keep
   the settle.
+- **A state that reads true from construction** passes a plain `Until` on the first frame. An A320 from
+  `SetRide` is put a metre up and reads "on the ground" before it drops onto its wheels, and the ramp was
+  refused during the drop. Wait for it to hold instead: `UntilHeld(cond, 1.0, max)`, as long as the old fixed
+  wait (#1080).
 - **Logins:** `if (!await LogIn("pw")) return;`, which waits for `Permissions.IsAdmin`. Never `/login` then a
   pause.
 - **Say-and-sleep retry loops:** `Say(x); if (await Until(answered, t)) break;` at the old interval.

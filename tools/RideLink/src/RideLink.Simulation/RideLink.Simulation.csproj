@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>RideLink.Simulation</RootNamespace>
+    <Description>
+      Simulated transport for RideLink: virtual trainers, straps and meters that speak real
+      GATT payloads, so the engine can be exercised with no hardware.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RideLink\RideLink.csproj" />
+  </ItemGroup>
+
+</Project>

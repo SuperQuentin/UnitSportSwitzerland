@@ -75,6 +75,7 @@ section() { # title, ERE on the leading emoji code
 } > "$OUT/notes.md"
 
 echo "Next version: v$V ($bump)"; cat "$OUT/notes.md"
+echo "Build features: ${UNITSPORT_FEATURES:-none} (UNITSPORT_FEATURES, docs/notes/general/build-features.md)"
 [ $DRY = 1 ] && exit 0
 
 WT="$PWD/$OUT/wt"; REPO=$PWD
@@ -92,7 +93,7 @@ ensure_preset() { # name, platform, extra option lines: appended to the (gitigno
   grep -q "^name=\"$1\"" "$f" && return
   n=$(grep -c '^\[preset\.[0-9]*\]$' "$f"); excl=$(sed -n 's/^exclude_filter="\(.*\)"$/\1/p' "$f" | head -1)
   echo "Adding preset.$n \"$1\" to export_presets.cfg"
-  printf '\n[preset.%s]\n\nname="%s"\nplatform="%s"\nrunnable=false\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter="%s"\nexport_path=""\npatches=PackedStringArray()\nencryption_include_filters=""\nencryption_exclude_filters=""\nseed=0\nencrypt_pck=false\nencrypt_directory=false\nscript_export_mode=2\n\n[preset.%s.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ndotnet/include_scripts_content=false\ndotnet/include_debug_symbols=false\ndotnet/embed_build_outputs=false\n%s\n' \
+  printf '\n[preset.%s]\n\nname="%s"\nplatform="%s"\nrunnable=false\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter="assets/music/*"\nexclude_filter="%s"\nexport_path=""\npatches=PackedStringArray()\nencryption_include_filters=""\nencryption_exclude_filters=""\nseed=0\nencrypt_pck=false\nencrypt_directory=false\nscript_export_mode=2\n\n[preset.%s.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ndotnet/include_scripts_content=false\ndotnet/include_debug_symbols=false\ndotnet/embed_build_outputs=false\n%s\n' \
     "$n" "$1" "$2" "$excl" "$n" "$3" >> "$f"
 }
 ensure_preset "Linux" "Linux" 'binary_format/embed_pck=false
@@ -107,6 +108,7 @@ codesign/codesign=1
 notarization/notarization=0'
 ensure_preset "Android" "Android" 'gradle_build/use_gradle_build=true
 gradle_build/export_format=0
+gradle_build/compress_native_libraries=true
 architectures/armeabi-v7a=false
 architectures/arm64-v8a=true
 architectures/x86=false
@@ -126,10 +128,15 @@ permissions/change_wifi_multicast_state=true
 permissions/internet=true
 permissions/vibrate=true'
 cp "$REPO/export_presets.cfg" .
+# the venues' tracker modules are no Godot resources: every preset packs them by name (#1244)
+sed -i 's|^include_filter=""$|include_filter="assets/music/*"|' export_presets.cfg
 # Android installs an update only over a lower version code, so it follows the semver
 sed -i -E "s|^version/code=.*|version/code=$((MA*10000+MI*100+PA))|; s|^version/name=.*|version/name=\"$V\"|" export_presets.cfg
 # a preset made before #1029 still says no Gradle; only the Android preset has this key
 sed -i -E "s|^gradle_build/use_gradle_build=.*|gradle_build/use_gradle_build=true|" export_presets.cfg
+# ... nor packs its .so files (#1082): Gradle stores them uncompressed, 71 MB of the 126 MB APK
+grep -q '^gradle_build/compress_native_libraries=' export_presets.cfg   || sed -i -E "s|^gradle_build/use_gradle_build=.*|&\ngradle_build/compress_native_libraries=true|" export_presets.cfg
+sed -i -E "s|^gradle_build/compress_native_libraries=.*|gradle_build/compress_native_libraries=true|" export_presets.cfg
 
 # yt-dlp + its QuickJS runtime (else 403s) + ffmpeg (CD burning, GPX video export) ship in bin/ beside the
 # executable (BundledTools), one set per platform, cached in $OUT/tools/<platform>/ between releases; delete it to refresh
@@ -234,7 +241,15 @@ else
   # a failed .NET publish still yields an APK, just without the game: never ship that
   # "A valid Android SDK path is required": Editor Settings > Export > Android > Android SDK Path (ANDROID_HOME
   # only seeds a fresh editor settings file, as on CI)
-  if export_preset "Android" "$APK"; then ASSETS+=("$APK"); fi
+  if export_preset "Android" "$APK"; then
+    ASSETS+=("$APK")
+    # the size gate (#1198): over budget it still ships, but the log, the notes and CI say by how much
+    APK_MB=$(( $(wc -c < "$APK") / 1000000 )); echo "Android APK: $APK_MB MB (budget ${APK_BUDGET_MB:-100} MB)"
+    if [ "$APK_MB" -gt "${APK_BUDGET_MB:-100}" ]; then
+      APK_OVER="the Android APK is $APK_MB MB, $((APK_MB - ${APK_BUDGET_MB:-100})) MB over its ${APK_BUDGET_MB:-100} MB budget"
+      echo "WARNING: $APK_OVER (tools/apksizecheck.sh names what the publish adds)"
+    fi
+  fi
 fi
 
 [ ${#ASSETS[@]} -gt 0 ] || { echo "Every export failed, nothing to release. Are the mono export templates installed?"; exit 1; }
@@ -243,6 +258,7 @@ if [ ${#SKIPPED[@]} -gt 0 ]; then
   printf '\n_Built on a host that could not export %s, so this release ships without it._\n' \
     "$(IFS=,; echo "${SKIPPED[*]}")" >> "$REPO/$OUT/notes.md"
 fi
+[ -n "${APK_OVER:-}" ] && printf '\n_Size: %s._\n' "$APK_OVER" >> "$REPO/$OUT/notes.md"
 if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
   printf '\n_Could not download %s for this release: those builds use the copy on your PATH instead._\n' \
     "$(IFS=,; echo "${MISSING_TOOLS[*]}")" >> "$REPO/$OUT/notes.md"
@@ -266,6 +282,7 @@ if [ -n "$last" ]; then
   (cd "$REPO" && tools/deltas.sh "$last" "v$V" --upload) || echo "Deltas failed; the release stands. Retry with: tools/deltas.sh $last v$V --upload"
 fi
 # On CI, a skipped platform is a run annotation, not only a log line: v0.28-v0.31.1 shipped no APK unnoticed
+[ $CI = 1 ] && [ -n "${APK_OVER:-}" ] && echo "::warning title=Android APK over budget::v$V: $APK_OVER"
 if [ $CI = 1 ] && [ ${#SKIPPED[@]} -gt 0 ]; then
   echo "::warning title=Release skipped platforms::v$V shipped without ${SKIPPED[*]} (see the export log above)"
 fi

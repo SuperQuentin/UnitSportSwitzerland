@@ -424,7 +424,13 @@ public partial class FarmSales : Node
     }
 
     /// <summary>The outdoor prompt for a stand or a buyer in reach (refreshed a few times a second, built only when it changes).</summary>
-    public static string? PromptFor(FootPlayer p) => FarmStands.Instance?.PromptFor(p) ?? Instance?.BuyerPrompt(p);
+    public static string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The outdoor prompt for a stand or a buyer in reach, and what to outline (#1286): the stand, or the buyer's office.</summary>
+    public static Interaction? InteractionFor(FootPlayer p) => FarmStands.Instance?.InteractionFor(p) ?? Instance?.BuyerInteraction(p);
+
+    private Interaction? BuyerInteraction(FootPlayer p) =>
+        BuyerHere(p) is { } b && BuyerPrompt(p) is { } text ? new(text, Outline.Of(FarmBuyerYards.Instance?.YardOf(b.Key))) : null;
 
     private (FarmBuyer? Buyer, ItemId Item, int Count, InputDevice Device) _buyerKey;
     private string? _buyerText;

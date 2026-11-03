@@ -2,7 +2,7 @@ namespace UnitSport.Tools.RoadGen.Layout;
 
 using UnitSport.Terrain.Format;
 
-/// <summary>An overhead head as planned (#1037): its offset across the arm (right of a driver arriving) and the moves of the lanes under it.</summary>
+/// <summary>An overhead head as planned (#1037): its offset across the arm (right of a driver arriving) and the moves of the lanes it shows (#1110).</summary>
 public sealed record OverheadSpot(double Offset, SignalMoves Moves);
 
 /// <summary>
@@ -26,10 +26,12 @@ public static class OverheadPlanner
     /// <summary>
     /// The approach's overhead heads, left to right; empty where its kerb heads do. Triggers: a lane further than
     /// <see cref="OwnHeadReach"/> from its own head; two lanes or more turning the same way (Bern Abb. 12, 13); a side road (it yields
-    /// when the lights are off) of two lanes or more without a refuge (Abb. 18); three lanes or more (Abb. 19). Then a head over
-    /// the middle of every lane, showing that lane's moves (the user, Oct 21 2026: one light per lane; a head for two lanes hung
-    /// over the line between them; Bern: "Bei mehr als einem Fahrstreifen für einen Verkehrsstrom können ... weitere Signalgeber
-    /// notwendig werden"). Bern's Abb. 19 leaves the kerb lane to its kerb head; here it gets one too.
+    /// when the lights are off) of two lanes or more without a refuge (Abb. 18); three lanes or more (Abb. 19). Then one cluster
+    /// centred over the approach's car lanes, like the main pole's (the user, Oct 22 2026, #1110, from Geneva: "you usually don't
+    /// get more than one light per direction overhead"; one head per lane only where heads are embedded in direction signs): a
+    /// head per direction, side by side <see cref="SignalOverhead.ClusterPitch"/> apart, left to right the left lanes' (only
+    /// left), the main head (every other lane: through, shared turns) and the right lanes' (only right), each showing the union of
+    /// its lanes' moves.
     /// </summary>
     /// <param name="sec">The approach's section at its cars' line.</param>
     /// <param name="streetLanes">The street's own lanes toward the junction (its normal section's), pockets not counted.</param>
@@ -48,6 +50,19 @@ public static class OverheadPlanner
         bool three = lanes.Count >= 3;
         if (!(far || doubleTurn || side || three)) return [];
 
-        return lanes.Select(l => new OverheadSpot(l.Mid, l.Moves)).OrderBy(s => s.Offset).ToList();
+        // the cluster's middle: the middle of the arriving car lanes, kerb to kerb of them
+        var spans = sec.CarLanes(StripWay.In).Select(l => sec.Span(l.Index)).ToList();
+        double middle = (spans.Min(x => x.From) + spans.Max(x => x.To)) * 0.5;
+        var heads = lanes.GroupBy(l => Direction(l.Moves)).OrderBy(g => g.Key)
+            .Select(g => g.Aggregate(SignalMoves.None, (m, l) => m | l.Moves)).ToList();
+        return heads.Select((m, i) => new OverheadSpot(middle + (i - (heads.Count - 1) * 0.5) * SignalOverhead.ClusterPitch, m)).ToList();
     }
+
+    /// <summary>Which head of the cluster shows a lane, left to right: a left-only lane's, the main head, a right-only lane's.</summary>
+    private static int Direction(SignalMoves moves) => moves switch
+    {
+        SignalMoves.Left => 0,
+        SignalMoves.Right => 2,
+        _ => 1,
+    };
 }

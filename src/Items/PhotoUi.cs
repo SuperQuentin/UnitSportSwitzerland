@@ -181,6 +181,18 @@ public partial class PhotoUi : CanvasLayer
         _albumCount.AddThemeFontSizeOverride("font_size", 13);
         _albumCount.AddThemeColorOverride("font_color", new Color(0.62f, 0.64f, 0.68f));
         head.AddChild(_albumCount);
+        // the app's folder is private on a phone: no file manager reaches it
+        if (OS.GetName() != "Android")
+        {
+            var openFolder = UiKit.Button("Open folder");
+            openFolder.TooltipText = "Where your printed photos are saved";
+            openFolder.Pressed += () =>
+            {
+                Directory.CreateDirectory(PhotoStore.LocalDir);
+                OS.ShellOpen(PhotoStore.LocalDir);
+            };
+            head.AddChild(openFolder);
+        }
         var close = new Button { Text = "Close" };
         close.Pressed += CloseAlbum;
         head.AddChild(close);

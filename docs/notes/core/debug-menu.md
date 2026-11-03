@@ -36,11 +36,11 @@
   and `Engine.TimeScale` (`DebugMenu._ExitTree`).
 - **Time scale** is offline only (online the server keeps the clock).
 - **`--debugview a,b,...`** turns tools on at boot, for screenshots: `open`, `tiles`, `labels`, `origin`,
-  `freeze`, `no<layer>` (`noground`, `noroads`, `nobuildings`, `notrees`, `nowater`, `nohorizon`,
+  `lanes`, `freeze`, `no<layer>` (`noground`, `noroads`, `nobuildings`, `notrees`, `nowater`, `nohorizon`,
   `noreal`, `nogenerated`, `nofill`), and one view: `wireframe`, `clay`, `colours`, `overdraw`.
   Example: `--origin 2583250,1113250 --shot-queue q.txt --debugview open,tiles,labels,origin`.
 - **Checks**: `--debugcheck --systems ui` (quick, `Core/DebugMenuCheck`): F9, mouse clicks pushed into
-  the viewport, Space, Esc (not the pause menu), `/debug`, clay through a `/style` restyle and back.
+  the viewport, Space, Esc (not the pause menu), `/debug`, clay through a `/style` restyle and back, the lane plan drawn once with its legend and cleared.
   `tools/debugcheck.sh` (net): a server with `--admin-password`; refused, `/login`, offered,
   `/admin remove`, every tool off. The view picker is set through `ItemSelected`, not its popup.
 - **Traffic** (#971, `world/traffic-generators`): `paths` draws every car's way ahead on the lanes it drives (a generated
@@ -65,4 +65,20 @@
   cross an exit's crossing with its walkers (a permissive conflict: riders turning right) for as long as walkers are on it
   (their green to the last across, through their yellow and red); a protected turn, kept apart by the times, never.
   Trails and movers redraw every frame, the other tools five times a second. The debug lines' material is alpha-blended.
+- **Lane plan** (#1181, `lanes`, `Terrain/LanePlanDebug`): the junction planner's cross-sections within 650 m seen from
+  above, over everything (no depth test): every street, `TRNS` transition piece and junction core as its strips coloured by
+  kind (legend top right: car lane arriving blue / leaving cyan / neither grey, turn pocket violet (an arriving lane with no
+  through move, or one opening along its transition), bike lane yellow, path red, verge and buffer green, sidewalk, flush
+  paving, kerb black, hatch pink, island orange, tram track magenta, core dark grey, parking bay light blue). Arriving or
+  leaving by the junction its point belongs to: the street's mouth nearer it, else the nearest core ahead or behind (400 m).
+  A transition's strips are the planner's; a plain segment's from `SegmentSections` and its attributes (lane counts, else
+  the class's guess: one way all along, two ways half each, one shared lane under 5 m; painted bike lanes; a pocket's
+  widening; the side's profile). White arrows: an arriving lane's moves 1.5 m back from its mouth (a `LANE` record's own
+  across its stop line where no street mouth is drawn there). Labels 14 m out on each transition's mouth and each `LANE`
+  approach: the record's lanes as the test region's log names them (`LANE L | bL | T | R | bTR`), under them the strips
+  left to right as the arriving driver sees them (`walk | path ‖ out | hatch | L | bL | T | TR ‖ path | walk`; `‖` the
+  carriageway's edges, `in`/`out`/`both` a lane without moves). Drawn once on the switch, when the camera has moved 300 m,
+  and on an origin shift (from the tiles in hand, node at the identity); `[lanes]` logs each build. Example:
+  `--chunks test_output/signal-region --generated off --origin 2910500,1322500 --at 2910500,1322500 --debugview lanes`
+  with a top-down shot `0,g95,0,-90,0,6,out.png`.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

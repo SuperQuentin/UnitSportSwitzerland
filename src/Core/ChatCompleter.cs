@@ -1,4 +1,5 @@
 using UnitSport.Items;
+using UnitSport.Terrain.Format;
 using UnitSport.Terrain.Stadiums;
 
 namespace UnitSport.Core;
@@ -40,58 +41,84 @@ public sealed class ChatCompleter
     /// <summary>Asked for when a player name is about to be completed, so the list is fresh.</summary>
     public Action? PlayersWanted { get; init; }
 
-    /// <summary>Name, whether it needs operator rights online, whether it also works without a server, its arguments.</summary>
-    private static readonly (string Name, bool Admin, bool Offline, string Args)[] Commands =
+    /// <summary>The groups <c>/help</c> lists the commands in, in this order (#1173).</summary>
+    private static readonly string[] Groups = ["General", "Travel", "World", "Activities", "Concerts & media", "Items & money", "Admin"];
+
+    /// <summary>
+    /// Name, whether it needs operator rights online, whether it also works without a server, its
+    /// arguments, its <c>/help</c> group and what it does in a few words.
+    /// </summary>
+    private static readonly (string Name, bool Admin, bool Offline, string Args, string Group, string About)[] Commands =
     [
-        ("help", false, true, ""),
-        ("who", false, true, ""),
-        ("me", false, true, "<action>"),
-        ("city", false, true, "<town>"),
-        ("occasion", false, true, "[list | start | stop | auto] [id]"),
-        ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
-        ("speed", false, true, "[<0.05 .. 8> | normal]"),
-        ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
-        ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]"),
-        ("water", false, true, "[E N]"),
-        ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]"),
-        ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
-        ("clip", false, true, "start <name> [seconds] [delay] | stop"),
-        ("spawn", true, true, "<item> [count]"),
-        ("catalogue", true, true, ""),
-        ("debug", true, true, ""),
+        ("help", false, true, "[command]", "General", "the commands, or one command's arguments"),
+        ("who", false, true, "", "General", "who is online"),
+        ("me", false, true, "<action>", "General", "say what you do: * you wave"),
+        ("name", false, false, "<name>", "General", "change your name"),
+        ("login", false, false, "<password>", "General", "become an operator"),
+        ("stream", false, false, "", "General", "terrain streaming stats"),
 #if PLAYTEST
-        ("note", false, true, "<what's wrong>"),
+        ("note", false, true, "<what's wrong>", "General", "a playtest note with a screenshot"),
 #endif
-        ("clear", false, true, "[player]"),
-        ("transfer", false, false, "me <player> | <from> <to>"),
-        ("inertia", false, false, "[steady | sway | full]"),
-        ("money", true, true, "<amount> [player]"),
-        ("bank", true, true, "[player] [set | add | take <amount>]"),
-        ("give", true, false, "<player> <item> [count]"),
-        ("name", false, false, "<name>"),
-        ("login", false, false, "<password>"),
-        ("stream", false, false, ""),
-        ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
-        ("fight", false, false, "<player> | accept | decline | leave"),
-        ("aura", false, false, "<player> | accept | decline | leave"),
-        ("concert", false, true, "host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto] | cue <go | section | fx ...> | input artnet|sacn|osc|all [on|off] | patch | debug | export | import <file> | rigs | videos | xchange | view | camera"),
-        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status"),
+        ("city", false, true, "<town>", "Travel", "teleport to a town"),
+        ("locate", false, true, "<thing> [+ spire | parking entrance | tall | old | new | <n> floors ...] [in <town>]", "Travel", "the nearest castle, lake, cinema, church + spire..."),
+        ("go", false, true, "@E,N", "Travel", "teleport to coordinates (as /city)"),
+        ("track", false, true, "@E,N [name] | off", "Travel", "point the way to coordinates"),
+        ("map", false, true, "@E,N", "Travel", "show coordinates on the map"),
+        ("enter", false, true, "<venue name | building key>", "Travel", "go straight inside a building, no door (offline)"),
+        ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]", "Travel", "the venues: what plays there, go to one"),
+        ("tpa", false, false, "<player>", "Travel", "ask to go to a player"),
+        ("tphere", false, false, "<player>", "Travel", "ask a player over"),
+        ("tp", true, true, "<player> | <E> <N>", "Travel", "go to a player or an LV95 point"),
+        ("bring", true, false, "<player>", "Travel", "bring a player to you"),
+        ("tpall", true, false, "<town>", "Travel", "send everyone to a town"),
+        ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>", "World", "the time of day"),
+        ("speed", false, true, "[<0.05 .. 8> | normal]", "World", "how fast the simulation runs"),
+        ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]", "World", "the weather and snow"),
+        ("games", false, true, "[list | play <piece> | bot | act <action> [numbers] | leave]", "Concerts & media", "the pool tables, dartboards and arcade games of the venue you are in: step up to one, add a bot, play by numbers"),
+        ("pinball", false, true, "[list | play <machine> | start | robot | view]", "Concerts & media", "the pinball machines of the venue you are in: step up to one, a robot at the flippers, the top view"),
+        ("cinema", false, true, "[play <link> | stop | relay on|off | fit <how> | ratio <r> | pool] | <hall> [lights full|dim|off] [film on|off]", "Concerts & media", "the hall you are in: its film; a hall's lights and film by number (admin)"),
+        ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]", "World", "waves on the lakes"),
+        ("water", false, true, "[E N]", "World", "the water surface at a point"),
+        ("occasion", false, true, "[list | start | stop | auto] [id]", "World", "world events"),
+        ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]", "World", "the visual style"),
+        ("stamina", false, true, "[infinite | on | full]", "World", "your stamina meter (infinite: admin online)"),
+        ("inertia", false, false, "[steady | sway | full]", "World", "how standing passengers sway"),
+        ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel", "Activities", "races"),
+        ("trial", false, false, "leave", "Activities", "an adventure trial"),
+        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status", "Activities", "Battle Royale"),
+        ("vs", false, false, "open [here|nearest|random|<village>] [rounds] [bots off|n] [easy|normal|hard] | join [id] | leave | start | invite <player> | close <id> | list | stats [name]", "Activities", "Versteckis, hide-and-seek in a village"),
+        ("fight", false, false, "<player> | accept | decline | leave", "Activities", "a fist fight"),
+        ("dummy", false, true, "[clear]", "Activities", "a training dummy to practise the sword on"),
+        ("aura", false, false, "<player> | accept | decline | leave", "Activities", "an aura battle"),
+        ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
+        ("rope", false, false, "[<player> | hands <player> | off]", "Activities", "rope up or hold hands with a party member"),
+        ("alcohol", false, false, "", "Activities", "what alcohol does here; measure your level with a breathalyzer"),
+        ("fondue", false, false, "[invite <player> | leave | forfeit 1|2|3]", "Activities", "the shared pot at your table"),
         // invites (#840)
-        ("invites", false, false, ""),
-        ("accept", false, false, "[player | kind | #id]"),
-        ("decline", false, false, "[player | kind | #id]"),
-        ("tpa", false, false, "<player>"),
-        ("tphere", false, false, "<player>"),
-        ("party", false, false, "[list] | invite <player> | leave | kick <player>"),
-        ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list"),
-        ("say", true, false, "<message>"),
-        ("admin", true, false, "list | add <player> | remove <player>"),
-        ("tp", true, true, "<player> | <E> <N>"),
-        ("bring", true, false, "<player>"),
-        ("tpall", true, false, "<town>"),
-        ("kick", true, false, "<player> [reason]"),
-        ("pvp", true, false, "on | off"),
-        ("update", true, false, ""),
+        ("invites", false, false, "", "Activities", "invites open to you and from you"),
+        ("accept", false, false, "[player | kind | #id]", "Activities", "accept an invite"),
+        ("decline", false, false, "[player | kind | #id]", "Activities", "turn an invite down"),
+        ("concert", false, true, "join | host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto] | cue <go | section | fx ...> | input artnet|sacn|osc|all [on|off] | patch | debug | export | import <file> | rigs | videos | xchange | view | camera", "Concerts & media", "go to a hosted show, host one, run it"),
+        ("cd", false, true, "[analysis | reanalyse [stale | all | <id>]]", "Concerts & media", "the CDs' music analysis"),
+        ("clip", false, true, "start <name> [seconds] [delay] | stop", "Concerts & media", "record a clip"),
+        ("clear", false, true, "[player]", "Items & money", "empty an inventory (cash kept)"),
+        ("transfer", false, false, "me <player> | <from> <to>", "Items & money", "hand every item and the cash over"),
+        ("spawn", true, true, "<item> [count]", "Items & money", "spawn an item"),
+        ("give", true, false, "<player> <item> [count]", "Items & money", "give a player an item"),
+        ("catalogue", true, true, "", "Items & money", "the item catalogue"),
+        ("money", true, true, "<amount> [player]", "Items & money", "add or take cash"),
+        ("bank", true, true, "[player] [set | add | take <amount>]", "Items & money", "a bank balance"),
+        ("say", true, false, "<message>", "Admin", "a server announcement"),
+        ("admin", true, false, "list | add <player> | remove <player>", "Admin", "the operators"),
+        ("kick", true, false, "<player> [reason]", "Admin", "kick a player"),
+        ("pvp", true, false, "on | off", "Admin", "player-on-player damage"),
+        ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list", "Admin", "server-run bots"),
+        ("despawn", true, true, "<vehicles | items | all> [radius m | everywhere]", "Admin", "remove parked vehicles or dropped items around you"),
+        ("debug", true, true, "", "Admin", "the debug menu"),
+        ("update", true, false, "", "Admin", "update and restart the server"),
+        // the adventure's travel (#1226): last in the table, so the short offline list keeps its first commands; /help groups them under Travel
+        ("travel", false, true, "[list] | to <point id> | unlock <id | all> [player] | lock <id | all> [player]", "Travel", "the adventure's travel network (unlock and lock: admins)"),
+        ("pin", false, true, "list | add [1-6] [note] | clear", "Travel", "your map pins"),
     ];
 
     /// <summary>The commands this player can run right now.</summary>
@@ -100,7 +127,7 @@ public sealed class ChatCompleter
     /// <summary>The commands someone online or not, operator or not, may run.</summary>
     public static IEnumerable<string> Visible(bool online, bool isAdmin)
     {
-        foreach (var (name, admin, offline, _) in Commands)
+        foreach (var (name, admin, offline, _, _, _) in Commands)
         {
             if (!online && !offline) continue;
             if (online && admin && !isAdmin) continue;
@@ -111,18 +138,27 @@ public sealed class ChatCompleter
     }
 
     /// <summary>
-    /// <c>/help</c> (#994), read off the same table as the completion so it never misses a command:
-    /// what anyone may run, then an operator's own; offline it is all one list.
+    /// <c>/help</c> (#994, #1173), read off the same table as the completion so it never misses a
+    /// command: one line per group of what this player may run.
     /// </summary>
     public static IEnumerable<string> Help(bool online, bool isAdmin)
     {
         var mine = Visible(online, isAdmin).ToHashSet();
-        string Line(bool admin) => string.Join("  ", Commands
-            .Where(c => mine.Contains(c.Name) && (!online || c.Admin == admin))
-            .Select(c => "/" + c.Name));
-        yield return Line(admin: false);
-        if (online && isAdmin) yield return "admin: " + Line(admin: true);
-        yield return "Tab completes a command and shows its arguments; /stadium list for the venues.";
+        yield return "Commands (Tab completes them; /help <command> for one's arguments):";
+        foreach (string group in Groups)
+        {
+            var names = Commands.Where(c => c.Group == group && mine.Contains(c.Name)).Select(c => "/" + c.Name).ToList();
+            if (names.Count > 0) yield return $"  {group}: {string.Join("  ", names)}";
+        }
+    }
+
+    /// <summary><c>/help &lt;command&gt;</c>: its arguments and what it does; null for one this player can't run.</summary>
+    public static string? HelpFor(string command, bool online, bool isAdmin)
+    {
+        string verb = command.Trim().TrimStart('/').ToLowerInvariant();
+        if (!Visible(online, isAdmin).Contains(verb)) return null;
+        var c = Commands.First(c => c.Name == verb);
+        return (c.Args.Length == 0 ? $"/{verb}" : $"/{verb} {c.Args}") + $"  — {c.About}";
     }
 
     /// <summary>"/spawn &lt;item&gt; [count]" once the line starts with a command this player can run, else null.</summary>
@@ -149,7 +185,8 @@ public sealed class ChatCompleter
         if (words.Length == 0 || (words.Length == 1 && !trailing))
         {
             string typed = words.Length == 0 ? "" : words[0];
-            return Match(VisibleCommands(), typed)
+            // a bare "/" lists every command, uncapped: the pad's picker (#1277) has no other way to reach them
+            return (typed.Length == 0 ? VisibleCommands().ToList() : Match(VisibleCommands(), typed))
                 .Select(c => new Suggestion($"/{c}", $"/{c} ", ArgsOf(c)))
                 .ToList();
         }
@@ -175,6 +212,9 @@ public sealed class ChatCompleter
                     .ToList();
             }
 
+            case "locate" or "find":
+                return LocateWords(text, words[0]);
+
             case "stadium":
             {
                 // a venue's name has spaces in it too: everything after the verb is one query
@@ -199,7 +239,7 @@ public sealed class ChatCompleter
                 string sub = words.Length > 1 ? words[1].ToLowerInvariant() : "";
                 options = argIndex switch
                 {
-                    0 => ["host", "release", "status", "song", "cue", "input", "patch", "debug", "export", "import", "rigs", "videos", "xchange", "view", "ndi", "snap", "camera"],
+                    0 => ["join", "host", "release", "status", "song", "cue", "input", "patch", "debug", "export", "import", "rigs", "videos", "xchange", "view", "ndi", "snap", "camera"],
                     1 when sub == "song" => ["list", "next", "prev", "restart", "stop", "play", "auto"],
                     1 when sub == "camera" => ["take", "leave", "list"],
                     1 when sub == "cue" => ["go", "calm", "groove", "chorus", "peak", "blackout", "release", "bpm", "master", "flames", "co2", "confetti", "gerbs", "pyro", "camera"],
@@ -227,6 +267,10 @@ public sealed class ChatCompleter
             case "spawn":
                 if (argIndex != 0) return [];
                 options = ItemLookup.Names();
+                break;
+
+            case "help":
+                options = argIndex == 0 ? VisibleCommands() : [];
                 break;
 
             case "tp" or "bring" or "tpa" or "tphere" or "accept" or "decline":
@@ -298,6 +342,15 @@ public sealed class ChatCompleter
                 options = argIndex == 0 ? ["on", "off"] : [];
                 break;
 
+            case "despawn":   // #1200
+                options = argIndex switch
+                {
+                    0 => ["vehicles", "items", "all"],
+                    1 => ["10", "30", "100", "everywhere"],
+                    _ => [],
+                };
+                break;
+
             case "bot" or "bots":   // #837
                 options = argIndex switch
                 {
@@ -319,6 +372,14 @@ public sealed class ChatCompleter
 
             case "fight" or "aura":
                 options = argIndex == 0 ? [.. PlayerNames(), "accept", "decline", "leave"] : [];
+                break;
+
+            case "dummy":   // #1371
+                options = argIndex == 0 ? ["clear"] : [];
+                break;
+
+            case "rope":
+                options = argIndex == 0 ? [.. PlayerNames(), "hands", "off"] : argIndex == 1 && words[1].ToLowerInvariant() == "hands" ? PlayerNames() : [];
                 break;
 
             case "race":
@@ -410,6 +471,50 @@ public sealed class ChatCompleter
     }
 
     /// <summary>Options that start with what was typed, then ones that merely contain it.</summary>
+    /// <summary>
+    /// <c>/locate</c>'s arguments (#1277): a noun first, then <c>+ selector</c>s, then a town after <c>in</c>. Not
+    /// capped at <see cref="MaxSuggestions"/>: the pad's buttons offer every noun.
+    /// </summary>
+    private List<Suggestion> LocateWords(string text, string verb)
+    {
+        string args = text[(1 + verb.Length)..].TrimStart();
+        string head = text[..(text.Length - args.Length)];
+        int inAt = (" " + args).LastIndexOf(" in ", StringComparison.OrdinalIgnoreCase);
+        if (inAt >= 0)
+        {
+            // a town's name has spaces in it: everything after "in" is one query
+            string town = args[(inAt + 3)..].TrimStart();
+            string before = text[..(text.Length - town.Length)];
+            return Places(town.TrimEnd(), MaxSuggestions).Distinct().Select(p => new Suggestion(p, before + p)).ToList();
+        }
+        int plus = args.LastIndexOf('+');
+        if (plus < 0 && !args.EndsWith(' '))
+        {
+            // the noun, as it is being typed
+            string typed = PlaceIndex.Normalize(args);
+            return World.Locate.LocateVocabulary.Nouns
+                .Where(w => w.StartsWith(typed, StringComparison.Ordinal) || typed.Length > 2 && w.Contains(typed, StringComparison.Ordinal))
+                .Select(w => new Suggestion(w, head + w + " "))
+                .ToList();
+        }
+        if (plus < 0)
+        {
+            // a noun and a space: the selectors that may follow it, and a town
+            return World.Locate.LocateVocabulary.ModifierWords
+                .Select(m => m == "in" ? new Suggestion("in <town>", text + "in ", "search round a town") : new Suggestion("+ " + m, text + "+ " + m + " "))
+                .ToList();
+        }
+        string sel = PlaceIndex.Normalize(args[(plus + 1)..].TrimStart());
+        string selHead = text[..(text.Length - args[(plus + 1)..].TrimStart().Length)];
+        if (args.EndsWith(' ') && sel.Length > 0)
+            return World.Locate.LocateVocabulary.ModifierWords
+                .Select(m => m == "in" ? new Suggestion("in <town>", text + "in ", "search round a town") : new Suggestion("+ " + m, text + "+ " + m + " "))
+                .ToList();
+        return World.Locate.LocateVocabulary.ModifierWords.Where(m => m != "in" && m.StartsWith(sel, StringComparison.Ordinal))
+            .Select(m => new Suggestion(m, selHead + m + " "))
+            .ToList();
+    }
+
     private static List<string> Match(IEnumerable<string> options, string typed)
     {
         var all = options.Distinct().ToList();

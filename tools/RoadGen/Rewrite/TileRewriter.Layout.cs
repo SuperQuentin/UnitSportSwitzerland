@@ -235,7 +235,7 @@ public static partial class TileRewriter
                 }
                 if (jp.Lights) BikeStops(jp);
                 // 6. the core between the mouths (step 2): connectors, kerb corners, the outline
-                jp.Core = jp.Merged?.Ring is { } circle ? RoundaboutCore.Plan(jp, circle) : MergedOrWhole(jp, alone, buildings.Contains);
+                jp.Core = GuardedCore(jp, alone, buildings.Contains);
             // its surface on the arms' heights at the mouths
             CorePlanner.Lift(jp.Core, m => net.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source source
                 ? source.SampleHeight((m.Left + m.Right) * 0.5) : 0);
@@ -316,6 +316,40 @@ public static partial class TileRewriter
         return plans;
     }
 
+    /// <summary>Junction plans that threw on degenerate geometry and fell back (#1427); logged in the stage's summary.</summary>
+    private static int _plannerFailures;
+
+    private static void WarnJunction(JunctionPlan jp, Exception e, string fellBackTo)
+    {
+        Interlocked.Increment(ref _plannerFailures);
+        Console.Error.WriteLine(FormattableString.Invariant(
+            $"  [WARN] junction planner: {e.GetType().Name}: {e.Message} at LV95 {jp.Centre.X:F1},{jp.Centre.Y:F1} (tile {TileId.FromLv95(jp.Centre.X, jp.Centre.Y)}, node {jp.Node}); fell back to {fellBackTo}"));
+    }
+
+    /// <summary>
+    /// One junction's core, never throwing (#1427: two degenerate lines aborted a nationwide pass of hours): where its planner
+    /// throws it is laid whole, and where that throws too it is refused, which leaves today's cap and trims to the old layout.
+    /// A pure function of the junction, so a fallback is as deterministic as the plan.
+    /// </summary>
+    private static JunctionCore GuardedCore(JunctionPlan jp, IReadOnlyDictionary<int, JunctionPlan>? alone, Func<Vec2, bool> blocked)
+    {
+        try { return jp.Merged?.Ring is { } circle ? RoundaboutCore.Plan(jp, circle) : MergedOrWhole(jp, alone, blocked); }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            try
+            {
+                var whole = CorePlanner.Plan(jp, blocked);
+                WarnJunction(jp, e, "the whole-junction plan");
+                return whole;
+            }
+            catch (Exception again) when (again is not OutOfMemoryException)
+            {
+                WarnJunction(jp, e, "no planned layout (the old caps)");
+                return new JunctionCore { Refused = "the planner threw: " + e.GetType().Name };
+            }
+        }
+    }
+
     /// <summary>
     /// A core as <see cref="CorePlanner"/> lays it; a merged junction's laid as one node fails its checks (elongated groups,
     /// parallel arms): member by member (<see cref="MergedCore"/>, #854) from its members' plans alone (<paramref name="alone"/>,
@@ -324,7 +358,16 @@ public static partial class TileRewriter
     private static JunctionCore MergedOrWhole(JunctionPlan jp, IReadOnlyDictionary<int, JunctionPlan>? alone, Func<Vec2, bool> blocked)
     {
         var whole = CorePlanner.Plan(jp, blocked);
-        if (alone is null || jp.Merged is null || MergedCore.Plan(jp, alone, blocked) is not { } byMembers) return whole;
+        if (alone is null || jp.Merged is null) return whole;
+        JunctionCore? members;
+        try { members = MergedCore.Plan(jp, alone, blocked); }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            // degenerate geometry in the member-by-member plan (the nationwide pass aborted on one, #1427): laid whole
+            WarnJunction(jp, e, "the whole-junction plan");
+            return whole;
+        }
+        if (members is not { } byMembers) return whole;
         static bool Fails(JunctionCore c) => !c.Simple || c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0;
         if (Environment.GetEnvironmentVariable("MERGEDDBG") is not null)
             Console.WriteLine(FormattableString.Invariant($"[merged] {jp.Centre.X:F0},{jp.Centre.Y:F0} {jp.Merged.Members?.Count} members: by members simple {byMembers.Simple} kerbs {byMembers.KerbsNotTangent} outside {byMembers.ConnectorsOutside} (most {byMembers.Connectors.Select(c => c.Outside).DefaultIfEmpty(0).Max():F2} m) area {byMembers.Area:F0}; whole simple {whole.Simple} kerbs {whole.KerbsNotTangent} outside {whole.ConnectorsOutside} area {whole.Area:F0}"));
@@ -520,10 +563,18 @@ public static partial class TileRewriter
         return new ArmAxis(points);
     }
 
+    /// <summary>The planner's step naming an arm whose lone bike lane serves every riders' move into a box (#1184).</summary>
+    internal const string LoneBikeStep = "4 lone bike lane: all moves, into a box";
+
     /// <summary>
     /// Where every arriving bike lane's riders stop at the lights (the user's rule, the same for the three moves): at an
     /// advanced line where the street their move goes into carries their way on (a departing bike lane or path), else in a
     /// bike box. A lane for several moves (kerbside, straight on and right) goes by its straight-on move.
+    /// A lone kerbside bike lane that would be turn-only (no straight on: a T's stem, J8 N's right-only one) while its riders'
+    /// other moves get no lane of their own (no left-turn bike lane, no pocket shared with them) serves them all and leads into
+    /// a bike box (the user, #1184: "a short bike lane leading into a bike box, serving all movements"; only turn-only lanes:
+    /// a lane straight on keeps its advanced line or box): riders wait in front of the cars and leave every way from it. Riders
+    /// turning left take the car lane (#1192) unless the car lane the bike lane leads into turns left too (a single lane).
     /// </summary>
     private static void BikeStops(JunctionPlan jp)
     {
@@ -531,10 +582,28 @@ public static partial class TileRewriter
         {
             var strips = a.Mouth.Strips.ToList();
             bool changed = false;
+            var lone = strips.Select((x, k) => (x, k)).Where(p => p.x.Kind == StripKind.BikeLane && p.x.Way == StripWay.In).ToList();
+            if (lone.Count == 1 && lone[0].k == a.Mouth.LastCarriageway && lone[0].x.Moves != SignalMoves.None
+                && (lone[0].x.Moves & SignalMoves.Through) == 0)
+            {
+                var cars = strips.Where(x => x.IsCarLane && x.Way == StripWay.In).Aggregate(SignalMoves.None, (m, x) => m | x.Moves);
+                var served = lone[0].x.Moves | (strips.Any(x => x.SharedWithBikes) ? SignalMoves.Right : SignalMoves.None);
+                // riders turning left take the car lane (the user, #1192: "bikes turning left take the car lane"): only where the car
+                // lane beside the bike lane, the one it leads into, turns left too (a single lane, J8 N's LR) does its box serve them
+                int beside = strips.FindLastIndex(lone[0].k, x => x.IsCarLane && x.Way == StripWay.In);
+                if (beside < 0 || (strips[beside].Moves != SignalMoves.None && (strips[beside].Moves & SignalMoves.Left) == 0)) cars &= ~SignalMoves.Left;
+                var missing = cars & ~served;
+                if (missing != SignalMoves.None)
+                {
+                    strips[lone[0].k] = lone[0].x with { Moves = lone[0].x.Moves | missing, Stop = BikeStop.Box };
+                    if (!a.Steps.Contains(LoneBikeStep)) a.Steps.Add(LoneBikeStep);
+                    changed = true;
+                }
+            }
             for (int k = 0; k < strips.Count; k++)
             {
                 var s = strips[k];
-                if (s.Kind != StripKind.BikeLane || s.Way != StripWay.In || s.Moves == SignalMoves.None) continue;
+                if (s.Kind != StripKind.BikeLane || s.Way != StripWay.In || s.Moves == SignalMoves.None || s.Stop == BikeStop.Box) continue;
                 var move = (s.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (s.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
                 bool carries = a.Toward.TryGetValue(move, out int to) && jp.Arms.FirstOrDefault(x => x.Arm == to) is { } dest && dest.Normal.CarriesBikesAway;
                 // a box only where the bike lane lies beside a car lane making its riders' move, the lane the box covers (the user,

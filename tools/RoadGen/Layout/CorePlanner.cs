@@ -674,6 +674,8 @@ public static class CorePlanner
     /// <summary>A polyline moved sideways by a distance per vertex, to its left (right when negative), mitred at its vertices.</summary>
     public static List<Vec2> Offset(IReadOnlyList<Vec2> line, Func<int, double> by)
     {
+        // a single point has no direction to be offset across: it comes back unchanged
+        if (line.Count < 2) return new List<Vec2>(line);
         var result = new List<Vec2>(line.Count);
         for (int k = 0; k < line.Count; k++)
         {
@@ -1020,7 +1022,9 @@ public static class CorePlanner
             if (rules.Has(JunctionRule.LeftTurnGuides))
             {
                 var lefts = mine.Where(c => c.Move == SignalMoves.Left).OrderBy(c => c.FromOffset).ToList();
-                var bike = core.Connectors.FirstOrDefault(c => c.Kind == ConnectorKind.Bike && c.FromArm == arm.Arm && c.Move == SignalMoves.Left);
+                // (a left-turn bike lane's: not a lone lane's riders leaving a bike box every way, #1184)
+                var bike = core.Connectors.FirstOrDefault(c => c.Kind == ConnectorKind.Bike && c.FromArm == arm.Arm && c.Move == SignalMoves.Left
+                    && arm.Mouth.Strips.Any(x => x.Id == c.FromId && x.Kind == StripKind.BikeLane && x.Moves == SignalMoves.Left));
                 // the inner guide only where a raised island stands on the exit; the outer one only beside a bike lane turning left too,
                 // as the guide between two left lanes (the user, Oct 17)
                 if (lefts.Count > 0 && HasRaisedIsland(arms[index[lefts[0].ToArm]]))

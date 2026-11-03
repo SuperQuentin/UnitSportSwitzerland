@@ -1,0 +1,33 @@
+{
+  "about": "Classic (#1135): the dark glass and amber look the menus had before the skins; the HUDs keep it always.",
+  "id": "classic",
+  "name": "Classic",
+  "night": true,
+  "font": "system",
+  "colors": {
+    "ground": "#05060A",
+    "card": "#0E1116D1",
+    "cardEdge": "#FFFFFF12",
+    "ink": "#E6EBF2",
+    "inkDim": "#949EAD",
+    "inkFaint": "#6B7585",
+    "accent": "#FAB81A",
+    "onAccent": "#121214",
+    "accent2": "#FAB81A",
+    "control": "#FFFFFF0B",
+    "controlHover": "#FFFFFF17",
+    "controlPressed": "#FFFFFF21",
+    "good": "#5CD17A",
+    "warn": "#F2A838",
+    "bad": "#ED5C54",
+    "hairline": "#FFFFFF14",
+    "shadow": "#00000061"
+  },
+  "shape": {
+    "radius": 16, "controlRadius": 8,
+    "outline": 1, "controlOutline": 0,
+    "shadowX": 0, "shadowY": 0, "shadowSize": 22,
+    "controlShadow": false,
+    "hoverScale": 0, "hoverTilt": 0
+  }
+}

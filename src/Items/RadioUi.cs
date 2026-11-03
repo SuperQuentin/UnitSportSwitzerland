@@ -80,6 +80,10 @@ public partial class RadioUi : CanvasLayer
     private ScrollContainer _scroll = null!;
     private HSlider _volume = null!;
     private Label _volumeValue = null!, _volumeLabel = null!;
+    // the voice/music mix (#1153): the CD's singer and its band, each its own level
+    private HSlider _voice = null!, _music = null!;
+    private Label _voiceValue = null!, _musicValue = null!;
+    private Control _mixRow = null!;
     private LineEdit _link = null!;
     private CheckBox _mine = null!;
     private ProgressBar _burnBar = null!;
@@ -200,6 +204,15 @@ public partial class RadioUi : CanvasLayer
         _view.TooltipText = "All the CDs and stations, and burning a new CD";
         _view.Pressed += () => ShowLibrary(!_libraryShown);
         volume.AddChild(_view);
+
+        // the mix (#1153): the voice and the music of a CD whose stems were burnt with it
+        var mixRow = UiKit.HBox(12);
+        _mixRow = mixRow;
+        box.AddChild(mixRow);
+        (_voice, _voiceValue) = MixSlider(mixRow, "Voice", "The singer's level, for everyone: down for karaoke");
+        (_music, _musicValue) = MixSlider(mixRow, "Music", "The band's level, for everyone: down to hear the singer alone");
+        _voice.ValueChanged += _ => SetMix();
+        _music.ValueChanged += _ => SetMix();
 
         box.AddChild(_library);
         _library.AddChild(UiKit.Line());
@@ -500,6 +513,12 @@ public partial class RadioUi : CanvasLayer
         _volume.SetValueNoSignal(volume);
         _volumeValue.Text = Percent(volume);
         _volume.Editable = target != Target.Church;
+        var mix = RadioMix();
+        _voice.SetValueNoSignal(mix.X);
+        _music.SetValueNoSignal(mix.Y);
+        _voiceValue.Text = Percent(mix.X);
+        _musicValue.Text = Percent(mix.Y);
+        UpdateMix();
         if (!_burning) ShowStatus("", UiTheme.TextDim, 0);
         _panel.Visible = true;
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
@@ -732,7 +751,11 @@ public partial class RadioUi : CanvasLayer
     private void PickUp()
     {
         if (Live() is not { } radio || RadioManager.Instance is not { } manager) return;
-        if (_local() is { } taker) taker.RadioVolume = radio.Volume;   // as loud in the hand (#734)
+        if (_local() is { } taker)
+        {
+            taker.RadioVolume = radio.Volume;   // as loud in the hand (#734)
+            taker.RadioMix = radio.Mix;         // and mixed the same (#1153)
+        }
         // what it plays carries on in the hand: the stack keeps the CD, its start and its mode (#168)
         string? playing = radio.CarriedData;
         manager.PickUp(radio, () =>
@@ -1015,8 +1038,96 @@ public partial class RadioUi : CanvasLayer
 
     // ---- every frame ------------------------------------------------------------------------
 
+    /// <summary>A labelled fader of the mix row, 0..1 at 5 % steps, its value shown beside it.</summary>
+    private static (HSlider, Label) MixSlider(Control row, string name, string tip)
+    {
+        var label = UiKit.Text(name, UiTheme.FontSmall, UiTheme.TextDim);
+        label.TooltipText = tip;
+        label.MouseFilter = Control.MouseFilterEnum.Pass;
+        label.CustomMinimumSize = new Vector2(64, 0);
+        label.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+        row.AddChild(label);
+        var slider = new HSlider
+        {
+            MinValue = 0, MaxValue = 1, Step = 0.05, Value = 1,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+            CustomMinimumSize = new Vector2(0, 22),
+            FocusMode = Control.FocusModeEnum.All,
+            TooltipText = tip,
+        };
+        row.AddChild(slider);
+        var value = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, align: HorizontalAlignment.Right);
+        value.CustomMinimumSize = new Vector2(48, 0);
+        value.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+        row.AddChild(value);
+        return (slider, value);
+    }
+
+    /// <summary>The mix of the radio the panel is on (#1153): X the voice, Y the music.</summary>
+    private Vector2 RadioMix() => _target switch
+    {
+        Target.World => Live()?.Mix ?? Vector2.One,
+        Target.Held or Target.Car => _local()?.RadioMix ?? Vector2.One,
+        _ => Vector2.One,
+    };
+
+    /// <summary>
+    /// Whether this player sets the mix: a world radio's owner (anyone's when nobody owns it), the
+    /// hand's own radio, the car's driver; never the church's.
+    /// </summary>
+    private bool MayMix() => _target switch
+    {
+        Target.World => Live() is { } radio && (!NetLink.Online(this) || RadioManager.MayMix(radio, Multiplayer.GetUniqueId())),
+        Target.Held => true,
+        Target.Car => MayChange(),
+        _ => false,
+    };
+
+    /// <summary>The faders work on a CD burnt with its stems, for the player whose mix it is; otherwise they say why not.</summary>
+    private void UpdateMix()
+    {
+        int cd = Now().Cd;
+        bool stems = cd != 0 && CdLibrary.Instance?.Find(cd) is { Analysis.Stems: true };
+        bool may = MayMix();
+        _voice.Editable = _music.Editable = stems && may;
+        string why = !may ? "Only the radio's owner mixes it" : cd == 0 ? "" : !stems ? "This CD has no voice and music stems yet (/cd reanalyse)" : "";
+        _voice.TooltipText = why.Length > 0 ? why : "The singer's level, for everyone: down for karaoke";
+        _music.TooltipText = why.Length > 0 ? why : "The band's level, for everyone: down to hear the singer alone";
+        _mixRow.Modulate = _voice.Editable ? Colors.White : new Color(1, 1, 1, 0.5f);
+        // someone else's change shows, unless this player is on a fader
+        var mix = RadioMix();
+        if (!_voice.HasFocus() && !_music.HasFocus())
+        {
+            _voice.SetValueNoSignal(mix.X);
+            _music.SetValueNoSignal(mix.Y);
+        }
+        _voiceValue.Text = Percent((float)_voice.Value);
+        _musicValue.Text = Percent((float)_music.Value);
+    }
+
+    /// <summary>Sets the mix of the radio the panel is on, for everyone (#1153).</summary>
+    private void SetMix()
+    {
+        if (!MayMix()) return;
+        var mix = new Vector2((float)_voice.Value, (float)_music.Value);
+        _voiceValue.Text = Percent(mix.X);
+        _musicValue.Text = Percent(mix.Y);
+        switch (_target)
+        {
+            case Target.World:
+                if (Live() is { } radio) RadioManager.Instance?.SetMix(radio, mix);
+                break;
+            case Target.Held:
+            case Target.Car:
+                if (_local() is { } me) me.RadioMix = mix;
+                break;
+        }
+    }
+
     private void UpdateNow()
     {
+        UpdateMix();
         var now = Now();
         var library = CdLibrary.Instance;
         bool locked = !MayChange();

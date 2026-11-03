@@ -13,8 +13,16 @@
   -> DrawingHorizon (`HorizonLayer.Progress()`: every block within `HorizonKm` drawn, so you never land
   in a void; ~2 s once the lattice is there, see `terrain/far-horizon`) -> Ready. Both terrain steps
   go ahead after 25 s anyway. Hosting adds "Starting your server" before all of it.
+- **A play launch at a point** (#1296): `<godot> --path . -- --chunks <dir> --at E,N` (with only the flags
+  `GameShell.UseTitle` calls harmless) skips the title but not this screen: `GameShell.PlayAt`, then
+  Explore at that point as from the menus (on foot on open ground). `--enter <venue | building>` (#1244) is one
+  too: its building is the landing, and the player goes inside once on foot (often before the screen lifts). A probe
+  or `--connect`, `--seat`, any
+  flag of its own, still boots `Direct`: no title, no loading screen.
 - **Frames to draw**: `ClientWorld._Ready` yields a frame (`Breathe`) at a few points when launched
   from the title, with an `IsInsideTree()` check after each await (Cancel may free the world
   mid-build). Command-line runs do not yield, so the probes see the old build order.
+- **In VR** the screen is on the headset's panel, so `LoadingScreen.Active` also puts the headset in
+  its loading space until the world is ready (`xr/rig`, #1101).
 - **Failure** (connection refused, timeout, kicked during the load) sets `Stage = Failed`; the shell
   leaves the world and shows the reason on the Multiplayer screen's banner (a dialog for solo).

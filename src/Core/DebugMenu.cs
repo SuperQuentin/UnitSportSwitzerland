@@ -38,6 +38,7 @@ public partial class DebugMenu : CanvasLayer
     private readonly Action<double> _askSpeed;
     private DebugOverlay _overlay = null!;
     private ZFightOverlay _zfight = null!;
+    private LanePlanDebug _lanes = null!;
 
     private Control _panel = null!;
     private Label _readout = null!;
@@ -60,6 +61,7 @@ public partial class DebugMenu : CanvasLayer
     internal OptionButton ViewPicker => _viewPicker;
     internal DebugViewMode View => _view;
     internal DebugOverlay Overlay => _overlay;
+    internal LanePlanDebug Lanes => _lanes;
 
     public DebugMenu(ChunkManager chunks, WorldOrigin origin, Func<Node3D?> nearTrees, Action<string> say,
         Action<double>? askSpeed = null)
@@ -83,6 +85,8 @@ public partial class DebugMenu : CanvasLayer
         GetParent().CallDeferred(Node.MethodName.AddChild, _overlay);
         _zfight = new ZFightOverlay(_origin);
         GetParent().CallDeferred(Node.MethodName.AddChild, _zfight);
+        _lanes = new LanePlanDebug(_chunks, _origin);
+        GetParent().CallDeferred(Node.MethodName.AddChild, _lanes);
 
         var panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
         panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.78f, 10, 10));
@@ -130,6 +134,10 @@ public partial class DebugMenu : CanvasLayer
             $"Faces that fight for the depth buffer within {ZFightOverlay.Radius:0} m of the camera, in magenta through\n"
             + "everything: same-facing faces under 8 mm apart that overlap and can be seen (#788).\n"
             + "Rescanned as the camera moves; the places are in the log. Flicker shot below catches the rest.");
+        Switch(overlays, "lanes", "Lane plan", false, on => _lanes.On = on,
+            "The junction planner's cross-sections within 650 m, seen from above (#1181): every street, transition and core\n"
+            + "as its strips coloured by kind (legend top right), the arriving lanes' moves as arrows, and at each\n"
+            + "approach's mouth its strips left to right as the arriving driver sees them, under its LANE record.");
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Terrain"));
@@ -141,6 +149,8 @@ public partial class DebugMenu : CanvasLayer
         LayerSwitch(terrain, "water", "Water", TileLayers.Water);
         Switch(terrain, "horizon", "Far horizon", true, on => { _hideHorizon = !on; ApplyHidden(); },
             "The decimated ring of the whole country beyond the streamed tiles.");
+        Switch(terrain, "curvature", "Earth curvature", Curvature.Drawn, on => Curvature.Drawn = on,
+            "The ground drops away with distance as on the real Earth (246 m at 60 km). Off: the flat world, as before #187.");
         Switch(terrain, "real", "Real tiles", true, on => { _hideReal = !on; ApplyHidden(); },
             "Tiles built from swisstopo data.");
         Switch(terrain, "generated", "Generated tiles", true, on => { _hideGenerated = !on; ApplyHidden(); },
@@ -171,6 +181,7 @@ public partial class DebugMenu : CanvasLayer
             });
 
         AddTrafficSection(rows);
+        AddDespawnSection(rows);
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Streaming"));
@@ -355,6 +366,7 @@ public partial class DebugMenu : CanvasLayer
             if (key != "fill") box.SetPressedNoSignal(_defaults[key]);
         _overlay.Tiles = _overlay.Labels = _overlay.WorldOrigin = false;
         _zfight.On = false;
+        _lanes.On = false;
         _hiddenLayers = TileLayers.None;
         _hideHorizon = _hideReal = _hideGenerated = false;
         ApplyHidden();
@@ -410,8 +422,29 @@ public partial class DebugMenu : CanvasLayer
     }
 
     /// <summary>
+    /// Despawn (#1200): parked vehicles and dropped items taken out of the world, round the camera or
+    /// everywhere. Only sends <c>/despawn</c>, so online the server checks the admin and answers in the chat.
+    /// </summary>
+    private void AddDespawnSection(VBoxContainer rows)
+    {
+        rows.AddChild(UiKit.Spacer(6));
+        rows.AddChild(UiKit.Section("Despawn"));
+        var buttons = UiKit.HBox(6);
+        void Button(string label, string command, string tip)
+        {
+            var button = ActionButton(label, () => Items.ItemController.Instance?.RunCommand?.Invoke(command));
+            button.TooltipText = $"{tip}\n{command}";
+            buttons.AddChild(button);
+        }
+        Button("Vehicles near", "/despawn vehicles", "Every parked vehicle within 30 m.");
+        Button("Items near", "/despawn items", "Every dropped item within 30 m.");
+        Button("Everything everywhere", "/despawn all everywhere", "Every parked vehicle and dropped item in the world.");
+        rows.AddChild(buttons);
+    }
+
+    /// <summary>
     /// <c>--debugview</c>: a comma list of tools to turn on at boot. <c>open</c> shows the panel;
-    /// <c>tiles</c>, <c>labels</c>, <c>origin</c>, <c>zfight</c>, <c>freeze</c> switch those on; <c>no&lt;layer&gt;</c>
+    /// <c>tiles</c>, <c>labels</c>, <c>origin</c>, <c>zfight</c>, <c>lanes</c>, <c>freeze</c> switch those on; <c>no&lt;layer&gt;</c>
     /// hides one (<c>noground</c>, <c>noroads</c>, <c>nobuildings</c>, <c>notrees</c>, <c>nowater</c>,
     /// <c>nohorizon</c>, <c>noreal</c>, <c>nogenerated</c>); <c>wireframe</c>, <c>clay</c>,
     /// <c>colours</c>, <c>overdraw</c> pick the view; <c>flicker</c> takes a flicker shot after

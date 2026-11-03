@@ -619,6 +619,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
         if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~CarRig.DriverDoor);
         // in a hold (#418): where the carrier is drawn now, before anything is drawn from it
         if (_inHold && !Wrecked) FollowCarrier(dt);
+        if (RestingFar()) return;
 
         // airstairs: posed where they stand, the platform at the sill they are docked at (#417)
         if (Ride is Airstairs stairs) StandAirstairs(stairs, dt);
@@ -741,6 +742,38 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
     private bool _stoodAsleep;
     /// <summary>Wrecked or not when the parked rigs were last dressed standing still; null while it moves.</summary>
     private bool? _dressedAtRest;
+
+    /// <summary>
+    /// Standing still further than this from the eye, m, a vehicle is posed once and then left as it stands, its rig
+    /// with it (#1112): a parked airliner re-posed its hinges, surfaces and instruments every frame, a lorry its lamps
+    /// and cockpit, and a Quest that had passed an airport spent a third of its main thread on aircraft 4 km away.
+    /// </summary>
+    private const float PoseWithinM = 250f;
+    /// <summary>Frames it has stood still out there; posed while under <see cref="RestPoseFrames"/>.</summary>
+    private int _restFrames;
+    private const int RestPoseFrames = 3;
+    private Vector3 _restAt;
+
+    /// <summary>
+    /// True when it has stood still, unburnt and out of the hold, far from the eye for a few frames: the rest of the
+    /// frame's posing is skipped and its rig's own processing paused, until it moves or the eye comes near. By its
+    /// position, not its velocity: a copy's is not replicated.
+    /// </summary>
+    private bool RestingFar()
+    {
+        var at = GlobalPosition;
+        bool still = at.DistanceSquaredTo(_restAt) < 1e-4f;
+        _restAt = at;
+        bool far = GetViewport().GetCamera3D() is { } eye && eye.GlobalPosition.DistanceSquaredTo(at) > PoseWithinM * PoseWithinM;
+        bool rest = still && far && !Wrecked && !_inHold && _shutDriverIn <= 0f;
+        _restFrames = rest ? _restFrames + 1 : 0;
+        if (_visual != null)
+        {
+            var mode = _restFrames > RestPoseFrames ? ProcessModeEnum.Disabled : ProcessModeEnum.Inherit;
+            if (_visual.ProcessMode != mode) _visual.ProcessMode = mode;
+        }
+        return _restFrames > RestPoseFrames;
+    }
     private HeavyRig[]? _heavySections;
     /// <summary>The drawn sections by index (0 the visual itself), found by name once.</summary>
     private Node3D?[]? _standSections;
@@ -842,18 +875,33 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
         Explosion.Spawn(GetParent(), GlobalPosition + Vector3.Up * 1f);
     }
 
+    /// <summary>A burnt vehicle's paint: the figure material darkened, one for every wreck, shaded for the style.</summary>
+    private static StandardMaterial3D Soot => _soot ??= Styles.StyleKit.Figure(new StandardMaterial3D
+    {
+        VertexColorUseAsAlbedo = true,
+        AlbedoColor = new Color(0.2f, 0.18f, 0.16f),
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
+        SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
+        Roughness = 1f,
+    });
+    private static StandardMaterial3D? _soot;
+
+    /// <summary>A burnt car (its paint gone to <see cref="Soot"/>), in the model viewer.</summary>
+    [Showcase("Cars", "Burnt")]
+    private static Node3D ShowcaseBurnt()
+    {
+        var visual = Rideable.Create((RideKind)CarCatalog.First)!.BuildParkedVisual(1);
+        foreach (var mesh in visual.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>().Append(visual as MeshInstance3D))
+            if (mesh != null) mesh.MaterialOverride = Soot;
+        return visual;
+    }
+
     /// <summary>Burnt: the paint goes to soot, and the fire and smoke start.</summary>
     private void Char()
     {
         if (_charred || _visual == null) return;
         _charred = true;
-        var soot = new StandardMaterial3D
-        {
-            VertexColorUseAsAlbedo = true,
-            AlbedoColor = new Color(0.2f, 0.18f, 0.16f),
-            SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
-            Roughness = 1f,
-        };
+        var soot = Soot;
         foreach (var mesh in _visual.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>().Append(_visual as MeshInstance3D))
             if (mesh != null) mesh.MaterialOverride = soot;
 

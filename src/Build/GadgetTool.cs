@@ -21,7 +21,7 @@ public partial class GadgetTool : Node
     private const float ZipSpeedMax = 16f, ClimbSpeed = 2.2f, LaunchHeight = 80f, LaunchSeconds = 2.6f, BounceSpeed = 15.5f;
 
     private readonly ItemController _items;
-    private MeshInstance3D _ghost = null!, _cable = null!;
+    private MeshInstance3D _ghost = null!, _cable = null!, _post = null!;
     private StandardMaterial3D _material = null!;
     private Label _hint = null!;
     // the high post's foot once set: in LV95, the origin can shift while you walk down to the bottom one (#185)
@@ -55,7 +55,11 @@ public partial class GadgetTool : Node
         };
         _ghost = new MeshInstance3D { Name = "GadgetGhost", MaterialOverride = _material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, TopLevel = true, Visible = false };
         AddChild(_ghost);
-        _cable = new MeshInstance3D { Name = "CableGhost", Mesh = new BoxMesh { Size = new Vector3(0.05f, 0.05f, 1f) }, MaterialOverride = _material,
+        // a zipline's second post and its cable: one post mesh again, a box stretched between the tops,
+        // moved every frame rather than a new mesh of both every frame (#1202)
+        _post = new MeshInstance3D { Name = "PostGhost", MaterialOverride = _material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, TopLevel = true, Visible = false };
+        AddChild(_post);
+        _cable = new MeshInstance3D { Name = "CableGhost", Mesh = new BoxMesh { Size = new Vector3(0.036f, 0.036f, 1f) }, MaterialOverride = _material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, TopLevel = true, Visible = false };
         AddChild(_cable);
         var layer = new CanvasLayer { Layer = 4 };
@@ -70,7 +74,8 @@ public partial class GadgetTool : Node
 
     // ---- placing ---------------------------------------------------------------------------------
 
-    private readonly record struct Spot(bool Valid, string Reason, Transform3D At, string Payload, ArrayMesh? Mesh);
+    /// <remarks><paramref name="High"/>: a zipline's other post's foot, in <paramref name="At"/>'s frame.</remarks>
+    private readonly record struct Spot(bool Valid, string Reason, Transform3D At, string Payload, ArrayMesh? Mesh, Vector3? High = null);
 
     /// <summary>Where the held gadget would go: on the ground in front, facing you (a ladder: hung from a ledge's top).</summary>
     private Spot Aim(FootPlayer player, PlacedKind kind)
@@ -110,10 +115,20 @@ public partial class GadgetTool : Node
             }
             case PlacedKind.Zipline when _zipStart is { } startGlobal:
             {
-                var start = PlacedObjects.Instance!.Origin.ToWorld(startGlobal);
+                var placed = PlacedObjects.Instance!;
+                var start = placed.Origin.ToWorld(startGlobal);
+                if (point.Y > start.Y)
+                {
+                    // the first post went in at the bottom and this one is higher: the server wants the
+                    // low end placed and the high end in the payload, so swap the two
+                    var low = new Transform3D(at.Basis, start);
+                    var pointGlobal = placed.Origin.ToGlobal(point);
+                    string? swapped = Gadgets.ZipProblem(point, start);
+                    return new Spot(swapped == null, swapped ?? "", low, Gadgets.ZipPayload(pointGlobal.E, pointGlobal.N, pointGlobal.Alt), GadgetMeshes.ZipPost(), low.AffineInverse() * point);
+                }
                 string? problem = Gadgets.ZipProblem(start, point);
                 var local = at.AffineInverse() * start;
-                return new Spot(problem == null, problem ?? "", at, Gadgets.ZipPayload(startGlobal.E, startGlobal.N, startGlobal.Alt), GadgetMeshes.Zipline(local));
+                return new Spot(problem == null, problem ?? "", at, Gadgets.ZipPayload(startGlobal.E, startGlobal.N, startGlobal.Alt), GadgetMeshes.ZipPost(), local);
             }
             default:
                 return new Spot(true, "", at, "", GadgetMeshes.Mesh(kind));
@@ -128,7 +143,7 @@ public partial class GadgetTool : Node
         if (held != ItemId.Zipline) _zipStart = null;
         if (!show)
         {
-            _ghost.Visible = _cable.Visible = false;
+            _ghost.Visible = _cable.Visible = _post.Visible = false;
             if (!Riding) _hint.Visible = false;
             return;
         }
@@ -136,7 +151,7 @@ public partial class GadgetTool : Node
         var name = ItemDefs.Get(held)?.Name ?? "";
         if (aiming)
         {
-            _ghost.Visible = _cable.Visible = false;
+            _ghost.Visible = _cable.Visible = _post.Visible = false;
             _hint.Text = InputHints.Format($"{name}\n{{use_item}}: take back a {name.ToLowerInvariant()} you set down");
             _hint.Visible = true;
             return;
@@ -150,10 +165,26 @@ public partial class GadgetTool : Node
             _ghost.GlobalTransform = spot.At;
         }
         _material.AlbedoColor = spot.Valid ? new Color(0.3f, 1f, 0.4f, 0.35f) : new Color(1f, 0.25f, 0.2f, 0.35f);
-        _cable.Visible = false;
-        string action = kind == PlacedKind.Zipline ? (_zipStart == null ? "set the top post" : "set the bottom post and string the cable") : "set it down";
+        ShowCable(spot);
+        string action = kind == PlacedKind.Zipline ? (_zipStart == null ? "set the first post" : "set the second post and string the cable") : "set it down";
         _hint.Text = $"{name}\n" + (spot.Valid ? InputHints.Format($"{{use_item}}: {action}") + (spot.Reason.Length > 0 ? $" ({spot.Reason})" : "") : spot.Reason);
         _hint.Visible = true;
+    }
+
+    /// <summary>A zipline's other post and the cable from top to top, or neither.</summary>
+    private void ShowCable(in Spot spot)
+    {
+        _post.Visible = _cable.Visible = spot.High != null && spot.Mesh != null;
+        if (spot.High is not { } high || spot.Mesh == null) return;
+        _post.Mesh = spot.Mesh;
+        _post.GlobalTransform = spot.At * new Transform3D(Basis.Identity, high);
+        var from = spot.At * (Vector3.Up * GadgetMeshes.CableHeight);
+        var to = spot.At * (high + Vector3.Up * GadgetMeshes.CableHeight);
+        var along = to - from;
+        float length = along.Length();
+        if (length < 1e-3f) { _cable.Visible = false; return; }
+        var up = Mathf.Abs(along.Normalized().Y) > 0.99f ? Vector3.Right : Vector3.Up;
+        _cable.GlobalTransform = new Transform3D(Basis.LookingAt(along / length, up) * Basis.FromScale(new Vector3(1f, 1f, length)), (from + to) * 0.5f);
     }
 
     /// <summary>Use (or Aim + Use: take back) with a gadget in <paramref name="slot"/>.</summary>
@@ -182,7 +213,7 @@ public partial class GadgetTool : Node
         {
             if (spot.Mesh == null || (!spot.Valid && spot.Reason.Length > 0)) { _items.Toast(spot.Reason); return; }
             _zipStart = placed.Origin.ToGlobal(spot.At.Origin);
-            _items.Toast("Top post set. Now walk down to where it ends and Use again.");
+            _items.Toast("First post set. Now walk to the other end (up or down) and Use again.");
             return;
         }
         if (!spot.Valid) { _items.Toast(spot.Reason); return; }
@@ -230,6 +261,9 @@ public partial class GadgetTool : Node
         {
             if (!kind(o.Kind)) continue;
             float d = o.WorldTransform(placed.Origin).Origin.DistanceTo(at);
+            // a zipline is taken back from either post
+            if (o.Kind == PlacedKind.Zipline && Gadgets.ZipStart(o.Payload) is { } s)
+                d = Mathf.Min(d, placed.Origin.ToWorld(s.E, s.N, s.Alt).DistanceTo(at));
             if (d < bestD) { bestD = d; best = o; }
         }
         return best;

@@ -24,7 +24,7 @@ guard_wait_ram 4 600 || exit 1
 SW=(--world fixture); CW=(--world fixture)
 [ -n "${REAL:-}" ] && { SW=(--generated-world); CW=(); }
 
-"$GODOT" --headless --path . -- --server --port $PORT "${SW[@]}" > $OUT/buildnet_server.log 2>&1 < /dev/null &
+"$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port $PORT "${SW[@]}" > $OUT/buildnet_server.log 2>&1 < /dev/null &
 SERVER=$!
 guard_watch $SERVER > /dev/null
 for _ in $(seq 1 600); do
@@ -32,11 +32,11 @@ for _ in $(seq 1 600); do
   kill -0 "$SERVER" 2>/dev/null || break
   guard_nap 0.2
 done
-guard_run 300 $OUT/buildnet_A.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name BuilderA --buildnet A --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS} &
+guard_run 300 $OUT/buildnet_A.log "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name BuilderA --buildnet A --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS} &
 A=$!
 # B joins only once A has built: what it sees comes from the join snapshot
 for _ in $(seq 1 400); do grep -q "say built" $OUT/buildnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
-guard_run 240 $OUT/buildnet_B.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name WatcherB --buildnet B --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS}
+guard_run 240 $OUT/buildnet_B.log "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name WatcherB --buildnet B --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS}
 wait $A
 code=0
 # the verdict is each client's last RESULT line

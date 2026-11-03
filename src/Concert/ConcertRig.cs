@@ -253,7 +253,7 @@ public partial class ConcertRig : Node3D
 
     private void BuildRig()
     {
-        var body = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f), Roughness = 0.6f };
+        var body = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f), Roughness = 0.6f });
         Multi("Heads", new BoxMesh { Size = new Vector3(0.45f, 0.55f, 0.45f) }, _heads.Length + _cells.Length, body, out _bodies);
         // the cones' far side only: half the fill of both, and a beam still shows from inside it
         var beamMat = Additive();
@@ -344,8 +344,12 @@ public partial class ConcertRig : Node3D
     /// The concert playing round a point, for the dances (<see cref="Items.RadioManager.NearestMusic"/>):
     /// anyone in the bowl dances to it, on its beat.
     /// </summary>
+    /// <summary>A probe's stand-in for a playing show (<c>--pogocheck</c>, #1150); null in a game.</summary>
+    internal static Func<Vector3, Items.RadioManager.Music?>? ProbeMusic;
+
     public static Items.RadioManager.Music? MusicNear(Vector3 point, float within = 160f)
     {
+        if (ProbeMusic?.Invoke(point) is { } probe) return probe;
         foreach (var rig in Live.Values)
         {
             if (!IsInstanceValid(rig) || rig._music?.Song is not { } song) continue;
@@ -372,6 +376,18 @@ public partial class ConcertRig : Node3D
         return h >= Event.StartHour && h < Event.EndHour;
     }
 
+    /// <summary>
+    /// The song's time as this listener hears it (#1153): the nearest hang's sound is late by its
+    /// distance, and the singer's lips must match what is heard, not what the desk reads. -1 between songs.
+    /// </summary>
+    private double HeardSongTime()
+    {
+        if (_music.SongTime < 0) return -1;
+        float delay = float.MaxValue;
+        foreach (var s in _music.Speakers) delay = MathF.Min(delay, s.Heard.Delay);
+        return _music.SongTime - (delay == float.MaxValue ? 0f : delay);
+    }
+
     public override void _Process(double delta)
     {
         double now = Net.ClockSync.ServerNow;
@@ -390,8 +406,83 @@ public partial class ConcertRig : Node3D
             if (f.Type.Kind == FixtureKind.Hazer) _haze = MathF.Max(_haze, p.Get01(f, Attr.Pump));
         float haze = 0.25f + 0.75f * _haze;
 
-        // the motors follow the DMX
         float dt = Math.Min((float)delta, 0.1f);
+        // the heads, beams, glows and pixel cells, the screens' paint and the real lamps are only worth their
+        // cost where someone can see them, like the performers below (#1344); the desk and the clocks run on
+        bool near = GetViewport()?.GetCamera3D() is { } eye && eye.GlobalPosition.DistanceTo(GlobalPosition) < 900f;
+        Color washSum = default, beamSum = default;
+        if (near) DriveRig(p, t, master, haze, dt, ref washSum, ref beamSum);
+        else _motorsSet = false;   // back in range the motors start from the DMX, not from where they stopped
+        _strobeT = t;
+        bool flash = _strobeHz > 0f && (t * _strobeHz) % 1f < _strobeDuty;
+        // the screens under a strobe: dim between the flashes, washed out on each (the camera feeds too)
+        float feedLevel = _strobeHz <= 0f ? 1f : flash ? 1.6f : 0.3f;
+        if (MathF.Abs(feedLevel - _feedLevel) > 0.01f)
+        {
+            _feedLevel = feedLevel;
+            foreach (var feed in _feeds)
+                if (feed.MaterialOverride is StandardMaterial3D fm) fm.AlbedoColor = new Color(feedLevel, feedLevel, feedLevel);
+        }
+        _screenFlash = _strobeHz <= 0f ? -1f : flash ? 1f : 0f;
+        bool imag = false;
+        for (int s = 0; s < _screens.Length; s++)
+        {
+            // an imported screen's own source (#975) over the show's content while it plays
+            bool video = _videos[s] is { } v && v.Step(near, p.Get01(_screens[s], Attr.Dimmer) * feedLevel);
+            bool camera = !video && p.Get(_screens[s], _screens[s].Type.Offset(Attr.Clip)) / 32 == LightDesk.CameraClip && p.Get01(_screens[s], Attr.Dimmer) > 0.05f;
+            if (_feeds[s].Visible != camera)
+            {
+                _feeds[s].Visible = camera;
+                if (camera && _feeds[s].MaterialOverride is StandardMaterial3D m) m.AlbedoTexture = _cameras.ImagTexture;
+            }
+            if (_pixelNodes[s].Visible != (!camera && !video)) _pixelNodes[s].Visible = !camera && !video;
+            imag |= camera;
+            if (near && !camera && !video) PaintScreen(_screens[s], _pixels[s], t);
+        }
+        // the artists dance and the cameras film only while someone can see it
+        if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT, _music.Song, HeardSongTime(), dt);
+        _cameras.ImagWanted = imag && near;
+        _cameras.Step(now % 86400.0);
+        if (near) _crew.Step(ShowOn() || ExternalLive, dt);
+        // the PA bounces on the kick
+        if (near)
+        {
+            bool live = (ShowOn() || ExternalLive) && _desk.Section is not (ShowSection.Blackout or ShowSection.WalkIn);
+            float beatPh = _desk.Beat - MathF.Floor(_desk.Beat);
+            float kick = !live ? 0f : _desk.Music is { } mu ? mu.Kick : MathF.Exp(-beatPh * 6f);
+            _pa.Pump(kick, _desk.Music is { HasBands: true } mb ? mb.Bass : 0.6f);
+        }
+
+        // the real lights follow the rig as a whole
+        if (near)
+        {
+            float washN = Math.Max(1, _heads.Length / 3);
+            var wash = washSum / washN;
+            foreach (var lamp in _lamps)
+            {
+                lamp.LightColor = new Color(Math.Min(1f, wash.R), Math.Min(1f, wash.G), Math.Min(1f, wash.B));
+                lamp.LightEnergy = 3f * Math.Min(1f, (wash.R + wash.G + wash.B) / 2f);
+            }
+            if (_crowdLight != null)
+            {
+                var b = beamSum / Math.Max(1, _heads.Length);
+                _crowdLight.LightColor = new Color(Math.Min(1f, b.R * 2f), Math.Min(1f, b.G * 2f), Math.Min(1f, b.B * 2f));
+                _crowdLight.LightEnergy = 0.6f * Math.Min(1f, b.R + b.G + b.B);
+            }
+            DriveCrowd(washSum + beamSum);
+            if (_bands != null && _crowd is { Visible: true })
+            {
+                _bands.Step(dt, GlobalTransform);
+                _crowd.DriveBands(_bands);
+            }
+        }
+        else if (_crowd is { Visible: true } && !(ShowOn() || ExternalLive)) _crowd.Visible = false;   // a show that ended out of range
+    }
+
+    /// <summary>The moving heads' motors and beams, the fixtures' glows and the pixel cells for this frame, and the strobe they set: the work <see cref="_Process"/> does only in range.</summary>
+    private void DriveRig(DmxPatch p, float t, float master, float haze, float dt, ref Color washSum, ref Color beamSum)
+    {
+        // the motors follow the DMX
         for (int i = 0; i < _heads.Length; i++)
         {
             var f = _heads[i];
@@ -418,7 +509,6 @@ public partial class ConcertRig : Node3D
         }
 
         int glow = 0;
-        Color washSum = default, beamSum = default;
         for (int i = 0; i < _heads.Length; i++)
         {
             var f = _heads[i];
@@ -491,67 +581,6 @@ public partial class ConcertRig : Node3D
                 beamSum += col * 0.3f;
             }
         }
-        _strobeT = t;
-        bool flash = _strobeHz > 0f && (t * _strobeHz) % 1f < _strobeDuty;
-        // the screens under a strobe: dim between the flashes, washed out on each (the camera feeds too)
-        float feedLevel = _strobeHz <= 0f ? 1f : flash ? 1.6f : 0.3f;
-        if (MathF.Abs(feedLevel - _feedLevel) > 0.01f)
-        {
-            _feedLevel = feedLevel;
-            foreach (var feed in _feeds)
-                if (feed.MaterialOverride is StandardMaterial3D fm) fm.AlbedoColor = new Color(feedLevel, feedLevel, feedLevel);
-        }
-        _screenFlash = _strobeHz <= 0f ? -1f : flash ? 1f : 0f;
-        bool imag = false;
-        bool near = GetViewport()?.GetCamera3D() is { } eye && eye.GlobalPosition.DistanceTo(GlobalPosition) < 900f;
-        for (int s = 0; s < _screens.Length; s++)
-        {
-            // an imported screen's own source (#975) over the show's content while it plays
-            bool video = _videos[s] is { } v && v.Step(near, p.Get01(_screens[s], Attr.Dimmer) * feedLevel);
-            bool camera = !video && p.Get(_screens[s], _screens[s].Type.Offset(Attr.Clip)) / 32 == LightDesk.CameraClip && p.Get01(_screens[s], Attr.Dimmer) > 0.05f;
-            if (_feeds[s].Visible != camera)
-            {
-                _feeds[s].Visible = camera;
-                if (camera && _feeds[s].MaterialOverride is StandardMaterial3D m) m.AlbedoTexture = _cameras.ImagTexture;
-            }
-            if (_pixelNodes[s].Visible != (!camera && !video)) _pixelNodes[s].Visible = !camera && !video;
-            imag |= camera;
-            if (!camera && !video) PaintScreen(_screens[s], _pixels[s], t);
-        }
-        // the artists dance and the cameras film only while someone can see it
-        if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT);
-        _cameras.ImagWanted = imag && near;
-        _cameras.Step(now % 86400.0);
-        if (near) _crew.Step(ShowOn() || ExternalLive, dt);
-        // the PA bounces on the kick
-        if (near)
-        {
-            bool live = (ShowOn() || ExternalLive) && _desk.Section is not (ShowSection.Blackout or ShowSection.WalkIn);
-            float beatPh = _desk.Beat - MathF.Floor(_desk.Beat);
-            float kick = !live ? 0f : _desk.Music is { } mu ? mu.Kick : MathF.Exp(-beatPh * 6f);
-            _pa.Pump(kick, _desk.Music is { HasBands: true } mb ? mb.Bass : 0.6f);
-        }
-
-        // the real lights follow the rig as a whole
-        float washN = Math.Max(1, _heads.Length / 3);
-        var wash = washSum / washN;
-        foreach (var lamp in _lamps)
-        {
-            lamp.LightColor = new Color(Math.Min(1f, wash.R), Math.Min(1f, wash.G), Math.Min(1f, wash.B));
-            lamp.LightEnergy = 3f * Math.Min(1f, (wash.R + wash.G + wash.B) / 2f);
-        }
-        if (_crowdLight != null)
-        {
-            var b = beamSum / Math.Max(1, _heads.Length);
-            _crowdLight.LightColor = new Color(Math.Min(1f, b.R * 2f), Math.Min(1f, b.G * 2f), Math.Min(1f, b.B * 2f));
-            _crowdLight.LightEnergy = 0.6f * Math.Min(1f, b.R + b.G + b.B);
-        }
-        DriveCrowd(washSum + beamSum);
-        if (_bands != null && _crowd is { Visible: true })
-        {
-            _bands.Step(dt, GlobalTransform);
-            _crowd.DriveBands(_bands);
-        }
     }
 
     /// <summary>The audience follows the show: how hard it dances by section, the rig's colour on it.</summary>
@@ -576,7 +605,8 @@ public partial class ConcertRig : Node3D
             float bpm = _music.Song?.Bpm ?? Event.Bpm;
             beat -= (_strobeT * _strobeHz) % 1f / _strobeHz * bpm / 60f;
         }
-        _crowd.Drive(beat, _energy, tint, _desk.Section == ShowSection.Chorus ? 1f : 0f);
+        // a seated jazz crowd sways, it does not hop (#1394)
+        _crowd.Drive(beat, Event.Genre == Genre.Jazz ? _energy * 0.25f : _energy, tint, _desk.Section == ShowSection.Chorus ? 1f : 0f);
     }
 
     /// <summary>The beam's direction from 16-bit pan and tilt: tilt tips it from the yoke's axis towards the fixture's home side, pan turns that about the axis.</summary>
@@ -709,5 +739,8 @@ public partial class ConcertRig : Node3D
             if (!seen.Add(e.Layout)) continue;
             yield return ($"{e.Layout}: {e.Artist} ({e.Genre}, screens {e.Screens})", () => new ConcertRig(e) { ForceLive = true, WithCrowd = false });
         }
+        // the jazz quartet on its small quay stage (#1394): bass, sax, piano with its stool, drum kit, amber washes
+        var jazz = ConcertPlanner.Jazz(StadiumCatalog.MontreuxJazzOpenAir, 2026, 1);
+        yield return ($"jazz: {jazz.Artist} ({jazz.Genre})", () => new ConcertRig(jazz) { ForceLive = true, WithCrowd = false });
     }
 }

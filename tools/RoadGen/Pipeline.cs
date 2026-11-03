@@ -24,7 +24,9 @@ public sealed record PipelineOptions(
     Func<RoadNetwork, RoadNode, Approach, Approach, bool>? TightCorner = null,
     /// <summary>Footpaths never node with car roads (<see cref="NetworkBuilder.IsFootpath"/>, #711); null = they do.</summary>
     Func<RoadLink, bool>? IsFootpath = null,
-    Func<RoadLink, bool>? IsCarRoad = null);
+    Func<RoadLink, bool>? IsCarRoad = null,
+    /// <summary>Lines that run through a node of their own kind uncut, no junction (#1057: a tram switch); null = none.</summary>
+    Func<RoadLink, bool>? ThroughNode = null);
 
 public sealed class RoadGenResult
 {
@@ -75,7 +77,7 @@ public static class Pipeline
         NetworkBuilder.RefreshHeadings(net);
 
         var junctions = opts.BuildJunctions && opts.Smooth
-            ? new JunctionBuilder { TightCorner = opts.TightCorner }.Build(net)
+            ? new JunctionBuilder { TightCorner = opts.TightCorner, ThroughNode = opts.ThroughNode }.Build(net)
             : new List<Junction>();
 
         var ribbons = new List<Ribbon>();

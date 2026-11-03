@@ -63,6 +63,16 @@ public partial class Traffic
     /// <summary>The colour a destination's cars are drawn in.</summary>
     public static Color DestinationColour(int id) => DestinationColours[(id % DestinationColours.Length + DestinationColours.Length) % DestinationColours.Length];
 
+    /// <summary>The debug lines' node, for <c>--origincheck</c>.</summary>
+    internal Node3D? DebugLines => _debugLines;
+
+    /// <summary>Draws the debug lines now (<c>--origincheck</c>).</summary>
+    internal void DrawDebugNow()
+    {
+        _debugDue = 0;
+        StepDebugDraw(0);
+    }
+
     private void StepDebugDraw(double dt)
     {
         if (!ShowPaths && !ShowEndpoints && !EndpointsHeld && !ShowLights && !ShowMovers && !ShowTrails && !ShowModeGraphs)
@@ -91,6 +101,9 @@ public partial class Traffic
             AddChild(_debugLines);
         }
         _debugLines.Visible = true;
+        // its vertices are in this frame's world space: an origin shift moved this child of the container with the frame
+        // it was drawn in (#185), so it is back at the identity for the new one (else every line drawn a shift away)
+        _debugLines.Transform = Transform3D.Identity;
         var mesh = _debugMesh!;
         mesh.ClearSurfaces();
         mesh.SurfaceBegin(Mesh.PrimitiveType.Triangles);

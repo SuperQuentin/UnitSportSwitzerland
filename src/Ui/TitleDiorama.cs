@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Styles;
 
 namespace UnitSport.Ui;
 
@@ -145,27 +146,27 @@ public partial class TitleDiorama : Node3D
                 }
             }
         st.GenerateNormals();
-        var mat = new StandardMaterial3D
+        var mat = StyleKit.Figure(new StandardMaterial3D
         {
             VertexColorUseAsAlbedo = true,
             Roughness = 1,
             SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
             // either winding reads right: the back face is lit with the flipped normal
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        };
+        });
         return new MeshInstance3D { Mesh = st.Commit(), MaterialOverride = mat };
     }
 
     private MeshInstance3D Water()
     {
         var mesh = new PlaneMesh { Size = new Vector2(Cells * Cell, Cells * Cell) };
-        var mat = new StandardMaterial3D
+        var mat = StyleKit.Figure(new StandardMaterial3D
         {
             AlbedoColor = new Color(0.20f, 0.42f, 0.55f, 0.88f),
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
             Roughness = 0.15f,
             Metallic = 0.1f,
-        };
+        });
         return new MeshInstance3D { Mesh = mesh, MaterialOverride = mat, Position = new Vector3(0, WaterLevel, 0) };
     }
 
@@ -173,7 +174,7 @@ public partial class TitleDiorama : Node3D
     private MultiMeshInstance3D Forest()
     {
         var cone = new CylinderMesh { TopRadius = 0, BottomRadius = 3.6f, Height = 13, RadialSegments = 6, Rings = 1 };
-        cone.Material = new StandardMaterial3D { AlbedoColor = new Color(0.16f, 0.30f, 0.17f), Roughness = 1 };
+        cone.Material = StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.16f, 0.30f, 0.17f), Roughness = 1 });
         var rng = new RandomNumberGenerator { Seed = 42 };
         var spots = new List<Transform3D>();
         for (int k = 0; k < 4000 && spots.Count < 520; k++)
@@ -198,21 +199,21 @@ public partial class TitleDiorama : Node3D
     private static Node3D Chalet(Vector3 at)
     {
         var root = new Node3D { Position = at };
-        var wood = new StandardMaterial3D { AlbedoColor = new Color(0.45f, 0.28f, 0.16f), Roughness = 1 };
-        var roofMat = new StandardMaterial3D { AlbedoColor = new Color(0.30f, 0.20f, 0.16f), Roughness = 1 };
+        var wood = StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.45f, 0.28f, 0.16f), Roughness = 1 });
+        var roofMat = StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.30f, 0.20f, 0.16f), Roughness = 1 });
         root.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(14, 8, 10), Material = wood }, Position = new Vector3(0, 4, 0) });
         var roof = new PrismMesh { Size = new Vector3(18, 6, 13), Material = roofMat };
         root.AddChild(new MeshInstance3D { Mesh = roof, Position = new Vector3(0, 11, 0), RotationDegrees = new Vector3(0, 90, 0) });
 
         var pole = new MeshInstance3D
         {
-            Mesh = new CylinderMesh { TopRadius = 0.2f, BottomRadius = 0.2f, Height = 18, Material = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.85f, 0.85f) } },
+            Mesh = new CylinderMesh { TopRadius = 0.2f, BottomRadius = 0.2f, Height = 18, Material = StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.85f, 0.85f) }) },
             Position = new Vector3(12, 9, 0),
         };
         root.AddChild(pole);
         var flag = new MeshInstance3D
         {
-            Mesh = new QuadMesh { Size = new Vector2(5, 5), Material = new StandardMaterial3D { AlbedoTexture = SwissFlag(), CullMode = BaseMaterial3D.CullModeEnum.Disabled, Roughness = 1 } },
+            Mesh = new QuadMesh { Size = new Vector2(5, 5), Material = StyleKit.Figure(new StandardMaterial3D { AlbedoTexture = SwissFlag(), CullMode = BaseMaterial3D.CullModeEnum.Disabled, Roughness = 1 }) },
             Position = new Vector3(14.7f, 15.5f, 0),
         };
         root.AddChild(flag);

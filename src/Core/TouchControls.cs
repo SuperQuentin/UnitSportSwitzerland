@@ -25,6 +25,20 @@ public partial class TouchControls : CanvasLayer
     /// <summary>Whether the overlay is on screen now (prompts, rumble and look ask).</summary>
     public static bool Shown { get; private set; }
 
+    private static TouchControls? _current;
+
+    /// <summary>
+    /// A mode that freezes the walker through <see cref="UiFocus"/> but is played on these controls (bowling's
+    /// aim, #1353): the overlay stays while it holds the input. Null for none.
+    /// </summary>
+    public static object? Takeover { get; set; }
+
+    /// <summary>
+    /// Hints name the on-screen controls (#1054, <see cref="InputDevice.Touch"/>): the overlay exists
+    /// and no real pad is in hand. Menus too, though the overlay hides there.
+    /// </summary>
+    public static bool Hinting => _current is { _padInUse: false };
+
     /// <summary>What applies right now, as the prompt bar has it: labels the buttons and makes the pills.</summary>
     public Func<IEnumerable<(string Action, string Text)>>? Source { get; set; }
 
@@ -95,7 +109,7 @@ public partial class TouchControls : CanvasLayer
     public static TouchControls Create() => new() { Name = "TouchControls" };
 
     /// <summary>Whether this device should get the overlay at all.</summary>
-    public static bool Wanted => Platform.IsMobile && (DisplayServer.GetName() != "headless" || TouchCheck.Requested);
+    public static bool Wanted => Platform.IsTouch && (DisplayServer.GetName() != "headless" || TouchCheck.Requested);
 
     /// <summary>Touch holds are real time (docs/notes/core/three-clocks.md): read as deadlines.</summary>
     private static double Now => RealClock.Now;
@@ -114,6 +128,8 @@ public partial class TouchControls : CanvasLayer
         GetViewport().SizeChanged += Relayout;
         _more.Tapped = MoreTapped;
         _more.Held = TogglePin;
+        _current = this;
+        PlayerInput.HintsChanged();
     }
 
     public override void _ExitTree()
@@ -121,6 +137,7 @@ public partial class TouchControls : CanvasLayer
         ReleaseAll();
         Shown = false;
         HotbarPlace = null;
+        if (_current == this) _current = null;
     }
 
     // ---- layout --------------------------------------------------------------------------
@@ -129,13 +146,22 @@ public partial class TouchControls : CanvasLayer
     private void Measure()
     {
         var size = _canvas.Size == Vector2.Zero ? GetViewport().GetVisibleRect().Size : _canvas.Size;
-        var toWindow = GetViewport().GetFinalTransform();
+        (_safe, _pxPerMm) = MeasureScreen(GetViewport(), size);
+        var settings = GameSettings.Current;
+        _k = _pxPerMm * settings.TouchScale;
+        _left = settings.TouchLeftHanded;
+    }
+
+    /// <summary>The safe area (canvas pixels, less a 1.5 mm margin) and canvas pixels a millimetre, for a canvas this size.</summary>
+    public static (Rect2 Safe, float PxPerMm) MeasureScreen(Viewport viewport, Vector2 size)
+    {
+        var toWindow = viewport.GetFinalTransform();
         float windowPerCanvas = Mathf.Max(0.01f, toWindow.X.Length());
         // a phone knows its density; a desktop --mobile preview is a 6-inch phone of the window's height
         bool phone = OS.HasFeature("mobile");
         float dpi = phone ? DisplayServer.ScreenGetDpi() : 0;
-        _pxPerMm = dpi >= 100 ? dpi / 25.4f / windowPerCanvas : size.Y / TouchLayout.PhoneHeightMm;
-        _safe = new Rect2(Vector2.Zero, size);
+        float pxPerMm = dpi >= 100 ? dpi / 25.4f / windowPerCanvas : size.Y / TouchLayout.PhoneHeightMm;
+        var safe = new Rect2(Vector2.Zero, size);
         if (phone)
         {
             var area = DisplayServer.GetDisplaySafeArea();
@@ -144,13 +170,10 @@ public partial class TouchControls : CanvasLayer
                 var inverse = toWindow.AffineInverse();
                 var a = inverse * (Vector2)area.Position;
                 var b = inverse * (Vector2)area.End;
-                _safe = new Rect2(a, b - a).Intersection(_safe);
+                safe = new Rect2(a, b - a).Intersection(safe);
             }
         }
-        _safe = _safe.Grow(-1.5f * _pxPerMm);
-        var settings = GameSettings.Current;
-        _k = _pxPerMm * settings.TouchScale;
-        _left = settings.TouchLeftHanded;
+        return (safe.Grow(-1.5f * pxPerMm), pxPerMm);
     }
 
     private void Relayout()
@@ -180,12 +203,14 @@ public partial class TouchControls : CanvasLayer
         _state = state;
         _built = true;
         _keys.Clear();
-        foreach (var spec in TouchLayout.For(state.Mode, state.Flags))
+        foreach (var spec in TouchLayout.Apply(TouchLayout.For(state.Mode, state.Flags), state.Mode, GameSettings.Current.TouchOverrides))
             _keys.Add(new Btn { Spec = spec, Label = spec.Label });
         _pills.Clear();
         _more.Hide();
         _labelTimer = 0;
         Relayout();
+        // what a hint calls a control follows the layout
+        PlayerInput.HintsChanged();
     }
 
     /// <summary>Where a control is drawn (for <see cref="TouchCheck"/>), by its id, or the middle of the screen.</summary>
@@ -226,7 +251,7 @@ public partial class TouchControls : CanvasLayer
         // holds it, so it counts as in game
         bool inGame = MouseCapture.Mode != Input.MouseModeEnum.Visible || MouseCapture.Disabled
             || DisplayServer.GetName() == "headless";
-        bool show = !_padInUse && inGame && !UiFocus.TextEntryActive;
+        bool show = !_padInUse && inGame && (!UiFocus.TextEntryActive || UiFocus.HeldOnlyBy(Takeover)) && !TouchLayoutScreen.IsOpen;
         if (show != Shown)
         {
             Shown = show;
@@ -475,15 +500,20 @@ public partial class TouchControls : CanvasLayer
 
     public override void _Input(InputEvent e)
     {
+        if (_editor != null)
+        {
+            if (_editor.Handle(e)) GetViewport().SetInputAsHandled();
+            return;
+        }
         switch (e)
         {
             // a real pad in hand: get out of the way until the screen is touched again
             case InputEventJoypadButton b when b.Device != Device && b.Device != XR.XrPad.DeviceId:
             case InputEventJoypadMotion m when m.Device != Device && m.Device != XR.XrPad.DeviceId && Mathf.Abs(m.AxisValue) > 0.5f:
-                _padInUse = true;
+                PadInUse(true);
                 return;
             case InputEventScreenTouch t:
-                _padInUse = false;
+                PadInUse(false);
                 if (!Shown) return;
                 if (t.Pressed) Down(t.Index, t.Position);
                 else Up(t.Index);
@@ -494,6 +524,38 @@ public partial class TouchControls : CanvasLayer
                 GetViewport().SetInputAsHandled();
                 return;
         }
+    }
+
+    private void PadInUse(bool on)
+    {
+        if (on == _padInUse) return;
+        _padInUse = on;
+        PlayerInput.HintsChanged();
+    }
+
+    /// <summary>
+    /// What a hint calls the control that does an action here (#1054), or null: "[Gas]" for a key,
+    /// "the stick", "a drag", "[MAP]", "[More › Travel menu]".
+    /// </summary>
+    public static string? NameOf(string action) => _current?.ControlFor(action);
+
+    private string? ControlFor(string action)
+    {
+        if (!InputMap.HasAction(action)) return null;
+        bool stick = TouchLayout.HasStick(_state.Mode);
+        if (stick && OnLeftStick(action)) return "the stick";
+        if (stick && TouchLayout.StickRuns(_state.Mode) && (_state.Flags & TouchFlags.RunButton) == 0
+            && action is PlayerInput.Sprint or PlayerInput.FlyBoost)
+            return "the stick past its ring";
+        foreach (var k in _keys)
+            if (k.Spec.Shape != TouchShape.Top && !k.Hidden && BoundTo(action, k.Spec.Send))
+                return k.Spec.Shape == TouchShape.Stick ? $"the {k.Spec.Label} stick" : $"[{k.Spec.Label}]";
+        if (action is PlayerInput.LookLeft or PlayerInput.LookRight or PlayerInput.LookUp or PlayerInput.LookDown)
+            return "a drag";
+        if (action == PlayerInput.Inventory) return "[BAG]";
+        foreach (var k in _keys)
+            if (k.Spec.Shape == TouchShape.Top && BoundTo(action, k.Spec.Send)) return $"[{k.Spec.Label}]";
+        return TouchMore.LabelFor(_state, action) is { } more ? $"[More › {more}]" : null;
     }
 
     private float Margin => TouchLayout.HitMarginMm * _pxPerMm;
@@ -826,6 +888,11 @@ public partial class TouchControls : CanvasLayer
     private void MoreTapped(TouchMore.Entry e)
     {
         _canvas.QueueRedraw();
+        if (e.Action == TouchMore.EditLayout)
+        {
+            OpenEditor();
+            return;
+        }
         if (e.Wheel)
         {
             // a wheel opens on the press and picks on the release: the next finger aims and lets go
@@ -835,6 +902,36 @@ public partial class TouchControls : CanvasLayer
             return;
         }
         Tap(TouchSend.Act(e.Action), e.Hold ? 0.6 : 0.05);
+    }
+
+    private TouchEditor? _editor;
+
+    /// <summary>More › Edit layout (#1048): this mode's controls, over the game, to move, resize or hide.</summary>
+    public void OpenEditor()
+    {
+        if (_editor != null) return;
+        ReleaseAll();
+        _more.Hide();
+        _editor = new TouchEditor(_state.Mode, _state.Flags & ~(TouchFlags.RunButton | TouchFlags.TapToUse), picker: false);
+        _editor.Finished = CloseEditor;
+        AddChild(_editor);
+        _canvas.QueueRedraw();
+    }
+
+    /// <summary>The layout editor open over the game (for <see cref="TouchCheck"/>).</summary>
+    public TouchEditor? Editor => _editor;
+
+    private void CloseEditor(Dictionary<string, TouchOverride>? kept)
+    {
+        if (kept != null)
+        {
+            GameSettings.Current.TouchOverrides = kept;
+            GameSettings.SaveTouchOverrides();
+        }
+        _editor?.QueueFree();
+        _editor = null;
+        _built = false;
+        _canvas.QueueRedraw();
     }
 
     private void TogglePin(TouchMore.Entry e)
@@ -947,7 +1044,7 @@ public partial class TouchControls : CanvasLayer
 
     private void Paint()
     {
-        if (!Shown) return;
+        if (!Shown || _editor != null) return;
         foreach (var k in _keys)
             if (!k.Hidden) PaintKey(k);
         foreach (var p in _pills)
@@ -1031,6 +1128,13 @@ public partial class TouchControls : CanvasLayer
         }
     }
 
+    /// <summary>The font size, at most <paramref name="size"/>, at which a text fits a width ("Handbrake" in an 8 mm key).</summary>
+    public static int FitFont(Font font, string text, int size, float width)
+    {
+        float w = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
+        return w <= width ? size : Math.Max(8, (int)(size * width / w));
+    }
+
     /// <summary>A key's words: the prompt's when they fit inside, else its own inside and the prompt under it.</summary>
     private void KeyText(Btn k, Rect2 r)
     {
@@ -1041,7 +1145,7 @@ public partial class TouchControls : CanvasLayer
             Text(k.Prompt, r, size, Ink(down));
             return;
         }
-        Text(k.Label, r, size, Ink(down));
+        Text(k.Label, r, FitFont(_font, k.Label, size, r.Size.X * 0.88f), Ink(down));
         if (k.Prompt.Length > 0)
             Text(k.Prompt, new Rect2(r.Position.X - 10f * _k, r.End.Y + 0.3f * _k, r.Size.X + 20f * _k, 3.6f * _k), FontPx(2f), Ink(false));
     }

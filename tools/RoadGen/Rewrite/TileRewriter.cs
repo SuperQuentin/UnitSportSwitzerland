@@ -57,6 +57,8 @@ public static partial class TileRewriter
         string? RawDir = null,
         /// <summary><c>osm_overlay.tsv</c>; null or missing = no OSM attributes.</summary>
         string? OsmOverlay = null,
+        /// <summary><c>tram_stops.tsv</c> (#1057, the preprocessor's <c>--tram-stops</c>); null or missing = no tram stops.</summary>
+        string? TramStops = null,
         /// <summary>Leave rewritten tiles that have no raw input alone instead of refusing.</summary>
         bool SkipRewritten = false,
         /// <summary>
@@ -64,6 +66,8 @@ public static partial class TileRewriter
         /// <see cref="NetworkStats.Layouts"/> and reported.
         /// </summary>
         bool NewJunctions = true,
+        /// <summary>Keep every block's junction plans for the summary lines (#1425); false = nationwide, where they would never fit in memory.</summary>
+        bool KeepPlans = true,
         /// <summary>
         /// Write the planner's junctions into the tiles (#818, the default; <c>--junctions new</c> plans only): cores, trims,
         /// transitions, exteriors and paths where its checks pass; the old layout builds the rest (and nothing of its own there).
@@ -72,7 +76,13 @@ public static partial class TileRewriter
         /// <summary>The canton of each tile; null = <c>switzerland.bin</c>'s (<see cref="Cantons.Find"/>). A test world's own zones (#1038).</summary>
         Cantons? Cantons = null,
         /// <summary>Called on each tile as it is about to be written (#1038: a test world's border marks); null = none.</summary>
-        Action<RoadTile>? Decorate = null);
+        Action<RoadTile>? Decorate = null,
+        /// <summary>
+        /// Gantries of lane signs (#1110): <c>sitg_signs.tsv</c> (the preprocessor's <c>--sitg-signs</c>; null or missing: the rule
+        /// everywhere), the region's <c>places.json</c> (the signs' destinations) and where to write every lit approach's facts
+        /// (<c>gantry_facts.tsv</c>, for <c>--gantry-benchmark</c>); <see cref="Gantries"/> false: none at all.
+        /// </summary>
+        string? SitgSigns = null, string? Places = null, string? GantryFacts = null, bool Gantries = true);
 
     public sealed record Stats(
         int TilesRead, int TilesWritten, int Junctions, int SegmentsWritten, int SegmentsDropped,
@@ -242,6 +252,7 @@ public static partial class TileRewriter
 
     public static Stats Run(string chunkDir, IReadOnlyList<TileId> tiles, Options options, Action<string> log)
     {
+        _plannerFailures = 0;
         string rawDir = options.RawDir ?? RawRoads.DirFor(RawRoads.DefaultTempDir(chunkDir));
         // the car park rings are written to their own directory beside the raw roads, not into it
         // (#499, ParkingAreaExtractor -> RawParking.DirFor), so they are found from the temp dir
@@ -275,11 +286,18 @@ public static partial class TileRewriter
         var signalSites = SignalSites.From(osmNodes);
         var restrictions = Restrictions.From(osmNodes);   // turns forbidden at an approach (#353)
         var crossingNodes = CrossingNodes.From(osmNodes);   // pedestrian crossings (#700)
+        // walkers' crossings over a tram track left without lights (#1176: OSM railway=tram_crossing, crossing=uncontrolled)
+        UncontrolledTramCrossings = osmNodes is null ? [] : osmNodes.All.Where(e => e.Kind == OsmNodesReader.NodeKind.Crossing
+            && e.Value == "uncontrolled" && e.Tags.GetValueOrDefault("railway") == "tram_crossing").Select(e => new Vec2(e.E, e.N)).ToList();
         if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 
         var wanted = new HashSet<TileId>(targets);
         var blocks = GroupIntoBlocks(targets, options.BlockSize);
+        // gantries of lane signs (#1110): SITG's in canton Geneva, the rule elsewhere
+        var gantries = options.Gantries ? GantryContext.Load(options.SitgSigns, options.Places) : null;
+        if (gantries is not null) gantries.Overlay = overlay;
+        if (gantries?.Sitg is { } sitg) log($"  SITG lane signs (#1110): {sitg.Gantries.Count:N0} gantries from {options.SitgSigns}");
 
         var session = new Session(options, new Inputs
         {
@@ -288,6 +306,7 @@ public static partial class TileRewriter
             Buildings = id => Facades.Read(chunkDir, id),
             Parking = id => RawParking.Read(parkDir, id),
             Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions, Crossings = crossingNodes,
+            Gantries = gantries,
         });
 
         int blockIndex = 0;
@@ -316,6 +335,7 @@ public static partial class TileRewriter
                 log($"  block {blockIndex}/{blocks.Count}  {session.TilesWritten} tiles, {session.JunctionCount} junctions");
         }
 
+        if (gantries is not null && options.GantryFacts is { } factsPath && !options.DryRun) gantries.WriteFacts(factsPath);
         return session.Finish(log);
     }
 
@@ -346,6 +366,8 @@ public static partial class TileRewriter
         internal SignalSites? SignalSites { get; init; }
         internal Restrictions? Restrictions { get; init; }
         internal CrossingNodes? Crossings { get; init; }
+        /// <summary>The gantries' data and rule (#1110); null = no gantries.</summary>
+        public GantryContext? Gantries { get; init; }
     }
 
     /// <summary>
@@ -373,7 +395,10 @@ public static partial class TileRewriter
         private readonly RoadHeights.Stats heightStats = new();
         private readonly RailingPlanner.Stats railings = new();
         private readonly ParkingStats parkingStats = new();
-        private readonly Footprints buildings = new(inputs.Buildings);
+        // one block's, made in Block: a session-long cache held every building tile it ever saw (#1425)
+        private Footprints buildings = null!;
+        /// <summary>The region's tram stops (#1057, <see cref="Options.TramStops"/>), none without the file.</summary>
+        private readonly List<(string Name, Vec2 At)> tramStops = options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : [];
 
         /// <summary>
         /// Rewrites one block: its tiles and a halo of <see cref="Options.Halo"/> read for context;
@@ -389,6 +414,7 @@ public static partial class TileRewriter
             var crossingNodes = inputs.Crossings;
             var built = new List<RoadTile>();
 
+            buildings = new Footprints(inputs.Buildings);
             var context = WithHalo(block, options.Halo);
 
             var net = new RoadNetwork();
@@ -484,7 +510,9 @@ public static partial class TileRewriter
                     // (#711, the user's rule) a footpath joining a street connects to its sidewalk: no junction with it; a track too
                     // (#854, the user, Oct 18: near a junction it ends at the carriageway's edge, no arm of it)
                     IsFootpath: l => l.Tag is Source s && s.Segment.Class is RoadClass.Path or RoadClass.Track,
-                    IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)));
+                    IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class),
+                    // tram tracks meeting at a switch run on through it uncut (#1057: a junction trimmed them back, a gap for the trams)
+                    ThroughNode: l => l.Tag is Source { Segment: { Class: RoadClass.Railway } t } && (t.Flags & RoadFlags.Tramway) != 0));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 // traffic lights: from OSM where the overlay covers a junction, else where two main
                 // roads cross in a dense core (#348)
@@ -771,7 +799,7 @@ public static partial class TileRewriter
                 var layouts = options.NewJunctions
                     ? PlanAndMerge(priority, result, layoutSegmentOf, layoutOutput, block, wanted, nearJunctions, rings, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
                     : null;
-                if (layouts is not null) netStats.Layouts.AddRange(layouts.Where(p => !p.Beyond));
+                if (layouts is not null && options.KeepPlans) netStats.Layouts.AddRange(layouts.Where(p => !p.Beyond));
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only
                 var writtenNodes = layouts is not null && options.WriteJunctions ? WritableLayouts(layouts, result, layoutSegmentOf, netStats.LayoutWrite) : [];
                 var oldPriority = WithoutWritten(priority, writtenNodes);
@@ -860,7 +888,12 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, layoutSegmentOf, finalPieces, layoutOutput, capOf, caps, writtenCaps, paint, layoutStation,
-                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings);
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings,
+                        inputs.Gantries);
+                // the tram stops' signs beside their tracks (#1057), where the preprocessor found stops (--tram-stops)
+                if (tramStops.Count > 0) EmitTramStops(tramStops, new TramNet(result), block, signs, netStats.LayoutWrite);
+                // the tram beds the walkers' crossings at lights cross, paved under them (#1179)
+                PaveTrackCrossings(output, signalRecords, paint, rails, netStats.LayoutWrite);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
@@ -976,7 +1009,7 @@ public static partial class TileRewriter
                     CatenarySupports = catenarySupports.GetValueOrDefault(id) ?? [],   // #1052
                     CatenaryWires = catenaryWires.GetValueOrDefault(id) ?? [],
                 };
-                rails.ClearTrackZones(tile.Paint, id);
+                rails.ClearTrackZones(tile.Paint, id, tile.Signals.Select(s => (s.X, s.Z)).ToList());
                 built.Add(tile);
             }
             return built;
@@ -991,6 +1024,7 @@ public static partial class TileRewriter
             log(embankments.Format());
             log(railings.Format());
             log(parkingStats.Format());
+            if (_plannerFailures > 0) log($"  junction planner: {_plannerFailures:N0} plans threw on degenerate geometry and fell back (see the [WARN] lines, #1427)");
             return new Stats(tilesRead, TilesWritten, junctionCount, written, dropped,
                 overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, Net);
         }

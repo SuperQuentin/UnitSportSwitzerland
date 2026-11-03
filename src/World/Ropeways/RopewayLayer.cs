@@ -56,6 +56,20 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
         _material.SetShaderParameter("flicker", 0f);
     }
 
+    /// <summary>This client's ropeways: a bottom station is what E at it outlines (#1286).</summary>
+    public static RopewayLayer? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    /// <summary>A line's bottom station shed, while it is drawn (its stations are drawn again after an origin shift).</summary>
+    public Node3D? BottomStation(long line) =>
+        _drawn.TryGetValue(line, out var d) && d.Stations.GetChildCount() > 0 ? d.Stations.GetChildOrNull<Node3D>(0) : null;
+
     public override void _Process(double delta)
     {
         if (_chunks.Origin is not { } origin || GetViewport()?.GetCamera3D() is not { } cam) return;

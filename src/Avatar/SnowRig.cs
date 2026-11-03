@@ -6,13 +6,13 @@ using UnitSport.Core;
 namespace UnitSport.Avatar;
 
 /// <summary>
-/// A skier or a snowboarder that moves (#933): the body from <see cref="SnowPose"/>, rebuilt into
-/// one mesh in place whenever the pose changes by a step (<see cref="SnowPose.Look.Key"/>), so a
-/// rider standing still or holding a line costs nothing.
+/// A skier or a snowboarder that moves (#933): the body from <see cref="SnowPose"/>, a skinned
+/// figure (#1202) posed by its bones whenever the pose changes by a step
+/// (<see cref="SnowPose.Look.Key"/>), so a rider standing still or holding a line costs nothing.
 ///
 /// <para>
-/// The skier's skis and poles are in the same surface as the body: they follow its feet and
-/// hands (a plough's V, a skating ski, a planted pole). The board does not move against the body
+/// The skier's skis and poles are built once and moved as nodes: they follow its feet and hands
+/// (a plough's V, a skating ski, a planted pole). The board does not move against the body
 /// except in the roll the whole figure takes, so it is its own mesh, built once; the rider stands
 /// on it a quarter turn round, its chest to the toe edge.
 /// </para>
@@ -23,9 +23,8 @@ public partial class SnowRig : Node3D
     private readonly SkiPalette _gear;
     private readonly bool _board;
     private readonly bool _facingRight;
-    private readonly MeshInstance3D _body;
-    private readonly ArrayMesh _mesh = new();
-    private readonly MeshScratch _scratch = new();
+    private readonly SkinnedFigure _body;
+    private readonly MeshInstance3D[] _skiNodes = new MeshInstance3D[2], _poleNodes = new MeshInstance3D[2];
     private readonly Vector3[] _joints = new Vector3[20];
     private readonly SnowPose.Ski[] _skis = new SnowPose.Ski[2];
     private readonly SnowPose.Pole[] _poles = new SnowPose.Pole[2];
@@ -50,11 +49,23 @@ public partial class SnowRig : Node3D
             AddChild(new MeshInstance3D { Name = "Board", Mesh = SnowboardMeshBuilder.Board(gear, facingRight), MaterialOverride = material });
         }
         else Name = "Skier";
-        _body = new MeshInstance3D { Name = "Rider", Mesh = _mesh, MaterialOverride = material };
+        _body = new SkinnedFigure { Name = "Rider", MaterialOverride = material };
+        _body.Show(new FigureLook(palette, Helmet: true));
         // the board's rider faces its toe edge: a quarter turn takes the figure's +Z to −X, the right of a board facing +Z
         if (board) _body.Rotation = new Vector3(0, facingRight ? -Mathf.Pi / 2f : Mathf.Pi / 2f, 0);
         if (board) _body.Position = new Vector3(0, 0.03f, 0);
         AddChild(_body);
+        if (!board)
+            for (int i = 0; i < 2; i++)
+            {
+                // each built at its origin (author space: a ski's boot, a pole's grip), moved where the pose puts it
+                var ski = new MeshScratch();
+                AppendSki(ski, gear, new SnowPose.Ski(Vector3.Zero, 0f, 0f));
+                AddChild(_skiNodes[i] = new MeshInstance3D { Name = $"Ski{i}", Mesh = ski.Build(), MaterialOverride = material });
+                var pole = new MeshScratch();
+                AppendPole(pole, gear, new SnowPose.Pole(Vector3.Zero, Vector3.Down * PoleLength));
+                AddChild(_poleNodes[i] = new MeshInstance3D { Name = $"Pole{i}", Mesh = pole.Build(), MaterialOverride = material });
+            }
         Show(new SnowPose.Look(0f, 0f, 0f, 0f, 0f, false));
     }
 
@@ -69,22 +80,31 @@ public partial class SnowRig : Node3D
         var key = look.Key;
         if (_shown == key) return;
         _shown = key;
-        _scratch.Clear();
+        // a restyle to or from a lit style (#311) is a new look
+        _body.Show(new FigureLook(_palette, Helmet: true));
         if (_board)
         {
             // the rider's own frame: the nose is at +X when facing right (its chest at −X of the board)
             float toe = Mathf.Clamp(look.Lean / 1.1f, -1f, 1f) * (_facingRight ? -1f : 1f);
             SnowPose.Boarder(look, toe, _facingRight ? 1f : -1f, _joints);
-            HumanMeshBuilder.AppendJoints(_scratch, _palette, _joints, helmet: true);
+            HumanMeshBuilder.PoseJoints(_body, _joints);
         }
         else
         {
             SnowPose.Skier(look, _joints, _skis, _poles);
-            HumanMeshBuilder.AppendJoints(_scratch, _palette, _joints, helmet: true);
-            foreach (var ski in _skis) AppendSki(_scratch, _gear, ski);
-            foreach (var pole in _poles) AppendPole(_scratch, _gear, pole);
+            HumanMeshBuilder.PoseJoints(_body, _joints);
+            for (int i = 0; i < 2; i++)
+            {
+                // node space is author space turned half round: a turn about up stays the same turn
+                var ski = _skis[i];
+                _skiNodes[i].Transform = new Transform3D(new Basis(Vector3.Up, ski.Yaw), Flip(ski.Boot));
+                var pole = _poles[i];
+                var along = Flip(pole.Basket - pole.Grip);
+                float length = along.Length();
+                var turn = length > 1e-4f ? new Basis(new Quaternion(Vector3.Down, along / length)) : Basis.Identity;
+                _poleNodes[i].Transform = new Transform3D(turn * Basis.FromScale(new Vector3(1f, length / PoleLength, 1f)), Flip(pole.Grip));
+            }
         }
-        _scratch.BuildInto(_mesh);
         // just in front of the face; the drawn body is author space turned half round (MeshScratch.Build)
         var eye = (_joints[SnowPose.HeadBase] + _joints[SnowPose.HeadTop]) * 0.5f + new Vector3(0, 0, 0.14f);
         eye = new Vector3(-eye.X, eye.Y, -eye.Z);
@@ -126,6 +146,11 @@ public partial class SnowRig : Node3D
         rig.Rotation = new Vector3(0, 0, look.Lean);
         return rig;
     }
+
+    private static Vector3 Flip(Vector3 v) => new(-v.X, v.Y, -v.Z);
+
+    /// <summary>The pole as built, grip to basket; the pose's own is reached by scaling it.</summary>
+    private const float PoleLength = 1.2f;
 
     // the ski: SkierMeshBuilder's 1.70 m, the boot behind centre, the tip rockered up
     private const float SkiWidth = 0.088f, SkiThickness = 0.022f, TailRun = 1.70f * 0.46f, TipRun = 1.70f * 0.54f;

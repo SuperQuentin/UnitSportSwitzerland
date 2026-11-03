@@ -221,6 +221,7 @@ public partial class ReplayRecorder : Node
             _buffer?.Actor(p, id, _scratch, now);
             _session?.Actor(p, id, _scratch, now);
         }
+        _world.Holding = Saving;
         if (OriginNow() is { } origin) _world.Tick(now, origin);
         _buffer?.Prune(now);
         _session?.Prune(now);

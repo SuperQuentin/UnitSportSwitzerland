@@ -1,0 +1,212 @@
+[
+  {
+    "alias": "bridge:kapellbrucke",
+    "id": "bridge:kapellbrucke.6c88c347f3",
+    "title": "Kapellbrücke",
+    "fact": "The covered wooden Chapel Bridge in Lucerne was built across the Reuss in the 14th century, next to the octagonal Wasserturm. Much of it burned in 1993 and was rebuilt within a year; triangular 17th-century paintings line its roof."
+  },
+  {
+    "alias": "cablecar:bettmerhorn",
+    "id": "cablecar:bettmergrat.8ca146ecdd",
+    "title": "Bettmerhorn top station",
+    "fact": "The gondola from Bettmeralp ends here at about 2650 m, on the ridge of the Bettmerhorn. Below lies the Great Aletsch Glacier, the longest glacier in the Alps, at the heart of the Jungfrau-Aletsch UNESCO World Heritage site."
+  },
+  {
+    "alias": "castle:chillon",
+    "id": "castle:chateau-de-chillon.c3a01dfd2c",
+    "title": "Château de Chillon",
+    "fact": "The Château de Chillon stands on a rock island in Lake Geneva near Montreux and was for centuries a stronghold of the Counts of Savoy. Lord Byron made it famous with 'The Prisoner of Chillon' (1816), about François Bonivard, held in its vaults from 1530 to 1536."
+  },
+  {
+    "alias": "castle:gruyeres",
+    "id": "castle:chateau-de-gruyeres.57c0285757",
+    "title": "Château de Gruyères",
+    "fact": "The castle above the medieval town of Gruyères dates from the 13th century. It was the seat of the Counts of Gruyère until the last count, Michel, went bankrupt in 1554 and his lands were divided between Fribourg and Bern."
+  },
+  {
+    "alias": "castle:tourbillon",
+    "id": "castle:chateau-de-tourbillon.8391acf77c",
+    "title": "Château de Tourbillon",
+    "fact": "The ruined castle of Tourbillon crowns one of the two hills above Sion, facing the Valère basilica. It was built around 1300 by Boniface de Challant, Bishop of Sion, and burned down in 1788."
+  },
+  {
+    "alias": "church:berner-munster",
+    "id": "church:berner-munster.8bc307b46e",
+    "title": "Bern Minster",
+    "fact": "Begun in 1421, the Minster of Bern is the most important late Gothic church in Switzerland. Its tower, finished only in 1893, is about 100 m high, the tallest church tower in the country."
+  },
+  {
+    "alias": "dam:grande-dixence",
+    "id": "dam:grande-dixence.174de157c3",
+    "title": "Grande Dixence Dam",
+    "fact": "Completed in 1961, the 285 m high Grande Dixence is the tallest gravity dam in the world. It holds back the Lac des Dix at the head of the Val des Dix in Valais."
+  },
+  {
+    "alias": "lake:joux",
+    "id": "lake:lac-de-joux.b577bfbf6c",
+    "title": "Lac de Joux",
+    "fact": "At 1004 m, the Lac de Joux fills the floor of the Vallée de Joux in the Vaud Jura and is the largest lake of the Jura mountains. The valley around it is a centre of fine Swiss watchmaking, and the lake often freezes over in winter."
+  },
+  {
+    "alias": "lake:leman",
+    "id": "lake:le-leman.cd30a6df4f",
+    "title": "Lake Geneva",
+    "fact": "Lac Léman covers about 580 km², shared between Switzerland and France, and is one of the largest lakes in Western Europe. The Rhône flows in at its eastern end and leaves it again at Geneva."
+  },
+  {
+    "alias": "lake:neuchatel",
+    "id": "lake:lac-de-neuchatel.f45329f868",
+    "title": "Lake Neuchâtel",
+    "fact": "Covering about 218 km², Lake Neuchâtel is the largest lake lying entirely within Switzerland. It stretches along the foot of the Jura from Yverdon-les-Bains to the Three Lakes region."
+  },
+  {
+    "alias": "lake:oeschinensee",
+    "id": "lake:oeschinensee.c460ed0b7b",
+    "title": "Oeschinensee",
+    "fact": "The Oeschinensee lies at about 1580 m above Kandersteg, beneath the cliffs of the Blüemlisalp. A gondola from Kandersteg brings visitors close to its shore, and in winter the lake freezes over."
+  },
+  {
+    "alias": "lake:vierwaldstattersee",
+    "id": "lake:vierwaldstattersee.f353aaec19",
+    "title": "Lake Lucerne",
+    "fact": "The Vierwaldstättersee, 114 km², takes its name from the four forest cantons on its shores: Uri, Schwyz, Unterwalden and Lucerne. The Rütli meadow on its shore is where the founding oath of the Swiss Confederation is traditionally said to have been sworn in 1291."
+  },
+  {
+    "alias": "pass:furka",
+    "id": "pass:furkapass.c3f837f3ee",
+    "title": "Furka Pass",
+    "fact": "The 2429 m Furka Pass joins Uri and Valais just above the Rhône Glacier, the source of the Rhône. The pass road appears in the James Bond film 'Goldfinger' (1964)."
+  },
+  {
+    "alias": "pass:gotthard",
+    "id": "pass:passo-del-san-gottardo.d82efe3e12",
+    "title": "Gotthard Pass",
+    "fact": "The 2106 m Gotthard Pass links Uri to Ticino and has been one of the main routes across the Alps since the Middle Ages. The Tremola, its cobbled road of hairpins, climbs from Airolo; beneath the pass run the 1980 road tunnel and, since 2016, the 57 km Gotthard Base Tunnel."
+  },
+  {
+    "alias": "pass:great-st-bernard",
+    "id": "pass:col-du-grand-saint-bernard.5d042e2a8c",
+    "title": "Great St Bernard Pass",
+    "fact": "The 2469 m pass links Valais to the Aosta Valley in Italy. Its hospice, founded by Saint Bernard of Menthon around 1050, gave its name to the St Bernard dogs that once helped find travellers in the snow. Napoleon led his army over the pass in May 1800."
+  },
+  {
+    "alias": "pass:grimsel",
+    "id": "pass:grimselpass.971b4fe887",
+    "title": "Grimsel Pass",
+    "fact": "The 2164 m Grimsel Pass links the Hasli valley in Bern to the Goms in Valais. The Grimselsee reservoir just below the pass feeds the hydroelectric power plants of the Oberhasli."
+  },
+  {
+    "alias": "peak:dent-de-morcles",
+    "id": "peak:grande-dent-de-morcles.4cee07d3fc",
+    "title": "Grande Dent de Morcles",
+    "fact": "At 2969 m, the Grande Dent de Morcles is the highest of the Dents de Morcles, on the border of Vaud and Valais. It rises above the bend of the Rhône valley at Saint-Maurice, opposite the Dents du Midi."
+  },
+  {
+    "alias": "peak:diablerets",
+    "id": "peak:le-sommet-des-diablerets.ff1a365e39",
+    "title": "Les Diablerets",
+    "fact": "The 3216 m Sommet des Diablerets crowns the glaciated Diablerets massif between Vaud and Valais. Legend blames its rockfalls on devils playing skittles on the mountain; in 1714 and 1749 huge landslides from it buried the pastures of Derborence."
+  },
+  {
+    "alias": "peak:dufourspitze",
+    "id": "peak:dufourspitze.1750acbaaf",
+    "title": "Dufourspitze",
+    "fact": "At 4633 m, the Dufourspitze in the Monte Rosa massif is the highest summit in Switzerland. It is named after General Guillaume-Henri Dufour, whose survey produced the first precise map of the country, and was first climbed on 1 August 1855."
+  },
+  {
+    "alias": "peak:eggishorn",
+    "id": "peak:eggishorn.161d8944f1",
+    "title": "Eggishorn",
+    "fact": "The 2927 m Eggishorn above Fiesch looks straight down onto the Great Aletsch Glacier, the longest glacier in the Alps. A cable car from Fiesch via Fiescheralp reaches a station just below the summit."
+  },
+  {
+    "alias": "peak:eiger",
+    "id": "peak:eiger.3f2dce575b",
+    "title": "Eiger",
+    "fact": "The 3967 m Eiger was first climbed in 1858 by Charles Barrington with the guides Christian Almer and Peter Bohren. Its 1800 m North Face, long one of the great problems of the Alps, was first climbed in 1938 by Heckmair, Vörg, Harrer and Kasparek."
+  },
+  {
+    "alias": "peak:jungfrau",
+    "id": "peak:jungfrau.e432465221",
+    "title": "Jungfrau",
+    "fact": "At 4158 m, the Jungfrau is the highest of the three famous peaks above Grindelwald and Lauterbrunnen. It was first climbed in 1811 by the brothers Johann Rudolf and Hieronymus Meyer of Aarau."
+  },
+  {
+    "alias": "peak:matterhorn",
+    "id": "peak:matterhorn.24581452f6",
+    "title": "Matterhorn",
+    "fact": "The 4478 m pyramid above Zermatt stands on the border between Switzerland and Italy. Edward Whymper's party made the first ascent on 14 July 1865; four of the seven climbers died on the way down."
+  },
+  {
+    "alias": "peak:moleson",
+    "id": "peak:le-moleson.7eef3975f0",
+    "title": "Le Moléson",
+    "fact": "The 2002 m Moléson is the landmark summit of the Gruyère region in Fribourg. A funicular and a cable car climb to it from Moléson-sur-Gruyères."
+  },
+  {
+    "alias": "peak:monch",
+    "id": "peak:monch.6bb6864033",
+    "title": "Mönch",
+    "fact": "The 4106 m Mönch, the 'monk', stands between the Eiger and the Jungfrau. It was first climbed in 1857, and the Jungfrau Railway runs through a tunnel beneath it on its way to the Jungfraujoch."
+  },
+  {
+    "alias": "peak:pilatus",
+    "id": "peak:esel.9a488f4372",
+    "title": "Pilatus (Esel)",
+    "fact": "The Esel, 2119 m, is the summit of Pilatus right above the Pilatus Kulm station, overlooking Lucerne. The Pilatus Railway from Alpnachstad, opened in 1889, is the steepest cogwheel railway in the world, with gradients of up to 48 percent."
+  },
+  {
+    "alias": "peak:piz-bernina",
+    "id": "peak:piz-bernina.47bed6e050",
+    "title": "Piz Bernina",
+    "fact": "At 4048 m, Piz Bernina above the Engadin is the only four-thousander of the Eastern Alps and the highest peak of Graubünden. It was first climbed in 1850 by the surveyor Johann Coaz and his team."
+  },
+  {
+    "alias": "peak:rigi-kulm",
+    "id": "peak:rigi-kulm.e43942aa5b",
+    "title": "Rigi Kulm",
+    "fact": "At 1797 m, Rigi Kulm is the top of the Rigi, the 'Queen of the Mountains' between Lake Lucerne and Lake Zug. The Vitznau-Rigi railway, opened in 1871, was the first mountain rack railway in Europe."
+  },
+  {
+    "alias": "peak:rochers-de-naye",
+    "id": "peak:rochers-de-naye.0ec5e6d64f",
+    "title": "Rochers de Naye",
+    "fact": "At 2042 m, the Rochers de Naye stand high above Montreux and Lake Geneva. A rack railway has climbed to the summit from Montreux via Glion since 1892."
+  },
+  {
+    "alias": "peak:santis",
+    "id": "peak:santis.0833d21b36",
+    "title": "Säntis",
+    "fact": "At 2502 m, the Säntis is the highest peak of the Alpstein massif in north-eastern Switzerland. A weather station has stood on its summit since 1882, and a cable car climbs to it from the Schwägalp."
+  },
+  {
+    "alias": "peak:titlis",
+    "id": "peak:titlis.f42cb64d6c",
+    "title": "Titlis",
+    "fact": "The glaciated 3238 m Titlis rises above Engelberg. In 1992 its Rotair became the first revolving cable car in the world, turning a full circle on the way up to the Klein Titlis station."
+  },
+  {
+    "alias": "station:jungfraujoch",
+    "id": "station:jungfraujoch.7ad4ec8548",
+    "title": "Jungfraujoch",
+    "fact": "At 3454 m, Jungfraujoch is the highest railway station in Europe. The Jungfrau Railway reached it in 1912 through a tunnel bored inside the Eiger and the Mönch."
+  },
+  {
+    "alias": "tower:uetliberg",
+    "id": "tower:uetliberg.ea0080b47b",
+    "title": "Uetliberg lookout tower",
+    "fact": "The lookout tower stands on Uto Kulm, the 870 m summit of the Uetliberg, Zurich's own mountain. The Uetliberg railway climbs here from Zurich main station, and the platform looks over the city, Lake Zurich and the Alps."
+  },
+  {
+    "alias": "waterfall:rheinfall",
+    "id": "waterfall:rheinfall.796b2a2e15",
+    "title": "Rhine Falls",
+    "fact": "At Neuhausen near Schaffhausen, the Rhine drops about 23 m over a 150 m wide rock step. By the volume of water it carries, it is the largest plain waterfall in Europe, and boats take visitors to the rock in its middle."
+  },
+  {
+    "alias": "waterfall:staubbachfall",
+    "id": "waterfall:staubbachfall.9312c5b7f5",
+    "title": "Staubbach Falls",
+    "fact": "The Staubbach drops almost 300 m over a cliff into the village of Lauterbrunnen, turning to spray on the way down. Goethe wrote his poem 'Song of the Spirits over the Waters' after seeing it in 1779."
+  }
+]

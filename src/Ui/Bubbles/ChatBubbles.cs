@@ -26,6 +26,13 @@ public partial class ChatBubbles : CanvasLayer
     public const float Range = 36f;
     private const int Max = 8;
 
+    /// <summary>
+    /// How fast a bubble's body and its tail's end catch up with where the layout puts them, per
+    /// second (#1140): snapped every frame, a head's jitter on screen (interpolation, camera shake,
+    /// a stride) and a layout flipping between two spots shook the tail.
+    /// </summary>
+    private const float BodyEase = 8f, TipEase = 18f;
+
     private readonly ChatManager _chat;
     private readonly Func<long, FootPlayer?> _speaker;
     private readonly List<Entry> _entries = new();
@@ -41,6 +48,9 @@ public partial class ChatBubbles : CanvasLayer
         public BubbleShape Shape;
         public double Born, Seconds;
         public SpeechBubble View = null!;
+        // flat screen: where the body and the tail's end are drawn, eased toward the layout's (#1140)
+        public Vector2 At, Tip;
+        public bool Placed;
         // VR: the bubble's own 2D viewport on a billboard
         public SubViewport? Port;
         public Sprite3D? Sprite;
@@ -222,7 +232,7 @@ public partial class ChatBubbles : CanvasLayer
                 continue;
             }
             var at = camera.UnprojectPosition(head);
-            if (!near || !frame.HasPoint(at) || n >= Max) { e.View.Visible = false; continue; }
+            if (!near || !frame.HasPoint(at) || n >= Max) { e.View.Visible = false; e.Placed = false; continue; }
             e.View.Visible = true;
             _on[n] = e;
             _wants[n] = new BubbleWant(at, e.View.Size);
@@ -230,13 +240,17 @@ public partial class ChatBubbles : CanvasLayer
         }
         if (n == 0) return;
         float h = frame.Size.Y;
+        float bodyK = 1f - Mathf.Exp(-BodyEase * (float)delta), tipK = 1f - Mathf.Exp(-TipEase * (float)delta);
         BubbleLayout.Place(_wants.AsSpan(0, n), frame, h * 0.02f, h * 0.01f, h * 0.05f, _placed);
         for (int k = 0; k < n; k++)
         {
             var e = _on[k]!;
             var place = _placed[k];
-            e.View.Position = place.Body.Position;
-            e.View.Point(place.Tip - place.Body.Position);
+            // the first frame on screen where the layout says, then eased there
+            if (!e.Placed) { e.At = place.Body.Position; e.Tip = place.Tip; e.Placed = true; }
+            else { e.At = e.At.Lerp(place.Body.Position, bodyK); e.Tip = e.Tip.Lerp(place.Tip, tipK); }
+            e.View.Position = e.At;
+            e.View.Point(e.Tip - e.At);
             int z = -Mathf.Min(1000, (int)(place.Reach / 4f));
             if (e.View.ZIndex != z) e.View.ZIndex = z;
             double age = now - e.Born;

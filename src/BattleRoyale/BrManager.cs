@@ -258,6 +258,8 @@ public partial class BrManager : Node
     {
         if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return _state.Running ? "A match is running; wait for the next lobby." : "No lobby is open.";
         if (_state.Find(peer) != null) return "You are already in.";
+        // another mode's round (#1268, Core/Rounds): one game at a time
+        if (Rounds.All.Any(m => m.Name != "br" && m.InRound(peer))) return "You are in another game; leave it first.";
         // a party plays as a team unless its members pick one with /br team (#840)
         _state.Entrants.Add(new BrEntrant { Peer = peer, Name = _chat?.NameOfPeer(peer) ?? peer.ToString(), Party = Parties.Server?.Of(peer)?.TeamName ?? "" });
         _chat?.Invites?.Dismiss(InviteId, _state.Seed, peer);
@@ -918,6 +920,12 @@ public partial class BrManager : Node
 
     /// <summary>Server: <paramref name="peer"/> is alive in a running match (no teleporting out of it).</summary>
     public bool Playing(long peer) => _state.Phase == BrPhase.Playing && _state.Find(peer) is { Alive: true };
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> is an entrant of a lobby or a match, alive or out, until the round ends
+    /// (<see cref="Finish"/>). The Adventure layer is off for it then (#1223).
+    /// </summary>
+    public bool InRound(long peer) => _state.Phase != BrPhase.Idle && _state.Find(peer) != null;
 
     /// <summary>Server: a peer left the game. Out of the lobby, or out of the match.</summary>
     public void PeerLeft(long peer)

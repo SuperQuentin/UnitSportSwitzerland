@@ -30,7 +30,7 @@ public partial class FootPlayer
     public bool InAura => AuraPose != 0;
 
     /// <summary>In a fist fight or an aura battle (on every peer): no items, emotes or interactions.</summary>
-    public bool InDuel => FightPose != 0 || AuraPose != 0;
+    public bool InDuel => FightPose != 0 || AuraPose != 0 || SchwingPose != 0;
 
     /// <summary>How far the slow walk steps towards the rival.</summary>
     private const float AuraWalkReach = 1.2f;

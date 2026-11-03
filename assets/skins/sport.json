@@ -1,0 +1,37 @@
+{
+  "about": "Low-poly Sport (#1135): the default menu look. Dark faceted ground, slanted controls, sky blue and an orange dash. A new skin is a copy of this file with its own id (docs/notes/ui/menu-skins.md).",
+  "id": "sport",
+  "name": "Low-poly Sport",
+  "night": true,
+  "font": "saira",
+  "colors": {
+    "ground": "#0B1220",
+    "card": "#141E2EF2",
+    "cardEdge": "#26364D",
+    "controlEdge": "#00000000",
+    "ink": "#F2F6FA",
+    "inkDim": "#9AABBC",
+    "inkFaint": "#8394A8",
+    "accent": "#4FD1FF",
+    "onAccent": "#0B1220",
+    "accent2": "#FF7A3D",
+    "control": "#1B2635",
+    "controlHover": "#243248",
+    "controlPressed": "#2C3D58",
+    "good": "#5BE39B",
+    "warn": "#FFB547",
+    "bad": "#FF7A7A",
+    "hairline": "#FFFFFF14",
+    "shadow": "#00000080"
+  },
+  "shape": {
+    "radius": 4, "controlRadius": 0,
+    "outline": 0, "controlOutline": 0,
+    "shadowX": 0, "shadowY": 0, "shadowSize": 26,
+    "controlShadow": false,
+    "hoverScale": 0, "hoverTilt": 0,
+    "skew": 0.22,
+    "menuFill": true,
+    "displayUppercase": true
+  }
+}

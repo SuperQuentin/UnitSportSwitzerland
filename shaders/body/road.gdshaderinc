@@ -60,7 +60,8 @@ void vertex() {
     local_vertex = VERTEX;
     surf = UV;
     style = UV2.x;
-    vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+    // the Earth's drop first (#187), then the lift toward the eye from where it is drawn
+    vec4 view = CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos);
     float dist = length(view.xyz);
     float lift = clamp((dist - far_lift_start) * far_lift_rate, 0.0, far_lift_max);
     view.xyz *= 1.0 - lift / max(dist, 1.0) - road_depth_bias;
@@ -71,9 +72,11 @@ void vertex() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
+#endif
     vec3 col = COLOR.rgb;
     int s = int(style + 0.5);
     if (s == 8 && !FRONT_FACING) {
@@ -100,9 +103,11 @@ void fragment() {
         // of aliasing into broken dots. Triangle paint has a constant lat, so it always draws.
         // Anti-aliasing, not the PS1 finish: it keeps the dither in every style.
         float px = 2.0 / max(fwidth(lat), 1e-4);
+#ifndef NO_DISCARD
         if (clamp(px - 0.5, 0.0, 1.0) < bayer4(FRAGCOORD.xy) + 0.5 / 16.0) {
             discard;
         }
+#endif
     } else if (s == 4) {
         // sleepers across the ballast, roughly prototypical 0.65 m spacing
         if (fract(along / 0.65) < 0.45) {
@@ -130,7 +135,9 @@ void fragment() {
 
     // Snow (a running occasion): carriageways are ploughed, so it lies only along the edges;
     // ballast holds it between the sleepers.
+#ifndef LITE_NO_OCCASION
     col = occasion_snow_amount(col, s == 4 ? 0.65 : s == 6 ? 0.3 : smoothstep(0.7, 1.0, abs(lat)) * 0.85 + 0.08);
+#endif
 
     // a road under a ski slope (#887) is the run in winter: the slope's snow over it, paint and
     // all; the signals' poles and heads (7, 8) stand out of it
@@ -147,7 +154,10 @@ void fragment() {
         n = -n;
     }
     // valley mist of a running occasion; a no-op on an ordinary day
-    col = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
+#ifndef LITE_NO_OCCASION
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+#endif
+    col = style_grade(col);
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
 #ifdef STYLE_REAL
@@ -155,7 +165,9 @@ void fragment() {
 #else
     ROUGHNESS = rough;
 #endif
+#ifndef LITE_NO_EMISSION
     EMISSION = col * door_light(world_pos, vec3(0.0, 1.0, 0.0));
+#endif
 #else
     // under a slope the road is lit as the terrain's snow round it is (terrain.gdshaderinc), or it
     // shows as a brighter ribbon through the run

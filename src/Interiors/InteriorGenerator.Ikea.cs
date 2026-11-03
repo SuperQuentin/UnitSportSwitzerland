@@ -25,7 +25,7 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Bumped when these rules change, so stored stores are planned again.</summary>
-    public const int IkeaRules = 1;
+    public const int IkeaRules = 2;
 
     /// <summary>A bin is about a metre square and knee-to-waist high; the sharks heap above it.</summary>
     private const float BinSize = 1.15f, BinHeight = 0.72f;
@@ -39,6 +39,9 @@ public static partial class InteriorGenerator
     /// want that budget for the room sets.
     /// </summary>
     private const int MaxBins = 120;
+
+    /// <summary>The strip of toilets along the back wall (#1285), and their headroom: a low block under the hall's roof.</summary>
+    private const float ToiletStrip = 3.4f, ToiletClear = 2.8f;
 
     /// <summary>
     /// Plans the inside of a store. False when the solid is too small to lay a hall out in, which
@@ -58,8 +61,25 @@ public static partial class InteriorGenerator
         l.Floors.Add(floor);
 
         float hw = w / 2, hd = d / 2;
-        var hall = new RoomPlan { X0 = -hw, Z0 = -hd, X1 = hw, Z1 = hd, Type = RoomType.IkeaMarket };
+        // the public toilets (#1285) along the back wall, a low block under the hall's roof, the stock room beside them
+        float back = d >= HallMin + ToiletStrip ? ToiletStrip : d >= HallMin + ToiletSizing.SingleD ? ToiletSizing.SingleD : 0;
+        var hall = new RoomPlan { X0 = -hw, Z0 = -hd, X1 = hw, Z1 = hd - back, Type = RoomType.IkeaMarket };
         floor.Rooms.Add(hall);
+        l.InnerDoors.Clear();
+        if (back > 0)
+        {
+            // a store's toilets serve a few hundred shoppers at a time [E]
+            var (_, left) = PublicToilets(l, floor, 0, new RectPlan(-hw, hd - back, hw, hd), Side.Front, (l.EntryX, hd), 400,
+                Math.Min(ToiletClear, l.ClearOf(hall)));
+            if (left != null)
+            {
+                var stock = new RoomPlan { Type = RoomType.Storage };
+                SetRect(stock, left);
+                floor.Rooms.Add(stock);
+                Opening(floor.Rooms, floor.Rooms.Count - 1, Side.Front, 0, (left.X0 + left.X1) / 2, 2.4f,
+                    Math.Min(3.0f, l.ClearOf(stock) - 0.3f), OpeningKind.Door);
+            }
+        }
 
         // the entrance: a store's is a wall of glass, so as wide as the shell will give, and tall
         l.EntryWidth = Math.Min(Math.Max(l.DoorWidth, 3.2f), w - 1.2f);
@@ -80,6 +100,15 @@ public static partial class InteriorGenerator
         // big-box store is — the hall is lit by its own high bays, which RoomLights gives any room
         // with no window.
         return true;
+    }
+
+    /// <summary>A store of a given size, planned and furnished, for the probe (#1285: its toilets by the slab's size).</summary>
+    internal static InteriorLayout? IkeaOfSize(float w, float d)
+    {
+        var l = new InteriorLayout { Key = $"ikea-{w}x{d}", Kind = BuildingKind.Commercial, Width = w, Depth = d, StoreyHeight = 6f, DoorWidth = 4f, DoorHeight = 3f };
+        if (!TryIkea(l, 3f)) return null;
+        Furnish(l, new Random(1));
+        return l;
     }
 
     /// <summary>

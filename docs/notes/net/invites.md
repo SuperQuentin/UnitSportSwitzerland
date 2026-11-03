@@ -25,6 +25,8 @@
 - **Client**: `InviteService.Client` keeps `Incoming` and `Sent` (`InviteView`: id, kind, peer and name,
   title, detail, `Until` on `GameClock`), raises `Changed` and `Arrived`; `Accept(id)`, `Decline(id)`,
   `Withdraw(id)` go to the server by RPC. `From(peer, kind)` is what the fight prompt reads.
+  `Resolved(kind, name, outcome)` (accepted, declined, lapsed) tells the sender of a direct invite how it ended
+  (protocol 55, #1253): the phone's Contacts result line.
 - **Bots** are never offered one (a negative id in `RpcId` means "every peer but that one"); they join
   activities through each activity's own server method.
 

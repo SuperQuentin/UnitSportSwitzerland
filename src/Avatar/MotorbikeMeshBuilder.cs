@@ -737,8 +737,8 @@ public partial class Motorcyclist : Node3D
     private void Assemble(HumanPalette? rider)
     {
         var k = _look;
-        // a dressed rider (#251) is a mesh of their own, in the figure shader, rebuilt while a skirt
-        // blows; the plain one stays baked into the bike's single body mesh
+        // a dressed rider (#251) is a skinned figure of their own (#1202), in the figure shader, posed
+        // while a skirt blows; the plain one stays baked into the bike's single body mesh
         bool dressed = rider is { Outfit.IsEmpty: false };
         // any rider has a face only the figure shader draws (#394)
         Material material = rider != null ? HumanMeshBuilder.FigureMaterial() : HumanMeshBuilder.Material();
@@ -753,7 +753,9 @@ public partial class Motorcyclist : Node3D
         if (dressed)
         {
             _rider = rider;
-            _riderMesh = new MeshInstance3D { Name = "Rider", Mesh = BuildRider(rider!), MaterialOverride = material };
+            _riderMesh = new SkinnedFigure { Name = "Rider", MaterialOverride = material };
+            _riderMesh.Show(new FigureLook(rider!, FullFace: true));
+            HumanMeshBuilder.PoseRider(_riderMesh, k.Seat, k.Grip, k.Peg);
             _frame.AddChild(_riderMesh);
         }
 
@@ -772,22 +774,33 @@ public partial class Motorcyclist : Node3D
     private Node3D _frame = null!;
 
     private HumanPalette? _rider;
-    private MeshInstance3D? _riderMesh;
+    private SkinnedFigure? _riderMesh;
     private readonly FigureWind _wind = new();
-
-    private ArrayMesh BuildRider(HumanPalette rider)
-    {
-        var s = new MeshScratch();
-        HumanMeshBuilder.AppendRider(s, rider, _look.Seat, _look.Grip, _look.Peg);
-        return s.Build();
-    }
+    private Vector3 _windKey = new(float.NaN, 0, 0);
+    private bool _riderSmooth = HumanMeshBuilder.SmoothFigures;
 
     public override void _Process(double delta)
     {
         if (_steer == null) return;
-        // the ride's wind in a skirt: measured from the bike's own motion, so remote copies blow too
-        if (_rider is { } r && _riderMesh != null && HumanMeshBuilder.Flutters(r.Outfit))
-            _riderMesh.Mesh = BuildRider(r with { Wind = _wind.Update(_riderMesh, (float)delta) });
+        if (_rider is { } r && _riderMesh != null)
+        {
+            // a restyle to or from a lit style (#311) is a new look
+            if (_riderSmooth != HumanMeshBuilder.SmoothFigures)
+            {
+                _riderSmooth = HumanMeshBuilder.SmoothFigures;
+                _riderMesh.Show(new FigureLook(r, FullFace: true));
+                _windKey = new Vector3(float.NaN, 0, 0);
+            }
+            // the ride's wind in a skirt: measured from the bike's own motion, so remote copies blow too;
+            // the skirt's bones posed when it moves by a cm/s
+            var wind = HumanMeshBuilder.Flutters(r.Outfit) ? _wind.Update(_riderMesh, (float)delta) : Vector3.Zero;
+            var key = (wind * 100f).Round();
+            if (key != _windKey)
+            {
+                _windKey = key;
+                HumanMeshBuilder.PoseRider(_riderMesh, _look.Seat, _look.Grip, _look.Peg, wind);
+            }
+        }
         _steer.Basis = new Basis(_steerAxis, SteerAngle);
         // + lifts the front (−Z) about the rear contact
         _pivot.Rotation = new Vector3(Pitch, 0, 0);

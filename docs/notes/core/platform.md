@@ -6,7 +6,9 @@
 ## Rule
 
 - Ask `Core/Platform`, never `OS.GetName()` at a call site:
-  - `Platform.IsMobile`: Android or iOS, **or a desktop run with `--mobile`**. Use it for what the phone UI looks like (no Wheel tab, touch controls, mobile defaults).
+  - `Platform.IsMobile`: Android or iOS, **or a desktop run with `--mobile`**. Use it for what such a device cannot do or afford (no Wheel tab, mobile defaults, smaller caches).
+  - `Platform.IsTouch`: mobile and not a standalone headset. Use it for what only a touch screen wants: the touch overlay, finger-sized menus, touch rows in Settings.
+  - `Platform.IsStandaloneVr`: the Meta Quest app (#1112, `xr/quest-standalone`): mobile, always in VR, no touch.
   - `Platform.CanSpawnProcesses`: false on a phone. Use it for anything that starts another process: hosting (`HostedServer`), the Realistic+ relaunch (`RendererRelaunch`), the VR relaunch (`XrSession`), ffmpeg (`VideoExporter`) and personal CD burns (yt-dlp + ffmpeg in `CdBurner`).
 - `--mobile` exists to check the phone UI on desktop without a phone. It also turns off what a phone cannot do, so a desktop `--mobile` run has no Host card, no VR and no Realistic+. It **does not** move the terrain to app storage (`TerrainPaths` keys that on `OS.GetName() == "Android"`), so a `--mobile` run still reads the local tiles.
 

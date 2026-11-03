@@ -1,0 +1,541 @@
+<!doctype html>
+<!-- Served at /admin.html by Caddy on a deployed server (#1207, docs/plans/web-dashboard.md). The admin dashboard: the
+     Users tab manages the Nakama accounts through the module's admin RPCs, which check the caller is in the "admins" group
+     (this page only hides what a non-admin cannot do). Server and Console (#1211) talk to the game server's admin API at
+     /server-api/ (Net/AdminApi), which checks the same Nakama token. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UnitSport Dashboard</title>
+<meta name="robots" content="noindex">
+<style>
+:root {
+  --bg: #120c14; --bg2: #1a121c; --text: #fbf4ee; --muted: #c2b3b0; --dim: #8d7e80;
+  --glow: #ff7a45; --glow2: #ffb36b; --rose: #e0567a; --ok: #4fe08a;
+  --glass: rgba(26, 16, 26, .55); --line: rgba(255, 220, 200, .14);
+  --radius: 16px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--glow2); }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--text); text-decoration: none; font-size: 17px; }
+.brand i { display: inline-flex; width: 30px; height: 30px; border-radius: 9px; align-items: center; justify-content: center;
+  background: var(--rose); }
+.brand small { font-weight: 600; color: var(--dim); }
+header .grow { flex: 1; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 40px) 64px; display: flex; flex-direction: column; gap: 18px; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tabs button { font: 600 14px system-ui, sans-serif; color: var(--muted); background: none; border: 1px solid var(--line);
+  border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+.tabs button[aria-selected=true] { background: var(--glow); color: #1a0d10; border-color: transparent; }
+.tabs button[disabled] { opacity: .45; cursor: default; }
+.panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.gate { text-align: center; padding: 48px 20px; color: var(--muted); }
+.gate button { margin-top: 12px; font: 700 15px system-ui, sans-serif; padding: 10px 20px; border-radius: 999px; border: none;
+  background: var(--glow); color: #1a0d10; cursor: pointer; }
+.users { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .users { grid-template-columns: minmax(0, 1fr); } }
+.search { display: flex; gap: 10px; margin-bottom: 14px; }
+.search input { flex: 1; min-width: 0; font: 400 15px system-ui, sans-serif; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--text); }
+.search input:focus { outline: 2px solid var(--glow); outline-offset: 1px; }
+.table { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 600; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px; }
+td { padding: 9px 8px; border-top: 1px solid var(--line); white-space: nowrap; }
+td.mail { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+tbody tr { cursor: pointer; }
+tbody tr:hover, tbody tr[aria-selected=true] { background: rgba(255, 122, 69, .08); }
+tbody tr:focus-visible { outline: 2px solid var(--glow); outline-offset: -2px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 4px; }
+.pill.admin { background: rgba(255, 179, 107, .18); color: var(--glow2); }
+.pill.banned { background: rgba(224, 86, 122, .2); color: var(--rose); }
+.empty { color: var(--dim); padding: 18px 8px; }
+.detail h2 { margin: 0 0 4px; font-size: 22px; overflow-wrap: anywhere; }
+.detail dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 14px 0; font-size: 14px; }
+.detail dt { color: var(--dim); }
+.detail dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions button { font: 600 14px system-ui, sans-serif; padding: 9px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--text); }
+.actions button.danger { border-color: rgba(224, 86, 122, .6); color: var(--rose); }
+.actions button.confirm { background: var(--rose); color: #1a0d10; border-color: transparent; }
+.actions button[disabled] { opacity: .5; cursor: default; }
+.note { color: var(--dim); font-size: 13px; }
+.err { color: var(--rose); font-size: 13px; min-height: 1em; margin-top: 10px; }
+/* server and console (#1211) */
+.server { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.server .wide { grid-column: 1 / -1; }
+@media (max-width: 860px) { .server { grid-template-columns: minmax(0, 1fr); } }
+.panel h3 { margin: 0 0 12px; font-size: 13px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0 0 14px; font-size: 14px; }
+.kv dt { color: var(--dim); }
+.kv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.live.on i { background: var(--ok); }
+.setting { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.setting:first-of-type { border-top: none; padding-top: 0; }
+.setting .now { font-size: 14px; color: var(--text); }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.controls input, .controls select { font: 400 14px system-ui, sans-serif; padding: 7px 10px; border-radius: 10px; min-width: 0;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--text); }
+.controls select option { background: var(--bg2); }
+.controls input:focus, .controls select:focus { outline: 2px solid var(--glow); outline-offset: 1px; }
+.controls input.grow { flex: 1; }
+.controls button { font: 600 13px system-ui, sans-serif; padding: 7px 13px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--text); }
+.controls button.go { background: var(--glow); color: #1a0d10; border-color: transparent; }
+.controls button.danger { border-color: rgba(224, 86, 122, .6); color: var(--rose); }
+.controls button.confirm { background: var(--rose); color: #1a0d10; border-color: transparent; }
+.controls button[disabled] { opacity: .5; cursor: default; }
+.said { font-size: 13px; color: var(--glow2); min-height: 1em; overflow-wrap: anywhere; }
+td.num { font-variant-numeric: tabular-nums; color: var(--muted); }
+td.act { text-align: right; }
+td.act button { font: 600 12px system-ui, sans-serif; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(224, 86, 122, .6); background: none; color: var(--rose); }
+td.act button.confirm { background: var(--rose); color: #1a0d10; }
+.log { background: #0b070c; border: 1px solid var(--line); border-radius: 12px; height: min(62vh, 640px); overflow: auto;
+  padding: 12px 14px; font: 12.5px/1.55 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log div { color: #d9cfc9; }
+.log .err { color: var(--rose); }
+.log .warn { color: var(--glow2); }
+.log .admin { color: var(--ok); }
+.log .you { color: var(--glow); }
+.log .reply { color: var(--glow2); padding-left: 1.5em; }
+.cmd { display: flex; gap: 8px; margin-top: 12px; }
+.cmd span { align-self: center; font: 700 15px ui-monospace, monospace; color: var(--glow); }
+.cmd input { flex: 1; min-width: 0; font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--text); }
+.cmd input:focus { outline: 2px solid var(--glow); outline-offset: 1px; }
+.cmd button { font: 700 14px system-ui, sans-serif; padding: 0 18px; border-radius: 999px; border: none; background: var(--glow); color: #1a0d10; cursor: pointer; }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="./"><i><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true"><path d="M13 4h6v9h9v6h-9v9h-6v-9H4v-6h9z" fill="#fff"/></svg></i>UnitSport <small>Dashboard</small></a>
+  <div class="grow"></div>
+  <div data-account></div>
+</header>
+<main>
+  <div class="tabs" role="tablist" aria-label="Dashboard">
+    <button role="tab" id="tab-users" aria-selected="true" aria-controls="view-users">Users</button>
+    <button role="tab" id="tab-server" aria-selected="false" aria-controls="view-server">Server</button>
+    <button role="tab" id="tab-console" aria-selected="false" aria-controls="view-console">Console</button>
+  </div>
+
+  <section id="gate" class="panel gate" hidden></section>
+
+  <section id="view-users" role="tabpanel" aria-labelledby="tab-users" hidden>
+    <div class="users">
+      <div class="panel">
+        <form class="search" id="search" role="search">
+          <label for="q" class="note" style="align-self:center">Find</label>
+          <input id="q" name="q" type="search" placeholder="A name or an email" autocomplete="off">
+        </form>
+        <div class="table">
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Status</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="err" id="list-err" role="alert"></div>
+      </div>
+      <div class="panel detail" id="detail">
+        <p class="note">Pick an account to see it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-server" role="tabpanel" aria-labelledby="tab-server" hidden>
+    <div class="err" id="server-err" role="alert"></div>
+    <div class="server">
+      <div class="panel">
+        <div class="bar"><h3 style="margin:0">Server</h3><span class="live" id="live"><i></i><span>connecting</span></span></div>
+        <dl class="kv" id="facts"></dl>
+        <div class="setting">
+          <div class="controls">
+            <button type="button" id="update">Update to the newest release</button>
+          </div>
+          <div class="controls">
+            <label class="note" for="restart-in">Restart</label>
+            <select id="restart-in"><option value="0">now</option><option value="1">in 1 minute</option><option value="5" selected>in 5 minutes</option><option value="10">in 10 minutes</option></select>
+            <button type="button" class="danger" id="restart">Restart</button>
+          </div>
+          <div class="said" id="server-said" role="status"></div>
+          <p class="note" style="margin:0">Players are warned in the chat. A restart keeps the build; an update installs the newest release, then restarts.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>The world now</h3>
+        <div class="setting">
+          <div class="now" id="now-time"></div>
+          <div class="controls">
+            <select id="time-at" aria-label="Time of day"><option>sunrise</option><option>day</option><option>noon</option><option>sunset</option><option>night</option><option>midnight</option></select>
+            <button type="button" data-cmd="time set {time-at}">Set</button>
+            <span class="note">or</span>
+            <input id="time-hm" size="5" placeholder="14:30" aria-label="Time as hh:mm">
+            <button type="button" data-cmd="time set {time-hm}">Set</button>
+          </div>
+          <div class="controls">
+            <label class="note" for="time-speed">A day lasts</label>
+            <input id="time-speed" size="4" placeholder="24" inputmode="numeric">
+            <span class="note">minutes (0 stops the clock)</span>
+            <button type="button" data-cmd="time speed {time-speed}">Set</button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="now" id="now-weather"></div>
+          <div class="controls">
+            <button type="button" data-cmd="weather clear">Clear</button>
+            <button type="button" data-cmd="weather cloudy">Cloudy</button>
+            <button type="button" data-cmd="weather reroll">Reroll</button>
+            <button type="button" data-cmd="weather auto">Back to real</button>
+            <input id="snow-cm" size="4" placeholder="40" inputmode="numeric" aria-label="Snow depth in cm">
+            <button type="button" data-cmd="weather snow {snow-cm}">Snow cm</button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="now" id="now-sea"></div>
+          <div class="controls">
+            <button type="button" data-cmd="seastate calm">Calm</button>
+            <button type="button" data-cmd="seastate chop">Chop</button>
+            <button type="button" data-cmd="seastate storm">Storm</button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="now" id="now-speed"></div>
+          <div class="controls">
+            <button type="button" data-cmd="speed normal">Normal</button>
+            <button type="button" data-cmd="speed 2">x2</button>
+            <button type="button" data-cmd="speed 0.5">x0.5</button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="controls">
+            <input id="say" class="grow" maxlength="200" placeholder="A message to everyone" aria-label="Message to everyone">
+            <button type="button" class="go" data-cmd="say {say}">Say</button>
+          </div>
+          <div class="said" id="world-said" role="status"></div>
+        </div>
+      </div>
+
+      <div class="panel wide">
+        <h3>Players online</h3>
+        <div class="table">
+          <table>
+            <thead><tr><th>Name</th><th>Account</th><th>Ping</th><th>Where (LV95)</th><th></th></tr></thead>
+            <tbody id="players"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel wide">
+        <h3>Startup arguments</h3>
+        <p class="note" style="margin-top:0">Added to the server's command line on the next restart, before the deploy's own, so they win:
+          <code>--server-name</code>, <code>--accounts off|optional|required</code>, <code>--spawn E,N</code>, <code>--no-teleport</code>...</p>
+        <form class="controls" id="startup">
+          <input id="startup-args" class="grow" maxlength="1000" placeholder="--server-name Alps --accounts optional" aria-label="Startup arguments" autocomplete="off" spellcheck="false">
+          <button type="submit" class="go" id="startup-save">Save</button>
+        </form>
+        <div class="said" id="startup-said" role="status"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-console" role="tabpanel" aria-labelledby="tab-console" class="panel" hidden>
+    <div class="bar">
+      <span class="note">The server's log, live. Commands run with operator rights and are logged with your name; <code>help</code> lists them.</span>
+      <label class="live"><input type="checkbox" id="follow" checked> follow</label>
+    </div>
+    <div class="log" id="log" role="log" aria-live="off" tabindex="0"></div>
+    <form class="cmd" id="cmd">
+      <span aria-hidden="true">/</span>
+      <input id="cmd-line" maxlength="400" placeholder="who, say hello, time set noon, kick Name reason..." aria-label="Command" autocomplete="off" spellcheck="false">
+      <button type="submit">Run</button>
+    </form>
+    <div class="err" id="console-err" role="alert"></div>
+  </section>
+</main>
+<script src="account.js"></script>
+<script>
+(function () {
+  "use strict";
+  var A = window.UnitSportAccount;
+  var gate = document.getElementById("gate");
+  var views = { users: document.getElementById("view-users"), server: document.getElementById("view-server"), console: document.getElementById("view-console") };
+  var tabs = { users: document.getElementById("tab-users"), server: document.getElementById("tab-server"), console: document.getElementById("tab-console") };
+  var tab = "users", selected = null;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function day(v) {
+    if (v == null || v === "") return "";
+    var d = typeof v === "number" ? new Date(v * 1000) : new Date(v);
+    return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+  }
+
+  function show() {
+    var me = A.me();
+    Object.keys(views).forEach(function (k) { views[k].hidden = true; tabs[k].setAttribute("aria-selected", k === tab ? "true" : "false"); });
+    if (!me || !me.admin) {
+      gate.hidden = false; gate.textContent = "";
+      gate.appendChild(el("p", null, me ? "This dashboard is for admins. Your account " + me.username + " is not one." : "Sign in with an admin account to use the dashboard."));
+      if (!me) { var b = el("button", null, "Sign in"); b.type = "button"; b.addEventListener("click", function () { A.open("in"); }); gate.appendChild(b); }
+      return;
+    }
+    gate.hidden = true;
+    views[tab].hidden = false;
+    if (tab === "users" && !views.users.dataset.loaded) { views.users.dataset.loaded = "1"; search(""); }
+  }
+  Object.keys(tabs).forEach(function (k) { tabs[k].addEventListener("click", function () { tab = k; show(); }); });
+
+  // ---- users --------------------------------------------------------------------------------------------------------
+  var rows = document.getElementById("rows"), listErr = document.getElementById("list-err"), detail = document.getElementById("detail");
+  var q = document.getElementById("q"), timer = 0;
+  q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { search(q.value); }, 250); });
+  document.getElementById("search").addEventListener("submit", function (ev) { ev.preventDefault(); search(q.value); });
+
+  function search(text) {
+    listErr.textContent = "";
+    A.rpc("admin_users", { q: text }).then(function (r) {
+      rows.textContent = "";
+      if (!r.users.length) { var tr = el("tr"); var td = el("td", "empty", "No account matches."); td.colSpan = 4; tr.appendChild(td); rows.appendChild(tr); return; }
+      r.users.forEach(function (u) {
+        var tr = el("tr"); tr.tabIndex = 0; tr.setAttribute("aria-selected", selected === u.id ? "true" : "false");
+        tr.appendChild(el("td", null, u.username));
+        tr.appendChild(el("td", "mail", u.email || "(no email: a game account)"));
+        tr.appendChild(el("td", null, day(u.created)));
+        var st = el("td"); if (u.banned) st.appendChild(el("span", "pill banned", "banned")); tr.appendChild(st);
+        function pick() { selected = u.id; rows.querySelectorAll("tr").forEach(function (x) { x.setAttribute("aria-selected", "false"); }); tr.setAttribute("aria-selected", "true"); open(u.id); }
+        tr.addEventListener("click", pick);
+        tr.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+        rows.appendChild(tr);
+      });
+    }, function (e) { listErr.textContent = e.message; });
+  }
+
+  function open(id) {
+    detail.textContent = "";
+    detail.appendChild(el("p", "note", "Loading..."));
+    A.rpc("admin_user", { id: id }).then(function (u) { draw(u); }, function (e) { detail.textContent = ""; detail.appendChild(el("p", "err", e.message)); });
+  }
+
+  function draw(u) {
+    var me = A.me();
+    detail.textContent = "";
+    detail.appendChild(el("h2", null, u.username));
+    var badges = el("div"); if (u.admin) badges.appendChild(el("span", "pill admin", "admin")); if (u.banned) badges.appendChild(el("span", "pill banned", "banned"));
+    detail.appendChild(badges);
+    var dl = el("dl");
+    [["Email", u.email || "none (a game account)"], ["Joined", day(u.created)], ["Last change", day(u.updated)], ["Devices", String(u.devices)], ["Id", u.id]]
+      .forEach(function (p) { dl.appendChild(el("dt", null, p[0])); dl.appendChild(el("dd", null, p[1])); });
+    detail.appendChild(dl);
+    var actions = el("div", "actions"), err = el("div", "err"); err.setAttribute("role", "alert");
+    var self = me && me.id === u.id;
+
+    var adminBtn = el("button", null, u.admin ? "Remove admin" : "Make admin"); adminBtn.type = "button";
+    if (self && u.admin) { adminBtn.disabled = true; adminBtn.title = "You cannot remove your own admin rights"; }
+    adminBtn.addEventListener("click", function () { act(adminBtn, err, "admin_set_admin", { id: u.id, admin: !u.admin }, u.id); });
+    actions.appendChild(adminBtn);
+
+    // a ban asks once more on the button itself (the page never uses browser dialogs)
+    var banBtn = el("button", u.banned ? null : "danger", u.banned ? "Unban" : "Ban"); banBtn.type = "button";
+    if (self) { banBtn.disabled = true; banBtn.title = "You cannot ban yourself"; }
+    banBtn.addEventListener("click", function () {
+      if (!u.banned && !banBtn.classList.contains("confirm")) { banBtn.classList.add("confirm"); banBtn.textContent = "Ban " + u.username + "? Click again"; return; }
+      act(banBtn, err, "admin_ban", { id: u.id, ban: !u.banned }, u.id);
+    });
+    actions.appendChild(banBtn);
+    detail.appendChild(actions);
+    detail.appendChild(el("p", "note", u.banned ? "Banned: cannot sign in, and servers that check accounts refuse it." :
+      "A ban ends the account's sessions; it cannot sign in until unbanned."));
+    detail.appendChild(err);
+  }
+
+  function act(button, err, rpc, payload, id) {
+    button.disabled = true; err.textContent = "";
+    A.rpc(rpc, payload).then(function () { open(id); search(q.value); }, function (e) { err.textContent = e.message; button.disabled = false; });
+  }
+
+  // ---- the game server's admin API (#1211) ---------------------------------------------------------------------------
+  function api(method, path, body) {
+    // the session token, renewed first when it is about to run out
+    return A.token().then(function (token) {
+      if (!token) throw new Error("Signed out: sign in again.");
+      var headers = { Authorization: "Bearer " + token };
+      if (body) headers["Content-Type"] = "application/json";
+      return fetch("server-api" + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null; try { j = JSON.parse(t); } catch (e) { /* Caddy's own page when the game server is down */ }
+        if (r.ok && j) return j;
+        if (!j && r.status >= 500) throw new Error("The game server does not answer (stopped, restarting, or started without --admin-http).");
+        throw new Error((j && j.error) || ("The server answered " + r.status + "."));
+      });
+    });
+  }
+  function run(line) { return api("POST", "/command", { line: line }); }
+  function say(id, text) { document.getElementById(id).textContent = text; }
+
+  // ---- server -------------------------------------------------------------------------------------------------------
+  var serverErr = document.getElementById("server-err"), live = document.getElementById("live"), facts = document.getElementById("facts");
+  var players = document.getElementById("players"), serverTimer = 0;
+  function since(s) { var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? h + " h " + m + " min" : m + " min"; }
+  function state(on, text) { live.classList.toggle("on", on); live.lastElementChild.textContent = text; }
+
+  function refreshServer() {
+    clearTimeout(serverTimer);
+    if (tab !== "server" || views.server.hidden) return;
+    Promise.all([api("GET", "/status"), api("GET", "/players")]).then(function (r) {
+      var st = r[0];
+      serverErr.textContent = ""; state(true, "live");
+      facts.textContent = "";
+      [["Name", st.name || "(not set)"], ["Version", st.version || "a local build"], ["Up for", since(st.uptimeSeconds)],
+       ["Players", String(st.players)], ["Accounts", st.accounts]].forEach(function (p) {
+        facts.appendChild(el("dt", null, p[0])); facts.appendChild(el("dd", null, p[1]));
+      });
+      var up = document.getElementById("update"), rs = document.getElementById("restart");
+      up.disabled = !st.canUpdate; up.title = st.canUpdate ? "" : "Only a server started by the deploy can update itself";
+      if (!rs.classList.contains("confirm")) rs.disabled = !st.canRestart;
+      rs.title = st.canRestart ? "" : "Only a server started by the deploy's start-server.sh can restart itself";
+      say("now-time", st.time); say("now-weather", st.weather); say("now-sea", st.sea); say("now-speed", st.speed);
+      drawPlayers(r[1].players);
+    }, function (e) { serverErr.textContent = e.message; state(false, "no answer"); })
+      .then(function () { serverTimer = setTimeout(refreshServer, 5000); });
+  }
+
+  function drawPlayers(list) {
+    // a kick waiting for its second click keeps the table as it is
+    if (players.querySelector("button.confirm")) return;
+    players.textContent = "";
+    if (!list.length) { var tr = el("tr"); var td = el("td", "empty", "Nobody is playing."); td.colSpan = 5; tr.appendChild(td); players.appendChild(tr); return; }
+    list.forEach(function (p) {
+      var tr = el("tr"); tr.style.cursor = "default";
+      var name = el("td", null, p.name + " ");
+      if (p.admin) name.appendChild(el("span", "pill admin", "admin"));
+      if (p.console) name.appendChild(el("span", "pill", "console"));
+      tr.appendChild(name);
+      tr.appendChild(el("td", "mail", p.account || "offline"));
+      tr.appendChild(el("td", "num", p.console ? "" : p.pingMs + " ms"));
+      tr.appendChild(el("td", "num", p.e == null ? "" : Math.round(p.e) + " / " + Math.round(p.n)));
+      var act = el("td", "act");
+      if (!p.admin) {
+        var kick = el("button", null, "Kick"); kick.type = "button";
+        kick.addEventListener("click", function () {
+          if (!kick.classList.contains("confirm")) { kick.classList.add("confirm"); kick.textContent = "Kick " + p.name + "?"; return; }
+          kick.disabled = true; kick.classList.remove("confirm");
+          api("POST", "/kick", { peer: p.peer, reason: "kicked from the dashboard" }).then(function (r) { say("server-said", r.line); refreshServer(); },
+            function (e) { say("server-said", e.message); refreshServer(); });
+        });
+        act.appendChild(kick);
+      }
+      tr.appendChild(act);
+      players.appendChild(tr);
+    });
+  }
+
+  // a world control runs its data-cmd, each {input-id} filled from that input
+  document.querySelectorAll("#view-server [data-cmd]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var missing = false;
+      var line = b.dataset.cmd.replace(/\{([\w-]+)\}/g, function (_, id) { var v = document.getElementById(id).value.trim(); if (!v) missing = true; return v; });
+      if (missing) { say("world-said", "Fill in the box beside it first."); return; }
+      b.disabled = true;
+      run(line).then(function (r) {
+        say("world-said", r.lines.join(" ") || "Done.");
+        if (b.dataset.cmd.indexOf("{say}") >= 0) document.getElementById("say").value = "";
+        refreshServer();
+      }, function (e) { say("world-said", e.message); }).then(function () { b.disabled = false; });
+    });
+  });
+
+  document.getElementById("update").addEventListener("click", function () {
+    var b = this; b.disabled = true;
+    api("POST", "/update").then(function (r) { say("server-said", r.lines.join(" ") || "Looking for a newer release..."); },
+      function (e) { say("server-said", e.message); }).then(function () { b.disabled = false; });
+  });
+  var restart = document.getElementById("restart");
+  restart.addEventListener("click", function () {
+    var minutes = +document.getElementById("restart-in").value;
+    if (!restart.classList.contains("confirm")) { restart.classList.add("confirm"); restart.textContent = "Restart? Click again"; return; }
+    restart.classList.remove("confirm"); restart.textContent = "Restart"; restart.disabled = true;
+    api("POST", "/restart", { minutes: minutes }).then(function (r) { say("server-said", r.line); },
+      function (e) { say("server-said", e.message); restart.disabled = false; });
+  });
+
+  var startupArgs = document.getElementById("startup-args"), startupSave = document.getElementById("startup-save");
+  function loadStartup() {
+    api("GET", "/startup").then(function (r) {
+      startupArgs.value = r.args; startupArgs.disabled = startupSave.disabled = !r.available;
+      if (!r.available) say("startup-said", "This server was not started by the deploy's start-server.sh: it has no startup file.");
+    }, function (e) { say("startup-said", e.message); });
+  }
+  document.getElementById("startup").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    api("POST", "/startup", { args: startupArgs.value }).then(function (r) {
+      startupArgs.value = r.args; say("startup-said", "Saved. Applied on the next restart.");
+    }, function (e) { say("startup-said", e.message); });
+  });
+
+  // ---- console ------------------------------------------------------------------------------------------------------
+  var log = document.getElementById("log"), follow = document.getElementById("follow"), consoleErr = document.getElementById("console-err");
+  var last = -1, logTimer = 0, history = [], hi = 0;
+  function kind(t) {
+    if (/^(ERR|ERROR)\b/.test(t)) return "err";
+    if (/^WARN\b/.test(t)) return "warn";
+    if (/^\[admin\]/.test(t)) return "admin";
+    return null;
+  }
+  function line(text, cls) {
+    log.appendChild(el("div", cls, text));
+    while (log.childElementCount > 3000) log.removeChild(log.firstElementChild);
+    if (follow.checked) log.scrollTop = log.scrollHeight;
+  }
+  function pollLog() {
+    clearTimeout(logTimer);
+    if (tab !== "console" || views.console.hidden) return;
+    // the first read shows the last 200 lines, then everything after the last one seen
+    api("GET", "/log?after=" + Math.max(last, 0)).then(function (r) {
+      consoleErr.textContent = "";
+      // a restarted server counts from 1 again: read it from its start
+      if (r.last < last) { line("(the server restarted)", "warn"); last = 0; return; }
+      (last < 0 ? r.lines.slice(-200) : r.lines).forEach(function (l) { line(l.text, kind(l.text)); });
+      last = r.last;
+    }, function (e) { consoleErr.textContent = e.message; })
+      .then(function () { logTimer = setTimeout(pollLog, document.hidden ? 5000 : 1000); });
+  }
+  var cmdLine = document.getElementById("cmd-line");
+  document.getElementById("cmd").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var text = cmdLine.value.trim().replace(/^\//, "");
+    if (!text) return;
+    history.push(text); hi = history.length; cmdLine.value = "";
+    line("/" + text, "you");
+    run(text).then(function (r) { r.lines.forEach(function (t) { line(t, "reply"); }); }, function (e) { line(e.message, "err"); });
+  });
+  cmdLine.addEventListener("keydown", function (ev) {
+    if (ev.key === "ArrowUp" && hi > 0) { hi--; cmdLine.value = history[hi]; ev.preventDefault(); }
+    else if (ev.key === "ArrowDown" && hi < history.length) { hi++; cmdLine.value = history[hi] || ""; ev.preventDefault(); }
+  });
+
+  // each tab polls only while it is shown (the tab buttons call show by name, so this wraps them too)
+  var showViews = show;
+  show = function () {
+    showViews();
+    var me = A.me();
+    if (!me || !me.admin) return;
+    if (tab === "server") { refreshServer(); if (!views.server.dataset.loaded) { views.server.dataset.loaded = "1"; loadStartup(); } }
+    if (tab === "console") { pollLog(); cmdLine.focus(); }
+  };
+
+  A.onChange(show);
+  A.ready.then(show);
+})();
+</script>
+</body>
+</html>

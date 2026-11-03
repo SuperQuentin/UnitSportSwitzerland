@@ -90,6 +90,9 @@ public partial class PlaceSearchUi : CanvasLayer
     /// <summary>Places matching a query, best first: the same ranking the search panel uses.</summary>
     public List<Place> Search(string query, int limit = 12) => _index.Search(query, limit);
 
+    /// <summary>The towns as loaded, for <c>/locate</c> offline (#1277).</summary>
+    public PlaceIndex Index => _index;
+
     /// <summary>Jumps to the best match for a name. Returns false when nothing matched.</summary>
     public bool GoToNamed(string query)
     {

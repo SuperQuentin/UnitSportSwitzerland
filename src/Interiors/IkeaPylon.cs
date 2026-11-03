@@ -65,7 +65,7 @@ public partial class IkeaPylon : Node
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             AlbedoColor = BuildingMeshBuilder.IkeaBlue,
         };
-        _grey = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.56f, 0.58f) };
+        _grey = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.56f, 0.58f) });
         if (_chunks == null) return;
         _chunks.TileFurnished += OnFurnished;
         _chunks.TileUnfurnished += OnUnfurnished;

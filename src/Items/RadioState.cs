@@ -25,7 +25,10 @@ public readonly record struct RadioState(
     float Length = 0,
     float Volume = RadioLoudness.Default,
     // which radio this is to the object containers (#689): given by the server; 0 = not persisted
-    long Oid = 0)
+    long Oid = 0,
+    // its voice/music mix (#1153), 0..1 each: 1 and 1 plays the CD as burnt
+    float Voice = 1f,
+    float Music = 1f)
 {
     public Godot.Collections.Dictionary ToDict()
     {
@@ -43,6 +46,7 @@ public readonly record struct RadioState(
         ["vol"] = Volume,
         };
         if (Oid != 0) d["oid"] = Oid;
+        if (Voice != 1f || Music != 1f) { d["voice"] = Voice; d["music"] = Music; }
         Position.Write(d);
         return d;
     }
@@ -59,5 +63,7 @@ public readonly record struct RadioState(
         d["settled"].AsBool(),
         d.TryGetValue("len", out var len) ? len.AsSingle() : 0f,
         d.TryGetValue("vol", out var vol) ? RadioLoudness.Clamp(vol.AsSingle()) : RadioLoudness.Default,
-        d.TryGetValue("oid", out var oid) ? oid.AsInt64() : 0);
+        d.TryGetValue("oid", out var oid) ? oid.AsInt64() : 0,
+        d.TryGetValue("voice", out var voice) ? Math.Clamp(voice.AsSingle(), 0f, 1f) : 1f,
+        d.TryGetValue("music", out var music) ? Math.Clamp(music.AsSingle(), 0f, 1f) : 1f);
 }

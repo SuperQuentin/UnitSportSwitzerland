@@ -18,6 +18,8 @@ public enum DetailPreset
     Low = 0,
     Medium = 1,
     High = 2,
+    /// <summary>Under Low, for a standalone headset's GPU (#1112): offered in VR only.</summary>
+    VeryLow = 3,
 }
 
 /// <summary>How the game window occupies the screen.</summary>
@@ -36,6 +38,15 @@ public enum AntiAliasing
     Msaa2x = 2,
     Msaa4x = 3,
     Msaa8x = 4,
+}
+
+/// <summary>When the hotbar is drawn on foot (#1369): the current item is always in the corner chip.</summary>
+public enum HotbarMode
+{
+    Always = 0,
+    /// <summary>Shown for a few seconds after a slot change, a holster or draw, a use or the quick wheel, then faded out.</summary>
+    Fade = 1,
+    Hidden = 2,
 }
 
 /// <summary>What the on-screen performance overlay shows (F3 cycles it).</summary>
@@ -80,6 +91,11 @@ public sealed class GameSettings
     /// <summary>Tile rings of real terrain around each anchor (Chebyshev radius in km).</summary>
     public int RenderDistanceRings { get; set; } = 15;
     public const int MinRings = 6, MaxRings = 40;
+    /// <summary>
+    /// The fewest rings this device may load: 3 on a standalone headset (#1112), where every tile is a
+    /// draw call a Quest 2 replays in each of its screen bins; the horizon's merged blocks cover the rest.
+    /// </summary>
+    public static int MinRingsHere => Platform.IsStandaloneVr ? 3 : MinRings;
 
     /// <summary>How far the 100 m horizon lattice is drawn, in km. 0 turns it off.</summary>
     public int HorizonKm { get; set; } = 60;
@@ -90,6 +106,42 @@ public sealed class GameSettings
 
     /// <summary>Distance fog in the world shaders. Off by default: the horizon is the point.</summary>
     public bool Fog { get; set; }
+
+    /// <summary>
+    /// The menus' look (#1135, <see cref="Ui.Skins.MenuSkin"/>): "auto" (the day skin by day, the night skin by night)
+    /// or a skin's id (a file in <c>assets/skins/</c> or <c>user://skins/</c>).
+    /// </summary>
+    public string MenuSkin { get; set; } = Ui.Skins.MenuSkin.SportId;
+    public string MenuSkinDay { get; set; } = Ui.Skins.MenuSkin.DayDefault;
+    public string MenuSkinNight { get; set; } = Ui.Skins.MenuSkin.NightDefault;
+
+    // ---- the adventure's navigation (#1226, docs/notes/adventure/compass.md, guide.md, travel.md) ----
+    /// <summary>The free-roam compass strip at the top of the screen.</summary>
+    public bool AdventureCompass { get; set; } = true;
+
+    /// <summary>Versteckis (#1268): the blind seeker hears the count, a tick a second.</summary>
+    public bool VersteckisCounting { get; set; } = true;
+    /// <summary>The guiding gust: 0 on demand (N), 1 always while a target is tracked, 2 arrow only, 3 off.</summary>
+    public int GuideWind { get; set; }
+    /// <summary>The guide as a high-contrast arrow on the ground instead of leaves (accessibility).</summary>
+    public bool GuideHighContrast { get; set; }
+    /// <summary>Offline: travel only through the unlocked network (no free jumps), as on a network server.</summary>
+    public bool AdventureTravelNetwork { get; set; }
+    // ---- playing together (#1266, docs/notes/adventure/together.md) ----
+    /// <summary>The "Together ×n" chip beside the stamina ring while friends are near.</summary>
+    public bool TogetherChip { get; set; } = true;
+    /// <summary>The fondue panel's figure-eight guide (the faint lemniscate behind your stirring trace).</summary>
+    public bool StirGuide { get; set; } = true;
+    /// <summary>Hidden crevasses on glacier cover: a snow bridge may break under an unroped player.</summary>
+    public bool Crevasses { get; set; } = true;
+    // ---- alcohol (#1271, docs/notes/adventure/alcohol.md) ----
+    /// <summary>Offline: <c>0</c> off, <c>1</c> mild, <c>2</c> real (the default). A server's <c>--alcohol</c> decides online.</summary>
+    public int AlcoholMode { get; set; } = 2;
+    /// <summary>Comfort: the view sway and edge blur while drunk (the input lag stays); VR never sways.</summary>
+    public bool AlcoholViewEffects { get; set; } = true;
+
+    /// <summary>No hover tilts, pops or ambient animation in the menus (#1135): plain fades only.</summary>
+    public bool ReduceMotion { get; set; }
 
     /// <summary>
     /// Generate the terrain there is no data for, blended into the real tiles beside it
@@ -133,6 +185,13 @@ public sealed class GameSettings
     /// another render of the bowl; the size costs less than the render itself.
     /// </summary>
     public int ConcertScreenWidth { get; set; } = 512;
+
+    /// <summary>
+    /// How sharp a cinema hall's video is decoded on this machine (#1319, <see cref="Interiors.CinemaVideo.DecodeSize"/>):
+    /// 480p, 720p or 1080p sources. Only what this machine decodes itself; through the server it stays the relay's.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Interiors.CinemaVideo.Quality CinemaVideo { get; set; } = Interiors.CinemaVideo.Quality.Medium;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
@@ -178,6 +237,11 @@ public sealed class GameSettings
     public bool TouchTapToUse { get; set; }
     /// <summary>Actions pinned from the More sheet, as "Mode:action" (two a mode at most).</summary>
     public List<string> TouchPins { get; set; } = new();
+    /// <summary>
+    /// The touch layout editor's moves, sizes and hidden controls (#1048), by
+    /// <see cref="TouchLayout.ModeKey"/> or <see cref="TouchLayout.SharedKey"/>.
+    /// </summary>
+    public Dictionary<string, TouchOverride> TouchOverrides { get; set; } = new();
 
     public bool InvertY { get; set; }
 
@@ -198,6 +262,17 @@ public sealed class GameSettings
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
+    /// <summary>
+    /// The rider's weight in kit, kg (#1124): with the bike's, the mass the Simulation road bike's
+    /// watts have to move, so a home-trainer rider's real weight sets their speed up a climb. The
+    /// default keeps the reference rider (82 kg with the bike and bottles).
+    /// </summary>
+    public float RiderMass { get; set; } = 72.5f;
+    /// <summary>
+    /// The rider's critical power, W (#1124): what they hold for about an hour (FTP is ~95% of it).
+    /// Above it the Simulation road bike's keys and pad drain a 20 kJ reserve; empty, the rider is held to it.
+    /// </summary>
+    public float RiderCriticalPower { get; set; } = 240f;
     /// <summary>Cars' tyres wear with the sliding they do and lose grip (off by default).</summary>
     public bool TyreWear { get; set; }
     /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
@@ -238,7 +313,8 @@ public sealed class GameSettings
     /// <c>--walkers N</c>, <c>--bikes N</c>, <c>--trams N</c> for one run.
     /// </summary>
     public int TrafficWalkers { get; set; }
-    public int TrafficRiders { get; set; }
+    /// <summary>Riders (#1056): 30 by day, like a town's cyclists around the cars' 35.</summary>
+    public int TrafficRiders { get; set; } = 30;
     public int Trams { get; set; }
 
     /// <summary>
@@ -275,14 +351,33 @@ public sealed class GameSettings
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
 
+    /// <summary>The sword's impact frame (#1371): a brief flash with speed lines on a finisher's or a full charge's hit. Off for photosensitivity.</summary>
+    public bool ImpactFrames { get; set; } = true;
+
     /// <summary>Radial streaks at the screen edge at speed.</summary>
     public bool SpeedLines { get; set; } = true;
+
+    /// <summary>The gliders' variometer: a beep that rises with the climb, a low tone in sink (#1225, <see cref="Audio.Variometer"/>).</summary>
+    public bool Variometer { get; set; } = true;
+
+    /// <summary>
+    /// Radios, stereos and speakers muffled by what stands between them and the ears, found by rays
+    /// (<see cref="Audio.Hearing"/>). Off: heard as in the open, no rays cast (#1281).
+    /// </summary>
+    public bool SoundOcclusion { get; set; } = true;
 
     /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
     public bool ChatBubbles { get; set; } = true;
 
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
+
+    /// <summary>The hotbar on foot (#1369). Touch controls keep it always, their taps need it.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public HotbarMode Hotbar { get; set; } = HotbarMode.Fade;
+
+    /// <summary>The item in hand is put away after a few idle seconds (#1369, <see cref="Items.ItemController.AutoHolsterSeconds"/>).</summary>
+    public bool AutoHolster { get; set; } = true;
 
     /// <summary>The on-foot camera over the left shoulder instead of the right; <c>swap_shoulder</c> flips it in game (#460).</summary>
     public bool LeftShoulder { get; set; }
@@ -321,10 +416,20 @@ public sealed class GameSettings
     public string PlayerName { get; set; } = "";
 
     /// <summary>
+    /// The first-run welcome (#1131, <see cref="Ui.WelcomeScreen"/>) was finished or skipped. True by default, so a
+    /// settings file from before the welcome never shows it; <see cref="Load"/> sets it false when there is no file
+    /// yet (a fresh install), and the welcome saves false as it opens, so quitting half-way shows it again.
+    /// </summary>
+    public bool FirstRunDone { get; set; } = true;
+
+    /// <summary>
     /// The first-run tutorial (#517, <see cref="Tutorial"/>) was finished or skipped. Off until
     /// then; Settings › Gameplay turns it off again to replay it.
     /// </summary>
     public bool TutorialDone { get; set; }
+
+    /// <summary>The newest build whose "What's new" (#1413) the player has seen; empty on a first install.</summary>
+    public string LastSeenVersion { get; set; } = "";
 
     /// <summary>
     /// The rides whose mini tutorial (#517, <see cref="VehicleIntroCard"/>) was done, by
@@ -334,7 +439,7 @@ public sealed class GameSettings
 
     /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
-    /// Settings → Character (#806; till then the figure comes from the player's network id).
+    /// the Character menu (#806; till then the figure comes from the player's network id).
     /// Saved alone with <see cref="SaveOnly"/>; <c>ClientWorld.PublishAppearance</c> puts it on the player.
     /// </summary>
     public int AppearanceBits { get; set; }
@@ -380,9 +485,46 @@ public sealed class GameSettings
     public int VrMsaa { get; set; } = 4;
     /// <summary>The headset's 3D resolution, relative to the eye size the runtime asks for.</summary>
     public float VrRenderScale { get; set; } = 1f;
+    /// <summary>
+    /// A standalone headset's dynamic resolution never goes under this share of its eye buffers'
+    /// width and height (#1112, XR/XrDynamicResolution).
+    /// </summary>
+    public float VrResolutionFloor { get; set; } = 0.75f;
+    public const float MinVrResolutionFloor = 0.5f;
     public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
     /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
     public bool VrFoveation { get; set; } = true;
+    /// <summary>
+    /// A standalone headset's Application SpaceWarp (#1112): the game renders every other frame and the headset makes
+    /// the one between from the motion it is given, so a frame has twice the time (XR/XrSession.ApplySpaceWarp).
+    /// Off, and only <c>--spacewarp on</c>: on a Quest 2 a black patch flashed in the left eye, and the made frames felt
+    /// less smooth than the headset's own reprojection of a slower game.
+    /// </summary>
+    public bool VrSpaceWarp { get; set; }
+    /// <summary>
+    /// The headset's refresh rate, Hz: 60, 72, 80, 90 or 120 (the nearest the runtime offers). Physics
+    /// ticks at it in VR, so every frame moves the view once. 72 by default: a Quest 2 over Air
+    /// Link holds 72 far more often than 90, and each frame gets more of the stream's bitrate (#1036);
+    /// on its own GPU (#1112) 72 is its budget too, and 60 the fallback for a scene it cannot hold.
+    /// </summary>
+    public int VrRefreshHz { get; set; } = 72;
+    /// <summary>The rates Settings offers: 60 only on a standalone headset (Link offers none under 72).</summary>
+    public static readonly int[] VrRefreshRates = Platform.IsStandaloneVr ? new[] { 60, 72, 80, 90, 120 } : new[] { 72, 80, 90, 120 };
+    /// <summary>
+    /// The terrain's detail preset in the headset, in place of <see cref="Detail"/>. Low by default:
+    /// a headset is held back by triangles (it draws the scene for each eye), and Medium has
+    /// three times Low's around the player (#1036).
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public DetailPreset VrDetail { get; set; } = DetailPreset.Low;
+    /// <summary>The cinema's video in the headset (#1319): the screen fills much more of the view there.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Interiors.CinemaVideo.Quality VrCinemaVideo { get; set; } = Interiors.CinemaVideo.Quality.High;
+    /// <summary>
+    /// The playing hall's screen as a compositor layer of its own in the headset (#1319, <c>InteriorNode.CinemaLayer</c>):
+    /// sampled at the headset's resolution, never resampled into the eye picture first.
+    /// </summary>
+    public bool VrCinemaLayer { get; set; } = true;
 
     // --- VR comfort (#439) ---
     /// <summary>The right stick's turn on foot: a snap of 15, 30 or 45 degrees, or 0 for a smooth turn.</summary>
@@ -430,6 +572,8 @@ public sealed class GameSettings
         // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
         if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
+        // a fresh install: the welcome (#1131) runs before the title
+        if (!Godot.FileAccess.FileExists(File)) loaded.FirstRunDone = false;
         try
         {
             if (Godot.FileAccess.FileExists(File))
@@ -442,6 +586,7 @@ public sealed class GameSettings
                     loaded.MusicVolume = old;
                 if (!text.Contains("\"cartoonDefault\"", StringComparison.OrdinalIgnoreCase) && loaded.VisualStyle == Styles.VisualStyle.Ps1)
                     loaded.VisualStyle = Styles.StyleKit.Default;
+                if (Platform.IsStandaloneVr) loaded.MigrateStandalone();
             }
             else if (OldRadioVolume() is float old) loaded.MusicVolume = old;
         }
@@ -474,11 +619,57 @@ public sealed class GameSettings
         Detail = DetailPreset.Low;
         RenderScale = 0.6f;
         TrafficCars = 10;
+        TrafficRiders = 8;
         CockpitMirrors = false;
         CommitBudgetMs = 3;
         MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
         CacheGb = 0.5f;
+        if (Platform.IsStandaloneVr) UseStandaloneVrDefaults();
     }
+
+    /// <summary>
+    /// A standalone headset's first launch (#1112, docs/notes/xr/quest-standalone.md), measured on a Quest 2:
+    /// its GPU sorts every triangle into screen bins and replays every draw in each, so fewer tiles
+    /// (each a draw) and fewer triangles count more than pixels; traffic is its CPU's physics.
+    /// </summary>
+    private void UseStandaloneVrDefaults()
+    {
+        StandaloneDefaults = LatestStandaloneDefaults;
+        VrDetail = DetailPreset.VeryLow;   // Low's 1.5 M triangles near the player held it to 10 fps
+        RenderDistanceRings = 3;           // the horizon's merged blocks beyond
+        VrMsaa = 2;                        // 4x halves the screen bins' size: ~10 ms more
+        TrafficCars = 6;
+        TrafficRiders = 4;
+        ReplayMinutes = 1;                 // the replay holds what it saw that long (Movie/WorldRecorder): memory
+    }
+
+    /// <summary>
+    /// Which of a standalone headset's defaults a saved file has had (#1112): a file saved before a default changed
+    /// is given the new value once, for that setting alone, and keeps every other choice. 1: a minute of replay
+    /// (the recorder's memory) and SpaceWarp off (it flashed black in one eye).
+    /// </summary>
+    public int StandaloneDefaults { get; set; }
+    private const int LatestStandaloneDefaults = 1;
+
+    /// <summary>Brings a headset's saved settings up to <see cref="LatestStandaloneDefaults"/>, written to the file at once.</summary>
+    private void MigrateStandalone()
+    {
+        if (StandaloneDefaults >= LatestStandaloneDefaults) return;
+        if (StandaloneDefaults < 1)
+        {
+            ReplayMinutes = 1;
+            VrSpaceWarp = false;
+            SaveOnly(nameof(ReplayMinutes), ReplayMinutes);
+            SaveOnly(nameof(VrSpaceWarp), VrSpaceWarp);
+        }
+        StandaloneDefaults = LatestStandaloneDefaults;
+        SaveOnly(nameof(StandaloneDefaults), StandaloneDefaults);
+        GD.Print($"[settings] standalone defaults brought to {LatestStandaloneDefaults}: replay {ReplayMinutes} min, SpaceWarp off");
+    }
+
+    /// <summary>Writes the touch layout alone, as the editor's Done does (a command-line run's other values stay out).</summary>
+    public static void SaveTouchOverrides() =>
+        SaveOnly(nameof(TouchOverrides), JsonSerializer.SerializeToNode(Current.TouchOverrides, JsonOptions)!);
 
     public void Save()
     {
@@ -538,7 +729,7 @@ public sealed class GameSettings
 
     private void Clamp()
     {
-        RenderDistanceRings = Math.Clamp(RenderDistanceRings, MinRings, MaxRings);
+        RenderDistanceRings = Math.Clamp(RenderDistanceRings, MinRingsHere, MaxRings);
         HorizonKm = Math.Clamp(HorizonKm, 0, MaxHorizonKm);
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
@@ -547,11 +738,14 @@ public sealed class GameSettings
         ConcertScreenWidth = ConcertScreenWidth switch { <= 384 => 256, <= 768 => 512, _ => 1024 };
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
+        VrResolutionFloor = Math.Clamp(VrResolutionFloor, MinVrResolutionFloor, 1f);
+        if (Array.IndexOf(VrRefreshRates, VrRefreshHz) < 0) VrRefreshHz = 72;
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
         TouchScale = Math.Clamp(TouchScale, 0.75f, TouchLayout.MaxScale);
         TouchOpacity = Math.Clamp(TouchOpacity, 0.2f, 1f);
         TouchPins ??= new();
+        TouchOverrides ??= new();
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
@@ -614,6 +808,10 @@ public sealed class GameSettings
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
+                case "--rider-kg" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float kg):
+                    RiderMass = Mathf.Clamp(kg, 30f, 200f); break;
+                case "--rider-cp" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float cp):
+                    RiderCriticalPower = Mathf.Clamp(cp, 50f, 600f); break;
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
                 case "--boardwalkable": BoardWalkableFromOutside = v is "on" or "1" or "true"; break;
@@ -673,6 +871,18 @@ public sealed class GameSettings
                     VrMonitor = v switch { "off" => XR.MonitorView.Off, "eyes" => XR.MonitorView.BothEyes,
                         "third" => XR.MonitorView.ThirdPerson, _ => XR.MonitorView.FirstPerson };
                     break;
+                // the headset's refresh rate and terrain detail (#1036), for frame-time checks
+                case "--vrhz" when int.TryParse(v, out int hz): VrRefreshHz = hz; break;
+                case "--vrdetail" when Enum.TryParse<DetailPreset>(v, true, out var vd): VrDetail = vd; break;
+                // the headset's picture, for frame-time checks on a Quest (#1112)
+                case "--vrmsaa" when int.TryParse(v, out int ms): VrMsaa = ms; break;
+                case "--vrscale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vs):
+                    VrRenderScale = Math.Clamp(vs, MinVrRenderScale, MaxVrRenderScale); break;
+                case "--vrfoveation": VrFoveation = v is "on" or "1" or "true"; break;
+                case "--spacewarp": VrSpaceWarp = v is "on" or "1" or "true"; break;
+                case "--replayminutes" when int.TryParse(v, out int replay): ReplayMinutes = replay; break;
+                case "--vrfloor" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vf):
+                    VrResolutionFloor = Math.Clamp(vf, MinVrResolutionFloor, 1f); break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 // a film's render profile sets the picture itself (#924, tools/trailer.sh RENDER), never the player's file
                 case "--render-scale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float rs):

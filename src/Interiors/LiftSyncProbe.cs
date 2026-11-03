@@ -237,7 +237,8 @@ public partial class LiftSyncProbe : ChatProbe
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
     {
-        door = DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+        // the index's own entry, in today's frame: a copy from before an origin shift points kilometres off (#1090)
+        door = DoorIndex.Find(door.Key) ?? door;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
@@ -248,13 +249,10 @@ public partial class LiftSyncProbe : ChatProbe
         for (int attempt = 0; attempt < 4 && !open; attempt++)
         {
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
-            open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
+            open = await UntilHeld(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, DoorSettle, 5 + attempt * 2);
         }
         if (!open) { Fail($"the door {doorKey} never opened"); return false; }
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
+        bool inside = await WalkInThrough(me, interiors.Links[doorKey].Outside, () => me.Indoors && interiors.Current != null);
         if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
         await Seconds(1.0);
         return true;

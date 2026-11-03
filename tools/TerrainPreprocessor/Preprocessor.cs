@@ -97,7 +97,8 @@ public static partial class Preprocessor
                 case "--io-jobs" when i + 1 < args.Count && int.TryParse(args[i + 1], out int n): ioJobs = n; i++; break;
                 case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
                     or "--dem-check" or "--rgealti-check" or "--dem-probe"
-                    or "--osm-overlay" or "--landings-file" or "--airports-file":
+                    or "--osm-overlay" or "--landings-file" or "--airports-file" or "--sitg-signs"
+                    or "--pois" or "--pois-file" or "--poisstats" or "--wikidata" or "--venues" or "--givers":
                     return false;
             }
         }
@@ -134,6 +135,9 @@ public static partial class Preprocessor
         // boat landings and harbour jetties (#377): standalone with --landings, and after every water pass
         // run with --tlm (the piers stand on the beds and the still water)
         bool landingsOnly = false;
+        // tram stops (#1057): standalone with --tram-stops (needs --out and --tlm), into <out>_temp/tram_stops.tsv for RoadGen
+        bool tramStopsOnly = false;
+        bool sitgSigns = false;   // #1110: canton Geneva's direction signs and gantries (SITG) for RoadGen
         // --landings-file: write landings.json elsewhere (reading a live region without touching it)
         string? landingsFile = null;
         // airports (#422): stands and runways from swissTLM3D and OpenStreetMap (--osm <pbf>) over the built tiles
@@ -141,6 +145,14 @@ public static partial class Preprocessor
         string? airportsFile = null, airportsOsm = null;
         // castles (#859): which solids of the built tiles are castles, into a C# list the game compiles in
         string? castlesFile = null;
+        // venues (#1232): bowling centres, cinemas, arcades, restaurants and bars from OSM, into venues.tsv.gz the game embeds
+        string? venuesFile = null;
+        // errand givers (#1339): post offices, dairies, Beizen and farms from OSM and the built tiles, into givers.tsv.gz the game embeds
+        string? giversFile = null;
+        // points of interest (#1224): standalone with --pois (needs --out, --tlm), and after every --places pass
+        // given --tlm; --boundaries <swissBOUNDARIES3D gpkg> for the cantons, --osm-pbf for castles
+        bool poisOnly = false, poisStats = false, wikidata = false;
+        string? poisFile = null, boundariesGpkg = null, atlasCards = null;
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false, hashOnly = false;
         string? franceBox = null;
@@ -150,6 +162,8 @@ public static partial class Preprocessor
         string? rgeAltiDir = null, demBox = null;
         double rgeAltiDz = 0;
         bool demCheck = false, demReparse = false;
+        int demCacheMb = 384, demMinProbes = 13;
+        bool demPlan = false;
         var demProbes = new List<(double E, double N)>();
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
@@ -193,10 +207,21 @@ public static partial class Preprocessor
                 case "--horizon": horizonOnly = true; break;
                 case "--water": waterOnly = true; break;
                 case "--landings": landingsOnly = true; break;
+                case "--tram-stops": tramStopsOnly = true; break;
+                case "--sitg-signs": sitgSigns = true; break;
                 case "--landings-file": landingsFile = args[++i]; break;
                 case "--airports": airportsOnly = true; break;
                 case "--airports-file": airportsFile = args[++i]; break;
                 case "--castles": castlesFile = args[++i]; break;
+                case "--venues": venuesFile = args[++i]; break;
+                case "--givers": giversFile = args[++i]; break;
+                case "--pois": poisOnly = true; break;
+                case "--pois-file": poisFile = args[++i]; break;
+                case "--poisstats": poisStats = true; break;
+                // Wikidata facts for the Atlas cards (#1224): network, so a step of its own after --pois
+                case "--wikidata": wikidata = true; break;
+                case "--boundaries": boundariesGpkg = args[++i]; break;
+                case "--atlas-cards": atlasCards = args[++i]; break;
                 case "--osm": airportsOsm = args[++i]; break;
                 case "--bathy": bathyDir = args[++i]; break;
                 case "--png-crop":
@@ -215,6 +240,22 @@ public static partial class Preprocessor
                 case "--dem-box": case "--rgealti-box": demBox = args[++i]; break;
                 case "--rgealti-dz": rgeAltiDz = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--dem-check": case "--rgealti-check": demCheck = true; break;
+                // (#1399) tile height encoding: "wide" = format v3, -50..4900 m (France); "legacy" = v2, 0..4700 m (default)
+                case "--height-format":
+                    ChunkFormat.Use(args[++i].ToLowerInvariant() switch
+                    {
+                        "wide" or "3" => ChunkFormat.WideVersion,
+                        "legacy" or "2" => ChunkFormat.LegacyVersion,
+                        var v => throw new ArgumentException($"--height-format wide|legacy, not {v}"),
+                    });
+                    break;
+                // only these départements of a France tree (RGEALTI_..._D074_... folders), for a test run
+                case "--dem-only": ForeignDem.OnlyFolders = args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries); break;
+                // of 25 probe points a new tile needs this many with data (default 13; 1 keeps every border tile, e.g. the Mont Blanc summit)
+                case "--dem-min-probes": demMinProbes = int.Parse(args[++i]); break;
+                // scan the rasters, pick the tiles, print how many and how long, build nothing
+                case "--dem-plan": demPlan = true; break;
+                case "--dem-cache-mb": demCacheMb = int.Parse(args[++i]); break;
                 // swissALTI3D tiles with foreign data under them are parsed again, so their -9999 gaps
                 // (0 m pits before #936) are filled from it; their old .edge files are set aside
                 case "--dem-reparse": demReparse = true; break;
@@ -292,6 +333,28 @@ public static partial class Preprocessor
                 : new HashSet<TileId>();
             SetStage("fields");
             return FieldStage.Run(fieldsDir, osmFieldsPbf, gwrPath, outDir, region, jobs);
+        }
+
+        // ---- venues (#1232): OSM bowling centres, cinemas, arcades, restaurants, bars; snapped to solids where tiles are built
+        if (venuesFile != null)
+        {
+            if (airportsOsm == null)
+            {
+                Console.Error.WriteLine("--venues <venues.tsv.gz> requires --osm <switzerland .osm.pbf> (and --out <chunk dir> to snap points onto built solids)");
+                return 2;
+            }
+            return VenueStage.Run(outDir, airportsOsm, venuesFile, jobs);
+        }
+
+        // ---- errand givers (#1339): OSM post offices, dairies, Beizen and farms, and the farms of the built tiles
+        if (giversFile != null)
+        {
+            if (outDir == null || airportsOsm == null)
+            {
+                Console.Error.WriteLine("--givers <givers.tsv.gz> requires --osm <switzerland .osm.pbf> and --out <chunk dir> (the region's tiles: heights, farms, solids) [--boundaries <swissboundaries3d .gpkg>]");
+                return 2;
+            }
+            return GiverStage.Run(outDir, airportsOsm, giversFile, boundariesGpkg, jobs);
         }
 
         // ---- castles (#859): OSM historic=castle and GWR names resolved to solids --------------------
@@ -374,6 +437,56 @@ public static partial class Preprocessor
             SetStage("water");
             int wrc = WaterStage.Run(outDir, WaterOptions(), ct);
             return wrc != 0 || tlmGpkg == null ? wrc : LandingStage.Run(outDir, tlmGpkg);
+        }
+
+        // ---- direction signs (#1110): SITG's signs, gantries and overhead heads in canton Geneva, for RoadGen's rewrite ----
+        if (sitgSigns)
+        {
+            if (outDir == null) { Console.Error.WriteLine("--sitg-signs requires --out <chunk dir>"); return 2; }
+            return SitgSignStage.Run(outDir, tempDir, force);
+        }
+
+        // ---- tram stops (#1057): swissTLM3D stops beside the tram tracks, for RoadGen's rewrite -----
+        if (tramStopsOnly)
+        {
+            if (outDir == null || tlmGpkg == null)
+            {
+                Console.Error.WriteLine("--tram-stops requires --out <chunk dir> and --tlm <swisstlm3d .gpkg>");
+                return 2;
+            }
+            return TramStopStage.Run(outDir, tlmGpkg);
+        }
+
+        // ---- points of interest (#1224): pois.bin from swissTLM3D (+ castles, cantons) ---------------
+        if (wikidata)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--wikidata requires --out <chunk dir> (with a pois.bin, or --pois-file f)");
+                return 2;
+            }
+            SetStage("wikidata");
+            return await WikidataStage.RunAsync(outDir, poisFile, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", ct);
+        }
+        if (poisStats)
+        {
+            if (outDir == null && poisFile == null)
+            {
+                Console.Error.WriteLine("--poisstats requires --out <chunk dir> or --pois-file <pois.bin>");
+                return 2;
+            }
+            return PoiStage.Stats(outDir ?? "", poisFile, atlasCards);
+        }
+        if (poisOnly)
+        {
+            if (outDir == null || tlmGpkg == null || !File.Exists(Path.Combine(outDir, "manifest.json")))
+            {
+                Console.Error.WriteLine("--pois requires --out <built chunk dir> and --tlm <swisstlm3d .gpkg> " +
+                                        "[--boundaries <swissboundaries3d .gpkg>] [--osm-pbf <switzerland .osm.pbf> [--gwr <data.sqlite>]] [--pois-file f]");
+                return 2;
+            }
+            SetStage("pois");
+            return PoiStage.Run(tlmGpkg, outDir, ManifestTiles(outDir), PoiOptions());
         }
 
         // ---- landings: piers and jetties from swissTLM3D over the built beds and water -------------
@@ -517,14 +630,22 @@ public static partial class Preprocessor
 
         // ---- terrain: sources -> .terr + .terrc, parsed and finished in one parallel pass -------
         var sw = Stopwatch.StartNew();
+        string manifestFile = Path.Combine(outDir, "manifest.json");
+        if (File.Exists(manifestFile) && TerrainManifest.FromJson(File.ReadAllText(manifestFile)) is { Tiles.Count: > 0 } built
+            && built.FormatVersion != ChunkFormat.Version)
+        {
+            Console.Error.WriteLine($"{outDir} holds height format v{built.FormatVersion} tiles but this run writes v{ChunkFormat.Version}; use a new --out or the matching --height-format");
+            return 2;
+        }
         var sources = TerrainBuild.Discover(inDirs);
         List<ForeignDem>? foreign = null;
         if (demArgs.Count > 0)
         {
-            var b = (demBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
-            if (b.Length != 4)
+            int[] b = demBox == "auto" ? Array.Empty<int>()
+                : (demBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (b.Length != 4 && demBox != "auto")
             {
-                Console.Error.WriteLine("--dem / --rgealti needs --dem-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145)");
+                Console.Error.WriteLine("--dem / --rgealti needs --dem-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145) or auto");
                 return 2;
             }
             foreign = new List<ForeignDem>();
@@ -533,9 +654,17 @@ public static partial class Preprocessor
                 // grid,dir[,dz]: the dir may hold a drive letter's colon, so commas split
                 var parts = d.Split(',');
                 double dz = parts.Length > 2 ? double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) : 0;
-                var dem = new ForeignDem(DemProjection.Parse(parts[0]), parts[1], dz);
-                Console.WriteLine($"DEM {dem.Name}: {dem.FileCount} rasters, dz {dz:+0.00;-0.00} m");
+                var scan = Stopwatch.StartNew();
+                var dem = new ForeignDem(DemProjection.Parse(parts[0]), parts[1], dz) { Jobs = jobs, CacheBytes = demCacheMb * 1048576L };
+                Console.WriteLine($"DEM {dem.Name}: {dem.FileCount} rasters, dz {dz:+0.00;-0.00} m, scanned in {scan.Elapsed.TotalSeconds:F0}s");
                 foreign.Add(dem);
+            }
+            if (demBox == "auto")
+            {
+                // the union of what each DEM covers
+                var bb = foreign.Select(d => d.BoundsLv95Km()).ToList();
+                b = new[] { bb.Min(x => x.MinE), bb.Min(x => x.MinN), bb.Max(x => x.MaxE), bb.Max(x => x.MaxN) };
+                Console.WriteLine($"--dem-box auto: {string.Join(",", b)} (LV95 km)");
             }
             if (demProbes.Count > 0)
             {
@@ -571,9 +700,15 @@ public static partial class Preprocessor
             foreach (var dem in foreign)
             {
                 // a new tile needs data under half of it; partial ones are the generated fill's
-                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss, minProbes: 13);
+                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss, minProbes: demMinProbes);
                 Console.WriteLine($"DEM {dem.Name}: {mine.Count} LV95 tiles with its data and no swissALTI3D");
                 tiles.UnionWith(mine);
+            }
+            if (demPlan)
+            {
+                Console.WriteLine($"--dem-plan: {tiles.Count} tiles to build in {sw.Elapsed.TotalSeconds:F0}s; E {tiles.Min(t => t.E)}..{tiles.Max(t => t.E)}, N {tiles.Min(t => t.N)}..{tiles.Max(t => t.N)}"
+                    + $"; heap {GC.GetTotalMemory(false) / 1048576} MB");
+                return 0;
             }
             if (demReparse)
             {
@@ -684,6 +819,11 @@ public static partial class Preprocessor
 
         return 0;
 
+        PoiStage.Options PoiOptions() => new(boundariesGpkg, osmFieldsPbf, gwrPath, poisFile, atlasCards, jobs);
+
+        static HashSet<TileId> ManifestTiles(string dir) =>
+            TerrainManifest.FromJson(File.ReadAllText(Path.Combine(dir, "manifest.json"))).Tiles.Select(t => t.Id).ToHashSet();
+
         // Batched: loading every chunk grid at once is ~2 MB x tile count (13 GB for the 6,699-tile
         // import) before feature data is even extracted. Tiles are ordered by (E, N) so each batch is a
         // compact strip and its bbox query stays tight.
@@ -700,6 +840,13 @@ public static partial class Preprocessor
                 SetStage("places");
                 int rc = PlaceStage.Run(gwrPath, outDir, existing.Tiles.Select(t => t.Id).ToHashSet(), tlmGpkg);
                 if (rc != 0) return rc;
+                // the points of interest follow the place index (#1224): its towns name and place village stops
+                if (tlmGpkg != null)
+                {
+                    SetStage("pois");
+                    rc = PoiStage.Run(tlmGpkg, outDir!, existing.Tiles.Select(t => t.Id).ToHashSet(), PoiOptions());
+                    if (rc != 0) return rc;
+                }
                 if (placesOnly || (tlmGpkg == null && buildingsGpkg == null && buildingsGdb.Count == 0)) return 0;
             }
 

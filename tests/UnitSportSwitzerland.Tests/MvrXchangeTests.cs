@@ -302,8 +302,10 @@ public class MvrXchangeTests
                 await stream.WriteAsync(junk);
                 tcp.Client.Shutdown(SocketShutdown.Send);
                 var buf = new byte[64];
-                tcp.ReceiveTimeout = 5000;
-                Assert.Equal(0, stream.Read(buf));   // dropped, no answer
+                // awaited, not a blocking Read: under the whole suite the station's drop waits for a pool
+                // thread, and a test blocking one for 5 s timed out (#1169); 30 s is room, not a wait
+                using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                Assert.Equal(0, await stream.ReadAsync(buf, limit.Token));   // dropped, no answer
             }
             // a client that sends one JOIN per connection and reads the answer (BlenderDMX, libMVRgdtf)
             using var c = new TcpClient();

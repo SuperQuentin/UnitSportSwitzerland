@@ -58,7 +58,23 @@ public static class GameClock
         return list.ToArray();
     }
 
-    public static double Now => Engine.GetPhysicsFrames() / (double)Engine.PhysicsTicksPerSecond;
+    public static double Now => _base + (Engine.GetPhysicsFrames() - _baseFrames) / (double)Engine.PhysicsTicksPerSecond;
+
+    // the time and tick count when the tick rate last changed: game time carries on from there
+    private static double _base;
+    private static ulong _baseFrames;
+
+    /// <summary>
+    /// Physics at <paramref name="hz"/> ticks a second from now on, game time running on without a
+    /// jump (VR ticks at the headset's refresh rate, <c>XR.XrSession.ApplyRefresh</c>, #1036).
+    /// </summary>
+    public static void SetTickRate(int hz)
+    {
+        if (hz <= 0 || hz == Engine.PhysicsTicksPerSecond) return;
+        _base = Now;
+        _baseFrames = Engine.GetPhysicsFrames();
+        Engine.PhysicsTicksPerSecond = hz;
+    }
 
     private static ulong _lastUsec;
 

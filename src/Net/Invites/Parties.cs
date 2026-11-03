@@ -131,7 +131,11 @@ public partial class Parties : Node
         if (!_chat?.OnlinePeers.Contains(peer) == true) return;
         RpcId(peer, MethodName.State, party?.Members.ToArray() ?? Array.Empty<long>(),
             party?.Members.Select(Who).ToArray() ?? Array.Empty<string>());
+        StateSent?.Invoke(peer);
     }
+
+    /// <summary>Server: a peer was sent its party state (it joined, left, or its party changed): shared pins follow (#1226).</summary>
+    public event Action<long>? StateSent;
 
     // ---- client -------------------------------------------------------------------------
 

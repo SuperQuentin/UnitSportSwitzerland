@@ -126,3 +126,7 @@ Verified 10/10 matching exactly one solid: 9 201–31 717 m², 17–25 m tall.
   self-serve racking and a row of tills are a follow-up issue. Only the bins are real.
 - **One entrance.** A store has an entrance and an exit, and loading bays round the back; those are
   #498's (several doors per building) to give.
+- **Toilets** (#1285, `public-toilets`): a 3.4 m strip along the back wall (1.7 m on a slab too shallow), a
+  low block of 2.8 m headroom under the hall's roof: the gendered set with the accessible WC, its
+  host the market hall; the rest of the strip the stock room, through a 2.4 m door. `IkeaRules` 2.
+  `--ikeacheck` also plans 9x10, 9x12 and 40x30 m slabs (`IkeaOfSize`): one WC, the shared set, by gender.

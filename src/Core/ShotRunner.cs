@@ -23,8 +23,16 @@ namespace UnitSport.Core;
 /// carried into the rooms (<see cref="Interiors.DoorLink.ToInside"/>): stand in front of a house
 /// looking at it, and the picture is from that far inside, looking on. Offline only, and best
 /// last in a queue: the door is left open.
+/// "l1.6" (#1306) is a point of the interior the last "i" line went into, in its plan's own frame (x, z across
+/// the building, y over the ground floor's level; pitch and yaw in that frame too): stills and glides inside,
+/// one take through the rooms. The camera stays in until a line that is not "l".
 /// A line starting with '/' is typed into the chat between two shots (<c>/style cartoon</c>,
 /// <c>/time set 19:30</c>), so one launch can picture a live change.
+/// A line whose path is "~ease", "~lin", "~in" or "~out" is a glide: the camera moves there from the last line's pose over
+/// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>).
+/// "fov 6.87" sets the camera's vertical field of view, degrees, for the shots after it (#1433: a lens's
+/// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>); below 1° it is a
+/// frustum of that angle (<see cref="CameraLens"/>, the telescope's, #1440).
 /// "shift dE,dN" moves the floating origin by that many metres with the camera still (#185), then
 /// logs the CPU and GPU time of the frames after it against the frames before: what a shift costs
 /// the renderer (SDFGI relights, <c>docs/notes/core/floating-origin.md</c>). Shots before and
@@ -39,10 +47,11 @@ namespace UnitSport.Core;
 public partial class ShotRunner : Node
 {
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
-        float? AboveGround = null, string? Command = null, float? Inside = null, Vector2? ShiftBy = null);
+        float? AboveGround = null, string? Command = null, float? Inside = null, Vector2? ShiftBy = null, string? Door = null,
+        bool Local = false, float? Fov = null);
 
     /// <summary>How far from an "i" shot's point its door may be, m.</summary>
-    private const float InsideDoorReach = 30f;
+    private const float InsideDoorReach = 50f;
 
     /// <summary>How long an "i" shot waits for its door and its interior before it fails, s.</summary>
     private const double InsideTimeout = 40;
@@ -51,6 +60,13 @@ public partial class ShotRunner : Node
     private string? _door;
     private bool _through;
     private double _waited;
+
+    /// <summary>The plan the camera is in, from an "i" shot on, for the "l" lines that follow it (#1306); null outside.</summary>
+    private string? _plan;
+
+    /// <summary>How long an "l" line has waited for <c>--enter</c> to put the camera in, s; -1 when none waits (#1244).</summary>
+    private double _awaitEnter = -1;
+    private string? _enteredSeen;
 
     /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
@@ -69,6 +85,10 @@ public partial class ShotRunner : Node
     public System.Func<Vector3, float?>? GroundHeight { get; set; }
 
     private readonly Camera3D _camera;
+
+    /// <summary>The near plane inside, m, and the camera's own, given back on the way out.</summary>
+    private const float InsideNear = 0.05f;
+    private float _outsideNear = 1f;
 
     /// <summary>
     /// Shot positions are world space as the game started (the manifest's origin), as they always
@@ -166,7 +186,8 @@ public partial class ShotRunner : Node
     /// <summary>After a shot's seconds: whether its ground has been complete long enough (or waited for too long).</summary>
     private bool GroundComplete(double delta)
     {
-        if (TilesComplete == null || _shot!.Value.SettleSeconds <= 0) return true;
+        // inside, the rooms are built whole: the tiles round a camera 3 km under them never come in (#1306)
+        if (TilesComplete == null || _shot!.Value.SettleSeconds <= 0 || _plan != null) return true;
         if (_settleWall < 0) _settleWall = RealClock.Now;
         _completeFor = TilesComplete(_camera.GlobalPosition) ? _completeFor + delta : 0;
         if (_completeFor >= CompleteHold) return true;
@@ -175,14 +196,82 @@ public partial class ShotRunner : Node
         return true;
     }
 
+    // a glide (a queued line whose path is "~ease", "~lin", "~in" or "~out"): from the last pose aimed
+    private Vector3 _lastPos, _glideFrom;
+    private float _lastPitch, _lastYaw, _lastAbove = 30f, _glideFromPitch, _glideFromYaw, _glideFromAbove;
+
+    /// <summary>
+    /// A glide moves the camera from the last queued pose to this one over its seconds (eased as its path names), writing
+    /// no picture and waiting for no tiles: camera moves for a clip filmed with <c>--clip</c>. Its "g" height is lerped above
+    /// the ground under the camera, so a glide over a slope follows it.
+    /// </summary>
+    private static bool IsGlide(Shot s) => s.OutPath.StartsWith('~');
+
     private void Aim(Shot shot)
     {
+        if (!shot.Local && _plan != null) LeaveInterior();
+        bool glide = IsGlide(shot);
+        if (glide) (_glideFrom, _glideFromPitch, _glideFromYaw, _glideFromAbove) = (_lastPos, _lastPitch, _lastYaw, _lastAbove);
+        (_lastPos, _lastPitch, _lastYaw) = (shot.Position, shot.PitchDeg, shot.YawDeg);
+        if (shot.AboveGround is { } above) _lastAbove = above;
+        if (glide)
+        {
+            _shot = shot;
+            _elapsed = 0;
+            // the real time, so a clip's log can be matched to its frames (ClipRecorder logs its start the same way)
+            GD.Print($"[glide] t={(long)(RealClock.Now * 1000)} {shot.OutPath} to {shot.Position.X:F0},{shot.Position.Z:F0} in {shot.SettleSeconds:F1} s");
+            return;
+        }
         _shot = shot;
         _elapsed = 0;
         _completeFor = 0;
         _settleWall = -1;
+        if (shot.Local)
+        {
+            // --enter still on its way in (#1244): the line waits for it
+            if (Interiors.InteriorManager.Instance is { } going && (going.Entering || _plan == null && Interiors.InteriorManager.EnterTarget != null && going.Entered == null))
+            {
+                _awaitEnter = 0;
+                return;
+            }
+            if (!PlaceInside(shot.Position, shot.PitchDeg, shot.YawDeg)) _shot = null;
+            return;
+        }
         _camera.Position = _origin != null && _start != null ? _origin.Since(_start).Point(shot.Position) : shot.Position;
         _camera.Rotation = new Vector3(Mathf.DegToRad(shot.PitchDeg), Mathf.DegToRad(shot.YawDeg), 0);
+    }
+
+    /// <summary>
+    /// The camera at a point of the interior it is in (an "l" line), turned in the plan's frame; false (and the line
+    /// failed) when no "i" line has taken it into one.
+    /// </summary>
+    private bool PlaceInside(Vector3 local, float pitchDeg, float yawDeg)
+    {
+        // --enter or /enter put the camera in a building (#1244): its plan, as an "i" line's
+        if (Interiors.InteriorManager.Instance?.Entered is { } entered && entered != _enteredSeen)
+        {
+            _enteredSeen = entered;
+            if (_plan == null) _outsideNear = _camera.Near;
+            _plan = entered;
+            _camera.Near = InsideNear;
+        }
+        if (_plan == null || Interiors.InteriorManager.Instance?.BuiltNode(_plan) is not { } node)
+        {
+            GD.PrintErr($"[shot] FAILED {_shot?.OutPath}: an \"l\" line with no interior: an \"i\" line goes in first");
+            _failed = true;
+            return false;
+        }
+        var turn = Basis.FromEuler(new Vector3(Mathf.DegToRad(pitchDeg), Mathf.DegToRad(yawDeg), 0));
+        _camera.GlobalTransform = node.GlobalTransform * new Transform3D(turn, local);
+        return true;
+    }
+
+    /// <summary>Back out of the interior the camera was in: the building drawn from outside again, the near plane given back.</summary>
+    private void LeaveInterior()
+    {
+        Interiors.InteriorManager.Instance?.CameraInside(null);
+        _camera.Near = _outsideNear;
+        _plan = null;
     }
 
     public override void _Process(double delta)
@@ -197,6 +286,19 @@ public partial class ShotRunner : Node
         _camera.Current = true;
         // every frame: a panel opened since (the start menu, a toast) would land in the picture
         if (_hideHud) HideHud();
+        if (_awaitEnter >= 0)
+        {
+            _awaitEnter += delta;
+            if (Interiors.InteriorManager.Instance is { } going && (going.Entering || going.Entered == null) && _awaitEnter < InsideTimeout * 3) return;
+            _awaitEnter = -1;
+            var s = _shot!.Value;
+            if (!PlaceInside(s.Position, s.PitchDeg, s.YawDeg)) { _shot = null; return; }
+        }
+        if (IsGlide(_shot!.Value))
+        {
+            Glide(delta);
+            return;
+        }
         if (_shot!.Value.Inside is { } inside && !_through)
         {
             GoInside(inside, delta);
@@ -215,7 +317,7 @@ public partial class ShotRunner : Node
 
         bool ok = Save(_shot.Value.OutPath);
         _failed |= !ok;
-        if (_through) Interiors.InteriorManager.Instance?.CameraInside(null);
+        // the camera stays in for the "l" lines after it; the next other line takes it out (Aim)
         _through = false;
         _door = null;
         _shot = null;
@@ -223,6 +325,39 @@ public partial class ShotRunner : Node
         {
             _done = true;
             GetTree().Quit(ok ? 0 : 1);
+        }
+    }
+
+    /// <summary>One frame of a glide (<see cref="IsGlide"/>).</summary>
+    private void Glide(double delta)
+    {
+        var g = _shot!.Value;
+        _elapsed += delta;
+        float t = g.SettleSeconds <= 0 ? 1f : Mathf.Clamp((float)(_elapsed / g.SettleSeconds), 0f, 1f);
+        float k = g.OutPath == "~ease" ? t * t * (3f - 2f * t) : g.OutPath == "~in" ? t * t : g.OutPath == "~out" ? 1f - (1f - t) * (1f - t) : t; // "~lin"
+        var p = _glideFrom.Lerp(g.Position, k);
+        float pitch = Mathf.Lerp(_glideFromPitch, g.PitchDeg, k);
+        float yaw = _glideFromYaw + Mathf.Wrap(g.YawDeg - _glideFromYaw, -180f, 180f) * k; // the short way round
+        if (g.Local)
+        {
+            if (!PlaceInside(p, pitch, yaw)) _shot = null;
+            else if (t >= 1f) (_lastYaw, _shot) = (yaw, null);
+            return;
+        }
+        var world = _origin != null && _start != null ? _origin.Since(_start).Point(p) : p;
+        if (g.AboveGround is { } to)
+        {
+            // above the ground: hold the height until the ground under the camera has streamed in
+            float y = _camera.Position.Y;
+            if (GroundHeight?.Invoke(world) is { } ground) y = ground + Mathf.Lerp(_glideFromAbove, to, k);
+            world = world with { Y = y };
+        }
+        _camera.Position = world;
+        _camera.Rotation = new Vector3(Mathf.DegToRad(pitch), Mathf.DegToRad(yaw), 0);
+        if (t >= 1f)
+        {
+            _lastYaw = yaw;
+            _shot = null;
         }
     }
 
@@ -236,6 +371,8 @@ public partial class ShotRunner : Node
             ReadQueue();
         }
         if (_pending.Count == 0) return false;
+        // the take before is still being encoded: the next one starts once it is written (#1306)
+        if (_pending.Peek() is { Command: { } clip } && clip.StartsWith("/clip start") && ClipRecorder.Busy) return false;
 
         var next = _pending.Dequeue();
         if (next is { Command: { } command })
@@ -247,6 +384,12 @@ public partial class ShotRunner : Node
         if (next is { ShiftBy: { } by })
         {
             ShiftOrigin(by);
+            return false;
+        }
+        if (next is { Fov: { } fov })
+        {
+            GD.Print(string.Create(CultureInfo.InvariantCulture, $"[shot-queue] fov {fov}"));
+            CameraLens.SetFov(_camera, fov);
             return false;
         }
         if (next is { } shot)
@@ -282,6 +425,8 @@ public partial class ShotRunner : Node
             if (line.Length == 0 || line.StartsWith('#')) continue;
             if (line == "quit") _pending.Enqueue(null);
             else if (line.StartsWith('/')) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Command: line));
+            else if (line.StartsWith("fov ") && float.TryParse(line[4..], NumberStyles.Float, CultureInfo.InvariantCulture, out float fov))
+                _pending.Enqueue(new Shot(default, 0, 0, 0, "", Fov: fov));
             else if (TryParseShift(line, out var by))
             {
                 _pending.Enqueue(new Shot(default, 0, 0, 0, "", ShiftBy: by));
@@ -377,10 +522,11 @@ public partial class ShotRunner : Node
         var p = line.Split(',');
         // InvariantCulture: this project is developed on a fr-CH machine (invariant-culture-floats)
         var inv = CultureInfo.InvariantCulture;
-        if (p.Length != 7
+        // an 8th field on an "i" shot names its door (a building's key, _slot for another door of it, #1250)
+        if (p.Length is not (7 or 8)
             || !float.TryParse(p[0], NumberStyles.Float, inv, out float x)
             || !(float.TryParse(p[1], NumberStyles.Float, inv, out float y)
-                || ((p[1].StartsWith('g') || p[1].StartsWith('i')) && float.TryParse(p[1][1..], NumberStyles.Float, inv, out y)))
+                || ((p[1].StartsWith('g') || p[1].StartsWith('i') || p[1].StartsWith('l')) && float.TryParse(p[1][1..], NumberStyles.Float, inv, out y)))
             || !float.TryParse(p[2], NumberStyles.Float, inv, out float z)
             || !float.TryParse(p[3], NumberStyles.Float, inv, out float pitch)
             || !float.TryParse(p[4], NumberStyles.Float, inv, out float yaw)
@@ -388,9 +534,9 @@ public partial class ShotRunner : Node
             || p[6].Trim().Length == 0)
             return false;
         // above the ground: start high, so nothing is clipped while the ground streams in
-        bool aboveGround = p[1].StartsWith('g'), inside = p[1].StartsWith('i');
+        bool aboveGround = p[1].StartsWith('g'), inside = p[1].StartsWith('i'), local = p[1].StartsWith('l');
         shot = new Shot(new Vector3(x, aboveGround || inside ? 2000f : y, z), pitch, yaw, seconds, p[6].Trim(),
-            aboveGround ? y : null, Inside: inside ? y : null);
+            aboveGround ? y : null, Inside: inside ? y : null, Door: p.Length == 8 ? p[7].Trim() : null, Local: local);
         return true;
     }
 
@@ -414,7 +560,10 @@ public partial class ShotRunner : Node
         if (GroundHeight?.Invoke(_camera.GlobalPosition) is not { } ground) return;
         var at = _camera.GlobalPosition with { Y = ground + height };
         _camera.GlobalPosition = at;
-        _door = interiors.OpenDoorForCamera(at, InsideDoorReach) ?? _door;
+        // the door is looked for at a walker's height: a camera asked high (over an auditorium's back rows,
+        // on a booth upstairs) is over every sill's level band
+        _door = (_shot!.Value.Door is { } named ? interiors.OpenDoorForCamera(named)
+            : interiors.OpenDoorForCamera(at with { Y = ground + Math.Min(height, 1.6f) }, InsideDoorReach)) ?? _door;
         if (_door == null || interiors.BuiltLink(_door) is not { } link) return;
 
         // as far behind the doorway as the point stands in front of it, at the height asked above
@@ -423,6 +572,17 @@ public partial class ShotRunner : Node
         var behind = link.Outside * new Vector3(local.X, height, -local.Z);
         _camera.GlobalTransform = link.ToInside * (_camera.GlobalTransform with { Origin = behind });
         interiors.CameraInside(link.Plan);
+        // indoors a cabinet stands a metre off: the spectator's 1 m near plane would cut it (#1250)
+        _outsideNear = _camera.Near;
+        _camera.Near = InsideNear;
+        // the "l" lines after it are in this plan's frame, a glide from here too (#1306)
+        _plan = link.Plan;
+        if (interiors.BuiltNode(link.Plan) is { } node)
+        {
+            var there = node.GlobalTransform.AffineInverse() * _camera.GlobalTransform;
+            var euler = there.Basis.GetEuler();
+            (_lastPos, _lastPitch, _lastYaw) = (there.Origin, Mathf.RadToDeg(euler.X), Mathf.RadToDeg(euler.Y));
+        }
         GD.Print($"[shot] inside through door {_door}: door at {link.Outside.Origin}, facing {link.Outside.Basis.Z}");
         _through = true;
         _waited = 0;
@@ -458,7 +618,8 @@ public partial class ShotRunner : Node
                  $"prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} " +
                  $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} " +
                  $"mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB" +
-                 (_frames > 0 ? $" frame={_frameMs / _frames:F1}ms" : ""));
+                 (_frames > 0 ? $" frame={_frameMs / _frames:F1}ms" : "") +
+                 (Styles.LodScale.StepIndex > 0 ? $" zoomlod=x{Styles.LodScale.Step:F2} ranges={Styles.ZoomRanges.Count} pass={Styles.ZoomRanges.LastPassMs:F2}ms/{Styles.ZoomRanges.LastPassSet}" : ""));
         _frameMs = 0;
         _frames = 0;
         return err == Error.Ok;

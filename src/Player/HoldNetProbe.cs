@@ -107,11 +107,11 @@ public partial class HoldNetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         Expect(me.SetRide(RideKind.A320), "A takes an A320");
-        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
+        // settled on its wheels first: it is put a metre up and reads "on the ground" from construction,
+        // so a plain Until passed at once and the ramp was refused during the drop (#1080); 1 s after
+        // spawning it was once still coming down too (#1006)
+        await UntilHeld(() => me.Vehicle is Airliner j && j.State.OnGround && j.MayOpenDoors, 1.0, 10);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
-        // settled on its wheels first: 1 s after spawning it was once still coming down, the ramp
-        // refused to open, and both peers waited out every step after it (#1006)
-        await Until(() => jet.MayOpenDoors, 8);
         await ParkingBrake(jet, true);
         jet.ToggleDoor(HoldCheck.RampDoor);
         bool ramp = (jet.DoorsOpen >> HoldCheck.RampDoor & 1) != 0 && jet.State.ParkingBrake;

@@ -8,7 +8,8 @@
 - `--connect <host> --econcheck <admin password>` against a server started with that password:
   non-admin vehicle refused, `/login` flips the flag, admin vehicle spawned, cash
   deposit refused outside a bank (#213); `/money` `/give` refused, then as admin `/money`,
-  `/give me`, `/bank set` (restored after), `/clear` (#262); the counter itself: `tools/bankcheck.sh` (loot `banks` note).
+  `/give me`, `/bank set` (restored after), `/clear` (#262), `/despawn all` takes the bike and a dropped stone (#1200);
+  the counter itself: `tools/bankcheck.sh` (loot `banks` note). `GODOT=<exe> tools/econcheck.sh` runs it on the fixture world.
 - Checks never touch the player's `user://inventory.json` (#932): every verification tool (`placedByTool`, the
   `tools` table of `ClientWorld._Ready`: `--interiorcheck`, `--birdcheck`, `--gathercheck`...) and the probes in the
   OR list next to it (`--invuicheck`, `--econcheck`, the net probes) start on a scratch inventory (`Inventory.Scratch`:

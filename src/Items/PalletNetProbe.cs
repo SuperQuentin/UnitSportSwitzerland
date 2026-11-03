@@ -364,8 +364,13 @@ public partial class PalletNetProbe : Node
         // end up a vehicle with its sleeping copy gone.
         bool alreadyUp = VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null;
         if (parked == null || !alreadyUp && !parked.Visible) { Log("the hall's forklift is not there to be woken"); return false; }
-        if (!alreadyUp) DormantVehicles.Instance!.Wake(slot);
-        bool woken = await Until(() => VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null, 10);
+        // asked while waiting, as the aim ray does: the server wakes it only once it knows we are inside (#1085)
+        bool woken = await Until(() =>
+        {
+            if (VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null) return true;
+            DormantVehicles.Instance!.Wake(slot);
+            return false;
+        }, 10);
         await Until(() => parked is { Visible: false }, 2);
         bool hidden = parked is { Visible: false };
         Log($"woken {woken}, the sleeping copy gone {hidden}");
@@ -430,9 +435,17 @@ public partial class PalletNetProbe : Node
         var look = at - stand;
         me.PlaceAt(stand, Mathf.Atan2(-look.X, -look.Z));
         await Seconds(1.5);
-        DormantVehicles.Instance!.Wake(slot);
         string name = slot.NodeName;
-        bool woken = await Until(() => VehicleManager.Instance?.GetNodeOrNull(name) != null, 10);
+        // asked while waiting, as a player's aim ray asks every frame (Wake itself asks the server again every
+        // 2 s): the server ignores a slot of a tile it has not built. Its generated fill follows the players
+        // (#951), so it starts on the works' tile only once we stand there and took 12-14 s for it; the one
+        // ask 1.5 s after arriving was lost, and 10 s was too short (#1085)
+        bool woken = await Until(() =>
+        {
+            if (VehicleManager.Instance?.GetNodeOrNull(name) != null) return true;
+            DormantVehicles.Instance!.Wake(slot);
+            return false;
+        }, 30);
         Log(FormattableString.Invariant($"the site's forklift {name}: woken {woken}"));
         if (!woken) return false;
         await Seconds(0.5);

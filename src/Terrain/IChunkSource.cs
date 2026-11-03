@@ -69,6 +69,12 @@ public interface IChunkSource
     Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => Task.FromResult<RopewayInfoIndex?>(null);
 
     /// <summary>
+    /// The region's points of interest (#1224, <c>pois.bin</c>, <see cref="PoiFile"/>), raw; null when the
+    /// region was built without them. Not tile-scoped: a client syncs it once. Decorators forward it.
+    /// </summary>
+    Task<byte[]?> LoadPoisAsync(CancellationToken ct = default) => Task.FromResult<byte[]?>(null);
+
+    /// <summary>
     /// The region's airports and their stands (#422, <c>airports.json</c>); null when the region has
     /// none. Only the deciding peer reads it (the server, or a client offline): it is not streamed.
     /// Decorators forward it.

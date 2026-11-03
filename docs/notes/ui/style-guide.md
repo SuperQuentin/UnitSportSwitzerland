@@ -2,7 +2,8 @@
 
 Use this when a feature adds or reworks an interface (HUD, picker, panel, popup) and it should match
 the menus. The tools are `Ui/UiTheme` (colours, fonts, styleboxes, the `Theme`) and `Ui/UiKit`
-(ready-made controls); details of both: `theme`. Worked example: `Core/ChatUi` (floating lines,
+(ready-made controls); details of both: `theme`. Where things go, how big and how they behave (and the
+self-review checklist): `ux-guidelines`. Worked example: `Core/ChatUi` (floating lines,
 glass panel, completion popup).
 
 ## Principles

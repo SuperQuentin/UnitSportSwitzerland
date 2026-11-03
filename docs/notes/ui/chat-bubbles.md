@@ -23,7 +23,9 @@
 - **Flat screen**: a `CanvasLayer` at layer 4 (over the world, under the prompts 11, the chat 15
   and the menus), lettering 2.6 % of the window's height, placed by `BubbleLayout` like the films'
   (on screen, none over another or over a speaker's head; a bubble pushed far away goes under the
-  others).
+  others). The body and the tail's end are **eased** toward the layout's spot (`BodyEase` 8/s,
+  `TipEase` 18/s, frame-rate independent), snapped on the first frame on screen: placed raw every
+  frame, a head's jitter on screen and a layout flipping between two spots shook the tail (#1140).
 - **VR** (`XrSession.Active` when the line arrives): the 2D layers are only a panel in the headset,
   so a 2D overlay would float on the panel, not over the head. Each bubble is drawn in a small
   `SubViewport` of its own (2D only, updated while visible) shown on a `Sprite3D` billboard whose

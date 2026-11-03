@@ -151,6 +151,28 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         if (GetNodeOrNull<RadioBody>(name) is { } radio) radio.Volume = RadioLoudness.Clamp(volume);
     }
 
+    /// <summary>
+    /// Sets a world radio's voice/music mix (#1153), for everyone. Its owner's (the player who threw
+    /// it; anyone's when it has none): the server checks.
+    /// </summary>
+    public void SetMix(RadioBody radio, Vector2 mix)
+    {
+        mix = mix.Clamp(Vector2.Zero, Vector2.One);
+        if (!Online) { radio.Mix = mix; return; }
+        RpcId(1, MethodName.RequestMix, radio.Name, mix);
+    }
+
+    /// <summary>Whether <paramref name="peer"/> may set <paramref name="radio"/>'s mix: its owner, or anyone for a radio nobody owns.</summary>
+    public static bool MayMix(RadioBody radio, long peer) => radio.Owner <= 0 || radio.Owner == peer;
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestMix(string name, Vector2 mix)
+    {
+        if (!Multiplayer.IsServer()) return;
+        if (GetNodeOrNull<RadioBody>(name) is { } radio && MayMix(radio, Multiplayer.GetRemoteSenderId()))
+            radio.Mix = mix.Clamp(Vector2.Zero, Vector2.One);
+    }
+
     public void Stop(RadioBody radio)
     {
         if (!Online) { radio.Playing = false; return; }
@@ -457,6 +479,8 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             speaker.StartedAt = p.StartedAt;
             speaker.Length = p.Length;
             speaker.Volume = player.RadioVolume;
+            speaker.Voice = player.RadioMix.X;
+            speaker.Music = player.RadioMix.Y;
             speaker.On = true;
         }
     }

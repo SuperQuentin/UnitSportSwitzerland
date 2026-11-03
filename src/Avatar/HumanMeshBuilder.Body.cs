@@ -46,7 +46,7 @@ public enum HairStyle
 
 /// <summary>
 /// Who a figure is, as opposed to what it wears (#394): build, face, eye colour, skin tone, hair
-/// style and hair colour. A player chooses it in Settings → Character (<c>GameSettings.AppearanceBits</c>) and it replicates
+/// style and hair colour. A player chooses it in the Character menu (<c>GameSettings.AppearanceBits</c>) and it replicates
 /// packed in one int (<c>FootPlayer.AppearanceBits</c>); everyone else gets one from a seed.
 /// Indices into <see cref="SkinTones"/>, <see cref="EyeColours"/> and <see cref="HairColours"/>:
 /// append to those tables only, a packed value must mean the same figure on every peer.
@@ -60,7 +60,7 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         new("8fd16a"), new("bcbab2"), new("ad8fe0"), new("5cc8bc"),
     };
 
-    /// <summary>What Settings → Character shows for each <see cref="SkinTones"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="SkinTones"/> entry (same order).</summary>
     public static readonly string[] SkinNames =
         { "Tone 1", "Tone 2", "Tone 3", "Tone 4", "Tone 5", "Tone 6", "Tone 7", "Tone 8", "Alien green", "Alien grey", "Alien violet", "Alien teal" };
 
@@ -78,10 +78,10 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         new("d8b860"), new("e8e2cf"), new("8a8a8a"), new("33b8bc"), new("1f6fbf"), new("e86aa8"),
     };
 
-    /// <summary>What Settings → Character shows for each <see cref="EyeColours"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="EyeColours"/> entry (same order).</summary>
     public static readonly string[] EyeNames = { "Brown", "Blue", "Green", "Violet", "Red", "Amber", "Grey", "Black" };
 
-    /// <summary>What Settings → Character shows for each <see cref="HairColours"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="HairColours"/> entry (same order).</summary>
     public static readonly string[] HairColourNames =
         { "Black", "Dark brown", "Brown", "Auburn", "Red", "Ginger", "Blonde", "Platinum", "Grey", "Teal", "Blue", "Pink" };
 
@@ -372,7 +372,8 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         // forward as the fallback: the trunk never lies along its own shoulder line
-        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f);
+        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f)
+            with { Part = PartTrunk };
     }
 
     /// <summary>An arm, shoulder to wrist (and the hand, on the forearm).</summary>
@@ -381,7 +382,9 @@ public static partial class HumanMeshBuilder
         var q = RestRig;
         return left
             ? TwoBoneRest(r.ShoulderL, r.ElbowL, r.WristL, ShoulderLine(r), TrunkUp(r), q.ShoulderL, q.ElbowL, q.WristL, ShoulderLine(q), TrunkUp(q), 0.04f)
-            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f);
+                with { Part = PartArmL }
+            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f)
+                with { Part = PartArmR };
     }
 
     /// <summary>A leg from free joints (a cyclist's too), hip to ankle, <paramref name="side"/> across the figure.</summary>
@@ -389,7 +392,8 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         var (rh, rk, ra) = left ? (q.HipL, q.KneeL, q.AnkleL) : (q.HipR, q.KneeR, q.AnkleR);
-        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f);
+        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f)
+            with { Part = left ? PartLegL : PartLegR };
     }
 
     /// <summary>A foot, ankle to toe.</summary>
@@ -397,7 +401,7 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         var (ra, rt) = left ? (q.AnkleL, q.ToeL) : (q.AnkleR, q.ToeR);
-        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up));
+        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up), left ? PartFootL : PartFootR);
     }
 
     /// <summary>The head and the neck under it.</summary>
@@ -405,7 +409,7 @@ public static partial class HumanMeshBuilder
     {
         var q = RestRig;
         return MeshScratch.RestMap.Rigid(BoneRest(r.HeadBase, r.HeadTop, ShoulderLine(r), TrunkFwd(r),
-            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)));
+            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)), PartHead);
     }
 
     /// <summary>
@@ -463,7 +467,7 @@ public static partial class HumanMeshBuilder
                 // pointing (#889), the hand bends at the wrist along its own way: it is drawn as from an
                 // elbow straight behind it on that line
                 bool point = !left && r.PointDirR != Vector3.Zero;
-                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point);
+                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point, r.Fist);
             }
         }
         if (!head) return fit;
@@ -471,7 +475,9 @@ public static partial class HumanMeshBuilder
         using var headRest = s.Resting(HeadRest(r));
         // a straight neck up into the skull behind the jaw: the jaw's underside overhangs it, so the
         // head reads as a head on a neck rather than one cone running down into the collar
-        s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
+        // from the top of the trunk into the head, so a skinned one (#1202) bends with both
+        using (s.Resting(HeadRest(r) with { Part = PartNeck }))
+            s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
         fit.Head.Draw(s, look.Skin);
         if (cover != HairCover.Head)
         {
@@ -656,16 +662,56 @@ public static partial class HumanMeshBuilder
     }
 
     /// <summary>
+    /// The closed fist of a sword's grip (#1371), from <see cref="HandGrip"/>: each finger a ring of straight boxes round the handle (the flat sides
+    /// tangent to its circle), stacked along the handle's axis, the thumb over the index and middle fingers. Built once, when the sword is equipped.
+    /// </summary>
+    private static void FistGrip(MeshScratch s, Vector3 wrist, Vector3 t, Vector3 d, Vector3 n, Color colour)
+    {
+        Vector3 At(System.Numerics.Vector3 v) => wrist + t * v.X + d * v.Y + n * v.Z;
+        var axis = HandGrip.Axis;
+        var axisW = (t * axis.X + d * axis.Y).Normalized();
+        Span<System.Numerics.Vector3> pts = stackalloc System.Numerics.Vector3[HandGrip.Segments + 1];
+        for (int i = 0; i < 4; i++)
+        {
+            HandGrip.RingPoints(i, pts);
+            for (int k = 0; k < HandGrip.Segments; k++)
+            {
+                var a = At(pts[k]);
+                var b = At(pts[k + 1]);
+                var along = b - a;
+                float len = along.Length();
+                var y = along / len;
+                var z = axisW.Cross(y).Normalized();
+                s.Box((a + b) * 0.5f, new Vector3(HandGrip.FingerWide, len + 0.003f, HandGrip.FingerThick), colour, new Basis(axisW, y, z));
+            }
+        }
+        Span<System.Numerics.Vector3> th = stackalloc System.Numerics.Vector3[3];
+        HandGrip.ThumbPoints(th);
+        s.Tube(At(th[0]), At(th[1]), HandGrip.ThumbRadius * 1.1f, HandGrip.ThumbRadius, colour, 5);
+        s.Tube(At(th[1]), At(th[2]), HandGrip.ThumbRadius, HandGrip.ThumbRadius * 0.9f, colour, 5);
+    }
+
+    /// <summary>
     /// A hand: palm, four fingers curled a little toward the palm, and a thumb on the side facing
     /// forward when the arm hangs. The palm faces the body. <paramref name="point"/>: the index
     /// straight on along the hand, the others curled into the palm (a finger on a screen, #889).
     /// </summary>
-    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false)
+    /// <summary>The viewer's close-ups of the grip build the unposed figure with closed fists (the game's is <c>FigureLook.Fist</c>).</summary>
+    [ThreadStatic] private static bool ForceFist;
+
+    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false, bool fist = false)
     {
+        fist |= ForceFist;
+        if (fist) scale = 1f;   // the grip is described at one hand size (HandGrip), so the sword sits in it whatever the build
         var h = HandFrameOf(elbow, wrist, side, scale);
         var (dir, thumbSide, n, k) = (h.Along, h.Thumb, h.Inward, scale);
         var basis = new Basis(thumbSide, dir, thumbSide.Cross(dir));
         s.Box(h.Palm, new Vector3(0.068f, 0.072f, 0.028f) * k, palm, basis);
+        if (fist)
+        {
+            FistGrip(s, wrist, thumbSide, dir, n, fingers);
+            return;
+        }
 
         // fingers from the knuckle line, the index on the thumb side
         var knuckles = h.Palm + dir * 0.036f * k;
@@ -673,7 +719,8 @@ public static partial class HumanMeshBuilder
         for (int i = 0; i < 4; i++)
         {
             // pointing: the index straight, the rest folded into the palm
-            float bend = !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
+            // a closed fist (#1371, a sword in the hand): every finger curled right round into the palm
+            float bend = fist ? 1.38f : !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
             var curl = (dir * Mathf.Cos(bend) + n * Mathf.Sin(bend)).Normalized();
             var fingerBasis = new Basis(thumbSide, curl, thumbSide.Cross(curl));
             float across = (1.5f - i) * 0.0168f * k;
@@ -690,7 +737,8 @@ public static partial class HumanMeshBuilder
         }
 
         var thumbRoot = wrist + dir * 0.022f * k + thumbSide * 0.028f * k;
-        var thumbDir = (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
+        var thumbDir = fist ? (dir * 0.45f + n * 0.55f - thumbSide * 0.40f).Normalized()   // over the curled fingers
+            : (dir * 0.65f + thumbSide * 0.5f + n * 0.45f).Normalized();
         s.Tube(thumbRoot, thumbRoot + thumbDir * 0.055f * k, 0.013f * k, 0.009f * k, fingers, 5);
     }
 

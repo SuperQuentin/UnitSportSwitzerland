@@ -18,8 +18,9 @@
   (the inside of the turn), the angulation turns `Basis(Back, +lean·share)`, and the first-person
   eye is flipped too (`SnowRig.Eye`). Got all three backwards once: the camera sat behind the
   head and the upper body leaned further in instead of out.
-- **Cost**: the mesh is rebuilt in place (`BuildInto`, one scratch per rig) only when the pose's
-  `Key` (its values in steps) changes; a held line costs nothing.
+- **Cost**: the body is a skinned figure (#1202) posed by its bones only when the pose's `Key`
+  (its values in steps) changes, the skis and poles nodes moved to their boots and grips; a held
+  line costs nothing.
 - **Driving it**: `SnowRide.Glide` records the tuck, air, plough and strides (a counter: physics
   steps and frames do not run one for one); `SnowRide.Animate` eases crouch, plough and absorb and
   runs a stride for `StrideTime` (0.42 s skis, 0.5 s board), legs taking turns. The pose travels

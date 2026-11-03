@@ -46,6 +46,7 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/unit
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
+lights_and_shadows/directional_shadow/size.quest=1024
 textures/vram_compression/import_etc2_astc=true
 scaling_3d/scale=0.75
 limits/global_shader_variables/buffer_size=262144
@@ -104,6 +105,10 @@ world_lights={
 "type": "float",
 "value": 0.0
 }
+world_lamps={
+"type": "float",
+"value": 1.0
+}
 world_origin_offset={
 "type": "vec2",
 "value": Vector2(0, 0)
@@ -147,6 +152,18 @@ water_time={
 world_cam_pos={
 "type": "vec3",
 "value": Vector3(0, 0, 0)
+}
+world_curvature={
+"type": "float",
+"value": 0.0
+}
+world_curve_blend={
+"type": "float",
+"value": 0.0
+}
+world_lod_scale={
+"type": "float",
+"value": 1.0
 }
 world_door_light_0={
 "type": "vec4",
@@ -199,6 +216,10 @@ portal_clip_plane_3={
 
 [xr]
 
+openxr/enabled.quest=true
+openxr/foveation_level.quest=3
+openxr/foveation_dynamic.quest=true
+openxr/extensions/meta/dynamic_resolution=false
 openxr/extensions/hand_tracking=true
 openxr/extensions/hand_tracking_unobstructed_data_source=true
 openxr/extensions/hand_tracking_controller_data_source=true

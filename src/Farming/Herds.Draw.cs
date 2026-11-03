@@ -51,6 +51,8 @@ public partial class Herds
         }
     }
 
+    private static readonly int NearEvery = Core.Platform.IsStandaloneVr ? 2 : 1, FarEvery = Core.Platform.IsStandaloneVr ? 16 : 8;
+
     public override void _Process(double delta)
     {
         if (_dedicated) return;
@@ -65,8 +67,7 @@ public partial class Herds
 
         foreach (var h in _all)
         {
-            double de = h.Plan.E - ee, dn = h.Plan.N - en;
-            float dist = (float)Math.Sqrt(de * de + dn * dn);
+            float dist = (float)GlobalPos.HorizontalDistance(h.Plan.E, h.Plan.N, ee, en);
             bool any = false;
             foreach (var c in h.Cows) if (_over.ContainsKey(c.Key)) { any = true; break; }
             if (dist > DrawRange && !any)
@@ -77,9 +78,12 @@ public partial class Herds
             bool fresh = h.Bodies == null;
             if (fresh) Build(h);
             if (!h.Bodies!.Visible) h.Bodies.Visible = h.Heads!.Visible = true;
-            // far herds a few times a second, staggered so they do not all land on one frame
-            if (!fresh && dist > NearRange && !any && (_frame + h.Plan.Index) % 8 != 0) continue;
-            Pose(h, now, eye, ee, en, dist > NearRange ? dt * 8f : dt);
+            // far herds a few times a second, staggered so they do not all land on one frame; on a
+            // standalone headset (#1112) the near ones every other frame and the far ones half as often
+            int every = dist > NearRange ? FarEvery : NearEvery;
+            if (!fresh && !any && every > 1 && (_frame + h.Plan.Index) % every != 0) continue;
+            // a near herd posed this frame anyway (being carried, just built) moves by this frame's time only
+            Pose(h, now, eye, ee, en, dist <= NearRange && (fresh || any) ? dt : dt * every);
         }
 
         Sounds(delta, ee, en, now);
@@ -92,6 +96,8 @@ public partial class Herds
         h.GroundAt = new Vector2[n];
         h.HeadPitch = new float[n];
         h.HeadYaw = new float[n];
+        h.BodyBuffer = new float[n * 12];
+        h.HeadBuffer = new float[n * 12];
         h.WasAir = new bool[n];
         h.AirAt = new Vector3[n];
         Array.Fill(h.Ground, float.NaN);
@@ -104,8 +110,8 @@ public partial class Herds
             CustomAabb = new Aabb(new Vector3(-400, -50, -400), new Vector3(800, 450, 800)),
             VisibilityRangeEnd = DrawRange,
         };
-        h.Bodies = Make("Cows", CowMeshBuilder.Body(h.Plan.Breed));
-        h.Heads = Make("Heads", CowMeshBuilder.Head(h.Plan.Breed));
+        h.Bodies = Styles.ZoomRanges.Track(Make("Cows", CowMeshBuilder.Body(h.Plan.Breed)));
+        h.Heads = Styles.ZoomRanges.Track(Make("Heads", CowMeshBuilder.Head(h.Plan.Breed)));
         AddChild(h.Bodies);
         AddChild(h.Heads);
     }
@@ -175,10 +181,13 @@ public partial class Herds
             else if (gait > 0.5f)
                 local.Y += Mathf.Abs(Mathf.Sin((float)now * 4.2f + i)) * 0.035f;   // the walk's gentle bob
 
-            bodies.SetInstanceTransform(i, new Transform3D(basis, local));
+            MultiMeshPack.Transform(h.BodyBuffer, i * 12, new Transform3D(basis, local));
             var headBasis = basis * new Basis(Vector3.Up, h.HeadYaw[i] + headShake) * new Basis(Vector3.Right, -h.HeadPitch[i]);
-            heads.SetInstanceTransform(i, new Transform3D(headBasis, local + basis * CowMeshBuilder.Neck));
+            MultiMeshPack.Transform(h.HeadBuffer, i * 12, new Transform3D(headBasis, local + basis * CowMeshBuilder.Neck));
         }
+        // one engine call a mesh, not one a cow: across the engine boundary each costs more than the pose (#1112)
+        bodies.Buffer = h.BodyBuffer;
+        heads.Buffer = h.HeadBuffer;
     }
 
     // ---- sounds -----------------------------------------------------------------------------------
@@ -199,8 +208,7 @@ public partial class Herds
         float palt = float.NaN;
         foreach (var h in _all)
         {
-            double de = h.Plan.E - ee, dn = h.Plan.N - en;
-            if (de * de + dn * dn > (range + 60) * (range + 60)) continue;
+            if (GlobalPos.HorizontalDistanceSquared(h.Plan.E, h.Plan.N, ee, en) > (range + 60) * (range + 60)) continue;
             for (int i = 0; i < h.Cows.Length; i++)
             {
                 var (e, n, alt, _, _, _) = Where(h, i, now);

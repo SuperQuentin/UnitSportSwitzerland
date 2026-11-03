@@ -22,7 +22,7 @@ public partial class Modal : Control
     private static Modal Build(Control host, string title, string? message, out VBoxContainer body)
     {
         Current?.QueueFree();
-        var m = new Modal { Name = "Modal", Theme = UiTheme.Get(), MouseFilter = MouseFilterEnum.Stop };
+        var m = new Modal { Name = "Modal", Theme = Skins.MenuSkin.Theme(), MouseFilter = MouseFilterEnum.Stop };
         m.SetAnchorsPreset(LayoutPreset.FullRect);
         m._previousFocus = host.GetViewport().GuiGetFocusOwner();
 
@@ -35,7 +35,7 @@ public partial class Modal : Control
         m.AddChild(centre);
 
         var panel = new PanelContainer { CustomMinimumSize = new Vector2(440, 0) };
-        panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.96f, 14, 26));
+        panel.ThemeTypeVariation = Skins.SkinTheme.Page;
         centre.AddChild(panel);
         body = UiKit.VBox(12);
         panel.AddChild(body);
@@ -207,6 +207,28 @@ public partial class Modal : Control
         okButton.Pressed += m.Cancel;
         buttons.AddChild(okButton);
         okButton.CallDeferred(Control.MethodName.GrabFocus);
+        return m;
+    }
+
+    /// <summary>A scrolling text with one Close button (Esc / B too), for notes longer than a message (#1413).</summary>
+    public static Modal Notes(Control host, string title, string bbcode)
+    {
+        var m = Build(host, title, null, out var body);
+        var text = new RichTextLabel
+        {
+            BbcodeEnabled = true, Text = bbcode, FocusMode = FocusModeEnum.All, // a focused label scrolls on the stick and arrows
+            CustomMinimumSize = new Vector2(560, 360),
+        };
+        text.AddThemeFontSizeOverride("normal_font_size", UiTheme.FontSmall);
+        text.AddThemeFontSizeOverride("bold_font_size", UiTheme.FontSmall);
+        body.AddChild(text);
+        var buttons = UiKit.HBox(10);
+        buttons.Alignment = BoxContainer.AlignmentMode.End;
+        body.AddChild(buttons);
+        var close = UiKit.Button("Close", primary: true, minWidth: 110);
+        close.Pressed += m.Cancel;
+        buttons.AddChild(close);
+        text.CallDeferred(Control.MethodName.GrabFocus);
         return m;
     }
 

@@ -61,6 +61,8 @@ public sealed class StagePlan
     public readonly List<PaCab> Pa = new();
     /// <summary>The lighting desk on the front-of-house riser, stadium frame: where its screen opens.</summary>
     public Vector3 Desk { get; private set; }
+    /// <summary>The consoles' box at front of house: what E at <see cref="Desk"/> outlines (#1286).</summary>
+    public StageBox Console { get; private set; }
     /// <summary>The camera platform beside front of house: its deck's top middle, stadium frame (#985).</summary>
     public Vector3 FohCamera { get; private set; }
     /// <summary>The far camera tower's deck top, out on the floor facing the stage; null when the floor has no room for it (#985).</summary>
@@ -95,6 +97,34 @@ public sealed class StagePlan
         foreach (var z in Zones)
             if (z.Contains(uv, margin)) return true;
         return false;
+    }
+
+    /// <summary>
+    /// <see cref="Blocked"/> for many points at one margin (the crowd asks it for 18 000 on a festival field against 400
+    /// boxes: 300 ms of trigonometry on the main thread): each box's axes and reach worked out once, the plan not changed after.
+    /// </summary>
+    public Func<Vector2, bool> BlockedTester(float margin)
+    {
+        var boxes = new List<(Vector2 C, float C2, float S, float Hx, float Hz, float Reach2)>();
+        foreach (var b in Boxes)
+        {
+            if (b.Size.X * b.Size.Z < 0.5f) continue;   // a pole
+            float reach = MathF.Sqrt(b.Size.X * b.Size.X + b.Size.Z * b.Size.Z) / 2 + margin;
+            boxes.Add((new Vector2(b.Centre.X, b.Centre.Z), MathF.Cos(b.Yaw), MathF.Sin(b.Yaw), b.Size.X / 2 + margin, b.Size.Z / 2 + margin, reach * reach));
+        }
+        return uv =>
+        {
+            if (Mvr.MvrCollision.Blocks(ObjectFootprints, uv, margin)) return true;
+            foreach (var (c, cos, sin, hx, hz, reach2) in boxes)
+            {
+                var d = uv - c;
+                if (d.LengthSquared() > reach2) continue;
+                if (MathF.Abs(d.X * cos - d.Y * sin) < hx && MathF.Abs(d.X * sin + d.Y * cos) < hz) return true;
+            }
+            foreach (var z in Zones)
+                if (z.Contains(uv, margin)) return true;
+            return false;
+        };
     }
 
     /// <summary>
@@ -381,6 +411,7 @@ public sealed class StagePlan
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, Tent, solid: false);
         // the consoles, facing the stage
         Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);
+        Console = Boxes[^1];
         Desk = At(0, 1.2f, foh + 2.8f);
         foreach (float x in new[] { -4.8f, 4.8f })
             foreach (float z in new[] { foh + 0.2f, foh + 5.8f })
@@ -681,6 +712,7 @@ public sealed class StagePlan
         Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, tent);
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, tent, solid: false);
         Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);
+        Console = Boxes[^1];
         Desk = At(0, 1.2f, foh + 2.8f);
         CameraDeck(5.6f, 8.6f, foh + 1.5f, foh + 4.5f);
         Zone("front of house", -6.5f, 9.6f, foh - 1.5f, foh + 7.5f, true);

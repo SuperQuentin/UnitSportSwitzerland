@@ -35,6 +35,12 @@ public enum HumanPose
     /// the toe edge (+Z), arms out along the board for balance. The board runs along X.
     /// </summary>
     Boarding,
+
+    /// <summary>
+    /// Falling from height (#1154): arms windmilling over the head, legs pedalling. A still of it;
+    /// the player draws it moving (<see cref="HumanMeshBuilder.BuildFalling"/>).
+    /// </summary>
+    Falling,
 }
 
 /// <summary>
@@ -133,6 +139,15 @@ public enum Headwear
     PumpkinHead = 2,
     SantaHat = 3,
     ReindeerAntlers = 4,
+    // 5-20 are the festivals' (#1269): Fasnacht masks and the flower crown, added by the parts that draw them
+    // the Fasnacht's Larven (#1357), full-head masks like the pumpkin: Basel's Waggis, the Alti Dante, the Harlekin, the Teufel (the stall's four) and the
+    // Luzern Fritschi and the Basel Ueli (the festivals' own hat while they run)
+    LarveWaggis = 5,
+    LarveDante = 6,
+    LarveHarlekin = 7,
+    LarveTeufel = 8,
+    LarveFritschi = 9,
+    LarveUeli = 10,
 }
 
 /// <summary>
@@ -174,7 +189,7 @@ public static partial class HumanMeshBuilder
         Vector3 ShoulderR, Vector3 ElbowR, Vector3 WristR,
         Vector3 HipL, Vector3 KneeL, Vector3 AnkleL, Vector3 ToeL,
         Vector3 HipR, Vector3 KneeR, Vector3 AnkleR, Vector3 ToeR,
-        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default);
+        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default, bool Fist = false);
 
     /// <param name="into">A mesh to rebuild in place (a figure redrawn while it moves keeps one), or null for a new one.</param>
     public static ArrayMesh Build(HumanPalette palette, HumanPose pose = HumanPose.Standing,
@@ -273,6 +288,32 @@ public static partial class HumanMeshBuilder
             ElbowL = elbowL, WristL = wristL, ElbowR = elbowR, WristR = wristR,
             HandDir = (wristL - elbowL).Normalized(),
         };
+    }
+
+    /// <summary>
+    /// A hand held by another player's (#1266, <c>ArmHold</c>): where the wrist goes, in the figure's own frame (x right,
+    /// y up, -z ahead, from the feet), and which hand reaches (<see cref="Left"/>: the figure's left; the right is the
+    /// item hand). Every peer computes it from the link book and both bodies' replicated positions; bones only.
+    /// </summary>
+    public readonly record struct HandHold(Vector3 Local, bool Left);
+
+    /// <summary>A wrist's reach for a held hand, m: the arm almost straight.</summary>
+    public const float HoldReach = 0.62f;
+
+    /// <summary>Puts one wrist at a held hand (<see cref="HandHold"/>), within <see cref="HoldReach"/> of its shoulder, and re-solves that elbow.</summary>
+    private static Rig ApplyHold(Rig rig, HandHold? hold)
+    {
+        if (hold is not { } h) return rig;
+        // the figure's left is the rig's +X side (R), its right the item side (L)
+        if (h.Left)
+        {
+            var wrist = Reach(rig.ShoulderR, Author(h.Local), HoldReach);
+            var elbow = Limb.Solve(rig.ShoulderR, wrist, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
+            return rig with { ElbowR = elbow, WristR = wrist };
+        }
+        var wl = Reach(rig.ShoulderL, Author(h.Local), HoldReach);
+        var el = Limb.Solve(rig.ShoulderL, wl, UpperArmLength, ForearmLength, new Vector3(-0.6f, -0.6f, -0.2f));
+        return rig with { ElbowL = el, WristL = wl, HandDir = (wl - el).Normalized() };
     }
 
     /// <summary>The body faces -Z, the author space +Z: a half turn about Y.</summary>
@@ -407,7 +448,7 @@ public static partial class HumanMeshBuilder
     public readonly record struct GaitMounts(
         Vector3 Eye, Vector3 Head, Vector3 Chest, Vector3 Hip,
         Vector3 ShoulderL, Vector3 ShoulderR, Vector3 FootL, Vector3 FootR,
-        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default);
+        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default, Vector3 GripOrigin = default, Basis GripBasis = default, Basis BoneBasis = default);
 
     /// <summary>
     /// The mount points for one instant of the gait.
@@ -419,8 +460,8 @@ public static partial class HumanMeshBuilder
     /// </para>
     /// </summary>
     public static GaitMounts MountsFor(float speed, float phase,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, VrArms? vr = null) =>
-        MountsForRig(ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr));
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, VrArms? vr = null, HandHold? hold = null) =>
+        MountsForRig(ApplyVr(ApplyHold(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), hold), vr));
 
     /// <summary>
     /// Mounts for a fixed (non-gait) pose — a cyclist, who does not run, still needs a head to
@@ -453,11 +494,16 @@ public static partial class HumanMeshBuilder
     /// side plane. Low clip-ons far ahead fold the torso down onto the tank; a high wide bar sits it up.
     /// The knees follow from the pegs by the same two-bone solve.
     /// </summary>
-    private static Rig RiderRig(Vector3 seat, Vector3 grip, Vector3 peg)
+    /// <param name="reachShare">How much of the arm's length reaches the grip: less folds the elbows.</param>
+    /// <param name="backAngle">
+    /// The back's angle above level, rad, when the rider sets it rather than the reach (a cyclist's
+    /// tuck, #1124): the shoulder goes there and the elbows fold to whatever reaches the grip.
+    /// </param>
+    private static Rig RiderRig(Vector3 seat, Vector3 grip, Vector3 peg, float reachShare = 0.8f, float backAngle = float.NaN)
     {
         const float torso = 0.48f, shoulderHalf = 0.175f;
         var hip = seat + new Vector3(0, 0.09f, 0);   // the hip joint rides a pelvis above the seat foam
-        float reach = 0.8f * (UpperArmLength + ForearmLength);
+        float reach = reachShare * (UpperArmLength + ForearmLength);
         float dx = Mathf.Abs(grip.X) - shoulderHalf;
         float armPlanar = Mathf.Sqrt(Mathf.Max(0.01f, reach * reach - dx * dx));
 
@@ -467,7 +513,8 @@ public static partial class HumanMeshBuilder
         var to = g - h;
         float d = Mathf.Max(to.Length(), 1e-3f);
         Vector2 shoulder;
-        if (d >= torso + armPlanar) shoulder = h + to / d * torso;   // out of reach: stretched toward the bars
+        if (!float.IsNaN(backAngle)) shoulder = h + new Vector2(Mathf.Sin(backAngle), Mathf.Cos(backAngle)) * torso;
+        else if (d >= torso + armPlanar) shoulder = h + to / d * torso;   // out of reach: stretched toward the bars
         else
         {
             float along = (d * d + torso * torso - armPlanar * armPlanar) / (2f * d);
@@ -511,6 +558,96 @@ public static partial class HumanMeshBuilder
             HipL: legL.Hip, KneeL: legL.Knee, AnkleL: legL.Ankle, ToeL: legL.Toe,
             HipR: legR.Hip, KneeR: legR.Knee, AnkleR: legR.Ankle, ToeR: legR.Toe,
             TorsoLean: 0f);
+    }
+
+    private static readonly Rig?[] _cyclingRigs = new Rig?[4];
+
+    /// <summary>
+    /// The cyclist, fitted to the road bike (<see cref="Player.BikeFrame"/>, #1124). The three contact
+    /// points are the bike's — the hips on the saddle the fit put up the seat tube, the hands on the
+    /// hoods, the feet on the pedals (the "R" foot forward and level) — and the torso is then the
+    /// seated rider's solve: the shoulder is the one place the back and a bent arm can both reach.
+    /// Placing these joints by hand once produced a rider lying flat in front of the bars: with the
+    /// ends pinned, the middle is not a free choice.
+    /// </summary>
+    private static Rig CyclingRig => CyclingRigFor(Player.RidingPosition.Hoods);
+
+    private static readonly Dictionary<(Player.BikeFrame, Player.RidingPosition), Rig> OtherBikeRigs = new();
+
+    /// <summary>
+    /// The cyclist in each riding position, solved the same way from <see cref="Player.BikeFrame.Fit"/>,
+    /// on <paramref name="frame"/> (#1159: sat up on a riser bar), the road bike when null.
+    /// </summary>
+    private static Rig CyclingRigFor(Player.RidingPosition position, Player.BikeFrame? frame = null)
+    {
+        if (frame == null || frame == Player.BikeFrame.Default)
+            return _cyclingRigs[(int)position] ??= SolveCyclingRig(Player.BikeFrame.Default, position);
+        lock (OtherBikeRigs)
+        {
+            if (!OtherBikeRigs.TryGetValue((frame, position), out var rig))
+                OtherBikeRigs[(frame, position)] = rig = SolveCyclingRig(frame, position);
+            return rig;
+        }
+    }
+
+    /// <summary>A cyclist in <paramref name="position"/> (#1124) on <paramref name="frame"/> (#1159): legs left out for <see cref="Cyclist"/> to pedal.</summary>
+    public static ArrayMesh BuildCyclist(HumanPalette palette, Player.RidingPosition position, bool includeLegs = false,
+        bool helmet = true, ArrayMesh? into = null, Player.BikeFrame? frame = null)
+    {
+        var scratch = ScratchFor(into);
+        AppendRig(scratch, palette, CyclingRigFor(position, frame), includeLegs, helmet);
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>
+    /// A cyclist part way from <paramref name="from"/> to <paramref name="to"/> (#1124): every joint
+    /// eased between the two solved poses, <paramref name="t"/> 0..1, so a rider sinks onto the drops
+    /// or rises out of the saddle instead of jumping there.
+    /// </summary>
+    public static ArrayMesh BuildCyclistBlend(HumanPalette palette, Player.RidingPosition from, Player.RidingPosition to,
+        float t, ArrayMesh? into = null, Player.BikeFrame? frame = null)
+    {
+        var scratch = ScratchFor(into);
+        AppendRig(scratch, palette, Lerp(CyclingRigFor(from, frame), CyclingRigFor(to, frame), t), includeLegs: false, helmet: true);
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>Two rigs blended joint by joint.</summary>
+    private static Rig Lerp(Rig a, Rig b, float t) => new(
+        a.HeadTop.Lerp(b.HeadTop, t), a.HeadBase.Lerp(b.HeadBase, t), a.Neck.Lerp(b.Neck, t), a.Chest.Lerp(b.Chest, t),
+        a.Waist.Lerp(b.Waist, t), a.Hip.Lerp(b.Hip, t),
+        a.ShoulderL.Lerp(b.ShoulderL, t), a.ElbowL.Lerp(b.ElbowL, t), a.WristL.Lerp(b.WristL, t),
+        a.ShoulderR.Lerp(b.ShoulderR, t), a.ElbowR.Lerp(b.ElbowR, t), a.WristR.Lerp(b.WristR, t),
+        a.HipL.Lerp(b.HipL, t), a.KneeL.Lerp(b.KneeL, t), a.AnkleL.Lerp(b.AnkleL, t), a.ToeL.Lerp(b.ToeL, t),
+        a.HipR.Lerp(b.HipR, t), a.KneeR.Lerp(b.KneeR, t), a.AnkleR.Lerp(b.AnkleR, t), a.ToeR.Lerp(b.ToeR, t),
+        Mathf.Lerp(a.TorsoLean, b.TorsoLean, t), a.HandDir.Lerp(b.HandDir, t), a.PointDirR.Lerp(b.PointDirR, t));
+
+    /// <summary>Camera mounts (the eye for first person) of a cyclist in <paramref name="position"/>.</summary>
+    public static GaitMounts MountsForCyclist(Player.RidingPosition position, Player.BikeFrame? frame = null) =>
+        MountsForRig(CyclingRigFor(position, frame));
+
+    private static Rig SolveCyclingRig(Player.BikeFrame frame, Player.RidingPosition position)
+    {
+        var fit = frame.Fit(position);
+        // the pelvis sits 1.5 cm over the leg joints, as on every other rig; RiderRig lifts its seat 9 cm
+        var pelvis = fit.Hip + new Vector3(0, 0.015f, -0.005f);
+        var upper = RiderRig(pelvis - new Vector3(0, 0.09f, 0), fit.Wrist, frame.Pedal(0f, 1), fit.Reach, fit.Back);
+
+        (Vector3 Hip, Vector3 Knee, Vector3 Ankle, Vector3 Toe) Leg(int side)
+        {
+            var hip = frame.LegHip(side, position);
+            var pedal = frame.Pedal(0f, side);
+            // the same solve as Cyclist's pedalling legs, so the still figure and the moving one agree
+            var knee = Limb.Solve(hip, pedal, Player.BikeFrame.ThighLength, Player.BikeFrame.ShinLength, new Vector3(0, 0, 1));
+            return (hip, knee, pedal + new Vector3(0, 0.03f, -0.03f), pedal + new Vector3(0, 0, 0.09f));
+        }
+        var l = Leg(-1);
+        var r = Leg(1);
+        return upper with
+        {
+            HipL = l.Hip, KneeL = l.Knee, AnkleL = l.Ankle, ToeL = l.Toe,
+            HipR = r.Hip, KneeR = r.Knee, AnkleR = r.Ankle, ToeR = r.Toe,
+        };
     }
 
     // ---- a car's driver (Avatar/CarCabin: the seat, wheel and pedals come from the car) ----
@@ -638,34 +775,6 @@ public static partial class HumanMeshBuilder
         };
     }
 
-    /// <summary>
-    /// A seated driver's body (no head) for a wheel angle, throttle and brake quantised to what can
-    /// be seen (0.03 rad, eighths) and <see cref="SmoothFigures"/> (#311), from <paramref name="cache"/> or built once into it (#221): a car
-    /// or a truck keeps one cache, so a wheel that comes back to straight does not rebuild the figure.
-    /// </summary>
-    public static ArrayMesh DriverBody(Dictionary<(int Turn, int Throttle, int Brake, bool Smooth), ArrayMesh> cache,
-        (int Turn, int Throttle, int Brake, bool Smooth) pose, HumanPalette palette, DriverSeat seat)
-    {
-        if (cache.TryGetValue(pose, out var mesh)) return mesh;
-        // ponytail: a full cache is emptied, not evicted by age; a hard drive of a full lock-to-lock
-        // wheel crosses ~500 keys, and an LRU is not worth it for a figure this cheap to rebuild
-        if (cache.Count >= 256) cache.Clear();
-        var s = new MeshScratch();
-        AppendDriver(s, palette, seat, pose.Turn * 0.03f, pose.Throttle / 8f, pose.Brake / 8f, head: false);
-        return cache[pose] = s.Build();
-    }
-
-    /// <summary>
-    /// A seated driver's head alone, for a car or truck rig to show from outside. Built once, and
-    /// again when <see cref="SmoothFigures"/> changes (the pose key's <c>Smooth</c>).
-    /// </summary>
-    public static ArrayMesh DriverHead(HumanPalette palette, DriverSeat seat)
-    {
-        var s = new MeshScratch();
-        AppendDriver(s, palette, seat, 0f, 0f, 0f, body: false);
-        return s.Build();
-    }
-
     /// <summary>Camera mounts for <see cref="AppendDriver"/>'s figure at rest, flipped to face -Z like the mesh.</summary>
     public static GaitMounts MountsForDriver(DriverSeat seat) => MountsForRig(DriverRig(seat, 0f, 0f, 0f));
 
@@ -694,6 +803,12 @@ public static partial class HumanMeshBuilder
 
     /// <summary>A fixed pose's joints, author space (+Z forward, origin at the feet).</summary>
     public static Vector3[] PoseJoints(HumanPose pose) => JointsOf(RigFor(pose));
+
+    /// <summary>
+    /// The walking gait's joints at <paramref name="speed"/> m/s and <paramref name="phase"/> of its cycle (two steps),
+    /// author space: for a figure whose arms are set over its walk (a decoration bowler's approach, #1334).
+    /// </summary>
+    public static Vector3[] StrideJoints(float speed, float phase) => JointsOf(GaitRig(speed, phase));
 
     /// <summary>
     /// A figure drawn from free joint points (a ragdoll): <paramref name="joints"/> in
@@ -753,7 +868,31 @@ public static partial class HumanMeshBuilder
             Lean: rig.TorsoLean,
             HandL: Flip(rig.WristL),
             HandR: Flip(rig.WristR),
-            HandBasis: HandBasisOf(rig));
+            HandBasis: HandBasisOf(rig),
+            GripOrigin: GripOf(rig).Origin, GripBasis: GripOf(rig).Basis, BoneBasis: BoneBasisOf(rig));
+
+        // the right hand's skinned bone frame (Frames: HandBone), flipped to mount space: where the posed hand mesh really is
+        static Basis BoneBasisOf(Rig r)
+        {
+            var b = HandBone(r.ElbowR, r.WristR, 1f).Basis;
+            return new Basis(Flip(b.X), Flip(b.Y), Flip(b.Z));
+        }
+
+        // the sword's grip (#1371): the ring centre of the closed fingers and the handle's axis through it, from the right hand's own frame, the one
+        // its skinned bone is posed in (HandBone) and its fist is built in (Hand), flipped to mount space; X the way the fingers leave, Y the palm's inside, Z along the handle
+        static (Vector3 Origin, Basis Basis) GripOf(Rig r)
+        {
+            var hf = HandFrameOf(r.ElbowR, r.WristR, 1f, 1f);
+            Vector3 W(System.Numerics.Vector3 v) => r.WristR + hf.Thumb * v.X + hf.Along * v.Y + hf.Inward * v.Z;
+            var c = HandGrip.Centre;
+            var ax = HandGrip.Axis;
+            var fi = HandGrip.Finger;
+            var axisW = (hf.Thumb * ax.X + hf.Along * ax.Y).Normalized();
+            var fingerW = (hf.Thumb * fi.X + hf.Along * fi.Y).Normalized();
+            var basis = new Basis(Flip(fingerW), Flip(hf.Inward), Flip(axisW));
+            if (basis.Determinant() < 0f) basis = new Basis(-basis.X, basis.Y, basis.Z);
+            return (Flip(W(c)), basis);
+        }
 
         // the item hand's frame in mesh space: -Z along the item, from the pose's direction or the forearm
         static Basis HandBasisOf(Rig r)
@@ -773,7 +912,7 @@ public static partial class HumanMeshBuilder
     /// each build, so a figure cached by its pose keys on it too (<c>FootPlayer.FootPoseKey</c>,
     /// <see cref="DriverBody"/>, <c>Cyclist</c>'s legs).
     /// </summary>
-    public static bool SmoothFigures => Styles.StyleKit.Detail == Styles.MeshDetail.High;
+    public static bool SmoothFigures => _smoothOverride ?? Styles.StyleKit.Detail == Styles.MeshDetail.High;
 
     /// <summary>
     /// A hat on the head, built in the head's own frame so it follows the neck like the helmet
@@ -851,6 +990,112 @@ public static partial class HumanMeshBuilder
                 }
                 // the red nose, on the face's nose (0.07 up the head, at its front)
                 s.Box(centre + fwd * 0.092f * k - up * 0.035f * k, new Vector3(0.04f, 0.04f, 0.035f), new Color(0.90f, 0.08f, 0.08f), frame);
+                break;
+            }
+            case >= Headwear.LarveWaggis and <= Headwear.LarveUeli:
+                AppendLarve(s, hat, centre, side, up, fwd, k, frame);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// A Fasnacht Larve (#1357): a head-sized shell round the whole head (the figure draws no face or hair under it) with the features of the mask: the Waggis's
+    /// huge nose, the Alti Dante's glasses and bun, the Harlekin's diamonds and cap, the Teufel's horns, Fritschi's bicorne and moustache, Ueli's belled jester cap.
+    /// </summary>
+    private static void AppendLarve(MeshScratch s, Headwear hat, Vector3 centre, Vector3 side, Vector3 up, Vector3 fwd, float k, Basis frame)
+    {
+        var c = centre + up * 0.01f * k;
+        var skin = hat switch
+        {
+            Headwear.LarveWaggis => new Color(0.93f, 0.66f, 0.56f),
+            Headwear.LarveDante => new Color(0.92f, 0.82f, 0.72f),
+            Headwear.LarveHarlekin => new Color(0.95f, 0.94f, 0.92f),
+            Headwear.LarveTeufel => new Color(0.82f, 0.10f, 0.10f),
+            Headwear.LarveFritschi => new Color(0.93f, 0.62f, 0.52f),
+            _ => new Color(0.94f, 0.80f, 0.66f),
+        };
+        s.Tube(c - up * 0.13f * k, c, 0.12f * k, 0.155f * k, skin, 8);
+        s.Tube(c, c + up * 0.14f * k, 0.155f * k, 0.10f * k, skin, 8);
+        var dark = new Color(0.08f, 0.07f, 0.09f);
+        var face = c + fwd * 0.145f * k;
+        foreach (float sgn in stackalloc[] { -1f, 1f })   // the eye holes
+            s.Box(face + (up * 0.04f + side * sgn * 0.055f) * k, new Vector3(0.05f, 0.035f, 0.03f) * k, hat == Headwear.LarveTeufel ? new Color(1f, 0.85f, 0.2f) : dark, frame);
+        switch (hat)
+        {
+            case Headwear.LarveWaggis:
+            {
+                // the Waggis: a nose as long as an arm's end, a straw wig and a red kerchief
+                s.Tube(face - up * 0.01f * k, face + fwd * 0.17f * k - up * 0.025f * k, 0.045f * k, 0.065f * k, skin, 7);
+                s.Box(face + fwd * 0.185f * k - up * 0.03f * k, new Vector3(0.09f, 0.09f, 0.08f) * k, new Color(0.85f, 0.25f, 0.25f), frame);
+                s.Box(c + up * 0.15f * k, new Vector3(0.26f, 0.08f, 0.26f) * k, new Color(0.92f, 0.80f, 0.35f), frame);
+                s.Tube(c + up * 0.08f * k, c + up * 0.12f * k, 0.162f * k, 0.162f * k, new Color(0.80f, 0.12f, 0.12f), 8);
+                break;
+            }
+            case Headwear.LarveDante:
+            {
+                // the Alti Dante: round glasses, a grey bun, a hat with a flower
+                var rim = new Color(0.22f, 0.20f, 0.20f);
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (up * 0.04f + side * sgn * 0.065f + fwd * 0.03f) * k, new Vector3(0.075f, 0.065f, 0.012f) * k, rim, frame);
+                s.Box(face - up * 0.015f * k + fwd * 0.02f * k, new Vector3(0.03f, 0.05f, 0.05f) * k, skin, frame);
+                s.Tube(c - fwd * 0.13f * k + up * 0.06f * k, c - fwd * 0.2f * k + up * 0.08f * k, 0.07f * k, 0.07f * k, new Color(0.78f, 0.78f, 0.80f), 7);
+                s.Tube(c + up * 0.15f * k, c + up * 0.19f * k, 0.15f * k, 0.12f * k, new Color(0.35f, 0.22f, 0.45f), 8);
+                s.Box(c + (up * 0.2f + side * 0.07f) * k, new Vector3(0.06f, 0.05f, 0.06f) * k, new Color(0.95f, 0.45f, 0.55f), frame);
+                break;
+            }
+            case Headwear.LarveHarlekin:
+            {
+                // the Harlekin: black diamonds on white and a two-pointed cap, one red, one yellow
+                var diamond = new Basis(fwd, MathF.PI / 4) * frame;
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (-up * 0.045f + side * sgn * 0.07f) * k, new Vector3(0.05f, 0.05f, 0.02f) * k, dark, diamond);
+                s.Box(face + up * 0.1f * k, new Vector3(0.05f, 0.05f, 0.02f) * k, dark, diamond);
+                var red = new Color(0.85f, 0.12f, 0.15f);
+                var yellow = new Color(0.95f, 0.78f, 0.15f);
+                s.Tube(c + (up * 0.1f + side * 0.075f) * k, c + up * 0.2f * k + side * 0.18f * k, 0.065f * k, 0.03f, red, 6);
+                s.Tube(c + (up * 0.1f - side * 0.075f) * k, c + up * 0.2f * k - side * 0.18f * k, 0.065f * k, 0.03f, yellow, 6);
+                break;
+            }
+            case Headwear.LarveTeufel:
+            {
+                // the Teufel: two black horns and a goatee
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                {
+                    var root = c + (up * 0.12f + side * sgn * 0.08f) * k;
+                    s.Tube(root, root + up * 0.1f + side * sgn * 0.05f - fwd * 0.03f, 0.035f * k, 0.008f, dark, 5);
+                }
+                s.Box(face - up * 0.075f * k, new Vector3(0.05f, 0.07f, 0.04f) * k, dark, frame);
+                s.Box(face - up * 0.035f * k, new Vector3(0.11f, 0.02f, 0.025f) * k, dark, frame);
+                break;
+            }
+            case Headwear.LarveFritschi:
+            {
+                // Luzern's Fritschi: a black bicorne with a red ribbon, a white moustache, red cheeks
+                var white = new Color(0.95f, 0.95f, 0.93f);
+                s.Box(face - up * 0.03f * k, new Vector3(0.15f, 0.04f, 0.03f) * k, white, frame);
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (-up * 0.02f + side * sgn * 0.1f) * k, new Vector3(0.04f, 0.04f, 0.015f) * k, new Color(0.9f, 0.3f, 0.3f), frame);
+                s.Box(c + up * 0.17f * k, new Vector3(0.36f, 0.09f, 0.16f) * k, dark, frame);
+                s.Box(c + (up * 0.2f + side * 0.14f) * k, new Vector3(0.07f, 0.1f, 0.15f) * k, dark, frame);
+                s.Box(c + (up * 0.2f - side * 0.14f) * k, new Vector3(0.07f, 0.1f, 0.15f) * k, dark, frame);
+                s.Box(c + (up * 0.16f + fwd * 0.08f) * k, new Vector3(0.3f, 0.025f, 0.02f) * k, new Color(0.85f, 0.12f, 0.15f), frame);
+                break;
+            }
+            default:
+            {
+                // Basel's Ueli: red cheeks and a three-pointed jester cap in blue and white with a gold bell on each point
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Box(face + (-up * 0.02f + side * sgn * 0.09f) * k, new Vector3(0.045f, 0.045f, 0.015f) * k, new Color(0.9f, 0.25f, 0.25f), frame);
+                var blue = new Color(0.12f, 0.28f, 0.70f);
+                var white = new Color(0.95f, 0.95f, 0.95f);
+                var gold = new Color(0.95f, 0.78f, 0.2f);
+                (Vector3 Dir, Color Col)[] points = [(side * 0.17f + up * 0.12f, blue), (up * 0.2f - fwd * 0.04f, white), (-side * 0.17f + up * 0.12f, blue)];
+                foreach (var (dir, col) in points)
+                {
+                    var tip = c + up * 0.12f * k + dir * k;
+                    s.Tube(c + up * 0.1f * k, tip, 0.1f * k, 0.025f, col, 6);
+                    s.Box(tip, new Vector3(0.04f, 0.04f, 0.04f), gold, frame);
+                }
                 break;
             }
         }
@@ -1090,35 +1335,21 @@ public static partial class HumanMeshBuilder
             HeadTop: new(0, 1.760f, 0.030f), HeadBase: new(0, 1.570f, 0.020f),
             Neck: new(0, 1.505f, 0.015f), Chest: new(0, 1.330f, 0.010f),
             Waist: new(0, 1.080f, 0), Hip: new(0, 0.960f, 0),
-            ShoulderL: new(-0.175f, 1.430f, 0), ElbowL: new(-0.205f, 1.180f, 0.140f),
-            WristL: new(-0.170f, 1.055f, -0.075f),
+            // the back arm's elbow behind the shoulder and its forearm bent forward, as the front one's
+            // (#1154: it was bent the other way at the elbow, the hand turned backwards)
+            ShoulderL: new(-0.175f, 1.430f, 0), ElbowL: new(-0.205f, 1.198f, -0.170f),
+            WristL: new(-0.175f, 1.060f, 0.038f),
             ShoulderR: new(0.175f, 1.430f, 0), ElbowR: new(0.205f, 1.180f, -0.140f),
             WristR: new(0.170f, 1.055f, 0.140f),
             HipL: new(-0.088f, 0.930f, 0), KneeL: new(-0.095f, 0.520f, 0.230f),
             AnkleL: new(-0.100f, 0.130f, 0.115f), ToeL: new(-0.100f, 0.055f, 0.290f),
             HipR: new(0.088f, 0.930f, 0), KneeR: new(0.095f, 0.500f, -0.180f),
-            AnkleR: new(0.100f, 0.190f, -0.330f), ToeR: new(0.100f, 0.230f, -0.480f),
+            // the trailing foot hangs pointed, toe down and forward of the heel, never kinked back up
+            AnkleR: new(0.100f, 0.190f, -0.330f), ToeR: new(0.100f, 0.035f, -0.245f),
             TorsoLean: -0.12f),
 
-        // Derived from the bike, not eyeballed. The three contact points are fixed — hips on
-        // the saddle (0.92 m), hands on the drops (0.885 m, 0.79 m forward) — and the shoulder
-        // is then the one place a 0.52 m torso and a 0.58 m arm can both reach, which puts it
-        // 0.335 m above the saddle and 0.40 m forward. Hand-placing these instead produced a
-        // rider lying horizontally in front of the bars: with the ends pinned, the middle is
-        // not a free choice.
-        HumanPose.Cycling => new Rig(
-            HeadTop: new(0, 1.345f, 0.470f), HeadBase: new(0, 1.245f, 0.375f),
-            Neck: new(0, 1.215f, 0.335f), Chest: new(0, 1.130f, 0.245f),
-            Waist: new(0, 1.020f, 0.095f), Hip: new(0, 0.920f, -0.055f),
-            ShoulderL: new(-0.170f, 1.235f, 0.400f), ElbowL: new(-0.185f, 1.020f, 0.575f),
-            WristL: new(-0.190f, 0.885f, 0.780f),
-            ShoulderR: new(0.170f, 1.235f, 0.400f), ElbowR: new(0.185f, 1.020f, 0.575f),
-            WristR: new(0.190f, 0.885f, 0.780f),
-            HipL: new(-0.090f, 0.905f, -0.050f), KneeL: new(-0.100f, 0.690f, 0.240f),
-            AnkleL: new(-0.100f, 0.375f, 0.140f), ToeL: new(-0.100f, 0.345f, 0.280f),
-            HipR: new(0.090f, 0.905f, -0.050f), KneeR: new(0.100f, 0.560f, 0.155f),
-            AnkleR: new(0.100f, 0.240f, 0.020f), ToeR: new(0.100f, 0.220f, 0.160f),
-            TorsoLean: 0f),
+        // Derived from the bike, not eyeballed (#1124): CyclingRig.
+        HumanPose.Cycling => CyclingRig,
 
         // Same discipline as the cycling rig: the torso is laid along a 45° line from the hip
         // and the joints fall where its own length puts them, rather than being placed by eye.
@@ -1172,6 +1403,9 @@ public static partial class HumanMeshBuilder
         HumanPose.ClimbLeft => Climb(1f),
         HumanPose.ClimbRight => Climb(-1f),
 
+        // a still of the fall's windmill (the viewer's entry); the figure draws it moving, BuildFalling
+        HumanPose.Falling => FallRig(0.15f),
+
         // bone lengths within a centimetre or two of the tucked rig's
         HumanPose.Boarding => new Rig(
             HeadTop: new(0, 1.500f, 0.170f), HeadBase: new(0, 1.310f, 0.150f),
@@ -1201,6 +1435,55 @@ public static partial class HumanMeshBuilder
             AnkleR: new(0.098f, 0.085f, 0), ToeR: new(0.098f, 0.040f, 0.145f),
             TorsoLean: 0f),
     };
+
+    /// <summary>
+    /// Falling from height (#1154): the arms windmill high and wide, out of step with each other, and
+    /// the legs pedal under the body. <paramref name="t"/> in seconds; a turn of the arms is 0.6 s, of
+    /// the legs 0.8 s. Bone lengths as the standing rig's, the elbows and knees solved.
+    /// </summary>
+    private static Rig FallRig(float t)
+    {
+        var r = RigFor(HumanPose.Standing) with { TorsoLean = 0f };
+        float arms = Mathf.Tau * t / 0.6f, legs = Mathf.Tau * t / 0.8f;
+        (Vector3, Vector3) Arm(Vector3 shoulder, float side, float a)
+        {
+            // round a point out to the side and above the shoulder, so the hands go over the head
+            var wrist = shoulder + new Vector3(side * 0.22f, 0.14f + 0.22f * Mathf.Cos(a), 0.28f * Mathf.Sin(a));
+            return (Limb.Solve(shoulder, wrist, UpperArmLength, ForearmLength, new Vector3(side, -0.4f, 0f)), wrist);
+        }
+        (Vector3, Vector3, Vector3) Leg(Vector3 hip, float b)
+        {
+            var ankle = hip + new Vector3(0f, -(0.68f + 0.10f * Mathf.Cos(b)), 0.10f + 0.15f * Mathf.Sin(b));
+            var knee = Limb.Solve(hip, ankle, ThighLength, ShinLength, new Vector3(0, 0, 1));
+            // the foot hangs pointed, toe down and ahead of the heel
+            return (knee, ankle, ankle + new Vector3(0f, -0.07f, 0.15f));
+        }
+        var (elbowL, wristL) = Arm(r.ShoulderL, -1f, arms);
+        var (elbowR, wristR) = Arm(r.ShoulderR, 1f, arms + Mathf.Pi);
+        var (kneeL, ankleL, toeL) = Leg(r.HipL, legs);
+        var (kneeR, ankleR, toeR) = Leg(r.HipR, legs + Mathf.Pi);
+        return r with
+        {
+            ElbowL = elbowL, WristL = wristL, ElbowR = elbowR, WristR = wristR,
+            KneeL = kneeL, AnkleL = ankleL, ToeL = toeL, KneeR = kneeR, AnkleR = ankleR, ToeR = toeR,
+        };
+    }
+
+    /// <summary>
+    /// The figure falling from height (#1154), <paramref name="t"/> seconds into its windmill
+    /// (<see cref="FallRig"/>). An item held keeps its own arm.
+    /// </summary>
+    public static ArrayMesh BuildFalling(HumanPalette palette, float t, ItemArmPose arm, float armBlend,
+        Headwear hat = Headwear.None, ArrayMesh? into = null)
+    {
+        var scratch = ScratchFor(into);
+        AppendRig(scratch, palette, ApplyArms(FallRig(t), arm, armBlend), includeLegs: true, helmet: false, hat);
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>Mounts for <see cref="BuildFalling"/> at the same time.</summary>
+    public static GaitMounts MountsForFall(float t, ItemArmPose arm = ItemArmPose.None, float armBlend = 0f) =>
+        MountsForRig(ApplyArms(FallRig(t), arm, armBlend));
 
     /// <summary>A climbing step: <paramref name="side"/> 1 = the left hand and knee up, −1 = the right ones.</summary>
     private static Rig Climb(float side)
@@ -1300,6 +1583,12 @@ public static partial class HumanMeshBuilder
         AuraSixSeven, AuraLasso, AuraCutTheRope,
         // #914
         AuraLeadRival, AuraShush, AuraBow, AuraLaugh,
+        // #1269: Schwingen (HumanMeshBuilder.Schwing.cs); past FightStand, so no groove either
+        SchwingGrip, SchwingLeanIn, SchwingLeanOut, SchwingLeanLeft, SchwingLeanRight, SchwingBrace, SchwingDown,
+        SchwingGroundTop, SchwingGroundBottom, SchwingStumble, SchwingBrush, SchwingDusted,
+        SchwingKurz, SchwingUebersprung, SchwingHueften, SchwingBrienzer, SchwingGammen, SchwingWyberhaken,
+        // #1371: the sword's whole-body poses (HumanMeshBuilder.Sword.cs), the move in DanceParams.Bar; past FightStand, so no groove either
+        SwordPose,
     }
 
     /// <summary>
@@ -1430,6 +1719,8 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= SwordMoves) return DanceMove.SwordPose;
+        if (index >= SchwingMoves) return SchwingResolve(index - SchwingMoves);
         if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
@@ -1480,10 +1771,11 @@ public static partial class HumanMeshBuilder
     private readonly struct Beat
     {
         public readonly float C, B, R, D, E;
-        public readonly int K, Par;
+        public readonly int K, Par, Bar;
 
         public Beat(float barPhase, int bar)
         {
+            Bar = bar;
             R = barPhase - Mathf.Floor(barPhase);
             C = R * 4f;
             K = Mathf.Clamp((int)C, 0, 3);
@@ -1854,6 +2146,8 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case DanceMove.SwordPose: EvalSword(t, mv, ref ch); break;
+            case >= DanceMove.SchwingGrip: EvalSchwing(move, t, mv, ref ch); break;
             case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }

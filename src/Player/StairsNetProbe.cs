@@ -68,7 +68,8 @@ public partial class StairsNetProbe : ChatProbe
 
         // an A320 parked here with its left doors open
         Expect(me.SetRide(RideKind.A320), "A takes an A320");
-        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
+        // on its wheels for a second: it reads "on the ground" from construction, a metre up (#1080)
+        await UntilHeld(() => me.Vehicle is Airliner j && j.State.OnGround, 1.0, 6);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
         jet.ToggleDoor(0);
         jet.ToggleDoor(2);

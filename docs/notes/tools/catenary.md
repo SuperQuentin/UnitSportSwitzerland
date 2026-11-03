@@ -20,8 +20,14 @@ Plan and decisions: `docs/plans/catenary.md`. What is built:
     that already crosses it within half a step instead of a span of its own (`SpansShared`).
   - **No mast on a bike path** (the user): every mast spot is also off each separated path band of the written street pieces
     (`TileRewriter.BikePaths`: out from the carriageway edge past the verge, `RoadSide`, 0.3 m either side, 10 m cells).
-  - **Centre masts** (the user: a grassy tram track out of town): a tram's own double track (not on a street) with no building
-    within 15 m either side (`CentreOpen`) and its centre line clear gets one mast between the tracks, an arm out to each.
+  - **Centre masts** (the user: a tram separated from the road, no buildings nearby): a tram on a bed of its own (not laid in
+    the carriageway: town paving counts, #1094; checked before a span) as a double track with no building
+    within 15 m either side (`CentreOpen`) and its centre line clear gets one mast between the tracks, an arm out to each. So do
+    two single tram tracks off the street 2.5-5 m apart and parallel (`TwinMin`/`TwinMax`, #1094: Geneva maps each track as a
+    line of its own): the first track to reach a spot puts the mast between them, the other's support within half a step hangs
+    from it (`CentreMastsShared`).
+    Geneva's copy (city centre, Oct 2026): 14 centre masts, 690 spans; only ~90 tram supports lie off the carriageway there.
+    The log names a few supports with no twin and with one but no centre mast.
   - **Elsewhere**: a cantilever mast 3.0 m out from each track (a double track: one outside each), a single track's on its right
     unless the spot is on a road, in a building or within 2 m of any rail line (`TrackGrid`, 10 m cells: the lines are densified to
     centimetres and a scan of every point stalled the Geneva rewrite), then its left; none where neither fits (counted).
@@ -35,7 +41,7 @@ Plan and decisions: `docs/plans/catenary.md`. What is built:
   between wall plates or masts with a hanger down to each wire; wires 2 cm thick (thinner vanish). Collision on masts only (4 m
   columns). Model viewer: "Overhead line" (tram span on facades, on masts, tram cantilever, tram centre mast, main-line pair).
 - **Stats**: the rewrite log's `overhead lines (#1052)` line. Test region (`signal-test-region`, rail row N 1324500): 60 spans
-  (27 ends on facades, 93 on masts, all off the street's bike paths), 58 cantilever masts (main line), 60 centre masts (reserved
-  tram), none skipped.
+  (27 ends on facades, 93 on masts, all off the street's bike paths), 58 cantilever masts (main line), 121 centre masts (the reserved
+  double track's 60, the paired single tracks' 61, 59 shared), none skipped.
 - **Not done**: portals and head spans over station track groups (masts between close tracks are skipped); zigzag; trolleybus
   double wires; tunnel wires; pantographs; OSM electrification; traffic heads on the catenary's spans (the user kept #1037's apart).

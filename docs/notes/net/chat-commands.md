@@ -54,8 +54,13 @@
   (`Terrain/Stadiums/StadiumLookup`: case and accents ignored, a town finds every venue in it (`StadiumSpec.Town`), a whole
   name wins, an ambiguous query lists its matches). Going there is a teleport like `/city` (`MayTeleport`: not out of a
   Battle Royale, not on a `--no-teleport` server unless you're an admin), to the centre spot. `/concert` acts on the venue
-  nearest you, so `/stadium <name>` then `/concert host` hosts there. `/tp <E> <N>` (admin; offline anyone) jumps to
+  nearest you, so `/stadium <name>` then `/concert host` hosts there. **`/concert join`** (#1173, anyone, offline too)
+  goes to the venue where a set is hosted now (`ConcertService.HostedVenues`, the nearest if several, the others named),
+  on the same terms. `/tp <E> <N>` (admin; offline anyone) jumps to
   an LV95 point (`AdminArgs.TryLv95`: space or comma, apostrophes allowed, only round Switzerland).
 - **`/help` is read off the completer's table** (`ChatCompleter.Help`, the same `Commands` rows as Tab): a new command
   gets its row there and shows in Tab, its usage line and `/help` together, so it can't be forgotten in one of them.
+  Each row carries a group (`Groups`: General, Travel, World, Activities, Concerts & media, Items & money, Admin) and a
+  few words: `/help` prints one line per group of what this player may run (#1173), `/help <command>` its arguments
+  and those words (`HelpFor`). `--chatcheck` fails if a command is in no group or two.
   Tab also completes `/concert` (sub-commands, cues, input protocols, xchange), `/transfer` and `/inertia`.

@@ -187,6 +187,8 @@ public partial class SoundPlayer : Control
 
     // ---- check -----------------------------------------------------------------------------
 
+    private static readonly string? WavFilter = CmdArgs.Value("--soundswav");
+
     private void CheckAll()
     {
         int count = 0, bad = 0;
@@ -199,6 +201,15 @@ public partial class SoundPlayer : Control
                     var w = e.Make();
                     var samples = Samples(w);
                     var (peak, _, finite) = Stats(samples);
+                    // --soundswav <text>: the sounds whose category or name holds it, as WAVs to listen to (#1244)
+                    if (WavFilter is { } only && !w.Stereo && w.MixRate == Dsp.Rate
+                        && $"{name} {e.Name}".Contains(only, StringComparison.OrdinalIgnoreCase))
+                    {
+                        System.IO.Directory.CreateDirectory("test_output/sounds");
+                        string file = string.Concat($"{name}_{e.Name}".Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '_'));
+                        Dsp.WriteWav($"test_output/sounds/{file}.wav", samples);
+                        GD.Print($"[sounds] wrote test_output/sounds/{file}.wav");
+                    }
                     if (!finite || peak > 1.0001f || peak < 1e-4f)
                     {
                         bad++;

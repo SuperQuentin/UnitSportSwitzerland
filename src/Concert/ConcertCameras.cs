@@ -98,7 +98,7 @@ public partial class ConcertCameras : Node3D
 
     private void BuildKit()
     {
-        _kit = new StandardMaterial3D { AlbedoColor = new Color(0.09f, 0.09f, 0.1f), Roughness = 0.5f };
+        _kit = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.09f, 0.09f, 0.1f), Roughness = 0.5f });
         _bodies = new Node3D[_rigs.Count];
         _cables = new MeshInstance3D[_rigs.Count][];
         _arms = new MeshInstance3D[_rigs.Count];
@@ -291,30 +291,28 @@ public partial class ConcertCameras : Node3D
 
 /// <summary>
 /// The artists on stage (#885): a DJ, a singer and two dancers, or a band of four, by genre — the game's
-/// own figures, dancing the music's moves on the show's beat, rebuilt in place (one mesh each).
-/// What the cameras film.
+/// own figures, dancing the music's moves on the show's beat: skinned figures posed by their bones
+/// (#1202), each built once. What the cameras film.
 /// </summary>
 public partial class ConcertPerformers : Node3D
 {
     private readonly StagePlan _plan;
     private readonly LightDesk _desk;
-    private readonly List<(MeshInstance3D Node, HumanPalette Palette, int Offset)> _people = new();
+    private readonly List<(SkinnedFigure Node, HumanPalette Palette, int Offset)> _people = new();
 
+    /// <summary><see cref="PerBeat"/> poses a beat over a move's 8 counts: the artists move in those steps.</summary>
+    private const int PerBeat = 8;
     /// <summary>
-    /// Poses built once and kept (a figure costs milliseconds to build): per artist, move and frame,
-    /// <see cref="PerBeat"/> frames a beat over the move's 8 counts. At most one new pose a frame; until
-    /// it is built the artist holds the one before.
-    /// </summary>
-    private readonly Dictionary<long, (Godot.Collections.Array Arrays, Mesh.ArrayFormat Format)[]> _poses = new();
-    private const int PerBeat = 8, MaxPoses = 1200;
-    /// <summary>
-    /// The pose each artist shows. Its mesh is never swapped: the figure material's face parameters
-    /// are per instance, and Godot registers them again on every new mesh without freeing the old
-    /// (the buffer overflowed, an error a swap); a pose is copied into the artist's own mesh instead.
+    /// The pose each artist shows. Its mesh is never swapped once shown: the figure material's face
+    /// parameters are per instance, and Godot registers them again on every new mesh without freeing
+    /// the old (the buffer overflowed); a skinned figure keeps its look's mesh and only moves its bones.
     /// </summary>
     private readonly List<long> _showing = new();
-    private ArrayMesh? _scratch;
     private Audio.Cd.MusicStyle _style;
+
+    /// <summary>The lead artist (centre stage, the first) sings the song's vocal (#1153); the others keep the shader's idle face.</summary>
+    private const int Singer = 0;
+    private readonly Avatar.Face.FaceAnimator _singerFace = new();
 
     public ConcertPerformers(StagePlan plan, LightDesk desk)
     {
@@ -331,9 +329,14 @@ public partial class ConcertPerformers : Node3D
         _style = e.Genre switch
         {
             Genre.Rock => Audio.Cd.MusicStyle.Rock, Genre.Electronic => Audio.Cd.MusicStyle.Electronic,
-            Genre.HipHop => Audio.Cd.MusicStyle.HipHop, Genre.Ballad => Audio.Cd.MusicStyle.Chill, _ => Audio.Cd.MusicStyle.Pop,
+            Genre.HipHop => Audio.Cd.MusicStyle.HipHop, Genre.Ballad or Genre.Jazz => Audio.Cd.MusicStyle.Chill, _ => Audio.Cd.MusicStyle.Pop,
         };
         float h = e.DeckHeight, z = _plan.Round ? 0 : -e.Depth * 0.35f;
+        if (e.Genre == Genre.Jazz)
+        {
+            BuildBand(e, h);
+            return;
+        }
         float[] xs = e.Genre switch
         {
             Genre.Electronic => new[] { 0f },
@@ -346,25 +349,110 @@ public partial class ConcertPerformers : Node3D
             float back = e.Genre == Genre.Rock && i == 3 ? -4f : 0f;
             var at = _plan.StagePoint(xs[i], h, z + back);
             var face = (_plan.StagePoint(xs[i], h, z + back + 10f) - at) with { Y = 0 };
-            var node = new MeshInstance3D
+            var node = new SkinnedFigure
             {
                 Name = $"Artist{i}", Position = at, MaterialOverride = HumanMeshBuilder.FigureMaterial(),
-                Basis = new Basis(Vector3.Up, Mathf.Atan2(-face.X, -face.Z)), Mesh = new ArrayMesh(),
+                Basis = new Basis(Vector3.Up, Mathf.Atan2(-face.X, -face.Z)),
             };
+            var palette = HumanPalette.ForRider(e.Seed + i * 7);
+            node.Show(new FigureLook(palette));
+            HumanMeshBuilder.PoseStride(node, 0f, 0f);
             AddChild(node);
-            _people.Add((node, HumanPalette.ForRider(e.Seed + i * 7), i * 3));
+            _people.Add((node, palette, i * 3));
             _showing.Add(long.MinValue);
         }
     }
 
-    /// <summary>One frame: each artist's move, on the beat; still between songs.</summary>
+    // ---- the jazz quartet (#1394) -------------------------------------------------------------------------
+
+    /// <summary>One player of the quartet: a pivot at the post (turned to face), the figure and its instrument as children, swaying as a node.</summary>
+    private readonly List<(Node3D Pivot, Basis Yaw, float Phase)> _band = new();
+    private bool _bandShown = true;
+
+    /// <summary>
+    /// A quartet at fixed posts of the deck (stage frame, x across, z towards the audience): the saxophonist at the front, the bassist stage left, the
+    /// pianist stage right at a piano turned side-on (the stool pushed back), the drummer on the back line. Instruments are nodes
+    /// (<see cref="JazzInstruments"/>), the figures idle skinned ones holding them; the sway is the pivot's roll.
+    /// </summary>
+    private void BuildBand(ConcertEvent e, float deck)
+    {
+        (float X, float Z, float FaceX, float FaceZ, JazzInstruments.Kind Kind)[] posts =
+        {
+            (-1.2f, -1.9f, 0f, 1f, JazzInstruments.Kind.Sax),
+            (-4.3f, -3.0f, 0f, 1f, JazzInstruments.Kind.Bass),
+            (4.0f, -3.6f, -1f, 0.35f, JazzInstruments.Kind.Piano),
+            (1.4f, -5.1f, 0f, 1f, JazzInstruments.Kind.Kit),
+        };
+        for (int i = 0; i < posts.Length; i++)
+        {
+            var post = posts[i];
+            var at = _plan.StagePoint(post.X, deck, post.Z);
+            var face = (_plan.StagePoint(post.X + post.FaceX * 10f, deck, post.Z + post.FaceZ * 10f) - at) with { Y = 0 };
+            var yaw = new Basis(Vector3.Up, Mathf.Atan2(-face.X, -face.Z));
+            var pivot = new Node3D { Name = $"Band{i}", Position = at, Basis = yaw };
+            var node = new SkinnedFigure { Name = $"Artist{i}", MaterialOverride = HumanMeshBuilder.FigureMaterial() };
+            var palette = HumanPalette.ForRider(e.Seed + i * 7);
+            node.Show(new FigureLook(palette));
+            HumanMeshBuilder.PoseStride(node, 0f, 0f, ItemArmPose.Hold, 1f);
+            pivot.AddChild(node);
+            pivot.AddChild(JazzInstruments.Node(post.Kind));
+            AddChild(pivot);
+            _people.Add((node, palette, i * 3));
+            _showing.Add(long.MinValue);
+            _band.Add((pivot, yaw, i * 0.7f));
+        }
+    }
+
+    /// <summary>The band sways a little to the beat, each on its own phase (the pivot's roll); out of sight while it is off for the encore.</summary>
+    private void StepJazz()
+    {
+        var part = _desk.Jazz.Part;
+        bool away = part is JazzPart.Call or JazzPart.Rest && _desk.HeldSection == null;
+        if (away == _bandShown)
+        {
+            _bandShown = !away;
+            foreach (var (pivot, _, _) in _band) pivot.Visible = _bandShown;
+        }
+        if (away) return;
+        bool playing = _desk.Section is not (ShowSection.Blackout or ShowSection.WalkIn);
+        float beat = _desk.Beat;
+        for (int i = 0; i < _band.Count; i++)
+        {
+            var (pivot, yaw, phase) = _band[i];
+            float roll = playing ? 0.045f * MathF.Sin(beat * MathF.PI * 0.5f + phase) : 0f;
+            pivot.Basis = yaw * new Basis(Vector3.Back, roll);
+        }
+    }
+
+    /// <summary>
+    /// The singer's lips on the CD's vocal at <paramref name="heardT"/> (the listener's delayed song
+    /// time): the jaw on the voice and its syllables, the lips' "oo" and "ee". Without a vocal
+    /// analysis, or between songs, a closed-mouthed smile.
+    /// </summary>
+    private void Sing(Audio.Cd.CdInfo? song, double heardT, float dt)
+    {
+        if (_people.Count <= Singer || dt <= 0f) return;
+        var face = Avatar.Face.FaceState.Neutral;
+        face.Smile = 0.3f;
+        if (song != null && heardT >= 0
+            && Audio.Cd.CdAnalysisRuntime.SampleVocal(song, heardT, out float voice, out float syllable, out float vowel, out _))
+            Avatar.Face.DanceFace.Sing(ref face, voice, syllable, vowel, 1f);
+        _singerFace.Step(_people[Singer].Node, face, null, dt, ease: Avatar.Face.FaceAnimator.LipEase);
+    }
+
     /// <summary>
     /// One frame: each artist's move, on the beat; still between songs. Under a fast strobe
     /// (<paramref name="strobeHz"/>, on the rig's clock <paramref name="strobeT"/>) each flash shows a
     /// new pose, a move's hit picked at random, held until the next: the freeze-frame dance of a strobe.
     /// </summary>
-    public void Step(float strobeHz = 0f, float strobeT = 0f)
+    public void Step(float strobeHz = 0f, float strobeT = 0f, Audio.Cd.CdInfo? song = null, double heardT = -1, float dt = 0f)
     {
+        Sing(song, heardT, dt);
+        if (_band.Count > 0)
+        {
+            StepJazz();
+            return;
+        }
         float beat = _desk.Beat, phase = beat - MathF.Floor(beat);
         int bar = (int)MathF.Floor(beat / 4f);
         float barPhase = beat / 4f - bar;
@@ -384,31 +472,17 @@ public partial class ConcertPerformers : Node3D
         float fBeats = (frame + 0.5f) / PerBeat;
         int fBar = (int)(fBeats / 4f);
         float fBarPhase = fBeats / 4f - fBar, fPhase = fBeats - MathF.Floor(fBeats);
-        bool built = false;
         for (int p = 0; p < _people.Count; p++)
         {
             var (node, palette, offset) = _people[p];
             int move = dancing ? ((bar / 2) + offset) % moves : -1;
             if (flashHash != 0) move = (int)((flashHash >> 4) + (uint)offset * 7u) % moves;
-            long key = ((long)p << 40) | ((long)(move + 1) << 20) | (long)(dancing ? frame : 0);
+            long key = ((long)(move + 1) << 20) | (long)(dancing ? frame : 0);
             if (_showing[p] == key) continue;
-            if (!_poses.TryGetValue(key, out var surfaces))
-            {
-                if (built) continue;
-                if (_poses.Count >= MaxPoses) _poses.Clear();
-                var dance = dancing ? new DanceParams(_style, move, fPhase, fBarPhase, fBar, 1f) : (DanceParams?)null;
-                _scratch ??= new ArrayMesh();
-                HumanMeshBuilder.BuildStride(palette, 0f, 0f, dance: dance, into: _scratch);
-                // the format too: the figure's custom channels are packed bytes only it can read back
-                surfaces = new (Godot.Collections.Array, Mesh.ArrayFormat)[_scratch.GetSurfaceCount()];
-                for (int k = 0; k < surfaces.Length; k++) surfaces[k] = (_scratch.SurfaceGetArrays(k), _scratch.SurfaceGetFormat(k));
-                _poses[key] = surfaces;
-                built = true;
-            }
-            var target = (ArrayMesh)node.Mesh;
-            target.ClearSurfaces();
-            foreach (var (arrays, format) in surfaces)
-                target.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, null, null, format);
+            // a restyle to or from a lit style (#311) is a new look; a pose only moves the bones
+            node.Show(new FigureLook(palette));
+            var dance = dancing ? new DanceParams(_style, move, fPhase, fBarPhase, fBar, 1f) : (DanceParams?)null;
+            HumanMeshBuilder.PoseStride(node, 0f, 0f, dance: dance);
             _showing[p] = key;
         }
     }

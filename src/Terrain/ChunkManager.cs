@@ -42,6 +42,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public double CommitBudgetMs { get; set; } = 4;
     private const double VrCommitBudgetMs = 2;
 
+    /// <summary>
+    /// Multiplies the per-frame commit slice while the loading screen caps the frame rate (#1381):
+    /// 30 fps with a doubled slice commits as much per second as 60 fps did.
+    /// </summary>
+    public static double CommitBudgetScale { get; set; } = 1;
+
     public LodPolicy Lod { get; set; } = new();
 
     /// <summary>
@@ -90,7 +96,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ViewDirection = -camera.GlobalTransform.Basis.Z;
         var size = camera.GetViewport().GetVisibleRect().Size;
         double aspect = size.Y > 0 ? size.X / size.Y : 16.0 / 9.0;
-        double half = Mathf.DegToRad(camera.Fov) / 2;
+        double half = Mathf.DegToRad(Core.CameraLens.FovOf(camera)) / 2;
         // Fov is the vertical angle unless the camera keeps its width
         if (camera.KeepAspect == Camera3D.KeepAspectEnum.Height)
             half = Math.Atan(Math.Tan(half) * aspect);
@@ -133,6 +139,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
 
     /// <summary>
+    /// Desktop ceiling on builds outside video export (#1381): two cores stay free for the OS and the
+    /// main thread. Unbounded on a phone, which has its own cap above. Read by the caps below.
+    /// </summary>
+    private static readonly int DesktopBuildCeiling = Platform.IsMobile ? int.MaxValue
+        : BuildPolicy.Ceiling(System.Environment.ProcessorCount);
+
+    /// <summary>The BelowNormal threads builds run on (desktop, not video export); made on first use.</summary>
+    private static readonly Lazy<BuildScheduler> BuildThreads = new(() => new BuildScheduler(DesktopBuildCeiling));
+    private bool _capLogged;
+
+    /// <summary>
     /// Tile builds allowed to run concurrently. Local disk could take far more, but the
     /// per-frame commit budget is the real limiter there, so a small number costs nothing
     /// locally and is what makes streaming usable.
@@ -150,11 +167,23 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
 
     /// <summary>Never below one: with no slot, nothing is ever built or even fetched.</summary>
-    private int MaxConcurrentBuilds => Math.Max(1,
-        OfflineMode ? OfflineMaxConcurrentBuilds
-        : MaxConcurrentBuildsOverride > 0 ? MaxConcurrentBuildsOverride
-        : Streaming?.Invoke() == true ? PlayMaxConcurrentBuilds
-        : LocalMaxConcurrentBuilds);
+    private int MaxConcurrentBuilds
+    {
+        get
+        {
+            if (OfflineMode) return Math.Max(1, OfflineMaxConcurrentBuilds);
+            int cap = MaxConcurrentBuildsOverride > 0 ? MaxConcurrentBuildsOverride
+                : Streaming?.Invoke() == true ? PlayMaxConcurrentBuilds
+                : LocalMaxConcurrentBuilds;
+            cap = BuildPolicy.Clamp(cap, DesktopBuildCeiling, out bool clamped);
+            if (clamped && MaxConcurrentBuildsOverride > 0 && !_capLogged)
+            {
+                _capLogged = true;
+                GD.Print($"[terrain] {MaxConcurrentBuildsOverride} parallel builds asked, held to {cap} to keep the PC responsive");
+            }
+            return Math.Max(1, cap);
+        }
+    }
 
     private int _buildsInFlight;
 
@@ -426,7 +455,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
         ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
         ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null,
-        List<Construction.PitCut>? Pits = null, RoadSignBuilder.Label[]? SignNames = null);
+        List<Construction.PitCut>? Pits = null, RoadSignBuilder.Label[]? SignNames = null,
+        ArrayMesh?[]? BuildingProxies = null, ArrayMesh?[]? RoadCells = null, ArrayMesh?[]? RoadPaintCells = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -759,6 +789,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// </summary>
     public static bool OcclusionCells { get; set; } = Core.CmdArgs.Value("--occlusion", notFlag: true) != "off";
 
+    /// <summary>
+    /// Detail chosen by the distance from the eye, height included (LodPolicy.WithAltitude): a standalone
+    /// headset (#1112), or <c>--verticallod</c>. Below 150 m above the ground nothing changes.
+    /// </summary>
+    public static bool VerticalLod { get; } = Platform.IsStandaloneVr || Core.CmdArgs.Has("--verticallod");
+
     /// <summary>Tiles within this many of an anchor's draw their buildings in cells.</summary>
     public const int CellRings = 1;
 
@@ -788,14 +824,19 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>
     /// Occlusion culling on the main view (#553) while the buildings are occluders: off in VR (two
     /// eyes, one occlusion buffer) and while a sightline cut dissolves the buildings in the way.
-    /// The portal cameras' viewports never cull: they stand inside the walls.
+    /// Except on a standalone headset (#1112), where it goes on the headset's own viewport: culled
+    /// from between the eyes, an edge seen by one eye only may pop a few centimetres early, and a
+    /// street's façades hide a city a Quest 2 could not draw. The portal cameras' viewports never
+    /// cull: they stand inside the walls.
     /// </summary>
     public void ApplyOcclusion()
     {
         if (!IsInsideTree()) return;
-        bool on = OcclusionCells && !_cutting && !XR.XrSession.Active;
+        bool standaloneVr = XR.XrSession.Active && Platform.IsStandaloneVr && XR.XrSession.Rig != null;
+        bool on = OcclusionCells && !_cutting && (!XR.XrSession.Active || standaloneVr);
         if (on) ProjectSettings.SetSetting("rendering/occlusion_culling/use_occlusion_culling", true);
-        GetViewport().UseOcclusionCulling = on;
+        if (standaloneVr) XR.XrSession.Rig!.HeadsetView.UseOcclusionCulling = on;
+        else GetViewport().UseOcclusionCulling = on;
     }
 
     /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
@@ -1465,7 +1506,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             // trees is as expensive as a surface, and letting those through unbudgeted
             // stacked five of them into one 120 ms frame
             bool overBudget = !OfflineMode && meshCommits > 0
-                && clock.Elapsed.TotalMilliseconds >= CommitBudgetMs;
+                && clock.Elapsed.TotalMilliseconds >= CommitBudgetMs * CommitBudgetScale;
             if (overBudget) break;
             if (!_ready.TryDequeue(out var result)) break;
 
@@ -1538,6 +1579,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 {
                     var node = EnsureNode(result.Id, state);
                     node.SetRoads(result.Roads);
+                    node.SetRoadCells(result.RoadCells, result.RoadPaintCells);
                     node.SetSignalLamps(result.Lamps);
                     node.SetSignNames(result.SignNames);
                 }
@@ -1548,7 +1590,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (result.BuildingsRequested)
             {
                 if (result.BuildingCells != null)
-                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices);
+                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices, result.BuildingProxies);
                 else if (result.Buildings != null)
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
                 // the building sites' shells (#608), or none: a rebuild without them clears them
@@ -1617,7 +1659,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (GodotObject.IsInstanceValid(anchor)) _anchorScratch.Add(anchor.GlobalPosition);
 
         int done = 0;
-        while (done == 0 || OfflineMode || clock.Elapsed.TotalMilliseconds < CommitBudgetMs)
+        while (done == 0 || OfflineMode || clock.Elapsed.TotalMilliseconds < CommitBudgetMs * CommitBudgetScale)
         {
             TileId bestId = default;
             ChunkState? best = null;
@@ -1738,14 +1780,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
     /// </summary>
     private readonly List<(TileId Tile, bool Collision, long Reach)> _desiredKey = new(), _keyNow = new();
-    private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
+    private (LodPolicy? Lod, long Version, bool Meshes, int Zoom, ZoomView ZoomView) _desiredKeyRest;
 
     private bool RingKeyChanged()
     {
         _keyNow.Clear();
         foreach (var anchor in _anchors)
             _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor), ReachKey(anchor)));
-        (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
+        // zoomed, the detail depends on where the camera points too (ZoomedDist): its tile and heading
+        int zoom = BuildMeshes ? Styles.LodScale.StepIndex : 0;
+        (LodPolicy? Lod, long Version, bool Meshes, int Zoom, ZoomView ZoomView) rest
+            = (Lod, _worldVersion, BuildMeshes, zoom, zoom > 0 ? CurrentZoomView() : default);
         if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
             && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
             return false;
@@ -1817,7 +1862,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             // as one mesh (#553), and only near the ground: from the air a building hides next to
             // nothing, and flying across a city rebuilt three tiles a crossing for no gain. Rebuilt
             // (buildings only) when it crosses, with a ring of slack so it does not flap.
-            bool wantCells = OcclusionCells && street && want.Buildings && want.Dist <= CellRings;
+            // a standalone headset (#1112) keeps them at every distance and height: each cell then picks
+            // its detail by its own distance from the eye (ChunkNode.ProxyFromM), whatever tile it is in
+            bool wantCells = OcclusionCells && want.Buildings && (Platform.IsStandaloneVr || (street && want.Dist <= CellRings));
             bool cellSwitch = state.HasBuildings && state.BuildingCells != wantCells
                 && (wantCells || want.Dist > CellRings + 1 || !street);
             bool needBuildings = want.Buildings && !state.PendingBuildings && (!state.HasBuildings || cellSwitch);
@@ -1870,22 +1917,77 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         }
     }
 
+    /// <summary>
+    /// What the zoomed detail is keyed on: the camera's tile and its heading in
+    /// <see cref="ZoomHeadingDeg"/> steps (<see cref="int.MinValue"/>: looking straight down or up,
+    /// every heading). Much finer than the load order's 16 sectors: a 200 mm view is 12° wide, and
+    /// a sector's rounding alone would refine five times what is on screen.
+    /// </summary>
+    private readonly record struct ZoomView(TileId Tile, int Heading);
+
+    private const double ZoomHeadingDeg = 2.5;
+
+    private ZoomView CurrentZoomView()
+    {
+        double e = ViewDirection.X, n = -ViewDirection.Z;
+        if (e * e + n * n < 0.04) return new ZoomView(_origin!.TileAt(ViewPosition), int.MinValue);
+        return new ZoomView(_origin!.TileAt(ViewPosition), (int)Math.Round(Mathf.RadToDeg(Math.Atan2(n, e)) / ZoomHeadingDeg));
+    }
+
+    /// <summary>
+    /// The ring a tile's detail is picked by while the camera zooms (#1433): inside the view cone a
+    /// tile at ring d is as big on screen as one at d / zoom walking, so it gets that ring's
+    /// stride, roads, buildings and trees (<see cref="Styles.ZoomRule.Ring"/>). Collision and
+    /// unloading stay by the ring. The angle is taken from the camera (<paramref name="camE"/>,
+    /// <paramref name="camN"/>, in km) to the tile's nearest edge, as the load order does.
+    /// </summary>
+    private static int ZoomedDist(TileId id, int dist, ZoomView view, double camE, double camN, float step, double coneHalfDeg)
+    {
+        if (dist <= 0) return dist;
+        if (view.Heading != int.MinValue)
+        {
+            double heading = Mathf.DegToRad(view.Heading * ZoomHeadingDeg);
+            double de = id.E + 0.5 - camE, dn = id.N + 0.5 - camN;
+            double r = Math.Sqrt(de * de + dn * dn);
+            if (r > TileHalfDiagonal)
+            {
+                double off = Mathf.RadToDeg(Math.Acos(Math.Clamp((de * Math.Cos(heading) + dn * Math.Sin(heading)) / r, -1, 1))
+                    - Math.Asin(TileHalfDiagonal / r));
+                // the heading is rounded to its step: half a step more
+                if (off > coneHalfDeg + ZoomHeadingDeg / 2) return dist;
+            }
+        }
+        return Styles.ZoomRule.Ring(dist, step);
+    }
+
     private void RecomputeDesired()
     {
         // desired stride per tile = finest over all anchors (0 = grid-only when meshes are off)
         var desired = new Dictionary<TileId, Want>();
+        var zoomView = _desiredKeyRest.ZoomView;
+        float zoomStep = _desiredKeyRest.Zoom > 0 ? Styles.LodScale.Step : 1f;
+        double coneHalf = Styles.LodScale.ConeHalfDeg;
+        var (camE, camN) = _origin!.ToLv95(ViewPosition);
+        camE /= ChunkFormat.TileSizeM;
+        camN /= ChunkFormat.TileSizeM;
         foreach (var anchor in _anchors)
         {
             var center = _origin!.TileAt(anchor.GlobalPosition);
             int radius = Lod.MaxDist;
             bool byRadius = CollisionByRadius && _collisionAnchors.Contains(anchor);
             var reach = byRadius ? ReachOf(anchor) : default;
+            // how high the anchor is above its ground, for the vertical LOD (LodPolicy.WithAltitude)
+            float agl = VerticalLod && TryGetHeight(anchor.GlobalPosition, out float under) ? anchor.GlobalPosition.Y - under : 0f;
             for (int de = -radius; de <= radius; de++)
                 for (int dn = -radius; dn <= radius; dn++)
                 {
                     var id = new TileId(center.E + de, center.N + dn);
                     if (!IsAvailable(id)) continue;
-                    int dist = Math.Max(Math.Abs(de), Math.Abs(dn));
+                    int ring = Math.Max(Math.Abs(de), Math.Abs(dn));
+                    // the ring the detail is chosen by: further out the higher the anchor flies, never
+                    // past the last ring (a tile under a high flight stays loaded at the coarsest stride)
+                    int dist = VerticalLod ? Math.Min(LodPolicy.WithAltitude(ring, agl), Lod.MaxDist) : ring;
+                    if (zoomStep > 1f) dist = ZoomedDist(id, dist, zoomView, camE, camN, zoomStep, coneHalf);
                     int stride = BuildMeshes ? Lod.StrideFor(dist) : 0;
                     if (stride < 0) continue;
                     // Only a body needs ground to stand on. The fly camera and a replay's ghosts
@@ -1895,7 +1997,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     bool collision = BuildCollision && _collisionAnchors.Contains(anchor)
                         && (byRadius
                             ? CollisionReach.Wants(id, reach.E, reach.N, reach.AheadE, reach.AheadN, reach.Airborne)
-                            : dist <= Lod.CollisionMaxDist);
+                            : ring <= Lod.CollisionMaxDist);   // the ground a body may land on: by the ring only
                     bool roads = BuildMeshes && dist <= Lod.RoadMaxDist;
                     bool buildings = BuildMeshes && dist <= Lod.BuildingMaxDist;
                     // strides are all 0 when meshes are off, otherwise all > 0: min = finest
@@ -2123,8 +2225,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var landings = World.Landings.Current;
         var detail = Detail;
 
-        Task.Run(async () =>
+        // BelowNormal dedicated threads on a desktop (#1381); the pool for video export and phones
+        bool onBuildThreads = !OfflineMode && !Platform.IsMobile;
+        Func<Task> work = async () =>
         {
+            if (onBuildThreads) BuildScheduler.Ambient.Value = BuildThreads.Value;
             try
             {
                 var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -2215,6 +2320,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         null, null, false, null, null, WaterLayer: waterLayer));
 
                 ArrayMesh? roads = null;
+                ArrayMesh?[]? roadCells = null, roadPaintCells = null;
                 SignalBuilder.Lamps? lamps = null;   // traffic-light lenses (#350)
                 RoadSignBuilder.Label[]? signNames = null;   // canton signs' names (#1038)
                 RoadTile? roadTile = null;
@@ -2231,9 +2337,19 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         && RoadMeshBuilder.Build(roadTile, grid, detail) is { } roadData)
                     {
                         ct.ThrowIfCancellationRequested();
-                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
+                        var paintData = RoadPaintBuilder.Build(roadTile);
+                        if (Platform.IsStandaloneVr)
+                        {
+                            // a standalone headset's roads in the buildings' cells (#1112): what is behind the
+                            // eye or a block is culled, and the paint goes beyond a few hundred metres
+                            roadCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(roadData), roadMaterial);
+                            if (paintData != null) roadPaintCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(paintData), roadMaterial);
+                            roads = new ArrayMesh();
+                        }
+                        else roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, paintData);
                         lamps = SignalBuilder.BuildLamps(roadTile);
                         signNames = RoadSignBuilder.Labels(roadTile);
+                        if (RoadSignBuilder.GantryLabels(roadTile) is { } gantryNames) signNames = [.. signNames ?? [], .. gantryNames];   // #1110
                     }
                     // the piers and jetties standing in the tile (#377): one more surface
                     if (pierMaterial != null && PierMeshBuilder.Build(landings, id, grid, mesh: true, collision: false) is { Mesh: { } pierData })
@@ -2286,7 +2402,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
                 ArrayMesh? buildings = null;
-                ArrayMesh?[]? buildingCells = null;
+                ArrayMesh?[]? buildingCells = null, buildingProxies = null;
                 (Vector3[] Vertices, int[] Indices)? occluders = null;
                 Vector3[][]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
@@ -2359,6 +2475,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                                 for (int c = 0; c < parts.Length; c++)
                                     if (parts[c] is { } part) buildingCells[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
                                 occluders = BuildingOcclusion.Occluders(bTile);
+                                // a standalone headset's far stand-ins, cut into the same cells (#1112)
+                                if (Platform.IsStandaloneVr && BuildingMeshBuilder.BuildProxies(bTile) is { } proxyData)
+                                {
+                                    var proxyParts = BuildingOcclusion.SplitByCell(proxyData);
+                                    buildingProxies = new ArrayMesh?[proxyParts.Length];
+                                    for (int c = 0; c < proxyParts.Length; c++)
+                                        if (proxyParts[c] is { } part) buildingProxies[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
+                                }
                             }
                             else buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                         }
@@ -2517,7 +2641,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
-                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames));
+                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames,
+                    BuildingProxies: buildingProxies, RoadCells: roadCells, RoadPaintCells: roadPaintCells));
             }
             catch (OperationCanceledException)
             {
@@ -2536,6 +2661,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Interlocked.Decrement(ref _buildsInFlight);
                 if (fine) Interlocked.Decrement(ref _fineBuildsInFlight);
             }
-        });
+        };
+        if (!onBuildThreads) Task.Run(work);
+        else Task.Factory.StartNew(work, CancellationToken.None, TaskCreationOptions.DenyChildAttach, BuildThreads.Value);
     }
 }

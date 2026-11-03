@@ -54,6 +54,14 @@ public partial class FlatTour : Node3D
             int garage = BuildingFootprint.ComputeDoors(garageTile, roads, null).First(d => d.Link.Any).Index;
             _l = InteriorGenerator.Generate(garageTile, garage, roads, null)!;
         }
+        else if (_block.StartsWith("shaped:", StringComparison.Ordinal))
+        {
+            // a generated shaped building (#1290): --block shaped:L, or shaped:bent:House to plan it as another kind
+            var p = _block[7..].Split(':');
+            var kind = p.Length > 1 ? Enum.Parse<Terrain.Format.BuildingKind>(p[1]) : (Terrain.Format.BuildingKind?)null;
+            if (ShapedCheck.Pick(p[0], kind) is not var (tile, index)) { GD.PrintErr($"[flattour] no {p[0]} building near the spawn"); GetTree().Quit(1); return; }
+            _l = InteriorGenerator.Generate(tile, index, null, null)!;
+        }
         else if (_block.StartsWith("real:", StringComparison.Ordinal))
         {
             // a block of a real tile (#694): --block real:E_N_index --chunks <terrain_chunks>, planned with its streets as the game does
@@ -114,6 +122,17 @@ public partial class FlatTour : Node3D
             _views.Add(("ramp_aisle", Past(1.7f, ramp.X0 - 2f, 0.5f), Past(0.6f, cx + 8f, 2.5f)));
         }
         _views.Add(("lobby", At(ground, main.X + 0.3f, main.Z + 0.5f), At(ground, main.X + 1.2f, main.Z + 5f, 1.2f)));
+        // rooms grown out to the building's outline (#1290): from the room's core toward the far
+        // corner of what it grew, the most grown first, on the ground floor and the one above
+        foreach (int fl in new[] { ground, Math.Min(_l.Floors.Count - 1, ground + 1) }.Distinct())
+            foreach (var (r, k) in _l.Floors[fl].Rooms.Where(r => r.Shape != null)
+                         .OrderByDescending(r => Math.Abs(r.FloorArea - r.Area)).Take(3).Select((r, k) => (r, k)))
+            {
+                var c = new Vector2((r.X0 + r.X1) / 2, (r.Z0 + r.Z1) / 2);
+                var far = r.Corners().OrderByDescending(q => q.DistanceTo(c)).First();
+                var from = c + (c - far).Normalized() * Math.Min(1.5f, Math.Min(r.Width, r.Depth) / 3);
+                _views.Add(($"shaped_f{fl - ground}_{k}_{r.Type.ToString().ToLowerInvariant()}", At(fl, from.X, from.Y), At(fl, far.X, far.Y, 0.8f)));
+            }
         // the stairwell (#571): up the stair from the front landing, from the half landing, and
         // down the well from the top floor
         if (_l.Floors[upper].Rooms.FirstOrDefault(r => r.Type == RoomType.Stairwell) is { } stair

@@ -90,28 +90,43 @@ public partial class GameShell : Node
         {
             "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail", "--data",
             "--generated", "--generated-roads", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
-            "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
-            "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
+            // (not --at: a spawn point on the command line means "put me there", straight into the world, the user;
+            // PlayAt sends that run through the loading screen, #1296)
+            "--traffic", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
+            "--origin", "--curvature", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
-            "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
-            "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
-            "--bubblecheck", "--worldpickcheck",
+            "--multiplayer", "--solo", "--map", "--menuskin", "--character", "--account", "--welcome", "--welcomecheck", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
+            "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmsaa", "--vrscale", "--vrfoveation", "--shadows", "--rendercensus", "--hidenodes", "--hidetoggle", "--xrhole", "--xrhandlog", "--xrpopup", "--soakcheck", "--replayminutes", "--perflevel", "--foveation", "--nosky", "--overdraw", "--hideui", "--plainterrain", "--litterrain", "--terrainvariant", "--vrmult", "--vrfloor", "--verticallod", "--buildingrings", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands", "--xrring", "--xrspace",
+            "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
         return true;
     }
 
+    /// <summary>
+    /// A play launch at a spawn point (#1296): <c>--at</c> (or <c>--enter</c>, #1244) and otherwise only what <see cref="UseTitle"/> lets
+    /// through. It skips the title but not the loading screen: Explore at that point, as from the menus (on
+    /// foot on open ground, frames for the screen to draw). A probe or a tool naming its own flags stays
+    /// <see cref="Direct"/>.
+    /// </summary>
+    public static bool PlayAt(string[] args) =>
+        (args.Contains("--at") || args.Contains("--enter"))
+        && UseTitle(args.Where(a => a is not ("--at" or "--enter" or "--patronhour") && !a.StartsWith("--playtest", StringComparison.Ordinal)).ToArray());
+    // (a playtest at a spawn point, #1292: the suite's own flags do not make it a tool run; without --at a playtest
+    // still boots straight into its fixture course, so they stay off the harmless list)
+
     public override void _Ready()
     {
         Instance = this;
         // a phone: fingers, not a pointer, so every menu a size up (#63; the canvas shrinks to match,
         // and the touch overlay lays out on what is left)
-        if (Platform.IsMobile) GetTree().Root.ContentScaleFactor = MobileUiScale;
+        if (Platform.IsTouch) GetTree().Root.ContentScaleFactor = MobileUiScale;
         Audio.SfxBus.Ensure();
         PlayerInput.Install(GetParent());
         // VR (#186) before any menu or camera exists, so the title is in the headset too
         bool vr = XR.XrSession.TryStart(GetParent());
+        RenderCensus.Install(this);
         AddChild(new DisplaySettings { Name = "Display" });
         AddChild(new DataWatch { Name = "DataWatch" });
 
@@ -171,20 +186,33 @@ public partial class GameShell : Node
             else if (CmdArgs.Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (CmdArgs.Has("--solo")) Push(SoloScreen.Create());
             else if (CmdArgs.Has("--map")) Push(Ui.MapScreen.Create());
+            // "--character": the figure editor (#1127), for screenshotting it
+            else if (CmdArgs.Has("--character")) Push(CharacterScreen.Create());
+            // "--account": the Account page (#1209), for screenshotting it
+            else if (CmdArgs.Has("--account")) Push(AccountScreen.Create());
             else if (CmdArgs.Has("--landing")) LaunchVia(new WorldLaunch { Mode = GameMode.Explore });
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
+            // "--at E,N" on a play launch (#1296): the same, at that point
+            // "--enter <venue>" (#1244) too: its building is the landing, and the player goes inside once on foot
+            else if (PlayAt(CmdArgs.All) && (SpawnPoint.ParseLv95("--at") ?? Interiors.InteriorManager.EnterLv95()) is { } at)
+                Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore, Landing = at, World = WorldChoice.FromArgs() })).CallDeferred();
             // a .gpx opened with the game (#1029): straight into its replay
             GpxOpenWith.Register();
             if ((GpxOpenWith.FromArgs() ?? AndroidBridge.OpenedFile()) is { } opened) Callable.From(() => OpenGpx(opened)).CallDeferred();
+            // the website's Join button (#1220): straight onto that server
+            JoinLink.Register();
+            if (JoinLink.FromArgs() is { } endpoint) Callable.From(() => Join(endpoint)).CallDeferred();
         }
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
+        if (WelcomeCheck.Requested()) AddChild(new WelcomeCheck(this));
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
         if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
+        if (ConsoleLinkCheck.Requested()) AddChild(new ConsoleLinkCheck(this));
     }
 
     public override void _ExitTree()
@@ -402,6 +430,16 @@ public partial class GameShell : Node
         return e;
     }
 
+    private string? _refusedEndpoint;
+
+    /// <summary>The server that just refused this game's version, handed to the Multiplayer screen once (#1088).</summary>
+    public string? TakeRefusedEndpoint()
+    {
+        string? e = _refusedEndpoint;
+        _refusedEndpoint = null;
+        return e;
+    }
+
     private void ShowTitle()
     {
         _state = State.Title;
@@ -412,8 +450,17 @@ public partial class GameShell : Node
         }
         ClearStack();
         Push(TitleScreen.Create());
+        // the first-run welcome (#1131): once, over the title, on the first title of the session
+        if (!_welcomeShown && WelcomeScreen.Wanted())
+        {
+            _welcomeShown = true;
+            GD.Print("[welcome] first run: the welcome opens over the title");
+            Push(WelcomeScreen.Create());
+        }
         MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
+
+    private static bool _welcomeShown;
 
     public override void _UnhandledInput(InputEvent e)
     {
@@ -461,6 +508,7 @@ public partial class GameShell : Node
     {
         if (_state is State.Loading or State.InWorld or State.Leaving) return;
         _launch = launch;
+        _refusedEndpoint = null;
         if (!launch.Hosted)
             _returnTo = launch.Mode == GameMode.Multiplayer ? "multiplayer" : "solo";
 
@@ -624,7 +672,12 @@ public partial class GameShell : Node
                     _rejoin = joined with { World = other.IsOpen ? null : other };
                     LeaveWorld(null);
                 }
-                else if (_world.Stage == LoadStage.Failed) LeaveWorld(_world.Failure ?? "The world could not be started.");
+                else if (_world.Stage == LoadStage.Failed)
+                {
+                    // another game version: the Multiplayer screen offers that server's console (#1088)
+                    _refusedEndpoint = _world.RefusedForVersion && _launch is { Mode: GameMode.Multiplayer, Hosted: false } refused ? refused.Endpoint : null;
+                    LeaveWorld(_world.Failure ?? "The world could not be started.");
+                }
                 break;
         }
     }

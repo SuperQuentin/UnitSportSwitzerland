@@ -30,7 +30,8 @@
   = 2 for the duration so remote peers pose Mouth (Wear maps to Mouth too). Sounds: `SfxSynth.GulpBank` (water),
   `CrunchBank` (food).
 - **Hats in hand** are the real worn hat: `ItemDefs.HandMesh` calls `HumanMeshBuilder.AppendHat` (internal).
-- **GPS screen**: first person draws the readout onto the device: a `SubViewport` (96x84, Label on an LCD-green
+- **GPS screen**: first person draws the readout onto the device: a `SubViewport` (96x84 nearest filtered in PS1;
+  192x168 with the text twice the size, linear filtered, in the lit styles, #1070; it follows a restyle), Label on an LCD-green
   ColorRect) shown as a `QuadMesh` on the device's face (mesh faces +Z, the holder). Chosen over the HUD panel
   because the numbers live on what you hold; the HUD panel stays for third person. Four short lines
   (`GpsScreen`). Only rendered while a GPS is the viewmodel.

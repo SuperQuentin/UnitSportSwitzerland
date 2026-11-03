@@ -233,6 +233,8 @@ public sealed class LaneApproach
     public SignalSite? Site { get; init; }
     public int Arm { get; init; }
     public SignalMoves Banned { get; init; }
+    /// <summary>Its cars may enter without room past the junction (#1134, <see cref="RoadApproach.AllowBlock"/>).</summary>
+    public bool AllowBlock { get; init; }
     /// <summary>The original lane's centre, metres right of the road's centre line; the lanes' offsets are from it.</summary>
     public float LaneCentre { get; init; }
     /// <summary>Out of the junction along the arm (world, flat, unit).</summary>
@@ -262,7 +264,8 @@ public sealed class LaneApproach
     public double[] LastDischarge { get; private init; } = [];
     public int[] QueuePlace { get; private init; } = [];
 
-    public static LaneApproach Make(ApproachLane[] lanes, SignalSite? site, int arm, SignalMoves banned, float centre, Vector3 outDir)
+    public static LaneApproach Make(ApproachLane[] lanes, SignalSite? site, int arm, SignalMoves banned, float centre, Vector3 outDir,
+        bool allowBlock = false)
     {
         var parent = new int[lanes.Length];
         int cars = 0;
@@ -284,7 +287,7 @@ public sealed class LaneApproach
         }
         return new LaneApproach
         {
-            Lanes = lanes, Site = site, Arm = arm, Banned = banned, LaneCentre = centre, Out = outDir,
+            Lanes = lanes, Site = site, Arm = arm, Banned = banned, LaneCentre = centre, Out = outDir, AllowBlock = allowBlock,
             Parent = parent, MultiLane = cars > 1, Reach = reach, Crossings = new int[lanes.Length], OffsetSum = new float[lanes.Length],
             LastDischarge = Enumerable.Repeat(double.NegativeInfinity, Math.Max(1, lanes.Length)).ToArray(), QueuePlace = new int[Math.Max(1, lanes.Length)],
         };
@@ -469,6 +472,7 @@ public sealed partial class LaneGraph
         }
         g.OrientDivided();
         var matched = new Dictionary<(LaneEdge, bool), float>();
+        var unlit = new List<(RoadJunctionPath, LaneEdge)>();   // car paths of cores without lights (#1057: they give way to trams)
         foreach (var tile in tiles)
         {
             var sites = new SignalSite[tile.Signals.Count];
@@ -557,6 +561,9 @@ public sealed partial class LaneGraph
                     sites[jpath.Signal].Rides.Add((ride, jpath.Group, jpath.Move));
                     ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Bike, jpath.Move, jpath.Width * 0.5f), null));
                 }
+                // a tram path at the lights (#1057): its trams are a movement the turning cars give way to; the trams drive it (BuildTrams)
+                if (jpath.Kind == JunctionPathKind.Tram && jpath.PointCount >= 2 && jpath.Signal >= 0 && jpath.Signal < sites.Length)
+                    ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Tram, jpath.Move, jpath.Width * 0.5f), null));
                 if (jpath.Kind != JunctionPathKind.Car || jpath.PointCount < 2) continue;
                 int n = jpath.PointCount;
                 var pts = new Vector3[n];
@@ -579,16 +586,20 @@ public sealed partial class LaneGraph
                 g.Link(edge.KeyEnd, edge, false);
                 g.Paths++;
                 if (site is not null) ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Car, jpath.Move, jpath.Width * 0.5f), edge));
+                else unlit.Add((jpath, edge));
             }
             for (int k = 0; k < sites.Length; k++)
                 if (ways[k].Any(w => w.Edge is not null)) Yields(sites[k].Plan, tile.Signals[k].ConflictLines, ways[k]);
+            // without lights its cars give way to its trams (#1057)
+            TramYields(tile, unlit);
+            unlit.Clear();
             // the lanes of every approach the tile records (#353), then any signalised approach it does not (an older tile)
             var recorded = new HashSet<(int, int)>();
             foreach (var r in tile.Approaches)
             {
                 var site = r.Signal >= 0 && r.Signal < sites.Length && r.SignalArm < sites[r.Signal].Out.Length ? sites[r.Signal] : null;
                 if (site is not null) recorded.Add((r.Signal, r.SignalArm));
-                var approach = LaneApproach.Make(r.Lanes.ToArray(), site, r.SignalArm, r.Banned, r.LaneCentre, OutOf(r.Heading));
+                var approach = LaneApproach.Make(r.Lanes.ToArray(), site, r.SignalArm, r.Banned, r.LaneCentre, OutOf(r.Heading), r.AllowBlock);
                 g.Attach(approach, origin.ToWorld(tile.Id.MinE + r.X, tile.Id.MaxN - r.Z, r.Y), matched);
             }
             for (int k = 0; k < sites.Length; k++)

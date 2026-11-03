@@ -20,8 +20,15 @@ public sealed class CabMirrors
         public required MeshInstance3D Face;
     }
 
-    /// <summary>Pixels across a mirror's height: low, like everything else on screen (and cheap).</summary>
-    private const int MirrorPixels = 48;
+    /// <summary>Pixels across a mirror's height in PS1: low, like everything else on screen (and cheap).</summary>
+    private const int Ps1MirrorPixels = 48;
+    /// <summary>
+    /// Pixels across a mirror's height in the lit styles (#1070), filtered linearly: 48 px blocks
+    /// read as a broken texture next to Cartoon's smooth shading. A mirror is a few hundred screen
+    /// pixels tall at most, so 128 keeps it sharp; on a phone 80, for one mirror's render a frame
+    /// on a tile GPU (phones start with the mirrors off, <c>GameSettings.UsePhoneDefaults</c>).
+    /// </summary>
+    private static readonly int LitMirrorPixels = Platform.IsMobile ? 80 : 128;
     /// <summary>What a mirror bothers to draw: nothing past this, m.</summary>
     private const float MirrorFar = 400f;
     /// <summary>What a mirror's camera sees: the world, without the held-item viewmodel or door portals' quads.</summary>
@@ -32,6 +39,8 @@ public sealed class CabMirrors
     private readonly Vector3 _offset;
     private Mirror[]? _mirrors;
     private int _turn;
+    /// <summary>The style the mirrors were sized and filtered for; they follow a restyle (<c>/style</c>, the settings) on the next frame.</summary>
+    private Styles.VisualStyle _style;
 
     /// <param name="owner">Takes the viewports as children (the rig).</param>
     /// <param name="body">Takes the mirror faces: the node the mounts are in the frame of, less <paramref name="offset"/>.</param>
@@ -55,10 +64,11 @@ public sealed class CabMirrors
             return;
         }
         _mirrors ??= BuildMirrors();
+        if (_style != Styles.StyleKit.Applied) ApplyStyle();
         var eye = _owner.GetViewport().GetCamera3D();
         if (eye == null) return;
         // one mirror re-rendered a frame, in turn: each at a third of the frame rate still moves
-        // smoothly enough in a PS1 frame, for the cost of one small extra render
+        // smoothly enough, for the cost of one small extra render
         _turn = (_turn + 1) % _mirrors.Length;
         for (int i = 0; i < _mirrors.Length; i++)
         {
@@ -121,6 +131,24 @@ public sealed class CabMirrors
         _perfOn = !_perfOn;
     }
 
+    /// <summary>
+    /// PS1: 48 px, nearest filtered, its blocky look; the lit styles: sharper and linear (#1070).
+    /// Polled against <see cref="Styles.StyleKit.Applied"/> rather than on <c>StyleKit.Chosen</c>,
+    /// which a settings-menu change does not raise, and which a plain class would have to unhook.
+    /// </summary>
+    private void ApplyStyle()
+    {
+        _style = Styles.StyleKit.Applied;
+        bool ps1 = _style == Styles.VisualStyle.Ps1;
+        int pixels = ps1 ? Ps1MirrorPixels : LitMirrorPixels;
+        var filter = ps1 ? BaseMaterial3D.TextureFilterEnum.Nearest : BaseMaterial3D.TextureFilterEnum.Linear;
+        foreach (var m in _mirrors!)
+        {
+            m.Port.Size = new Vector2I(Mathf.RoundToInt(pixels * m.Mount.Size.X / m.Mount.Size.Y), pixels);
+            ((StandardMaterial3D)m.Face.MaterialOverride).TextureFilter = filter;
+        }
+    }
+
     private Mirror[] BuildMirrors()
     {
         var mirrors = new Mirror[_mounts.Length];
@@ -130,7 +158,6 @@ public sealed class CabMirrors
             var port = new SubViewport
             {
                 Name = mount.Name + "View",
-                Size = new Vector2I(Mathf.RoundToInt(MirrorPixels * mount.Size.X / mount.Size.Y), MirrorPixels),
                 RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
                 HandleInputLocally = false,
                 Msaa3D = Viewport.Msaa.Disabled,
@@ -153,7 +180,6 @@ public sealed class CabMirrors
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                     AlbedoTexture = port.GetTexture(),
                     AlbedoColor = new Color(0.86f, 0.88f, 0.92f),
-                    TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
                     // a mirror shows the world left for right
                     Uv1Scale = new Vector3(-1f, 1f, 1f),
                     Uv1Offset = new Vector3(1f, 0f, 0f),
@@ -162,6 +188,8 @@ public sealed class CabMirrors
             _body.AddChild(face);
             mirrors[i] = new Mirror { Mount = mount, Port = port, Camera = camera, Face = face };
         }
+        _mirrors = mirrors;
+        ApplyStyle();   // the size and the filter
         return mirrors;
     }
 }

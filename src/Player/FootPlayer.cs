@@ -294,7 +294,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         return ok && kept;
     }
 
-    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/> or <see cref="PoseTucked"/>.</summary>
+    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/>, <see cref="PoseFall"/> or <see cref="PoseTucked"/>.</summary>
     [Export] public int PoseKind { get; set; }
 
     /// <summary>
@@ -504,6 +504,17 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
     /// <summary>Hanging from a zipline; climbing a ladder, <c>Anim.X</c> = which half of the step (#359).</summary>
     public const int PoseHang = 4, PoseClimb = 5;
+    /// <summary>Falling from height (#1154): the arms windmill, each peer on its own clock.</summary>
+    public const int PoseFall = 7;
+
+    /// <summary>
+    /// Falling this fast (m/s, about a 4 m drop) the figure starts flailing, a little before a landing
+    /// hurts (11 m/s), until it lands.
+    /// </summary>
+    private const float FlailFallSpeed = 9f;
+
+    /// <summary>Seconds into the fall's windmill, on this peer's own clock (#1154).</summary>
+    private float _flailClock;
 
     /// <summary>
     /// The hat on the figure, as an <see cref="Avatar.Headwear"/> (occasions, #18). Replicated like
@@ -512,7 +523,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     [Export] public int HeadwearId { get; set; }
 
     private Avatar.Headwear Hat => (Avatar.Headwear)HeadwearId;
-    private Avatar.Headwear _poseHat;
 
     /// <summary>
     /// The clothes on the figure, an <see cref="Avatar.Outfit"/> packed into 60 bits (#251).
@@ -531,7 +541,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     [Export] public int AppearanceBits { get; set; }
 
+    /// <summary>What the player plays on, shown on their <see cref="NameTag"/> (#1136).</summary>
+    public const int DeviceDesktop = 0, DeviceVr = 1, DeviceMobile = 2;
+
+    /// <summary>
+    /// <see cref="DeviceDesktop"/>, <see cref="DeviceVr"/> or <see cref="DeviceMobile"/>: set by the
+    /// owner every frame (a headset can start mid-game), replicated on change.
+    /// </summary>
+    [Export] public int DeviceKind { get; set; }
+
     private int _visualAppearance;
+    /// <summary>The figure the body on screen was built from (a probe checks the owner's own body follows the Character menu).</summary>
+    public int DrawnAppearance => _visualAppearance;
 
     /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
     private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
@@ -550,6 +571,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
     /// </summary>
     public Transform3D? HandLocal { get; private set; }
+
+    /// <summary>The closed fist's grip frame (ring centre, handle axis along Z) while a sword is drawn, in this body's space; else null (<see cref="Avatar.HandGrip"/>).</summary>
+    public Transform3D? GripLocal { get; private set; }
+
+    /// <summary>The largest angle (degrees) and distance (cm) seen between the item hand frame used before the grip (<c>HandBasis</c>, a guessed socket) and the skinned hand bone / the closed fist's ring centre (an audit, #1371).</summary>
+    public float HandBoneMaxDeg, HandSocketMaxCm;
 
     /// <summary>
     /// What the item hand is doing with the held item: 0 idle, 1 aim, 2 use. Replicated next to
@@ -691,10 +718,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DeviceKind", ".:DanceId", ".:FightPose", ".:AuraPose", ".:SchwingPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
 
     // --- figure animation ---
-    private MeshInstance3D? _walker;
+    private Avatar.SkinnedFigure? _walker;
     private Avatar.HumanPalette _walkPalette = Avatar.HumanPalette.Default;
     /// <summary>The figure's colours and clothes as drawn now: the VR hands wear its skin and gloves (#648).</summary>
     public Avatar.HumanPalette WalkPalette => _walkPalette;
@@ -738,12 +765,26 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>Seconds airborne, so a single frame off a kerb does not flash the jump pose.</summary>
     private float _airTime;
 
-    /// <summary>Fixed poses for the local body, built once: they do not animate, only swap.</summary>
-    private ArrayMesh? _airPose, _slidePose;
-
     private const float ShoulderHeight = 1.55f;
     private const float ShoulderOffset = 0.55f;
     private const float ArmLength = 3.3f;
+
+    /// <summary>
+    /// The player's own zoom of the on-foot arm (#1149), Genshin's way: from <see cref="ZoomFar"/> in
+    /// to <see cref="ZoomFace"/>, where the pivot has climbed from the shoulder to the eyes and come in
+    /// off the shoulder, so the nearest stop frames the face (orbit round to the front to see it).
+    /// <see cref="_zoom"/> eases to <see cref="_zoomWant"/>; owner only, never sent.
+    /// </summary>
+    private float _zoomWant = ArmLength, _zoom = ArmLength;
+    private const float ZoomFace = 0.6f, ZoomFar = 8f, ZoomStep = 1.2f;
+    /// <summary>R3 held on a pad: the right stick's up and down zoom; let go without zooming, it is the view switch.</summary>
+    private bool _padZoomHeld, _padZoomed;
+
+    /// <summary>Steps the on-foot zoom in (<paramref name="steps"/> &gt; 0) or out, by a factor a step.</summary>
+    public void ZoomView(float steps) => _zoomWant = Mathf.Clamp(_zoomWant / Mathf.Pow(ZoomStep, steps), ZoomFace, ZoomFar);
+
+    /// <summary>The on-foot zoom's arm length, for a check.</summary>
+    public float ViewZoom => _zoom;
 
     /// <summary>How fast the body swings round to face the direction of travel, 1/s.</summary>
     private const float BodyTurnRate = 12f;
@@ -1020,6 +1061,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public static Func<FootPlayer, bool>? Regenerates;
 
+    /// <summary>
+    /// Asked every walk step: the top speed (m/s) of a body disguised as a prop (Versteckis, #1268), null when it is
+    /// itself. A prop walks only: no run, jump, slide or emote, and on a desktop its view is lent third person.
+    /// </summary>
+    public static Func<FootPlayer, float?>? PropWalk;
+
     /// <summary>Down for good, until <see cref="Respawn"/>: out of the match.</summary>
     public bool Eliminated { get; private set; }
 
@@ -1034,6 +1081,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>Shaken by something nearby — an explosion — at this strength, 0..1.</summary>
     public event Action<float>? Shaken;
     public event Action<bool>? EngineToggled;
+
+    /// <summary>The e-bike's remote stepped to a mode (#1167): the feel layer beeps it.</summary>
+    public event Action<AssistLevel>? AssistChanged;
 
     private double _sinceHurt = 99;
 
@@ -1091,13 +1141,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="RideControls"/>.
     /// </summary>
     public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
+    /// <summary>On foot, on the ground, moving with the run intent (Shift, pad L3, a bot's Run): the item holsters on its start (#1369).</summary>
+    public bool SprintIntent { get; private set; }
 
     /// <summary>
     /// Jump and crouch for a body that reads no keys (an <see cref="Npc"/>, a server-run bot, #837),
     /// read with <see cref="WalkControls"/>: held, as the keys would be (a jump is a press = false then
     /// true). Null: neither.
     /// </summary>
-    public Func<(bool Jump, bool Crouch)>? FootActions { get; set; }
+    public Func<(bool Jump, bool Crouch, bool Climb)>? FootActions { get; set; }
+
+    /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
+    public bool JumpTaken { get; set; }
+
+    /// <summary>A festival game has the hands (the stone put, #1269): no item is used while it runs. Owner only; nothing is replicated.</summary>
+    public bool GameBusy { get; set; }
+    /// <summary>The look (mouse and right stick) belongs to something else this frame (the flag swinger's figures, #1269): the camera stays. Owner only.</summary>
+    public bool LookTaken { get; set; }
 
     /// <summary>
     /// A bot (#837): a body the dedicated server runs itself (authority 1), an <see cref="Npc"/> with
@@ -1259,11 +1319,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a player's proxy re-entering the tree stays a plain anchor
         if (Terrain != null && !Terrain.HasAnchor(this))
             Terrain.AddAnchor(this, collision: !Net.NetworkManager.DedicatedServer || IsMultiplayerAuthority());
+        // a body stands in a cinema's beam and shadows it (#1279)
+        Interiors.InteriorNode.BeamBodies.Add(this);
     }
 
     public override void _ExitTree()
     {
         Terrain?.RemoveAnchor(this);
+        Interiors.InteriorNode.BeamBodies.Remove(this);
         Explosion.Blast -= OnBlast;
         if (!NetProxy && !Puppet && !Net.NetLink.Dropped(this) && !IsMultiplayerAuthority())
             GD.Print($"[net] player {Name} left view");
@@ -1311,15 +1374,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:AppearanceBits");
+        replication.AddProperty(".:DeviceKind");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:FightPose");
         replication.AddProperty(".:AuraPose");
+        replication.AddProperty(".:SchwingPose");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
         replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
         replication.AddProperty(".:RadioVolume");
+        replication.AddProperty(".:RadioMix");
         replication.AddProperty(".:PhoneState");
         if (Npc)
         {
@@ -1512,6 +1578,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!Net.NetworkManager.DedicatedServer) AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
         // a bot is marked over its head on every client (#837)
         if (Bot && !Net.NetworkManager.DedicatedServer) AddChild(new Bots.BotTag(this));
+        // everyone else in sight carries their name, and VR / MOBILE, over their head (#1136)
+        else if (!Npc && !Puppet && !IsMultiplayerAuthority() && !Net.NetworkManager.DedicatedServer) AddChild(new NameTag(this));
 
         if (IsMultiplayerAuthority() && !Npc && _interest != null)
             Callable.From(() => _interest.ReportView(Core.GameSettings.Current.CameraFar, BaseFov)).CallDeferred();
@@ -1563,12 +1631,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _walkPalette = FigurePalette(rider);
             _poseOutfit = OutfitBits;
             _face.Reset();   // a new node: its face uniforms start over
-            _walker = new MeshInstance3D
-            {
-                Name = "Body",
-                Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
-                MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
-            };
+            // its look's skinned mesh, built once and posed by its bones (#1202)
+            _walker = new Avatar.SkinnedFigure { Name = "Body", MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial() };
+            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat));
+            Avatar.HumanMeshBuilder.PoseStride(_walker, 0f, 0f);
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = Avatar.OwnBody.Layer;
             _visual = _walker;
         }
@@ -1703,6 +1769,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Origin is { } origin) NetGlobal = origin.ToGlobal(Position);
             // the cockpits' altimeters (#421) read the height over the sea of this world's y = 0
             if (!Npc) Avatar.AircraftCockpit.WorldAltitude = Origin is { } sea ? (float)sea.ToGlobal(Vector3.Zero).Alt : 0f;
+            if (!Npc) DeviceKind = XR.XrSession.Active ? DeviceVr : Core.Platform.IsMobile ? DeviceMobile : DeviceDesktop;
             NetVel = Velocity;
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
@@ -1743,11 +1810,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
             // published whatever the view: first person draws no body, but everyone else does
             using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Publish, Bot)) PublishFootPose(dt);
+            if (InCrevasse) PublishCrevassePose();   // #1372: down a hidden crevasse
             StepThrowView(dt);
             // a fist fight (#495): its own side-on view
             if (FightView(dt)) return;
             // an aura battle (#907): the phone-filmed view over the waiting battler's shoulder
             if (AuraView(dt)) return;
+            // Schwingen (#1269): side-on over the grip
+            if (SchwingView(dt)) return;
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -1942,8 +2012,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // seated on a stand (#885): the hands rest in the lap, holding nothing
         if (_walker == null || PoseKind == PoseSit) { HandLocal = null; return; }
         // mounts are already turned to face -Z, where the figure's right is +X
-        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        var hand = SwordDrawn ? mounts.HandR : mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;   // a sword is in the right hand even when the off hand crosses to the handle
         HandLocal = _walker.Transform * new Transform3D(mounts.HandBasis, hand);
+        // a sword's grip (#1371): from the right hand's own frame, where its skinned bone and its fist are
+        GripLocal = SwordDrawn ? _walker.Transform * new Transform3D(mounts.GripBasis, mounts.GripOrigin) : null;
+        if (SwordDrawn)
+        {
+            // an audit: how far the hand's frame the item used to be placed from (HandBasis, from the other arm's direction and the world's up) is from the
+            // skinned hand bone's real frame, and from the closed fist's ring centre
+            var bone = _walker.Transform.Basis * mounts.BoneBasis;
+            var old = _walker.Transform.Basis * mounts.HandBasis;
+            float deg = Mathf.RadToDeg((old.Inverse() * bone).GetRotationQuaternion().GetAngle());
+            if (deg > HandBoneMaxDeg) HandBoneMaxDeg = deg;
+            float cm = ((hand + mounts.HandBasis * new Vector3(0, -0.05f, -0.03f)) - mounts.GripOrigin).Length() * 100f;
+            if (cm > HandSocketMaxCm) HandSocketMaxCm = cm;
+        }
     }
 
     /// <summary>The arm pose the held item and <see cref="ItemAction"/> call for, the same on every peer.</summary>
@@ -2037,6 +2120,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (_climbing) { PublishClimbPose(dt); return; }   // #1225
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -2050,7 +2134,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         // a fighter (#495) is drawn by the dance layer, which lays over the stride only, in the air too
-        PoseKind = InDuel ? PoseStride : _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
+        PoseKind = InDuel ? PoseStride : _sliding ? PoseTucked
+            : _airTime > 0.12f ? (_fallSpeed > FlailFallSpeed ? PoseFall : PoseAir) : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
         Anim = new Vector4(speed, _stridePhase, 0f, 0f);
 
@@ -2059,7 +2144,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // rather than the figure shrinking.
         float squash = Mathf.Clamp(-_landingDip * 1.2f, 0f, 0.22f);
         // thrown, stunned or knocked out: flat on the ground
-        float down = (_stunTimer > 0 || Downed || FightPose == (int)Combat.FightStance.Down) && IsOnFloor() ? -1.45f : 0f;   // downed (#475): crawling, flat; floored in a fight (#495)
+        float down = (_stunTimer > 0 || Downed || FightPose == (int)Combat.FightStance.Down || Combat.SchwingRules.Lying(SchwingPose)) && IsOnFloor() ? -1.45f : 0f;   // downed (#475): crawling, flat; floored in a fight (#495)
         _downRot = Mathf.Lerp(_downRot, down, MathX.Damp(10f, dt));
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
@@ -2079,7 +2164,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId)));
 
     /// <summary>On foot and free to move the body: what an emote (#404), or any dance, needs.</summary>
-    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !InDuel;
+    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !InDuel
+        && PropWalk?.Invoke(this) == null;
 
     /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
     public bool RatBeatHere(bool heard) =>
@@ -2237,94 +2323,110 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The owner's figure from its eye or not (<see cref="Avatar.OwnBody"/>), after the pose: its shadow takes the mesh.</summary>
     private void SeeBodyFromEye(bool fromEye)
     {
-        if (_walker != null) Avatar.OwnBody.See(_walker, fromEye, ref _bodyShadow);
+        if (_walker != null) Avatar.OwnBody.See(_walker, fromEye && !SeenFromOutside, ref _bodyShadow);
     }
+
+    /// <summary>
+    /// Another camera shows this owner's body (the bowling camera behind the bowler, #1336): drawn as everyone sees it,
+    /// whole and with what it holds, even when the player plays in first person.
+    /// </summary>
+    public bool SeenFromOutside
+    {
+        get => _seenFromOutside;
+        set
+        {
+            _seenFromOutside = value;
+            // seen through, so the lane ahead shows past it (#1336): every other pixel or so left out
+            _walker?.SetInstanceShaderParameter(SeeThrough, value ? SeeThroughShare : 0f);
+        }
+    }
+
+    private bool _seenFromOutside;
+    private static readonly StringName SeeThrough = "see_through";
+    /// <summary>The share of the body's pixels left out while another camera looks over it.</summary>
+    private const float SeeThroughShare = 0.6f;
 
     private void ApplyFootPose()
     {
+        int pose = ShownPose;   // a crevasse's figure is what its Anim.W names (#1372)
+        // the figure chosen in the Character menu reaches the owner after the body was built (PublishAppearance): draw it again
+        if (AppearanceBits != _visualAppearance) RefreshVisual();
         if (_walker == null) return;
-        // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
-        if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
-        // and so do clothes put on or taken off (#251)
+        // clothes put on or taken off (#251) are a new look
         if (_poseOutfit != OutfitBits)
         {
-            _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
+            _poseOutfit = OutfitBits;
             _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
         }
         float dt = (float)GetProcessDeltaTime();
         // a swimmer's face lives too (#802): blinks, glances, a blow's grimace
-        if (PoseKind == PoseSwim) { ApplySwimFigure(); StepFace(dt); return; }
+        if (pose == PoseSwim) { ApplySwimFigure(); StepFace(dt); return; }
+        if (pose == PoseWallClimb) { ApplyClimbFigure(); StepFace(dt); return; }   // #1225
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
-        var dance = DrawnDance = StepFightPose(dt) ?? StepAuraPose(dt) ?? danced;
+        var dance = DrawnDance = StepSwordPose(dt) ?? StepFightPose(dt) ?? StepAuraPose(dt) ?? StepSchwingPose(dt) ?? danced;
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
         if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
         if (!armed) { arm = Avatar.ItemArmPose.None; blend = 0f; }   // what the builder does with them anyway
-        // Rebuilt only when what it shows changes (#221): a figure standing still is built once, and
-        // a remote one far away or out of view at most 15 times a second. The speed is keyed to the
-        // centimetre per second, so a standing figure's float noise does not rebuild it.
+        // Posed only when what it shows changes (#221), by its bones (#1202): a figure standing still
+        // is posed once, and a remote one far away or out of view at most 15 times a second. The
+        // speed is keyed to the centimetre per second, so a standing figure's float noise does not.
         // a skirt streams in the air the figure moves through (#251): walking, running, falling
-        var palette = _walkPalette;
-        if (Avatar.HumanMeshBuilder.Flutters(palette.Outfit))
-        {
-            palette = palette with { Wind = _walkWind.Update(_walker, dt) };
-            _slidePose = null;
-            _airPose = null;
-        }
+        var wind = Avatar.HumanMeshBuilder.Flutters(_walkPalette.Outfit) ? _walkWind.Update(_walker, dt) : Vector3.Zero;
         _poseWait += dt;
-        // a restyle to or from a lit style changes the figure's build (#311): the held poses go too
+        // a restyle to or from a lit style changes the figure's build (#311): a new look
         bool smooth = Avatar.HumanMeshBuilder.SmoothFigures;
-        if (smooth != _poseKey.Smooth)
-        {
-            _slidePose = null;
-            _airPose = null;
-        }
-        // VR hands (#439) keyed to 2 cm, so a hand held still does not rebuild the figure
-        var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
-        if (vr is { } v) vr = new Avatar.HumanMeshBuilder.VrArms(SnapHand(v.Right), SnapHand(v.Left));
+        // VR hands (#439) as they are: posing the arms is bones only (#1202), no need to snap them to 2 cm
+        var vr = pose == PoseStride && dance == null ? VrHands : null;
         // a finger on the phone's screen (#889): the owner's own, keyed to 4 mm
-        Avatar.HumanMeshBuilder.Pointing? point = PoseKind == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
+        Avatar.HumanMeshBuilder.Pointing? point = pose == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
             ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
                 (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
             : null;
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr, point);
+        // a fall's windmill runs on this peer's clock: nothing more is replicated than the pose kind
+        _flailClock = pose == PoseFall ? _flailClock + dt : 0f;
+        float phase = pose == PoseFall ? _flailClock : _stridePhase;
+        // a hand held by a friend's (#1266, ArmHold): keyed to 2 cm, the item hand stays the item's
+        var hold = pose == PoseStride && dance == null && vr == null ? HoldPose(armed) : null;
+        var key = new FootPoseKey(_walker, pose, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold, SwordDrawn);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
         {
             _mountsKey = key;
-            _poseMounts = PoseKind switch
+            _poseMounts = pose switch
             {
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
+                PoseFall => Avatar.HumanMeshBuilder.MountsForFall(_flailClock, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
                 PoseSit => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Standing, arm, blend),
-                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
+                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr, hold),
             };
         }
-        // the dedicated server draws nothing (#842): a bot it runs walks without its figure being rebuilt
-        // every frame (0.8 ms and 180 KB a bot a frame, the whole of a bot's cost); clients rebuild their
-        // copy from the replicated pose, and the hand's mounts above stay exact for what it holds
+        // the dedicated server draws nothing (#842): a bot it runs walks without its figure being posed;
+        // clients pose their copy from the replicated pose, and the hand's mounts above stay exact for
+        // what it holds. The own figure in VR needs no hold (#1112's): its arms are bones (#1202)
         if (key != _poseKey && !HoldRemoteFigure() && !Net.NetworkManager.DedicatedServer)
         {
             _poseKey = key;
             _poseWait = 0f;
-            _walker.Mesh = PoseKind switch
+            // a new look (clothes, hat, style, a finger out to point) is the only thing that builds a mesh
+            _walker.Show(new Avatar.FigureLook(_walkPalette, Hat: Hat, Point: point != null, Fist: SwordDrawn) { Smooth = smooth });
+            switch (pose)
             {
-                PoseTucked => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
-                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
-                PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
-                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
-                PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
+                case PoseTucked: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Tucked, arm, blend, wind); break;
+                case PoseAir: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Running, arm, blend, wind); break;
+                case PoseFall: Avatar.HumanMeshBuilder.PoseFalling(_walker, _flailClock, arm, blend, wind); break;
+                case PoseHang or PoseClimb: Avatar.HumanMeshBuilder.PosePosed(_walker, CarriedFigure(), arm, blend, wind); break;
                 // seated on a stand (#885): the figure round its hip, which BodyPose lifts
-                PoseSit => SeatedWalker(palette),
-                _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
-                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr, point: point),
-            };
+                case PoseSit: Avatar.SeatedFigure.Pose(_walker, new Avatar.SeatAnchor(0, new Vector3(0, Anim.X, 0), Anim.Y, 0f)); break;
+                default: Avatar.HumanMeshBuilder.PoseStride(_walker, Anim.X, _stridePhase, arm, blend, dance, vr, point, wind, hold); break;
+            }
         }
         var mounts = _poseMounts;
         _walker.Transform = BodyPose;
@@ -2339,7 +2441,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _walker.Transform *= FlinchPose(dt);
         // stood on a slope, the capsule's round bottom holds the body r(1/cos - 1) over the ground under
         // its origin (#883): the figure goes down by that, so its feet are on the slope, not over it
-        _footDrop = Mathf.Lerp(_footDrop, PoseKind is PoseStride or PoseTucked ? SlopeDrop() : 0f, MathX.Damp(12f, dt));
+        _footDrop = Mathf.Lerp(_footDrop, pose is PoseStride or PoseTucked ? SlopeDrop() : 0f, MathX.Damp(12f, dt));
         if (_footDrop > 0.002f) _walker.Position += Vector3.Down * _footDrop;
         PlaceHand(mounts);
         PlaceBack(mounts);
@@ -2349,20 +2451,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
-        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null);
-
-    /// <summary>A VR hand to the 2 cm the figure is keyed on (#439).</summary>
-    private static Vector3 SnapHand(Vector3 p) => (p / 0.02f).Round() * 0.02f;
+        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null, Vector3 Wind = default,
+        Avatar.HumanMeshBuilder.HandHold? Hold = null, bool Fist = false);
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
-    /// <summary>The animated figure's one mesh, rebuilt in place (the cached held poses aside).</summary>
-    private ArrayMesh? _poseMesh;
     private float _poseWait;
 
     /// <summary>
-    /// Whether a remote figure keeps last frame's mesh: beyond 40 m or outside the camera's view
-    /// cone it is rebuilt at 15 Hz, not every frame. Not frozen: mirrors, portals and photos see
+    /// Whether a remote figure keeps last frame's pose: beyond 40 m or outside the camera's view
+    /// cone it is posed at 15 Hz, not every frame. Not frozen: mirrors, portals and photos see
     /// what the main camera does not. The cone holds the whole screen and the figure's size, so a
     /// figure at the edge of the picture still counts as in view.
     /// </summary>
@@ -2403,11 +2501,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera); not in VR (#920)
         float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f && !XR.XrSession.Active ? 1f : 0f);
+        // a prop (#1268) is seen from behind, from the ordinary third-person camera, on a desktop; VR stays first person (comfort)
+        bool prop = !XR.XrSession.Active && PropWalk?.Invoke(this) != null;
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
         if (want == 0f && _throwBlend < 0.01f) _throwBlend = 0f;
-        if (!_thirdPerson && want > 0f)
+        if (!_thirdPerson && (want > 0f || prop))
         {
             _borrowedThird = true;
             _thirdPerson = true;
@@ -2415,7 +2515,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _armBlend = 1f;
             RefreshVisual(force: true);
         }
-        else if (_borrowedThird && want == 0f && _throwBlend == 0f)
+        else if (_borrowedThird && want == 0f && _throwBlend == 0f && !prop)
         {
             _borrowedThird = false;
             _thirdPerson = false;
@@ -2524,7 +2624,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
         // the arm grows out of the eye instead of shrinking from the chase distance.
         float tb = _throwBlend;
-        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        // the player's zoom (#1149): closer than the usual arm, the pivot climbs to the eyes and the
+        // shoulder offset goes, so the last metres close in on the face
+        _zoom = Mathf.Lerp(_zoom, _zoomWant, MathX.Damp(10f, dt));
+        float face = _borrowedThird ? 0f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp((ArmLength - _zoom) / (ArmLength - ZoomFace), 0f, 1f));
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : (Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend))
+            + (EyeHeight - ShoulderHeight) * face, ThrowCamHeight, tb);
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
@@ -2532,21 +2637,22 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
         var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
-        if (CameraShake > 0f)
+        float shake = CameraShake + SwordShake * GameSettings.Current.ScreenShake;   // a landed blow (#1371) adds to it
+        if (shake > 0f)
         {
             // two incommensurate wobbles per axis: a tremble, not a wave
             float now = (float)Time.GetTicksMsec() / 1000f;
-            view = view * new Basis(Vector3.Right, CameraShake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
-                        * new Basis(Vector3.Up, CameraShake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
+            view = view * new Basis(Vector3.Right, shake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
+                        * new Basis(Vector3.Up, shake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
         }
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = MathX.FlatLength(Velocity);
-        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f,
+        float distance = Mathf.Lerp(_borrowedThird ? 0f : _zoom + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f * (1f - face),
             GunAim ? GunCamDistance : ThrowCamDistance, tb);
 
         // over the right shoulder, or the left once swapped (#460): the swap slides across in an eighth of a second
-        float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, GunAim ? GunCamOffset : ThrowCamOffset, tb);
+        float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset * (1f - face), GunAim ? GunCamOffset : ThrowCamOffset, tb);
         var shoulder = pivot + view.X * (offset * _shoulderSide);
         var wanted = shoulder + view.Z * distance;
 
@@ -2565,6 +2671,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var lens = new Transform3D(view, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
+
+    /// <summary>Whether the player's zoom drives the camera now (#1149): on foot in third person, nothing borrowed, not in VR.</summary>
+    public bool ZoomsView => _ride == null && RidingWith == 0 && _thirdPerson && !_borrowedThird && !XR.XrSession.Active;
 
     /// <summary>Puts the on-foot camera over the other shoulder and saves the side (#460).</summary>
     public void SwapShoulder()
@@ -2679,9 +2788,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ExitVehicle();
             return true;
         }
-        // seated on a stand (#885): stand up
+        // seated on a stand (#885): stand up; seated at a restaurant's table (#1385), E is the fondue there (start one,
+        // or sit in at its pot) and standing up is walking or jumping off
         if (Sitting)
         {
+            if (Interiors.PotTables.Near(GlobalPosition) != null)
+            {
+                TryTogetherInteract();
+                return true;
+            }
             StandUpFromSeat();
             return true;
         }
@@ -2707,6 +2822,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an elevator's call button or cabin, a flat's front door (#557)
             if (_ride == null && interiors?.TryInside(this) == true) return true;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
+            if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
+            if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
+            if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
+            if (Interiors.Games.TableGames.TryUse(this)) return true;   // a pool table, a dartboard, a game (#1324, #1326)
+            if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
             if (!byHand && interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))
@@ -2740,6 +2860,42 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
+        // a set-up telescope at hand (#1440): look through it
+        if (Items.Telescopes.TryInteract(this)) return true;
+        // Versteckis (#1268): an objective's hold; a prop opens no door and drives nothing
+        if (Adventure.Versteckis.VersteckisManager.TryInteract(this)) return true;
+        // a chest, a seal's stack or cowbell, a guide's burrow, a trial's post, an offering box (#1227)
+        if (Adventure.Rewards.RewardWorld.TryInteract(this)) return true;
+        // a summit cross, a telescope or a stamp post at hand (#1224): look out, or stamp
+        if (Adventure.Places.PoiMarkers.TryInteract(this)) return true;
+        // the stone of a festival's Steinstossen at hand (#1269): lift it
+        if (Occasions.Festivals.SteinGame.TryInteract(this)) return true;
+        // an errand giver at hand (#1267): talk to them
+        if (Adventure.Errands.ErrandGivers.TryInteract(this)) return true;
+        // a lost hiker at hand (#1339): talk to them, and they follow
+        if (Adventure.Errands.WorldEvents.TryInteract(this)) return true;
+        // the Älplerfest's flag ground (#1269): swing the flag
+        if (Occasions.Festivals.Fahnen.FahnenGame.TryInteract(this)) return true;
+        // the Désalpe's herd, alp sign or fair ring (#1269 part 7): dress a cow, start the drive, vote
+        if (Occasions.Festivals.Desalpe.DesalpeGame.TryInteract(this)) return true;
+        // the Christmas market's stalls and the Samichlaus (#1348): a taste, a ware, his bag
+        if (Occasions.Festivals.Christmas.ChristmasGame.TryInteract(this)) return true;
+        // Montreux Jazz (#1394): E at the stage-front rail marks the listener
+        if (Occasions.Festivals.MontreuxJazz.JazzGame.TryInteract(this)) return true;
+        // the Zibelemärit's stalls (#1373): a taste, a ware
+        if (Occasions.Festivals.Zibelemaerit.ZibeleGame.TryInteract(this)) return true;
+        // the Escalade's Marmite, soup pot and start line (#1351)
+        if (Occasions.Festivals.Escalade.EscaladeGame.TryInteract(this)) return true;
+        // the Fasnacht's Larven stall, Basel's Morgestraich lantern and the Guggenmusik stage (#1357)
+        if (Occasions.Festivals.Fasnacht.FasnachtGame.TryInteract(this)) return true;
+        // the Sechseläuten's pyre and Weibel (#1358)
+        if (Occasions.Festivals.Sechselaeuten.SechseGame.TryInteract(this)) return true;
+        // the Chalandamarz's Treichel stand and the ring on the march beat (#1356)
+        if (Occasions.Festivals.Chalanda.ChalandaGame.TryInteract(this)) return true;
+        // the 1 August's lampion stand, fireworks stand and walk post (#1355)
+        if (Occasions.Festivals.August1.August1Game.TryInteract(this)) return true;
+        // the festival ground's alphorn row (#1269): a seat in the song
+        if (Occasions.Festivals.Horn.HornGround.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
         if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
@@ -2756,11 +2912,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a building's door in reach beats the dance: music next door must not lock you out
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
         // another player looked at, on foot: challenge them to a fist fight, or take their challenge (#495)
+        // the sawdust ring of the Älplerfest (#1269): the queue for a bout
+        if (TryJoinRing()) return true;
         if (TryEngageFighter()) return true;
         // a concert's light desk (#885): its screen, at the front-of-house console, by hand too
         if (IsOnFloor() && Concert.ConcertDeskUi.TryOpen(this)) return true;
         // a stand's row (#885): sit down, by hand too (a VR grip), before music's dance
         if (TrySit()) return true;
+        // linked to a friend (#1266): hold E at the rope to haul them up, tap E to let go
+        if (!byHand && TryTogetherInteract()) return true;
         if (byHand) return false;
         // music heard here: E starts the dance; stopping works for as long as it lasts
         if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
@@ -2873,6 +3033,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Telehandler parkedBoom) parkedBoom.UnpackFlags(state.Flags);
         // a saucer's ramp and lamps as they were left (#861)
         if (_ride is Ufo parkedUfo) parkedUfo.UnpackFlags(state.Flags);
+        // an e-bike's battery and mode as they were left (#1167)
+        if (_ride is Bicycle parkedBike) parkedBike.UnpackFlags(state.Flags, state.Load);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2890,7 +3052,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>The vehicle as it is right now, to hand to the world.</summary>
-    private VehicleState CaptureVehicle(bool wrecked)
+    internal VehicleState CaptureVehicle(bool wrecked)
     {
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
@@ -2912,7 +3074,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Ufo uf ? uf.PackFlags() : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Ufo uf ? uf.PackFlags() : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : _ride is Bicycle bf ? bf.PackFlags() : 0,
+            Load: _ride is Truck tl ? tl.Load : _ride is Bicycle { Spec.Assist: not null } bl ? bl.Charge : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw,
             Name: _rideName);
@@ -3072,6 +3235,40 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 return candidate + Vector3.Up * 0.1f;
         }
         return over + Vector3.Up * 0.2f;
+    }
+
+    /// <summary>
+    /// The first solid surface under <paramref name="from"/> (within <paramref name="reach"/> m) with room for a standing
+    /// body on it: a floor, a stair, a roof, the ground (#1244, leaving the fly camera). A surface with too little room
+    /// over it (a table under a shelf, a ceiling's top) is passed through to the next one down. Null when there is none
+    /// (no collision built there yet).
+    /// </summary>
+    public Vector3? StandingSpotBelow(Vector3 from, float reach = 400f)
+    {
+        _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
+        var space = GetWorld3D().DirectSpaceState;
+        var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        var start = from;
+        var end = from + Vector3.Down * reach;
+        for (int i = 0; i < 16; i++)
+        {
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(start, end, CollisionMask, exclude));
+            if (hit.Count == 0) return null;
+            var at = (Vector3)hit["position"];
+            if (((Vector3)hit["normal"]).Y > 0.6f)
+            {
+                var query = new PhysicsShapeQueryParameters3D
+                {
+                    Shape = _standProbe,
+                    Transform = new Transform3D(Basis.Identity, at + Vector3.Up * (StandHeight * 0.5f + 0.1f)),
+                    CollisionMask = CollisionMask,
+                    Exclude = exclude,
+                };
+                if (space.IntersectShape(query, 1).Count == 0) return at + Vector3.Up * 0.05f;
+            }
+            start = at + Vector3.Down * 0.05f;
+        }
+        return null;
     }
 
     /// <summary>Whether a player standing at <paramref name="feet"/> would be in one of the vehicle's own boxes.</summary>
@@ -3375,6 +3572,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // into the sky by the solver
         if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
+        EndClimb();   // #1225: no climbing on any ride
+        DropPhoneBackdrop();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
@@ -3453,6 +3652,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (UnitSport.Core.UiFocus.TextEntryActive) return;
 
+        // the sword in the hand (#1371): the lock-on takes the middle button and R3 before the shoulder swap and the view switch
+        if (SwordDrawn && IsMultiplayerAuthority() && !@event.IsEcho() && @event.IsActionPressed(PlayerInput.SwordLock))
+        {
+            SwordToggleLock();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // the other shoulder (#460): its own key, or R3 on a pad while a gun is shouldered
         if (_ride == null && !@event.IsEcho() && (@event.IsActionPressed(PlayerInput.SwapShoulder)
             || (GunAim && @event is InputEventJoypadButton && @event.IsActionPressed(PlayerInput.CameraToggle))))
@@ -3462,8 +3669,33 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        // at a crane's controls the view switch is its hook camera (#618, WorkCrane)
-        if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho() && !CraneWorking)
+        // the on-foot camera's zoom (#1149, #1369): the plain wheel, whatever else is held (Shift is sprint), = / -.
+        // Not Alt + wheel (the hotbar's), not a wheel the held item owns (ItemController.WheelClaimed); a panel,
+        // the quick wheel or the map hold UiFocus (above) or swallow the wheel themselves
+        if (ZoomsView && (@event.IsActionPressed(PlayerInput.ViewZoomIn, true) || @event.IsActionPressed(PlayerInput.ViewZoomOut, true))
+            && (@event is not InputEventMouseButton
+                || (!PlayerInput.IsHotbarWheel(@event) && !UnitSport.Items.ItemController.WheelClaimed)))
+        {
+            ZoomView(@event.IsActionPressed(PlayerInput.ViewZoomIn, true) ? 1f : -1f);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // a pad's R3 on foot in third person: held, the right stick zooms (ApplyStickLook); let go
+        // without zooming, it switches the view as it always did
+        if (@event is InputEventJoypadButton && @event.IsAction(PlayerInput.CameraToggle) && !CraneWorking && (ZoomsView || _padZoomHeld))
+        {
+            if (@event.IsPressed()) { _padZoomHeld = true; _padZoomed = false; }
+            else if (_padZoomHeld)
+            {
+                _padZoomHeld = false;
+                if (!_padZoomed) ToggleView();
+            }
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // at a crane's controls the view switch is its hook camera (#618, WorkCrane); a prop keeps its lent view (#1268)
+        if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho() && !CraneWorking && PropWalk?.Invoke(this) == null)
         {
             ToggleView();
             GetViewport().SetInputAsHandled();
@@ -3480,6 +3712,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && SeatIndex == 0 && AirlinerEngines())
         {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // on an e-bike the engine switch is the Bosch remote's mode button (#1167): Off, Eco, Tour, Sport, Turbo
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is Bicycle { Spec.Assist: not null } ebike && SeatIndex == 0)
+        {
+            ebike.CycleAssist();
+            AssistChanged?.Invoke(ebike.Level);
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -3583,7 +3823,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        if (@event is InputEventMouseMotion motion && PlayerInput.IsLookMotion(motion))
+        if (@event is InputEventMouseMotion motion && !LookTaken && PlayerInput.IsLookMotion(motion))
         {
             // Mounted, the body's yaw belongs to the steering — a bicycle goes where it points,
             // and letting the mouse turn it would mean looking over your shoulder steered you
@@ -3627,7 +3867,17 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Excavator { Digging: true } or WheelLoader { Working: true } or Telehandler { Working: true }) return;
         // and a crane's operator hoists with it (#618)
         if (CraneWorking) return;
-        var look = PlayerInput.LookRate;
+        var look = LookTaken ? Vector2.Zero : PlayerInput.LookRate;
+        // R3 held (#1149): the stick's up and down are the zoom, its sides still turn the view
+        if (_padZoomHeld)
+        {
+            if (Mathf.Abs(look.Y) > 0.1f)
+            {
+                ZoomView(-look.Y * dt * 1.6f);
+                _padZoomed = true;
+            }
+            look.Y = 0f;
+        }
         // on foot a steering wheel turns the view; mounted or seated it only steers
         if (_ride == null && RidingWith == 0) look.X += PlayerInput.WheelLookRate;
         look *= LookScale;
@@ -3704,12 +3954,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float dt = (float)delta;
         // inside another player (a shared spawn): ease apart rather than be shoved out (#203)
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Separate, Bot)) SeparateFromPlayers(dt);
+        // the sword in the hand (#1371, FootPlayer.Sword.cs): its machine, the dodge and lunge steps, a blow's push
+        SwordStep(dt, IsOnFloor());
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Health, Bot))
         {
             TickHealth(dt, onFloor);
+            TickStamina(dt, onFloor);   // #1225, FootPlayer.Stamina.cs
             TickFarmFoot(dt);
+            TickTogether(dt);   // #1266, FootPlayer.Together.cs: a held E at a friend or the rope
         }
         using var walkTime = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Walk, Bot);
 
@@ -3742,10 +3996,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // on a face (#1225, FootPlayer.Climb.cs)
+        if (ClimbPhysics(dt, onFloor)) return;
         // in the water (#301, FootPlayer.Swim.cs)
         if (SwimPhysics(dt, onFloor)) return;
         // in a fist fight (#495, FootPlayer.Fight.cs)
         if (FightPhysics(dt, onFloor)) return;
+        // in a Schwingen bout (#1269, FootPlayer.Schwing.cs)
+        if (SchwingPhysics(dt, onFloor)) return;
         // in a UFO's tractor beam (#861, FootPlayer.Ufo.cs)
         if (BeamPhysics(dt, onFloor)) return;
         // in an aura battle (#907, FootPlayer.Aura.cs)
@@ -3781,6 +4039,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         bool running = sprintDown || _sprintLatch;
         bool crouchHeld = keys ? PlayerInput.Held(PlayerInput.CrouchSlide) : acts.Crouch;
+        // a sword in hand: the pad's B is the dodge (#1371), so the pad's crouch and slide wait until it is put away
+        if (keys && SwordDrawn && PlayerInput.LastDevice == InputDevice.Gamepad) crouchHeld = false;
+        // a prop (#1268): walks at its cap, never runs, jumps or slides (the Sprint key is its burst, PropWalk's answer)
+        float? propWalk = PropWalk?.Invoke(this);
+        if (propWalk != null) running = sprintDown = _sprintLatch = crouchHeld = false;
 
         // Wall jumps and slide entries need the *edge*, not the state: the ground jump below
         // polls, so holding Space bunny-hops, and a polled wall jump would rocket you up a
@@ -3790,11 +4053,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // ends at ~2 m/s, the walk accelerates you back over the entry threshold in about a
         // second, and a held key starts the next one — so holding Ctrl became a permanent
         // 7 m/s crouch-run. A slide is one move; you re-press to take another.
-        bool spaceDown = keys ? PlayerInput.Held(PlayerInput.Jump) : acts.Jump;
+        bool spaceDown = (keys ? PlayerInput.Held(PlayerInput.Jump) : acts.Jump) && propWalk == null;
         bool jumpPressed = spaceDown && !_jumpHeld;
         _jumpHeld = spaceDown;
         // downed (#475): a crawl, nothing more
         if (Downed) running = crouchHeld = spaceDown = jumpPressed = _sprintLatch = false;
+        // the concert pogo's beat (#1150): the press is the QTE's, the dance does the jumping
+        if (keys && JumpTaken) spaceDown = jumpPressed = false;
 
         bool crouchPressed = crouchHeld && !_crouchHeld;
         _crouchHeld = crouchHeld;
@@ -3811,7 +4076,24 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             direction = moveAmount > 0.01f ? walk.Wish.Normalized() : Vector3.Zero;
             running = walk.Run;
         }
+        // drunk (#1271): the intent lags and drifts, whatever made it
+        if (Drunk is { } drunk)
+        {
+            var w = drunk.Walk(direction * moveAmount, dt);
+            moveAmount = Mathf.Min(w.Length(), 1f);
+            direction = moveAmount > 0.01f ? w.Normalized() : Vector3.Zero;
+        }
+        // holding hands or roped (#1266): the soft follow constraint, on the intent (a bot's too)
+        if (Tethered?.Invoke((direction * moveAmount, running)) is { } tied)
+        {
+            moveAmount = Mathf.Min(tied.Wish.Length(), 1f);
+            direction = moveAmount > 0.01f ? tied.Wish.Normalized() : Vector3.Zero;
+            running = tied.Run;
+        }
         if (_slideCooldown > 0) _slideCooldown -= dt;
+        SprintIntent = running && moveAmount > 0.1f && onFloor;
+        // sprinting in a fight costs stamina (#1225); out of one it is free. Empty or winded: a run is a walk
+        if (running && moveAmount > 0.1f && onFloor && InCombat && !SpendStamina(StaminaKind.SprintCombat, dt)) running = false;
 
         // Remember the last usable wall, and the last jump press, for a moment each. Contact
         // and input almost never line up on the same physics frame otherwise.
@@ -3840,6 +4122,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _jumpBuffer = 0;
             return;
         }
+
+        // --- free climbing (#1225, FootPlayer.Climb.cs) ----------------------------------------
+        // pushing into a climbable face grabs it (a low ledge still vaults, above); Space then climb-jumps
+        if (TryBeginClimb(dt, direction, onFloor, acts.Climb)) { _jumpBuffer = 0; return; }
 
         // --- enter / leave the slide -------------------------------------------------
         float flatSpeed = MathX.FlatLength(velocity);
@@ -3931,7 +4217,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _lastWallNormal = Vector3.Zero;
             if (!_sliding && spaceDown && !steep)
             {
-                velocity.Y = JumpVelocity;
+                // a friend's leg-up (#1266, Räuberleiter): a free climb-jump of 2.6 m, winded or not
+                velocity.Y = jumpPressed && LegUp?.Invoke() == true ? Mathf.Sqrt(2f * Gravity * Adventure.Together.TogetherService.LegUpHeight) : JumpVelocity;
                 _groundCoyote = 0;
                 // a held Space re-jumps on every landing; each is a jump worth hearing
                 Jumped?.Invoke();
@@ -3943,6 +4230,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!_sliding)
         {
             float speed = Downed ? CrawlSpeed * moveAmount
+                : propWalk is float cap ? cap * moveAmount
                 : (running ? RunSpeed : WalkSpeed) * moveAmount * WadePace(running);   // wading (#380)
 
             // climbing costs speed: scale by how much of the move is uphill
@@ -3989,6 +4277,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
         }
 
+        // roped (#1266): a fall is caught at the rope's length round a partner who stands
+        if (!onFloor && RopeHold?.Invoke(velocity, dt) is { Held: true } rope)
+        {
+            velocity = rope.Velocity;
+            _fallSpeed = 0f;
+        }
         Velocity = velocity;
         // an open doorway: let through the building's shell to the sill, then carried across it
         var interiors = Interiors.InteriorManager.Instance;
@@ -4068,7 +4362,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="MantleMin"/> and <see cref="MantleMax"/> above the feet, and room to stand on
     /// it. Starts the pull-up when all three hold.
     /// </summary>
-    private bool TryBeginMantle(Vector3 forward, float speed)
+    private bool TryBeginMantle(Vector3 forward, float speed, float beyond = 0.45f)
     {
         var space = GetWorld3D().DirectSpaceState;
         var exclude = new Godot.Collections.Array<Rid> { GetRid() };
@@ -4077,7 +4371,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // nothing in the way at the height the hands reach over, or it is a wall, not a ledge
         var high = feet + Vector3.Up * reach;
-        var over = high + forward * (BodyRadius + 0.45f);
+        var over = high + forward * (BodyRadius + beyond);
         if (space.IntersectRay(PhysicsRayQueryParameters3D.Create(high, over, CollisionMask, exclude)).Count > 0)
             return false;
 
@@ -4180,6 +4474,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void FaceTravel(float dt, Vector3 moveDirection)
     {
         // winding up a throw: square up to where the view points, whatever the feet do
+        // swinging the sword, or locked on to a target (#1371): face where the blow goes
+        if (SwordFaceYaw is { } swordYaw)
+        {
+            Rotation = new Vector3(0, SwordFaceSnap ? swordYaw : Mathf.LerpAngle(Rotation.Y, swordYaw, MathX.Damp(26f, dt)), 0);
+            return;
+        }
         if (_throwBlend > 0.05f || SquareToView)
         {
             Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, MathX.Damp(18f, dt)), 0);
@@ -4221,6 +4521,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private bool RescueFromVoid(double delta)
     {
         _sinceSnapWarning += delta;
+        // down a hidden crevasse (#1372): ten metres under the ground on purpose, the slot's own collision holds the body
+        if (InCrevasse) return false;
         // creative flight through walls (#1002) goes into hills on purpose: back up once it lands
         if (CreativeFlying && GameSettings.Current.CreativeNoclip) return false;
         Vector3 to;
@@ -4339,7 +4641,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
-        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
+        // the air itself (#1225, World/AirLiftField): thermals, ridge lift, a campfire's updraft; the own flyer only
+        var air = Vector3.Zero;
+        if (!Npc && !flyer.IsVehicle && flyer is Canopy or Wingsuit or Pigeon)
+        {
+            World.AirLiftField.Use(Terrain, Origin);
+            air = World.AirLiftField.AirAt(GlobalPosition);
+        }
+        AirNow = air;
+        // a pigeon's wings are muscles: flapping spends stamina, empty it glides (#1225)
+        if (flyer is Pigeon bird)
+        {
+            bool flapping = input.Up > 0.5f && Pigeon.ModeOf(_flight) == PigeonFlight.Mode.Air;
+            bird.MayFlap = !flapping || SpendStamina(input.Effort ? StaminaKind.PigeonFlapBoost : StaminaKind.PigeonFlap, dt);
+        }
+        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude, air), dt, ref _flight);
         // a game mode's fence (#485: a Battle Royale's zone, while gliding): no flying out of it
         if (ev == FlightEvent.None && FlightFence?.Invoke(this, _flight.Velocity) is { } fenced) _flight.Velocity = fenced;
         // an airliner's hard landing or belly scrape: the airframe pays for it (#414)
@@ -4577,6 +4893,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
         if (_ride is { WheelLock: > 0f } && XR.XrSession.Active && RideControls == null && !float.IsNaN(XR.XrSession.WheelAngle))
             input = input with { WheelAngle = XR.XrSession.WheelAngle };
+        // drunk (#1271): the same lag and noise whatever made the input (keys, pad, wheel, VR hands)
+        if (Drunk is { } drunk) input = drunk.Ride(input, dt);
 
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);
@@ -4624,14 +4942,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
-        var surface = (_ride is Motorbike or Truck or SnowRide || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
+        var surface = (_ride is Motorbike or Truck or SnowRide or Bicycle || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
-            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles())
+            // a wheel to follow (#1124): close in, and from riding speed
+            : onFloor && _ride is Bicycle && _motion.Speed > 4f ? RideGround.WheelDraftBehind(GlobalPosition, heading, OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
         var ground = new RideGround(onFloor, grade, surface, Draft);
+        // the air thins with height: the same watts go ~6% faster over the Grimsel than in Bern (#1124)
+        if (_ride is Bicycle) ground = ground with { Altitude = Origin is { } sea ? (float)sea.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y };
         if (_ride is SnowRide)
         {
             LookAtSnow(onFloor);
@@ -5284,6 +5606,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _camera.Fov = Mathf.Lerp(_camera.Fov, zoom, MathX.Damp(14f, dt));
             return;
         }
-        _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, MathX.Damp(5f, dt));
+        // a finisher's or a full charge's hit punches the view in a few degrees and back (#1371, SwordFovKick)
+        if (SwordFovKick > 0f) _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov - SwordFovKick, MathX.Damp(30f, dt));
+        else _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, MathX.Damp(5f, dt));
     }
 }

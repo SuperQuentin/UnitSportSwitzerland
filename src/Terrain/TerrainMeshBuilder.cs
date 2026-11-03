@@ -233,13 +233,16 @@ public static partial class TerrainMeshBuilder
     /// the altitude bands alone — at 30 km nobody can tell a vineyard from a meadow, and the
     /// cover raster is a per-tile file this layer exists to avoid reading. Tiles the region
     /// does not hold leave their quads out; blocks share edge vertices exactly, so there are
-    /// no cracks between them and no skirts are needed.
+    /// no cracks between them and no skirts are needed. <paramref name="step"/> takes every
+    /// step-th sample (2: 200 m, 51 x 51 vertices, a standalone headset's, #1112); every block of a
+    /// layer takes the same one, so their edges still match.
     /// </summary>
-    public static MeshData? BuildHorizonBlock(HorizonIndex horizon, int blockE, int blockN)
+    public static MeshData? BuildHorizonBlock(HorizonIndex horizon, int blockE, int blockN, int step = 1)
     {
         const int perTile = HorizonFormat.SamplesPerSide - 1;             // 10 quads a tile
-        const int m = HorizonBlockTiles * perTile + 1;                    // 101
-        const float quad = HorizonFormat.SpacingM;
+        const int full = HorizonBlockTiles * perTile + 1;                 // 101
+        int m = (full - 1) / step + 1;
+        float quad = HorizonFormat.SpacingM * step;
 
         var vertices = new Vector3[m * m];
         var colors = new Color[m * m];
@@ -251,9 +254,10 @@ public static partial class TerrainMeshBuilder
             {
                 // the block's last column/row belongs to its last tile's east/south edge, not to
                 // the neighbouring block's first tile, so the two blocks read the same sample
-                int tc = Math.Min(c / perTile, HorizonBlockTiles - 1);
-                int tr = Math.Min(r / perTile, HorizonBlockTiles - 1);
-                int ic = c - tc * perTile, ir = r - tr * perTile;
+                int fc = c * step, fr = r * step;
+                int tc = Math.Min(fc / perTile, HorizonBlockTiles - 1);
+                int tr = Math.Min(fr / perTile, HorizonBlockTiles - 1);
+                int ic = fc - tc * perTile, ir = fr - tr * perTile;
                 var id = new TileId(blockE + tc, blockN + HorizonBlockTiles - 1 - tr);
                 if (!horizon.TryGet(id, out var samples)) continue;
 
@@ -263,7 +267,7 @@ public static partial class TerrainMeshBuilder
                 float alt = (float)ChunkFormat.Dequantize(HorizonIndex.Surface(samples[si], levels, si, out bool wet));
                 vertices[r * m + c] = new Vector3(c * quad, alt, r * quad);
                 colors[r * m + c] = CoverPalette.ColorFor(wet ? CoverClass.Water : CoverClass.Open, alt,
-                    CoverPalette.Hash(blockE * 100 + c, blockN * 100 + r)).SrgbToLinear();
+                    CoverPalette.Hash(blockE * 100 + fc, blockN * 100 + fr)).SrgbToLinear();
                 present[r * m + c] = true;
                 any++;
             }

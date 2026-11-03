@@ -40,7 +40,9 @@ public static class DoorCheck
         new("a shed", BuildingKind.Annex, 4, 3, 2.6f, 1, 1),
         new("a barn", BuildingKind.Agricultural, 20, 10, 8, 2, 2),
         new("a garage", BuildingKind.Garage, 6, 6, 3.3f, 2, 2),
-        new("a block of flats", BuildingKind.Apartment, 30, 15, 15, 3, 3),
+        // a block of flats is entered by its stairwells, on its street front only, 22 m apart (#1304): one
+        // door on 30 m, three on the long block at the end of the street
+        new("a block of flats", BuildingKind.Apartment, 30, 15, 15, 1, 1),
         new("a 100 m shop front", BuildingKind.Commercial, 100, 20, 12, 5, DoorBudget.MaxPerBuilding),
         new("a works hall", BuildingKind.Industrial, 60, 30, 9, 3, DoorBudget.MaxPerBuilding),
         // low enough that the 2.8 m door of a works does not fit under its eave, tall enough that
@@ -50,6 +52,7 @@ public static class DoorCheck
         new("a low works", BuildingKind.Industrial, 12, 8, 3.4f, 1, 1),
         // turned to no axis, so a mirrored plan frame puts its doorways on visibly wrong walls
         new("a turned block", BuildingKind.Commercial, 48, 18, 12, 3, DoorBudget.MaxPerBuilding, Turn: 31f),
+        new("a long block of flats", BuildingKind.Apartment, 60, 15, 15, 3, 3),
     ];
 
     public static int Run()
@@ -84,8 +87,13 @@ public static class DoorCheck
                 ? BuildingTypes.SiteFor(new BuildingKey(tile.Id.E, tile.Id.N, i).ToString(),
                     b.Kind, plan.Width, plan.Depth, b.MaxY - b.MinY)
                 : BuildingType.None;
-            Expect(mine.Count >= box.Least && mine.Count <= box.Most,
-                $"{box.What} ({box.Width:F0}x{box.Depth:F0} m) has {mine.Count} door(s), wanted {box.Least}..{box.Most}");
+            // the building's own doors; a shop unit's or a venue's own door (#1292) is beyond its budget
+            int own = mine.Count(d => !d.Unit), units = mine.Count - own;
+            Expect(own >= box.Least && own <= box.Most,
+                $"{box.What} ({box.Width:F0}x{box.Depth:F0} m) has {own} door(s){(units > 0 ? $" and {units} unit door(s)" : "")}, wanted {box.Least}..{box.Most}");
+            foreach (var u in mine.Where(d => d.Unit))
+                Expect(u.Width <= 1.2f + 0.01f && u.Hang == DoorHang.Inward && !u.Vehicle && (u.Span == 0 || u.Span >= VenueFront.MinSpan),
+                    $"{box.What} slot {u.Slot}: a unit's door is a shop door ({u.Width:F1} m), its front {u.Span:F1} m");
             Expect(mine.Select(d => d.Slot).SequenceEqual(Enumerable.Range(0, mine.Count)),
                 $"{box.What}: its doors are slots 0..{mine.Count - 1}");
 
@@ -610,7 +618,7 @@ public static class DoorCheck
         var e = layout?.EntranceOf(key);
         if (layout == null || e == null) return line + " | locked";
         var (w, top) = layout.OpeningOf(e);
-        var origin = new Core.WorldOrigin(tile.MinE + 500, tile.MaxN - 500);
+        var origin = new Core.WorldOrigin(tile.Centre.E, tile.Centre.N);
         var link = DoorLink.Create(layout, e, origin, d.Width, d.Height);
         return line + $" | in {F(e.X)},{F(e.Z)} dir {F(e.InX)},{F(e.InZ)} w {F(e.Width)} door {F(e.DoorX)},{F(e.DoorY)},{F(e.DoorZ)} "
             + $"h {F(e.DoorHeight)} {e.Hang} {e.Vehicle} opening {F(w)}x{F(top)} inside {V(link.Inside.Origin)} facing {V(link.Inside.Basis.Z)} "
