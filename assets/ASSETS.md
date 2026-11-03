@@ -85,6 +85,9 @@ export preset packs `music/` by its `include_filter`. The playlists: `TrackerLib
 
 | File | Source | Licence |
 |---|---|---|
+| `mercury_2k.jpg`, `venus_2k.jpg` (the clouds), `mars_2k.jpg`, `jupiter_2k.jpg`, `saturn_2k.jpg`, `saturn_ring_2k.png` (a radial strip with alpha), `uranus_2k.jpg`, `neptune_2k.jpg` | [Solar System Scope](https://www.solarsystemscope.com/textures/) 2k maps (#1444), as downloaded | CC BY 4.0, Solar System Scope |
+| `stars_bsc5.json` | The Yale Bright Star Catalogue, 5th revised ed. ([bsc5.dat](http://tdc-www.harvard.edu/catalogs/bsc5.html)), J2000 RA, Dec, V, B-V of its 9,096 placed stars (#1444) | Free to use, credit Hoffleit & Warren |
+| `tle_snapshot.json` | [CelesTrak](https://celestrak.org) GP elements, groups `stations` and `visual`, 2026-11-03 (#1444); the game fetches fresh ones | Free, credit CelesTrak |
 | `moon_lroc_4k.jpg` | [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720), `lroc_color_poles_4k.tif` (LRO's LROC WAC colour mosaic, simple cylindrical, centred on 0° E), saved as a JPEG at quality 90 | Public domain (NASA); credit: NASA's Scientific Visualization Studio |
 
 ## `cinema/` (the cinema screens' slideshow, #1250)

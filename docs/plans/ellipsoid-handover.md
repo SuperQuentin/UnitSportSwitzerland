@@ -3,7 +3,7 @@
 
 # Ellipsoid handover: from the flat world to a real WGS84 Earth at altitude
 
-Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441)**; the rest planned, after #187's render-space curvature drop lands.
+Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445)**; the rest planned, after #187's render-space curvature drop lands.
 Issue: #1430.
 Prerequisites: the floating origin (#185, `docs/plans/floating-origin.md`, done), the round world
 near the ground (#187, `docs/plans/spherical-world.md`) and its regression net (#1429).
@@ -408,6 +408,7 @@ speed).
 
 | **C0** Detail by size on screen (**done**, #1433) | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
 | **C1** Telescope on the moon (**built**, PR #1441) | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
+| **C1b** The solar system and satellites in the sky (**built**, PR #1445, #1444) | stars, planets and their axes, Jupiter's moons and Titan, Saturn's rings, satellites by SGP4 and CelesTrak, the telescope's lock on any of them | C1 | the bodies against Horizons; Jupiter and Saturn held in the telescope (`docs/notes/world/night-sky.md`) |
 | **C2** Spaceplane to orbit | spec, model, sounds, rocket thrust, the cruise drive round the Earth, glide home and runway landing | H4, H5 | take off at an airfield, reach 400 km, drive round the Earth, drop into orbit, re-enter and land on a runway |
 | **C3** Out to the moon and planets | the drive between bodies, the far-marker list, planets and markers in the telescope | H7, C1, C2 | A drives to lunar orbit; B on the ground locks the telescope on the moon and sees A's marker at the right place |
 
