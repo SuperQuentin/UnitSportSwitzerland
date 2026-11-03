@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Pool ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a pool table by the bar.
+
+- [ ] E at a table → a place, the camera down behind the cue ball (ball in hand from above for the break); A / D aims, Shift fine, W / S follow or draw (the prompt shows it); hold Space and let go → the power swings up and down and the shot goes off at the power shown.
+- [ ] The same on a pad (left stick aims, right stick nudges, A strikes, B steps back) and on a phone (stick aims, Bowl strikes).
+- [ ] E again alone → a bot sits opposite and shoots on its turn; the balls roll and turn, the stripes read as stripes, the clack, cushion and pocket sounds play; the HUD line says whose turn and what the last shot did.
+- [ ] VR: E by grip at the table, then the pad's stick and A through `XrPad` play it (holding the cue is a gap).
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.
@@ -641,3 +650,12 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] The telescope on Jupiter (lock with LMB) at 20,000 mm: its belts, its four moons beside it; Saturn's rings and Titan.
 - [ ] After dusk or before dawn, satellites drift across as points; the ISS on a pass (Heavens-Above times for your town) where and when it should be. Online first: the game fetches fresh elements once a day (`[satellites] fetched` in the log).
 - [ ] The frame rate with the night sky up, and with Starlink's ten thousand after the first fetch.
+
+## The curvature at altitude (PR [#1458](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1458), [#1430](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1430) H1)
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538300,1151200 --occasion none`, the spectator (T), boost up.
+
+- [ ] Climb steadily from the street to 50 km: the ground falls away smoothly, no jump or shimmer at 5, 20 or 50 km; it stops at 50 km.
+- [ ] The UFO the same way: it stops climbing at 50 km.
+- [ ] VR: the same climb, both eyes agree on the horizon all the way.
+- [ ] From 20-50 km: no z-fighting on the ground (the far plane grows to ~1,000 km), frame rate as on the ground.

@@ -104,10 +104,10 @@ public partial class HouseLayoutCheck : Node
             _warned.Clear();
             var at = TileId.FromLv95(h.E, h.N);
             bool found = false;
-            for (int de = -1; de <= 1 && !found; de++)
-            for (int dn = -1; dn <= 1 && !found; dn++)
+            for (int dx = -1; dx <= 1 && !found; dx++)
+            for (int dz = 1; dz >= -1 && !found; dz--)
             {
-                var id = new TileId(at.E + de, at.N + dn);
+                var id = at.Neighbour(dx, dz);
                 var path = System.IO.Path.Combine(chunks, BuildingFormat.FileName(id));
                 if (!System.IO.File.Exists(path)) continue;
                 BuildingTile tile;

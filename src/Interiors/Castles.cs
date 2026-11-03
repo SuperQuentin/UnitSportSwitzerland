@@ -88,10 +88,10 @@ public static partial class Castles
             var points = List[c].Points;
             for (int p = 0; p + 1 < points.Length; p += 2)
             {
-                double e = points[p], n = points[p + 1];
-                if (e < id.MinE - Reach || e > id.MinE + ChunkFormat.TileSizeM + Reach
-                    || n < id.MinN - Reach || n > id.MaxN + Reach) continue;
-                near.Add((c, (float)(e - id.MinE), (float)(id.MaxN - n)));
+                // in the tile's own frame (x east, z south from its north-west corner; #1443)
+                var (x, z) = id.Local(points[p], points[p + 1]);
+                if (x < -Reach || x > ChunkFormat.TileSizeM + Reach || z < -Reach || z > ChunkFormat.TileSizeM + Reach) continue;
+                near.Add((c, (float)x, (float)z));
             }
         }
         if (near.Count == 0) return null;

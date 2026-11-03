@@ -542,7 +542,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
     {
         DoorKey.TryParse(e.Door, out var k);
-        return Origin!.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0) + new Vector3(e.DoorX, e.DoorY, e.DoorZ);
+        return Origin!.TileTransform(k.Tile) * new Vector3(e.DoorX, e.DoorY, e.DoorZ);
     }
 
     /// <summary>The doorway in the interior's wall, world space.</summary>
@@ -1018,8 +1018,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         BuildingKey.TryParse(l.Key, out var key);
         var tile = key.Tile;
-        var tileOrigin = origin.ToWorld(tile.MinE, tile.MaxN, 0);
-        var at = tileOrigin + new Vector3(l.CenterX, 0, l.CenterZ);
+        var at = origin.TileTransform(tile) * new Vector3(l.CenterX, 0, l.CenterZ);
         return new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(at.X, InteriorBaseY, at.Z));
     }
 
@@ -1082,9 +1081,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             var tile = await Source.LoadBuildingsAsync(k.Tile);
             if (tile == null || k.Index < 0 || k.Index >= tile.Buildings.Count
                 || BuildingTypes.For(tile).Boxes[k.Index] is not { } box) return;
-            var origin = Origin.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0);
+            var xf = Origin.TileTransform(k.Tile);
             var b = tile.Buildings[k.Index];
-            _boxes[plan] = new BuildingSounds.Occupied(origin + new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
+            _boxes[plan] = new BuildingSounds.Occupied(xf * new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
                 box.AxisU, box.Width / 2, box.Depth / 2, 0);
         }
         catch (Exception e) { GD.PushWarning($"[interior] box of {plan}: {e.Message}"); }
@@ -1506,6 +1505,7 @@ public partial class InteriorNode : Node3D
         AddStaff(node);   // a venue's clerk and bartender (#1235)
         AddPinballs(node, material);   // a venue's pinball machines, each a table to play (#1325)
         AddLaneRigs(node, material);   // a bowling centre's pins, pinsetters and hood balls (#1323)
+        AddTableRigs(node);   // pool tables, dartboards, table football, the arcade's games (#1324, #1326)
         AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
         VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
         Patrons.VenuePatrons.AddTo(node); // its guests at the tables, the machines, in the queues and the halls (#1244)

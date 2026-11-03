@@ -649,6 +649,10 @@ public partial class ChatManager : Node
             case "pinball":
                 Show(Interiors.Pinball.PinballTables.Instance?.Command(rest, Interiors.InteriorManager.Instance?.Current?.Key, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "Pinball is not running.", ChatKind.Private);
                 return;
+            // pool, darts, table football, the arcade's games (#1324): list, step up, a bot, an action by numbers
+            case "games":
+                Show(Interiors.Games.TableGames.Instance?.Command(rest, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "The games are not running.", ChatKind.Private);
+                return;
             // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the player is in
             case "bowl":
                 Show(Interiors.BowlingLanes.Instance?.Command(1, rest, Interiors.InteriorManager.Instance?.Current?.Key, "You") ?? "Bowling is not running.", ChatKind.Private);

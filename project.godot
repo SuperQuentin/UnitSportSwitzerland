@@ -157,6 +157,10 @@ world_curvature={
 "type": "float",
 "value": 0.0
 }
+world_curve_blend={
+"type": "float",
+"value": 0.0
+}
 world_lod_scale={
 "type": "float",
 "value": 1.0

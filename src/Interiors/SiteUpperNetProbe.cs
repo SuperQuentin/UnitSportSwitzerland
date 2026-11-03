@@ -35,7 +35,7 @@ public partial class SiteUpperNetProbe : ChatProbe
     private Vector3 _foot, _top, _step;
     private TileId _tile;
 
-    private Vector3 World(Vector3 tileLocal) => _origin.ToWorld(_tile.MinE, _tile.MaxN, 0) + tileLocal;
+    private Vector3 World(Vector3 tileLocal) => _origin.TileTransform(_tile) * tileLocal;
 
     /// <summary>The upper door's sill, world: the deck's top.</summary>
     private DoorKey _key;
@@ -284,10 +284,11 @@ public partial class SiteUpperNetProbe : ChatProbe
                 // what stands round the body, in the site's frame (#827 diagnosis)
                 if (_site != null && _yard != null)
                 {
-                    var t = me.GlobalPosition - _origin.ToWorld(_tile.MinE, _tile.MaxN, 0);
+                    var toSite = _origin.TileTransform(_tile).AffineInverse();
+                    var t = toSite * me.GlobalPosition;
                     var d = new Vector2(t.X, t.Z) - _site.Box.Center;
                     var p = new Vector3(d.Dot(_site.Box.AxisU), t.Y, d.Dot(_site.Box.AxisV));
-                    GD.Print($"{Log} at site ({p.X:F2}, {p.Y:F2}, {p.Z:F2}); goal {((Goal() - _origin.ToWorld(_tile.MinE, _tile.MaxN, 0)))}; velocity {me.Velocity}, on a wall {me.IsOnWall()}");
+                    GD.Print($"{Log} at site ({p.X:F2}, {p.Y:F2}, {p.Z:F2}); goal {toSite * Goal()}; velocity {me.Velocity}, on a wall {me.IsOnWall()}");
                     var chunks = FindChunks(GetTree().Root);
                     var toGoal = ((Goal() - me.GlobalPosition) with { Y = 0 }).Normalized();
                     for (float k = -0.4f; k <= 1.21f; k += 0.4f)
