@@ -65,6 +65,28 @@ From a full sweep of `src/`, `tools/`, `tests/` (regex counts, approximate):
 | LV95-keyed graphs and grids | `LaneGraph` snap cells, `AirLift` 400 m cells, `TreeColliders`, `YardIndex`, `PisteIndex`, Versteckis, `WalkGraph`; 66 hand-written plane distances | med | Keys from the tile key; geodesic distances beyond a few km |
 | Maps | `MapView` linear in LV95, `MapCore`/`MapSetup` bakes, BR minimap | med | A map projection of their own, decoupled from world space |
 
+## Findings while starting G0 (2026-11-03)
+
+- **The anchor frame is the exact ENU frame at the anchor**, so near it +X is east, −Z true north,
+  +Y up and Y the altitude, to within the tilt and the ground's fall (0.03° and 70 cm at 3 km).
+  `SunPath`, the compass, the snow line, air density, the altimeter and gravity keep working as
+  they are: they need no helper. What breaks is long distances, stored data and the wire.
+- **`GlobalPos` is already a good seam**: its distances (`DistanceTo` in 15 files,
+  `HorizontalDistanceTo` in 20) become Earth chord and geodesic distances inside it with no caller
+  change; only its two operators (5 files) need a frame for their axes. The work is the code that
+  bypasses it: raw `e, n` arithmetic (66 hand-written `de*de + dn*dn`, offsets like `e + dx`) and
+  the 61 records holding LV95.
+- **LV95 as a notation survives far out**: the rigorous projection is exact wherever it is
+  defined (Brest has exact LV95 coordinates), and only treating `e, n` as Euclidean metres breaks.
+  But it diverges 90° from Bern's central line, so it cannot hold the whole Earth: storage moves to
+  the Earth position type all the same.
+- **The server** (not in the audit) keeps one world frame that never shifts, because its players
+  can be anywhere, and builds collision round its bots within 300 m (`bots/server-collision`).
+  With tiles in true positions, one flat frame cannot serve players 500 km apart: far tiles would
+  sit tilted in it and floats lose centimetres. **G2 needs physics in several local frames on the
+  server**, one per region with players or bots in it (Godot physics spaces per region), and
+  measuring done there in Earth positions. A G2 prerequisite of its own (G2a below).
+
 ## Design
 
 ### 1. The cube sphere
@@ -169,10 +191,11 @@ All on `main`, each small and verified by #1429's net (`tools/test.sh coords`, r
 | Phase | What | Depends on | Done when |
 |---|---|---|---|
 | **G0a** Geodesy | H2's module (#1435) as the one source: rigorous LV95 ↔ ETRS89 ↔ ECEF both ways, the geoid; the game's lat/lon catalogues (`PhotoSpots`, `Landmarks`, `SteamerBerth`, ...) and GPX through it | #1435 | unit tests against swisstopo and IGN reference points; coords and shots unchanged in CH |
-| **G0b** Position seam | `GlobalPos` gains ECEF/geodetic views and `AltitudeOf`; raw `e, n` APIs retyped to it area by area; `UpAt`, `NorthAt` helpers (today +Y and −Z) on the gravity, down-ray and heading sites | G0a | no behaviour change: coords tier and shots within the floor after each area |
+| **G0b** Position seam | `GlobalPos`'s operators through a frame (5 files); then, area by area, raw `e, n` arithmetic (hand-written distances, offsets) and the records holding LV95 moved onto `GlobalPos`; stored headings marked as grid north for G2's conversion. No helpers for up, north or altitude (findings above) | G0a | no behaviour change: coords tier and shots within the floor after each area |
 | **G0c** Tile-key seam | a `TileKey` abstraction in front of `TileId`: neighbours, ring distance, bounds, frame, file name; the 1,887 uses moved to it area by area, LV95 still behind it | none | the same; `TileId` arithmetic only inside the LV95 implementation |
 | **G1** Cube format and preprocessor | mapping and orientation, keys, the format, packing, the tiler with control-point resampling; Switzerland and France re-tiled; level 13 against 14 measured; collision error measured | G0a | every edge and corner shared exactly in unit tests; any vertex within 1 cm of its rigorous ECEF point; collision within 2 cm of the mesh; French roads on their terrain (was 10-276 m off); a level chosen with numbers |
-| **G2** The switch | the game on cube tiles in the anchor frame, re-anchoring with rotation; quadtree streaming and the pyramid for the far view; the wire and saves migrated (protocol bump); true-north headings; patterns from tile coordinates; `world_curvature` to refraction only | G0b, G0c, G1, #1430's H3 anchor | the global Swiss world against the LV95 one: coords with no regression, reference shots within tolerance (curvature now in geometry: far shots match #187's); a drive Geneva → Val Müstair and a flight Geneva → Brest with no pop at any re-anchor; `--originstress` with rotation clean; two clients agree |
+| **G2a** Server frames | the server's physics and measuring in several local frames, one per region with players or bots, on today's LV95 world first | G0b | two bots 300 km apart on one server collide and walk as alone; `tools/test.sh net` unchanged |
+| **G2** The switch | the game on cube tiles in the anchor frame, re-anchoring with rotation; quadtree streaming and the pyramid for the far view; the wire and saves migrated (protocol bump); true-north headings; patterns from tile coordinates; `world_curvature` to refraction only | G0b, G0c, G1, G2a, #1430's H3 anchor | the global Swiss world against the LV95 one: coords with no regression, reference shots within tolerance (curvature now in geometry: far shots match #187's); a drive Geneva → Val Müstair and a flight Geneva → Brest with no pop at any re-anchor; `--originstress` with rotation clean; two clients agree |
 | **G3** Data only | one more region from Copernicus and OSM (and the poles in a coarse test world) without touching code | G2 | a region added by running the preprocessor alone; a car crosses a data border and a cube face edge with no seam, pop or jolt; a flight over the North Pole draws no pinching |
 
 H2 (#1435) is G0a's foundation; H3's anchor is built once for both plans. After G2 the LV95 world
