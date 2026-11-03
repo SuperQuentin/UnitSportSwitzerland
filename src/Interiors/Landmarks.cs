@@ -98,7 +98,7 @@ public static class Landmarks
 
     private static Landmark Ikea1(string name, double lat, double lon)
     {
-        var (e, n) = SwissProjection.ToLv95(lat, lon);
+        var (e, n) = SwissGeodesy.ToLv95(lat, lon);
         return new Landmark(name, BuildingType.Ikea, lat, lon, e, n);
     }
 

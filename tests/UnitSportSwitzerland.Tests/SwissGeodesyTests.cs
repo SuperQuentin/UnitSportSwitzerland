@@ -134,6 +134,41 @@ public class SwissGeodesyTests
         Assert.True(Math.Abs(e2 - e) < 1.5 && Math.Abs(n2 - n) < 1.5, $"approximate off by {e - e2:F3} / {n - n2:F3} m");
     }
 
+    [Theory]
+    [InlineData(46.9480, 7.4474)]    // Bern
+    [InlineData(46.2044, 6.1432)]    // Geneva
+    [InlineData(48.8566, 2.3522)]    // Paris, 435 km out
+    [InlineData(48.3904, -4.4861)]   // Brest, 909 km out
+    [InlineData(41.9192, 8.7386)]    // Ajaccio
+    public void Lat_lon_to_LV95_and_back_is_exact_far_from_Bern(double lat, double lon)
+    {
+        // #1443: the way in for OSM, IGN and GPS points; the inverse at the matching height returns them
+        var (e, n) = SwissGeodesy.ToLv95(lat, lon);
+        var (lat2, lon2) = SwissGeodesy.ToLatLon(e, n);
+        Assert.True(Math.Abs(lat2 - lat) < 1e-8 && Math.Abs(lon2 - lon) < 1e-8, $"drift {(lat2 - lat) * 111e3:F4} / {(lon2 - lon) * 76e3:F4} m");
+    }
+
+    [Theory]
+    [InlineData(46.9480, 7.4474)]
+    [InlineData(48.3904, -4.4861)]
+    public void The_height_a_lat_lon_is_taken_at_moves_it_by_at_most_HorizontalPerMetre(double lat, double lon)
+    {
+        // the datums' normals are not parallel: a point converted at 3,000 m lands a little off one at 500 m
+        var (e0, n0) = SwissGeodesy.ToLv95(lat, lon, 500);
+        var (e1, n1) = SwissGeodesy.ToLv95(lat, lon, 3500);
+        double perMetre = Math.Sqrt((e1 - e0) * (e1 - e0) + (n1 - n0) * (n1 - n0)) / 3000;
+        Assert.True(perMetre < SwissGeodesy.HorizontalPerMetre, $"{perMetre:E2} m per metre");
+    }
+
+    [Fact]
+    public void The_approximate_SwissProjection_is_far_off_in_France()
+    {
+        // why everything from outside goes through SwissGeodesy (#1443): Brest by the polynomials
+        var (e, n) = SwissProjection.ToLv95(48.3904, -4.4861);
+        var (e2, n2) = SwissGeodesy.ToLv95(48.3904, -4.4861);
+        Assert.True(Math.Sqrt((e - e2) * (e - e2) + (n - n2) * (n - n2)) > 200);
+    }
+
     [Fact]
     public void ECEF_of_the_equator_and_the_poles()
     {

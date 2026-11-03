@@ -146,5 +146,33 @@ public static class SwissGeodesy
     /// <summary>The inverse of <see cref="ToWgs84"/>.</summary>
     public static (double E, double N, double H) FromWgs84(Geodetic g) => FromEcef(Ellipsoid.Wgs84.ToEcef(g));
 
+    /// <summary>
+    /// The ellipsoidal height a latitude and longitude with no height of their own are taken at: the
+    /// Swiss Plateau's ground (~450 m LHN95 plus ~50 m of geoid). The two datums' normals differ, so
+    /// the height moves the LV95 point a little: <see cref="HorizontalPerMetre"/> per metre off.
+    /// </summary>
+    public const double GroundH = 500;
+
+    /// <summary>How far an LV95 point moves per metre of ellipsoidal height it is converted at: measured 2.6e-5 at Bern and 2.8e-5 at Brest, so a summit taken at the Plateau's height lands ~10 cm off (the Matterhorn, 4 km higher): pass the height when it is known.</summary>
+    public const double HorizontalPerMetre = 3e-5;
+
+    /// <summary>
+    /// Latitude and longitude on WGS84 / ETRS89 (degrees, GPS, OSM, IGN) to LV95, rigorously (#1443): the
+    /// one way in for coordinates from outside, valid however far from Bern. <see cref="SwissProjection"/>'s
+    /// polynomials are off by 10 m at Paris and 276 m at Brest.
+    /// </summary>
+    public static (double E, double N) ToLv95(double latDeg, double lonDeg, double hEllipsoid = GroundH)
+    {
+        var (e, n, _) = FromWgs84(new Geodetic(latDeg, lonDeg, hEllipsoid));
+        return (e, n);
+    }
+
+    /// <summary>LV95 and an LHN95 height to latitude and longitude on WGS84 (degrees): the inverse of <see cref="ToLv95"/>.</summary>
+    public static (double LatDeg, double LonDeg) ToLatLon(double e, double n, double hLhn95 = GroundH - 50)
+    {
+        var g = ToWgs84(e, n, hLhn95);
+        return (g.LatDeg, g.LonDeg);
+    }
+
     private static double Rad(double deg) => deg * Math.PI / 180.0;
 }
