@@ -52,6 +52,9 @@ public partial class FootPlayer
             .OrderBy(x => x.Item2).Take(3).Select(x => $"{x.i}:{x.Item2:F2}"));
     }
 
+    /// <summary>For checks: whether the body has been put on the ground it stands on (never below it).</summary>
+    public bool Placed => _placed;
+
     /// <summary>For checks: the states that take the walk over.</summary>
     public string WalkState => $"wait {_deckWait:F2} mantle {_mantling} stun {_stunTimer:F2} slide {_sliding} placed {_placed} walk {(WalkControls != null)}";
 

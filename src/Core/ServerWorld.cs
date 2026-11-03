@@ -210,6 +210,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (WorldChoice.FunActive) World.WorldClock.Start(World.Fun.FunWorld.DuskHour, 0);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
+        // two bots far apart on one server, each in a frame of its own (#1456, tools/regioncheck.sh)
+        if (Bots.RegionCheck.Requested) AddChild(new Bots.RegionCheck());
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
         Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
