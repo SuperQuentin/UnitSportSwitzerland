@@ -154,6 +154,16 @@ public sealed class OriginFrame
         return Turn(up, Axes).Normalized();
     }
 
+    /// <summary>
+    /// This world in Earth positions (#1430 H4): the anchor's axes, or for the flat ground frame its
+    /// tangent frame at its origin (grid axes there, world Y = 0 at <see cref="Alt0"/>), exact at the
+    /// origin and the flat plane's own curvature away from it. What places real-geometry things (the
+    /// globe) in a world of flat tiles.
+    /// </summary>
+    public FrameAxes EcefAxes => _ecefAxes ??= Axes ?? FrameAxes.GroundAt(E, N, Alt0);
+
+    private FrameAxes? _ecefAxes;
+
     /// <summary>An Earth-fixed direction in this frame's world axes (the ground frame: grid axes at its own origin).</summary>
     public Vector3 DirectionOf(EcefPos ecef)
     {
@@ -297,6 +307,9 @@ public sealed class WorldOrigin
 
     /// <summary>The ground frame's vertical origin now (#1430 H3): 0 but in the Space regime.</summary>
     public double Alt0 => _frame.Alt0;
+
+    /// <summary>The world in Earth positions now (<see cref="OriginFrame.EcefAxes"/>).</summary>
+    public FrameAxes EcefAxes => _frame.EcefAxes;
 
     /// <summary>The same to an anchor frame (#1430 H3): world (0, 0, 0) and its axes at <paramref name="axes"/>.</summary>
     internal OriginShift MoveTo(FrameAxes axes)

@@ -1,0 +1,338 @@
+using System.Collections.Concurrent;
+using Godot;
+using UnitSport.Core;
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.World;
+
+/// <summary>
+/// The Earth from far out (#1430 H4; docs/plans/ellipsoid-handover.md §6a): the coarse cube levels
+/// of a <c>--cube-global</c> region (G1's format), in real geometry, coloured by the month. Until
+/// round tiles (#1443 G2) it lives beside the flat LV95 world: placed through the frame's Earth axes
+/// (<see cref="OriginFrame.EcefAxes"/>), drawn a little behind whatever stands at the same place
+/// (<c>shaders/globe.gdshader</c>), so the flat tiles and horizon blocks win where they are, and
+/// shown once the camera is above <see cref="ShowAboveM"/>.
+///
+/// <para>
+/// Levels by size on screen (<see cref="Styles.LodScale"/>, C0): a tile splits into its four children
+/// when a drawn cell would cover more than <see cref="SplitPixels"/> pixels, and only once all four are
+/// built, so nothing is ever missing; past the horizon a tile is not drawn. Each tile is drawn every
+/// <see cref="Stride"/>-th lattice vertex (64 cells), its mesh built once on a worker around its own
+/// ENU anchor (<see cref="CubeGeometry.Exact"/>, rigorous) with skirts against cracks between levels;
+/// a shift only rewrites transforms (<c>no-mesh-rebuild-per-frame</c>).
+/// </para>
+/// </summary>
+public partial class Globe : Node
+{
+    public const string DefaultDir = "D:/UnitSportSwitzerland/cube_global";
+
+    /// <summary>The region to draw: <c>--globe DIR</c>, else the default one when it exists; null leaves the globe out.</summary>
+    public static string? DataDir
+    {
+        get
+        {
+            string? dir = CmdArgs.Value("--globe");
+            if (dir is "off" or "0") return null;
+            dir ??= DefaultDir;
+            return File.Exists(System.IO.Path.Combine(dir, CubeManifest.FileName)) ? dir : null;
+        }
+    }
+
+    /// <summary>Drawn above this camera altitude, metres (H1's exact sphere blend starts at 20 km).</summary>
+    public const float ShowAboveM = 15_000;
+
+    /// <summary>Every this many lattice vertices are drawn: 64 cells a tile of 512.</summary>
+    public const int Stride = 8;
+
+    public const float SplitPixels = 6;
+
+    private const double EarthR = 6_371_000;
+
+    public WorldOrigin? Origin { get; set; }
+
+    /// <summary>Whether a globe is drawn past the edge of the data (the altitude haze need not hide it).</summary>
+    public static bool Present { get; private set; }
+
+    public string Dir { get; set; } = DefaultDir;
+
+    private CubeManifest _manifest = null!;
+    private int _maxLevel;
+    private readonly Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
+    private readonly Dictionary<CubeKey, MeshInstance3D> _patches = new();
+    private readonly Dictionary<CubeKey, EnuFrame> _anchors = new();
+    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour)> _ready = new();
+    private readonly HashSet<CubeKey> _loading = new(), _want = new();
+    private readonly SemaphoreSlim _workers = new(3);
+    private Shader _shader = null!;
+    private int _month = 7, _epoch = int.MinValue;
+    private double _nextPlan;
+    private bool _shown;
+
+    public override void _Ready()
+    {
+        _manifest = CubeManifest.FromJson(File.ReadAllText(System.IO.Path.Combine(Dir, CubeManifest.FileName)));
+        _maxLevel = _manifest.LevelsOrLeaf.Max(l => l.Level);
+        foreach (var file in Directory.GetFiles(Dir, "*.cubb")) Index(file, CubeBundle.Magic, _heights);
+        foreach (var file in Directory.GetFiles(Dir, "*.cuba")) Index(file, CubeBundle.AlbedoMagic, _albedo);
+        _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
+        if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
+        GD.Print($"[globe] {_heights.Count} tiles to level {_maxLevel}, {_albedo.Count} coloured, month {_month}, from {Dir}");
+        for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
+        Present = true;
+    }
+
+    public override void _ExitTree() => Present = false;
+
+    private static void Index(string file, uint magic, Dictionary<CubeKey, (string, long, int)> into)
+    {
+        using var fs = File.OpenRead(file);
+        foreach (var (key, at) in CubeBundle.ReadIndex(fs, magic)) into[key] = (file, at.Offset, at.Length);
+    }
+
+    public override void _Process(double delta)
+    {
+        if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
+
+        // what the workers built, a few a frame
+        for (int k = 0; k < 4 && _ready.TryDequeue(out var r); k++) Commit(r.Key, r.Arrays, r.Colour);
+
+        bool show = Origin.AltitudeOf(cam.GlobalPosition) > ShowAboveM;
+        if (show != _shown)
+        {
+            _shown = show;
+            foreach (var p in _patches.Values) p.Visible = false;
+            _nextPlan = 0;
+        }
+        if (!show) return;
+
+        if (Origin.Frame.Epoch != _epoch)
+        {
+            _epoch = Origin.Frame.Epoch;
+            foreach (var (key, node) in _patches) node.Transform = Place(key);
+        }
+
+        // five plans a second
+        _nextPlan -= delta;
+        if (_nextPlan > 0) return;
+        _nextPlan = 0.2;
+        Plan(cam);
+    }
+
+    /// <summary>Which tiles to draw: from the six faces down, by size on screen and the horizon.</summary>
+    private void Plan(Camera3D cam)
+    {
+        var axes = Origin!.EcefAxes;
+        var c = cam.GlobalPosition;
+        var eye = axes.ToEcef(c.X, c.Y, c.Z);
+        double eyeR = Math.Sqrt(FrameAxes.Dot(eye, eye));
+        var eyeDir = new EcefPos(eye.X / eyeR, eye.Y / eyeR, eye.Z / eyeR);
+        double horizon = Math.Acos(Math.Min(1, EarthR / eyeR));
+        float viewH = GetViewport().GetVisibleRect().Size.Y;
+        double focal = viewH / (2 * Math.Tan(Mathf.DegToRad(cam.Fov) / 2)) * Styles.LodScale.Value;
+
+        _want.Clear();
+        for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, eyeDir, horizon, focal);
+        foreach (var (key, node) in _patches) node.Visible = _want.Contains(key);
+    }
+
+    private void Select(CubeKey key, EcefPos eye, EcefPos eyeDir, double horizon, double focal)
+    {
+        var anchor = AnchorOf(key);
+        var up = anchor.Up;
+        // the tile's angular radius on the sphere, a little generous: a face spans 90°
+        double radius = Math.PI / 2 / key.Side * 0.8;
+        double angle = Math.Acos(Math.Clamp(FrameAxes.Dot(eyeDir, up), -1, 1));
+        if (angle > horizon + radius) return;
+
+        var centre = new EcefPos(up.X * EarthR, up.Y * EarthR, up.Z * EarthR);
+        var d = eye - centre;
+        double distance = Math.Max(Math.Sqrt(FrameAxes.Dot(d, d)) - EarthR * radius, 1000);
+        double cell = EarthR * Math.PI / 2 / key.Side / ((1 << CubeKey.LatticeBits(key.Level)) / Stride);
+        bool split = key.Level < _maxLevel && cell / distance * focal > SplitPixels;
+        if (split)
+        {
+            bool all = true;
+            foreach (var child in key.Children())
+                if (!_patches.ContainsKey(child)) { all = false; Request(child); }
+            if (all)
+            {
+                foreach (var child in key.Children()) Select(child, eye, eyeDir, horizon, focal);
+                return;
+            }
+        }
+        if (_patches.ContainsKey(key)) _want.Add(key);
+        else Request(key);
+    }
+
+    private EnuFrame AnchorOf(CubeKey key)
+    {
+        if (!_anchors.TryGetValue(key, out var a)) _anchors[key] = a = key.Anchor;
+        return a;
+    }
+
+    private void Request(CubeKey key)
+    {
+        if (_patches.ContainsKey(key) || _loading.Contains(key) || !_heights.TryGetValue(key, out var at)) return;
+        _loading.Add(key);
+        _albedo.TryGetValue(key, out var colourAt);
+        int month = _month;
+        _ = Task.Run(async () =>
+        {
+            await _workers.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var tile = CubeTileCodec.Decode(ReadBytes(at));
+                var arrays = Build(tile);
+                Image? colour = null;
+                if (colourAt.Path != null)
+                {
+                    var a = CubeAlbedoCodec.Decode(ReadBytes(colourAt));
+                    colour = new Image();
+                    if (colour.LoadWebpFromBuffer(a.ForMonth(month)) == Error.Ok) colour.GenerateMipmaps();
+                    else colour = null;
+                }
+                _ready.Enqueue((key, arrays, colour));
+            }
+            catch (Exception e)
+            {
+                GD.PushError($"[globe] {key}: {e.Message}");
+            }
+            finally
+            {
+                _workers.Release();
+            }
+        });
+    }
+
+    private static byte[] ReadBytes((string Path, long Offset, int Length) at)
+    {
+        using var handle = File.OpenHandle(at.Path, FileMode.Open, System.IO.FileAccess.Read, FileShare.Read);
+        var bytes = new byte[at.Length];
+        RandomAccess.Read(handle, bytes, at.Offset);
+        return bytes;
+    }
+
+    /// <summary>
+    /// A tile's mesh around its anchor: every <see cref="Stride"/>-th lattice vertex, rigorous, with
+    /// normals from its neighbours, the colour's UVs (row 0 the south edge, as the image), and a skirt
+    /// along each edge hanging a third of a drawn cell, so a neighbour drawn a level coarser leaves no crack.
+    /// </summary>
+    public static Godot.Collections.Array Build(CubeTile tile)
+    {
+        var key = tile.Key;
+        int bits = tile.Bits, m = (1 << bits) / Stride, n = m + 1;
+        var anchor = key.Anchor;
+        var pos = new Vector3[n * n];
+        var up = new Vector3[n * n];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                float h = tile.HeightAt(i * Stride, j * Stride);
+                if (float.IsNaN(h)) h = 0;
+                var (x, y, z) = CubeGeometry.Exact(key, bits, i * Stride, j * Stride, h);
+                pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
+                var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, ((long)key.X << bits) + i * Stride), CubeSphere.Lattice(key.Level + bits, ((long)key.Y << bits) + j * Stride));
+                var (ux, uy, uz) = anchor.DirectionToLocal(normal);
+                up[j * n + i] = new Vector3((float)ux, (float)uy, (float)uz);
+            }
+
+        double cellM = EarthR * Math.PI / 2 / key.Side / m;
+        float skirt = (float)(cellM / 3);
+        int edge = 4 * m, total = n * n + edge;
+        var verts = new Vector3[total];
+        var norms = new Vector3[total];
+        var uvs = new Vector2[total];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int k = j * n + i;
+                var du = pos[j * n + Math.Min(i + 1, m)] - pos[j * n + Math.Max(i - 1, 0)];
+                var dv = pos[Math.Min(j + 1, m) * n + i] - pos[Math.Max(j - 1, 0) * n + i];
+                var nrm = du.Cross(dv).Normalized();
+                if (nrm.Dot(up[k]) < 0) nrm = -nrm;
+                verts[k] = pos[k];
+                norms[k] = nrm;
+                uvs[k] = new Vector2(i / (float)m, j / (float)m);
+            }
+
+        // the edge ring, counter-clockwise in (i, j), then its lowered copy
+        var ring = new int[edge];
+        int r = 0;
+        for (int i = 0; i < m; i++) ring[r++] = i;
+        for (int j = 0; j < m; j++) ring[r++] = j * n + m;
+        for (int i = m; i > 0; i--) ring[r++] = m * n + i;
+        for (int j = m; j > 0; j--) ring[r++] = j * n;
+        for (int e = 0; e < edge; e++)
+        {
+            int k = ring[e];
+            verts[n * n + e] = pos[k] - up[k] * skirt;
+            norms[n * n + e] = norms[k];
+            uvs[n * n + e] = uvs[k];
+        }
+
+        // Godot's front faces wind clockwise as seen; whether (i, j) runs clockwise from above depends on the face
+        var a0 = pos[0];
+        bool flip = (pos[1] - a0).Cross(pos[n] - a0).Dot(up[0]) > 0;
+        var idx = new List<int>(m * m * 6 + edge * 12);
+        void Tri(int a, int b, int c)
+        {
+            if (flip) { idx.Add(a); idx.Add(c); idx.Add(b); }
+            else { idx.Add(a); idx.Add(b); idx.Add(c); }
+        }
+        for (int j = 0; j < m; j++)
+            for (int i = 0; i < m; i++)
+            {
+                int k00 = j * n + i, k10 = k00 + 1, k01 = k00 + n, k11 = k01 + 1;
+                Tri(k00, k10, k11);
+                Tri(k00, k11, k01);
+            }
+        for (int e = 0; e < edge; e++)
+        {
+            int a = ring[e], b = ring[(e + 1) % edge], la = n * n + e, lb = n * n + (e + 1) % edge;
+            // both windings: a skirt is seen from either side
+            idx.Add(a); idx.Add(b); idx.Add(lb);
+            idx.Add(a); idx.Add(lb); idx.Add(la);
+            idx.Add(a); idx.Add(lb); idx.Add(b);
+            idx.Add(a); idx.Add(la); idx.Add(lb);
+        }
+
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = verts;
+        arrays[(int)Mesh.ArrayType.Normal] = norms;
+        arrays[(int)Mesh.ArrayType.TexUV] = uvs;
+        arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
+        return arrays;
+    }
+
+    private void Commit(CubeKey key, Godot.Collections.Array arrays, Image? colour)
+    {
+        _loading.Remove(key);
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        var material = new ShaderMaterial { Shader = _shader };
+        if (colour != null) material.SetShaderParameter("albedo_tex", ImageTexture.CreateFromImage(colour));
+        var node = new MeshInstance3D
+        {
+            Name = key.FileStem,
+            Mesh = mesh,
+            MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+        };
+        AddChild(node);
+        node.Transform = Place(key);
+        _patches[key] = node;
+    }
+
+    /// <summary>A tile's anchor (x east, y up, z south) in this world, composed in doubles.</summary>
+    private Transform3D Place(CubeKey key)
+    {
+        var axes = Origin!.EcefAxes;
+        var a = AnchorOf(key);
+        Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
+        var (ox, oy, oz) = axes.FromEcef(a.Origin);
+        var south = new EcefPos(-a.North.X, -a.North.Y, -a.North.Z);
+        return new Transform3D(new Basis(Turn(a.East), Turn(a.Up), Turn(south)), new Vector3((float)ox, (float)oy, (float)oz));
+    }
+}

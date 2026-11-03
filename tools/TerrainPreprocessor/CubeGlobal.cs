@@ -8,7 +8,8 @@ namespace UnitSport.Tools.Preprocessor;
 /// <summary>
 /// The globe's coarse levels (#1430 H4; docs/plans/ellipsoid-handover.md §6a, tools/cube-tiles note):
 /// every tile of levels 0..N over the whole Earth from NOAA ETOPO 2022 60″ (ice surface and sea
-/// floor on EGM2008, plus its EGM2008 undulation grid: h = H + N, WGS84 ellipsoidal as the leaves),
+/// floor on EGM2008, plus its EGM2008 undulation grid: h = max(H, 0) + N, WGS84 ellipsoidal as the
+/// leaves; the sea at its surface, the floor's relief left to the colour),
 /// written in G1's format (<see cref="CubeTileCodec"/>, <see cref="CubeBundle"/>, a version-2
 /// <see cref="CubeManifest"/>). The leaves' own tiler (<see cref="CubeStage"/>) is untouched: this is
 /// its global source, as G1 expected (#1455).
@@ -61,7 +62,7 @@ public static class CubeGlobal
         Console.WriteLine($"cube-global: ETOPO 2022 {grid.Width} x {grid.Height}, h = H + N, loaded in {sw.Elapsed.TotalSeconds:F0} s");
 
         var manifest = new CubeManifest { LeafLevel = maxLevel, Bits = CubeKey.LatticeBits(maxLevel), BundleLevel = BundleLevel(maxLevel) };
-        manifest.Sources.Add("NOAA NCEI ETOPO 2022 60 arc-second, surface (ice) on EGM2008 + its EGM2008 geoid grid (public domain)");
+        manifest.Sources.Add("NOAA NCEI ETOPO 2022 60 arc-second, surface (ice) on EGM2008 + its EGM2008 geoid grid (public domain); below sea level at the geoid");
         long bytes = 0;
         var built = new ConcurrentDictionary<CubeKey, CubeTile>();
         for (int level = minLevel; level <= maxLevel; level++)
@@ -188,7 +189,9 @@ public sealed class EtopoGrid
                 {
                     int x = b.X * s.BlockW + c;
                     if (x >= s.Width) break;
-                    grid.H[(long)y * s.Width + x] = hs[r * s.BlockW + c] + ns[r * s.BlockW + c];
+                    // the sea at its surface (the geoid), the sea floor dropped: the globe shows the
+                    // water, and Blue Marble's shading already draws the floor's relief
+                    grid.H[(long)y * s.Width + x] = Math.Max(hs[r * s.BlockW + c], 0f) + ns[r * s.BlockW + c];
                 }
             }
         });

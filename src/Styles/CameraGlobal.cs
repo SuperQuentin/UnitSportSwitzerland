@@ -113,7 +113,7 @@ public partial class CameraGlobal : Node
         if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
         if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
 
-        float scale = HazeAt(altitude);
+        float scale = HazeAt(altitude, World.Globe.Present);
         if (GetViewport()?.FindWorld3D()?.Environment is not { } env || (scale == _fogScale && env == _fogEnv)) return;
         _fogScale = scale;
         _fogEnv = env;   // a restyle hands over a new one: its own ground haze is the base
@@ -121,9 +121,14 @@ public partial class CameraGlobal : Node
         env.FogDensity = (float)env.GetMeta(BaseFogMeta) * scale;
     }
 
-    /// <summary>The style's haze at a camera height, as a share of the ground's: 1 to 3 km, then thinning with the air, never under a sixth.</summary>
-    public static float HazeAt(double altitude) =>
-        altitude <= 3_000 ? 1f : Mathf.Max(1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
+    /// <summary>
+    /// The style's haze at a camera height, as a share of the ground's: 1 to 3 km, then thinning with
+    /// the air, never under a sixth while it has to hide the edge of the data. With the globe drawn
+    /// past that edge (#1430 H4) nothing needs hiding, and it thins on: depth fog counts distance, not
+    /// air, so a sixth of it over the hundreds of kilometres seen from orbit drew a white wall.
+    /// </summary>
+    public static float HazeAt(double altitude, bool globe = false) =>
+        altitude <= 3_000 ? 1f : Mathf.Max(globe ? 0f : 1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
 
     private void ScaleShadows()
     {
