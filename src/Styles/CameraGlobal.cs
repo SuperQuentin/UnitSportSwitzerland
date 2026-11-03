@@ -44,7 +44,9 @@ public partial class CameraGlobal : Node
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Push;
 
     private static readonly StringName WorldCamPos = "world_cam_pos", WorldLodScale = "world_lod_scale",
-        CurvatureParam = "world_curvature";
+        CurvatureParam = "world_curvature", CurveBlendParam = "world_curve_blend", BaseFogMeta = "base_fog_density";
+    private float _curveBlend = float.NaN, _fogScale = float.NaN;
+    private Godot.Environment? _fogEnv;
     private float _pushedScale = 1f;
 
     // the sun whose shadow distance follows the zoom, and its own distance (a restyle makes a new sun)
@@ -67,16 +69,49 @@ public partial class CameraGlobal : Node
                 RenderingServer.GlobalShaderParameterSet(WorldLodScale, _pushedScale);
             }
         }
-        // the Earth's curvature in every world shader (#187), pushed when it changes
-        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2 : 0f;
+        // the Earth's curvature in every world shader (#187), by the camera's height (#1430 H1): refraction
+        // fades out from 5 to 20 km, the drop gives way to the exact sphere from 20 to 50 km. Pushed when it changes.
+        var camera = GetViewport()?.GetCamera3D();
+        double altitude = camera?.GlobalPosition.Y ?? 0;
+        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2At(altitude) : 0f;
         if (curvature != _curvature)
         {
             _curvature = curvature;
             RenderingServer.GlobalShaderParameterSet(CurvatureParam, curvature);
         }
+        float blend = Core.Curvature.Drawn ? (float)Core.Curvature.SphereBlendAt(altitude) : 0f;
+        if (blend != _curveBlend)
+        {
+            _curveBlend = blend;
+            RenderingServer.GlobalShaderParameterSet(CurveBlendParam, blend);
+        }
+        if (camera != null) Climb(camera, altitude);
         ZoomRanges.Tick();
         ScaleShadows();
     }
+
+    /// <summary>
+    /// High up (#1430 H1): the view reaches past the geometric horizon (√(2Rh + h²) + 200 km above 5 km),
+    /// and the style's haze thins with the air, kept at a sixth so the edge of the terrain data stays
+    /// in the haze until the globe (H4). Below 3 km nothing changes.
+    /// </summary>
+    private void Climb(Camera3D camera, double altitude)
+    {
+        float far = Core.GameSettings.Current.CameraFar;
+        if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
+        if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
+
+        float scale = HazeAt(altitude);
+        if (GetViewport()?.FindWorld3D()?.Environment is not { } env || (scale == _fogScale && env == _fogEnv)) return;
+        _fogScale = scale;
+        _fogEnv = env;   // a restyle hands over a new one: its own ground haze is the base
+        if (!env.HasMeta(BaseFogMeta)) env.SetMeta(BaseFogMeta, env.FogDensity);
+        env.FogDensity = (float)env.GetMeta(BaseFogMeta) * scale;
+    }
+
+    /// <summary>The style's haze at a camera height, as a share of the ground's: 1 to 3 km, then thinning with the air, never under a sixth.</summary>
+    public static float HazeAt(double altitude) =>
+        altitude <= 3_000 ? 1f : Mathf.Max(1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
 
     private void ScaleShadows()
     {
