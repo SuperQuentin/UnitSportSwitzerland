@@ -134,4 +134,35 @@ public class OriginFrameTests
         var after = new Basis(Vector3.Up, heading + turned.Yaw) * Vector3.Forward;
         Assert.True(after.DistanceTo(turned.Direction(dir)) < 1e-5f);
     }
+
+    [Fact]
+    public void Altitude_and_up_in_both_kinds_of_frame()
+    {
+        var ground = GroundAt(BernE, BernN);
+        Assert.Equal(612.5, ground.AltitudeOf(new Vector3(30, 612.5f, -40)), 3);
+        Assert.Equal(Vector3.Up, ground.UpAt(new Vector3(30, 612.5f, -40)));
+        var anchor = AnchorAt(BernE, BernN, 120_000);
+        var p = new GlobalPos(BernE + 15_000, BernN - 8_000, 118_000);
+        Assert.Equal(p.Alt, anchor.AltitudeOf(anchor.ToWorld(p)), 0.01);
+        Assert.True(anchor.UpAt(Vector3.Zero).DistanceTo(Vector3.Up) < 1e-5f, "up at the anchor is its Y");
+        // 17 km away the ground's up has turned ~0.15° from the anchor's
+        float turn = Mathf.RadToDeg(anchor.UpAt(anchor.ToWorld(p)).AngleTo(Vector3.Up));
+        Assert.InRange(turn, 0.1f, 0.2f);
+    }
+
+    [Fact]
+    public void The_sun_from_an_anchor_with_the_grounds_axes_is_where_the_ground_has_it()
+    {
+        var date = new DateOnly(2026, 8, 1);
+        try
+        {
+            World.SunPath.Frame = null;
+            var flat = World.SunPath.Toward(SkyBody.Sun, date, 15, BernE, BernN, out _);
+            // the place cell's centre: the anchor at it has the very axes the ground path turns into
+            World.SunPath.Frame = AnchorAt(BernE + 500, BernN + 500, 0);
+            var anchored = World.SunPath.Toward(SkyBody.Sun, date, 15, BernE, BernN, out _);
+            Assert.True(Mathf.RadToDeg(flat.AngleTo(anchored)) < 0.01f, $"{flat} / {anchored}");
+        }
+        finally { World.SunPath.Frame = null; }
+    }
 }
