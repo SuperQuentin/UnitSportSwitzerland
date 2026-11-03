@@ -257,6 +257,66 @@ records which one it is:
   ~13,000 km. Beyond that, and for other bodies (H7), a **scaled-space** pass draws distant bodies
   shrunk and brought closer with the same angular size.
 
+### 6a. H4 design: the coarse pyramid in G1's format
+
+Decided with #1443's coordinator (2026-11-03): one pyramid. H4 builds the coarse levels and the
+renderer that draws them; G2 extends the same renderer down to the leaves as its far view.
+
+**Sources** (on D:, `D:/UnitSportSwitzerland/data/global/`, never in git; approved 2026-11-03):
+
+| Source | What | Size | Licence |
+|---|---|---|---|
+| NOAA ETOPO 2022 60″ surface (`etopo2022/ETOPO_2022_v1_60s_N90W180_surface.tif`) | ice surface and sea floor, 1.85 km, heights on EGM2008 | 466 MB | public domain (NOAA NCEI), cited |
+| ETOPO 2022 60″ geoid (`…_geoid.tif`) | EGM2008 undulation N on the same grid: h = H + N, WGS84 ellipsoidal as G1's tiles | 426 MB | public domain |
+| NASA Blue Marble Next Generation, topography and bathymetry, 12 months (`bmng/world.topo.bathy.2004MM.3x21600x10800.jpg`) | the colour of the land by month (snow, vegetation), shaded sea floor; 2 km | 12 × ~29 MB | credit "NASA Earth Observatory" (R. Stöckli et al.) in the credits screen |
+
+Over Switzerland and wherever leaves exist, the coarse levels come from the leaves themselves
+(heights averaged by the tiler, colour from our own tile colours), so the hue and the relief do not
+jump when the globe takes over from the Swiss blocks; ETOPO and Blue Marble fill the rest, blended
+across the data border as the French import's edge masks do. The two geoids (CHGeo2004 inside,
+EGM2008 out) differ by metres, under one coarse cell.
+
+**The format at coarse levels: two rules proposed to G1** (#1455):
+
+- **A lattice cap.** G1's lattice is 2^(23 − level) cells a side (~1.2 m at every level), which no
+  level above the leaves can hold (level 6 would be 131,072 a side). Every level keeps **at most 512
+  cells a side**: bits = min(23 − level, 9), so the level-14 leaves are unchanged, a level-0 tile is
+  19.6 km a cell, level 2 4.9 km, level 4 1.2 km (ETOPO's own spacing). One function,
+  `CubeKey.LatticeBits(level)`, which every reader uses. Edges stay exact: a coarse lattice point
+  is a leaf lattice point, and a renderer may draw every 2nd, 4th or 8th vertex as G1's harness
+  does.
+- **A colour payload.** A tile carries an optional albedo: 12 monthly images (WebP, 256² on the
+  shipped levels, 512² on the streamed ones), in bundles
+  of their own beside the height bundles (`F<f>_L<l>_x_y.cuba`, same index), so leaves without a
+  global colour carry none and G2 can give the leaves their colour another way.
+
+**Which levels, and where they live** (estimates, the tiler measures):
+
+- Levels 0-2 (6 + 24 + 96 = 126 tiles) **ship with the game**: the whole Earth from far out and
+  the showcase's last seconds. Heights a few MB; colour ~126 × 12 × 12 KB ≈ 18 MB.
+- Levels 3-4 (384 + 1,536 tiles) stream through the map downloader
+  (`docs/plans/in-game-map-downloader.md`): the view from low orbit (~0.3 km a pixel at nadir from
+  400 km; level 4 is ETOPO's own 1.2 km).
+- Over Switzerland, levels 5-13 from the leaves, by G1's tiler.
+
+**The renderer** (`World/Globe`, client only):
+
+- One node per drawn tile, its mesh built once on a worker from `CubeGeometry` (the patch around
+  its own ENU anchor, floats) and placed by one rigid transform composed in doubles (the frame's
+  `TileTransform`, H3 step 1). A shift only rewrites transforms (`no-mesh-rebuild-per-frame`).
+- Levels chosen by size on screen through `world_lod_scale` (C0): a tile splits when its cell would
+  cover more than a set number of pixels. G2 carries the same rule to the leaves.
+- Its own shader: real geometry, so **no `curve_offset`**. Until G2, in the flat ground frame, the
+  globe is placed by the frame's embedding (the ground frame as the tangent frame at its origin,
+  grid axes: `OriginFrame.Embedding`), drawn under and around the flat tiles and `HorizonLayer`,
+  masked under them as `HorizonLayer`'s cover mask hides blocks under loaded tiles, and faded in
+  with altitude; above ~150 km the Swiss blocks fade out.
+- **The seam with H1**: above 20 km H1 bends the flat tiles onto a sphere of `CURVE_EARTH_R`; the
+  globe is the ellipsoid. A check measures the gap between the two where they meet (the edge of the
+  data, at 20, 60 and 120 km) and picks the sphere's radius as the local Gaussian radius at the
+  origin if the gap is over a pixel.
+- In the model viewer as a `[Showcase]` set (a few patches and the whole globe).
+
 ### 7. Network
 
 - Ground and Transition: nothing changes, positions stay LV95 `GlobalPos`
@@ -406,8 +466,8 @@ speed).
 |---|---|---|---|
 | **H1** Refraction fade and exact-sphere blend (**built**, PR #1458) | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
 | **H2** `EcefPos` and conversions (**built**, PR #1435) | `EcefPos`, `Geodetic`, `Planet`, rigorous LV95 ↔ ETRS89, geoid grid | none | unit tests: REFRAME points to < 2 mm, round trips < 0.1 mm |
-| **H3** Rotating 3D anchor | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space, `EcefPos` on the wire | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
-| **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check | H3 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
+| **H3** Rotating 3D anchor (**built** but the wire: PRs #1460, #1475, #1476, #1477) | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space. Rotation is switched on by #1443 G2 (round tiles); directions on the wire (step 5) **moved into G2's wire migration**, one protocol bump | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
+| **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check. **Decided with #1443's coordinator: one pyramid.** The coarse levels are G1's format (#1455: `CubeSphere`/`CubeKey`, bundles, ellipsoidal heights), made by G1's tiler at coarse levels, no second format; levels picked by size on screen (`world_lod_scale`, C0) so G2 carries the same selection down to the leaves as its far view. Until G2 the globe is drawn under and around the flat LV95 tiles and `HorizonLayer`, fading in with altitude, and H1's sphere wrap must meet its real geometry (the seam measured). Waits for #1455 | H3, #1443 G1 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
 | **Showcase** (asked 2026-11-03) | a smooth pull-back from a Lausanne street to the whole Earth in space, an altitude readout on screen, as a clip (`/clip`, `tools/record-clip.sh`) | H3, H4 | the first clip once the globe draws: no pop at any handover, the readout continuous from metres to thousands of km |
 | **H5** Orbital gravity | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ |
 | **H6** Ephemeris sky (**ground part built**, PR #1436) | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
