@@ -61,6 +61,9 @@ public partial class UfoSightings : Node3D, IOriginContainer
     private int _forcedCount;
     private double _forcedUntil;
 
+    /// <summary>The frame the saucers are played in (the server's main one).</summary>
+    public WorldOrigin Origin => _origin;
+
     public UfoSightings(ChunkManager? chunks, WorldOrigin origin, bool dedicated)
     {
         Name = NodeName;

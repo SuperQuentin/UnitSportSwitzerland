@@ -94,7 +94,7 @@ public partial class FootPlayer
     /// <summary>Every player one of this body's shapes is inside, into <see cref="_overlapHits"/>.</summary>
     private void CollectOverlaps()
     {
-        var space = GetWorld3D().DirectSpaceState;
+        var space = Space;
         _overlapQuery ??= new PhysicsShapeQueryParameters3D
         {
             CollideWithAreas = false,

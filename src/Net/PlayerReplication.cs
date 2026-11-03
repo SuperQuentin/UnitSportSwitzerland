@@ -72,14 +72,24 @@ public static class PlayerReplication
     {
         long owner = d[0].AsInt64();
         int n = d[1].AsInt32();
+        var at = new GlobalPos(d[3].AsDouble(), d[4].AsDouble(), d[5].AsDouble());
+        // on the dedicated server it starts in the frame of the region it spawns in (#1456): a bot far
+        // from the server's origin never passes through the main frame's coarse floats
+        var region = Regions.ServerRegions.Instance?.For(at);
+        if (region != null) origin = region.Origin;
         var npc = new FootPlayer
         {
             Name = NodeName(NpcId(owner, n)),
             Npc = true,
             Origin = origin,
-            Position = origin.ToWorld(d[3].AsDouble(), d[4].AsDouble(), d[5].AsDouble()),
+            Position = origin.ToWorld(at),
             Rotation = new Vector3(0, d[6].AsSingle(), 0),
         };
+        if (region != null)
+        {
+            npc.Region = region;
+            npc.Terrain = region.Chunks;
+        }
         npc.SetMultiplayerAuthority((int)owner);
         if (d.Count > 8 && d[8].AsInt32() == DriverBot)
         {

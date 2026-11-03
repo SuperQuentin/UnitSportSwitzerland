@@ -78,7 +78,29 @@ tilted in it. So the server needs a frame, and a physics space, per region.
    same script run alone within 1 cm; `--noregions` shows today's cm steps at 300 km.
 6. A real-terrain run (Geneva, Val Müstair) and `tools/test.sh net`, recorded in the PR.
 
+## Status (PR #1457)
+
+All six steps built. What came out differently from the design above:
+
+- **Shadows**: the main `ChunkManager` keeps a plain anchor for every body in another region, so the
+  data the server serves and reads in its main frame (heights, the steamer, the airport stands, the
+  dormant fleets, the generated fill) loads as before. `GroundAt(GlobalPos)` was not needed: the ground
+  lambdas keep reading the main terrain.
+- **The parked things moved into scope** (decided with the user once the real-terrain run showed Riddes
+  and Geneva, ~45 km from the real map's manifest origin, play in regions of their own): not as region
+  members but as **mirrors** (`RegionMirrors`). Every solid thing the server holds in its main frame
+  (parked vehicles, Versteckis decor, BR structures and crates) gets a static copy in each far region
+  within 300 m of its bots; bots spot, reach and take cars and react to saucers through Earth
+  positions in their own frame. The replicated nodes stay where the network and the services find them,
+  as bodies do.
+- **Teleports across regions**: `ServerRegions.Put(body, at)` (a bot called to a Schwingen ring).
+- **Statics bound to the main terrain**: `WaterField.In(terrain)` while a far body steps and thinks.
+- **The real-terrain run**: the D: tile set spans 93 km (Geneva to Valais), so it ran at Geneva and
+  Riddes (each in a region of its own); the 300 km case is the generated world's.
+- Results: the tracks of a run with both sites match each site alone to 0.000 cm; `--noregions` puts the
+  far site 3.7 cm off; `--nomirrors` lets the far walker through the parked car (22.7 m).
+
 ## Out of scope
 
-- Parked vehicles, dropped items, radios, crates, herds and birds as region members (a follow-up).
-- Rotation of a region's frame (G2, with #1430's anchor).
+- Dropped items, radios and herds have no collision on the server to mirror; birds fly in the main frame.
+- Rotation of a region's frame (G2, with #1430's anchor frame, `OriginFrame.Axes`, #1460).

@@ -52,7 +52,7 @@ public static class PlayerHits
     {
         var targets = Targets(shooter);
         if (targets.Count == 0) return 0;
-        var space = shooter.GetWorld3D().DirectSpaceState;
+        var space = shooter.Space;
         var sums = new Dictionary<FootPlayer, (float Damage, bool Head, Vector3 At)>();
         var basis = Basis.LookingAt(aim.Normalized(), Mathf.Abs(aim.Normalized().Y) > 0.99f ? Vector3.Forward : Vector3.Up);
         float spread = Mathf.DegToRad(spreadDeg ?? weapon.SpreadDeg);
@@ -103,7 +103,7 @@ public static class PlayerHits
         }
         if (best == null) return false;
         var at = best.GlobalPosition + Vector3.Up * 1.1f;
-        if (Blocked(shooter.GetWorld3D().DirectSpaceState, shooter, best, eye, at)) return false;
+        if (Blocked(shooter.Space, shooter, best, eye, at)) return false;
         (sink ?? Send)(best, at, aim, new Hit(PeerOf(best), weapon.Damage, weapon.Id, false));
         return true;
     }
@@ -116,7 +116,8 @@ public static class PlayerHits
     {
         var list = new List<FootPlayer>();
         foreach (var n in shooter.GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (n is FootPlayer p && p != shooter && (p.Bot || !p.Npc && PeerOf(p) > 0)
+            // only bodies in the shooter's server region (#1456): another region's floats are another frame
+            if (n is FootPlayer p && p != shooter && p.Region == shooter.Region && (p.Bot || !p.Npc && PeerOf(p) > 0)
                 && p.Down != 1 && p.IsInsideTree())   // downed (2) can be finished, #475
                 list.Add(p);
         return list;

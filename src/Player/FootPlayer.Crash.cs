@@ -121,7 +121,7 @@ public partial class FootPlayer
         _knockQuery.CollisionMask = RagdollMask;
         _knockQuery.Exclude = SelfExclude;
         _knockQuery.Transform = _body.GlobalTransform;
-        var hits = GetWorld3D().DirectSpaceState.IntersectShape(_knockQuery, 6);
+        var hits = Space.IntersectShape(_knockQuery, 6);
         ulong frame = Engine.GetPhysicsFrames();
         Vector3 worst = Vector3.Zero;
         foreach (var hit in hits)
@@ -330,7 +330,7 @@ public partial class FootPlayer
 
         _ragdollClock += dt;
         _crackCooldown -= dt;
-        _ragdoll.Step(dt * SlowMotion(_ragdollClock), GetWorld3D().DirectSpaceState, GroundAt, Indoors ? null : _ragdollWater ??= RagdollWaterAt);
+        _ragdoll.Step(dt * SlowMotion(_ragdollClock), Space, GroundAt, Indoors ? null : _ragdollWater ??= RagdollWaterAt);
         if (!IsMultiplayerAuthority())
         {
             // the owner's body is pinned to its hips, so the replicated position is where they are
@@ -499,7 +499,7 @@ public partial class FootPlayer
         if (XR.XrSession.Active) { BeginVrCrashView(fwd); return; }
         var body = _ragdoll.Centre;
         var side = Vector3.Up.Cross(fwd).Normalized();
-        var space = GetWorld3D().DirectSpaceState;
+        var space = Space;
         // either side, whichever has room; behind and above if neither does
         var tries = new[]
         {
@@ -554,8 +554,8 @@ public partial class FootPlayer
             var side = (_crashAnchor - body) with { Y = 0 };
             side = side.LengthSquared() > 0.04f ? side.Normalized() : _crashSide;
             var from = body + Vector3.Up * 0.8f;
-            var wanted = CameraReach(GetWorld3D().DirectSpaceState, from, body + side * CrashChase + Vector3.Up * 2.2f);
-            var space = GetWorld3D().DirectSpaceState;
+            var wanted = CameraReach(Space, from, body + side * CrashChase + Vector3.Up * 2.2f);
+            var space = Space;
             if (wanted.DistanceTo(body) < 3f)
             {
                 // boxed in on this side (a wall, the car): swing round a quarter turn and try again
@@ -570,7 +570,7 @@ public partial class FootPlayer
         }
         // the vehicle that threw or hit the body rolls on, through where the lens was held: never
         // inside it (#751 playtest, the inside of a bus): up over the body instead
-        var physics = GetWorld3D().DirectSpaceState;
+        var physics = Space;
         _lensPoint.Position = _crashAnchor;
         _lensPoint.CollisionMask = RagdollMask;
         _lensPoint.Exclude = SelfExclude;
@@ -639,7 +639,7 @@ public partial class FootPlayer
     private void PlaceVrEye(Vector3 body, Vector3[] sides)
     {
         if (_vrEye == null) return;
-        var space = GetWorld3D().DirectSpaceState;
+        var space = Space;
         Vector3 best = body + sides[0] * 5.5f + Vector3.Up * 1.65f;
         float bestRoom = -1f;
         foreach (var side in sides)
@@ -670,7 +670,7 @@ public partial class FootPlayer
         if (_vrCheck < 0.1f) return;
         var body = _ragdoll.Centre;
         var eye = _vrEye.GlobalPosition;
-        _vrBlind = Sees(GetWorld3D().DirectSpaceState, eye, body) ? 0f : _vrBlind + _vrCheck;
+        _vrBlind = Sees(Space, eye, body) ? 0f : _vrBlind + _vrCheck;
         _vrCheck = 0f;
         if (_vrSinceCut < 1.2f || (eye.DistanceTo(body) < 14f && _vrBlind < 0.5f)) return;
         // beside it again, from the side we were on, then round the other ways

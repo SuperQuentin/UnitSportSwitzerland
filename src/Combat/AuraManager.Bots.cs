@@ -152,7 +152,7 @@ public partial class AuraManager
         bool laughing = now - s.LaughedAt < AuraBody.LaughSeconds;
         body.AuraPose = AuraBody.PoseFor(r.Phase, performing, won, r.Plan, r.T0, r.Beat, r.Grades, now, laughing, out float stepIn);
         var rival = id == r.A ? m.BodyB : m.BodyA;
-        var toRival = rival != null && GodotObject.IsInstanceValid(rival) ? rival.GlobalPosition - body.GlobalPosition : m.CentreWorld - body.GlobalPosition;
+        var toRival = rival != null && GodotObject.IsInstanceValid(rival) ? body.WhereIs(rival) - body.GlobalPosition : m.CentreWorld - body.GlobalPosition;
         toRival.Y = 0;
         var dir = toRival.LengthSquared() > 0.01f ? toRival.Normalized() : Vector3.Forward;
         s.Hold.Target = s.Mark + (m.CentreWorld - s.Mark).Normalized() * (stepIn * 1.2f);

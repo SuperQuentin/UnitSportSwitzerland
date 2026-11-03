@@ -21,6 +21,8 @@
   arrives. Spawn data (`PlayerReplication.NpcData`, the state dictionaries) is LV95 too.
 - **The server relays LV95 unchanged** and measures with it (`FootPlayer.Global`, `VehicleBody.Global`:
   the last published value, exact however far the player is from the server's own origin). Its own
-  world floats are only for metre-scale checks between nearby bodies (door reach, despawn ranges).
+  world floats are only for metre-scale checks between nearby bodies (door reach, despawn ranges), and
+  a body's floats are in its server region's frame (`net/server-regions`): across bodies, read
+  `origin.ToWorld(body.Global)` or `body.WhereIs(other)`, never two `GlobalPosition`s.
 - A new networked feature: put `GlobalPos` in its payload from the start; a new synchronized body
   gets a `NetPlace`. Any change to what goes on the wire bumps `Handshake.Protocol`.

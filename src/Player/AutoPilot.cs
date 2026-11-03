@@ -763,7 +763,7 @@ public sealed class AutoPilot
     private IEnumerable<Other> Sensed(float dt, Vector3 fwd)
     {
         if (!Player.IsInsideTree() || dt <= 0f) yield break;
-        var space = Player.GetWorld3D().DirectSpaceState;
+        var space = Player.Space;
         // the whole road, not the line: oncoming traffic in the other lane is exactly what a pass,
         // a cut bend or a spun rival has to see
         _probe ??= new BoxShape3D();
