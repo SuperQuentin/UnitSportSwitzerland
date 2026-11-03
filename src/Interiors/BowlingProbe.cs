@@ -61,7 +61,7 @@ public partial class BowlingProbe : Node
         var tile = new BuildingTile { Id = id, Buildings = new List<Building> { Box(500, 500, c.W, c.D, c.H, c.Kind) } };
         Venues.Override = new List<VenueRecord>
         {
-            new("n1", VenueType.Bowling, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", $"Bowling {c.Name}"),
+            new("n1", VenueType.Bowling, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, "", $"Bowling {c.Name}"),
         };
         string what = $"{c.Name} ({c.W}x{c.D} m, {c.H} m, {c.Kind})";
         var map = BuildingTypes.For(tile);

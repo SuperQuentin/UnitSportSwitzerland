@@ -35,7 +35,7 @@ public partial class InteriorManager
         if (BuildingKey.TryParse(t, out var key))
         {
             var tile = key.Tile;
-            return (tile.MinE + 500, tile.MaxN - 500);
+            return tile.Centre;
         }
         return FindVenue(t) is { } v ? (Venues.At(v).E, Venues.At(v).N) : null;
     }

@@ -49,10 +49,10 @@ public static class ShopSurvey
         {
             var c = TileId.FromLv95(town.E, town.N);
             int townTiles = 0;
-            for (int de = -1; de <= 1; de++)
-                for (int dn = -1; dn <= 1; dn++)
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = 1; dz >= -1; dz--)
                 {
-                    var id = new TileId(c.E + de, c.N + dn);
+                    var id = c.Neighbour(dx, dz);
                     var tile = src.LoadBuildingsAsync(id).GetAwaiter().GetResult();
                     if (tile == null || ++townTiles > MaxTiles) continue;
                     tiles++;
