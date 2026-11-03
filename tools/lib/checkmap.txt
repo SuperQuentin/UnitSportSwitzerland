@@ -1146,3 +1146,29 @@ src/Concert/JazzInstruments quick  --concertcheck --systems ui
 src/Occasions/Festivals/MontreuxJazz/ net    tools/montreuxnetcheck.sh
 src/Occasions/Festivals/FestivalService.MontreuxJazz net    tools/montreuxnetcheck.sh
 tools/montreuxnetcheck.sh    net    tools/montreuxnetcheck.sh
+
+# #1429: the regression net before a coordinate or rendering change (docs/notes/general/regression-net.md)
+# the far horizon at its LV95 corners across origin shifts; a GPX course drawn and run across shifts
+src/Terrain/HorizonLayer     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Terrain/HorizonCheck     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Gpx/                     quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+src/Core/OriginShifter       quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+# probes that existed without a row
+src/World/Traffic            quick  --trafficcheck --chunks fixture:junction
+src/World/LaneGraph          quick  --trafficcheck --chunks fixture:junction
+src/Birds/                   quick  --birdcheck --world fixture
+src/Birds/                   quick  --birdstrikecheck --world fixture
+src/Player/VoidProbe         quick  --voidcheck --world fixture
+src/Player/FootPlayer.cs     quick  --voidcheck --world fixture
+# the origin under load: probes that pass with a shift every 20 m (--originstress)
+src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --ride car,15 --world flat --originstress 20
+src/Core/OriginShifter       quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/WorldOrigin         quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --flycheck a320 --world flat --originstress 20
+# a shift every 200 m: at 20 the BNR32 spun five times in one of two runs (a shift twice a second at 160 km/h)
+src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
+src/Core/WorldOrigin         quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200

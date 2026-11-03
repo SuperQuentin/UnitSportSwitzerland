@@ -65,7 +65,7 @@ so they fit the depth range.
 | Anchor in Space | MSFS style: origin **at the camera**, Y = the ellipsoid normal under it, X/Z carried over by the **minimal rotation** from the previous anchor. The first Space anchor copies the ground frame's axes exactly (grid east/north, so meridian convergence included). |
 | Shifts in Space | Through the existing `OriginShift` (already a `Transform3D`): rotation **and** vertical translation, past **20 km** from the anchor in any direction (float step 2 mm there). At 7.7 km/s that is one shift every 2.6 s, each turning the world by 0.17°. |
 | Coming down | Below the Space exit altitude, re-anchor to the **whole-km LV95 tile corner** under the camera at altitude 0, axes grid-aligned: a normal ground frame again. |
-| Outside LV95 coverage | The Ground regime needs data and an addressing there: that is #187's old phase D (global tiling). Until it exists, descending outside the preprocessed area **stays in the Space regime** down to the coarse globe, with collision from the globe DEM. |
+| Outside LV95 coverage | The Ground regime needs data and an addressing there: **global tiling** (#1443, `docs/plans/global-tiling.md`). Until it exists, descending outside the preprocessed area **stays in the Space regime** down to the coarse globe, with collision from the globe DEM. |
 | Gravity | **GM/r²** toward the centre in Space and Transition; the ground game keeps its tuned 9.81 m/s². At 60 km GM/r² is 9.63 (−2 %), at 400 km 8.68. |
 | Orbital integration | **Doubles, in an inertial frame** (ECI), velocity Verlet at the physics rate. ECEF rotates: Coriolis at orbital speed is 2ωv ≈ 1.1 m/s², far too big to ignore. Jolt only ever holds the craft's local transform in the anchor frame, for contacts. |
 | Ceiling until H3 lands | Spectator and UFO **capped at 50 km** (the top of the Transition regime), so no one reaches a model that does not exist yet. |
@@ -291,8 +291,14 @@ The same pattern one level up:
   Moon in Earth: ~66,000 km; Earth in the Sun: ~925,000 km.
 - Doubles are enough: at 4.5·10¹² m (Neptune) their step is 1 mm. Planet positions from JPL's
   approximate Keplerian elements.
-- Each body's ground regime is a flat local frame like LV95 is for Earth: the same global tiling
-  question as #187's phase D.
+- Each body's ground regime uses the global tiling of #1443 with that body's ellipsoid.
+
+### 10. Global tiling: the ground anywhere on Earth
+
+Its own plan now: `docs/plans/global-tiling.md` (#1443), the next step after #187 and ahead of the
+Space phases here. In short: tiles hold true Earth positions on a cube sphere, the game keeps one
+flat Y-up frame (this plan's H3 anchor, used on the ground too), and #187's drop shrinks to
+refraction. H2 is its first phase's foundation; H3's anchor is built once for both.
 
 ### 9. Features that ride on it (C0-C3)
 
@@ -462,7 +468,7 @@ and C0.
 
 ## Out of scope
 
-- Global tiling for ground-level play outside the preprocessed area (#187's phase D).
+- Global tiling for the ground anywhere: #1443.
 - Weather, clouds and their shadows seen from orbit; oceans with waves; tides.
 - Re-entry heating, realistic rocketry, docking and landing on other bodies: this plan is the frame
   they stand on (the spaceplane and telescope above are the only content it carries).
