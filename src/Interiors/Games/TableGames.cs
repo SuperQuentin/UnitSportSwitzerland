@@ -24,8 +24,8 @@ namespace UnitSport.Interiors.Games;
 public partial class TableGames : Node
 {
     public const string NodeName = "TableGames";
-    /// <summary>Bot seats' peer ids: this and below (bowling's partners are -900 000 and down, a few at most).</summary>
-    public const long BotBase = -2_000_000;
+    /// <summary>Bot seats' peer ids: <see cref="TableGame.BotBase"/> and below.</summary>
+    public const long BotBase = TableGame.BotBase;
     /// <summary>A live game's server step [s], how often its poses go out, how often a client sends its controls.</summary>
     public const double LiveStep = 1.0 / 120, FrameEvery = 0.05, InputEvery = 1.0 / 30;
 
@@ -63,7 +63,7 @@ public partial class TableGames : Node
         if (Instance == this) Instance = null;
     }
 
-    public static bool IsBot(long peer) => peer <= BotBase;
+    public static bool IsBot(long peer) => TableGame.IsBot(peer);
 
     /// <summary>A piece's frame in its plan: turned, on its floor.</summary>
     public static Transform3D PieceFrame(InteriorLayout l, FurniturePlan f) =>

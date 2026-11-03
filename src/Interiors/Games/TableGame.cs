@@ -20,6 +20,11 @@ public enum GameKind : byte
 /// </summary>
 public abstract class TableGame
 {
+    /// <summary>Bot seats' peer ids: this and below (bowling's partners are -900 000 and down, a few at most).</summary>
+    public const long BotBase = -2_000_000;
+
+    public static bool IsBot(long peer) => peer <= BotBase;
+
     public abstract GameKind Kind { get; }
     /// <summary>How many can play at once.</summary>
     public abstract int MaxSeats { get; }
