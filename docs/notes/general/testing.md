@@ -239,6 +239,12 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   `tools/crashnetcheck.sh`), #230 (`RoadStandProbe`, `WallOffProbe`, `TrafficProbe`),
   #233 (`tools/loadtest.sh`, already wired as a `full` row).
 
+## Results kept, and a baseline (#1429)
+
+Every run writes `results.csv` (`TEST_LEDGER=`); `tools/test-compare.py` compares two.
+`tools/test.sh coords` is the set to baseline before a coordinate or rendering change, beside the
+reference screenshots: `regression-net`.
+
 ## How to check
 
 - `tools/test.sh unit` (3 s): the tier-0 project builds and passes.

@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Core;
 
@@ -30,10 +31,33 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
         return System.Math.Sqrt(de * de + dn * dn + da * da);
     }
 
+    /// <summary>The square of <see cref="HorizontalDistanceTo"/>, for comparisons that skip the root.</summary>
+    public double HorizontalDistanceSquaredTo(GlobalPos other) => HorizontalDistanceSquared(E, N, other.E, other.N);
+
     /// <summary>
-    /// This place moved by <paramref name="d"/>, a world-space offset (x east, y up, z south). The
-    /// world axes are the same in every frame while a shift has no rotation; the round world
-    /// (#187) makes them depend on where the frame is, and this is the place to change then.
+    /// The horizontal distance between two LV95 points held as raw eastings and northings rather than
+    /// <see cref="GlobalPos"/> values (#1443). The same metric as <see cref="HorizontalDistanceTo"/>, kept here
+    /// so that both become Earth distances together.
+    /// </summary>
+    public static double HorizontalDistance(double e1, double n1, double e2, double n2)
+    {
+        double de = e1 - e2, dn = n1 - n2;
+        return System.Math.Sqrt(de * de + dn * dn);
+    }
+
+    /// <summary>The square of <see cref="HorizontalDistance"/>, for comparisons that skip the root.</summary>
+    public static double HorizontalDistanceSquared(double e1, double n1, double e2, double n2)
+    {
+        double de = e1 - e2, dn = n1 - n2;
+        return de * de + dn * dn;
+    }
+
+    /// <summary>
+    /// This place moved by <paramref name="d"/>, an offset in the local axes at <paramref name="p"/>
+    /// (x east, y up, z south). Today those are the world's axes in every frame. With the global
+    /// tiling (#1443) they stay the local east-up-south at <paramref name="p"/>, which the anchor
+    /// frame's axes match to 0.03° within a few km: the metre-scale callers (interpolation, docking)
+    /// need no change, only this body.
     /// </summary>
     public static GlobalPos operator +(GlobalPos p, Vector3 d) => new(p.E + d.X, p.N - d.Z, p.Alt + d.Y);
 
@@ -42,6 +66,19 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
         new((float)(a.E - b.E), (float)(a.Alt - b.Alt), (float)-(a.N - b.N));
 
     public bool IsFinite => double.IsFinite(E) && double.IsFinite(N) && double.IsFinite(Alt);
+
+    /// <summary>
+    /// This place on the Earth (#1430), <see cref="Alt"/> taken as an LHN95 height: the rigorous
+    /// <see cref="SwissGeodesy"/> chain, so <see cref="FromEcef"/> brings it back to a tenth of a millimetre.
+    /// </summary>
+    public EcefPos ToEcef() => SwissGeodesy.ToEcef(E, N, Alt);
+
+    /// <summary>The inverse of <see cref="ToEcef"/>.</summary>
+    public static GlobalPos FromEcef(EcefPos p)
+    {
+        var (e, n, h) = SwissGeodesy.FromEcef(p);
+        return new(e, n, h);
+    }
 
     /// <summary>Puts this position in a network dictionary under <paramref name="key"/>, as three doubles.</summary>
     public void Write(Godot.Collections.Dictionary d, string key = "pos")

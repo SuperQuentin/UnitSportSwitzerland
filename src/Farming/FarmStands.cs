@@ -40,7 +40,7 @@ public partial class FarmStands : Node
     public Func<IChunkSource?>? Source { get; set; }
     /// <summary>Client: pack, pocket, toasts.</summary>
     public ItemController? Items { get; set; }
-    /// <summary>Server: a peer's display name, the owner recorded on placed objects.</summary>
+    /// <summary>Server: a peer's display name; only the fallback when no <see cref="PlayerIds"/> runs (#1359).</summary>
     public Func<long, string>? NameOf { get; set; }
 
     private readonly Dictionary<long, StandState> _stands = new();
@@ -66,6 +66,8 @@ public partial class FarmStands : Node
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        if (_claim != null && PlayerIds.Server is { } ids) ids.Identified -= _claim;
+        _claim = null;
         if (_placed != null)
         {
             _placed.Added -= OnAdded;
@@ -115,7 +117,8 @@ public partial class FarmStands : Node
         if (o.Kind != PlacedKind.FarmStand || !Serving) return;
         if (!_stands.TryGetValue(o.Id, out var s))
         {
-            _stands[o.Id] = s = new StandState { Id = o.Id, Owner = o.Owner, LastTick = Now };
+            _stands[o.Id] = s = new StandState { Id = o.Id, Owner = OwnerKeyOf(o.Owner), LastTick = Now };
+            s.OwnerName = PlayerIds.IsId(s.Owner) && PlayerIds.Server is { } ids ? ids.NameOfId(s.Owner) : PlayerIds.IsId(s.Owner) ? "" : s.Owner;
             Save();
         }
         if (float.IsNaN(s.RoadM)) Measure(o, s);
@@ -332,11 +335,63 @@ public partial class FarmStands : Node
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AskOp(int op, long id, int a, int b) => ServeOp(Multiplayer.GetRemoteSenderId(), op, id, a, b);
 
-    private string OwnerName(long peer) => Online ? NameOf?.Invoke(peer) ?? $"Rider{peer}" : "local";
+    /// <summary>
+    /// What a peer's stands are kept under (#1359): its player id, "local" offline, null while an online player is not
+    /// proven yet (it can do nothing at a stand then).
+    /// </summary>
+    private string? OwnerId(long peer) =>
+        !Online ? "local"
+        : PlayerIds.Server is { } ids ? ids.IdOf(peer)
+        : NameOf?.Invoke(peer) ?? $"Rider{peer}";
+
+    private const string UnprovenMessage = "Your identity is not confirmed yet, try again in a moment.";
+
+    private bool IsOwner(long peer, StandState s) => OwnerId(peer) is { } me && s.Owner == me;
+
+    /// <summary>The owner to show a client: the name as it is now, resolved at send time (an old name key stays as it is).</summary>
+    private string DisplayOwner(string owner, string backup) =>
+        Online && PlayerIds.Server is { } ids && PlayerIds.IsId(owner) ? ids.NameOfId(owner, backup) : owner;
+
+    /// <summary>The owner to show next to a stand: what the server last said, else what the placed object says.</summary>
+    public string OwnerLabel(PlacedObject o) => _stands.TryGetValue(o.Id, out var s) && s.Owner.Length > 0 ? s.Owner : o.Owner;
+
+    /// <summary>
+    /// Server: the key a new stand is kept under. The placed object names its owner; a name of a player online
+    /// now is turned into that player's id, any other (an old save's) stays a name for <see cref="ClaimLegacy"/>.
+    /// </summary>
+    private string OwnerKeyOf(string placedOwner)
+    {
+        if (!Online || PlayerIds.Server is not { } ids || PlayerIds.IsId(placedOwner)) return placedOwner;
+        foreach (long peer in ids.Online())
+            if (ids.NameOf(peer) is { } n && n.Equals(placedOwner, StringComparison.OrdinalIgnoreCase) && ids.IdOf(peer) is { } id) return id;
+        return placedOwner;
+    }
+
+    private Action<long, string, string>? _claim;
+
+    public override void _EnterTree()
+    {
+        if (!_server || PlayerIds.Server is not { } ids) return;
+        _claim = ClaimLegacy;
+        ids.Identified += _claim;
+    }
+
+    /// <summary>Server: a peer has its id and name; every stand still kept under that name (before #1359) is theirs now.</summary>
+    private void ClaimLegacy(long peer, string id, string name)
+    {
+        int n = 0;
+        foreach (var s in _stands.Values)
+            if (s.Owner.Equals(name, StringComparison.OrdinalIgnoreCase)) { s.Owner = id; s.OwnerName = name; n++; }
+        if (n == 0) return;
+        GD.Print($"[stand] {name} claimed {n} legacy stand(s) as {id}");
+        Save();
+        foreach (var s in _stands.Values.Where(s => s.Owner == id)) Broadcast(s.Id);
+    }
 
     private void ServeOp(long peer, int op, long id, int a, int b)
     {
-        string who = OwnerName(peer);
+        string? who = OwnerId(peer);
+        if (who == null) { Reply(peer, MethodName.Answer, op, id, 0, 0, 0, UnprovenMessage); return; }
         string? refused = !_stands.TryGetValue(id, out var s) || _placed?.All.TryGetValue(id, out var o) != true ? "That stand is not there any more."
             : !InReach(peer, o!) ? "Too far from the stand."
             : null;
@@ -345,6 +400,7 @@ public partial class FarmStands : Node
         {
             Tick();   // what passers-by bought until now goes first
             bool owner = s!.Owner == who;
+            if (owner && PlayerIds.Server is { } ids && ids.NameOf(peer) is { Length: > 0 } now) s.OwnerName = now;   // refreshed whenever they act
             switch (op)
             {
                 case OpStock when !owner:
@@ -448,7 +504,7 @@ public partial class FarmStands : Node
             return;
         }
         foreach (int p in Multiplayer.GetPeers())
-            RpcId(p, MethodName.State, id, s.Owner, items, counts, s.Cash, s.RoadM, s.Houses, s.Takings, NameOf?.Invoke(p) == s.Owner);
+            RpcId(p, MethodName.State, id, DisplayOwner(s.Owner, s.OwnerName), items, counts, s.Cash, s.RoadM, s.Houses, s.Takings, IsOwner(p, s));
     }
 
     /// <summary>Server: a joining peer gets every stand.</summary>
@@ -457,7 +513,7 @@ public partial class FarmStands : Node
         foreach (var s in _stands.Values)
         {
             var (items, counts) = Pack(s);
-            RpcId(peer, MethodName.State, s.Id, s.Owner, items, counts, s.Cash, s.RoadM, s.Houses, s.Takings, NameOf?.Invoke(peer) == s.Owner);
+            RpcId(peer, MethodName.State, s.Id, DisplayOwner(s.Owner, s.OwnerName), items, counts, s.Cash, s.RoadM, s.Houses, s.Takings, IsOwner(peer, s));
         }
     }
 
@@ -544,7 +600,7 @@ public partial class FarmStands : Node
         string tag = InputHints.Tag(PlayerInput.InteractMount);
         return _promptText = key.Item2
             ? $"{tag} Your farm stand: stock it, take the cash ({key.Item4} CHF in the box)"
-            : key.Item3 > 0 ? $"{tag} {o.Owner}'s farm stand: buy ({key.Item3} for sale)" : $"{o.Owner}'s farm stand: nothing for sale";
+            : key.Item3 > 0 ? $"{tag} {OwnerLabel(o)}'s farm stand: buy ({key.Item3} for sale)" : $"{OwnerLabel(o)}'s farm stand: nothing for sale";
     }
 
     // ---- persistence --------------------------------------------------------------------------------
@@ -569,7 +625,7 @@ public partial class FarmStands : Node
         // NaN is not JSON: an unmeasured road is saved as -1 and read back as "measure again"
         var list = _stands.Values.OrderBy(s => s.Id).Select(s => new StandState
         {
-            Id = s.Id, Owner = s.Owner, Slots = s.Slots, Cash = s.Cash, RoadM = float.IsNaN(s.RoadM) ? -1 : s.RoadM,
+            Id = s.Id, Owner = s.Owner, OwnerName = s.OwnerName, Slots = s.Slots, Cash = s.Cash, RoadM = float.IsNaN(s.RoadM) ? -1 : s.RoadM,
             Houses = s.Houses, LastTick = s.LastTick, Takings = s.Takings,
         }).ToList();
         JsonStore.SaveAsync(StorePath, list, onError: e => GD.PushError($"[stand] saving: {e.Message}"));

@@ -179,6 +179,7 @@ public static class Recipes
         ItemId.Candy, ItemId.Pumpkin, ItemId.Biberli, ItemId.Mandarin,
         ItemId.Grittibaenz, ItemId.Gluehwein,
         ItemId.WitchHat, ItemId.PumpkinHead, ItemId.SantaHat, ItemId.ReindeerAntlers,
+        ItemId.JazzPass,   // the Montreux Jazz wristband, from its Listening game (#1394)
         ItemId.Zwiebelzopf, ItemId.Zibelechueche, ItemId.Mehlsuppe, ItemId.Konfettiei,   // the Zibelemärit's, from its stalls (#1373)
         ItemId.Raeppli, ItemId.LarveWaggis, ItemId.LarveDante, ItemId.LarveHarlekin, ItemId.LarveTeufel,   // the Fasnacht's, from its stall (#1357)
         // sold only (#273): the Swiss army knife, and what only a PAUSA machine holds
@@ -192,6 +193,9 @@ public static class Recipes
         ItemId.PlayingCards, ItemId.PokerChips, ItemId.BeerBottle, ItemId.Gamelle,
         // the Adventure's rock crystal (#1227): found in chests and offerings only
         ItemId.Bergkristall,
+        // a player's birthday (#1423): only in the birthday gift
+        ItemId.PartyHat, ItemId.BirthdayCrown, ItemId.CandleHat, ItemId.CakeHat, ItemId.PropellerCap, ItemId.BalloonHat,
+        ItemId.BirthdayGift, ItemId.BirthdayCake, ItemId.BirthdayRocket,
     }.Concat(FishCatalog.Items).ToHashSet();   // fish are caught (#493)
 
     /// <summary>Everything a recipe gives, the main output first.</summary>

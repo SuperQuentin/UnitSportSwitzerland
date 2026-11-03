@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Versteckis;
 
@@ -53,7 +54,7 @@ public static class VsTactics
     /// <summary>Whether a seeker at (<paramref name="se"/>, <paramref name="sn"/>) facing (<paramref name="fe"/>, <paramref name="fn"/>) faces a point.</summary>
     public static bool Facing(double se, double sn, double fe, double fn, double e, double n)
     {
-        double de = e - se, dn = n - sn, l = Math.Sqrt(de * de + dn * dn), fl = Math.Sqrt(fe * fe + fn * fn);
+        double de = e - se, dn = n - sn, l = GlobalPos.HorizontalDistance(e, n, se, sn), fl = Math.Sqrt(fe * fe + fn * fn);
         if (l < 0.5) return true;
         if (fl < 1e-6) return false;
         return (de * fe + dn * fn) / (l * fl) >= FacingCos;

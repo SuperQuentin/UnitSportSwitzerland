@@ -108,6 +108,8 @@ public partial class TipperCheck : Node
         Expect(me.SetRide(Kind) && me.Heavy is { } t0 && t0.Spec.Body == (MixerRun ? TruckBody.Mixer : TruckBody.Tipper),
             $"mounted the {HeavyCatalog.For(Kind)?.Label}");
         if (me.Heavy is not { } truck || me.Visual is not HeavyRig rig) { Finish(); return; }
+        // the automatic, whatever box the machine's settings pick: a manual stays in N on the throttle (#1214)
+        truck.ShiftOverride = HeavyShift.Automatic;
         me.RideControls = () => new RideInput(0f, 1f, 0f, false);
         await Seconds(1);
 

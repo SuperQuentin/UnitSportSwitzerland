@@ -109,6 +109,13 @@ public enum AssetKind
     /// tile-scoped, like <see cref="Pois"/>; an older server answers "missing" (cards keep their generated line).
     /// </summary>
     AtlasFacts = 18,
+
+    /// <summary>
+    /// The SHA-256 of the tile index and of each region file the server has (<see cref="AssetDigest"/>, #1380),
+    /// as JSON. A returning client fetches only what differs from its cached copies. An older server does not
+    /// know the kind and answers "missing" (no protocol bump): the client fetches everything.
+    /// </summary>
+    Digest = 19,
 }
 
 /// <summary>
@@ -164,6 +171,7 @@ public static class AssetStream
         AssetKind.Ropeways => RopewayInfoIndex.FileName,
         AssetKind.Pois => PoiFile.FileName,
         AssetKind.AtlasFacts => "atlas_facts.json",
+        AssetKind.Digest => "",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -173,7 +181,7 @@ public static class AssetStream
     /// nor CDs (another directory).
     /// </summary>
     public static bool ServedOverHttp(AssetKind kind) =>
-        kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase);
+        kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase or AssetKind.Digest);
 
     /// <summary>
     /// True for kinds whose format already compresses its own payload, so deflating again

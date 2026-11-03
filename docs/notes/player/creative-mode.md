@@ -12,13 +12,26 @@
   call `UpdateCameraFeel`** before it returns, as the swim does: the first-person eye takes its pitch
   there, at the end of the walk step, and without it the view stayed level (#1002 playtest). It runs after the swim, fight,
   beam and aura steps, before the walk, so water and duels still win.
+- **The figure flies like Superman** (#1219): `PoseFly = 8` (`PublishFlyPose`), `Anim.X` the lean 0..1
+  from the forward speed in the body's frame (full at `FlyFullLean` 9 m/s), and `BodyPose` tips the
+  figure about its middle up to 80° (`FlyTilt`), back a little flying backwards, head down a little
+  diving, banked into turns (the yaw rate) and strafes. Lean and bank are springs (`FlySpring` 5.5,
+  damping 0.6: a little overshoot), not a lerp, which read stiff in play; gliding adds a slow roll and
+  pitch swell and the rig's legs and reaching arm drift, hovering a bob. Landing, what lean is left
+  springs out over the standing pose (`SettleFlyPose`) instead of snapping. `HumanMeshBuilder.FlyRig`
+  turns the arms between the hover (loose at the sides, legs dangling) and Superman (right fist up
+  over the head, left arm along the body, legs straight, the left knee bent, toes pointed, head tipped
+  back to look ahead); the hover's paddle runs on each peer's clock (`_flailClock`). Third person, the
+  flight turns the body to where it flies (`FaceTravel`). Protocol 50: old peers would draw kind 8 as
+  a stride. The check asserts upright hovering, lying out flying, standing up again; windowed it saves
+  `test_output/creative/{hover,superman}[_side].png`.
 - **`GameSettings.CreativeNoclip`** (Settings > Controls > "Creative flight through walls", off):
   the flight moves the position without `MoveAndSlide`; `RescueFromVoid` waits while it flies, so
   flying into a hill does not snap you onto it; landing underground does.
 - **Refused like the fly camera**: in a Battle Royale match, and online on a server without
   teleporting (`Permissions.CanTeleport`); `OnPermissionsChanged` turns it off when either starts.
 - **Local only**: not replicated, no protocol change. Damage is decided on the owning peer
-  (`FootPlayer.TakeDamage`), so the owner's flag is enough; remote peers see the replicated air pose.
+  (`FootPlayer.TakeDamage`), so the owner's flag is enough; remote peers see the replicated fly pose.
   A creative player can still hurt others (as on a Minecraft server).
 - **Spectator** (the camera-only `SpectatorCamera`, with the mouse wheel's speed): `PlayerInput.Spectator`,
   Shift+T (told from T by `exactMatch`, checked before `Tune`); a pad holds D-pad down 0.4 s

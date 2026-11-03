@@ -67,7 +67,7 @@ public class LandmarkTests
             Assert.InRange(l.E, 2480000, 2840000);
             Assert.InRange(l.N, 1070000, 1300000);
             // E/N really are the row's own lat/lon
-            var (e, n) = SwissProjection.ToLv95(l.Lat, l.Lon);
+            var (e, n) = SwissGeodesy.ToLv95(l.Lat, l.Lon);
             Assert.Equal(e, l.E, 1);
             Assert.Equal(n, l.N, 1);
         }

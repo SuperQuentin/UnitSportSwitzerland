@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Core;
 
@@ -62,6 +63,13 @@ public partial class OriginShifter : Node
     private readonly Func<Vector3?> _focus;
     private readonly Func<bool> _allowed;
     private readonly bool _stress;
+
+    /// <summary>
+    /// <c>--originyaw &lt;deg&gt;</c> with <c>--originstress</c> (#1430 H3): every shift goes to an anchor frame
+    /// turned by this much about the up, one way then back, so every handler meets a rotation.
+    /// </summary>
+    private readonly float _stressYaw;
+    private bool _stressTurned;
     private readonly HashSet<string> _warned = new();
 
     /// <param name="focus">Where precision matters most: the active camera.</param>
@@ -80,7 +88,9 @@ public partial class OriginShifter : Node
             _stress = true;
             ThresholdM = stress;
             StepM = 1;
-            GD.Print($"[origin] stress: shift past {stress:F0} m, to the metre");
+            _stressYaw = CmdArgs.Double("--originyaw") is double yaw ? Mathf.DegToRad((float)yaw) : 0f;
+            GD.Print($"[origin] stress: shift past {stress:F0} m, to the metre"
+                + (_stressYaw != 0 ? $", each shift turning the world {Mathf.RadToDeg(_stressYaw):F1}° (anchor frames, #1430 H3)" : ""));
         }
         else if (ParseThreshold() is { } threshold)
             ThresholdM = threshold;
@@ -127,10 +137,10 @@ public partial class OriginShifter : Node
         if (!_allowed()) return false;
         double step = Math.Max(1, StepM);
         double newE = exact ? e : Math.Round(e / step) * step, newN = exact ? n : Math.Round(n / step) * step;
-        if (newE == _origin.E && newN == _origin.N) return false;
+        if (!_origin.Frame.IsAnchor && newE == _origin.E && newN == _origin.N) return false;
 
         var clock = Stopwatch.StartNew();
-        var shift = _origin.MoveTo(newE, newN);
+        var shift = _stressYaw != 0 ? _origin.MoveTo(StressAxes(newE, newN)) : _origin.MoveTo(newE, newN);
         var pass = new Pass(shift);
         Visit(GetTree().Root, pass, childrenAreGlobal: true);
         foreach (var body in pass.Kinematic) Teleport(body);
@@ -149,6 +159,23 @@ public partial class OriginShifter : Node
                 + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms, "
                 + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all");
         return true;
+    }
+
+    /// <summary>
+    /// The anchor frame a yawed stress shift goes to: the ground's own axes at the new place, at
+    /// altitude 0 (so world Y stays near the altitude), turned about the up by the stress yaw every
+    /// other shift.
+    /// </summary>
+    private FrameAxes StressAxes(double e, double n)
+    {
+        var g = FrameAxes.GroundAt(e, n, 0);
+        _stressTurned = !_stressTurned;
+        if (!_stressTurned) return g;
+        double c = Math.Cos(_stressYaw), s = Math.Sin(_stressYaw);
+        // turned about up (Y): X' = X cos - Z sin... as Basis(Up, yaw) turns the world's X and Z
+        var x = new EcefPos(g.X.X * c - g.Z.X * s, g.X.Y * c - g.Z.Y * s, g.X.Z * c - g.Z.Z * s);
+        var z = new EcefPos(g.X.X * s + g.Z.X * c, g.X.Y * s + g.Z.Y * c, g.X.Z * s + g.Z.Z * c);
+        return g with { X = x, Z = z };
     }
 
     /// <summary>What one shift has moved and found so far.</summary>
@@ -248,6 +275,17 @@ public partial class OriginShifter : Node
                 if (_stress && spatial is not IOriginShiftAware) WarnIfContainer(spatial);
                 spatial.Transform = pass.Shift.Apply(spatial.Transform);
                 pass.Moved++;
+            }
+            // a turning shift turns what moves (#1430 H3); a body that handles the shift turns its own
+            if (pass.Shift.Turns)
+            {
+                if (spatial is RigidBody3D rigid)
+                {
+                    rigid.LinearVelocity = pass.Shift.Direction(rigid.LinearVelocity);
+                    rigid.AngularVelocity = pass.Shift.Direction(rigid.AngularVelocity);
+                }
+                else if (spatial is CharacterBody3D character and not IOriginShiftAware)
+                    character.Velocity = pass.Shift.Direction(character.Velocity);
             }
             // whether it moved itself or with its parent, it is somewhere else now
             if (spatial is PhysicsBody3D body

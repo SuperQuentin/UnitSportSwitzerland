@@ -53,6 +53,7 @@ public partial class RadioSparkles : MeshInstance3D
         CustomAabb = new Aabb(new Vector3(-0.45f, -0.2f, -0.35f), new Vector3(0.9f, 0.85f, 0.7f));
         VisibilityRangeEnd = Range;
         Visible = false;
+        Styles.ZoomRanges.Track(this);
     }
 
     /// <summary>

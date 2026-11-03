@@ -149,6 +149,8 @@ public partial class DebugMenu : CanvasLayer
         LayerSwitch(terrain, "water", "Water", TileLayers.Water);
         Switch(terrain, "horizon", "Far horizon", true, on => { _hideHorizon = !on; ApplyHidden(); },
             "The decimated ring of the whole country beyond the streamed tiles.");
+        Switch(terrain, "curvature", "Earth curvature", Curvature.Drawn, on => Curvature.Drawn = on,
+            "The ground drops away with distance as on the real Earth (246 m at 60 km). Off: the flat world, as before #187.");
         Switch(terrain, "real", "Real tiles", true, on => { _hideReal = !on; ApplyHidden(); },
             "Tiles built from swisstopo data.");
         Switch(terrain, "generated", "Generated tiles", true, on => { _hideGenerated = !on; ApplyHidden(); },

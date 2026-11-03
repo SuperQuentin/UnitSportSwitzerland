@@ -519,6 +519,9 @@ public static partial class InteriorGenerator
     /// door than the main one loses it (it reads as locked, #498) unless that shuts off rooms; else its
     /// room takes back its rectangle, whose wall still has it.
     /// </summary>
+    /// <summary>The doors of their own (#1292) of the building being planned, by key: <see cref="MoveEntries"/> never locks them.</summary>
+    [ThreadStatic] internal static HashSet<string>? UnitDoors;
+
     private static void MoveEntries(InteriorLayout l)
     {
         if (l.Entrances.Count == 0) l.Entrances.AddRange(l.AllEntrances());
@@ -557,9 +560,11 @@ public static partial class InteriorGenerator
             var (r, cut) = EntryCut(rooms, new Vector2(e.X, e.Z));
             if (r?.Type == RoomType.Ramp) continue;
             bool off = r != null && cut != null && r.Shape != null && cut.Edge == null && !OnShape(r, cut);
-            bool far = i > 0 && DoorGap(l, e).Gap > FarDoor;
+            // the main door, and a shop's or a venue's own door (#1292): the only way into its unit, never locked
+            bool keep = i == 0 || UnitDoors?.Contains(e.Door) == true;
+            bool far = !keep && DoorGap(l, e).Gap > FarDoor;
             if (!off && !far) continue;
-            if (i > 0)
+            if (!keep)
             {
                 unreached ??= Unreached(l);
                 r?.Openings.Remove(cut!);
@@ -624,6 +629,11 @@ public static partial class InteriorGenerator
             var outward = new Vector2(o.Dot(u), o.Dot(v)).Normalized();
             var n = -outward;
             var t = new Vector2(-outward.Y, outward.X);
+            // a venue's own door (#1292) with a private room behind it (an arm the outline fit grew off a room, a bedroom
+            // or a study): that room is the venue's, so its doorway fits there (the plan follows the door)
+            if (!flats && d.Unit && d.Venue > 0
+                && rooms.FirstOrDefault(r => r.Holds(at.X + n.X * 0.6f, at.Y + n.Y * 0.6f)) is { Type: RoomType.Bedroom or RoomType.Study or RoomType.GuestRoom or RoomType.Storage } priv)
+                priv.Type = DiningRoomOf(Venues.At(d.Venue - 1));
             if (rooms.Any(r => r.Holds(at.X + n.X * 0.6f, at.Y + n.Y * 0.6f)))
             {
                 // a room right behind it, and no doorway yet: the door's own was never planned (the box's side had

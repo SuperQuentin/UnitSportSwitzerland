@@ -17,11 +17,13 @@ occasions, adventure, core, ui, xr, styles, farming, general. New knowledge goes
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
+`build-features` (`UNITSPORT_FEATURES`: an export leaves out the dev tools it does not list, e.g. the trailer studio; `#if TRAILER` at its call sites; the editor has all),
 `release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
 `feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard; heavy checks side by side in lock slots, `TEST_JOBS`),
+`regression-net` (before a coordinate or rendering change: `tools/test.sh coords` + `results.csv` + `tools/test-compare.py` against a `main` baseline; reference screenshots on D: with `tools/refshots.sh` and `tools/refshot-diff.py`, noise floor first),
 `fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock; net checks at `/speed` with `--checkspeed`),
 `check-waits` (wait for the event, never a fixed time: `Until`, `LogIn`, `Finish` ends with the peers, 0.2 s polls, `REAL=1` for the flat-world scripts),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
@@ -39,7 +41,9 @@ occasions, adventure, core, ui, xr, styles, farming, general. New knowledge goes
 `human-test-list` (`tests/TO-TEST-BY-HUMAN.md`: what a PR could not verify itself — clicks, pad, VR, real-size regions — added in the same PR, deleted once tested),
 `playtest-recorder` (`--playtest-record`: a session's bundle in `test_output/playtest/sessions/`, `report.md` first; F12 notes),
 `topview` (a recorded session from above over its terrain, cover, buildings and roads: `tools/playtest.sh topview`, Shift+F12 live, server-vs-client offsets),
-`collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table).
+`collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table),
+`session-length` (token cost grows with context: one session per task, `/compact` around 200k; measured breakdown),
+`flat-lv95-ratchet` (#1443: hand-written LV95 distances and tile-corner arithmetic in `src/` may only shrink; `FlatLv95RatchetTests`).
 
 ## Rules
 

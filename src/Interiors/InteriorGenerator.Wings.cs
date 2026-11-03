@@ -77,7 +77,15 @@ public static partial class InteriorGenerator
             // a garage (#694) has the basement it leads to
             int cellars = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any) ? 1 : AptBasement(l.Key, mixed, above, area);
             var flats = new WingPlanner(above, cellars, (sl, sub, opts, rng) => TryBlock(sl, sub, kind, above, type, rng, opts), BackLanding: true);
-            if (TryWings(l, fp, type, wings, flats)) return true;
+            // a wing plan is kept only if the whole of it validates, upper floors and all: planned whole, even when the
+            // footprint asks only for the shop units (#1292), or it could keep a plan the game would not
+            bool groundOnly = GroundOnly;
+            GroundOnly = false;
+            try
+            {
+                if (TryWings(l, fp, type, wings, flats)) return true;
+            }
+            finally { GroundOnly = groundOnly; }
             // what a wing plan that came apart left behind, gone before the box is planned
             (l.Type, l.Below, l.EntryX, l.EntryWidth) = (t, below, x, width);
             l.Floors.Clear();
@@ -257,6 +265,8 @@ public static partial class InteriorGenerator
             }
             if (best == null) continue;
             best.Doors.Add(d);
+            // a shop's or a venue's own door (#1292) is no wing's front door: the wing is planned as without it
+            if (d.Unit) continue;
             if (best.Main == null || d.Slot < best.Main.Value.Slot) { best.Main = d; best.Front = side; }
         }
         if (!wings.Any(w => w.Main is { Slot: 0 })) return Fail("no street door on a wing");

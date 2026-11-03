@@ -11,6 +11,9 @@
 - **The button opens the Account page** (`Ui/AccountScreen`): the picture and name, **Change your figure** (to the
   Character menu), and the account page below. Settings no longer has an Account tab.
 - The welcome's step 3 keeps the same account page.
+- **Manage your account on the website** (#1359), signed in to an account server behind a site (`AccountRules.SiteOf`),
+  opens `<site>/account.html` (`Account.ManagePage`, `net/web-dashboard`): the name and the password change there.
+  `Account.RefreshName` reads the name again when the screen opens and when the window gets focus back.
 
 ## Client: two modes (the Account page from the title screen's account button, #1209; `src/Ui/AccountPage.cs`)
 

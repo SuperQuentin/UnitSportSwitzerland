@@ -300,7 +300,7 @@ public class WorldEventTests
     public void ThePostcardHomeNeedsAFamousViewNearAndAPostOfficeNearIt()
     {
         // Gruyères' castle: a Host and a Postmaster at the village
-        var (e, n) = SwissProjection.ToLv95(46.5837, 7.0820);
+        var (e, n) = SwissGeodesy.ToLv95(46.5837, 7.0820);
         Giver G(GiverKind k, string name, double dx) =>
             new($"giver:{GiverCatalogue.Tag(k)}:{ErrandHash.Hex(ErrandHash.Of("t:" + name))}", k, e + dx, n, 0f, "FR", 800, name, "test");
         var givers = new GiverCatalogue(new[] { G(GiverKind.Host, "Beiz Gruyères", 0), G(GiverKind.Postmaster, "Poste Gruyères", 60) });

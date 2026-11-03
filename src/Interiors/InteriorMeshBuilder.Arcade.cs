@@ -76,7 +76,7 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.ClawMachine:
             {
-                // the cabinet, its control ledge, the box of plush with the claw over it, the lit top: the box
+                // the cabinet, its control ledge, the box's posts and back, the lit top: the box
                 // is left open (a pane would be window glass to the interior shader, which draws the sky in it)
                 const float top = 0.9f, roof = 1.85f;
                 B(-w, 0, -d, w, top, d, body);
@@ -91,15 +91,7 @@ public static partial class InteriorMeshBuilder
                     B(x0, top - 0.03f, z0, x0 + 0.055f, roof, z0 + 0.055f, dark);
                 }
                 B(-w + 0.03f, top - sink, -d + 0.04f, w - 0.03f, roof, -d + 0.05f, trim);
-                for (int i = 0; i < 6; i++)
-                {
-                    float x = -w + 0.1f + (i % 3) * (p.W - 0.2f) / 3, z = -d + 0.12f + (i / 3) * (p.D - 0.3f) / 2;
-                    float s0 = (p.W - 0.2f) / 3 - 0.05f;
-                    B(x, top - sink, z, x + s0, top + 0.1f + 0.12f * Hash(p, 30 + i), z + (p.D - 0.3f) / 2 - 0.05f,
-                        Plush[(int)(Hash(p, 50 + i) * Plush.Length) % Plush.Length]);
-                }
-                B(-0.01f, 1.45f, -0.01f, 0.01f, roof + sink, 0.01f, Chrome);
-                B(-0.07f, 1.33f, -0.07f, 0.07f, 1.45f + sink, 0.07f, Chrome);
+                // the plush, the claw and its gantry are the game's (Games.Claw.ClawRig, #1326)
                 B(-w, roof - sink, -d, w, H, d, trim);
                 B(-w + 0.05f, roof + 0.04f, d - sink, w - 0.05f, H - 0.04f, d + sink, marquee);
                 break;
@@ -230,7 +222,7 @@ public static partial class InteriorMeshBuilder
             }
             case FurnitureType.AirHockey:
             {
-                // the table, its lit field and centre line, the rails round it, two mallets and the puck
+                // the table, its lit field and centre line, the rails round it with the goals' slots (the puck and mallets are the game's, Games.AirHockey.AirHockeyRig, #1326)
                 const float field = 0.78f;
                 B(-w, 0, -d, w, field, d, body, true);
                 B(-w + 0.08f, field - sink, -d + 0.08f, w - 0.08f, field + sink, d - 0.08f, Lit(0.84f, 0.92f, 0.98f));
@@ -239,16 +231,16 @@ public static partial class InteriorMeshBuilder
                 foreach (float sz in new[] { -1f, 1f })
                 {
                     float z0 = sz < 0 ? -d + 0.015f : d - 0.075f;
-                    B(-w + 0.015f, field - sink, z0, w - 0.015f, H, z0 + 0.06f, railCol);
+                    // each end's rail broken by its goal's slot
+                    B(-w + 0.015f, field - sink, z0, -0.14f, H, z0 + 0.06f, railCol);
+                    B(0.14f, field - sink, z0, w - 0.015f, H, z0 + 0.06f, railCol);
+                    B(-0.14f, field - 0.06f, z0, 0.14f, field - 0.02f, z0 + 0.06f, railCol);
                 }
                 foreach (float sx in new[] { -1f, 1f })
                 {
                     float x0 = sx < 0 ? -w + 0.03f : w - 0.075f;
                     B(x0, field - sink, -d + 0.06f, x0 + 0.045f, H, d - 0.06f, railCol);
                 }
-                B(-0.06f, field, d - 0.35f, 0.06f, 0.86f, d - 0.23f, C(0.85f, 0.10f, 0.12f));
-                B(-0.06f, field, -d + 0.23f, 0.06f, 0.86f, -d + 0.35f, C(0.10f, 0.30f, 0.85f));
-                B(-0.04f, field, -0.25f, 0.04f, 0.81f, -0.17f, dark);
                 break;
             }
         }

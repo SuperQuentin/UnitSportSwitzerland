@@ -168,6 +168,13 @@ public abstract class Rideable
     public const float Gravity = 9.81f;
 
     /// <summary>
+    /// The origin moved (#185): a ride that keeps world-space state of its own (a position, a velocity,
+    /// an attitude) moves it here, and turns it when the shift turns (an anchor frame's, #1430 H3).
+    /// Called by its rider's <c>OnOriginShifted</c>. Most rides read their state off the body each step.
+    /// </summary>
+    public virtual void OnOriginShifted(Core.OriginShift shift) { }
+
+    /// <summary>
     /// The arcade tuning layer is active (Settings → Movement: Game). Each vehicle keeps its
     /// real-world numbers for Sim and swaps a handful of them here — more power and grip, less
     /// scrub — without a second model: the same equations, just a fitter, braver rider.

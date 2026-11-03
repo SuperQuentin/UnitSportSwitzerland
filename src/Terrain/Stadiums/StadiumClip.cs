@@ -79,8 +79,21 @@ public static class StadiumClip
         };
     }
 
-    /// <summary>Every stadium's facade outline in LV95 (east, north), worked out once.</summary>
-    private static readonly (Vector2[] Poly, Vector2 Min, Vector2 Max, double E0, double N0)[] Lv95 = StadiumCatalog.All.Select(s =>
+    /// <summary>Every stadium's facade outline in LV95 (east, north), worked out once per stadium list (a course adds its own, #1396).</summary>
+    private static (Vector2[] Poly, Vector2 Min, Vector2 Max, double E0, double N0)[] Lv95
+    {
+        get
+        {
+            var known = _lv95;
+            if (ReferenceEquals(known.For, StadiumCatalog.All)) return known.Outlines;
+            var all = StadiumCatalog.All;
+            _lv95 = known = (all, Outlines(all));
+            return known.Outlines;
+        }
+    }
+    private static (StadiumSpec[]? For, (Vector2[] Poly, Vector2 Min, Vector2 Max, double E0, double N0)[] Outlines) _lv95 = (null, []);
+
+    private static (Vector2[] Poly, Vector2 Min, Vector2 Max, double E0, double N0)[] Outlines(StadiumSpec[] all) => all.Select(s =>
     {
         // relative to the centre spot, so a float keeps centimetres
         var owner = StadiumCatalog.Owner(s);

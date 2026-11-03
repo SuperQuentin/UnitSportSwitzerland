@@ -38,6 +38,8 @@ Riddes viewpoints, M1 Pro: 33–36M primitives a frame on `main`, 25–30M with 
   through the nearest interior doorway (`InteriorManager.ThroughNearestDoor`), to where the
   portal camera stands: else every tree seen out a door portal was past the handover, a
   billboard through the doorway and 3D seen directly.
+- **Zoomed** (#1433, `zoom-lod`), the handover distance is divided by `world_lod_scale`: through
+  a 200 mm lens 3D trees reach ~2 km. `NearTrees` gathers the view cone that far.
 - `--tree-lod off` restores every tree as 3D (pixel-identical to before, the check for changes
   here); `--tree-near m` moves the handover.
 - **Heavier trees (Cartoon, `MeshDetail.High`) are culled per tree on the CPU: `NearTrees`.** A
@@ -52,3 +54,12 @@ Riddes viewpoints, M1 Pro: 33–36M primitives a frame on `main`, 25–30M with 
   underside traced flat; `hit_puff`: ellipsoids, the low-poly puffs traced smooth;
   `hit_trunk6`). Far billboards cast no shadow: traced from the rendering camera, a shadow pass
   would trace them from the light.
+- **Both kinds light by the mesh's smooth normals and take snow by its facets** (#1437). Godot
+  turns a MultiMesh instance's normals by its basis, not the inverse transpose, so a conifer's
+  (0.26 h, h, 0.26 h) tipped the smooth normals nearly straight up: the 3D trees had no shade
+  side and read pale under snow beside the billboards. The vertex stage divides `NORMAL` by the
+  squared scale (Cartoon only: Realistic's trees are left as they were, and PS1 is unlit). The billboard lights a
+  tier by the normal the GPU interpolates across its face (`tier_smooth`) and snows a puff by the
+  6x4 mesh's facet under the hit (`puff_facet`), as `facet_normal` does on the 3D tree.
+  Check the pair with one pose shot twice: `--tree-near 40` (billboards from 40 m) and
+  `--tree-lod off`.

@@ -31,12 +31,15 @@ public class ToiletSizingTests
     }
 
     [Fact]
-    public void Less_space_is_a_shared_anteroom_and_really_none_a_single_room()
+    public void Less_space_is_a_shared_anteroom_then_a_pair_of_WCs_and_really_none_a_single_room()
     {
         Assert.Equal(ToiletSet.Shared, ToiletSizing.Choose(6f, 3.0f, 150).Set);
-        // long but too shallow for the gendered rooms' turn
-        Assert.Equal(ToiletSet.Single, ToiletSizing.Choose(12f, 2.75f, 150).Set);
-        Assert.Equal(ToiletSet.Single, ToiletSizing.Choose(6f, 2.6f, 150).Set);
+        // long but too shallow for the gendered rooms' turn or the anteroom: a women's and a men's WC (#1292)
+        Assert.Equal(ToiletSet.Pair, ToiletSizing.Choose(12f, 2.75f, 150).Set);
+        Assert.Equal(ToiletSet.Pair, ToiletSizing.Choose(6f, 2.6f, 150).Set);
+        Assert.Equal(2 * ToiletSizing.SingleW, ToiletSizing.Choose(2.8f, 1.7f, 20).Length, 3);
+        // room for one only
+        Assert.Equal(ToiletSet.Single, ToiletSizing.Choose(2.7f, 2.6f, 150).Set);
         Assert.Equal(ToiletSet.Single, ToiletSizing.Choose(1.5f, 2.0f, 150).Set);
         Assert.Equal(ToiletSet.None, ToiletSizing.Choose(1.2f, 3f, 150).Set);
         Assert.Equal(ToiletSet.None, ToiletSizing.Choose(4f, 1.5f, 150).Set);

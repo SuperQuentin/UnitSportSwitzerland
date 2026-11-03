@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnitSport.Adventure.Places;
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Rewards;
@@ -30,8 +31,8 @@ public static class PhotoSpots
 
     private static PhotoSpot W(string id, string name, double standLat, double standLon, double targetLat, double targetLon, float targetAlt, string target)
     {
-        var (se, sn) = SwissProjection.ToLv95(standLat, standLon);
-        var (te, tn) = SwissProjection.ToLv95(targetLat, targetLon);
+        var (se, sn) = SwissGeodesy.ToLv95(standLat, standLon);
+        var (te, tn) = SwissGeodesy.ToLv95(targetLat, targetLon);
         return new PhotoSpot("ph:" + id, name, Math.Round(se), Math.Round(sn), StandRadius, Math.Round(te), Math.Round(tn), targetAlt, target, Review: true);
     }
 
@@ -145,18 +146,20 @@ public static class PhotoJudge
         Func<double, double, float?> ground)
     {
         if (!PhotoSpots.Inside(spot, e, n)) return PhotoVerdict.NotThere;
-        double de = spot.TargetE - e, dn = spot.TargetN - n, dist = Math.Sqrt(de * de + dn * dn);
+        double de = spot.TargetE - e, dn = spot.TargetN - n, dist = GlobalPos.HorizontalDistance(spot.TargetE, spot.TargetN, e, n);
         if (dist < 1) return PhotoVerdict.OffTarget;
         double bearing = Math.Atan2(de, dn) * 180 / Math.PI;
-        double elev = Math.Atan2(spot.TargetAlt - eyeAlt, dist) * 180 / Math.PI;
+        // aimed where the target is drawn: lower by the Earth's drop (#187, 27 m at 20 km)
+        double elev = Math.Atan2(spot.TargetAlt - Core.Curvature.Drop(dist) - eyeAlt, dist) * 180 / Math.PI;
         double half = fovDeg / 2 * PhotoSpots.FrameShare;
         if (Math.Abs(AngleDiff(bearing, yawDeg)) > half || Math.Abs(elev - pitchDeg) > half) return PhotoVerdict.OffTarget;
-        // the sight line, past the first 30 m and short of the target's own slopes (the last 150 m)
+        // the sight line, past the first 30 m and short of the target's own slopes (the last 150 m),
+        // over the ground and the Earth's bulge between (#187)
         for (double s = 30; s < dist - 150; s += PhotoSpots.SightStep)
         {
             double t = s / dist;
             float line = (float)(eyeAlt + (spot.TargetAlt - eyeAlt) * t);
-            if (ground(e + de * t, n + dn * t) is { } g && g > line + 2) return PhotoVerdict.Blocked;
+            if (ground(e + de * t, n + dn * t) is { } g && g + Core.Curvature.Bulge(s, dist) > line + 2) return PhotoVerdict.Blocked;
         }
         return PhotoVerdict.Taken;
     }

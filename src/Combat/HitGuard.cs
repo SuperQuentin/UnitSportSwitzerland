@@ -1,3 +1,5 @@
+using UnitSport.Core;
+
 namespace UnitSport.Combat;
 
 // Plain C#, no Godot: linked into the unit tests (docs/notes/general/testing.md).
@@ -79,7 +81,7 @@ public sealed class HitGuard
     {
         double under0 = Under(from, ground), under1 = Under(to, ground);
         double de = to.E - from.E, dn = to.N - from.N;
-        int n = (int)(Math.Sqrt(de * de + dn * dn) / step);
+        int n = (int)(GlobalPos.HorizontalDistance(to.E, to.N, from.E, from.N) / step);
         for (int i = 1; i < n; i++)
         {
             double t = i / (double)n;

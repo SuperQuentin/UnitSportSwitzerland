@@ -30,9 +30,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Occasions.Birthdays.BirthdayService? _birthdays;
     private World.TrafficGenerators? _trafficEndpoints;
     private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
+    private Net.PlayerIds? _ids;
     private Adventure.AdventureService? _adventure;
     private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
@@ -66,6 +68,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 return;
             }
             GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
+            if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
         }
         // the account step of a join (#1123): checked before anything is loaded, so a typo never serves a world
         if (ParseAccounts() is not { } accounts) { GetTree().Quit(1); return; }
@@ -184,10 +187,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _churchRadios = Interiors.ChurchRadios.Create(this);
         _cinemaBooths = Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball games: the score and the turn (#1325)
+        Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games (#1323)
         Net.ClockSync.Create(this);
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
+        // the fun world's sky is held at dusk (#1396): its clock stopped there
+        if (WorldChoice.FunActive) World.WorldClock.Start(World.Fun.FunWorld.DuskHour, 0);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -246,6 +252,16 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword(), PlayerRegistry.ParseHostToken());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
+        // who a peer is apart from its name (#1359): saved data is keyed by these ids, names looked up when shown
+        var playerList = _registry;
+        var ids = _ids = Net.PlayerIds.Server = Net.PlayerIdsCache.Create(persist: !Items.Bank.Scratch);
+        ids.AccountOf = peer => _accountGate?.Of(peer)?.UserId;
+        ids.KeyOf = peer => _sleepers?.KeyOf(peer);
+        ids.NameOf = peer => _chat?.NameOfPeer(peer) is { Length: > 0 } n && n != $"Rider{peer}" ? n : null;
+        ids.Online = () => playerList.Players.Select(p => p.PeerId);
+        _chat.NameAssigned += ids.Refresh;
+        _registry.Ids = ids;
+        ids.Identified += (peer, id, name) => GD.Print($"[ids] peer {peer} is {name} ({id})");
         // /locate (#1277): every list the server holds, and an index of its buildings built now on workers
         // (from the tiles themselves, not the 32 MB cache the rest shares) or read back from user://cache
         AddChild(new World.Locate.LocateService(local, manifest, () => places, origin,
@@ -310,6 +326,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
+        // the fun world's PvP block (#1396): who stands in it, and its weapon crates
+        if (WorldChoice.FunActive)
+        {
+            var players = _players;
+            World.Fun.FunWorld.Players = peer => players.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer)) is { } p ? p.Global : null;
+            AddChild(new World.Fun.FunCrates(_brCrates));
+        }
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
             (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
         br.Origin = origin;
@@ -362,6 +385,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // one player at a time at each set-up telescope (#1440)
+        Items.Telescopes.Create(this, server: true);
+        // player birthdays (#1423): who celebrates today, the wishes, the cakes' slices, the birthday fireworks
+        _birthdays = Occasions.Birthdays.BirthdayService.Create(this, origin, server: true, networked: true);
+        _birthdays.BodyOf = peer => _players?.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer));
+        _birthdays.NameOf = peer => _players?.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer)) is { Bot: true } bot
+            ? bot.BotName.Length > 0 ? bot.BotName : "Bot" : _chat.NameOfPeer(peer);
+        _birthdays.Chat = _chat;
         // traffic endpoints (#971): admins set them, every client runs them on its own traffic
         _trafficEndpoints = World.TrafficGenerators.Create(this, server: true);
         _trafficEndpoints.IsAdmin = _chat.IsAdminPeer;
@@ -371,6 +402,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // players who left, asleep where they were (#644)
         _sleepers = Net.Sleepers.Create(this, origin, server: true);
         _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+        _sleepers.Proven += (peer, _) => ids.Refresh(peer);
         // the Adventure layer (#1223): progress per proven identity (an account on --accounts required), quests;
         // off for a player in a Battle Royale round
         if (Systems.On(Systems.Adventure))
@@ -691,12 +723,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private void OnPeerAccepted(long id)
     {
         GD.Print($"[server] peer {id} speaks protocol {Handshake.Protocol}");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // The rules first (#1380): the joining client's loading screen waits for them, and nothing
+        // below is needed to read them. Still before Sleepers.WakeAt, which is sent further down on
+        // the same ordered channel (net/arrival).
+        _arrival?.SendTo(id);
+        long rulesMs = clock.ElapsedMilliseconds;
         _registry?.Add(id);
 
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
             _chunks!.AddAnchor(player, collision: false);   // a proxy: height queries only, no collision (#837)
-        _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
         _cinemaBooths?.SendTo(id);
@@ -706,6 +743,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Farming.Herds.Instance?.SendTo(id);
         Occasions.UfoSightings.Instance?.SendTo(id);
         _placed?.SendTo(id);
+        _birthdays?.SendTo(id);
         _trafficEndpoints?.SendTo(id);
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
@@ -723,6 +761,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat?.SendWorldTimeTo(id);
         _chat?.SendWorldSpeedTo(id);
         _chat?.SendSeaStateTo(id);
+        GD.Print($"[server] peer {id} accepted: rules sent at {rulesMs} ms, player spawned and state sent at {clock.ElapsedMilliseconds} ms");
     }
 
     private void OnPeerDisconnected(long id)
@@ -733,10 +772,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // before the registry forgets its name and the body is freed: it lies down where it was (#644)
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _adventure?.PeerLeft(id);
+        _ids?.Left(id);
         Adventure.Places.PlacesService.Instance?.PeerLeft(id);
         Adventure.Rewards.RewardService.Instance?.PeerLeft(id);
         Adventure.Navigation.AdventureTravel.Instance?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
+        _birthdays?.PeerLeft(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);

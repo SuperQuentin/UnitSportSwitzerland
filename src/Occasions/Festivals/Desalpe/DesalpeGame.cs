@@ -324,8 +324,7 @@ public partial class DesalpeGame : CanvasLayer
         private static bool NearHerd(DesalpeGame g, DesalpeHerd herd)
         {
             if (g._local() is not { } p || g.Run?.Site is not { } site || herd.CowAt(0) is not { } at) return false;
-            double de = p.Global.E - at.E, dn = p.Global.N - at.N;
-            return de * de + dn * dn <= 300 * 300;
+            return GlobalPos.HorizontalDistanceSquared(p.Global.E, p.Global.N, at.E, at.N) <= 300 * 300;
         }
 
         private void DrawDrive(DesalpeGame g, DesalpeView view, DesalpeHerd herd, Vector2 c)

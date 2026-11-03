@@ -401,6 +401,12 @@ public partial class FootPlayer
             alcohol.AskTest(peer);
             return true;
         }
+        // their birthday today, not wished yet (#1423): E wishes them a happy birthday, the fight's challenge after
+        if (Occasions.Birthdays.BirthdayService.Instance is { } birthdays && birthdays.CanWish(peer))
+        {
+            birthdays.Wish(peer);
+            return true;
+        }
         // they challenged you to an aura battle (#914): E takes that; otherwise E is the fight's
         if (AuraManager.Client?.AcceptFrom(peer) == true) return true;
         // a party member (#1266): holding E asks to hold hands, a tap stays the fight's challenge

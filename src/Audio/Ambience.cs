@@ -516,16 +516,16 @@ public partial class Ambience : Node, IOriginShiftAware
     {
         var origin = Origin!;
         var tile = origin.TileAt(pos);
-        var (e, n) = origin.ToLv95(pos);
-        double lx = e - tile.MinE, lz = tile.MaxN - n;
+        var local = origin.TileLocal(tile, pos);
 
-        // the tile under the listener, plus any neighbour whose edge is within earshot
+        // the tile under the listener, plus any neighbour whose edge is within earshot (in the tile's
+        // own axes, #1443: local z runs south)
         var needed = new List<TileId> { tile };
-        int dx = lx < 70 ? -1 : lx > 930 ? 1 : 0;
-        int dz = lz < 70 ? 1 : lz > 930 ? -1 : 0;   // tile N grows northward, z southward
-        if (dx != 0) needed.Add(new TileId(tile.E + dx, tile.N));
-        if (dz != 0) needed.Add(new TileId(tile.E, tile.N + dz));
-        if (dx != 0 && dz != 0) needed.Add(new TileId(tile.E + dx, tile.N + dz));
+        int dx = local.X < 70 ? -1 : local.X > 930 ? 1 : 0;
+        int dz = local.Z < 70 ? -1 : local.Z > 930 ? 1 : 0;
+        if (dx != 0) needed.Add(tile.Neighbour(dx, 0));
+        if (dz != 0) needed.Add(tile.Neighbour(0, dz));
+        if (dx != 0 && dz != 0) needed.Add(tile.Neighbour(dx, dz));
 
         float best = float.MaxValue;
         Vector3 bestPos = default;
@@ -536,22 +536,23 @@ public partial class Ambience : Node, IOriginShiftAware
         {
             if (!_water.TryGetValue(t, out var segs)) { EnsureWater(t); continue; }
             if (segs == null) continue;
-            double offX = t.MinE - origin.E, offZ = t.MaxN - origin.N;
+            // the segments are tile-local (x east, y up, z south): placed by the tile's frame
+            var xf = origin.TileTransform(t);
             foreach (var s in segs)
             {
                 var pts = s.Points;
                 for (int i = 0; i + 5 < pts.Length; i += 3)
                 {
-                    float ax = (float)(offX + pts[i]), az = (float)(pts[i + 2] - offZ);
-                    float bx = (float)(offX + pts[i + 3]), bz = (float)(pts[i + 5] - offZ);
-                    float vx = bx - ax, vz = bz - az, len2 = vx * vx + vz * vz;
-                    float u = len2 > 1e-6f ? Mathf.Clamp(((pos.X - ax) * vx + (pos.Z - az) * vz) / len2, 0f, 1f) : 0f;
-                    float px = ax + vx * u, pz = az + vz * u;
+                    var a = xf * new Vector3(pts[i], pts[i + 1], pts[i + 2]);
+                    var b = xf * new Vector3(pts[i + 3], pts[i + 4], pts[i + 5]);
+                    float vx = b.X - a.X, vz = b.Z - a.Z, len2 = vx * vx + vz * vz;
+                    float u = len2 > 1e-6f ? Mathf.Clamp(((pos.X - a.X) * vx + (pos.Z - a.Z) * vz) / len2, 0f, 1f) : 0f;
+                    float px = a.X + vx * u, pz = a.Z + vz * u;
                     float dd = MathF.Sqrt((px - pos.X) * (px - pos.X) + (pz - pos.Z) * (pz - pos.Z));
                     if (dd < best)
                     {
                         best = dd; bestWidth = s.Width;
-                        bestPos = new Vector3(px, pts[i + 1] + u * (pts[i + 4] - pts[i + 1]), pz);
+                        bestPos = new Vector3(px, a.Y + u * (b.Y - a.Y), pz);
                         lake = false;
                     }
                 }

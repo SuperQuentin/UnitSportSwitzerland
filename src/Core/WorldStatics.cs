@@ -19,12 +19,15 @@ public static class WorldStatics
     {
         UiFocus.Clear();
         Permissions.Reset();
+        Net.PlayerIds.Server = null;
         Interiors.DoorIndex.Clear();
         Vehicles.GarageUi.GarageNear = null;
         Audio.Surfaces.Origin = null;
         Audio.Surfaces.Forget();
         Occasions.OccasionTowns.UseGenerated(null);
         WorldChoice.Active = null;   // back to the open world for the title (#999)
+        Terrain.Fixture.FixtureChunkSource.ForgetWorld();   // a course's venues, stadium and fleet (#1396)
+        World.Fun.FunWorld.Leave();
 
         Items.ItemEvents.ResetEvents();
         Combat.SwordService.ResetEvents();

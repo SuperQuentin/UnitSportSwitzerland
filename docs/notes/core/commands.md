@@ -43,7 +43,9 @@
   more than one picture is needed: every launch steals focus on macOS (`macos-launch-steals-focus`;
   Windows: `windows-launch-focus`).
   A queued shot's y may be `g1.7` (that high above the ground, once it has streamed in), and each
-  shot logs `frame=` ms, averaged over its last second of settling. Or `i1.6`, inside a house
+  shot logs `frame=` ms, averaged over its last second of settling. A `fov 6.87` line sets the
+  camera's vertical field of view for the shots after it (#1433; zoomed, each shot also logs
+  `zoomlod=`, see `styles/zoom-lod`). Or `i1.6`, inside a house
   (#320, offline): x, z stand in front of a front door (within 30 m, outside: a point inside a
   building never finds its own door); that door opens, and once its interior is built the camera
   goes as far behind the doorway as the point stands in front of it, 1.6 m above the sill, turned

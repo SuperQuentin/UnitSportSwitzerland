@@ -60,7 +60,7 @@ public static class HallFront
             Rotation = new Vector3(0, Mathf.Pi, 0),
             VisibilityRangeEnd = 400f,
         });
-        if (v.Type != VenueType.Cinema) return root;
+        if (v.Type != VenueType.Cinema) return Styles.ZoomRanges.TrackTree(root);
 
         // the films on the canopy's fascia, black capitals on white [S: Cine Rex]
         if (shape.Canopy)
@@ -116,7 +116,7 @@ public static class HallFront
                 Position = new Vector3(x, CaseFoot + 0.3f, 0.1f + 0.036f),
             });
         }
-        return root;
+        return Styles.ZoomRanges.TrackTree(root);
     }
 
     /// <summary>As many of the films as fit along a canopy <paramref name="width"/> wide in 0.3 m capitals, three spaces apart.</summary>

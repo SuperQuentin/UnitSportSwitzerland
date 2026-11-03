@@ -35,3 +35,14 @@ neighbour's DEM resampled onto `XyzParser`'s 0.5 m cell lattice (reducer, seams,
 - Bavaria does not border Switzerland (only Lake Constance); BW does.
 - `XyzParser.FillMissing` used to leave rows below the data at MissingCell: 4700 m walls in a
   tile whose foot had no data. It copies the nearest filled row either way now.
+
+## All of France (#1399)
+
+- `--dem lambert93,<tree> --dem-box auto --height-format wide --dem-min-probes 1` on the whole
+  `data/france/rgealti` tree, on the NAS, into its own region: `france-nas-run` (runner, resume, scale).
+  `ForeignDem` places `RGEALTI_FXX_<E>_<N>_MNT_` tiles from their names and opens them lazily (no handle or
+  header per tile), skips SRC/DST/`.tmp`/supplements, and chooses tiles by coverage (edge tiles read once for a
+  100 m data mask). Flags: `--dem-only D074,D013`, `--dem-cache-mb`, `--dem-min-probes`, `--dem-plan`, `--dem-box auto`.
+- Heights outside 0..4700 m need tile format v3 (`terrain/height-format-v3`): `--height-format wide`.
+  RGE ALTI tops out at 4,778.9 m on the French side of Mont Blanc; the Camargue goes to -1.1 m.
+- A tile with no data under it at all is sea level, not `MissingCell` (4700 m walls).

@@ -86,6 +86,10 @@ world_night={
 "type": "float",
 "value": 0.0
 }
+world_building_box_from={
+"type": "float",
+"value": 1000.0
+}
 world_snow={
 "type": "float",
 "value": 0.0
@@ -153,6 +157,18 @@ water_time={
 world_cam_pos={
 "type": "vec3",
 "value": Vector3(0, 0, 0)
+}
+world_curvature={
+"type": "float",
+"value": 0.0
+}
+world_curve_blend={
+"type": "float",
+"value": 0.0
+}
+world_lod_scale={
+"type": "float",
+"value": 1.0
 }
 world_door_light_0={
 "type": "vec4",

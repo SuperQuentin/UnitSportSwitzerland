@@ -55,7 +55,7 @@ public partial class CinemaProbe : Node
         // (six rows only: the booth's floor 1.6 m over the top one, more than a short flight, so no service door)
         new("along-x", 44, 22, 8, BuildingKind.Commercial, true, Upstairs: true, MinService: 0),
         // a narrow town cinema: one hall, the toilets a single WC beside the lobby (#1285)
-        new("narrow", 9.8f, 26, 5, BuildingKind.Commercial, true, Toilets: ToiletSet.Single),
+        new("narrow", 9.8f, 26, 5, BuildingKind.Commercial, true, Toilets: ToiletSet.Pair),
         // a kiosk: no hall fits, the ordinary rules furnish it
         new("too-small", 8, 10, 4, BuildingKind.Commercial, false),
     };
@@ -78,7 +78,7 @@ public partial class CinemaProbe : Node
         var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, c.W, c.D, c.H, c.Kind) } };
         Venues.Override = new List<VenueRecord>
         {
-            new("n1", VenueType.Cinema, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", $"Cinéma {c.Name}"),
+            new("n1", VenueType.Cinema, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, "", $"Cinéma {c.Name}"),
         };
         string what = $"{c.Name} ({c.W}x{c.D} m, {c.H} m, {c.Kind})";
         Check(Venues.HallOf(BuildingTypes.For(tile), 0) == VenueType.Cinema, $"{what}: the solid is a cinema");
