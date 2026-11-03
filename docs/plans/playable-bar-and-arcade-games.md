@@ -1,7 +1,9 @@
 # Playable bar and arcade games (#1324, #1326, epic #1322)
 
-Status: **planned**. Pool, darts and table football (#1324); arcade cabinets, air hockey, the claw machine,
-tickets and the prize counter (#1326). Bowling (#1323) and pinball (#1325) are built and set the patterns.
+Status: **built** (2026-11-03): the framework (#1453), pool (#1459), darts (#1461), table football (#1468), air hockey
+(#1469), coins, tickets and the prize counter (#1472), the claw machine (#1473), the cabinets' games (this plan's last PR).
+As built: `docs/notes/terrain/table-games.md`. Open: the VR hand ways (each game's row in `xr/vr-action-map` says gap),
+bots walking in to play (#1330).
 
 ## Decisions (owner, 2026-11-03)
 

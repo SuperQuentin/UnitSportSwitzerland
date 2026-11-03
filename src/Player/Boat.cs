@@ -33,6 +33,18 @@ public class Boat : Rideable, IEngined
     /// <summary>The live motion: the centre of mass, velocity, spin, attitude, engine.</summary>
     public BoatState State;
 
+    /// <summary>
+    /// The hull's own integrator keeps world-space directions: turned with the world when a shift turns
+    /// it (#1430 H3). Its position is read back from the body each step.
+    /// </summary>
+    public override void OnOriginShifted(Core.OriginShift shift)
+    {
+        if (!shift.Turns) return;
+        State.Velocity = shift.Direction(State.Velocity);
+        State.Spin = shift.Direction(State.Spin);
+        State.Attitude = new Quaternion(shift.Transform.Basis) * State.Attitude;
+    }
+
     /// <summary>The helm as last applied, for the sound and the rig.</summary>
     public BoatControls Controls;
 

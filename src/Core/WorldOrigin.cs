@@ -127,6 +127,28 @@ public sealed class OriginFrame
         ? new(E + world.X, N - world.Z, world.Y)
         : GlobalPos.FromEcef(Axes.ToEcef(world.X, world.Y, world.Z));
 
+    /// <summary>
+    /// The altitude (LV95 heights: above sea level) of a world point (#1430 H3): its Y in the ground
+    /// frame, its place's height in an anchor frame, where Y is height over the anchor's tangent plane.
+    /// </summary>
+    public double AltitudeOf(Vector3 world) => Axes == null ? world.Y : ToGlobal(world).Alt;
+
+    /// <summary>The way up at a world point, in world axes (#1430 H3): +Y in the ground frame, the ellipsoid's up in an anchor frame.</summary>
+    public Vector3 UpAt(Vector3 world)
+    {
+        if (Axes == null) return Vector3.Up;
+        var g = ToGlobal(world);
+        var up = FrameAxes.GroundAt(g.E, g.N, g.Alt).Y;
+        return Turn(up, Axes).Normalized();
+    }
+
+    /// <summary>An Earth-fixed direction in this frame's world axes (the ground frame: grid axes at its own origin).</summary>
+    public Vector3 DirectionOf(EcefPos ecef)
+    {
+        var axes = Axes ?? FrameAxes.GroundAt(E, N, 0);
+        return Turn(ecef, axes);
+    }
+
     public TileId TileAt(Vector3 world)
     {
         var (e, n) = ToLv95(world);
@@ -259,6 +281,14 @@ public sealed class WorldOrigin
         return _frame.Since(old);
     }
 
+    /// <summary>The same to an anchor frame (#1430 H3): world (0, 0, 0) and its axes at <paramref name="axes"/>.</summary>
+    internal OriginShift MoveTo(FrameAxes axes)
+    {
+        var old = _frame;
+        _frame = new OriginFrame(axes, old.Epoch + 1);
+        return _frame.Since(old);
+    }
+
     internal void RaiseShifted(OriginShift shift) => Shifted?.Invoke(shift);
 
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into the current one's.</summary>
@@ -282,4 +312,8 @@ public sealed class WorldOrigin
     public Vector3 TileToWorld(TileId id, Vector3 local) => _frame.TileToWorld(id, local);
 
     public Vector3 TileLocal(TileId id, Vector3 world) => _frame.TileLocal(id, world);
+
+    public double AltitudeOf(Vector3 world) => _frame.AltitudeOf(world);
+
+    public Vector3 UpAt(Vector3 world) => _frame.UpAt(world);
 }

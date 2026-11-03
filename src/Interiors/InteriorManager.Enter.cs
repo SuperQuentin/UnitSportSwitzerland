@@ -164,6 +164,9 @@ public partial class InteriorManager
     }
 
     /// <summary>The building a target names: a building key as it is, or the building holding the venue.</summary>
+    /// <summary>The building a venue's name, OSM id or building key names (as <c>--enter</c> finds it); null when none.</summary>
+    public Task<BuildingKey?> BuildingFor(string target) => BuildingOf(target);
+
     private async Task<BuildingKey?> BuildingOf(string target)
     {
         if (BuildingKey.TryParse(target, out var key)) return key;

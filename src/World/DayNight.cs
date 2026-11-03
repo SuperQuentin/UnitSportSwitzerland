@@ -260,6 +260,7 @@ public partial class DayNight : Node
         if (SunPath.Model == SunModel.Real && !WorldChoice.FunActive)
         {
             TrackPlace();
+            SunPath.Frame = Origin?.Frame;
             var date = SunPath.Today();
             sun = SunPath.Toward(SkyBody.Sun, date, Hour, _placeE, _placeN, out float elevationDeg);
             SunElevationDeg = elevationDeg;

@@ -127,6 +127,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.ShopSurvey.Requested, Interiors.ShopSurvey.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
+        (() => Terrain.GroundCheck.Requested, Terrain.GroundCheck.Run),
         (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
         (() => Concert.ConcertCheck.Requested, Concert.ConcertCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
@@ -232,6 +233,48 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
+            return;
+        }
+        // the arcade's machines with a screen, their small games drawn into it (#1326)
+        if (Interiors.Games.Cabinet.CabinetProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.Cabinet.CabinetProbe { Name = "CabinetProbe" });
+            return;
+        }
+        // a claw machine played by a bot through its rig (#1326)
+        if (Interiors.Games.Claw.ClawProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.Claw.ClawProbe { Name = "ClawProbe" });
+            return;
+        }
+        // the arcade's coins, tickets and prize counter (#1326)
+        if (Interiors.Games.PrizeProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.PrizeProbe { Name = "PrizeProbe" });
+            return;
+        }
+        // an air hockey table played by two bots through its rig (#1326)
+        if (Interiors.Games.AirHockey.AirHockeyProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.AirHockey.AirHockeyProbe { Name = "AirHockeyProbe" });
+            return;
+        }
+        // a table football table played by two bots through its rig (#1324)
+        if (Interiors.Games.Foosball.FoosballProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.Foosball.FoosballProbe { Name = "FoosballProbe" });
+            return;
+        }
+        // a dartboard played by two bots through its rig (#1324)
+        if (Interiors.Games.Darts.DartsProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.Darts.DartsProbe { Name = "DartsProbe" });
             return;
         }
         // a pool table played by two bots through its rig (#1324)
@@ -440,7 +483,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // far trees as billboards, before the first tile builds them
         var treeFarMaterial = StyleKit.Material(MaterialRole.TreeFar);
         StyleKit.TreeFarMaterial = StyleKit.TreeLod ? treeFarMaterial : null;
-        AddChild(new CameraGlobal());
+        AddChild(new CameraGlobal { Origin = origin });
 
         // Fog is a setting now (off by default: the far horizon is the point). Every world
         // material carries the uniforms, so the toggle just re-pushes two floats to each.
@@ -1022,6 +1065,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Items.TelescopeProbe.Requested || Items.TelescopeNetProbe.Role != null || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
+            || Occasions.Birthdays.BirthdayCheck.Requested || Occasions.Birthdays.BirthdayNetProbe.Role != null
             || Occasions.Festivals.Chalanda.ChalandaCheck.Requested || Occasions.Festivals.Chalanda.ChalandaNetProbe.Role != null
             || Occasions.Festivals.Escalade.EscaladeCheck.Requested || Occasions.Festivals.Escalade.EscaladeNetProbe.Role != null
             || Occasions.Festivals.Zibelemaerit.ZibeleCheck.Requested || Occasions.Festivals.Zibelemaerit.ZibeleNetProbe.Role != null
@@ -1031,7 +1075,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
             || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null || Interiors.Games.Pool.PoolNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null || Interiors.Games.Pool.PoolNetProbe.Role != null || Interiors.Games.TableNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -1068,6 +1112,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
         if (Interiors.Pinball.PinballNetProbe.Role != null) AddChild(new Interiors.Pinball.PinballNetProbe(items, origin));
         if (Interiors.Games.Pool.PoolNetProbe.Role != null) AddChild(new Interiors.Games.Pool.PoolNetProbe(items, origin));
+        if (Interiors.Games.TableNetProbe.Role != null) AddChild(new Interiors.Games.TableNetProbe(items, origin));
         if (Interiors.BowlingNetProbe.Role != null) AddChild(new Interiors.BowlingNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
@@ -1148,6 +1193,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(soloDrop);
         Vehicles.VehicleManager.Refused += Toast;
         Movie.MovieSession.Said += Toast;
+        Trainer.FtpWatch.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
         Terrain.Construction.CraneService.Said += Toast;
 
@@ -1215,6 +1261,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
         // who looks through which set-up telescope (#1440), same path as the server's
         Items.Telescopes.Create(this, server: false);
+        // player birthdays (#1423): the gift, the wishes, the cake's slices, the birthday fireworks; offline this client plays the server
+        var birthdays = Occasions.Birthdays.BirthdayService.Create(this, origin, server: false, networked: Launch.Networked);
+        birthdays.Me = () => _onFoot ? LocalPlayer : null;
+        birthdays.BodyOf = peer => peer == Multiplayer.GetUniqueId() || !Launch.Networked && peer == 1
+            ? LocalPlayer : _players?.GetNodeOrNull<FootPlayer>(PlayerReplication.NodeName(peer));
+        birthdays.NameOf = _ => GameSettings.Current.PlayerName;
+        birthdays.Toast = Toast;
+        birthdays.Give = stack => items.Give(stack);
+        if (Occasions.Birthdays.BirthdayCheck.Requested) AddChild(new Occasions.Birthdays.BirthdayCheck(items, () => LocalPlayer));
+        if (Occasions.Birthdays.BirthdayNetProbe.Role != null) AddChild(new Occasions.Birthdays.BirthdayNetProbe(items));
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
         // the Adventure layer (#1223): the server keeps this player's progress and quests, offline this client
@@ -1363,6 +1419,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
+        if (Interiors.Games.TableGames.Instance is { } tableGames) tableGames.Items = items;   // the arcade's coins and tickets (#1326)
         // selling farm produce (#494): World/FarmSales and World/FarmStands, same paths as the server's; offline this client plays it
         if (Systems.On(Systems.Farming))
         {
@@ -1877,6 +1934,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         StyleKit.Chosen -= OnStyleChosen;
         NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
+        Trainer.FtpWatch.Said -= Toast;
         Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         Terrain.Construction.CraneService.Said -= Toast;
@@ -2110,6 +2168,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // a request, not a claim.
         string requested = Launch.PlayerName;
         _chat?.AnnounceName(requested.Length > 0 ? requested : $"Rider{Multiplayer.GetUniqueId()}");
+        // after the name, on the same ordered channel: the chat line about a birthday names the player (#1423)
+        Occasions.Birthdays.BirthdayService.Instance?.SendMine();
         // hosted from the menu: the player who started the server runs it
         if (Launch.HostToken is { } token) _chat?.ClaimHost(token);
 

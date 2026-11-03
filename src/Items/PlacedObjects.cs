@@ -36,6 +36,8 @@ public enum PlacedKind
     TravelFlag = 12,
     /// <summary>A telescope on its tripod (#1440): one player at a time looks through it (<c>Items.Telescopes</c>). Only its owner packs it up, and not while someone looks.</summary>
     Telescope = 13,
+    /// <summary>A birthday cake (#1423): anyone near takes a slice (<c>Occasions.Birthdays.BirthdayService</c> keeps how many are left); the server takes it away eaten.</summary>
+    BirthdayCake = 14,
 }
 
 /// <summary>
@@ -428,6 +430,17 @@ public partial class PlacedObjects : Node
             foreach (int p in Multiplayer.GetPeers())
                 RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), o.E, o.N, o.Altitude, o.Rotation, o.Payload);
         return o;
+    }
+
+    /// <summary>Server: takes one object away on its own authority (a birthday cake eaten up, #1423), told to everyone.</summary>
+    public void ServerRemove(long id)
+    {
+        if (!_objects.ContainsKey(id)) return;
+        Drop(id);
+        Save();
+        if (Online)
+            foreach (int p in Multiplayer.GetPeers())
+                RpcId(p, MethodName.Remove, id);
     }
 
     /// <summary>Server: takes away everything one owner set down (the match's gadgets when it is over).</summary>

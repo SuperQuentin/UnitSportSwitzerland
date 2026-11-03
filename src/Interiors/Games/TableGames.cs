@@ -267,6 +267,7 @@ public partial class TableGames : Node
     /// <summary>A game changed: packed to everyone inside; here, its rig told.</summary>
     private void Changed(string key, int index, TableGame g)
     {
+        if (IsServer) PayOut(g);
         if (Online)
         {
             var bytes = g.Pack();

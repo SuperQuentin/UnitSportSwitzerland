@@ -294,7 +294,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         return ok && kept;
     }
 
-    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/>, <see cref="PoseFall"/> or <see cref="PoseTucked"/>.</summary>
+    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/>, <see cref="PoseFall"/>, <see cref="PoseFly"/> or <see cref="PoseTucked"/>.</summary>
     [Export] public int PoseKind { get; set; }
 
     /// <summary>
@@ -1325,6 +1325,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _ExitTree()
     {
+        // leaving the game on the bike ends the ride too (#902)
+        if (_ride is Bicycle && FtpRider) Trainer.FtpWatch.RideEnded();
         Terrain?.RemoveAnchor(this);
         Interiors.InteriorNode.BeamBodies.Remove(this);
         Explosion.Blast -= OnBlast;
@@ -2121,6 +2123,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
         if (_climbing) { PublishClimbPose(dt); return; }   // #1225
+        if (CreativeFlying) { PublishFlyPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -2149,6 +2152,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
             new Vector3(0, Mathf.Abs(_downRot) * 0.12f, 0));
+        SettleFlyPose(dt);
     }
 
     /// <summary>
@@ -2387,9 +2391,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
                 (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
             : null;
-        // a fall's windmill runs on this peer's clock: nothing more is replicated than the pose kind
-        _flailClock = pose == PoseFall ? _flailClock + dt : 0f;
-        float phase = pose == PoseFall ? _flailClock : _stridePhase;
+        // a fall's windmill and a hover's paddle (#1219) run on this peer's clock: nothing more is replicated than the pose kind
+        _flailClock = pose is PoseFall or PoseFly ? _flailClock + dt : 0f;
+        float phase = pose is PoseFall or PoseFly ? _flailClock : _stridePhase;
         // a hand held by a friend's (#1266, ArmHold): keyed to 2 cm, the item hand stays the item's
         var hold = pose == PoseStride && dance == null && vr == null ? HoldPose(armed) : null;
         var key = new FootPoseKey(_walker, pose, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, _walkPalette, smooth, vr, point, wind, hold, SwordDrawn);
@@ -2403,6 +2407,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
                 PoseFall => Avatar.HumanMeshBuilder.MountsForFall(_flailClock, arm, blend),
+                PoseFly => Avatar.HumanMeshBuilder.MountsForFly(Anim.X, _flailClock, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
                 PoseSit => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Standing, arm, blend),
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr, hold),
@@ -2422,6 +2427,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 case PoseTucked: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Tucked, arm, blend, wind); break;
                 case PoseAir: Avatar.HumanMeshBuilder.PosePosed(_walker, Avatar.HumanPose.Running, arm, blend, wind); break;
                 case PoseFall: Avatar.HumanMeshBuilder.PoseFalling(_walker, _flailClock, arm, blend, wind); break;
+                case PoseFly: Avatar.HumanMeshBuilder.PoseFlying(_walker, Anim.X, _flailClock, arm, blend, wind); break;
                 case PoseHang or PoseClimb: Avatar.HumanMeshBuilder.PosePosed(_walker, CarriedFigure(), arm, blend, wind); break;
                 // seated on a stand (#885): the figure round its hip, which BodyPose lifts
                 case PoseSit: Avatar.SeatedFigure.Pose(_walker, new Avatar.SeatAnchor(0, new Vector3(0, Anim.X, 0), Anim.Y, 0f)); break;
@@ -2792,6 +2798,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // or sit in at its pot) and standing up is walking or jumping off
         if (Sitting)
         {
+            // a birthday cake on the table (#1423): a slice, before the fondue
+            if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
             if (Interiors.PotTables.Near(GlobalPosition) != null)
             {
                 TryTogetherInteract();
@@ -2826,6 +2834,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
             if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
             if (Interiors.Games.TableGames.TryUse(this)) return true;   // a pool table, a dartboard, a game (#1324, #1326)
+            if (Interiors.Games.ArcadeCounters.TryUse(this)) return true;   // the change machine, the prize counter (#1326)
+            if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;   // a slice of a birthday cake (#1423)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
@@ -2858,6 +2868,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a building site crane's ladder or its remote's box (#618)
         if (TryCrane()) return true;
 
+        // a slice of a birthday cake at hand (#1423)
+        if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
         // a set-up telescope at hand (#1440): look through it
@@ -3485,6 +3497,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _mantleForward = shift.Direction(_mantleForward);
         _camFwd = shift.Direction(_camFwd);
         Velocity = shift.Direction(Velocity);
+        if (shift.Turns)
+        {
+            // an anchor frame's turn (#1430 H3): the headings kept as angles, and the flight state
+            float yaw = shift.Yaw;
+            _viewYaw += yaw;
+            _flight.Velocity = shift.Direction(_flight.Velocity);
+            _flight.Yaw += yaw;
+            _flight.Attitude = shift.Transform.Basis * _flight.Attitude;
+        }
+        _ride?.OnOriginShifted(shift);
         ShiftDeck(shift);
         ShiftCrash(shift);
     }
@@ -3561,8 +3583,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     /// <param name="tuning">Garage parts, for a car taken back from the world; 0 (stock) for a new one.</param>
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
+    /// <summary>The local human rider, whose bike rides the hidden FTP test watches (#902): no NPC, bot or copy.</summary>
+    private bool FtpRider => IsMultiplayerAuthority() && !Npc && !Bot && !Puppet && !NetProxy;
+
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // off the bike: that ride is over, and the hidden FTP test reads it (#902)
+        if (_ride is Bicycle && kind != RideKind.RoadBike && FtpRider) Trainer.FtpWatch.RideEnded();
         // back on foot: the vehicle it had got into is behind it (parked, wrecked, left), its name with it
         if (kind == RideKind.OnFoot) _rideName = "";
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
@@ -4963,6 +4990,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else Slope = null;
         _ride!.Step(input, ground, dt, ref _motion);
+        // the hidden FTP test (#902) listens to the local rider's pedals
+        if (_ride is Bicycle pedalled && FtpRider) Trainer.FtpWatch.Sample(pedalled.LastWatts, pedalled.PowerMeasured, dt);
         // riding switch turns the rider round on every screen (#922)
         if (_ride is Snowboard ridden && TuningBits != ridden.Bits) TuningBits = ridden.Bits;
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it

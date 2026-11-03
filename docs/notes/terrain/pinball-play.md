@@ -52,7 +52,9 @@ sizes and the four tables: `pinball`. Plan: `docs/plans/playable-pinball.md`. Co
   took the Start but stayed in attract, so BowlinGland's two tables are two launches. Each launch runs on a user:// of its
   own (APPDATA) seeded with high scores. `stills` keeps the HUD (`/pinball`'s list names the live indices: the plans
   regenerate, so check them before filming). ~25 min to film, a minute to cut, 93 s at 1080p.
-- **Checks**: `--pinballcheck --systems ui` (cabinets played through their nodes: flippers, balls, drops, lamps,
+- **Checks**: `tools/pinballnetcheck.sh` (server + two clients play a game; then the server restarts on its saved
+  `pinball_scores.json` and a third client, `--pinballnet R` with a user:// of its own, must find both scores on the
+  machine and its backbox), `--pinballcheck --systems ui` (cabinets played through their nodes: flippers, balls, drops, lamps,
   the backbox, no mesh rebuilt, the screen over the wire), `--zfightcheck Pinball`, `--sounds,check`.
 - **High scores** (`PinballHighScores`, `PinballScoreBook`, unit tested): the best five per machine, keyed like the
   table choice (plan key, furniture index, and the table: a plan that puts another table there starts afresh), kept by

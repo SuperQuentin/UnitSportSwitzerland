@@ -85,6 +85,10 @@ world_night={
 "type": "float",
 "value": 0.0
 }
+world_building_box_from={
+"type": "float",
+"value": 1000.0
+}
 world_snow={
 "type": "float",
 "value": 0.0

@@ -72,7 +72,7 @@ public sealed class PoolGame : TableGame
         Call = "Break";
     }
 
-    public bool Busy(double now) => now < ShotEnd;
+    public override bool Busy(double now) => now < ShotEnd;
 
     /// <summary>The balls of a group (1-7 or 9-15).</summary>
     public static bool InGroup(int ball, Group g) => g == Group.Solids ? ball is >= 1 and <= 7 : g == Group.Stripes && ball is >= 9 and <= 15;

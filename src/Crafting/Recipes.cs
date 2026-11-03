@@ -193,6 +193,9 @@ public static class Recipes
         ItemId.PlayingCards, ItemId.PokerChips, ItemId.BeerBottle, ItemId.Gamelle,
         // the Adventure's rock crystal (#1227): found in chests and offerings only
         ItemId.Bergkristall,
+        // a player's birthday (#1423): only in the birthday gift
+        ItemId.PartyHat, ItemId.BirthdayCrown, ItemId.CandleHat, ItemId.CakeHat, ItemId.PropellerCap, ItemId.BalloonHat,
+        ItemId.BirthdayGift, ItemId.BirthdayCake, ItemId.BirthdayRocket,
     }.Concat(FishCatalog.Items).ToHashSet();   // fish are caught (#493)
 
     /// <summary>Everything a recipe gives, the main output first.</summary>

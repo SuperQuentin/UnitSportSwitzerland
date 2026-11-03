@@ -26,8 +26,11 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private static readonly int MaxBuildsInFlight = Core.Platform.IsMobile ? 2   // a phone's cores are the tiles' (#63)
         : Math.Clamp(System.Environment.ProcessorCount / 2, 2, 8);
 
-    /// <summary>The lattice step: 200 m on a standalone headset, a quarter of the triangles (#1112).</summary>
-    private static readonly int HorizonStep = Core.Platform.IsStandaloneVr ? 2 : 1;
+    /// <summary>
+    /// The lattice step for blocks built from now on: 200 m on Very low, a quarter of the triangles (a standalone
+    /// headset's since #1112, every device's since #1216).
+    /// </summary>
+    private static int HorizonStep => Core.GameSettings.Lean ? 2 : 1;
 
     /// <summary>Main-thread time a frame may spend committing blocks; one always goes through.</summary>
     private const double CommitBudgetMs = 3;
@@ -78,9 +81,9 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         _source = source;
         _origin = origin;
         _material = material;
-        // a standalone headset (#1112): drawn after the real tiles, so what lies under them is rejected
-        // by depth before it is shaded (opaque draws sort by priority first, Mobile renderer)
-        if (Core.Platform.IsStandaloneVr) material.RenderPriority = 1;
+        // the Mobile renderer (#1112, #1216): drawn after the real tiles, so what lies under them is rejected
+        // by depth before it is shaded (opaque draws sort by priority first)
+        if (Styles.StyleKit.OnMobileRenderer) material.RenderPriority = 1;
         _anchors = anchors;
         // deferred, so a source configured right after (the generated fill) is read once, not
         // twice: whoever reloads first this frame wins, and this then finds it loading
@@ -183,12 +186,21 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         _material?.SetShaderParameter("use_cover", true);
     }
 
-    /// <summary>The coverage texture is sampled by world XZ, so its corner moves with the origin.</summary>
+    /// <summary>
+    /// The coverage texture is sampled by world XZ, so its corner moves with the origin, and its axes
+    /// turn with an anchor frame's (#1430 H3): grid east and south at the corner, in world XZ.
+    /// </summary>
     private void PushCoverOrigin()
     {
         if (_coverImage == null) return;
-        var nw = _origin!.ToWorld(_coverMinE * ChunkFormat.TileSizeM, (_coverMaxN + 1) * ChunkFormat.TileSizeM, 0);
+        double e = _coverMinE * ChunkFormat.TileSizeM, n = (_coverMaxN + 1) * ChunkFormat.TileSizeM;
+        var nw = _origin!.ToWorld(e, n, 0);
+        var east = _origin.ToWorld(e + 1000, n, 0) - nw;
+        var south = _origin.ToWorld(e, n - 1000, 0) - nw;
+        var ex = new Vector2(east.X, east.Z).Normalized();
+        var sx = new Vector2(south.X, south.Z).Normalized();
         _material?.SetShaderParameter("cover_origin", new Vector2(nw.X, nw.Z));
+        _material?.SetShaderParameter("cover_axes", new Vector4(ex.X, ex.Y, sx.X, sx.Y));
     }
 
     /// <summary>The blocks are children and have moved already (#185); the coverage has not.</summary>
