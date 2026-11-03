@@ -12,8 +12,8 @@ namespace UnitSport.Tools.Preprocessor;
 /// reads or writes it).
 ///
 /// <code>
-/// --cube --cube-out DIR [--in SWISSALTI3D_DIR ...] [--dem lambert93,DIR[,dz] ...] [--cube-level 13]
-///   [--cube-bits 10] [--cube-bundle 8] [--cube-box minE,minN,maxE,maxN] [--tlm GPKG] [--buildings GPKG]
+/// --cube --cube-out DIR [--in SWISSALTI3D_DIR ...] [--dem lambert93,DIR[,dz] ...] [--cube-level 14]
+///   [--cube-bits 9] [--cube-bundle 9] [--cube-box minE,minN,maxE,maxN] [--tlm GPKG] [--buildings GPKG]
 ///   [--cube-bdtopo] [--cube-cache DIR] [--cube-cache-tiles 300] [--jobs N] [--cube-check]
 /// </code>
 /// </summary>
@@ -26,7 +26,7 @@ public static class CubeStage
         public List<string> In { get; } = new();
         public List<string> Dems { get; } = new();
         public string? Out, Cache, Tlm, Buildings;
-        public int Level = 13, Bits = -1, Bundle = -1, CacheTiles = 300, Jobs = Environment.ProcessorCount;
+        public int Level = 14, Bits = -1, Bundle = -1, CacheTiles = 300, Jobs = Environment.ProcessorCount;
         public (double MinE, double MinN, double MaxE, double MaxN)? Box;
         public bool BdTopo, Check, CheckOnly;
         public string? Dump;
