@@ -122,7 +122,6 @@ public sealed class MapView
                     points.Add(new Vector2((eKm + 1) * 1000f, (nKm + 1) * 1000f));
                 }
                 if (country.CantonAt(tile.Neighbour(0, -1))?.Id != here.Id)
-
                 {
                     points.Add(new Vector2(eKm * 1000f, (nKm + 1) * 1000f));
                     points.Add(new Vector2((eKm + 1) * 1000f, (nKm + 1) * 1000f));

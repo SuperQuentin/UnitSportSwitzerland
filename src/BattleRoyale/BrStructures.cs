@@ -251,7 +251,6 @@ public static class BrStructures
                 for (int i = 0; i + 1 < s.PointCount; i += 4)
                 {
                     var (e, n) = id.Global(s.Points[i * 3], s.Points[i * 3 + 2]);
-
                     if (!area.Contains(e, n)) continue;
                     var along = new Vector2(s.Points[i * 3 + 3] - s.Points[i * 3], -(s.Points[i * 3 + 5] - s.Points[i * 3 + 2]));
                     if (along.LengthSquared() < 1e-4f) continue;

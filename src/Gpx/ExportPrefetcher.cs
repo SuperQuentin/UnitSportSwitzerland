@@ -83,7 +83,6 @@ public sealed class ExportPrefetcher
                         var id = centre.Neighbour(dx, dz);
                         if (id.RingDistance(centre) != ring) continue;
 
-
                         if (!chunks.AvailableTiles.Contains(id)) continue;
 
                         // A tile on the horizon of one part of the route can be underfoot on

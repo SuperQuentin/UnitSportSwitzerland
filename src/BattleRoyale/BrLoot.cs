@@ -58,7 +58,6 @@ public static class BrLoot
                             // in the tile's own frame (#1443); the east sum keeps its old order, bit for bit
                             var (ge, pn) = id.Global(x0, z0 + dz * t);
                             double pe = ge + dx * t;
-
                             if (area.Contains(pe, pn)) points.Add(new RoadPoint(pe, pn, y0 + dy * t, heading, s.Class));
                         }
                     }

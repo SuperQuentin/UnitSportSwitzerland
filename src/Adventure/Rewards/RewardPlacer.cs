@@ -231,7 +231,6 @@ public static class RewardPlacer
             return _tile.Global(Math.Clamp(x, 2, 998), Math.Clamp(z, 2, 998));
         }
 
-
         public float Height(double e, double n) => (float)_grid.SampleHeight(e, n);
 
         /// <summary>Degrees, from the coarse grid over ±5 m.</summary>

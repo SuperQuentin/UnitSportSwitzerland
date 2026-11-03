@@ -402,7 +402,6 @@ public partial class MapScreen : Screen
         for (int dx = -4; dx <= 4; dx++)
             for (int dz = -4; dz <= 4; dz++)
                 if (_local.Built.Contains(tile.Neighbour(dx, dz))) near++;
-
         bool covered = _country.Covered(tile);
 
         var row = UiKit.HBox(8);

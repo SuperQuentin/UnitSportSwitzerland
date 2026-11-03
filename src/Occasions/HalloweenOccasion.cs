@@ -293,7 +293,6 @@ public sealed class HalloweenOccasion : Occasion
                 double n = (cn + 0.2 + 0.6 * OccasionHash.Unit(ce, cn, 2, Salt + 11)) * PatchCell;
                 if (e < west + HalfW || e >= east - HalfW
                     || n <= south + HalfD || n > north - HalfD) continue;   // whole patch in this tile
-
                 double town = t.Towns.Min(tw => Math.Sqrt((tw.E - e) * (tw.E - e) + (tw.N - n) * (tw.N - n)));
                 if (town > 1500 || town < 180) continue;   // the village edge, not the square
 

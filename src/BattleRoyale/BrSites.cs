@@ -246,6 +246,5 @@ public static class BrSites
         float cx = (minX + maxX) * 0.5f, cz = (minZ + maxZ) * 0.5f;
         var (e, n) = id.Global(cx, cz);
         return (e, n, Math.Max(maxX - minX, maxZ - minZ) * 0.5f);
-
     }
 }

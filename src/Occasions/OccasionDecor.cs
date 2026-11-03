@@ -341,7 +341,6 @@ public partial class OccasionDecor : Node
             for (int dz = 1; dz >= -1; dz--)
             {
                 if (!_tiles.TryGetValue(id.Neighbour(dx, dz), out var tile) || !IsInstanceValid(tile.Node)) continue;
-
                 var o = tile.Node.GlobalPosition;
                 foreach (var s in tile.Spots)
                 {

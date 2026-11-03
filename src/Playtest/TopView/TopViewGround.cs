@@ -152,7 +152,6 @@ public static class TopViewGround
                 // tile-local metres: X east, Z south
                 double X(int v) => (tile.Global(t[i + v * 3], t[i + v * 3 + 2]).E - g.Min.E) * k;
                 double Y(int v) => (g.Min.N + g.Side - tile.Global(t[i + v * 3], t[i + v * 3 + 2]).N) * k;
-
                 FillTriangle(g, X(0), Y(0), X(1), Y(1), X(2), Y(2), (168, 156, 148));
             }
         }

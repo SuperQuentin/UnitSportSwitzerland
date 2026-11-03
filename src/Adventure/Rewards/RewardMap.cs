@@ -107,7 +107,6 @@ public sealed class RewardMap
         var pois = cat.InTile(id).ToArray();
         var lakes = new List<Poi>();
         cat.Near(id.Centre.E, id.Centre.N, 900, lakes, PoiKind.Lake);
-
         RewardSpot[] spots = Array.Empty<RewardSpot>();
         ChunkGrid? grid = null;
         try

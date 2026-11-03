@@ -47,7 +47,6 @@ public partial class RewardStats : Node
                 var id = centre.Neighbour(dx, dz);
                 var spots = await svc.Map.TileAsync(id);
                 if (svc.Map.GridOf(id) == null) continue;
-
                 tiles++;
                 foreach (var s in spots)
                 {

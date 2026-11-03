@@ -544,7 +544,6 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         if (!_streams.TryGetValue(tile, out var segs) || segs == null) return false;
         var (e, n) = _origin.ToLv95(ahead);
         var (lx, lz) = tile.Local(e, n);
-
         foreach (var s in segs)
         {
             float reach = s.Width / 2 + StreamReach;

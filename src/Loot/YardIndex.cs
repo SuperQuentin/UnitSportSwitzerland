@@ -84,7 +84,6 @@ internal sealed class YardIndex
             for (int dz = 1; dz >= -1; dz--)
             {
                 if (!_tiles.TryGetValue(_here.Neighbour(dx, dz), out var list)) continue;
-
                 for (int i = 0; i < list.Length; i++)
                 {
                     float s = SiteLoot.Score(list[i], e, n, alt, look);

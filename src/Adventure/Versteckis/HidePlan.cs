@@ -137,7 +137,6 @@ public static class HidePlan
             double de, dn, l;
             if (church is { } c) { de = c.OutE; dn = c.OutN; l = Math.Sqrt(c.OutE * c.OutE + c.OutN * c.OutN); }
             else { de = door.E - ce; dn = door.N - cn; l = GlobalPos.HorizontalDistance(door.E, door.N, ce, cn); }
-
             if (l > 0.01) Add(VsProp.Bench, door.E + de / l * 6, door.N + dn / l * 6, YawOf(-de, -dn), 2f);
         }
 

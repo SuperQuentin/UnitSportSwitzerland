@@ -191,7 +191,6 @@ public sealed class PoiCatalogue
             // from the point to the nearest point of the lake's box
             double be = Math.Clamp(e, lake.MinE, lake.MaxE), bn = Math.Clamp(n, lake.MinN, lake.MaxN);
             if (GlobalPos.HorizontalDistanceSquared(e, n, be, bn) <= r2) into.Add(lake);
-
         }
     }
 

@@ -198,7 +198,6 @@ public static class BrMapImage
         return new((float)((e - west) / mpp), (float)((north - n) / mpp));
     }
 
-
     private static void Line(Color[] px, Vector2 a, Vector2 b, int width, Color color)
     {
         float len = a.DistanceTo(b);

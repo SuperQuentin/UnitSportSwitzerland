@@ -139,7 +139,6 @@ public sealed class RaceRoute
             var (x, z) = id.Local(pe, pn);
             int col = Mathf.Clamp((int)System.Math.Round(x), 0, ChunkFormat.GridSize - 1);
             int row = Mathf.Clamp((int)System.Math.Round(z), 0, ChunkFormat.GridSize - 1);
-
             return (float)g.HeightMetersAt(col, row);
         }
 

@@ -136,7 +136,6 @@ public partial class GatherProbe : Node
         return new(e, n, grid.HeightMetersAt(col, row));
     }
 
-
     private async Task Visit(string what, (GlobalPos Stand, GlobalPos Face)? spot, Gathering.Resource expected, params ItemId[] gives)
     {
         if (spot is not { } s)

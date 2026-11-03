@@ -445,7 +445,6 @@ public sealed class RaceLine
             if (!covers.TryGetValue(id, out var raster)) return false;
             var (lx, lz) = id.Local(e, nn);
             int col = (int)System.Math.Round(lx), row = (int)System.Math.Round(lz);
-
             int k = row * ChunkFormat.GridSize + col;
             if ((uint)col >= ChunkFormat.GridSize || (uint)row >= ChunkFormat.GridSize || k >= raster.Length) return false;
             return (CoverClass)raster[k] is CoverClass.Water or CoverClass.Wetland or CoverClass.Glacier;

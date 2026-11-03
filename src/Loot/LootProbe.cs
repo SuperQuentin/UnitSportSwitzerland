@@ -51,7 +51,6 @@ public partial class LootProbe : Node
             for (int dz = 1; dz >= -1; dz--)
             {
                 var id = centre.Neighbour(dx, dz);
-
                 var tile = await _source.LoadBuildingsAsync(id);
                 if (tile == null) continue;
                 var roads = await _source.LoadRoadsAsync(id);

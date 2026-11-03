@@ -96,7 +96,6 @@ public partial class HitboxProbe : Node3D
             for (int dx = -1; dx <= 1; dx++)
             {
                 var tile = source.LoadBuildingsAsync(centre.Neighbour(dx, dz)).Result;
-
                 if (tile == null || tile.Buildings.Count == 0) continue;
                 var body = new StaticBody3D { Position = new Vector3(0, -20000f - _buildings.Count * 3000f, 0) };
                 AddChild(body);

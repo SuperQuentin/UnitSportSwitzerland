@@ -160,7 +160,6 @@ public sealed class VsGround
                 {
                     var (lx, lz) = id.Local(pe, pn);
                     int cx = (int)lx, cz = (int)lz;
-
                     if ((uint)cx < ChunkFormat.GridSize && (uint)cz < ChunkFormat.GridSize && (CoverClass)cover[cz * ChunkFormat.GridSize + cx] == CoverClass.Water) wet++;
                 }
                 if (GroundAt(pe, pn) is float h0 && GroundAt(pe + 5, pn) is float h1 && GroundAt(pe, pn + 5) is float h2
