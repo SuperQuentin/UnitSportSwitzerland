@@ -18,6 +18,7 @@ public class AirHockeyTests
         var g = new AirHockeyGame();
         g.Sit(1, 0);
         g.Sit(2, 1);
+        Assert.Null(g.Act(0, AirHockeyGame.ActCoin, Array.Empty<int>(), 0, new Random(1)));
         double now = 0;
         while (!g.InPlay) g.Step(Dt, now += Dt);
         return g;
@@ -87,13 +88,30 @@ public class AirHockeyTests
             if ((bots -= Dt) <= 0)
             {
                 bots = 0.1;
-                g.Bot(0, now, rng);
-                g.Bot(1, now, rng);
+                for (int s = 0; s < 2; s++)
+                    if (g.Bot(s, now, rng) is { } move) g.Act(s, move.Action, move.Args, now, rng);
             }
             g.Step(Dt, now);
         }
         _out.WriteLine($"{g.Call} after {now / 60:F1} min");
         Assert.True(g.Winner >= 0, $"a winner within 20 minutes ({g.Goals[0]} : {g.Goals[1]})");
+        // the tickets: two a goal, eight more to the winner
+        Assert.Equal(2, g.Payouts.Count);
+        Assert.Contains(g.Payouts, p => p.Peer == g.Seats[g.Winner] && p.Tickets == 7 * 2 + 8);
+    }
+
+    [Fact]
+    public void No_game_without_a_coin_and_none_on_top_of_one()
+    {
+        var g = new AirHockeyGame();
+        g.Sit(1, 0);
+        double now = 0;
+        for (int i = 0; i < 600; i++) g.Step(Dt, now += Dt);
+        Assert.False(g.InPlay, "no coin, no puck");
+        Assert.Null(g.Act(0, AirHockeyGame.ActCoin, Array.Empty<int>(), now, new Random(1)));
+        Assert.NotNull(g.Act(0, AirHockeyGame.ActCoin, Array.Empty<int>(), now, new Random(1)));
+        for (int i = 0; i < 300; i++) g.Step(Dt, now += Dt);
+        Assert.True(g.InPlay);
     }
 
     [Fact]

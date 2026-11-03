@@ -234,6 +234,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
             return;
         }
+        // the arcade's coins, tickets and prize counter (#1326)
+        if (Interiors.Games.PrizeProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.PrizeProbe { Name = "PrizeProbe" });
+            return;
+        }
         // an air hockey table played by two bots through its rig (#1326)
         if (Interiors.Games.AirHockey.AirHockeyProbe.ParseArgs())
         {
@@ -1382,6 +1389,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
+        if (Interiors.Games.TableGames.Instance is { } tableGames) tableGames.Items = items;   // the arcade's coins and tickets (#1326)
         // selling farm produce (#494): World/FarmSales and World/FarmStands, same paths as the server's; offline this client plays it
         if (Systems.On(Systems.Farming))
         {

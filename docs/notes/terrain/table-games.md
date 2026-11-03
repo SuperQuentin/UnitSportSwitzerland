@@ -98,3 +98,18 @@ Code: `src/Interiors/Games/`, one folder per game beside it.
 - **Controls** (`AirHockeyPlay`): from your end; the stick drives the mallet as you see it, Shift full speed.
 - **Checks**: `--airhockeycheck --systems ui`, `GAME=AirHockey tools/tablenetcheck.sh` (the live branch reads table
   football's rods; air hockey's own live checks are the probe's for now).
+
+## Coins, tickets and prizes (#1326)
+
+- **Items** (660-669): `ArcadeCoin` (a Batzen, 1 CHF), `PrizeTicket`, and the prizes `PlushCow`, `PlushMarmot`,
+  `PlushBernese` (plush is Material: thrown as the Blåhaj), `Keyring`, `BouncyBall`, `SweetsBag` (food); each has a
+  16 x 16 icon in `ItemIcons`.
+- **The client's pocket**: the inventory is the client's (as a shop's cash), so the change machine (`ArcadeCounters.Swap`:
+  5 CHF for 5 Batzen) and the prize counter (`ArcadeCounters.Buy`, `PrizeCounterUi`; prices in `ArcadeCounters.Prizes`,
+  20 to 400 tickets) never ask the server; a machine's coin is paid by the client (`TableGames.PayCoin`) before it asks
+  for a game (`ActCoin`).
+- **Tickets**: a game adds to its `Payouts` (`TableGame.Pay`); the server drains them on every change
+  (`TableGames.PayOut`) and tells each human's client, which adds them to the pack (`Tickets` RPC; `TicketsWon` for the
+  checks). Bots pay nothing and are paid nothing. Air hockey: a Batzen a game, two tickets a goal, eight more to the winner.
+- **Sounds** (`ArcadeSounds`): the change machine's coins, a coin into a slot, tickets printing.
+- **Checks**: `--prizecheck --systems ui` (the swap, the panel's rows, greyed prices, a purchase, the payouts).
