@@ -234,6 +234,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.Pinball.PinballProbe { Name = "PinballProbe" });
             return;
         }
+        // a dartboard played by two bots through its rig (#1324)
+        if (Interiors.Games.Darts.DartsProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.Games.Darts.DartsProbe { Name = "DartsProbe" });
+            return;
+        }
         // a pool table played by two bots through its rig (#1324)
         if (Interiors.Games.Pool.PoolProbe.ParseArgs())
         {
@@ -1029,7 +1036,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Occasions.Festivals.August1.August1Check.Requested || Occasions.Festivals.August1.August1NetProbe.Role != null
             || Occasions.Festivals.Christmas.ChristmasCheck.Requested || Occasions.Festivals.Christmas.ChristmasNetProbe.Role != null
             || Adventure.Rewards.RewardCheck.Requested || Adventure.Rewards.RewardNetProbe.Role != null || World.Locate.LocateNetProbe.Role != null
-            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null || Interiors.Games.Pool.PoolNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null || Interiors.CinemaNetProbe.Role != null || Interiors.BowlingNetProbe.Role != null || Interiors.Pinball.PinballNetProbe.Role != null || Interiors.Games.Pool.PoolNetProbe.Role != null || Interiors.Games.TableNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -1066,6 +1073,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Interiors.CinemaNetProbe.Role != null) AddChild(new Interiors.CinemaNetProbe(items, origin));
         if (Interiors.Pinball.PinballNetProbe.Role != null) AddChild(new Interiors.Pinball.PinballNetProbe(items, origin));
         if (Interiors.Games.Pool.PoolNetProbe.Role != null) AddChild(new Interiors.Games.Pool.PoolNetProbe(items, origin));
+        if (Interiors.Games.TableNetProbe.Role != null) AddChild(new Interiors.Games.TableNetProbe(items, origin));
         if (Interiors.BowlingNetProbe.Role != null) AddChild(new Interiors.BowlingNetProbe(items, origin));
         if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));

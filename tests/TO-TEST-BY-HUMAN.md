@@ -16,6 +16,14 @@ BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2
 - [ ] E again alone → a bot sits opposite and shoots on its turn; the balls roll and turn, the stripes read as stripes, the clack, cushion and pocket sounds play; the HUD line says whose turn and what the last shot did.
 - [ ] VR: E by grip at the table, then the pad's stick and A through `XrPad` play it (holding the cue is a gap).
 
+## Darts ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a dartboard on a wall.
+
+- [ ] E within the throw line → the board fills the view, a yellow ring sways over the treble 20; W / A / S / D moves it, Shift finely; hold Space → the sway settles for a second or so, then grows; let go → the dart flies in an arc and sticks where the ring was (give or take a few mm), the thunk plays, the HUD says what it scored.
+- [ ] Three darts, then the next player; a bust goes back; the checkout hint (e.g. "out: T20 D20") is right; E alone adds a bot that throws its visits.
+- [ ] The same on a pad and a phone; VR through the pad (throwing by hand is a gap).
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.

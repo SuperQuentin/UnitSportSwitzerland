@@ -44,3 +44,23 @@ Code: `src/Interiors/Games/`, one folder per game beside it.
 - **Checks**: `--poolcheck --systems ui` (two bots through the rig; headless a MultiMesh reads its instances at the
   origin, so it reads `PoolRig.Shown`), `tools/poolnetcheck.sh` (BowlinGland, two clients and a bot), model viewer
   Venues › Pool.
+
+## Darts (501, double out)
+
+- **Board** (`DartBoard`, pure, `DartsTests`): mm from the bull, x right, y up; segments clockwise from 20, treble
+  99-107, double 162-170, bulls 15.9 / 6.35 mm; oche 2.37 m, bull 1.73 m. `Aim(value, mult)` is a bed's middle.
+- **Rules** (`DartsGame`): up to four, three darts a visit, bust below 0, to 1, or to 0 off a single; a throw after the
+  leg starts the next (the winner's next throws first); the HUD shows a checkout (`Checkout`). Alone: practice.
+- **Wire**: a throw is the aim in tenths of a mm; the server adds a human's 5 mm hand spread (the reticle's sway is
+  the rest of the skill; a bot's 17 mm sway is in its aim) and scores where it lands.
+- **Rig** (`DartsRig`): the face is a disc with the beds, the spider and the numbers drawn once into a shared texture
+  from the same scoring code (the check reads its pixels back); a dark backing; three dart nodes (one shared mesh)
+  flown 0.4 s in an arc and left in the board until the visit's darts are pulled; the aim ring; sounds `DartsSounds`
+  (thunk, a knock off the surround, the pull). The room mesh draws only the cabinet.
+- **Controls** (`DartsPlay`): from the oche, a 38° view; the stick moves the aim, which sways; hold Jump to steady it
+  (~1.5 s, then it tires), let go to throw. V / R3 a close look. VR: the pad; throwing by hand is the target.
+- **Checks**: `--dartscheck --systems ui`, `tools/tablenetcheck.sh` (any turn game: `GAME=DartBoard` by default,
+  `GAME=PoolTable` works too; the whole packed game compared after every change), model viewer Venues › Darts
+  (`--modelsyaw 0 --modelslook 0,1.73,0.02,0.9` faces the board).
+- **Reach**: a `GameSpec.Reach` per game; E searches `GameCatalog.MaxReach` and the game's `UseFrom` decides (a board
+  from its throw line, 3.2 m).
