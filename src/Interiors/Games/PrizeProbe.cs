@@ -71,8 +71,8 @@ public partial class PrizeProbe : Node
         game.MalletAt[0] = new Vector2(0.4f, -0.5f);
         for (int i = 0; i < 120 && game.Winner < 0; i++) game.Step(TableGames.LiveStep, now += TableGames.LiveStep);
         Check(game.Winner == 1, "the bot won the last goal");
-        Check(game.Payouts.Any(p => p.Peer == 7 && p.Tickets == 6) && game.Payouts.Any(p => p.Peer == TableGame.BotBase),
-            $"the game paid two a goal and the winner more ({string.Join(", ", game.Payouts.Select(p => $"{p.Peer}:{p.Tickets}"))})");
+        Check(game.Payouts.Any(p => p.Peer == 7 && p.Count == 6 && p.Item == ItemId.PrizeTicket) && game.Payouts.Any(p => p.Peer == TableGame.BotBase),
+            $"the game paid two a goal and the winner more ({string.Join(", ", game.Payouts.Select(p => $"{p.Peer}:{p.Count}"))})");
         Check(!game.Running && game.Act(0, AirHockey.AirHockeyGame.ActCoin, Array.Empty<int>(), now, new Random(1)) == null, "another coin, another game");
 
         GD.Print($"[prizes] RESULT: {(_ok ? "ok" : "FAILED")}");

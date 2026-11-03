@@ -38,19 +38,33 @@ public partial class TableNetProbe : ChatProbe
         if (!Enum.TryParse<FurnitureType>(CmdArgs.Value("--tablegame") ?? "", out var type) || GameCatalog.Of(type) is not { } spec) { Fail("--tablegame names no playable piece"); return; }
         string doorArg = CmdArgs.Value("--tabledoor") ?? "";
         string? venue = CmdArgs.Value("--tablevenue");
-        var (e, n) = SpawnPoint.ParseTarget();
-        var spot = _origin.ToWorld(e, n, 0);
-        me.GlobalPosition = new Vector3(spot.X, me.GlobalPosition.Y + 2, spot.Z);
-        me.Velocity = Vector3.Zero;
-        me.RequestReplacement();
+        if (CmdArgs.Value("--at") != null)
+        {
+            var (e, n) = SpawnPoint.ParseTarget();
+            var spot = _origin.ToWorld(e, n, 0);
+            me.GlobalPosition = new Vector3(spot.X, me.GlobalPosition.Y + 2, spot.Z);
+            me.Velocity = Vector3.Zero;
+            me.RequestReplacement();
+        }
         DoorIndex.Entry? door = null;
         if (venue != null)
         {
             // a venue by name: its first door the index holds
-            if (await interiors.BuildingFor(venue) is not { } building) { Fail($"no venue \"{venue}\""); return; }
-            if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.All().Where(d => d.Key.Building == building).OrderBy(d => d.Key.Slot).Cast<DoorIndex.Entry?>().FirstOrDefault()) != null, 150))
-            { Fail($"no door of {venue} ({building}) near"); return; }
-            GD.Print($"{Log} {venue}: building {building}, door {door!.Value.Key}");
+            var building = await interiors.BuildingFor(venue);
+            if (building == null && InteriorManager.FindVenue(venue) is { } vi)
+            {
+                // a test world's venues are not in its tiles' venue index (as --enter finds them): the door nearest the venue's place
+                var rec = Venues.At(vi);
+                var place = _origin.ToWorld(rec.E, rec.N, 0);
+                if (await Until(() => DoorIndex.All().Any(), 60))
+                    building = DoorIndex.All().OrderBy(d => new Vector2(d.World.X - place.X, d.World.Z - place.Z).Length()).First().Key.Building;
+            }
+            if (building is not { } b0) { Fail($"no venue \"{venue}\""); return; }
+            var want = b0;
+            if (!await Until(() => me.IsOnFloor() && (door = DoorIndex.All().Where(d => d.Key.Building == want).OrderBy(d => d.Key.Slot).Cast<DoorIndex.Entry?>().FirstOrDefault()) != null, 150))
+            { Fail($"no door of {venue} ({want}) near"); return; }
+            var building0 = want;
+            GD.Print($"{Log} {venue}: building {building0}, door {door!.Value.Key}");
         }
         else
         {
@@ -71,7 +85,12 @@ public partial class TableNetProbe : ChatProbe
         me.GlobalPosition = node.GlobalTransform * (TableGames.PieceFrame(layout, f) * local);
         me.Velocity = Vector3.Zero;
         await Seconds(1.0);
-        if (_role == "B") await Heard("A", "seated", 60);
+        if (_role == "B") await Heard("A", "seated", 300);
+        if (spec.Make(f).MaxSeats == 1)
+        {
+            await Solo(games, node, index, spec, me);
+            return;
+        }
         TableGamePlay.Begin(me, node, index, spec);
         long myId = Multiplayer.GetUniqueId();
         TableGame? Game() => games.GameAt(key, index);
@@ -164,16 +183,33 @@ public partial class TableNetProbe : ChatProbe
     {
         TableGame? Game() => games.GameAt(key, index);
         string other = _role == "A" ? "B" : "A";
-        int myTeam = Foosball.FoosballGame.TeamOf(Game()!.SeatOf(myId));
+        int mySeat = Game()!.SeatOf(myId), myTeam = mySeat % 2;
+        // what a seat's push moves, as this peer sees it: table football's rods (pushed away from the player), air
+        // hockey's mallet (pushed up the table)
         float RodsOf(int team)
         {
-            if (Game() is not Foosball.FoosballGame f) return 0;
-            float sum = 0;
-            for (int rod = 0; rod < 8; rod++) if (Foosball.FoosballGame.Team[rod] == team) sum += f.Slide[rod];
-            return sum;
+            switch (Game())
+            {
+                case Foosball.FoosballGame f:
+                {
+                    float sum = 0;
+                    for (int rod = 0; rod < 8; rod++) if (Foosball.FoosballGame.Team[rod] == team) sum += f.Slide[rod];
+                    return sum;
+                }
+                case AirHockey.AirHockeyGame h:
+                    return h.MalletAt[team].Y;
+            }
+            return 0;
         }
-        var ballFrom = (Game() as Foosball.FoosballGame)?.BallAt ?? Vector2.Zero;
-        Expect(await Until(() => Game() is Foosball.FoosballGame { InPlay: true } f && f.BallAt.DistanceTo(ballFrom) > 0.02f, 20), $"{_role} sees the ball run");
+        // air hockey: a coin starts the game (the check pays none)
+        if (Game() is AirHockey.AirHockeyGame && _role == "A") games.AskAct(key, index, AirHockey.AirHockeyGame.ActCoin);
+        Vector2 Ball() => Game() switch { Foosball.FoosballGame f => f.BallAt, AirHockey.AirHockeyGame h => h.PuckAt, _ => Vector2.Zero };
+        bool InPlay() => Game() switch { Foosball.FoosballGame f => f.InPlay, AirHockey.AirHockeyGame h => h.InPlay, _ => false };
+        Expect(await Until(InPlay, 20), $"{_role} sees the game start");
+        var ballFrom = Ball();
+        bool ran = await Until(() => Ball().DistanceTo(ballFrom) > 0.02f, 10);
+        // a still puck waits for a mallet: the push below moves it
+        if (Game() is Foosball.FoosballGame) Expect(ran, $"{_role} sees the ball run");
         foreach (string pusher in new[] { "A", "B" })
         {
             if (pusher == _role)
@@ -190,13 +226,13 @@ public partial class TableNetProbe : ChatProbe
                 float before = RodsOf(team);
                 Say("watching");
                 await Heard(pusher, "pushed", 20);
-                // the pusher's rods moved away from them: red's towards +z, blue's towards −z
+                // the pusher's rods moved away from them (red's towards +z, blue's towards −z); a mallet up the table
                 float moved = (RodsOf(team) - before) * (team == 0 ? 1 : -1);
-                Expect(moved > 0.05f, $"{_role} saw {pusher}'s rods slide ({moved * 100:F1} cm in all)");
+                Expect(Mathf.Abs(moved) > 0.05f, $"{_role} saw {pusher}'s {(Game() is AirHockey.AirHockeyGame ? "mallet" : "rods")} move ({Mathf.Abs(moved) * 100:F1} cm)");
             }
         }
         await Seconds(1.0);
-        string score = Game() is Foosball.FoosballGame g ? $"{g.Goals[0]}:{g.Goals[1]}" : "";
+        string score = Game() switch { Foosball.FoosballGame g => $"{g.Goals[0]}:{g.Goals[1]}", AirHockey.AirHockeyGame h => $"{h.Goals[0]}:{h.Goals[1]}", _ => "" };
         Say($"score {score}");
         string? theirs = await HeardStarting(other, "score ", 20);
         Expect(theirs == $"score {score}", $"both read the same score ({score} / {theirs})");
@@ -215,9 +251,65 @@ public partial class TableNetProbe : ChatProbe
             Expect(await Until(() => Game()?.Seats.Any(TableGame.IsBot) == true, 10), "a bot took the free seat");
             float before = RodsOf(1 - myTeam);
             bool moved = await Until(() => Mathf.Abs(RodsOf(1 - myTeam) - before) > 0.03f, 20);
-            Expect(moved, "the bot's rods move on the server");
+            Expect(moved, "the bot plays on the server (its side moves)");
             TableGamePlay.Current?.QueueFree();
             Expect(await Until(() => Game()?.Seated == 0, 10), "the bot left with the last player");
+        }
+        await Finish(3);
+    }
+
+    /// <summary>
+    /// A one-player machine (the claw): A steps up and plays the bot's way (a coin, steering, a drop); B, beside it, can
+    /// only watch: it must see the claw move and drop, and both must hold the same game when the go is over.
+    /// </summary>
+    private async Task Solo(TableGames games, InteriorNode node, int index, GameSpec spec, FootPlayer me)
+    {
+        string key = node.Layout.Key;
+        TableGame? Game() => games.GameAt(key, index);
+        long myId = Multiplayer.GetUniqueId();
+        string other = _role == "A" ? "B" : "A";
+        if (_role == "A")
+        {
+            TableGamePlay.Begin(me, node, index, spec);
+            Expect(await Until(() => Game()?.SeatOf(myId) == 0, 15), "A took the machine");
+            Say("seated");
+            await Heard("B", "watching", 300);
+            var rng = new Random(1);
+            // one go, the bot's hands on A's client: a coin, steering by the stick, a drop
+            var g = (Claw.ClawGame)Game()!;
+            games.AskAct(key, index, Claw.ClawGame.ActCoin);
+            Expect(await Until(() => Game() is Claw.ClawGame { State: Claw.ClawGame.Phase.Steer }, 10), "the coin started a go");
+            double until = Time.GetTicksMsec() / 1000.0 + 40;
+            while (Game() is Claw.ClawGame { State: Claw.ClawGame.Phase.Steer } c && Time.GetTicksMsec() / 1000.0 < until)
+            {
+                var copy = new Claw.ClawGame();
+                copy.Unpack(c.Pack());
+                if (copy.Bot(0, 0, rng) is { Action: Claw.ClawGame.ActDrop }) { games.AskAct(key, index, Claw.ClawGame.ActDrop); break; }
+                games.SendInput(key, index, Claw.ClawGame.Pack(copy.Pile.Count > 0 ? (copy.Pile[0].At - copy.ClawAt).Normalized() : Vector2.Zero));
+                await Seconds(0.1);
+            }
+            Expect(await Until(() => Game() is Claw.ClawGame { State: Claw.ClawGame.Phase.Idle }, 20), $"the go ended: {(Game() as Claw.ClawGame)?.Call}");
+            Say("go over");
+        }
+        else
+        {
+            await Heard("A", "seated", 300);
+            var from = (Game() as Claw.ClawGame)?.ClawAt ?? Vector2.Zero;
+            Say("watching");
+            Expect(await Until(() => Game() is Claw.ClawGame c && c.ClawAt.DistanceTo(from) > 0.05f, 30), "B sees the claw move");
+            Expect(await Until(() => Game() is Claw.ClawGame { Down: > 0.5f }, 40), "B sees it drop");
+            await Heard("A", "go over", 60);
+        }
+        await Seconds(1);
+        Say($"game {State(Game())}");
+        string? theirs = await HeardStarting(other, "game ", 20);
+        Expect(theirs == $"game {State(Game())}", "both hold the same game after the go");
+        Say("done");
+        await Heard(other, "done", 30);
+        if (_role == "A")
+        {
+            TableGamePlay.Current?.QueueFree();
+            Expect(await Until(() => Game()?.Seated == 0, 10), "A stepped back");
         }
         await Finish(3);
     }

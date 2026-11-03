@@ -62,6 +62,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Air hockey: move your mallet (hold Shift for full speed)", PlayerInput.MoveForward),
             new("The arcade: E at the change machine swaps 5 CHF for 5 Batzen; at the prize counter, tickets for prizes", PlayerInput.InteractMount),
             new("The arcade: put a Batzen in a machine for a game", PlayerInput.Jump),
+            new("Claw machine: steer the claw (Jump drops it; V looks from the side)", PlayerInput.MoveForward),
             new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
             new("Bowling: move your spot", PlayerInput.MoveLeft),
             new("Bowling: turn your line", PlayerInput.BowlAimLeft),

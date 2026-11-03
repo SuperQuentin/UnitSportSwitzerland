@@ -113,3 +113,19 @@ Code: `src/Interiors/Games/`, one folder per game beside it.
   checks). Bots pay nothing and are paid nothing. Air hockey: a Batzen a game, two tickets a goal, eight more to the winner.
 - **Sounds** (`ArcadeSounds`): the change machine's coins, a coin into a slot, tickets printing.
 - **Checks**: `--prizecheck --systems ui` (the swap, the panel's rows, greyed prices, a purchase, the payouts).
+
+## The claw machine (#1326)
+
+- **Game** (`ClawGame`, pure and live, one player, `ClawTests`): a Batzen (`ActCoin`) gives 30 s to steer (0.22 m/s, inside
+  the box's floor less 8 cm a side), then it drops by Jump (`ActDrop`) or by the clock: down 1.4 s, closes 0.6 s, the
+  prize nearest the claw's middle is held by the server's luck (60 % within 4 cm, 20 % within 8 cm), lifts (a held prize
+  can slip, 20 %), carries to the chute (front-left) and opens: the prize is `Give`n (a `Payouts` item, so the winner's
+  client gets the plush itself). Twelve prizes (cow, marmot, Bernese), restocked under six; none in the chute's corner.
+- **Wire**: the stick is two bytes, 30 a second; poses (the claw, how far down, how open, the held prize) 20 a second.
+- **Rig** (`ClawRig`): the gantry's bar (slid in z), its carriage (in x), the cable scaled to its length, the hub and three
+  prongs turned open and shut, the plush as nodes (shared meshes per kind, re-dressed only when a slot's kind changes),
+  the chute's rim, a countdown, the motor's hum and a win's jingle (`ClawSounds`). The room mesh keeps the cabinet,
+  its posts, back and top, and no longer draws the plush and claw.
+- **Controls** (`ClawPlay`): from the front; Jump a coin, the stick steers, Jump drops; V / R3 from the side.
+- **Checks**: `--clawcheck --systems ui` (a bot's twelve goes through the rig), model viewer Venues › Claw machine
+  (`--modelsyaw -20` shows its front).

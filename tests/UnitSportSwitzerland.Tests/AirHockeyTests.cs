@@ -97,7 +97,7 @@ public class AirHockeyTests
         Assert.True(g.Winner >= 0, $"a winner within 20 minutes ({g.Goals[0]} : {g.Goals[1]})");
         // the tickets: two a goal, eight more to the winner
         Assert.Equal(2, g.Payouts.Count);
-        Assert.Contains(g.Payouts, p => p.Peer == g.Seats[g.Winner] && p.Tickets == 7 * 2 + 8);
+        Assert.Contains(g.Payouts, p => p.Peer == g.Seats[g.Winner] && p.Count == 7 * 2 + 8);
     }
 
     [Fact]
