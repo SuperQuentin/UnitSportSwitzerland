@@ -248,6 +248,8 @@ public static partial class TerrainMeshBuilder
         var colors = new Color[m * m];
         var present = new bool[m * m];
         int any = 0;
+        // the block's north-west tile: the others are its neighbours in the tile axes (x east, z south)
+        var northWest = new TileId(blockE, blockN + HorizonBlockTiles - 1);
 
         for (int r = 0; r < m; r++)
             for (int c = 0; c < m; c++)
@@ -258,7 +260,7 @@ public static partial class TerrainMeshBuilder
                 int tc = Math.Min(fc / perTile, HorizonBlockTiles - 1);
                 int tr = Math.Min(fr / perTile, HorizonBlockTiles - 1);
                 int ic = fc - tc * perTile, ir = fr - tr * perTile;
-                var id = new TileId(blockE + tc, blockN + HorizonBlockTiles - 1 - tr);
+                var id = northWest.Neighbour(tc, tr);
                 if (!horizon.TryGet(id, out var samples)) continue;
 
                 // a lake's bed is in the heights since #298: draw its water over it, water-coloured

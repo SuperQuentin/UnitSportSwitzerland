@@ -66,7 +66,8 @@ public static class SitePlans
             // its runners are its +X, turned about +Y
             var runners = p.AlongX ? site.Box.AxisU : site.Box.AxisV;
             float yaw = Mathf.Atan2(-runners.Y, runners.X);
-            yield return new YardPallet(site.Key, p.Slot, tile.Id.MinE + at.X, tile.Id.MaxN - at.Z, at.Y, yaw, p.Load, Site: true);
+            var (e, n) = tile.Id.Global(at.X, at.Z);
+            yield return new YardPallet(site.Key, p.Slot, e, n, at.Y, yaw, p.Load, Site: true);
         }
     }
 
@@ -112,7 +113,7 @@ public static class SitePlans
         var all = new List<YardStock>();
         foreach (var site in sites)
             if (only == null || site.Key == only)
-                all.AddRange(SiteLoot.Of(site, SiteShellBuilder.Dressing(tile, site, grid), tile.Id.MinE, tile.Id.MaxN));
+                all.AddRange(SiteLoot.Of(site, SiteShellBuilder.Dressing(tile, site, grid), tile.Id));
         return all.ToArray();
     }
 
