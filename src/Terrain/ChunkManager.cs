@@ -2485,7 +2485,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
-                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid) is { } buildingData)
+                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid, stride) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (cells)
@@ -2520,7 +2520,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                             linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null, sites);
                         }
                         buildingFaces = ChunkNode.SplitByCell(bTile != null
-                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile, grid), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. officeFaces ?? []] : []);
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile, grid), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. BuildingMeshBuilder.StoopFaces(linkDoors), .. officeFaces ?? []] : []);
                     }
                     Lap(StBldgMesh, stageMs, clock);
                 }
