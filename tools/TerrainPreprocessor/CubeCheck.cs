@@ -127,6 +127,57 @@ public static class CubeCheck
         return ok ? 0 : 1;
     }
 
+    /// <summary>
+    /// <c>--cube-dump F0/L13/x_y</c>: one built tile as JSON for a picture (<c>&lt;out&gt;/F0_L13_x_y.json</c>):
+    /// its surface every 4th vertex (local x, y, z), and its features; for BD TOPO points also where
+    /// the LV95 path would have put them (<see cref="SwissProjection"/>'s LV95 taken as the place).
+    /// </summary>
+    public static int Dump(CubeStage.Options o, CubeKey key)
+    {
+        var manifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(o.Out!, CubeManifest.FileName)));
+        var tile = CubeBundle.Read(Path.Combine(o.Out!, CubeBundle.FileName(key.AncestorAt(manifest.BundleLevel))), key)
+            ?? throw new InvalidOperationException($"{key} is not built");
+        var anchor = key.Anchor;
+        var v = CubeGeometry.Vertices(key, tile.Bits, tile.Heights);
+        int n = tile.Side;
+        var sb = new System.Text.StringBuilder();
+        string F(double x) => x.ToString("F2", CultureInfo.InvariantCulture);
+        sb.Append($"{{\"key\":\"{key.Describe()}\",\"n\":{(n - 1) / 4 + 1},\"grid\":[");
+        bool first = true;
+        for (int j = 0; j < n; j += 4)
+            for (int i = 0; i < n; i += 4)
+            {
+                int k = (j * n + i) * 3;
+                sb.Append(first ? "" : ",").Append(float.IsNaN(v[k + 1]) ? "null,null,null" : $"{F(v[k])},{F(v[k + 1])},{F(v[k + 2])}");
+                first = false;
+            }
+        sb.Append("],\"roads\":[");
+        first = true;
+        foreach (var r in tile.Roads)
+        {
+            sb.Append(first ? "" : ",").Append($"{{\"src\":{(int)r.Source},\"cls\":\"{r.Class}\",\"pts\":[{string.Join(",", r.Points.Select(p => F(p)))}],\"old\":[");
+            if (r.Source == CubeSource.BdTopo)
+                for (int p = 0; p < r.Points.Length; p += 3)
+                {
+                    var e = anchor.ToEcef(r.Points[p], r.Points[p + 1], r.Points[p + 2]);
+                    var g = Ellipsoid.Wgs84.ToGeodetic(e);
+                    var (eo, no) = SwissProjection.ToLv95(g.LatDeg, g.LonDeg);
+                    var (_, _, h) = SwissGeodesy.FromEcef(e);
+                    var (x, _, z) = anchor.ToLocal(SwissGeodesy.ToEcef(eo, no, h));
+                    sb.Append(p == 0 ? "" : ",").Append($"{F(x)},{F(z)}");
+                }
+            sb.Append("]}");
+            first = false;
+        }
+        sb.Append("],\"buildings\":[");
+        sb.Append(string.Join(",", tile.Buildings.Select(b => $"{{\"src\":{(int)b.Source},\"pts\":[{string.Join(",", b.Points.Select(p => F(p)))}]}}")));
+        sb.Append("]}");
+        string path = Path.Combine(o.Out!, key.FileStem + ".json");
+        File.WriteAllText(path, sb.ToString());
+        Console.WriteLine($"dump: {path}");
+        return 0;
+    }
+
     /// <summary>A height field's value at (x, z) with each cell split along one diagonal and along the other: the worse of the two is what is measured, whichever the physics engine takes.</summary>
     private static (double A, double B) FieldAt(float[] f, int side, double s, double half, double x, double z)
     {

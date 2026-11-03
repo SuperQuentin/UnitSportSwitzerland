@@ -70,12 +70,22 @@ public partial class CubeHarness : Node3D
             foreach (var (key, at) in CubeBundle.ReadIndex(fs)) _index[key] = (path, at.Offset, at.Length);
         }
 
-        // the frame: ENU at the tile nearest the middle of the region
+        // the frame: ENU at the built tile nearest the middle of the region, or nearest --cubeat lat,lon
         var keys = _index.Keys.ToList();
-        double mx = 0, my = 0, mz = 0;
-        foreach (var k in keys) { var o = k.Anchor.Origin; mx += o.X; my += o.Y; mz += o.Z; }
-        var mid = CubeKey.FromEcef(new EcefPos(mx / keys.Count, my / keys.Count, mz / keys.Count), _manifest.LeafLevel);
-        _frame = (keys.Contains(mid) ? mid : keys[0]).Anchor;
+        EcefPos target;
+        if (CmdArgs.Value("--cubeat") is { } atArg)
+        {
+            var ll = atArg.Split(',').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            target = Ellipsoid.Wgs84.ToEcef(new Geodetic(ll[0], ll[1], 0));
+        }
+        else
+        {
+            double mx = 0, my = 0, mz = 0;
+            foreach (var k in keys) { var o = k.Anchor.Origin; mx += o.X; my += o.Y; mz += o.Z; }
+            target = new EcefPos(mx / keys.Count, my / keys.Count, mz / keys.Count);
+        }
+        var mid = keys.MinBy(k => k.Anchor.Origin.DistanceTo(target));
+        _frame = mid.Anchor;
         foreach (var k in keys) _xf[k] = TileTransform(_frame, k.Anchor);
 
         AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-40), Mathf.DegToRad(-30), 0), LightEnergy = 1.2f });
@@ -87,13 +97,13 @@ public partial class CubeHarness : Node3D
                 AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color(0.5f, 0.5f, 0.55f),
             },
         });
-        _material = new StandardMaterial3D { AlbedoColor = new Color(0.45f, 0.55f, 0.35f), Roughness = 1 };
+        _material = new StandardMaterial3D { VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = 1 };
         _camera = new Camera3D { Far = 20000, Near = 0.5f, Current = true };
         AddChild(_camera);
 
         _report.AppendLine($"# Cube harness: {Path.GetFileName(_dir.TrimEnd('/', '\\'))}");
         _report.AppendLine();
-        _report.AppendLine($"Level {_manifest.LeafLevel}, {1 << _manifest.Bits} cells a tile, {keys.Count} tiles; anchor frame at {(keys.Contains(mid) ? mid : keys[0]).Describe()}.");
+        _report.AppendLine($"Level {_manifest.LeafLevel}, {1 << _manifest.Bits} cells a tile, {keys.Count} tiles; anchor frame at {mid.Describe()}.");
         _report.AppendLine();
         CallDeferred(nameof(Start));
     }
@@ -111,8 +121,43 @@ public partial class CubeHarness : Node3D
 
     private async void Start()
     {
+        if (CmdArgs.Value("--cubeshot") is { } shot)
+        {
+            await Shot(shot);
+            return;
+        }
         await Collision();
         StartFlight();
+    }
+
+    /// <summary>
+    /// <c>--cubeshot &lt;png&gt;</c>: no measurement, one still: the camera 1.6 km above the anchor, 3 km
+    /// to its south, looking north 30° down, once every tile in reach is in.
+    /// </summary>
+    private async Task Shot(string png)
+    {
+        _from = _to = new Vector3(0, 1600, 3000);
+        _flightS = 1;
+        _camera.Position = _from;
+        _camera.LookAt(new Vector3(0, 0, -800), Vector3.Up);
+        _radius = 6000;
+        Plan();
+        int pending;
+        do
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            while (_ready.TryDequeue(out var job)) Commit(job.Key, job.Step, job.Arrays, job.BuildMs);
+            pending = _loaded.Count(kv => kv.Value.Busy);
+        } while (pending > 0);
+        int meshes = _loaded.Count(kv => kv.Value.Node != null);
+        var aabb = _loaded.Values.Where(e => e.Node != null).Select(e => e.Node!.Transform * e.Node.GetAabb()).ToList();
+        GD.Print($"[cubeharness] still: {meshes} tiles drawn of {_loaded.Count} planned; y {aabb.Min(a => a.Position.Y):F0}..{aabb.Max(a => a.End.Y):F0}, "
+            + $"x {aabb.Min(a => a.Position.X):F0}..{aabb.Max(a => a.End.X):F0}, z {aabb.Min(a => a.Position.Z):F0}..{aabb.Max(a => a.End.Z):F0}");
+        if (CmdArgs.Has("--cubenocull")) _material.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+        for (int k = 0; k < 10; k++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        GetViewport().GetTexture().GetImage().SavePng(png);
+        GD.Print($"[cubeharness] RESULT: ok (shot {png})");
+        GetTree().Quit();
     }
 
     // ---- collision ---------------------------------------------------------------------------
@@ -307,6 +352,7 @@ public partial class CubeHarness : Node3D
     public override void _Process(double delta)
     {
         if (!_flying) return;
+        // (the still keeps its camera)
         ulong now = Time.GetTicksUsec();
         double ms = (now - _lastTicks) / 1000.0;
         _lastTicks = now;
@@ -415,6 +461,16 @@ public partial class CubeHarness : Node3D
                 // next to a hole (no data) there is no normal: up, and no warning per vertex
                 nor[j * m + i] = !nn.IsFinite() || nn.LengthSquared() == 0 ? Vector3.Up : nn.Y < 0 ? -nn.Normalized() : nn.Normalized();
             }
+        // tinted by height: lowland green, then brown, rock grey, snow above 2,600 m
+        var col = new Color[m * m];
+        for (int k = 0; k < col.Length; k++)
+        {
+            float hh = float.IsNaN(sub[k]) ? 0 : sub[k] - 50;
+            col[k] = hh < 700 ? new Color(0.42f, 0.56f, 0.30f).Lerp(new Color(0.55f, 0.58f, 0.36f), hh / 700)
+                : hh < 1800 ? new Color(0.55f, 0.58f, 0.36f).Lerp(new Color(0.52f, 0.45f, 0.36f), (hh - 700) / 1100)
+                : hh < 2600 ? new Color(0.52f, 0.45f, 0.36f).Lerp(new Color(0.6f, 0.6f, 0.6f), (hh - 1800) / 800)
+                : new Color(0.93f, 0.94f, 0.97f);
+        }
         var idx = new List<int>((m - 1) * (m - 1) * 6);
         for (int j = 0; j < m - 1; j++)
             for (int i = 0; i < m - 1; i++)
@@ -430,6 +486,7 @@ public partial class CubeHarness : Node3D
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = pos;
         arrays[(int)Mesh.ArrayType.Normal] = nor;
+        arrays[(int)Mesh.ArrayType.Color] = col;
         arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
         return arrays;
     }

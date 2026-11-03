@@ -29,6 +29,7 @@ public static class CubeStage
         public int Level = 13, Bits = -1, Bundle = -1, CacheTiles = 300, Jobs = Environment.ProcessorCount;
         public (double MinE, double MinN, double MaxE, double MaxN)? Box;
         public bool BdTopo, Check, CheckOnly;
+        public string? Dump;
     }
 
     public static async Task<int> RunAsync(IReadOnlyList<string> args, CancellationToken ct)
@@ -58,6 +59,7 @@ public static class CubeStage
                 case "--cube-bdtopo": o.BdTopo = true; break;
                 case "--cube-check": o.Check = true; break;
                 case "--cube-check-only": o.Check = o.CheckOnly = true; break;
+                case "--cube-dump": o.Dump = args[++i]; break;
                 case "--jobs": o.Jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 default: Console.Error.WriteLine($"--cube: unknown option {args[i]}"); return 2;
             }
@@ -79,6 +81,7 @@ public static class CubeStage
         Console.WriteLine($"cube: level {o.Level}, {1 << o.Bits} cells a tile, bundles at level {o.Bundle}; "
             + $"swissALTI3D {swiss?.Tiles.Count ?? 0} tiles, {dems.Count} foreign DEM(s)");
 
+        if (o.Dump != null) return CubeCheck.Dump(o, CubeKey.Parse(o.Dump));
         if (o.CheckOnly) return CubeCheck.Run(o, src);
 
         var sw = Stopwatch.StartNew();
