@@ -63,6 +63,7 @@ public partial class ControlsHelp : CanvasLayer
             new("The arcade: E at the change machine swaps 5 CHF for 5 Batzen; at the prize counter, tickets for prizes", PlayerInput.InteractMount),
             new("The arcade: put a Batzen in a machine for a game", PlayerInput.Jump),
             new("Claw machine: steer the claw (Jump drops it; V looks from the side)", PlayerInput.MoveForward),
+            new("Arcade machines: the stick moves or steers, Jump fires; a rhythm game's four lanes are the four directions", PlayerInput.MoveLeft),
             new("Bowling: E at the shoe counter, a ball rack, the ball return, then on the approach to bowl", PlayerInput.InteractMount),
             new("Bowling: move your spot", PlayerInput.MoveLeft),
             new("Bowling: turn your line", PlayerInput.BowlAimLeft),

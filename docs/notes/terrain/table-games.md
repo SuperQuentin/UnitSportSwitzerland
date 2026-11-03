@@ -129,3 +129,21 @@ Code: `src/Interiors/Games/`, one folder per game beside it.
 - **Controls** (`ClawPlay`): from the front; Jump a coin, the stick steers, Jump drops; V / R3 from the side.
 - **Checks**: `--clawcheck --systems ui` (a bot's twelve goes through the rig), model viewer Venues › Claw machine
   (`--modelsyaw -20` shows its front).
+
+## The arcade's machines (#1326)
+
+- **Which game**: `CabinetRig.PlaysOf`: a racer twin races (Col Rush), dance and drum machines keep the beat (Yodel
+  Beat), an upright shoots (Snowball Patrol) or races by its place. All original.
+- **The games** (`MiniGames.cs`, pure, `CabinetTests`): 160 x 120 pixels through `IScreen` (rects and the pinball's 5 x 7
+  font). Snowball Patrol: a snowcat fires at sweeping rows of marmots that drop acorns, three lives, faster waves.
+  Col Rush: a winding pass, slower cars to pass, the verge slows, three crashes; the score is the distance. Yodel Beat:
+  four lanes at 124 BPM for a minute, perfect within 0.08 s, good within 0.16 s, a combo bonus.
+- **Who runs what**: `CabinetGame` (server, one player) takes the coin (`ActCoin`, with a seed) and the score at the end
+  (`ActEnd`): the five best under the players' names, tickets by score (1-60), "high score #n". The player's own client
+  runs the game (`CabinetPlay`) and draws it into the screen every frame; the score is the client's word (as a shop's
+  cash); walking off mid-game ends it. Watchers see the attract screen: who plays, then the score.
+- **Rig** (`CabinetRig`): a plate 9 mm in front of the room mesh's lit screen (the uprights' face; 12 mm proud of the
+  racer's, dance machine's and drums' faces: the mesh's sink), a 160 x 120 image updated in place (no mesh rebuilt);
+  the attract screen redrawn on change and its blink. A racer twin's second screen shows the same race.
+- **Checks**: `--cabinetcheck --systems ui` (each machine type: attract, a robot's game moving the picture, the coin and
+  the score), model viewer Venues › Arcade games (`--modelsyaw -15` faces them).
