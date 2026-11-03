@@ -144,7 +144,8 @@ public static class BuildingIndexBuilder
                         flags |= IndexedFlags.GarageRoll;
                 }
             }
-            list.Add(new IndexedBuilding(tile.Id.MinE + c.X, tile.Id.MaxN - c.Y, tile.Id.E, tile.Id.N, i, b.Kind,
+            var (ce, cn) = tile.Id.Global(c.X, c.Y);
+            list.Add(new IndexedBuilding(ce, cn, tile.Id.E, tile.Id.N, i, b.Kind,
                 b.Floors, b.YearBuilt, b.MaxY - b.MinY, flags));
         }
         return list;

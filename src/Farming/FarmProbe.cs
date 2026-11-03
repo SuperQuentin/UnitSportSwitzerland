@@ -60,10 +60,11 @@ public partial class FarmProbe : Node
             // aim at the nearest arable cell (grass is the terrain's own), from 30 m up, 70 m south-west of it
             var (pe, pn) = _origin.ToLv95(me.GlobalPosition);
             double be = pe, bn = pn, bd = double.MaxValue;
-            for (double de = -240; de <= 240; de += 8)
-                for (double dn = -240; dn <= 240; dn += 8)
-                    if (farm.CellAtLv95(pe + de, pn + dn) is { } v && !FarmTables.IsGrass(v.FieldCrop) && de * de + dn * dn < bd)
-                        (be, bn, bd) = (pe + de, pn + dn, de * de + dn * dn);
+            // a search grid round the spot, in metres (the probe's own square, not a distance between two places)
+            for (double x = -240; x <= 240; x += 8)
+                for (double y = -240; y <= 240; y += 8)
+                    if (farm.CellAtLv95(pe + x, pn + y) is { } v && !FarmTables.IsGrass(v.FieldCrop) && x * x + y * y < bd)
+                        (be, bn, bd) = (pe + x, pn + y, x * x + y * y);
             float gy = me.GlobalPosition.Y;
             var target = _origin.ToWorld(be + 20, bn + 20, gy);
             cam.GlobalPosition = _origin.ToWorld(be - 50, bn - 50, gy + 30);

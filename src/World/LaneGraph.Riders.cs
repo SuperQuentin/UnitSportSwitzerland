@@ -161,7 +161,7 @@ public sealed partial class LaneGraph
         var cum = new float[n];
         for (int i = 0; i < n; i++)
         {
-            pts[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
+            pts[i] = origin.TileToWorld(tile.Id, new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
             if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
         }
         if (cum[^1] < 0.5f) return null;
@@ -169,7 +169,7 @@ public sealed partial class LaneGraph
         {
             Points = pts, Cumulative = cum, Class = jpath.Junction.Class, Width = Math.Max(jpath.Width, jpath.ToWidth), OneWay = 1, Connector = true,
             Kind = MoverKind.Rider,
-            KeyStart = Key(tile.Id.MinE + jpath.From.X, tile.Id.MaxN - jpath.From.Z), KeyEnd = Key(tile.Id.MinE + jpath.To.X, tile.Id.MaxN - jpath.To.Z),
+            KeyStart = Key(tile.Id.Global(jpath.From.X, jpath.From.Z)), KeyEnd = Key(tile.Id.Global(jpath.To.X, jpath.To.Z)),
             Path = info,
         };
     }

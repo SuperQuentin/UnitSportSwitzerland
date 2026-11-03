@@ -34,11 +34,12 @@ public static class PisteCourse
             foreach (var r in tile.Records)
             {
                 if (r.IsArea || r.Type is not (PisteType.Downhill or PisteType.Connection) || r.Path.Length < 4) continue;
-                double e0 = tile.Id.MinE + r.Path[0], n0 = tile.Id.MinN + r.Path[1];
+                // the path is in metres east and north of the tile's south-west corner: z = size - north
+                var (e0, n0) = tile.Id.Global(r.Path[0], ChunkFormat.TileSizeM - r.Path[1]);
                 // a relation's member ways share its id: tell them apart by where they start
                 if (!seen.Add((r.Id, (long)Math.Round(e0), (long)Math.Round(n0)))) continue;
                 var pts = new double[r.Path.Length];
-                for (int i = 0; i < pts.Length; i += 2) { pts[i] = tile.Id.MinE + r.Path[i]; pts[i + 1] = tile.Id.MinN + r.Path[i + 1]; }
+                for (int i = 0; i < pts.Length; i += 2) (pts[i], pts[i + 1]) = tile.Id.Global(r.Path[i], ChunkFormat.TileSizeM - r.Path[i + 1]);
                 runs.Add(new Run(r.Id, pts, r.WidthM));
             }
         return runs;

@@ -35,13 +35,14 @@ public class SiteLootTests
     }
 
     private const double MinE = 2585000, MaxN = 1115000;
+    private static readonly TileId Tile = new(2585, 1114);
 
     private static (ConstructionSite Site, SiteDressingPlan Yard, List<YardStock> Stock) Make(string key, float w, float d, float h, byte floors, float turn = 0.3f, float ground = 0f)
     {
         var b = Box(w, d, h, floors, turn);
         var site = ConstructionSites.Plan(key, b, PlanBox.Of(b)!.Value, new Vector2(500, 560), _ => false)!;
         var yard = SiteDressings.Plan(site, (_, _) => ground);
-        return (site, yard, SiteLoot.Of(site, yard, MinE, MaxN));
+        return (site, yard, SiteLoot.Of(site, yard, Tile));
     }
 
     public static IEnumerable<object[]> Sites() => new[]

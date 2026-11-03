@@ -81,7 +81,8 @@ public static class PitSurvey
                 int rolled = Enumerable.Range(0, roles.Count).Count(k => roles[k].Chance >= 1 || Fnv.Unit($"{site.Key}|site|machine{k}") < roles[k].Chance);
                 yards.Add((rolled, rolled - site.Machines.Count, site.Zones.Any(z => z.Kind == SiteZoneKind.Materials), ConstructionSites.MaterialsWayIn(site)));
                 var c = site.Box.Center;
-                samples.Add((site.Key, id.MinE + c.X, id.MaxN - c.Y, pit.TopOuter.Y - pit.Floor, ConstructionSites.LaneWall(site.Pit, site.Box, site.Front), pit.HasRamp));
+                var (ce, cn) = id.Global(c.X, c.Y);
+                samples.Add((site.Key, ce, cn, pit.TopOuter.Y - pit.Floor, ConstructionSites.LaneWall(site.Pit, site.Box, site.Front), pit.HasRamp));
             }
             if (any) pitTiles.Add(id);
         });

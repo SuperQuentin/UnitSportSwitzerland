@@ -128,8 +128,9 @@ public static class DormantSlots
 
             // a parked car faces either way out of its bay, as they do
             float yaw = bay.Heading + ((h >> 17 & 1) == 0 ? 0f : MathF.PI);
+            var (be, bn) = id.Global(bay.X, bay.Z);
             into.Add(new VehicleSlot(owner, i,
-                id.MinE + bay.X, id.MaxN - bay.Z, bay.Y, Wrap(yaw),
+                be, bn, bay.Y, Wrap(yaw),
                 carKinds[(int)(h >> 20 & 0xFFFF) % carKinds.Count],
                 (byte)(h >> 36 & 7),
                 // a van or estate in roughly one bay in eight, and never in a motorcycle bay
@@ -246,8 +247,9 @@ public static class DormantSlots
 
                     // a forecourt's stock all faces the way it is meant to be seen from
                     float yaw = neat ? yard.Heading : yard.Heading + ((h >> 17 & 1) == 0 ? 0f : MathF.PI);
+                    var (se, sn) = id.Global(x, z);
                     var slot = new VehicleSlot(yard.Owner, ordinal,
-                        id.MinE + x, id.MaxN - z, yard.Y, Wrap(yaw),
+                        se, sn, yard.Y, Wrap(yaw),
                         cars[(int)(h >> 20 & 0xFFFF) % cars.Count],
                         (byte)(neat ? (h >> 36 & 7) : h >> 36 & 3),   // a forecourt is brighter
                         !neat && (h >> 40 & 7) == 0);
@@ -283,7 +285,8 @@ public static class DormantSlots
         float cos = MathF.Cos(yard.Heading), sin = MathF.Sin(yard.Heading);
         float x = yard.X + u * cos - v * sin;
         float z = yard.Z - u * sin - v * cos;
-        return new VehicleSlot(yard.Owner, ForkliftOrdinal, id.MinE + x, id.MaxN - z, yard.Y,
+        var (fe, fn) = id.Global(x, z);
+        return new VehicleSlot(yard.Owner, ForkliftOrdinal, fe, fn, yard.Y,
             Wrap(yard.Heading + MathF.PI), forklift, 0, false);
     }
 
@@ -307,7 +310,8 @@ public static class DormantSlots
                 bool van = m.Role == MachineRole.Van;
                 int? kind = !van ? kindOf(m.Role, h) : cars.Count > 0 ? cars[(int)(h >> 20 & 0xFFFF) % cars.Count] : null;
                 if (kind is not { } k) continue;
-                into.Add(new VehicleSlot(site.Key, m.Ordinal, id.MinE + m.At.X, id.MaxN - m.At.Y, site.Base,
+                var (me, mn) = id.Global(m.At.X, m.At.Y);
+                into.Add(new VehicleSlot(site.Key, m.Ordinal, me, mn, site.Base,
                     Wrap(m.Yaw), k, (byte)(h >> 36 & 3), van));
             }
     }
