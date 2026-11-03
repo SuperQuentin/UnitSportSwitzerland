@@ -462,7 +462,7 @@ public static class PinballLayouts
         var t = new PinballTable
         {
             Name = "alpine", Title = "Alpine Ski Race", Era = PinballEra.Lcd,
-            Ground = new Color(0.82f, 0.88f, 0.95f), AccentA = new Color(0.90f, 0.10f, 0.12f), AccentB = new Color(0.10f, 0.40f, 0.95f),
+            Ground = new Color(0.16f, 0.33f, 0.60f), AccentA = new Color(0.90f, 0.10f, 0.12f), AccentB = new Color(0.10f, 0.40f, 0.95f),
             Cabinet = new Color(0.85f, 0.10f, 0.12f), Trim = new Color(0.95f, 0.95f, 0.95f),
             ScoopShot = "Start hut", LockShot = "Downhill", JackpotShot = "Slalom", Wizard = "Alpine crown",
         };
