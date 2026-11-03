@@ -36,6 +36,7 @@ public partial class Main : Node
 		Concert.ConcertRig.UseGodotImages();
 		SetWindowTitle(GetWindow());
 		MouseCapture.PassTestWindowThrough();
+		GameSettings.LowerTestPriority();
 		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
 		ClipRecorder.StartFromArgs(GetTree());
 
