@@ -116,6 +116,8 @@ public static partial class Preprocessor
         if (CubeGlobal.Wants(args)) return CubeGlobal.Run(args, ct);
         // and its finer levels averaged from a --cube build's leaves
         if (CubeSwiss.Wants(args)) return CubeSwiss.Run(args, ct);
+        // the levels the game ships, on their own
+        if (CubeSubset.Wants(args)) return CubeSubset.Run(args);
 
         void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
 

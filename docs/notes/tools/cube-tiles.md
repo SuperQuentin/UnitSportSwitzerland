@@ -105,7 +105,12 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   vertex, ETOPO's footprint where the nine are not all there; every tile over the leaves and its three
   siblings (so a parent can always split). Nov 3 2026, below-normal priority, 12 threads: 39 s,
   1,340 tiles, 136 MB, peak 9.6 GB (the 2,547 leaves held at once); 0 of 2.7 M edge vertices differ.
-  Run the colour bake again after it. The leaves are G1's local region (825 km² of swissALTI3D
+  Run the colour bake again after it.
+- **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
+  together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
+  assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
+  export preset's `include_filter` (no Godot resources). The game reads them through `World/Globe/GlobeFiles`
+  (`res://` by Godot's FileAccess: inside a pack .NET's file API sees nothing); the full region on D: wins when it is there. The leaves are G1's local region (825 km² of swissALTI3D
   0.5 m, all the 0.5 m on D:, plus RGE ALTI samples): the rest of Switzerland's 0.5 m is on the NAS
   (`france-nas-run`); a `--cube` run over it there gives the rest of the country, then this again.
 

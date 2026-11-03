@@ -26,15 +26,19 @@ public partial class Globe : Node
 {
     public const string DefaultDir = "D:/UnitSportSwitzerland/cube_global";
 
-    /// <summary>The region to draw: <c>--globe DIR</c>, else the default one when it exists; null leaves the globe out.</summary>
+    /// <summary>
+    /// The region to draw: <c>--globe DIR</c> ("off" none), else the full one on D: when it is there, else the
+    /// levels the game ships (<see cref="GlobeFiles.Shipped"/>, 0-2: 23.5 MB in Git LFS); null leaves the globe out.
+    /// </summary>
     public static string? DataDir
     {
         get
         {
             string? dir = CmdArgs.Value("--globe");
             if (dir is "off" or "0") return null;
-            dir ??= DefaultDir;
-            return File.Exists(System.IO.Path.Combine(dir, CubeManifest.FileName)) ? dir : null;
+            if (dir != null) return GlobeFiles.HasManifest(dir) ? dir : null;
+            if (GlobeFiles.HasManifest(DefaultDir)) return DefaultDir;
+            return GlobeFiles.HasManifest(GlobeFiles.Shipped) ? GlobeFiles.Shipped : null;
         }
     }
 
@@ -95,7 +99,7 @@ public partial class Globe : Node
 
     private CubeManifest _manifest = null!;
     private int _maxLevel;
-    private readonly Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
+    private Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
     private readonly Dictionary<CubeKey, MeshInstance3D> _patches = new();
     private readonly Dictionary<CubeKey, EnuFrame> _anchors = new();
     private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour, int Month)> _ready = new();
@@ -108,10 +112,10 @@ public partial class Globe : Node
 
     public override void _Ready()
     {
-        _manifest = CubeManifest.FromJson(File.ReadAllText(System.IO.Path.Combine(Dir, CubeManifest.FileName)));
+        var files = new GlobeFiles(Dir);
+        _manifest = files.Manifest();
         _maxLevel = _manifest.LevelsOrLeaf.Max(l => l.Level);
-        foreach (var file in Directory.GetFiles(Dir, "*.cubb")) Index(file, CubeBundle.Magic, _heights);
-        foreach (var file in Directory.GetFiles(Dir, "*.cuba")) Index(file, CubeBundle.AlbedoMagic, _albedo);
+        (_heights, _albedo) = files.Index(_manifest);
         _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
         GD.Print($"[globe] {_heights.Count} tiles to level {_maxLevel}, {_albedo.Count} coloured, month {_month}, from {Dir}");
@@ -174,12 +178,6 @@ public partial class Globe : Node
         var south = (Origin.ToWorld(e, n - 1000, 0) - nw).Normalized();
         RenderingServer.GlobalShaderParameterSet(RealOrigin, new Vector2(nw.X, nw.Z));
         RenderingServer.GlobalShaderParameterSet(RealAxes, new Vector4(east.X, east.Z, south.X, south.Z));
-    }
-
-    private static void Index(string file, uint magic, Dictionary<CubeKey, (string, long, int)> into)
-    {
-        using var fs = File.OpenRead(file);
-        foreach (var (key, at) in CubeBundle.ReadIndex(fs, magic)) into[key] = (file, at.Offset, at.Length);
     }
 
     public override void _Process(double delta)
@@ -339,13 +337,7 @@ public partial class Globe : Node
         });
     }
 
-    private static byte[] ReadBytes((string Path, long Offset, int Length) at)
-    {
-        using var handle = File.OpenHandle(at.Path, FileMode.Open, System.IO.FileAccess.Read, FileShare.Read);
-        var bytes = new byte[at.Length];
-        RandomAccess.Read(handle, bytes, at.Offset);
-        return bytes;
-    }
+    private static byte[] ReadBytes((string Path, long Offset, int Length) at) => GlobeFiles.ReadBytes(at);
 
     /// <summary>
     /// A tile's mesh around its anchor: every <see cref="Stride"/>-th lattice vertex, rigorous, with
@@ -497,10 +489,8 @@ public partial class Globe : Node
     private static Node3D Showcase(string dir, Func<CubeKey, bool> which, bool earthFixed)
     {
         var root = new Node3D { Name = "Globe" };
-        var heights = new Dictionary<CubeKey, (string, long, int)>();
-        var albedo = new Dictionary<CubeKey, (string, long, int)>();
-        foreach (var file in Directory.GetFiles(dir, "*.cubb")) Index(file, CubeBundle.Magic, heights);
-        foreach (var file in Directory.GetFiles(dir, "*.cuba")) Index(file, CubeBundle.AlbedoMagic, albedo);
+        var files = new GlobeFiles(dir);
+        var (heights, albedo) = files.Index(files.Manifest());
         var shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         // Earth-fixed with the north pole up (+Y), or one tile in its own frame
         var earth = new FrameAxes(new EcefPos(0, 0, 0), new EcefPos(0, 1, 0), new EcefPos(0, 0, 1), new EcefPos(1, 0, 0));

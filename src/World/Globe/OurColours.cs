@@ -38,10 +38,11 @@ public sealed class OurColours
             var p = System.IO.Path.GetFileNameWithoutExtension(file).Split('_');
             _tiles.Add(new TileId(int.Parse(p[1]), int.Parse(p[2])));
         }
-        MinE = _tiles.Min(t => t.MinE);
-        MinN = _tiles.Min(t => t.MinN);
-        MaxE = _tiles.Max(t => t.MinE) + 1000;
-        MaxN = _tiles.Max(t => t.MaxN);
+        // the data's LV95 box, from the tiles' kilometre indices (this reads LV95 tiles by nature)
+        MinE = _tiles.Min(t => t.E) * ChunkFormat.TileSizeM;
+        MinN = _tiles.Min(t => t.N) * ChunkFormat.TileSizeM;
+        MaxE = (_tiles.Max(t => t.E) + 1) * ChunkFormat.TileSizeM;
+        MaxN = (_tiles.Max(t => t.N) + 1) * ChunkFormat.TileSizeM;
         // each tile's ring distance to the nearest tile without data, outward from the edge (breadth first)
         var queue = new Queue<TileId>();
         foreach (var t in _tiles)
