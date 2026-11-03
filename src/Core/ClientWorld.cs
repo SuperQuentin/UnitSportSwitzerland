@@ -763,8 +763,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (World.Globe.DataDir is { } globe)
             {
                 var chunksForGlobe = _chunks;
-                AddChild(new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles });
+                AddChild(new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe });
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
+                if (World.AltitudeReadout.Requested) AddChild(new World.AltitudeReadout { Name = "AltitudeReadout", Origin = origin });
             }
         }
         ApplySun();

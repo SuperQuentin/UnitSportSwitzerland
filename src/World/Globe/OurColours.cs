@@ -95,11 +95,25 @@ public sealed class OurColours
                 var c = CoverPalette.ColorFor((CoverClass)cover[fr * ChunkFormat.GridSize + fc], alt, 0.5f).SrgbToLinear();
                 sum += new Vector3(c.R, c.G, c.B);
                 hits++;
-                // inside the edge: the tile's ring distance, less how far the sample is from the tile's inner side
-                feather += Math.Clamp((_inside.TryGetValue(id, out int ring) ? ring - 0.5 : 0) * 1000 / FeatherM, 0, 1);
+                feather += Feather(se, sn);
             }
         if (hits == 0) return (Vector3.Zero, 0);
         return (sum / hits, (float)(hits / (double)(k * k) * Mathf.SmoothStep(0, 1, (float)(feather / hits))));
+    }
+
+    /// <summary>
+    /// How far inside the data a point is, as a share of <see cref="FeatherM"/>: the tiles' ring distances
+    /// from the edge (½ km at an edge tile's centre, 0 off the data) bilinear between tile centres, so the
+    /// weight rises smoothly instead of a kilometre step at a time (the lake read as blocks from 30 km).
+    /// </summary>
+    private double Feather(double e, double n)
+    {
+        double fx = e / 1000 - 0.5, fy = n / 1000 - 0.5;
+        int x0 = (int)Math.Floor(fx), y0 = (int)Math.Floor(fy);
+        double tx = fx - x0, ty = fy - y0;
+        double R(int x, int y) => _inside.TryGetValue(new TileId(x, y), out int ring) ? ring - 0.5 : 0;
+        double d = (R(x0, y0) * (1 - tx) + R(x0 + 1, y0) * tx) * (1 - ty) + (R(x0, y0 + 1) * (1 - tx) + R(x0 + 1, y0 + 1) * tx) * ty;
+        return Math.Clamp(d * 1000 / FeatherM, 0, 1);
     }
 
     private (byte[] Cover, ChunkGrid? Coarse) Load(TileId id) => _cache.GetOrAdd(id, t =>

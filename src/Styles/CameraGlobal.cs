@@ -107,11 +107,30 @@ public partial class CameraGlobal : Node
     /// and the style's haze thins with the air, kept at a sixth so the edge of the terrain data stays
     /// in the haze until the globe (H4). Below 3 km nothing changes.
     /// </summary>
+    /// <summary>Above this the near plane is altitude / 10,000 (100 m at 1,000 km).</summary>
+    public const double RaisedNearFromM = 1_000_000;
+
+    private float _baseNear = -1;
+
     private void Climb(Camera3D camera, double altitude)
     {
         float far = Core.GameSettings.Current.CameraFar;
         if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
         if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
+        // past 1,000 km (the spectator only: the UFO stops at 120 km) the near plane follows the
+        // altitude: at 12,000 km a 17,400 km far over a 1 m near broke the light culler's frustum
+        // (create_frustum_points) and nothing drew; nothing is that near the camera up there (#1430 H4)
+        if (altitude > RaisedNearFromM)
+        {
+            float near = (float)(altitude / 10_000);
+            if (_baseNear < 0) _baseNear = camera.Near;
+            if (Mathf.Abs(camera.Near - near) > near * 0.05f) camera.Near = near;
+        }
+        else if (_baseNear >= 0)
+        {
+            camera.Near = _baseNear;
+            _baseNear = -1;
+        }
 
         float scale = HazeAt(altitude, World.Globe.Present);
         if (GetViewport()?.FindWorld3D()?.Environment is not { } env || (scale == _fogScale && env == _fogEnv)) return;

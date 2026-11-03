@@ -58,6 +58,9 @@ public partial class Globe : Node
     /// <summary>The tiles with real data (the rest is the generated fill, which gives way to the globe from high up).</summary>
     public Func<IReadOnlySet<TileId>?>? RealTiles { get; set; }
 
+    /// <summary>The flat world's node (the tiles, the horizon blocks, what stands on them): hidden outright once every flat tile has dissolved, so none of it is drawn.</summary>
+    public Node3D? FlatWorld { get; set; }
+
     /// <summary>The generated fill dissolves from here to <see cref="FillGoneM"/>, metres.</summary>
     public const double FillFromM = 15_000, FillGoneM = 25_000;
 
@@ -119,6 +122,7 @@ public partial class Globe : Node
         Axes = null;
         RenderingServer.GlobalShaderParameterSet(FillHide, 0f);
         RenderingServer.GlobalShaderParameterSet(FlatHide, 0f);
+        if (FlatWorld != null && IsInstanceValid(FlatWorld)) FlatWorld.Visible = true;
     }
 
     /// <summary>
@@ -149,7 +153,12 @@ public partial class Globe : Node
         float fill = _mask == null ? 0 : (float)Mathf.SmoothStep(FillFromM, FillGoneM, altitude);
         float flat = (float)Mathf.SmoothStep(FlatFromM, FlatGoneM, altitude);
         if (fill != _fill) RenderingServer.GlobalShaderParameterSet(FillHide, _fill = fill);
-        if (flat != _flat) RenderingServer.GlobalShaderParameterSet(FlatHide, _flat = flat);
+        if (flat != _flat)
+        {
+            RenderingServer.GlobalShaderParameterSet(FlatHide, _flat = flat);
+            // all dissolved: not drawn at all (34 M triangles discarded a pixel at a time at 3,000 km)
+            if (FlatWorld != null && IsInstanceValid(FlatWorld)) FlatWorld.Visible = flat < 1f;
+        }
     }
 
     /// <summary>The mask is sampled by world XZ: its NW corner and grid axes, again after a shift.</summary>
