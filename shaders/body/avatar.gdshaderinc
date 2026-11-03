@@ -17,6 +17,7 @@
 // back to its own space (origin at the feet).
 
 #include "res://shaders/body/face.gdshaderinc"
+#include "res://shaders/common/curvature.gdshaderinc"
 
 varying vec3 v_pos;
 varying flat int v_fx;
@@ -45,6 +46,8 @@ void vertex() {
         VERTEX += CUSTOM1.xyz * (skirt_flutter.x * wave) - vec3(0.0, length(CUSTOM1.xyz) * skirt_flutter.x * 0.6 * lift, 0.0);
     }
     if (CUSTOM1.w != 0.0) VERTEX.y = max(VERTEX.y, skirt_floor);
+    // on the curved Earth like the ground under it (#187): an airliner 30 km off is 60 m lower
+    POSITION = PROJECTION_MATRIX * CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
 }
 
 float hash13(vec3 p) {
