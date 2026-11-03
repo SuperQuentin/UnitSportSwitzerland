@@ -135,7 +135,7 @@ public static class NeonSign
                 Transform = new Transform3D(new Basis(Vector3.Up, side > 0 ? 0 : Mathf.Pi),
                     new Vector3(total / 2 - textW / 2, 0, 0.03f * side)),
             });
-        return sign;
+        return Styles.ZoomRanges.TrackTree(sign);
     }
 
     /// <summary>Saira at a medium weight: the variable font's default is a hairline, too thin to read from the street.</summary>
