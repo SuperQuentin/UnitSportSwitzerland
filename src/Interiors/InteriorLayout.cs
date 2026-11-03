@@ -30,6 +30,19 @@ public enum RoomType
     // #827: the site office's upper containers, off the gallery: the site manager's office over the
     // office, the drawing office over the mess room
     SiteManager, DrawingOffice,
+    // #1235: a bowling centre: the lane hall, the concourse in front of it, a mezzanine over that
+    BowlingLanes, Concourse, Mezzanine,
+    // #1238: a cinema: its lobby, its auditoriums, the staff corridor and the projection room
+    CinemaLobby, Auditorium, StaffCorridor, ProjectionRoom,
+    // #1240: an amusement arcade's hall of machines
+    ArcadeHall,
+    // #1242: a dining venue's guest room, by its kind, and its kitchen
+    Gaststube, Pizzeria, CafeRoom, FastFoodRoom, KebabRoom, BarRoom, PubRoom, ClubRoom, GastroKitchen,
+    // #1250: an arcade that is a billiard hall by its name (Bluff Billard, Geneva): pool tables under their lamps
+    BilliardHall,
+    // #1285: public toilets: an anteroom with the basins (a gendered room's, or the shared one), the women's and the
+    // men's washroom behind it, a stall off either, the accessible WC
+    ToiletLobby, WomensToilet, MensToilet, ToiletStall, AccessibleToilet,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -52,6 +65,20 @@ public sealed class OpeningPlan
     public OpeningKind Kind { get; set; }
     /// <summary>Index of the room on the other side, −1 for the outside.</summary>
     public int Other { get; set; } = -1;
+    /// <summary>
+    /// A window between two rooms left unglazed: a cinema's projection port (#1250). An inner window
+    /// (<see cref="Other"/> ≥ 0) without it is glazed dark, see-through (the booth's viewing windows).
+    /// Left out of the JSON when false.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Open { get; set; }
+    /// <summary>
+    /// On a shaped room's edge (#1290): the index of the corner the edge starts at in
+    /// <see cref="RoomPlan.Shape"/>, and <see cref="Center"/> is then the distance along that edge
+    /// instead of <see cref="Side"/>'s coordinate. Null, and left out of the JSON, on the rectangle's walls.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? Edge { get; set; }
 }
 
 public sealed class RoomPlan
@@ -81,10 +108,67 @@ public sealed class RoomPlan
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
     public bool Piece { get; set; }
     public List<OpeningPlan> Openings { get; set; } = new();
+    /// <summary>
+    /// What the room really covers when that is not its rectangle (#1290): corners x0, z0, x1, z1, …
+    /// counter-clockwise. Its walls, floor and ceiling follow it; the rectangle stays the room's core
+    /// (furniture, the walk map, doors between rooms), inside it when the shape grew the room out to
+    /// an angled facade, round it when the facade cut it. Null, and left out of the JSON, for a plain room.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public float[]? Shape { get; set; }
 
     public float Width => X1 - X0;
     public float Depth => Z1 - Z0;
     public float Area => Width * Depth;
+
+    /// <summary>The corners of <see cref="Shape"/>, or the rectangle's, counter-clockwise from its front left.</summary>
+    public Godot.Vector2[] Corners()
+    {
+        if (Shape is not { Length: >= 6 } s)
+            return [new(X0, Z0), new(X1, Z0), new(X1, Z1), new(X0, Z1)];
+        var p = new Godot.Vector2[s.Length / 2];
+        for (int i = 0; i < p.Length; i++) p[i] = new Godot.Vector2(s[2 * i], s[2 * i + 1]);
+        return p;
+    }
+
+    public void SetShape(IReadOnlyList<Godot.Vector2>? corners)
+    {
+        if (corners == null) { Shape = null; return; }
+        var s = new float[corners.Count * 2];
+        for (int i = 0; i < corners.Count; i++) { s[2 * i] = corners[i].X; s[2 * i + 1] = corners[i].Y; }
+        Shape = s;
+    }
+
+    /// <summary>Whether a point of the plan is in the room: its shape if it has one, else its rectangle.</summary>
+    public bool Holds(float x, float z) => Shape == null
+        ? x >= X0 && x <= X1 && z >= Z0 && z <= Z1
+        : RoomShapes.Contains(Corners(), new Godot.Vector2(x, z)) || x >= X0 && x <= X1 && z >= Z0 && z <= Z1 && RoomShapes.EdgeDistance(Corners(), new Godot.Vector2(x, z)) < 0.02f;
+
+    /// <summary>The floor area: the shape's if it has one.</summary>
+    public float FloorArea => Shape == null ? Area : Math.Abs(RoomShapes.Area(Corners()));
+
+    /// <summary>
+    /// Where an opening is and which way its wall faces out of the room: its centre on the wall line,
+    /// the outward unit normal, and the wall's direction (the room on its left).
+    /// </summary>
+    public (Godot.Vector2 At, Godot.Vector2 Out, Godot.Vector2 Along) WallFrame(OpeningPlan o)
+    {
+        if (o.Edge is int k && Shape != null)
+        {
+            var c = Corners();
+            var a = c[k % c.Length];
+            var b = c[(k + 1) % c.Length];
+            var along = (b - a).Normalized();
+            return (a + along * o.Center, new Godot.Vector2(along.Y, -along.X), along);
+        }
+        return o.Side switch
+        {
+            Side.Front => (new(o.Center, Z0), new(0, -1), new(1, 0)),
+            Side.Back => (new(o.Center, Z1), new(0, 1), new(-1, 0)),
+            Side.Left => (new(X0, o.Center), new(-1, 0), new(0, -1)),
+            _ => (new(X1, o.Center), new(1, 0), new(0, 1)),
+        };
+    }
 }
 
 /// <summary>An axis-aligned rectangle in interior-local X/Z.</summary>
@@ -230,6 +314,28 @@ public enum FurnitureType
     Pillar, StorageCage, Mailboxes, BikeRack,
     // #822: a building site's office and mess room, and its toilet cabins
     CoffeeMachine, Heater, Urinal, PaperRoll, Mirror, CoatHook,
+    // #1235: a bowling centre's lanes and settees, its counters, bar and games
+    LanePair, Settee, ShoeCounter, ShoeRack, BallRack, BarCounter, BackBar, BarStool, PoolTable,
+    Pinball, ArcadeCabinet, DartBoard,
+    /// <summary>A bowling carpet's print (#1235): neon shapes scattered over a room's floor, walked over like paint.</summary>
+    Confetti,
+    // #1238: a cinema's halls, lobby and booth
+    SeatingBank, MovieScreen, ExitSign, Porthole, BoxOffice, ConcessionStand, PosterFrame, Standee, Stanchions,
+    Projector, ServerRack, FilmPlatter, BoothPanel,
+    // #1240: an amusement arcade's machines and counters
+    PrizeCounter, ChangeMachine, ClawMachine, Racer, SimPod, DanceMachine, DrumGame, BasketballGame, AirHockey,
+    // #1242: restaurants, cafés, bars and clubs
+    TableSet, BanquetteSet, HighTable, Kachelofen, PizzaOven, PastryCase, OrderCounter, KebabCounter, TableFootball,
+    Jukebox, Stage, DjBooth, DanceFloor, CookLine,
+    // #1250: a billiard hall's cues in their wall rack; an auditorium's loudspeakers and wall lights
+    CueRack, Loudspeaker, WallSconce,
+    /// <summary>A floor-level booth's raised floor (#1250): its projectionist's eyes at the viewing windows, steps up from its door.</summary>
+    BoothDeck,
+    // #1285: public toilets: a counter of basins, a hand dryer, the screen between urinals, an accessible WC's rails,
+    // and the signs over the doorways
+    SinkRow, HandDryer, UrinalScreen, GrabRail, WcSignWomen, WcSignMen, WcSignAll, WcSignAccessible,
+    /// <summary>The steps from a hall's top walkway up to its service doorway into the booth (#1279).</summary>
+    ServiceSteps,
 }
 
 public sealed class FurniturePlan
@@ -354,7 +460,11 @@ public sealed class InnerDoorPlan
     public float Center { get; set; }
     public float Width { get; set; }
     public float Top { get; set; }
-    /// <summary>The flat it closes (<see cref="RoomPlan.Unit"/>).</summary>
+    /// <summary>The sill over its floor, m: 0 for a flat's door; a cinema's service door is up a few steps (#1279).
+    /// Left out of the JSON at 0, so a flat's plan is byte for byte what it was (the door baseline hashes it).</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public float Bottom { get; set; }
+    /// <summary>The flat it closes (<see cref="RoomPlan.Unit"/>), -1 for none.</summary>
     public int Unit { get; set; }
     public bool Locked { get; set; }
 }
@@ -412,7 +522,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 28; // 28: a site office's upper containers through raised doors off its gallery (#827); 27: a building site's interior is its site office and its toilet cabins (#822); 26: open stairwells with a railing, TVs facing the sofa, furniture that leaves a way through (#680); 25: a studio under 5.7 m deep keeps its kitchenette at least 1.2 m (#694); 24: ramp-first garages, a ramp square to the front wall or along the facade beside a single stairwell (#694); 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 40; // 40: dining venues and shop units entered by their own street doors, wide shops cut into units, compact toilets where space is short (#1292); 39: rooms follow the building's outline, angled facades included (#1290); 38: public toilets by gender in restaurants, cafés, bars and clubs, sized to the space (#1285); 34: guest rooms split until none is a hall, booth-side portholes, billiard halls of a hall's size (#1250); 33: a cooking venue's kitchen and WC walled off its room, big guest rooms split, varied tables, billiard halls, fuller foyers and arcades (#1250); 32: restaurants, cafés, bars and clubs take ground-floor rooms (#1242); 31: amusement arcades at their real places (#1240); 30: cinemas at their real places (#1238); 29: bowling centres at their real places (#1235); 28: a site office's upper containers through raised doors off its gallery (#827); 27: a building site's interior is its site office and its toilet cabins (#822); 26: open stairwells with a railing, TVs facing the sofa, furniture that leaves a way through (#680); 25: a studio under 5.7 m deep keeps its kitchenette at least 1.2 m (#694); 24: ramp-first garages, a ramp square to the front wall or along the facade beside a single stairwell (#694); 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -550,13 +660,7 @@ public sealed class InteriorLayout
             foreach (var o in r.Openings)
             {
                 if (o.Kind != OpeningKind.Entry) continue;
-                var p = o.Side switch
-                {
-                    Side.Front => new Godot.Vector2(o.Center, r.Z0),
-                    Side.Back => new Godot.Vector2(o.Center, r.Z1),
-                    Side.Left => new Godot.Vector2(r.X0, o.Center),
-                    _ => new Godot.Vector2(r.X1, o.Center),
-                };
+                var p = r.WallFrame(o).At;
                 float d = p.DistanceTo(at);
                 if (d < bestD) { bestD = d; best = (o.Width, o.Top - o.Bottom); }
             }
@@ -571,7 +675,7 @@ public sealed class InteriorLayout
     {
         for (int fl = Math.Min(f.Floor, Floors.Count - 1); fl >= 0; fl--)
             foreach (var r in Floors[fl].Rooms)
-                if (fl + r.Span > f.Floor && f.X >= r.X0 && f.X <= r.X1 && f.Z >= r.Z0 && f.Z <= r.Z1)
+                if (fl + r.Span > f.Floor && r.Holds(f.X, f.Z))
                     return r;
         return null;
     }

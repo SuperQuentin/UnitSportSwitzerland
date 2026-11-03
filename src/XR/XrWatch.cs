@@ -14,6 +14,10 @@ internal sealed partial class XrWatch : Node3D
     private const float Every = 0.5f;
     private Label3D _time = null!, _alt = null!, _speed = null!;
     private float _wait;
+    /// <summary>The compass bezel (#1226): its N turned to the north, the amber notch toward the tracked target.</summary>
+    private Node3D _bezel = null!;
+    private Node3D _notch = null!;
+    private static ArrayMesh? _ringMesh;
 
     public override void _Ready()
     {
@@ -52,6 +56,25 @@ internal sealed partial class XrWatch : Node3D
             Mesh = new CylinderMesh { TopRadius = 0.018f, BottomRadius = 0.018f, Height = 0.001f, RadialSegments = 16 },
             Transform = new Transform3D(new Basis(Vector3.Right, Mathf.Pi / 2), Vector3.Zero),
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.96f, 0.96f, 0.94f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            Layers = XrSession.HeadsetOnlyLayer,
+        });
+        // the compass bezel (#1226): a ring of ticks round the dial, N in red, turned so N points north; an amber notch
+        // on it toward the tracked target. One mesh built once, turned per frame (a transform, no rebuild)
+        _bezel = new Node3D { Name = "Bezel" };
+        AddChild(_bezel);
+        _bezel.AddChild(new MeshInstance3D
+        {
+            Mesh = _ringMesh ??= Ring(),
+            MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            Layers = XrSession.HeadsetOnlyLayer,
+        });
+        _notch = new Node3D { Name = "Target", Visible = false };
+        _bezel.AddChild(_notch);
+        _notch.AddChild(new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(0.004f, 0.005f, 0.002f) },
+            Position = new Vector3(0, 0.0215f, 0.0012f),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.98f, 0.72f, 0.1f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
             Layers = XrSession.HeadsetOnlyLayer,
         });
         face.AddChild(new MeshInstance3D
@@ -109,6 +132,7 @@ internal sealed partial class XrWatch : Node3D
         // an untracked controller sits inside the head: not drawn then, like the hands
         Visible = tracked;
         if (Transform != spot) Transform = spot;
+        TurnBezel(player);
         _wait -= dt;
         if (_wait > 0f) return;
         _wait = Every;
@@ -116,7 +140,59 @@ internal sealed partial class XrWatch : Node3D
         int h = (int)hour % 24, m = (int)((hour - Math.Floor(hour)) * 60.0);
         Set(_time, $"{h:00}:{m:00}");
         Set(_alt, player != null ? $"{player.Global.Alt:0} m" : "");
-        Set(_speed, player != null ? $"{player.Velocity.Length() * 3.6f:0} km/h" : "");
+        // tracking something (#1226): its distance where the speed was
+        if (player != null && Adventure.Navigation.NavTarget.Current is { } t)
+        {
+            var g = player.Global;
+            Set(_speed, "◆ " + Adventure.Navigation.NavFormat.Distance(Math.Sqrt((t.E - g.E) * (t.E - g.E) + (t.N - g.N) * (t.N - g.N))));
+        }
+        else Set(_speed, player != null ? $"{player.Velocity.Length() * 3.6f:0} km/h" : "");
+    }
+
+    /// <summary>
+    /// Turns the bezel so its N points to the world's north (-Z) as seen on the dial, and its notch toward the tracked
+    /// target. Per frame, a rotation only.
+    /// </summary>
+    private void TurnBezel(FootPlayer? player)
+    {
+        if (!IsInsideTree()) return;
+        var b = GlobalBasis.Orthonormalized();
+        // the world's north in the dial's plane (the dial faces local +Z; the ring's N tick is its local +Y)
+        var north = b.Inverse() * new Vector3(0, 0, -1);
+        float angle = Mathf.Atan2(-north.X, north.Y);
+        _bezel.Rotation = new Vector3(0, 0, angle);
+        if (player != null && Adventure.Navigation.NavTarget.Current is { } t)
+        {
+            var g = player.Global;
+            float bearing = Ui.CompassStrip.Bearing(new Vector2((float)(t.E - g.E), (float)(t.N - g.N)));
+            _notch.Rotation = new Vector3(0, 0, -Mathf.DegToRad(bearing));
+            _notch.Visible = true;
+        }
+        else _notch.Visible = false;
+    }
+
+    /// <summary>The bezel ring: 24 ticks round the dial, every third longer, N red.</summary>
+    private static ArrayMesh Ring()
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        for (int i = 0; i < 24; i++)
+        {
+            float a = i * Mathf.Tau / 24;
+            float len = i % 6 == 0 ? 0.004f : i % 3 == 0 ? 0.003f : 0.0018f, w = i == 0 ? 0.0022f : 0.0011f;
+            var c = i == 0 ? new Color(0.85f, 0.1f, 0.1f) : new Color(0.12f, 0.12f, 0.14f);
+            var dir = new Vector3(-Mathf.Sin(a), Mathf.Cos(a), 0);
+            var side = new Vector3(dir.Y, -dir.X, 0) * w;
+            var p0 = dir * 0.0195f + new Vector3(0, 0, 0.0011f);
+            var p1 = dir * (0.0195f + len) + new Vector3(0, 0, 0.0011f);
+            foreach (var v in new[] { p0 - side, p1 - side, p1 + side, p0 - side, p1 + side, p0 + side })
+            {
+                st.SetColor(c);
+                st.SetNormal(Vector3.Back);
+                st.AddVertex(v);
+            }
+        }
+        return st.Commit();
     }
 
     private static void Set(Label3D label, string text)

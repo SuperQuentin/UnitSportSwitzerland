@@ -60,7 +60,8 @@ void vertex() {
     local_vertex = VERTEX;
     surf = UV;
     style = UV2.x;
-    vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+    // the Earth's drop first (#187), then the lift toward the eye from where it is drawn
+    vec4 view = CURVED(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos);
     float dist = length(view.xyz);
     float lift = clamp((dist - far_lift_start) * far_lift_rate, 0.0, far_lift_max);
     view.xyz *= 1.0 - lift / max(dist, 1.0) - road_depth_bias;

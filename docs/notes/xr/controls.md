@@ -97,7 +97,7 @@ The full per-action design and rules: `xr/vr-action-map`.
   `Ui/Radial` drawn into a 512 px SubViewport, redrawn only when the aimed wedge changes, on a quad
   with no depth test (over the dashboard). `--xrsim --xrring <wedge>` holds it open before the eyes.
 - **Wrist menu (#437, `XR/XrWristMenu`).** The ring's *More…*: a list on the UI panel: travel,
-  inventory, map, bird journal, drop the held item (on foot), fly camera / walk, controls,
+  inventory, map, the Journal (quests, birds, fish), drop the held item (on foot), fly camera / walk, controls,
   recentre. A pick taps the action (`XrPad.Tap`) after the menu has let the pointer go, so the
   screen it opens is the one the key opens. In the world only (`XrRig.InWorld`), never on the
   title. Prompts for an action with no controller input but a wrist entry say **Wrist**

@@ -31,7 +31,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site", "crag", "hamlet", "fun" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -84,6 +84,39 @@ public sealed class FixtureCourse
     /// <summary>The course's airports (#422) planned at a start in LV95; null: none.</summary>
     public Func<double, double, AirportIndex>? Airports { get; init; }
 
+    /// <summary>A road's own width (m), by its index in <see cref="Roads"/>; the others are their class's default.</summary>
+    public Dictionary<int, float> RoadWidths { get; } = new();
+
+    /// <summary>
+    /// A venue standing in a block (#1396): its kind, a point inside the block, metres from the start. The source makes
+    /// them the venue list (<c>Interiors.Venues.Override</c>), so the block is that bowling centre, cinema or café.
+    /// </summary>
+    public sealed record Venue(VenueType Type, double X, double Y, string Name, VenueFlags Flags = VenueFlags.None, int Count = 0);
+
+    /// <summary>The course's venues; none by default (the embedded list then stays).</summary>
+    public List<Venue> Venues { get; } = new();
+
+    /// <summary>
+    /// A vehicle standing on the course (#1396): a <c>RideKind</c> as an int, where, facing which way (degrees, 0 north,
+    /// clockwise as a compass), with a <c>TrailerCatalog</c> code for a trailer coupled to it or standing alone.
+    /// </summary>
+    public sealed record Parked(int Kind, double X, double Y, float HeadingDeg, int Train = 0, float Load = 0.5f);
+
+    /// <summary>The course's parked vehicles, put back a while after one is taken; none by default.</summary>
+    public List<Parked> Fleet { get; } = new();
+
+    /// <summary>A prepared ski slope (#1396): an outline, metres from the start, and how hard it is.</summary>
+    public sealed record Slope(string Name, PisteDifficulty Difficulty, (double X, double Y)[] Outline);
+
+    /// <summary>The course's ski slopes; none by default.</summary>
+    public List<Slope> Slopes { get; } = new();
+
+    /// <summary>Painted lines on the ground (a marked bay), metres from the start: white, 15 cm.</summary>
+    public List<(double X0, double Y0, double X1, double Y1)> Lines { get; } = new();
+
+    /// <summary>A stadium of the course's own, planned at a start in LV95 (#1396); null: none.</summary>
+    public Func<double, double, Stadiums.StadiumSpec>? StadiumAt { get; init; }
+
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }
 
@@ -100,11 +133,11 @@ public sealed class FixtureCourse
     /// (<see cref="PavedFrom"/>), then a ridge across the whole tile (<see cref="RidgeHeight"/>):
     /// up at <see cref="RidgeGrade"/>, a plateau, down again.
     /// </summary>
-    private static FixtureCourse Flat()
+    private static FixtureCourse Flat(string name = "flat")
     {
         var c = new FixtureCourse
         {
-            Name = "flat",
+            Name = name,
             Terrain = (x, _) => FlatHeight + RidgeHeight(x),
             Cover = (x, _) => x >= PavedFrom && x < PavedFrom + PavedWidth ? CoverClass.PavedArea : CoverClass.Open,
             // the spawn's tiles plus the strip and the ridge, whatever the start
@@ -155,8 +188,37 @@ public sealed class FixtureCourse
         "airport" => FixtureAirport.Create(),
         "garage" => Garage(),
         "site" => Site(),
+        "crag" => Crag.Create(),
+        "hamlet" => Hamlet(),
+        "fun" => FunCourse.Create(),
         _ => null,
     };
+
+    /// <summary>
+    /// The flat course with a hamlet round the fixture chapel (#1268, Versteckis): ten blocks (the chapel, seven
+    /// houses, two barns) on a loop of minor road, the flat course's pasture and its herd east of it. The chapel
+    /// POI (<c>PoiCatalogue.Fixture</c>, 150 m west and 120 m south of the start) stands on the square in front of
+    /// the chapel's door, so a game opened near the start is held here (<c>--versteckischeck</c>,
+    /// <c>tools/versteckisnetcheck.sh</c>).
+    /// </summary>
+    private static FixtureCourse Hamlet()
+    {
+        var c = Flat("hamlet");
+        // the loop, its four sides meeting at the corners (a road meeting another ends there)
+        c.Road(RoadClass.Minor, new Pen(-215, -180, FlatHeight, 0, 0).Straight(115))
+            .Road(RoadClass.Minor, new Pen(-100, -180, FlatHeight, 90, 0).Straight(130))
+            .Road(RoadClass.Minor, new Pen(-100, -50, FlatHeight, 180, 0).Straight(115))
+            .Road(RoadClass.Minor, new Pen(-215, -50, FlatHeight, 270, 0).Straight(130));
+        c.Blocks.Add(new Block(HamletChurch.X, HamletChurch.Y, 12, 18, 11, Kind: BuildingKind.Sacral, Floors: 1));
+        foreach (var (x, y) in new[] { (-190.0, -155.0), (-125.0, -155.0), (-190.0, -75.0), (-125.0, -72.0), (-240.0, -120.0), (-150.0, -205.0), (-72.0, -205.0) })
+            c.Blocks.Add(new Block(x, y, 9, 8, 6, Kind: BuildingKind.House, Floors: 2));
+        c.Blocks.Add(new Block(-240, -165, 18, 12, 7, Kind: BuildingKind.Agricultural, Floors: 1));
+        c.Blocks.Add(new Block(-160, -26, 18, 12, 7, Kind: BuildingKind.Agricultural, Floors: 1));
+        return c;
+    }
+
+    /// <summary>The hamlet's chapel block, metres from the start: its door faces south onto the chapel POI's square.</summary>
+    public static readonly (double X, double Y) HamletChurch = (-150, -100);
 
     /// <summary>
     /// Three building sites with pits (#619) along a minor street, on flat ground: a block at its

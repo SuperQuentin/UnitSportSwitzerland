@@ -90,9 +90,10 @@ public partial class GameShell : Node
         {
             "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail", "--data",
             "--generated", "--generated-roads", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
-            // (not --at: a spawn point on the command line means "put me there", straight into the world, the user)
+            // (not --at: a spawn point on the command line means "put me there", straight into the world, the user;
+            // PlayAt sends that run through the loading screen, #1296)
             "--traffic", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
-            "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
+            "--origin", "--curvature", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--menuskin", "--character", "--account", "--welcome", "--welcomecheck", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmsaa", "--vrscale", "--vrfoveation", "--shadows", "--rendercensus", "--hidenodes", "--hidetoggle", "--xrhole", "--xrhandlog", "--xrpopup", "--soakcheck", "--replayminutes", "--perflevel", "--foveation", "--nosky", "--overdraw", "--hideui", "--plainterrain", "--litterrain", "--terrainvariant", "--vrmult", "--vrfloor", "--verticallod", "--buildingrings", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands", "--xrring", "--xrspace",
@@ -102,6 +103,18 @@ public partial class GameShell : Node
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
         return true;
     }
+
+    /// <summary>
+    /// A play launch at a spawn point (#1296): <c>--at</c> (or <c>--enter</c>, #1244) and otherwise only what <see cref="UseTitle"/> lets
+    /// through. It skips the title but not the loading screen: Explore at that point, as from the menus (on
+    /// foot on open ground, frames for the screen to draw). A probe or a tool naming its own flags stays
+    /// <see cref="Direct"/>.
+    /// </summary>
+    public static bool PlayAt(string[] args) =>
+        (args.Contains("--at") || args.Contains("--enter"))
+        && UseTitle(args.Where(a => a is not ("--at" or "--enter" or "--patronhour") && !a.StartsWith("--playtest", StringComparison.Ordinal)).ToArray());
+    // (a playtest at a spawn point, #1292: the suite's own flags do not make it a tool run; without --at a playtest
+    // still boots straight into its fixture course, so they stay off the harmless list)
 
     public override void _Ready()
     {
@@ -181,9 +194,16 @@ public partial class GameShell : Node
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
+            // "--at E,N" on a play launch (#1296): the same, at that point
+            // "--enter <venue>" (#1244) too: its building is the landing, and the player goes inside once on foot
+            else if (PlayAt(CmdArgs.All) && (SpawnPoint.ParseLv95("--at") ?? Interiors.InteriorManager.EnterLv95()) is { } at)
+                Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore, Landing = at, World = WorldChoice.FromArgs() })).CallDeferred();
             // a .gpx opened with the game (#1029): straight into its replay
             GpxOpenWith.Register();
             if ((GpxOpenWith.FromArgs() ?? AndroidBridge.OpenedFile()) is { } opened) Callable.From(() => OpenGpx(opened)).CallDeferred();
+            // the website's Join button (#1220): straight onto that server
+            JoinLink.Register();
+            if (JoinLink.FromArgs() is { } endpoint) Callable.From(() => Join(endpoint)).CallDeferred();
         }
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);

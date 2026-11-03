@@ -16,12 +16,18 @@ public struct BotIntent
     public bool Run;
     public bool Jump;
     public bool Crouch;
+    /// <summary>Grab the face it walks into and climb it (#1225): a body never climbs by pushing alone.</summary>
+    public bool Climb;
     /// <summary>Face this yaw whatever the feet do (aiming, looking round); null = face where it walks.</summary>
     public float? FaceYaw;
     /// <summary>The view's pitch when <see cref="FaceYaw"/> is set (radians, + up).</summary>
     public float Pitch;
     /// <summary>Fire (or stab) at this world point this tick, if the weapon is ready (<see cref="BotHands.Fire"/>).</summary>
     public Vector3? FireAt;
+    /// <summary>Swing the sword at this world point (<see cref="BotHands.Swing"/>); held, it chains the combo.</summary>
+    public Vector3? SwordAt;
+    /// <summary>Dodge away from this world point this tick (<see cref="BotHands.Dodge"/>).</summary>
+    public Vector3? DodgeFrom;
     /// <summary>
     /// In the air: whether it wants the parachute open (else the wingsuit). The body's flight controls
     /// turn the wish into the deploy or cut-away press only when the ride differs, never a held key.
@@ -64,6 +70,12 @@ public sealed class Bot
     public bool Watched;
     /// <summary>The hands' state (<see cref="BotHands"/>): when the weapon is ready again, the barrel's heat and since when.</summary>
     public double NextShotAt;
+    /// <summary>The sword's machine (#1371): the combo, the dodge and their stamina, stepped by <see cref="BotHands.Tick"/>; the same rules as a player's.</summary>
+    public Combat.SwordMachine Sword { get; } = new();
+    public double SwordWantUntil, DodgeWantUntil;
+    public Vector3 SwordTarget, DodgeAway;
+    public bool SwordPulse, SwordTraced;
+    public int SwordSwings;
     public float Heat;
     public double HeatAt;
     /// <summary>What it perceives (<see cref="BotSenses"/>): the only way its brain learns about the world.</summary>

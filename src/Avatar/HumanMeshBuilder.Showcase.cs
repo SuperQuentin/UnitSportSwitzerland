@@ -37,6 +37,8 @@ public static partial class HumanMeshBuilder
         yield return ("Aiming", () => Skinned(plain, f => PoseStride(f, 1.6f, 0.7f, ItemArmPose.ShoulderAim, 1f)));
         yield return ("Driving", () => Skinned(plain, f => PoseDriver(f, kart, 1.2f, 0.5f, 0f)));
         yield return ("Swimming", () => Skinned(plain, f => PoseSwim(f, SwimStyle.Crawl, 0.3f)));
+        yield return ("Wall climbing", () => Skinned(plain, f => PoseWallClimb(f, 0.05f, 0f)));
+        yield return ("Climb-jump", () => Skinned(plain, f => PoseWallClimb(f, 0.3f, 1f)));
         yield return ("Robe, running", () => Skinned(Wearing(GarmentShape.Robe, 4), f => PoseStride(f, 4.6f, 0.3f)));
         yield return ("Dress, seated", () => Skinned(Wearing(GarmentShape.Dress, 5), f => PoseDriver(f, kart, 0f, 0.3f, 0f)));
         yield return ("Ruffle, running", () => Skinned(Wearing(GarmentShape.RuffleMini, 6), f => PoseStride(f, 4.6f, 0.6f)));
@@ -163,6 +165,14 @@ public static partial class HumanMeshBuilder
             .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(FightMoves + (int)s, (int)s, 0.5f)))))
             .Concat(Enum.GetValues<FightMove>().Where(m => m != FightMove.None)
                 .Select(m => ($"Move - {m}", (Func<Node3D>)(() => Figure(Danced(FightMoves + FightRules.PoseOf(m), (int)m, 0.4f))))));
+
+    // Schwingen (#1269): the grip, the leans, the ground work and the six throws at their moment of effort
+    [Showcase("Schwingen")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseSchwingen() =>
+        Enum.GetValues<SchwingStance>().Where(s => s is not SchwingStance.None and < SchwingStance.ThrowBase)
+            .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(SchwingMoves + (int)s, (int)s, 0.3f)))))
+            .Concat(SchwingRules.Throws
+                .Select(d => ($"Throw - {d.Name}", (Func<Node3D>)(() => Figure(Danced(SchwingMoves + SchwingRules.PoseOf(d.Throw), (int)d.Throw, 0.5f))))));
 
     // the aura battle (#907): its stances, then each move most of the way through (the pose held)
     [Showcase("Aura")]

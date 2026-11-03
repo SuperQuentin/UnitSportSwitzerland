@@ -135,11 +135,14 @@ public static class MergedCore
             for (int k = 1; k < legs.Count; k++)
             {
                 var (here, _, offset) = streets[k - 1];
-                Splice(centre, legs[k].Centre, here.Axis!, offset);
+                // (an empty leg or centre line, degenerate geometry on the nationwide pass: the merge is declined, the junction planned whole)
+                if (!Splice(centre, legs[k].Centre, here.Axis!, offset)) return null;
             }
             // a through move across the members: one S from mouth to mouth, as on one node (its legs would narrow onto the inner
             // street's lanes and widen again)
             if (legs.Count > 1 && centre.Count > 2 && Angle(centre[1] - centre[0], centre[^1] - centre[^2]) < CorePlanner.TurnAngle) Smooth(centre);
+            // legs that spliced away to nothing (#1279: a Bern block threw in Set): the junction is planned whole instead
+            if (centre.Count < 2) return null;
             var move = new Connector
             {
                 FromArm = c.FromArm, FromId = c.FromId, ToArm = c.ToArm, ToId = c.ToId, Move = c.Move, Kind = c.Kind, Width = c.Width, ToWidth = c.ToWidth,
@@ -524,12 +527,13 @@ public static class MergedCore
     }
 
     /// <summary>
-    /// A move's next leg spliced on where the two run along the inner street's lane (offset <paramref name="offset"/> on
+    /// A move's next leg spliced on (false when either line is empty, nothing to splice) where the two run along the inner street's lane (offset <paramref name="offset"/> on
     /// <paramref name="axis"/>, the near member's): with the lane drawn between where the two members' mouths leave a gap, cut
     /// halfway along where both are on it where they overlap.
     /// </summary>
-    private static void Splice(List<Vec2> centre, List<Vec2> next, ArmAxis axis, double offset)
+    public static bool Splice(List<Vec2> centre, List<Vec2> next, ArmAxis axis, double offset)
     {
+        if (centre.Count == 0 || next.Count == 0) return false;
         // (run on past the street's far end: a leg going on straight into the far member's arm)
         double Station(Vec2 p) => axis.StationPast(p);
         bool On(Vec2 p) { double s = Station(p); return Math.Abs((p - axis.PointAt(s)).Dot(axis.RightAt(s)) - offset) < OnLane; }
@@ -544,7 +548,7 @@ public static class MergedCore
             for (int k = 1; k < steps; k++) centre.Add(axis.At(endA + (startB - endA) * k / steps, offset));
             centre.AddRange(next);
             CorePlanner.Dedupe(centre);
-            return;
+            return true;
         }
         double lo = Math.Max(Station(centre[ia]), startB), hi = Math.Min(endA, Station(next[ib]));
         if (lo > hi)
@@ -553,7 +557,7 @@ public static class MergedCore
             // they come closest
             Join(centre, next);
             if (Kinked(centre)) Smooth(centre);
-            return;
+            return true;
         }
         double t = (lo + hi) * 0.5;
         int keep = centre.Count;
@@ -566,5 +570,6 @@ public static class MergedCore
             if (Station(next[k]) <= t) { from = k + 1; break; }
         centre.AddRange(next.Skip(from));
         CorePlanner.Dedupe(centre);
+        return true;
     }
 }

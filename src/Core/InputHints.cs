@@ -27,6 +27,10 @@ public static class InputHints
     public static string Label(string action) =>
         Label(action, PlayerInput.HintDevice);
 
+    /// <summary>What puts the item away or takes it out (#1369): the key, "hold D-pad →" on a pad, the hip grip in VR.</summary>
+    public static string HolsterLabel() =>
+        PlayerInput.HintDevice == InputDevice.Gamepad ? $"hold {Button(JoyButton.DpadRight)}" : Label(PlayerInput.Holster);
+
     // Memoised (#221): HUD prompts ask every frame, and each lookup marshals the action's events
     // and builds a list. Bindings only change in PlayerInput.Bind, which calls Invalidate.
     // In VR a control's name also depends on whether the triggers are the shoulders (on foot) or
@@ -160,15 +164,18 @@ public static class InputHints
 
     // ------------------------------------------------------------------------------------
 
+    /// <summary>"Left " or "Right " for a binding to one key of a pair (Left Shift, #1325); empty for either.</summary>
+    private static string Side(InputEventKey k) => k.Location switch { KeyLocation.Left => "Left ", KeyLocation.Right => "Right ", _ => "" };
+
     /// <summary>A chord's held keys, "Shift+" for Shift+T (#1002); empty for a plain key.</summary>
     private static string Modifiers(InputEventKey k) =>
         (k.CtrlPressed ? "Ctrl+" : "") + (k.AltPressed ? "Alt+" : "") + (k.ShiftPressed ? "Shift+" : "");
 
     private static string? KeyName(InputEvent e) => e switch
     {
-        InputEventKey k when k.PhysicalKeycode != Key.None => Modifiers(k) + PhysicalLabel(k.PhysicalKeycode),
+        InputEventKey k when k.PhysicalKeycode != Key.None => Modifiers(k) + Side(k) + PhysicalLabel(k.PhysicalKeycode),
         InputEventKey k when k.Keycode != Key.None => Modifiers(k) + OS.GetKeycodeString(k.Keycode),
-        InputEventMouseButton m => m.ButtonIndex switch
+        InputEventMouseButton m => (m.AltPressed ? "Alt+" : "") + m.ButtonIndex switch
         {
             MouseButton.Left => "LMB",
             MouseButton.Right => "RMB",

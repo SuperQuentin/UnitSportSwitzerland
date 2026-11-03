@@ -55,6 +55,7 @@ public partial class FootPlayer
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
             Effort: false);
+        if (Drunk is { } drunk) input = drunk.Ride(input, dt);   // drunk (#1271)
         // nobody at the helm (the driver jumped out, #158), or the engine off: it drifts
         if (SeatIndex != 0 || !EngineOn) input = new RideInput(0f, 0f, SeatIndex != 0 ? 0f : input.Steer, false);
         LastRideInput = input;

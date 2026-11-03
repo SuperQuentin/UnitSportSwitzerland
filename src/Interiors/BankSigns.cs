@@ -81,11 +81,12 @@ public partial class BankSigns : Node
     private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
     {
         node.GetNodeOrNull(NodeName)?.QueueFree();
-        if (!doors.Any(d => (d.Bank || d.Shop != Loot.ShopType.None) && d.Width > 0)) return;
+        // a venue's door carries its neon sign instead (#1232, VenueSigns)
+        if (!doors.Any(d => (d.Bank || d.Shop != Loot.ShopType.None) && d.Width > 0 && d.Venue == 0)) return;
         var root = new Node3D { Name = NodeName };
         foreach (var d in doors)
         {
-            if (!(d.Bank || d.Shop != Loot.ShopType.None) || d.Width <= 0) continue;
+            if (!(d.Bank || d.Shop != Loot.ShopType.None) || d.Width <= 0 || d.Venue > 0) continue;
             string text = d.Bank ? "BANK" : Loot.ShopTables.Name(d.Shop).ToUpperInvariant();
             var ink = d.Bank ? BankInk : ShopColors(d.Shop).Text;
             var outward = d.Outward with { Y = 0 };
@@ -128,7 +129,7 @@ public partial class BankSigns : Node
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 Transform = new Transform3D(new Basis(Vector3.Up, side > 0 ? 0 : Mathf.Pi), new Vector3(0, 0, 0.06f * side)),
             });
-        return sign;
+        return Styles.ZoomRanges.TrackTree(sign);
     }
 
     /// <summary>The bank's sign and every shop's, in the model viewer (#1069), standing on its ground.</summary>

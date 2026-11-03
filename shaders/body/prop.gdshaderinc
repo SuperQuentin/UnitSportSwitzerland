@@ -33,7 +33,7 @@ void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     seed = INSTANCE_CUSTOM.x;
     glow_gain = INSTANCE_CUSTOM.y;
-    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 void fragment() {
@@ -54,7 +54,9 @@ void fragment() {
     col = occasion_snow(col, n, 0.7);
 
     float wobble = 0.82 + 0.18 * sin(TIME * (6.0 + seed * 5.0) + seed * 40.0) * sin(TIME * 2.3 + seed * 13.0);
-    float glow = mask * glow_gain * world_night * mix(1.0, wobble, flicker);
+    // a lamp goes out with the Morgestraich (world_lamps 0); a lantern (mask under 0.99, FasnachtModels.Lantern) keeps shining
+    float lamps = mask > 0.99 ? world_lamps : 1.0;
+    float glow = mask * glow_gain * world_night * lamps * mix(1.0, wobble, flicker);
     // near music (#734) the lights flash with the kicks, by day too
     float mr = music_reach(world_pos);
     if (mr > 0.0) {

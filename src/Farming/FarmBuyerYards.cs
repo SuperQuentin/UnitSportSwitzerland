@@ -30,8 +30,12 @@ public partial class FarmBuyerYards : Node
     {
         var y = new FarmBuyerYards { Name = "FarmBuyerYards", _origin = origin, _source = source, _groundAt = groundAt };
         world.AddChild(y);
+        Instance = y;
         return y;
     }
+
+    /// <summary>This client's yards: a buyer's office is what E at the buyer outlines (#1286).</summary>
+    public static FarmBuyerYards? Instance { get; private set; }
 
     /// <summary>Probes: the yard node of a buyer, once built.</summary>
     public Node3D? YardOf(string key) => _built.GetValueOrDefault(key);

@@ -71,6 +71,24 @@ public static class BrRegion
         return best ?? new BrArea(towns[0].E, towns[0].N, side, towns[0].Name);
     }
 
+    /// <summary>The 1 km tiles (km numbers) a region's square touches: every one must be on the map.</summary>
+    public static IEnumerable<(int E, int N)> TilesOf(BrArea area)
+    {
+        double half = area.Side * 0.5;
+        int e0 = (int)Math.Floor((area.E - half) / 1000), e1 = (int)Math.Floor((area.E + half - 1) / 1000);
+        int n0 = (int)Math.Floor((area.N - half) / 1000), n1 = (int)Math.Floor((area.N + half - 1) / 1000);
+        for (int e = e0; e <= e1; e++)
+            for (int n = n0; n <= n1; n++)
+                yield return (e, n);
+    }
+
+    /// <summary>
+    /// The tile is on the map. A tile at sea level is off the edge of the data (beyond the border):
+    /// not part of the country.
+    /// </summary>
+    public static bool Usable(IReadOnlyDictionary<(int E, int N), ManifestTile> tiles, int e, int n, out ManifestTile tile) =>
+        tiles.TryGetValue((e, n), out tile!) && tile.Min > 1f;
+
     /// <summary>The candidate's score, or null when a hard rule rejects it.</summary>
     public static double? Score(BrArea area, IReadOnlyList<Place> towns, IReadOnlyDictionary<(int E, int N), ManifestTile> tiles,
         IReadOnlyList<(double E, double N)> recent)
@@ -78,21 +96,16 @@ public static class BrRegion
         foreach (var (re, rn) in recent)
             if (Math.Sqrt((re - area.E) * (re - area.E) + (rn - area.N) * (rn - area.N)) < RepeatKm * 1000) return null;
 
-        double half = area.Side * 0.5;
-        int e0 = (int)Math.Floor((area.E - half) / 1000), e1 = (int)Math.Floor((area.E + half - 1) / 1000);
-        int n0 = (int)Math.Floor((area.N - half) / 1000), n1 = (int)Math.Floor((area.N + half - 1) / 1000);
         int count = 0, high = 0;
         float lo = float.MaxValue, hi = float.MinValue;
-        for (int e = e0; e <= e1; e++)
-            for (int n = n0; n <= n1; n++)
-            {
-                // a tile at sea level is off the edge of the data (beyond the border): not part of the country
-                if (!tiles.TryGetValue((e, n), out var t) || t.Min <= 1f) return null;
-                count++;
-                if (t.Max > HighMetres) high++;
-                lo = Math.Min(lo, (float)t.Max);
-                hi = Math.Max(hi, (float)t.Max);
-            }
+        foreach (var (e, n) in TilesOf(area))
+        {
+            if (!Usable(tiles, e, n, out var t)) return null;
+            count++;
+            if (t.Max > HighMetres) high++;
+            lo = Math.Min(lo, (float)t.Max);
+            hi = Math.Max(hi, (float)t.Max);
+        }
         if (high > count * 0.3) return null;
 
         int buildings = 0, villages = 0;

@@ -45,7 +45,12 @@ public static class OccasionProbe
         Expect("ufo: morning after", defaults, "2026-11-07", "christmas-2026", "ufo-2026");
         Expect("ufo: gone sunday", defaults, "2026-11-08", "christmas-2026");
         Expect("ufo: second friday", defaults, "2026-11-13", "christmas-2026");
-        Expect("summer", defaults, "2027-07-14");
+        // Montreux Jazz (#1394): the first Friday of July and fifteen days on (2027-07-02 to 07-17), whatever else runs
+        Expect("montreux jazz: opens (with the ufo night)", defaults, "2027-07-02", "ufo-2027", "montreuxjazz-2027");
+        Expect("montreux jazz: mid-festival", defaults, "2027-07-14", "montreuxjazz-2027");
+        Expect("montreux jazz: closes", defaults, "2027-07-17", "montreuxjazz-2027");
+        Expect("summer", defaults, "2027-07-18");
+        Expect("montreux jazz: day before", defaults, "2027-07-01");
 
         var wrap = new List<OccasionEntry>
         {
@@ -80,7 +85,9 @@ public static class OccasionProbe
         Expect("stacking", stacked, "2026-10-20", "halloween-2026", "games-2026");
 
         // the file wins per id; a default the file does not mention is still there
-        var merged = OccasionConfig.Merge(OccasionConfig.Defaults(), new List<OccasionEntry>
+        // the seasons and the UFOs only: a festival's default entry (the Désalpe in early October, the Christmas market in December) is not what this merge is about
+        var seasons = OccasionConfig.Defaults().Where(e => Festivals.FestivalCatalog.Get(e.Id) == null).ToList();
+        var merged = OccasionConfig.Merge(seasons, new List<OccasionEntry>
         {
             new() { Id = "Halloween", Enabled = false },
             new() { Id = "community-day", Schedule = { new DateWindow("2026-10-03", "2026-10-03") } },

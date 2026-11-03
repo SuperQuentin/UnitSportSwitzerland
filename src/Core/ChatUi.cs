@@ -60,6 +60,28 @@ public partial class ChatUi : CanvasLayer
     private Label _usage = null!;
     private LineEdit _input = null!;
     private Label _ghost = null!;
+    /// <summary>The "/" button and the picker it opens (#1277): the completions as buttons, for a pad and a VR ray.</summary>
+    private Button _slash = null!;
+    private ScrollContainer _pickerScroll = null!;
+    private HFlowContainer _picker = null!;
+    private Label _pickerUsage = null!;
+    /// <summary>The choices a coordinate opens (#1277): Teleport, Track, Show on map, Copy.</summary>
+    private Control _choicesLayer = null!;
+    private PanelContainer _choices = null!;
+    private VBoxContainer _choiceList = null!;
+    private Label _choiceTitle = null!;
+
+    /// <summary>The choices shown (checks), empty when closed.</summary>
+    public IEnumerable<string> ChoiceLabels => _choicesLayer.Visible
+        ? _choiceList.GetChildren().OfType<Button>().Where(b => !b.IsQueuedForDeletion()).Select(b => b.Text) : [];
+    private bool _pickerOn;
+
+    /// <summary>The chat on this screen, for the quick menu's Chat wedge.</summary>
+    public static ChatUi? Instance { get; private set; }
+
+    /// <summary>Picker buttons shown (checks): their labels, in order.</summary>
+    public IEnumerable<string> PickerLabels => _pickerOn
+        ? _picker.GetChildren().OfType<Button>().Where(b => !b.IsQueuedForDeletion()).Select(b => b.Text) : [];
 
     /// <summary>Lines sent, oldest first; which one is in the box (-1: the draft); what was typed before Up.</summary>
     private readonly List<string> _history = [];
@@ -76,6 +98,13 @@ public partial class ChatUi : CanvasLayer
 
     /// <summary>True while the input box is taking keystrokes.</summary>
     public bool IsTyping => _panel.Visible;
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
 
     public override void _Ready()
     {
@@ -95,6 +124,7 @@ public partial class ChatUi : CanvasLayer
         AddChild(_feed);
 
         BuildPanel();
+        BuildChoices();
         // once the input has a height, the floating lines line up with the scrollback's
         Callable.From(AlignFeed).CallDeferred();
 
@@ -105,9 +135,28 @@ public partial class ChatUi : CanvasLayer
         _chat.NamesReceived += () => Callable.From(() => { if (IsTyping) RefreshSuggestions(); }).CallDeferred();
 
         Append(Platform.IsTouch ? "CHAT (top right) to chat, / for commands." : "Press Enter to chat, / for commands.", ChatKind.System);
-        // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines
+        // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines;
+        // "--chatsend <line>" sends a line a few seconds before (a /locate answer to picture, #1277), and
+        // "--chatpicker [text]" opens it on the pad's picker instead, with that text in the box
         if (CmdArgs.Has("--chatopen"))
-            GetTree().CreateTimer(CmdArgs.Double("--chatopen") ?? 4).Timeout += () => OpenInput();
+        {
+            double at = CmdArgs.Double("--chatopen") ?? 4;
+            if (CmdArgs.Value("--chatsend", notFlag: true) is { } say)
+                GetTree().CreateTimer(Math.Max(0.5, at - 6)).Timeout += () => _chat.Send(say);
+            GetTree().CreateTimer(at).Timeout += () =>
+            {
+                if (!CmdArgs.Has("--chatpicker"))
+                {
+                    OpenInput();
+                    // "--chatchoices": the choices of the newest line with a point, as a pad's A opens them
+                    if (CmdArgs.Has("--chatchoices") && _log.GetChildren().OfType<RichTextLabel>().LastOrDefault(l => l.HasMeta(FirstPoint)) is { } last)
+                        Callable.From(() => OpenChoicesOn(last)).CallDeferred();
+                    return;
+                }
+                OpenForPad();
+                if (CmdArgs.Value("--chatpicker", notFlag: true) is { } typed) { SetText(typed); FocusPicker(); }
+            };
+        }
     }
 
     /// <summary>
@@ -177,7 +226,34 @@ public partial class ChatUi : CanvasLayer
         _input.TextSubmitted += OnSubmitted;
         _input.TextChanged += _ => RefreshSuggestions();
         _input.GuiInput += OnInputGui;
-        column.AddChild(_input);
+        _input.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+
+        // the picker (#1277): what Tab offers, as buttons a pad's D-pad or a VR ray can reach, over the input
+        _pickerScroll = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            Visible = false,
+        };
+        column.AddChild(_pickerScroll);
+        _picker = new HFlowContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _picker.AddThemeConstantOverride("h_separation", 4);
+        _picker.AddThemeConstantOverride("v_separation", 4);
+        _pickerScroll.AddChild(_picker);
+        // with the picker open, the usage line sits over it rather than in the popup that would cover it
+        _pickerUsage = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _pickerUsage.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _pickerUsage.Visible = false;
+        column.AddChild(_pickerUsage);
+        column.MoveChild(_pickerUsage, _pickerScroll.GetIndex());
+
+        var inputRow = UiKit.HBox(6);
+        _slash = Chip("/", "The commands as buttons");
+        _slash.ToggleMode = true;
+        _slash.CustomMinimumSize = new Vector2(38, 0);
+        _slash.Pressed += () => SetPicker(!_pickerOn, focus: true);
+        inputRow.AddChild(_slash);
+        inputRow.AddChild(_input);
+        column.AddChild(inputRow);
 
         // the rest of the highlighted completion, drawn faintly after what was typed
         _ghost = new Label
@@ -215,7 +291,9 @@ public partial class ChatUi : CanvasLayer
 
     public void Append(string line, ChatKind kind)
     {
-        _log.AddChild(Line(line, kind, floating: false));
+        var logged = Line(line, kind, floating: false);
+        if (World.Locate.LocateCoords.FindAll(line).Count > 0) MakeClickable(logged, line, kind);
+        _log.AddChild(logged);
         // out of the tree first: QueueFree only frees at the end of the frame, so the count never fell and
         // this loop spun forever on line 81, queueing it again and again (a frozen client growing ~100 MB/s:
         // a 100-player match's kill feed passed 80 lines, #837)
@@ -252,8 +330,8 @@ public partial class ChatUi : CanvasLayer
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             MouseFilter = Control.MouseFilterEnum.Ignore,
-            Text = Markup(line, kind),
         };
+        Fill(label, line, kind);
         label.AddThemeFontOverride("normal_font", UiTheme.Font);
         label.AddThemeFontOverride("bold_font", UiTheme.Bold);
         // one size in both lists, so a line does not jump when the panel opens over it
@@ -286,7 +364,245 @@ public partial class ChatUi : CanvasLayer
         return $"[color=#{ColorFor(kind).ToHtml(false)}]{Escape(line)}[/color]";
     }
 
-    private static string Escape(string text) => text.Replace("[", "[lb]");
+    private static string Escape(string text) => World.Locate.LocateCoords.Highlight(text.Replace("[", "[lb]"), c => Mark + c + Mark);
+
+    /// <summary>Wraps each coordinate in the markup, for <see cref="Fill"/> to cut at: a character no chat line carries.</summary>
+    private const string Mark = "\u0001";
+
+    /// <summary>
+    /// The line's rich text; each <c>@E,N</c> in it (#1277) drawn as a pin and the coordinates in amber, the two one
+    /// link whose meta is "E,N|name" (<see cref="ShowChoices"/>).
+    /// </summary>
+    private static void Fill(RichTextLabel label, string line, ChatKind kind)
+    {
+        string markup = Markup(line, kind);
+        if (!markup.Contains(Mark))
+        {
+            label.Text = markup;
+            return;
+        }
+        string? speaker = kind == ChatKind.Say && line.IndexOf(": ", StringComparison.Ordinal) is > 0 and var colon ? line[..colon] : null;
+        var coords = World.Locate.LocateCoords.FindAll(line);
+        string[] parts = markup.Split(Mark);
+        // even parts are text, odd ones a coordinate, in the order FindAll gives them
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (i % 2 == 0)
+            {
+                label.AppendText(parts[i]);
+                continue;
+            }
+            int k = i / 2;
+            if (k >= coords.Count) { label.AppendText(parts[i]); continue; }
+            var c = coords[k];
+            label.PushMeta(MetaOf(c, World.Locate.LocateCoords.LabelOf(line, c, speaker)), RichTextLabel.MetaUnderline.OnHover);
+            label.AddImage(Icons.Pin, 15, 15, UiTheme.Amber, InlineAlignment.Center);
+            label.PushBold();
+            label.PushColor(UiTheme.Amber);
+            // a no-break space, and a word joiner after the comma: the pin and its coordinates wrap as one word
+            label.AddText(" " + parts[i].Replace(",", ",⁠"));
+            label.Pop();
+            label.Pop();
+            label.Pop();
+        }
+    }
+
+    // ---- coordinates (#1277) ---------------------------------------------------------------
+
+    /// <summary>A small button for the chat's rows: the picker's words, a coordinate's actions.</summary>
+    private static Button Chip(string text, string tooltip = "")
+    {
+        var b = new Button { Text = text, TooltipText = tooltip, FocusMode = Control.FocusModeEnum.All, CustomMinimumSize = new Vector2(0, 30) };
+        b.AddThemeFontSizeOverride("font_size", UiTheme.FontSmall);
+        return b;
+    }
+
+    /// <summary>
+    /// A scrollback line carrying <c>@E,N</c> (#1277): its pin and coordinates are a link (a click, a VR ray), and the
+    /// line takes focus so a pad reaches it (A opens its first point). Either opens <see cref="ShowChoices"/>.
+    /// </summary>
+    private void MakeClickable(RichTextLabel label, string line, ChatKind kind)
+    {
+        label.MouseFilter = Control.MouseFilterEnum.Pass;
+        label.FocusMode = Control.FocusModeEnum.All;
+        label.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(UiTheme.Amber, 0.14f), 6, 2, 2));
+        label.MetaClicked += meta => ShowChoices(meta.AsString(), GetViewport().GetMousePosition());
+        var c = World.Locate.LocateCoords.FindAll(line)[0];
+        string? speaker = kind == ChatKind.Say && line.IndexOf(": ", StringComparison.Ordinal) is > 0 and var colon ? line[..colon] : null;
+        label.SetMeta(FirstPoint, MetaOf(c, World.Locate.LocateCoords.LabelOf(line, c, speaker)));
+        label.GuiInput += e =>
+        {
+            if (!e.IsActionPressed("ui_accept")) return;
+            OpenChoicesOn(label);
+            label.AcceptEvent();
+        };
+    }
+
+    private static readonly StringName FirstPoint = "locate_first";
+
+    private static string MetaOf(World.Locate.CoordMatch c, string name) =>
+        $"{c.E.ToString(System.Globalization.CultureInfo.InvariantCulture)},{c.N.ToString(System.Globalization.CultureInfo.InvariantCulture)}|{name}";
+
+    /// <summary>A pad's A on a focused line: the choices of its first point, under it.</summary>
+    private void OpenChoicesOn(RichTextLabel label) =>
+        ShowChoices(label.GetMeta(FirstPoint).AsString(), label.GlobalPosition + new Vector2(24, label.Size.Y));
+
+    private void BuildChoices()
+    {
+        // a full-screen catcher: a click beside the list closes it
+        _choicesLayer = new Control { Visible = false, MouseFilter = Control.MouseFilterEnum.Stop, Theme = UiTheme.Get() };
+        _choicesLayer.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _choicesLayer.GuiInput += e =>
+        {
+            if (e is InputEventMouseButton { Pressed: true }) HideChoices();
+        };
+        AddChild(_choicesLayer);
+        _choices = new PanelContainer();
+        var style = UiTheme.GlassPanel(0.97f, 8, 6);
+        style.ShadowSize = 12;
+        _choices.AddThemeStyleboxOverride("panel", style);
+        _choicesLayer.AddChild(_choices);
+        var col = UiKit.VBox(2);
+        _choices.AddChild(col);
+        _choiceTitle = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        col.AddChild(UiKit.Margin(_choiceTitle, 6, 2, 6, 2));
+        _choiceList = UiKit.VBox(2);
+        col.AddChild(_choiceList);
+    }
+
+    /// <summary>
+    /// The choices for one point, beside <paramref name="at"/>: Teleport (where allowed), Track, Show on map, Copy.
+    /// They send the lines a player could type (<c>/go</c>, <c>/track</c>, <c>/map</c>), so the server's rules apply.
+    /// Esc / B or a click beside it closes it.
+    /// </summary>
+    public void ShowChoices(string meta, Vector2 at)
+    {
+        int bar = meta.IndexOf('|');
+        if (!World.Locate.LocateCoords.TryParse(bar < 0 ? meta : meta[..bar], out double e, out double n)) return;
+        string where = World.Locate.LocateCoords.Format(e, n);
+        string name = bar < 0 ? where : meta[(bar + 1)..];
+        _choiceTitle.Text = name == where ? where : $"{name}  {where}";
+        foreach (Node b in _choiceList.GetChildren())
+        {
+            _choiceList.RemoveChild(b);
+            b.QueueFree();
+        }
+        void Add(string text, string tip, Action pick)
+        {
+            var b = Chip(text, tip);
+            b.Alignment = HorizontalAlignment.Left;
+            b.Pressed += pick;
+            _choiceList.AddChild(b);
+        }
+        if (Permissions.CanTeleport) Add("Teleport", $"Go to {name}", () => { HideChoices(); CloseInput(); _chat.Send($"/go {where}"); });
+        Add("Track", "Point the way: the marker and the compass", () => { HideChoices(); CloseInput(); _chat.Send($"/track {where} {name}"); });
+        Add("Show on map", "Open the map on it", () => { HideChoices(); CloseInput(recaptureMouse: false); _chat.Send($"/map {where} {name}"); });
+        Add("Copy", "Copy the coordinates, to paste in a message", () =>
+        {
+            DisplayServer.ClipboardSet(where);
+            HideChoices();
+            Append($"Copied {where}.", ChatKind.Private);
+        });
+        _choicesLayer.Visible = true;
+        // beside the point, kept on screen once it has a size
+        _choices.Position = at;
+        Callable.From(() =>
+        {
+            var view = GetViewport().GetVisibleRect().Size;
+            var size = _choices.GetCombinedMinimumSize();
+            _choices.Size = size;
+            _choices.Position = new Vector2(Math.Clamp(at.X, 8, view.X - size.X - 8), Math.Clamp(at.Y, 8, view.Y - size.Y - 8));
+            if (_choiceList.GetChildren().OfType<Button>().FirstOrDefault() is { } first) first.GrabFocus();
+        }).CallDeferred();
+    }
+
+    private void HideChoices()
+    {
+        if (!_choicesLayer.Visible) return;
+        _choicesLayer.Visible = false;
+        if (_panel.Visible && !_pickerOn) _input.GrabFocus();
+    }
+
+    // ---- the picker (#1277) ----------------------------------------------------------------
+
+    /// <summary>
+    /// Opens the chat for a pad or a VR hand (the quick menu's Chat wedge): the picker shown with the commands,
+    /// the first one focused. B closes it.
+    /// </summary>
+    public void OpenForPad()
+    {
+        OpenInput("/");
+        SetPicker(true, focus: true);
+    }
+
+    private void SetPicker(bool on, bool focus)
+    {
+        _pickerOn = on;
+        _pickerScroll.Visible = on;
+        if (!on) _pickerUsage.Visible = false;
+        _slash.SetPressedNoSignal(on);
+        if (on && _input.Text.Length == 0) SetText("/");
+        else ShowSuggestions();
+        BuildPicker();
+        if (on && focus) FocusPicker();
+        else if (!on) _input.GrabFocus();
+    }
+
+    private void FocusPicker() => Callable.From(() =>
+    {
+        if (_picker.GetChildren().OfType<Button>().FirstOrDefault(b => !b.IsQueuedForDeletion()) is { } first) first.GrabFocus();
+    }).CallDeferred();
+
+    /// <summary>The words that may come next, then the back key, Send and Close; rebuilt with the suggestions.</summary>
+    private void BuildPicker()
+    {
+        if (!_pickerOn) return;
+        foreach (Node b in _picker.GetChildren())
+        {
+            _picker.RemoveChild(b);
+            b.QueueFree();
+        }
+        _pickerUsage.Text = _completer.Usage(_input.Text) ?? "";
+        _pickerUsage.Visible = _pickerUsage.Text.Length > 0;
+        foreach (var s in _suggestions)
+        {
+            var b = Chip(s.Label, s.Detail);
+            string text = s.Text;
+            b.Pressed += () => { SetText(text); FocusPicker(); };
+            _picker.AddChild(b);
+        }
+        var back = Chip("Back", "Take the last word back");
+        back.Pressed += () => { SetText(BackOneWord(_input.Text)); FocusPicker(); };
+        _picker.AddChild(back);
+        var send = Chip("Send", "Send the line");
+        send.ThemeTypeVariation = Ui.Skins.SkinTheme.Primary;
+        send.Pressed += () => OnSubmitted(_input.Text);
+        _picker.AddChild(send);
+        var close = Chip("Close");
+        close.Pressed += () => CloseInput();
+        _picker.AddChild(close);
+        // the panel grows with the words, up to four rows, then the picker scrolls: measured once the flow
+        // has wrapped them at the panel's width
+        GetTree().ProcessFrame += FitPicker;
+    }
+
+    private const float PickerMaxHeight = 4 * 34;
+
+    private void FitPicker()
+    {
+        GetTree().ProcessFrame -= FitPicker;
+        if (!_pickerOn) return;
+        _pickerScroll.CustomMinimumSize = new Vector2(0, Math.Min(_picker.GetCombinedMinimumSize().Y, PickerMaxHeight));
+    }
+
+    /// <summary>"/locate church + spire" -> "/locate church + "; "/locate " -> "/"; "/" -> "".</summary>
+    public static string BackOneWord(string text)
+    {
+        string t = text.TrimEnd();
+        int cut = t.LastIndexOf(' ');
+        if (cut < 0) return t.Length > 1 && t.StartsWith('/') ? "/" : "";
+        return t[..(cut + 1)];
+    }
 
     private static Color ColorFor(ChatKind kind) => kind switch
     {
@@ -328,6 +644,11 @@ public partial class ChatUi : CanvasLayer
         _panel.Visible = false;
         _popup.Visible = false;
         _feed.Visible = true;
+        _choicesLayer.Visible = false;
+        _pickerOn = false;
+        _pickerScroll.Visible = false;
+        _pickerUsage.Visible = false;
+        _slash.SetPressedNoSignal(false);
         _input.ReleaseFocus();
         UiFocus.Set(this, false);
 
@@ -359,6 +680,7 @@ public partial class ChatUi : CanvasLayer
         _suggestionCursor = -1;
         BuildRows();
         ShowSuggestions();
+        BuildPicker();
     }
 
     private void BuildRows()
@@ -409,13 +731,14 @@ public partial class ChatUi : CanvasLayer
             row.AddThemeStyleboxOverride("panel", UiTheme.Flat(on ? new Color(UiTheme.Amber, 0.16f) : new Color(0, 0, 0, 0), 6, 10, 4));
             ((Label)row.GetChild(0).GetChild(0)).AddThemeColorOverride("font_color", on ? UiTheme.Amber : UiTheme.Text);
         }
-        _rows.Visible = _suggestions.Count > 0;
+        // with the picker open its buttons are the list: the popup keeps only the usage line
+        _rows.Visible = _suggestions.Count > 0 && !_pickerOn;
 
         string? usage = _completer.Usage(_input.Text);
         _usage.Visible = usage != null;
         _usage.Text = usage ?? "";
 
-        _popup.Visible = _panel.Visible && (_suggestions.Count > 0 || usage != null);
+        _popup.Visible = _panel.Visible && !_pickerOn && (_suggestions.Count > 0 || usage != null);
         if (_popup.Visible) PlacePopup();
 
         UpdateGhost();
@@ -510,6 +833,20 @@ public partial class ChatUi : CanvasLayer
     }
 
     // ---- keys ------------------------------------------------------------------------------
+
+    /// <summary>Pad B (and a VR hand's, through <c>XrPad</c>) closes the open chat, as Esc does.</summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (_choicesLayer.Visible && (@event.IsActionPressed("ui_cancel") || @event is InputEventKey { Pressed: true, PhysicalKeycode: Key.Escape }))
+        {
+            HideChoices();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (!_panel.Visible || @event is InputEventKey || !@event.IsActionPressed("ui_cancel")) return;
+        CloseInput();
+        GetViewport().SetInputAsHandled();
+    }
 
     public override void _UnhandledKeyInput(InputEvent @event)
     {

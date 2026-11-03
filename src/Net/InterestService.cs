@@ -53,6 +53,13 @@ public partial class InterestService : Node
     /// <summary>Server: true when two peers race each other; always relevant then.</summary>
     public Func<long, long, bool>? Together { get; set; }
 
+    /// <summary>
+    /// Server: true when <c>viewer</c> must not be sent <c>target</c> at all, whatever the distance (#1268: a Versteckis
+    /// seeker in Hide is sent none of the hiders). Wins over <see cref="Together"/>, and is applied at once, not held back
+    /// by the once-a-second flip limit.
+    /// </summary>
+    public Func<long, long, bool>? Withheld { get; set; }
+
     private readonly HashSet<long> _connected = new();
     private readonly Dictionary<long, Interest.View> _views = new();
     private readonly Dictionary<long, HashSet<long>> _sets = new();
@@ -203,14 +210,15 @@ public partial class InterestService : Node
                 if (target == viewer) continue;
                 bool was = set.Contains(target);
                 if (first) _changed.Add(target);
-                bool together = Together?.Invoke(viewer, target) == true;
+                bool withheld = Withheld?.Invoke(viewer, target) == true;
+                bool together = !withheld && Together?.Invoke(viewer, target) == true;
                 if (together) _together.Add((viewer, target));
-                bool now_ = Interest.Relevant(eye, Local(_at[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
+                bool now_ = !withheld && Interest.Relevant(eye, Local(_at[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
                     together, Ground == null ? null : _sight);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
-                // an edge case must not blink: each pair flips at most once a second
-                if (_flipped.TryGetValue((viewer, target), out double last) && now - last < MinFlipSeconds) continue;
+                // an edge case must not blink: each pair flips at most once a second (a withholding is never held back)
+                if (!withheld && _flipped.TryGetValue((viewer, target), out double last) && now - last < MinFlipSeconds) continue;
                 _flipped[(viewer, target)] = now;
                 if (now_) { set.Add(target); _leaving.Remove((viewer, target)); }
                 else { set.Remove(target); _leaving[(viewer, target)] = now + DespawnDelay; }

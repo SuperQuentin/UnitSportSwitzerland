@@ -15,6 +15,8 @@ public enum BuildingType : byte
     Ikea = 8,
     // #557: a block of flats, and a city block with shops under its flats
     Apartments = 9, MixedUse = 10,
+    // #1232: entertainment venues at their OSM places (Venues); a plan's type, never a group's
+    Bowling = 11, Cinema = 12, Arcade = 13,
 }
 
 /// <summary>The role one solid plays in its group.</summary>
@@ -47,15 +49,20 @@ public sealed class BuildingTypeMap
     private readonly int[] _group;
     private readonly BuildingPart[] _part;
     private readonly int[]? _castle;
+    private readonly int[]? _venue;
+    private readonly int[][]? _dining;
 
     public PlanBox?[] Boxes { get; }
     public IReadOnlyList<BuildingGroup> Groups { get; }
 
-    internal BuildingTypeMap(PlanBox?[] boxes, List<BuildingGroup> groups, int[]? castles = null)
+    internal BuildingTypeMap(PlanBox?[] boxes, List<BuildingGroup> groups, int[]? castles = null, int[]? venues = null,
+        int[][]? dining = null)
     {
         Boxes = boxes;
         Groups = groups;
         _castle = castles;
+        _venue = venues;
+        _dining = dining;
         _group = Enumerable.Repeat(-1, boxes.Length).ToArray();
         _part = new BuildingPart[boxes.Length];
         for (int g = 0; g < groups.Count; g++)
@@ -84,6 +91,20 @@ public sealed class BuildingTypeMap
 
     /// <summary>Whether any solid of the tile is a castle's.</summary>
     public bool HasCastles => _castle != null;
+
+    /// <summary>
+    /// The entertainment venue a solid is (#1232), an index for <see cref="Venues.At"/>, or -1. Only
+    /// what it is: how each kind is planned and dressed is that kind's own (a venue is not a
+    /// <see cref="BuildingGroup"/>, so churches, landmarks and stored plans are what they were).
+    /// </summary>
+    public int VenueOf(int index) => _venue != null && index >= 0 && index < _venue.Length ? _venue[index] : -1;
+
+    /// <summary>The dining venues a solid holds (#1242), in list order: indices for <see cref="Venues.At"/>.</summary>
+    public IReadOnlyList<int> DiningOf(int index) =>
+        _dining != null && index >= 0 && index < _dining.Length ? _dining[index] : Array.Empty<int>();
+
+    /// <summary>Whether any solid of the tile is a venue.</summary>
+    public bool HasVenues => _venue != null;
 }
 
 /// <summary>
@@ -194,6 +215,30 @@ public static class BuildingTypes
         var boxes = new PlanBox?[n];
         for (int i = 0; i < n; i++) boxes[i] = PlanBox.Of(tile.Buildings[i]);
 
+        var groups = Churches(tile, boxes);
+
+        // a landmark is recognised by where it stands, not by its shape (#501): the tile knows its
+        // own id, so this stays a pure function of the tile's bytes like everything above it. One
+        // member for now — grouping a store with its garden centre and its annexes is a follow-up.
+        if (Landmarks.Match(tile, boxes) is { } hit && groups.All(g => !g.Members.Contains(hit.Index)))
+            groups.Add(new BuildingGroup(hit.Store.Type, new[] { hit.Index }, new[] { BuildingPart.Store }));
+
+        var contained = Venues.Contained(tile);
+        return new BuildingTypeMap(boxes, groups, Castles.Match(tile), Venues.Match(tile, contained), Venues.Dining(tile, contained));
+    }
+
+    /// <summary>
+    /// Whether a solid's kind can be a church's hall or tower: the only boxes <see cref="Churches"/> reads
+    /// (a caller that needs no other may leave the rest null, as <c>/locate</c>'s index does, #1277).
+    /// </summary>
+    public static bool ChurchPart(BuildingKind kind) =>
+        kind is not (BuildingKind.House or BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Industrial
+            or BuildingKind.Agricultural or BuildingKind.UnderConstruction);
+
+    /// <summary>The tile's churches: each hall with its towers (<see cref="Detect"/>'s first step).</summary>
+    public static List<BuildingGroup> Churches(BuildingTile tile, PlanBox?[] boxes)
+    {
+        int n = tile.Buildings.Count;
         var towers = new List<int>();
         var halls = new List<int>();
         for (int i = 0; i < n; i++)
@@ -243,14 +288,7 @@ public static class BuildingTypes
             }
             groups.Add(new BuildingGroup(BuildingType.Church, members, parts));
         }
-
-        // a landmark is recognised by where it stands, not by its shape (#501): the tile knows its
-        // own id, so this stays a pure function of the tile's bytes like everything above it. One
-        // member for now — grouping a store with its garden centre and its annexes is a follow-up.
-        if (Landmarks.Match(tile, boxes) is { } hit && groups.All(g => !g.Members.Contains(hit.Index)))
-            groups.Add(new BuildingGroup(hit.Store.Type, new[] { hit.Index }, new[] { BuildingPart.Store }));
-
-        return new BuildingTypeMap(boxes, groups, Castles.Match(tile));
+        return groups;
     }
 
     private static bool IsTower(Building b, PlanBox box)

@@ -12,6 +12,8 @@
   - **The control**: "Sign in" opens a dialog with two tabs. **Sign in** asks for email and password. **Create
     account** adds a name in the game: 2 to 20 letters, digits, `-` and `_`, or empty to let Nakama pick one.
   - **Signed in**, it shows the name, **Dashboard** for an admin, and Sign out.
+- **Forgot your password?** (#1257) in the Sign in tab asks only for the email and mails a link to `reset.html`, where the
+  new password is chosen (`net/nakama`).
 - **The server key** comes from `nakama.json`, which `--nakama` writes beside the pages. It is not a secret.
 - **The session** (Nakama's token and refresh token) lives in `localStorage`, under `unitsport.session`.
   - It is renewed a minute before it runs out.

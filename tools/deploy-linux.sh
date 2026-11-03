@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 # Build the Linux x64 dedicated server and deploy it to a Debian/Ubuntu host over SSH.
-# Usage: tools/deploy-linux.sh [--check] [--setup] [--build] [--chunks] [--nakama] [--restart] [--no-chunks] [--dry-run] [--checksum] [--prune]
+# Usage: tools/deploy-linux.sh [--check] [--setup] [--build] [--chunks] [--nakama] [--restart] [--no-chunks] [--dry-run] [--checksum] [--prune] [--smtp-check <to>]
 #   no step flag = everything: setup, build + upload, chunk sync, Nakama (when NAKAMA=1), restart.  --check = report only.
+#   --smtp-check <to> = a step of its own: the layout service sends a test mail to <to> with the host's SMTP settings.
 # Config: tools/deploy.env (copy tools/deploy.env.example); env vars override it. Details: docs/notes/general/linux-deploy.md
 # Needs (local, Git Bash or Linux): ssh with key auth to the host, tar, dotnet SDK, Godot mono + Linux export templates.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
-S_SETUP=0 S_BUILD=0 S_CHUNKS=0 S_NAKAMA=0 S_RESTART=0 CHECK=0 DRY=0 CHECKSUM=0 PRUNE=0 NOCHUNKS=0
-for a in "$@"; do
+usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+S_SETUP=0 S_BUILD=0 S_CHUNKS=0 S_NAKAMA=0 S_RESTART=0 CHECK=0 DRY=0 CHECKSUM=0 PRUNE=0 NOCHUNKS=0 S_SMTP=0 SMTP_TO=
+while [ $# -gt 0 ]; do
+  a=$1; shift
   case $a in
+    --smtp-check) [ $# -gt 0 ] && [ "${1#-}" = "$1" ] || { echo "--smtp-check needs an address"; usage 1; }; S_SMTP=1 SMTP_TO=$1; shift ;;
     --check) CHECK=1 DRY=1 S_SETUP=1 S_CHUNKS=1 ;;
     --setup) S_SETUP=1 ;; --build) S_BUILD=1 ;; --chunks) S_CHUNKS=1 ;; --nakama) S_NAKAMA=1 ;; --restart) S_RESTART=1 ;;
     --no-chunks) NOCHUNKS=1 ;; --dry-run) DRY=1 ;; --checksum) CHECKSUM=1 ;; --prune) PRUNE=1 ;;
     -h|--help) usage ;; *) echo "Unknown option $a"; usage 1 ;;
   esac
 done
-[ $((S_SETUP + S_BUILD + S_CHUNKS + S_NAKAMA + S_RESTART)) = 0 ] && S_SETUP=1 S_BUILD=1 S_CHUNKS=1 S_NAKAMA=2 S_RESTART=1
+[ $((S_SETUP + S_BUILD + S_CHUNKS + S_NAKAMA + S_RESTART + S_SMTP)) = 0 ] && S_SETUP=1 S_BUILD=1 S_CHUNKS=1 S_NAKAMA=2 S_RESTART=1
 [ $NOCHUNKS = 1 ] && S_CHUNKS=0
 
 # --- config: tools/deploy.env, but variables already set in the environment win ---
@@ -91,6 +94,12 @@ say "Preflight ($DEPLOY_HOST)"
 "${SSH[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$DEPLOY_HOST" true \
   || die "ssh $DEPLOY_HOST failed with key auth. Run: ssh-keygen (once), then ssh-copy-id -p $DEPLOY_PORT_SSH $DEPLOY_HOST"
 echo "  ssh    OK ($(rq 'uname -srm; . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-}"' | tr '\n' ' '))"
+if [ $S_SMTP = 1 ]; then  # the layout service's own check, with layouts.env (SMTP_PASS stays on the host) loaded
+  say "SMTP check ($DEPLOY_HOST)"
+  rq "set -a; . $(qd "$LAYOUTS_DIR/layouts.env"); set +a; $(qd "$LAYOUTS_DIR/app/LayoutService") --smtp-check $(qd "$SMTP_TO")" \
+    && echo "  SMTP    OK" || die "SMTP check failed (see above; settings come from SMTP_* in tools/deploy.env, written to $LAYOUTS_DIR/layouts.env by --setup)"
+  exit 0
+fi
 SUDO=sudo
 if rq 'sudo -n true' 2>/dev/null; then SUDO_TTY=(); echo "  sudo   OK (passwordless)"
 elif [ -t 0 ]; then SUDO_TTY=(-t); echo "  sudo   will ask for your password"
@@ -115,7 +124,7 @@ runnable=false
 dedicated_server=true
 custom_features=""
 export_filter="all_resources"
-include_filter=""
+include_filter="assets/music/*"
 exclude_filter="$excl"
 export_path="$BUILD/$BIN"
 patches=PackedStringArray()
@@ -186,6 +195,7 @@ web_accounts() {
   rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/account.js")" < tools/deploy/web/account.js
   rq "cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
   rq "cat > $(qd "$WEB/admin.html")" < tools/deploy/web/admin.html
+  rq "cat > $(qd "$WEB/reset.html")" < tools/deploy/web/reset.html
 }
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
@@ -220,7 +230,11 @@ install_layouts() { # house layouts (#1186): the page, the settings (secrets: a 
   rq "cat > $(qd "$WEB/houses.html")" < tools/deploy/web/houses.html
   [ -z "${LAYOUTS_ADMINS:-}" ] && echo "  LAYOUTS_ADMINS is empty: nobody can approve a house layout (set it in tools/deploy.env)"
   [ -z "${SMTP_HOST:-}" ] && echo "  SMTP_HOST is empty: login links go to $LAYOUTS_DIR/layouts.log instead of an email"
+  # forgotten passwords (#1257): the service calls the host's Nakama with its http key (it exists once --nakama has run)
+  local hk; hk=$(rq "sed -n 's/^NAKAMA_HTTP_KEY=//p' $(qd "$NAKAMA_DIR/.env") 2>/dev/null || $SUDO -n sed -n 's/^NAKAMA_HTTP_KEY=//p' $(qd "$NAKAMA_DIR/.env") 2>/dev/null" | tr -d '\r\n' || true)
+  [ -z "$hk" ] && echo "  no Nakama http key yet: password reset mails stay off until --nakama has run and --setup runs again"
   { for v in LAYOUTS_DB SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM; do printf '%s=%q\n' "$v" "${!v:-}"; done
+    printf '%s=%q\n' NAKAMA_URL "http://127.0.0.1:$NAKAMA_PORT" NAKAMA_HTTP_KEY "$hk"
     printf '%s=%q\n' ADMIN_EMAILS "${LAYOUTS_ADMINS:-}" PUBLIC_URL "$LAYOUTS_PUBLIC_URL" LAYOUTS_URLS "http://127.0.0.1:$LAYOUTS_PORT" \
       LAYOUTS_DATA "$LAYOUTS_DIR" LAYOUTS_CHUNKS "$CHUNKS_DIR" LAYOUTS_EXPORT "$LAYOUTS_DIR/house-layouts.json"
   } | rq "mkdir -p $(qd "$LAYOUTS_DIR") && umask 077 && cat > $(qd "$LAYOUTS_DIR/layouts.env")"
@@ -356,7 +370,7 @@ if [ $S_NAKAMA = 1 ]; then
       printf '{"url":"/nakama","serverKey":"%s"}
 ' "$key" | rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/nakama.json")"
       web_accounts
-      echo "  website accounts: nakama.json, account.js and admin.html in $WEB; first admins: ${NAKAMA_ADMIN_EMAILS:-none}"
+      echo "  website accounts: nakama.json, account.js, admin.html and reset.html in $WEB; first admins: ${NAKAMA_ADMIN_EMAILS:-none}"
     fi
     echo "  official server of a build: put both in assets/account-server.json (url, serverKey) before releasing"
     echo "  admin console: ssh -L 7351:127.0.0.1:7351 -p $DEPLOY_PORT_SSH $DEPLOY_HOST, then http://127.0.0.1:7351 (login in $NAKAMA_DIR/.env)"

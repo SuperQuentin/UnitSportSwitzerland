@@ -38,7 +38,7 @@ public partial class FootPlayer
     {
         if (_wadeSpray == null && (DisplayServer.GetName() == "headless" || !IsInsideTree())) return;
         bool owner = IsMultiplayerAuthority();
-        bool walking = RideKindId == (int)RideKind.OnFoot && !IsSwimming && !Ragdolled && RidingWith == 0 && Visible;
+        bool walking = RideKindId == (int)RideKind.OnFoot && !IsSwimming && !IsClimbing && !Ragdolled && RidingWith == 0 && Visible;
         float depth = 0f, level = 0f;
         if (walking && WaterField.TryLevelAt(GlobalPosition, out level)) depth = Mathf.Max(0f, level - GlobalPosition.Y);
         float speed = owner ? MathX.FlatLength(Velocity) : PoseKind == PoseStride ? Anim.X : 0f;

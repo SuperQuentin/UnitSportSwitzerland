@@ -91,7 +91,7 @@ public partial class FootPlayer
     {
         if (!IsMultiplayerAuthority())
             PhoneFold = Mathf.MoveToward(PhoneFold, PhoneState >= PhoneOpenState ? 1f : 0f, dt / Phone.PhoneModel.UnfoldSeconds);
-        bool held = _walker != null && HandLocal is not null && Ride == RideKind.OnFoot && !RidingAlong && !IsSwimming && !Ragdolled
+        bool held = _walker != null && HandLocal is not null && Ride == RideKind.OnFoot && !RidingAlong && !IsSwimming && !IsClimbing && !Ragdolled
                     && IsPhonePose(_itemArmCur) && _itemArmBlend > 0.3f;
         if (!held)
         {

@@ -18,6 +18,8 @@ public sealed class PhotoMeta
     public float FocalMm { get; set; }
     /// <summary>The full-size frame in <c>user://photos</c> it was cropped from.</summary>
     public string Source { get; set; } = "";
+    /// <summary>The photo spot it frames (#1227, <c>Adventure.Rewards.PhotoSpots</c>), or "".</summary>
+    public string Spot { get; set; } = "";
 }
 
 /// <summary>
@@ -87,7 +89,7 @@ public static class PhotoStore
     }
 
     /// <summary>Prints a frame, stores it in the archive with its sidecar and returns its id.</summary>
-    public static string Save(Image frame, double e, double n, double altitude, float focalMm, string source)
+    public static string Save(Image frame, double e, double n, double altitude, float focalMm, string source, string spot = "")
     {
         var (jpeg, card) = Print(frame);
         string id = IdOf(jpeg);
@@ -97,7 +99,7 @@ public static class PhotoStore
         {
             Id = id, E = Math.Round(e, 1), N = Math.Round(n, 1), Altitude = Math.Round(altitude, 1),
             Taken = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture),
-            FocalMm = MathF.Round(focalMm), Source = source,
+            FocalMm = MathF.Round(focalMm), Source = source, Spot = spot,
         };
         // System.Text.Json writes numbers culture-invariantly
         Core.JsonStore.Save(Path.Combine(LocalDir, id + ".json"), meta, Core.JsonStore.Indented);

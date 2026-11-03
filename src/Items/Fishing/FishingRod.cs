@@ -216,7 +216,7 @@ public partial class FishingRod : Node
         State = Phase.Waiting;
         _waited = 0;
         _toldEmpty = false;
-        _timer = FishRules.BiteSeconds(Spot, Bait, World.WorldClock.CurrentHour, World.WaterField.SeaState, _rng);
+        _timer = FishRules.BiteSeconds(Spot, Bait, World.WorldClock.CurrentHour, World.WaterField.SeaState, _rng, Adventure.Together.TogetherService.LocalNear);
         string bait = Bait switch { Bait.Spinner => "a spinner", Bait.Dough => "dough", _ => "a bare hook" };
         _items.Toast($"Cast into {Spot.Describe()}, with {bait}.");
     }
@@ -235,12 +235,15 @@ public partial class FishingRod : Node
 
     private void Bite()
     {
-        _biter = FishRules.Pick(Spot, Bait, World.WorldClock.CurrentHour, _rng);
+        // friends fishing near (#1266): rarer fish are likelier, and the bite says so
+        int together = Adventure.Together.TogetherService.LocalNear;
+        _biter = FishRules.Pick(Spot, Bait, World.WorldClock.CurrentHour, _rng, together);
         if (_biter == null)
         {
             _timer = 30;   // nothing lives here: the float just sits
             return;
         }
+        if (together > 0 && _biter.Rarity >= Rarity.Rare) _items.Toast("Together: a rarer bite");
         State = Phase.Bite;
         _timer = StrikeWindow;
         Visuals?.Dip(0.07f);
@@ -259,7 +262,7 @@ public partial class FishingRod : Node
         }
         _items.Toast(text);
         State = Phase.Waiting;
-        _timer = FishRules.BiteSeconds(Spot, Bait, World.WorldClock.CurrentHour, World.WaterField.SeaState, _rng);
+        _timer = FishRules.BiteSeconds(Spot, Bait, World.WorldClock.CurrentHour, World.WaterField.SeaState, _rng, Adventure.Together.TogetherService.LocalNear);
     }
 
     private void Strike(FootPlayer player)

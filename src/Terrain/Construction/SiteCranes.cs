@@ -47,6 +47,7 @@ public partial class SiteCranes : Node3D
         public float JibBottom;
         /// <summary>The pose drawn last frame.</summary>
         public CranePose Last;
+        public bool Posed;
         /// <summary>The pallet on its hook, drawn, its slings, and its load byte (−1: none).</summary>
         public Node3D? Carried, Slings;
         public int CarriedLoad = -1;
@@ -96,6 +97,20 @@ public partial class SiteCranes : Node3D
         /// <summary>The remote's box itself, in the world.</summary>
         public Vector3 RemoteBox => ToWorld(new Vector3(Data.Job.Base.X, Data.Ground + CranePlans.RemoteHeight, Data.Job.Base.Y)
                                             + RemoteSide * (CranePlans.MastHalf(Data.Spot) + 0.12f));
+
+        /// <summary>The remote's box as a box in the world, square to the tile as <c>CranePlans</c> draws it (its outline, #1286).</summary>
+        public Transform3D RemoteFrame => new(Owner.GlobalBasis, RemoteBox);
+
+        /// <summary>
+        /// The ladder's lowest <paramref name="height"/> metres, the stiles' box in the world, x across them
+        /// (its outline, #1286): the part a hand reaches from the ground, not all the way to the cab.
+        /// </summary>
+        public Transform3D LadderFrame(float height)
+        {
+            var centre = new Vector3(Data.Job.Base.X, Data.Ground + CranePlans.FootHeight(Data.Spot) + height / 2, Data.Job.Base.Y)
+                         + Face * (CranePlans.MastHalf(Data.Spot) + 0.12f);
+            return new Transform3D(Owner.GlobalBasis * new Basis(Vector3.Up, Mathf.Atan2(Face.X, Face.Z)), ToWorld(centre));
+        }
 
         /// <summary>The operator's place in the cab for a pose, in the world, and its heading (along the jib).</summary>
         public (Vector3 At, float Yaw) InCab(CranePose pose) =>
@@ -227,16 +242,21 @@ public partial class SiteCranes : Node3D
             CraneService.Hold? hold = null;
             var pose = service != null && service.PoseOf(c.Job, sim, hour, day, dt, out var held, out hold)
                 ? held : CraneMotion.Pose(c.Job, sim, hour, day);
+            // a crane at rest (or waiting on the clock) writes nothing: each write is an engine call (#1344)
+            if (!c.Posed || pose != c.Last)
+            {
+                c.Pivot.Rotation = new Vector3(0, pose.Yaw, 0);
+                c.Trolley.Position = new Vector3(0, c.JibBottom, -pose.Trolley);
+                // the hook hangs from the trolley, its height in the pivot's frame
+                float hookY = pose.HookY - c.Pivot.Position.Y;
+                c.Hook.Position = new Vector3(0, hookY, -pose.Trolley);
+                float ropeTop = c.JibBottom - 0.35f;
+                c.Rope.Position = new Vector3(0, ropeTop, -pose.Trolley);
+                c.Rope.Scale = new Vector3(1, Math.Max(0.05f, ropeTop - hookY), 1);
+                c.Load.Visible = pose.Loaded;
+                c.Posed = true;
+            }
             c.Last = pose;
-            c.Pivot.Rotation = new Vector3(0, pose.Yaw, 0);
-            c.Trolley.Position = new Vector3(0, c.JibBottom, -pose.Trolley);
-            // the hook hangs from the trolley, its height in the pivot's frame
-            float hookY = pose.HookY - c.Pivot.Position.Y;
-            c.Hook.Position = new Vector3(0, hookY, -pose.Trolley);
-            float ropeTop = c.JibBottom - 0.35f;
-            c.Rope.Position = new Vector3(0, ropeTop, -pose.Trolley);
-            c.Rope.Scale = new Vector3(1, Math.Max(0.05f, ropeTop - hookY), 1);
-            c.Load.Visible = pose.Loaded;
             Hang(c, pose, hold);
         }
     }

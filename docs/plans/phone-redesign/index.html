@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phone Interactions v2</title>
+<style>
+:root{--bg:#0f1115;--fg:#e8e6e1;--mut:#9aa0a8;--acc:#fab81a;--line:#2a2f38;--card:#171a20}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:1000px;margin:auto}
+h1,h2{color:var(--acc)}a{color:var(--acc)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;vertical-align:top;text-align:left}
+th{background:var(--card)}
+li{margin:6px 0}
+.shot{margin:28px 0}
+.frame{width:900px;height:506px;overflow:hidden;border:1px solid var(--line);border-radius:6px;background:#000}
+iframe{width:1280px;height:720px;border:0;transform:scale(.703125);transform-origin:0 0}
+.tw{overflow-x:auto}
+</style></head><body>
+<h1>Phone Interactions v2: Five Verbs on the Existing Foldable</h1>
+<h2>Principles</h2><ol id="pr"></ol>
+<h2>Interaction table</h2><div class="tw"><table id="tb"></table></div>
+<h2>Risks</h2><ul id="rk"></ul>
+<h2>Mockups</h2><div id="g"></div>
+<script id="data" type="application/json">
+{"principles":[
+"Five verbs, one meaning each on every device: Pick (move highlight), Open (activate), Back (exactly one step up, never folds except from Home), Put away (leave from anywhere), and Take out. Esc is only ever Back while the phone is out.",
+"Keep the structure; fix what breaks it. Foldable, cover, 3x2 Home, apps and the Esc/B/swipe-right chain stay. No recents stack, dock, widget board, second Home page or settings app: scope is a tune-up plus targeted rework of Map, Contacts, Activities and Camera.",
+"Phone key is a toggle: the key that takes the phone out puts it away from any page except text entry. Pad gets a hold D-pad Up chord, touch gets a real Phone button, VR keeps the pocket grip plus wrist menu.",
+"Back is generic: any page except Home and Travel goes up one level, so Training or any future app can never fold the phone by accident. Every app shows a visible Back chevron. Travel gets an explicit Cancel.",
+"Decide four devices together: every action has keyboard/mouse, pad, VR and touch cells, an InputHints row, and a row in xr/vr-action-map and touch-controls. The phone.md notes get a touch column and one stated rule (folded walks, open stands, camera walks).",
+"Selection never shifts under the hands: calls are a pinned banner, not a re-indexed quick list. Quick tiles keep a fixed order (Open, Map, Camera, Contacts, Photos, Activities) and are individually pickable.",
+"Sizes follow the body: touch slop 2 mm, back swipe 10 mm, targets 7 mm minimum and 9 mm primary via pxPerMm; mouse thresholds scale with window height; VR travel look at 25-45 cm instead of 14 cm. Touch uses the enlarged square-on inner screen.",
+"Nothing essential lives only in a tooltip, key hint or toast: labels and badges under tiles, a persistent hint bar generated from the focused control, error banners that stay, and an action button on every empty state.",
+"Social actions are safe and visible: Fight and Bring here confirm (Cancel default), 'Call' becomes 'Invite', and a result line reports the outcome. Server slash commands (/tpa, /tphere, /party, /fight) stay unchanged for bots.",
+"Pad-first Map: Recents, Near you and categories as focusable rows; search is optional. Single amber accent (0.98, 0.72, 0.10) for selection, focus, hover and the VR fingertip ring; dark glass otherwise."],
+"risks":[
+"Hold D-pad Up 0.4 s may feel laggy next to the emote tap; keep the hold-Back quick menu as the fallback and playtest the timing. Hold-B 0.4 s put-away must not collide with hold-Back 0.3 s (quick menu) and tap-Back (inventory); verify on a real pad.",
+"New P key and right-click-as-Back need a conflict check against the key map and against selfie right-click (selfie keeps it only inside Camera, where Back is Esc); update controls table, InputHints and vr-action-map in the same change.",
+"Merging Menu and Training into Activities changes Home tiles and the cover list; --phonecheck flows that relied on Training folding the phone, the 3x2 VR layout assertions and the notes must be updated together; Journal and Host overlays need a Back-to-phone path.",
+"VR comfort changes (25-45 cm travel look, edge ghost, handedness-swapped face buttons, ear-answer, selfie hold) cannot be verified headless; --phonevrcheck must cover false positives and accidental ear-answer, and on-headset checks are the user's.",
+"Millimetre gestures need pxPerMm available to PhoneController, which has no touch path today; enlarging the inner screen on touch changes camera framing and must not alter the desktop look. Re-run TouchLayoutTests at 2220x1080 and small phones; keyboard lift over a 3D quad is unproven and Android on-phone checks are the user's.",
+"Contacts result lines (Sent, Accepted, Declined) need server feedback that the raw slash commands do not give today: a small net change (tier 2 check on the remote peer) and a bots/bot-capability-map row (#837); the phone must keep acting on intents, not raw Input reads.",
+"Pad A as shutter needs a clear definition of 'standing still', or it either jumps instead of shooting or shoots when the player wanted to jump.",
+"On-screen keyboard for pad and VR is new UI; if it slips, Map still works from rows alone.",
+"Staging: one oversized PR would be hard to test. Suggested split: (1) input verbs, Back rule, toggle, hint bar and notes; (2) Home/cover and Activities merge; (3) Map and Travel; (4) Contacts and confirm; (5) Camera, touch and VR polish."]}
+</script>
+<script id="md" type="text/plain">
+| Action | Keyboard / mouse | Gamepad | VR | Touch |
+|---|---|---|---|---|
+| Take out (on foot) | Up (kept) or new P. Blocked in a cab, while typing or busy, with a toast naming the reason. First-spawn hint. | Quick-menu Phone entry (hold Back, aim right stick, release) kept. New: hold D-pad Up 0.4 s with a filling ring; a tap stays the emote wheel. One-time toast "Hold D-pad Up: phone". | Free-hand grip at the pocket zone, or wrist-menu Phone entry. New: pocket glows when the hand is within 15 cm. | New Phone button in the on-foot layout (9 mm) and a More-sheet row. Quick menu entry kept. |
+| Put away (from any depth) | Phone key again (Up or P), not while typing. Up/S folded still works. Click outside the glass. | Hold B 0.4 s from any page (ring fills in the hint bar); tap B stays Back. | Release the grip away from the pocket (hangs 0.5 s, flies home, kept). New: hold the holding-hand Back button 0.4 s. | Tap outside the phone, or the Phone button again. |
+| Back (exactly one step) | Esc, right click (new), Backspace, swipe right 10 mm-equivalent. Generic rule: any page except Home and Travel goes up one level (Photo to Photos, apps to Home); Home folds. Esc is only ever Back while the phone is out. | B tap, same chain. | Face button on the holding hand (swaps with handedness; default right-handed). Back chevron on the glass. | Visible Back chevron top-left of every app (9 mm); left-edge swipe. Panning pages (Map, Photo) ignore the swipe. |
+| Open / fold the foldable | Cover: Enter / Space / E / click on Open. Esc or Back at Home folds. | A on the Open tile; B at Home folds. | Holding-hand X (A if left-handed); or swing the loose edge (edge ghost within 15 cm plus a one-time "grab the edge to open" hint). | Tap the Open tile or the cover; fold handle on the inner screen. |
+| Cover: pick quick tile | Fixed order: Open, Map, Camera, Contacts, Photos, Activities. Tiles are individually hoverable and clickable; left/right, A/D, keys 1-6. Wheel down = next (same sense as swipe left). | D-pad left/right, plus left stick (new). | Swipe the cover with a live preview of the next tile; tap or ray + trigger. | Tap a tile (9 mm) or swipe. |
+| Run selected tile / Select | Enter, E, Space, left click. | A. | Fingertip touch at 6 mm (amber ring that shrinks with depth, hover highlight on buttons) or ray + trigger. | Tap. |
+| Move highlight / scroll | Arrows, WASD, PgUp/PgDn, wheel. 6 px mouse dead zone before the mouse takes the highlight from the keys; hover ring and focus ring visibly distinct (both amber). | D-pad / left stick; LB/RB = page up/down in lists and the Photos grid; focus remembered per page. | Fingertip drag with flick and inertia; ray beam shown faintly whenever the free hand points near the phone. | Drag with inertia; 2 mm slop; targets 7 mm or more, primary 9 mm. |
+| Incoming call | Banner above the quick tiles (tiles never shift): Enter = Answer, Esc = Decline. | A = Answer, B = Decline while the banner is up. | Raise to ear (unchanged, geometry to verify on a headset) or tap the banner buttons. | Tap Answer / Decline (9 mm). |
+| Map: choose a place | Default list is focusable rows: Recents, Near you (with distance), Towns, category chips. Enter/click travels. "/" or click focuses the optional search field; Esc leaves the field first, then Back. | Rows take focus first; search is one optional last row (on-screen keyboard); no typing needed. | Rows by fingertip/ray; same on-screen keyboard if wanted. | Same rows; native keyboard height lifts the screen. |
+| Travel curtain | Curtain shows "Travelling to X" with a Cancel button; Esc cancels before the jump. | B cancels. | Curtain runs when the screen is 25-45 cm from the eyes and facing them (about 1 s), or blinks after 1.5 s (was 14 cm / 3 s). B or Cancel button cancels. | Tap Cancel. |
+| Contacts: act on a player | One row per player (name + status). Enter opens a sheet: Go to, Bring here, Party invite, Fight. Fight and Bring here show a confirm sheet (Cancel default focus); a result line follows (Sent, Accepted, Declined, Timed out). | A opens the sheet / action; A on Confirm; B back. | Tap row, action, Confirm. | Tap row, action, Confirm (9 mm). |
+| Activities (Play / Host / Train) | Rows keep focus by id across the 1 s refresh. Host button (admins) opens the full setup overlay with a Back-to-phone path. Training is a section. | LB/RB switches section; A joins/leaves. | Tap. | Tap. |
+| Camera: shutter | Click or Enter; Space still jumps. | RT always; A when standing still (idle threshold). Shutter and Selfie buttons focusable. | Trigger on the on-screen shutter or ray. Zoom by on-screen chips so a stray trigger off the phone no longer zooms. | Big shutter (12 mm or more); tapping the glass does not shoot. |
+| Camera: zoom / selfie / look | Wheel or Up/Down zoom; chips 1x 2x 5x with current lit; selfie F, Tab or right click (in Camera only), or button. | LB/RB zoom steps, Y selfie; body walks and right stick looks (#1149 kept). | Selfie button plus the auto turn (needs 0.6 s and a clear turn, haptic cue). | Chips and Selfie button; drag the free area to look; floating stick walks. |
+| Camera: leave | Esc: selfie, then Camera, then Home. | B same. | Holding-hand Back, or hold to put away. | Back chevron. |
+| Photos / Photo view | Arrows move; Left/Right previous/next photo; Enter opens; Set as lock/home button. | D-pad, LB/RB page the grid and previous/next in the viewer. | Swipe sideways previous/next; tap buttons. | Swipe, tap. |
+| Hints | One persistent bottom hint bar built from the focused control (Enter on the search field = Search, on a row = Travel), via InputHints. | Same, pad glyphs. | Hint card on the glass lower edge, including pocket grip and edge-grab first-use prompts. | Chevrons and labelled buttons carry it; no hint bar. |
+</script>
+<script>
+var d=JSON.parse(document.getElementById('data').textContent);
+function li(id,a){document.getElementById(id).innerHTML=a.map(function(x){var e=document.createElement('li');e.textContent=x;return e.outerHTML}).join('')}
+li('pr',d.principles);li('rk',d.risks);
+var rows=document.getElementById('md').textContent.trim().split('\n').filter(function(l){return !/^\|[-| ]+\|$/.test(l)});
+document.getElementById('tb').innerHTML=rows.map(function(l,i){var t=i?'td':'th';
+ return '<tr>'+l.replace(/^\||\|$/g,'').split(' | ').map(function(c){var e=document.createElement(t);e.textContent=c.replace(/^\s+|\s+$/g,'');return e.outerHTML}).join('')+'</tr>'}).join('');
+var g='';for(var i=1;i<=10;i++){var n='S'+(i<10?'0':'')+i+'.html';
+ g+='<div class="shot"><h3><a href="'+n+'">'+n+'</a></h3><div class="frame"><iframe src="'+n+'" loading="lazy"></iframe></div></div>'}
+document.getElementById('g').innerHTML=g;
+</script></body></html>

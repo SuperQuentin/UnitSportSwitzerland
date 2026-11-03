@@ -105,6 +105,10 @@ world_lights={
 "type": "float",
 "value": 0.0
 }
+world_lamps={
+"type": "float",
+"value": 1.0
+}
 world_origin_offset={
 "type": "vec2",
 "value": Vector2(0, 0)
@@ -148,6 +152,18 @@ water_time={
 world_cam_pos={
 "type": "vec3",
 "value": Vector3(0, 0, 0)
+}
+world_curvature={
+"type": "float",
+"value": 0.0
+}
+world_curve_blend={
+"type": "float",
+"value": 0.0
+}
+world_lod_scale={
+"type": "float",
+"value": 1.0
 }
 world_door_light_0={
 "type": "vec4",

@@ -37,3 +37,4 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `crank-turning-wrong-way-instantly` — A crank turning the wrong way is instantly obvious to anyone who rides
 - `meshscratch-boxes-render-inside-out` — MeshScratch winding, fixed: every face clockwise from outside (Godot front face); `--meshcheck` signed-volume check (#54), smooth primitives too (#311); overlays must stand ~1 cm proud or they z-fight at distance
 - `snow-rig` — Live skier and boarder (#933): `SnowPose` joints from crouch/lean/plough/stride/absorb, two-bone limbs, angulation, the author-space half turn trap, posed (skinned, #1202) only on a new pose key, sent as the ride pose
+- `wall-climb-pose` — Free-climbing figure (#1225): `PoseWallClimb`/`AdvanceWallClimb`, hands and feet on a plane 0.35 m ahead (+Z), diagonal limbs, climb-jump stretch

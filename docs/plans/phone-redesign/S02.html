@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>S02 Take-out and put-away</title>
+<style>
+:root{--a:#fab81a}
+*{box-sizing:border-box}
+body{margin:0;width:1280px;height:720px;background:#07090c;color:#e8ecf2;font:13px/1.35 "Segoe UI",system-ui,sans-serif;overflow:hidden;position:relative}
+h1{margin:0;position:absolute;left:20px;top:12px;font-size:18px;font-weight:600}
+h1 span{color:var(--a)}
+.sub{position:absolute;right:20px;top:16px;color:#8b95a4;font-size:12px}
+.grid{position:absolute;left:20px;top:48px;width:1240px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.c{background:#10141a;border:1px solid #232a34;border-radius:10px;height:290px;padding:8px 10px;display:flex;flex-direction:column;align-items:center}
+.c h2{font-size:12px;color:#aab3c0;margin:0 0 6px;align-self:flex-start;font-weight:600}
+.c p{font-size:10.5px;color:#8b95a4;margin:5px 0 0;text-align:center;line-height:1.3}
+.sc{position:relative;width:100%;height:200px;border-radius:8px;background:linear-gradient(#141b26 0 62%,#1b2a1c 62%);overflow:hidden;border:1px solid #232a34}
+.toast{position:absolute;left:50%;transform:translateX(-50%);background:rgba(20,26,34,.95);border:1px solid #3a4452;border-radius:12px;padding:5px 10px;font-size:11px;white-space:nowrap}
+.toast.a{border-color:var(--a)}
+.k{border:1px solid #4a5464;border-radius:4px;padding:0 5px;color:#e8ecf2;font-size:10px;background:#1a2029}
+.man{position:absolute;left:50%;bottom:36px;width:22px;height:60px;margin-left:-11px;border-radius:11px 11px 4px 4px;background:#2a323f}
+.man:before{content:"";position:absolute;left:3px;top:-16px;width:16px;height:16px;border-radius:50%;background:#2a323f}
+.ring{width:56px;height:56px;border-radius:50%;background:conic-gradient(var(--a) 0 var(--p,70%),#2b3340 0);display:flex;align-items:center;justify-content:center;position:absolute}
+.ring:after{content:"";position:absolute;inset:6px;border-radius:50%;background:#10141a}
+.ring span{position:relative;z-index:1;font-size:10px;font-weight:700;color:var(--a)}
+.btn{position:absolute;border-radius:50%;background:rgba(40,48,60,.85);border:1px solid #3a4452;display:flex;align-items:center;justify-content:center;font-size:10px;color:#cfd6e0}
+.btn.ph{border:2px solid var(--a);color:var(--a);background:rgba(250,184,26,.12)}
+.glow{position:absolute;border-radius:50%;background:radial-gradient(circle,rgba(250,184,26,.7),rgba(250,184,26,0) 70%)}
+.hand{position:absolute;width:30px;height:20px;border-radius:10px;background:#c9a98a;opacity:.9}
+.pf{position:absolute;border-radius:9px;background:#0b0e13;border:2px solid #2b3340}
+.pf.g{background:none;border:2px dashed var(--a);color:var(--a);font-size:9px;display:flex;align-items:center;justify-content:center;text-align:center}
+.sheet{position:absolute;left:8px;right:8px;bottom:6px;border-radius:8px;background:#161c25;border:1px solid #3a4452;padding:4px 8px;font-size:10px;display:flex;justify-content:space-between}
+.hb{position:absolute;left:10px;right:10px;bottom:8px;height:20px;border-radius:10px;background:#141a22;font-size:10px;color:#cfd6e0;display:flex;align-items:center;padding:0 8px;gap:6px}
+.dim{color:#8b95a4}
+.cap{position:absolute;left:20px;right:20px;bottom:12px;height:84px;background:#10141a;border:1px solid #232a34;border-radius:10px;display:grid;grid-template-columns:repeat(4,1fr)}
+.cap div{padding:8px 12px;font-size:11.5px;color:#aab3c0;border-right:1px solid #232a34}
+.cap div:last-child{border:0}
+.cap b{display:block;color:var(--a);font-size:11px;margin-bottom:2px;letter-spacing:.04em}
+table{border-collapse:collapse;width:100%;font-size:10.5px;color:#cfd6e0}
+td,th{border-bottom:1px solid #232a34;padding:4px 3px;text-align:left;vertical-align:top}
+th{color:var(--a);font-weight:600;font-size:10px}
+</style></head><body>
+<h1>S02 Take-out and put-away <span>/ one toggle, four devices</span></h1>
+<div class="sub">The key that takes the phone out puts it away (except in text entry). Esc is only ever Back while the phone is out.</div>
+<div class="grid">
+
+<div class="c"><h2>1 Keyboard first-spawn hint</h2>
+<div class="sc"><div class="man"></div>
+<div class="toast a" style="top:14px">Phone: <span class="k">Up</span> or <span class="k">P</span></div>
+<div class="toast" style="top:46px;font-size:10px">Press again to put it away</div>
+<div class="hb"><span class="dim">Shown once on first spawn</span></div></div>
+<p>Up (kept) or new P. Same key puts it away from any page, but not while typing.</p></div>
+
+<div class="c"><h2>2 Pad hold ring, 0.4 s</h2>
+<div class="sc"><div class="man"></div>
+<div class="ring" style="left:50%;margin-left:-28px;top:30px;--p:70%"><span>D&uarr;</span></div>
+<div class="toast" style="top:96px;font-size:10px">Hold D-pad Up: phone</div>
+<div class="hb"><span class="dim">tap D-pad Up = emote wheel (unchanged)</span></div></div>
+<p>Ring fills while D-pad Up is held; releasing early cancels and falls through to the emote wheel. Toast shown once.</p></div>
+
+<div class="c"><h2>3 Touch Phone button</h2>
+<div class="sc"><div class="man" style="left:50%"></div>
+<div class="btn" style="left:14px;bottom:20px;width:60px;height:60px;border-style:dashed">stick</div>
+<div class="btn ph" style="right:14px;top:14px;width:46px;height:46px">Phone</div>
+<div class="btn" style="right:64px;top:34px;width:34px;height:34px">More</div>
+<div class="btn" style="right:14px;bottom:20px;width:46px;height:46px">Jump</div>
+<div class="sheet"><span>More &rsaquo; Phone</span><span style="color:var(--a)">open</span></div></div>
+<p>9 mm Phone button in the on-foot layout, plus a More-sheet row. Quick-menu entry kept. Tap it again to put away.</p></div>
+
+<div class="c"><h2>4 VR pocket glow</h2>
+<div class="sc"><div class="man" style="height:90px;bottom:20px"></div>
+<div class="glow" style="left:calc(50% + 6px);bottom:36px;width:46px;height:46px"></div>
+<div class="hand" style="left:calc(50% + 36px);bottom:38px"></div>
+<div class="toast a" style="top:12px;font-size:10px">hand within 15 cm: grip to take out</div>
+<div class="hb"><span class="dim">Free-hand grip at the pocket, or wrist menu Phone</span></div></div>
+<p>Pocket glows amber as the hand approaches. Releasing the grip away from the pocket hangs 0.5 s, then flies home.</p></div>
+
+<div class="c"><h2>5 VR loose-edge ghost</h2>
+<div class="sc" style="background:#141b26">
+<div class="pf" style="left:46px;top:40px;width:70px;height:104px"></div>
+<div class="pf g" style="left:118px;top:40px;width:70px;height:104px">open<br>half</div>
+<div class="hand" style="left:176px;top:96px"></div>
+<div class="toast a" style="top:10px;font-size:10px">Grab the edge to open</div>
+<div class="hb"><span class="dim">Edge ghost appears within 15 cm; hint shown once</span></div></div>
+<p>Swing the loose edge to unfold; Holding-hand X (A if left-handed) also opens.</p></div>
+
+<div class="c"><h2>6 Refusal toasts, with reason</h2>
+<div class="sc"><div class="man" style="opacity:.4"></div>
+<div class="toast" style="top:12px;border-color:var(--a)">Phone unavailable: you are in a cab</div>
+<div class="toast" style="top:52px">Finish typing first (Enter or Esc)</div>
+<div class="toast" style="top:92px">Busy: travel in progress, B to cancel</div>
+<div class="hb"><span class="dim">toast always names the reason</span></div></div>
+<p>Blocked in a cab, while typing, or busy. The reason is always stated; nothing fails silently.</p></div>
+
+<div class="c"><h2>7 Put-away hold ring</h2>
+<div class="sc" style="background:#0d1117">
+<div class="pf" style="left:50%;margin-left:-62px;top:8px;width:124px;height:182px"></div>
+<div class="hb" style="left:calc(50% - 56px);right:calc(50% - 56px);bottom:16px;width:112px;padding:0 4px;gap:4px;font-size:9px"><span class="ring" style="position:relative;width:16px;height:16px;--p:60%"></span>Hold <span class="k">B</span> 0.4 s</div></div>
+<p>Hold B (or Back on the holding hand in VR) from any page. Tap B stays Back. Click or tap outside the glass also puts away.</p></div>
+
+<div class="c"><h2>8 Summary</h2>
+<table>
+<tr><th></th><th>Take out</th><th>Put away</th></tr>
+<tr><td>Kbd</td><td>Up / P</td><td>Up / P, click outside</td></tr>
+<tr><td>Pad</td><td>Hold D-pad Up; quick menu</td><td>Hold B 0.4 s</td></tr>
+<tr><td>VR</td><td>Pocket grip; wrist menu</td><td>Release away; hold Back</td></tr>
+<tr><td>Touch</td><td>Phone button; More</td><td>Tap outside; Phone button</td></tr>
+</table>
+<p>Back never puts away except at Home (it folds). Put away is its own verb.</p></div>
+
+</div>
+<div class="cap">
+<div><b>KEYBOARD / MOUSE</b>Up or P toggles. Blocked in cab, typing or busy: toast with reason. Click outside the glass puts away.</div>
+<div><b>GAMEPAD</b>Hold D-pad Up 0.4 s (filling ring) takes out; hold B 0.4 s puts away. Quick menu entry kept.</div>
+<div><b>VR</b>Pocket glow within 15 cm, grip to take out. Edge ghost and "grab the edge to open" once. Hold holding-hand Back to put away.</div>
+<div><b>TOUCH</b>9 mm Phone button in layout and More sheet; tap outside the phone or the button again to put away.</div>
+</div>
+</body></html>

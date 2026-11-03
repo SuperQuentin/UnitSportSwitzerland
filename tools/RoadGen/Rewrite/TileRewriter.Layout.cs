@@ -235,7 +235,7 @@ public static partial class TileRewriter
                 }
                 if (jp.Lights) BikeStops(jp);
                 // 6. the core between the mouths (step 2): connectors, kerb corners, the outline
-                jp.Core = jp.Merged?.Ring is { } circle ? RoundaboutCore.Plan(jp, circle) : MergedOrWhole(jp, alone, buildings.Contains);
+                jp.Core = GuardedCore(jp, alone, buildings.Contains);
             // its surface on the arms' heights at the mouths
             CorePlanner.Lift(jp.Core, m => net.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source source
                 ? source.SampleHeight((m.Left + m.Right) * 0.5) : 0);
@@ -316,6 +316,40 @@ public static partial class TileRewriter
         return plans;
     }
 
+    /// <summary>Junction plans that threw on degenerate geometry and fell back (#1427); logged in the stage's summary.</summary>
+    private static int _plannerFailures;
+
+    private static void WarnJunction(JunctionPlan jp, Exception e, string fellBackTo)
+    {
+        Interlocked.Increment(ref _plannerFailures);
+        Console.Error.WriteLine(FormattableString.Invariant(
+            $"  [WARN] junction planner: {e.GetType().Name}: {e.Message} at LV95 {jp.Centre.X:F1},{jp.Centre.Y:F1} (tile {TileId.FromLv95(jp.Centre.X, jp.Centre.Y)}, node {jp.Node}); fell back to {fellBackTo}"));
+    }
+
+    /// <summary>
+    /// One junction's core, never throwing (#1427: two degenerate lines aborted a nationwide pass of hours): where its planner
+    /// throws it is laid whole, and where that throws too it is refused, which leaves today's cap and trims to the old layout.
+    /// A pure function of the junction, so a fallback is as deterministic as the plan.
+    /// </summary>
+    private static JunctionCore GuardedCore(JunctionPlan jp, IReadOnlyDictionary<int, JunctionPlan>? alone, Func<Vec2, bool> blocked)
+    {
+        try { return jp.Merged?.Ring is { } circle ? RoundaboutCore.Plan(jp, circle) : MergedOrWhole(jp, alone, blocked); }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            try
+            {
+                var whole = CorePlanner.Plan(jp, blocked);
+                WarnJunction(jp, e, "the whole-junction plan");
+                return whole;
+            }
+            catch (Exception again) when (again is not OutOfMemoryException)
+            {
+                WarnJunction(jp, e, "no planned layout (the old caps)");
+                return new JunctionCore { Refused = "the planner threw: " + e.GetType().Name };
+            }
+        }
+    }
+
     /// <summary>
     /// A core as <see cref="CorePlanner"/> lays it; a merged junction's laid as one node fails its checks (elongated groups,
     /// parallel arms): member by member (<see cref="MergedCore"/>, #854) from its members' plans alone (<paramref name="alone"/>,
@@ -324,7 +358,16 @@ public static partial class TileRewriter
     private static JunctionCore MergedOrWhole(JunctionPlan jp, IReadOnlyDictionary<int, JunctionPlan>? alone, Func<Vec2, bool> blocked)
     {
         var whole = CorePlanner.Plan(jp, blocked);
-        if (alone is null || jp.Merged is null || MergedCore.Plan(jp, alone, blocked) is not { } byMembers) return whole;
+        if (alone is null || jp.Merged is null) return whole;
+        JunctionCore? members;
+        try { members = MergedCore.Plan(jp, alone, blocked); }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            // degenerate geometry in the member-by-member plan (the nationwide pass aborted on one, #1427): laid whole
+            WarnJunction(jp, e, "the whole-junction plan");
+            return whole;
+        }
+        if (members is not { } byMembers) return whole;
         static bool Fails(JunctionCore c) => !c.Simple || c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0;
         if (Environment.GetEnvironmentVariable("MERGEDDBG") is not null)
             Console.WriteLine(FormattableString.Invariant($"[merged] {jp.Centre.X:F0},{jp.Centre.Y:F0} {jp.Merged.Members?.Count} members: by members simple {byMembers.Simple} kerbs {byMembers.KerbsNotTangent} outside {byMembers.ConnectorsOutside} (most {byMembers.Connectors.Select(c => c.Outside).DefaultIfEmpty(0).Max():F2} m) area {byMembers.Area:F0}; whole simple {whole.Simple} kerbs {whole.KerbsNotTangent} outside {whole.ConnectorsOutside} area {whole.Area:F0}"));

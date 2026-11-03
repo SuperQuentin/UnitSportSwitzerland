@@ -56,3 +56,4 @@
   `/cd` parsing), `DanceFaceTests` (lips on the voice).
 - **Not done**: movie recordings (`ActorIo`) do not record `RadioMix`; the church radio has no mix; the
   concert desk's faders do not show a mix set by chat.
+- **Client thread budget (#1414)**: a burn's separation uses `VocalSeparator.Threads` (cores / 4, 1..4; the dedicated server keeps all but two) for ONNX and the STFT `Parallel.For`, on a below-normal worker, so the radio's audio thread does not underrun. A client that is online (`!Owns`) never burns its default/fixture queue nor runs the analysis backfill (queues kept, resumed offline); a personal CD it asks for still burns.

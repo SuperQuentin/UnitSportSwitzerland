@@ -10,7 +10,7 @@
   RETURNING, ON CONFLICT, a partial unique index); only the schema's id and float words differ. Settings are env vars, listed at
   the top of `Program.cs`. One open claim (draft or pending) per building, five per person. Login tokens and sessions are stored hashed. The cookie is
   HttpOnly, SameSite=Strict and Secure (`COOKIE_SECURE=0` locally). Every state change needs `X-Requested-With: houses`.
-  Rate limits are per IP (the login, writes) and per email (three links an hour). With no `SMTP_HOST` the link goes to the log.
+  Mail goes through MailKit (`SMTP_PORT` 465 = implicit TLS, otherwise STARTTLS). Rate limits are per IP (the login, writes) and per email (three links an hour). With no `SMTP_HOST` the link goes to the log.
 - **Privacy:** a plan and a layout are seen only by their owner and the moderators. The export holds walls and rooms and
   nothing personal. The page redraws an uploaded photo on a canvas before sending it, which drops EXIF (GPS) data and caps it
   at 4000 px. A PDF page is rendered to PNG in the browser (pdf.js), so the server only ever stores PNG or JPEG files, which
@@ -58,7 +58,7 @@
   - **Furnishing:** `Entrances` (extra doors) and `Furnish` run as usual.
   - **Fallback:** the result must pass `InteriorValidator`. If it fails or does not fit, the generated interior stays and the reason is logged (`[interior] house layout ... not used`).
   - **Freshness:** interiors live underground behind the door portal, so the drawing never has to meet the shell's walls. `InteriorLayout.House` holds the layout's hash and `Matches` compares it. An approval, a new version or a withdrawal therefore makes the stored plan stale. A plan already in memory stays until the server restarts. `House` and `Piece` are left out of a generated plan's JSON, which is byte for byte what it was (the door baseline hashes it).
-  - **Exact angled walls** are #1197.
+  - **Exact angled walls** (#1197): `MergePieces` makes each room cut into pieces one shaped room again, its walls as drawn (`terrain/interior-outlines`). A room holding a stair keeps its strips.
 - **Checks:**
   - `HouseLayoutTests` (unit tier): the frame, the rules on polygons, reachability, the export file, the cut (an L exact, a stair carved, rooms sharing an angled wall still meeting, a drawing a few cm off evened out).
   - `--houselayoutcheck` (quick tier):
@@ -78,3 +78,4 @@
   - Caddy proxies `/api/*` (body up to 12 MB) and serves `/houses.html`. Set `LAYOUTS_TRUSTED_PROXIES` to the edge proxy (195.48.14.221 for unitsport.infrack.ch) so rate limits see visitors. Without it, Caddy drops their X-Forwarded-For and everyone shares the proxy's limit.
   - A host set up before #1186 needs `tools/deploy-linux.sh --setup` once for the new Caddyfile.
   - **Not deployed yet:** set `LAYOUTS_ADMINS` and the SMTP account in `tools/deploy.env` first.
+  - **Check the mail settings:** `tools/deploy-linux.sh --smtp-check you@example.ch` runs `LayoutService --smtp-check` on the host with `layouts.env` loaded (connect, log in, send a test mail; port 465 = implicit TLS, 587 or any other port = STARTTLS; prints the exact SMTP failure, never the password; exit 1 on failure).

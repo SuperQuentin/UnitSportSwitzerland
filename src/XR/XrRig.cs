@@ -57,6 +57,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XrCabControls _cab = null!;
     private XrTeleport _teleport = null!;
     private XrWatch _watch = null!;
+    private XrStaminaRing _stamina = null!;   // #1225
     private XrMap _map = null!;
     private XrPhone _phone = null!;
     private XrClimb _climb = null!;
@@ -240,6 +241,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // on the drawn left hand's wrist, so it is where the hand is, the wheel's rim included (#1097)
         _watch = new XrWatch();
         _leftHand.AddChild(_watch);
+        _stamina = new XrStaminaRing();
+        _watch.AddChild(_stamina);
         _map = new XrMap(_right);
         _left.AddChild(_map);
         _climb = new XrClimb(_left, _right);
@@ -409,6 +412,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _map.Update(player);
         // the watch on the placed left hand, then the ring over it, aimed by the physical right hand
         _watch.Tick(player, _leftHand.Visible, _leftHand.WatchSpot, dt);
+        PalmUp(player, dt);
+        _stamina.Tick(player, dt);
         // "--xrring <wedge>" with --xrsim: the ring held open before the eyes, that wedge lit, for a headset shot
         if (_ringShot is int lit) _ring.ShowForShot(_camera.GlobalTransform, lit);
         else _ring.Update(_camera.GlobalTransform, _watch.GlobalTransform, _watch.Visible, _leftHanded ? _left : _right, player, InWorld && !Ui.LoadingScreen.Active, dt);   // no wheel over a load
@@ -818,6 +823,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             }
         }
         target *= Core.GameSettings.Current.VrVignette;
+        // drunk (#1271): a soft vignette instead of the sway, whatever the comfort setting says of the motion one
+        target = Mathf.Max(target, Adventure.Alcohol.AlcoholService.VrVignette);
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;
@@ -884,4 +891,32 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     }
 
     internal static Basis YawOnly(Basis b) => new(Vector3.Up, YawOf(b));
+
+    // ---- the guiding gust's gesture (#1226, docs/notes/adventure/guide.md) ----------------------------
+
+    private float _palmHeld;
+    private bool _palmFired;
+
+    /// <summary>
+    /// The open left hand held palm up for 0.5 s summons the guiding gust ("feel the wind"): the physical left grip's
+    /// +X (OpenXR: the palm's normal on the left hand) near straight up, grip and trigger let go. Once per raise.
+    /// </summary>
+    private void PalmUp(Player.FootPlayer? player, float dt)
+    {
+        bool open = _leftGrip.GetIsActive() && _left.GetFloat("grip") < 0.3f && _left.GetFloat("trigger") < 0.3f;
+        bool up = open && player != null && _leftGrip.GlobalBasis.X.Normalized().Dot(Vector3.Up) > 0.75f;
+        if (!up)
+        {
+            _palmHeld = 0;
+            _palmFired = false;
+            return;
+        }
+        _palmHeld += dt;
+        if (_palmFired || _palmHeld < 0.5f) return;
+        _palmFired = true;
+        Adventure.Navigation.GuidingWind.Instance?.Summon();
+    }
+
+    /// <summary>A haptic tick on the left controller (the guide's start, a target coming near).</summary>
+    public void PulseLeft(float amplitude, float seconds) => _leftGrip.TriggerHapticPulse("haptic", 0.0, amplitude, seconds, 0.0);
 }

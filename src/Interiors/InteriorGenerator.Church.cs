@@ -41,8 +41,12 @@ public static partial class InteriorGenerator
         {
             var fp = BuildingFootprint.Compute(tile, index, roads, grid);
             if (fp == null) return null;
+            var map = BuildingTypes.For(tile);
+            int venue = map.VenueOf(index);
+            var dining = map.DiningOf(index);
             layout = Generate(fp, tile.Buildings[index], Loot.ShopTables.IsRural(tile.Buildings.Count),
-                group?.Type ?? BuildingType.None);
+                group?.Type ?? BuildingType.None, venue >= 0 ? Venues.At(venue) : null,
+                dining.Count > 0 ? dining.Select(Venues.At).ToList() : null);
         }
         layout.Group = GroupPrint(tile, index);
         return layout;
@@ -54,6 +58,10 @@ public static partial class InteriorGenerator
         {
             { Type: BuildingType.Church } g => g.Fingerprint(tile, ChurchRules),
             { Type: BuildingType.Ikea } g => g.Fingerprint(tile, IkeaRules),
+            // a bowling centre (#1235) is no group, but its rules move on their own
+            null when Venues.HallOf(BuildingTypes.For(tile), index) == VenueType.Bowling => $"Bowling{BowlingRules}",
+            null when Venues.HallOf(BuildingTypes.For(tile), index) == VenueType.Cinema => $"Cinema{CinemaRules}",
+            null when Venues.HallOf(BuildingTypes.For(tile), index) == VenueType.Arcade => $"Arcade{ArcadeRules}",
             _ => "",
         };
 

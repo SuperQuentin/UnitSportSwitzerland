@@ -36,7 +36,7 @@ public partial class MapCanvas : Control
         Erase,
     }
 
-    private static readonly int[] ZoomSteps = [2, 3, 4, 6, 8, 12, 16, 24];
+    private static readonly int[] ZoomSteps = MapView.DefaultSteps;
 
     // Tile status, over the relief. Alpha rather than solid: the relief has to stay readable
     // underneath, or the map stops looking like the country as soon as you own some of it.
@@ -54,9 +54,9 @@ public partial class MapCanvas : Control
     public HashSet<TileId> Working { get; } = new();
 
     // view: the centre in LV95 metres, and how many screen pixels one kilometre takes
-    private double _centreE = 2_660_000, _centreN = 1_180_000;
-    private int _zoom = 0;
-    private int PxPerKm => ZoomSteps[_zoom];
+    /// <summary>Pan, zoom and the LV95-to-screen maths, shared with the adventure map (#1224).</summary>
+    private readonly MapView _view = new();
+    private int PxPerKm => _view.PxPerKm;
 
     private Tool _tool = Tool.Move;
     private TileId? _anchor;
@@ -78,8 +78,6 @@ public partial class MapCanvas : Control
     private int _statusLocalStamp = -1;
 
     // Canton borders, in LV95 metres, baked once; and the screen-space buffer DrawMultiline takes.
-    private Vector2[]? _borders;
-    private Vector2[] _borderScreen = [];
 
     private Font _font = null!;
     private bool _reliefDrawn;
@@ -122,7 +120,7 @@ public partial class MapCanvas : Control
     public TileId? Hovered => _hovered;
 
     /// <summary>Where the view is centred, in LV95 metres.</summary>
-    public (double E, double N) ViewCentre => (_centreE, _centreN);
+    public (double E, double N) ViewCentre => (_view.CentreE, _view.CentreN);
 
     /// <summary>The current scale: screen pixels to one kilometre.</summary>
     public int Scale => PxPerKm;
@@ -163,9 +161,7 @@ public partial class MapCanvas : Control
     /// <summary>Centres the view on a point, optionally zooming in to it (a search result).</summary>
     public void FocusOn(double e, double n, int? pxPerKm = null)
     {
-        _centreE = e;
-        _centreN = n;
-        if (pxPerKm is { } want) _zoom = Array.FindIndex(ZoomSteps, z => z >= want) is var i and >= 0 ? i : ZoomSteps.Length - 1;
+        _view.FocusOn(e, n, pxPerKm);
         QueueRedraw();
     }
 
@@ -185,13 +181,9 @@ public partial class MapCanvas : Control
 
     // ---- coordinates -------------------------------------------------------------------------
 
-    private Vector2 ToScreen(double e, double n) => new(
-        (float)((e - _centreE) / 1000.0 * PxPerKm + Size.X / 2),
-        (float)((_centreN - n) / 1000.0 * PxPerKm + Size.Y / 2));
+    private Vector2 ToScreen(double e, double n) { _view.Size = Size; return _view.ToScreen(e, n); }
 
-    private (double E, double N) ToWorld(Vector2 p) => (
-        _centreE + (p.X - Size.X / 2) / PxPerKm * 1000.0,
-        _centreN - (p.Y - Size.Y / 2) / PxPerKm * 1000.0);
+    private (double E, double N) ToWorld(Vector2 p) { _view.Size = Size; return _view.ToLv95(p); }
 
     private TileId TileAt(Vector2 p)
     {
@@ -200,11 +192,7 @@ public partial class MapCanvas : Control
     }
 
     /// <summary>The view's world bounds in LV95 metres (west, south, east, north).</summary>
-    private (double W, double S, double E, double N) Bounds()
-    {
-        double halfW = Size.X / 2.0 / PxPerKm * 1000.0, halfH = Size.Y / 2.0 / PxPerKm * 1000.0;
-        return (_centreE - halfW, _centreN - halfH, _centreE + halfW, _centreN + halfH);
-    }
+    private (double W, double S, double E, double N) Bounds() { _view.Size = Size; return _view.Bounds(); }
 
     // ---- drawing -----------------------------------------------------------------------------
 
@@ -232,22 +220,8 @@ public partial class MapCanvas : Control
     /// </summary>
     private void DrawSampled(Texture2D? texture, (double MinE, double MaxN, double Spacing, int Cols, int Rows) lattice)
     {
-        if (texture == null || lattice.Cols == 0) return;
-        var (w, s, e, n) = Bounds();
-
-        double x0 = (w - lattice.MinE) / lattice.Spacing, x1 = (e - lattice.MinE) / lattice.Spacing;
-        double y0 = (lattice.MaxN - n) / lattice.Spacing, y1 = (lattice.MaxN - s) / lattice.Spacing;
-
-        double cx0 = Math.Max(0, x0), cx1 = Math.Min(lattice.Cols, x1);
-        double cy0 = Math.Max(0, y0), cy1 = Math.Min(lattice.Rows, y1);
-        if (cx1 <= cx0 || cy1 <= cy0) return;
-
-        // the clamped source rectangle, back in screen pixels
-        float sx = (float)((cx0 - x0) / (x1 - x0) * Size.X), sxEnd = (float)((cx1 - x0) / (x1 - x0) * Size.X);
-        float sy = (float)((cy0 - y0) / (y1 - y0) * Size.Y), syEnd = (float)((cy1 - y0) / (y1 - y0) * Size.Y);
-
-        DrawTextureRectRegion(texture, new Rect2(sx, sy, sxEnd - sx, syEnd - sy),
-            new Rect2((float)cx0, (float)cy0, (float)(cx1 - cx0), (float)(cy1 - cy0)));
+        _view.Size = Size;
+        _view.DrawSampled(this, texture, lattice);
     }
 
     /// <summary>
@@ -302,53 +276,8 @@ public partial class MapCanvas : Control
     /// </summary>
     private void DrawBorders()
     {
-        _borders ??= BakeBorders();
-        if (_borders.Length == 0) return;
-        if (_borderScreen.Length != _borders.Length) _borderScreen = new Vector2[_borders.Length];
-
-        var (w, s, e, n) = Bounds();
-        int kept = 0;
-        for (int i = 0; i + 1 < _borders.Length; i += 2)
-        {
-            // cull off-screen segments: at zoom 2 the whole country is on screen, at 24 almost none of it
-            var a = _borders[i];
-            var b = _borders[i + 1];
-            if (Math.Max(a.X, b.X) < w || Math.Min(a.X, b.X) > e || Math.Max(a.Y, b.Y) < s || Math.Min(a.Y, b.Y) > n) continue;
-            _borderScreen[kept++] = ToScreen(a.X, a.Y);
-            _borderScreen[kept++] = ToScreen(b.X, b.Y);
-        }
-        if (kept == 0) return;
-        // DrawMultiline takes the whole array, and slicing it would allocate on every redraw (a pan
-        // redraws each frame): park the culled tail on one off-screen point, where it draws nothing.
-        var parked = new Vector2(-1e4f, -1e4f);
-        for (int i = kept; i < _borderScreen.Length; i++) _borderScreen[i] = parked;
-        DrawMultiline(_borderScreen, new Color(1, 1, 1, 0.16f));
-    }
-
-    private Vector2[] BakeBorders()
-    {
-        var points = new List<Vector2>();
-        for (int eKm = CountryData.MinE; eKm <= CountryData.MaxE; eKm++)
-        {
-            for (int nKm = CountryData.MinN; nKm <= CountryData.MaxN; nKm++)
-            {
-                var here = _country.CantonAt(new TileId(eKm, nKm));
-                if (here == null) continue;
-                // A border is where the canton to the east or to the north differs. Drawing only
-                // those two sides per tile draws each boundary once instead of twice.
-                if (_country.CantonAt(new TileId(eKm + 1, nKm))?.Id != here.Id)
-                {
-                    points.Add(new Vector2((eKm + 1) * 1000f, nKm * 1000f));
-                    points.Add(new Vector2((eKm + 1) * 1000f, (nKm + 1) * 1000f));
-                }
-                if (_country.CantonAt(new TileId(eKm, nKm + 1))?.Id != here.Id)
-                {
-                    points.Add(new Vector2(eKm * 1000f, (nKm + 1) * 1000f));
-                    points.Add(new Vector2((eKm + 1) * 1000f, (nKm + 1) * 1000f));
-                }
-            }
-        }
-        return points.ToArray();
+        _view.Size = Size;
+        _view.DrawBorders(this, _country, new Color(1, 1, 1, 0.16f));
     }
 
     /// <summary>
@@ -455,8 +384,7 @@ public partial class MapCanvas : Control
         if (_pressAt is { } down && !_dragging && motion.Position.DistanceTo(down) > 5) _dragging = true;
         if (_panning || _dragging)
         {
-            _centreE -= moved.X / (double)PxPerKm * 1000.0;
-            _centreN += moved.Y / (double)PxPerKm * 1000.0;
+            _view.Pan(moved);
             QueueRedraw();
             return;
         }
@@ -596,8 +524,8 @@ public partial class MapCanvas : Control
             // a constant screen speed, so panning feels the same whatever the zoom
             const double PixelsPerSecond = 620.0;
             double metres = PixelsPerSecond / PxPerKm * 1000.0 * delta;
-            _centreE += pan.X * metres;
-            _centreN -= pan.Y * metres;
+            _view.CentreE += pan.X * metres;
+            _view.CentreN -= pan.Y * metres;
             _hovered = TileAt(Size / 2);
             QueueRedraw();
         }
@@ -632,14 +560,8 @@ public partial class MapCanvas : Control
 
     private void ZoomAt(Vector2 at, int steps)
     {
-        int next = Math.Clamp(_zoom + steps, 0, ZoomSteps.Length - 1);
-        if (next == _zoom) return;
-        // keep the world point under the cursor under the cursor
-        var (keepE, keepN) = ToWorld(at);
-        _zoom = next;
-        var (nowE, nowN) = ToWorld(at);
-        _centreE += keepE - nowE;
-        _centreN += keepN - nowN;
+        _view.Size = Size;
+        if (!_view.ZoomAt(at, steps)) return;
         _hovered = TileAt(at);
         QueueRedraw();
     }

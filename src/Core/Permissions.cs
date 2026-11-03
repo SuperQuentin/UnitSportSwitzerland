@@ -47,6 +47,7 @@ public static class Permissions
     {
         SetAdmin(false);
         SetServerTeleport(true);
+        SetServerBody(true, true);
     }
 
     /// <summary>The server lets players who are not admins teleport (<c>Net/Arrival</c>, #799). Meaningless offline.</summary>
@@ -59,8 +60,66 @@ public static class Permissions
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Offline, the player chose the adventure's travel network (<c>Settings > Gameplay > Travel</c>, #1226): free jumps
+    /// are off for it as on a <c>--adventure-travel network</c> server.
+    /// </summary>
+    public static bool OfflineTravelNetwork { get; private set; }
+
+    public static void SetOfflineTravelNetwork(bool on)
+    {
+        if (OfflineTravelNetwork == on) return;
+        OfflineTravelNetwork = on;
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// The server counts stamina (#1225): <c>--stamina off</c> drops the meter while keeping the
+    /// Adventure layer (<c>Net/Arrival</c>). Meaningless offline (always on).
+    /// </summary>
+    public static bool ServerStamina { get; private set; } = true;
+
+    /// <summary>The server's air rises in thermals, ridge lift and updrafts (#1225); <c>--lift off</c> stills it.</summary>
+    public static bool ServerLift { get; private set; } = true;
+
+    /// <summary>The server's <c>--alcohol off|mild|real</c> (#1271), as <c>Net/Arrival</c> carried it: 0, 1, 2.</summary>
+    public static int ServerAlcohol { get; private set; } = 2;
+
+    internal static void SetServerAlcohol(int mode) => ServerAlcohol = Math.Clamp(mode, 0, 2);
+
+    /// <summary>The server's <c>--crevasses off|on</c> (#1372), as <c>Net/Arrival</c> carried it. Meaningless offline (always on).</summary>
+    public static bool ServerCrevasses { get; private set; } = true;
+
+    internal static void SetServerCrevasses(bool on) => ServerCrevasses = on;
+
+    /// <summary>
+    /// Hidden crevasses open under an unroped player on a glacier (#1372): the server allows them, not in a Battle Royale match,
+    /// and the player's <c>Settings › Gameplay › Crevasses</c> is on; a <c>--crevasses off|on</c> on this command line wins over the setting
+    /// (offline and checks).
+    /// </summary>
+    public static bool CrevassesOn => ServerCrevasses && !InMatch && (CmdArgs.Value("--crevasses")?.ToLowerInvariant() switch
+    {
+        "off" => false,
+        "on" => true,
+        _ => GameSettings.Current.Crevasses,
+    });
+
+    internal static void SetServerBody(bool stamina, bool lift)
+    {
+        if (ServerStamina == stamina && ServerLift == lift) return;
+        ServerStamina = stamina;
+        ServerLift = lift;
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Thermals, ridge lift and updrafts carry this player's gliders (#1225): the server did not say
+    /// <c>--lift off</c>, and not in a Battle Royale match (a parachute hovering in a thermal would change the drop).
+    /// </summary>
+    public static bool LiftOn => ServerLift && !InMatch;
+
     /// <summary>The place search, the VR hand map and the fly camera may move the player somewhere else.</summary>
-    public static bool CanTeleport => !Online || IsAdmin || ServerTeleport;
+    public static bool CanTeleport => Online ? IsAdmin || ServerTeleport : !OfflineTravelNetwork;
 
     /// <summary>Connected to a server, i.e. not the world of your own.</summary>
     public static bool Online

@@ -25,6 +25,9 @@
     **Advanced** sets another server, folded away, and opens by itself while the build names none.
   - The player sets its address (`http://host:7350`) and server key (not a secret), then signs in by email and
     password, or creates the account with an optional name for the scoreboards.
+  - **Forgot your password?** under Sign in (only for a server behind a site, `AccountRules.SiteOf`: the URL ends in
+    `/nakama`) asks the site to mail a link (`NakamaRest.ForgotPassword`); the link opens the site's `reset.html`
+    (`net/nakama`, #1257). Any other account server has no reset.
   - The password is never stored. Sign-in keeps the session and refresh tokens in **`user://online_account.json`**
     (`Net/Accounts/Account`), apart from `settings.json`, so tokens never travel with a shared settings file.
     It is not `user://account.json`: that one is the offline bank's (`items/cash-account`).

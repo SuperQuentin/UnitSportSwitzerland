@@ -19,5 +19,8 @@
   ground loaded there = no sleeper.
 - The figure comes from `Rider` = the peer id it had (jersey hue, and the figure when the player never
   chose one), `AppearanceBits`, `OutfitBits`, `HeadwearId`.
+- **The proven key is the identity other systems use** (#1223): `Sleepers.KeyOf(peer)` and the
+  `Proven(peer, key)` event, raised right after a good proof (before a sleeper wakes). The Adventure
+  progress loads on it (`adventure/service`); a peer that never proves gets none saved.
 - Check: `tools/sleepercheck.sh` (net tier): A steps 30 m and leaves, B (own `user://`) sees one
   sleeper, A comes back with the same `user://` and must wake within 3 m of it while B sees it go.

@@ -117,6 +117,7 @@ public partial class ConcertService : Node
     {
         if (Instance?.SeedFor(Array.IndexOf(StadiumCatalog.All, venue)) is { } seed)
             return $"set {seed} hosted now, {ConcertPlanner.Plan(venue, seed).Artist}";
+        if (!ConcertPlanner.Open(venue, Core.Calendar.Now.Date)) return $"no stage today, it stands only in its season ({venue.Season})";
         var e = ConcertPlanner.Tonight(venue, Core.Calendar.Now.Date);
         static string Clock(float hour) => $"{(int)hour:00}:{(int)Math.Round(hour % 1 * 60):00}";
         return $"tonight {Clock(e.StartHour)}-{Clock(e.EndHour)}, {e.Artist} ({e.Genre})";

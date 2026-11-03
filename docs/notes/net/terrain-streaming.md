@@ -12,6 +12,7 @@
   `ChunkManager._available` — without that merge the LOD rings skip unknown tiles and nothing
   is ever requested. It also saves that index to the cache, so tiles streamed in an earlier
   session are reachable offline.
+- **A returning player** reuses the last visit (#1380): the index cached per server and merged at boot, a server digest instead of re-downloads, ready without the horizon: `net/rejoin-cache`.
 - **HTTP first** when the server names a mirror (`--tiles-url`, #651): the bulk files come from a
   static HTTP server and ENet is the fallback (`net/http-tiles`).
 - **Cache writes use a unique temp name** (`NetworkChunkSource.WriteCache`, issue #65): two

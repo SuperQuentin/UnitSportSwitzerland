@@ -20,6 +20,9 @@ function InitModule(ctx, logger, nk, initializer) {
   initializer.registerRpc('admin_user', rpcAdminUser);
   initializer.registerRpc('admin_set_admin', rpcAdminSetAdmin);
   initializer.registerRpc('admin_ban', rpcAdminBan);
+  // forgotten passwords (#1257): the layout service mails the link, these two hold and spend the token
+  initializer.registerRpc('password_reset_issue', rpcPasswordResetIssue);
+  initializer.registerRpc('password_reset_apply', rpcPasswordResetApply);
   logger.info('UnitSport module %s loaded', MODULE_VERSION);
 }
 
@@ -184,4 +187,63 @@ function rpcAdminBan(ctx, logger, nk, payload) {
   if (r.ban === true) nk.usersBanId([id]); else nk.usersUnbanId([id]);
   logger.info('admin %s set ban=%s on %s', ctx.userId, r.ban === true, id);
   return JSON.stringify({ id: id, banned: r.ban === true });
+}
+
+// ---- forgotten passwords (#1257) -------------------------------------------------------------------------------------
+// Nakama sends no mail, so the layout service (which has SMTP) does. Both RPCs are server to server (the http key) and
+// refuse a player's session. The token is 244 random bits; only its SHA-256 is stored, in a system-owned object that no
+// client can read, valid 30 minutes and spent by one use. A new request replaces the account's earlier token.
+
+var RESET_COLLECTION = 'password_reset';
+var RESET_TTL_MS = 30 * 60 * 1000;
+var SYSTEM_USER = '00000000-0000-0000-0000-000000000000';
+var MIN_PASSWORD = 8, MAX_PASSWORD = 128;   // Nakama's own minimum is 8
+
+function requireServer(ctx) {
+  if (ctx.userId) throw { message: 'server to server only', code: Code.PERMISSION_DENIED };
+}
+
+// { email } -> { token, email } for an account with that email, else {} (the caller answers the same either way)
+function rpcPasswordResetIssue(ctx, logger, nk, payload) {
+  requireServer(ctx);
+  var email = String(parse(payload).email || '').trim().toLowerCase();
+  if (email.length < 3 || email.length > 255) bad('email');
+  var rows = nk.sqlQuery("SELECT id, disable_time FROM users WHERE lower(email) = $1 LIMIT 1", [email]);
+  if (!rows.length || isBanned(rows[0].disable_time)) return '{}';
+  var userId = rows[0].id;
+  var token = nk.uuidv4().replace(/-/g, '') + nk.uuidv4().replace(/-/g, '');
+  var now = Date.now();
+  var earlier = nk.storageRead([{ collection: RESET_COLLECTION, key: 'user:' + userId, userId: SYSTEM_USER }]);
+  if (earlier.length) nk.storageDelete([{ collection: RESET_COLLECTION, key: 'hash:' + earlier[0].value.hash, userId: SYSTEM_USER }]);
+  nk.storageWrite([
+    { collection: RESET_COLLECTION, key: 'user:' + userId, userId: SYSTEM_USER, permissionRead: 0, permissionWrite: 0,
+      value: { hash: nk.sha256Hash(token), expires: now + RESET_TTL_MS } },
+    { collection: RESET_COLLECTION, key: 'hash:' + nk.sha256Hash(token), userId: SYSTEM_USER, permissionRead: 0, permissionWrite: 0,
+      value: { userId: userId, email: email, expires: now + RESET_TTL_MS } },
+  ]);
+  logger.info('password reset issued for %s', userId);
+  return JSON.stringify({ token: token, email: email });
+}
+
+// { token, password } -> { ok: true }. A bad, spent or expired token is 400 "invalid or expired link".
+function rpcPasswordResetApply(ctx, logger, nk, payload) {
+  requireServer(ctx);
+  var r = parse(payload);
+  var password = typeof r.password === 'string' ? r.password : '';
+  if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) bad('password: ' + MIN_PASSWORD + ' to ' + MAX_PASSWORD + ' characters');
+  var token = typeof r.token === 'string' ? r.token : '';
+  var expired = { message: 'invalid or expired link', code: Code.INVALID_ARGUMENT };
+  if (!/^[0-9a-f]{64}$/.test(token)) throw expired;
+  var key = 'hash:' + nk.sha256Hash(token);
+  var found = nk.storageRead([{ collection: RESET_COLLECTION, key: key, userId: SYSTEM_USER }]);
+  if (!found.length) throw expired;
+  var v = found[0].value;
+  // spent first: even a failure below leaves no usable token
+  nk.storageDelete([{ collection: RESET_COLLECTION, key: key, userId: SYSTEM_USER },
+                    { collection: RESET_COLLECTION, key: 'user:' + v.userId, userId: SYSTEM_USER }]);
+  if (Date.now() > v.expires) throw expired;
+  // linking the account's own email again sets a new password
+  nk.linkEmail(v.userId, v.email, password);
+  logger.info('password reset applied for %s', v.userId);
+  return JSON.stringify({ ok: true });
 }

@@ -21,6 +21,9 @@ public readonly record struct BuildAim(
 /// </summary>
 public partial class BuildTool : Node
 {
+    /// <summary>The key that picks the piece: the plain wheel with the hammer aimed (#1369: Alt + wheel is the hotbar's), the D-pad on a pad.</summary>
+    private static string PieceKey => InputHints.Pad ? InputHints.Label(PlayerInput.NextItem) : "wheel";
+
     /// <summary>How far from the body a piece may be built (the server allows a little more).</summary>
     public const float Reach = 6.5f;
     /// <summary>A structure this close (metres from any of its pieces) takes the new piece onto its grid.</summary>
@@ -255,8 +258,8 @@ public partial class BuildTool : Node
             _ghost.Visible = true;
             _material.AlbedoColor = aim.Valid ? new Color(0.3f, 1f, 0.4f, 0.35f) : new Color(1f, 0.25f, 0.2f, 0.35f);
             _hint.Text = aiming
-                ? $"{what}\n" + InputHints.Format("{next_item}: piece · {build_turn}: material · {use_item}: take back your piece")
-                : aim.Valid ? $"{what} — {CostText()}\n" + InputHints.Format("{use_item}: build · {build_turn}: turn · {aim_item} + {next_item}: piece")
+                ? $"{what}\n" + InputHints.Format(PieceKey + ": piece · {build_turn}: material · {use_item}: take back your piece")
+                : aim.Valid ? $"{what} — {CostText()}\n" + InputHints.Format("{use_item}: build · {build_turn}: turn · {aim_item} + " + PieceKey + ": piece")
                 : $"{what}\n{aim.Reason}";
         }
         _hint.Visible = _hint.Text.Length > 0;

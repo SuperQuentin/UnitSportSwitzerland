@@ -103,11 +103,15 @@ public partial class ChurchRadios : Node
     // ---- the player at it ------------------------------------------------------------------------
 
     /// <summary>The plan key of the church whose radio <paramref name="p"/> stands at, or null.</summary>
-    public static string? At(FootPlayer p)
+    public static string? At(FootPlayer p) => RadioAt(p, out var node) >= 0 ? node!.Layout.Key : null;
+
+    /// <summary>The church radio <paramref name="p"/> stands at, as a furniture index of <paramref name="node"/>'s plan, or -1.</summary>
+    private static int RadioAt(FootPlayer p, out InteriorNode? node)
     {
-        if (!p.Indoors || InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
-        int i = Loot.LootService.NearestOf(p, layout, node, t => t == FurnitureType.ChurchRadio, Reach);
-        return i >= 0 ? layout.Key : null;
+        node = null;
+        if (!p.Indoors || InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } inside }) return -1;
+        node = inside;
+        return Loot.LootService.NearestOf(p, layout, inside, t => t == FurnitureType.ChurchRadio, Reach);
     }
 
     /// <summary>E at the church radio: opens the radio panel on it. False when not at one.</summary>
@@ -121,8 +125,14 @@ public partial class ChurchRadios : Node
     }
 
     /// <summary>The prompt at the church radio, or null.</summary>
-    public static string? PromptFor(FootPlayer p) =>
-        At(p) == null ? null : $"{Core.InputHints.Tag(Core.PlayerInput.InteractMount)} {RadioTap.Prompt}";
+    public static string? PromptFor(FootPlayer p) => InteractionFor(p)?.Text;
+
+    /// <summary>The prompt at the church radio and the radio to outline (#1286), or null.</summary>
+    public static Interaction? InteractionFor(FootPlayer p)
+    {
+        int i = RadioAt(p, out var node);
+        return i < 0 ? null : new($"{Core.InputHints.Tag(Core.PlayerInput.InteractMount)} {RadioTap.Prompt}", Outline.Piece(node!, i));
+    }
 
     // ---- client: asking --------------------------------------------------------------------------
 

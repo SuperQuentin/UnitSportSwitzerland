@@ -106,7 +106,7 @@ public partial class FootPlayer
     }
 
     /// <summary>Creative flight's figure (#1219): <c>Anim.X</c> is the lean, the tilt goes in <see cref="BodyPose"/>.</summary>
-    public const int PoseFly = 8;
+    public const int PoseFly = 10;
 
     /// <summary>Flying this fast forward (m/s) the figure lies flat out, Superman; slower it stands up toward the hover.</summary>
     private const float FlyFullLean = 9f;

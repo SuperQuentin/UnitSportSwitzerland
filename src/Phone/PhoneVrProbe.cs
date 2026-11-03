@@ -79,6 +79,8 @@ public partial class PhoneVrProbe : Node
         Check(off is >= 0f and < 0.08f, $"it is in the hand, before the eyes ({off:F2} m off)");
         Shot("phonevr_1_folded.png");
 
+        phone.SelectQuick("Camera");
+        await Wait(0.2);
         await Tap(phone.Screens.CoverCardUv(), cover: true);
         await Wait(1.4);
         Check(me.PhoneState == FootPlayer.PhoneCameraState, $"a tap on the cover runs its quick action, the camera app (state {me.PhoneState})");
@@ -108,16 +110,18 @@ public partial class PhoneVrProbe : Node
         await Wait(0.7);
         Check(!phone.Selfie && me.PhoneState == FootPlayer.PhoneCameraState, $"turned back, the selfie ends (state {me.PhoneState})");
 
-        // the right trigger, its ray off the phone, steps the lens: 2x, 5x, round to 1x
+        // the right trigger, its ray off the phone, no longer steps the lens (a stray pull must not zoom, #1253)
         XrPhone.SimRay = Head * new Transform3D(Basis.Identity, new Vector3(0.25f, -0.3f, -0.2f));
-        var zooms = new List<float>();
-        for (int i = 0; i < 3; i++)
-        {
-            await Trigger();
-            zooms.Add(phone.Screens.Zoom);
-        }
+        for (int i = 0; i < 3; i++) await Trigger();
         XrPhone.SimRay = null;
-        Check(zooms is [2f, 5f, 1f], $"the right trigger off the phone steps the zoom ({string.Join(", ", zooms)})");
+        Check(phone.Screens.Zoom == 1f, $"a trigger pulled off the phone does not zoom ({phone.Screens.Zoom}x)");
+        // the chips do: a fingertip on 5x, then 2x, each lit when it is the lens
+        await Tap(phone.Screens.ZoomChipUv(2), cover: false);
+        Check(phone.Screens.Zoom == 5f && phone.Screens.LitChip == 2, $"a fingertip on the 5x chip zooms to it and lights it ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        await Tap(phone.Screens.ZoomChipUv(1), cover: false);
+        Check(phone.Screens.Zoom == 2f && phone.Screens.LitChip == 1, $"and the 2x chip ({phone.Screens.Zoom}x, chip {phone.Screens.LitChip})");
+        await Tap(phone.Screens.ZoomChipUv(0), cover: false);
+        Check(phone.Screens.Zoom == 1f, "and back to 1x");
 
         await Button(JoyButton.B, 0.6);
         Check(me.PhoneState == FootPlayer.PhoneOpenState && phone.Screens.Shown == PhoneScreens.Page.Home, "B goes back to the home screen");
@@ -172,12 +176,12 @@ public partial class PhoneVrProbe : Node
         AtEyes();
         for (int i = 0; i < 40 && Math.Abs(me.Global.E - (at.E + 250)) > 5; i++) await Wait(0.05);
         double took = GameClock.Now - asked;
-        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took < 2.5, $"raised to the eyes, the travel goes behind it ({took:F1} s, before the blink)");
+        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took < 1.4, $"raised to the eyes, the travel goes behind it ({took:F1} s, before the blink)");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
         Check(!phone.IsOut, "and back in the pocket there");
 
         await FromPocket();
-        BeforeEyes();
+        BeforeEyes(low: 0.7f);   // down at the hip, past the 40 cm reach
         await Wait(0.4);
         phone.Open(PhoneScreens.Page.Map);
         await Wait(0.8);
@@ -186,7 +190,7 @@ public partial class PhoneVrProbe : Node
         Teleporter.Instance?.TeleportTo(at.E + 250, at.N, "probe vr blink");
         for (int i = 0; i < 100 && Math.Abs(me.Global.E - (at.E + 250)) > 5; i++) await Wait(0.1);
         took = GameClock.Now - asked;
-        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took >= 2.5, $"not raised, it goes behind a blink after the wait ({took:F1} s)");
+        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took >= 1.2, $"not raised, it goes behind a blink after the wait ({took:F1} s)");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
 
         // ---- phase 3: a call answered at the ear ----
@@ -261,10 +265,10 @@ public partial class PhoneVrProbe : Node
     /// The phone 32 cm before the eyes, a little low and left, its screen to them; rolled by
     /// <paramref name="roll"/> degrees, or <paramref name="turned"/> round so its back faces them.
     /// </summary>
-    private void BeforeEyes(float roll = 0f, bool turned = false)
+    private void BeforeEyes(float roll = 0f, bool turned = false, float low = 0.16f)
     {
         var head = Head;
-        var at = head * new Vector3(-0.02f, -0.16f, -0.32f);
+        var at = head * new Vector3(-0.02f, -low, -0.32f);
         var z = (head.Origin - at).Normalized();
         var y = (Vector3.Up - z * z.Dot(Vector3.Up)).Normalized();
         var basis = new Basis(y.Cross(z), y, z);
