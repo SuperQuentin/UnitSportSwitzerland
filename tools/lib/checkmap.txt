@@ -205,6 +205,9 @@ src/Interiors/Pinball/ quick --pinballcheck --systems ui
 src/Interiors/Pinball/ quick --zfightcheck Pinball
 shaders/pinball_display quick --pinballcheck --systems ui
 src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
+# #1324: table games: pool played by two bots through its rig (the solver and rules: unit tests), and over the net
+src/Interiors/Games/ quick --poolcheck --systems ui
+src/Interiors/Games/ net    tools/poolnetcheck.sh
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
