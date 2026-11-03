@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Net.Regions;
+using UnitSport.Terrain;
 
 namespace UnitSport.Player;
 
@@ -29,6 +30,9 @@ public partial class FootPlayer
     /// </summary>
     public Vector3 WhereIs(FootPlayer other) =>
         other.Region == Region || Origin is not { } frame ? other.GlobalPosition : frame.ToWorld(other.Global);
+
+    /// <summary>The terrain of the region this body is in when that is not the main one (the statics bound to the main terrain step aside for it), else null.</summary>
+    public ChunkManager? RegionTerrain => Region is { IsMain: false } r ? r.Chunks : null;
 
     /// <summary>Whether this body is in the server's main frame (always on a client): where parked vehicles, crates and stops are placed.</summary>
     public bool InMainFrame => Region is null or { IsMain: true };

@@ -1754,6 +1754,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public override void _Process(double delta)
     {
         using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Process, Bot);
+        using var water = World.WaterField.In(RegionTerrain);
         ProcessStep(delta);
     }
 
@@ -3913,6 +3914,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         Bots.BodyProfiler.CountFrame();
         using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Physics, Bot);
+        using var water = World.WaterField.In(RegionTerrain);
         PhysicsStep(delta);
     }
 

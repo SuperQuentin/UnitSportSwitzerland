@@ -94,6 +94,8 @@ public partial class VersteckisManager
         if (BotDirector.Instance?.Get(id) is not { } bot || !IsInstanceValid(bot.Body)) return;
         var world = _origin.ToWorld(e, n, 0);
         world.Y = (GroundWorld(world) ?? (float?)(GameOfBot(id)?.Site?.GroundAt(e, n)) ?? world.Y) + 0.6f;
+        // in the bot's own frame: on a server it may be in a region of its own (#1456); altitude is the same in every frame
+        if (bot.Body.Origin is { } frame && frame != _origin) world = frame.ToWorld(e, n, world.Y);
         bot.Body.PlaceAt(world, bot.Body.Rotation.Y);
         bot.Body.Velocity = Vector3.Zero;
     }
@@ -142,8 +144,8 @@ public partial class VersteckisManager
         var s = g.S;
         if (s.Find(s.Seeker) is not { Bot: true } || BotDirector.Instance?.Get(s.Seeker) is not { Brain: VersteckisBrain brain } bot) return;
         float reach = voice switch { VsVoice.Thump => VsRules.SprintHeard, VsVoice.Bell => 10000f, VsVoice.Poof => 40f, _ => VsRules.MooHeard };
-        var (be, bn) = _origin.ToLv95(bot.Body.GlobalPosition);
-        if ((be - e) * (be - e) + (bn - n) * (bn - n) > reach * reach) return;
+        var (be, bn) = (bot.Body.Global.E, bot.Body.Global.N);
+        if (GlobalPos.HorizontalDistanceSquared(be, bn, e, n) > reach * reach) return;
         double a = _rng.NextDouble() * Math.Tau, r = _rng.NextDouble() * 10;
         brain.Heard(e + Math.Cos(a) * r, n + Math.Sin(a) * r);
     }

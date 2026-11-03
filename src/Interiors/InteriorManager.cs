@@ -531,9 +531,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         var body = PlayerBody(peer);
         if (body == null || Origin == null) return true;
         var e = layout.EntranceFor(door);
-        var at = body.GlobalPosition;
+        var at = WorldOf(body);
         return at.DistanceTo(OutsideDoorAt(layout, e)) <= reach || at.DistanceTo(InsideDoorAt(layout, e)) <= reach;
     }
+
+    /// <summary>A body in this manager's frame, from its Earth position: on the server it may be in another region's (#1456).</summary>
+    private Vector3 WorldOf(Node3D body) => body is Player.FootPlayer p && Origin != null ? Origin.ToWorld(p.Global) : body.GlobalPosition;
 
     private Node3D? PlayerBody(long peer) =>
         Players?.GetNodeOrNull<Node3D>(peer.ToString()) ?? (peer == MyId && !Online ? LocalPlayer?.Invoke() : null);
@@ -559,7 +562,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         var bodies = new List<Vector3>();
         if (Players != null)
             foreach (var n in Players.GetChildren())
-                if (n is Node3D body) bodies.Add(body.GlobalPosition);
+                if (n is Node3D body) bodies.Add(WorldOf(body));
         if (!Online && LocalPlayer?.Invoke() is { } me && IsInstanceValid(me)) bodies.Add(me.GlobalPosition);
 
         foreach (var (door, plan) in _doors.ToList())

@@ -214,7 +214,8 @@ public partial class BotDirector : Node
             if (!bot.Body.Eliminated) BotSkills.Unembed(bot, bot.World.Space, now);
             if (now >= bot.NextThink)
             {
-                double wait = bot.Brain.Think(bot, now);
+                double wait;
+                using (World.WaterField.In(bot.Body.RegionTerrain)) wait = bot.Brain.Think(bot, now);
                 bot.NextThink = now + (bot.Watched ? wait : Math.Max(wait, FarThink));
             }
             // the facing: where it aims or looks, else where it walks (third person's FaceTravel)

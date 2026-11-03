@@ -211,10 +211,11 @@ public partial class ItemEvents : Node
     /// Server: <paramref name="shooter"/> (a bot's id) fired: every peer that sees it hears and sees the
     /// shot, as a player's own shot is relayed (<see cref="Relay"/>). World space, this server's origin.
     /// </summary>
-    public void ServerSend(long shooter, ItemEventKind kind, Vector3 position, Vector3 direction, string extra = "")
+    public void ServerSend(long shooter, ItemEventKind kind, Vector3 position, Vector3 direction, string extra = "", Core.WorldOrigin? frame = null)
     {
         if (!_server) return;
-        var at = _origin.ToGlobal(position);
+        // the bot's own frame when it is in a server region of its own (#1456)
+        var at = (frame ?? _origin).ToGlobal(position);
         ServerHeard?.Invoke(shooter, kind, at);
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
@@ -227,9 +228,9 @@ public partial class ItemEvents : Node
     /// (PvP or the mode's say, the weapon's reach and damage, the ground, its rate of fire), then to the
     /// victim: a player's machine, or a bot's body here.
     /// </summary>
-    public void ServerHit(long shooter, Vector3 at, Vector3 direction, PlayerHits.Hit hit)
+    public void ServerHit(long shooter, Vector3 at, Vector3 direction, PlayerHits.Hit hit, Core.WorldOrigin? frame = null)
     {
-        if (_server) RelayHit(shooter, _origin.ToGlobal(at), direction, hit.Pack());
+        if (_server) RelayHit(shooter, (frame ?? _origin).ToGlobal(at), direction, hit.Pack());
     }
 
     /// <summary>Server: the fire-rate budgets of every shooter (#468).</summary>
