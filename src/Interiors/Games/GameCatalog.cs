@@ -25,6 +25,7 @@ public static class GameCatalog
     static GameCatalog()
     {
         // each game adds its row here
+        Add(Pool.PoolPlay.Spec);
     }
 
     public static void Add(GameSpec spec) => Specs.Add(spec);

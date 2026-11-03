@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Pool ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a pool table by the bar.
+
+- [ ] E at a table → a place, the camera down behind the cue ball (ball in hand from above for the break); A / D aims, Shift fine, W / S follow or draw (the prompt shows it); hold Space and let go → the power swings up and down and the shot goes off at the power shown.
+- [ ] The same on a pad (left stick aims, right stick nudges, A strikes, B steps back) and on a phone (stick aims, Bowl strikes).
+- [ ] E again alone → a bot sits opposite and shoots on its turn; the balls roll and turn, the stripes read as stripes, the clack, cushion and pocket sounds play; the HUD line says whose turn and what the last shot did.
+- [ ] VR: E by grip at the table, then the pad's stick and A through `XrPad` play it (holding the cue is a gap).
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.
