@@ -125,6 +125,58 @@ public static partial class Ephemeris
         return (Math.Atan2(g.Y, g.X), Math.Asin(g.Z / len), len);
     }
 
+    /// <summary>
+    /// The ICRF (J2000 equator and equinox) axes in the Earth-fixed frame at <paramref name="utc"/>:
+    /// precessed to the date and turned by sidereal time. The stars' catalogue places go through it.
+    /// </summary>
+    public static (Terrain.Format.EcefPos X, Terrain.Format.EcefPos Y, Terrain.Format.EcefPos Z) Celestial(DateTime utc)
+    {
+        double t = (JulianDay(utc) + DeltaT / 86400.0 - 2451545.0) / 36525.0;
+        double gast = SiderealTime(utc);
+        Terrain.Format.EcefPos F(double x, double y, double z) => Spin(Precess(new Terrain.Format.EcefPos(x, y, z), t), -gast);
+        return (F(1, 0, 0), F(0, 1, 0), F(0, 0, 1));
+    }
+
+    /// <summary>
+    /// A planet's apparent visual magnitude, roughly (Mallama and Hilton's absolute magnitudes and
+    /// phase terms; Saturn's rings by their tilt): what sizes its point by eye. Moons by their
+    /// planet's distance, their own absolute magnitude.
+    /// </summary>
+    public static double Magnitude(SkyBody body, DateTime utc)
+    {
+        double t = (JulianDay(utc) + DeltaT / 86400.0 - 2451545.0) / 36525.0;
+        var earth = EarthHeliocentric(t);
+        int i = (ParentOf(body) - SkyBody.Mercury);
+        var p = Heliocentric(i, t);
+        double r = p.Length, delta = (p - earth).Length;
+        // the phase angle at the planet, degrees
+        double cos = Dot(p, p - earth) / (r * delta);
+        double a = Math.Acos(Math.Clamp(cos, -1, 1)) / Deg;
+        double h = body switch
+        {
+            SkyBody.Mercury => -0.613 + 0.06328 * a - 0.0016336 * a * a + 3.3644e-5 * a * a * a - 3.4265e-7 * a * a * a * a,
+            SkyBody.Venus => -4.384 - 0.001044 * a + 3.687e-4 * a * a - 2.814e-6 * a * a * a + 8.938e-9 * a * a * a * a,
+            SkyBody.Mars => -1.601 + 0.02267 * a - 1.302e-4 * a * a,
+            SkyBody.Jupiter => -9.395 - 3.7e-4 * a + 6.16e-4 * a * a,
+            SkyBody.Saturn => -8.914 - 1.825 * RingTilt(utc) + 0.026 * a,
+            SkyBody.Uranus => -7.110 + 0.00009 * a,
+            SkyBody.Neptune => -7.00,
+            SkyBody.Io => -1.68, SkyBody.Europa => -1.41, SkyBody.Ganymede => -2.09, SkyBody.Callisto => -1.05,
+            _ => -1.28,   // Titan
+        };
+        return h + 5 * Math.Log10(r * delta);
+    }
+
+    /// <summary>|sin| of the Earth's latitude over Saturn's equator: how open its rings are, 0..1.</summary>
+    private static double RingTilt(DateTime utc)
+    {
+        var (pole, _, _) = Axes(SkyBody.Saturn, utc);
+        var v = Ecef(SkyBody.Saturn, utc);
+        return Math.Abs(Dot(pole, v) / v.Length);
+    }
+
+    private static double Dot(Terrain.Format.EcefPos a, Terrain.Format.EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
     /// <summary>A body's equatorial and polar radii, metres (IAU): the gas giants are visibly flattened.</summary>
     public static (double Equator, double Pole) Radii(SkyBody body) => body switch
     {

@@ -30,9 +30,12 @@ public partial class DayNight : Node
 {
     /// <summary>
     /// The real sky in world axes: unit directions to the sun and the moon from the camera's place,
-    /// the moon's distance (metres) and its own axes (<see cref="SunPath.MoonFace"/>).
+    /// the moon's distance (metres) and its own axes (<see cref="SunPath.MoonFace"/>), the celestial
+    /// sphere's axes for the stars (<see cref="SunPath.SkyFrame"/>), and the date, hour and place
+    /// it was read at, for anything else in the sky (#1444).
     /// </summary>
-    public readonly record struct RealSky(Vector3 Sun, Vector3 Moon, double MoonDistance, Basis MoonFace);
+    public readonly record struct RealSky(Vector3 Sun, Vector3 Moon, double MoonDistance, Basis MoonFace, Basis Stars,
+        DateOnly Date, double Hour, double E, double N);
 
     public static DayNight? Instance { get; private set; }
 
@@ -261,7 +264,8 @@ public partial class DayNight : Node
             sun = SunPath.Toward(SkyBody.Sun, date, Hour, _placeE, _placeN, out float elevationDeg);
             SunElevationDeg = elevationDeg;
             var moon = SunPath.Toward(SkyBody.Moon, date, Hour, _placeE, _placeN, out _, out double moonDistance);
-            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(date, Hour, _placeE, _placeN));
+            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(date, Hour, _placeE, _placeN),
+                SunPath.SkyFrame(date, Hour, _placeE, _placeN), date, Hour, _placeE, _placeN);
             shade = SunElevationDeg > 3f ? sun : MoonShade(moon);
         }
         else

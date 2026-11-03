@@ -48,7 +48,7 @@ public partial class TelescopeView : CanvasLayer
     private Label _readout = null!, _hint = null!;
     private Control _mask = null!;
     private string _hintShown = "";
-    private (float Focal, bool Locked) _readoutShown = (-1f, false);
+    private (float Focal, bool Locked, SkyBody Target) _readoutShown = (-1f, false, SkyBody.Moon);
 
     /// <summary>Opens the view through telescope <paramref name="id"/> (its node <paramref name="scope"/>).</summary>
     public static void Begin(Telescopes service, long id, Node3D scope, Player.FootPlayer? player)
@@ -132,7 +132,10 @@ public partial class TelescopeView : CanvasLayer
         Pitch = Mathf.Asin(Mathf.Clamp(d.Y, -1f, 1f));
     }
 
-    /// <summary>Locks on the moon if it is in or near the view; true when locked.</summary>
+    /// <summary>What it follows while <see cref="Locked"/>: the moon, a planet or a big moon (#1444).</summary>
+    public SkyBody Target { get; private set; } = SkyBody.Moon;
+
+    /// <summary>Locks on the body nearest the middle of the view, if it is in or near it; true when locked.</summary>
     public bool ToggleLock()
     {
         if (Locked)
@@ -145,15 +148,25 @@ public partial class TelescopeView : CanvasLayer
             ItemController.Instance?.Toast("Nothing to lock on here.");
             return false;
         }
-        float off = Mathf.RadToDeg(Direction.AngleTo(sky.Moon));
+        var (target, off) = (SkyBody.Moon, Mathf.RadToDeg(Direction.AngleTo(sky.Moon)));
+        if (World.SkyBodies.Instance?.Nearest(Direction) is { } planet && planet.OffDeg < off) (target, off) = (planet.Id, planet.OffDeg);
         if (!TelescopeOptics.CanLock(off, Focal))
         {
-            ItemController.Instance?.Toast("Point it at the moon first.");
+            ItemController.Instance?.Toast("Point it at the moon or a planet first.");
             return false;
         }
+        Target = target;
         Locked = true;
         return true;
     }
+
+    /// <summary>Where <see cref="Target"/> is this frame, if the sky shows it.</summary>
+    private Vector3? TargetDirection() => Target == SkyBody.Moon
+        ? World.DayNight.Instance?.Sky?.Moon
+        : World.SkyBodies.Instance?.DirectionOf(Target);
+
+    /// <summary>The target's name for the readout.</summary>
+    private string TargetName => Target == SkyBody.Moon ? "the moon" : Target.ToString();
 
     /// <summary>The tube's direction in world axes.</summary>
     public Vector3 Direction => new Basis(Vector3.Up, Yaw) * new Basis(Vector3.Right, Pitch) * Vector3.Forward;
@@ -211,7 +224,7 @@ public partial class TelescopeView : CanvasLayer
             var want = -head.GlobalBasis.Z;
             Aim(Direction.Slerp(want.Normalized(), Mathf.Min(1f, (float)delta * 6f)));
         }
-        if (Locked && World.DayNight.Instance?.Sky is { } sky) Aim(sky.Moon);
+        if (Locked && TargetDirection() is { } target) Aim(target);
         else if (Locked) Locked = false;
         if (!IsInstanceValid(_scope))
         {
@@ -309,10 +322,10 @@ public partial class TelescopeView : CanvasLayer
 
     private void UpdateHud()
     {
-        if (_readoutShown != (Focal, Locked))
+        if (_readoutShown != (Focal, Locked, Target))
         {
-            _readoutShown = (Focal, Locked);
-            _readout.Text = $"{Focal:0} mm   ×{TelescopeOptics.Magnification(Focal):0.#}{(Locked ? "   locked on the moon" : "")}";
+            _readoutShown = (Focal, Locked, Target);
+            _readout.Text = $"{Focal:0} mm   ×{TelescopeOptics.Magnification(Focal):0.#}{(Locked ? $"   locked on {TargetName}" : "")}";
         }
         string hint = Hint();
         if (hint != _hintShown) _hint.Text = _hintShown = hint;
@@ -323,7 +336,7 @@ public partial class TelescopeView : CanvasLayer
     {
         var device = PlayerInput.HintDevice;
         string zoom = device == InputDevice.Gamepad ? "[D-pad ↑ ↓] zoom" : _vr ? "[right stick ↑ ↓] zoom" : "[wheel] zoom";
-        return $"{zoom}   {InputHints.Prompt(PlayerInput.UseItem, Locked ? "let go of the moon" : "lock on the moon")}   " +
+        return $"{zoom}   {InputHints.Prompt(PlayerInput.UseItem, Locked ? $"let go of {TargetName}" : "lock on")}   " +
             $"{InputHints.Prompt(PlayerInput.InteractMount, "step back")}";
     }
 

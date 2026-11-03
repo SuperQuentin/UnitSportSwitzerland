@@ -127,12 +127,28 @@ public static class SunPath
     /// Z its north pole. A point of its surface with world normal <c>n</c> is at longitude
     /// atan2(n·Y, n·X), latitude asin(n·Z): the moon's map, the right way round, with its libration.
     /// </summary>
-    public static Basis MoonFace(DateOnly date, double hour, double e, double n)
+    public static Basis MoonFace(DateOnly date, double hour, double e, double n) => Face(SkyBody.Moon, date, hour, e, n);
+
+    /// <summary>Any body's own axes in world axes, as <see cref="MoonFace"/> (#1444): a planet's map and its rings' plane.</summary>
+    public static Basis Face(SkyBody body, DateOnly date, double hour, double e, double n)
     {
         var place = PlaceAt(e, n);
-        var (pole, prime, east) = Ephemeris.MoonAxes(SwissTime.ToUtc(date, hour));
+        var (pole, prime, east) = Ephemeris.Axes(body, SwissTime.ToUtc(date, hour));
         Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
         return new Basis(Axis(prime), Axis(east), Axis(pole));
+    }
+
+    /// <summary>
+    /// The celestial sphere in world axes (#1444): columns are the ICRF's X (the equinox), Y and Z
+    /// (the north celestial pole) as seen from LV95 <paramref name="e"/> / <paramref name="n"/>. A
+    /// star's catalogue direction times it is where it shines.
+    /// </summary>
+    public static Basis SkyFrame(DateOnly date, double hour, double e, double n)
+    {
+        var place = PlaceAt(e, n);
+        var (x, y, z) = Ephemeris.Celestial(SwissTime.ToUtc(date, hour));
+        Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
+        return new Basis(Axis(x), Axis(y), Axis(z));
     }
 
     /// <summary>True east / north / up into world axes: turned by the meridian convergence to grid north.</summary>
