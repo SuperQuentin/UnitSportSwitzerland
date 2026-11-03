@@ -16,7 +16,8 @@ namespace UnitSport.Interiors.Games;
 public partial class TableNetProbe : ChatProbe
 {
     public static string? Role => RoleArg("--tablenet");
-    private const int Turns = 4;
+    /// <summary>The changes both peers compare: each sees every one, so both stop at the same one.</summary>
+    private const int Changes = 8;
 
     private readonly WorldOrigin _origin;
 
@@ -76,8 +77,9 @@ public partial class TableNetProbe : ChatProbe
         TableGame? Game() => games.GameAt(key, index);
         Expect(await Until(() => Game()?.SeatOf(myId) >= 0, 15), $"{_role} took a seat");
         Say("seated");
-        if (_role == "A") Expect(await Until(() => Game()?.Seated == 2, 60), "both seats are taken");
-        else await Until(() => Game()?.Seated == 2, 30);
+        // the other may load the world a good while later
+        if (_role == "A") Expect(await Until(() => Game()?.Seated == 2, 300), "both seats are taken");
+        else await Until(() => Game()?.Seated == 2, 60);
 
         if (Game() is { Live: true })
         {
@@ -89,7 +91,7 @@ public partial class TableNetProbe : ChatProbe
         string last = State(Game());
         double until = Time.GetTicksMsec() / 1000.0 + 300;
         string other = _role == "A" ? "B" : "A";
-        while ((mine < Turns || compared - mine < Turns) && Time.GetTicksMsec() / 1000.0 < until)
+        while (compared < Changes && Time.GetTicksMsec() / 1000.0 < until)
         {
             var g = Game();
             if (g == null) { await Seconds(0.2); continue; }
