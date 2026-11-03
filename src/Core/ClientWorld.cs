@@ -572,6 +572,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Interiors.ChurchRadios.Create(this);
         Interiors.CinemaBooths.Create(this);   // a cinema's lights and screen (#1238)
         Interiors.Pinball.PinballTables.Create(this);   // every venue's pinball machines, played and watched (#1325)
+        Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
@@ -2372,6 +2373,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             foreach (var row in pinball.Prompts()) yield return row;
             yield break;
         }
+        if (Interiors.Games.TableGamePlay.Current is { } game)
+        {
+            foreach (var row in game.Prompts()) yield return row;
+            yield break;
+        }
         // what E acts on, where the screen says it in a floating line (a door, a counter, a rack, loot):
         // a phone needs it as a row too, for its button (#1353)
         if (TouchControls.Shown && Interiors.InteriorManager.Instance?.Floating is { } floating)
@@ -2574,6 +2580,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (Interiors.BowlingAim.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
         if (Interiors.Pinball.PinballPlay.Current != null) return new TouchState(TouchMode.Pinball, TouchFlags.None);
+        // at a pool table, a dartboard, a game (#1324): the stick aims, the Bowl button strikes or throws
+        if (Interiors.Games.TableGamePlay.Current != null) return new TouchState(TouchMode.Bowl, TouchFlags.None);
         if (Viewer is not { } p || !IsInstanceValid(p))
         {
             var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
