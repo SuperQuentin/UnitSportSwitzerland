@@ -54,7 +54,7 @@ public sealed partial class LaneGraph
             foreach (var p in tile.PointProps)
             {
                 if (p.Type != PointPropType.TramStop) continue;
-                var at = origin.ToWorld(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z, p.Y);
+                var at = origin.TileToWorld(tile.Id, new Vector3(p.X, p.Y, p.Z));
                 // the trams it serves come toward its face: they run along -front
                 var run = new Vector3(Mathf.Sin(p.Heading), 0f, Mathf.Cos(p.Heading));
                 TramStop? best = null;
@@ -144,7 +144,7 @@ public sealed partial class LaneGraph
         foreach (var tile in tiles)
         {
             if (!tile.JunctionPaths.Any(p => p.Kind == JunctionPathKind.Tram)) continue;
-            Vector3 World(float x, float y, float z) => origin.ToWorld(tile.Id.MinE + x, tile.Id.MaxN - z, y);
+            Vector3 World(float x, float y, float z) => origin.TileToWorld(tile.Id, new Vector3(x, y, z));
             // the lights as the trams see them (the plans the lamps and the cars read: the same objects)
             var sites = tile.Signals.Select(s => new SignalSite { Plan = s.Plan, Out = s.Plan.Arms.Select(a => OutOf(a.Heading)).ToArray() }).ToArray();
             foreach (var jp in tile.JunctionPaths)
@@ -160,7 +160,7 @@ public sealed partial class LaneGraph
                 }
                 if (cum[^1] < 0.5f) continue;
                 var site = jp.Signal >= 0 && jp.Signal < sites.Length ? sites[jp.Signal] : null;
-                long from = Key(tile.Id.MinE + jp.From.X, tile.Id.MaxN - jp.From.Z), to = Key(tile.Id.MinE + jp.To.X, tile.Id.MaxN - jp.To.Z);
+                long from = Key(tile.Id.Global(jp.From.X, jp.From.Z)), to = Key(tile.Id.Global(jp.To.X, jp.To.Z));
                 var edge = new LaneEdge
                 {
                     Points = pts, Cumulative = cum, Class = RoadClass.Railway, Flags = RoadFlags.Tramway, Kind = MoverKind.Tram,

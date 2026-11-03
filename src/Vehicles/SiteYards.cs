@@ -96,9 +96,8 @@ public static class SiteYards
             var door = new Vector2(fp.Door.Position.X, fp.Door.Position.Z);
             var centre = door + outward * (Apron + depth / 2);
 
-            float ground = grid != null
-                ? (float)grid.SampleMeshHeight(tile.Id.MinE + centre.X, tile.Id.MaxN - centre.Y)
-                : b.MinY;
+            var (ce, cn) = tile.Id.Global(centre.X, centre.Y);
+            float ground = grid != null ? (float)grid.SampleMeshHeight(ce, cn) : b.MinY;
             // a little wider than the facade, because a yard is not walled to the building's line
             var yard = new SiteYard(key.ToString(), (int)site, centre.X, ground, centre.Y, heading, fp.Width + 6f, depth);
             // the doors on that wall, along it: u is (cos, -sin) in (x, z), as DormantSlots lays it
@@ -129,7 +128,8 @@ public static class SiteYards
         for (int i = list.Count - 1; i >= 0; i--)
         {
             var p = list[i];
-            var at = new Vector2((float)(p.E - tile.Id.MinE), (float)(tile.Id.MaxN - p.N));
+            var (px, pz) = tile.Id.Local(p.E, p.N);
+            var at = new Vector2((float)px, (float)pz);
             if (Blocked(tile, roads, map, at, 0.9f)) { list.RemoveAt(i); continue; }
             if (grid != null) list[i] = p with { Height = grid.SampleMeshHeight(p.E, p.N) };
         }

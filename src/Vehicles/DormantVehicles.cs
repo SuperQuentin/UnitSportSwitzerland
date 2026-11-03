@@ -533,10 +533,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         _pending.RemoveAll(id => !Within(id, KeepRings));
 
         foreach (var at in _anchorTiles)
-            for (int de = -NearRings; de <= NearRings; de++)
-                for (int dn = -NearRings; dn <= NearRings; dn++)
+            for (int dx = -NearRings; dx <= NearRings; dx++)
+                for (int dz = NearRings; dz >= -NearRings; dz--)
                 {
-                    var id = new TileId(at.E + de, at.N + dn);
+                    var id = at.Neighbour(dx, dz);
                     if (!_slots.ContainsKey(id) && !_pending.Contains(id)) _pending.Add(id);
                 }
         if (_drop.Count > 0) Report();
@@ -679,7 +679,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         for (int i = into.Count - 1; i >= before; i--)
         {
             var s = into[i];
-            var at = new Vector2((float)(s.E - id.MinE), (float)(id.MaxN - s.N));
+            var (sx, sz) = id.Local(s.E, s.N);
+            var at = new Vector2((float)sx, (float)sz);
             // a lorry needs more room round it than a hatchback before it reads as parked in a wall
             bool goods = s.Train != 0 || s.KindId == (int)RideKind.Trailer || s.KindId is >= HeavyCatalog.First and <= HeavyCatalog.Last;
             // (a forklift, RideKind 193, is past HeavyCatalog's range and parks as a car does)
@@ -777,9 +778,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         DormantSlots.ForMarina(id, jetties, (e, n) =>
         {
             // a berth a few metres across the tile's edge reads the edge's water
-            double x = Math.Clamp(e - id.MinE, 0, ChunkFormat.TileSizeM), z = Math.Clamp(id.MaxN - n, 0, ChunkFormat.TileSizeM);
+            var (lx, lz) = id.Local(e, n);
+            double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
             if (!water.TrySample(x, z, out float level, out _)) return null;
-            return (level, (float)grid.SampleHeight(id.MinE + x, id.MaxN - z));
+            var (ge, gn) = id.Global(x, z);
+            return (level, (float)grid.SampleHeight(ge, gn));
         }, (int)RideKind.Speedboat, (int)RideKind.Jetski, into);
     }
 

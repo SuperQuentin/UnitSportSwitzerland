@@ -67,8 +67,9 @@ public partial class TunnelProbe : Node3D
                 double n = _n + dr * ChunkFormat.SpacingM;
                 if (TileId.FromLv95(e, n) != tile) continue;
 
-                int col = (int)((e - tile.MinE) / ChunkFormat.SpacingM);
-                int row = (int)((tile.MaxN - n) / ChunkFormat.SpacingM);
+                var (lx, lz) = tile.Local(e, n);
+                int col = (int)(lx / ChunkFormat.SpacingM);
+                int row = (int)(lz / ChunkFormat.SpacingM);
                 if ((uint)col >= HoleFormat.QuadsPerSide || (uint)row >= HoleFormat.QuadsPerSide) continue;
                 bool carved = holes.Contains(HoleFormat.CellIndex(col, row));
 
