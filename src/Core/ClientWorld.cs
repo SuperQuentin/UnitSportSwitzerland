@@ -699,6 +699,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _dayNight = new World.DayNight(environment)
             {
                 GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
+                Origin = origin,
             };
             AddChild(_dayNight);
         }

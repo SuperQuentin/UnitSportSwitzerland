@@ -1,22 +1,65 @@
+using System;
 using Godot;
+using UnitSport.Core;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.World;
 
 // Godot's managed maths only (Vector3, Mathf): linked into the unit tests (docs/notes/general/testing.md).
 
+/// <summary>Which sun lights the world: the real one, or the old fixed summer day.</summary>
+public enum SunModel { Real, Fixed }
+
 /// <summary>
 /// Where the sun is by the hour (#1225): the model <see cref="DayNight"/> lights the world with,
-/// pulled out so the thermals (<see cref="AirLift"/>) read the very same sky. A simple Swiss summer
-/// day rather than an ephemeris: up at <see cref="Sunrise"/>, due south and <see cref="NoonElevation"/>
-/// high at noon, down at <see cref="Sunset"/>.
+/// pulled out so the thermals (<see cref="AirLift"/>) read the very same sky.
 ///
 /// <para>
-/// Axes are the world's: +X east, -Z north, +Y up. The vector points from the ground to the sun.
+/// <b>The real sun</b> (#1430, phase H6): the ephemeris (<see cref="Ephemeris"/>) on the calendar's
+/// date (<see cref="Calendar"/>) at the game's hour, read as Swiss civil time, from the place's real
+/// latitude and longitude. Bern's day is 8 h 30 min in December and 15 h 55 min in June, and the
+/// June noon sun stands 66.5° high. The moon is real too (<see cref="Toward"/>).
+/// </para>
+///
+/// <para>
+/// <b>The fixed day</b> (<c>--sun fixed</c>, and the default of check runs and trailer renders, so
+/// their pictures do not move with the date): up at <see cref="Sunrise"/>, due south and
+/// <see cref="NoonElevation"/> high at noon, down at <see cref="Sunset"/>.
+/// </para>
+///
+/// <para>
+/// Axes are the world's: +X east, -Z north (LV95 grid north, not true north), +Y up. The vector
+/// points from the ground to the sun.
 /// </para>
 /// </summary>
 public static class SunPath
 {
     public const float Sunrise = 6f, Sunset = 18f, NoonElevation = 62f;
+
+    /// <summary>Where the sky is read when nothing says where: Bern.</summary>
+    public const double BernE = 2_600_000, BernN = 1_200_000;
+
+    /// <summary>The sun in force for this process.</summary>
+    public static SunModel Model { get; set; } = DefaultModel();
+
+    /// <summary>The date the real sun is read on.</summary>
+    public static Func<DateOnly> Today { get; set; } = DefaultToday();
+
+#if GODOT
+    /// <summary><c>--sun real|fixed</c>; otherwise fixed for check runs and trailer renders, real in play.</summary>
+    private static SunModel DefaultModel() => CmdArgs.Value("--sun") switch
+    {
+        "real" => SunModel.Real,
+        "fixed" => SunModel.Fixed,
+        _ => Systems.Narrowed || Trailer.TrailerDirector.Requested ? SunModel.Fixed : SunModel.Real,
+    };
+
+    private static Func<DateOnly> DefaultToday() => () => Calendar.Today;
+#else
+    private static SunModel DefaultModel() => SunModel.Fixed;
+
+    private static Func<DateOnly> DefaultToday() => () => DateOnly.FromDateTime(DateTime.Now);
+#endif
 
     /// <summary>
     /// How far round the sun is: 0 at sunrise, 1 at sunset, 2 at the next sunrise. Day and night each
@@ -31,8 +74,8 @@ public static class SunPath
     }
 
     /// <summary>
-    /// The direction to the sun and its elevation in degrees (negative at night: the sun below the
-    /// horizon). The numbers <c>DayNight</c> has always produced, to the last bit.
+    /// The fixed day's direction to the sun and its elevation in degrees (negative at night: the sun
+    /// below the horizon). The numbers <c>DayNight</c> has always produced, to the last bit.
     /// </summary>
     public static Vector3 Direction(float hour, out float elevationDeg,
         float rise = Sunrise, float set = Sunset, float noonElevation = NoonElevation)
@@ -45,6 +88,77 @@ public static class SunPath
         return new Vector3(Mathf.Sin(az) * Mathf.Cos(el), Mathf.Sin(el), -Mathf.Cos(az) * Mathf.Cos(el));
     }
 
-    /// <summary><see cref="Direction(float, out float, float, float, float)"/> for the default day.</summary>
+    /// <summary><see cref="Direction(float, out float, float, float, float)"/> for the default fixed day.</summary>
     public static Vector3 Direction(double hour) => Direction((float)hour, out _);
+
+    /// <summary>The sun over LV95 <paramref name="e"/> / <paramref name="n"/> at this hour, by the <see cref="Model"/> in force.</summary>
+    public static Vector3 Direction(double hour, double e, double n, out float elevationDeg) =>
+        Model == SunModel.Real ? Toward(SkyBody.Sun, Today(), hour, e, n, out elevationDeg) : Direction((float)hour, out elevationDeg);
+
+    /// <summary>
+    /// The real direction to <paramref name="body"/> from LV95 <paramref name="e"/> / <paramref name="n"/>
+    /// at <paramref name="hour"/> (Swiss civil time) on <paramref name="date"/>, in world axes, and its
+    /// elevation in degrees. Whatever the <see cref="Model"/>.
+    /// </summary>
+    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg)
+    {
+        var place = PlaceAt(e, n);
+        var h = Ephemeris.Topocentric(body, SwissTime.ToUtc(date, hour), place.Geo);
+        elevationDeg = (float)h.ElevationDeg;
+        // true east and north into grid east and north: turned by the meridian convergence
+        double gridE = h.East * place.NorthN + h.North * place.NorthE;
+        double gridN = -h.East * place.NorthE + h.North * place.NorthN;
+        return new Vector3((float)gridE, (float)h.Up, (float)-gridN);
+    }
+
+    /// <summary>
+    /// The hour (Swiss civil time) the sun rises or sets at Bern today, by the <see cref="Model"/>:
+    /// the upper limb on the horizon with standard refraction (-0.833°), as an almanac gives it.
+    /// </summary>
+    public static double RiseOrSet(bool rise) =>
+        Model == SunModel.Fixed ? (rise ? Sunrise : Sunset) : RiseOrSet(Today(), rise);
+
+    /// <summary>The real sunrise or sunset at Bern on <paramref name="date"/>, hours of Swiss civil time.</summary>
+    public static double RiseOrSet(DateOnly date, bool rise)
+    {
+        double El(double hour)
+        {
+            Toward(SkyBody.Sun, date, hour, BernE, BernN, out float el);
+            return el + 0.833;
+        }
+        // morning: the first climb through the horizon; evening: the last fall
+        const double step = 0.25;
+        for (double a = 0; a < 24; a += step)
+        {
+            double b = a + step, ea = El(a), eb = El(b);
+            if (rise ? !(ea < 0 && eb >= 0) : !(ea >= 0 && eb < 0)) continue;
+            for (int i = 0; i < 30; i++)
+            {
+                double mid = (a + b) / 2, em = El(mid);
+                if ((em < 0) == (ea < 0)) { a = mid; ea = em; } else b = mid;
+            }
+            return (a + b) / 2;
+        }
+        return rise ? Sunrise : Sunset;
+    }
+
+    /// <summary>A place on the Earth, and true north as a unit vector in LV95 grid east / north.</summary>
+    private sealed record Place(long CellE, long CellN, Geodetic Geo, double NorthE, double NorthN);
+
+    /// <summary>The last place asked for, per kilometre: swapped whole, so threads never see half of one.</summary>
+    private static Place? _place;
+
+    private static Place PlaceAt(double e, double n)
+    {
+        long ce = (long)Math.Floor(e / 1000), cn = (long)Math.Floor(n / 1000);
+        if (_place is { } p && p.CellE == ce && p.CellN == cn) return p;
+        double pe = (ce + 0.5) * 1000, pn = (cn + 0.5) * 1000;
+        var geo = SwissGeodesy.ToWgs84(pe, pn, 500);
+        // a step due north in latitude, measured on the grid
+        var (ne, nn, _) = SwissGeodesy.FromWgs84(geo with { LatDeg = geo.LatDeg + 0.01 });
+        double de = ne - pe, dn = nn - pn, len = Math.Sqrt(de * de + dn * dn);
+        var place = new Place(ce, cn, geo, de / len, dn / len);
+        _place = place;
+        return place;
+    }
 }

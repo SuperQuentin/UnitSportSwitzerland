@@ -26,8 +26,8 @@ public enum TimeOp
 public static class TimeCommand
 {
     /// <summary>
-    /// Names for <c>/time set</c>. Sunrise and sunset are the default summer day's; an occasion
-    /// may move the real ones (a short winter day).
+    /// Names for <c>/time set</c>. Sunrise and sunset are the fixed day's here; under the real sun
+    /// (#1430) they are today's at Bern (<see cref="SunPath.RiseOrSet"/>).
     /// </summary>
     public static readonly (string Name, double Hour)[] Named =
     [
@@ -99,7 +99,12 @@ public static class TimeCommand
         foreach (var (name, h) in Named)
             if (name == text)
             {
-                hour = h;
+                hour = name switch
+                {
+                    "sunrise" => SunPath.RiseOrSet(rise: true),
+                    "sunset" => SunPath.RiseOrSet(rise: false),
+                    _ => h,
+                };
                 return true;
             }
 
