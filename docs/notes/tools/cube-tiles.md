@@ -32,17 +32,18 @@ path: nothing in the game reads it yet (G2 switches). Code in `tools/TerrainForm
 
 - The anchor: `CubeKey.Anchor`, the ENU frame at the cell's centre on the ellipsoid (`EnuFrame`:
   ECEF origin and axes in doubles; local axes are the game's, x east, y up, z south).
-- Heights: WGS84 **ellipsoidal**, on the cell's lattice at (2^bits + 1)² vertices, row-major from the
-  south-west (i along u, j along v). bits = 23 − level (1024 cells at level 13, 512 at 14: ~1.2 m
-  at a face centre either way). NaN = no data.
+- **Leaf level 14** (chosen with the user on G1's numbers, `docs/plans/global-tiling.md` "G1
+  results"): ~0.6 km tiles. Heights: WGS84 **ellipsoidal**, on the cell's lattice at (2^bits + 1)²
+  vertices, row-major from the south-west (i along u, j along v). bits = 23 − level (512 cells at
+  level 14, 1024 at 13: ~1.2 m at a face centre either way). NaN = no data.
 - Encoding: 1 cm quanta above the tile's own base, planar prediction (W + S − SW), zigzag varints,
   Brotli. Every height within 5 mm whatever the relief; the ushort band (7.55 cm) and a per-tile
   offset+scale over 16 bits (over 1 cm once a tile spans 1,310 m; the local region's worst 1 km
   tile spans 1,304 m) do not hold 1 cm.
 - Features in the anchor frame, floats: road centrelines (`CubeRoad`: source, `RoadClass`, width,
   points) and building footprints (`CubeBuilding`: points on the ground, height above the lowest).
-- Bundles (`CUBB`, `F0_L8_x_y.cubb`): the tiles under one ancestor (default level − 5: 32 × 32
-  tiles), an index of key/offset/length, then the tiles; `cube_manifest.json` lists every tile with
+- Bundles (`CUBB`, `F0_L9_x_y.cubb`): the tiles under one ancestor (default level − 5: 32 × 32
+  tiles, ~20 km at level 14), an index of key/offset/length, then the tiles; `cube_manifest.json` lists every tile with
   its height range, counts and bytes.
 - Geometry (`CubeGeometry.Vertices`): ground point and normal rigorous at a 17 × 17 control grid,
   bilinear between, `S + h·U`: within 0.3 mm of the rigorous vertex. Mesh quads split along
@@ -53,7 +54,7 @@ path: nothing in the game reads it yet (G2 switches). Code in `tools/TerrainForm
 
 ```
 dotnet run --project tools/TerrainPreprocessor -c Release -- --cube --cube-out D:/.../cube13 \
-  --in <swissALTI3D zips> [--rgealti <RGE ALTI dir> | --dem lambert93,<dir>,-0.28] [--cube-level 13] \
+  --in <swissALTI3D zips> [--rgealti <RGE ALTI dir> | --dem lambert93,<dir>,-0.28] [--cube-level 14] \
   [--cube-box minE,minN,maxE,maxN] [--tlm <swissTLM3D.gpkg>] [--buildings <swissBUILDINGS3D gpkg>] \
   [--cube-bdtopo] [--cube-cache DIR] [--cube-check | --cube-check-only]
 ```
@@ -77,7 +78,30 @@ dotnet run --project tools/TerrainPreprocessor -c Release -- --cube --cube-out D
   (`BdFeature.LatLonRings`) on the vertex's normal. Never `SwissProjection`.
 - `--cube-check`: shared edges of every built neighbour pair (exact), vertices against the rigorous
   ground point, the resampling against exact, a tangent-plane collision field against the mesh, and
-  the features against the mesh below them.
+  the features against the mesh below them. `--cube-dump F0/L13/x_y` writes one tile as JSON (its
+  surface every 4th vertex, features, and where the LV95 path put the French points) for pictures.
+- Cost: ~0.75 CPU-s a level-14 tile for heights (1.4 km² of 1 m data a CPU-s), ~1 s more for
+  features (GeoPackage and WFS reads); features are placed in kilometre order (the TLM's R-tree
+  order thrashed the 16 MB source tiles); each tile is encoded the moment its heights exist; peak
+  ~11 GB with `--cube-cache-tiles 300` (16 MB each).
+
+## The harness (`--cubeharness`, `src/Terrain/CubeHarness.cs`)
+
+`<godot> --path . -- --cubeharness <cube region dir> [--cubespeed 100] [--cuberadius 4000]` (a
+window: rendering is measured; muted, no focus, vsync off): the region in one flat Y-up ENU anchor
+frame (the tile nearest its middle, or `--cubeat lat,lon`), each tile placed by one rigid transform
+composed in doubles (`TileTransform`). First collision on the steepest full tile and a middling
+one: a tangent-plane `HeightMapShape3D` (heights divided by the spacing, one uniform scale; an
+alignment probe checks rays at its own samples), a trimesh of the whole mesh and a 128-cell trimesh
+patch, each against the mesh with vertical rays. Then a flight along the region's long axis with an
+LOD step by distance (1, 2, 4, 8 within 0.8, 1.6, 3.2 km and beyond), one commit a frame. Writes
+`test_output/cubeharness/<region>.md`. `--cubeshot <png>` takes one still instead (1.6 km up,
+3 km south of the anchor, looking north). Godot collides with front faces only: trimesh triangles
+are wound clockwise from above, as the render mesh.
+
+- Found with it: the height field misses 2 cm against the mesh (hence trimesh patches, decided);
+  a whole level-13 tile committed at once stalls the main thread ~120 ms (level 14: ~30 ms).
+
 
 ## French sample (#1399's data is on the NAS)
 
