@@ -73,6 +73,10 @@ The coverage map found far rendering, GPX and the origin under load with no chec
     figures, vehicles, props and buildings close up, the near shaders' best check.
   - `ARGS="--curvature 0"` passes game flags: a branch's picture with its change switched off
     must match `main`'s.
+  - `VIEWS="a b"` retakes only those (a crash, a fix), into a tag of its own, then copied over. It
+    keeps the catalogue's origin: from the subset's own, the floats round otherwise (8 % of a shot).
+  - Compare only libraries taken with the same pins: a base taken before `--watertime` existed
+    differed from the branch on every lake. Take the base again when the tool's pins change.
   - Windowed (headless renders nothing): it opens a window per launch at 24,48, never on top.
 - `tools/refshot-diff.py A B [--noise noise.json]` compares two libraries picture by picture:
   mean difference, the share of pixels off by more than 8/255, the largest difference; a heatmap

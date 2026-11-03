@@ -64,7 +64,7 @@ so they fit the depth range.
 | Anchor in Space | MSFS style: origin **at the camera**, Y = the ellipsoid normal under it, X/Z carried over by the **minimal rotation** from the previous anchor. The first Space anchor copies the ground frame's axes exactly (grid east/north, so meridian convergence included). |
 | Shifts in Space | Through the existing `OriginShift` (already a `Transform3D`): rotation **and** vertical translation, past **20 km** from the anchor in any direction (float step 2 mm there). At 7.7 km/s that is one shift every 2.6 s, each turning the world by 0.17°. |
 | Coming down | Below the Space exit altitude, re-anchor to the **whole-km LV95 tile corner** under the camera at altitude 0, axes grid-aligned: a normal ground frame again. |
-| Outside LV95 coverage | The Ground regime needs data and an addressing there: **global tiling** (section 10, phases G1-G3; #187's old phase D). Until it exists, descending outside the preprocessed area **stays in the Space regime** down to the coarse globe, with collision from the globe DEM. |
+| Outside LV95 coverage | The Ground regime needs data and an addressing there: **global tiling** (#1443, `docs/plans/global-tiling.md`). Until it exists, descending outside the preprocessed area **stays in the Space regime** down to the coarse globe, with collision from the globe DEM. |
 | Gravity | **GM/r²** toward the centre in Space and Transition; the ground game keeps its tuned 9.81 m/s². At 60 km GM/r² is 9.63 (−2 %), at 400 km 8.68. |
 | Orbital integration | **Doubles, in an inertial frame** (ECI), velocity Verlet at the physics rate. ECEF rotates: Coriolis at orbital speed is 2ωv ≈ 1.1 m/s², far too big to ignore. Jolt only ever holds the craft's local transform in the anchor frame, for contacts. |
 | Ceiling until H3 lands | Spectator and UFO **capped at 50 km** (the top of the Transition regime), so no one reaches a model that does not exist yet. |
@@ -281,65 +281,14 @@ The same pattern one level up:
   Moon in Earth: ~66,000 km; Earth in the Sun: ~925,000 km.
 - Doubles are enough: at 4.5·10¹² m (Neptune) their step is 1 mm. Planet positions from JPL's
   approximate Keplerian elements.
-- Each body's ground regime uses the global tiling of section 10 with that body's ellipsoid.
+- Each body's ground regime uses the global tiling of #1443 with that body's ellipsoid.
 
-### 10. Global tiling: the ground anywhere on Earth (G1-G3)
+### 10. Global tiling: the ground anywhere on Earth
 
-**Priority (2026-11-03)**: France and other neighbours are being imported, and the system must take
-the whole Earth's geodata later without being changed again. Global tiling is therefore the next
-step after #187, ahead of the Space phases; it gets a plan of its own, and this section is its
-outline.
-
-The Ground regime today is one flat LV95 frame. That holds for Switzerland (LV95's scale error is
-~0.05 % at 200 km from Bern) and nowhere else: one plane stretched to Tokyo distorts everything.
-Measured across France with the rigorous LV95 chain (`DemProjection`): the map scale is off by
-0.06 % at Paris and 0.39 % at Ajaccio, and grid north turns from true north by 3.7° at Paris and
-8.7° at Brest. Worse today: roads and buildings come in through `SwissProjection.ToLv95`, swisstopo's
-polynomials for Switzerland only, which put them 9.6 m off the (rigorously placed) terrain at Paris,
-70 m at Bordeaux and 276 m at Brest.
-**Many projections, one per region, are not the answer either**: two projections disagree by
-metres along their border, so every region edge would be a seam.
-
-**The rule: tiles hold true Earth positions; the frame the game runs in is only a viewpoint.**
-
-- **Tile geometry from ECEF.** The preprocessor converts every source vertex to its true ECEF point
-  (in doubles, H2's rigorous chain for Swiss data) and stores the tile relative to its own anchor:
-  a tangent (east-north-up) frame at the tile's centre, floats in metres. Neighbouring tiles share
-  their edge points (the same latitude/longitude grid, so the same ECEF point), so they meet
-  exactly in any frame.
-- **The game's frame is H3's anchor, everywhere.** A Cartesian frame tangent at an anchor near the
-  camera; travelling re-anchors with a small rotation (0.027° every 3 km). Every anchor frame is the
-  same ECEF space turned and moved, so going from one to the next is an exact rigid transform:
-  nothing stretches, nowhere is an edge, Bern or the Pacific. A tile is placed by one rigid
-  transform (tile ENU → ECEF → anchor), composed in doubles and cast.
-- **Why this does not crack where #187's rejected phase B did**: there, tiles meshed flat in LV95
-  were tilted onto the sphere as rigid blocks, so their flat geometry disagreed with the sphere
-  along every edge (~30 cm at 2,000 m). Here each vertex already is its true point.
-- **Addressing**: a global quadtree. Lat/lon cells (MSFS's choice, simple, squeezed at the poles)
-  or cube-sphere faces (even everywhere): G1 decides, measuring tile counts and seam handling at
-  face edges. Leaf tiles about 1 km.
-- **Curvature becomes geometry.** Tiles are round by construction, so #187's shader drop no longer
-  supplies the Earth's curve. What remains for the shader is refraction: the apparent Earth is
-  flatter than the real one, so `world_curvature` becomes apparent minus geometric
-  (1/2R_eff − 1/2R = −k/2R, a small lift). One global, the same `CURVED_CLIP` call sites.
-- **"Up" is no longer Y across the map**, only at the anchor: at distance s the local up tilts by
-  s/R (0.009° a km). This is the real cost of G2. Everything that assumes up = Y over the whole map
-  is audited:
-  - **Builders** (roads, buildings, props, trees) mesh in their tile's own frame, so they keep a
-    local up and need no change beyond taking the tile frame.
-  - **Gravity and physics** use the anchor's up. Re-anchoring every 3 km keeps the error under
-    0.03°, below what a car or a walker can feel.
-  - **`Position.Y` as altitude** becomes the height above the ellipsoid (or LHN95 through the
-    geoid) from the body's `EcefPos`, as H3's audit already does for what runs in Space; here it
-    reaches everything on the ground.
-  - **Lane graphs, nav meshes, traffic and bot paths**: per tile, in the tile frame, joined at tile
-    edges through their shared ECEF points.
-  - **`GlobalPos` (LV95)** stays the type of Swiss data and Swiss UI (coordinates, GPX), converted at
-    load; the world position type becomes `EcefPos` (or tile id plus a local offset on the wire).
-- **The Swiss data is the first region**, re-meshed into the global grid from the same sources.
-  The LV95 world and the global one exist side by side until G2's net says they match.
-- **Data for elsewhere**: Copernicus GLO-30 for heights, OpenStreetMap for roads and buildings, a
-  preprocessor path of its own (a data task, like H4's globe).
+Its own plan now: `docs/plans/global-tiling.md` (#1443), the next step after #187 and ahead of the
+Space phases here. In short: tiles hold true Earth positions on a cube sphere, the game keeps one
+flat Y-up frame (this plan's H3 anchor, used on the ground too), and #187's drop shrinks to
+refraction. H2 is its first phase's foundation; H3's anchor is built once for both.
 
 ### 9. Features that ride on it (C0-C3)
 
@@ -450,9 +399,6 @@ speed).
 | **H5** Orbital gravity | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ |
 | **H6** Ephemeris sky | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
 | **H7** Planets | registry, frame tree, SOI handovers, scaled space | H4, H5 | a transfer from Earth orbit to lunar orbit with both handovers invisible |
-| **G1** Global tile format | addressing (lat/lon or cube sphere), tile anchors, the ECEF-based preprocessor, Switzerland re-meshed into it | H2 | the global Swiss tiles meet edge to edge within 1 mm in any anchor frame; every vertex within 1 cm of its rigorous ECEF point |
-| **G2** The ground in the anchor frame | the game streams global tiles in H3's anchor frame on the ground too, re-anchoring with rotation every few km; the up = Y audit (physics, altitude, lane graphs, bots, wire); `world_curvature` becomes refraction only | G1, H3 | #1429's net on the global Swiss world against the LV95 one: `coords` with no regression, reference shots within tolerance; a drive Geneva → Val Müstair with no pop at any re-anchor |
-| **G3** A second region | one neighbouring area from Copernicus and OSM, streamed across the border | G2 | a car crosses from Geneva into France and back with no seam, no pop and no physics jolt at the border |
 
 | **C0** Detail by size on screen (**done**, #1433) | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
 | **C1** Telescope on the moon | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
@@ -510,7 +456,7 @@ and C0.
 
 ## Out of scope
 
-- Global data at scale (every country): G3 proves one neighbouring region; the rest is data work.
+- Global tiling for the ground anywhere: #1443.
 - Weather, clouds and their shadows seen from orbit; oceans with waves; tides.
 - Re-entry heating, realistic rocketry, docking and landing on other bodies: this plan is the frame
   they stand on (the spaceplane and telescope above are the only content it carries).
