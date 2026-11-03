@@ -7,6 +7,70 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Buildings meet the ground ([#1417](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1417))
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2597738,1119166` (Sion, a hillside door that gets a 3-step stoop); Lausanne `--at 2538476,1152508` (a 12 m plinth).
+
+- [ ] Walk up to the Sion door: the stoop's steps climb on foot (keyboard, then pad) up to the sill, no jump, no catching on a tread; walk off it back down.
+- [ ] A downhill house in Lausanne/Zermatt: no dark slot or daylight under its uphill-to-downhill walls, the plinth reads as a basement storey, in Cartoon and PS1.
+- [ ] Fly out over the building rings (strides 2, 4, 10, about 1-3 km): no sliver of daylight under a house at the ring change, and no footing poking out of the ground.
+- [ ] A door whose ground rises in front of it: the sill sits on a level landing, the door opens and you walk in with the interior floor at the sill.
+- [ ] Realistic style: the plinth wall and stoop show plain masonry, not a roof texture.
+
+## Pool ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a pool table by the bar.
+
+- [ ] E at a table → a place, the camera down behind the cue ball (ball in hand from above for the break); A / D aims, Shift fine, W / S follow or draw (the prompt shows it); hold Space and let go → the power swings up and down and the shot goes off at the power shown.
+- [ ] The same on a pad (left stick aims, right stick nudges, A strikes, B steps back) and on a phone (stick aims, Bowl strikes).
+- [ ] E again alone → a bot sits opposite and shoots on its turn; the balls roll and turn, the stripes read as stripes, the clack, cushion and pocket sounds play; the HUD line says whose turn and what the last shot did.
+- [ ] VR: E by grip at the table, then the pad's stick and A through `XrPad` play it (holding the cue is a gap).
+
+## Darts ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+BowlinGland (Gland): `--chunks D:/UnitSportSwitzerland/terrain_chunks --origin 2510000,1140000 --enter bowlingland`, a dartboard on a wall.
+
+- [ ] E within the throw line → the board fills the view, a yellow ring sways over the treble 20; W / A / S / D moves it, Shift finely; hold Space → the sway settles for a second or so, then grows; let go → the dart flies in an arc and sticks where the ring was (give or take a few mm), the thunk plays, the HUD says what it scored.
+- [ ] Three darts, then the next player; a bust goes back; the checkout hint (e.g. "out: T20 D20") is right; E alone adds a bot that throws its visits.
+- [ ] The same on a pad and a phone; VR through the pad (throwing by hand is a gap).
+
+## Table football ([#1324](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1324))
+
+A bar with a table (`/enter` a pub or a bar; the arcade's grouped tables too).
+
+- [ ] E at the table → your side (red first), looking across; W / S slides your rods towards and away from you, Space kicks (the ball shoots up the table), Shift lifts the rods; the ball is served from the side; a goal moves a bead and says the score; first to 10.
+- [ ] E again alone → a bot takes blue and plays; online with a friend, each sees the other's rods and the ball smoothly (it's streamed 20 times a second).
+- [ ] Pad and phone the same; VR through the pad (gripping the handles is a gap). Does it feel playable, and are the kicks strong enough?
+
+## Air hockey ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade (`/enter` one; Billard Bluff, Geneva, has one on its ground floor).
+
+- [ ] E at a table → your end, looking down it; the stick drives the mallet as you see it, Shift for full speed; the puck clacks off the mallet and rails, a goal buzzes and counts on the scorer; first to 7.
+- [ ] E again alone → a bot takes the other end; online, the other player's mallet and the puck move smoothly.
+
+## Arcade coins, tickets and prizes ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade, with some cash in your pocket (`/enter` one; Billard Bluff, Geneva).
+
+- [ ] E at the change machine → 5 CHF become 5 Batzen (a clatter, a toast); with less than 5 CHF it says so.
+- [ ] At air hockey, Jump → a Batzen goes in and the puck comes out; with none, it points you to the change machine. At the game's end, tickets print into your pack (two a goal, eight more for the winner).
+- [ ] E at the prize counter → the panel: your tickets, each prize and its price, the ones you can't afford greyed with how many more; Swap gives the prize (it's in the pack, the plush throws like the Blåhaj). Pad and VR pointer work it; Esc / B / E closes it.
+
+## Claw machine ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade's claw machines (by the door), with a few Batzen.
+
+- [ ] E at the machine's front → looking in; Jump puts a Batzen in (the countdown starts at 30), the stick steers the claw as you see it, V looks from the side to judge depth, Jump drops: down, closed, up, back to the chute. A win drops the plush into your pack with a jingle; a near miss says so.
+- [ ] Does it feel fair? (right over a prize wins about half the time, a few cm off much less, and a prize can slip on the way up.)
+
+## Arcade machines' games ([#1326](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1326))
+
+An arcade with uprights, a racer twin, a dance machine (Pixel Paradise in the fun world has them all).
+
+- [ ] E at an upright → its screen fills the view, attract mode (title, INSERT BATZEN, high scores by turns); Jump puts a Batzen in and Snowball Patrol (or Col Rush, by the machine) starts on the screen; play it to the end → tickets, and your name in its high scores; a friend online sees "NOW PLAYING" with your name, then your score.
+- [ ] The racer twin's Col Rush (steer, forward faster) and the dance machine's Yodel Beat (the four directions on the beat): are they fun for a minute, and readable on the screen at that distance?
+
 ## Zoom-aware detail ([#1433](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1433))
 
 `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538500,1154500` (above Lausanne), the camera item in hand.
@@ -78,13 +142,11 @@ Play solo > Explore > world "Neon fun world" (or host it). Spawn on the plaza.
 - [ ] PvP block (hosted, with a friend): weapons from the crates hurt only while both stand inside the red outline; nowhere else.
 - [ ] Leave to the title and play the open world: no fun world venue, arena, festival field or dusk left behind.
 
-## Phone: interact pills, bowling on touch, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
+## Phone: interact pills, pause menu ([#1354](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1354))
 
 On the Android phone (a test APK).
 
 - [ ] Walk up to a building's door, a shop counter, a loot cupboard: a cyan pill names it ("Open the door") on the right edge; a tap does it.
-- [ ] In a bowling centre: the shoe counter, a ball rack and the approach each show their pill. Step up: the overlay stays, with Bowl, Back and Pins; the stick walks the spot, a drag turns the line; Bowl sets it, then hold Bowl to swing and slide the thumb sideways for hook, let go to roll. Back steps back. Is a whole frame comfortable?
-- [ ] At a pinball machine: the overlay stays with a Flip under each thumb, Plunger and Nudge on the right, Back on the left, a Start pill. Hold Plunger and let go to launch; both flippers at once work; Left-handed in Settings keeps the left flipper on the left. Is a whole game comfortable?
 - [ ] II (pause) on a phone held sideways: every entry down to Quit can be reached (it scrolls when it does not fit), Leave to main menu works.
 
 ## Loading and PC responsiveness ([#1382](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1382))
@@ -505,7 +567,7 @@ On the fixture (`--world fixture --pois fixture --givers fixture --systems ui,te
 - [ ] E at a machine's front → the eye view over the lockdown bar, the backbox's display at the top; a game starts (the ball on the plunger). V → straight down; V → back.
 - [ ] Hold Space and let go → the ball goes up the shooter lane; soft → into the top lanes (the lit one: "SKILL SHOT"); hard → round the arch.
 - [ ] Left Shift flips only the left flipper, Right Shift only the right; Enter pulls the plunger and does not open the chat (Enter away from a machine still does).
-- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD); restart the server → still there.
+- [ ] Finish a game with a good score → "New high score: #n!", then in attract the backbox shows the high scores with your name, in the table's style (reels, segments, dots, LCD). (A server restart keeping them is in `tools/pinballnetcheck.sh`.)
 - [ ] A / D (and the arrows) flip; a ball rolling down an inlane can be cradled and aimed. Do the flippers feel strong enough, too strong? Can you make each ramp and orbit on purpose?
 - [ ] W nudges (Q / R to the sides): a few hard nudges → "DANGER", then TILT (flippers dead, the ball drains, no bonus).
 - [ ] Play a whole game on each of the four tables (Clockwork, Space Mission, Haunted Castle, Alpine Ski Race): the lit scoop starts a mission, its shots blink, the timer runs; lock lights, two locks → multiball; ball save; the bonus at the drain; GAME OVER and MATCH. Is it fun? Is any shot impossible or too easy?
@@ -601,6 +663,15 @@ A windowed offline game on real terrain with the adventure on. `--worldevent cow
 - [ ] In a real exported build, update from an older release (delta patch, then again by unpacking the archive by hand) and reach the title: the "What's new" popup lists every release since, newest first, once; the next launch shows none. Offline at the first launch after an update: no popup, it comes at the next online launch.
 - [ ] Pad and VR: the "What's new" title entry opens the notes; the stick scrolls them, B closes (VR: pointer on Close). Is the text readable at the panel's distance?
 
+## The real sun and moon (PR [#1436](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1436), [#1430](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1430) H6)
+
+Normal play (no check flags), any region; `--date` pins the day.
+
+- [ ] Play an evening today: the sun sets around the time a weather app gives for your town, in the south-west in winter, the north-west in summer; `/time set sunset` goes there.
+- [ ] Night with the moon up: hills keep a lit side facing the moon, its glow sits where the real moon is; a night with no moon (around a new moon) still reads, not flat.
+- [ ] `--date 2026-12-24`: Christmas snow under a short day, dusk before 17:00; a paraglider finds weaker thermals than in June.
+- [ ] Online, a client joining a server: both see the same sun.
+
 ## Earth curvature drawn round the camera (PR for [#187](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/187))
 
 Launch: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2548600,1148500` (Lavaux, the Alps across the lake).
@@ -611,3 +682,33 @@ Launch: `--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2548600,1148500` (
 - [ ] Debug menu → Terrain → "Earth curvature" off and on while looking at the far horizon → the far ground drops and rises; nearby nothing moves.
 - [ ] Fly the Cessna across several km (origin shifts) looking at the horizon → no jump in the horizon at a shift.
 - [ ] Navigate to a place 20-30 km away (adventure map) → the diamond sits on the place, not tens of metres above it.
+
+## Telescope and the moon in the sky (PR [#1441](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1441), [#1440](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1440))
+
+`/spawn telescope`, any region, a night with the moon up (`--date 2026-12-23 --time 23` for a full moon).
+
+- [ ] The moon in the night sky with the naked eye: a small bright disc where the moon really is (a sky app), the right phase; by day a pale disc, its dark side the sky's blue.
+- [ ] Set the telescope up (Use), E at it: the view opens, the wheel zooms, the mouse turns it slowly; LMB locks on the moon and holds it while the hours pass; E steps back.
+- [ ] Pad: D-pad ↑ ↓ zoom, right stick turns, RT locks, B steps back.
+- [ ] VR: Y or grip at the tripod; the eyepiece's picture floats before the eyes and follows the head; the right stick zooms, the trigger locks.
+- [ ] Pointed at far mountains at 8,000 mm: the frame rate holds (the zoom-aware detail has no cap yet).
+- [ ] Online: a second player at the tripod reads "Someone is looking through the telescope" and gets in once you step back.
+
+## The night sky: stars, planets, satellites (PR [#1445](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1445), [#1444](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1444))
+
+Normal play, a clear night (`--occasion none` in December: the snowfall hides the sky).
+
+- [ ] The stars against a sky app tonight: Orion, the Plough, Cassiopeia where they are; they come out at dusk and sink into the haze at the horizon.
+- [ ] Venus, Jupiter, Saturn, Mars as bright points where a sky app has them; Venus also by day.
+- [ ] The telescope on Jupiter (lock with LMB) at 20,000 mm: its belts, its four moons beside it; Saturn's rings and Titan.
+- [ ] After dusk or before dawn, satellites drift across as points; the ISS on a pass (Heavens-Above times for your town) where and when it should be. Online first: the game fetches fresh elements once a day (`[satellites] fetched` in the log).
+- [ ] The frame rate with the night sky up, and with Starlink's ten thousand after the first fetch.
+
+## The curvature at altitude (PR [#1458](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1458), [#1430](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1430) H1)
+
+`--chunks D:/UnitSportSwitzerland/terrain_chunks --at 2538300,1151200 --occasion none`, the spectator (T), boost up.
+
+- [ ] Climb steadily from the street to 50 km: the ground falls away smoothly, no jump or shimmer at 5, 20 or 50 km; it stops at 50 km.
+- [ ] The UFO the same way: it stops climbing at 50 km.
+- [ ] VR: the same climb, both eyes agree on the horizon all the way.
+- [ ] From 20-50 km: no z-fighting on the ground (the far plane grows to ~1,000 km), frame rate as on the ground.

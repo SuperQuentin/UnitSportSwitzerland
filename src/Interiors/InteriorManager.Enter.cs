@@ -35,7 +35,7 @@ public partial class InteriorManager
         if (BuildingKey.TryParse(t, out var key))
         {
             var tile = key.Tile;
-            return (tile.MinE + 500, tile.MaxN - 500);
+            return tile.Centre;
         }
         return FindVenue(t) is { } v ? (Venues.At(v).E, Venues.At(v).N) : null;
     }
@@ -164,6 +164,9 @@ public partial class InteriorManager
     }
 
     /// <summary>The building a target names: a building key as it is, or the building holding the venue.</summary>
+    /// <summary>The building a venue's name, OSM id or building key names (as <c>--enter</c> finds it); null when none.</summary>
+    public Task<BuildingKey?> BuildingFor(string target) => BuildingOf(target);
+
     private async Task<BuildingKey?> BuildingOf(string target)
     {
         if (BuildingKey.TryParse(target, out var key)) return key;

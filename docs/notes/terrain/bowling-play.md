@@ -15,10 +15,17 @@ Playable lanes in every bowling centre (`bowling-centres` builds them). Plan: `d
 - **The deck is the server's** (`PinDeck`): Jolt, in a `PhysicsServer3D` space of its own per roll, built
   from `BowlingSizes` (the dedicated server builds no interiors): deck, gutters, kickbacks, the pit's floor
   under everything, a **cushion** (bodies over the pit lose speed and never come back: a hard back wall threw
-  the ball back onto the deck). Pins: a convex hull of the turned outline, 1.55 kg; ball 6.35 kg; CCD on.
+  the ball back onto the deck). Pins: two hulls of the turned outline, body and head with the thin neck between
+  (one hull filled the neck and pins felled each other at head height), 1.55 kg, centre of mass 0.155 m up;
+  ball 6.35 kg; CCD on. **Surfaces** (owner playtest: straight balls struck nearly every time): no bounce (Jolt
+  takes the larger of two, so the pins' 0 holds on the deck too), pin friction 0.7, deck 0.5, ball 0.3. Bouncy,
+  slick pins (0.55 / 0.3 / 0.2) flew about and 22 of 28 straight balls struck; kickbacks off and 120-240 Hz
+  steps changed little. Now head-on leaves the 4-6-7-10, a flat pocket hit the 7 or the 10.
   Real time (Godot steps every active space with the physics tick): no faster-than-real-time stepping.
-  Standing = upright (Y·up > 0.94) on the deck. `--bowlingrollcheck --systems physics` (pocket balls strike
-  4/5, edges take the corner pin, a spare, a gutter ball).
+  Standing = upright (Y·up > 0.94) on the deck. `--bowlingrollcheck --systems physics`: 9 pocket hooks (at
+  least every other strikes; now 6/9), 28 straight balls across the head pin at 7-9 m/s (at most 2 in 5; now
+  8/28), head-on a split, edges take the corner pin, a spare, a gutter ball; `--pindeck pinBounce,pinFriction,
+  deckBounce,deckFriction,ballFriction` sweeps the surfaces (the results scatter: compare several).
 - **State** (`BowlingLanes`, `World/Bowling`, server + every client): per (centre key, pair index, lane) the
   bowlers in turn, their rolls, standing pins, the cycle (kind, start on `ClockSync.SimNow`), the roll under
   way, the rest poses. Whole centre packed on every change (`Pack`, a few hundred bytes) to the peers inside

@@ -75,7 +75,8 @@ public static partial class InteriorGenerator
         foreach (var v in dining)
         {
             // the venue's point in the plan's frame: +X along AxisU, +Z along AxisV, from the centre
-            var d = new Vector2((float)(v.E - tile.MinE), (float)(tile.MaxN - v.N)) - fp.Center;
+            var (vx, vz) = tile.Local(v.E, v.N);
+            var d = new Vector2((float)vx, (float)vz) - fp.Center;
             float px = d.Dot(fp.AxisU), pz = d.Dot(fp.AxisV);
             var guest = DiningRoomOf(v);
             int best = -1;
@@ -901,7 +902,7 @@ public static partial class InteriorGenerator
             {
                 var id = new TileId(2600, 1200);
                 var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, 12f, 16f, 4f, BuildingKind.Commercial) } };
-                Venues.Override = new List<VenueRecord> { new("n1", type, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, cuisine, name) };
+                Venues.Override = new List<VenueRecord> { new("n1", type, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, cuisine, name) };
                 InteriorLayout layout;
                 try { layout = Generate(tile, 0, null, null)!; }
                 finally { Venues.Override = null; }

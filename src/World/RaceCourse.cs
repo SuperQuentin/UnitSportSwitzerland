@@ -47,7 +47,7 @@ public sealed class RaceCourse
     public void Follow(OriginFrame now)
     {
         Route?.Follow(now);
-        if (_frame is { } was && !(was.E == now.E && was.N == now.N))
+        if (_frame is { } was && !was.SameFrame(now))
         {
             var shift = now.Since(was);
             for (int i = 0; i < Gates.Length; i++) Gates[i] = shift.Point(Gates[i]);

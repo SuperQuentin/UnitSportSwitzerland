@@ -1325,6 +1325,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _ExitTree()
     {
+        // leaving the game on the bike ends the ride too (#902)
+        if (_ride is Bicycle && FtpRider) Trainer.FtpWatch.RideEnded();
         Terrain?.RemoveAnchor(this);
         Interiors.InteriorNode.BeamBodies.Remove(this);
         Explosion.Blast -= OnBlast;
@@ -2825,6 +2827,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.CinemaBooths.TryUse(this)) return true;   // the booth's lights and screen (#1238)
             if (Interiors.BowlingLanes.TryUse(this)) return true;   // shoes, a ball, the approach (#1323)
             if (Interiors.Pinball.PinballTables.TryUse(this)) return true;   // step up to a pinball machine (#1325)
+            if (Interiors.Games.TableGames.TryUse(this)) return true;   // a pool table, a dartboard, a game (#1324, #1326)
+            if (Interiors.Games.ArcadeCounters.TryUse(this)) return true;   // the change machine, the prize counter (#1326)
             if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
@@ -2859,6 +2863,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
+        // a set-up telescope at hand (#1440): look through it
+        if (Items.Telescopes.TryInteract(this)) return true;
         // Versteckis (#1268): an objective's hold; a prop opens no door and drives nothing
         if (Adventure.Versteckis.VersteckisManager.TryInteract(this)) return true;
         // a chest, a seal's stack or cowbell, a guide's burrow, a trial's post, an offering box (#1227)
@@ -3558,8 +3564,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     /// <param name="tuning">Garage parts, for a car taken back from the world; 0 (stock) for a new one.</param>
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
+    /// <summary>The local human rider, whose bike rides the hidden FTP test watches (#902): no NPC, bot or copy.</summary>
+    private bool FtpRider => IsMultiplayerAuthority() && !Npc && !Bot && !Puppet && !NetProxy;
+
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // off the bike: that ride is over, and the hidden FTP test reads it (#902)
+        if (_ride is Bicycle && kind != RideKind.RoadBike && FtpRider) Trainer.FtpWatch.RideEnded();
         // back on foot: the vehicle it had got into is behind it (parked, wrecked, left), its name with it
         if (kind == RideKind.OnFoot) _rideName = "";
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
@@ -4960,6 +4971,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else Slope = null;
         _ride!.Step(input, ground, dt, ref _motion);
+        // the hidden FTP test (#902) listens to the local rider's pedals
+        if (_ride is Bicycle pedalled && FtpRider) Trainer.FtpWatch.Sample(pedalled.LastWatts, pedalled.PowerMeasured, dt);
         // riding switch turns the rider round on every screen (#922)
         if (_ride is Snowboard ridden && TuningBits != ridden.Bits) TuningBits = ridden.Bits;
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it

@@ -26,8 +26,11 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private static readonly int MaxBuildsInFlight = Core.Platform.IsMobile ? 2   // a phone's cores are the tiles' (#63)
         : Math.Clamp(System.Environment.ProcessorCount / 2, 2, 8);
 
-    /// <summary>The lattice step: 200 m on a standalone headset, a quarter of the triangles (#1112).</summary>
-    private static readonly int HorizonStep = Core.Platform.IsStandaloneVr ? 2 : 1;
+    /// <summary>
+    /// The lattice step for blocks built from now on: 200 m on Very low, a quarter of the triangles (a standalone
+    /// headset's since #1112, every device's since #1216).
+    /// </summary>
+    private static int HorizonStep => Core.GameSettings.Lean ? 2 : 1;
 
     /// <summary>Main-thread time a frame may spend committing blocks; one always goes through.</summary>
     private const double CommitBudgetMs = 3;
@@ -50,7 +53,8 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     /// drop round the camera, 340 m at the far edge of a 60 km horizon, and a box culled as flat would
     /// lose the peaks along the top of the screen. The farthest a block's corner can be from the camera.
     /// </summary>
-    private float CullMargin() => (float)Curvature.Drop(_distanceM + UnloadSlackM + BlockM * Math.Sqrt(2));
+    // without refraction's share: from 20 km up the drop is the true sphere's (#1430 H1), 15 % more
+    private float CullMargin() => (float)(Curvature.Drop(_distanceM + UnloadSlackM + BlockM * Math.Sqrt(2)) / (1 - Curvature.Refraction));
 
     private IChunkSource? _source;
     private WorldOrigin? _origin;
@@ -77,9 +81,9 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         _source = source;
         _origin = origin;
         _material = material;
-        // a standalone headset (#1112): drawn after the real tiles, so what lies under them is rejected
-        // by depth before it is shaded (opaque draws sort by priority first, Mobile renderer)
-        if (Core.Platform.IsStandaloneVr) material.RenderPriority = 1;
+        // the Mobile renderer (#1112, #1216): drawn after the real tiles, so what lies under them is rejected
+        // by depth before it is shaded (opaque draws sort by priority first)
+        if (Styles.StyleKit.OnMobileRenderer) material.RenderPriority = 1;
         _anchors = anchors;
         // deferred, so a source configured right after (the generated fill) is read once, not
         // twice: whoever reloads first this frame wins, and this then finds it loading

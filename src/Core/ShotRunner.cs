@@ -31,7 +31,8 @@ namespace UnitSport.Core;
 /// A line whose path is "~ease", "~lin", "~in" or "~out" is a glide: the camera moves there from the last line's pose over
 /// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>).
 /// "fov 6.87" sets the camera's vertical field of view, degrees, for the shots after it (#1433: a lens's
-/// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>).
+/// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>); below 1° it is a
+/// frustum of that angle (<see cref="CameraLens"/>, the telescope's, #1440).
 /// "shift dE,dN" moves the floating origin by that many metres with the camera still (#185), then
 /// logs the CPU and GPU time of the frames after it against the frames before: what a shift costs
 /// the renderer (SDFGI relights, <c>docs/notes/core/floating-origin.md</c>). Shots before and
@@ -388,7 +389,7 @@ public partial class ShotRunner : Node
         if (next is { Fov: { } fov })
         {
             GD.Print(string.Create(CultureInfo.InvariantCulture, $"[shot-queue] fov {fov}"));
-            _camera.Fov = fov;
+            CameraLens.SetFov(_camera, fov);
             return false;
         }
         if (next is { } shot)

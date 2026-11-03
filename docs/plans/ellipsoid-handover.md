@@ -3,7 +3,7 @@
 
 # Ellipsoid handover: from the flat world to a real WGS84 Earth at altitude
 
-Status: **H2 built (PR #1435)**; the rest planned, after #187's render-space curvature drop lands.
+Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445); H1 the curvature at altitude built (PR #1458)**; #187's curvature merged (PR #1432); the rest planned, H3 next.
 Issue: #1430.
 Prerequisites: the floating origin (#185, `docs/plans/floating-origin.md`, done), the round world
 near the ground (#187, `docs/plans/spherical-world.md`) and its regression net (#1429).
@@ -234,17 +234,22 @@ records which one it is:
   the `WorldEnvironment` sky fading from today's sky to black as the camera leaves the air.
 - **Stars**: the Yale Bright Star Catalogue (~9,100 stars, public domain) on the celestial sphere in
   ECI, turned into the anchor frame by sidereal time; also at night on the ground.
-- **Sun and moon** (H6): an ephemeris from the date (`Core/Calendar`) and environment time
-  (`WorldClock`) plus the camera's real latitude and longitude: Meeus' low-precision formulas
-  (sun ~0.01°, moon ~0.3°) or JPL's approximate positions. `SunPath` keeps its API and returns the
-  ephemeris direction in the current frame; `DayNight`'s moon stops being "opposite the sun".
-  Check: Bern at the June solstice, noon elevation 66.5° (today's constant: 62°).
+- **Sun and moon** (H6, **built for the ground**: PR #1436): `Core/Ephemeris`, Meeus (the sun's
+  low-precision theory, the moon's full chapter 47 series, nutation, apparent sidereal time),
+  topocentric through ECEF, so it serves a place in orbit as well. Against JPL Horizons at four
+  Swiss towns: sun 0.008°, moon 0.0013° (its distance to 40 km); Bern's June noon sun 66.49°.
+  `SunPath.Toward(body, date, hour, e, n)` turns it from true north to grid north at the camera's
+  LV95 place; `DayNight` shades the night from the real moon. `Ephemeris.MoonPhase` gives the lit
+  fraction for C1. Still to come with H3/H4: the moon drawn as a disc, stars, the frame in Space.
 - **The real sun on the ground** (decided): the game hour stays local civil time (CET/CEST,
   `Europe/Zurich`), converted to UTC for the ephemeris; in Space the HUD shows UTC. The callers of
   `SunPath.Direction` today: `DayNight` (which also takes an occasion's own sunrise, sunset and noon
   elevation, a hand-made short winter day that the real date now gives by itself: those overrides
   go), `AirLift` (thermals follow the season) and `FunBackdrop` (a fixed dusk in a world that is not
-  on Earth: stays fixed). `GameSettings.StartHour` keeps meaning a clock time.
+  on Earth: stays fixed). `GameSettings.StartHour` keeps meaning a clock time. As built: `Core/SwissTime` (CET/CEST by the
+  EU rule, no `TimeZoneInfo`); the occasions' own sunrise, sunset and noon stay for the fixed day
+  only; `--sun fixed` is also the default of every check, fixture world, screenshot run and
+  trailer, so their results do not move with the date.
 - **North**: the compass, map, minimap and GPX overlays keep **grid north** on the ground (the map
   is LV95). In Space the HUD heading uses true north computed from the anchor frame (the ECEF Z
   axis projected on the tangent plane).
@@ -299,7 +304,9 @@ refraction. H2 is its first phase's foundation; H3's anchor is built once for bo
 
 Small features that make the frame playable early, each a separate issue when it starts.
 
-**A telescope.** A telescope on a tripod for looking at the moon and the planets from the ground (or
+**A telescope** (**C1 built**, #1440, PR #1441: `docs/notes/items/telescope.md` has it as built; the
+moon is the only target until H7, the zoom stops at 8,000 mm with the 4k moon map, and below 1° the
+camera is a frustum, `Core/CameraLens`). A telescope on a tripod for looking at the moon and the planets from the ground (or
 at the Earth from the moon), and at where other players are out there.
 
 - **Set up, then look through (decided: a tripod)**: carried as an item, set down with Use where a
@@ -397,16 +404,18 @@ speed).
 
 | Phase | What | Depends on | Done when |
 |---|---|---|---|
-| **H1** Refraction fade and exact-sphere blend | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
+| **H1** Refraction fade and exact-sphere blend (**built**, PR #1458) | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
 | **H2** `EcefPos` and conversions (**built**, PR #1435) | `EcefPos`, `Geodetic`, `Planet`, rigorous LV95 ↔ ETRS89, geoid grid | none | unit tests: REFRAME points to < 2 mm, round trips < 0.1 mm |
 | **H3** Rotating 3D anchor | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space, `EcefPos` on the wire | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
 | **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check | H3 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
+| **Showcase** (asked 2026-11-03) | a smooth pull-back from a Lausanne street to the whole Earth in space, an altitude readout on screen, as a clip (`/clip`, `tools/record-clip.sh`) | H3, H4 | the first clip once the globe draws: no pop at any handover, the readout continuous from metres to thousands of km |
 | **H5** Orbital gravity | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ |
-| **H6** Ephemeris sky | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
+| **H6** Ephemeris sky (**ground part built**, PR #1436) | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
 | **H7** Planets | registry, frame tree, SOI handovers, scaled space | H4, H5 | a transfer from Earth orbit to lunar orbit with both handovers invisible |
 
 | **C0** Detail by size on screen (**done**, #1433) | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
-| **C1** Telescope on the moon | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
+| **C1** Telescope on the moon (**built**, PR #1441) | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
+| **C1b** The solar system and satellites in the sky (**built**, PR #1445, #1444) | stars, planets and their axes, Jupiter's moons and Titan, Saturn's rings, satellites by SGP4 and CelesTrak, the telescope's lock on any of them | C1 | the bodies against Horizons; Jupiter and Saturn held in the telescope (`docs/notes/world/night-sky.md`) |
 | **C2** Spaceplane to orbit | spec, model, sounds, rocket thrust, the cruise drive round the Earth, glide home and runway landing | H4, H5 | take off at an airfield, reach 400 km, drive round the Earth, drop into orbit, re-enter and land on a runway |
 | **C3** Out to the moon and planets | the drive between bodies, the far-marker list, planets and markers in the telescope | H7, C1, C2 | A drives to lunar orbit; B on the ground locks the telescope on the moon and sees A's marker at the right place |
 

@@ -1,3 +1,5 @@
+using System;
+
 namespace UnitSport.Core;
 
 /// <summary>
@@ -43,6 +45,79 @@ public static class Curvature
 
     /// <summary>The same from a squared flat distance (no square root on a hot path).</summary>
     public static double DropSquared(double distanceSquaredM2) => distanceSquaredM2 * DropPerM2;
+
+    // ---- at altitude (#1430, phase H1 of docs/plans/ellipsoid-handover.md) -----------------------
+
+    /// <summary>Refraction holds up to here, metres: the dense low air bends near-horizontal rays.</summary>
+    public const double RefractionTopM = 5_000;
+
+    /// <summary>And is gone from here: from the stratosphere the planet looks geometric.</summary>
+    public const double GeometricFromM = 20_000;
+
+    /// <summary>The drop gives way to the exact sphere between these two altitudes, metres.</summary>
+    public const double SphereFromM = 20_000, SphereAtM = 50_000;
+
+    /// <summary>How high the spectator and the UFO may climb until the Space regime exists (H3), metres.</summary>
+    public const double CeilingM = 50_000;
+
+    /// <summary>A smooth 0 → 1 from <paramref name="a"/> to <paramref name="b"/>.</summary>
+    private static double SmoothStep(double a, double b, double x)
+    {
+        double t = Math.Clamp((x - a) / (b - a), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
+    /// <summary>The refraction coefficient seen from a camera at <paramref name="altitudeM"/>: 0.13 low, 0 from 20 km.</summary>
+    public static double RefractionAt(double altitudeM) => Refraction * (1 - SmoothStep(RefractionTopM, GeometricFromM, altitudeM));
+
+    /// <summary>The drop per square metre for a camera at <paramref name="altitudeM"/>: the <c>world_curvature</c> global.</summary>
+    public static double DropPerM2At(double altitudeM) => (1 - RefractionAt(altitudeM)) / (2 * EarthRadiusM);
+
+    /// <summary>How far the drop has given way to the exact sphere, 0..1: the <c>world_curve_blend</c> global.</summary>
+    public static double SphereBlendAt(double altitudeM) => SmoothStep(SphereFromM, SphereAtM, altitudeM);
+
+    /// <summary>The geometric horizon's distance from <paramref name="altitudeM"/> up, metres: √(2Rh + h²).</summary>
+    public static double HorizonM(double altitudeM)
+    {
+        double h = Math.Max(0, altitudeM);
+        return Math.Sqrt(2 * EarthRadiusM * h + h * h);
+    }
+
+    /// <summary>
+    /// Where a flat point is drawn, as an offset from it (<c>shaders/common/curvature.gdshaderinc</c>'s
+    /// <c>curve_offset</c>, in doubles): <paramref name="flatM"/> from the camera on the ground plane,
+    /// <paramref name="altitudeM"/> high. The drop lowers it by s² · <paramref name="dropPerM2"/>; the exact
+    /// wrap reads the flat distance as arc length on the sphere through the camera's nadir: the point
+    /// moves in by s − (R + y)·sin θ and down by (R + y)·(1 − cos θ). Blended by <paramref name="blend"/>.
+    /// Returns the shift along the ground towards the point (negative: drawn nearer) and the height change.
+    /// </summary>
+    public static (double Along, double Up) Offset(double flatM, double altitudeM, double dropPerM2, double blend)
+    {
+        double drop = flatM * flatM * dropPerM2;
+        double theta = flatM / EarthRadiusM;
+        double along = (EarthRadiusM + altitudeM) * Math.Sin(theta) - flatM;
+        double down = (EarthRadiusM + altitudeM) * (1 - Math.Cos(theta));
+        return (blend * along, -((1 - blend) * drop + blend * down));
+    }
+
+    /// <summary>
+    /// The same in single precision, the way the shader works it (camera-relative, no R + y, 1 − cos θ as
+    /// 2·sin²(θ/2), small-angle series near zero): what the GPU draws, checked against <see cref="Offset"/>.
+    /// </summary>
+    public static (float Along, float Up) OffsetAsShader(float flatM, float altitudeM, float dropPerM2, float blend)
+    {
+        const float r = (float)EarthRadiusM;
+        float s = flatM, s2 = s * s;
+        float drop = s2 * dropPerM2;
+        if (blend <= 0f || s < 1e-3f) return (0f, -drop);
+        float th = s / r, half = th * 0.5f;
+        float sincHalf = half < 1e-3f ? 1f - half * half / 6f : MathF.Sin(half) / half;
+        float sincM1 = th < 1e-2f ? -th * th / 6f + th * th * th * th / 120f : MathF.Sin(th) / th - 1f;
+        float along = s * sincM1 + altitudeM * MathF.Sin(th);
+        float sinHalf = MathF.Sin(half);
+        float down = s2 / (2f * r) * sincHalf * sincHalf + altitudeM * 2f * sinHalf * sinHalf;
+        return (blend * along, -((1f - blend) * drop + blend * down));
+    }
 
     /// <summary>
     /// How high the Earth stands above the straight line between two points <paramref name="totalM"/>

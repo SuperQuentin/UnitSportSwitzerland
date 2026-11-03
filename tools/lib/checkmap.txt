@@ -122,6 +122,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/World/StarField      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/SkyBodies      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -205,6 +213,17 @@ src/Interiors/Pinball/ quick --pinballcheck --systems ui
 src/Interiors/Pinball/ quick --zfightcheck Pinball
 shaders/pinball_display quick --pinballcheck --systems ui
 src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
+# #1324: table games: pool played by two bots through its rig (the solver and rules: unit tests), and over the net
+src/Interiors/Games/ quick --poolcheck --systems ui
+src/Interiors/Games/ net    tools/poolnetcheck.sh
+src/Interiors/Games/ quick --dartscheck --systems ui
+src/Interiors/Games/ net    tools/tablenetcheck.sh
+src/Interiors/Games/ quick --foosballcheck --systems ui
+src/Interiors/Games/ quick --airhockeycheck --systems ui
+src/Interiors/Games/ quick --prizecheck --systems ui
+src/Interiors/Games/ quick --clawcheck --systems ui
+src/Interiors/Games/ quick --cabinetcheck --systems ui
+src/Items/ItemIcons quick --prizecheck --systems ui
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
@@ -424,6 +443,7 @@ src/Crafting/            net    tools/campfirecheck.sh
 src/Items/Fishing        net    tools/fishcheck.sh
 src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
+src/Items/Telescope      net    tools/telescopecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/Farming/             net    tools/farmnetcheck.sh
 src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh

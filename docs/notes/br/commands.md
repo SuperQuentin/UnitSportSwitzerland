@@ -15,6 +15,16 @@
 - `<godot> --headless --path . -- [--chunks <dir>] --brcheck`: zone determinism/nesting, round
   lengths (30-45 min target), 200 real region picks against the hard rules, no repeat within 8 km,
   state JSON round trip, inventory lend round trip, and a real region's map rendered to `test_output/br_map_check.png`.
+  - **The map must have room for it** (#894). With no `places.json`/manifest it checks generated
+    ground only and passes. With them, it first counts what the map can carry: 5 match regions
+    8 km apart (one 6 km square per town, every tile present) for the no-repeat check, and 2
+    mountain regions (600 m between the lowest and highest tile tops) for the sites, since bunkers
+    want a 31° slope by a road and the lake shore has none. Short of either, one FAIL says so,
+    names the towns missing tiles, and writes those tiles to `test_output/brcheck_missing_tiles.txt`
+    (`E-N  # town`, for `tools/MapSetup -- --tiles-file`). It then skips the no-repeat check and
+    runs the sites only in the mountain regions there are. A partial map (a few towns set up) fails
+    here on purpose: the old seeded picks failed with misleading lines instead ("Zürich, Zürich",
+    0 bunkers on the lake shore).
 - `GODOT=<exe> [CHUNKS=<dir>] tools/brcheck.sh`: `--brcheck`, then one whole match over loopback on a
   generated world at pace 0.13 (two players get the smallest zone, at half the timetable: the old 0.08 clock, #447) (`BrProbe`, `PORT=` to move it off 7799): admin opens and starts, B joins by itself (`--br`), both board the cargo plane
   (A jumps when the doors open and steers by looking, B is pushed out when they close; each sees the other hidden aboard), both in the region with a

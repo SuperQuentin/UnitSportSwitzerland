@@ -75,7 +75,8 @@ public partial class DiningProbe : Node
     {
         var id = new TileId(2600, 1200);
         var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, c.W, c.D, c.H, c.Kind) } };
-        Venues.Override = c.Venues.Select((v, i) => new VenueRecord($"n{i + 1}", v.Type, id.MinE + 500 + v.Dx, id.MaxN - 500 - v.Dz,
+        var (ce, cn) = id.Centre;
+        Venues.Override = c.Venues.Select((v, i) => new VenueRecord($"n{i + 1}", v.Type, ce + v.Dx, cn - v.Dz,
             VenueFix.Inside, VenueFlags.None, 0, v.Cuisine, $"{c.Name} {i}")).ToList();
         string what = $"{c.Name} ({c.W}x{c.D} m, {c.H} m, {c.Kind})";
         Check(BuildingTypes.For(tile).DiningOf(0).Count == c.Venues.Length, $"{what}: the solid holds its {c.Venues.Length} venue(s)");
