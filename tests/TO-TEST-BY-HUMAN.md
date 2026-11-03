@@ -11,7 +11,9 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 
 With the `--cube-global` region on D: (`D:/UnitSportSwitzerland/cube_global`, or `--globe <dir>`), spectator or UFO, real sky (play, not a shot run).
 
-- [ ] Climb from a Lausanne street to 120 km and back → the globe fades in above 15 km with no pop; the sky darkens to black by 40 km; nothing jumps at 60 or 50 km; the haze never turns into a white wall.
+- [ ] Desktop, live: the spectator from a Lausanne street (`--origin 2538300,1151200`) straight up to ~12,000 km and back, boost held → the globe fades in above 15 km with no pop; the sky darkens to black by 40 km; the generated fill dissolves at 50-80 km and every flat tile at 150-250 km without a hole; nothing jumps at 60 or 50 km; the whole Earth sits under you with the stars; coming down, the flat world comes back in the same order.
+- [ ] VR, live (PC VR, then the Quest standalone with the shipped levels 0-2 only): the same climb as far as the headset's flight allows → no flicker or swimming of the globe in either eye; on the Quest the flat world sinks out of sight at its half-way heights instead of dissolving; frame rate holds.
+- [ ] A clean clone with Git LFS, no D: data: the globe still draws from `assets/globe` (levels 0-2), softer below ~1,000 km.
 - [ ] At 120 km by day, then at dusk and at night → stars by day up there; the limb is a blue band over black; the terminator lies where the real sun puts it (not where the moon is at night).
 - [ ] Frame time at 120 km looking at the horizon, and while climbing fast (tiles streaming) → no hitch over ~30 ms.
 - [ ] The same on a phone or the Quest (Mobile renderer, maybe a 24-bit depth buffer) → no flicker between globe tiles or against the flat tiles far out.
