@@ -3,7 +3,7 @@
 
 # Ellipsoid handover: from the flat world to a real WGS84 Earth at altitude
 
-Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445)**; the rest planned, after #187's render-space curvature drop lands.
+Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445); H1 the curvature at altitude built (PR #1458)**; the rest planned, after #187's render-space curvature drop lands.
 Issue: #1430.
 Prerequisites: the floating origin (#185, `docs/plans/floating-origin.md`, done), the round world
 near the ground (#187, `docs/plans/spherical-world.md`) and its regression net (#1429).
@@ -404,7 +404,7 @@ speed).
 
 | Phase | What | Depends on | Done when |
 |---|---|---|---|
-| **H1** Refraction fade and exact-sphere blend | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
+| **H1** Refraction fade and exact-sphere blend (**built**, PR #1458) | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
 | **H2** `EcefPos` and conversions (**built**, PR #1435) | `EcefPos`, `Geodetic`, `Planet`, rigorous LV95 ↔ ETRS89, geoid grid | none | unit tests: REFRAME points to < 2 mm, round trips < 0.1 mm |
 | **H3** Rotating 3D anchor | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space, `EcefPos` on the wire | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
 | **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check | H3 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
