@@ -147,7 +147,11 @@ public partial class CameraGlobal : Node
     /// air, so a sixth of it over the hundreds of kilometres seen from orbit drew a white wall.
     /// </summary>
     public static float HazeAt(double altitude, bool globe = false) =>
-        altitude <= 3_000 ? 1f : Mathf.Max(globe ? 0f : 1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
+        altitude <= 3_000 ? 1f : globe
+            // with the globe the air's own shell takes over the haze: thinned twice as fast (a climb
+            // through 6-20 km went all but blank)
+            ? Mathf.Exp(-(float)(altitude - 3_000) / 5_000f)
+            : Mathf.Max(1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
 
     private void ScaleShadows()
     {

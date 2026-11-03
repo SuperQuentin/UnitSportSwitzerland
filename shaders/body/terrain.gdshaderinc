@@ -41,7 +41,7 @@ vec2 cover_uv(vec2 xz) {
 }
 
 // The globe from high up (#1430 H4, World/Globe/Globe.cs): the generated fill (no real data under it)
-// gives way to the globe from 15 km, every flat tile from 150 km (world_fill_hide, world_flat_hide,
+// gives way to the globe from 50 km, every flat tile from 150 km (world_fill_hide, world_flat_hide,
 // 0..1), dissolved by a dither. The real tiles' mask is one R8 texel a km tile, as cover_uv's.
 global uniform float world_fill_hide;
 global uniform float world_flat_hide;

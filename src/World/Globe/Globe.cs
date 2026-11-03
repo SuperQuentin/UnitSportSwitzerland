@@ -61,8 +61,11 @@ public partial class Globe : Node
     /// <summary>The flat world's node (the tiles, the horizon blocks, what stands on them): hidden outright once every flat tile has dissolved, so none of it is drawn.</summary>
     public Node3D? FlatWorld { get; set; }
 
-    /// <summary>The generated fill dissolves from here to <see cref="FillGoneM"/>, metres.</summary>
-    public const double FillFromM = 15_000, FillGoneM = 25_000;
+    /// <summary>
+    /// The generated fill dissolves from here to <see cref="FillGoneM"/>, metres: high, where a globe cell
+    /// (1.2 km past the leaves) is a few pixels; from 18 km the whole view went to the globe's blur.
+    /// </summary>
+    public const double FillFromM = 50_000, FillGoneM = 80_000;
 
     /// <summary>Every flat tile dissolves from here to <see cref="FlatGoneM"/>: the globe alone above.</summary>
     public const double FlatFromM = 150_000, FlatGoneM = 250_000;
