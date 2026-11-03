@@ -25,9 +25,11 @@ public static class TelescopeVisual
     private static ArrayMesh? _mount, _tube, _whole;
 
     /// <summary>The tripod and its head, without the tube.</summary>
+    [Showcase("Items", "Telescope mount")]
     public static ArrayMesh MountMesh() => _mount ??= Build(MountParts);
 
     /// <summary>The tube, in its own frame: along -Z from the head, the eyepiece behind.</summary>
+    [Showcase("Items", "Telescope tube")]
     public static ArrayMesh TubeMesh() => _tube ??= Build(TubeParts);
 
     /// <summary>The whole telescope set up, tube level: the ghost and the model viewer.</summary>
@@ -63,8 +65,8 @@ public static class TelescopeVisual
             Strut(st, foot, top, 0.035f, Leg);
             Strut(st, foot + (top - foot) * 0.02f, foot + (top - foot) * 0.08f, 0.05f, Dark);   // a rubber foot
         }
-        // the spreader tray half way up, and the mount head
-        Box(st, new Vector3(0, 0.55f, 0), Basis.Identity, new Vector3(0.22f, 0.03f, 0.22f), Leg);
+        // the spreader tray half way up, meeting the legs, and the mount head
+        Box(st, new Vector3(0, 0.55f, 0), Basis.Identity, new Vector3(0.36f, 0.03f, 0.36f), Leg);
         Box(st, new Vector3(0, Head.Y - 0.1f, 0), Basis.Identity, new Vector3(0.16f, 0.1f, 0.16f), Dark);
         Box(st, new Vector3(0, Head.Y - 0.03f, 0), Basis.Identity, new Vector3(0.08f, 0.06f, 0.08f), Dark);
     }
