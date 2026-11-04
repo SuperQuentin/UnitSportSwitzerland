@@ -60,8 +60,9 @@ public sealed partial class Airliner : Flyer
 
     public override RideKind Kind => _kind;
     public override string Label => Spec.Name;
-    public override string Blurb =>
-        "{sprint}/{crouch_slide} thrust levers, {move_forward}{move_back} pitch, {move_left}{move_right} roll and steer, {jump} brakes, {flaps_down}/{flaps_up} flaps, {car_door} gear, {speedbrake} speedbrake, {parking_brake} parking brake";
+    public override string Blurb => Spec.Spacecraft
+        ? "{sprint}/{crouch_slide} rockets, {move_forward}{move_back} pitch, {move_left}{move_right} roll and steer, {jump} brakes, {car_door} gear, {speedbrake} speedbrake, above 60 km {engine_toggle} the cruise drive"
+        : "{sprint}/{crouch_slide} thrust levers, {move_forward}{move_back} pitch, {move_left}{move_right} roll and steer, {jump} brakes, {flaps_down}/{flaps_up} flaps, {car_door} gear, {speedbrake} speedbrake, {parking_brake} parking brake";
 
     /// <summary>What its engines sound like: the A320's turbofans, the freighter's turboprops (#420).</summary>
     public Audio.EngineProfile Sound => Kind == RideKind.Freighter ? Audio.EngineProfile.Turboprop : Audio.EngineProfile.Turbofan;

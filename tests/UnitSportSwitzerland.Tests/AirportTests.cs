@@ -48,6 +48,8 @@ public class AirportTests
         var military = Assert.Single(stands, s => s.Use == StandUse.Military);
         Assert.Equal("C1", heavy.Ref);
         Assert.Equal("C2", military.Ref);
+        // the space shuttle on the third cargo stand (#1492)
+        Assert.Equal("C3", Assert.Single(stands, s => s.Use == StandUse.Space).Ref);
         // nose gear on the stop: the origin 12.64 m behind it (north: the A320s face south)
         var one = stands.Single(s => s.Ref == "1");
         Assert.Equal(2600030, one.E, 3);

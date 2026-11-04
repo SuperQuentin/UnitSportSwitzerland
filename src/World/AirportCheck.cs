@@ -88,9 +88,10 @@ public partial class AirportCheck : Node
         // ---- the stands filled -------------------------------------------------------------------
         int want = Fixture ? 6 : 1;
         bool filled = await Until(() => Planes(RideKind.A320).Count >= want && Planes(RideKind.An124).Count >= 1 && Planes(RideKind.Freighter).Count >= 1
+            && Planes(RideKind.Shuttle).Count >= 1
             && Planes(RideKind.A320).All(p => Docked(p) == 2), 90);
         var a320s = Planes(RideKind.A320);
-        Expect(filled && a320s.All(p => (p.DoorsOpen & 5) == 5), $"parked at the stands: {a320s.Count} A320s ({a320s.Sum(Docked)} airstairs docked), {Planes(RideKind.An124).Count} AN-124, {Planes(RideKind.Freighter).Count} freighter");
+        Expect(filled && a320s.All(p => (p.DoorsOpen & 5) == 5), $"parked at the stands: {a320s.Count} A320s ({a320s.Sum(Docked)} airstairs docked), {Planes(RideKind.An124).Count} AN-124, {Planes(RideKind.Freighter).Count} freighter, {Planes(RideKind.Shuttle).Count} shuttle");
         if (Fixture)
         {
             Expect(a320s.Count == 6 && a320s.All(p => Docked(p) == 2), "the fixture's six A320s, two stairs docked at each");

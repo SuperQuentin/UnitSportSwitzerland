@@ -84,6 +84,7 @@ public partial class VehicleIntroCard : CanvasLayer
     /// <summary>The kind of intro a ride gets, or null (airstairs, a parked trailer: nothing to learn there).</summary>
     public static VehicleIntroKind? KindOf(Rideable ride) => ride switch
     {
+        Airliner { Spec.Spacecraft: true } => VehicleIntroKind.Shuttle,
         Airliner => VehicleIntroKind.Airliner,
         Ufo => VehicleIntroKind.Ufo,
         Helicopter => VehicleIntroKind.Helicopter,

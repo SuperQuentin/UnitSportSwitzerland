@@ -333,9 +333,9 @@ public partial class ShuttleCheck : Node
         float err = Bearing(p, jet, target);
         float wantBank = Mathf.Clamp(err * 2f, -1f, 1f);
         // the altitude falls with the distance, the speed with it (the lever sets it: v = lever · d / τ)
-        double wantAlt = Math.Clamp(EntryAlt + dist * 0.2, EntryAlt, 300_000);
+        double wantAlt = Math.Clamp(EntryAlt + Math.Max(dist - 100_000, 0) * 0.2, EntryAlt, 300_000);
         float wantElev = Mathf.Clamp((float)((wantAlt - alt) / 40_000), -1f, 1f) * Mathf.DegToRad(25f);
-        double speed = Math.Clamp(dist / 40, 400, 1e6);
+        double speed = Math.Clamp(dist / 40, 300, 1e6);
         float lever = Mathf.Clamp((float)(speed * ShuttleFlight.DriveTau / alt), 0.002f, 1f);
         Fly(Attitude(elev, wantElev, bank, wantBank), lever);
         if (_passedFar && toEntry < 8_000)
@@ -352,7 +352,8 @@ public partial class ShuttleCheck : Node
     {
         // nose down out of the drive (it drops out below 50 km), then the air takes it; pull out to the glide
         float err = Bearing(p, jet, _home);
-        if (jet.DriveOn) { Fly(Attitude(elev, Mathf.DegToRad(-20f), bank, Mathf.Clamp(err * 2f, -0.5f, 0.5f)), jet.State.Lever); return; }
+        // out of the drive quickly, 45° down at 300 m/s: it drops out below 50 km a few km on
+        if (jet.DriveOn) { Fly(Attitude(elev, Mathf.DegToRad(-45f), bank, Mathf.Clamp(err * 2f, -0.5f, 0.5f)), (float)(300 * ShuttleFlight.DriveTau / alt)); return; }
         float q = 0.5f * AirlinerFlight.Density((float)alt) * jet.State.Tas * jet.State.Tas;
         Fly(Attitude(elev, q < 3000 ? Mathf.DegToRad(-15f) : Mathf.DegToRad(-8f), bank, Mathf.Clamp(err * 2f, -0.5f, 0.5f)), 0f);
         if (q > 4000 && alt < 30_000)
@@ -423,20 +424,29 @@ public partial class ShuttleCheck : Node
         if (_stageT > 2400) Fail("no touchdown within 40 min of the glide");
     }
 
-    private bool _grounded, _circling, _flare;
+    private bool _circling, _flare;
 
     /// <summary>The flare's attitude wanted, rad.</summary>
     private float _flareAt;
     private double _trace;
 
+    /// <summary>
+    /// The flat world's ground under the runway, in the frame the craft is in now (never an anchor frame), put
+    /// back after each shift.
+    /// </summary>
     private void PutGround()
     {
-        if (_grounded || _origin.Frame.IsAnchor) return;
+        var frame = _origin.Frame;
+        if (frame.IsAnchor || _groundIn != null && frame.SameFrame(_groundIn)) return;
         if (GetParent().GetNodeOrNull<Node3D>("Ground") is not { } ground) return;
-        var home = _origin.Frame.ToWorld(_homeE, _homeN + RunwayLength * 0.5, 0);
-        ground.GlobalPosition = new Vector3(home.X, TestWorld.GroundY - 0.5f - _origin.Frame.ToWorld(_homeE, _homeN, 0).Y * 0f, home.Z);
-        _grounded = true;
+        // the runway's middle at sea level in this frame, level: the turned Space frames turned it with the
+        // world, and on edge a 20 km plane is no runway
+        ground.GlobalTransform = new Transform3D(Basis.Identity, frame.ToWorld(_homeE, _homeN + RunwayLength * 0.5, 0) + Vector3.Down * 0.5f);
+        GD.Print(FormattableString.Invariant($"[shuttlecheck] the ground under the runway at world {ground.GlobalPosition}, frame {frame.E:F0}/{frame.N:F0}"));
+        _groundIn = frame;
     }
+
+    private OriginFrame? _groundIn;
 
     private void Rollout(FootPlayer p, Airliner jet)
     {

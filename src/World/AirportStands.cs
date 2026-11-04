@@ -127,6 +127,7 @@ public partial class AirportStands : Node
     {
         StandUse.Heavy => RideKind.An124,
         StandUse.Military => RideKind.Freighter,
+        StandUse.Space => RideKind.Shuttle,
         _ => RideKind.A320,
     };
 

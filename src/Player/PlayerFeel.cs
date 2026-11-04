@@ -30,6 +30,8 @@ public partial class PlayerFeel : Node3D
     private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
     private EngineSynth _rotor = null!, _engine = null!, _jet = null!, _turboprop = null!;
     private AudioStreamPlayer _squeal = null!;
+    /// <summary>The shuttle's rockets, cruise drive and re-entry plasma (#1492).</summary>
+    private AudioStreamPlayer _rockets = null!, _drive = null!, _plasma = null!;
     private double _beep;
     private int _puffs;
     private EngineSynth? _carEngine;
@@ -94,6 +96,9 @@ public partial class PlayerFeel : Node3D
         _tyre = Loop(SfxSynth.Tyre);
         _scrape = Loop(SfxSynth.Scrape);
         _squeal = Loop(SfxSynth.Squeal);
+        _rockets = Loop(ShuttleSounds.Rockets);
+        _drive = Loop(ShuttleSounds.Drive);
+        _plasma = Loop(ShuttleSounds.Plasma);
         _rotor = new EngineSynth(EngineProfile.Turboshaft, spatial: false, seed: 1);
         _engine = new EngineSynth(EngineProfile.PistonAero, spatial: false, seed: 2);
         _jet = new EngineSynth(EngineProfile.Turbofan, spatial: false, seed: 4);
@@ -206,6 +211,7 @@ public partial class PlayerFeel : Node3D
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
             SetLoop(_hiss, 0, 1); SetLoop(_tyre, 0, 1); SetLoop(_scrape, 0, 1); SetLoop(_squeal, 0, 1);
+            SetLoop(_rockets, 0, 1); SetLoop(_drive, 0, 1); SetLoop(_plasma, 0, 1);
             _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _jet.Set(0, 0, 0, 0); _turboprop.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
             _spray.Emitting = _dust.Emitting = _smoke.Emitting = false;
             return;
@@ -280,8 +286,11 @@ public partial class PlayerFeel : Node3D
         bool props = airliner?.Sound.IsTurboprop == true;
         float cabin = airliner != null && flight.Spool > 0.02f ? 0.18f + 0.32f * flight.Spool : 0f;
         float thrust = Mathf.Clamp((flight.Spool - 0.3f) / 0.7f, 0f, 1f);
-        _jet.Set(flight.Spool, flight.Control, thrust, props ? 0f : cabin);
+        // the shuttle (#1492): no fans, its rockets, its drive and re-entry's roar instead
+        bool rocket = airliner?.Spec.Rocket == true;
+        _jet.Set(flight.Spool, flight.Control, thrust, props || rocket ? 0f : cabin);
         _turboprop.Set(flight.Spool, flight.Control, thrust, props ? cabin : 0f);
+        ShuttleAudio(rocket ? airliner : null);
 
         // Proximity: a wingsuit fast and low is the whole point of one. Time spent under 20 m at
         // speed pays out as a named popup once the pilot climbs out of it (or lands).
@@ -458,6 +467,17 @@ public partial class PlayerFeel : Node3D
         var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Player };
         AddChild(p);
         return p;
+    }
+
+    /// <summary>The shuttle's loops from its flight, quieter from the flight deck than outside; all silent in anything else.</summary>
+    private void ShuttleAudio(Airliner? shuttle)
+    {
+        if (shuttle == null) { SetLoop(_rockets, 0, 1); SetLoop(_drive, 0, 1); SetLoop(_plasma, 0, 1); return; }
+        var s = shuttle.State;
+        float inside = _player.InCockpit ? 0.45f : 1f;
+        SetLoop(_rockets, s.Spool * 0.9f * inside, 0.8f + 0.25f * s.Spool);
+        SetLoop(_drive, shuttle.DriveOn ? (0.35f + 0.2f * s.Lever) * inside : 0f, 0.8f + 0.6f * s.Lever);
+        SetLoop(_plasma, shuttle.Heat * 0.8f * inside, 0.7f + 0.5f * shuttle.Heat);
     }
 
     /// <summary>Eases a loop toward a linear volume and a pitch, so nothing jumps between frames.</summary>

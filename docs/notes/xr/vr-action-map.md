@@ -213,6 +213,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | autopilot / trim | Y Home End / hold D-pad → (AP, #421), trim — | ok: AP poke or hold R stick →, trim wheel by hand (#438) | gap: trim on a pad |
 | wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
+| shuttle cruise drive on / off, above 60 km (#1492) | Z / D-pad ↑ (`engine_toggle`; below 60 km the engines' switch) | ok: R stick ↑, or grip the guarded switch on the centre console and throw it forward (`XrCabControls` "shuttle") | keep |
+| shuttle rockets, pitch / roll, gear, brakes, speedbrake (#1492) | the airliner's (levers = rockets) | ok: as the airliner's, its levers by hand | keep |
 | UFO up / down, move, turn (#861) | Space Ctrl, WASD, mouse / RT LT, L stick, R stick | ok: R / L trigger, L stick; turns like the helicopter | keep |
 | UFO boost (#861) | Shift or Q / L3 or LB | ok: L stick click, or the left grip | keep |
 | UFO space drive, above 60 km (#1480) | the hover's own: WASD / L stick along the heading, Space Ctrl / RT LT up and down, boost for three g | ok: the same as the hover (no new action) | keep |
