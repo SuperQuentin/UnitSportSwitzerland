@@ -23,7 +23,7 @@ public static class GustFx
         {
             // the bottle lands on the ground: the column rises from a metre under it
             var g = origin.ToGlobal(e.Position);
-            World.AirLift.Volumes.Add(g.E, g.N, g.Alt - 1.0, Radius, Seconds, Net.ClockSync.SimNow, Top, Speed);
+            World.AirLift.Volumes.Add(g.Lv95.E, g.Lv95.N, g.Alt - 1.0, Radius, Seconds, Net.ClockSync.SimNow, Top, Speed);
         }
         n.Sound3D(e.Position, RewardSounds.Gust, 1f, -2f, unitSize: 10f, maxDistance: 200f);
         var column = new Node3D { Name = "Gust" };

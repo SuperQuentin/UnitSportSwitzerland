@@ -97,7 +97,7 @@ public partial class FestivalService
 
     private string? ServeBet(long peer, PlayerProgress p, BooggRound round, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at, int bucket)
     {
-        if (!SechselaeutenRules.NearPyre(site, at.E, at.N)) return Tell(peer, "Go to the pyre first.");
+        if (!SechselaeutenRules.NearPyre(site, at)) return Tell(peer, "Go to the pyre first.");
         if (round.WhyNotBet(p.Key, bucket) is { } why) return Tell(peer, why);
         var inst = p.Get(FestivalBook.Section).Of(run.Instance, def.Id);
         if (!FestivalRules.Spend(inst, SechselaeutenRules.Stake))
@@ -111,7 +111,7 @@ public partial class FestivalService
 
     private string? ServeGrill(long peer, PlayerProgress p, BooggRound round, ResolvedSite site, GlobalPos at)
     {
-        if (!SechselaeutenRules.NearPyre(site, at.E, at.N)) return Tell(peer, "Go to the embers first.");
+        if (!SechselaeutenRules.NearPyre(site, at)) return Tell(peer, "Go to the embers first.");
         if (round.Phase == BooggPhase.Betting) return Tell(peer, "The pyre is not lit yet.");
         if (round.Phase == BooggPhase.Burning) return Tell(peer, "The fire is too hot: wait for the head to burst.");
         if (!_grilled.Add((round.Instance, round.Number, p.Key))) return Tell(peer, "You have grilled your Cervelat this round.");
@@ -123,7 +123,7 @@ public partial class FestivalService
 
     private string? ServePurse(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
-        if (!SechselaeutenRules.NearWeibel(site, at.E, at.N)) return Tell(peer, "Go to the Zunft's Weibel first.");
+        if (!SechselaeutenRules.NearWeibel(site, at)) return Tell(peer, "Go to the Zunft's Weibel first.");
         if (PlayedToday(p, run, def, SechselaeutenRules.PurseGame) > 0) return Tell(peer, "You have the Zunft's purse today.");
         int granted = Award(peer, run.Id, SechselaeutenRules.PurseBatzen, "the Zunft's purse", SechselaeutenRules.PurseGame, SechselaeutenRules.PursePoints);
         if (_boogg.GetValueOrDefault(run.Instance) is { } round)

@@ -1,4 +1,5 @@
 using UnitSport.Concert;
+using UnitSport.Core;
 
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-steinstossen.md).
 
@@ -244,6 +245,12 @@ public readonly record struct SteinGround(double E, double N, double DirE, doubl
     }
 
     public double DistanceTo(double e, double n) => Math.Sqrt((e - E) * (e - E) + (n - N) * (n - N));
+
+    /// <summary>The stone's place as a position (altitude 0: reach is measured along the ground).</summary>
+    public GlobalPos Pos => GlobalPos.FromLv95(E, N, 0);
+
+    /// <summary>The distance along the ground from <paramref name="at"/> to the stone.</summary>
+    public double DistanceTo(GlobalPos at) => at.HorizontalDistanceTo(Pos);
 
     /// <summary>The point <paramref name="metres"/> along the throw, LV95.</summary>
     public (double E, double N) Along(double metres) => (E + DirE * metres, N + DirN * metres);

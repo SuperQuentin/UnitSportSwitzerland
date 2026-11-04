@@ -91,12 +91,26 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
 
 ## The film (`--shuttlefilm`, `tools/shuttlefilm.sh`, #1497)
 
-- At Geneva on the real map (D:'s tiles and globe), windowed, silent (`--audio-driver Dummy`), frame-exact
-  (`--fixed-fps 30 --clip-hq`): `ShuttlePilot` flies the Europe mission (taxi onto 04, out 2,000 km NE in the
+- At Geneva on the real map (D:'s tiles and globe), windowed, frame-exact (`--fixed-fps 30 --clip-hq`) in
+  Godot's movie mode: `ShuttlePilot` flies the Europe mission (taxi onto 04, out 2,000 km NE in the
   drive and back over home, a minute of orbit, a retro burn to a -3,500 km perigee, re-entry ~1,600 km SW, back up
-  and the drive home, the approach to 22 over the lake), `ClipRecorder.Film`/`Cut` film five clips, faster
-  between them; the script cuts them into `shuttle-film.mp4` with captions (ffmpeg's `drawtext`).
+  and the drive home, the approach to 22 over the lake), `ClipRecorder.Film`/`Cut` film four clips, faster
+  between them. The way into space (taxi to 400 km) and the way out of it (62 km to the stop) are each **one clip**,
+  so the sky's turn to black and back is on film: a new clip waits for the last one's encoding, and a cut there had
+  lost the climb from 20 to 60 km. The film logs `mark drive|landing at frame N` for the captions inside them. The
+  script cuts them into `shuttle-film.mp4` with captions (ffmpeg's `drawtext`), and
+  `shuttle-film-short.mp4` (the taxi skipped, sped up 1-3x, two passes to `SHORT_MB`, 8: about 85 s).
+- **The sound**: `--write-movie` mixes the audio in step with each drawn frame (the dummy driver, so silent while it
+  runs), so the run's AVI (MJPEG, a few GB, `MOVIE`, deleted after unless `KEEP=1`) holds the sound in time. Each
+  clip takes its slice from the frame ClipRecorder logs its first picture on (`frames from frame N`), sped up
+  with `atempo` (the pitch kept). Real-time capture (`AudioEffectCapture`) cannot do it: the mixer runs on the
+  wall clock while the frames do not.
 - The same mission headless on the flat world: `--shuttlecheck europe`.
+- **Pictures for chasing a rendering bug**: `--shuttlefilm drive[,at=<km>][,hide=<node name>...][,sky][,bigstars][,stardist=<share>]`
+  flies the mission to that height on the drive up (80 km by default) and saves one picture,
+  `test_output/clips/shuttle-drive-<km>[-...].png`: nodes hidden by name, the space sky magenta (a black thing, or
+  hidden stars?), every star 40 times its size (`size_scale` in `sky_point`: whatever crops them shows its edge),
+  the stars nearer. It found the stars' depth floor (`world/night-sky`). `--shuttlefilm orbit[,km]` takes one in orbit.
 
 ## Checks
 

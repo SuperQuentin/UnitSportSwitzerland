@@ -55,7 +55,7 @@ public partial class YardLootNetProbe : ChatProbe
         var source = Loot.Source!.Invoke()!;
         var at = me.Global;
         var world = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
-        var sites = world.SitesNear(at.E, at.N, 4000).OrderBy(s => Sq(s.E - at.E) + Sq(s.N - at.N)).Take(6).ToList();
+        var sites = world.SitesNear(at.E, at.N, 4000).OrderBy(s => at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.E, s.N, at.Alt))).Take(6).ToList();
         GD.Print($"{Log} {sites.Count} generated sites within 4 km");
         // two stacks or more if the nearest site has such a skip (C then takes the second, after a
         // refused try from afar), else any skip with something in it

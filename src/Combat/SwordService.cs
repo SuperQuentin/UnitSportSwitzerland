@@ -235,13 +235,14 @@ public partial class SwordService : Node
             to = victim.Global;
         }
         // east is +x, north is -z, as the world's axes: a yaw is the same in every frame
-        float dx = (float)(to.E - from.E), dz = (float)(from.N - to.N);
+        var (offE, offN, offUp) = from.OffsetTo(to);
+        float dx = (float)offE, dz = (float)-offN;
         float yaw = _yaw.GetValueOrDefault(who, attacker.Rotation.Y);
         float fx = -Mathf.Sin(yaw), fz = -Mathf.Cos(yaw);
         // the blow lands only where the blade is: its capsule swept over the swing's window around now (the server's clock since the move began,
         // 100 ms either side) against the target's own shape, from the two bodies as the server has them, with 0.30 m of slack for their age
         double since = _guard.SinceAct(who, now, out var announced);
-        if (announced != move || !Reaches(who, move, yaw, dx, (float)(to.Alt - from.Alt), dz, kind == SwordTargetKind.Dummy ? dummy!.Yaw : 0f,
+        if (announced != move || !Reaches(who, move, yaw, dx, (float)offUp, dz, kind == SwordTargetKind.Dummy ? dummy!.Yaw : 0f,
                 kind, since, out var contact))
         {
             if (!quiet) GD.Print(FormattableString.Invariant($"[sword] refused {who}: the {move} blade never reached {kind} {id} ({Mathf.Sqrt(dx * dx + dz * dz):F1} m away, {since:F2} s into it)"));
@@ -274,7 +275,7 @@ public partial class SwordService : Node
         }
         GD.Print(FormattableString.Invariant($"[sword] {who} hit {kind} {id} for {def.Damage:F0} ({move})"));
         // where the blade touched: a point of the blade, relative to the attacker, put back in the world
-        var at = new GlobalPos(from.E + contact.X, from.N - contact.Z, from.Alt + contact.Y);
+        var at = from.Moved(contact.X, -contact.Z, contact.Y);
         var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, knock, _origin.ToWorld(at), down);
         if (victim != null && !victim.Bot) PvpRules.RaiseHit(who, id, def.Damage);
         BroadcastStruck(strike, at, victim != null && !victim.Bot ? id : 0);
@@ -351,7 +352,7 @@ public partial class SwordService : Node
         float yaw = body.Rotation.Y;
         var g = body.Global;
         // 2.6 m ahead, facing the one who put it there
-        var at = new GlobalPos(g.E - Mathf.Sin(yaw) * 2.6, g.N + Mathf.Cos(yaw) * 2.6, g.Alt);
+        var at = g.Moved(-Mathf.Sin(yaw) * 2.6, Mathf.Cos(yaw) * 2.6);
         AddDummy(sender, at, yaw + Mathf.Pi);
         return "[dummy] A training dummy stands in front of you.";
     }
@@ -488,7 +489,11 @@ public partial class SwordService : Node
         if (!Authority || BodyOf(who) is not { } attacker || !SwordRules.IsBlow(move)) return 0;
         var from = attacker.Global;
         int landed = 0;
-        bool Near(GlobalPos to) => Mathf.Abs((float)(to.E - from.E)) < 4f && Mathf.Abs((float)(to.N - from.N)) < 4f;
+        bool Near(GlobalPos to)
+        {
+            var (offE, offN, _) = from.OffsetTo(to);
+            return Mathf.Abs((float)offE) < 4f && Mathf.Abs((float)offN) < 4f;
+        }
         foreach (var d in _dummyData.Values.ToArray())
             if (d.Hp > 0f && Near(d.Pos) && !_guard.Reached(who, Key(SwordTargetKind.Dummy, d.Id)) && ServerHit(who, move, SwordTargetKind.Dummy, d.Id, quiet: true)) landed++;
         if (GetNodeOrNull("../Players") is { } players)

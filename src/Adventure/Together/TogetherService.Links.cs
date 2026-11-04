@@ -48,7 +48,7 @@ public partial class TogetherService
     /// <summary>Glacier cover at a point: the check's box first, then the terrain's cover.</summary>
     public bool OnGlacier(GlobalPos at)
     {
-        if (GlacierBox is { } box && (at.E - box.E) * (at.E - box.E) + (at.N - box.N) * (at.N - box.N) <= box.R * box.R) return true;
+        if (GlacierBox is { } box && at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(box.E, box.N, at.Alt)) <= box.R * box.R) return true;
         return GlacierAt?.Invoke(at) == true;
     }
 

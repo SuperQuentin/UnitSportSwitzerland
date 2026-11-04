@@ -346,7 +346,7 @@ public partial class HornGame : Node
         }
         var g = p.Global;
         var site = _svc?.RunningOf(_festival)?.Site;
-        if (site == null || !HornGround.Near(site, g.E, g.N, 25) || !_scripted && Input.IsActionJustPressed("ui_cancel"))
+        if (site == null || !HornGround.Near(site, g, 25) || !_scripted && Input.IsActionJustPressed("ui_cancel"))
         {
             Abort(site == null ? "The festival is over." : $"You left the row.");
             return;

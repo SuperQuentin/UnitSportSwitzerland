@@ -254,7 +254,7 @@ public partial class LootService : Node
         found = default;
         if (p.Indoors || p.Ride != RideKind.OnFoot || Source?.Invoke() is not { } source) return false;
         var at = p.Global;
-        _yards.Around(source, at.E, at.N);
+        _yards.Around(source, at);
         var look = -p.Camera.GlobalTransform.Basis.Z;
         // the world's x is east and its z south, as a tile's frame
         return _yards.Nearest(at.E, at.N, (float)at.Alt, new Vector2(look.X, look.Z), MovedYard, out found);

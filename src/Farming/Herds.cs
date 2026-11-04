@@ -506,20 +506,24 @@ public partial class Herds : Node3D, IOriginContainer
     /// The cow of a non-staged herd nearest an LV95 point within <paramref name="within"/> m, at the
     /// moment <paramref name="at"/> (the sightings aim an abduction at it): its LV95 point then.
     /// </summary>
-    public (double E, double N, float Ground)? CowNear(double e, double n, float within, double at)
+    public (double E, double N, float Ground)? CowNear(double e, double n, float within, double at) =>
+        CowNear(GlobalPos.FromLv95(e, n, 0), within, at);
+
+    /// <summary><see cref="CowNear(double, double, float, double)"/> from a position.</summary>
+    public (double E, double N, float Ground)? CowNear(GlobalPos near, float within, double at)
     {
         (double E, double N, float Ground)? best = null;
         double bestD = within * within;
         foreach (var h in _all)
         {
             if (h.Plan.Staged) continue;
-            double he = h.Plan.E - e, hn = h.Plan.N - n;
+            var (he, hn, _) = near.OffsetTo(GlobalPos.FromLv95(h.Plan.E, h.Plan.N, near.Alt));
             if (he * he + hn * hn > (within + 60) * (within + 60)) continue;
             for (int i = 0; i < h.Cows.Length; i++)
             {
                 if (_over.ContainsKey(h.Cows[i].Key)) continue;
                 var (ce, cn, _, _, _, _) = Where(h, i, at);
-                double d = (ce - e) * (ce - e) + (cn - n) * (cn - n);
+                double d = near.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(ce, cn, near.Alt));
                 if (d >= bestD) continue;
                 float g = GroundAt(ce, cn);
                 if (float.IsNaN(g)) continue;

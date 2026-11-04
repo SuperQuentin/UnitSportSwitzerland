@@ -314,9 +314,10 @@ public partial class RewardCheck : ChatProbe
         if (spot == null) { Expect(false, "the fixture photo spot exists"); return; }
         await WalkTo(spot.StandE + 20, spot.StandN - 30);
         var g = Me!.Global;
-        double de = spot.TargetE - g.E, dn = spot.TargetN - g.N;
+        var target = GlobalPos.FromLv95(spot.TargetE, spot.TargetN, spot.TargetAlt);
+        var (de, dn, _) = g.OffsetTo(target);
         float yaw = (float)(Math.Atan2(de, dn) * 180 / Math.PI);
-        float pitch = (float)(Math.Atan2(spot.TargetAlt - (g.Alt + 1.6), GlobalPos.HorizontalDistance(spot.TargetE, spot.TargetN, g.E, g.N)) * 180 / Math.PI);
+        float pitch = (float)(Math.Atan2(spot.TargetAlt - (g.Alt + 1.6), g.HorizontalDistanceTo(target)) * 180 / Math.PI);
         Svc.ReportPhoto(spot.Id, yaw + 90, pitch, 40);
         Expect(await Until(() => _photos.Any(p => p.Spot == spot.Id && !p.Taken), 3) && !Adv.Mine.Get(PhotosProgress.Section).Taken.Contains(spot.Id),
             "a photo aimed 90° off is not counted");
@@ -351,9 +352,9 @@ public partial class RewardCheck : ChatProbe
         Expect(await Until(() => GustFx.Count == gusts + 1, 2), "a bottled gust lets out its updraft");
         // the lift is the stamina plan's air (#1225): a volume that rises 20 m over where it landed
         var air = ItemEvents.Instance!.Origin!.ToGlobal(gustAt + new Vector3(0, 20, 0));
-        float lift = UnitSport.World.AirLift.Volumes.LiftAt(air.E, air.N, (float)air.Alt, Net.ClockSync.SimNow);
+        float lift = UnitSport.World.AirLift.Volumes.LiftAt(air.Lv95.E, air.Lv95.N, (float)air.Alt, Net.ClockSync.SimNow);
         Expect(UnitSport.World.AirLift.Volumes.Count == volumes + 1 && lift >= GustFx.Speed * 0.9f, $"and the air there rises ({lift:F1} m/s)");
-        float later = UnitSport.World.AirLift.Volumes.LiftAt(air.E, air.N, (float)air.Alt, Net.ClockSync.SimNow + GustFx.Seconds + 1);
+        float later = UnitSport.World.AirLift.Volumes.LiftAt(air.Lv95.E, air.Lv95.N, (float)air.Alt, Net.ClockSync.SimNow + GustFx.Seconds + 1);
         Expect(later == 0, "for 20 seconds");
         Expect(Crafting.Recipes.All.Any(r => r.Out == ItemId.TreasureDetector && r.In.Any(i => i.Id == ItemId.Bergkristall && i.Count == 4)), "the detector's recipe: 4 Bergkristall, electronics, copper wire");
         // the travel flag: planted, it is this player's portable travel point (navigation's TravelBook.Flag, #1226)
@@ -364,7 +365,7 @@ public partial class RewardCheck : ChatProbe
         Expect(await Until(() => first != null, 3) && first!.Value.Object is { } flag, $"the travel flag is planted ({first?.Refused})");
         var book = Adv.Mine.Get(Navigation.TravelBook.Section);
         var fg = placed.Origin.ToGlobal(at.Origin);
-        Expect(await Until(() => book.Flag is { } f && Math.Abs(f.E - fg.E) < 0.5 && Math.Abs(f.N - fg.N) < 0.5, 3),
+        Expect(await Until(() => book.Flag is { } f && fg.OffsetTo(GlobalPos.FromLv95(f.E, f.N, fg.Alt)) is var (fe, fn, _) && Math.Abs(fe) < 0.5 && Math.Abs(fn) < 0.5, 3),
             $"and it is the player's portable travel point ({book.Flag})");
         placed.RequestPlace(PlacedKind.TravelFlag, at with { Origin = at.Origin + new Vector3(3, 0, 0) }, "", r => second = r);
         Expect(await Until(() => second != null, 3) && second!.Value.Refused?.Contains("already stands") == true, $"a second flag is refused ({second?.Refused})");
@@ -409,7 +410,9 @@ public partial class RewardCheck : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 0.3) break;
             double s = Math.Min(d, step);
             me.GlobalPosition += new Vector3((float)(de / d * s), 0.2f, (float)(-dn / d * s));
@@ -423,21 +426,24 @@ public partial class RewardCheck : ChatProbe
     private Vector3 WorldAt(double e, double n, double alt)
     {
         var g = Me!.Global;
-        return Me.GlobalPosition + new Vector3((float)(e - g.E), (float)(alt - g.Alt), (float)-(n - g.N));
+        var (east, north, up) = g.OffsetTo(GlobalPos.FromLv95(e, n, alt));
+        return Me.GlobalPosition + new Vector3((float)east, (float)up, -(float)north);
     }
 
     private (double E, double N) Lv95Of(Vector3 w)
     {
         var g = Me!.Global;
         var d = w - Me.GlobalPosition;
-        return (g.E + d.X, g.N - d.Z);
+        var p = g.Moved(d.X, -d.Z);
+        return (p.Lv95.E, p.Lv95.N);
     }
 
     private async Task Jump(double e, double n)
     {
         var me = Me!;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(e - g.E), 0.2f, (float)-(n - g.N));
+        var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
+        me.GlobalPosition += new Vector3((float)toE, 0.2f, -(float)toN);
         me.Velocity = Vector3.Zero;
         await Seconds(0.3);
     }

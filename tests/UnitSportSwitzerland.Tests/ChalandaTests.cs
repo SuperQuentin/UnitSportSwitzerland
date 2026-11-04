@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.Chalanda;
@@ -99,9 +100,9 @@ public class ChalandaTests
         // a station is far enough from the next that one body cannot pass two at once, and the first is out of the stand's reach
         for (int k = 1; k < path.Length; k++)
             Assert.True(ChalandaRules.Dist(path[k].E, path[k].N, path[k - 1]) > 2 * ChalandaRules.StationReach);
-        Assert.False(ChalandaRules.NearStand(site, path[0].E, path[0].N));
-        Assert.True(ChalandaRules.NearStand(site, path[ChalandaRules.Stations].E + 1, path[ChalandaRules.Stations].N));
-        foreach (var (e, n) in path) Assert.True(ChalandaRules.OnLoop(site, e, n));
+        Assert.False(ChalandaRules.NearStand(site, GlobalPos.FromLv95(path[0].E, path[0].N, 0)));
+        Assert.True(ChalandaRules.NearStand(site, GlobalPos.FromLv95(path[ChalandaRules.Stations].E + 1, path[ChalandaRules.Stations].N, 0)));
+        foreach (var (e, n) in path) Assert.True(ChalandaRules.OnLoop(site, GlobalPos.FromLv95(e, n, 0)));
     }
 
     [Fact]
@@ -121,12 +122,12 @@ public class ChalandaTests
     public void The_walk_has_a_corridor_and_a_far_edge()
     {
         var site = Site();
-        Assert.True(ChalandaRules.OnLoop(site, site.E + ChalandaRules.LoopRadius, site.N));
-        Assert.True(ChalandaRules.OnLoop(site, site.E, site.N + ChalandaRules.LoopRadius + ChalandaRules.LoopWidth - 1));
-        Assert.False(ChalandaRules.OnLoop(site, site.E, site.N));
-        Assert.False(ChalandaRules.OnLoop(site, site.E, site.N + ChalandaRules.LoopRadius + ChalandaRules.LoopWidth + 1));
-        Assert.False(ChalandaRules.Left(site, site.E, site.N + ChalandaRules.LoopRadius + 10));
-        Assert.True(ChalandaRules.Left(site, site.E, site.N + ChalandaRules.LoopRadius + ChalandaRules.LeaveMargin + 1));
+        Assert.True(ChalandaRules.OnLoop(site, GlobalPos.FromLv95(site.E + ChalandaRules.LoopRadius, site.N, 0)));
+        Assert.True(ChalandaRules.OnLoop(site, GlobalPos.FromLv95(site.E, site.N + ChalandaRules.LoopRadius + ChalandaRules.LoopWidth - 1, 0)));
+        Assert.False(ChalandaRules.OnLoop(site, site.Pos));
+        Assert.False(ChalandaRules.OnLoop(site, GlobalPos.FromLv95(site.E, site.N + ChalandaRules.LoopRadius + ChalandaRules.LoopWidth + 1, 0)));
+        Assert.False(ChalandaRules.Left(site, GlobalPos.FromLv95(site.E, site.N + ChalandaRules.LoopRadius + 10, 0)));
+        Assert.True(ChalandaRules.Left(site, GlobalPos.FromLv95(site.E, site.N + ChalandaRules.LoopRadius + ChalandaRules.LeaveMargin + 1, 0)));
     }
 
     [Fact]

@@ -144,8 +144,7 @@ public partial class VersteckisManager
         var s = g.S;
         if (s.Find(s.Seeker) is not { Bot: true } || BotDirector.Instance?.Get(s.Seeker) is not { Brain: VersteckisBrain brain } bot) return;
         float reach = voice switch { VsVoice.Thump => VsRules.SprintHeard, VsVoice.Bell => 10000f, VsVoice.Poof => 40f, _ => VsRules.MooHeard };
-        var (be, bn) = (bot.Body.Global.E, bot.Body.Global.N);
-        if (GlobalPos.HorizontalDistanceSquared(be, bn, e, n) > reach * reach) return;
+        if (bot.Body.Global.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, 0)) > reach * reach) return;
         double a = _rng.NextDouble() * Math.Tau, r = _rng.NextDouble() * 10;
         brain.Heard(e + Math.Cos(a) * r, n + Math.Sin(a) * r);
     }

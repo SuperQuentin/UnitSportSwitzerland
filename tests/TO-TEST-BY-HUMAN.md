@@ -790,3 +790,10 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] The UFO the same way: it stops climbing at 50 km.
 - [ ] VR: the same climb, both eyes agree on the horizon all the way.
 - [ ] From 20-50 km: no z-fighting on the ground (the far plane grows to ~1,000 km), frame rate as on the ground.
+
+## The sky's depth floor and the shuttle film (PR [#1519](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1519), [#1518](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1518))
+
+- [ ] In space (`/orbit 100`, or the shuttle's drive at 60-130 km), look straight at a planet, the moon and the shuttle: no disc of missing stars round what you look at.
+- [ ] On the ground at night (`--sun real`, a clear night), stars over a mountain range 50-70 km away: they still stop at the ridge line (stars now win against ridges within ~2 depth steps of the far plane, past ~62 km of a 70 km view).
+- [ ] At noon only Venus shows by day; Jupiter and Mercury come out with the stars at dusk.
+- [ ] `tools/shuttlefilm.sh` on another machine: the film has the game's sound in step (the take-off's roar with the take-off).

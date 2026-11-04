@@ -174,9 +174,9 @@ public partial class PhoneVrProbe : Node
         Teleporter.Instance?.TeleportTo(at.E + 250, at.N, "probe vr eyes");
         await Wait(0.6);
         AtEyes();
-        for (int i = 0; i < 40 && Math.Abs(me.Global.E - (at.E + 250)) > 5; i++) await Wait(0.05);
+        for (int i = 0; i < 40 && Math.Abs(at.Moved(250, 0).OffsetTo(me.Global).East) > 5; i++) await Wait(0.05);
         double took = GameClock.Now - asked;
-        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took < 1.4, $"raised to the eyes, the travel goes behind it ({took:F1} s, before the blink)");
+        Check(Math.Abs(at.Moved(250, 0).OffsetTo(me.Global).East) < 5 && took < 1.4, $"raised to the eyes, the travel goes behind it ({took:F1} s, before the blink)");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
         Check(!phone.IsOut, "and back in the pocket there");
 
@@ -188,9 +188,9 @@ public partial class PhoneVrProbe : Node
         at = me.Global;
         asked = GameClock.Now;
         Teleporter.Instance?.TeleportTo(at.E + 250, at.N, "probe vr blink");
-        for (int i = 0; i < 100 && Math.Abs(me.Global.E - (at.E + 250)) > 5; i++) await Wait(0.1);
+        for (int i = 0; i < 100 && Math.Abs(at.Moved(250, 0).OffsetTo(me.Global).East) > 5; i++) await Wait(0.1);
         took = GameClock.Now - asked;
-        Check(Math.Abs(me.Global.E - (at.E + 250)) < 5 && took >= 1.2, $"not raised, it goes behind a blink after the wait ({took:F1} s)");
+        Check(Math.Abs(at.Moved(250, 0).OffsetTo(me.Global).East) < 5 && took >= 1.2, $"not raised, it goes behind a blink after the wait ({took:F1} s)");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
 
         // ---- phase 3: a call answered at the ear ----

@@ -111,7 +111,7 @@ public partial class DepartureBoard : VBoxContainer
         Rows.Clear();
         if (AdventureTravel.Instance is not { } travel || PlacesService.Instance is not { } places) return;
         var book = travel.MyBook;
-        var at = Here ?? new GlobalPos(_sign?.E ?? 0, _sign?.N ?? 0, 0);
+        var at = Here ?? GlobalPos.FromLv95(_sign?.E ?? 0, _sign?.N ?? 0, 0);
         var (down, driving) = BodyState?.Invoke() ?? (false, false);
         int cantons = travel.CantonsOf(book);
         long balance = Bank.Instance?.Balance ?? 0;
@@ -145,7 +145,7 @@ public partial class DepartureBoard : VBoxContainer
         {
             if (places.Catalogue.Resolve(id) is not { } poi || _sign != null && poi.Id == _sign.Id) continue;
             if (q.Length > 0 && !PlaceIndex.Normalize(poi.Name).Contains(q, StringComparison.Ordinal)) continue;
-            _found.Add((poi, TravelNetwork.Distance(poi, at.E, at.N)));
+            _found.Add((poi, TravelNetwork.Distance(poi, at)));
         }
         _found.Sort((a, b) => a.D.CompareTo(b.D));
         if (_found.Count == 0)

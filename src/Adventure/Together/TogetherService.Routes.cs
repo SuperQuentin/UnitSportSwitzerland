@@ -35,7 +35,7 @@ public partial class TogetherService
     }
 
     private bool Within(long peer, double e, double n, float reach) =>
-        PositionOf(peer) is { } p && (p.E - e) * (p.E - e) + (p.N - n) * (p.N - n) <= reach * reach;
+        PositionOf(peer) is { } p && p.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, p.Alt)) <= reach * reach;
 
     /// <summary>Client: the local player roped to a friend, both within <paramref name="reach"/> m of a point (a rope team's chest unseals).</summary>
     public bool RopedHere(double e, double n, float reach)
@@ -43,10 +43,10 @@ public partial class TogetherService
         long self = Self;
         if (Links.ModeOf(self) != LinkMode.Rope || Me?.Invoke() is not { } me) return false;
         var g = me.Global;
-        if ((g.E - e) * (g.E - e) + (g.N - n) * (g.N - n) > reach * reach) return false;
+        if (g.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, g.Alt)) > reach * reach) return false;
         return Near(Links.LeaderOf(self)) || Near(Links.FollowerOf(self));
 
-        bool Near(long other) => other != 0 && Body(other)?.Global is { } o && (o.E - e) * (o.E - e) + (o.N - n) * (o.N - n) <= reach * reach;
+        bool Near(long other) => other != 0 && Body(other)?.Global is { } o && o.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, o.Alt)) <= reach * reach;
     }
 
     /// <summary>Whether <paramref name="peer"/> offers a step now (checks).</summary>

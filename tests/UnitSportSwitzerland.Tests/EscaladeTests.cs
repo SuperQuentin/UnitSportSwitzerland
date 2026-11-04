@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.Escalade;
@@ -51,7 +52,7 @@ public class EscaladeTests
         for (int k = 1; k < path.Length; k++)
             Assert.True(EscaladeRules.Dist(path[k].E, path[k].N, path[k - 1]) > 2 * EscaladeRules.GateReach);
         // and the first gate is not within the line's reach
-        Assert.False(EscaladeRules.NearStart(site, path[0].E, path[0].N));
+        Assert.False(EscaladeRules.NearStart(site, GlobalPos.FromLv95(path[0].E, path[0].N, 0)));
     }
 
     [Fact]
@@ -117,12 +118,12 @@ public class EscaladeTests
     {
         var site = Site();
         var m = EscaladeRules.MarmiteAt(site);
-        Assert.False(EscaladeRules.NearPot(site, m.E, m.N));
-        Assert.False(EscaladeRules.NearStart(site, m.E, m.N));
-        Assert.True(EscaladeRules.NearMarmite(site, m.E, m.N + 2));
+        Assert.False(EscaladeRules.NearPot(site, GlobalPos.FromLv95(m.E, m.N, 0)));
+        Assert.False(EscaladeRules.NearStart(site, GlobalPos.FromLv95(m.E, m.N, 0)));
+        Assert.True(EscaladeRules.NearMarmite(site, GlobalPos.FromLv95(m.E, m.N + 2, 0)));
         var p = EscaladeRules.PotAt(site);
-        Assert.False(EscaladeRules.NearMarmite(site, p.E, p.N));
-        Assert.True(EscaladeRules.NearPot(site, p.E, p.N));
+        Assert.False(EscaladeRules.NearMarmite(site, GlobalPos.FromLv95(p.E, p.N, 0)));
+        Assert.True(EscaladeRules.NearPot(site, GlobalPos.FromLv95(p.E, p.N, 0)));
         // the pot and the line are each within the crew's reach of the Marmite's square
         Assert.True(EscaladeRules.Dist(p.E, p.N, m) < EscaladeRules.CrewReach);
     }

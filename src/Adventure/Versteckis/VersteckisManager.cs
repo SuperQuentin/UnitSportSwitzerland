@@ -281,12 +281,12 @@ public partial class VersteckisManager : Node
         var queue = new Queue<VsCandidate>();
         if (name.Count > 0)
         {
-            if (VsArea.Named(candidates, string.Join(' ', name), at.E, at.N) is not { } named) return $"No village with a church called '{string.Join(' ', name)}'.";
+            if (VsArea.Named(candidates, string.Join(' ', name), at.Lv95.E, at.Lv95.N) is not { } named) return $"No village with a church called '{string.Join(' ', name)}'.";
             queue.Enqueue(named);
         }
         else if (where == "here")
         {
-            var here = VsArea.Here(candidates, _towns, at.E, at.N);
+            var here = VsArea.Here(candidates, _towns, at.Lv95.E, at.Lv95.N);
             if (!VsArea.FarFromOthers(here.E, here.N, taken)) return "Another game is played within 600 m.";
             queue.Enqueue(here);
         }
@@ -294,7 +294,7 @@ public partial class VersteckisManager : Node
         {
             if (VsArea.Random(candidates, _rng, LoadHistory()) is { } pick) queue.Enqueue(pick);
         }
-        else foreach (var c in VsArea.Nearest(candidates, at.E, at.N).Take(VsArea.Tries)) queue.Enqueue(c);
+        else foreach (var c in VsArea.Nearest(candidates, at.Lv95.E, at.Lv95.N).Take(VsArea.Tries)) queue.Enqueue(c);
         if (queue.Count == 0) return "No village to hide in near here.";
 
         var game = new Game { Next = queue, AskedRounds = rounds };
@@ -348,7 +348,7 @@ public partial class VersteckisManager : Node
         if (Parties.Server?.Of(from) is { } party)
             foreach (long m in party.Members) if (m != from) asked.Add(m);
         foreach (long peer in _chat.OnlinePeers)
-            if (peer != from && PositionOf(peer) is { } p && (p.E - g.S.E) * (p.E - g.S.E) + (p.N - g.S.N) * (p.N - g.S.N) <= 1500 * 1500)
+            if (peer != from && PositionOf(peer) is { } p && p.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(g.S.E, g.S.N, p.Alt)) <= 1500 * 1500)
                 asked.Add(peer);
         foreach (long peer in asked)
             if (!Rounds.InRound(peer))
@@ -378,7 +378,7 @@ public partial class VersteckisManager : Node
         if (id == 0 && lobbies.Count > 0)
         {
             var at = PositionOf(peer);
-            game = at is { } p ? lobbies.OrderBy(g => (g.S.E - p.E) * (g.S.E - p.E) + (g.S.N - p.N) * (g.S.N - p.N)).First() : lobbies[0];
+            game = at is { } p ? lobbies.OrderBy(g => p.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(g.S.E, g.S.N, p.Alt))).First() : lobbies[0];
         }
         if (game == null) return id > 0 ? $"No game #{id}." : "No game is open: /vs open starts one.";
         if (game.S.Phase != VsPhase.Lobby) return "That game is under way: join the next one.";

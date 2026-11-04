@@ -61,13 +61,13 @@ public partial class FestivalService
         if (!_adventure.Active(peer) || _adventure.Progress(peer) is not { } p) return thrown ? "Not adventuring." : Tell(peer, "No adventuring now.");
         if (Connected(peer) && !Allowed(peer)) return "too fast";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return thrown ? "No position." : Tell(peer, "Go to the market.");
-        return thrown ? ServeZibeleThrow(peer, p, run, site, at.E, at.N) : ServeZibeleStall(peer, p, run, def, site, target, at.E, at.N);
+        return thrown ? ServeZibeleThrow(peer, p, run, site, at) : ServeZibeleStall(peer, p, run, def, site, target, at);
     }
 
-    private string? ServeZibeleStall(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, int stall, double e, double n)
+    private string? ServeZibeleStall(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, int stall, GlobalPos at)
     {
         var st = ZibeleRules.Layout(site)[stall];
-        if (ZibeleRules.Dist(e, n, st.E, st.N) > ZibeleRules.StallReach + ZibeleRules.ServerSlack) return Tell(peer, "Go to the stall first.");
+        if (ZibeleRules.Dist(at, st.E, st.N) > ZibeleRules.StallReach + ZibeleRules.ServerSlack) return Tell(peer, "Go to the stall first.");
         string name = ZibeleRules.StallName(st.Kind);
         var key = (run.Instance, peer);
         var (day, mask) = _zibeleStamps.GetValueOrDefault(key);
@@ -101,9 +101,9 @@ public partial class FestivalService
         return null;
     }
 
-    private string? ServeZibeleThrow(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, double e, double n)
+    private string? ServeZibeleThrow(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, GlobalPos at)
     {
-        if (!ZibeleRules.NearSite(site, e, n, ZibeleRules.ServerSlack)) return "Too far from the market.";
+        if (!ZibeleRules.NearSite(site, at, ZibeleRules.ServerSlack)) return "Too far from the market.";
         double now = GameClock.Now;
         if (_zibeleThrowAt.TryGetValue(peer, out double last) && now - last < ZibeleRules.ThrowGap) return "Too fast.";
         _zibeleThrowAt[peer] = now;

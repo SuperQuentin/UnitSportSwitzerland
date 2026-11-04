@@ -95,13 +95,13 @@ public partial class TogetherService
             {
                 if (o.Kind != PlacedKind.Campfire || !Crafting.CampfireClock.Burning(o.Payload, now)) continue;
                 var g = placed.Origin.ToGlobal(o.WorldTransform(placed.Origin).Origin);
-                if (g.DistanceTo(at) <= FireReach) return (PotSpot.Campfire, $"fire:{o.Id}", g.E, g.N, (float)g.Alt);
+                if (g.DistanceTo(at) <= FireReach) return (PotSpot.Campfire, $"fire:{o.Id}", g.Lv95.E, g.Lv95.N, (float)g.Alt);
             }
         }
         if (campfireOnly) return null;
         // a mountain hut (or a chalet restaurant, which the places map to one)
         var near = new List<Places.Poi>();
-        Places.PoiCatalogueHost.Current.Near(at.E, at.N, HutReach, near, PoiKind.Hut);
+        Places.PoiCatalogueHost.Current.Near(at, HutReach, near, PoiKind.Hut);
         if (near.Count > 0) return (PotSpot.Hut, $"hut:{near[0].Id}", near[0].E, near[0].N, (float)at.Alt);
         // a dining venue is no spot by itself: its pots stand on its tables (ServeStartAt, #1384)
         return null;
@@ -189,7 +189,7 @@ public partial class TogetherService
         return null;
     }
 
-    private static double Dist(GlobalPos a, double e, double n) => Math.Sqrt((a.E - e) * (a.E - e) + (a.N - n) * (a.N - n));
+    private static double Dist(GlobalPos a, double e, double n) => a.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, a.Alt));
 
     /// <summary>An ingredient in (the owner took it from its pack first; a refusal gives it back). Null when added.</summary>
     public string? ServeAdd(long peer, int potId, ItemId item)
@@ -584,8 +584,9 @@ public partial class TogetherService
         // the table's place in LV95: the player's, moved by the table's offset (x east, z south, y up)
         var d = top - me.GlobalPosition;
         var g = me.Global;
-        double e = g.E + d.X, n = g.N - d.Z;
-        float alt = (float)(g.Alt + d.Y);
+        var table = g.Moved(d.X, -d.Z, d.Y);
+        double e = table.Lv95.E, n = table.Lv95.N;
+        float alt = (float)table.Alt;
         if (Authority) ServeStartAt(Self, raclette, e, n, alt);
         else RpcId(1, MethodName.RequestStartAt, raclette, e, n, alt);
     }
@@ -725,7 +726,7 @@ public partial class TogetherService
         var me = MyPot == null && !Permissions.InMatch ? Me?.Invoke() : null;
         _spotHere = me != null && SpotNear(Self) is { Spot: PotSpot.Hut };
         _tableHere = me != null && PotTables.Near(me.GlobalPosition) is { } top
-            && PositionOf(Self) is { } at && DiningVenueNear(at.E, at.N) != null ? top : null;
+            && PositionOf(Self) is { } at && DiningVenueNear(at.Lv95.E, at.Lv95.N) != null ? top : null;
     }
 
     private void OfferPot(long peer, Pot pot)

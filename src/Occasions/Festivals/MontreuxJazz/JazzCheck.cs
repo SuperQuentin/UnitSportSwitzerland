@@ -164,7 +164,7 @@ public partial class JazzCheck : ChatProbe
         Expect(await UntilSongStart(e, 1), "the second song begins");
         Stand(site, 36.5f);
         await Seconds(0.5);
-        Expect(!MontreuxJazzRules.InZone(site, Me!.Global.E, Me.Global.N), "the lurker stands 36.5 m from the stage: outside the zone");
+        Expect(!MontreuxJazzRules.InZone(site, Me!.Global), "the lurker stands 36.5 m from the stage: outside the zone");
         paid = Svc.MontreuxSongsPaid; before = Mine.Batzen;
         Expect(await Until(() => Moment(e).Part != JazzPart.Song, 40), "the second song ends");
         await Seconds(0.6);

@@ -1,4 +1,5 @@
 using UnitSport.Adventure.Alcohol;
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.Christmas;
@@ -97,9 +98,9 @@ public class ChristmasTests
     {
         var site = Site();
         foreach (var s in ChristmasRules.Layout(site))
-            Assert.Equal(s.Index, ChristmasRules.NearestStall(site, s.E, s.N + (s.Yaw == 0f ? -2.0 : 2.0)));
-        Assert.Equal(-1, ChristmasRules.NearestStall(site, site.E + 70, site.N + 70));
-        Assert.Equal(-1, ChristmasRules.NearestStall(site, site.E, site.N + 40));
+            Assert.Equal(s.Index, ChristmasRules.NearestStall(site, GlobalPos.FromLv95(s.E, s.N + (s.Yaw == 0f ? -2.0 : 2.0), 0)));
+        Assert.Equal(-1, ChristmasRules.NearestStall(site, GlobalPos.FromLv95(site.E + 70, site.N + 70, 0)));
+        Assert.Equal(-1, ChristmasRules.NearestStall(site, GlobalPos.FromLv95(site.E, site.N + 40, 0)));
     }
 
     [Fact]
@@ -109,10 +110,10 @@ public class ChristmasTests
         var (se, sn) = ChristmasRules.SamichlausAt(site);
         var (te, tn) = ChristmasRules.TreeAt(site);
         Assert.True(se > site.E && te < site.E && sn == site.N && tn == site.N);
-        Assert.True(ChristmasRules.NearSamichlaus(site, se - 1.5, sn));
-        Assert.False(ChristmasRules.NearSamichlaus(site, site.E, site.N));
+        Assert.True(ChristmasRules.NearSamichlaus(site, GlobalPos.FromLv95(se - 1.5, sn, 0)));
+        Assert.False(ChristmasRules.NearSamichlaus(site, site.Pos));
         // no stall is at the Samichlaus, so one key never means two things
-        Assert.Equal(-1, ChristmasRules.NearestStall(site, se - 1.5, sn));
+        Assert.Equal(-1, ChristmasRules.NearestStall(site, GlobalPos.FromLv95(se - 1.5, sn, 0)));
     }
 
     // ---- the wares -----------------------------------------------------------------------------------

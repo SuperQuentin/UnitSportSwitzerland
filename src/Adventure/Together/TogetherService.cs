@@ -138,9 +138,9 @@ public partial class TogetherService : Node
         {
             if (m == peer || n >= _serverMates.Length) continue;
             if (PositionOf(m) is not { } pos) continue;
-            _serverMates[n++] = new Mate(pos.E, pos.N, pos.Alt, _adventure.Active(m), IsDown(m));
+            _serverMates[n++] = Mate.At(pos, _adventure.Active(m), IsDown(m));
         }
-        return TogetherRules.Count(at.E, at.N, at.Alt, _serverMates.AsSpan(0, n), radius);
+        return TogetherRules.Count(at, _serverMates.AsSpan(0, n), radius);
     }
 
     // ---- the together rule, on the owner ------------------------------------------------------------
@@ -180,9 +180,9 @@ public partial class TogetherService : Node
             {
                 if (peer == self || count >= _mates.Length || Body(peer) is not { } body) continue;
                 var g = body.Global;
-                _mates[count++] = new Mate(g.E, g.N, g.Alt, true, body.Down != 0 || body.KnockedOut);
+                _mates[count++] = Mate.At(g, true, body.Down != 0 || body.KnockedOut);
             }
-            n = TogetherRules.Count(at.E, at.N, at.Alt, _mates.AsSpan(0, count));
+            n = TogetherRules.Count(at, _mates.AsSpan(0, count));
         }
         if (n == NearHere) return;
         NearHere = n;

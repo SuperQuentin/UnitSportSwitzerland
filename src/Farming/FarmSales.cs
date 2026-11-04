@@ -181,9 +181,11 @@ public partial class FarmSales : Node
     private void ServeSellHere(long peer, int item, int count, double e, double n)
     {
         // online the peer's own replicated body says where it is, not what it claims
-        if (Online && BodyOf(peer) is { } body) (e, n) = (body.Global.E, body.Global.N);
+        GlobalPos at;
+        if (Online && BodyOf(peer) is { } body) at = body.Global;
         else if (Online) { Reply(peer, MethodName.SoldHere, item, 0, 0, ""); return; }
-        var b = FarmBuyers.At(e, n, Online ? FarmMarket.ServerSlack : 0f);
+        else at = GlobalPos.FromLv95(e, n, 0);
+        var b = FarmBuyers.At(at, Online ? FarmMarket.ServerSlack : 0f);
         var id = (ItemId)item;
         long total = b != null && b.Buys(id) && ItemDefs.Get(id) is { } def && count is > 0 and <= FarmMarket.MaxLoad
             ? FarmPrices.Delivery(def.Value, id, count, Month, null, Week, b.Premium) : 0;

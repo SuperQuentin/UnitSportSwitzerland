@@ -48,6 +48,9 @@ public sealed class GiverCatalogue
     public Giver? Resolve(string id) => id != null && _byId.TryGetValue(id, out var g) ? g : null;
 
     /// <summary>The givers within <paramref name="radiusM"/> of a point into <paramref name="into"/> (cleared first).</summary>
+    public void Near(GlobalPos at, float radiusM, List<Giver> into) => Near(at.Lv95.E, at.Lv95.N, radiusM, into);
+
+    /// <summary><see cref="Near(GlobalPos, float, List{Giver})"/> for a point given as LV95 numbers (the index is keyed by LV95 kilometres).</summary>
     public void Near(double e, double n, float radiusM, List<Giver> into)
     {
         into.Clear();

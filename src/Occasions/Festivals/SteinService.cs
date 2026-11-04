@@ -156,7 +156,7 @@ public partial class SteinService : Node
     private bool AtGround(long peer, ResolvedSite site)
     {
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return peer < 0;   // a bot's body may be unknown to the server's lookup
-        return SteinGround.Of(site).DistanceTo(at.E, at.N) <= SteinRules.ReachM + 1.5;
+        return SteinGround.Of(site).DistanceTo(at) <= SteinRules.ReachM + 1.5;
     }
 
     private SteinAttempt? No(long peer, string why)
@@ -187,7 +187,7 @@ public partial class SteinService : Node
         if (!_networked) { Landed?.Invoke(l); return; }
         foreach (int p in Multiplayer.GetPeers())
         {
-            bool near = p == l.Thrower || _adventure.PositionOf?.Invoke(p) is { } at && g.DistanceTo(at.E, at.N) <= HearM;
+            bool near = p == l.Thrower || _adventure.PositionOf?.Invoke(p) is { } at && g.DistanceTo(at) <= HearM;
             if (near) RpcId(p, MethodName.TellLanded, l.Thrower, l.Name, l.Attempt, l.Class, l.Metres, l.Angle, l.Speed, l.Power, l.Batzen, l.Points, l.Foul ?? "", l.E, l.N, l.Yaw);
         }
         // a dedicated server shows nothing; the host of a listen game is not a case here (offline is not networked)

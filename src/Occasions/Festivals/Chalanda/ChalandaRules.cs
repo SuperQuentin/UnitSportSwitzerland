@@ -1,5 +1,6 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-chalandamarz.md).
 
+using UnitSport.Core;
 using UnitSport.Concert;
 
 namespace UnitSport.Occasions.Festivals.Chalanda;
@@ -100,13 +101,15 @@ public static class ChalandaRules
 
     public static double Dist(double e, double n, (double E, double N) at) => Math.Sqrt((e - at.E) * (e - at.E) + (n - at.N) * (n - at.N));
 
-    public static bool NearStand(ResolvedSite site, double e, double n) => Dist(e, n, StandAt(site)) <= StandReach;
+    public static double Dist(GlobalPos pos, (double E, double N) at) => pos.HorizontalDistanceTo(GlobalPos.FromLv95(at.E, at.N, pos.Alt));
+
+    public static bool NearStand(ResolvedSite site, GlobalPos at) => Dist(at, StandAt(site)) <= StandReach;
 
     /// <summary>On the walk: within <see cref="LoopWidth"/> of the loop's circle.</summary>
-    public static bool OnLoop(ResolvedSite site, double e, double n) => Math.Abs(Dist(e, n, (site.E, site.N)) - LoopRadius) <= LoopWidth;
+    public static bool OnLoop(ResolvedSite site, GlobalPos at) => Math.Abs(Dist(at, (site.E, site.N)) - LoopRadius) <= LoopWidth;
 
     /// <summary>Gone: so far out that the child has left the procession.</summary>
-    public static bool Left(ResolvedSite site, double e, double n) => Dist(e, n, (site.E, site.N)) > LoopRadius + LeaveMargin;
+    public static bool Left(ResolvedSite site, GlobalPos at) => Dist(at, (site.E, site.N)) > LoopRadius + LeaveMargin;
 
     // ---- walking ---------------------------------------------------------------------------------------------
 

@@ -180,13 +180,13 @@ public partial class ErrandGivers : Node3D
         int today = ErrandService.Today;
         if (today != _day) { _day = today; _dirty = true; }
         var at = me.Global;
-        GiverHost.Current.Near(at.E, at.N, FreeM, _near);
+        GiverHost.Current.Near(at, FreeM, _near);
         _live.Clear();
         foreach (var g in _near)
         {
             _live.Add(g.Id);
             if (_shown.ContainsKey(g.Id)) continue;
-            if (GlobalPos.HorizontalDistanceSquared(g.E, g.N, at.E, at.N) > ShowM * ShowM) { _live.Remove(g.Id); continue; }
+            if (g.Pos.HorizontalDistanceSquaredTo(at) > ShowM * ShowM) { _live.Remove(g.Id); continue; }
             _material ??= HumanMeshBuilder.FigureMaterial();
             Add(g);
         }

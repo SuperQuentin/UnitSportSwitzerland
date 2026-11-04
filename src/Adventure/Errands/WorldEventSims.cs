@@ -1,12 +1,21 @@
 using System;
 using System.Collections.Generic;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Errands;
 
 // Plain C#, no Godot: linked into the unit tests (docs/notes/adventure/world-events.md).
 
 /// <summary>A point a helper stands at (LV95 metres).</summary>
-public readonly record struct Spot(double E, double N);
+public readonly record struct Spot(double E, double N)
+{
+    /// <summary>The spot a <see cref="GlobalPos"/> stands at.</summary>
+    public static Spot At(GlobalPos p)
+    {
+        var lv = p.Lv95;
+        return new Spot(lv.E, lv.N);
+    }
+}
 
 /// <summary>
 /// The runaway cow (#1339): it broke out and walks away from its herd on a bearing at 1.1 m/s. Helpers within 7 m push it: it
@@ -144,14 +153,17 @@ public sealed class AvalancheSim
     public bool Done => DugCount == Buried;
 
     /// <summary>The buried one nearest a point and how far, within <paramref name="within"/> m; -1 when none.</summary>
-    public int Nearest(double e, double n, double within, out double dist)
+    public int Nearest(double e, double n, double within, out double dist) => Nearest(GlobalPos.FromLv95(e, n, 0), within, out dist);
+
+    /// <summary>The buried one nearest a <see cref="GlobalPos"/> and how far, within <paramref name="within"/> m; -1 when none.</summary>
+    public int Nearest(GlobalPos at, double within, out double dist)
     {
         int best = -1;
         dist = within;
         for (int i = 0; i < Buried; i++)
         {
             if (Dug(i)) continue;
-            double d = Math.Sqrt((Spots[i].E - e) * (Spots[i].E - e) + (Spots[i].N - n) * (Spots[i].N - n));
+            double d = GlobalPos.FromLv95(Spots[i].E, Spots[i].N, at.Alt).HorizontalDistanceTo(at);
             if (d <= dist) { dist = d; best = i; }
         }
         return best;

@@ -218,7 +218,7 @@ public partial class SchwingNetProbe : ChatProbe
     private async Task ToRing(FootPlayer me)
     {
         if (SchwingManager.RingNow() is not { } ring || me.Origin is not { } origin) return;
-        var at = origin.ToWorld(ring.E, ring.N, me.Global.Alt);
+        var at = origin.ToWorld(ring.Pos.WithAlt(me.Global.Alt));
         me.GlobalPosition = new Vector3(at.X + (_role == "A" ? -1.2f : 1.2f), me.GlobalPosition.Y + 0.5f, at.Z);
         me.Velocity = Vector3.Zero;
         await Seconds(1.5);
