@@ -86,7 +86,14 @@ The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`
 - **The generated fill far from Switzerland** follows a player anywhere (`terrain/generated-fill`'s 40-tile box)
   and comes back under 80 km (`Globe.FillGoneM`): re-entering 1,600 km out it was a black disc under the shuttle
   from 68 km. Farther than 100 km from the real tiles' box (`Globe.FillFarM`) it stays hidden wherever the
-  globe shows (above 15 km, gone over the 5 km above that), #1497.
+  globe shows (above 5 km, gone over the 5 km above that), #1518.
+- **The globe from 5 km** (#1518, `Globe.ShowAboveM`, was 15): where the far plane starts reaching past the horizon
+  blocks' 60 km and the haze thins on the globe's word (`CameraGlobal.HazeAt` from 3 km). At 15 km a landing from
+  space looked through thinned haze at nothing past 60 km: a flat haze-coloured plane with the far lakes on it.
+- **The air ends at the ground** (#1518, `atmosphere.gdshader`): a ray that meets the planet's sphere ends there,
+  and at the scene's depth only where something stands clearly in front. The globe is drawn pushed back along the
+  ray (a quarter of its distance below 80 km); ending at its depth lengthened the air, and where the pushed globe
+  and the sphere swapped places the haze jumped: a sharp disc of clear, yellow ground under the shuttle at 57-62 km.
 - No vertical origin yet: world Y is still ~altitude in Space anchors (3 cm floats at 400 km).
   **The camera's near plane follows it** (#1497, `Styles/CameraGlobal.NearOfDistance`): at least the camera's
   distance from the world's origin / 200,000 (1.5 m at 300 km, 2 m at 400 km). With the player's 0.08 m near
