@@ -150,7 +150,8 @@ public static class CubeCheck
         Report("resampling, control points against exact (height)", interp, 0.001);
         Report("vertex geometry, control grid against rigorous", geom, 0.01);
         ok &= Report("mesh vertex against the rigorous ground point (target 1 cm)", total, 0.01);
-        ok &= Report($"collision field at the mesh's spacing ({spacing:F2} m) against the mesh (target 2 cm)", coll1, 0.02);
+        // informational since G1 (#1452): the height field misses 2 cm against the mesh, so collision is trimesh patches (C2)
+        Report($"collision field at the mesh's spacing ({spacing:F2} m) against the mesh (G1: a height field misses, collision is trimesh patches)", coll1, double.NaN);
         Report($"collision field at half the spacing ({spacing / 2:F2} m) against the mesh", collHalf, 0.02);
         Report($"collision field at twice the spacing ({2 * spacing:F2} m) against the mesh", coll2, 0.02);
         Report("swissTLM3D feature points against the mesh below", featTlm, double.NaN);
@@ -182,7 +183,7 @@ public static class CubeCheck
         var lv95 = new Lv95Ground(grids);
         var toSources = new List<double>();
         var toTerr = new List<double>();
-        double terrSigned = 0;
+        int beds = 0;
         int misses = 0, points = 0;
         foreach (var key in sample)
         {
@@ -209,7 +210,9 @@ public static class CubeCheck
                 points++;
                 if (ground.Sample(x, y) is not { } h)
                 {
-                    if (!float.IsNaN(tiles[key].HeightAt((int)i, (int)j))) misses++;
+                    int qi = Math.Min((int)i, cells - 1), qj = Math.Min((int)j, cells - 1);
+                    var th = tiles[key];
+                    if (!float.IsNaN(th.HeightAt(qi, qj)) && !float.IsNaN(th.HeightAt(qi + 1, qj)) && !float.IsNaN(th.HeightAt(qi, qj + 1)) && !float.IsNaN(th.HeightAt(qi + 1, qj + 1))) misses++;
                     continue;
                 }
                 double exact = src.ExactHeight(t.NormalAt(i, j), cur);
@@ -219,8 +222,9 @@ public static class CubeCheck
                     var (e, nn, _) = SwissGeodesy.FromEcef(ground.Frame.ToEcef(x, y, h));
                     if (lv95.Sample(e, nn) is { } ht)
                     {
-                        toTerr.Add(Math.Abs(h - ht));
-                        terrSigned += h - ht;
+                        // a lake: the LV95 build holds its bed (#298), the leaves still the surveyed surface
+                        if (h - ht > 1) beds++;
+                        else toTerr.Add(Math.Abs(h - ht));
                     }
                 }
             }
@@ -229,8 +233,9 @@ public static class CubeCheck
         Report("frame ground (leaf mesh, quads split as drawn) against the sources' height there", toSources, double.NaN);
         if (o.Terr != null)
         {
-            Report($"frame ground against the LV95 build's .terr at the same place ({grids.Count} tiles; lakes hold beds there)", toTerr, double.NaN);
-            if (toTerr.Count > 0) Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  frame ground minus .terr: mean {terrSigned / toTerr.Count * 1000:F1} mm"));
+            Report($"frame ground against the LV95 build's .terr at the same place ({grids.Count} tiles; {beds} points over lake beds left out)", toTerr, double.NaN);
+            if (toTerr.Count > 0) Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"  of those within 5 cm {toTerr.Count(d => d <= 0.05) * 100.0 / toTerr.Count:F1} %, within 50 cm {toTerr.Count(d => d <= 0.5) * 100.0 / toTerr.Count:F1} % (.terr: 1 m lattice, 7 cm quanta)"));
         }
 
         // points on edges shared across frames, from both frames' grounds
@@ -257,7 +262,7 @@ public static class CubeCheck
                 }
             }
         }
-        return Report("frame ground on edges shared across frames, from both frames (target 1 µm)", across, 1e-6);
+        return Report("frame ground on edges shared across frames, from both frames (target 1 µm)", across, 1e-6) && misses == 0;
     }
 
     /// <summary>
