@@ -45,7 +45,7 @@ public class FlatLv95RatchetTests
             new(@"\w\)?\.(E|N)\b(?!\s*\()", RegexOptions.Compiled),
             // 4147 on main before G2 A2 (#1503); the wire's step converts the LV95 records (pins, pots, structures, placed
             // objects, pallets, traffic endpoints...) at the RPC edge, reading their E/N there until A2b migrates them
-            Baseline: 4166, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+            Baseline: 4164, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);
