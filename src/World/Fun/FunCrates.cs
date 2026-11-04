@@ -56,7 +56,7 @@ public partial class FunCrates : Node
     {
         if (_crates.MayLoot == _wrapped) return;
         var match = _crates.MayLoot;
-        _wrapped = peer => match(peer) || FunWorld.Players?.Invoke(peer) is { } p && FunWorld.InPvp(p.E, p.N);
+        _wrapped = peer => match(peer) || FunWorld.Players?.Invoke(peer) is { } p && FunWorld.InPvp(p);
         _crates.MayLoot = _wrapped;
     }
 

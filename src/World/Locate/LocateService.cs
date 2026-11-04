@@ -149,7 +149,7 @@ public partial class LocateService : Node
         FeedPlayers();
     }
 
-    private void FeedPlayers() => _queue?.SetPlayers(_players().Select(p => (p.E, p.N)).ToList());
+    private void FeedPlayers() => _queue?.SetPlayers(_players().Select(p => (p.Lv95.E, p.Lv95.N)).ToList());
 
     /// <summary>The engine over the lists as they are now; rebuilt when the POI catalogue arrives or changes.</summary>
     private async Task<LocateEngine> EngineAsync()
@@ -276,7 +276,7 @@ public partial class LocateService : Node
                 return ([$"No town matching '{q.Town}'."], true);
             (e, n, from) = (town.E, town.N, town.Name);
         }
-        else if (at is { } here) (e, n) = (here.E, here.N);
+        else if (at is { } here) (e, n) = (here.Lv95.E, here.Lv95.N);
         else return (["Where are you? Get into the world first, or ask '/locate <thing> in <town>'."], true);
         // still indexing: what is round the asker next
         if (q.OnBuildings || q.Target == LocateTarget.Church) _queue?.Prefer(e, n);

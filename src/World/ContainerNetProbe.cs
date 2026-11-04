@@ -145,7 +145,7 @@ public partial class ContainerNetProbe : Node
                 if (_t < 3) return;
                 _radioOid = radio.Oid;
                 _radioAt = radio.Capture().Position;
-                Say(FormattableString.Invariant($"PARKED car {_carOid} {_carAt.E:F3} {_carAt.N:F3} {_carAt.Alt:F3} item {_itemOid} {_itemAt.E:F3} {_itemAt.N:F3} {_itemAt.Alt:F3} radio {_radioOid} {_radioAt.E:F3} {_radioAt.N:F3} {_radioAt.Alt:F3}"));
+                Say(FormattableString.Invariant($"PARKED car {_carOid} {_carAt.Lv95.E:F3} {_carAt.Lv95.N:F3} {_carAt.Alt:F3} item {_itemOid} {_itemAt.Lv95.E:F3} {_itemAt.Lv95.N:F3} {_itemAt.Alt:F3} radio {_radioOid} {_radioAt.Lv95.E:F3} {_radioAt.Lv95.N:F3} {_radioAt.Alt:F3}"));
                 Say("ready: waiting for the go");
                 Next();
                 return;
