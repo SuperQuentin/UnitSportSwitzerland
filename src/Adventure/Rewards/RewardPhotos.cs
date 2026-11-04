@@ -32,8 +32,8 @@ public static class RewardPhotos
         if (RewardService.Instance == null) return "";
         var g = player.Global;
         var (yaw, pitch) = Aim(cam);
-        foreach (var s in PhotoSpots.At(g.E, g.N, PoiCatalogueHost.Current))
-            if (PhotoJudge.Judge(s, g.E, g.N, (float)g.Alt + 1.6f, yaw, pitch, fovDeg, (_, _) => null) == PhotoVerdict.Taken) return s.Id;
+        foreach (var s in PhotoSpots.At(g, PoiCatalogueHost.Current))
+            if (PhotoJudge.Judge(s, g, (float)g.Alt + 1.6f, yaw, pitch, fovDeg, (_, _) => null) == PhotoVerdict.Taken) return s.Id;
         return "";
     }
 
@@ -44,7 +44,7 @@ public static class RewardPhotos
         var g = player.Global;
         var (yaw, pitch) = Aim(cam);
         var taken = adv.Mine.Get(PhotosProgress.Section).Taken;
-        foreach (var s in PhotoSpots.At(g.E, g.N, PoiCatalogueHost.Current))
+        foreach (var s in PhotoSpots.At(g, PoiCatalogueHost.Current))
             if (!taken.Contains(s.Id)) svc.ReportPhoto(s.Id, yaw, pitch, fovDeg);
         foreach (string name in AnimalsInFrame(cam, fovDeg)) svc.ReportFauna(name);
     }

@@ -136,14 +136,15 @@ public partial class TrialRunner : Node3D
         if (now >= _nextSample && _samples.Count * 16 < GhostTrack.MaxBytes - 64)
         {
             _nextSample = now + 1 / GhostTrack.Rate;
-            _samples.Add(new GhostTrack.Sample(at.E, at.N, (float)at.Alt, me.GlobalRotation.Y));
+            _samples.Add(new GhostTrack.Sample(at.Lv95.E, at.Lv95.N, (float)at.Alt, me.GlobalRotation.Y));
         }
         _ghost?.UpdateTo(now - _ghostStart, 1, delta);
         // a gate the server did not count (the body's published position lagged) is reported again a second later
         if (t.Next >= t.Gates.Length || t.Next == _sent && now - _sentAt < 1.0) return;
         var g = t.Gates[t.Next];
-        double dz = at.Alt - g.Alt;
-        double d2 = GlobalPos.HorizontalDistanceSquared(at.E, at.N, g.E, g.N) + (_glide ? dz * dz : 0);
+        var gate = GlobalPos.FromLv95(g.E, g.N, g.Alt);
+        double dz = -at.OffsetTo(gate).Up;
+        double d2 = at.HorizontalDistanceSquaredTo(gate) + (_glide ? dz * dz : 0);
         if (d2 > g.Radius * g.Radius || !_glide && Math.Abs(dz) > 15) return;
         _sent = t.Next;
         _sentAt = now;

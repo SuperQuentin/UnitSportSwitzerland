@@ -47,12 +47,13 @@ public partial class TogetherService
         if (_slot != null || me.InCrevasse) { StepSlot(me, dt); return; }
         if (!Permissions.CrevassesOn || !me.IsOnFloor() || me.RideKindId != 0) return;
         var g = me.Global;
-        long cell = Crevasses.CellKey(g.E, g.N);
+        var lv = g.Lv95;   // the crevasse strips are hashed on the LV95 grid
+        long cell = Crevasses.CellKey(lv.E, lv.N);
         bool sameCell = cell == _crevasseCell;
         _crevasseCell = cell;
         // the cell's crevasse at all (one hash), then the glacier under the body (the cover lookup)
-        if (sameCell && !Crevasses.At(g.E, g.N)) return;
-        if (Crevasses.InCell(g.E, g.N) is not { } c || !Crevasses.At(g.E, g.N) || _broken.Contains(cell) || !OnGlacier(g)) return;
+        if (sameCell && !Crevasses.At(lv.E, lv.N)) return;
+        if (Crevasses.InCell(lv.E, lv.N) is not { } c || !Crevasses.At(lv.E, lv.N) || _broken.Contains(cell) || !OnGlacier(g)) return;
         _broken.Add(cell);
         Break(me, c);
     }
@@ -69,7 +70,7 @@ public partial class TogetherService
         if (origin == null) return;
 
         // the slot opens on the strip's line under the body, turned along it, its walls a little over the ground at both ends
-        var (le, ln) = Crevasses.OnLine(c, g.E, g.N);
+        var (le, ln) = Crevasses.OnLine(c, g.Lv95.E, g.Lv95.N);
         var at = origin.ToWorld(le, ln, g.Alt);
         var (he, hn) = Crevasses.Heading(c.Angle);
         var along = origin.ToWorld(le + he, ln + hn, g.Alt) - at;
