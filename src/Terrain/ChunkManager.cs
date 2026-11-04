@@ -2224,6 +2224,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var cachedWater = state.Water;
         // a coarser mesh is on screen: the new one can wait for its road blend (see the interim publish)
         bool groundShown = state.ActiveStride > 0 && state.Node != null;
+        // whether its water is drawn already (see the interim publish)
+        bool waterShown = state.Node?.HasWater == true;
         var source = _source!;
         bool buildMesh = BuildMeshes && stride > 0;
         bool streaming = Streaming?.Invoke() == true;
@@ -2326,10 +2328,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
                 var heldMesh = groundShown && blendsRoads && nearField ? mesh : null;
                 var interimMesh = heldMesh == null ? mesh : null;
+                // A lake over its bed (#298) is a pit until its water comes, and this commit turns the
+                // horizon's block off under the tile: with no water drawn there yet, its flat surface goes
+                // out with the ground, and the tail's (streams included) replaces it. A climb's new tiles
+                // showed Lake Geneva's floor, 300 m down, for a second before (#1430).
+                var interimWater = interimMesh != null && !waterShown && waterMaterial != null && waterLayer is { Legacy: false }
+                    && WaterMeshBuilder.Build(waterLayer, null, stride, detail) is { } flatWater
+                    ? ChunkNode.ToArrayMesh(flatWater, waterMaterial) : null;
                 if (interimMesh != null || publishInterimCollision)
                     _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: true,
                         interimMesh, publishInterimCollision ? collision : null, null, false, holes, cover,
-                        null, null, false, null, null, WaterLayer: waterLayer));
+                        null, null, false, null, interimWater, WaterLayer: waterLayer));
 
                 ArrayMesh? roads = null;
                 ArrayMesh?[]? roadCellMeshes = null, roadPaintCells = null;
