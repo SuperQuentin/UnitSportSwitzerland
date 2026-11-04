@@ -163,6 +163,9 @@ public sealed class QuestEngine
         return changes;
     }
 
+    /// <summary><see cref="OnPosition(QuestsProgress, double, double, long)"/> for a player at a <see cref="GlobalPos"/>.</summary>
+    public List<QuestChange> OnPosition(QuestsProgress p, GlobalPos at, long now) => OnPosition(p, at.Lv95.E, at.Lv95.N, now);
+
     /// <summary>The player is at LV95 (<paramref name="e"/>, <paramref name="n"/>): running quests whose current step is to reach a place there move on.</summary>
     public List<QuestChange> OnPosition(QuestsProgress p, double e, double n, long now)
     {

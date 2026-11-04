@@ -18,6 +18,8 @@ public sealed class Poi
     public string Canton { get; }
     public double E { get; }
     public double N { get; }
+    /// <summary>Where it stands (its height the file's elevation), computed once.</summary>
+    public GlobalPos Pos { get; }
     public float Elevation { get; }
     public float DiscoverRadius { get; }
     public float RevealRadius { get; }
@@ -47,6 +49,7 @@ public sealed class Poi
         E = r.E;
         N = r.N;
         Elevation = r.Elevation;
+        Pos = GlobalPos.FromLv95(E, N, Elevation);
         DiscoverRadius = r.DiscoverRadius;
         RevealRadius = r.RevealRadius;
         LineKey = r.LineKey;
@@ -169,6 +172,9 @@ public sealed class PoiCatalogue
     /// (cleared first), of one kind or all. A lake counts when the point is within the radius of its
     /// bounding box. Allocates nothing once <paramref name="into"/> has grown.
     /// </summary>
+    public void Near(GlobalPos at, float radiusM, List<Poi> into, PoiKind? kind = null) => Near(at.Lv95.E, at.Lv95.N, radiusM, into, kind);
+
+    /// <summary><see cref="Near(GlobalPos, float, List{Poi}, PoiKind?)"/> for a point given as LV95 numbers (the index is keyed by LV95 kilometres).</summary>
     public void Near(double e, double n, float radiusM, List<Poi> into, PoiKind? kind = null)
     {
         into.Clear();

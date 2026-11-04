@@ -144,7 +144,7 @@ public partial class AdventureMap : Screen
         }
 
         // centred on the player, or the place asked for
-        if (Me?.Invoke() is { } me) _canvas.View.FocusOn(me.At.E, me.At.N, 32);
+        if (Me?.Invoke() is { } me) _canvas.View.FocusOn(me.At.Lv95.E, me.At.Lv95.N, 32);
         if (_focus != null) Select(_focus, centre: true);
         if (_point is { } point) _canvas.View.FocusOn(point.E, point.N, 32);
         if (AdventureService.Instance is { } svc) svc.SectionChanged += OnSection;
@@ -401,7 +401,7 @@ public partial class AdventureMap : Screen
         private void DrawMe(CanvasItem on)
         {
             if (Me?.Invoke() is not { } me) return;
-            var at = View.ToScreen(me.At.E, me.At.N);
+            var at = View.ToScreen(me.At.Lv95.E, me.At.Lv95.N);
             // the yaw turns from north (screen up), clockwise
             var fwd = new Vector2(Mathf.Sin(-me.Yaw), -Mathf.Cos(me.Yaw));
             var side = new Vector2(-fwd.Y, fwd.X);
