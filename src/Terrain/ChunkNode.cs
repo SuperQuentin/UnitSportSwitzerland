@@ -1018,6 +1018,9 @@ public partial class ChunkNode : Node3D
 
     private MeshInstance3D? _waterInstance;
 
+    /// <summary>Whether the tile's water is drawn (any build's, fine or flat).</summary>
+    public bool HasWater => _waterInstance != null;
+
     public void SetWater(ArrayMesh mesh)
     {
         if (_waterInstance == null)
