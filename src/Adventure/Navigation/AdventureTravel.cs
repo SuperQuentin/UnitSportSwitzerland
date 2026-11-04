@@ -462,6 +462,8 @@ public partial class AdventureTravel : Node
         else RpcId(1, MethodName.RequestBuy, ga, stationId);
     }
 
+    public void AskPinAdd(GlobalPos at, byte icon, string note, bool shared) => AskPinAdd(at.Lv95.E, at.Lv95.N, icon, note, shared);
+
     public void AskPinAdd(double e, double n, byte icon, string note, bool shared)
     {
         if (Authority) PinAdd(AdventureService.LocalPeer, e, n, icon, note, shared);
@@ -484,7 +486,7 @@ public partial class AdventureTravel : Node
     public (TravelRefusal Why, Fare Fare) Preview(Poi to, Poi? sign, GlobalPos at, bool down, bool driving)
     {
         var ask = new TravelAsk(Mode, Permissions.IsAdmin && Permissions.Online, AdventureLog.Adventuring, Permissions.InMatch,
-            down, driving, false, MyBook, to, sign, at.E, at.N, Now, Bank.Instance?.Balance ?? 0);
+            down, driving, false, MyBook, to, sign, at.Lv95.E, at.Lv95.N, Now, Bank.Instance?.Balance ?? 0);
         return TravelNetwork.MayTravel(ask, Rules);
     }
 
