@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Errands;
 
@@ -15,6 +16,9 @@ public enum GiverKind : byte { HutWarden = 0, StationMaster = 1, ShipMaster = 2,
 /// </summary>
 public sealed record Giver(string Id, GiverKind Kind, double E, double N, float Heading, string Canton, float Elevation, string Name, string Source)
 {
+    /// <summary>Where it stands, computed once (its height the file's elevation).</summary>
+    public GlobalPos Pos { get; } = GlobalPos.FromLv95(E, N, Elevation);
+
     /// <summary>The 5 km cell holding it.</summary>
     public (int E, int N) Cell => Postkarte.CellOf(E, N);
 }
