@@ -133,8 +133,8 @@ public static class CubeCompare
                     double g = c.Lv.Ground(e, nn);
                     if (double.IsNaN(g)) { acc.O++; continue; }
                     double dh = hl - g;
-                    // under still water the LV95 heights are the bed (#298): apart, until leaves carry beds too (B3 PR 6)
-                    if (c.Lv.WaterAt(e, nn) is { } level && !double.IsNaN(level)) { acc.W.Add(dh); continue; }
+                    // under water the LV95 heights are the bed (#298): apart, until leaves carry beds too (B3 PR 6)
+                    if (c.Lv.UnderWater(e, nn)) { acc.W.Add(dh); continue; }
                     leaf.Add(dh);
                     double ge = c.Lv.Ground(e + 0.5, nn) - c.Lv.Ground(e - 0.5, nn), gn = c.Lv.Ground(e, nn + 0.5) - c.Lv.Ground(e, nn - 0.5);
                     // the shift is read off ordinary slopes: not flat (no signal), not cliffs (the grids sample them differently)
@@ -149,7 +149,7 @@ public static class CubeCompare
         r.Note($"{perLeaf.Count} leaves, vertices every {c.Stride}; {noData} without data, {outside} off the LV95 tiles");
         var s = all.Spread();
         r.Check("leaf − LV95 (LHN95 at the vertex), dry", s, true, new Bar(Stat.Mean, CompareBars.HeightBias), new Bar(Stat.P50, CompareBars.HeightMedian));
-        if (wet.Count > 0) r.Check("leaf − LV95 under LV95 still water (its bed), not held to a bar", wet.Spread(), true);
+        if (wet.Count > 0) r.Check("leaf − LV95 where the LV95 sample touches water (its bed), not held to a bar", wet.Spread(), true);
         var (se, sn, bias) = fit.Solve();
         double shift = Math.Sqrt(se * se + sn * sn);
         r.Note(string.Create(CultureInfo.InvariantCulture,
@@ -802,6 +802,28 @@ internal sealed class Lv95Build
         if (!Tiles.Contains(id)) return -1;
         var (i, ok) = Vertex(id, e, n);
         return !ok ? -1 : (_lastCover ??= new()).Get(id, _cover) is { } cells ? cells[i] : 0;
+    }
+
+    /// <summary>
+    /// Whether a bilinear <see cref="Ground"/> sample there takes a bed vertex (#298: the <c>.terr</c> holds the
+    /// bed under water): one of its four corners has a still level or <see cref="CoverClass.Water"/>, which the
+    /// level raster misses at some shores.
+    /// </summary>
+    public bool UnderWater(double e, double n)
+    {
+        var id = TileId.FromLv95(e, n);
+        if (!Tiles.Contains(id)) return false;
+        var levels = (_lastWater ??= new()).Get(id, _water);
+        var cover = (_lastCover ??= new()).Get(id, _cover);
+        if (levels == null && cover == null) return false;
+        int c0 = Math.Clamp((int)Math.Floor(e - id.MinE), 0, ChunkFormat.GridSize - 2), r0 = Math.Clamp((int)Math.Floor(id.MaxN - n), 0, ChunkFormat.GridSize - 2);
+        for (int dr = 0; dr <= 1; dr++)
+            for (int dc = 0; dc <= 1; dc++)
+            {
+                int k = (r0 + dr) * ChunkFormat.GridSize + c0 + dc;
+                if ((levels != null && levels[k] != 0) || (cover != null && cover[k] == (byte)CoverClass.Water)) return true;
+            }
+        return false;
     }
 
     /// <summary>The still level (LHN95) at the nearest 1 m vertex, NaN dry; null off the tiles.</summary>
