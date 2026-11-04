@@ -160,6 +160,20 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
     public Vector3 OffsetFromEnu(Vector3 enu) => Enu.FromEnu(enu);
 
     /// <summary>
+    /// The rate this position changes (its offset axes per second) for a velocity in the local east-up-south here:
+    /// <see cref="OffsetFromEnu"/> measured over a hundredth of a second of that velocity, as an interpolator wants it.
+    /// The same on the ground; bounded where the grid's scale runs away (LV95's singular points 90° from Bern, which a
+    /// polar orbit flies over: there the local scale tends to 0 and the linear form to infinity; #1430 H5).
+    /// </summary>
+    public Vector3 RateOfEnu(Vector3 enu)
+    {
+        const double h = 0.01;
+        var f = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(ToEcef()));
+        var moved = FromEcef(f.ToEcef(enu.X * h, enu.Y * h, enu.Z * h));
+        return (moved - this) / (float)h;
+    }
+
+    /// <summary>
     /// A heading in this type's offset axes (radians, Godot's sense: 0 faces −Z, positive turns left; grid north
     /// until A1) as a heading from true north here (#1503): what goes on the wire.
     /// </summary>

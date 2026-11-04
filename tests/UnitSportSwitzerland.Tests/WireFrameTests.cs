@@ -75,6 +75,9 @@ public class WireFrameTests
         Assert.True(p.EnuFromOffset(new Vector3(0, 0, -1)).Normalized().DistanceTo(gridNorth) < 1e-5f, $"{p.EnuFromOffset(new Vector3(0, 0, -1))} vs {gridNorth}");
         var v = new Vector3(12.5f, -3f, 40f);
         Assert.True(p.OffsetFromEnu(p.EnuFromOffset(v)).DistanceTo(v) < 1e-4f);
+        // the rate over a hundredth of a second is the linear form on the ground, to a hundredth of a mm/s
+        var rate = p.RateOfEnu(p.EnuFromOffset(v));
+        Assert.True(rate.DistanceTo(v) < 2e-3f, $"{rate} vs {v}");
         // headings: grid north's true yaw is the convergence, and the two are inverses
         float convergence = p.TrueYaw(0f);
         Assert.Equal(YawOf(gridNorth), convergence, 5);

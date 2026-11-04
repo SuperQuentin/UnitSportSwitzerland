@@ -364,8 +364,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             if (_inGlobalStamp != _netTime || _inGlobalFor != _netGlobal)
             {
-                var enu = _netGlobal.Enu;
-                _inGlobal = (enu.FromEnu(NetVel), enu.Yaw(NetYaw));
+                // the velocity as the rate the position changes, over a hundredth of a second (bounded where the
+                // grid's scale runs away: a polar orbit over LV95's singular points)
+                _inGlobal = (_netGlobal.RateOfEnu(NetVel), _netGlobal.Enu.Yaw(NetYaw));
                 _inGlobalStamp = _netTime;
                 _inGlobalFor = _netGlobal;
             }
