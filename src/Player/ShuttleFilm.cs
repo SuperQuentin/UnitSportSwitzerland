@@ -255,7 +255,21 @@ public partial class ShuttleFilm : Node
             return;
         }
         if (_wait - _shotAt < 0.2) return;
-        GD.Print(FormattableString.Invariant($"[shuttlefilm] {alt / 1000:F1} km in {_pilot!.Now}: {_shotName}.png, horizon {_chunks?.Horizon?.Progress()}, {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} draws, {Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame) / 1e6:F1} M triangles"));
+        var lensAt = GetViewport().GetCamera3D()?.GlobalPosition;
+        // where the air's shell thinks the camera is (World/Atmosphere's own sums): its height over the shell's
+        // sphere against the frame's altitude; a misplaced shell clears a disc of air under the camera
+        string air = "";
+        if (lensAt is { } eye)
+        {
+            var axes = World.Globe.Axes ?? _origin.EcefAxes;
+            var (px, py, pz) = axes.FromEcef(new Terrain.Format.EcefPos(0, 0, 0));
+            var g = Terrain.Format.Ellipsoid.Wgs84.ToGeodetic(axes.ToEcef(eye.X, eye.Y, eye.Z));
+            var nadir = Terrain.Format.CubeSphere.OnEllipsoid(Terrain.Format.CubeSphere.NormalAt(g.LatDeg, g.LonDeg), 0);
+            double r = Math.Sqrt(Core.FrameAxes.Dot(nadir, nadir));
+            double d = (eye - new Vector3((float)px, (float)py, (float)pz)).Length();
+            air = FormattableString.Invariant($", air: over the sphere {(d - r) / 1000:F1} km against {_origin.Frame.AltitudeOf(eye) / 1000:F1} km, globe axes {World.Globe.Axes != null}");
+        }
+        GD.Print(FormattableString.Invariant($"[shuttlefilm] {alt / 1000:F1} km in {_pilot!.Now}: {_shotName}.png, horizon {_chunks?.Horizon?.Progress()}, {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} draws, {Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame) / 1e6:F1} M triangles, fill {RenderingServer.GlobalShaderParameterGet("world_fill_hide")}, flat {RenderingServer.GlobalShaderParameterGet("world_flat_hide")}, edge {RenderingServer.GlobalShaderParameterGet("world_flat_edge")} on {RenderingServer.GlobalShaderParameterGet("world_flat_edge_on")}, camera {lensAt}{air}"));
         GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://test_output/clips/{_shotName}.png"));
         End(0, "drive");
     }

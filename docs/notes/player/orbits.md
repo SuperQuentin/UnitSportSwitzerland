@@ -90,6 +90,10 @@ The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`
 - **The globe from 5 km** (#1528, `Globe.ShowAboveM`, was 15): where the far plane starts reaching past the horizon
   blocks' 60 km and the haze thins on the globe's word (`CameraGlobal.HazeAt` from 3 km). At 15 km a landing from
   space looked through thinned haze at nothing past 60 km: a flat haze-coloured plane with the far lakes on it.
+- **The air is drawn as one full-screen quad** (#1528, `atmosphere.gdshader`, `Atmosphere`): each pixel's ray comes
+  from the screen and the depth, never the geometry. The sphere's back faces, pulled in to 90 % of the far plane, were
+  clipped round the view's axis on the way down from the drive: a sharp disc of no air (yellow ground) under the
+  shuttle at 57-62 km. The colour-coded branches (`--shuttlefilm shot,Fall,at=61`) showed no fragment there at all.
 - **The flat world's edges dissolve into the globe** while it is drawn (#1528, the user's choice; `terrain.gdshaderinc`
   `flat_edge`, globals `world_flat_edge`/`_on` pushed by `Globe.Edge`): the tiles' square (Chebyshev from the
   camera's tile, as they load) and the horizon blocks' circle over their last 4 km, in over 5-10 km of height. From

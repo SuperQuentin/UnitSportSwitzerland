@@ -87,6 +87,10 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   `DriveHome`, `Fall`, `Glide`, `Rollout`) and says what it wants of the time scale; the host judges and films.
 - Client-side only: a server-run bot pilot is #1498, after #1443 G2 (on the server a body above 60 km stays in
   the main region's flat LV95 frame), with a long orbital path.
+- **Calm in space** (#1528, the user: the acrobatics looked stupid on film): the drive banks at most 20° to turn
+  (`ShuttlePilot.DriveBank`, was 57°), the dive out of the drive is 25° (was 45°), and the retro burn's turn takes
+  the retrograde direction in the craft's own axes: a roll brings it into the pitch plane, a pitch closes on it, both
+  slowing as they close. Pitching alone missed it off that plane and looped the craft until it passed close.
 - The taxi: square to the centreline, round onto it from 40 m out, on a whisper of rocket (6 %) and the brakes.
 
 ## The film (`--shuttlefilm`, `tools/shuttlefilm.sh`, #1497)
