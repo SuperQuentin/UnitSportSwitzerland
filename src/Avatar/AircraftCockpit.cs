@@ -33,6 +33,16 @@ public sealed record CockpitLayout(
         An124Layout.UpperCeilingY - 0.17f, An124Layout.PilotHip.Z + 0.3f, false, 0f,
         new[] { new Vector3(0f, An124Layout.UpperCeilingY - 0.05f, 17f), new Vector3(0f, An124Layout.UpperCeilingY - 0.05f, 21f) });
 
+    /// <summary>
+    /// The orbiter (#1492): a glass cockpit, three engines; its rotational hand controller stands between
+    /// each pilot's knees, drawn as the column-and-yoke stand-in (it moves the same way).
+    /// </summary>
+    public static CockpitLayout Shuttle { get; } = new(true, 3, ShuttleLayout.CommanderHip, ShuttleLayout.FlightDeckY,
+        ShuttleLayout.PanelZ, ShuttleLayout.PanelY, ShuttleMeshBuilder.CockpitPanelHalf, ShuttleLayout.GlareY,
+        ShuttleLayout.PedestalZ0, ShuttleLayout.PedestalZ1, ShuttleLayout.PedestalTop, ShuttleLayout.PedestalHalf,
+        ShuttleLayout.OverheadY, ShuttleLayout.OverheadZ, false, 0f,
+        new[] { new Vector3(0f, ShuttleLayout.FlightDeckY - 0.15f, 21.4f) });
+
     /// <summary>The captain's eye, authored.</summary>
     public Vector3 Eye => HumanMeshBuilder.DriverEye(Hip, AirlinerRig.PilotRecline);
 }
