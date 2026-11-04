@@ -1,9 +1,11 @@
 // The globe from far out (#1430 H4, World/Globe/Globe.cs): the coarse cube tiles in real geometry,
 // so no curve_offset (the flat tiles are bent onto a sphere; these already are one). Drawn a little
 // behind whatever stands at the same place, so the flat world's tiles and horizon blocks win where
-// they are, and the globe shows round and past them.
+// they are, and the globe shows round and past them. Hazed as they are: the style's haze is all but
+// gone by the time the flat world gives way (Styles/CameraGlobal.HazeAt), and an unhazed globe
+// switching on at 15 km beside the hazed fill was a jump in the climb.
 shader_type spatial;
-render_mode unshaded, cull_back, fog_disabled;
+render_mode unshaded, cull_back;
 
 // toward the real sun, world axes (World/Globe/Atmosphere): the scene's light is the moon at night,
 // and one light cannot put the terminator across the whole Earth anyway
@@ -12,6 +14,12 @@ global uniform vec3 world_true_sun;
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
 // how far behind, as a fraction of the distance from the eye
 uniform float push = 0.004;
+// while the generated fill is drawn (terrain.gdshaderinc, 0 until 50 km) the globe goes a quarter of
+// the distance further behind, at most 50 km: the fill's made-up heights stand kilometres off
+// ETOPO's, and the Alps poked through it from 15 km. Capped well inside the far plane (horizon +
+// 200 km) and gone with the fill, so the air's ray (atmosphere.gdshader) ends near the ground again
+global uniform float world_fill_hide;
+const float FILL_PUSH = 0.25, FILL_PUSH_MAX = 50000.0;
 // lit as the style lights the world (World/Globe/Globe.cs keeps these the environment's): its
 // ambient on the day side, the sun's colour; the night side dark
 uniform vec3 ambient = vec3(0.40, 0.48, 0.74);
@@ -22,7 +30,9 @@ uniform bool cartoon = false;
 
 void vertex() {
 	vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
-	view.xyz *= 1.0 + push;
+	float d = max(length(view.xyz), 1.0);
+	float fill = min(d * FILL_PUSH, FILL_PUSH_MAX) * (1.0 - world_fill_hide);
+	view.xyz *= 1.0 + push + fill / d;
 	POSITION = PROJECTION_MATRIX * view;
 }
 
