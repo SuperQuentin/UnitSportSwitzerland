@@ -65,7 +65,7 @@ public partial class FilmPuppet : Node
         // a body's yaw turns its forward (-Z) from north toward east the other way round
         _puppet.NetYaw = (float)-h;
         _puppet.NetVel = new Vector3((float)e, (float)_climb, (float)-n);
-        _puppet.NetGlobal = new GlobalPos(_from.E + e * _t, _from.N + n * _t, _from.Alt + _climb * _t);
+        _puppet.NetGlobal = _from.Moved(e * _t, n * _t, _climb * _t);
         // last: its setter applies the state
         _puppet.NetTime = ++_stamp;
         // every 2 s: where it is from the camera, to frame a shot by
