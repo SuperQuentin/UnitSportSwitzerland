@@ -41,6 +41,9 @@ public static class ShuttleFlight
     /// <summary>The drive's speed at a lever and a distance to the surface, m/s.</summary>
     public static float DriveSpeed(float lever, double distance) => (float)(Mathf.Clamp(lever, 0f, 1f) * System.Math.Max(distance, 0) / DriveTau);
 
+    /// <summary>The lever that drives at <paramref name="speed"/> at a distance to the surface (the drive's inverse), 0..1.</summary>
+    public static float DriveLever(float speed, double distance) => distance > 0 ? Mathf.Clamp((float)(speed * DriveTau / distance), 0f, 1f) : 0f;
+
     /// <summary>The share of control the reaction jets have at a dynamic pressure: 1 in vacuum, 0 in thick air.</summary>
     public static float JetShare(float q) => Mathf.Clamp(2f - 2f * q / JetQ, 0f, 1f);
 

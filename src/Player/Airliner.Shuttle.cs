@@ -65,6 +65,8 @@ public sealed partial class Airliner : ISpacecraft
         {
             DriveOn = true;
             space.Drop();
+            // it takes over at the speed the craft has (the lever set to match), not from a standstill
+            State.Lever = ShuttleFlight.DriveLever(State.Tas, place.Altitude);
             GD.Print(FormattableString.Invariant($"[shuttle] cruise drive on at {place.Altitude / 1000:F1} km"));
         }
         // taken down out of Space the drive drops out: an aircraft again, at the speed it had

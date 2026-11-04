@@ -36,7 +36,8 @@ The model: `avatar/shuttle-model`. Walkable decks and zero-g aboard are a follow
   level stays level, and turned with the frame on a turned shift (`Airliner.OnOriginShifted`).
 - **The cruise drive** (Z / D-pad ↑ above 60 km, the cockpit's guarded switch in VR): v = lever · d / τ,
   d the altitude, τ = 10 s (40 km/s at 400 km; round the Earth at 400 km in ~18 min), along the nose; the
-  stick pitches and rolls, a bank turns it like a plane. The rockets are quiet in it. **Off**: a circular
+  stick pitches and rolls, a bank turns it like a plane. The rockets are quiet in it. Switched on, it carries
+  on at the speed it had (the lever set to match). **Off**: a circular
   orbit where it is along the nose's heading (`Orbit.Circular`), the levers back to zero. **Taken below
   50 km** it drops out and flies on at its drive speed: the arcade way home is to drive down over the
   airport slowly and glide in. Nobody at the controls switches it off.

@@ -55,6 +55,9 @@ public class ShuttleTests
         Assert.Equal(40_000f, ShuttleFlight.DriveSpeed(1f, 400_000), 1f);
         Assert.Equal(3_000f, ShuttleFlight.DriveSpeed(0.5f, 60_000), 1f);
         Assert.Equal(0f, ShuttleFlight.DriveSpeed(0f, 400_000));
+        // switched on in orbit it carries on at the speed it had
+        Assert.Equal(7_669f, ShuttleFlight.DriveSpeed(ShuttleFlight.DriveLever(7_669f, 400_000), 400_000), 1f);
+        Assert.Equal(1f, ShuttleFlight.DriveLever(1e6f, 60_000));
     }
 
     [Fact]
