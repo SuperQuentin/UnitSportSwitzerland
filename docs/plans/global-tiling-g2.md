@@ -114,13 +114,49 @@ with content")
   the oblique stereographic (exact angles, same scale error, an iterated inverse) and the cube lattice
   (its scale drifts 2-3 m a km near face edges and corners); the comparison is in #1523.
 
-**B3 The tools cube-native** (one PR per stage, each compared with the LV95 build of the same area:
-counts equal, positions within 2 cm after projection)
-1. ground: heights (G1's tiler), cover, water, holes, bathymetry;
-2. roads: RoadGen (lanes, junction layouts, signals, tunnels, piers, walls, traffic endpoints);
-3. buildings (swissBUILDINGS3D, GWR), trees, photos, pistes, fields;
-4. region-wide files (landings, ropeways, POIs, airports, places) in Earth positions; the pyramid
-   levels 5-13 from the new leaves (`--cube-swiss`); `horizon.bin` no longer built.
+**B3 The tools cube-native** (one PR per stage, each compared with the LV95 build of the same area).
+Planned 2026-11-04 from a survey of TerrainPreprocessor and RoadGen; **decided with the user**:
+- **Interface first**: each stage keeps its maths; its plane, units, ground and tile loop come through one
+  interface, first with an LV95 instance whose output must be **byte-identical** (SHA-256 of a D: subset),
+  then the cube instance is added and compared. One copy of the code.
+- **The LV95 build stays until D** (the game reads LV95 tiles until the flip, so they can still be rebuilt);
+  its instances are deleted in D.
+- **Everything that writes LV95 moves in B3**, the extras too: castles, venues, givers, Wikidata, the
+  traffic-lights test region (`traffic_endpoints.tsv`), MapSetup and the in-game map builder.
+- Defaults taken: stages in dependency order (below); raw intermediates per leaf in a temporary `.cubl`, point
+  files in lat/lon; shared lattice edges exact across frames by an owner rule (a seam pass); the bars per kind
+  (2 cm on source vertices, plus 2×10⁻⁴ of the distance along a line for what is placed by distance: LV95
+  grid lengths are 80-190 ppm long); the LV95 build's OSM and IGN inputs made rigorous (`SwissGeodesy`, not
+  `SwissProjection`) first so the baseline is exact; features drape on the leaf mesh; tree seeds from the
+  global lattice vertex (face, i, j); photos resampled in a Godot tool mode (`GlobeAlbedoBake`'s pattern);
+  region-wide files new, in lat/lon and ellipsoidal heights.
+
+Cross-cutting pieces: a work-frame driver over level-9 cells (one frame = one `.cubl` bundle, margins through
+`CubeKey.Neighbour`, so across face edges), a `LeafRegion` with `TileRegion`'s `Touches` contract, per-leaf
+transforms (plane + sea-level height ↔ anchor ENU, rigorous at 17 × 17 control points, directions through the
+Jacobian), a frame ground (`IGround` on the leaf mesh, LV95 and frame instances), the leaf writer with its
+seam pass, and a comparer (`--cube-compare`: LV95 records and leaves both to ECEF, matched by id or nearest,
+percentiles, fail on a breach). No LV95 raster is resampled: lattice kinds are computed again at the leaf
+vertices; constants counted in 1 m cells are restated in metres. The terrain blended to the roads is the
+game's (C1), not a build stage.
+
+| PR | Content | Check |
+|---|---|---|
+| 0 | comparer; geographic sources in the LV95 build rigorous; baseline rebuilt | shift per stage measured |
+| 1 | driver, transforms, `IGround`, leaf writer and seam pass, cube manifest; heights into `.cubl`; `--cube-swiss` from `.cubl` | transforms within 0.1 mm; `--cube-check`; heights against `.terr` |
+| 2 | road extraction, holes, parking; raw kinds; French roads | raw length per TLM line; vertices 2 cm; a hole per portal |
+| 3 | buildings with GWR; French buildings | count by id; vertices 2 cm |
+| 4a | RoadGen behind `IUnits`/`IGround`, LV95 instance | byte-identical |
+| 4b | RoadGen on frames: blocks, km caches, the Jacobian for angles, overlay / nodes / SITG / tram / places in lat/lon | junction and signal counts; centrelines 2 cm; across frame edges |
+| 5 | cover and trees | per class ≥ 99.5 %; surveyed trees exact; scatter density ±1 % |
+| 6 | water and beds (one union-find over the region on leaf labels) | levels per body; bed percentiles; exact shared edges |
+| 7 | pistes and ropeways, fields, photos | areas, outlines 2 cm |
+| 8 | region-wide files in Earth positions (places, POIs, landings, airports, castles/venues/givers/Wikidata inputs, the test region); no `horizon.bin`; MapSetup; the pyramid levels 5-13 from the leaves | counts; positions 2 cm |
+
+Risks: per-tile counts differ by construction where features are cut at other edges; things placed by
+distance along a line drift ~8 cm a km against LV95 (grid lengths); water seams across frames; a frame of
+heights is ~1 GB; the cost of rigorous projection per point (measured in PR 1); B5's generated roads need
+4a's interface.
 
 **B4 The data** (no code, results in the G2 issue)
 - The D: region (Geneva – Riddes) rebuilt as leaves; the corridor at 2 m; Brest re-tiled at level 14
