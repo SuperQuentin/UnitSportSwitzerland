@@ -37,6 +37,11 @@ pastel greens, a soft rim, strong aerial haze.
   the far billboards never cast** (the full-resolution tiles under the cascades doubled the
   primitives in the prototype); buildings, near trees, props, avatars and vehicles do. Hidden
   while the camera is in the rooms under the terrain.
+- **Lakes from afar** (#1430): one blue, `STYLE_LAKE` (`shaders/common/style.gdshaderinc`, the
+  water's deepest band). The water mesh fades its bands into it from 1-2.5 km off and 300-900 m up;
+  the ground and the horizon blocks, which paint lakes in `CoverPalette`'s slate water, swap that
+  hue for it past 500-1000 m (`style_lake`), so near water and far lakes meet without an edge.
+  Closer in, the ground under the water is a lake bed seen through the shallows and keeps its slate.
 - **Trees:** `MeshDetail.High` (`ChunkNode.HighDetailTrees`): tiered 7-sided conifers (54
   triangles) and three-puff broadleaves (120), smooth normals. Near: `NearTrees` (`tree-lod`);
   far: billboards tracing the same shapes (`hit_tier`, `hit_puff`, `hit_trunk6`).
