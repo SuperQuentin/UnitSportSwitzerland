@@ -120,6 +120,19 @@ public partial class ClipRecorder : Node
         }
     }
 
+    /// <summary>
+    /// A clip a script films (#1497, the shuttle's film): from now until <see cref="Cut"/> (at most the command
+    /// line's longest). Null when it starts, else why not (busy encoding the last one: wait on <see cref="Busy"/>).
+    /// </summary>
+    public static string? Film(SceneTree tree, string name) =>
+        Ensure(tree).Start(name, MaxCommandSeconds, 0, _ => { }, MaxCommandSeconds);   // Say logs it
+
+    /// <summary>Ends a <see cref="Film"/> clip; it encodes, <see cref="Busy"/> until its files are written.</summary>
+    public static void Cut()
+    {
+        if (_instance is { _recording: true } rec) rec.Stop();
+    }
+
     private static ClipRecorder Ensure(SceneTree tree)
     {
         if (_instance != null && IsInstanceValid(_instance)) return _instance;

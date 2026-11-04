@@ -47,6 +47,9 @@
   --chunks <region> --generated off --origin 2917500,1323500 --at 2917500,1323500 --trafficcheck --seconds 600 --shot-queue
   <file with 34,g20,27,-28,50,900,x.png> --nohud --time 13 --style cartoon --traffic 150 --walkers 100 --bikes 50 --trams 6`
   (`--trafficcheck --at` keeps the traffic and its feeders there; the shot queue's line holds the camera).
+- **A scripted film in clips** (#1497, `tools/shuttlefilm.sh`): a probe films its own parts with
+  `ClipRecorder.Film(tree, name)` / `Cut()` (no length cap but the command line's), waiting on `Busy` between
+  them, and runs fast between the clips; the script cuts the MP4s into one with captions.
 - **Camera moves**: a `--shot-queue` of glides (`x,g20,z,pitch,yaw,seconds,~ease`, `core/commands`) flies the camera
   while it films; one still shot first settles the tiles. `[clip] t=` and each `[glide] t=` log `RealClock.Now` in ms, so a glide's
   place in the MP4 is its time less the clip's (with `--clip-realtime`). A flythrough of the signal test region, cut from

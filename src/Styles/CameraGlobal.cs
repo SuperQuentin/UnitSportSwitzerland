@@ -112,19 +112,27 @@ public partial class CameraGlobal : Node
 
     private float _baseNear = -1;
 
+    /// <summary>The near plane is at least the camera's distance from the world's origin over this (#1497).</summary>
+    public const float NearOfDistance = 200_000;
+
     private void Climb(Camera3D camera, double altitude)
     {
         float far = Core.GameSettings.Current.CameraFar;
         if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
         if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
-        // past 1,000 km (the spectator only: the UFO stops at 120 km) the near plane follows the
+        // past 1,000 km (the spectator only: the UFO and the shuttle fly lower) the near plane follows the
         // altitude: at 12,000 km a 17,400 km far over a 1 m near broke the light culler's frustum
-        // (create_frustum_points) and nothing drew; nothing is that near the camera up there (#1430 H4)
-        if (altitude > RaisedNearFromM)
+        // (create_frustum_points) and nothing drew; nothing is that near the camera up there (#1430 H4).
+        // Nearer in, it is kept off the floats' step where the camera stands (#1497): a turned Space anchor
+        // has no vertical origin, so the camera is ~altitude up in world Y; at 300 km a float steps 3 cm and a
+        // 0.08 m near plane's corners fell within a few steps of the eye: the frustum degenerated and nothing
+        // drew, the shuttle 50 m ahead included. 1/200,000 of its distance from the origin: 2 m at 400 km.
+        float floor = camera.GlobalPosition.Length() / NearOfDistance;
+        float raised = Mathf.Max(altitude > RaisedNearFromM ? (float)(altitude / 10_000) : 0f, floor);
+        if (raised > (_baseNear >= 0 ? _baseNear : camera.Near))
         {
-            float near = (float)(altitude / 10_000);
             if (_baseNear < 0) _baseNear = camera.Near;
-            if (Mathf.Abs(camera.Near - near) > near * 0.05f) camera.Near = near;
+            if (Mathf.Abs(camera.Near - raised) > raised * 0.05f) camera.Near = raised;
         }
         else if (_baseNear >= 0)
         {

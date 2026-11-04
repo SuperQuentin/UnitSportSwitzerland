@@ -855,6 +855,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 k => new Birds.BirdStrikeProbe(chunks, origin, k.Birds, Birds.BirdStrikeProbe.ParseArgs().Shot)),
             new(() => Combat.CombatProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Combat.CombatProbe(chunks, origin, Combat.CombatProbe.ParseArgs().Shot)),
+            // the shuttle's mission at Geneva, filmed (#1497)
+            new(() => ShuttleFilm.Requested, ToolAnchor.AtTarget, _ => new ShuttleFilm(chunks, origin)),
             new(() => FlightCheckProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
             {
                 var f = FlightCheckProbe.ParseArgs()!.Value;
