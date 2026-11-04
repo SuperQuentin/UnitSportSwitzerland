@@ -775,7 +775,7 @@ public partial class PalletService : Node
         // a crane's operator reaches with its hook (#618): the pallet hangs a sling's length under it
         if (Terrain.Construction.CraneService.Instance?.HookOf(peer) is { } crane)
             return crane.Hook is { } hook
-                   && hook.DistanceTo(at with { Alt = at.Alt + Terrain.Construction.CraneControl.SlingHang - 0.5 }) <= Reach + more;
+                   && hook.DistanceTo(at.WithAlt(at.Alt + Terrain.Construction.CraneControl.SlingHang - 0.5)) <= Reach + more;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
         return body.Global.DistanceTo(at) <= Reach + more;
     }

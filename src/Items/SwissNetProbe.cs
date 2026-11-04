@@ -70,7 +70,7 @@ public partial class SwissNetProbe : ChatProbe
         var at = me.Global;
         for (int tries = 0; tries < 60 && !Said("B", "ready"); tries++)
         {
-            Say(Fmt($"posA {at.E:F2} {at.N:F2} {at.Alt:F2}"));
+            Say(Fmt($"posA {at.Lv95.E:F2} {at.Lv95.N:F2} {at.Alt:F2}"));
             if (await Until(() => Said("B", "ready"), 2.5)) break;
         }
         if (!Said("B", "ready")) { Fail("B never got ready"); return; }
