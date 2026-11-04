@@ -185,18 +185,22 @@ public partial class FightManager : Node
         return null;
     }
 
+    /// <summary>The place halfway between two bodies, the centre of a bout (fight, aura, Schwingen).</summary>
+    internal static GlobalPos Midpoint(GlobalPos a, GlobalPos b) =>
+        new((a.E + b.E) * 0.5, (a.N + b.N) * 0.5, (a.Alt + b.Alt) * 0.5);
+
     private void Begin(long a, long b)
     {
         var ga = Body(a)!.Global;
         var gb = Body(b)!.Global;
-        double de = gb.E - ga.E, dn = gb.N - ga.N;
+        var (de, dn, _) = ga.OffsetTo(gb);
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
         float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
         var match = new Match
         {
             Id = _nextId++,
             Rules = new FightMatch(a, b, _clock),
-            Centre = new GlobalPos((ga.E + gb.E) * 0.5, (ga.N + gb.N) * 0.5, (ga.Alt + gb.Alt) * 0.5),
+            Centre = FightManager.Midpoint(ga, gb),
             Yaw = yaw,
         };
         _matches[match.Id] = match;

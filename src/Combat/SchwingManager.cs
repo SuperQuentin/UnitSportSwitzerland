@@ -122,7 +122,7 @@ public partial class SchwingManager : Node
                 if (peer <= 0 && BotPeerByName(name) is { } bot) peer = bot;
                 // "bot": the nearest free one
                 if (peer <= 0 && name.Equals("bot", StringComparison.OrdinalIgnoreCase) && Body(sender) is { } me
-                    && FreeBot(me.Global.E, me.Global.N, 20) is { } near) peer = near.Id;
+                    && FreeBot(me.Global, 20) is { } near) peer = near.Id;
                 return peer == 0 || peer == -1 ? $"[schwing] No player called '{name}'." : Challenge(sender, peer);
         }
     }
@@ -205,10 +205,10 @@ public partial class SchwingManager : Node
     {
         var ga = Body(a)!.Global;
         var gb = Body(b)!.Global;
-        double de = gb.E - ga.E, dn = gb.N - ga.N;
+        var (de, dn, _) = ga.OffsetTo(gb);
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
         float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
-        var centre = new GlobalPos((ga.E + gb.E) * 0.5, (ga.N + gb.N) * 0.5, (ga.Alt + gb.Alt) * 0.5);
+        var centre = FightManager.Midpoint(ga, gb);
         var match = new Match
         {
             Id = _nextId++,
@@ -352,13 +352,12 @@ public partial class SchwingManager : Node
     // ---- the ring's queue (server) ------------------------------------------------------------
 
     /// <summary>The running Älplerfest with the Schwingen open, and where its ring is (LV95), or null.</summary>
-    public static (RunningFestival Run, double E, double N)? RingNow()
+    public static (RunningFestival Run, GlobalPos Pos)? RingNow()
     {
         if (FestivalService.Instance is not { } fs) return null;
         if (fs.RunningOf(FestivalId) is not { Site: { } site } run) return null;
         if (FestivalCatalog.Get(FestivalId) is not { } def || !def.IsOpen(GameId, run.Day)) return null;
-        var (e, n) = SchwingRing.Of(site);
-        return (run, e, n);
+        return (run, SchwingRing.PosOf(site));
     }
 
     private void TickQueue()
@@ -367,14 +366,14 @@ public partial class SchwingManager : Node
         if (RingNow() is not { } ring) { foreach (var q in _queue.ToArray()) QueueTell(q.Peer, false); _queue.Clear(); return; }
         // two humans in the queue wrestle; one alone long enough gets a bot
         for (int i = _queue.Count - 1; i >= 0; i--)
-            if (Body(_queue[i].Peer) is not { } b || !AtRing(b, ring.E, ring.N)) { QueueTell(_queue[i].Peer, false); _queue.RemoveAt(i); }
+            if (Body(_queue[i].Peer) is not { } b || !AtRing(b, ring.Pos)) { QueueTell(_queue[i].Peer, false); _queue.RemoveAt(i); }
         while (_queue.Count >= 2)
         {
             long a = _queue[0].Peer, b = _queue[1].Peer;
             _queue.RemoveRange(0, 2);
             StartAtRing(a, b, ring);
         }
-        if (_queue.Count == 1 && _clock - _queue[0].Since >= FillSeconds && FreeBot(ring.E, ring.N) is { } bot)
+        if (_queue.Count == 1 && _clock - _queue[0].Since >= FillSeconds && FreeBot(ring.Pos) is { } bot)
         {
             long a = _queue[0].Peer;
             _queue.Clear();
@@ -382,10 +381,10 @@ public partial class SchwingManager : Node
         }
     }
 
-    private static bool AtRing(FootPlayer body, double e, double n) =>
-        body.Ride == RideKind.OnFoot && body.Down == 0 && body.Global.HorizontalDistanceTo(new GlobalPos(e, n, body.Global.Alt)) <= SchwingRules.RingDiameter * 0.5f + RingReach;
+    private static bool AtRing(FootPlayer body, GlobalPos ring) =>
+        body.Ride == RideKind.OnFoot && body.Down == 0 && body.Global.HorizontalDistanceTo(ring) <= SchwingRules.RingDiameter * 0.5f + RingReach;
 
-    private Bots.Bot? FreeBot(double e, double n, double within = 400)
+    private Bots.Bot? FreeBot(GlobalPos at, double within = 400)
     {
         Bots.Bot? best = null;
         double bestD = within;
@@ -393,13 +392,13 @@ public partial class SchwingManager : Node
         foreach (var b in bots.All)
         {
             if (!b.Alive || b.Body.Ride != RideKind.OnFoot || b.Body.Down != 0 || InMatch(b.Id) || Fights?.InMatch(b.Id) == true || Auras?.InMatch(b.Id) == true) continue;
-            double d = b.Body.Global.HorizontalDistanceTo(new GlobalPos(e, n, b.Body.Global.Alt));
+            double d = b.Body.Global.HorizontalDistanceTo(at);
             if (d < bestD) { bestD = d; best = b; }
         }
         return best;
     }
 
-    private void StartAtRing(long a, long b, (RunningFestival Run, double E, double N) ring)
+    private void StartAtRing(long a, long b, (RunningFestival Run, GlobalPos Pos) ring)
     {
         if (Body(a) is not { } ba || Body(b) is not { } bb) return;
         // a bot is called to the human's side; the humans' clients set themselves on their marks on Begin
@@ -424,7 +423,7 @@ public partial class SchwingManager : Node
     {
         if (Busy(peer) is { } busy) return busy;
         if (RingNow() is not { } ring) return "[schwing] The Schwingen is not on now.";
-        if (Body(peer) is not { } body || !AtRing(body, ring.E, ring.N)) return "[schwing] Come to the ring first.";
+        if (Body(peer) is not { } body || !AtRing(body, ring.Pos)) return "[schwing] Come to the ring first.";
         _queue.Add((peer, _clock));
         QueueTell(peer, true);
         return "[schwing] You are in the ring's queue. The next wrestler meets you; if nobody comes, a Schwinger will.";
