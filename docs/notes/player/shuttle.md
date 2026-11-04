@@ -106,9 +106,12 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   with `atempo` (the pitch kept). Real-time capture (`AudioEffectCapture`) cannot do it: the mixer runs on the
   wall clock while the frames do not.
 - The same mission headless on the flat world: `--shuttlecheck europe`.
-- **Pictures for chasing a rendering bug**: `--shuttlefilm drive[,at=<km>][,hide=<node name>...][,sky][,bigstars][,stardist=<share>]`
-  flies the mission to that height on the drive up (80 km by default) and saves one picture,
-  `test_output/clips/shuttle-drive-<km>[-...].png`: nodes hidden by name, the space sky magenta (a black thing, or
+- **Pictures for chasing a rendering bug**: `--shuttlefilm drive|shot,<stage>[,at=<km>][,skip][,hide=<node name>...][,sky][,bigstars][,stardist=<share>]`
+  flies the mission to that height in that stage (`drive` = `shot,DriveUp`; past `at` going up in the climb and
+  the drive up, under it in the others; 80 km by default) and saves one picture,
+  `test_output/clips/shuttle-<stage>-<km>[-...].png`, the horizon's progress and the draw calls in the log. `skip`
+  starts the descent at once (80 km out on 22's line, 62 km up, as `--shuttlecheck glide`): a minute instead of
+  fifteen, though its dive is steeper than the mission's. Nodes hidden by name, the space sky magenta (a black thing, or
   hidden stars?), every star 40 times its size (`size_scale` in `sky_point`: whatever crops them shows its edge),
   the stars nearer. It found the stars' depth floor (`world/night-sky`). `--shuttlefilm orbit[,km]` takes one in orbit.
 

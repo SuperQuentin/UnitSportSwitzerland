@@ -46,7 +46,7 @@ public partial class Globe : Node
     /// Drawn above this camera altitude, metres: where the far plane starts reaching past the flat world's
     /// horizon (<c>CameraGlobal</c>, from 5 km) and the haze thins on the globe's word (<c>HazeAt</c>, from 3 km).
     /// At 15 km a landing from space looked through 3-15 km of thinned haze at nothing past the horizon
-    /// blocks' 60 km: a flat haze-coloured plane with the lakes on it (#1518).
+    /// blocks' 60 km: a flat haze-coloured plane with the lakes on it (#1528).
     /// </summary>
     public const float ShowAboveM = 5_000;
 
@@ -150,7 +150,7 @@ public partial class Globe : Node
     }
 
     /// <summary>
-    /// The flat world's edge dissolved into the globe while it is drawn (#1518, the user's choice: from above,
+    /// The flat world's edge dissolved into the globe while it is drawn (#1528, the user's choice: from above,
     /// the tiles' square stood out against the globe as a patch): the tiles' square round the camera's tile, the
     /// horizon blocks' circle, faded in over the 5 km above <see cref="ShowAboveM"/> (terrain.gdshaderinc's
     /// <c>flat_edge</c>). Written on change only.

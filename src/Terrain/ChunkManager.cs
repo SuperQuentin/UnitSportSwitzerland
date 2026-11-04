@@ -471,7 +471,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _source = source;
         _origin = origin;
         _material = material;
-        // the tiles' square dissolves into the globe at its edge while the globe is drawn (#1518, World/Globe)
+        // the tiles' square dissolves into the globe at its edge while the globe is drawn (#1528, World/Globe)
         (material as ShaderMaterial)?.SetShaderParameter(FlatEdgeParam, 1);
         _roadMaterial = roadMaterial;
         _buildingMaterial = buildingMaterial;

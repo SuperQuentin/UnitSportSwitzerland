@@ -51,7 +51,7 @@ global uniform sampler2D world_real_mask : filter_nearest, repeat_disable;
 global uniform vec2 world_real_origin;
 global uniform vec2 world_real_extent;
 global uniform vec4 world_real_axes;
-// the flat world's own edge, dissolved into the globe beneath while the globe is drawn (#1518: from above, the
+// the flat world's own edge, dissolved into the globe beneath while the globe is drawn (#1528: from above, the
 // tiles' square stood out as a patch): its centre (world x, z), the tiles' half side (Chebyshev from the
 // anchor's tile, as they load) and the horizon blocks' radius, metres; world_flat_edge_on 0..1 by height
 global uniform vec4 world_flat_edge;
