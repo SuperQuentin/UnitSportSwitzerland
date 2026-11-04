@@ -182,7 +182,7 @@ public sealed class CubeManifest
     [JsonPropertyName("levels")] public List<CubeManifestLevel> Levels { get; set; } = new();
 
     /// <summary>The levels, a version-1 manifest's leaf level standing for them.</summary>
-    public IReadOnlyList<CubeManifestLevel> LevelsOrLeaf => Levels.Count > 0 ? Levels
+    [JsonIgnore] public IReadOnlyList<CubeManifestLevel> LevelsOrLeaf => Levels.Count > 0 ? Levels
         : new[] { new CubeManifestLevel { Level = LeafLevel, Bits = Bits, BundleLevel = BundleLevel } };
 
     /// <summary>The level entry for <paramref name="level"/>, or null.</summary>

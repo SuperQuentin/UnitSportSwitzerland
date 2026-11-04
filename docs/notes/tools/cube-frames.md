@@ -117,6 +117,21 @@ pairs (164 across frame edges), 0 differ; frame ground against the sources media
 99.4 % within 50 cm (3,099 of 20,878 points over Lake Geneva's bed left out); edges across frames
 from both frames 0.00 mm.
 
+The 2 m corridor (`data/swissalti3d_2m` alone, 1,896 km tiles): 5,739 leaves in 25 frames, 882 MB
+(150 KB a leaf), 938 s with the zips parsed the first time (1.8 GB of `_2m.f32` cache) and a
+10-minute unit-test run beside it (1.41 CPU-s a leaf; seam and write 177 s), slowest frame 189 s,
+peak 3.9 GB. Check (run alone: holding 5,739 decoded leaves wants ~8 GB free): 10,774 pairs (374
+across frame edges), 0 differ; ground against the sources median 6.1 mm; against `.terr` where the
+D: region overlaps it (Riddes, 6 tiles) median 26 mm, 99.6 % within 50 cm (2 m data against the
+LV95 build's 0.5 m).
+
+`--cube-swiss` from the D: region's `.cubl` (levels 5-13, 1,340 tiles, 231 s, peak 9.5 GB) is
+**byte-identical** to the pyramid built from G1's `.cubb` leaves (all 88 bundles).
+
+The LV95 build is untouched (`TerrainSampler` → `Lv95Ground`, `ISourceRegion`, the parser's spacing):
+main's and this branch's `--roads-only` and `--cover-only` (9 Geneva tiles) and a terrain build of
+4 swissALTI3D tiles give the same SHA-256 for every file, intermediates included.
+
 ## What the later stages take from here
 
 - Read a source through `plan.QueryBox(source)` and `plan.Region(source, margin)`; a line stage
