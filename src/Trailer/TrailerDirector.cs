@@ -1209,7 +1209,7 @@ public partial class TrailerDirector : Node
             var g = _origin.ToGlobal(at);
             var fwd = -basis.Z;
             double yaw = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z));
-            dump.Row(frame, t, id, kind, g.E, g.N, g.Alt, yaw, speed, pose, ride, beam);
+            dump.Row(frame, t, id, kind, g.Lv95.E, g.Lv95.N, g.Alt, yaw, speed, pose, ride, beam);
         }
         Row("camera", "camera", _camera.GlobalPosition, _camera.GlobalBasis, 0f, "-", "-", false);
         for (int i = 0; i < _actors.Count; i++)

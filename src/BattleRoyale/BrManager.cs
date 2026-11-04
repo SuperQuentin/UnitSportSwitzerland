@@ -220,7 +220,7 @@ public partial class BrManager : Node
         if (query.Equals("here", StringComparison.OrdinalIgnoreCase))
         {
             if (_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString()) is not { } body) return "'/br open here' needs a player.";
-            var (e, n) = (body.Global.E, body.Global.N);
+            var (e, n) = (body.Global.Lv95.E, body.Global.Lv95.N);
             area = new BrArea(Math.Round(e / 50) * 50, Math.Round(n / 50) * 50, size, NearestTown(e, n) ?? "here");
         }
         else if (query.Length > 0)
@@ -698,7 +698,7 @@ public partial class BrManager : Node
         if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is not { } body) return;
         if (_lastFlare.TryGetValue(peer, out double last) && RealNow - last < 20) return;
         _lastFlare[peer] = RealNow;
-        var (pe, pn) = (body.Global.E, body.Global.N);
+        var (pe, pn) = (body.Global.Lv95.E, body.Global.Lv95.N);
         var rng = new Random(_state.Seed ^ (int)peer ^ (int)Now);
         float a = (float)(rng.NextDouble() * Math.Tau), r = 20f + (float)rng.NextDouble() * 30f;
         var drop = new Crate
@@ -737,14 +737,13 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return false;
         if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || BodyOf(peer) is not { } body) return false;
         if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return false;
-        var (be, bn) = (body.Global.E, body.Global.N);
-        if (GlobalPos.HorizontalDistance(e, n, be, bn) > PingReach) return false;
+        if (body.Global.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, 0)) > PingReach) return false;
         _lastPing[peer] = RealNow;
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
             if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
         TeamPinged?.Invoke(me.Team, peer, e, n, alt);
         // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
-        if (!me.Bot) _humanPings[me.Team] = (new GlobalPos(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        if (!me.Bot) _humanPings[me.Team] = (GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
         return true;
     }
 
@@ -780,7 +779,7 @@ public partial class BrManager : Node
         // a squad player's dogtag (#480): a team-mate can bring them back with it
         if (LeavesTag(e)) stacks.Add(new Items.ItemStack(Items.ItemId.Dogtag, 1));
         if (stacks.Count == 0) return;
-        var (pe, pn) = (body.Global.E, body.Global.N);
+        var (pe, pn) = (body.Global.Lv95.E, body.Global.Lv95.N);
         var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
         box.SetStacks(stacks);
         _crates.Spawn(new[] { box });

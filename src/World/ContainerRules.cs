@@ -367,11 +367,15 @@ public static class ContainerRules
     /// the same way, and <paramref name="pristine"/> (undamaged, untuned, doors shut, nothing playing):
     /// anything else would be silently repaired or undone by turning back into the slot's own look.
     /// </summary>
-    public static bool BackInBay(AwakeSlot slot, double e, double n, float yaw, int kindId, int train, float load, bool pristine)
+    public static bool BackInBay(AwakeSlot slot, double e, double n, float yaw, int kindId, int train, float load, bool pristine) =>
+        BackInBay(slot, GlobalPos.FromLv95(e, n, 0), yaw, kindId, train, load, pristine);
+
+    /// <inheritdoc cref="BackInBay(AwakeSlot, double, double, float, int, int, float, bool)"/>
+    public static bool BackInBay(AwakeSlot slot, GlobalPos at, float yaw, int kindId, int train, float load, bool pristine)
     {
         if (!pristine || slot.E is not { } se || slot.N is not { } sn) return false;
         if (kindId != slot.KindId || train != slot.Train || Math.Abs(load - slot.Load) > 0.05f) return false;
-        if (Math.Sqrt((e - se) * (e - se) + (n - sn) * (n - sn)) > BayReach) return false;
+        if (at.HorizontalDistanceTo(GlobalPos.FromLv95(se, sn, 0)) > BayReach) return false;
         double turn = Math.IEEERemainder(yaw - slot.Yaw, 2 * Math.PI);
         return Math.Abs(turn) <= BayYawDeg * Math.PI / 180;
     }

@@ -42,7 +42,8 @@ public partial class ClimbNetProbe : ChatProbe
     {
         var g = Me!.Origin!.ToGlobal(world);
         var (e, n) = Start;
-        return ((float)(g.E - e), (float)(g.N - n), (float)(g.Alt - Crag.Flat));
+        var (east, north, up) = GlobalPos.FromLv95(e, n, Crag.Flat).OffsetTo(g);
+        return ((float)east, (float)north, (float)up);
     }
 
     private Vector3 East => (At(100, 0) - At(0, 0)) with { Y = 0 } is var d ? d.Normalized() : Vector3.Right;

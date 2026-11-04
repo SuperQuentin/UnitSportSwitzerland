@@ -175,7 +175,7 @@ public partial class OrbitCheck : Node
         if (alt < 20) p.FlyControls = () => new FlightInput(Vector2.Zero, 0f, 1f, 0f, 0f, false, false, 0f);
         if (!_ufo!.State.Landed) return;
         var g = _origin.Frame.ToGlobal(p.GlobalPosition);
-        GD.Print(FormattableString.Invariant($"[orbitcheck] landed after the orbit at LV95 {g.E:F0}/{g.N:F0}, {_t:F0} s from the hover; frame {_origin.Frame.E:F0}/{_origin.Frame.N:F0}, no turn"));
+        GD.Print(FormattableString.Invariant($"[orbitcheck] landed after the orbit at LV95 {g.Lv95.E:F0}/{g.Lv95.N:F0}, {_t:F0} s from the hover; frame {_origin.Frame.E:F0}/{_origin.Frame.N:F0}, no turn"));
         Finish(0, "ok");
     }
 

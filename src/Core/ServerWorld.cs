@@ -452,7 +452,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
                     if (_players.GetChild(i) is Player.FootPlayer p && p.GetMultiplayerAuthority() != except)
                     {
                         var g = p.NetGlobal;
-                        if ((g.E - e) * (g.E - e) + (g.N - n) * (g.N - n) <= radius * radius) return true;
+                        if (g.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, 0)) <= radius * radius) return true;
                     }
                 if (dropped != null)
                     foreach (var item in dropped.Items)
@@ -604,7 +604,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             if (_players.GetChild(i) is not Player.FootPlayer p || p.Npc && !p.Bot || p.Stowed) continue;
             var at = p.Global;
             string name = p.Bot ? (p.BotName.Length > 0 ? p.BotName : "Bot") : _chat?.NameOfPeer(p.GetMultiplayerAuthority()) ?? p.Name;
-            _mapPlayers.Add(new LiveMapPlayer(name, Math.Round(at.E, 1), Math.Round(at.N, 1), Math.Round(at.Alt, 1),
+            _mapPlayers.Add(new LiveMapPlayer(name, Math.Round(at.Lv95.E, 1), Math.Round(at.Lv95.N, 1), Math.Round(at.Alt, 1),
                 RideLabel(p.RideKindId), p.Bot));
         }
         return _mapPlayers;

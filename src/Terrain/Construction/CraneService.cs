@@ -417,5 +417,5 @@ public partial class CraneService : Node
         return new(e, n, local.Y);
     }
 
-    private static double Flat(GlobalPos a, GlobalPos b) => Math.Sqrt((a.E - b.E) * (a.E - b.E) + (a.N - b.N) * (a.N - b.N));
+    private static double Flat(GlobalPos a, GlobalPos b) => a.HorizontalDistanceTo(b);
 }

@@ -88,7 +88,7 @@ public partial class BirdNet : Node
     {
         if (!_server || kind is < ReportShot or > ReportFlush) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        var from = new GlobalPos(e, n, alt);
+        var from = GlobalPos.FromLv95(e, n, alt);
         // a gun that is not where its owner is does not shoot
         float reach = kind == ReportShot ? MaxShotOffset : MaxFarOffset;
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || !from.IsFinite || body.Global.DistanceTo(from) > reach)
@@ -148,7 +148,7 @@ public partial class BirdNet : Node
     {
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        var from = new GlobalPos(e, n, alt);
+        var from = GlobalPos.FromLv95(e, n, alt);
         // wall clock (#579): a rate limit on what a client may send must not loosen when that
         // client slows its own simulation
         double now = Core.RealClock.Now;
@@ -179,7 +179,7 @@ public partial class BirdNet : Node
     {
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        var from = new GlobalPos(e, n, alt);
+        var from = GlobalPos.FromLv95(e, n, alt);
         double now = Core.RealClock.Now;   // wall clock, as in DropRpc
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || !from.IsFinite || body.Global.DistanceTo(from) > 8f
             || !vel.IsFinite() || vel.Length() > 80f || _lastSplat.TryGetValue(sender, out double last) && now - last < 1.0) return;

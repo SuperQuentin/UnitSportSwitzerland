@@ -119,7 +119,7 @@ public sealed class VersteckisBrain : IBotBrain
     {
         var others = new List<(double E, double N)>();
         foreach (var e in s.Entrants)
-            if (e.Role == VsRole.Hider && e.Peer != bot.Id && _vs.PositionOf(e.Peer) is { } p) others.Add((p.E, p.N));
+            if (e.Role == VsRole.Hider && e.Peer != bot.Id && _vs.PositionOf(e.Peer) is { } p) others.Add((p.Lv95.E, p.Lv95.N));
         var space = bot.World.Space;
         var door = _frame.ToWorld(s.DoorE, s.DoorN, 0) with { Y = bot.Body.GlobalPosition.Y + 1.6f };
         Func<double, double, bool> hidden = (e, n) =>

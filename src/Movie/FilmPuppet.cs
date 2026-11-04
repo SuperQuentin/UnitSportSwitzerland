@@ -37,7 +37,7 @@ public partial class FilmPuppet : Node
             GD.PrintErr($"[puppet] not a ride and E,N,alt,heading,speed[,climb]: {spec}");
             return null;
         }
-        var film = new FilmPuppet { Name = "FilmPuppet", _kind = kind, _from = new GlobalPos(v[0], v[1], v[2]), _heading = v[3], _speed = v[4], _climb = v[5] };
+        var film = new FilmPuppet { Name = "FilmPuppet", _kind = kind, _from = GlobalPos.FromLv95(v[0], v[1], v[2]), _heading = v[3], _speed = v[4], _climb = v[5] };
         // under the studio's names, so neither meets a peer's nor the other's
         int id = MovieStage.PuppetBase - 1 - _count++;
         film._puppet = new FootPlayer { Name = id.ToString(), Origin = origin, Puppet = true };
@@ -65,7 +65,7 @@ public partial class FilmPuppet : Node
         // a body's yaw turns its forward (-Z) from north toward east the other way round
         _puppet.NetYaw = (float)-h;
         _puppet.NetVel = new Vector3((float)e, (float)_climb, (float)-n);
-        _puppet.NetGlobal = new GlobalPos(_from.E + e * _t, _from.N + n * _t, _from.Alt + _climb * _t);
+        _puppet.NetGlobal = _from.Moved(e * _t, n * _t, _climb * _t);
         // last: its setter applies the state
         _puppet.NetTime = ++_stamp;
         // every 2 s: where it is from the camera, to frame a shot by

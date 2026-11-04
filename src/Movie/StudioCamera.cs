@@ -163,7 +163,7 @@ public partial class StudioCamera : Camera3D
     /// </summary>
     public static Transform3D PoseTransform(WorldOrigin origin, in CameraPose pose, Func<int, Vector3?> actorAt)
     {
-        var at = origin.ToWorld(new GlobalPos(pose.E, pose.N, pose.Alt));
+        var at = origin.ToWorld(GlobalPos.FromLv95(pose.E, pose.N, pose.Alt));
         var basis = new Basis(new Quaternion(pose.Qx, pose.Qy, pose.Qz, pose.Qw).Normalized());
         if (pose.LookAt >= 0 && actorAt(pose.LookAt) is { } target)
         {

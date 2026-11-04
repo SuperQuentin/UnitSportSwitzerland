@@ -287,7 +287,7 @@ public partial class ObjectContainers : Node
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is > 0)
             {
                 var at = p.Global;
-                var tile = TileId.FromLv95(at.E, at.N);
+                var tile = at.Tile;
                 if (!_playerTiles.Contains(tile)) _playerTiles.Add(tile);
             }
     }
@@ -329,7 +329,7 @@ public partial class ObjectContainers : Node
         {
             ulong id = node.GetInstanceId();
             var at = ((Net.IInterestEntity)node).InterestAt;
-            var tile = TileId.FromLv95(at.E, at.N);
+            var tile = at.Tile;
             if (!_watch.TryGetValue(id, out var w)) w = (0, 0, at);
             double lonely = ContainerRules.Lonely(w.Lonely, step, tile, _playerTiles);
             double still = ContainerRules.Still(w.Still, step, at.DistanceTo(w.At));

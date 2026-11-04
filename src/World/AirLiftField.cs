@@ -72,7 +72,7 @@ public static class AirLiftField
         double now = Net.ClockSync.SimNow;
         SyncCampfires(now);
         var p = origin.ToGlobal(global);
-        return AirLift.At(p.E, p.N, (float)p.Alt, now, Ground);
+        return AirLift.At(p.Lv95.E, p.Lv95.N, (float)p.Alt, now, Ground);
     }
 
     /// <summary>The thermals alive near a world point (the cues), strongest first; how many were written.</summary>
@@ -80,7 +80,7 @@ public static class AirLiftField
     {
         if (!Permissions.LiftOn || Ground.Origin is not { } origin) return 0;
         var p = origin.ToGlobal(global);
-        return AirLift.ThermalsNear(p.E, p.N, radius, Net.ClockSync.SimNow, Ground, into);
+        return AirLift.ThermalsNear(p.Lv95.E, p.Lv95.N, radius, Net.ClockSync.SimNow, Ground, into);
     }
 
     /// <summary>A thermal's source as a world point (the cues place their specks there).</summary>

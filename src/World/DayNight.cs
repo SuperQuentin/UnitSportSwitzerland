@@ -321,7 +321,7 @@ public partial class DayNight : Node
         var at = cam.GlobalPosition;
         if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return;
         var place = Origin.ToGlobal(at);
-        (_placeE, _placeN) = (place.E, place.N);
+        (_placeE, _placeN) = (place.Lv95.E, place.Lv95.N);
     }
 
     /// <summary>The night's shading from the real moon: its bearing, at least ~25° up (sin 25° = 0.42).</summary>

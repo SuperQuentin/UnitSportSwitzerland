@@ -68,12 +68,15 @@ public static class FunWorld
     public static Func<long, GlobalPos?>? Players { get; set; }
 
     /// <summary>Whether an LV95 point is in the PvP block.</summary>
-    public static bool InPvp(double e, double n)
+    public static bool InPvp(double e, double n) => InPvp(GlobalPos.FromLv95(e, n, 0));
+
+    /// <summary>Whether a place is in the PvP block.</summary>
+    public static bool InPvp(GlobalPos at)
     {
         var (x0, y0, x1, y1) = FunCourse.PvpBox;
-        double x = e - Start.E, y = n - Start.N;
+        var (x, y, _) = GlobalPos.FromLv95(Start.E, Start.N, 0).OffsetTo(at);
         return x >= x0 && x <= x1 && y >= y0 && y <= y1;
     }
 
-    private static bool InPvp(long peer) => Players?.Invoke(peer) is { } p && InPvp(p.E, p.N);
+    private static bool InPvp(long peer) => Players?.Invoke(peer) is { } p && InPvp(p);
 }

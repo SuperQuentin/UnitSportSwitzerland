@@ -149,8 +149,8 @@ internal sealed partial class XrMap : Node3D
         {
             // map metres to the ground: east is the map's +X, north its −Z, as the world's
             var g = player.Global;
-            double e = g.E + go.X / Size * Span, n = g.N - go.Y / Size * Span;
-            teleporter.TeleportTo(e, n);
+            var to = g.Moved(go.X / Size * Span, -(go.Y / Size * Span)).Lv95;
+            teleporter.TeleportTo(to.E, to.N);
             Visible = false;
         }
         _triggerWas = trigger;

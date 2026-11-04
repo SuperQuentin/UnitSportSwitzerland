@@ -272,7 +272,7 @@ public partial class FlightCheckProbe : Node
             // a burning fire's updraft (AirLiftField's campfire numbers) 20 m ahead on the flat
             var fire = ground + new Vector3(0, -1f, -20f);
             var g = _origin.ToGlobal(fire);
-            World.AirLift.Volumes.Set(CheckFireKey, g.E, g.N, g.Alt, World.AirLiftField.CampfireRadius,
+            World.AirLift.Volumes.Set(CheckFireKey, g.Lv95.E, g.Lv95.N, g.Alt, World.AirLiftField.CampfireRadius,
                 World.AirLiftField.CampfireTop, World.AirLiftField.CampfireSpeed);
             _liftAt = fire;
             p.SetRide(RideKind.Paraglider);

@@ -291,7 +291,7 @@ public partial class BrManager
         }
         string name = _state.Find(peer)?.Name ?? "?";
         _horns.RemoveAll(h => h.Name == name);
-        _horns.Add((new Vector2((float)(at.E - _state.AreaE), (float)(at.N - _state.AreaN)), name, until));
+        _horns.Add((_state.ZonePointOf(at), name, until));
         GD.Print($"[br] alphorn: {name}");
     }
 

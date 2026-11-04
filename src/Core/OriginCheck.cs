@@ -66,7 +66,7 @@ public static class OriginCheck
         var d = new Godot.Collections.Dictionary();
         sender.ToGlobal(at).Write(d);
         var read = GlobalPos.Read(d);
-        Expect(read.DistanceTo(new GlobalPos(2_601_234.567, 1_199_876.125, 812.5)) < 0.001, $"a dictionary carries the place ({read})");
+        Expect(read.DistanceTo(GlobalPos.FromLv95(2_601_234.567, 1_199_876.125, 812.5)) < 0.001, $"a dictionary carries the place ({read})");
         Expect(receiver.ToWorld(read).DistanceTo(receiver.ToWorld(2_601_234.567, 1_199_876.125, 812.5)) < 0.001,
             "the receiver puts it where its own origin says");
 
@@ -156,7 +156,7 @@ public static class OriginCheck
         foreach (var (node, was) in before)
         {
             var now = Where(node);
-            Expect(now.HorizontalDistanceTo(was) < 0.01 && Math.Abs(now.Alt - was.Alt) < 0.01,
+            Expect(now.HorizontalDistanceTo(was) < 0.01 && Math.Abs(was.OffsetTo(now).Up) < 0.01,
                 $"{node.Name} is still at {was} (now {now})");
         }
         Expect(root.Transform == Transform3D.Identity && manager.Transform == Transform3D.Identity

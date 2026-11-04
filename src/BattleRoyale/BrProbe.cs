@@ -101,7 +101,7 @@ public partial class BrProbe : ChatProbe
 
         // wait for B next to us, then stab it until it goes down
         // LV95: B's world space is not this one (every peer has its own origin, #185)
-        Say(Fmt($"posA {me.Global.E:F2} {me.Global.N:F2} {me.Global.Alt:F2}"));
+        Say(Fmt($"posA {me.Global.Lv95.E:F2} {me.Global.Lv95.N:F2} {me.Global.Alt:F2}"));
         if (!await Until(() => Said("B", "near"), 90)) { Expect(false, "B came near"); return; }
         await Seconds(1.5);
         var b = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf("B"));
@@ -568,7 +568,7 @@ public partial class BrProbe : ChatProbe
         // down, not out (#475): a team-mate stands, so 0 HP puts B down
         var me = Me!;
         await Seconds(1.0);
-        Say(Fmt($"posB {me.Global.E:F2} {me.Global.N:F2}"));
+        Say(Fmt($"posB {me.Global.Lv95.E:F2} {me.Global.Lv95.N:F2}"));
         me.TakeDamage(1000f, 0, DamageCause.Other);
         Expect(me.Downed && !me.Eliminated, "0 HP with a team-mate standing: down, not out");
         Expect(await Until(() => Br.State.Find(Br.Me)?.Downed == true, 5), "the server has B down");

@@ -101,8 +101,8 @@ public partial class GpxCheck : Node
         var (e, n, _, _, _) = _track!.Sample(_raceTime);
         var course = _runner!.CourseAt(_raceTime);
         var at = _origin.ToGlobal(course);
-        if (at.HorizontalDistanceTo(new GlobalPos(e, n, 0)) > 0.05)
-            Fault($"{when}: CourseAt is LV95 {at.E:F2}/{at.N:F2}, the track says {e:F2}/{n:F2}");
+        if (at.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, 0)) > 0.05)
+            Fault($"{when}: CourseAt is LV95 {at.Lv95.E:F2}/{at.Lv95.N:F2}, the track says {e:F2}/{n:F2}");
         // the avatar eases toward the course (a couple of metres behind it at this pace): a misplacement
         // across a shift would be kilometres, a wrong frame for the height tens of metres
         var foot = _runner.FootWorld;

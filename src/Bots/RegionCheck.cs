@@ -95,9 +95,9 @@ public partial class RegionCheck : Node
     {
         _out = ProjectSettings.GlobalizePath(CmdArgs.Value("--regionout") ?? "res://test_output/regions");
         Directory.CreateDirectory(_out);
-        var spawn = SpawnPoint.ParseLv95("--regionat") is var (ae, an) ? new GlobalPos(ae, an, 0)
-            : new GlobalPos(SpawnPoint.DefaultLv95E + 250, SpawnPoint.DefaultLv95N + 250, 0);
-        var far = SpawnPoint.ParseLv95("--regionfar") is var (be, bn) ? new GlobalPos(be, bn, 0) : spawn with { E = spawn.E + FarM };
+        var spawn = SpawnPoint.ParseLv95("--regionat") is var (ae, an) ? GlobalPos.FromLv95(ae, an, 0)
+            : GlobalPos.FromLv95(SpawnPoint.DefaultLv95E + 250, SpawnPoint.DefaultLv95N + 250, 0);
+        var far = SpawnPoint.ParseLv95("--regionfar") is var (be, bn) ? GlobalPos.FromLv95(be, bn, 0) : spawn.Moved(FarM, 0);
         _wander = CmdArgs.Int("--regionwander") ?? 0;
         if (_run is "both" or "a") _sites.Add(new Site("a", spawn));
         if (_run is "both" or "b") _sites.Add(new Site("b", far));
@@ -112,8 +112,8 @@ public partial class RegionCheck : Node
         foreach (var s in _sites)
         {
             s.Walker = director.Add(s.At, 0f, BotProfile.For(1, 0, BotDifficulty.Normal, new HashSet<string>()));
-            s.Blocker = director.Add(s.At with { E = s.At.E + BlockerGap }, 0f, BotProfile.For(1, 1, BotDifficulty.Normal, new HashSet<string>()));
-            s.Driver = director.Add(s.At with { E = s.At.E - 10 }, 0f, BotProfile.For(1, 2, BotDifficulty.Normal, new HashSet<string>()));
+            s.Blocker = director.Add(s.At.Moved(BlockerGap, 0), 0f, BotProfile.For(1, 1, BotDifficulty.Normal, new HashSet<string>()));
+            s.Driver = director.Add(s.At.Moved(-10, 0), 0f, BotProfile.For(1, 2, BotDifficulty.Normal, new HashSet<string>()));
             if (s.Walker == null || s.Blocker == null || s.Driver == null) { Fail($"site {s.Name}: no bots"); return; }
             s.Walker.Brain = new Script(Vector3.Right);
             s.Blocker.Brain = new Script(Vector3.Zero);
@@ -170,8 +170,11 @@ public partial class RegionCheck : Node
             var d = s.Driver!.Body.Global;
             s.MinGap = Math.Min(s.MinGap, w.HorizontalDistanceTo(b));
             s.MinCar = Math.Min(s.MinCar, d.HorizontalDistanceTo(s.CarAt));
+            var (we, wn, wa) = s.WalkerStart.OffsetTo(w);
+            var (be, bn, ba) = s.BlockerStart.OffsetTo(b);
+            var (de, dn, da) = s.DriverStart.OffsetTo(d);
             s.Csv.Append(string.Create(CultureInfo.InvariantCulture,
-                $"{_walked},{w.E - s.WalkerStart.E:F5},{w.N - s.WalkerStart.N:F5},{w.Alt - s.WalkerStart.Alt:F5},{b.E - s.BlockerStart.E:F5},{b.N - s.BlockerStart.N:F5},{b.Alt - s.BlockerStart.Alt:F5},{d.E - s.DriverStart.E:F5},{d.N - s.DriverStart.N:F5},{d.Alt - s.DriverStart.Alt:F5}\n"));
+                $"{_walked},{we:F5},{wn:F5},{wa:F5},{be:F5},{bn:F5},{ba:F5},{de:F5},{dn:F5},{da:F5}\n"));
         }
         if (_walked < WalkTicks) return;
         if (_walked == WalkTicks)
@@ -217,7 +220,7 @@ public partial class RegionCheck : Node
         if (_hopped < 0)
         {
             var from = hopper.Region;
-            var to = home.Global with { N = home.Global.N - 6, Alt = home.Global.Alt + 1 };
+            var to = home.Global.Moved(0, -6, 1);
             ServerRegions.Put(hopper, to);
             _hopLine = $"hop {hopper.Name} from {from} to {hopper.Region}";
             _hopOk = hopper.Region == home.Region;
@@ -225,7 +228,7 @@ public partial class RegionCheck : Node
             return true;
         }
         if (++_hopped < HopTicks) return true;
-        double drop = hopper.Global.Alt - home.Global.Alt;
+        double drop = home.Global.OffsetTo(hopper.Global).Up;
         bool stands = hopper.IsOnFloor() && System.Math.Abs(drop) < 3;
         _hopOk &= stands && hopper.Region == home.Region;
         GD.Print(string.Create(CultureInfo.InvariantCulture,
@@ -242,7 +245,7 @@ public partial class RegionCheck : Node
         foreach (var s in _sites)
         {
             var at = s.Driver!.Body.Global;
-            s.CarAt = at with { N = at.N + CarGap };
+            s.CarAt = at.Moved(0, CarGap);
             var state = new Vehicles.VehicleState(kind, s.CarAt, Mathf.Pi / 2, Vector3.Zero, ride.MaxHealth,
                 EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
             // a name of this run's own: the object containers file a parked car, and the runs of one script share user://

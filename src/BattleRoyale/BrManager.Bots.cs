@@ -430,8 +430,7 @@ public partial class BrManager
         foreach (var e in _state.Entrants.Where(e => e.Bot && e.Alive))
             if (BodyOf(e.Peer) is { Eliminated: false } body)
             {
-                var (pe, pn) = (body.Global.E, body.Global.N);
-                if (z.Outside(new Vector2((float)(pe - _state.AreaE), (float)(pn - _state.AreaN))))
+                if (z.Outside(_state.ZonePointOf(body.Global)))
                     body.TakeDamage(z.Dps * (float)dt, 0, DamageCause.Zone);
             }
     }

@@ -1044,7 +1044,8 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         chunks.Clear();
         var ms = _snapshotBuffer;
         var w = _snapshotWriter;
-        double anchorE = System.Math.Round(focus.E / 1000) * 1000, anchorN = System.Math.Round(focus.N / 1000) * 1000;
+        var focusLv95 = focus.Lv95;
+        double anchorE = System.Math.Round(focusLv95.E / 1000) * 1000, anchorN = System.Math.Round(focusLv95.N / 1000) * 1000;
         var toAnchor = _origin.SinceAnchor(anchorE, anchorN).Inverse;
         var near = _origin.ToWorld(focus);
         BeginSnapshot(anchorE, anchorN);
