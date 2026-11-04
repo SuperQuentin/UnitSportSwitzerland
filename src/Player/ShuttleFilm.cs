@@ -150,10 +150,11 @@ public partial class ShuttleFilm : Node
         {
             if (!_player.SetRide(RideKind.Shuttle) || _player.Vehicle is not Airliner { Spec.Spacecraft: true } jet) { End(1, "no shuttle"); return; }
             _shuttle = jet;
-            float heading = Heading04 - Mathf.Pi / 2;
-            _player.Rotation = new Vector3(0, -heading, 0);
-            jet.State.Yaw = -heading;
-            jet.State.Attitude = new Basis(Vector3.Up, -heading);
+            // the runway's heading is from grid north (LV95 ends): true north at the threshold, then this frame (#1504)
+            float yaw = TrueNorth.GridYawToWorld(_origin.Frame, start, Mathf.Pi / 2 - Heading04);
+            _player.Rotation = new Vector3(0, yaw, 0);
+            jet.State.Yaw = yaw;
+            jet.State.Attitude = new Basis(Vector3.Up, yaw);
             jet.State.Settle = 2f;
             _wait = 0;
             return;

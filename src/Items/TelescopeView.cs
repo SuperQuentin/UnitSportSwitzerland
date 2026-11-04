@@ -40,6 +40,7 @@ public partial class TelescopeView : CanvasLayer
 
     private Telescopes _service = null!;
     private Player.FootPlayer? _player;
+    private Core.TrueNorth.Near _north;
     private Node3D _scope = null!;
     private Node3D? _tube;
     private Camera3D? _cam, _own;
@@ -409,6 +410,9 @@ public partial class TelescopeView : CanvasLayer
         var body = Target;
         string text, nl = "\n";
         (double Azimuth, double Altitude)? horizon = TargetDirection() is { } d ? TelescopeTargets.Horizon(d.X, d.Y, d.Z) : null;
+        // the azimuth from true north at the scope, not the world's −Z (#1504)
+        if (horizon is { } h && _player?.Origin is { } origin)
+            horizon = ((h.Azimuth - Mathf.RadToDeg(_north.World(origin.Frame, _scope.GlobalPosition)) + 360) % 360, h.Altitude);
         if (Satellite != null) text = Satellite + nl + TelescopeTargets.Where(horizon);
         else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, SwissTime.ToUtc(sky.Date, sky.Hour)), horizon);
         if (text != _infoShown) _info.Text = _infoShown = text;

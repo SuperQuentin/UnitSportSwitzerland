@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Terrain.Stadiums;
 
@@ -72,8 +73,21 @@ public sealed record StadiumSpec
     /// <summary>The centre spot, LV95 (from the pitch polygon's centroid).</summary>
     public required double E { get; init; }
     public required double N { get; init; }
-    /// <summary>The pitch's long axis, degrees clockwise from north.</summary>
+    /// <summary>
+    /// The pitch's long axis, degrees clockwise from grid north, as measured off swissimage: what the builders' LV95 and
+    /// tile-local maths use, the grid's axes (until G2 C builds in a leaf's frame). Anything else reads
+    /// <see cref="TrueAzimuthDeg"/> or <see cref="OffsetAzimuthDeg"/> (#1504).
+    /// </summary>
     public float AzimuthDeg { get; init; }
+
+    /// <summary>The pitch's long axis from true north (#1504): <see cref="AzimuthDeg"/> turned by the meridian convergence at the centre spot.</summary>
+    public float TrueAzimuthDeg => (float)(TrueNorth.GridToTrue(E, N, Mathf.DegToRad(AzimuthDeg)) * 180 / Math.PI);
+
+    /// <summary>
+    /// The long axis in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> (what <c>OffsetTo</c> measures in):
+    /// <see cref="AzimuthDeg"/> while those are the grid's, the true one once A1 puts ECEF inside.
+    /// </summary>
+    public float OffsetAzimuthDeg(GlobalPos at) => TrueAzimuthDeg + (float)(at.Convergence * 180 / Math.PI);
 
     /// <summary>The pitch's lines, for the record and the check: 105 x 68 is the UEFA size.</summary>
     public float PitchWidth { get; init; } = 68f;
