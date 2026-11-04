@@ -142,7 +142,7 @@ game's (C1), not a build stage.
 
 | PR | Content | Check |
 |---|---|---|
-| 0 | comparer; geographic sources in the LV95 build rigorous; baseline rebuilt (**built**, PR #1526: `--cube-compare` and `GeoInput`, `tools/cube-compare`; the D: baseline not rebuilt yet) | shift per stage measured |
+| 0 | comparer; geographic sources in the LV95 build rigorous; baseline rebuilt (**built**, PR #1526: `--cube-compare` and `GeoInput`, `tools/cube-compare`. The live D: region is not rebuilt here: each stage PR builds the LV95 reference of the area it compares, with these inputs, under `test_b3/`, beside its cube build; B4 rebuilds the live region) | shift per stage measured |
 | 1 | driver, transforms, `IGround`, leaf writer and seam pass, cube manifest; heights into `.cubl`; `--cube-swiss` from `.cubl` | transforms within 0.1 mm; `--cube-check`; heights against `.terr` |
 | 2 | road extraction, holes, parking; raw kinds; French roads | raw length per TLM line; vertices 2 cm; a hole per portal |
 | 3 | buildings with GWR; French buildings | count by id; vertices 2 cm |
