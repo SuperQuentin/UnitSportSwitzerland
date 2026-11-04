@@ -30,6 +30,14 @@ public sealed class ShuttlePilot
             return (E + de * along + dn * across, N + dn * along - de * across);
         }
 
+        /// <summary>Where a place is: metres along past the threshold, and to the right of the centreline.</summary>
+        public (double Along, double Across) Of(GlobalPos p)
+        {
+            var (de, dn) = Dir;
+            var (x, y, _) = GlobalPos.FromLv95(E, N, 0).OffsetTo(p);
+            return (x * de + y * dn, x * dn - y * de);
+        }
+
         /// <summary>Where an LV95 place is: metres along past the threshold, and to the right of the centreline.</summary>
         public (double Along, double Across) Of(double e, double n)
         {
@@ -350,7 +358,7 @@ public sealed class ShuttlePilot
     {
         var s = _jet.State;
         var g = _frame.ToGlobal(_p.GlobalPosition);
-        var (along, across) = Plan.From.Of(g.E, g.N);
+        var (along, across) = Plan.From.Of(g);
         // square to the centreline, then round onto it from 40 m out (across + is right of it)
         float want = Math.Abs(across) >= 40
             ? Plan.From.Heading + Mathf.Sign((float)-across) * Mathf.Pi / 2
@@ -423,7 +431,7 @@ public sealed class ShuttlePilot
     {
         var s = _jet.State;
         var g = _frame.ToGlobal(_p.GlobalPosition);
-        var (along, across) = Plan.To.Of(g.E, g.N);
+        var (along, across) = Plan.To.Of(g);
         double height = alt - Plan.To.Elevation;
         if (agl < 3_000) WantScale = Near;
         var v = s.Velocity;
@@ -473,7 +481,7 @@ public sealed class ShuttlePilot
         var g = _frame.ToGlobal(_p.GlobalPosition);
         Fly(new Vector2(Mathf.Clamp(HeadingError(Plan.To.Heading) * 2f, -1f, 1f), 0f), 0f, brake: 1f);
         if (s.Velocity.Length() > 0.5f) { if (StageTime > 300) Fail("not stopped"); return; }
-        StoppedAt = Plan.To.Of(g.E, g.N);
+        StoppedAt = Plan.To.Of(g);
         Say(FormattableString.Invariant($"stopped {StoppedAt.Along:F0} m past the threshold, {StoppedAt.Across:F1} m off the centreline"));
         Next(Stage.Stopped, 1.0);
     }
