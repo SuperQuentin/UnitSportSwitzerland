@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.Fasnacht;
@@ -49,12 +50,12 @@ public class FasnachtTests
     {
         var site = Site();
         Assert.Equal((site.E - 9, site.N), FasnachtRules.StallAt(site));
-        Assert.True(FasnachtRules.NearStall(site, site.E - 9, site.N + 4));
-        Assert.False(FasnachtRules.NearStall(site, site.E - 9, site.N + 8));
-        Assert.True(FasnachtRules.NearStall(site, site.E - 9, site.N + 8, FasnachtRules.ServerSlack));
-        Assert.True(FasnachtRules.NearStage(site, site.E + 14, site.N + 6));
-        Assert.True(FasnachtRules.NearLantern(site, site.E, site.N + 11));
-        Assert.False(FasnachtRules.NearLantern(site, site.E, site.N));
+        Assert.True(FasnachtRules.NearStall(site, GlobalPos.FromLv95(site.E - 9, site.N + 4, 0)));
+        Assert.False(FasnachtRules.NearStall(site, GlobalPos.FromLv95(site.E - 9, site.N + 8, 0)));
+        Assert.True(FasnachtRules.NearStall(site, GlobalPos.FromLv95(site.E - 9, site.N + 8, 0), FasnachtRules.ServerSlack));
+        Assert.True(FasnachtRules.NearStage(site, GlobalPos.FromLv95(site.E + 14, site.N + 6, 0)));
+        Assert.True(FasnachtRules.NearLantern(site, GlobalPos.FromLv95(site.E, site.N + 11, 0)));
+        Assert.False(FasnachtRules.NearLantern(site, site.Pos));
     }
 
     [Fact]

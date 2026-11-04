@@ -64,9 +64,9 @@ public partial class FestivalService
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Go to the square.");
         return target switch
         {
-            EscaladeMarmite => ServeSmash(peer, p, run, def, site, at.E, at.N),
-            EscaladePot => ServeSoupe(peer, p, run, def, site, at.E, at.N),
-            _ => ServeCourseStart(peer, run, site, at.E, at.N),
+            EscaladeMarmite => ServeSmash(peer, p, run, def, site, at),
+            EscaladePot => ServeSoupe(peer, p, run, def, site, at),
+            _ => ServeCourseStart(peer, run, site, at),
         };
     }
 
@@ -79,7 +79,7 @@ public partial class FestivalService
         if (CrewKeys(peer) is { } keys)
             foreach (long m in CrewPeers(keys))
                 if (m != peer && _adventure.Active(m) && _adventure.Progress(m) is { } mp
-                    && _adventure.PositionOf?.Invoke(m) is { } at && EscaladeRules.Dist(at.E, at.N, point) <= EscaladeRules.CrewReach)
+                    && _adventure.PositionOf?.Invoke(m) is { } at && EscaladeRules.Dist(at, point) <= EscaladeRules.CrewReach)
                     list.Add((m, mp));
         return list;
     }
@@ -89,9 +89,9 @@ public partial class FestivalService
     private int PlayedToday(PlayerProgress p, RunningFestival run, FestivalDef def, string game) =>
         p.Get(FestivalBook.Section).Of(run.Instance, def.Id).Played.GetValueOrDefault(FestivalRules.PlayKey(game, run.Day));
 
-    private string? ServeSmash(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, double e, double n)
+    private string? ServeSmash(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
-        if (!EscaladeRules.NearMarmite(site, e, n)) return Tell(peer, "Go to the Marmite first.");
+        if (!EscaladeRules.NearMarmite(site, at)) return Tell(peer, "Go to the Marmite first.");
         var crew = CrewNear(peer, p, EscaladeRules.MarmiteAt(site));
         var members = crew.Select(c => new EscaladeRules.Member(c.P.Key, c.P.Created, NameOf(c.Peer, c.P))).ToList();
         var (young, old) = EscaladeRules.Pair(members)!.Value;
@@ -132,9 +132,9 @@ public partial class FestivalService
 
     // ---- the soup pot --------------------------------------------------------------------------------------
 
-    private string? ServeSoupe(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, double e, double n)
+    private string? ServeSoupe(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
-        if (!EscaladeRules.NearPot(site, e, n)) return Tell(peer, "Go to the soup pot first.");
+        if (!EscaladeRules.NearPot(site, at)) return Tell(peer, "Go to the soup pot first.");
         var crew = CrewNear(peer, p, EscaladeRules.PotAt(site));
         int fed = 0;
         foreach (var (cp, cpp) in crew)
@@ -154,9 +154,9 @@ public partial class FestivalService
 
     // ---- the Course ----------------------------------------------------------------------------------------
 
-    private string? ServeCourseStart(long peer, RunningFestival run, ResolvedSite site, double e, double n)
+    private string? ServeCourseStart(long peer, RunningFestival run, ResolvedSite site, GlobalPos at)
     {
-        if (!EscaladeRules.NearStart(site, e, n)) return Tell(peer, "Go to the start line first.");
+        if (!EscaladeRules.NearStart(site, at)) return Tell(peer, "Go to the start line first.");
         _courses[(run.Instance, peer)] = new CourseRun { Start = GameClock.Now, Next = 0 };
         NoteEscalade(peer, EscaladeEvent.CourseStart, 0, 0, "Go! Six gates through the old town, then back to the line.");
         return null;
@@ -186,7 +186,7 @@ public partial class FestivalService
             }
             if (_adventure.PositionOf?.Invoke(peer) is not { } at) continue;
             var path = EscaladeRules.Path(site);
-            if (EscaladeRules.Dist(at.E, at.N, path[run.Next]) > EscaladeRules.GateReach) continue;
+            if (EscaladeRules.Dist(at, path[run.Next]) > EscaladeRules.GateReach) continue;
             run.Next++;
             if (run.Next <= EscaladeRules.Gates)
             {

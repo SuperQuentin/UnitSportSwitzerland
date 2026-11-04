@@ -477,7 +477,7 @@ public partial class FestivalService : Node
             {
                 var key = (peer, run.Instance);
                 if (peer <= 0 || _watchPaid.Contains(key) || !_adventure.Active(peer) || _adventure.Progress(peer) is not { } p) continue;
-                if (_adventure.PositionOf?.Invoke(peer) is not { } at || site.DistanceTo(at.E, at.N) > FestivalShows.WatchRadiusM) continue;
+                if (_adventure.PositionOf?.Invoke(peer) is not { } at || site.DistanceTo(at) > FestivalShows.WatchRadiusM) continue;
                 double seen = _watched.GetValueOrDefault(key) + CrewCheckEvery;
                 _watched[key] = seen;
                 if (seen < FestivalShows.WatchSeconds) continue;

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.Sechselaeuten;
@@ -191,11 +192,11 @@ public class SechselaeutenTests
     public void The_ground_is_a_function_of_the_site()
     {
         var site = new ResolvedSite("test", 2600000, 1200000, 120, false, null, "x");
-        Assert.True(SechselaeutenRules.NearPyre(site, 2600000, 1200010));
-        Assert.False(SechselaeutenRules.NearPyre(site, 2600000, 1200020));
+        Assert.True(SechselaeutenRules.NearPyre(site, GlobalPos.FromLv95(2600000, 1200010, 0)));
+        Assert.False(SechselaeutenRules.NearPyre(site, GlobalPos.FromLv95(2600000, 1200020, 0)));
         var w = SechselaeutenRules.WeibelAt(site);
-        Assert.True(SechselaeutenRules.NearWeibel(site, w.E + 1, w.N));
-        Assert.False(SechselaeutenRules.NearWeibel(site, w.E + 10, w.N));
+        Assert.True(SechselaeutenRules.NearWeibel(site, GlobalPos.FromLv95(w.E + 1, w.N, 0)));
+        Assert.False(SechselaeutenRules.NearWeibel(site, GlobalPos.FromLv95(w.E + 10, w.N, 0)));
         // the pyre's ring of banners is clear of the pyre and the Weibel
         for (int k = 0; k < SechselaeutenRules.Banners; k++)
         {

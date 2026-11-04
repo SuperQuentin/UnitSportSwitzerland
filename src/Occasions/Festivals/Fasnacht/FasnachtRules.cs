@@ -1,5 +1,6 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-fasnacht.md).
 
+using UnitSport.Core;
 namespace UnitSport.Occasions.Festivals.Fasnacht;
 
 /// <summary>
@@ -37,11 +38,13 @@ public static class FasnachtRules
 
     public static double Dist(double e, double n, (double E, double N) p) => Math.Sqrt((e - p.E) * (e - p.E) + (n - p.N) * (n - p.N));
 
-    public static bool NearStall(ResolvedSite s, double e, double n, double slack = 0) => Dist(e, n, StallAt(s)) <= StallReach + slack;
+    public static double Dist(GlobalPos pos, (double E, double N) p) => pos.HorizontalDistanceTo(GlobalPos.FromLv95(p.E, p.N, pos.Alt));
 
-    public static bool NearStage(ResolvedSite s, double e, double n, double slack = 0) => Dist(e, n, StageAt(s)) <= StageReach + slack;
+    public static bool NearStall(ResolvedSite s, GlobalPos at, double slack = 0) => Dist(at, StallAt(s)) <= StallReach + slack;
 
-    public static bool NearLantern(ResolvedSite s, double e, double n, double slack = 0) => Dist(e, n, LanternAt(s)) <= LanternReach + slack;
+    public static bool NearStage(ResolvedSite s, GlobalPos at, double slack = 0) => Dist(at, StageAt(s)) <= StageReach + slack;
+
+    public static bool NearLantern(ResolvedSite s, GlobalPos at, double slack = 0) => Dist(at, LanternAt(s)) <= LanternReach + slack;
 
     // ---- the stall: Larven and Räppli ----------------------------------------------------------------------------
 

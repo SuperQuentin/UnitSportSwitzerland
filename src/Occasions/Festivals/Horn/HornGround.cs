@@ -26,10 +26,10 @@ public static class HornGround
 
     public static (double E, double N) SpotOf(ResolvedSite site) => (site.E + OffsetE, site.N + OffsetN);
 
-    public static bool Near(ResolvedSite site, double e, double n, double reach)
+    public static bool Near(ResolvedSite site, GlobalPos at, double reach)
     {
         var (re, rn) = SpotOf(site);
-        return (e - re) * (e - re) + (n - rn) * (n - rn) <= reach * reach;
+        return at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(re, rn, at.Alt)) <= reach * reach;
     }
 
     // ---- the prop ---------------------------------------------------------------------------------
@@ -91,7 +91,7 @@ public static class HornGround
         if (FestivalService.Instance is not { } svc) return null;
         var g = p.Global;
         foreach (var run in svc.Running)
-            if (run.Site is { } site && FestivalCatalog.Get(run.Id) is { } def && def.IsOpen(GameId, run.Day) && Near(site, g.E, g.N, ReachM))
+            if (run.Site is { } site && FestivalCatalog.Get(run.Id) is { } def && def.IsOpen(GameId, run.Day) && Near(site, g, ReachM))
                 return run;
         return null;
     }

@@ -338,7 +338,7 @@ public partial class BirthdayService : Node
         if (!_server) WishTaken(to);
         else if (Connected(from)) RpcId(from, MethodName.WishTaken, to);
         var head = b!.Global;
-        var at = _origin.ToWorld(head.E, head.N, head.Alt + 1.9);
+        var at = _origin.ToWorld(head.Moved(0, 0, 1.9));
         if (_server) GetParent()?.GetNodeOrNull<ItemEvents>(ItemEvents.NodeName)?.ServerSend(to, ItemEventKind.BirthdayWish, at, Vector3.Zero, wisher);
         return null;
     }

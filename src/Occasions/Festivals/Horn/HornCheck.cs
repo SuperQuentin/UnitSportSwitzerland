@@ -57,7 +57,8 @@ public partial class HornCheck : ChatProbe
         // ---- at the row ------------------------------------------------------------------------------
         var (rowE, rowN) = HornGround.SpotOf(site);
         var g0 = Me.Global;
-        Me.PlaceAt(Me.GlobalPosition + new Vector3((float)(rowE - g0.E), 0.3f, (float)(g0.N - rowN)), Me.Rotation.Y);
+        var (rowDE, rowDN, _) = g0.OffsetTo(GlobalPos.FromLv95(rowE, rowN, g0.Alt));
+        Me.PlaceAt(Me.GlobalPosition + new Vector3((float)rowDE, 0.3f, (float)-rowDN), Me.Rotation.Y);
         Me.Velocity = Vector3.Zero;
         await Seconds(0.5);
         Expect(HornGround.At(Me) != null && HornGround.InteractionFor(Me) is { } hint && hint.Text.Contains("alphorn"), $"at the row the prompt says so ({HornGround.InteractionFor(Me)?.Text})");

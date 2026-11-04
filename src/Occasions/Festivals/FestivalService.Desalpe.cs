@@ -141,7 +141,7 @@ public partial class FestivalService
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !_adventure.Active(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            double x = at.E - s.Site.E, y = at.N - s.Site.N;
+            var (x, y, _) = s.Site.Pos.OffsetTo(at);
             float zone = DesalpeRules.ZoneFoot;
             if (s.Last.TryGetValue(peer, out var was) && Math.Sqrt((x - was.X) * (x - was.X) + (y - was.Y) * (y - was.Y)) / dt > 3.5) zone = DesalpeRules.ZoneMounted;
             s.Last[peer] = (x, y);
@@ -259,7 +259,8 @@ public partial class FestivalService
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !Connected(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            double x = at.E - s.Site.E - cx, y = at.N - s.Site.N - cy;
+            var (offE, offN, _) = s.Site.Pos.OffsetTo(at);
+            double x = offE - cx, y = offN - cy;
             if (x * x + y * y <= 500 * 500) RpcId(peer, MethodName.TellDesalpeSnap, bytes);
         }
     }
@@ -282,7 +283,8 @@ public partial class FestivalService
         if (peer > 0)
         {
             if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Where are you?");
-            double x = at.E - s.Site.E - s.Run.Flock.X[cow], y = at.N - s.Site.N - s.Run.Flock.Y[cow];
+            var (offE, offN, _) = s.Site.Pos.OffsetTo(at);
+            double x = offE - s.Run.Flock.X[cow], y = offN - s.Run.Flock.Y[cow];
             if (x * x + y * y > (DesalpeRules.DressReach + 3) * (DesalpeRules.DressReach + 3)) return Tell(peer, $"Go to the cow to dress it ({Math.Sqrt(x * x + y * y):F0} m).");
         }
         byte was = s.Run.Dress[cow];
@@ -311,7 +313,8 @@ public partial class FestivalService
         foreach (long p in _adventure.Peers.ToArray())
         {
             if (p <= 0 || !_adventure.Active(p) || _adventure.PositionOf?.Invoke(p) is not { } at) continue;
-            double x = at.E - s.Site.E - sign.X, y = at.N - s.Site.N - sign.Y;
+            var (offE, offN, _) = s.Site.Pos.OffsetTo(at);
+            double x = offE - sign.X, y = offN - sign.Y;
             double d2 = x * x + y * y;
             if (d2 <= (DesalpeRules.StartReach + 40) * (DesalpeRules.StartReach + 40)) near++;
             if (p == peer && d2 <= (DesalpeRules.StartReach + 5) * (DesalpeRules.StartReach + 5)) starter = true;
@@ -359,7 +362,7 @@ public partial class FestivalService
         if (!def.IsOpen(DesalpeRules.VoteGame, run.Day)) return Tell(peer, $"The vote opens on day {def.OpensOn(DesalpeRules.VoteGame)}.");
         if (!_adventure.Active(peer) || _adventure.KeyOf(peer) is not { } key) return Tell(peer, "No adventuring now.");
         if (Connected(peer) && !Allowed(peer)) return "too fast";
-        if (_adventure.PositionOf?.Invoke(peer) is not { } at || s.Site.DistanceTo(at.E, at.N) > DesalpeRules.VoteReach + 10) return Tell(peer, "Go to the fair's ring to vote.");
+        if (_adventure.PositionOf?.Invoke(peer) is not { } at || s.Site.DistanceTo(at) > DesalpeRules.VoteReach + 10) return Tell(peer, "Go to the fair's ring to vote.");
         if (s.Vote.TryVote(key, entry) is { } why) return Tell(peer, why);
         Award(peer, s.Festival, DesalpeRules.VoteBatzen, $"voted for herd {entry}", DesalpeRules.VoteGame, DesalpeRules.VotePoints);
         if (Connected(peer)) RpcId(peer, MethodName.TellDesalpeVoted, entry);

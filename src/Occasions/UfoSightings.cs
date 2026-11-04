@@ -272,7 +272,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
         if (forcedDue)
         {
             var who = players[0].Global;
-            var (ce, cn) = SightingPlanner.Cell(who.E, who.N);
+            var (ce, cn) = SightingPlanner.Cell(who);
             if (TryPlan(_forced[_forcedCount], ce, cn, slot, (uint)(now * 1000) ^ 0xF0F0u, who, now) is { } forced)
             {
                 _forcedCount++;
@@ -287,14 +287,14 @@ public partial class UfoSightings : Node3D, IOriginContainer
         foreach (var p in players)
         {
             var at = p.Global;
-            var (ce, cn) = SightingPlanner.Cell(at.E, at.N);
+            var (ce, cn) = SightingPlanner.Cell(at);
             if (_cells.Add((ce, cn)) && SightingPlanner.Roll(ce, cn, slot, out uint seed) is { } kind)
             {
                 // an abduction with no herd near, or a landing with no meadow, is a flyover
                 var plan = TryPlan(kind, ce, cn, slot, seed, at, now) ?? TryPlan(SightingKind.Flyover, ce, cn, slot, seed, at, now);
                 if (plan != null) Publish(plan);
             }
-            var (me, mn) = SightingPlanner.Cell(at.E, at.N, SightingPlanner.MothershipCell);
+            var (me, mn) = SightingPlanner.Cell(at, SightingPlanner.MothershipCell);
             if (_cells.Add((me + 1_000_000, mn)) && SightingPlanner.RollMothership(me, mn, slot, out uint ms)
                 && TryPlan(SightingKind.Mothership, me, mn, slot, ms, at, now) is { } mother)
                 Publish(mother);
@@ -316,7 +316,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
         {
             case SightingKind.Abduction:
             {
-                if (Farming.Herds.Instance?.CowNear(near.E, near.N, 600f, start + SightingPath.AbductBeamOn) is not { } cow) return null;
+                if (Farming.Herds.Instance?.CowNear(near, 600f, start + SightingPath.AbductBeamOn) is not { } cow) return null;
                 return new Sighting(id, kind, start, length, cow.E, cow.N, cow.Ground, heading, count, seed);
             }
             case SightingKind.Landing:
