@@ -3298,15 +3298,17 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // out of the hold's frame (#418): the parked vehicle stays carried, the driver walks
         if (InHoldRide && Aboard) LeaveHold();
 
-        ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
+        // the record's velocity is in GlobalPos's axes (#1503): this world's for the body
+        var velocity = Origin!.Frame.WorldOfOffset(state.Position, state.Velocity);
+        ApplyRide(RideKind.OnFoot, velocity + right * 2f);
+        if (aisle is { } spot) StandIn(spot, velocity, (door, right, side, frame, vehicle));
         // down the ramp of a landed saucer (#861): at its foot, if that is clear
         else if (grounded && vehicle.ExitSpot is { } foot && ClearStandAt(frame * foot) is { } stand) GlobalPosition = stand;
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
         // over the side of a boat: onto a pier or jetty alongside (#377), else into the water beside
         // it, swimming (#302, #301)
         if (vehicle is Boat && aisle == null && !StepOntoPier(door, right, side))
-            IntoWater(GlobalPosition, state.Velocity with { Y = 0 } * 0.5f);
+            IntoWater(GlobalPosition, velocity with { Y = 0 } * 0.5f);
     }
 
     /// <summary>
@@ -3413,12 +3415,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void WreckVehicle()
     {
         var state = CaptureVehicle(wrecked: true);
-        var away = -state.Velocity with { Y = 0 };
+        var velocity = Origin!.Frame.WorldOfOffset(state.Position, state.Velocity);   // this world's (#1503)
+        var away = -velocity with { Y = 0 };
         away = away.LengthSquared() > 0.01f ? away.Normalized() : GlobalTransform.Basis.Z;
 
         Announced?.Invoke("WRECKED!", false);
         PlayerInput.Rumble(1f, 1f, 0.6f);
-        ApplyRide(RideKind.OnFoot, state.Velocity * 0.25f + away * 5f + Vector3.Up * 7f);
+        ApplyRide(RideKind.OnFoot, velocity * 0.25f + away * 5f + Vector3.Up * 7f);
         GlobalPosition = Origin!.ToWorld(state.Position) + Vector3.Up * 1.5f + away * 1.5f;
         _stunTimer = 1.5f;
         _ejected = 2.0;
