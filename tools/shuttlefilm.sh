@@ -86,7 +86,7 @@ cut() {
 cut "$out/shuttle-film.mp4" 1280 0 0 0 0 -- 1 1 1 1 -- -c:v libx264 -crf 20 -preset slow -c:a aac -b:a 160k
 # a short one (SHORT_MB, 8 by default): the taxi skipped, sped up, two passes to the size
 mb=${SHORT_MB:-8}
-skip=(${SHORT_SKIP:-18 0 0 0}) speed=(${SHORT_SPEED:-2.5 3 2 2.5})
+skip=(${SHORT_SKIP:-18 0 0 0}) speed=(${SHORT_SPEED:-3 3 2 5})
 total=0
 for k in 1 2 3 4; do
   [ -s "$d/shuttle-$k.mp4" ] || continue
