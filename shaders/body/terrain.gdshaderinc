@@ -137,7 +137,7 @@ void vertex() {
 #endif
 #ifdef VERTEX_FINISH
     {
-        vec3 c = COLOR.rgb;
+        vec3 c = style_lake(COLOR.rgb, length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz));
         float vertex_rock = smoothstep(0.62, 0.38, normalize(smooth_n).y);
         c = mix(c, vec3(0.30, 0.28, 0.26), vertex_rock * 0.75);
         c = style_grade(c);
@@ -178,6 +178,8 @@ void fragment() {
 
 #ifdef VERTEX_FINISH
     vec3 col = v_col;
+#elif defined(STYLE_CARTOON)
+    vec3 col = style_lake(COLOR.rgb, length(VERTEX));
 #else
     vec3 col = COLOR.rgb;
 #endif
