@@ -25,6 +25,10 @@ namespace UnitSport.Player;
 public partial class PlayerFeel : Node3D
 {
     private readonly FootPlayer _player;
+    private TrueNorth.Near _north;
+
+    /// <summary>True north's bearing in world axes at the player, degrees: the autopilot's heading reads from it (#1504).</summary>
+    private float ApNorth() => _player.Origin is { } o ? Mathf.RadToDeg(_north.World(o.Frame, _player.GlobalPosition)) : 0f;
 
     // --- audio ---
     private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
@@ -959,7 +963,7 @@ public partial class PlayerFeel : Node3D
         if (s.Lit < a.Spec.Engines)
             sb.Append(s.Starting ? (s.Apu < 1f ? $"APU {s.Apu * 100f:0}%    " : $"START ENG {Mathf.FloorToInt(s.Lit) + 1}    ") : "ENGINES OFF    ");
         if (s.Autopilot)
-            sb.Append($"AP HDG {Mathf.PosMod(-Mathf.RadToDeg(s.ApHeading), 360f):000} ALT {s.ApAltitude / Foot:0} SPD {s.ApSpeed / Knot:0}    ");
+            sb.Append($"AP HDG {Mathf.PosMod(-Mathf.RadToDeg(s.ApHeading) - ApNorth(), 360f):000} ALT {s.ApAltitude / Foot:0} SPD {s.ApSpeed / Knot:0}    ");
         // a rocket's propellant is unlimited (#1492)
         if (!a.Spec.Rocket)
         {

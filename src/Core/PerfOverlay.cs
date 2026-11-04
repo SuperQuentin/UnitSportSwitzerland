@@ -233,7 +233,8 @@ public partial class PerfOverlay : CanvasLayer
         var p = cam.GlobalPosition;
         var (e, n) = origin.ToLv95(p);
         var forward = -cam.GlobalBasis.Z;
-        double bearing = (Math.Atan2(forward.X, -forward.Z) * 180 / Math.PI + 360) % 360;   // world -Z is north
+        // from true north at the camera (#1504), not the world's −Z
+        double bearing = (TrueNorth.Bearing(origin.Frame, p, forward) * 180 / Math.PI + 360) % 360;
         return string.Format(CultureInfo.InvariantCulture, "LV95 {0:F0},{1:F0}  alt {2:F0} m  facing {3} {4:F0}°",
             e, n, p.Y, Compass[(int)Math.Round(bearing / 45) % 8], bearing);
     }

@@ -52,10 +52,12 @@ public class GlobalPosTests
     [InlineData(100, 0, 90)]
     [InlineData(0, -100, 180)]
     [InlineData(-100, 0, -90)]
-    public void The_bearing_is_clockwise_from_north(double east, double north, double degrees)
+    public void The_bearing_is_clockwise_from_true_north(double east, double north, double degrees)
     {
-        Assert.Equal(degrees, Bern.BearingTo(Bern.Moved(east, north)) * 180 / Math.PI, 9);
-        Assert.Equal(Math.Atan2(Geneva.E - Bern.E, Geneva.N - Bern.N), Bern.BearingTo(Geneva));
+        // Bern's meridian: grid and true north agree (#1504)
+        Assert.Equal(degrees, Bern.BearingTo(Bern.Moved(east, north)) * 180 / Math.PI, 2);
+        // elsewhere the grid's bearing less the meridian convergence there
+        Assert.Equal(Math.Atan2(Bern.E - Geneva.E, Bern.N - Geneva.N) - Geneva.Convergence, Geneva.BearingTo(Bern));
     }
 
     [Fact]

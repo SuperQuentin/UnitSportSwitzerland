@@ -54,15 +54,24 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
     public bool Shown => GameSettings.Current.AdventureCompass && AdventureLog.Adventuring && !Permissions.InMatch
         && !XR.XrSession.Active && Me?.Invoke() != null && GameShell.Instance is not { Top: not null };
 
+    /// <summary>The camera's heading in <see cref="GlobalPos"/>'s offset axes, the markers' (<see cref="GlobalPos.OffsetTo"/>).</summary>
     public Vector2? Heading
     {
         get
         {
             if (GetViewport()?.GetCamera3D() is not { } cam) return null;
             var f = -cam.GlobalBasis.Z;
-            return new Vector2(f.X, -f.Z);
+            var h = new Vector2(f.X, -f.Z);
+            return TargetMarker.Origin?.Invoke() is { } origin ? _north.WorldToOffset(origin.Frame, cam.GlobalPosition, h) : h;
         }
     }
+
+    /// <summary>True north's bearing in the offset axes at the camera, degrees (#1504).</summary>
+    public float North => GetViewport()?.GetCamera3D() is { } cam && TargetMarker.Origin?.Invoke() is { } origin
+        ? Mathf.RadToDeg(_north.Offset(origin.Frame, cam.GlobalPosition))
+        : 0f;
+
+    private TrueNorth.Near _north;
 
     public bool Declutter => true;
     public bool Fades => true;
