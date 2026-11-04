@@ -12,12 +12,23 @@ namespace UnitSport.Terrain.Format;
 /// <summary>Brotli for the section payloads: a small head written as is, then the compressed body.</summary>
 internal static class LeafPack
 {
+    /// <summary>
+    /// Brotli quality 6, window 4 MB: measured on a Geneva km² (roads 5.9 MB raw), quality 4 (what
+    /// <see cref="CompressionLevel.Optimal"/> gives) kept 72 % of the roads, 6 kept 56 % at ~0.9 s,
+    /// 11 kept 45 % at 24 s; decoding costs the same at every quality. Leaves are written once.
+    /// </summary>
+    public const int Quality = 6, Window = 22;
+
     public static byte[] Pack(ReadOnlySpan<byte> head, Action<Stream> body)
     {
-        using var ms = new MemoryStream();
-        ms.Write(head);
-        using (var br = new BrotliStream(ms, CompressionLevel.Optimal, leaveOpen: true)) body(br);
-        return ms.ToArray();
+        using var raw = new MemoryStream();
+        body(raw);
+        var src = raw.GetBuffer().AsSpan(0, (int)raw.Length);
+        var dst = new byte[head.Length + BrotliEncoder.GetMaxCompressedLength(src.Length)];
+        head.CopyTo(dst);
+        if (!BrotliEncoder.TryCompress(src, dst.AsSpan(head.Length), out int written, Quality, Window))
+            throw new InvalidOperationException("Brotli could not compress a leaf section");
+        return dst[..(head.Length + written)];
     }
 
     public static byte[] Pack(Action<Stream> body) => Pack(ReadOnlySpan<byte>.Empty, body);

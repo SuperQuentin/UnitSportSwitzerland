@@ -19,7 +19,7 @@ Status: **agreed with the user** (2026-11-04); nothing built yet. Issue: #1500, 
 | The tools | **Cube-native in G2**: every build stage (TerrainPreprocessor, RoadGen, ~52k lines) works in a local flat **work frame**, the ENU plane of a level-9 cube cell (~20 km, 10 ppm horizontal at its edge), and writes leaves. Each source enters through its own projection (LV95 for swisstopo, Lambert-93 for IGN, geographic for OSM and Copernicus). G3 then stays data-only. The generated world, the fill and the fixture courses do the same in the game. |
 | `GlobalPos` | **ECEF inside, `E`/`N` removed**: every use (~3,000 in 591 files) moves to Earth maths, frame maths, the cube key, or the explicit LV95 notation view where a person reads it. |
 | The switch | **One world switch**, `--frame flat|earth` (and a setting), `flat` by default until the last step flips it. What depends on cube leaves lands behind it: the earth streamer, collision patches, the turning ground frame, patterns, curvature, the server on leaves. The positions work (GlobalPos, the wire, saves, north) is correct in both and lands unconditionally. |
-| Leaf layout | **Compared in practice** (B1): all kinds as sections of one leaf entry, against one bundle per kind; measured on the D: region; the user picks, the other is deleted. |
+| Leaf layout | **Compared in practice** (B1): all kinds as sections of one leaf entry, against one bundle per kind; measured on the D: region; the user picks, the other is deleted. **Picked: sections of one entry** (1 read and 24 ms median cold a leaf, against 5.3 reads and 92 ms; equal warm). |
 | Streaming | **The globe all the way down**: one quadtree and one size-on-screen rule from orbit to the leaves (#1430 H4's renderer). Near the camera a leaf is furnished by today's builders (roads, buildings, trees, water). Collision is separate from drawing: trimesh patches round bodies, on client and server alike (G1). HorizonLayer, `horizon.bin` and the LV95 rings retire. |
 | Order | **Two tracks in parallel** (A: positions; B: data), joined in C, then the flip (D). |
 | Saves | A schema version per store, **converted in place on first load, no backup**. |
@@ -89,7 +89,9 @@ flat world; track B builds data the game does not read yet; C wires the two toge
 
 ### Track B: data (the game does not read it yet)
 
-**B1 The leaf content format** (one PR)
+**B1 The leaf content format** (one PR; **built**, PR #1525: layout A chosen by the user on the
+measurements, the per-kind bundles dropped; the format in `docs/notes/tools/cube-tiles.md`, "Leaves
+with content")
 - Every kind in the leaf's ENU frame (x east, y up, z south, as the builders' tile-local axes):
   heights (G1), cover per lattice vertex, holes per lattice quad, water levels, roads (the
   `RoadTile` record: cross-sections, paint, junctions, signals, tunnels, piers, walls), buildings
