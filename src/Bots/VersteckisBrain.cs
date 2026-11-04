@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Adventure.Versteckis;
+using UnitSport.Core;
 
 namespace UnitSport.Bots;
 
@@ -71,6 +72,7 @@ public sealed class VersteckisBrain : IBotBrain
 
     public double Think(Bot bot, double now)
     {
+        _frame = bot.Body.Origin ?? _vs.Origin;
         bot.Intent = BotIntent.Stand;
         if (_vs.StateOf(_game) is not { } s || s.Find(bot.Id) is not { Left: false } me || bot.Body.Eliminated) return 0.5;
         if (s.Round != _round) NewRound(s.Round);
@@ -89,9 +91,12 @@ public sealed class VersteckisBrain : IBotBrain
         return 0.5;
     }
 
-    private (double E, double N) Lv95(Vector3 world) => _vs.Origin.ToLv95(world);
+    private (double E, double N) Lv95(Vector3 world) => _frame.ToLv95(world);
 
-    private Vector3 World(Bot bot, double e, double n) => _vs.Origin.ToWorld(e, n, 0) with { Y = bot.Body.GlobalPosition.Y };
+    private Vector3 World(Bot bot, double e, double n) => _frame.ToWorld(e, n, 0) with { Y = bot.Body.GlobalPosition.Y };
+
+    /// <summary>The bot's own frame, taken at each think: on a server it may be a region's, not the game's (#1456).</summary>
+    private Core.WorldOrigin _frame = null!;
 
     // ---- hiding ----------------------------------------------------------------------------------
 
@@ -116,10 +121,10 @@ public sealed class VersteckisBrain : IBotBrain
         foreach (var e in s.Entrants)
             if (e.Role == VsRole.Hider && e.Peer != bot.Id && _vs.PositionOf(e.Peer) is { } p) others.Add((p.E, p.N));
         var space = bot.World.Space;
-        var door = _vs.Origin.ToWorld(s.DoorE, s.DoorN, 0) with { Y = bot.Body.GlobalPosition.Y + 1.6f };
+        var door = _frame.ToWorld(s.DoorE, s.DoorN, 0) with { Y = bot.Body.GlobalPosition.Y + 1.6f };
         Func<double, double, bool> hidden = (e, n) =>
         {
-            var at = _vs.Origin.ToWorld(e, n, 0) with { Y = door.Y };
+            var at = _frame.ToWorld(e, n, 0) with { Y = door.Y };
             return !BotRays.Clear(space, door, at, bot.Body.GetRid());
         };
         var spot = VsTactics.HiderSpot(decor, _prop, s.DoorE, s.DoorN, others, hidden, (int)bot.Profile.Difficulty, _rng, s.E, s.N, s.Radius);
@@ -290,7 +295,7 @@ public sealed class VersteckisBrain : IBotBrain
         for (int i = 0; i < decor.Count; i++)
         {
             var d = decor[i];
-            double de = d.E - be, dn = d.N - bn, dd = de * de + dn * dn;
+            double dd = GlobalPos.HorizontalDistanceSquared(d.E, d.N, be, bn);
             if (dd > SeekSight * SeekSight || !VsTactics.Facing(be, bn, fe, fn, d.E, d.N) && dd > 36) continue;
             sus.Look("d" + i, d.Kind, d.E, d.N, now, inPlace: true);
         }

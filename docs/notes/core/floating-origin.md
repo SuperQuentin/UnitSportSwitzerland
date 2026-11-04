@@ -7,7 +7,8 @@
   `docs/plans/spherical-world.md` (#187).
 - **Online too, and every peer has its own origin**: positions cross the network in LV95, never
   world space (`net/positions-on-the-wire`). The server keeps the manifest's origin and never
-  shifts (its players can be anywhere); it measures with what players publish (`FootPlayer.Global`),
+  shifts (its players can be anywhere); far clusters of bodies get a frame and a physics space of
+  their own (`net/server-regions`, #1456); it measures with what players publish (`FootPlayer.Global`),
   and runs each race in a frame of its own at the host (`RaceManager`). A client's origin is its
   own from boot: joining neither checks nor adopts the server's.
 - **A world-space `Vector3` means a place only in the frame it was computed in.** Anything that
@@ -42,6 +43,8 @@
   in the physics world, right under the shifted player and swept off at 1,860 m/s carrying them.
   The shifter makes every kinematic body static, sets its transform and makes it kinematic again
   (`OriginShifter.Teleport`). Removing it from the space and re-adding works too.
+- **The Earth's curvature is drawn round the camera, not the origin** (#187, `world/earth-curvature`):
+  a shift changes nothing in it.
 - **Shader patterns read `pattern_xz(world_pos)`** (`shaders/world_origin.gdshaderinc`): world XZ
   plus the `world_origin_offset` global, the origin modulo 9.6 km (a multiple of every pattern
   period). Raw `world_pos.xz` in a pattern jumps at every shift; normals from `dFdx(world_pos)` and
@@ -68,6 +71,28 @@
     airdrop's trail needs world space: left as is.
   - **Falling snow** wraps round the camera in a 60 m box: in pattern space (`world_origin_offset`,
     9.6 km = 160 boxes), or every flake lands somewhere else at a shift.
+- **Shifts that turn** (#1430 H3, `docs/plans/ellipsoid-handover.md`): an anchor frame
+  (`OriginFrame.Axes`, `FrameAxes`: an origin and axes on the Earth) is reached by a shift with a
+  rotation. `OriginShift.Turns` and `Yaw` (radians about up) say so. What a handler must do then:
+  - the shifter turns `RigidBody3D` linear and angular velocities, and `CharacterBody3D.Velocity`
+    of a body that is not `IOriginShiftAware` (one that is turns its own);
+  - a heading kept as an angle adds `shift.Yaw` (`FootPlayer._viewYaw`, `SpectatorCamera._yaw`,
+    `FlightMotion.Yaw`); a flight's velocity and attitude turn with `Direction` / the basis
+    (`FootPlayer`, `VehicleBody` handlers);
+  - a ride with world-space state of its own overrides `Rideable.OnOriginShifted` (the boat turns
+    its velocity, spin and attitude; its position is read back from the body);
+  - a shader sampling by world XZ gets the axes too (`HorizonLayer`'s `cover_axes`);
+  - a check steering by compass heading turns it by the grid's yaw in the world (`BoatCheck.GridYaw`).
+  - **In Space the shifts turn above 250 km** (#1480, `SpaceMode.Rotates`, `Curvature.TurnRegime`,
+    `OriginShifter.Turned`), where no flat tile is drawn any more: every 20 km the anchor is
+    `FrameAxes.Tangent` under the camera, built in ECEF (the previous axes turned by the least rotation, no
+    LV95). From 60 to 250 km the Space frame stays flat: the flat tiles are still drawn there, and the
+    curvature shader wraps them as one plane. The ground keeps its flat frame until #1443 G2.
+    `--orbitcheck` flies a polar orbit through ~2,080 turned shifts; `--spacebandcheck` the band.
+  `--originstress <m> --originyaw <deg>` sends every shift to an anchor frame at altitude 0 turned
+  ±deg about up, so every handler meets a rotation: the car ride, the A320 and the hairpin drive
+  pass at 2° (check map). Known gap: the speedboat's beach landing (`--boatcheck`) stops 3 m
+  further out and keeps creeping at 1.2 m/s in a turned frame, everything else on the boat passes.
 - **Checks**: `--origincheck` (headless: frames, lane keys, the wire between two origins, a race
   road followed across a shift, a remote interpolated 3,600 km out, the node walk, the kinematic
   case; RESULT line). Multiplayer: the `tools/*check.sh` loopback scripts with `--originstress` on

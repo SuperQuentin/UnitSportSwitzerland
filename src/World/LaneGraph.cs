@@ -411,6 +411,9 @@ public sealed partial class LaneGraph
     public static long Key(double e, double n) =>
         ((long)(int)Math.Round(e / Snap) << 32) ^ (uint)(int)Math.Round(-n / Snap);
 
+    /// <summary>The snap cell of an LV95 point as a tile answers it (<see cref="TileId.Global"/>).</summary>
+    public static long Key((double E, double N) p) => Key(p.E, p.N);
+
     /// <summary>
     /// Builds in one origin frame, taken once by the caller (a worker must not read a live origin
     /// that may move under it). Shift the result if the origin has moved since.
@@ -485,7 +488,7 @@ public sealed partial class LaneGraph
                 Vector3[] World(float[] f)
                 {
                     var v = new Vector3[f.Length / 3];
-                    for (int i = 0; i < v.Length; i++) v[i] = origin.ToWorld(tile.Id.MinE + f[i * 3], tile.Id.MaxN - f[i * 3 + 2], f[i * 3 + 1]);
+                    for (int i = 0; i < v.Length; i++) v[i] = origin.TileToWorld(tile.Id, new Vector3(f[i * 3], f[i * 3 + 1], f[i * 3 + 2]));
                     return v;
                 }
                 var worldOf = new Dictionary<float[], Vector3[]>(ReferenceEqualityComparer.Instance);
@@ -498,10 +501,10 @@ public sealed partial class LaneGraph
                 var sg = tile.Signals[k];
                 foreach (var arm in sg.Poles.Where(p => (p.Flags & SignalPoleFlags.Pedestrian) != 0).GroupBy(p => p.Arm))
                 {
-                    var heads = arm.Select(p => origin.ToWorld(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z, p.Y)).ToList();
+                    var heads = arm.Select(p => origin.TileToWorld(tile.Id, new Vector3(p.X, p.Y, p.Z))).ToList();
                     if (heads.Count < 2 || arm.Key * 3 + 2 >= sg.Stops.Length || float.IsNaN(sg.Stops[arm.Key * 3])) continue;
                     var (a0, b0) = heads.SelectMany(x => heads, (x, y) => (x, y)).MaxBy(xy => xy.x.DistanceSquaredTo(xy.y));
-                    var stop = origin.ToWorld(tile.Id.MinE + sg.Stops[arm.Key * 3], tile.Id.MaxN - sg.Stops[arm.Key * 3 + 2], sg.Stops[arm.Key * 3 + 1]);
+                    var stop = origin.TileToWorld(tile.Id, new Vector3(sg.Stops[arm.Key * 3], sg.Stops[arm.Key * 3 + 1], sg.Stops[arm.Key * 3 + 2]));
                     var u = outs[arm.Key];
                     // the zebra's own bars where the tile has them: the yellow paint across the arm nearest the stop line
                     var zebra = stop - u * 1.8f;
@@ -514,7 +517,7 @@ public sealed partial class LaneGraph
                         for (int v = 0; v < nv; v++)
                             c += new Vector3(paint.Vertices[v * 3], paint.Vertices[v * 3 + 1], paint.Vertices[v * 3 + 2]);
                         c /= nv;
-                        var at = origin.ToWorld(tile.Id.MinE + c.X, tile.Id.MaxN - c.Z, c.Y);
+                        var at = origin.TileToWorld(tile.Id, c);
                         var d = at - stop;
                         float along = d.Dot(u), across = (d - u * along).Length();
                         if (along < 0.5f && -along < best && across < 15f) { best = -along; zebra = at; }
@@ -557,7 +560,7 @@ public sealed partial class LaneGraph
                 {
                     var ride = new Vector3[jpath.PointCount];
                     for (int i = 0; i < ride.Length; i++)
-                        ride[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
+                        ride[i] = origin.TileToWorld(tile.Id, new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
                     sites[jpath.Signal].Rides.Add((ride, jpath.Group, jpath.Move));
                     ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Bike, jpath.Move, jpath.Width * 0.5f), null));
                 }
@@ -570,7 +573,7 @@ public sealed partial class LaneGraph
                 var cum = new float[n];
                 for (int i = 0; i < n; i++)
                 {
-                    pts[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
+                    pts[i] = origin.TileToWorld(tile.Id, new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
                 }
                 if (cum[^1] < 0.5f) continue;
@@ -578,7 +581,7 @@ public sealed partial class LaneGraph
                 var edge = new LaneEdge
                 {
                     Points = pts, Cumulative = cum, Class = jpath.Junction.Class, Width = Math.Max(jpath.Width, jpath.ToWidth), OneWay = 1, Connector = true,
-                    KeyStart = Key(tile.Id.MinE + jpath.From.X, tile.Id.MaxN - jpath.From.Z), KeyEnd = Key(tile.Id.MinE + jpath.To.X, tile.Id.MaxN - jpath.To.Z),
+                    KeyStart = Key(tile.Id.Global(jpath.From.X, jpath.From.Z)), KeyEnd = Key(tile.Id.Global(jpath.To.X, jpath.To.Z)),
                     Path = new JunctionPathInfo(jpath.Move, jpath.From.Offset, jpath.To.Offset, site, site is null ? -1 : jpath.Group),
                 };
                 g.Edges.Add(edge);
@@ -600,7 +603,7 @@ public sealed partial class LaneGraph
                 var site = r.Signal >= 0 && r.Signal < sites.Length && r.SignalArm < sites[r.Signal].Out.Length ? sites[r.Signal] : null;
                 if (site is not null) recorded.Add((r.Signal, r.SignalArm));
                 var approach = LaneApproach.Make(r.Lanes.ToArray(), site, r.SignalArm, r.Banned, r.LaneCentre, OutOf(r.Heading), r.AllowBlock);
-                g.Attach(approach, origin.ToWorld(tile.Id.MinE + r.X, tile.Id.MaxN - r.Z, r.Y), matched);
+                g.Attach(approach, origin.TileToWorld(tile.Id, new Vector3(r.X, r.Y, r.Z)), matched);
             }
             for (int k = 0; k < sites.Length; k++)
             {
@@ -612,7 +615,7 @@ public sealed partial class LaneGraph
                     for (int to = 0; to < signal.Plan.Arms.Count; to++)
                         if (to != a && signal.Plan.Arms[to].Out) moves |= SignalPlan.Turn(signal.Plan.Arms, a, to);
                     var approach = LaneApproach.Make([new ApproachLane(0f, 0f, 0f, moves, ApproachLaneKind.Car)], sites[k], a, SignalMoves.None, 0f, sites[k].Out[a]);
-                    g.Attach(approach, origin.ToWorld(tile.Id.MinE + signal.Stops[a * 3], tile.Id.MaxN - signal.Stops[a * 3 + 2], signal.Stops[a * 3 + 1]), matched);
+                    g.Attach(approach, origin.TileToWorld(tile.Id, new Vector3(signal.Stops[a * 3], signal.Stops[a * 3 + 1], signal.Stops[a * 3 + 2])), matched);
                 }
             }
         }

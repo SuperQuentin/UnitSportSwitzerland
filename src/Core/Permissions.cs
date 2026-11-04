@@ -42,12 +42,13 @@ public static class Permissions
         Changed?.Invoke();
     }
 
-    /// <summary>Back to a non-admin who may teleport, on leaving a server.</summary>
+    /// <summary>Back to a non-admin who may teleport and moves at normal speed, on leaving a server.</summary>
     internal static void Reset()
     {
         SetAdmin(false);
         SetServerTeleport(true);
         SetServerBody(true, true);
+        Player.FootPlayer.SetOwnSpeedFactor(1f);   // an admin's /movespeed (#1485) stays on that server
     }
 
     /// <summary>The server lets players who are not admins teleport (<c>Net/Arrival</c>, #799). Meaningless offline.</summary>

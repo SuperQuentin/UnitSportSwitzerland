@@ -125,7 +125,7 @@ public partial class PisteLayer : Node
         if (_chunks.RoadsAt(id) is { } roads) TagRoads(roads, layer);
     }
 
-    /// <summary>The roads mesh and its cells (a standalone headset's, <see cref="ChunkNode.SetRoadCells"/>).</summary>
+    /// <summary>The roads mesh and its cells (<see cref="ChunkNode.SetRoadCells"/>).</summary>
     private static void TagRoads(MeshInstance3D roads, int layer)
     {
         roads.SetInstanceShaderParameter(PisteLayerParam, layer);
@@ -146,11 +146,11 @@ public partial class PisteLayer : Node
         }
         // nearest first, so a full array keeps the slopes under the camera
         for (int ring = 0; ring <= Radius; ring++)
-            for (int dn = -ring; dn <= ring; dn++)
-                for (int de = -ring; de <= ring; de++)
+            for (int dz = ring; dz >= -ring; dz--)
+                for (int dx = -ring; dx <= ring; dx++)
                 {
-                    if (Math.Max(Math.Abs(de), Math.Abs(dn)) != ring) continue;
-                    var id = new TileId(centre.E + de, centre.N + dn);
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != ring) continue;
+                    var id = centre.Neighbour(dx, dz);
                     if (_shown.TryGetValue(id, out var shown))
                     {
                         // a tile rebuilt or reloaded has new ground or road nodes: tell them its layer again

@@ -51,7 +51,9 @@ public partial class Herds
         }
     }
 
-    private static readonly int NearEvery = Core.Platform.IsStandaloneVr ? 2 : 1, FarEvery = Core.Platform.IsStandaloneVr ? 16 : 8;
+    // on Low and Very low (#1216; a standalone headset's since #1112) the near herds every other frame, the far half as often
+    private static int NearEvery => Core.GameSettings.Cheap ? 2 : 1;
+    private static int FarEvery => Core.GameSettings.Cheap ? 16 : 8;
 
     public override void _Process(double delta)
     {
@@ -67,8 +69,7 @@ public partial class Herds
 
         foreach (var h in _all)
         {
-            double de = h.Plan.E - ee, dn = h.Plan.N - en;
-            float dist = (float)Math.Sqrt(de * de + dn * dn);
+            float dist = (float)GlobalPos.HorizontalDistance(h.Plan.E, h.Plan.N, ee, en);
             bool any = false;
             foreach (var c in h.Cows) if (_over.ContainsKey(c.Key)) { any = true; break; }
             if (dist > DrawRange && !any)
@@ -79,8 +80,7 @@ public partial class Herds
             bool fresh = h.Bodies == null;
             if (fresh) Build(h);
             if (!h.Bodies!.Visible) h.Bodies.Visible = h.Heads!.Visible = true;
-            // far herds a few times a second, staggered so they do not all land on one frame; on a
-            // standalone headset (#1112) the near ones every other frame and the far ones half as often
+            // far herds a few times a second, staggered so they do not all land on one frame (NearEvery, FarEvery)
             int every = dist > NearRange ? FarEvery : NearEvery;
             if (!fresh && !any && every > 1 && (_frame + h.Plan.Index) % every != 0) continue;
             // a near herd posed this frame anyway (being carried, just built) moves by this frame's time only
@@ -209,8 +209,7 @@ public partial class Herds
         float palt = float.NaN;
         foreach (var h in _all)
         {
-            double de = h.Plan.E - ee, dn = h.Plan.N - en;
-            if (de * de + dn * dn > (range + 60) * (range + 60)) continue;
+            if (GlobalPos.HorizontalDistanceSquared(h.Plan.E, h.Plan.N, ee, en) > (range + 60) * (range + 60)) continue;
             for (int i = 0; i < h.Cows.Length; i++)
             {
                 var (e, n, alt, _, _, _) = Where(h, i, now);

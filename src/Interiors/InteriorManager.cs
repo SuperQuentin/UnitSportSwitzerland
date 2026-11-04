@@ -531,9 +531,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         var body = PlayerBody(peer);
         if (body == null || Origin == null) return true;
         var e = layout.EntranceFor(door);
-        var at = body.GlobalPosition;
+        var at = WorldOf(body);
         return at.DistanceTo(OutsideDoorAt(layout, e)) <= reach || at.DistanceTo(InsideDoorAt(layout, e)) <= reach;
     }
+
+    /// <summary>A body in this manager's frame, from its Earth position: on the server it may be in another region's (#1456).</summary>
+    private Vector3 WorldOf(Node3D body) => body is Player.FootPlayer p && Origin != null ? Origin.ToWorld(p.Global) : body.GlobalPosition;
 
     private Node3D? PlayerBody(long peer) =>
         Players?.GetNodeOrNull<Node3D>(peer.ToString()) ?? (peer == MyId && !Online ? LocalPlayer?.Invoke() : null);
@@ -542,7 +545,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
     {
         DoorKey.TryParse(e.Door, out var k);
-        return Origin!.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0) + new Vector3(e.DoorX, e.DoorY, e.DoorZ);
+        return Origin!.TileTransform(k.Tile) * new Vector3(e.DoorX, e.DoorY, e.DoorZ);
     }
 
     /// <summary>The doorway in the interior's wall, world space.</summary>
@@ -559,7 +562,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         var bodies = new List<Vector3>();
         if (Players != null)
             foreach (var n in Players.GetChildren())
-                if (n is Node3D body) bodies.Add(body.GlobalPosition);
+                if (n is Node3D body) bodies.Add(WorldOf(body));
         if (!Online && LocalPlayer?.Invoke() is { } me && IsInstanceValid(me)) bodies.Add(me.GlobalPosition);
 
         foreach (var (door, plan) in _doors.ToList())
@@ -1018,8 +1021,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         BuildingKey.TryParse(l.Key, out var key);
         var tile = key.Tile;
-        var tileOrigin = origin.ToWorld(tile.MinE, tile.MaxN, 0);
-        var at = tileOrigin + new Vector3(l.CenterX, 0, l.CenterZ);
+        var at = origin.TileTransform(tile) * new Vector3(l.CenterX, 0, l.CenterZ);
         return new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(at.X, InteriorBaseY, at.Z));
     }
 
@@ -1082,9 +1084,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             var tile = await Source.LoadBuildingsAsync(k.Tile);
             if (tile == null || k.Index < 0 || k.Index >= tile.Buildings.Count
                 || BuildingTypes.For(tile).Boxes[k.Index] is not { } box) return;
-            var origin = Origin.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0);
+            var xf = Origin.TileTransform(k.Tile);
             var b = tile.Buildings[k.Index];
-            _boxes[plan] = new BuildingSounds.Occupied(origin + new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
+            _boxes[plan] = new BuildingSounds.Occupied(xf * new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
                 box.AxisU, box.Width / 2, box.Depth / 2, 0);
         }
         catch (Exception e) { GD.PushWarning($"[interior] box of {plan}: {e.Message}"); }
@@ -1279,10 +1281,21 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (problems.Count > 0)
             GD.PushWarning($"[interior] {keyText}: {string.Join("; ", problems.Take(3))}");
 
+        // Only a cache, and every writer stores the same plan. Games sharing one user:// (a check's
+        // clients, a server beside its client) plan a building at once: a shared ".part" was open
+        // in another process, and the throw took the caller's plan with it (#1401).
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        string tmp = path + ".part";
-        await File.WriteAllTextAsync(tmp, layout.ToJson());
-        File.Move(tmp, path, overwrite: true);
+        string tmp = $"{path}.{Guid.NewGuid():N}.part";
+        try
+        {
+            await File.WriteAllTextAsync(tmp, layout.ToJson());
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Windows refuses to replace a file another game is reading: it holds the same plan
+            try { File.Delete(tmp); } catch (IOException) { }
+        }
         return layout;
     }
 }
@@ -1506,6 +1519,7 @@ public partial class InteriorNode : Node3D
         AddStaff(node);   // a venue's clerk and bartender (#1235)
         AddPinballs(node, material);   // a venue's pinball machines, each a table to play (#1325)
         AddLaneRigs(node, material);   // a bowling centre's pins, pinsetters and hood balls (#1323)
+        AddTableRigs(node);   // pool tables, dartboards, table football, the arcade's games (#1324, #1326)
         AddScreens(node); // a cinema's cat and beams, shown by the booth (#1238)
         VenueMusic.AddTo(node);   // a venue's music in its rooms (#1244)
         Patrons.VenuePatrons.AddTo(node); // its guests at the tables, the machines, in the queues and the halls (#1244)

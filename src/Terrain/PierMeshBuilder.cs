@@ -64,13 +64,18 @@ public static class PierMeshBuilder
 
         public bool Empty => Vertices.Count == 0 && Faces.Count == 0;
 
-        private Vector3 Local(double e, double n, double h) => new((float)(e - _id.MinE), (float)h, (float)(_id.MaxN - n));
+        private Vector3 Local(double e, double n, double h)
+        {
+            var (x, z) = _id.Local(e, n);
+            return new((float)x, (float)h, (float)z);
+        }
 
         /// <summary>The bed (or ground) under a tile-local point; NaN off the tile or with no grid.</summary>
         private float Bed(Vector3 p)
         {
             if (_grid == null || p.X < 0 || p.Z < 0 || p.X > ChunkFormat.TileSizeM || p.Z > ChunkFormat.TileSizeM) return float.NaN;
-            return (float)_grid.SampleHeight(_id.MinE + p.X, _id.MaxN - p.Z);
+            var (e, n) = _id.Global(p.X, p.Z);
+            return (float)_grid.SampleHeight(e, n);
         }
 
         /// <summary>A quad a-b-c-d (around its edge): drawn, and solid when <paramref name="solid"/>.</summary>

@@ -33,16 +33,18 @@ internal sealed class YardIndex
             _haveHere = true;
             _scratch.Clear();
             foreach (var id in _tiles.Keys)
-                if (Math.Abs(id.E - here.E) > 2 || Math.Abs(id.N - here.N) > 2) _scratch.Add(id);
+                if (id.RingDistance(here) > 2) _scratch.Add(id);
             foreach (var id in _scratch) _tiles.Remove(id);
         }
-        for (int dE = -1; dE <= 1; dE++)
-            for (int dN = -1; dN <= 1; dN++)
+        for (int tx = -1; tx <= 1; tx++)
+            for (int tz = 1; tz >= -1; tz--)
             {
-                var id = new TileId(here.E + dE, here.N + dN);
+                var id = here.Neighbour(tx, tz);
                 if (_tiles.ContainsKey(id) || _loading.ContainsKey(id)) continue;
-                double dx = Math.Max(0, Math.Max(id.MinE - e, e - (id.MinE + ChunkFormat.TileSizeM)));
-                double dz = Math.Max(0, Math.Max(id.MinN - n, n - (id.MinN + ChunkFormat.TileSizeM)));
+                // how far the player is outside the tile, in its own frame (#1443)
+                var (x, z) = id.Local(e, n);
+                double dx = Math.Max(0, Math.Max(-x, x - ChunkFormat.TileSizeM));
+                double dz = Math.Max(0, Math.Max(-z, z - ChunkFormat.TileSizeM));
                 if (dx * dx + dz * dz > TileReach * TileReach) continue;
                 _loading[id] = Task.Run(() => Plan(source, id));
             }
@@ -78,10 +80,10 @@ internal sealed class YardIndex
         best = default;
         float bestScore = float.MaxValue;
         if (!_haveHere) return false;
-        for (int dE = -1; dE <= 1; dE++)
-            for (int dN = -1; dN <= 1; dN++)
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                if (!_tiles.TryGetValue(new TileId(_here.E + dE, _here.N + dN), out var list)) continue;
+                if (!_tiles.TryGetValue(_here.Neighbour(dx, dz), out var list)) continue;
                 for (int i = 0; i < list.Length; i++)
                 {
                     float s = SiteLoot.Score(list[i], e, n, alt, look);

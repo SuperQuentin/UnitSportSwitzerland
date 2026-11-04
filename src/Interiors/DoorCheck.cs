@@ -618,7 +618,7 @@ public static class DoorCheck
         var e = layout?.EntranceOf(key);
         if (layout == null || e == null) return line + " | locked";
         var (w, top) = layout.OpeningOf(e);
-        var origin = new Core.WorldOrigin(tile.MinE + 500, tile.MaxN - 500);
+        var origin = new Core.WorldOrigin(tile.Centre.E, tile.Centre.N);
         var link = DoorLink.Create(layout, e, origin, d.Width, d.Height);
         return line + $" | in {F(e.X)},{F(e.Z)} dir {F(e.InX)},{F(e.InZ)} w {F(e.Width)} door {F(e.DoorX)},{F(e.DoorY)},{F(e.DoorZ)} "
             + $"h {F(e.DoorHeight)} {e.Hang} {e.Vehicle} opening {F(w)}x{F(top)} inside {V(link.Inside.Origin)} facing {V(link.Inside.Basis.Z)} "

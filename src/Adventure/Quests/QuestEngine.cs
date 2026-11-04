@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure;
 
@@ -190,8 +191,7 @@ public sealed class QuestEngine
     {
         if (PoisByDiscoveryOnly && target is PoiTarget) return false;
         if (Locate(target) is not { } at) return false;
-        double de = e - at.E, dn = n - at.N;
-        return de * de + dn * dn <= (double)at.RadiusM * at.RadiusM;
+        return GlobalPos.HorizontalDistanceSquared(e, n, at.E, at.N) <= (double)at.RadiusM * at.RadiusM;
     }
 
     /// <summary>Whether any running quest waits on a position, or a quest may start on one (the service's 2 Hz check skips the others).</summary>

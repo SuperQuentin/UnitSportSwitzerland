@@ -55,6 +55,15 @@ uniform vec3 toon_abyss : source_color = vec3(0.07, 0.25, 0.48);
 uniform vec3 toon_foam : source_color = vec3(0.97, 0.98, 1.0);
 uniform vec3 toon_underside : source_color = vec3(0.78, 0.96, 0.96);
 uniform float foam_shore_m = 0.035;
+// far off (from, to: metres from the eye) the bands give way to the lake as the ground and the horizon
+// blocks draw it (shaders/body/terrain.gdshaderinc: Terrain/CoverPalette's water, made linear by
+// TerrainMeshBuilder as source_color does here; the style's grade and painted patches), opaque: a climb
+// outruns the streaming, and the loaded tiles' bands and shallows stood out as a square on the lake
+// round them (#1430). So does the eye climbing (from, to: metres above the surface): the water under a
+// climb is near, but the tiles round it are not loaded yet
+uniform vec2 far_lake_m = vec2(1000.0, 2500.0);
+uniform vec2 far_lake_above_m = vec2(300.0, 900.0);
+uniform vec3 far_lake : source_color = vec3(0.20, 0.32, 0.42);
 #endif
 #ifdef STYLE_REAL
 uniform sampler2D water_screen_texture : hint_screen_texture, filter_linear_mipmap;
@@ -90,7 +99,7 @@ void vertex() {
     wave_lift = d.y;
     wave_scale = UV.x;
     world_pos = rest + d;
-    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
 }
 
 // ---- fine ripples: shading only ----------------------------------------------------------
@@ -163,6 +172,8 @@ void fragment() {
 #endif
     vec2 ground = pattern_xz(world_pos);
     float dist = length(VERTEX);
+    // where this surface was drawn (#187): the depth buffer behind it holds curved positions too
+    vec3 drawn = CURVED_FRAGMENT(vec4(VERTEX, 1.0), world_pos).xyz;
     vec3 det = water_detail(ground);
     // far off, the waves' normal is interpolated over a few pixels' worth of triangles: shading by
     // it draws the mesh's own grid over a whole lake (seen from above Nyon), so it eases to up
@@ -174,10 +185,13 @@ void fragment() {
     // the water between this surface and what is behind it, along the view
     float scene_depth = texture(water_depth_texture, SCREEN_UV).r;
     vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_depth, 1.0);
-    float through = max(0.0, -behind.z / behind.w + VERTEX.z);
+    float through = max(0.0, -behind.z / behind.w + drawn.z);
     // and straight down to it: the depth of the water here (the sky behind: very deep)
-    vec3 bed = (INV_VIEW_MATRIX * vec4(behind.xyz / behind.w, 1.0)).xyz;
-    float depth = scene_depth <= 0.0 ? 1000.0 : max(0.0, world_pos.y - bed.y);
+    vec3 bed = UNCURVED_FRAGMENT((INV_VIEW_MATRIX * vec4(behind.xyz / behind.w, 1.0)).xyz);
+    // a bed above the surface: on the curved Earth a view grazing the water's bulge leaves it
+    // again and meets the far shore above the water (from 1.7 m up, past ~5 km): deep, not a shore
+    // line drawn along every far coast (#187)
+    float depth = scene_depth <= 0.0 || (world_curvature > 0.0 && bed.y > world_pos.y) ? 1000.0 : max(0.0, world_pos.y - bed.y);
 #endif
 
 #ifndef STYLE_LIT
@@ -259,10 +273,14 @@ void fragment() {
     float crest = step(0.15, amp) * step(0.8 * amp, wave_lift + det.x * 0.18 * amp);
     float foam = max(shore, crest) * (FRONT_FACING ? 1.0 : 0.0);
     col = FRONT_FACING ? col : toon_underside;
-    ALBEDO = style_grade(occasion_mist(mix(col, toon_foam, foam), mist_at, dist));
-    ROUGHNESS = 0.6;
+    float far_off = FRONT_FACING ? max(smoothstep(far_lake_m.x, far_lake_m.y, dist),
+        smoothstep(far_lake_above_m.x, far_lake_above_m.y, CAMERA_POSITION_WORLD.y - world_pos.y)) : 0.0;
+    vec3 lake = style_grade(occasion_mist(far_lake, mist_at, dist))
+        * mix(0.9, 1.1, style_paint_noise(ground / 38.0) * 0.6 + style_paint_noise(ground / 9.0) * 0.4);
+    ALBEDO = mix(style_grade(occasion_mist(mix(col, toon_foam, foam), mist_at, dist)), lake, far_off);
+    ROUGHNESS = mix(0.6, 1.0, far_off);
 #ifndef NO_SCENE_DEPTH
-    ALPHA = FRONT_FACING ? max(mix(0.35, 0.97, smoothstep(0.0, 4.0, depth)), foam) : 0.88;
+    ALPHA = mix(FRONT_FACING ? max(mix(0.35, 0.97, smoothstep(0.0, 4.0, depth)), foam) : 0.88, 1.0, far_off);
 #endif
 #endif
 
@@ -278,7 +296,7 @@ void fragment() {
     vec2 ruv = clamp(SCREEN_UV + offset, vec2(0.001), vec2(0.999));
     float rdepth = texture(water_depth_texture, ruv).r;
     vec4 rbehind = INV_PROJECTION_MATRIX * vec4(ruv * 2.0 - 1.0, rdepth, 1.0);
-    float rthrough = -rbehind.z / rbehind.w + VERTEX.z;
+    float rthrough = -rbehind.z / rbehind.w + drawn.z;
     if (rthrough < 0.0) {
         ruv = SCREEN_UV;
         rthrough = through;
@@ -291,10 +309,10 @@ void fragment() {
     vec3 reflected = vec3(0.0);
     if (ssr_steps > 0 && FRONT_FACING) {
         // screen-space reflection (Realistic+): march the reflected ray against the opaque depth
-        vec3 r = reflect(normalize(VERTEX), NORMAL);
+        vec3 r = reflect(normalize(drawn), NORMAL);
         float t = 1.0;
         for (int i = 0; i < ssr_steps; i++) {
-            vec3 p = VERTEX + r * t;
+            vec3 p = drawn + r * t;
             vec4 c = PROJECTION_MATRIX * vec4(p, 1.0);
             if (c.w <= 0.0) {
                 break;

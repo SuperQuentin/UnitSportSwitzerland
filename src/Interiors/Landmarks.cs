@@ -98,7 +98,7 @@ public static class Landmarks
 
     private static Landmark Ikea1(string name, double lat, double lon)
     {
-        var (e, n) = SwissProjection.ToLv95(lat, lon);
+        var (e, n) = SwissGeodesy.ToLv95(lat, lon);
         return new Landmark(name, BuildingType.Ikea, lat, lon, e, n);
     }
 
@@ -110,17 +110,23 @@ public static class Landmarks
     public static IEnumerable<Landmark> Near(TileId id)
     {
         foreach (var l in All)
-            if (l.E >= id.MinE - Reach && l.E <= id.MinE + ChunkFormat.TileSizeM + Reach
-                && l.N >= id.MinN - Reach && l.N <= id.MaxN + Reach)
+        {
+            // in the tile's own frame (x east, z south from its north-west corner; #1443)
+            var (x, z) = id.Local(l.E, l.N);
+            if (x >= -Reach && x <= ChunkFormat.TileSizeM + Reach && z >= -Reach && z <= ChunkFormat.TileSizeM + Reach)
                 yield return l;
+        }
     }
 
     /// <summary>
     /// The point of <paramref name="l"/> in <paramref name="id"/>'s frame: X east, Z south from the
     /// NW corner, like every tile file. May fall just outside the tile, which is the point of it.
     /// </summary>
-    public static Vector2 LocalPoint(TileId id, Landmark l) =>
-        new((float)(l.E - id.MinE), (float)(id.MaxN - l.N));
+    public static Vector2 LocalPoint(TileId id, Landmark l)
+    {
+        var (x, z) = id.Local(l.E, l.N);
+        return new((float)x, (float)z);
+    }
 
     /// <summary>Whether a solid is the right shape and size to be a landmark store at all.</summary>
     public static bool IsStoreShaped(PlanBox box, Building b)

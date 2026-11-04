@@ -189,13 +189,15 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
         {
             var tasks = new List<Task<RoadTile?>>();
             var centre = TileId.FromLv95(e, n);
-            for (int de = -1; de <= 1; de++)
-                for (int dn = -1; dn <= 1; dn++)
+            // dz (south) from +1 down to -1: the order the tiles were always visited in
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = 1; dz >= -1; dz--)
                 {
-                    var id = new TileId(centre.E + de, centre.N + dn);
-                    // only tiles that reach within the radius
-                    double ce = Math.Clamp(e, id.MinE, id.MinE + ChunkFormat.TileSizeM), cn = Math.Clamp(n, id.MaxN - ChunkFormat.TileSizeM, id.MaxN);
-                    if (Math.Abs(ce - e) > Radius || Math.Abs(cn - n) > Radius) continue;
+                    var id = centre.Neighbour(dx, dz);
+                    // only tiles that reach within the radius, in the tile's own frame (#1443)
+                    var (x, z) = id.Local(e, n);
+                    if (Math.Abs(Math.Clamp(x, 0, ChunkFormat.TileSizeM) - x) > Radius
+                        || Math.Abs(Math.Clamp(z, 0, ChunkFormat.TileSizeM) - z) > Radius) continue;
                     tasks.Add(source.LoadRoadsAsync(id));
                 }
             var tiles = await Task.WhenAll(tasks);
@@ -266,12 +268,12 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
 
         foreach (var tile in _tiles)
         {
-            var b = _origin.ToWorld(tile.Id.MinE, tile.Id.MaxN, 0);
+            var b = _origin.TileTransform(tile.Id).Origin;
             foreach (var j in tile.Junctions) AddCore(j, b, near);
         }
         foreach (var tile in _tiles)
         {
-            var b = _origin.ToWorld(tile.Id.MinE, tile.Id.MaxN, 0);
+            var b = _origin.TileTransform(tile.Id).Origin;
             var transitions = SegmentSections.TransitionsOf(tile);
             for (int i = 0; i < tile.Segments.Count; i++)
             {
@@ -290,7 +292,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
         }
         foreach (var tile in _tiles)
         {
-            var b = _origin.ToWorld(tile.Id.MinE, tile.Id.MaxN, 0);
+            var b = _origin.TileTransform(tile.Id).Origin;
             AddApproaches(tile, b, near);
         }
         PlaceLabels(near);

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Core;
 
@@ -47,6 +48,35 @@ public partial class OriginShifter : Node
 
     public static OriginShifter? Instance { get; private set; }
 
+    /// <summary>
+    /// How the origin follows the camera (#1430 H3): past <see cref="ThresholdM"/> from it (horizontally,
+    /// or in 3D when <see cref="Vertical"/>) it moves to the camera. <see cref="Rotates"/>: to an anchor
+    /// frame turned to the ellipsoid there; off while tiles are flat LV95, switched on with round tiles
+    /// (#1443 G2), for the ground and Space alike.
+    /// </summary>
+    public readonly record struct ReanchorMode(double ThresholdM, bool Vertical, bool Rotates);
+
+    /// <summary>
+    /// The Space regime's mode: every 20 km, turned to the ellipsoid under the camera above 250 km (#1480:
+    /// an orbit goes round the whole Earth, where the flat LV95 plane stretches; below, the flat tiles are
+    /// still drawn as one plane, so the frame stays flat there; the ground keeps its flat frame until round
+    /// tiles, #1443 G2). No rise yet: at 400 km a float still holds 3 cm at the camera, and world Y below
+    /// about -2 km is the interiors' band (<c>InteriorManager.InteriorBaseY</c>), which a risen origin puts
+    /// the camera in on the way down. The vertical origin (<see cref="OriginFrame.Alt0"/>) waits until the
+    /// interiors' band is told apart by altitude rather than by raw Y.
+    /// </summary>
+    public static ReanchorMode SpaceMode { get; set; } = new(20_000, Vertical: false, Rotates: true);
+
+    /// <summary>Whether the origin follows the camera in Space (above 60 km climbing, until below 50 km).</summary>
+    public bool InSpace { get; private set; }
+
+    /// <summary>Whether the Space frame turns now (#1480: above 250 km, until below 240, where no flat tile is drawn).</summary>
+    public bool Turned { get; private set; }
+
+
+    /// <summary>The world's origin, for whatever reads an altitude through it (the spectator's ceiling).</summary>
+    public WorldOrigin Origin => _origin;
+
     /// <summary>Horizontal metres from the origin past which the camera triggers a shift.</summary>
     public double ThresholdM { get; set; } = 3000;
 
@@ -62,6 +92,13 @@ public partial class OriginShifter : Node
     private readonly Func<Vector3?> _focus;
     private readonly Func<bool> _allowed;
     private readonly bool _stress;
+
+    /// <summary>
+    /// <c>--originyaw &lt;deg&gt;</c> with <c>--originstress</c> (#1430 H3): every shift goes to an anchor frame
+    /// turned by this much about the up, one way then back, so every handler meets a rotation.
+    /// </summary>
+    private readonly float _stressYaw;
+    private bool _stressTurned;
     private readonly HashSet<string> _warned = new();
 
     /// <param name="focus">Where precision matters most: the active camera.</param>
@@ -80,7 +117,9 @@ public partial class OriginShifter : Node
             _stress = true;
             ThresholdM = stress;
             StepM = 1;
-            GD.Print($"[origin] stress: shift past {stress:F0} m, to the metre");
+            _stressYaw = CmdArgs.Double("--originyaw") is double yaw ? Mathf.DegToRad((float)yaw) : 0f;
+            GD.Print($"[origin] stress: shift past {stress:F0} m, to the metre"
+                + (_stressYaw != 0 ? $", each shift turning the world {Mathf.RadToDeg(_stressYaw):F1}° (anchor frames, #1430 H3)" : ""));
         }
         else if (ParseThreshold() is { } threshold)
             ThresholdM = threshold;
@@ -110,6 +149,43 @@ public partial class OriginShifter : Node
         if (!_allowed() || _focus() is not { } at) return;
         // a camera gone to NaN would shift the whole world to NaN with it (#1006)
         if (!at.IsFinite()) return;
+
+        // the Space regime (#1430 H3): entered climbing past 60 km, left below 50 km. Both handovers are
+        // one rigid move of everything, the camera with it: the picture cannot change.
+        double altitude = _origin.AltitudeOf(at);
+        bool space = Curvature.SpaceRegime(InSpace, altitude);
+        if (space != InSpace)
+        {
+            InSpace = space;
+            var (se, sn) = _origin.ToLv95(at);
+            GD.Print(string.Create(CultureInfo.InvariantCulture, $"[origin] {(space ? "into" : "out of")} the Space regime at {altitude / 1000:F1} km"));
+            double enterAlt0 = SpaceMode.Vertical ? altitude : 0;
+            // in at 60 km the frame is flat (it turns from 250 km); out at 50 km it is the ground frame again, flat
+            // and on a whole-km corner, whatever it was
+            Turned = false;
+            if (space) ShiftTo(se, sn, exact: true, alt0: enterAlt0);
+            else ShiftTo(se, sn);
+            return;
+        }
+        if (InSpace)
+        {
+            double alt0 = SpaceMode.Vertical ? altitude : _origin.Alt0;
+            // the frame turns only where no flat tile is drawn any more (#1480, above 250 km, back below 240):
+            // a change is one rigid move, as the handovers are, to a turned anchor or to the flat frame there
+            bool turn = SpaceMode.Rotates && Curvature.TurnRegime(Turned, altitude);
+            if (turn != Turned)
+            {
+                Turned = turn;
+                var (te, tn) = _origin.ToLv95(at);
+                GD.Print(string.Create(CultureInfo.InvariantCulture, $"[origin] the Space frame {(turn ? "turns" : "stops turning")} at {altitude / 1000:F1} km"));
+                ShiftTo(te, tn, exact: true, alt0: alt0, axes: turn ? SpaceAnchor(at, alt0) : null);
+                return;
+            }
+            if (SpaceMode.Vertical ? at.Length() <= SpaceMode.ThresholdM : new Vector2(at.X, at.Z).Length() <= SpaceMode.ThresholdM) return;
+            var (pe, pn) = _origin.ToLv95(at);
+            ShiftTo(pe, pn, exact: true, alt0: alt0, axes: Turned ? SpaceAnchor(at, alt0) : null);
+            return;
+        }
         if (new Vector2(at.X, at.Z).Length() <= ThresholdM) return;
 
         var (e, n) = _origin.ToLv95(at);
@@ -122,16 +198,21 @@ public partial class OriginShifter : Node
     /// Returns false when shifting is not allowed or would change nothing. <paramref name="exact"/>
     /// puts the origin on the point itself rather than snapping it to <see cref="StepM"/>.
     /// </summary>
-    public bool ShiftTo(double e, double n, bool exact = false)
+    /// <param name="axes">The anchor to move to (a turning Space shift, <see cref="SpaceAnchor"/>); null for one built from <paramref name="e"/> / <paramref name="n"/>.</param>
+    public bool ShiftTo(double e, double n, bool exact = false, double alt0 = 0, FrameAxes? axes = null)
     {
         if (!_allowed()) return false;
         double step = Math.Max(1, StepM);
         double newE = exact ? e : Math.Round(e / step) * step, newN = exact ? n : Math.Round(n / step) * step;
-        if (newE == _origin.E && newN == _origin.N) return false;
+        if (!_origin.Frame.IsAnchor && newE == _origin.E && newN == _origin.N && alt0 == _origin.Alt0) return false;
 
         var clock = Stopwatch.StartNew();
-        var shift = _origin.MoveTo(newE, newN);
-        var pass = new Pass(shift);
+        var shift = _stressYaw != 0 ? _origin.MoveTo(StressAxes(newE, newN))
+            : axes != null ? _origin.MoveTo(axes)
+            // a turning re-anchor (round tiles, #1443 G2): the ellipsoid's own axes at the camera
+            : InSpace && Turned ? _origin.MoveTo(FrameAxes.GroundAt(newE, newN, alt0))
+            : _origin.MoveTo(newE, newN, alt0);
+        var pass = new Pass(shift) { Owner = this };
         Visit(GetTree().Root, pass, childrenAreGlobal: true);
         foreach (var body in pass.Kinematic) Teleport(body);
         foreach (var node in pass.Doppler) ResetDoppler(node);
@@ -151,10 +232,81 @@ public partial class OriginShifter : Node
         return true;
     }
 
+    /// <summary>
+    /// The turning Space anchor under the camera (#1430 H5): built in ECEF (<see cref="FrameAxes.Tangent"/>),
+    /// its axes the current ones turned by the least rotation, its origin <paramref name="alt0"/> high
+    /// (LV95 heights, as the ground frame's) under the camera. No LV95 in it: an orbit goes everywhere.
+    /// </summary>
+    private FrameAxes SpaceAnchor(Vector3 camera, double alt0)
+    {
+        var frame = _origin.Frame;
+        var at = frame.ToEcef(camera);
+        double drop = frame.AltitudeOf(camera) - alt0;
+        // LV95's heights fail only at its two singular points: the ellipsoid's there, near enough
+        if (!double.IsFinite(drop)) drop = Ellipsoid.Wgs84.ToGeodetic(at).H - alt0;
+        // from the flat ground frame (entering Space, near Switzerland): its grid axes under the camera
+        var previous = frame.Axes;
+        if (previous == null)
+        {
+            var g = frame.ToGlobal(camera);
+            previous = FrameAxes.GroundAt(g.E, g.N, alt0);
+        }
+        return FrameAxes.Tangent(at, drop, previous);
+    }
+
+    /// <summary>
+    /// Moves one node placed in world space, and what it holds, into another frame: what a whole-world
+    /// shift does to every node, done to this one only. A server region hands a body to another region
+    /// this way (#1456): its node keeps its path, its frame changes. Kinematic bodies are teleported, the
+    /// handlers told, as in <see cref="ShiftTo"/>.
+    /// </summary>
+    public static void Move(Node3D node, OriginShift shift)
+    {
+        var pass = new Pass(shift);
+        if (node is IOriginShiftAware handler) pass.Aware.Add(handler);
+        node.GlobalTransform = shift.Apply(node.GlobalTransform);
+        pass.Moved++;
+        // a turning shift turns what moves, as Visit does for what the node holds (a region's frame turns with G2)
+        if (shift.Turns)
+        {
+            if (node is RigidBody3D rigid)
+            {
+                rigid.LinearVelocity = shift.Direction(rigid.LinearVelocity);
+                rigid.AngularVelocity = shift.Direction(rigid.AngularVelocity);
+            }
+            else if (node is CharacterBody3D character and not IOriginShiftAware)
+                character.Velocity = shift.Direction(character.Velocity);
+        }
+        if (node is PhysicsBody3D body && PhysicsServer3D.BodyGetMode(body.GetRid()) == PhysicsServer3D.BodyMode.Kinematic)
+            pass.Kinematic.Add(body);
+        Visit(node, pass, childrenAreGlobal: false);
+        foreach (var kinematic in pass.Kinematic) Teleport(kinematic);
+        foreach (var aware in pass.Aware) aware.OnOriginShifted(shift);
+    }
+
+    /// <summary>
+    /// The anchor frame a yawed stress shift goes to: the ground's own axes at the new place, at
+    /// altitude 0 (so world Y stays near the altitude), turned about the up by the stress yaw every
+    /// other shift.
+    /// </summary>
+    private FrameAxes StressAxes(double e, double n)
+    {
+        var g = FrameAxes.GroundAt(e, n, 0);
+        _stressTurned = !_stressTurned;
+        if (!_stressTurned) return g;
+        double c = Math.Cos(_stressYaw), s = Math.Sin(_stressYaw);
+        // turned about up (Y): X' = X cos - Z sin... as Basis(Up, yaw) turns the world's X and Z
+        var x = new EcefPos(g.X.X * c - g.Z.X * s, g.X.Y * c - g.Z.Y * s, g.X.Z * c - g.Z.Z * s);
+        var z = new EcefPos(g.X.X * s + g.Z.X * c, g.X.Y * s + g.Z.Y * c, g.X.Z * s + g.Z.Z * c);
+        return g with { X = x, Z = z };
+    }
+
     /// <summary>What one shift has moved and found so far.</summary>
     private sealed class Pass(OriginShift shift)
     {
         public readonly OriginShift Shift = shift;
+        /// <summary>The shifter doing a whole-world shift (it warns about containers under <c>--originstress</c>); null for <see cref="Move"/>.</summary>
+        public OriginShifter? Owner;
         public int Moved;
         public readonly List<IOriginShiftAware> Aware = new();
         public readonly List<PhysicsBody3D> Kinematic = new();
@@ -200,7 +352,7 @@ public partial class OriginShifter : Node
     /// the body is made static for the move and kinematic again after.
     /// </para>
     /// </summary>
-    private static void Teleport(PhysicsBody3D body)
+    public static void Teleport(PhysicsBody3D body)
     {
         var rid = body.GetRid();
         PhysicsServer3D.BodySetMode(rid, PhysicsServer3D.BodyMode.Static);
@@ -213,7 +365,7 @@ public partial class OriginShifter : Node
     /// of <paramref name="node"/> have no Node3D parent transform to follow (or follow a container
     /// that stays at the identity), so their own transform is their world position.
     /// </summary>
-    private void Visit(Node node, Pass pass, bool childrenAreGlobal)
+    private static void Visit(Node node, Pass pass, bool childrenAreGlobal)
     {
         int count = node.GetChildCount();
         for (int i = 0; i < count; i++)
@@ -245,9 +397,20 @@ public partial class OriginShifter : Node
             if (global)
             {
                 // a node that handles the shift itself (ThrowAim) knows what it holds
-                if (_stress && spatial is not IOriginShiftAware) WarnIfContainer(spatial);
+                if (pass.Owner is { _stress: true } owner && spatial is not IOriginShiftAware) owner.WarnIfContainer(spatial);
                 spatial.Transform = pass.Shift.Apply(spatial.Transform);
                 pass.Moved++;
+            }
+            // a turning shift turns what moves (#1430 H3); a body that handles the shift turns its own
+            if (pass.Shift.Turns)
+            {
+                if (spatial is RigidBody3D rigid)
+                {
+                    rigid.LinearVelocity = pass.Shift.Direction(rigid.LinearVelocity);
+                    rigid.AngularVelocity = pass.Shift.Direction(rigid.AngularVelocity);
+                }
+                else if (spatial is CharacterBody3D character and not IOriginShiftAware)
+                    character.Velocity = pass.Shift.Direction(character.Velocity);
             }
             // whether it moved itself or with its parent, it is somewhere else now
             if (spatial is PhysicsBody3D body

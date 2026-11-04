@@ -59,7 +59,7 @@ public partial class ArcadeProbe : Node
         var tile = new BuildingTile { Id = id, Buildings = new List<Building> { BowlingProbe.Box(500, 500, c.W, c.D, c.H, c.Kind) } };
         Venues.Override = new List<VenueRecord>
         {
-            new("n1", VenueType.Arcade, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", $"Arcade {c.Name}"),
+            new("n1", VenueType.Arcade, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, "", $"Arcade {c.Name}"),
         };
         string what = $"{c.Name} ({c.W}x{c.D} m, {c.H} m, {c.Kind})";
         Check(Venues.HallOf(BuildingTypes.For(tile), 0) == VenueType.Arcade, $"{what}: the solid is an arcade");

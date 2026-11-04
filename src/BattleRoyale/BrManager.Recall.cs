@@ -76,7 +76,7 @@ public partial class BrManager
         if (!_server || !RecallOpen || Origin == null) return false;
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
             || BodyOf(peer) is not { } body) return false;
-        var (be, bn) = Origin.ToLv95(body.GlobalPosition);
+        var (be, bn) = (body.Global.E, body.Global.N);
         var here = new Vector2((float)(be - _state.AreaE), (float)(bn - _state.AreaN));
         var stop = Stops().OrderBy(s => s.At.DistanceTo(here)).FirstOrDefault();
         if (stop.At.DistanceTo(here) > RecallReach + 4f) return false;
@@ -107,14 +107,15 @@ public partial class BrManager
     /// </summary>
     private void RecallBot(long id, double e, double n, float alt)
     {
-        if (Director?.Get(id) is not { } bot || Origin == null) return;
-        var at = Origin.ToWorld(e, n, alt + 180);
+        if (Director?.Get(id) is not { } bot || (bot.Body.Origin ?? Origin) is not { } frame) return;
+        // in its own frame: a bot in a region of its own (#1456)
+        var at = frame.ToWorld(e, n, alt + 180);
         bot.Body.Respawn(at);
         bot.Body.Leap(at, new Vector3(0, 0, -20f), RideKind.Wingsuit);
         bot.Inventory.Clear();
         bot.Inventory.Put(0, new ItemStack(ItemId.Knife, 1));
         bot.Inventory.Add(ItemId.Bandage, 2);
-        if (bot.Brain is BrBrain brain) brain.DropTarget = Origin.ToWorld(e, n, alt);
+        if (bot.Brain is BrBrain brain) brain.DropTarget = frame.ToWorld(e, n, alt);
     }
 
     // ---- client ---------------------------------------------------------------------------------

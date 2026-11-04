@@ -29,9 +29,14 @@ namespace UnitSport.Core;
 /// A line starting with '/' is typed into the chat between two shots (<c>/style cartoon</c>,
 /// <c>/time set 19:30</c>), so one launch can picture a live change.
 /// A line whose path is "~ease", "~lin", "~in" or "~out" is a glide: the camera moves there from the last line's pose over
-/// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>).
+/// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>). "~exp" (#1430 H4, the street-to-Earth
+/// pull-back) eases like "~ease" but grows the height geometrically (the same zoom every second, 2 m to 12,000 km),
+/// above the ground for a "g" line.
 /// "fov 6.87" sets the camera's vertical field of view, degrees, for the shots after it (#1433: a lens's
-/// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>).
+/// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>); below 1° it is a
+/// frustum of that angle (<see cref="CameraLens"/>, the telescope's, #1440).
+/// "puppet a320 E,N,alt,heading,speed[,climb]" (#1430) sends a machine across the shots after it, in a straight
+/// line (<see cref="SpawnPuppet"/>: <c>Movie/FilmPuppet</c>, the street-to-Earth film's airliner and saucer).
 /// "shift dE,dN" moves the floating origin by that many metres with the camera still (#185), then
 /// logs the CPU and GPU time of the frames after it against the frames before: what a shift costs
 /// the renderer (SDFGI relights, <c>docs/notes/core/floating-origin.md</c>). Shots before and
@@ -47,7 +52,7 @@ public partial class ShotRunner : Node
 {
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
         float? AboveGround = null, string? Command = null, float? Inside = null, Vector2? ShiftBy = null, string? Door = null,
-        bool Local = false, float? Fov = null);
+        bool Local = false, float? Fov = null, string? Puppet = null);
 
     /// <summary>How far from an "i" shot's point its door may be, m.</summary>
     private const float InsideDoorReach = 50f;
@@ -69,6 +74,9 @@ public partial class ShotRunner : Node
 
     /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
+
+    /// <summary>Sends a queued "puppet" line's machine across the shots (<c>Movie/FilmPuppet</c>); the client world spawns it.</summary>
+    public System.Action<string>? SpawnPuppet { get; set; }
 
     /// <summary>
     /// Whether the ground round a point is complete (the director's <c>ChunkManager.CompleteNear</c>,
@@ -153,8 +161,11 @@ public partial class ShotRunner : Node
 
     private static bool HideHudRequested() => CmdArgs.Has("--nohud");
 
+    /// <summary>A canvas layer in this group is part of the picture (a film's overlay, <c>World/Globe/AltitudeReadout</c>): <c>--nohud</c> leaves it.</summary>
+    public static readonly StringName FilmOverlay = "film_overlay";
+
     /// <summary>
-    /// Hides every CanvasLayer. The tree is walked once, then followed through
+    /// Hides every CanvasLayer but the film's overlays. The tree is walked once, then followed through
     /// <c>NodeAdded</c>: a whole-tree <c>FindChildren</c> every frame visited each tile node and
     /// was 90 % of the main thread at 40 rings, the very cost the shots were measuring (#221).
     /// </summary>
@@ -168,7 +179,8 @@ public partial class ShotRunner : Node
             GetTree().NodeAdded += OnNodeAdded;
         }
         _hudLayers.RemoveAll(layer => !IsInstanceValid(layer));
-        foreach (var layer in _hudLayers) layer.Visible = false;
+        foreach (var layer in _hudLayers)
+            if (!layer.IsInGroup(FilmOverlay)) layer.Visible = false;
     }
 
     private void OnNodeAdded(Node node)
@@ -333,8 +345,11 @@ public partial class ShotRunner : Node
         var g = _shot!.Value;
         _elapsed += delta;
         float t = g.SettleSeconds <= 0 ? 1f : Mathf.Clamp((float)(_elapsed / g.SettleSeconds), 0f, 1f);
-        float k = g.OutPath == "~ease" ? t * t * (3f - 2f * t) : g.OutPath == "~in" ? t * t : g.OutPath == "~out" ? 1f - (1f - t) * (1f - t) : t; // "~lin"
+        bool exp = g.OutPath == "~exp";
+        float k = g.OutPath is "~ease" or "~exp" ? t * t * (3f - 2f * t) : g.OutPath == "~in" ? t * t : g.OutPath == "~out" ? 1f - (1f - t) * (1f - t) : t; // "~lin"
         var p = _glideFrom.Lerp(g.Position, k);
+        // the height geometrically, from its own easing: each second the same zoom
+        if (exp && g.AboveGround == null) p = p with { Y = Geometric(_glideFrom.Y, g.Position.Y, k) };
         float pitch = Mathf.Lerp(_glideFromPitch, g.PitchDeg, k);
         float yaw = _glideFromYaw + Mathf.Wrap(g.YawDeg - _glideFromYaw, -180f, 180f) * k; // the short way round
         if (g.Local)
@@ -348,7 +363,7 @@ public partial class ShotRunner : Node
         {
             // above the ground: hold the height until the ground under the camera has streamed in
             float y = _camera.Position.Y;
-            if (GroundHeight?.Invoke(world) is { } ground) y = ground + Mathf.Lerp(_glideFromAbove, to, k);
+            if (GroundHeight?.Invoke(world) is { } ground) y = ground + (exp ? Geometric(_glideFromAbove, to, k) : Mathf.Lerp(_glideFromAbove, to, k));
             world = world with { Y = y };
         }
         _camera.Position = world;
@@ -359,6 +374,10 @@ public partial class ShotRunner : Node
             _shot = null;
         }
     }
+
+    /// <summary>From <paramref name="a"/> to <paramref name="b"/> by a constant factor (both above a metre), at <paramref name="k"/> 0..1.</summary>
+    private static float Geometric(float a, float b, float k) =>
+        (float)(Math.Max(a, 1.0) * Math.Pow(Math.Max(b, 1.0) / Math.Max(a, 1.0), k));
 
     /// <summary>Starts the next queued shot, reading lines appended since the last poll. False while idle.</summary>
     private bool NextFromQueue(double delta)
@@ -385,10 +404,15 @@ public partial class ShotRunner : Node
             ShiftOrigin(by);
             return false;
         }
+        if (next is { Puppet: { } puppet })
+        {
+            SpawnPuppet?.Invoke(puppet);
+            return false;
+        }
         if (next is { Fov: { } fov })
         {
             GD.Print(string.Create(CultureInfo.InvariantCulture, $"[shot-queue] fov {fov}"));
-            _camera.Fov = fov;
+            CameraLens.SetFov(_camera, fov);
             return false;
         }
         if (next is { } shot)
@@ -426,6 +450,7 @@ public partial class ShotRunner : Node
             else if (line.StartsWith('/')) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Command: line));
             else if (line.StartsWith("fov ") && float.TryParse(line[4..], NumberStyles.Float, CultureInfo.InvariantCulture, out float fov))
                 _pending.Enqueue(new Shot(default, 0, 0, 0, "", Fov: fov));
+            else if (line.StartsWith("puppet ")) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Puppet: line[7..]));
             else if (TryParseShift(line, out var by))
             {
                 _pending.Enqueue(new Shot(default, 0, 0, 0, "", ShiftBy: by));

@@ -90,7 +90,7 @@ public static class HerdPlan
                 }
                 else spots = near.ToArray();
                 // two herds on one field stay apart: a second centre too close to an earlier one is dropped
-                double he = tile.Id.MinE + ce, hn = tile.Id.MinN + cn;
+                var (he, hn) = tile.Id.Global(ce, ChunkFormat.TileSizeM - cn);   // cells count north from the south-west corner
                 if (herds.Any(o => o.Tile == tile.Id && Math.Abs(o.E - he) < Spread * 1.5 && Math.Abs(o.N - hn) < Spread * 1.5)) continue;
                 int cows = Math.Min(4 + (int)(Unit(seed, 1) * 7f), Math.Max(2, cells.Count / 40));
                 var breed = Unit(fid, 2) < 0.6f ? CowBreed.Brown : CowBreed.Simmental;
@@ -193,7 +193,8 @@ public static class HerdPlan
                     if (spots.Count < MinSpots) continue;
                     int cows = 3 + (int)(Unit(cellSeed, 4) * 6f);
                     var breed = Unit(cellSeed, 5) < 0.6f ? CowBreed.Brown : CowBreed.Simmental;
-                    herds.Add(new Herd(id, herds.Count, id.MinE + x, id.MaxN - z, spots.ToArray(), breed, cows, cellSeed));
+                    var (he, hn) = id.Global(x, z);
+                    herds.Add(new Herd(id, herds.Count, he, hn, spots.ToArray(), breed, cows, cellSeed));
                     break;
                 }
             }

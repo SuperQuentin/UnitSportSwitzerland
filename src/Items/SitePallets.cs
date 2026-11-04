@@ -109,7 +109,8 @@ public static class SitePallets
             float roll = (h >> 20 & 0xFFFF) / 65536f;
             float depth = (h >> 40 & 7) < 2 ? Pallets.SquareDepth : Pallets.NarrowDepth;
             // runners along the facade: a node's +X at yaw y is (cos y, -sin y), the yard's along
-            into.Add(new YardPallet(yard.Owner, slot, id.MinE + x, id.MaxN - z, yard.Y,
+            var (pe, pn) = id.Global(x, z);
+            into.Add(new YardPallet(yard.Owner, slot, pe, pn, yard.Y,
                 DormantSlots.Wrap(yard.Heading), Pallets.LoadOf(roll, depth)));
         }
     }

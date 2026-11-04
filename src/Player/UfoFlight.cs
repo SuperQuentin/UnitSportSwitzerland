@@ -139,6 +139,10 @@ public static class UfoFlight
         var wish = (fwd * -stick.Y + right * stick.X) * top * rampHold;
         // accelerating toward the wish, braking harder when it asks for less
         float rate = wish.LengthSquared() < flat.LengthSquared() * 0.81f ? StopAccel : c.Boost ? DashAccel : Accel;
+        // back from orbit (#1430 H5) at kilometres a second: the dampers brake in proportion, as the hover
+        // never flies that fast by itself (nothing changes up to twice the boost)
+        float flatSpeed = flat.Length();
+        if (flatSpeed > FastFrom) rate = Mathf.Max(rate, (flatSpeed - Dash) * FastBrake);
         flat = flat.MoveToward(wish, rate * dt);
 
         float vyWish = lift * (c.Boost ? DashClimb : Climb);
@@ -148,7 +152,8 @@ public static class UfoFlight
         // that holds its height would otherwise hover 2 m up for ever after a slow descent)
         if (lift <= 0.05f && env.Below < SettleHeight && flat.Length() < LandSpeed) vyWish = Mathf.Min(vyWish, -FlareSink);
         if (rampHold < 1f) vyWish = Mathf.Max(vyWish, 0f) * 0.3f + 0.6f;
-        float vy = Mathf.MoveToward(s.Velocity.Y, vyWish, VerticalAccel * dt);
+        float vAccel = Mathf.Abs(s.Velocity.Y) > FastFrom ? Mathf.Max(VerticalAccel, (Mathf.Abs(s.Velocity.Y) - DashClimb) * FastBrake) : VerticalAccel;
+        float vy = Mathf.MoveToward(s.Velocity.Y, vyWish, vAccel * dt);
         s.Velocity = new Vector3(flat.X, vy, flat.Z);
 
         // the legs: down near the ground (descending or slow), folded up high, unless the pilot chose
@@ -171,6 +176,57 @@ public static class UfoFlight
 
         float speed01 = Mathf.Clamp(s.Velocity.Length() / Dash, 0f, 1f);
         s.Hum = Approach(s.Hum, 0.3f + 0.7f * speed01, 3f, dt);
+        return s;
+    }
+
+    /// <summary>
+    /// Out of orbit (#1430 H5), m/s and per second: faster than this the hover brakes at this fraction of its
+    /// excess speed each second (2 km/s comes down to cruising in about ten seconds).
+    /// </summary>
+    public const float FastFrom = 2f * Dash, FastBrake = 0.4f;
+
+    /// <summary>
+    /// The space drive (#1430 H5), m/s²: the stick along the heading frame and the climb keys along the up,
+    /// gentle for station keeping, three g with boost (orbital speed in about four minutes). Lift beats
+    /// gravity (9.6 at 60 km), so the saucer can still climb without boost.
+    /// </summary>
+    public const float SpaceDrive = 3f, SpaceLift = 12f, SpaceBoost = 30f;
+
+    /// <summary>
+    /// The pilot's thrust in Space, world axes, m/s² (#1430 H5): horizontal from the stick in the heading
+    /// frame, along <paramref name="up"/> from the climb keys. Nothing held is a coast.
+    /// </summary>
+    public static Vector3 SpaceThrust(in Controls c, float yaw, Vector3 up)
+    {
+        var stick = c.Stick.LengthSquared() > 1f ? c.Stick.Normalized() : c.Stick;
+        var flat = Heading(yaw) * -stick.Y + Right(yaw) * stick.X;
+        float lift = c.Up - c.Down;
+        return flat * (c.Boost ? SpaceBoost : SpaceDrive) + up * lift * (c.Boost ? SpaceBoost : SpaceLift);
+    }
+
+    /// <summary>
+    /// The saucer in Space (#1430 H5): its motion is its orbit's (<see cref="Ufo"/> integrates it in doubles),
+    /// so this only turns it to the look, folds the legs (unless the pilot wants them), tilts it into its
+    /// <paramref name="thrust"/> and sets the hum. <paramref name="velocity"/> is the ground-relative velocity
+    /// the orbit gives it, kept for the HUD and for the hover it falls back to below the Space regime.
+    /// </summary>
+    public static State SpaceStep(State s, in Controls c, Vector3 thrust, Vector3 velocity, float dt)
+    {
+        if (c.Beam) s.Beam = !s.Beam;
+        if (c.Lights) s.Lights = !s.Lights;
+        s.Landed = false;
+        s.Settled = 0f;
+        s.RampWanted = null;
+        s.Ramp = Mathf.MoveToward(s.Ramp, 0f, RampSpeed * 2f * dt);
+        s.Yaw += TurnStep(s.Yaw, c.ViewYaw, dt);
+        if (c.Hatch) s.LegsWanted = !(s.LegsWanted ?? s.Legs > 0.5f);
+        s.Legs = Mathf.MoveToward(s.Legs, s.LegsWanted == true ? 1f : 0f, LegsSpeed * dt);
+        var fwd = Heading(s.Yaw);
+        var right = Right(s.Yaw);
+        Wobble(ref s, (new Vector2(thrust.Dot(fwd), thrust.Dot(right)) * TiltPerAccel).LimitLength(MaxTilt), dt);
+        s.Velocity = velocity;
+        s.LastFlat = MathX.Flat(velocity);
+        s.Hum = Approach(s.Hum, 0.3f + 0.7f * Mathf.Clamp(thrust.Length() / SpaceBoost, 0f, 1f), 3f, dt);
         return s;
     }
 

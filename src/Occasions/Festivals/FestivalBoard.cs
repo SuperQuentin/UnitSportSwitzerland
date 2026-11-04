@@ -16,8 +16,15 @@ public sealed class CrewEntry
     /// <summary>Points per member, by progress key: who contributed (and so is paid a milestone).</summary>
     public Dictionary<string, int> Contributed { get; set; } = new();
 
-    /// <summary>The members' names as they were when they last scored, for the Journal.</summary>
+    /// <summary>The members' names as they were when they last scored: a cache, for a key whose name is unknown (#1359).</summary>
     public Dictionary<string, string> Names { get; set; } = new();
+
+    /// <summary>
+    /// The name to show for a member: <paramref name="nameOf"/> gives it now from the progress key (a PlayerKey or
+    /// <c>acct:</c> id; null for a key that is no id), else the stored one (also the backup when the id no longer resolves).
+    /// </summary>
+    public string NameOf(string memberKey, Func<string, string?, string>? nameOf) =>
+        nameOf != null && Net.PlayerIds.IsId(memberKey) ? nameOf(memberKey, Names.GetValueOrDefault(memberKey)) : Names.GetValueOrDefault(memberKey, "?");
 }
 
 /// <summary>A milestone a play has just reached, and the members it pays.</summary>

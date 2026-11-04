@@ -55,7 +55,8 @@ public static class RewardPlacer
             for (int cy = 0; cy < 4; cy++)
             {
                 long ke = tile.E * 4L + cx, kn = tile.N * 4L + cy;
-                double e0 = tile.MinE + cx * Cell, n0 = tile.MinN + cy * Cell;
+                // the cell's south-west corner: cy counts north from the tile's south edge (#1443)
+                var (e0, n0) = tile.Global(cx * Cell, ChunkFormat.TileSizeM - cy * Cell);
                 var common = new SpotRng(AdventureHash.Of(ke, kn, SaltCommon));
                 if (common.Next() < PCommon && Candidate(ref common, t, e0, n0, 30, RoadClear) is { } c)
                     Add(chests, ids, Chest(c.E, c.N, c.Alt, ChestTier.Common, null, ke, kn, SaltCommon, t, canton, remote: false));
@@ -223,8 +224,12 @@ public static class RewardPlacer
             }
         }
 
-        public (double E, double N) Inside(double e, double n) =>
-            (Math.Clamp(e, _tile.MinE + 2, _tile.MinE + 998), Math.Clamp(n, _tile.MinN + 2, _tile.MinN + 998));
+        public (double E, double N) Inside(double e, double n)
+        {
+            // 2 m inside the tile's edges, in its own frame (#1443)
+            var (x, z) = _tile.Local(e, n);
+            return _tile.Global(Math.Clamp(x, 2, 998), Math.Clamp(z, 2, 998));
+        }
 
         public float Height(double e, double n) => (float)_grid.SampleHeight(e, n);
 

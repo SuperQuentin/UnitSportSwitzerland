@@ -37,7 +37,7 @@ public partial class InteractOutlineCheck : Node
         var id = new TileId(2600, 1200);
         Venues.Override = new List<VenueRecord>
         {
-            new("o1", VenueType.Cinema, id.MinE + 500, id.MaxN - 500, VenueFix.Inside, VenueFlags.None, 0, "", "Cinéma outline"),
+            new("o1", VenueType.Cinema, id.Centre.E, id.Centre.N, VenueFix.Inside, VenueFlags.None, 0, "", "Cinéma outline"),
         };
         var cinema = Plan("a cinema", BowlingProbe.Box(500, 500, 18, 34, 9, BuildingKind.Commercial));
         Venues.Override = null;

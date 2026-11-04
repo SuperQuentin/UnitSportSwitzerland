@@ -74,8 +74,18 @@ public partial class PinballTables : Node
         return node;
     }
 
+    public override void _Ready()
+    {
+        // a server keeps scores by id (#1359): the ones still under a player's name become its own once it is known
+        if (PlayerIds.Server is { } ids && ids != _claimFrom) { _claimFrom = ids; ids.Identified += ClaimLegacy; }
+    }
+
+    private PlayerIds? _claimFrom;
+
     public override void _ExitTree()
     {
+        if (_claimFrom != null) _claimFrom.Identified -= ClaimLegacy;
+        _claimFrom = null;
         if (Instance == this) Instance = null;
     }
 

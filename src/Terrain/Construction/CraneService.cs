@@ -411,7 +411,11 @@ public partial class CraneService : Node
         _forget.Clear();
     }
 
-    private static GlobalPos Lv95(TileId tile, Vector3 local) => new(tile.MinE + local.X, tile.MaxN - local.Z, local.Y);
+    private static GlobalPos Lv95(TileId tile, Vector3 local)
+    {
+        var (e, n) = tile.Global(local.X, local.Z);
+        return new(e, n, local.Y);
+    }
 
     private static double Flat(GlobalPos a, GlobalPos b) => Math.Sqrt((a.E - b.E) * (a.E - b.E) + (a.N - b.N) * (a.N - b.N));
 }

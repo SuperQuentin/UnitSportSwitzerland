@@ -219,7 +219,7 @@ public partial class Herds : Node3D, IOriginContainer
     {
         int index = _staged++;
         var plan = HerdPlan.Staged(index, e, n, Math.Clamp(count, 1, 40), breed, radius, seed ?? (uint)(index * 7 + 3));
-        var id = new TileId(int.MinValue + index, 0);
+        var id = StagedKey(index);
         _byTile[id] = new List<Live> { Add(plan) };
         return index;
     }
@@ -231,7 +231,7 @@ public partial class Herds : Node3D, IOriginContainer
     /// </summary>
     public void Rewind(int handle)
     {
-        if (_byTile.TryGetValue(new TileId(int.MinValue + handle, 0), out var list))
+        if (_byTile.TryGetValue(StagedKey(handle), out var list))
             foreach (var h in list) h.Epoch = Now;
     }
 
@@ -250,7 +250,7 @@ public partial class Herds : Node3D, IOriginContainer
     /// <summary>A staged herd's cows where they are now, LV95 and compass yaw (rad), for the director's track dump.</summary>
     public IEnumerable<(double E, double N, float Alt, float Yaw)> StagedCows(int handle)
     {
-        if (!_byTile.TryGetValue(new TileId(int.MinValue + handle, 0), out var list)) yield break;
+        if (!_byTile.TryGetValue(StagedKey(handle), out var list)) yield break;
         double now = Now;
         foreach (var h in list)
             for (int i = 0; i < h.Cows.Length; i++)
@@ -260,8 +260,15 @@ public partial class Herds : Node3D, IOriginContainer
             }
     }
 
+    /// <summary>The key a staged herd is filed under: a tile no map has (never a neighbour of a real one).</summary>
+    private static TileId StagedKey(int handle)
+    {
+        int e = int.MinValue + handle;
+        return new TileId(e, 0);
+    }
+
     /// <summary>Takes a staged herd away again.</summary>
-    public void Unstage(int handle) => OnTileGone(new TileId(int.MinValue + handle, 0));
+    public void Unstage(int handle) => OnTileGone(StagedKey(handle));
 
     /// <summary>Every herd's anchor and count, for probes and bots (LV95).</summary>
     public IEnumerable<Herd> All => _all.Select(h => h.Plan);
@@ -387,11 +394,10 @@ public partial class Herds : Node3D, IOriginContainer
         var plan = cow.Herd.Plan;
         double now = Now;
         var pure = CowMotion.At(plan, cow.Index, now - cow.Herd.Epoch);
-        double de = plan.E + pure.Offset.X - o.E, dn = plan.N + pure.Offset.Y - o.N;
         var down = new Override
         {
             Air = false, E = o.E, N = o.N, Alt = o.Alt, Yaw = o.Yaw, Since = now,
-            Distance = (float)Math.Sqrt(de * de + dn * dn),
+            Distance = (float)GlobalPos.HorizontalDistance(plan.E + pure.Offset.X, plan.N + pure.Offset.Y, o.E, o.N),
         };
         _over[cow.Key] = down;
         GD.Print($"[herds] cow {plan.Tile}/{plan.Index}/{cow.Index} set down at LV95 {o.E:F1}/{o.N:F1}, {down.Distance:F0} m from its herd");

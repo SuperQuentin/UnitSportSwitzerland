@@ -24,6 +24,23 @@
   openh264 at 24 Mb/s); with `--fixed-fps 30` the game waits for the encoder instead of dropping a frame, so every frame of
   the shot queue's glides is in the film, however slowly it renders. Winget's full ffmpeg (`Gyan.FFmpeg`, in
   `%LOCALAPPDATA%/Microsoft/WinGet/Links`) has libx264 and https; Krita's has neither.
+- **`--fixed-fps` is an engine flag**: it must come before the `--`, so a frame-exact `--clip-hq` film runs Godot
+  directly (`<godot> --resolution 1920x1080 --fixed-fps 30 --path . -- --clip name,3,75 --clip-quit --nocapture
+  --clip-hq ...`); `tools/record-clip.sh` passes its flags after the `--`, where Godot ignores it. There the engine kept
+  real-time steps, a heavy 1080p scene rendered at ~10 fps and the recorder kept one picture a frame: the 45 s glide of
+  #1430's pull-back played in 16 s.
+- **The street-to-Earth pull-back** (#1430 H4): the `--cube-global` region on D:, `--sun real --altitude-readout --nohud`
+  (the readout is a film overlay `--nohud` keeps) and a shot queue of `5,g3,0,-3,200,8,<still>` (the tiles settle),
+  `5,g12000000,0,-90,200,45,~exp` (`~exp`: the height grows geometrically, the same zoom every second) and a 3 s hold,
+  from `--origin 2538300,1151200` (a Lausanne street clear of trees above it). 57 s filmed, trimmed from 9.5 s to 47 s.
+  Since then (Nov 2026) the still waits out its 150 s for the ground: hold with a `~lin` glide instead (14 s).
+- **Guests in a shot** (#1430): a queue line `puppet a320 E,N,alt,heading,speed[,climb]` (any `RideKind`: `ufo`,
+  `helicopter`, ...) sends that machine in a straight line from then on (`Movie/FilmPuppet`, the movie studio's puppet:
+  posed, not simulated, never solid); it logs where the camera is and looks, then its distance every 2 s, to place the
+  next take by. Split the climb into `~exp` glides (each eases in and out in log height) so the camera slows where
+  a guest passes. **No loading in the film**: run the exe directly with `--fixed-fps 30` before `--` and no `--clip`,
+  and put `/clip start <name> <seconds> 0` in the queue right before the first glide. The film with an A320 at 3 km
+  and a saucer at 100 km: `test_output/globe/qf.txt` in the commit's PR (#1430), 53 s, 7.6 MB at 720p 1200 kb/s.
 - **`--clip-realtime`** (#1105): a slow frame fills every 1/30 s slot it took (the picture repeated) instead of one, so a
   heavy scene (a busy junction at 10-27 fps) plays in the time it filmed; without it such a clip played up to 3x fast. E.g.
   two cycles of the signal test region's J14: `SIZE=1280x720 tools/record-clip.sh j14-two-cycles 50 250 --clip-realtime

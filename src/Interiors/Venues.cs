@@ -28,8 +28,11 @@ public static class Venues
 
     private static readonly Lazy<Index> Loaded = new(Load, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    /// <summary>Every venue, sorted by E then N. Empty if the resource is missing or unreadable.</summary>
-    public static IReadOnlyList<VenueRecord> List => Loaded.Value.Rows;
+    /// <summary>
+    /// Every venue, sorted by E then N: a world's own (<see cref="Override"/>: a test world's boulevard) when it has them,
+    /// else the embedded list. Empty if the resource is missing or unreadable.
+    /// </summary>
+    public static IReadOnlyList<VenueRecord> List => Current.Rows;
 
     /// <summary>
     /// Replaces the embedded list (the checks' hand-made venues); null restores it. Set before the
@@ -138,16 +141,18 @@ public static class Venues
         var id = tile.Id;
         var found = new List<(int, int)>();
         var near = new List<(int Venue, float X, float Z)>();
-        for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+        // the tile and the eight round it, in the tile's own frame (x east, z south; #1443)
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                if (!index.ByTile.TryGetValue((id.E + de, id.N + dn), out var cell)) continue;
+                var t = id.Neighbour(dx, dz);
+                if (!index.ByTile.TryGetValue((t.E, t.N), out var cell)) continue;
                 foreach (int v in cell)
                 {
                     var r = index.Rows[v];
-                    if (r.E < id.MinE - Reach || r.E > id.MinE + ChunkFormat.TileSizeM + Reach
-                        || r.N < id.MinN - Reach || r.N > id.MaxN + Reach) continue;
-                    near.Add((v, (float)(r.E - id.MinE), (float)(id.MaxN - r.N)));
+                    var (x, z) = id.Local(r.E, r.N);
+                    if (x < -Reach || x > ChunkFormat.TileSizeM + Reach || z < -Reach || z > ChunkFormat.TileSizeM + Reach) continue;
+                    near.Add((v, (float)x, (float)z));
                 }
             }
         if (near.Count == 0) return found;

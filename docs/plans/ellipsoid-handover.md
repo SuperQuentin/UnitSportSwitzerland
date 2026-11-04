@@ -3,7 +3,8 @@
 
 # Ellipsoid handover: from the flat world to a real WGS84 Earth at altitude
 
-Status: **planned, follow-up of #187** (after its render-space curvature drop lands). Issue: #1430.
+Status: **H2 built (PR #1435); H6's ground sky built (PR #1436); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445); H1 the curvature at altitude built (PR #1458)**; #187's curvature merged (PR #1432); the rest planned, H3 next.
+Issue: #1430.
 Prerequisites: the floating origin (#185, `docs/plans/floating-origin.md`, done), the round world
 near the ground (#187, `docs/plans/spherical-world.md`) and its regression net (#1429).
 
@@ -60,11 +61,11 @@ so they fit the depth range.
 | Earth model in Space | **WGS84**: a = 6,378,137 m, 1/f = 298.257223563, GM = 3.986004418·10¹⁴ m³/s², ω = 7.292115·10⁻⁵ rad/s. ETRS89 (what LV95 is tied to) and WGS84 differ by ~0.5 m today: ignored. |
 | Global position in Space | **`EcefPos`** (three doubles, earth-centred earth-fixed). `GlobalPos` (LV95) stays the ground type; the two convert through geodetic latitude, longitude and ellipsoidal height. |
 | LV95 ↔ ECEF | The **rigorous** swisstopo chain (Swiss oblique conformal cylinder on Bessel 1841, then the CH1903+ → ETRS89 datum shift ΔX/ΔY/ΔZ ≈ 674.374 / 15.056 / 405.346 m), not the approximate polynomials: the handover must round-trip to under a millimetre, and the landing point can be hundreds of km from Bern. `SwissProjection` keeps the polynomials for GPX. |
-| Heights | swissALTI3D heights are **LHN95 orthometric**. Ellipsoidal h = H + N, with N the geoid undulation (about +50 m in Switzerland, smooth). One coarse geoid grid (EGM2008 at 1°, ~260 KB) serves both the Swiss handover and the global DEM, which is orthometric too (EGM2008). Its absolute error does not matter for continuity: the same N is used both ways. |
-| Anchor in Space | MSFS style: origin **at the camera**, Y = the ellipsoid normal under it, X/Z carried over by the **minimal rotation** from the previous anchor. The first Space anchor copies the ground frame's axes exactly (grid east/north, so meridian convergence included). |
-| Shifts in Space | Through the existing `OriginShift` (already a `Transform3D`): rotation **and** vertical translation, past **20 km** from the anchor in any direction (float step 2 mm there). At 7.7 km/s that is one shift every 2.6 s, each turning the world by 0.17°. |
+| Heights | swissALTI3D heights are **LHN95 orthometric**. Ellipsoidal h = H + N, with N the geoid undulation (~44 to 58 m in Switzerland). As built (H2): a 20 km grid of swisstopo's CHGeo2004 above Bessel, sampled from REFRAME, held at its edge outside. The global DEM (H4) is orthometric on EGM2008 and brings a coarse EGM2008 grid of its own; the two meet within a few metres at the border. Their absolute error does not matter for continuity: the same N is used both ways. |
+| Anchor in Space | MSFS style: origin **at the camera**, Y = the ellipsoid normal under it, X/Z carried over by the **minimal rotation** from the previous anchor. The first Space anchor copies the ground frame's axes exactly (grid east/north, so meridian convergence included). **As built (H3, decided with #1443's coordinator): turning waits for round tiles (#1443 G2).** While tiles are flat LV95 the Space frame is the flat ground frame: the origin follows the camera along, never turns, so streamed tiles stay consistent with shifted ones. A vertical origin (`OriginFrame.Alt0`, the shader reading the altitude as y − `world_ground_y`) is built and tested but off (`SpaceMode.Vertical`): up to the 120 km ceiling a float still holds 8 mm at the camera, and world Y below about −2 km is the interiors' band (`InteriorManager.InteriorBaseY`), which a risen origin puts the camera in on the way down (the terrain went dark at 51 km). It goes on for orbits (H5), once the interiors' band is told apart by altitude. One re-anchor mode (`OriginShifter.ReanchorMode`: threshold, vertical, rotates) serves both; G2 switches `Rotates` on, for the ground and Space alike, with the anchor frames (`FrameAxes`) of H3 step 1. Up and gravity for orbits come from ECEF (`OriginFrame.UpAt`, H5's GM/r²), never from −Y. |
+| Shifts in Space | Through the existing `OriginShift` (already a `Transform3D`): rotation **and** vertical translation, past **20 km** from the anchor in any direction (float step 2 mm there). At 7.7 km/s that is one shift every 2.6 s, each turning the world by 0.17°. **As built: horizontal only for now** (no rotation until G2, no rise until H5, above). |
 | Coming down | Below the Space exit altitude, re-anchor to the **whole-km LV95 tile corner** under the camera at altitude 0, axes grid-aligned: a normal ground frame again. |
-| Outside LV95 coverage | The Ground regime needs data and an addressing there: that is #187's old phase D (global tiling). Until it exists, descending outside the preprocessed area **stays in the Space regime** down to the coarse globe, with collision from the globe DEM. |
+| Outside LV95 coverage | The Ground regime needs data and an addressing there: **global tiling** (#1443, `docs/plans/global-tiling.md`). Until it exists, descending outside the preprocessed area **stays in the Space regime** down to the coarse globe, with collision from the globe DEM. |
 | Gravity | **GM/r²** toward the centre in Space and Transition; the ground game keeps its tuned 9.81 m/s². At 60 km GM/r² is 9.63 (−2 %), at 400 km 8.68. |
 | Orbital integration | **Doubles, in an inertial frame** (ECI), velocity Verlet at the physics rate. ECEF rotates: Coriolis at orbital speed is 2ωv ≈ 1.1 m/s², far too big to ignore. Jolt only ever holds the craft's local transform in the anchor frame, for contacts. |
 | Ceiling until H3 lands | Spectator and UFO **capped at 50 km** (the top of the Transition regime), so no one reaches a model that does not exist yet. |
@@ -136,18 +137,22 @@ view from altitude.
 data is in view. Until the globe (H4) the fog hides it; with H4 the globe is drawn under and around
 the Swiss tiles already in Transition (below).
 
-### 3. `EcefPos` and the conversions (H2)
+### 3. `EcefPos` and the conversions (H2, built: PR #1435)
 
-- `Core/EcefPos` (double X, Y, Z) and `Core/Geodetic` (lat, lon, h), next to `GlobalPos`, with
-  geodetic ↔ ECEF (closed form one way, Vermeille or a two-step Bowring the other, < 0.1 mm).
-- `Core/Planet`: a, f, GM, ω, plus derived e², radii of curvature, `Gravity(r)`, `Up(lat, lon)`.
-  Earth is the only instance until H7.
-- LV95 ↔ ETRS89 rigorous in `tools/TerrainFormat` (the preprocessor will need it for global data
-  too), unit-tested against swisstopo's published reference points. LHN95 ↔ ellipsoidal heights
-  through the geoid grid.
-- `GlobalPos.ToEcef()` / `EcefPos.ToLv95()`; the `GlobalPos + Vector3` operator's comment already
+As built (`docs/notes/core/swiss-geodesy.md`):
+
+- `EcefPos`, `Geodetic` and `Ellipsoid` (`Wgs84`, `Bessel1841`; geodetic ↔ ECEF by iterated
+  Bowring, exact from below ground out past the moon) live in `tools/TerrainFormat`, beside the
+  projection, so the preprocessor has them for global data too.
+- `SwissGeodesy`: the rigorous LV95 ↔ CH1903+ cylinder and the CH1903+ → CHTRS95 translation.
+  Against swisstopo's REFRAME it matches to < 2 mm in Switzerland, France and Bavaria; LV95 → ECEF
+  → LV95 comes back within 0.1 mm from −3 km to 400 km up and 1,400 km out. LHN95 ↔ ellipsoidal
+  heights through `BesselGeoid`, a 20 km CHGeo2004 grid (within 0.25 m of REFRAME between nodes).
+- `Core/Planet` (Godot-free): the shape, GM, ω, `Gravity(r)`, `CircularSpeed(r)`; Earth only until H7.
+  Radii of curvature and `Up` come with their first caller (H3).
+- `GlobalPos.ToEcef()` / `GlobalPos.FromEcef`; the `GlobalPos + Vector3` operator's comment already
   marks itself as "the place to change" for a rotating frame.
-- Pure maths, linked into the unit tests, no game change: it can land any time.
+- Pure maths, linked into the unit tests, no game change.
 
 ### 4. The rotating 3D anchor (H3)
 
@@ -229,23 +234,88 @@ records which one it is:
   the `WorldEnvironment` sky fading from today's sky to black as the camera leaves the air.
 - **Stars**: the Yale Bright Star Catalogue (~9,100 stars, public domain) on the celestial sphere in
   ECI, turned into the anchor frame by sidereal time; also at night on the ground.
-- **Sun and moon** (H6): an ephemeris from the date (`Core/Calendar`) and environment time
-  (`WorldClock`) plus the camera's real latitude and longitude: Meeus' low-precision formulas
-  (sun ~0.01°, moon ~0.3°) or JPL's approximate positions. `SunPath` keeps its API and returns the
-  ephemeris direction in the current frame; `DayNight`'s moon stops being "opposite the sun".
-  Check: Bern at the June solstice, noon elevation 66.5° (today's constant: 62°).
+- **Sun and moon** (H6, **built for the ground**: PR #1436): `Core/Ephemeris`, Meeus (the sun's
+  low-precision theory, the moon's full chapter 47 series, nutation, apparent sidereal time),
+  topocentric through ECEF, so it serves a place in orbit as well. Against JPL Horizons at four
+  Swiss towns: sun 0.008°, moon 0.0013° (its distance to 40 km); Bern's June noon sun 66.49°.
+  `SunPath.Toward(body, date, hour, e, n)` turns it from true north to grid north at the camera's
+  LV95 place; `DayNight` shades the night from the real moon. `Ephemeris.MoonPhase` gives the lit
+  fraction for C1. Still to come with H3/H4: the moon drawn as a disc, stars, the frame in Space.
 - **The real sun on the ground** (decided): the game hour stays local civil time (CET/CEST,
   `Europe/Zurich`), converted to UTC for the ephemeris; in Space the HUD shows UTC. The callers of
   `SunPath.Direction` today: `DayNight` (which also takes an occasion's own sunrise, sunset and noon
   elevation, a hand-made short winter day that the real date now gives by itself: those overrides
   go), `AirLift` (thermals follow the season) and `FunBackdrop` (a fixed dusk in a world that is not
-  on Earth: stays fixed). `GameSettings.StartHour` keeps meaning a clock time.
+  on Earth: stays fixed). `GameSettings.StartHour` keeps meaning a clock time. As built: `Core/SwissTime` (CET/CEST by the
+  EU rule, no `TimeZoneInfo`); the occasions' own sunrise, sunset and noon stay for the fixed day
+  only; `--sun fixed` is also the default of every check, fixture world, screenshot run and
+  trailer, so their results do not move with the date.
 - **North**: the compass, map, minimap and GPX overlays keep **grid north** on the ground (the map
   is LV95). In Space the HUD heading uses true north computed from the anchor frame (the ECEF Z
   axis projected on the tangent plane).
 - **Very far**: the far plane covers the whole visible globe up to ~8,000 km altitude with
   ~13,000 km. Beyond that, and for other bodies (H7), a **scaled-space** pass draws distant bodies
   shrunk and brought closer with the same angular size.
+
+### 6a. H4 design: the coarse pyramid in G1's format
+
+Decided with #1443's coordinator (2026-11-03): one pyramid. H4 builds the coarse levels and the
+renderer that draws them; G2 extends the same renderer down to the leaves as its far view.
+
+**Sources** (on D:, `D:/UnitSportSwitzerland/data/global/`, never in git; approved 2026-11-03):
+
+| Source | What | Size | Licence |
+|---|---|---|---|
+| NOAA ETOPO 2022 60″ surface (`etopo2022/ETOPO_2022_v1_60s_N90W180_surface.tif`) | ice surface and sea floor, 1.85 km, heights on EGM2008 | 466 MB | public domain (NOAA NCEI), cited |
+| ETOPO 2022 60″ geoid (`…_geoid.tif`) | EGM2008 undulation N on the same grid: h = H + N, WGS84 ellipsoidal as G1's tiles | 426 MB | public domain |
+| NASA Blue Marble Next Generation, topography and bathymetry, 12 months (`bmng/world.topo.bathy.2004MM.3x21600x10800.jpg`) | the colour of the land by month (snow, vegetation), shaded sea floor; 2 km | 12 × ~29 MB | credit "NASA Earth Observatory" (R. Stöckli et al.) in the credits screen |
+
+Over Switzerland and wherever leaves exist, the coarse levels come from the leaves themselves
+(heights averaged by the tiler, colour from our own tile colours), so the hue and the relief do not
+jump when the globe takes over from the Swiss blocks; ETOPO and Blue Marble fill the rest, blended
+across the data border as the French import's edge masks do. The two geoids (CHGeo2004 inside,
+EGM2008 out) differ by metres, under one coarse cell.
+
+**The format at coarse levels: two rules proposed to G1** (#1455):
+
+- **A lattice cap.** G1's lattice is 2^(23 − level) cells a side (~1.2 m at every level), which no
+  level above the leaves can hold (level 6 would be 131,072 a side). Every level keeps **at most 512
+  cells a side**: bits = min(23 − level, 9), so the level-14 leaves are unchanged, a level-0 tile is
+  19.6 km a cell, level 2 4.9 km, level 4 1.2 km (ETOPO's own spacing). One function,
+  `CubeKey.LatticeBits(level)`, which every reader uses. Edges stay exact: a coarse lattice point
+  is a leaf lattice point, and a renderer may draw every 2nd, 4th or 8th vertex as G1's harness
+  does.
+- **A colour payload.** A tile carries an optional albedo: 12 monthly images (WebP, 256² on the
+  shipped levels, 512² on the streamed ones), in bundles
+  of their own beside the height bundles (`F<f>_L<l>_x_y.cuba`, same index), so leaves without a
+  global colour carry none and G2 can give the leaves their colour another way.
+
+**Which levels, and where they live** (estimates, the tiler measures):
+
+- Levels 0-2 (6 + 24 + 96 = 126 tiles) **ship with the game**: the whole Earth from far out and
+  the showcase's last seconds. Heights a few MB; colour ~126 × 12 × 12 KB ≈ 18 MB.
+- Levels 3-4 (384 + 1,536 tiles) stream through the map downloader
+  (`docs/plans/in-game-map-downloader.md`): the view from low orbit (~0.3 km a pixel at nadir from
+  400 km; level 4 is ETOPO's own 1.2 km).
+- Over Switzerland, levels 5-13 from the leaves, by G1's tiler.
+
+**The renderer** (`World/Globe`, client only):
+
+- One node per drawn tile, its mesh built once on a worker from `CubeGeometry` (the patch around
+  its own ENU anchor, floats) and placed by one rigid transform composed in doubles (the frame's
+  `TileTransform`, H3 step 1). A shift only rewrites transforms (`no-mesh-rebuild-per-frame`).
+- Levels chosen by size on screen through `world_lod_scale` (C0): a tile splits when its cell would
+  cover more than a set number of pixels. G2 carries the same rule to the leaves.
+- Its own shader: real geometry, so **no `curve_offset`**. Until G2, in the flat ground frame, the
+  globe is placed by the frame's embedding (the ground frame as the tangent frame at its origin,
+  grid axes: `OriginFrame.Embedding`), drawn under and around the flat tiles and `HorizonLayer`,
+  masked under them as `HorizonLayer`'s cover mask hides blocks under loaded tiles, and faded in
+  with altitude; above ~150 km the Swiss blocks fade out.
+- **The seam with H1**: above 20 km H1 bends the flat tiles onto a sphere of `CURVE_EARTH_R`; the
+  globe is the ellipsoid. A check measures the gap between the two where they meet (the edge of the
+  data, at 20, 60 and 120 km) and picks the sphere's radius as the local Gaussian radius at the
+  origin if the gap is over a pixel.
+- In the model viewer as a `[Showcase]` set (a few patches and the whole globe).
 
 ### 7. Network
 
@@ -281,14 +351,22 @@ The same pattern one level up:
   Moon in Earth: ~66,000 km; Earth in the Sun: ~925,000 km.
 - Doubles are enough: at 4.5·10¹² m (Neptune) their step is 1 mm. Planet positions from JPL's
   approximate Keplerian elements.
-- Each body's ground regime is a flat local frame like LV95 is for Earth: the same global tiling
-  question as #187's phase D.
+- Each body's ground regime uses the global tiling of #1443 with that body's ellipsoid.
+
+### 10. Global tiling: the ground anywhere on Earth
+
+Its own plan now: `docs/plans/global-tiling.md` (#1443), the next step after #187 and ahead of the
+Space phases here. In short: tiles hold true Earth positions on a cube sphere, the game keeps one
+flat Y-up frame (this plan's H3 anchor, used on the ground too), and #187's drop shrinks to
+refraction. H2 is its first phase's foundation; H3's anchor is built once for both.
 
 ### 9. Features that ride on it (C0-C3)
 
 Small features that make the frame playable early, each a separate issue when it starts.
 
-**A telescope.** A telescope on a tripod for looking at the moon and the planets from the ground (or
+**A telescope** (**C1 built**, #1440, PR #1441: `docs/notes/items/telescope.md` has it as built; the
+moon is the only target until H7, the zoom stops at 8,000 mm with the 4k moon map, and below 1° the
+camera is a frustum, `Core/CameraLens`). A telescope on a tripod for looking at the moon and the planets from the ground (or
 at the Earth from the moon), and at where other players are out there.
 
 - **Set up, then look through (decided: a tripod)**: carried as an item, set down with Use where a
@@ -386,21 +464,24 @@ speed).
 
 | Phase | What | Depends on | Done when |
 |---|---|---|---|
-| **H1** Refraction fade and exact-sphere blend | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
-| **H2** `EcefPos` and conversions | `EcefPos`, `Geodetic`, `Planet`, rigorous LV95 ↔ ETRS89, geoid grid | none | unit tests: swisstopo reference points to < 1 mm, round trips < 0.1 mm |
-| **H3** Rotating 3D anchor | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space, `EcefPos` on the wire | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
-| **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check | H3 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
-| **H5** Orbital gravity | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ |
-| **H6** Ephemeris sky | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
+| **H1** Refraction fade and exact-sphere blend (**built**, PR #1458) | `world_curvature` by altitude, `world_curve_blend` and the exact wrap in `curved_view`, normals, fog fade, far plane and cull margins by altitude, the 50 km ceiling | #187's drop | Bern → 50 km → Bern with the spectator shows no jump frame to frame, and the 50 km view matches a reference render of the exact sphere |
+| **H2** `EcefPos` and conversions (**built**, PR #1435) | `EcefPos`, `Geodetic`, `Planet`, rigorous LV95 ↔ ETRS89, geoid grid | none | unit tests: REFRAME points to < 2 mm, round trips < 0.1 mm |
+| **H3** Rotating 3D anchor (**built** but the wire: PRs #1460, #1475, #1476, #1477) | anchor frame in `WorldOrigin`, rotating shifts, the two handovers, the altitude audit for what runs in Space. Rotation is switched on by #1443 G2 (round tiles); directions on the wire (step 5) **moved into G2's wire migration**, one protocol bump | H1, H2 | UFO Bern → 100 km → Bern across both handovers with no pop; `--originstress` with rotation clean |
+| **H4** Globe and atmosphere | cube-sphere LOD, the global DEM and albedo pyramid (data task), Swiss blocks into the globe, limb shader, sky to black, depth format check. **Decided with #1443's coordinator: one pyramid.** The coarse levels are G1's format (#1455: `CubeSphere`/`CubeKey`, bundles, ellipsoidal heights), made by G1's tiler at coarse levels, no second format; levels picked by size on screen (`world_lod_scale`, C0) so G2 carries the same selection down to the leaves as its far view. Until G2 the globe is drawn under and around the flat LV95 tiles and `HorizonLayer`, fading in with altitude, and H1's sphere wrap must meet its real geometry (the seam measured). Waits for #1455. **Built** (#1478): levels 0-2 ship with the game (`assets/globe`, 23.5 MB in Git LFS), levels 3-4 and the Swiss levels stay on D: and stream later through the map downloader. Follow-ups: the soft stretch of a climb from 15 to 60 km outside our data (nothing finer than ETOPO's 1.2 km there); Switzerland-wide fine levels once the rest of the 0.5 m data is here from the NAS (a `--cube` run, then `--cube-swiss`) | H3, #1443 G1 | from 400 km Switzerland is recognisable and the limb is right; frame time within budget |
+| **Showcase** (asked 2026-11-03; **first take filmed** on #1478, recipe in `general/feature-clips`) | a smooth pull-back from a Lausanne street to the whole Earth in space, an altitude readout on screen, as a clip (`/clip`, `tools/record-clip.sh`) | H3, H4 | the first clip once the globe draws: no pop at any handover, the readout continuous from metres to thousands of km |
+| **H5** Orbital gravity (**built**, PR #1484) | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only. **Decided with the user**: the UFO flies orbits (the space drive on its hover keys, `/orbit <km>`); the pilot's client integrates, the server an empty one (its orbit the only truth); the space shuttle is C2, next; the wire stays LV95 until G2 (others see an orbit crossing the LV95 sliver at 172.56° W up to 31 km off, logged). **Decided with #1443's coordinator**: `SpaceMode.Rotates` on **above 250 km only** (in above 250, out below 240), where the flat tiles are gone: below, the curvature shader wraps them as one plane and the Space frame stays flat; coming down is one rigid move back to the flat frame at 240 km and to the ground frame (identity, whole-km corner) at 50; turned anchors built in ECEF (`FrameAxes.Tangent`); bodies above the handover out of the server's region planner, in the main region. G2 still turns rotation on for the ground, with round tiles (`player/orbits`) | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ (**0.32 m and 5·10⁻¹⁴** through 2,080 turned shifts, then down and landed in a ground frame, `--orbitcheck`; the band, `--spacebandcheck`) |
+| **H6** Ephemeris sky (**ground part built**, PR #1436) | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
 | **H7** Planets | registry, frame tree, SOI handovers, scaled space | H4, H5 | a transfer from Earth orbit to lunar orbit with both handovers invisible |
 
-| **C0** Detail by size on screen | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
-| **C1** Telescope on the moon | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
+| **C0** Detail by size on screen (**done**, #1433) | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
+| **C1** Telescope on the moon (**built**, PR #1441) | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
+| **C1b** The solar system and satellites in the sky (**built**, PR #1445, #1444) | stars, planets and their axes, Jupiter's moons and Titan, Saturn's rings, satellites by SGP4 and CelesTrak, the telescope's lock on any of them | C1 | the bodies against Horizons; Jupiter and Saturn held in the telescope (`docs/notes/world/night-sky.md`) |
 | **C2** Spaceplane to orbit | spec, model, sounds, rocket thrust, the cruise drive round the Earth, glide home and runway landing | H4, H5 | take off at an airfield, reach 400 km, drive round the Earth, drop into orbit, re-enter and land on a runway |
 | **C3** Out to the moon and planets | the drive between bodies, the far-marker list, planets and markers in the telescope | H7, C1, C2 | A drives to lunar orbit; B on the ground locks the telescope on the moon and sees A's marker at the right place |
 
-H2 and the sky part of H6 can land early and in parallel; H1 needs only #187. C0 can land at any
-time and helps the camera item now; C1 is the earliest playable piece: it needs only the ephemeris
+H2 and the sky part of H6 can land early and in parallel; H1 needs only #187. C0 is done (#1433,
+`docs/notes/styles/zoom-lod.md`: at 200 mm the step is x9.31, GPU time unchanged, VRAM +1.15 GB,
+hitches for ~7 s while the cone's tiles refine); C1 is the earliest playable piece: it needs only the ephemeris
 and C0.
 
 ## Tests
@@ -449,7 +530,7 @@ and C0.
 
 ## Out of scope
 
-- Global tiling for ground-level play outside the preprocessed area (#187's phase D).
+- Global tiling for the ground anywhere: #1443.
 - Weather, clouds and their shadows seen from orbit; oceans with waves; tides.
 - Re-entry heating, realistic rocketry, docking and landing on other bodies: this plan is the frame
   they stand on (the spaceplane and telescope above are the only content it carries).

@@ -244,6 +244,8 @@ public partial class BedCheck : Node
         await Seconds(1);
         Expect(took && me.Vehicle is IBed { HasBed: true } taken && taken.BedLoad == inBody, $"got into, its body still holds the pallet ({(me.Vehicle as IBed)?.BedLoad})");
         if (me.Vehicle is not IBed carrier) { Finish(); return; }
+        // the automatic, whatever box the machine's settings pick: a manual stays in N on the throttle (#1214)
+        if (me.Heavy is { } truck) truck.ShiftOverride = HeavyShift.Automatic;
         if (!me.EngineOn) await Tap(PlayerInput.EngineToggle);
         var start = me.GlobalPosition;
         me.RideControls = () => new RideInput(1f, 0f, 0f, false);

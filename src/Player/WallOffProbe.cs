@@ -99,7 +99,7 @@ public partial class WallOffProbe : Node
     private bool Pick(RoadTile? tile, FootPlayer me)
     {
         if (tile == null) return false;
-        var basePos = _origin.ToWorld(tile.Id.MinE, tile.Id.MaxN, 0);
+        var basePos = _origin.TileTransform(tile.Id).Origin;
         float best = float.MaxValue;
         foreach (var w in tile.LinearProps)
         {

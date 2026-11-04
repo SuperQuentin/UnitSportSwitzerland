@@ -59,7 +59,7 @@ public static class BotHands
         var eye = body.EyePosition;
         var aim = (target - eye).Normalized();
         if (!aim.IsFinite() || aim.LengthSquared() < 0.5f) return false;
-        PlayerHits.HitSink sink = (victim, at, dir, hit) => events.ServerHit(bot.Id, at, dir, hit);
+        PlayerHits.HitSink sink = (victim, at, dir, hit) => events.ServerHit(bot.Id, at, dir, hit, body.Origin);
         if (weapon.Melee)
         {
             if (eye.DistanceTo(target) > weapon.Range + 0.5f) return false;
@@ -74,7 +74,7 @@ public static class BotHands
         float spread = weapon.SpreadAt(bot.Heat);
         bot.Heat = weapon.Heat(bot.Heat);
         bot.HeatAt = now;
-        events.ServerSend(bot.Id, ItemEventKind.Shot, ItemEvents.MuzzleOf(body, aim), aim, ((int)weapon.Id).ToString());
+        events.ServerSend(bot.Id, ItemEventKind.Shot, ItemEvents.MuzzleOf(body, aim), aim, ((int)weapon.Id).ToString(), body.Origin);
         body.BodyJolt();
         PlayerHits.Shoot(body, eye, aim, weapon, spread, sink);
         return true;

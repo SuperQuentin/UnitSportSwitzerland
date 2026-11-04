@@ -61,10 +61,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     public const float ReachM = 3.0f;
 
     /// <summary>
-    /// Dormant cars are drawn to here, as <c>Traffic</c> draws its own to 600 m; a standalone headset to 250 m
-    /// (#1112): Geneva's loaded parked cars were 2.5 million triangles.
+    /// Dormant cars of a tile drawn now reach this far, as <c>Traffic</c> draws its own to 600 m; 250 m on Low and
+    /// Very low (#1216, a standalone headset's since #1112): Geneva's loaded parked cars were 2.5 million triangles.
     /// </summary>
-    private static readonly float DrawnM = Core.Platform.IsStandaloneVr ? 250f : 400f;
+    private static float DrawnM => Core.GameSettings.Cheap ? 250f : 400f;
     private const double CellM = 125.0;
 
     /// <summary>
@@ -533,10 +533,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         _pending.RemoveAll(id => !Within(id, KeepRings));
 
         foreach (var at in _anchorTiles)
-            for (int de = -NearRings; de <= NearRings; de++)
-                for (int dn = -NearRings; dn <= NearRings; dn++)
+            for (int dx = -NearRings; dx <= NearRings; dx++)
+                for (int dz = NearRings; dz >= -NearRings; dz--)
                 {
-                    var id = new TileId(at.E + de, at.N + dn);
+                    var id = at.Neighbour(dx, dz);
                     if (!_slots.ContainsKey(id) && !_pending.Contains(id)) _pending.Add(id);
                 }
         if (_drop.Count > 0) Report();
@@ -679,7 +679,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         for (int i = into.Count - 1; i >= before; i--)
         {
             var s = into[i];
-            var at = new Vector2((float)(s.E - id.MinE), (float)(id.MaxN - s.N));
+            var (sx, sz) = id.Local(s.E, s.N);
+            var at = new Vector2((float)sx, (float)sz);
             // a lorry needs more room round it than a hatchback before it reads as parked in a wall
             bool goods = s.Train != 0 || s.KindId == (int)RideKind.Trailer || s.KindId is >= HeavyCatalog.First and <= HeavyCatalog.Last;
             // (a forklift, RideKind 193, is past HeavyCatalog's range and parks as a car does)
@@ -777,9 +778,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         DormantSlots.ForMarina(id, jetties, (e, n) =>
         {
             // a berth a few metres across the tile's edge reads the edge's water
-            double x = Math.Clamp(e - id.MinE, 0, ChunkFormat.TileSizeM), z = Math.Clamp(id.MaxN - n, 0, ChunkFormat.TileSizeM);
+            var (lx, lz) = id.Local(e, n);
+            double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
             if (!water.TrySample(x, z, out float level, out _)) return null;
-            return (level, (float)grid.SampleHeight(id.MinE + x, id.MaxN - z));
+            var (ge, gn) = id.Global(x, z);
+            return (level, (float)grid.SampleHeight(ge, gn));
         }, (int)RideKind.Speedboat, (int)RideKind.Jetski, into);
     }
 
@@ -839,13 +842,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_drawn.Remove(id, out var old)) Free(old);
         if (!_slots.TryGetValue(id, out var slots)) return;
 
-        // a standalone headset's are also cut into 125 m cells (#1112): an instancer's drawn range counts from its
-        // middle, which for a whole tile's cars of one look was the tile's, far from the cars at its edge
+        // cut into 125 m cells (#1112, every device since #1216): an instancer's drawn range counts from its middle,
+        // which for a whole tile's cars of one look was the tile's, far from the cars at its edge
         var byLook = new Dictionary<(DormantLooks.Key Look, long Cell), List<VehicleSlot>>();
         foreach (var s in slots)
         {
             if (_awake.Contains(KeyOf(s))) continue;
-            long cell = Core.Platform.IsStandaloneVr ? (long)Math.Floor(s.E / CellM) * 100_000 + (long)Math.Floor(s.N / CellM) : 0;
+            long cell = (long)Math.Floor(s.E / CellM) * 100_000 + (long)Math.Floor(s.N / CellM);
             var key = (DormantLooks.KeyOf(s), cell);
             if (!byLook.TryGetValue(key, out var list)) byLook[key] = list = new List<VehicleSlot>();
             list.Add(s);

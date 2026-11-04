@@ -16,6 +16,7 @@ run/flush_stdout_on_print=true
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 config/icon="res://icon.svg"
 config/quit_on_go_back=false
+config/project_settings_override="user://test_window.cfg"
 
 [autoload]
 
@@ -85,6 +86,10 @@ world_night={
 "type": "float",
 "value": 0.0
 }
+world_building_box_from={
+"type": "float",
+"value": 1000.0
+}
 world_snow={
 "type": "float",
 "value": 0.0
@@ -152,6 +157,50 @@ water_time={
 world_cam_pos={
 "type": "vec3",
 "value": Vector3(0, 0, 0)
+}
+world_curvature={
+"type": "float",
+"value": 0.0
+}
+world_curve_blend={
+"type": "float",
+"value": 0.0
+}
+world_ground_y={
+"type": "float",
+"value": 0.0
+}
+world_space={
+"type": "float",
+"value": 0.0
+}
+world_fill_hide={
+"type": "float",
+"value": 0.0
+}
+world_flat_hide={
+"type": "float",
+"value": 0.0
+}
+world_real_mask={
+"type": "sampler2D",
+"value": ""
+}
+world_real_origin={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
+world_real_extent={
+"type": "vec2",
+"value": Vector2(1, 1)
+}
+world_real_axes={
+"type": "vec4",
+"value": Vector4(1, 0, 0, 1)
+}
+world_true_sun={
+"type": "vec3",
+"value": Vector3(0, 1, 0)
 }
 world_lod_scale={
 "type": "float",

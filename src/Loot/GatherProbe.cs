@@ -57,8 +57,11 @@ public partial class GatherProbe : Node
         var tiles = new List<TileId>();
         for (int r = 0; r <= 2; r++)
             for (int dx = -r; dx <= r; dx++)
-                for (int dy = -r; dy <= r; dy++)
-                    if (Math.Max(Math.Abs(dx), Math.Abs(dy)) == r) tiles.Add(new TileId(centre.E + dx, centre.N + dy));
+                for (int dz = r; dz >= -r; dz--)
+                {
+                    var t = centre.Neighbour(dx, dz);
+                    if (t.RingDistance(centre) == r) tiles.Add(t);
+                }
 
         foreach (var id in tiles)
         {
@@ -97,7 +100,7 @@ public partial class GatherProbe : Node
             if (tree == null && trees.Count > 0)
             {
                 var t = trees.FirstOrDefault(t => t.Kind == 0 || t.Kind == 3);
-                var at = _origin.ToWorld(id.MinE + t.X, id.MaxN - t.Z, t.Y);
+                var at = _origin.TileToWorld(id, new Vector3(t.X, t.Y, t.Z));
                 tree = (_origin.ToGlobal(at + new Vector3(1.4f, 0, 0)), _origin.ToGlobal(at));
             }
         }
@@ -127,8 +130,11 @@ public partial class GatherProbe : Node
         return true;
     }
 
-    private static GlobalPos World(TileId id, ChunkGrid grid, int col, int row) =>
-        new(id.MinE + col * ChunkFormat.SpacingM, id.MaxN - row * ChunkFormat.SpacingM, grid.HeightMetersAt(col, row));
+    private static GlobalPos World(TileId id, ChunkGrid grid, int col, int row)
+    {
+        var (e, n) = id.Global(col * ChunkFormat.SpacingM, row * ChunkFormat.SpacingM);
+        return new(e, n, grid.HeightMetersAt(col, row));
+    }
 
     private async Task Visit(string what, (GlobalPos Stand, GlobalPos Face)? spot, Gathering.Resource expected, params ItemId[] gives)
     {

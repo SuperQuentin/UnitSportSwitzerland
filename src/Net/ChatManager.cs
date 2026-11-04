@@ -56,6 +56,13 @@ public partial class ChatManager : Node
 
     private Node3D? _players;
     private WorldOrigin? _origin;
+
+    /// <summary>
+    /// Where a peer's body is in this server's world frame: from its Earth position, so it is right
+    /// whichever region the body's own physics is in (#1456).
+    /// </summary>
+    private Vector3? WorldOf(long peer) =>
+        _origin != null && _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is { } body ? _origin.ToWorld(body.Global) : null;
     private PlaceIndex? _places;
 
     /// <summary>Client-side only: where a forced teleport is applied.</summary>
@@ -67,6 +74,9 @@ public partial class ChatManager : Node
     /// <summary>Adds a stack, dropping what does not fit on the ground; returns how many went nowhere. Falls back to a plain add.</summary>
     public Func<Items.ItemStack, int>? GiveOrDrop { get; set; }
     public PlaceSearchUi? PlaceSearch { get; set; }
+
+    /// <summary>Client-side: <c>/orbit &lt;km&gt;</c> for the own player's saucer (#1430 H5); the line to show.</summary>
+    public Func<double, string>? PutInOrbit { get; set; }
 
     /// <summary>Client-side: where this player is, for the nearest venue offline (<c>/stadium</c>).</summary>
     public Func<GlobalPos?>? Here { get; set; }
@@ -139,7 +149,12 @@ public partial class ChatManager : Node
     {
         if (player.PeerId == ConsolePeerId || _registry?.Find(player.PeerId) == null) return;
         if (player.Bodiless) RemoteLine?.Invoke(player.PeerId, player.IsAdmin ? "You are an admin." : "You are no longer an admin.");
-        else RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+        else
+        {
+            RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+            // an admin's /movespeed (#1485) goes with the rights
+            if (!player.IsAdmin) SetMoveSpeed(player.PeerId, 1f);
+        }
     }
 
     /// <summary>
@@ -156,7 +171,7 @@ public partial class ChatManager : Node
             : "You are no longer an admin.", ChatKind.System);
     }
 
-    /// <summary>Server: a peer's name was set or changed — the key of its bank account.</summary>
+    /// <summary>Server: a peer's name was set or changed (shown only: saved data is keyed by its id, <see cref="PlayerIds"/>).</summary>
     public event Action<long>? NameAssigned;
 
     /// <summary>Server: operator rights for the other server-side systems (vehicle spawning).</summary>
@@ -526,6 +541,10 @@ public partial class ChatManager : Node
                 else Show("Nothing to teleport here.", ChatKind.Error);
                 return;
 
+            case "orbit":
+                Show(OrbitLine(rest), ChatKind.Admin);
+                return;
+
             case "spawn":
                 if (Items.ItemLookup.TryParse(rest, out var def, out int count, out string error)) Show(Give(def, count), ChatKind.Admin);
                 else Show(error, ChatKind.Error);
@@ -533,6 +552,18 @@ public partial class ChatManager : Node
 
             case "time":
                 Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
+                return;
+
+            // the player's own movement speed (#1485): offline the player is the admin
+            case "movespeed":
+                if (parts.Length == 1) Show($"Your movement speed: {Player.MoveSpeedCommand.Describe(Player.FootPlayer.OwnSpeedFactor)}.", ChatKind.Private);
+                else if (parts.Length > 2) Show("Offline you are the only player: /movespeed <factor>.", ChatKind.Error);
+                else if (Player.MoveSpeedCommand.TryParse(parts[1], out float moveFactor, out string moveError))
+                {
+                    Player.FootPlayer.SetOwnSpeedFactor(moveFactor);
+                    Show($"Your movement speed: {Player.MoveSpeedCommand.Describe(moveFactor)}.", ChatKind.Admin);
+                }
+                else Show(moveError, ChatKind.Error);
                 return;
 
             case "speed":
@@ -642,6 +673,10 @@ public partial class ChatManager : Node
             case "pinball":
                 Show(Interiors.Pinball.PinballTables.Instance?.Command(rest, Interiors.InteriorManager.Instance?.Current?.Key, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "Pinball is not running.", ChatKind.Private);
                 return;
+            // pool, darts, table football, the arcade's games (#1324): list, step up, a bot, an action by numbers
+            case "games":
+                Show(Interiors.Games.TableGames.Instance?.Command(rest, Interiors.InteriorManager.Instance?.LocalPlayer?.Invoke()) ?? "The games are not running.", ChatKind.Private);
+                return;
             // bowling (#1323): sign in, take a ball, roll by numbers, in the centre the player is in
             case "bowl":
                 Show(Interiors.BowlingLanes.Instance?.Command(1, rest, Interiors.InteriorManager.Instance?.Current?.Key, "You") ?? "Bowling is not running.", ChatKind.Private);
@@ -649,6 +684,13 @@ public partial class ChatManager : Node
             // playing together (#1266): the rope and the shared pot
             case "alcohol":
                 Show(Adventure.Alcohol.AlcoholService.Instance?.Command(Adventure.AdventureService.LocalPeer, rest) ?? "Alcohol needs the Adventure layer.", ChatKind.Private);
+                return;
+
+            case "birthday":
+                // offline (#1423): only this player; their day, or when it is
+                Show(Occasions.Birthdays.MyBirthday.IsToday ? Occasions.Birthdays.MyBirthday.Greeting(GameSettings.Current.PlayerName)!
+                    : Occasions.Birthdays.MyBirthday.Date.IsSet ? "It is not your birthday today." : "Enter your birthday on the Account page, from the title screen.",
+                    ChatKind.Private);
                 return;
 
             case "rope" or "fondue":
@@ -768,6 +810,22 @@ public partial class ChatManager : Node
 
         Teleporter.TeleportTo(lv95E, lv95N, label);
         LineReceived?.Invoke($"Teleported to {label}", ChatKind.System);
+    }
+
+    /// <summary>Client side: an admin's <c>/orbit</c> (#1430 H5), for the saucer this client flies.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void OrbitForced(double km) => LineReceived?.Invoke(OrbitLine(km.ToString(System.Globalization.CultureInfo.InvariantCulture)), ChatKind.Admin);
+
+    /// <summary>
+    /// <c>/orbit &lt;km&gt;</c> on this client (#1430 H5): the own saucer onto a circular orbit. Offline free,
+    /// online an admin's (the server checks, then sends <see cref="OrbitForced"/>).
+    /// </summary>
+    private string OrbitLine(string arg)
+    {
+        if (!double.TryParse(arg, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double km))
+            return "Usage: /orbit <km>, e.g. /orbit 400";
+        return PutInOrbit?.Invoke(km) ?? "No player to put in orbit.";
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
@@ -998,8 +1056,7 @@ public partial class ChatManager : Node
             case "weather": CommandWeather(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it
             case "water":
-                ReplyTo(sender, World.WaterField.Command(rest,
-                    _players?.GetNodeOrNull<Node3D>(sender.ToString())?.GlobalPosition), ChatKind.Private);
+                ReplyTo(sender, World.WaterField.Command(rest, WorldOf(sender)), ChatKind.Private);
                 return;
             // anyone may list; start/stop/auto are checked inside, against the same IsAdmin
             case "occasion" or "occasions":
@@ -1051,6 +1108,11 @@ public partial class ChatManager : Node
             case "alcohol":
                 if (Adventure.Alcohol.AlcoholService.Instance is not { } alcohol) ReplyTo(sender, "Alcohol is not available here.", ChatKind.Error);
                 else ReplyTo(sender, alcohol.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "birthday":
+                // who celebrates today, and the wishes of one's own (#1423)
+                ReplyTo(sender, Occasions.Birthdays.BirthdayService.Server?.Command(sender) ?? "Birthdays are not kept here.", ChatKind.Private);
                 return;
             case "rope" or "fondue":
                 if (Adventure.Together.TogetherService.Instance is not { } together) ReplyTo(sender, "Playing together is not available here.", ChatKind.Error);
@@ -1119,10 +1181,19 @@ public partial class ChatManager : Node
                 }
                 return;
 
+            case "movespeed": CommandMoveSpeed(sender, parts); return;
+
             case "admin": CommandAdmin(sender, parts); return;
             case "tp": if (RequiresAvatar(sender, verb)) CommandTeleportToPlayer(sender, rest); return;
             case "bring": if (RequiresAvatar(sender, verb)) CommandBring(sender, rest); return;
             case "tpall": CommandTeleportEveryone(sender, rest); return;
+            // the pilot's client flies its saucer (#1430 H5): the orbit is put there
+            case "orbit":
+                if (!RequiresAvatar(sender, verb)) return;
+                if (!double.TryParse(rest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double orbitKm))
+                    ReplyTo(sender, "Usage: /orbit <km>, e.g. /orbit 400", ChatKind.Error);
+                else RpcId(sender, MethodName.OrbitForced, orbitKm);
+                return;
             case "kick": CommandKick(sender, parts); return;
             case "update": CommandUpdate(sender); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
@@ -1132,7 +1203,7 @@ public partial class ChatManager : Node
             case "bank": CommandBank(sender, parts); return;
             case "despawn":
             {
-                var (line, refused) = Despawn(parts[1..], _players?.GetNodeOrNull<Node3D>(sender.ToString())?.GlobalPosition);
+                var (line, refused) = Despawn(parts[1..], WorldOf(sender));
                 if (!refused) GD.Print($"[despawn] {NameOf(sender)}: {line}");
                 ReplyTo(sender, line, refused ? ChatKind.Error : ChatKind.Admin);
                 return;
@@ -1298,17 +1369,14 @@ public partial class ChatManager : Node
                 return;
 
             case "add" when name.Length > 0:
-                if (_registry.GrantAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} is already an operator.", ChatKind.Error);
+                // by the player's id (#1359): a name only finds them
+                if (_registry.GrantAdmin(name) is { } notGranted) ReplyTo(sender, notGranted, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is now an operator", ChatKind.Admin);
                 return;
 
             case "remove" when name.Length > 0:
-                if (_registry.RevokeAdmin(name))
-                    Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
-                else
-                    ReplyTo(sender, $"{name} was not an operator.", ChatKind.Error);
+                if (_registry.RevokeAdmin(name) is { } notRevoked) ReplyTo(sender, notRevoked, ChatKind.Error);
+                else Broadcast($"{PlayerRegistry.Sanitize(name)} is no longer an operator", ChatKind.Admin);
                 return;
 
             default:
@@ -1825,6 +1893,79 @@ public partial class ChatManager : Node
         ReplyTo(sender, $"No player matching '{name}'.", ChatKind.Error);
         return null;
     }
+
+    // ---- /movespeed (#1485) -------------------------------------------------------------
+
+    /// <summary>
+    /// <c>/movespeed [&lt;factor&gt; | normal] [player]</c>, admin: the sender's own movement speed, or a
+    /// player's or a server-run bot's; bare, the sender's current factor. No upper cap. Refused for
+    /// anyone playing a round, where everyone plays on equal terms.
+    /// </summary>
+    private void CommandMoveSpeed(long sender, string[] parts)
+    {
+        long peer = sender;
+        string who = "Your";
+        bool bot = false;
+        if (parts.Length > 2 && string.Join(' ', parts[2..]) is var name && !name.Equals("me", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_registry?.FindByName(name) is { } player) (peer, who) = (player.PeerId, player.Name + "'s");
+            else if (Bots.BotDirector.Instance?.Named(name) is var (botId, botName)) (peer, who, bot) = (botId, botName + "'s", true);
+            else
+            {
+                ReplyTo(sender, $"No player or bot matching '{name}'.", ChatKind.Error);
+                return;
+            }
+        }
+        if (peer == sender && !RequiresAvatar(sender, "movespeed")) return;
+
+        if (parts.Length == 1)
+        {
+            ReplyTo(sender, $"{who} movement speed: {Player.MoveSpeedCommand.Describe(BodyOf(peer)?.SpeedFactor ?? 1f)}.", ChatKind.Private);
+            return;
+        }
+        if (!Player.MoveSpeedCommand.TryParse(parts[1], out float factor, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+        if (RefusedInMatch(sender, peer)) return;
+        if (!SetMoveSpeed(peer, factor))
+        {
+            ReplyTo(sender, "No body to set the speed of.", ChatKind.Error);
+            return;
+        }
+        string said = Player.MoveSpeedCommand.Describe(factor);
+        ReplyTo(sender, $"{who} movement speed: {said}.", ChatKind.Admin);
+        if (peer != sender && !bot) ReplyTo(peer, $"{NameOf(sender)} set your movement speed: {said}.", ChatKind.Admin);
+        GD.Print($"[admin] {NameOf(sender)} set {(peer == sender ? "their" : who)} movement speed to {said}");
+    }
+
+    private Player.FootPlayer? BodyOf(long peer) => _players?.GetNodeOrNull<Player.FootPlayer>(PlayerReplication.NodeName(peer));
+
+    /// <summary>
+    /// Server (#1485): a body's movement speed factor (<see cref="Player.FootPlayer.SpeedFactor"/>), the path
+    /// <c>/movespeed</c> and a bot's brain take. A server-run bot's body moves at it here; a player's body is
+    /// its owner's, so the owner is told (<see cref="SpeedFactorSet"/>) and the server keeps it on its copy.
+    /// False when there is no such body or player.
+    /// </summary>
+    public bool SetMoveSpeed(long peer, float factor)
+    {
+        var body = BodyOf(peer);
+        if (body is { Bot: true } or { Npc: true })
+        {
+            body.SpeedFactor = factor;
+            return true;
+        }
+        if (_registry?.Find(peer) is not { Bodiless: false }) return false;
+        if (body != null) body.SpeedFactor = factor;
+        RpcId(peer, MethodName.SpeedFactorSet, factor);
+        return true;
+    }
+
+    /// <summary>Client: the server set this player's movement speed (<c>/movespeed</c>, an admin's choice).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SpeedFactorSet(float factor) => Player.FootPlayer.SetOwnSpeedFactor(factor);
 
     /// <summary><c>/give &lt;player&gt; &lt;item&gt; [count]</c>: <c>/spawn</c> into someone else's inventory.</summary>
     private void CommandGive(long sender, string[] parts)

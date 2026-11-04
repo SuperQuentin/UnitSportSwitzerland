@@ -53,6 +53,7 @@ public class ClockDisciplineTests
     {
         ["src/Adventure/Alcohol/Bac.cs"] = "clock: blood alcohol runs on real time, so a player who logs off drunk comes back sober (#1271); pure, linked into tier 0",
         // ---- the clocks themselves ----
+        ["src/Terrain/CubeHarness.cs"] = "clock: a performance harness (#1443 G1) measures real frame times, not game time",
         ["src/Core/RealClock.cs"] = "clock: it is the wall clock",
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",
         ["src/Net/ClockSync.cs"] = "clock: LocalNow's fallback off --fixed-fps, and the server's Unix offset",
@@ -182,7 +183,9 @@ public class ClockDisciplineTests
         ["src/World/Traffic.cs"] = "presentation: a car's age in the debug readout",
 
         // ---- calendar: the real date, on purpose ----
+        ["src/World/Satellites.cs"] = "plumbing: the satellites' elements are fetched again once they are a real day old: the age of a file on disk, not anything in the game (#1444)",
         ["src/Core/Calendar.cs"] = "calendar: the one reader of today's date for the occasions, the farm, the birds, fishing, shops and tonight's concert; --date or a film's date pins it (#924)",
+        ["src/Trainer/FtpWatch.cs"] = "calendar: the real date stamped on a detected FTP in rider.json (#902)",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",
         ["src/Loot/LootService.cs"] = "calendar: a building restocks once a real day (LootTables.RestockSeconds)",
         ["src/Loot/ShopService.cs"] = "calendar: a shop restocks once a real day",

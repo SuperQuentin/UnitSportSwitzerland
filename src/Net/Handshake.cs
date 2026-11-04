@@ -119,7 +119,13 @@ public partial class Handshake : Node
     /// 85: World/Sword Act, Acted, Hit, Struck, DummySpawn/DummyHit (#1371: sword combat, server-checked blade hits), ItemId 600, ItemUse.Sword, the sword dance moves (7000+).
     /// 86: World/Adventure/Festivals RequestMontreux, TellMontreux (#1394: Montreux Jazz's listening mark and the encore's claps), ItemId 511, Genre.Jazz (the jazz night's event is built from the festival's year and day, nothing is sent).
     /// 87: Adventure/Together RequestStartAt (#1384: a fondue pot on a dining venue's table, the table's place sent).
-    public const int Protocol = 87;
+    /// 88: World/Telescopes AskLook, AskLeave, Answered, Busy (#1440: one player at a time at a set-up telescope), PlacedKind.Telescope 13, ItemId 640.
+    /// 89: creative flight's figure (#1219): FootPlayer.PoseKind 10 (PoseFly), Anim.X the lean, BodyPose the tilt.
+    /// 90: World/Birthdays (#1423: Tell, RequestWish, RequestSlice, RequestShow, SetCelebrants, CakeState, Sliced, Told, WishTaken, Show), ItemIds 545-553,
+    /// ItemUse.Open, ItemEventKind.BirthdayWish, PlacedKind.BirthdayCake 14, Headwear 21-26 (the birthday hats).
+    /// 91: World/Chat SpeedFactorSet (#1485: an admin's /movespeed sent to the body's owner; named to sort after NotifyKicked).
+    /// 92: World/Chat OrbitForced (#1480: an admin's /orbit, for the saucer the client flies; named to sort after NotifyKicked).
+    public const int Protocol = 92;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

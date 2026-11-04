@@ -46,10 +46,10 @@ public partial class FootPlayer
     /// <summary>Seconds of air in a full breath (the reserve while the head is under, <see cref="AirReserve"/>).</summary>
     public const float AirMax = AirReserve.Max;
 
-    /// <summary>Stroke pace, m/s: Game swims faster, as it runs faster.</summary>
-    public float SwimSpeed => Rideable.Arcade ? 1.5f : 1.15f;
+    /// <summary>Stroke pace, m/s: Game swims faster, as it runs faster; times an admin's <see cref="SpeedFactor"/> (#1485).</summary>
+    public float SwimSpeed => (Rideable.Arcade ? 1.5f : 1.15f) * SpeedFactor;
     /// <summary>The sprint stroke (Sprint held).</summary>
-    public float SprintSwimSpeed => Rideable.Arcade ? 2.4f : 1.9f;
+    public float SprintSwimSpeed => (Rideable.Arcade ? 2.4f : 1.9f) * SpeedFactor;
 
     private bool _swimming;
     private float _swimLunge;
@@ -289,8 +289,8 @@ public partial class FootPlayer
         float spring = (level - SwimFloat - GlobalPosition.Y) * 2.5f + water.Y;
         float wishY;
         bool vertical = true;
-        if (dive) wishY = Mathf.Min(wish.Y, -DiveSpeed * (sprint ? 1.4f : 1f));
-        else if (jumpDown && sub > SwimFloat + 0.15f) wishY = Mathf.Max(wish.Y, RiseSpeed);
+        if (dive) wishY = Mathf.Min(wish.Y, -DiveSpeed * SpeedFactor * (sprint ? 1.4f : 1f));
+        else if (jumpDown && sub > SwimFloat + 0.15f) wishY = Mathf.Max(wish.Y, RiseSpeed * SpeedFactor);
         else if (lookSteers && Mathf.Abs(wish.Y) > 0.2f) wishY = wish.Y;
         else
         {

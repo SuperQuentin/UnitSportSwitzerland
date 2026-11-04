@@ -122,6 +122,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/World/StarField      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/SkyBodies      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -205,6 +213,17 @@ src/Interiors/Pinball/ quick --pinballcheck --systems ui
 src/Interiors/Pinball/ quick --zfightcheck Pinball
 shaders/pinball_display quick --pinballcheck --systems ui
 src/Interiors/Pinball/ net    tools/pinballnetcheck.sh
+# #1324: table games: pool played by two bots through its rig (the solver and rules: unit tests), and over the net
+src/Interiors/Games/ quick --poolcheck --systems ui
+src/Interiors/Games/ net    tools/poolnetcheck.sh
+src/Interiors/Games/ quick --dartscheck --systems ui
+src/Interiors/Games/ net    tools/tablenetcheck.sh
+src/Interiors/Games/ quick --foosballcheck --systems ui
+src/Interiors/Games/ quick --airhockeycheck --systems ui
+src/Interiors/Games/ quick --prizecheck --systems ui
+src/Interiors/Games/ quick --clawcheck --systems ui
+src/Interiors/Games/ quick --cabinetcheck --systems ui
+src/Items/ItemIcons quick --prizecheck --systems ui
 # #1243: terraces in front of restaurants, cafés and bars
 src/Interiors/VenueTerraces quick  --terracecheck
 src/Interiors/TerraceProbe  quick  --terracecheck
@@ -380,6 +399,9 @@ src/Net/AdminArgs        net    tools/econcheck.sh
 src/Items/DroppedItems   net    tools/econcheck.sh
 src/Vehicles/VehicleManager net tools/econcheck.sh
 src/Core/Chat            net    tools/econcheck.sh
+src/Player/FootPlayer.MoveSpeed net tools/movespeednetcheck.sh
+src/Player/MoveSpeed     net    tools/movespeednetcheck.sh
+src/Net/ChatManager      net    tools/movespeednetcheck.sh
 src/Net/                 net    @netsmoke
 src/Net/Sleeper          net    tools/sleepercheck.sh
 src/Net/PlayerKey        net    tools/sleepercheck.sh
@@ -424,6 +446,7 @@ src/Crafting/            net    tools/campfirecheck.sh
 src/Items/Fishing        net    tools/fishcheck.sh
 src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
+src/Items/Telescope      net    tools/telescopecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/Farming/             net    tools/farmnetcheck.sh
 src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
@@ -880,6 +903,13 @@ tools/yardlootnetcheck   net    tools/yardlootnetcheck.sh
 src/Bots/                net    tools/botcheck.sh
 src/Items/PlayerHits     net    tools/botcheck.sh
 src/Terrain/CollisionReach net  tools/botcheck.sh
+# #1456: server regions: two bots 300 km apart collide and walk as each does alone, each in a frame of its own
+src/Net/Regions/         net    tools/regioncheck.sh
+src/Player/FootPlayer.Region net tools/regioncheck.sh
+src/Bots/RegionCheck     net    tools/regioncheck.sh
+src/Bots/Bot.cs          net    tools/regioncheck.sh
+src/Core/OriginShifter   net    tools/regioncheck.sh
+tools/regioncheck        net    tools/regioncheck.sh
 # #837: one player against bots in a whole match: top-up at GO, kills of bots "(n bots)", record and board, bots gone after
 src/BattleRoyale/BrManager net  tools/brbotcheck.sh
 src/BattleRoyale/BrState   net  tools/brbotcheck.sh
@@ -1033,6 +1063,8 @@ src/Occasions/Festivals/    net    tools/festivalnetcheck.sh
 src/Occasions/Festivals/    net    tools/fireworksnetcheck.sh
 tools/fireworksnetcheck.sh  net    tools/fireworksnetcheck.sh
 src/Occasions/Festivals/    quick  --fireworkscheck --festival test --date 2027-03-14 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
+src/Occasions/Birthdays/     quick  --birthdaycheck --date 2026-11-01 --birthday 01-11-1996 --birthday-public --world fixture --chunks fixture:flat --systems ui,physics,occasions
+src/Occasions/Birthdays/     net    tools/birthdaynetcheck.sh
 src/Occasions/Festivals/Fahnen/ net    tools/fahnenetcheck.sh
 tools/fahnenetcheck.sh      net    tools/fahnenetcheck.sh
 src/Occasions/Festivals/Fahnen/ quick  --fahnecheck --festival test --date 2027-08-16 --world fixture --chunks fixture:flat --systems ui,physics,occasions,adventure
@@ -1142,3 +1174,56 @@ src/Concert/JazzInstruments quick  --concertcheck --systems ui
 src/Occasions/Festivals/MontreuxJazz/ net    tools/montreuxnetcheck.sh
 src/Occasions/Festivals/FestivalService.MontreuxJazz net    tools/montreuxnetcheck.sh
 tools/montreuxnetcheck.sh    net    tools/montreuxnetcheck.sh
+
+# #1429: the regression net before a coordinate or rendering change (docs/notes/general/regression-net.md)
+# the far horizon at its LV95 corners across origin shifts; a GPX course drawn and run across shifts
+src/Terrain/HorizonLayer     quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
+src/Terrain/HorizonCheck     quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
+src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
+src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
+src/Gpx/                     quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+src/Core/OriginShifter       quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+# probes that existed without a row
+src/World/Traffic            quick  --trafficcheck --chunks fixture:junction
+src/World/LaneGraph          quick  --trafficcheck --chunks fixture:junction
+src/Birds/                   quick  --birdcheck --world fixture
+src/Birds/                   quick  --birdstrikecheck --world fixture
+src/Player/VoidProbe         quick  --voidcheck --world fixture
+src/Player/FootPlayer.cs     quick  --voidcheck --world fixture
+# the origin under load: probes that pass with a shift every 20 m (--originstress)
+src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --ride car,15 --world flat --originstress 20
+src/Core/OriginShifter       quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/WorldOrigin         quick  --boatcheck speedboat --chunks fixture:lake --originstress 20
+src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20
+src/Core/WorldOrigin         quick  --flycheck a320 --world flat --originstress 20
+# a shift every 200 m: at 20 the BNR32 spun five times in one of two runs (a shift twice a second at 160 km/h)
+src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
+src/Core/WorldOrigin         quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200
+# the same with every shift turning the world 2° (anchor frames, #1430 H3): every handler meets a rotation
+src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShift         quick  --ride car,15 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20 --originyaw 2
+src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200 --originyaw 2
+# #1480 (#1430 H5): a polar 400 km orbit at x8 closes after one period through turned Space anchors, then down into
+# the hover (offline); two saucers in orbit side by side through the server's /orbit, each watching the other's copy
+src/Core/Orbit                 quick  --orbitcheck --world flat
+src/Core/Atmosphere            quick  --orbitcheck --world flat
+src/Player/Ufo                 quick  --orbitcheck --world flat
+src/Player/OrbitCheck          quick  --orbitcheck --world flat
+src/Core/OriginShifter         quick  --orbitcheck --world flat
+src/Core/WorldOrigin           quick  --orbitcheck --world flat
+src/Player/Ufo                 net    tools/orbitnetcheck.sh
+src/Player/OrbitNetProbe       net    tools/orbitnetcheck.sh
+src/Net/RemoteInterpolator     net    tools/orbitnetcheck.sh
+src/Net/InterestService        net    tools/orbitnetcheck.sh
+# #1480: the Space band where flat tiles are still drawn (60-250 km): the frame stays flat there, every tile and horizon
+# block where its frame's tile transform puts it through 30 shifts, the frame turning only above 250 km
+src/Core/OriginShifter         quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Core/WorldOrigin           quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Core/Curvature             quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Terrain/SpaceBandCheck     quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Terrain/ChunkManager       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Terrain/HorizonLayer       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
+src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh

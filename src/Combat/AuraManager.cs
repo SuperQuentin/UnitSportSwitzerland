@@ -226,7 +226,7 @@ public partial class AuraManager : Node
         var gb = Body(b)!.Global;
         double de = gb.E - ga.E, dn = gb.N - ga.N;
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = de * de + dn * dn < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
         var match = new Match
         {
             Id = _nextId++,
@@ -236,7 +236,8 @@ public partial class AuraManager : Node
             BodyA = Body(a),
             BodyB = Body(b),
         };
-        match.CentreWorld = (match.BodyA!.GlobalPosition + match.BodyB!.GlobalPosition) * 0.5f;
+        // in A's frame; the two stand face to face, so in one server region (#1456)
+        match.CentreWorld = (match.BodyA!.GlobalPosition + match.BodyA.WhereIs(match.BodyB!)) * 0.5f;
         // the beat of the music playing here (#914), or the fixed 120
         PickBeat(match);
         _matches[match.Id] = match;

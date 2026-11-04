@@ -20,8 +20,40 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
   `godot ... &` without a timeout. A server + clients check sources `tools/lib/twoclient.sh`
   instead, which does all of that (`twoclient-checks`).
+- **A test window never takes focus or the mouse and never makes a sound (#1378)**: a person works at
+  the machine while a tier runs. Every windowed Godot a check starts runs in a fresh `user://` of its own
+  (`guard_test_userdata <dir>`, or `twoclient.sh`'s `tc_userdata`) holding `test_window.cfg`, which
+  `project.godot`'s `application/config/project_settings_override` reads before the window exists:
+  `display/window/size/no_focus=true`, the `Dummy` audio driver (it still mixes, as headless) and
+  `unitsport/test_window=true` (`MouseCapture.TestWindow`: no probe captures the pointer, listed in
+  `ClientWorld` or not). A player's own `user://` never has the file. A new windowed launcher uses one of
+  the two helpers, never the real `user://` (it also carries the player's settings: an H-pattern truck
+  gearbox failed four checks). Only `playtest.sh` and `run-worktree.sh` keep focus, mouse and sound: a
+  person plays those.
+- **No check runs on the real `user://` (#1403)**: `tools/test.sh` starts every quick-tier Godot (and
+  `@netsmoke`'s two) in `test_output/tests/userdata/<check>`, fresh each run (`ud` in `run_one`); the
+  `tools/` scripts isolate themselves. The real one carried the player's settings, CDs and placed objects
+  into the checks: an H-pattern truck gearbox failed seven quick checks on one machine and passed on the
+  next. `TEST_USERDATA=real` runs them on the real one, to debug a check against your own data.
+- **Every check plays on one fixed, minimal profile, at low priority (#1411)**: in a test run (the test
+  `user://`'s `unitsport/test_window`) `GameSettings` never reads or writes `settings.json`; it starts from
+  `GameSettings.TestProfile()` (code defaults, versioned with the repo; 6 rings, horizon off, detail Low,
+  render scale 0.5, no AA, 256 px concert screens, no mirrors, 640x360), the same on every machine, and
+  the process runs below normal priority. A check that needs more says so on its command line (`--rings`,
+  `--horizon`, `--detail`, `--render-scale`, `--aa`, `--mirrors`), never by changing the profile.
+  `lootsynccheck` on real terrain: 978 MB per client, 2.4 GB in all (3.4 GB per client on the defaults).
+- **A windowed check by hand** (a session running one probe straight from Godot) gets none of that on
+  its own: `. tools/lib/guard.sh; guard_test_userdata test_output/userdata_<x>` first (then
+  `${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} <godot> --path . -- --<x>check ...`), or headless when it
+  can be. `--nocapture` alone keeps only the mouse.
 - **Never kill by name or pattern** (`taskkill /im`, `pkill`, `Stop-Process` on a match): other
   agents run Godot at the same time. Only the PIDs you started; `guard_run` already does it.
+- **Stopping a run: `tools/test.sh stop`** (#1409), never by stopping the shell that started it (that left
+  `test.sh` and its checks running). It kills the tree from `test_output/tests/test.pid`, then every
+  process still carrying the run's exported `TEST_RUN` id (`/proc/*/environ`: late forks, orphans).
+- **A run that died goes on**: every result is appended to `test_output/tests/results.tsv` as it lands
+  (time, check, verdict, seconds, log); `TEST_RESUME=1 tools/test.sh <tier>` skips what it holds as PASS,
+  the 10 min unit stage included. A full run once died after 5 h with only an in-memory table.
 - Network, authority or replicated state changed: `tools/test.sh net` before the PR (root `CLAUDE.md`).
 
 ## Why: the tiers and what they cost (PR #232)
@@ -154,7 +186,15 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   dir: Git Bash and WSL do not see each other's lock.
 - **Slots: the net and full tiers run side by side (#1008).**
   - The lock is `GUARD_SLOTS` directories: `unitsport-heavy.lock` is slot 0, then `.1`, `.2`. The default
-    is one slot per 10 GB of RAM, from 1 to 4 (3 on 32 GB).
+    is one slot per 14 GB of RAM, from 1 to 4 (2 on 32 GB). One per 10 GB gave 3 on 32 GB, and a full
+    run with real terrain hit the RAM floor 6 times: each job lost, then rerun alone, ~15 min (#1407).
+- **A full run wastes nothing it can see coming (#1407)**:
+  - A `--collidecheck` row whose targets another selected row covers, in the same world, is skipped
+    ("[test] skipped …"): with every area selected the 11 runs become 3 (the two combined, `castles/`),
+    1,014 s → ~600 s; a narrow change still runs its own folder's row.
+  - A check that needs Docker asks `guard_docker_up` (15 s): with Docker Desktop's engine down it fails
+    at once with the reason, where `docker info` hung it into the 10 min timeout.
+  - `tools/loadtest.sh` finds the terrain as the game does: `CHUNKS`, else `terrain_location.json`.
   - `guard_lock` takes the first free slot and sets `GUARD_SLOT`. A script from before #1008 only knows
     slot 0.
   - **Ports:** `tc_server`, `tc_client` and `tc_godot` move `--port N` and `127.0.0.1:N` by
@@ -219,6 +259,12 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   #219 (`BankProbe`, `LootProbe`, `tools/bankcheck.sh`), #220 (`CrashNetProbe`, `RideProbe`,
   `tools/crashnetcheck.sh`), #230 (`RoadStandProbe`, `WallOffProbe`, `TrafficProbe`),
   #233 (`tools/loadtest.sh`, already wired as a `full` row).
+
+## Results kept, and a baseline (#1429)
+
+Every run writes `results.csv` (`TEST_LEDGER=`); `tools/test-compare.py` compares two.
+`tools/test.sh coords` is the set to baseline before a coordinate or rendering change, beside the
+reference screenshots: `regression-net`.
 
 ## How to check
 

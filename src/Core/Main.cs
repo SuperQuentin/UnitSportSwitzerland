@@ -30,11 +30,32 @@ public partial class Main : Node
 		if (what.Length > 0) window.Title = $"UnitSportSwitzerland — {what}";
 	}
 
+	private static double _lv95WarnedAt = double.NegativeInfinity;
+
+	/// <summary>
+	/// <see cref="Terrain.Format.SwissGeodesy.OutsideDomain"/>: a point within ~0.13° of Bern's antimeridian has no
+	/// right LV95 place (#1480). Logged with its stack once every 10 s (an orbit crosses the sliver in about 2 s);
+	/// any thread may call it.
+	/// </summary>
+	private static void WarnOutsideLv95(Terrain.Format.EcefPos p)
+	{
+		double now = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+		if (now - _lv95WarnedAt < 10) return;
+		_lv95WarnedAt = now;
+		var g = Terrain.Format.Ellipsoid.Wgs84.ToGeodetic(p);
+		GD.PushWarning(System.FormattableString.Invariant(
+			$"[geodesy] LV95 asked for {g.LatDeg:F3}° {g.LonDeg:F3}°, on Bern's antimeridian where it does not round-trip (up to 31 km off): use ECEF there (#1480): {System.Environment.StackTrace}"));
+	}
+
 	public override void _Ready()
 	{
 		// MVR textures Godot decodes: here, not in a module initializer (#1010, Android)
 		Concert.ConcertRig.UseGodotImages();
+		// an LV95 place from the sliver on Bern's antimeridian is up to 31 km off: never quietly (#1480)
+		Terrain.Format.SwissGeodesy.OutsideDomain = WarnOutsideLv95;
 		SetWindowTitle(GetWindow());
+		MouseCapture.PassTestWindowThrough();
+		GameSettings.LowerTestPriority();
 		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
 		ClipRecorder.StartFromArgs(GetTree());
 
@@ -71,12 +92,14 @@ public partial class Main : Node
 			return;
 		}
 
+#if TRAILER
 		// the films' subtitle files (#862): no world, a file job for tools/trailer.sh
 		if (UnitSport.Trailer.SubtitleCut.Requested)
 		{
 			AddChild(new UnitSport.Trailer.SubtitleCut { Name = "SubtitleCut" });
 			return;
 		}
+#endif
 
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.
@@ -140,6 +163,20 @@ public partial class Main : Node
 		if (UnitSport.Audio.SoundPlayer.Requested())
 		{
 			AddChild(new UnitSport.Audio.SoundPlayer { Name = "SoundPlayer" });
+			return;
+		}
+
+		// G1's cube-tile streaming and collision harness (#1443): a region on its own, no game
+		if (UnitSport.Terrain.CubeHarness.Requested())
+		{
+			AddChild(new UnitSport.Terrain.CubeHarness { Name = "CubeHarness" });
+			return;
+		}
+
+		// the globe's colour bake into a --cube-global region (#1430 H4): a tool, no game
+		if (UnitSport.World.GlobeAlbedoBake.Requested())
+		{
+			AddChild(new UnitSport.World.GlobeAlbedoBake { Name = "GlobeAlbedoBake" });
 			return;
 		}
 

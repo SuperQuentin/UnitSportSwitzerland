@@ -3,6 +3,7 @@
 - `Net/Sleepers` at `World/Sleepers` (server and every client). A player who disconnects stays as a body
   lying on its back (the knocked-out angle, -1.45 rad about X), in its outfit, figure and hat, with a
   billboard `Name (asleep)` tag (drawn to 60 m). Look only: nothing can be done to it. On reconnecting,
+- **Tag name** (#1359): sent as `PlayerIds.NameOfId(Key, Name)`, the player's name now; the stored `Name` is only the backup.
   that player wakes there (`WakeAt` -> `Teleporter.TeleportTo`, the `/tp` path: it settles on the
   **terrain**, so a sleeper on a bridge or a deck wakes on the ground under it).
 - **Identity is a key, not the name** (names are a request anyone can make): `Net/PlayerKey`, ECDSA
@@ -10,7 +11,8 @@
   client answers `Prove(publicKey, signature)` over `"unitsport-identity-v1:" + nonce`; a good one makes
   `PlayerKey.Fingerprint` (128 bits of SHA-256, hex) that peer's identity for the session. One nonce per
   join (no replays). A peer that never proves (old client, bot) leaves no sleeper; a key already in use
-  by a connected peer (two clients on one `user://`) gets no identity.
+  by a connected peer (two clients on one `user://`) is that install's next copy, `KEY:2`, `KEY:3`... (#1359,
+  `net/player-ids`): a player of its own, with its own sleeper and saved data.
 - **Server**: `SleeperBook` (pure, unit tested in `SleeperTests`) keeps one sleeper per key, saved to
   `user://sleepers/server.json` through `JsonStore.SaveAsync`, so they survive a restart. The key never
   goes to clients; they know a sleeper by its `Id`. `ServerWorld.OnPeerDisconnected` calls `PeerLeft`

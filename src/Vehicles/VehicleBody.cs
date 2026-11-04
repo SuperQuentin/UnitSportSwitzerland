@@ -27,7 +27,7 @@ namespace UnitSport.Vehicles;
 /// nothing. Every peer watches <see cref="Wrecked"/>: the frame it flips, it explodes there too.
 /// </para>
 /// </summary>
-public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
+public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IOriginShiftAware
 {
     public const string Group = "vehicles";
 
@@ -105,6 +105,19 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
     private VehicleState _initial;
     private RideMotion _motion;
     private FlightMotion _flight;
+
+    /// <summary>
+    /// The shifter moves the body; a turning shift (an anchor frame's, #1430 H3) also turns what it
+    /// keeps as directions: its velocity and its flight state. Nothing to do on a ground shift.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        if (!shift.Turns) return;
+        Velocity = shift.Direction(Velocity);
+        _flight.Velocity = shift.Direction(_flight.Velocity);
+        _flight.Yaw += shift.Yaw;
+        _flight.Attitude = shift.Transform.Basis * _flight.Attitude;
+    }
     private Node3D? _visual;
     private float _bikeRoll;
     private float _heavySpin;
@@ -487,6 +500,9 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
         // brake); in the air the lever stays where the pilot left it
         var input = new FlightInput(Vector2.Zero, 0f, 0f, 0f, onFloor ? 1f : 0f, false, false, _flight.Yaw,
             Engine: EngineOn && Ride is not Helicopter, Piloted: false);
+        // a saucer left in orbit keeps flying it on the server (#1480): in doubles, its body only following
+        if (flyer is Ufo saucer)
+            saucer.Place = new Ufo.SpacePlace(Origin.Frame, GlobalPosition, Origin.AltitudeOf(GlobalPosition), Net.ClockSync.SimNow, Contacts: false);
         flyer.Fly(input, new FlightEnv(onFloor, clearance), dt, ref _flight);
         Rotation = new Vector3(0, _flight.Yaw, 0);
 

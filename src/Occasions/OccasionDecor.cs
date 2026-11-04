@@ -223,7 +223,7 @@ public partial class OccasionDecor : Node
             .Where(a => a.Has(OccasionFacets.Decorations) || a.Has(OccasionFacets.Hunt)).ToList();
         if (running is not { Count: > 0 }) return;
 
-        var tileOrigin = _origin.ToWorld(id.MinE, id.MaxN, 0);
+        var tileOrigin = _origin.TileTransform(id).Origin;
         var ctx = new TileContext
         {
             Id = id,
@@ -234,7 +234,7 @@ public partial class OccasionDecor : Node
             Roads = tile.Roads,
             HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,
-            Towns = OccasionTowns.Near(id.MinE + 500, id.MaxN - 500, 3000).ToList(),
+            Towns = OccasionTowns.Near(id.Centre.E, id.Centre.N, 3000).ToList(),
         };
         var into = new DecorBuilder { IsClaimed = IsClaimed };
         foreach (var a in running)
@@ -279,7 +279,7 @@ public partial class OccasionDecor : Node
                     Multimesh = multi,
                     MaterialOverride = kind.Candle ? _candle : _steady,
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                    VisibilityRangeEnd = Core.Platform.IsStandaloneVr ? StandaloneDrawnM : 0f,
+                    VisibilityRangeEnd = DrawnM,
                 });
             }
         foreach (var mesh in into.Meshes)
@@ -295,18 +295,25 @@ public partial class OccasionDecor : Node
     }
 
     /// <summary>
-    /// How far a standalone headset draws the decor, m (#1112): a pumpkin or a gift past it is a few pixels, and
-    /// a Halloween city's were a millisecond of a Quest's frame from the air.
+    /// How far the decor of a tile built now is drawn, m, by the Detail preset (#1216); 0 as far as it is loaded.
+    /// A pumpkin or a gift past it is a few pixels, and a Halloween city's were a millisecond of a Quest's frame
+    /// from the air (#1112).
     /// </summary>
-    private const float StandaloneDrawnM = 150f;
+    private static float DrawnM => Core.GameSettings.Current.EffectiveDetail switch
+    {
+        Core.DetailPreset.VeryLow => 150f,
+        Core.DetailPreset.Low => 300f,
+        Core.DetailPreset.Medium => 600f,
+        _ => 0f,
+    };
 
     /// <summary>
-    /// One kind's props as drawn: all in one MultiMesh, or on a standalone headset in the buildings' 125 m cells
-    /// (<see cref="Terrain.BuildingOcclusion.Cells"/>), so each cell's range is measured from where its props stand.
+    /// One kind's props as drawn: in the buildings' 125 m cells (<see cref="Terrain.BuildingOcclusion.Cells"/>), so
+    /// each cell's range is measured from where its props stand; all in one MultiMesh where nothing limits it.
     /// </summary>
     private static IEnumerable<List<(Transform3D Xf, float Seed, float Glow)>> Cells(List<(Transform3D Xf, float Seed, float Glow)> all)
     {
-        if (!Core.Platform.IsStandaloneVr)
+        if (DrawnM <= 0f)
         {
             yield return all;
             yield break;
@@ -330,10 +337,10 @@ public partial class OccasionDecor : Node
     {
         var id = _origin.TileAt(world);
         var found = new List<(HuntSpot, Vector3, float)>();
-        for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                if (!_tiles.TryGetValue(new TileId(id.E + de, id.N + dn), out var tile) || !IsInstanceValid(tile.Node)) continue;
+                if (!_tiles.TryGetValue(id.Neighbour(dx, dz), out var tile) || !IsInstanceValid(tile.Node)) continue;
                 var o = tile.Node.GlobalPosition;
                 foreach (var s in tile.Spots)
                 {

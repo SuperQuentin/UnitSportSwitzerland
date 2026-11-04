@@ -43,7 +43,7 @@ public sealed class RaceRoute
     /// </summary>
     public void Follow(OriginFrame now)
     {
-        if (Frame is { } was && !(was.E == now.E && was.N == now.N))
+        if (Frame is { } was && !was.SameFrame(now))
         {
             var shift = now.Since(was);
             for (int i = 0; i < Centre.Count; i++) Centre[i] = shift.Point(Centre[i]);
@@ -69,10 +69,11 @@ public sealed class RaceRoute
         var (e, n) = frame.ToLv95(at);
         var here = TileId.FromLv95(e, n);
         var tiles = new List<RoadTile>();
-        for (int de = -4; de <= 4; de++)
-            for (int dn = -4; dn <= 4; dn++)
+        // west to east, each column south to north (z runs south in the tile's frame): the graph's order
+        for (int dx = -4; dx <= 4; dx++)
+            for (int dz = 4; dz >= -4; dz--)
             {
-                try { if (await source.LoadRoadsAsync(new TileId(here.E + de, here.N + dn), ct) is { } t) tiles.Add(t); }
+                try { if (await source.LoadRoadsAsync(here.Neighbour(dx, dz), ct) is { } t) tiles.Add(t); }
                 catch (System.Exception) { /* no roads there */ }
             }
         var graph = LaneGraph.Build(tiles, frame, s =>
@@ -114,10 +115,10 @@ public sealed class RaceRoute
         var (e, n) = frame.ToLv95(at);
         var here = TileId.FromLv95(e, n);
         var tiles = new List<PisteTile>();
-        for (int de = -4; de <= 4; de++)
-            for (int dn = -4; dn <= 4; dn++)
+        for (int dx = -4; dx <= 4; dx++)
+            for (int dz = 4; dz >= -4; dz--)
             {
-                try { if (await source.LoadPistesAsync(new TileId(here.E + de, here.N + dn), ct) is { } t) tiles.Add(t); }
+                try { if (await source.LoadPistesAsync(here.Neighbour(dx, dz), ct) is { } t) tiles.Add(t); }
                 catch (System.Exception) { /* no slopes there */ }
             }
         if (tiles.Count == 0) return null;
@@ -135,8 +136,9 @@ public sealed class RaceRoute
                 grids[id] = g;
             }
             if (g == null) return 0f;
-            int col = Mathf.Clamp((int)System.Math.Round(pe - id.MinE), 0, ChunkFormat.GridSize - 1);
-            int row = Mathf.Clamp((int)System.Math.Round(id.MaxN - pn), 0, ChunkFormat.GridSize - 1);
+            var (x, z) = id.Local(pe, pn);
+            int col = Mathf.Clamp((int)System.Math.Round(x), 0, ChunkFormat.GridSize - 1);
+            int row = Mathf.Clamp((int)System.Math.Round(z), 0, ChunkFormat.GridSize - 1);
             return (float)g.HeightMetersAt(col, row);
         }
 

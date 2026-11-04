@@ -207,7 +207,7 @@ public partial class SchwingManager : Node
         var gb = Body(b)!.Global;
         double de = gb.E - ga.E, dn = gb.N - ga.N;
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = de * de + dn * dn < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
         var centre = new GlobalPos((ga.E + gb.E) * 0.5, (ga.N + gb.N) * 0.5, (ga.Alt + gb.Alt) * 0.5);
         var match = new Match
         {
@@ -219,7 +219,8 @@ public partial class SchwingManager : Node
             BodyA = Body(a),
             BodyB = Body(b),
         };
-        match.CentreWorld = (match.BodyA!.GlobalPosition + match.BodyB!.GlobalPosition) * 0.5f;
+        // in A's frame; the two stand within reach, so in one server region (#1456)
+        match.CentreWorld = (match.BodyA!.GlobalPosition + match.BodyA.WhereIs(match.BodyB!)) * 0.5f;
         _matches[match.Id] = match;
         BotsEnter(match);
         _schwingOf[a] = _schwingOf[b] = match.Id;
@@ -402,8 +403,9 @@ public partial class SchwingManager : Node
     {
         if (Body(a) is not { } ba || Body(b) is not { } bb) return;
         // a bot is called to the human's side; the humans' clients set themselves on their marks on Begin
-        if (PlayerReplication.IsBotId(b)) bb.GlobalPosition = ba.GlobalPosition;
-        if (PlayerReplication.IsBotId(a)) ba.GlobalPosition = bb.GlobalPosition;
+        // by its Earth position: the bot may come from another server region (#1456)
+        if (PlayerReplication.IsBotId(b)) Net.Regions.ServerRegions.Put(bb, ba.Global);
+        if (PlayerReplication.IsBotId(a)) Net.Regions.ServerRegions.Put(ba, bb.Global);
         Begin(a, b, festival: true, schlussgang: ring.Run.Day >= SchlussgangDay);
     }
 

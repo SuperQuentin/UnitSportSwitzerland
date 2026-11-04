@@ -40,7 +40,8 @@ namespace UnitSport.Birds;
 /// </summary>
 public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
-    public static readonly int Budget = Core.Platform.IsStandaloneVr ? 16 : 32;   // a standalone headset's CPU (#1112)
+    /// <summary>The most birds at once: 16 on Low and Very low (#1216; a standalone headset's CPU, #1112).</summary>
+    public static int Budget => Core.GameSettings.Cheap ? 16 : 32;
     private const float SpawnMin = 35f, SpawnMax = 150f;
     public const float DespawnDistance = 240f;
     public const float Range = 55f;
@@ -451,7 +452,8 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
             return false;
         }
         var (e, n) = _origin.ToLv95(p);
-        int col = (int)Math.Round(e - tile.MinE), row = (int)Math.Round(tile.MaxN - n);
+        var (lx, lz) = tile.Local(e, n);
+        int col = (int)Math.Round(lx), row = (int)Math.Round(lz);
         int i = row * ChunkFormat.GridSize + col;
         if (raster == null || (uint)col >= ChunkFormat.GridSize || (uint)row >= ChunkFormat.GridSize || i >= raster.Length) return false;
         cover = (CoverClass)raster[i];
@@ -474,7 +476,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     {
         bool Near(TileId t)
         {
-            var centre = _origin.ToWorld(t.MinE + 500, t.MaxN - 500, 0);
+            var centre = _origin.TileToWorld(t, new Vector3(500, 0, 500));
             foreach (var o in who) if (Flat(o.Position - centre) < 2000f) return true;
             return false;
         }
@@ -523,8 +525,9 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     {
         var tile = _origin.TileAt(at);
         if (!_trees.TryGetValue(tile, out var cells) || cells == null) return null;
-        var corner = _origin.ToWorld(tile.MinE, tile.MaxN, 0);
-        var local = at - corner;
+        // the tops are kept in the tile's own frame (#1443)
+        var xf = _origin.TileTransform(tile);
+        var local = xf.AffineInverse() * at;
         Vector3? best = null;
         float bestD = reach;
         var (cx, cz) = Cell(local);
@@ -538,7 +541,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
                     if (d < bestD) { bestD = d; best = t; }
                 }
             }
-        return best + corner;
+        return best is { } top ? xf * top : null;
     }
 
     /// <summary>The origin moved (#185): the birds' nodes have moved with it, their flight plans have not.</summary>

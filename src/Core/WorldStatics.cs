@@ -19,6 +19,7 @@ public static class WorldStatics
     {
         UiFocus.Clear();
         Permissions.Reset();
+        Net.PlayerIds.Server = null;
         Interiors.DoorIndex.Clear();
         Vehicles.GarageUi.GarageNear = null;
         Audio.Surfaces.Origin = null;

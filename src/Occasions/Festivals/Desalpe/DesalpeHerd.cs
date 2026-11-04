@@ -102,7 +102,7 @@ public partial class DesalpeHerd : Node3D
         double bestD = double.MaxValue;
         for (int i = 0; i < _x.Length; i++)
         {
-            double de = _site!.E + _x[i] - e, dn = _site.N + _y[i] - n, d = Math.Sqrt(de * de + dn * dn);
+            double d = GlobalPos.HorizontalDistance(_site!.E + _x[i], _site.N + _y[i], e, n);
             if (d < bestD) { bestD = d; best = i; }
         }
         return (best, bestD);
@@ -246,8 +246,7 @@ public partial class DesalpeHerd : Node3D
         }
         var eye = cam.GlobalPosition;
         var (ee, en) = origin.ToLv95(eye);
-        double de = _site.E + _target[0].X - ee, dn = _site.N + _target[0].Y - en;
-        if (de * de + dn * dn > DrawRange * DrawRange)
+        if (GlobalPos.HorizontalDistanceSquared(_site.E + _target[0].X, _site.N + _target[0].Y, ee, en) > DrawRange * DrawRange)
         {
             if (_bodies != null && _bodies.Visible) _bodies.Visible = _heads!.Visible = _bells!.Visible = false;
             foreach (var g in _groups.Values) g.Node.Visible = false;
@@ -323,8 +322,7 @@ public partial class DesalpeHerd : Node3D
         for (int i = 0; i < _x.Length; i++)
         {
             if (!moo && _gait[i] < 0.3f && i != 0) continue;   // the bells ring where cows walk, the Leitkuh's always a little
-            double de = _site!.E + _x[i] - ee, dn = _site.N + _y[i] - en;
-            if (de * de + dn * dn > range * range) continue;
+            if (GlobalPos.HorizontalDistanceSquared(_site!.E + _x[i], _site.N + _y[i], ee, en) > range * range) continue;
             if (_rng.Next(++seen) == 0) pick = i;
         }
         if (pick < 0 || _voices.Length == 0) return;

@@ -23,7 +23,8 @@ public partial class PinballCabinet : Node3D
 
     private sealed record Meshes(ArrayMesh Body, ArrayMesh Field, ArrayMesh Plastic, ArrayMesh Flipper, ArrayMesh Drop, ArrayMesh Spinner);
     private static readonly Dictionary<int, Meshes> Built = new();
-    private static ArrayMesh? _ball, _lampDisc, _lampArrow, _knob;
+    private static readonly Dictionary<Color, ArrayMesh> Balls = new();
+    private static ArrayMesh? _lampDisc, _lampArrow, _knob;
     private static StandardMaterial3D? _lampMat, _plasticMat;
 
     public PinballTable Table { get; private set; } = null!;
@@ -74,10 +75,10 @@ public partial class PinballCabinet : Node3D
             c._field.AddChild(n);
             c._flippers[i] = n;
         }
-        _ball ??= BallMesh();
+        if (!Balls.TryGetValue(t.Ball, out var ball)) Balls[t.Ball] = ball = BallMesh(t.Ball);
         for (int i = 0; i < MaxBalls; i++)
         {
-            c._balls[i] = new MeshInstance3D { Name = $"Ball{i}", Mesh = _ball, MaterialOverride = material, Visible = false };
+            c._balls[i] = new MeshInstance3D { Name = $"Ball{i}", Mesh = ball, MaterialOverride = material, Visible = false };
             c._field.AddChild(c._balls[i]);
         }
         var drops = new List<int>();
@@ -358,7 +359,7 @@ public partial class PinballCabinet : Node3D
     /// <summary>The playfield: its art, walls, rubbers, posts, bumpers, slings, targets, scoops, lanes, the apron and wire forms.</summary>
     private static ArrayMesh FieldMesh(PinballTable t)
     {
-        var s = new PinballMesh();
+        var s = new PinballMesh { SelfLit = true };
         var ground = t.Ground.SrgbToLinear();
         var a = t.AccentA.SrgbToLinear();
         var b = t.AccentB.SrgbToLinear();
@@ -535,7 +536,7 @@ public partial class PinballCabinet : Node3D
     private static ArrayMesh FlipperMesh(PinballTable t)
     {
         // a tapered bat along +X from its pivot, its rubber ring round it
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         var body = t.Trim.SrgbToLinear();
         var f = t.Flippers[0];
         const int n = 10;
@@ -573,7 +574,7 @@ public partial class PinballCabinet : Node3D
 
     private static ArrayMesh DropMesh(PinballTable t)
     {
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         s.Box(new Vector3(-0.011f, 0, -0.003f), new Vector3(0.011f, 0.032f, 0.003f), t.AccentB.SrgbToLinear());
         s.Box(new Vector3(-0.008f, 0.012f, -0.0035f), new Vector3(0.008f, 0.026f, 0.0035f), Rubber);
         return s.Build();
@@ -582,17 +583,17 @@ public partial class PinballCabinet : Node3D
     private static ArrayMesh SpinnerMesh()
     {
         // a flag hanging from its axle (the node turns round X)
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         s.Box(new Vector3(-0.02f, -0.026f, -0.0015f), new Vector3(0.02f, -0.003f, 0.0015f), PinballMesh.Lit(PinballMesh.Col(1f, 0.8f, 0.2f)));
         return s.Build();
     }
 
-    private static ArrayMesh BallMesh()
+    private static ArrayMesh BallMesh(Color col)
     {
-        var s = new PinballMesh { TwoSided = true };
+        var s = new PinballMesh { SelfLit = true, TwoSided = true };
         const int rings = 6, seg = 10;
         const float r = BallRadius;
-        var col = PinballMesh.Col(0.86f, 0.88f, 0.92f);
+        col = PinballMesh.Col(col.R, col.G, col.B);
         for (int i = 0; i < rings; i++)
             for (int j = 0; j < seg; j++)
             {

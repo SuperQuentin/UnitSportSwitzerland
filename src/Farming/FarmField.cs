@@ -209,10 +209,10 @@ public partial class FarmField : Node
         var (e, n) = Focus();
         double now = Core.RealClock.Now;   // how long a tile went unwanted: housekeeping, real time
         var centre = TileId.FromLv95(e, n);
-        for (int dn = -1; dn <= 1; dn++)
-            for (int de = -1; de <= 1; de++)
+        for (int dz = 1; dz >= -1; dz--)
+            for (int dx = -1; dx <= 1; dx++)
             {
-                var id = new TileId(centre.E + de, centre.N + dn);
+                var id = centre.Neighbour(dx, dz);
                 if (EdgeDistance(id, e, n) > LoadRadius) continue;
                 var t = Ensure(id);
                 t.LastWanted = now;
@@ -226,8 +226,10 @@ public partial class FarmField : Node
 
     private static double EdgeDistance(TileId id, double e, double n)
     {
-        double dx = Math.Max(0, Math.Max(id.MinE - e, e - (id.MinE + ChunkFormat.TileSizeM)));
-        double dy = Math.Max(0, Math.Max(id.MinN - n, n - id.MaxN));
+        // outside the tile's square in its own frame (x east, z south from its north-west corner)
+        var (x, z) = id.Local(e, n);
+        double dx = Math.Max(0, Math.Max(-x, x - ChunkFormat.TileSizeM));
+        double dy = Math.Max(0, Math.Max(z - ChunkFormat.TileSizeM, -z));
         return Math.Sqrt(dx * dx + dy * dy);
     }
 

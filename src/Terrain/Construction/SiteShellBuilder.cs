@@ -80,8 +80,8 @@ public static class SiteShellBuilder
             for (int j = 0; j <= nv; j++)
             {
                 var p = box.Center + box.AxisU * (box.Width * ((float)i / nu - 0.5f)) + box.AxisV * (box.Depth * ((float)j / nv - 0.5f));
-                float h = (float)grid.SampleMeshHeight(id.MinE + Mathf.Clamp(p.X, 0, ChunkFormat.TileSizeM),
-                    id.MaxN - Mathf.Clamp(p.Y, 0, ChunkFormat.TileSizeM));
+                var (e, n) = id.Global(Mathf.Clamp(p.X, 0, ChunkFormat.TileSizeM), Mathf.Clamp(p.Y, 0, ChunkFormat.TileSizeM));
+                float h = (float)grid.SampleMeshHeight(e, n);
                 high = Math.Max(high, h);
                 low = Math.Min(low, h);
             }
@@ -98,8 +98,8 @@ public static class SiteShellBuilder
     {
         if (grid == null) return tile.Buildings[int.Parse(site.Key.Split('_')[2])].MinY;
         var id = tile.Id;
-        return (float)grid.SampleMeshHeight(id.MinE + Mathf.Clamp(p.X, 0, ChunkFormat.TileSizeM),
-            id.MaxN - Mathf.Clamp(p.Y, 0, ChunkFormat.TileSizeM));
+        var (e, n) = id.Global(Mathf.Clamp(p.X, 0, ChunkFormat.TileSizeM), Mathf.Clamp(p.Y, 0, ChunkFormat.TileSizeM));
+        return (float)grid.SampleMeshHeight(e, n);
     }
 
     /// <summary>

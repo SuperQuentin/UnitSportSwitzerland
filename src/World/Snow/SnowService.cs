@@ -152,7 +152,8 @@ public partial class SnowService : Node
         {
             if (node is not FootPlayer p || !SnowRide.Is(p.RideKindId)) continue;
             ulong key = p.GetInstanceId();
-            var at = p.GlobalPosition;
+            // in the terrain's frame, from the Earth position: on the server the body may be in another region's (#1456)
+            var at = _chunks?.Origin is { } frame ? frame.ToWorld(p.Global) : p.GlobalPosition;
             var slope = _index.At(at, out _);
             if (slope != null && _lastSeen.TryGetValue(key, out var last) && last.Slope == slope.Id)
             {

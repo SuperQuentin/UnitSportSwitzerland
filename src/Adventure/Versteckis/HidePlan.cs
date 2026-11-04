@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Versteckis;
@@ -112,7 +113,7 @@ public static class HidePlan
             double next = 20 + Unit(rk, 1) * 30, walked = 0;
             for (int i = 1; i < line.Length; i++)
             {
-                double de = line[i].E - line[i - 1].E, dn = line[i].N - line[i - 1].N, len = Math.Sqrt(de * de + dn * dn);
+                double de = line[i].E - line[i - 1].E, dn = line[i].N - line[i - 1].N, len = GlobalPos.HorizontalDistance(line[i].E, line[i].N, line[i - 1].E, line[i - 1].N);
                 if (len < 0.01) continue;
                 while (walked + len >= next)
                 {
@@ -129,12 +130,13 @@ public static class HidePlan
         }
         if (churchDoor is { } door)
         {
-            double de = door.E - ce, dn = door.N - cn;
-            // in front of the door, facing it: out of the church along the door's own outward when known
+            // in front of the door, facing it: out of the church along the door's own outward when known,
+            // else away from the centre
             var church = buildings.Where(b => b.Kind == BuildingKind.Sacral)
-                .OrderBy(b => (b.DoorE - door.E) * (b.DoorE - door.E) + (b.DoorN - door.N) * (b.DoorN - door.N)).Select(b => (VsBuilding?)b).FirstOrDefault();
-            if (church is { } c) { de = c.OutE; dn = c.OutN; }
-            double l = Math.Sqrt(de * de + dn * dn);
+                .OrderBy(b => GlobalPos.HorizontalDistanceSquared(b.DoorE, b.DoorN, door.E, door.N)).Select(b => (VsBuilding?)b).FirstOrDefault();
+            double de, dn, l;
+            if (church is { } c) { de = c.OutE; dn = c.OutN; l = Math.Sqrt(c.OutE * c.OutE + c.OutN * c.OutN); }
+            else { de = door.E - ce; dn = door.N - cn; l = GlobalPos.HorizontalDistance(door.E, door.N, ce, cn); }
             if (l > 0.01) Add(VsProp.Bench, door.E + de / l * 6, door.N + dn / l * 6, YawOf(-de, -dn), 2f);
         }
 

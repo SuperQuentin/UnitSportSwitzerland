@@ -248,7 +248,9 @@ public partial class InterestService : Node
                 if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
                 float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
                 bool near = _together.Contains((viewer, target))
-                    || _at[_viewerIndex[vi]].DistanceTo(at) < radius;
+                    || _at[_viewerIndex[vi]].DistanceTo(at) < radius
+                    // an orbit (#1430 H5): 1.3 km between two 6 Hz states is no picture
+                    || targetNode.NetVel.LengthSquared() > RemoteInterpolator.FastSpeed * RemoteInterpolator.FastSpeed;
                 (near ? _near : _far).Add(viewer);
             }
             if (lastNear != null && _farOf.TryGetValue(target, out var lastFar)
@@ -298,7 +300,8 @@ public partial class InterestService : Node
         var (e, n) = (at.E, at.N);
         var id = TileId.FromLv95(e, n);
         if (!index.TryGet(id, out _)) return null;
-        double fc = (e - id.MinE) / HorizonFormat.SpacingM, fr = (id.MaxN - n) / HorizonFormat.SpacingM;
+        var (lx, lz) = id.Local(e, n);
+        double fc = lx / HorizonFormat.SpacingM, fr = lz / HorizonFormat.SpacingM;
         int last = HorizonFormat.SamplesPerSide - 1;
         int c0 = Math.Clamp((int)fc, 0, last - 1), r0 = Math.Clamp((int)fr, 0, last - 1);
         double tx = Math.Clamp(fc - c0, 0, 1), ty = Math.Clamp(fr - r0, 0, 1);

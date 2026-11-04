@@ -25,6 +25,8 @@ public partial class WorldPickCheck : Node
     private readonly string _soloBefore = GameSettings.Current.SoloWorld;
     private readonly WorldChoice _junction = WorldChoice.Find("junction")!, _signals = WorldChoice.Find(WorldChoice.SignalsId)!;
 
+    private const string SignalsStep = "traffic lights region";
+
     public static bool Requested() => CmdArgs.Has("--worldpickcheck");
 
     public WorldPickCheck(GameShell shell)
@@ -33,7 +35,7 @@ public partial class WorldPickCheck : Node
         Name = "WorldPickCheck";
         _steps.Add(("solo picker, junction course", PickOnSolo, CheckJunction));
         if (!CmdArgs.Has("nosignals"))   // the net check: built and played in the quick one
-            _steps.Add(("traffic lights region", () => _shell.Launch(new WorldLaunch { Mode = GameMode.Explore, World = _signals, Landing = _signals.Start }), CheckSignals));
+            _steps.Add((SignalsStep, () => _shell.Launch(new WorldLaunch { Mode = GameMode.Explore, World = _signals, Landing = _signals.Start }), CheckSignals));
         if (CmdArgs.Int("host") is int port)
             _steps.Add(("hosted junction course", () => _shell.Host("WorldPick host", port, false, null, true, _junction), () => CheckHosted(port)));
         if (CmdArgs.Value("connect") is { } endpoint)
@@ -66,7 +68,9 @@ public partial class WorldPickCheck : Node
         {
             if (!_shell.InWorld)
             {
-                if (Seconds(_since) > 150) Fail($"{_steps[_index].Name}: never in the world ({_shell.World?.Failure ?? "no failure"})");
+                // the traffic lights region is built first, on this machine: 246 s measured in a debug
+                // build beside other checks, where 150 s was enough when the region was smaller (#1398)
+                if (Seconds(_since) > (_steps[_index].Name == SignalsStep ? 600 : 150)) Fail($"{_steps[_index].Name}: never in the world ({_shell.World?.Failure ?? "no failure"})");
                 return;
             }
             _entered = true;

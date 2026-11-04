@@ -71,9 +71,12 @@ public sealed class ChatCompleter
         ("tp", true, true, "<player> | <E> <N>", "Travel", "go to a player or an LV95 point"),
         ("bring", true, false, "<player>", "Travel", "bring a player to you"),
         ("tpall", true, false, "<town>", "Travel", "send everyone to a town"),
+        ("orbit", true, true, "<km>", "Travel", "your UFO onto a circular orbit, 100 km up and more"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>", "World", "the time of day"),
         ("speed", false, true, "[<0.05 .. 8> | normal]", "World", "how fast the simulation runs"),
+        ("movespeed", true, true, "[<factor> | normal] [player]", "Admin", "how fast you (or a player, a bot) move: any factor, 1 = normal"),
         ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]", "World", "the weather and snow"),
+        ("games", false, true, "[list | play <piece> | bot | act <action> [numbers] | leave]", "Concerts & media", "the pool tables, dartboards and arcade games of the venue you are in: step up to one, add a bot, play by numbers"),
         ("pinball", false, true, "[list | play <machine> | start | robot | view]", "Concerts & media", "the pinball machines of the venue you are in: step up to one, a robot at the flippers, the top view"),
         ("cinema", false, true, "[play <link> | stop | relay on|off | fit <how> | ratio <r> | pool] | <hall> [lights full|dim|off] [film on|off]", "Concerts & media", "the hall you are in: its film; a hall's lights and film by number (admin)"),
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]", "World", "waves on the lakes"),
@@ -92,6 +95,7 @@ public sealed class ChatCompleter
         ("party", false, false, "[list] | invite <player> | leave | kick <player>", "Activities", "your party"),
         ("rope", false, false, "[<player> | hands <player> | off]", "Activities", "rope up or hold hands with a party member"),
         ("alcohol", false, false, "", "Activities", "what alcohol does here; measure your level with a breathalyzer"),
+        ("birthday", false, false, "", "Activities", "who celebrates a birthday today, and your wishes when it is yours"),
         ("fondue", false, false, "[invite <player> | leave | forfeit 1|2|3]", "Activities", "the shared pot at your table"),
         // invites (#840)
         ("invites", false, false, "", "Activities", "invites open to you and from you"),
@@ -261,6 +265,16 @@ public sealed class ChatCompleter
 
             case "inertia":
                 options = argIndex == 0 ? ["steady", "sway", "full"] : [];
+                break;
+
+            // #1485: a factor, then whose (online)
+            case "movespeed":
+                options = argIndex switch
+                {
+                    0 => ["normal", "2", "5", "10"],
+                    1 => PlayerNames().Prepend("me"),
+                    _ => [],
+                };
                 break;
 
             case "spawn":

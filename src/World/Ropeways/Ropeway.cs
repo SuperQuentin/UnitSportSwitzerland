@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.World.Ropeways;
@@ -113,7 +114,7 @@ public sealed class RopewayLine
         float seg = Arc[i] - Arc[i - 1];
         float t = seg < 1e-4f ? 0f : (s - Arc[i - 1]) / seg;
         double de = E[i] - E[i - 1], dn = N[i] - N[i - 1];
-        float len = (float)Math.Sqrt(de * de + dn * dn);
+        float len = (float)GlobalPos.HorizontalDistance(E[i], N[i], E[i - 1], N[i - 1]);
         return (E[i - 1] + de * t, N[i - 1] + dn * t, Alt[i - 1] + (Alt[i] - Alt[i - 1]) * t,
             len < 1e-4f ? 0f : (float)(de / len), len < 1e-4f ? 1f : (float)(dn / len));
     }

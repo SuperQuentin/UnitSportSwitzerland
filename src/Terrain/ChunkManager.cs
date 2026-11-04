@@ -96,7 +96,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ViewDirection = -camera.GlobalTransform.Basis.Z;
         var size = camera.GetViewport().GetVisibleRect().Size;
         double aspect = size.Y > 0 ? size.X / size.Y : 16.0 / 9.0;
-        double half = Mathf.DegToRad(camera.Fov) / 2;
+        double half = Mathf.DegToRad(Core.CameraLens.FovOf(camera)) / 2;
         // Fov is the vertical angle unless the camera keeps its width
         if (camera.KeepAspect == Camera3D.KeepAspectEnum.Height)
             half = Math.Atan(Math.Tan(half) * aspect);
@@ -504,9 +504,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// time — the next evaluation rebuilds tiles whose stride changed and unloads the rest
     /// through the ordinary hysteresis.
     /// </summary>
+    private static readonly StringName BuildingBoxFromParam = "world_building_box_from";
+
     public void ApplySettings(GameSettings s)
     {
+        var was = Lod;
         Lod = LodPolicy.FromSettings(s);
+        // the preset's far-box and paint distances on the tiles already drawn (#1216): ranges, nothing to rebuild;
+        // the windows fade before the boxes take over (building.gdshaderinc)
+        RenderingServer.GlobalShaderParameterSet(BuildingBoxFromParam, Lod.BuildingBoxFromM);
+        if (was.BuildingBoxFromM != Lod.BuildingBoxFromM || was.RoadPaintToM != Lod.RoadPaintToM)
+            foreach (var state in _chunks.Values)
+                state.Node?.SetRanges(Lod.BuildingBoxFromM, Lod.RoadPaintToM);
         if (Styles.StyleKit.Detail != Detail)
         {
             Detail = Styles.StyleKit.Detail;
@@ -726,9 +735,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             {
                 if (added.Contains(id)) return true;
                 if (_available.Contains(id)) return false;   // real before, and unchanged
-                for (int dn = -BlendReachTiles; dn <= BlendReachTiles; dn++)
-                    for (int de = -BlendReachTiles; de <= BlendReachTiles; de++)
-                        if (added.Contains(new TileId(id.E + de, id.N + dn))) return true;
+                for (int dz = -BlendReachTiles; dz <= BlendReachTiles; dz++)
+                    for (int dx = -BlendReachTiles; dx <= BlendReachTiles; dx++)
+                        if (added.Contains(id.Neighbour(dx, dz))) return true;
                 return false;
             }
             ReplaceTiles(Affected);
@@ -790,10 +799,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public static bool OcclusionCells { get; set; } = Core.CmdArgs.Value("--occlusion", notFlag: true) != "off";
 
     /// <summary>
-    /// Detail chosen by the distance from the eye, height included (LodPolicy.WithAltitude): a standalone
-    /// headset (#1112), or <c>--verticallod</c>. Below 150 m above the ground nothing changes.
+    /// Detail chosen by the distance from the eye, height included (LodPolicy.WithAltitude, #1112; every device
+    /// since #1216, <c>--noverticallod</c> to measure without). Below 150 m above the ground nothing changes.
     /// </summary>
-    public static bool VerticalLod { get; } = Platform.IsStandaloneVr || Core.CmdArgs.Has("--verticallod");
+    public static bool VerticalLod { get; } = !Core.CmdArgs.Has("--noverticallod");
 
     /// <summary>Tiles within this many of an anchor's draw their buildings in cells.</summary>
     public const int CellRings = 1;
@@ -917,24 +926,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private void FitHorizonCoverage()
     {
         if (Horizon == null) return;
-        int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
-        foreach (var t in _available)
-        {
-            minE = Math.Min(minE, t.E);
-            maxE = Math.Max(maxE, t.E);
-            minN = Math.Min(minN, t.N);
-            maxN = Math.Max(maxN, t.N);
-        }
+        var cover = TileRect.Bounding(_available);
         if (_fallback?.Current is { Enabled: true } snap)
-        {
-            var b = snap.Bounds;
-            minE = Math.Min(minE, b.MinE);
-            maxE = Math.Max(maxE, b.MaxE);
-            minN = Math.Min(minN, b.MinN);
-            maxN = Math.Max(maxN, b.MaxN);
-        }
-        if (minE > maxE) return;
-        Horizon.EnsureCoverage(minE, maxE, minN, maxN);
+            cover = cover is { } real ? real.Union(snap.Bounds) : snap.Bounds;
+        if (cover is { } box) Horizon.EnsureCoverage(box);
     }
 
     // ---- debug menu (#339) -------------------------------------------------------------
@@ -1240,7 +1235,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
         if (!_chunks.TryGetValue(id, out var state) || state.Cover is not { } raster) return false;
-        int col = (int)Math.Round(e - id.MinE), row = (int)Math.Round(id.MaxN - n);
+        var (x, z) = id.Local(e, n);
+        int col = (int)Math.Round(x), row = (int)Math.Round(z);
         if ((uint)col >= ChunkFormat.GridSize || (uint)row >= ChunkFormat.GridSize) return false;
         int i = row * ChunkFormat.GridSize + col;
         if (i >= raster.Length) return false;
@@ -1269,8 +1265,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
+        var (x, z) = id.Local(e, n);
         return _chunks.TryGetValue(id, out var state) && state.Water is { } water
-            && water.TrySample(e - id.MinE, id.MaxN - n, out stillLevel, out waveScale);
+            && water.TrySample(x, z, out stillLevel, out waveScale);
     }
 
     /// <summary>
@@ -1319,7 +1316,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     {
         var q = PhysicsRayQueryParameters3D.Create(worldPos + Vector3.Up * 0.5f, worldPos - Vector3.Up * depth);
         q.Exclude = new Godot.Collections.Array<Rid> { self };
-        return body.GetWorld3D().DirectSpaceState.IntersectRay(q).Count > 0;
+        // a body's own space: on the server a body in a region of its own is not in the viewport's (#1456)
+        var space = body is Player.FootPlayer player ? player.Space : body.GetWorld3D().DirectSpaceState;
+        return space.IntersectRay(q).Count > 0;
     }
 
     /// <summary>
@@ -1331,8 +1330,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
+        var (x, z) = id.Local(e, n);
         return _chunks.TryGetValue(id, out var state) && state.Bores is { Count: > 0 } bores
-            && RoadTunnels.Inside(bores, e - id.MinE, worldPos.Y, id.MaxN - n);
+            && RoadTunnels.Inside(bores, x, worldPos.Y, z);
     }
 
     /// <summary>
@@ -1345,7 +1345,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var (e, n) = _origin.ToLv95(worldPos);
         var id = TileId.FromLv95(e, n);
         if (!_chunks.TryGetValue(id, out var state) || state.Pits is not { Count: > 0 } pits) return false;
-        var at = new Vector2((float)(e - id.MinE), (float)(id.MaxN - n));
+        var (x, z) = id.Local(e, n);
+        var at = new Vector2((float)x, (float)z);
         foreach (var pit in pits)
             if (pit.Rect.Contains(at, 0.5f) && worldPos.Y > pit.Floor - 1.5f) return true;
         return false;
@@ -1363,7 +1364,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (!_chunks.TryGetValue(id, out var state)) return false;
         // the cell under the point, not the whole tile: cells land one per frame, nearest first,
         // so a body waits only for its own; and a bridge is ground too
-        int cell = ChunkNode.CollisionCell((int)(e - id.MinE), (int)(id.MaxN - n));
+        var (x, z) = id.Local(e, n);
+        int cell = ChunkNode.CollisionCell((int)x, (int)z);
         return (state.HeightCellsDone & (1 << cell)) != 0
             && ((state.RoadCellsQueued & (1 << cell)) == 0 || (state.RoadCellsDone & (1 << cell)) != 0);
     }
@@ -1579,7 +1581,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 {
                     var node = EnsureNode(result.Id, state);
                     node.SetRoads(result.Roads);
-                    node.SetRoadCells(result.RoadCells, result.RoadPaintCells);
+                    node.SetRoadCells(result.RoadCells, result.RoadPaintCells, Lod.RoadPaintToM);
                     node.SetSignalLamps(result.Lamps);
                     node.SetSignNames(result.SignNames);
                 }
@@ -1590,7 +1592,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (result.BuildingsRequested)
             {
                 if (result.BuildingCells != null)
-                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices, result.BuildingProxies);
+                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices, result.BuildingProxies, Lod.BuildingBoxFromM);
                 else if (result.Buildings != null)
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
                 // the building sites' shells (#608), or none: a rebuild without them clears them
@@ -1600,7 +1602,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // has no cells to show, and recording that as "not cells" rebuilt it forever
                 state.BuildingCells = state.PendingCells;
                 if (result.Doors != null)
-                    Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
+                    Interiors.DoorIndex.SetTile(result.Id, _origin!.TileTransform(result.Id).Origin, result.Doors);
                 TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
                 if (result.Trees != null)
                 {
@@ -1752,7 +1754,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             state.Node = new ChunkNode
             {
                 Name = $"Chunk_{id}",
-                Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
+                // its NW corner, turned with the world in a Space frame (#1480): a tile streamed after a turning
+                // shift lies as the ones the shift turned (the plain corner in a ground frame, to the bit)
+                Transform = _origin!.TileTransform(id),
             };
             ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);
@@ -1862,11 +1866,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             // as one mesh (#553), and only near the ground: from the air a building hides next to
             // nothing, and flying across a city rebuilt three tiles a crossing for no gain. Rebuilt
             // (buildings only) when it crosses, with a ring of slack so it does not flap.
-            // a standalone headset (#1112) keeps them at every distance and height: each cell then picks
-            // its detail by its own distance from the eye (ChunkNode.ProxyFromM), whatever tile it is in
-            bool wantCells = OcclusionCells && want.Buildings && (Platform.IsStandaloneVr || (street && want.Dist <= CellRings));
+            // Since #1216 at every height, out to the tiles a building turns into its box in (LodPolicy.CellRings):
+            // each cell picks its own mesh or its boxes by its distance from the eye (BuildingBoxFromM), whatever
+            // tile it is in. A tile beyond is one mesh of boxes: cells there were thousands of draws on a desktop.
+            int cellRings = Lod.CellRings;
+            bool wantCells = OcclusionCells && want.Buildings && want.Dist <= cellRings;
             bool cellSwitch = state.HasBuildings && state.BuildingCells != wantCells
-                && (wantCells || want.Dist > CellRings + 1 || !street);
+                && (wantCells || want.Dist > cellRings + 1);
             bool needBuildings = want.Buildings && !state.PendingBuildings && (!state.HasBuildings || cellSwitch);
             bool needGrid = state.Grid == null;
 
@@ -1912,6 +1918,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     // a server builds no roads to draw, but a bot's collision needs the road tile: decks,
                     // kerbs, walls and tunnel bores are cut from it (#837)
                     roadsForBlend: (needCollision || nearMesh) && (want.Roads || !BuildMeshes), fine: fine, cells: wantCells,
+                    boxes: OcclusionCells && !wantCells,
                     buildingsOnly: needBuildings && cellSwitch);
             }
         }
@@ -1978,12 +1985,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             var reach = byRadius ? ReachOf(anchor) : default;
             // how high the anchor is above its ground, for the vertical LOD (LodPolicy.WithAltitude)
             float agl = VerticalLod && TryGetHeight(anchor.GlobalPosition, out float under) ? anchor.GlobalPosition.Y - under : 0f;
-            for (int de = -radius; de <= radius; de++)
-                for (int dn = -radius; dn <= radius; dn++)
+            // dz runs from south to north, the order the tiles were always visited in
+            for (int dx = -radius; dx <= radius; dx++)
+                for (int dz = radius; dz >= -radius; dz--)
                 {
-                    var id = new TileId(center.E + de, center.N + dn);
+                    var id = center.Neighbour(dx, dz);
                     if (!IsAvailable(id)) continue;
-                    int ring = Math.Max(Math.Abs(de), Math.Abs(dn));
+                    int ring = center.RingDistance(id);
                     // the ring the detail is chosen by: further out the higher the anchor flies, never
                     // past the last ring (a tile under a high flight stays loaded at the coarsest stride)
                     int dist = VerticalLod ? Math.Min(LodPolicy.WithAltitude(ring, agl), Lod.MaxDist) : ring;
@@ -2173,8 +2181,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
         bool wantRoads, bool wantBuildings, bool roadsForBlend = false, bool fine = false, bool cells = false,
-        bool buildingsOnly = false)
+        bool buildingsOnly = false, bool boxes = false)
     {
+        // Very low's roads in the buildings' cells (#1112): what is behind the eye or a block is culled. Elsewhere one
+        // mesh a tile (#1216): a road tile is not rebuilt as the player nears it, and cells everywhere cost a desktop
+        // more draws than they saved. Read here, on the main thread, for the build.
+        bool roadCells = GameSettings.Lean;
         if (fine) Interlocked.Increment(ref _fineBuildsInFlight);
         state.PendingStride = stride;
         state.BuildStartedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -2320,7 +2332,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         null, null, false, null, null, WaterLayer: waterLayer));
 
                 ArrayMesh? roads = null;
-                ArrayMesh?[]? roadCells = null, roadPaintCells = null;
+                ArrayMesh?[]? roadCellMeshes = null, roadPaintCells = null;
                 SignalBuilder.Lamps? lamps = null;   // traffic-light lenses (#350)
                 RoadSignBuilder.Label[]? signNames = null;   // canton signs' names (#1038)
                 RoadTile? roadTile = null;
@@ -2338,15 +2350,19 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     {
                         ct.ThrowIfCancellationRequested();
                         var paintData = RoadPaintBuilder.Build(roadTile);
-                        if (Platform.IsStandaloneVr)
+                        // the paint stops at the preset's distance (LodPolicy.RoadPaintToM): in each cell, or the tile's
+                        // as one more mesh (a "cell" of the whole tile, ChunkNode.SetRoadCells)
+                        if (roadCells)
                         {
-                            // a standalone headset's roads in the buildings' cells (#1112): what is behind the
-                            // eye or a block is culled, and the paint goes beyond a few hundred metres
-                            roadCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(roadData), roadMaterial);
+                            roadCellMeshes = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(roadData), roadMaterial);
                             if (paintData != null) roadPaintCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(paintData), roadMaterial);
                             roads = new ArrayMesh();
                         }
-                        else roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, paintData);
+                        else
+                        {
+                            roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
+                            if (paintData != null) roadPaintCells = [ChunkNode.ToArrayMesh(paintData, roadMaterial)];
+                        }
                         lamps = SignalBuilder.BuildLamps(roadTile);
                         signNames = RoadSignBuilder.Labels(roadTile);
                         if (RoadSignBuilder.GantryLabels(roadTile) is { } gantryNames) signNames = [.. signNames ?? [], .. gantryNames];   // #1110
@@ -2465,7 +2481,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
-                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid) is { } buildingData)
+                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid, stride) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (cells)
@@ -2475,8 +2491,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                                 for (int c = 0; c < parts.Length; c++)
                                     if (parts[c] is { } part) buildingCells[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
                                 occluders = BuildingOcclusion.Occluders(bTile);
-                                // a standalone headset's far stand-ins, cut into the same cells (#1112)
-                                if (Platform.IsStandaloneVr && BuildingMeshBuilder.BuildProxies(bTile) is { } proxyData)
+                                // the far stand-ins, cut into the same cells (#1112, every device since #1216)
+                                if (BuildingMeshBuilder.BuildProxies(bTile) is { } proxyData)
                                 {
                                     var proxyParts = BuildingOcclusion.SplitByCell(proxyData);
                                     buildingProxies = new ArrayMesh?[proxyParts.Length];
@@ -2484,7 +2500,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                                         if (proxyParts[c] is { } part) buildingProxies[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
                                 }
                             }
-                            else buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
+                            // a tile beyond the cells' rings is past every building's box distance: its boxes alone (#1216)
+                            else buildings = ChunkNode.ToArrayMesh(boxes && BuildingMeshBuilder.BuildProxies(bTile) is { } far ? far : buildingData, buildingMaterial);
                         }
                     }
                     if (wantCollision)
@@ -2499,7 +2516,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                             linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null, sites);
                         }
                         buildingFaces = ChunkNode.SplitByCell(bTile != null
-                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile, grid), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. officeFaces ?? []] : []);
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile, grid), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. BuildingMeshBuilder.StoopFaces(linkDoors), .. officeFaces ?? []] : []);
                     }
                     Lap(StBldgMesh, stageMs, clock);
                 }
@@ -2642,7 +2659,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
                     buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames,
-                    BuildingProxies: buildingProxies, RoadCells: roadCells, RoadPaintCells: roadPaintCells));
+                    BuildingProxies: buildingProxies, RoadCells: roadCellMeshes, RoadPaintCells: roadPaintCells));
             }
             catch (OperationCanceledException)
             {

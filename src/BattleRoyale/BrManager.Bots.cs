@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Bots;
 using UnitSport.Net;
 using UnitSport.Player;
@@ -53,10 +54,12 @@ public partial class BrManager
     /// back, to and fro; a stop only inside the next circle was usually none (the four are spread over the first).
     /// Null when none can be had.
     /// </summary>
-    public Vector3? NearestStop(Vector3 at, float health = 100f)
+    public Vector3? NearestStop(Vector3 at, float health = 100f, WorldOrigin? frame = null)
     {
-        if (!RecallOpen || Origin == null) return null;
-        var (e, n) = Origin.ToLv95(at);
+        // in the asking bot's frame (#1456): on a server with regions it need not be this world's
+        frame ??= Origin;
+        if (!RecallOpen || frame == null) return null;
+        var (e, n) = frame.ToLv95(at);
         var here = new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN));
         var z = _state.Zone().At(Now - _state.Started);
         var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
@@ -75,14 +78,15 @@ public partial class BrManager
         var stops = Stops().Where(s => health - ZoneSeconds(s) * dps > StopKeep).ToList();
         if (stops.Count == 0) return null;
         var stop = stops.OrderBy(s => s.At.DistanceTo(here)).First();
-        return Origin.ToWorld(_state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt);
+        return frame.ToWorld(_state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt);
     }
 
     /// <summary>Why <see cref="NearestStop"/> has none (for <c>--botlog</c>): recalls, the zone, each stop's walk and the time left.</summary>
-    public string StopReport(Vector3 at)
+    public string StopReport(Vector3 at, WorldOrigin? frame = null)
     {
-        if (Origin == null) return "no origin";
-        var (e, n) = Origin.ToLv95(at);
+        frame ??= Origin;
+        if (frame == null) return "no origin";
+        var (e, n) = frame.ToLv95(at);
         var here = new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN));
         var z = _state.Zone().At(Now - _state.Started);
         var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
@@ -99,8 +103,8 @@ public partial class BrManager
     private const float StopKeep = 45f;
 
     /// <summary>The last ping a human of <paramref name="team"/> made (world point, when, by whom), for the team's bots.</summary>
-    public (Vector3 At, double When, long From)? HumanPing(int team) => _humanPings.TryGetValue(team, out var p) ? p : null;
-    private readonly Dictionary<int, (Vector3 At, double When, long From)> _humanPings = new();
+    public (GlobalPos At, double When, long From)? HumanPing(int team) => _humanPings.TryGetValue(team, out var p) ? p : null;
+    private readonly Dictionary<int, (GlobalPos At, double When, long From)> _humanPings = new();
 
     /// <summary>
     /// GO, once teams are drawn (#837 phase 4): a squad's bots land as a group. A bot-only team flies to its
@@ -253,7 +257,8 @@ public partial class BrManager
             // and crash in the air. Each takes the nearest free moment, MinJumpGap from every other.
             jumpAt = FreeMoment(jumps, jumpAt, flight.OpensAt + 0.2, flight.ClosesAt - 0.2);
             jumps.Add(jumpAt);
-            var target = Origin.ToWorld(e, n, (float)BrMapImage.Height(horizon, e, n));
+            // in the bot's own frame: it may have spawned in a region of its own (#1456)
+            var target = (bot.Body.Origin ?? Origin).ToWorld(e, n, (float)BrMapImage.Height(horizon, e, n));
             var brain = new BrBrain(this, _crates, _state.Seed ^ (i * 7919)) { DropTarget = target, JumpAt = jumpAt };
             bot.Brain = brain;
             brains.Add(brain);
@@ -314,12 +319,19 @@ public partial class BrManager
     /// <summary>The bots still in the plane's hold.</summary>
     private readonly HashSet<long> _aboardBots = new();
 
+    /// <summary>
+    /// A point of this world (the plane, its ramp) in the frame of bot <paramref name="id"/>'s body: the
+    /// same on a client, another on a server where the bot is in a region of its own (#1456).
+    /// </summary>
+    private Vector3 ToBody(long id, Vector3 world) =>
+        BodyOf(id)?.Origin is { } frame && Origin != null && frame != Origin ? frame.ToWorld(Origin.ToGlobal(world)) : world;
+
     /// <summary>Where the hold keeps a bot: as <see cref="Hold"/> keeps the local player, while it is aboard.</summary>
     private (Vector3 At, float Yaw, Vector3 Velocity)? BotHold(long id)
     {
         if (!_aboardBots.Contains(id) || _state.Flight is not { } flight || Origin == null) return null;
         var f = PlaneFrame(flight, Now);
-        return (f.At + Vector3.Down * 1.2f, f.Yaw, f.Velocity);
+        return (ToBody(id, f.At + Vector3.Down * 1.2f), f.Yaw, f.Velocity);
     }
 
     /// <summary>
@@ -339,7 +351,7 @@ public partial class BrManager
         var exit = f.At + new Basis(Vector3.Up, f.Yaw) * BrPlane.Ramp + Vector3.Down * 2f + right * _jumpSide * (float)(4 + _rng.NextDouble() * 4);
         var forward = f.Velocity.LengthSquared() > 1f ? f.Velocity.Normalized() : new Basis(Vector3.Up, f.Yaw) * Vector3.Forward;
         _aboardBots.Remove(bot.Id);
-        bot.Body.Leap(exit, forward * Math.Min(flight.Speed, ExitSpeed) + right * _jumpSide * 2f + Vector3.Down * 4f, RideKind.Wingsuit);
+        bot.Body.Leap(ToBody(bot.Id, exit), forward * Math.Min(flight.Speed, ExitSpeed) + right * _jumpSide * 2f + Vector3.Down * 4f, RideKind.Wingsuit);
         if (_state.Find(bot.Id) is { } e) e.Jumped = true;
         _pushSoon = true;   // one state message for every bot that jumped this frame
         GD.Print($"[br] {bot.Body.Name} \"{bot.Profile.Name}\" {(pushed ? "pushed out" : "jumped")} {flight.ClosesAt - now:F0} s before the doors close");
@@ -364,10 +376,11 @@ public partial class BrManager
     }
 
     /// <summary>The ground's height under a world point from the terrain lattice, for a bot opening its canopy over unloaded ground.</summary>
-    public float? GroundAt(Vector3 world)
+    public float? GroundAt(Vector3 world, WorldOrigin? frame = null)
     {
-        if (Origin == null || Horizon is not { } horizon) return null;
-        var (e, n) = Origin.ToLv95(world);
+        frame ??= Origin;
+        if (frame == null || Horizon is not { } horizon) return null;
+        var (e, n) = frame.ToLv95(world);
         return (float)BrMapImage.Height(horizon, e, n);
     }
 
@@ -417,7 +430,7 @@ public partial class BrManager
         foreach (var e in _state.Entrants.Where(e => e.Bot && e.Alive))
             if (BodyOf(e.Peer) is { Eliminated: false } body)
             {
-                var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
+                var (pe, pn) = (body.Global.E, body.Global.N);
                 if (z.Outside(new Vector2((float)(pe - _state.AreaE), (float)(pn - _state.AreaN))))
                     body.TakeDamage(z.Dps * (float)dt, 0, DamageCause.Zone);
             }
