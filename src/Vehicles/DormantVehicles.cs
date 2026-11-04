@@ -264,7 +264,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             && (s.DoorsOpen & 15) == 0 && s.Cd == "" && s.Radio == 0 && !s.EngineOn;
         foreach (var (key, slot) in _awakeInfo)
         {
-            if (!World.ContainerRules.BackInBay(slot, s.Position.E, s.Position.N, s.Yaw, (int)s.Kind, s.Train, s.Load, pristine)) continue;
+            if (!World.ContainerRules.BackInBay(slot, s.Position, s.Yaw, (int)s.Kind, s.Train, s.Load, pristine)) continue;
             int bar = key.LastIndexOf('|');
             string owner = key[..bar];
             int ordinal = int.Parse(key[(bar + 1)..]);
@@ -916,7 +916,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             if (!solid)
             {
                 var g = _origin.ToGlobal(p);
-                _missed.Add((g.E, g.N, g.Alt));
+                _missed.Add((g.Lv95.E, g.Lv95.N, g.Alt));
             }
             return y;
         }
