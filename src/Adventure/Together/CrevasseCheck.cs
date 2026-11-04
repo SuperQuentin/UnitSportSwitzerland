@@ -71,7 +71,7 @@ public partial class CrevasseCheck : ChatProbe
         Expect(await Until(() => _partner.IsOnFloor(), 10), "the partner stands");
 
         // the fixture has no ice: a glacier box round the player
-        TogetherService.GlacierBox = (me.Global.E, me.Global.N, 150);
+        TogetherService.GlacierBox = (me.Global.Lv95.E, me.Global.Lv95.N, 150);
         var found = Cells(TogetherService.GlacierBox.Value, 4);
         if (found.Count < 4) { Expect(false, $"four crevasse cells in the glacier box ({found.Count})"); return; }
         var origin = me.Origin!;

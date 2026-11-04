@@ -112,6 +112,9 @@ public static class PhotoSpots
     }
 
     /// <summary>The spots whose standing disc holds a point (curated first, then the viewpoints within 1 km).</summary>
+    public static List<PhotoSpot> At(GlobalPos at, PoiCatalogue cat) => At(at.Lv95.E, at.Lv95.N, cat);
+
+    /// <summary><see cref="At(GlobalPos, PoiCatalogue)"/> for a point given as LV95 numbers (a spot's disc is on the LV95 grid).</summary>
     public static List<PhotoSpot> At(double e, double n, PoiCatalogue cat)
     {
         var list = new List<PhotoSpot>();
@@ -142,6 +145,10 @@ public static class PhotoJudge
     /// <param name="pitchDeg">Up from the horizontal.</param>
     /// <param name="fovDeg">The frame's full angle (the print is a square crop: the same both ways).</param>
     /// <param name="ground">The terrain height, null where unknown (an unloaded tile: taken as clear).</param>
+    public static PhotoVerdict Judge(PhotoSpot spot, GlobalPos at, float eyeAlt, float yawDeg, float pitchDeg, float fovDeg,
+        Func<double, double, float?> ground) => Judge(spot, at.Lv95.E, at.Lv95.N, eyeAlt, yawDeg, pitchDeg, fovDeg, ground);
+
+    /// <summary><see cref="Judge(PhotoSpot, GlobalPos, float, float, float, float, Func{double, double, float?})"/> for a body at LV95 numbers.</summary>
     public static PhotoVerdict Judge(PhotoSpot spot, double e, double n, float eyeAlt, float yawDeg, float pitchDeg, float fovDeg,
         Func<double, double, float?> ground)
     {

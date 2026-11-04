@@ -176,16 +176,16 @@ public partial class RewardWorld : Node3D
             return;
         }
         var at = me.Global;
-        var here = TileId.FromLv95(at.E, at.N);
+        var here = at.Tile;
         for (int dx = -1; dx <= 1; dx++)
             for (int dz = 1; dz >= -1; dz--)
             {
                 if (svc.Map.TryTile(here.Neighbour(dx, dz)) is not { } spots) continue;
                 foreach (var s in spots)
-                    if (GlobalPos.HorizontalDistanceSquared(s.E, s.N, at.E, at.N) <= RangeM * RangeM) _near.Add(s);
+                    if (at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.E, s.N, at.Alt)) <= RangeM * RangeM) _near.Add(s);
             }
         var cat = PoiCatalogueHost.Current;
-        cat.Near(at.E, at.N, RangeM, _nearPois);
+        cat.Near(at, RangeM, _nearPois);
         var mine = AdventureService.Instance?.Mine;
         var opened = mine?.Get(ChestsProgress.Section).Opened;
         var taken = mine?.Get(CollectProgress.Section).Taken;

@@ -164,7 +164,7 @@ public partial class RewardService : Node
     {
         why = "";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) { why = "No body."; return false; }
-        double d = GlobalPos.HorizontalDistance(at.E, at.N, e, n);
+        double d = at.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, at.Alt));
         if (d > reach) { why = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Too far ({d:F0} m)."); return false; }
         if (Math.Abs(at.Alt - alt) > RewardRules.ClaimSlackUpM) { why = "Not there."; return false; }
         return true;
@@ -385,7 +385,7 @@ public partial class RewardService : Node
             foreach (long other in _adventure.Peers)
             {
                 if (!_adventure.Active(other) || _adventure.Progress(other) is not { } op || _adventure.PositionOf?.Invoke(other) is not { } at) continue;
-                if (Math.Sqrt((at.E - chest.E) * (at.E - chest.E) + (at.N - chest.N) * (at.N - chest.N)) > 30) continue;
+                if (at.HorizontalDistanceTo(GlobalPos.FromLv95(chest.E, chest.N, at.Alt)) > 30) continue;
                 _seals.MarkDone(op.Key, chest.Id, now);
                 SendSeal(other, chest.Id, _seals.MaskOf(op.Key, chest.Id));
             }
@@ -408,10 +408,10 @@ public partial class RewardService : Node
             foreach (long m in party)
                 if (m != peer && _adventure.Active(m) && _adventure.Progress(m) is { } mp && _adventure.PositionOf?.Invoke(m) is { } mpos)
                 {
-                    members.Add((mp.Key, mpos.E, mpos.N));
+                    members.Add((mp.Key, mpos.Lv95.E, mpos.Lv95.N));
                     peerOf[mp.Key] = m;
                 }
-        var keys = Seals.Coop(p.Key, members, at?.E ?? chest.E, at?.N ?? chest.N);
+        var keys = Seals.Coop(p.Key, members, at?.Lv95.E ?? chest.E, at?.Lv95.N ?? chest.N);
         var mine = SealStep.Ignored;
         foreach (string key in keys)
         {
@@ -474,9 +474,9 @@ public partial class RewardService : Node
         if (already && !p.Get(QuestsProgress.Section).Active.Keys.Any(k => k.StartsWith("pk:", StringComparison.Ordinal))) return "taken";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Refuse(peer, spotId, "No body.");
         if (!float.IsFinite(yawDeg) || !float.IsFinite(pitchDeg) || fovDeg is < 1 or > 120) return Refuse(peer, spotId, "No such photo.");
-        var ground = await Map.SightGround(at.E, at.N, spot.TargetE, spot.TargetN);
+        var ground = await Map.SightGround(at.Lv95.E, at.Lv95.N, spot.TargetE, spot.TargetN);
         if (!IsInstanceValid(this) || _adventure.Progress(peer) != p) return "gone";
-        var verdict = PhotoJudge.Judge(spot, at.E, at.N, (float)at.Alt + 1.6f, yawDeg, pitchDeg, fovDeg, ground);
+        var verdict = PhotoJudge.Judge(spot, at, (float)at.Alt + 1.6f, yawDeg, pitchDeg, fovDeg, ground);
         if (verdict != PhotoVerdict.Taken)
         {
             GD.Print($"[rewards] peer {peer}: photo of {spot.Id}: {verdict}");
@@ -726,7 +726,7 @@ public partial class RewardService : Node
         foreach (long peer in _tickPeers)
         {
             if (_adventure.Progress(peer) is not { } p || !_guides.Following(p.Key, out _, out _, out _)) continue;
-            if (_adventure.PositionOf?.Invoke(peer) is not { } at || _guides.Follow(p.Key, at.E, at.N, now) is not { } move) continue;
+            if (_adventure.PositionOf?.Invoke(peer) is not { } at || _guides.Follow(p.Key, at.Lv95.E, at.Lv95.N, now) is not { } move) continue;
             SendGuide(peer, move);
             GuideStep(peer, p, move);
         }

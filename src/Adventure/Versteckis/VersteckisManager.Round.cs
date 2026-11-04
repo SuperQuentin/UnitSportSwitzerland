@@ -177,7 +177,7 @@ public partial class VersteckisManager
             e.Score += points;
             e.RoundScore += points;
             var at = PositionOf(e.Peer);
-            if (at is { } p) s.Pins.Add(new VsPin(e.Peer, e.Name, e.Prop, p.E, p.N, e.Caught));
+            if (at is { } p) s.Pins.Add(new VsPin(e.Peer, e.Name, e.Prop, p.Lv95.E, p.Lv95.N, e.Caught));
             e.Holding = -1;
             e.DisguiseBackAt = 0;
         }

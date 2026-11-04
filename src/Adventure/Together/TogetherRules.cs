@@ -7,7 +7,11 @@ namespace UnitSport.Adventure.Together;
 /// altitude), whether they adventure now (<c>AdventureService.Active</c>, off in a round) and whether they
 /// are knocked out (the replicated <c>Down</c>).
 /// </summary>
-public readonly record struct Mate(double E, double N, double Alt, bool Active, bool Down);
+public readonly record struct Mate(double E, double N, double Alt, bool Active, bool Down)
+{
+    /// <summary>A member standing at a <see cref="GlobalPos"/>.</summary>
+    public static Mate At(GlobalPos p, bool active, bool down) => new(p.Lv95.E, p.Lv95.N, p.Alt, active, down);
+}
 
 /// <summary>
 /// "Playing together" (#1266, <c>docs/plans/adventure-together.md</c> part 1), in one place: a party member,
@@ -47,6 +51,9 @@ public static class TogetherRules
     /// <paramref name="radius"/> across and <see cref="VerticalRadius"/> up or down. Capped at <see cref="MaxCounted"/>.
     /// The mode does not matter: a friend in a car beside the field counts.
     /// </summary>
+    public static int Count(GlobalPos at, ReadOnlySpan<Mate> mates, float radius = Radius) => Count(at.Lv95.E, at.Lv95.N, at.Alt, mates, radius);
+
+    /// <summary><see cref="Count(GlobalPos, ReadOnlySpan{Mate}, float)"/> for a player at LV95 numbers.</summary>
     public static int Count(double e, double n, double alt, ReadOnlySpan<Mate> mates, float radius = Radius)
     {
         int count = 0;
