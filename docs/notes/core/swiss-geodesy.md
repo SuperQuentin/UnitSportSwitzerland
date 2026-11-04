@@ -13,7 +13,7 @@
 - **The way in from latitude and longitude** (GPS, OSM, IGN): `SwissGeodesy.ToLv95(lat, lon[, hEll])`
   and back `ToLatLon(e, n[, hLhn95])`, rigorous however far out. The game uses only these (#1443,
   G0a: GPX import and export, photo spots, landmarks, berths, the 1 August quays); the preprocessor's
-  stages still use `SwissProjection` until G1. A point without a height is taken at 500 m
+  stages too since #1507, through `GeoInput` on the built tiles' ground (`tools/cube-compare`). A point without a height is taken at 500 m
   ellipsoidal; the height moves it by 2.6-2.8 cm per km (the datums' normals are not parallel), so
   pass it when it is known.
 - **Types**: `EcefPos` (earth-centred doubles), `Geodetic` (degrees, ellipsoidal height),
