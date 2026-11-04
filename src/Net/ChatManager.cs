@@ -146,7 +146,12 @@ public partial class ChatManager : Node
     {
         if (player.PeerId == ConsolePeerId || _registry?.Find(player.PeerId) == null) return;
         if (player.Bodiless) RemoteLine?.Invoke(player.PeerId, player.IsAdmin ? "You are an admin." : "You are no longer an admin.");
-        else RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+        else
+        {
+            RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+            // an admin's /movespeed (#1485) goes with the rights
+            if (!player.IsAdmin) SetMoveSpeed(player.PeerId, 1f);
+        }
     }
 
     /// <summary>
@@ -540,6 +545,18 @@ public partial class ChatManager : Node
 
             case "time":
                 Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
+                return;
+
+            // the player's own movement speed (#1485): offline the player is the admin
+            case "movespeed":
+                if (parts.Length == 1) Show($"Your movement speed: {Player.MoveSpeedCommand.Describe(Player.FootPlayer.OwnSpeedFactor)}.", ChatKind.Private);
+                else if (parts.Length > 2) Show("Offline you are the only player: /movespeed <factor>.", ChatKind.Error);
+                else if (Player.MoveSpeedCommand.TryParse(parts[1], out float moveFactor, out string moveError))
+                {
+                    Player.FootPlayer.SetOwnSpeedFactor(moveFactor);
+                    Show($"Your movement speed: {Player.MoveSpeedCommand.Describe(moveFactor)}.", ChatKind.Admin);
+                }
+                else Show(moveError, ChatKind.Error);
                 return;
 
             case "speed":
@@ -1140,6 +1157,8 @@ public partial class ChatManager : Node
                     Broadcast($"[server] Standing passengers now feel the vehicles: {rest.ToLowerInvariant()}.", ChatKind.Admin);
                 }
                 return;
+
+            case "movespeed": CommandMoveSpeed(sender, parts); return;
 
             case "admin": CommandAdmin(sender, parts); return;
             case "tp": if (RequiresAvatar(sender, verb)) CommandTeleportToPlayer(sender, rest); return;
@@ -1844,6 +1863,79 @@ public partial class ChatManager : Node
         ReplyTo(sender, $"No player matching '{name}'.", ChatKind.Error);
         return null;
     }
+
+    // ---- /movespeed (#1485) -------------------------------------------------------------
+
+    /// <summary>
+    /// <c>/movespeed [&lt;factor&gt; | normal] [player]</c>, admin: the sender's own movement speed, or a
+    /// player's or a server-run bot's; bare, the sender's current factor. No upper cap. Refused for
+    /// anyone playing a round, where everyone plays on equal terms.
+    /// </summary>
+    private void CommandMoveSpeed(long sender, string[] parts)
+    {
+        long peer = sender;
+        string who = "Your";
+        bool bot = false;
+        if (parts.Length > 2 && string.Join(' ', parts[2..]) is var name && !name.Equals("me", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_registry?.FindByName(name) is { } player) (peer, who) = (player.PeerId, player.Name + "'s");
+            else if (Bots.BotDirector.Instance?.Named(name) is var (botId, botName)) (peer, who, bot) = (botId, botName + "'s", true);
+            else
+            {
+                ReplyTo(sender, $"No player or bot matching '{name}'.", ChatKind.Error);
+                return;
+            }
+        }
+        if (peer == sender && !RequiresAvatar(sender, "movespeed")) return;
+
+        if (parts.Length == 1)
+        {
+            ReplyTo(sender, $"{who} movement speed: {Player.MoveSpeedCommand.Describe(BodyOf(peer)?.SpeedFactor ?? 1f)}.", ChatKind.Private);
+            return;
+        }
+        if (!Player.MoveSpeedCommand.TryParse(parts[1], out float factor, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+        if (RefusedInMatch(sender, peer)) return;
+        if (!SetMoveSpeed(peer, factor))
+        {
+            ReplyTo(sender, "No body to set the speed of.", ChatKind.Error);
+            return;
+        }
+        string said = Player.MoveSpeedCommand.Describe(factor);
+        ReplyTo(sender, $"{who} movement speed: {said}.", ChatKind.Admin);
+        if (peer != sender && !bot) ReplyTo(peer, $"{NameOf(sender)} set your movement speed: {said}.", ChatKind.Admin);
+        GD.Print($"[admin] {NameOf(sender)} set {(peer == sender ? "their" : who)} movement speed to {said}");
+    }
+
+    private Player.FootPlayer? BodyOf(long peer) => _players?.GetNodeOrNull<Player.FootPlayer>(PlayerReplication.NodeName(peer));
+
+    /// <summary>
+    /// Server (#1485): a body's movement speed factor (<see cref="Player.FootPlayer.SpeedFactor"/>), the path
+    /// <c>/movespeed</c> and a bot's brain take. A server-run bot's body moves at it here; a player's body is
+    /// its owner's, so the owner is told (<see cref="SpeedFactorSet"/>) and the server keeps it on its copy.
+    /// False when there is no such body or player.
+    /// </summary>
+    public bool SetMoveSpeed(long peer, float factor)
+    {
+        var body = BodyOf(peer);
+        if (body is { Bot: true } or { Npc: true })
+        {
+            body.SpeedFactor = factor;
+            return true;
+        }
+        if (_registry?.Find(peer) is not { Bodiless: false }) return false;
+        if (body != null) body.SpeedFactor = factor;
+        RpcId(peer, MethodName.SpeedFactorSet, factor);
+        return true;
+    }
+
+    /// <summary>Client: the server set this player's movement speed (<c>/movespeed</c>, an admin's choice).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SpeedFactorSet(float factor) => Player.FootPlayer.SetOwnSpeedFactor(factor);
 
     /// <summary><c>/give &lt;player&gt; &lt;item&gt; [count]</c>: <c>/spawn</c> into someone else's inventory.</summary>
     private void CommandGive(long sender, string[] parts)

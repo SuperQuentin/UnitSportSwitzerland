@@ -105,6 +105,10 @@ public static class ChatCheck
         ExpectTexts(completer, "/deb", ["/debug "], "debug menu command offline (#339)");
         ExpectTexts(completer, "/giv", [], "/give needs a server");
         ExpectTexts(completer, "/bank s", ["/bank set"], "bank verbs");
+        ExpectTexts(completer, "/moves", ["/movespeed "], "/movespeed offline (#1485)");
+        ExpectTexts(completer, "/movespeed n", ["/movespeed normal"], "/movespeed normal");
+        Expect(!ChatCompleter.Visible(online: true, isAdmin: false).Contains("movespeed")
+            && ChatCompleter.Visible(online: true, isAdmin: true).Contains("movespeed"), "/movespeed online: an admin's only");
         Offline(host);
 
         Venues(completer, host);
@@ -226,6 +230,21 @@ public static class ChatCheck
         Expect(dropped.Items.All(i => i.IsQueuedForDeletion()), "no stone left");
         dropped.QueueFree();
         camera.QueueFree();
+
+        // /movespeed (#1485): offline the player is the admin; any positive factor, no cap
+        chat.Send("/movespeed 250");
+        Expect(Player.FootPlayer.OwnSpeedFactor == 250f && last == "Your movement speed: x250.", $"/movespeed 250: {last}");
+        chat.Send("/movespeed");
+        Expect(last == "Your movement speed: x250.", $"bare /movespeed says it: {last}");
+        chat.Send("/movespeed 0");
+        Expect(Player.FootPlayer.OwnSpeedFactor == 250f && last.Contains("not a speed factor"), $"/movespeed 0 refused: {last}");
+        chat.Send("/movespeed 2 Bob");
+        Expect(last.StartsWith("Offline you are the only player"), $"/movespeed for someone else offline: {last}");
+        chat.Send("/movespeed normal");
+        Expect(Player.FootPlayer.OwnSpeedFactor == 1f, $"/movespeed normal restores x1: {last}");
+        chat.Send("/movespeed 3");
+        Permissions.Reset();
+        Expect(Player.FootPlayer.OwnSpeedFactor == 1f, "leaving a server drops the factor");
 
         chat.QueueFree();
     }
