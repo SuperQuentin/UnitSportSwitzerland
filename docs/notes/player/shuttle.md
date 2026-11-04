@@ -79,7 +79,7 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
 
 ## Checks
 
-- `--shuttlecheck --world flat` (`Player/ShuttleCheck`, quick, ~3 min): a scripted pilot flies the whole
+- `--shuttlecheck --world flat` (`Player/ShuttleCheck`, quick, ~50 s): a scripted pilot flies the whole
   mission on the shuttle's own controls: take-off, a 50° rocket climb into Space, the drive up to 400 km and
   round the Earth (a whole turn of the ground track), the drive off (a circular orbit, apsides within 1 km),
   a retro burn to a 45 km perigee, half an orbit down and re-entry (fails without a glow over 0.5), a minute
