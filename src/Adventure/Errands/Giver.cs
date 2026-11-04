@@ -12,7 +12,8 @@ public enum GiverKind : byte { HutWarden = 0, StationMaster = 1, ShipMaster = 2,
 
 /// <summary>
 /// A giver: a server-known figure at a real place. <see cref="E"/>/<see cref="N"/> is where it stands (LV95 metres, the
-/// outside point of its door), <see cref="Heading"/> the way it faces (radians, 0 = north, clockwise).
+/// outside point of its door), <see cref="Heading"/> the way it faces (radians, 0 = grid north, clockwise; the game turns it to true north where it
+/// sets the figure down, #1504).
 /// </summary>
 public sealed record Giver(string Id, GiverKind Kind, double E, double N, float Heading, string Canton, float Elevation, string Name, string Source)
 {

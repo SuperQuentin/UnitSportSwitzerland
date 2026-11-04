@@ -40,6 +40,24 @@ public static class TrueNorth
     /// <summary>A Godot yaw on the LV95 grid (0 faces grid north) as one from true north (see <see cref="GridToTrue"/>).</summary>
     public static float GridYawToTrue(double e, double n, float gridYaw) => (float)(gridYaw + GridConvergence(e, n));
 
+    /// <summary><see cref="GridToTrue(double, double, double)"/> at a place.</summary>
+    public static double GridToTrue(GlobalPos at, double gridBearing) => gridBearing - at.GridConvergence;
+
+    /// <summary><see cref="GridYawToTrue(double, double, float)"/> at a place.</summary>
+    public static float GridYawToTrue(GlobalPos at, float gridYaw) => (float)(gridYaw + at.GridConvergence);
+
+    /// <summary>
+    /// A heading stored in grid north (a Godot yaw) at a world point as a world yaw in <paramref name="frame"/>: turned to
+    /// true north at the place, then into the frame (<see cref="WorldYaw"/>). The same yaw on the flat ground (to float
+    /// precision), the right one in an anchor frame.
+    /// </summary>
+    public static float GridYawToWorld(OriginFrame frame, Vector3 at, float gridYaw) =>
+        WorldYaw(frame, at, GridYawToTrue(frame.ToGlobal(at), gridYaw));
+
+    /// <summary>The inverse of <see cref="GridYawToWorld"/>: a world yaw at a world point as one from grid north, to store.</summary>
+    public static float WorldYawToGrid(OriginFrame frame, Vector3 at, float worldYaw) =>
+        (float)(TrueYaw(frame, at, worldYaw) - frame.ToGlobal(at).GridConvergence);
+
     /// <summary>
     /// A heading from true north (a Godot yaw) at <paramref name="at"/> as a yaw in <see cref="GlobalPos"/>'s offset
     /// axes, what a record keeps beside its position (<c>VehicleState</c>, a slot): the same as the grid yaw while those

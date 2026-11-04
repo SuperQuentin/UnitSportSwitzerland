@@ -58,6 +58,12 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
     /// </summary>
     public double Convergence => TrueNorth.GridConvergence(E, N, Alt);
 
+    /// <summary>
+    /// The LV95 grid's meridian convergence here, whatever this type holds inside: what a heading stored in grid north
+    /// (a Swiss source's, a literal catalogue's) is turned by at load (<see cref="TrueNorth.GridYawToTrue(GlobalPos, float)"/>).
+    /// </summary>
+    public double GridConvergence => TrueNorth.GridConvergence(E, N, Alt);
+
     /// <summary>The terrain tile under this place (the LV95 kilometre today, the cube leaf in G2).</summary>
     public TileId Tile => TileId.FromLv95(E, N);
 

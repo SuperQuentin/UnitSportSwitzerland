@@ -198,11 +198,11 @@ public partial class TrafficGeneratorUi : CanvasLayer
         Close();
     }
 
-    /// <summary>Which way a destination lies from this one, as a compass word.</summary>
+    /// <summary>Which way a destination lies from this one, as a compass word (from true north, #1504).</summary>
     private static string Bearing(TrafficEndpoint from, TrafficEndpoint to)
     {
-        double a = Math.Atan2(to.N - from.N, to.E - from.E) * 180 / Math.PI;
-        string[] names = ["east", "north-east", "north", "north-west", "west", "south-west", "south", "south-east"];
+        double a = GlobalPos.FromLv95(from.E, from.N, 0).BearingTo(GlobalPos.FromLv95(to.E, to.N, 0)) * 180 / Math.PI;
+        string[] names = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
         return names[(int)Math.Round(((a % 360) + 360) % 360 / 45) % 8];
     }
 }
