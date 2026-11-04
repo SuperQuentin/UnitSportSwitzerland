@@ -204,6 +204,8 @@ public partial class PlayerInput : Node
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
+    /// <summary>Looking through a telescope (#1530): the next / previous sky object in its target menu, and the info HUD. Pad LB / X / Y (VR: the left trigger, X, Y); on foot these are free while the view holds the focus.</summary>
+    public const string TelescopeNext = "telescope_next", TelescopePrev = "telescope_prev", TelescopeInfo = "telescope_info";
     /// <summary>Hold on foot outdoors to collect stone, water or firewood (<see cref="Loot.Gathering"/>).</summary>
     public const string Gather = "gather";
     public const string AimItem = "aim_item";
@@ -766,6 +768,10 @@ public partial class PlayerInput : Node
         // mounted (RB trick, LB boost). The inventory is on the two keys players try first, I
         // and Tab; E is taken by interacting, which is also why it is not Minecraft's E.
         Bind(UseItem, Mouse(MouseButton.Left), Button(JoyButton.RightShoulder));
+        // the telescope view (#1530): the arrows, LB, X and Y; the view holds the focus, so nothing else reads them then (as PinballPlay)
+        Bind(TelescopeNext, Keys(Key.Right), Button(JoyButton.LeftShoulder));
+        Bind(TelescopePrev, Keys(Key.Left), Button(JoyButton.X));
+        Bind(TelescopeInfo, Keys(Key.Up), Button(JoyButton.Y));
         Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
         Bind(Inventory, Keys(Key.I, Key.Tab), Button(JoyButton.Back));
         Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
