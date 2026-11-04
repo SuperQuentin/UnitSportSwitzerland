@@ -141,7 +141,7 @@ public partial class BonkCheck : Node
                 var from = me.GlobalPosition + Vector3.Up * 1.4f + (chest - me.GlobalPosition with { Y = chest.Y }).Normalized() * 0.5f;
                 var velocity = (chest - from).Normalized() * 14f + Vector3.Up * 1.2f;
                 if (_step == 2) DroppedItems.Instance?.Drop(new ItemStack(ItemId.Stone, 1), from, velocity, Vector3.Zero, Vector3.Right * 8f);
-                else if (RadioManager.Instance is { } radios) radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(from), 0, velocity));
+                else if (RadioManager.Instance is { } radios) radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(from), 0, radios.Origin.Frame.OffsetOfWorld(from, velocity)));
                 GD.Print($"[bonkcheck] thrower: threw a {(_step == 2 ? "stone" : "radio")} from {me.GlobalPosition.DistanceTo(other.GlobalPosition):F1} m");
                 Next();
                 break;

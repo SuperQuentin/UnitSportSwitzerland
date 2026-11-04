@@ -408,8 +408,12 @@ public partial class ShopService : Node
     public void Deliver(ItemId id, int count, Vector3 at, string door, Action<int> done)
     {
         _deliveries.Enqueue(done);
-        if (Online) RpcId(1, MethodName.RequestDeliver, (int)id, count, at, door);
-        else ServeDeliver(1, (int)id, count, at, door);
+        if (!Online) { ServeDeliver(1, (int)id, count, at, door); return; }
+        // ECEF through the local body's frame (#1503); the server reads its own copy of the body, this is only the claim
+        var origin = (GetViewport().GetCamera3D()?.GetParent() as FootPlayer)?.Origin
+            ?? GetParent()?.GetNodeOrNull<FootPlayer>($"Players/{Multiplayer.GetUniqueId()}")?.Origin;
+        var (x, y, z) = origin != null ? origin.ToGlobal(at).ToWire() : (double.NaN, double.NaN, double.NaN);
+        RpcId(1, MethodName.RequestDeliver, (int)id, count, x, y, z, door);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -443,7 +447,15 @@ public partial class ShopService : Node
     private void RequestBump(string key, int furniture) => ServeBump(Multiplayer.GetRemoteSenderId(), key, furniture);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestDeliver(int id, int count, Vector3 at, string door) => ServeDeliver(Multiplayer.GetRemoteSenderId(), id, count, at, door);
+    private void RequestDeliver(int id, int count, double x, double y, double z, string door)
+    {
+        // online the peer's own replicated body says where it is (ServeDeliver); the claim is decoded in that body's frame for the record
+        long peer = Multiplayer.GetRemoteSenderId();
+        var at = GetParent()?.GetNodeOrNull<FootPlayer>($"Players/{peer}")?.Origin is { } origin
+            && double.IsFinite(x) && double.IsFinite(y) && double.IsFinite(z)
+            ? origin.ToWorld(GlobalPos.FromWire(x, y, z)) : Vector3.Zero;
+        ServeDeliver(peer, id, count, at, door);
+    }
 
     /// <summary>
     /// Server: pays for a load. Online the peer's own replicated position must be by a farm co-op's

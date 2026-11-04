@@ -232,9 +232,11 @@ public partial class SchwingManager : Node
             _chat?.Invites?.WithdrawInvolving(FightManager.InviteId, who);
             _chat?.Invites?.WithdrawInvolving(AuraManager.InviteId, who);
         }
+        var (cx, cy, cz) = centre.ToWire();   // ECEF, heading from true north at the centre (#1503)
+        float trueYaw = centre.TrueYaw(yaw);
         foreach (long who in new[] { a, b })
             if (Connected(who))
-                RpcId(who, MethodName.Begin, match.Id, a, b, Who(a), Who(b), centre.E, centre.N, centre.Alt, yaw, festival, schlussgang);
+                RpcId(who, MethodName.Begin, match.Id, a, b, Who(a), Who(b), cx, cy, cz, trueYaw, festival, schlussgang);
         SendState(match);
         GD.Print($"[schwing] #{match.Id} {a} vs {b}{(festival ? " at the ring" : "")}{(schlussgang ? " (Schlussgang)" : "")}");
     }
@@ -575,12 +577,16 @@ public partial class SchwingManager : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Begin(int id, long a, long b, string nameA, string nameB, double e, double n, double alt, float yaw, bool festival, bool schlussgang)
+    private void Begin(int id, long a, long b, string nameA, string nameB, double x, double y, double z, float trueYaw, bool festival, bool schlussgang)
     {
         Queued = false;
+        var centre = GlobalPos.FromWire(x, y, z);
+        // the view's yaw is a world yaw of this peer: from true north at the centre through the local body's frame (flat: the grid's)
+        var origin = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Multiplayer.GetUniqueId()))?.Origin;
+        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : centre.OffsetYaw(trueYaw);
         Current = new View
         {
-            Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = new GlobalPos(e, n, alt), Yaw = yaw,
+            Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = centre, Yaw = yaw,
             Festival = festival, Schlussgang = schlussgang, TimeLeft = schlussgang ? SchwingRules.SchlussgangSeconds : SchwingRules.GangSeconds,
             Me = Multiplayer.GetUniqueId(), StateAt = GameClock.Now, PhaseAt = GameClock.Now,
         };
