@@ -760,11 +760,17 @@ internal sealed class Lv95Build
         return decode(fs);
     }
 
+    // each thread keeps the last tile of each kind it asked for: a leaf's vertices fall on one to four tiles,
+    // and the shared caches' lock taken per vertex cost more than the rest of the comparison
+    [ThreadStatic] private static Last<TileId, ChunkGrid?>? _lastTerr;
+    [ThreadStatic] private static Last<TileId, byte[]?>? _lastCover;
+    [ThreadStatic] private static Last<TileId, ushort[]?>? _lastWater;
+
     /// <summary>The <c>.terr</c> height at an LV95 point, bilinear (the build's draping), NaN off the tiles.</summary>
     public double Ground(double e, double n)
     {
         var id = TileId.FromLv95(e, n);
-        return Tiles.Contains(id) && _terr.Get(id) is { } g ? g.SampleHeight(e, n) : double.NaN;
+        return Tiles.Contains(id) && (_lastTerr ??= new()).Get(id, _terr) is { } g ? g.SampleHeight(e, n) : double.NaN;
     }
 
     public bool Covers(double e, double n) => Tiles.Contains(TileId.FromLv95(e, n));
@@ -795,7 +801,7 @@ internal sealed class Lv95Build
         var id = TileId.FromLv95(e, n);
         if (!Tiles.Contains(id)) return -1;
         var (i, ok) = Vertex(id, e, n);
-        return !ok ? -1 : _cover.Get(id) is { } cells ? cells[i] : 0;
+        return !ok ? -1 : (_lastCover ??= new()).Get(id, _cover) is { } cells ? cells[i] : 0;
     }
 
     /// <summary>The still level (LHN95) at the nearest 1 m vertex, NaN dry; null off the tiles.</summary>
@@ -805,7 +811,7 @@ internal sealed class Lv95Build
         if (!Tiles.Contains(id)) return null;
         var (i, ok) = Vertex(id, e, n);
         if (!ok) return null;
-        ushort q = _water.Get(id) is { } levels ? levels[i] : (ushort)0;
+        ushort q = (_lastWater ??= new()).Get(id, _water) is { } levels ? levels[i] : (ushort)0;
         return q == 0 ? double.NaN : ChunkFormat.Dequantize(q);
     }
 
@@ -897,7 +903,9 @@ internal sealed class CubeBuild
 
     public bool Has(CubeKey key) => _entries.ContainsKey(key);
 
-    public CubeTile? Heights(CubeKey key) => _heights.Get(key);
+    [ThreadStatic] private static Last<CubeKey, CubeTile?>? _lastHeights;
+
+    public CubeTile? Heights(CubeKey key) => (_lastHeights ??= new()).Get(key, _heights);
 
     public LeafSection? Section(CubeKey key, LeafKind kind)
     {
@@ -966,6 +974,21 @@ internal sealed class CubeBuild
     {
         var boxes = Bundles.Select(Lv95Box).ToList();
         return (boxes.Min(b => b.MinE), boxes.Min(b => b.MinN), boxes.Max(b => b.MaxE), boxes.Max(b => b.MaxN));
+    }
+}
+
+/// <summary>One thread's last answer from an <see cref="Lru{TKey, TValue}"/>, asked again for the same key without its lock.</summary>
+internal sealed class Last<TKey, TValue> where TKey : struct, IEquatable<TKey>
+{
+    private bool _has;
+    private TKey _key;
+    private TValue _value = default!;
+
+    public TValue Get(TKey key, Lru<TKey, TValue> from)
+    {
+        if (_has && _key.Equals(key)) return _value;
+        (_has, _key, _value) = (true, key, from.Get(key));
+        return _value;
     }
 }
 
