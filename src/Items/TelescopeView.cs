@@ -48,7 +48,7 @@ public partial class TelescopeView : CanvasLayer
     private MeshInstance3D? _panel;
     private Label _readout = null!, _hint = null!, _menu = null!, _info = null!;
     private bool _infoOn;
-    private ulong _infoAt;
+    private double _infoAt;
     private string _menuShown = "", _infoShown = "";
     private Control _mask = null!;
     private string _hintShown = "";
@@ -402,8 +402,8 @@ public partial class TelescopeView : CanvasLayer
     private void UpdateInfo()
     {
         _info.Visible = _infoOn;
-        if (!_infoOn || Time.GetTicksMsec() - _infoAt < 250) return;
-        _infoAt = Time.GetTicksMsec();
+        if (!_infoOn || RealClock.Now - _infoAt < 0.25) return;
+        _infoAt = RealClock.Now;
         if (World.DayNight.Instance?.Sky is not { } sky) return;
         // the satellite (a spacecraft) has no ephemeris reading: it shows its name and place only
         var body = Target;
