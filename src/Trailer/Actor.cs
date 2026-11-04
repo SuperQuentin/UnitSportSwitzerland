@@ -437,7 +437,7 @@ public sealed class Actor
             var g = _origin.ToGlobal(Body.GlobalPosition);
             string arc = _pilot != null ? $" arc {_pilot.Arc:F0} m" : !float.IsNaN(_arc) ? $" arc {_arc:F0} m" : "";
             GD.Print(string.Create(CultureInfo.InvariantCulture,
-                $"[trailer] shot {shot} t={_moving:F1} actor {Index} {Body.Ride} at {g.E:F0},{g.N:F0} alt {g.Alt:F0} {v.Length() * 3.6f:F0} km/h{arc}"));
+                $"[trailer] shot {shot} t={_moving:F1} actor {Index} {Body.Ride} at {g.Lv95.E:F0},{g.Lv95.N:F0} alt {g.Alt:F0} {v.Length() * 3.6f:F0} km/h{arc}"));
         }
     }
 
@@ -521,7 +521,7 @@ public sealed class RouteBook
         for (float s = 0; s < route.Line.Length; s += 5f)
         {
             var g = frame.ToGlobal(route.Line.PointAt(s));
-            w.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{s:F0},{g.E:F1},{g.N:F1},{g.Alt:F1}"));
+            w.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{s:F0},{g.Lv95.E:F1},{g.Lv95.N:F1},{g.Alt:F1}"));
         }
     }
 
