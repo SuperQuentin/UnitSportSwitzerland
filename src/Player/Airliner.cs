@@ -91,13 +91,45 @@ public sealed partial class Airliner : Flyer
         VehicleDeck[] Decks, SeatAnchor[] Seats, Vector3 Entry, int Doors, int GDoors, string GDoorsName,
         System.Func<int, Vector3?> Stand);
 
-    private static Shape? _a320, _freighter, _an124;
+    private static Shape? _a320, _freighter, _an124, _shuttle;
     private Shape Body => Kind switch
     {
         RideKind.Freighter => _freighter ??= FreighterShape(),
         RideKind.An124 => _an124 ??= An124Shape(),
+        RideKind.Shuttle => _shuttle ??= ShuttleShape(),
         _ => _a320 ??= A320Shape(),
     };
+
+    /// <summary>
+    /// The orbiter (#1492): the hull the fuselage's constant section short of the nose and the base, the
+    /// main wing's box (the glove is inside the hull), no deck yet (walkable decks are #1493), seven seats:
+    /// the commander (flies), the pilot, two specialists behind them, three on the mid deck; one door, the
+    /// side hatch on the left, which G works.
+    /// </summary>
+    private static Shape ShuttleShape()
+    {
+        float front = ShuttleLayout.NoseFromZ + 0.5f, rear = ShuttleLayout.BaseZ + 0.5f;
+        var fuselage = new Aabb(
+            new Vector3(-ShuttleLayout.HalfWidth, ShuttleLayout.BellyY, -front),
+            new Vector3(ShuttleLayout.HalfWidth * 2f, ShuttleLayout.TopY - ShuttleLayout.BellyY, front - rear));
+        float pFront = -(ShuttleLayout.HatchZ + 1.2f), pRear = -rear;
+        var parked = (new Vector3(0, ShuttleLayout.TopY * 0.5f, (pFront + pRear) * 0.5f), new Vector3(ShuttleLayout.HalfWidth * 2f, ShuttleLayout.TopY, pRear - pFront));
+        float wingFront = ShuttleLayout.KinkZ, wingRear = ShuttleLayout.RootTrailingZ;
+        var wing = (new Vector3(0, ShuttleLayout.BellyY + 0.6f, -(wingFront + wingRear) * 0.5f),
+            new Vector3(ShuttleLayout.WingTipX * 2f, 1.0f, wingFront - wingRear));
+        var seats = new List<SeatAnchor>
+        {
+            new(0, AircraftMeshBuilder.Flip(ShuttleLayout.CommanderHip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY),
+            new(0, AircraftMeshBuilder.Flip(ShuttleLayout.PilotHip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY),
+        };
+        foreach (var hip in ShuttleLayout.SpecialistHips)
+            seats.Add(new SeatAnchor(0, AircraftMeshBuilder.Flip(hip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY));
+        foreach (var hip in ShuttleLayout.MidDeckHips)
+            seats.Add(new SeatAnchor(0, AircraftMeshBuilder.Flip(hip), AirlinerRig.PilotRecline, ShuttleLayout.MidDeckY));
+        return new Shape(fuselage, parked, wing, System.Array.Empty<VehicleDeck>(), seats.ToArray(),
+            AircraftMeshBuilder.Flip(new Vector3(ShuttleLayout.HalfWidth, 0f, ShuttleLayout.HatchZ)), ShuttleLayout.DoorCount,
+            1, "hatch", _ => null);
+    }
 
     private static Shape A320Shape()
     {
@@ -271,6 +303,7 @@ public sealed partial class Airliner : Flyer
         {
             RideKind.Freighter => AirlinerRig.CreateFreighter(),
             RideKind.An124 => AirlinerRig.CreateAn124(),
+            RideKind.Shuttle => AirlinerRig.CreateShuttle(),
             _ => AirlinerRig.CreateA320(Color.FromHsv((riderIndex * 0.37f) % 1f, 0.65f, 0.7f)),
         };
         rig.Show(Look(State), 0f);

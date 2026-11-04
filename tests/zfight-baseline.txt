@@ -9,6 +9,7 @@
 154.7	Aircraft / Antonov AN-124 (parked)
 365.3	Aircraft / Military cargo plane
 365.3	Aircraft / Military cargo plane (parked)
+2388.8	Aircraft / Space shuttle, re-entry
 38.4	Aircraft / UFO
 96.1	Aircraft / UFO, flying (legs up, beam on, shortened)
 382.9	Aura / Move - Arms crossed
@@ -1072,6 +1073,7 @@
 138.6	Parts / Mini excavator boom
 14.2	Parts / Mini excavator bucket
 7.9	Parts / Phone back half
+10	Parts / Shuttle plasma shell
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
 425.2	People / Errand givers - Dairy
