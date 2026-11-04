@@ -11,16 +11,24 @@ namespace UnitSport.Terrain.Format;
 /// Colour bundles (<c>CUBA</c>, <c>.cuba</c>, #1430 H4) are the same layout holding
 /// <see cref="CubeAlbedoCodec"/> entries instead, bundled by their own level, so a far-view fetch
 /// pulls only colour and leaves carry none.
+/// Leaf bundles (<c>CUBL</c>, <c>.cubl</c>, #1505 G2 B1) are the same layout again, holding
+/// <see cref="CubeLeafCodec"/> entries (every kind of a leaf as a section of one entry), one bundle
+/// per level-9 ancestor of the level-14 leaves; the coarse pyramid keeps <c>.cubb</c>.
 /// </summary>
 public static class CubeBundle
 {
     public const uint Magic = 0x42425543; // "CUBB"
     public const uint AlbedoMagic = 0x41425543; // "CUBA"
+    public const uint LeafMagic = 0x4C425543; // "CUBL"
     public const ushort Version = 1;
 
     public static string FileName(CubeKey bundle) => bundle.FileStem + ".cubb";
 
     public static string AlbedoFileName(CubeKey bundle) => bundle.FileStem + ".cuba";
+
+    public static string LeafFileName(CubeKey bundle) => bundle.FileStem + ".cubl";
+
+    private static string MagicName(uint magic) => System.Text.Encoding.ASCII.GetString(BitConverter.GetBytes(magic));
 
     /// <summary>Writes a bundle atomically (a .tmp beside it, then a rename): heights (<see cref="Magic"/>) or colour (<see cref="AlbedoMagic"/>).</summary>
     public static void Write(string path, CubeKey bundle, IReadOnlyList<(CubeKey Key, byte[] Bytes)> tiles, uint magic = Magic)
@@ -61,7 +69,7 @@ public static class CubeBundle
     public static Dictionary<CubeKey, (long Offset, int Length)> ReadIndex(Stream s, uint magic = Magic)
     {
         var r = new BinaryReader(s);
-        if (r.ReadUInt32() != magic) throw new InvalidDataException($"not a cube bundle ({(magic == Magic ? "CUBB" : "CUBA")})");
+        if (r.ReadUInt32() != magic) throw new InvalidDataException($"not a cube bundle ({MagicName(magic)})");
         ushort version = r.ReadUInt16();
         if (version != Version) throw new InvalidDataException($"cube bundle version {version}, this reads {Version}");
         r.ReadUInt16();
@@ -100,6 +108,46 @@ public static class CubeBundle
     /// <summary>One tile of a bundle, or null when the bundle does not hold it.</summary>
     public static CubeTile? Read(string path, CubeKey key) =>
         ReadBytes(path, key) is { } bytes ? CubeTileCodec.Decode(bytes) : null;
+
+    /// <summary>One leaf of a <c>.cubl</c> bundle with all its sections, or null when the bundle does not hold it.</summary>
+    public static CubeLeaf? ReadLeaf(string path, CubeKey key) =>
+        ReadBytes(path, key, LeafMagic) is { } bytes ? CubeLeafCodec.Decode(bytes) : null;
+
+    /// <summary>Every leaf entry of a <c>.cubl</c> bundle, undecoded, in file order.</summary>
+    public static List<(CubeKey Key, byte[] Bytes)> ReadAllEntries(string path, uint magic = LeafMagic)
+    {
+        using var fs = File.OpenRead(path);
+        var list = new List<(CubeKey, byte[])>();
+        foreach (var (key, (offset, length)) in ReadIndex(fs, magic).OrderBy(e => e.Value.Offset))
+        {
+            fs.Position = offset;
+            var bytes = new byte[length];
+            fs.ReadExactly(bytes);
+            list.Add((key, bytes));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// A build stage's write into a <c>.cubl</c> bundle (#1505): in every leaf of the bundle the
+    /// stage's <paramref name="stageKinds"/> are dropped and <paramref name="sections"/> put in; every
+    /// other section stays bit for bit (<see cref="CubeLeafCodec.Replace"/>), so a stage reruns alone.
+    /// A leaf left with no section is dropped; the bundle is written atomically, leaves in key order.
+    /// </summary>
+    public static void UpdateLeaves(string path, CubeKey bundle, IReadOnlyDictionary<CubeKey, List<LeafSection>> sections,
+        IReadOnlyCollection<LeafKind> stageKinds)
+    {
+        var entries = File.Exists(path) ? ReadAllEntries(path).ToDictionary(e => e.Key, e => e.Bytes) : new Dictionary<CubeKey, byte[]>();
+        foreach (var key in sections.Keys) entries.TryAdd(key, CubeLeafCodec.Encode(new CubeLeaf { Key = key }));
+        var tiles = new List<(CubeKey, byte[])>();
+        foreach (var (key, bytes) in entries.OrderBy(e => e.Key.Y).ThenBy(e => e.Key.X))
+        {
+            var put = sections.TryGetValue(key, out var s) ? s : [];
+            byte[] updated = CubeLeafCodec.Replace(bytes, put, stageKinds);
+            if (CubeLeafCodec.ReadTable(updated).Table.Count > 0) tiles.Add((key, updated));
+        }
+        Write(path, bundle, tiles, LeafMagic);
+    }
 
     /// <summary>One entry's bytes, or null when the bundle does not hold it.</summary>
     public static byte[]? ReadBytes(string path, CubeKey key, uint magic = Magic)
