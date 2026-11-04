@@ -416,7 +416,7 @@ public partial class AdventureService : Node
             return false;
         }
         if (Quests.Locate(deliver.At) is not { } at || PositionOf?.Invoke(peer) is not { } pos
-            || Math.Sqrt((pos.E - at.E) * (pos.E - at.E) + (pos.N - at.N) * (pos.N - at.N)) > at.RadiusM + DeliverSlackM)
+            || pos.HorizontalDistanceTo(GlobalPos.FromLv95(at.E, at.N, pos.Alt)) > at.RadiusM + DeliverSlackM)
         {
             Refuse(peer, $"Hand it over at {(deliver.At is AreaTarget a ? a.Name : deliver.At.Id)}.");
             return false;
@@ -513,7 +513,7 @@ public partial class AdventureService : Node
                 if (!Active(peer) || Progress(peer) is not { } p) continue;
                 var q = p.Get(QuestsProgress.Section);
                 if (!Quests.WaitsOnPosition(q) || PositionOf?.Invoke(peer) is not { } at) continue;
-                Apply(peer, p, Quests.OnPosition(q, at.E, at.N, Now));
+                Apply(peer, p, Quests.OnPosition(q, at, Now));
             }
         }
         foreach (var (peer, key) in _keyOf)
@@ -665,6 +665,9 @@ public partial class AdventureService : Node
         _place = (label, e, n, radiusM);
         UpdateTracked();
     }
+
+    /// <summary><see cref="TrackPlace(string, double, double, float)"/> for a place held as a <see cref="GlobalPos"/>.</summary>
+    public void TrackPlace(string label, GlobalPos at, float radiusM) => TrackPlace(label, at.Lv95.E, at.Lv95.N, radiusM);
 
     /// <summary>Client: drops a tracked place (reached, or the button again); the tracked quest's target shows again.</summary>
     public void UntrackPlace()
