@@ -62,7 +62,8 @@ cut() {
   [ $n -gt 0 ] || { echo "[shuttlefilm] no clips to cut"; return 1; }
   [ $sound = 1 ] || echo "[shuttlefilm] no movie track ($movie): $file is silent"
   for j in $(seq 0 $((n - 1))); do filter+="[v$j][a$j]"; done
-  filter+="concat=n=$n:v=1:a=1[out][aout]"
+  # the game's mix is quiet (the take-off peaks at -27 dB): brought up to a film's loudness
+  filter+="concat=n=$n:v=1:a=1[out][acat];[acat]loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000[aout]"
   ffmpeg -hide_banner -loglevel error -y "${inputs[@]}" -filter_complex "$filter" -map "[out]" -map "[aout]" \
       -pix_fmt yuv420p -movflags +faststart "$@" "$file"
   echo "[shuttlefilm] wrote $file ($n clips, $(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file") s, $(( $(wc -c < "$file") / 1024 )) KB)"
@@ -78,8 +79,8 @@ for k in 1 2 3 4 5; do
   [ -s "$d/shuttle-$k.mp4" ] || continue
   total=$(awk "BEGIN { print $total + ($(ffprobe -v error -show_entries format=duration -of csv=p=0 "$d/shuttle-$k.mp4") - ${skip[$((k - 1))]}) / ${speed[$((k - 1))]} }")
 done
-# the size less the sound (96 kbit/s) and 4 % for the container, over the length
-kbps=$(awk "BEGIN { print int($mb * 8192 * 0.96 / $total - 96) }")
+# the size (MB of 1,000,000 bytes) less the sound (96 kbit/s) and 6 % for the container and the rate's overshoot, over the length
+kbps=$(awk "BEGIN { print int($mb * 8000 * 0.94 / $total - 96) }")
 pass="$(dirname "$movie")/shuttle-short-pass"
 cut "$out/shuttle-film-short.mp4" 960 "${skip[@]}" -- "${speed[@]}" -- -c:v libx264 -b:v ${kbps}k -preset slow -pass 1 -passlogfile "$pass" -c:a aac -b:a 96k
 cut "$out/shuttle-film-short.mp4" 960 "${skip[@]}" -- "${speed[@]}" -- -c:v libx264 -b:v ${kbps}k -preset slow -pass 2 -passlogfile "$pass" -c:a aac -b:a 96k
