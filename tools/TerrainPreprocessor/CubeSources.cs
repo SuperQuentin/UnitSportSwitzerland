@@ -5,15 +5,20 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
-/// swissALTI3D for the cube tiler (#1443, G1): the 0.5 m tiles as float metres (not the build's 7 cm
-/// quantisation), parsed once into <c>E_N.f32</c> files in a cache directory, then held in an LRU of
-/// <see cref="Capacity"/> tiles (16 MB each). Heights are LHN95; NaN where the tile has none.
+/// swissALTI3D for the cube tiler (#1443, G1): the tiles of one spacing (0.5 m, or the 2 m corridor of
+/// #1507) as float metres (not the build's 7 cm quantisation), parsed once into <c>E_N.f32</c> files
+/// (<c>E_N_2m.f32</c> at 2 m) in a cache directory, then held in an LRU of <see cref="Capacity"/> tiles
+/// (16 MB each at 0.5 m, 1 MB at 2 m). Heights are LHN95; NaN where the tile has none.
 /// </summary>
 public sealed class SwissAltiSource
 {
-    public const int Cells = XyzParser.CellsPerSide;
+    /// <summary>Metres between cell centres: 0.5, or 2.</summary>
+    public double Spacing { get; }
 
-    private static readonly Regex Name = new(@"swissalti3d_\d{4}_(\d{4})-(\d{4})_0\.5_2056", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    /// <summary>Cells a side of a 1 km tile: 2000 at 0.5 m, 500 at 2 m.</summary>
+    public int Cells { get; }
+
+    private static readonly Regex Name = new(@"swissalti3d_\d{4}_(\d{4})-(\d{4})_(0\.5|2)_2056", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private readonly Dictionary<TileId, string> _files = new();
     private readonly string _cacheDir;
@@ -25,20 +30,23 @@ public sealed class SwissAltiSource
 
     public IReadOnlyCollection<TileId> Tiles => _files.Keys;
 
-    public SwissAltiSource(IEnumerable<string> dirs, string cacheDir)
+    public SwissAltiSource(IEnumerable<string> dirs, string cacheDir, double spacing = 0.5)
     {
         _cacheDir = cacheDir;
+        Spacing = spacing;
+        Cells = (int)Math.Round(1000 / spacing);
+        string tag = spacing == 0.5 ? "0.5" : spacing.ToString(System.Globalization.CultureInfo.InvariantCulture);
         Directory.CreateDirectory(cacheDir);
         var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
         foreach (var dir in dirs)
             foreach (var path in Directory.EnumerateFiles(dir, "*.xyz*", opts))
-                if (Name.Match(Path.GetFileName(path)) is { Success: true } m)
+                if (Name.Match(Path.GetFileName(path)) is { Success: true } m && m.Groups[3].Value == tag)
                     _files[new TileId(int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value))] = path; // the newest year last, by name order
     }
 
     public bool Has(TileId id) => _files.ContainsKey(id);
 
-    /// <summary>The tile's 2000² heights, row 0 north, centres at MinE + 0.25 + 0.5c, MaxN − 0.25 − 0.5r; null with no source.</summary>
+    /// <summary>The tile's heights, row 0 north, centres at MinE + s/2 + s·c, MaxN − s/2 − s·r (s the spacing); null with no source.</summary>
     public float[]? Grid(TileId id)
     {
         if (!_files.ContainsKey(id)) return null;
@@ -66,7 +74,7 @@ public sealed class SwissAltiSource
 
     private float[] Load(TileId id)
     {
-        string cache = Path.Combine(_cacheDir, $"{id.E}_{id.N}.f32");
+        string cache = Path.Combine(_cacheDir, Spacing == 0.5 ? $"{id.E}_{id.N}.f32" : $"{id.E}_{id.N}_{Spacing:0.##}m.f32");
         var grid = new float[Cells * Cells];
         if (File.Exists(cache) && new FileInfo(cache).Length == grid.Length * 4L)
         {
@@ -74,7 +82,7 @@ public sealed class SwissAltiSource
             fs.ReadExactly(MemoryMarshal.AsBytes(grid.AsSpan()));
             return grid;
         }
-        XyzParser.ParseFloat(File.ReadAllBytes(_files[id]), _files[id], id, grid, new byte[1 << 20]);
+        XyzParser.ParseFloat(File.ReadAllBytes(_files[id]), _files[id], id, grid, new byte[1 << 20], Spacing);
         string tmp = cache + ".tmp";
         using (var fs = File.Create(tmp)) fs.Write(MemoryMarshal.AsBytes(grid.AsSpan()));
         File.Move(tmp, cache, overwrite: true);
@@ -89,10 +97,11 @@ public sealed class SwissAltiSource
         public bool Missing;
     }
 
-    /// <summary>LHN95 height at an LV95 point, bilinear between the four nearest 0.5 m cells (the nearest alone at a data edge), or NaN.</summary>
+    /// <summary>LHN95 height at an LV95 point, bilinear between the four nearest cells (the nearest alone at a data edge), or NaN.</summary>
     public double Sample(double e, double n, ref Cursor cur)
     {
-        double gx = (e - 0.25) * 2, gy = (n - 0.25) * 2;
+        // at 0.5 m the same doubles as (e − 0.25)·2: dividing by a power of two is exact
+        double half = Spacing / 2, gx = (e - half) / Spacing, gy = (n - half) / Spacing;
         long c = (long)Math.Floor(gx), s = (long)Math.Floor(gy);
         double fx = gx - c, fy = gy - s;
         double h00 = At(c, s, ref cur), h10 = At(c + 1, s, ref cur), h01 = At(c, s + 1, ref cur), h11 = At(c + 1, s + 1, ref cur);
@@ -101,7 +110,7 @@ public sealed class SwissAltiSource
         return h00 + (h10 - h00) * fx + (h01 - h00) * fy + (h00 - h10 - h01 + h11) * fx * fy;
     }
 
-    /// <summary>The cell whose centre is at 0.25 + 0.5·(c, s) metres (s counted northward).</summary>
+    /// <summary>The cell whose centre is at s/2 + s·(c, s) metres, s the spacing (rows counted northward).</summary>
     private double At(long c, long s, ref Cursor cur)
     {
         var id = new TileId((int)Math.Floor(c / (double)Cells), (int)Math.Floor(s / (double)Cells));
@@ -125,10 +134,11 @@ public sealed class SwissAltiSource
 /// </summary>
 public sealed class CubeHeightSource
 {
-    public readonly SwissAltiSource? Swiss;
+    /// <summary>swissALTI3D, finest first (0.5 m, then 2 m where 0.5 m has none).</summary>
+    public readonly IReadOnlyList<SwissAltiSource> Swiss;
     public readonly IReadOnlyList<ForeignDem> Dems;
 
-    public CubeHeightSource(SwissAltiSource? swiss, IReadOnlyList<ForeignDem> dems)
+    public CubeHeightSource(IReadOnlyList<SwissAltiSource> swiss, IReadOnlyList<ForeignDem> dems)
     {
         Swiss = swiss;
         Dems = dems;
@@ -136,7 +146,7 @@ public sealed class CubeHeightSource
 
     public sealed class Cursors
     {
-        public SwissAltiSource.Cursor Swiss;
+        public readonly SwissAltiSource.Cursor[] Swiss = new SwissAltiSource.Cursor[4];
         public readonly ForeignDem.Cursor[] Dems;
         public Cursors(int dems) { Dems = new ForeignDem.Cursor[dems]; for (int i = 0; i < dems; i++) Dems[i] = new ForeignDem.Cursor(); }
     }
@@ -149,17 +159,25 @@ public sealed class CubeHeightSource
         _ => DemProjection.Laea3035(phi, lam),
     };
 
+    /// <summary>swissALTI3D's LHN95 height at an LV95 point, the finest spacing that has one, or NaN.</summary>
+    public double SwissHeight(double e, double n, Cursors cur)
+    {
+        for (int k = 0; k < Swiss.Count; k++)
+        {
+            double h = Swiss[k].Sample(e, n, ref cur.Swiss[k]);
+            if (!double.IsNaN(h)) return h;
+        }
+        return double.NaN;
+    }
+
     /// <summary>
     /// The height (LHN95, with each DEM's offset) at a point given by its LV95 position and its grid
     /// position in every DEM, or NaN where no source has data. <paramref name="demXy"/> holds x, y per DEM.
     /// </summary>
     public double Height(double e, double n, ReadOnlySpan<double> demXy, Cursors cur)
     {
-        if (Swiss != null)
-        {
-            double h = Swiss.Sample(e, n, ref cur.Swiss);
-            if (!double.IsNaN(h)) return h;
-        }
+        double hs = SwissHeight(e, n, cur);
+        if (!double.IsNaN(hs)) return hs;
         for (int d = 0; d < Dems.Count; d++)
         {
             double h = Dems[d].Sample(demXy[2 * d], demXy[2 * d + 1], ref cur.Dems[d]);

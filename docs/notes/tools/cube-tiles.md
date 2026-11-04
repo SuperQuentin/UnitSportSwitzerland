@@ -55,7 +55,7 @@ path: nothing in the game reads it yet (G2 switches). Code in `tools/TerrainForm
 Every tile kind of a level-14 leaf as a **section of one entry** (layout A, chosen by the user on
 measurements over the D: region: 1 read and 24 ms median cold a leaf, against 5.3 reads and 92 ms for
 a bundle per kind; equal from the OS cache). Code: `CubeLeaf.cs` (container), `CubeLeafSections.cs`
-(the section codecs, `CubeLeafContent`); tests `CubeLeafTests`. Nothing writes real leaves yet (B3)
+(the section codecs, `CubeLeafContent`); tests `CubeLeafTests`. `--cube` writes their heights since B3 PR 1 (`cube-frames`), the other kinds come with the later B3 stages,
 and the game reads none (C1).
 
 - **Frame**: every position is in the leaf's anchor frame (`CubeKey.Anchor`): x east, y ENU up, z
@@ -176,11 +176,15 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
 dotnet run --project tools/TerrainPreprocessor -c Release -- --cube --cube-out D:/.../cube13 \
   --in <swissALTI3D zips> [--rgealti <RGE ALTI dir> | --dem lambert93,<dir>,-0.28] [--cube-level 14] \
   [--cube-box minE,minN,maxE,maxN] [--tlm <swissTLM3D.gpkg>] [--buildings <swissBUILDINGS3D gpkg>] \
-  [--cube-bdtopo] [--cube-cache DIR] [--cube-check | --cube-check-only]
+  [--cube-bdtopo] [--cube-cache DIR] [--cube-check | --cube-check-only] [--cube-terr <LV95 chunks>]
 ```
 
+- **Since #1507 (G2 B3) it writes leaves**: one level-9 work frame at a time through the leaf writer,
+  each leaf's `Heights` section into the frame's `.cubl` (G1's `.cubb` leaves are still read by the
+  check and `--cube-swiss`); the driver, transforms, ground and writer are in `cube-frames`.
 - Sources: swissALTI3D parsed once to float32 (`<cache>/alti/E_N.f32`, 16 MB a km², not the
-  build's 7 cm ushorts), an LRU of 300 in memory; then `ForeignDem` (RGE ALTI etc.) with its dz.
+  build's 7 cm ushorts; the 2 m corridor `E_N_2m.f32`, 1 MB, read where 0.5 m has nothing), an LRU
+  of 300 in memory; then `ForeignDem` (RGE ALTI etc.) with its dz.
 - Heights: the point on each vertex's normal whose LHN95 height (`SwissGeodesy.FromEcef`) equals the
   source height at its own LV95 position (`CubeHeightSource.ExactHeight`, a fixed point). The
   LV95 position, LHN95 height and each DEM's grid position are rigorous at 17 × 17 control points
