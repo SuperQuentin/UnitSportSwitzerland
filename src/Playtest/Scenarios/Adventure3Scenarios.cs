@@ -98,7 +98,7 @@ public static partial class Adventure3Scenarios
         await Adv3.Begin(c, "11:00");
         var me = await c.PutPlayer(c.At(0), c.Heading(0));
         GameSettings.Current.Crevasses = true;
-        var box = (E: me.Global.E, N: me.Global.N, R: 150.0);
+        var box = (E: me.Global.Lv95.E, N: me.Global.Lv95.N, R: 150.0);
         TogetherService.GlacierBox = box;
         Adv3.OnClear(c, () => TogetherService.GlacierBox = null);
         (double E, double N, double Angle)? best = null;
@@ -226,7 +226,7 @@ public static partial class Adventure3Scenarios
             var events = WorldEvents.Instance ?? throw new InvalidOperationException("no world events service");
             events.ForestOverride = (e, n) => ((long)Math.Floor(e / 16) + (long)Math.Floor(n / 16)) % 2 == 0;
             Adv3.OnClear(c, () => events.ForestOverride = null);
-            double e0 = me.Global.E, n0 = me.Global.N;
+            double e0 = me.Global.Lv95.E, n0 = me.Global.Lv95.N;
             events.Stage(WorldEventKind.RunawayCow, e0, n0 + 45, seed: 3, lifeS: 900);
             events.Stage(WorldEventKind.LostHiker, e0 + 60, n0, seed: 4, goalE: e0 + 60, goalN: n0 + 120, lifeS: 900);
             events.Stage(WorldEventKind.Avalanche, e0 - 60, n0, seed: 2, lifeS: 900);
