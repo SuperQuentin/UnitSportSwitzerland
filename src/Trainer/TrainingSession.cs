@@ -651,10 +651,10 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         // the nearest road node, and its road that goes most nearly back
         int node = -1, next = -1;
         double best = double.MaxValue;
-        foreach (int n in g.NodesNear(at.E, at.N, 12))
+        foreach (int n in g.NodesNear(at.Lv95.E, at.Lv95.N, 12))
         {
             var (ne, nn, _) = g.Pos(n);
-            double d = (ne - at.E) * (ne - at.E) + (nn - at.N) * (nn - at.N);
+            double d = GlobalPos.FromLv95(ne, nn, 0).HorizontalDistanceSquaredTo(at);
             if (d < best) { best = d; node = n; }
         }
         double turn = double.MaxValue;
@@ -668,7 +668,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             }
         if (node < 0 || next < 0 || turn > 60) { Say("No road to turn round on here."); return; }
 
-        var way = new List<WayPoint> { new(at.E, at.N, at.Alt), JunctionChoice.Point(g, node) };
+        var way = new List<WayPoint> { new(at.Lv95.E, at.Lv95.N, at.Alt), JunctionChoice.Point(g, node) };
         AppendRoads(way, JunctionChoice.Follow(g, node, next, Window), SpliceAfter);
         var (ne2, nn2, _) = g.Pos(node);
         var (te2, tn2, _) = g.Pos(next);
