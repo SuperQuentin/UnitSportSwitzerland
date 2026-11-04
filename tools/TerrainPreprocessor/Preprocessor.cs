@@ -405,7 +405,7 @@ public static partial class Preprocessor
                 : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
                 : new HashSet<TileId>();
             SetStage("osm-overlay");
-            return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs);
+            return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs, outDir);
         }
 
         // ---- SWISSIMAGE photos: one aerial JPEG per tile, for the realistic styles' terrain -------------

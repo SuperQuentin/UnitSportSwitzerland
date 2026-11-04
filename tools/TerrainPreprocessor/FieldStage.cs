@@ -83,7 +83,7 @@ public static class FieldStage
                 gated = (e, n) => !lwbTiles.Contains(TileId.FromLv95(e, n));
                 how = "tiles with no LWB field at all (no --gwr)";
             }
-            var polys = OsmFields.Load(osmPbf, jobs);
+            var polys = OsmFields.Load(osmPbf, jobs, GeoInput.Over(outDir));
             var os = new Stats();
             foreach (var p in polys)
             {
