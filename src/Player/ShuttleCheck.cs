@@ -70,7 +70,7 @@ public partial class ShuttleCheck : Node
             _report = _t + (_stage == Stage.Glide && _origin.Frame.AltitudeOf(p.GlobalPosition) < 2_000 ? 5 : 60);
             Report(p, jet);
         }
-        Pilot(p, jet);
+        Pilot(p, jet, (float)delta);
     }
 
     private void Next(Stage stage, double scale)
@@ -176,7 +176,7 @@ public partial class ShuttleCheck : Node
         Next(Stage.Roll, Near);
     }
 
-    private void Pilot(FootPlayer p, Airliner jet)
+    private void Pilot(FootPlayer p, Airliner jet, float dt)
     {
         var s = jet.State;
         double alt = _origin.Frame.AltitudeOf(p.GlobalPosition);
@@ -298,7 +298,7 @@ public partial class ShuttleCheck : Node
                 Fall(p, jet, alt, elev, bank);
                 return;
             case Stage.Glide:
-                Glide(p, jet, alt, elev, bank);
+                Glide(p, jet, alt, elev, bank, dt);
                 return;
             case Stage.Rollout:
                 Rollout(p, jet);
@@ -364,7 +364,7 @@ public partial class ShuttleCheck : Node
     }
 
     /// <summary>The steep glide to the runway: the path aimed at a point short of the threshold, the speed by the speedbrake (and the rockets if low).</summary>
-    private void Glide(FootPlayer p, Airliner jet, double alt, float elev, float bank)
+    private void Glide(FootPlayer p, Airliner jet, double alt, float elev, float bank, float dt)
     {
         var s = jet.State;
         // the runway's frame: along (+ past the threshold), across (+ right)
@@ -384,10 +384,16 @@ public partial class ShuttleCheck : Node
         float k = Mathf.SmoothStep(0f, 1f, (400f - agl) / 320f);
         float gammaWant = Mathf.Lerp(outer, Mathf.Max(outer, -0.044f), k);
         float stickY = Mathf.Clamp((gammaWant - gamma) * 3f, -1f, 1f);
-        // the flare: a sink that falls with the height (3 s of it, 1.5 m/s at the least), begun where that is
-        // the sink it has, so the loop only follows it
-        _flare |= agl < Mathf.Max(-v.Y, 1.5f) * 3f;
-        if (_flare) stickY = Mathf.Clamp((-Mathf.Max(agl / 3f, 1.5f) - v.Y) * 0.15f, -0.6f, 0.6f);
+        // the flare as a pilot flies it: the nose to an attitude and held there (a loop on the sink itself lags
+        // the airframe, balloons and drops): 8° at once, then the attitude wanted creeps toward the sink wanted, a quarter of
+        // the height a second, 1.5 m/s at the wheels, and the rockets hold the speed so it does not drift
+        float pitch = AirlinerFlight.PitchOf(s.Attitude);
+        if (!_flare && agl < 30f) { _flare = true; _flareAt = Mathf.Max(pitch, 0.14f); }
+        if (_flare)
+        {
+            _flareAt = Mathf.Clamp(_flareAt + (-Mathf.Max(1.5f, agl * 0.25f) - v.Y) * 0.008f * dt, -0.05f, 0.22f);
+            stickY = Mathf.Clamp((_flareAt - pitch) * 6f, -0.8f, 0.8f);
+        }
         if (agl < 60f && _stageT >= _trace) { _trace = _stageT + 0.5; GD.Print(FormattableString.Invariant($"[shuttlecheck] flare agl {agl:F1} vy {v.Y:F2} stick {stickY:F2} pitch {Mathf.RadToDeg(AirlinerFlight.PitchOf(s.Attitude)):F1} alpha {Mathf.RadToDeg(s.Alpha):F1} ias {s.Ias:F0} q {s.PitchRate:F3} floor {s.OnGround}")); }
         // lateral: onto the line, then along it (a heading clockwise from north is minus the yaw)
         float track = RunwayHeading + (float)Math.Atan2(-across, Math.Max(Math.Abs(along) * 0.25, 1_500));
@@ -401,7 +407,8 @@ public partial class ShuttleCheck : Node
         // the rockets when it is short of speed (the real one has none on approach; a player has them,
         // unlimited): a 4:1 brick loses its speed fast once the flare has taken the dive off it
         float vLow = agl > 400 ? 130f : 125f;
-        float lever = !_flare && s.Ias < vLow ? Mathf.Clamp((vLow + 5f - s.Ias) * 0.08f, 0f, 0.8f) : 0f;
+        if (_flare) vLow = 115f;
+        float lever = agl > 2f && s.Ias < vLow ? Mathf.Clamp((vLow + 5f - s.Ias) * 0.08f, 0f, 0.8f) : 0f;
         // the speedbrake holds the speed on the outer slope, and closes for the flare
         bool brakes = agl > 400 && s.Ias > 140f;
         if (brakes != (s.SpeedBrake == 2)) jet.Command(AirlinerCommand.Speedbrake);
@@ -417,6 +424,9 @@ public partial class ShuttleCheck : Node
     }
 
     private bool _grounded, _circling, _flare;
+
+    /// <summary>The flare's attitude wanted, rad.</summary>
+    private float _flareAt;
     private double _trace;
 
     private void PutGround()
