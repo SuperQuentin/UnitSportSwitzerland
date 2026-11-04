@@ -17,7 +17,7 @@ public partial class TestWorld : Node3D
     public const float GroundY = 0f;
 
     /// <summary>The ground under <paramref name="at"/>: the terrain's, or the flat plane's with no terrain.</summary>
-    public static bool TryGround(ChunkManager? chunks, Vector3 at, out float y)
+    public static bool TryGround(IWorldGround? chunks, Vector3 at, out float y)
     {
         y = GroundY;
         return chunks == null || chunks.TryGetHeight(at, out y);

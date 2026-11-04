@@ -135,7 +135,7 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
         var cam = GetViewport().GetCamera3D();
         var eye = cam?.GlobalPosition ?? Vector3.Zero;
         _cameraTile = _origin.TileAt(eye);
-        float groundUnderEye = _chunks.TryGetHeight(eye, out float g) ? g : eye.Y - 100f;
+        float groundUnderEye = _chunks.Ground.TryGetHeight(eye, out float g) ? g : eye.Y - 100f;
 
         int labelsUsed = 0;
         if (_tiles || _labels)
@@ -202,7 +202,7 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
         Edge(c, d, steps, colour, generated, ref h);
         Edge(d, a, steps, colour, generated, ref h);
 
-        float foot = _chunks.TryGetHeight(nw, out float at) ? at : fallback;
+        float foot = _chunks.Ground.TryGetHeight(nw, out float at) ? at : fallback;
         Line(_groundPoints, _groundColours, new Vector3(nw.X, foot, nw.Z), new Vector3(nw.X, foot + 120f, nw.Z), colour);
     }
 
@@ -221,7 +221,7 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
     /// <summary>A point on the drawn ground, or at the last height known where no grid is loaded.</summary>
     private Vector3 Drape(Vector3 p, ref float h)
     {
-        if (_chunks.TryGetHeight(p, out float ground)) h = ground;
+        if (_chunks.Ground.TryGetHeight(p, out float ground)) h = ground;
         return new Vector3(p.X, h + Lift, p.Z);
     }
 
@@ -243,7 +243,7 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
         }
         var l = _tileLabels[index];
         var centre = _origin.TileToWorld(id, new Vector3(TileSize / 2, 0, TileSize / 2));
-        float ground = _chunks.TryGetHeight(centre, out float at) ? at : fallback;
+        float ground = _chunks.Ground.TryGetHeight(centre, out float at) ? at : fallback;
         l.Position = new Vector3(centre.X, ground + 40f, centre.Z);
         string strideText = stride < 0 ? "not built" : stride == 0 ? "grid only" : $"stride {stride}";
         string text = $"{id}\n{strideText}{(generated ? "\ngenerated" : "")}";
@@ -259,7 +259,7 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
     private void AddOrigin(Vector3 eye)
     {
         var amber = new Color(1f, 0.78f, 0.15f);
-        float foot = _chunks.TryGetHeight(Vector3.Zero, out float at) ? at : 0f;
+        float foot = _chunks.Ground.TryGetHeight(Vector3.Zero, out float at) ? at : 0f;
         Line(_xrayPoints, _xrayColours, new Vector3(0, foot - 100f, 0), new Vector3(0, foot + 2500f, 0), amber);
         Line(_xrayPoints, _xrayColours, new Vector3(0, foot + Lift, 0), new Vector3(300f, foot + Lift, 0), new Color(1f, 0.3f, 0.3f));
         Line(_xrayPoints, _xrayColours, new Vector3(0, foot + Lift, 0), new Vector3(0, foot + Lift, -300f), new Color(0.35f, 0.55f, 1f));

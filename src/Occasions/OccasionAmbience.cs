@@ -143,8 +143,8 @@ public partial class OccasionAmbience : Node
         {
             float a = (float)rng.NextDouble() * Mathf.Tau, d = min + (float)rng.NextDouble() * (max - min);
             var p = ears + new Vector3(Mathf.Cos(a) * d, 0, Mathf.Sin(a) * d);
-            if (accept != null && (!_chunks.TryGetCover(p, out var c) || !accept(c))) continue;
-            if (_chunks.TryGetHeight(p, out float y)) return p with { Y = y };
+            if (accept != null && (!_chunks.Ground.TryGetCover(p, out var c) || !accept(c))) continue;
+            if (_chunks.Ground.TryGetHeight(p, out float y)) return p with { Y = y };
         }
         return null;
     }
@@ -155,7 +155,7 @@ public partial class OccasionAmbience : Node
         foreach (var t in OccasionTowns.Near(e, n, within))
         {
             var p = _origin.ToWorld(t.E, t.N, 0);
-            return p with { Y = _chunks.TryGetHeight(p, out float y) ? y : ears.Y };
+            return p with { Y = _chunks.Ground.TryGetHeight(p, out float y) ? y : ears.Y };
         }
         return null;
     }

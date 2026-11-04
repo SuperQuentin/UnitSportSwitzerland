@@ -179,6 +179,10 @@ heights is ~1 GB; the cost of rigorous projection per point (measured in PR 1); 
   `InTunnel`, `FloorBelow`, `GroundAt`, `HasCollisionAt`, the tile events) served by `ChunkManager` in
   `flat` and by leaves in `earth`; the 170 `TryGetHeight` callers and the 68 `IChunkSource` users move
   to it.
+- **Status (#1532, first half: the interface on `ChunkManager`)**: PR 1 in progress: `IWorldGround`
+  (`terrain/world-ground`) with `GroundTile` keys, served through `chunks.Ground`; every point query and
+  tile event moved onto it, same values and cost (`--worldgroundcheck`). PR 2: `IChunkSource` keyed by
+  `GroundTile` and its users moved. The leaf instance and the earth streamer are the second half, after B.
 
 **C2 Collision patches** (one PR)
 - Trimesh patches (~128 × 128 cells, ~150 m) of a leaf's own triangles plus its road and building

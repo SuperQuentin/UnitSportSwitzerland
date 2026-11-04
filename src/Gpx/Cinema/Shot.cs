@@ -165,7 +165,7 @@ public sealed class ShotContext
     }
 
     /// <summary>Terrain height, or null where the tile has not streamed in.</summary>
-    public float? Ground(Vector3 at) => Chunks.TryGetHeight(at, out float h) ? h : null;
+    public float? Ground(Vector3 at) => Chunks.Ground.TryGetHeight(at, out float h) ? h : null;
 
     /// <summary>
     /// Ground height for a point close beside the runner - AnkleCam, LowHeroPass - which trusts

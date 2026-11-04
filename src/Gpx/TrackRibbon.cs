@@ -113,7 +113,7 @@ public partial class TrackRibbon : MeshInstance3D
             // Only include stretches whose terrain has streamed in — the ribbon is still gated on
             // that even for a road-matched course, because a segment with nothing under it would
             // hang in space at the edge of the loaded world.
-            if (!_chunks.TryGetHeight(p, out float ground))
+            if (!_chunks.Ground.TryGetHeight(p, out float ground))
             {
                 prev = null;
                 continue;

@@ -45,7 +45,7 @@ public partial class AfricaTwinEgg : Node
 
     public override void _Ready()
     {
-        _chunks.TileEntered += OnTileEntered;
+        _chunks.Ground.TileEntered += OnTileEntered;
         // a local egg from an offline session would double the server's: the server's word wins
         // (a method, not a lambda: the multiplayer API outlives this node, and a static lambda would
         // stay connected after the world is left, and be connected again by the next one)
@@ -56,7 +56,7 @@ public partial class AfricaTwinEgg : Node
 
     public override void _ExitTree()
     {
-        _chunks.TileEntered -= OnTileEntered;
+        _chunks.Ground.TileEntered -= OnTileEntered;
         Multiplayer.ConnectedToServer -= DropLocalEgg;
     }
 
@@ -64,8 +64,9 @@ public partial class AfricaTwinEgg : Node
     private bool Decides => Net.NetworkManager.DedicatedServer
         || Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer;
 
-    private async void OnTileEntered(TileId id)
+    private async void OnTileEntered(GroundTile tile)
     {
+        var id = tile.Lv95Tile;
         if (id != _tile || _busy || !Decides) return;
         if (VehicleManager.Instance is not { } vehicles) return;
         if (vehicles.GetNodeOrNull<VehicleBody>(EggName) is { Wrecked: false }) return;   // still parked there

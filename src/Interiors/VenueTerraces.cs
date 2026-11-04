@@ -194,8 +194,8 @@ public partial class VenueTerraces : Node
         FogUniforms.Apply(_material);
         GameSettings.Changed += ApplyFog;
         if (_chunks == null) return;
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
@@ -203,16 +203,17 @@ public partial class VenueTerraces : Node
         _epoch++;
         GameSettings.Changed -= ApplyFog;
         if (_chunks == null) return;
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _chunks.Ground.TileFurnished -= OnFurnished;
+        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
     }
 
     private void ApplyFog() => FogUniforms.Apply(_material);
 
-    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
+    private static void OnUnfurnished(GroundTile tile, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
-    private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
+    private void OnFurnished(GroundTile tile, ChunkNode node, DoorSpot[] doors)
     {
+        var id = tile.Lv95Tile;
         node.GetNodeOrNull(NodeName)?.QueueFree();
         if (!doors.Any(d => d.Venue > 0 && Wants(Venues.At(d.Venue - 1)))) return;
         int epoch = _epoch;
@@ -261,7 +262,7 @@ public partial class VenueTerraces : Node
         float? Ground(Vector3 local)
         {
             var world = node.ToGlobal(local);
-            return _chunks.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : null;
+            return _chunks.Ground.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : null;
         }
         Node3D? root = null;
         StaticBody3D? body = null;

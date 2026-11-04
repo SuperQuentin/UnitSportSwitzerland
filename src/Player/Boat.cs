@@ -216,7 +216,7 @@ public class Boat : Rideable, IEngined
 /// </summary>
 public sealed class BoatWater : IBoatWater
 {
-    public ChunkManager? Terrain;
+    public IWorldGround? Terrain;
     private double _t;
     private Vector3 _flow;
 

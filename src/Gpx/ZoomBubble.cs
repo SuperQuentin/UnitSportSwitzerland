@@ -211,7 +211,7 @@ public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
 
         var want = head - heading * CamBack + Vector3.Up * CamUp;
         // never under a slope rising behind the runner
-        if (_chunks.TryGetHeight(want, out float ground))
+        if (_chunks.Ground.TryGetHeight(want, out float ground))
             want.Y = Mathf.Max(want.Y, ground + CamMinClearance);
 
         _camPos = !_camPlaced || dt <= 0

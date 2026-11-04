@@ -133,7 +133,7 @@ public partial class ReverbZones : Node
             return;
         }
 
-        bool wooded = _chunks != null && _chunks.TryGetCover(head, out var c) && CoverFormat.IsWooded(c);
+        bool wooded = _chunks != null && _chunks.Ground.TryGetCover(head, out var c) && CoverFormat.IsWooded(c);
         if (wooded)
         {
             // trunks and leaves scatter: a soft, damped, diffuse tail with no echo in it

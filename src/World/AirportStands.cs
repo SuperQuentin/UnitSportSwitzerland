@@ -59,7 +59,7 @@ public partial class AirportStands : Node
 
     public override async void _Ready()
     {
-        _chunks.TileEntered += OnTileEntered;
+        _chunks.Ground.TileEntered += OnTileEntered;
         // a check's server refills sooner (tools/airportnetcheck.sh)
         if (double.TryParse(CmdArgs.Value("--standrespawn"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double respawn))
             RespawnSeconds = respawn;
@@ -71,12 +71,12 @@ public partial class AirportStands : Node
         // tiles that entered before the file was read
         var seen = new List<(TileId Id, int Stride)>();
         _chunks.ListTiles(seen);
-        foreach (var (id, _) in seen) OnTileEntered(id);
+        foreach (var (id, _) in seen) OnTileEntered(GroundTile.FromLv95(id));
     }
 
     public override void _ExitTree()
     {
-        _chunks.TileEntered -= OnTileEntered;
+        _chunks.Ground.TileEntered -= OnTileEntered;
         if (Instance == this) Instance = null;
     }
 
@@ -93,8 +93,9 @@ public partial class AirportStands : Node
 
     private bool Decides => Net.NetworkManager.DedicatedServer || Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer;
 
-    private void OnTileEntered(TileId id)
+    private void OnTileEntered(GroundTile tile)
     {
+        var id = tile.Lv95Tile;
         if (!Decides) return;
         foreach (var (_, stand) in _index.Stands())
             if (TileId.FromLv95(stand.E, stand.N) == id && !_stands.ContainsKey(stand.Id))
@@ -162,7 +163,7 @@ public partial class AirportStands : Node
             if (!double.IsNegativeInfinity(empty) && now - empty < RespawnSeconds) continue;
             var at = origin.ToWorld(stand.E, stand.N, 0);
             if (_players.Count > 0 && !_players.Any(p => MathX.FlatDistance(p, at) < PlaceRadius)) continue;
-            if (!_chunks.TryGetHeight(at, out float ground)) continue;
+            if (!_chunks.Ground.TryGetHeight(at, out float ground)) continue;
             var size = AirportPlanner.SizeOf(stand.Use);
             if (!double.IsNegativeInfinity(empty) && !Clear(vehicles, at, name, (float)(size.Span / 2 + 3))) continue;
             if (Fill(vehicles, origin, stand, at with { Y = ground }) == 0) continue;

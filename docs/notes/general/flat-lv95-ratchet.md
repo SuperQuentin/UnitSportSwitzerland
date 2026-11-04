@@ -33,6 +33,10 @@
   `MapRelief`: the swisstopo source tiles) and Adventure's LV95 records, the fog-of-war lattice
   (`FogMask`) and the lakes' boxes (`PoiCatalogue`), which G2 converts with the saves. They are all
   that is left of the tile corners (26) and neighbours (1) in `src/`.
+- **Flat ground escape hatches** (#1532, G2 C1): gameplay asks the ground through `IWorldGround`
+  (`terrain/world-ground`), whose tiles are opaque `GroundTile`s. `GroundTile.FromLv95(id)`, `tile.Lv95Tile`
+  and `ChunkManager.Of(ground)` cross back to the LV95 tile or the streamer's `IChunkSource`; counted (32
+  after PR 1), lowered by PR 2 (`IChunkSource` keyed by `GroundTile`), 0 at D.
 - A change that removes some lowers the baseline in the same commit (the test prints the new
   count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` and `src/Core/WorldOrigin.cs`
   are the seam and are not counted, nor is `src/Terrain/ProceduralWorld.Network.cs`, the generated

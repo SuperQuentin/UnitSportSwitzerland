@@ -60,7 +60,7 @@ public static class Surfaces
     /// <paramref name="caller"/> (a driven vehicle) gets a cache of its own; without one the
     /// answer is cached for everyone (the local player's feet).
     /// </summary>
-    public static Surface At(ChunkManager chunks, Vector3 feet, bool indoors, object? caller = null)
+    public static Surface At(IWorldGround chunks, Vector3 feet, bool indoors, object? caller = null)
     {
         var c = caller == null ? Shared : Callers.GetValue(caller, _ => new Cache());
         double now = Time.GetTicksMsec() / 1000.0;
@@ -73,7 +73,7 @@ public static class Surfaces
         return s;
     }
 
-    private static Surface Compute(ChunkManager chunks, Vector3 feet)
+    private static Surface Compute(IWorldGround chunks, Vector3 feet)
     {
         // standing in water (World/WaterField, #299): a lake's shallows over a gravel bed are water
         if (chunks.TryGetWaterLevel(feet, out float still) && still - feet.Y > 0.05f) return Surface.Water;
@@ -111,9 +111,9 @@ public static class Surfaces
     // roads
     // ------------------------------------------------------------------------------------
 
-    private static Surface? RoadUnder(ChunkManager chunks, Vector3 feet)
+    private static Surface? RoadUnder(IWorldGround chunks, Vector3 feet)
     {
-        if (Origin is not { } origin || chunks.Source is not { } source) return null;
+        if (Origin is not { } origin || ChunkManager.Of(chunks)?.Source is not { } source) return null;
         Watch(chunks);
         var tile = origin.TileAt(feet);
         if (!Roads.TryGetValue(tile, out var index))
@@ -244,11 +244,11 @@ public static class Surfaces
         && !s.Attributes.Has(RoadAttrFlags.Embedded);   // the road around an embedded rail is what you stand on
 
     private static int _epoch;
-    private static ChunkManager? _watched;
+    private static IWorldGround? _watched;
     private static readonly bool CheckIndex = CmdArgs.Has("--surfacecheck");
 
     /// <summary>A road tile goes when its terrain tile unloads: they used to pile up for the whole session (#221).</summary>
-    private static void Watch(ChunkManager chunks)
+    private static void Watch(IWorldGround chunks)
     {
         if (_watched == chunks) return;
         if (_watched != null) _watched.TileUnloaded -= Evict;
@@ -256,10 +256,10 @@ public static class Surfaces
         _watched = chunks;
     }
 
-    private static void Evict(TileId tile)
+    private static void Evict(GroundTile tile)
     {
-        Roads.Remove(tile);
-        Loading.Remove(tile);
+        Roads.Remove(tile.Lv95Tile);
+        Loading.Remove(tile.Lv95Tile);
     }
 
     /// <summary>Drops the cached road tiles, for when the world under them is replaced.</summary>

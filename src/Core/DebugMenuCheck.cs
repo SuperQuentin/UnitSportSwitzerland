@@ -244,7 +244,7 @@ public partial class DebugMenuCheck : ChatProbe
     {
         _chunks.ListTiles(_tiles);
         foreach (var (id, _) in _tiles)
-            if (_chunks.GroundAt(id) is { Mesh: not null } ground) return ground;
+            if (_chunks.Ground.GroundAt(GroundTile.FromLv95(id)) is { Mesh: not null } ground) return ground;
         return null;
     }
 

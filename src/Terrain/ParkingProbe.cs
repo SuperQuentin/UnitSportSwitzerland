@@ -130,14 +130,14 @@ public partial class ParkingProbe : Node
 
         if (_player == null)
         {
-            _player = new FootPlayer { Name = "ParkingProbeBody", Terrain = _chunks };
+            _player = new FootPlayer { Name = "ParkingProbeBody", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.DebugLaunch(over + Vector3.Up * 1.5f, Vector3.Zero);
             _t = 0;
             return;
         }
         // hold it over the bay until the ground there is solid, as the other probes do
-        if (!_chunks.HasCollisionAt(_floorAt))
+        if (!_chunks.Ground.HasCollisionAt(_floorAt))
         {
             _player.GlobalPosition = over + Vector3.Up * 1.5f;
             _player.Velocity = Vector3.Zero;
@@ -163,7 +163,7 @@ public partial class ParkingProbe : Node
         string what = (hit["collider"].AsGodotObject() as Node)?.Name.ToString() ?? "?";
         GD.Print($"[parking] floor over an empty bay: {off * 100:F1} cm from the bay's own height, "
             + $"hit '{what}' (player on floor: {_player.IsOnFloor()}, "
-            + $"terrain height {(_chunks.TryGetHeight(over, out float th) ? (th - over.Y).ToString("F2") : "?")} m off)");
+            + $"terrain height {(_chunks.Ground.TryGetHeight(over, out float th) ? (th - over.Y).ToString("F2") : "?")} m off)");
         if (off > 0.35f) Fail($"the floor over a bay is {off:F2} m off its height");
         Advance();
     }

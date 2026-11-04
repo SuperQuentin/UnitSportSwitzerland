@@ -538,9 +538,9 @@ public partial class DebugMenu : CanvasLayer
         var (e, n) = _origin.ToLv95(pos);
         var tile = _origin.TileAt(pos);
         int stride = _chunks.StrideAt(tile);
-        string ground = _chunks.TryGetHeight(pos, out float h)
+        string ground = _chunks.Ground.TryGetHeight(pos, out float h)
             ? string.Format(ci, "{0:F1} m, {1:F0} m below", h, pos.Y - h) : "not loaded";
-        string cover = _chunks.TryGetCover(pos, out var c) ? c.ToString() : "-";
+        string cover = _chunks.Ground.TryGetCover(pos, out var c) ? c.ToString() : "-";
         var shifter = OriginShifter.Instance;
         return string.Format(ci,
             "LV95   {0:F0} / {1:F0}  alt {2:F0} m\ntile   {3}  {4}  {5}\nground {6}  {7}\n"

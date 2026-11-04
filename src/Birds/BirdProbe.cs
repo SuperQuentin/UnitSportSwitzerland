@@ -55,21 +55,21 @@ public partial class BirdProbe : Node
 
         var (e, n) = SpawnPoint.ParseTarget();
         var origin = _origin;
-        var player = new FootPlayer { Name = "BirdProbe", Terrain = _chunks };
+        var player = new FootPlayer { Name = "BirdProbe", Terrain = _chunks?.Ground };
         AddChild(player);
         _birds.PlayerOverride = () => player;
         player.LeaveInterior(origin.ToWorld(e, n, 3000), 0f);
 
         // wait for the ground and its cover under the spawn
         double t = 0;
-        while (t < 30 && !(_chunks.TryGetHeight(player.GlobalPosition, out _) && _chunks.TryGetCover(player.GlobalPosition, out _)))
+        while (t < 30 && !(_chunks.Ground.TryGetHeight(player.GlobalPosition, out _) && _chunks.Ground.TryGetCover(player.GlobalPosition, out _)))
         {
             await Frame();
             t += GetProcessDeltaTime();
         }
         // No terrain here (a fresh clone): the survey and the spawner cannot be tested, but the
         // hunt itself - catalogue, meshes, shot, fall, score, item path - still can.
-        bool terrain = _chunks.TryGetCover(player.GlobalPosition, out _);
+        bool terrain = _chunks.Ground.TryGetCover(player.GlobalPosition, out _);
         var standAt = player.GlobalPosition;
         if (!terrain) GD.Print("[birds] (no terrain loaded at the spawn: survey and spawning not tested)");
         else
@@ -78,7 +78,7 @@ public partial class BirdProbe : Node
             player.LeaveInterior(player.GlobalPosition with { Y = ground + 1.5f }, 0f);
             player.Velocity = Vector3.Zero;
             for (int i = 0; i < 120 && !player.IsOnFloor(); i++) await Frame();
-            Check(_chunks.TryGetCover(player.GlobalPosition, out _), $"terrain and cover loaded at the spawn after {t:0.0} s (ground {ground:0} m)");
+            Check(_chunks.Ground.TryGetCover(player.GlobalPosition, out _), $"terrain and cover loaded at the spawn after {t:0.0} s (ground {ground:0} m)");
 
             // (1) survey: what each habitat around here draws
             var rng = new Random(7);
@@ -86,7 +86,7 @@ public partial class BirdProbe : Node
             for (int i = 0; i < 600; i++)
             {
                 var p = player.GlobalPosition + new Vector3((float)(rng.NextDouble() * 2 - 1) * 400f, 0, (float)(rng.NextDouble() * 2 - 1) * 400f);
-                if (!_chunks.TryGetHeight(p, out float h) || !_chunks.TryGetCover(p, out var cover)) continue;
+                if (!_chunks.Ground.TryGetHeight(p, out float h) || !_chunks.Ground.TryGetCover(p, out var cover)) continue;
                 var habitat = BirdLife.HabitatAt(cover, h);
                 var s = _birds.Pick(habitat, h);
                 if (!tally.TryGetValue(habitat, out var bySpecies)) tally[habitat] = bySpecies = new();

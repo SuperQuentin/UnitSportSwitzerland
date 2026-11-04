@@ -295,13 +295,13 @@ public partial class Ambience : Node, IOriginShiftAware
             _birdSet = Enumerable.Range(0, AmbienceDsp.SpeciesCount).OrderBy(_ => r.Next()).Take(2 + r.Next(2)).ToArray();
         }
 
-        if (_chunks.TryGetSurface(pos, out float h)) { _ground = h; _altitude = h; }
+        if (_chunks.Ground.TryGetSurface(pos, out float h)) { _ground = h; _altitude = h; }
         else { _ground = pos.Y - 1.5f; _altitude = pos.Y; }
 
         int known = 0, pasture = 0, wooded = 0;
         void Look(Vector3 p)
         {
-            if (!_chunks.TryGetCover(p, out var c)) return;
+            if (!_chunks.Ground.TryGetCover(p, out var c)) return;
             known++;
             if (IsPasture(c)) pasture++;
             if (CoverFormat.IsWooded(c)) wooded++;
@@ -366,8 +366,8 @@ public partial class Ambience : Node, IOriginShiftAware
         {
             float a = Rand(0, Mathf.Tau), d = Rand(min, max);
             var p = pos + new Vector3(Mathf.Cos(a) * d, 0, Mathf.Sin(a) * d);
-            if (accept != null && _chunks.TryGetCover(p, out var c) && !accept(c)) continue;
-            if (!_chunks.TryGetHeight(p, out float y)) continue;
+            if (accept != null && _chunks.Ground.TryGetCover(p, out var c) && !accept(c)) continue;
+            if (!_chunks.Ground.TryGetHeight(p, out float y)) continue;
             p.Y = y;
             return p;
         }
@@ -479,7 +479,7 @@ public partial class Ambience : Node, IOriginShiftAware
             double offset = Rand(0f, 5f);
             var bell = _churchBank.Variants[Math.Abs(t.Town.Name.GetHashCode()) % _churchBank.Variants.Length];
             float wx = t.X, wz = t.Z;
-            float ground = _chunks.TryGetHeight(new Vector3(wx, 0, wz), out float gy) ? gy : _ground;
+            float ground = _chunks.Ground.TryGetHeight(new Vector3(wx, 0, wz), out float gy) ? gy : _ground;
             for (int i = 0; i < strikes; i++)
             {
                 double when = offset + i * Rand(2.4f, 2.6f);
@@ -502,7 +502,7 @@ public partial class Ambience : Node, IOriginShiftAware
         float a = Rand(0, Mathf.Tau), d = Rand(350f, 900f);
         var at = pos + new Vector3(Mathf.Cos(a) * d, 0, Mathf.Sin(a) * d);
         // far tiles have no height in hand; a slope somewhere above/below the listener will do
-        at.Y = _chunks.TryGetHeight(at, out float y) ? y + 30f : pos.Y + Rand(-100f, 200f);
+        at.Y = _chunks.Ground.TryGetHeight(at, out float y) ? y + 30f : pos.Y + Rand(-100f, 200f);
         var (stream, pitch, db) = _rockBank.Pick(_rng);
         Speak(stream, at, pitch, db - 2f, 140f, 3000f);
         _rockNext = _now + Rand(60f, 180f);

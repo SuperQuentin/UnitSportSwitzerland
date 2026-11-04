@@ -301,8 +301,8 @@ public partial class Herds : Node3D, IOriginContainer
     {
         if (_chunks == null) return float.NaN;
         var at = _origin.ToWorld(e, n, 0);
-        if (!_dedicated && _chunks.TryGetSurface(at, out float s)) return s;
-        return _chunks.TryGetHeight(at, out float h) ? h : float.NaN;
+        if (!_dedicated && _chunks.Ground.TryGetSurface(at, out float s)) return s;
+        return _chunks.Ground.TryGetHeight(at, out float h) ? h : float.NaN;
     }
 
     // ---- the authority: beams, and what it sends -------------------------------------------------

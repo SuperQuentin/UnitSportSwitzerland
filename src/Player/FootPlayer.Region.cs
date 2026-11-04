@@ -63,7 +63,7 @@ public partial class FootPlayer
         Terrain?.RemoveAnchor(this);
         Region = target;
         Origin = target.Origin;
-        Terrain = target.Chunks;
+        Terrain = target.Chunks?.Ground;
         ApplyRegionSpace();
         if (from != null) OriginShifter.Move(this, target.Origin.Frame.Since(from.Frame));
         // exact from the Earth position, not the float sum of a far position and a far offset

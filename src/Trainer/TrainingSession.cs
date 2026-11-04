@@ -295,7 +295,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         {
             // the body to the start, on its feet, then onto the bike once it stands
             me.RideControls = null;
-            float ground = _chunks.TryGetHeight(start, out float h) ? h : start.Y;
+            float ground = _chunks.Ground.TryGetHeight(start, out float h) ? h : start.Y;
             me.DebugLaunch(new Vector3(start.X, ground + 1.2f, start.Z), Vector3.Zero);
             me.Rotation = new Vector3(0, yaw, 0);
             _way = CourseFrom(0);

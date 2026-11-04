@@ -58,7 +58,7 @@ public partial class CombatProbe : Node
         if (_player == null)
         {
             // a fresh clone has no terrain at all; the fight is 400 m up, so fly over the void
-            if (!_chunks.TryGetHeight(at, out float g))
+            if (!_chunks.Ground.TryGetHeight(at, out float g))
             {
                 if (_wait < 20) return;
                 GD.Print("[combatcheck] no terrain under the spawn; flying over the void");
@@ -70,7 +70,7 @@ public partial class CombatProbe : Node
                 AddChild(pad);
                 pad.GlobalPosition = at + Vector3.Down * 0.5f;
             }
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
             if (_noGround) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // onto the pad
@@ -78,7 +78,7 @@ public partial class CombatProbe : Node
             if (_paraglider)
             {
                 // the target pilot stands beside the shooter; it can only strap in on the ground
-                _target = new FootPlayer { Name = "Target", Terrain = _chunks };
+                _target = new FootPlayer { Name = "Target", Terrain = _chunks?.Ground };
                 AddChild(_target);
                 _target.GlobalPosition = _player.GlobalPosition + new Vector3(4f, 0, 0);
                 if (_noGround) _target.DebugLaunch(_target.GlobalPosition, Vector3.Zero);
@@ -89,7 +89,7 @@ public partial class CombatProbe : Node
         }
         if (!_started)
         {
-            if ((!_noGround && !_chunks.HasCollisionAt(at)) || !_player.IsOnFloor()
+            if ((!_noGround && !_chunks.Ground.HasCollisionAt(at)) || !_player.IsOnFloor()
                 || (_target != null && !_target.IsOnFloor())) return;
             _player.SetRide(Craft);
             _player.DebugLaunch(_player.GlobalPosition + Vector3.Up * 400f, new Vector3(0, 0, _paraglider ? -10 : -50));

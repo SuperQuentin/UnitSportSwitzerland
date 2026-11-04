@@ -70,19 +70,19 @@ public partial class PitCheck : Node
         if (_player == null)
         {
             // on the first site's apron: a body is what the ground's collision is built round
-            _player = new FootPlayer { Name = "PitDriver", Terrain = _chunks };
+            _player = new FootPlayer { Name = "PitDriver", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = sites[0].World(sites[0].Pit.Route[0]) + Vector3.Up * 1.5f;
         }
         // the ground round both sites must have its collision, the pits cut in it
         foreach (var d in sites)
             foreach (var p in d.Pit.Route.Append(Vector3.Zero))
-                if (!terrain.HasCollisionAt(d.World(p)))
+                if (!terrain.Ground.HasCollisionAt(d.World(p)))
                 {
                     if (log) GD.Print($"[pitcheck] waiting for the collision at {d.World(p)} ({d.Site.Key})");
                     return;
                 }
-        if (sites.FirstOrDefault(d => !terrain.InPit(d.World(new Vector3(0, d.Pit.Floor + 0.5f, 0)))) is { } notYet)
+        if (sites.FirstOrDefault(d => !terrain.Ground.InPit(d.World(new Vector3(0, d.Pit.Floor + 0.5f, 0)))) is { } notYet)
         {
             if (log) GD.Print($"[pitcheck] waiting for the pit of {notYet.Site.Key} to be cut");
             return;
@@ -225,7 +225,7 @@ public partial class PitCheck : Node
         // out: backed up the lane and the ramp, through the mouth onto the ground
         if (!await DriveTo(me, route[1], "the ramp's foot (backing out)", reverse: true)) return;
         if (!await DriveTo(me, d.World(d.Pit.Exit), "the ground past the ramp's mouth (backing out)", reverse: true)) return;
-        Expect(!_chunks.InPit(me.GlobalPosition with { Y = me.GlobalPosition.Y - 1f }) || me.GlobalPosition.Y > d.Pit.TopOuter.Y,
+        Expect(!_chunks.Ground.InPit(me.GlobalPosition with { Y = me.GlobalPosition.Y - 1f }) || me.GlobalPosition.Y > d.Pit.TopOuter.Y,
             "the excavator is out of the pit");
         me.RideControls = () => new RideInput(0f, 0f, 0f, false);
         await Frames(30);

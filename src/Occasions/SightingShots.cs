@@ -75,7 +75,7 @@ public partial class SightingShots : Node
 
     private FootPlayer? Me => _player();
 
-    private float Ground(Vector3 at) => _chunks != null && _chunks.TryGetSurface(at, out float g) ? g : at.Y;
+    private float Ground(Vector3 at) => _chunks != null && _chunks.Ground.TryGetSurface(at, out float g) ? g : at.Y;
 
     /// <summary>The camera <paramref name="back"/> m from <paramref name="at"/> on the bearing <paramref name="from"/>, <paramref name="up"/> over the ground, looking at <paramref name="look"/>.</summary>
     private void Frame(Vector3 at, float from, float back, float up, Vector3 look)
@@ -111,7 +111,7 @@ public partial class SightingShots : Node
         // settle, then keep the place in LV95, never as a world point across frames
         await Seconds(8);
         Vector3 Spot() => Me?.GlobalPosition ?? GetViewport().GetCamera3D()!.GlobalPosition;
-        await Until(() => _chunks == null || _chunks.TryGetSurface(Spot(), out _), 60);
+        await Until(() => _chunks == null || _chunks.Ground.TryGetSurface(Spot(), out _), 60);
         var (pe, pn) = _origin.ToLv95(Spot());
         Vector3 Home() { var w = _origin.ToWorld(pe, pn, 0); return w with { Y = Ground(w) }; }
         await Seconds(3);

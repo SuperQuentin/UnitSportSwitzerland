@@ -50,8 +50,8 @@ public partial class VoidProbe : Node
         {
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
-            if (!_chunks.TryGetHeight(at, out float g)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!_chunks.Ground.TryGetHeight(at, out float g)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
             GD.Print($"[voidcheck] player at LV95 {e:F0}/{n:F0}, ground {g:F1} m");
@@ -143,7 +143,7 @@ public partial class VoidProbe : Node
         }
     }
 
-    private float Ground(FootPlayer p) => _chunks.TryGetHeight(p.GlobalPosition, out float g) ? g : float.NaN;
+    private float Ground(FootPlayer p) => _chunks.Ground.TryGetHeight(p.GlobalPosition, out float g) ? g : float.NaN;
 
     private void Drop(FootPlayer p, float y, string what)
     {
@@ -165,7 +165,7 @@ public partial class VoidProbe : Node
         foreach (float d in new[] { 60_000f, 150_000f, 400_000f })
         {
             var at = _standing + new Vector3(d, 0, 0);
-            if (!_chunks.TryGetHeight(at, out _)) return at with { Y = -600f };
+            if (!_chunks.Ground.TryGetHeight(at, out _)) return at with { Y = -600f };
         }
         return null;
     }

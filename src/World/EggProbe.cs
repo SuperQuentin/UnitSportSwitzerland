@@ -49,7 +49,7 @@ public partial class EggProbe : Node
 
         if (_hold is { } at && me != null)
         {
-            if (_chunks.HasCollisionAt(at) && _chunks.TryGetHeight(at, out float g))
+            if (_chunks.Ground.HasCollisionAt(at) && _chunks.Ground.TryGetHeight(at, out float g))
             {
                 me.GlobalPosition = at with { Y = g + 0.5f };
                 me.Velocity = Vector3.Zero;

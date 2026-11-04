@@ -39,8 +39,8 @@ public partial class VenueSigns : Node
         _material.SetShaderParameter("flicker", 0f);
         FogUniforms.Apply(_material);
         GameSettings.Changed += ApplyFog;
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
     }
 
     private void ApplyFog() => FogUniforms.Apply(_material);
@@ -49,17 +49,18 @@ public partial class VenueSigns : Node
     {
         GameSettings.Changed -= ApplyFog;
         if (_chunks == null) return;
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _chunks.Ground.TileFurnished -= OnFurnished;
+        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
     }
 
-    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
+    private static void OnUnfurnished(GroundTile tile, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
     /// <summary>Whether a venue's sign is neon (#1250): the halls, bars and clubs; the places to eat are painted.</summary>
     public static bool Neon(VenueType t) => Venues.IsHall(t) || t is VenueType.Bar or VenueType.Nightclub;
 
-    private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
+    private void OnFurnished(GroundTile tile, ChunkNode node, DoorSpot[] doors)
     {
+        var id = tile.Lv95Tile;
         node.GetNodeOrNull(NodeName)?.QueueFree();
         Node3D? root = null;
         foreach (var d in doors)

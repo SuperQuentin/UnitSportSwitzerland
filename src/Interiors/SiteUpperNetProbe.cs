@@ -289,7 +289,7 @@ public partial class SiteUpperNetProbe : ChatProbe
                     var chunks = FindChunks(GetTree().Root);
                     var toGoal = ((Goal() - me.GlobalPosition) with { Y = 0 }).Normalized();
                     for (float k = -0.4f; k <= 1.21f; k += 0.4f)
-                        if (chunks != null && chunks.TryGetHeight(me.GlobalPosition + toGoal * k, out float gh))
+                        if (chunks != null && chunks.Ground.TryGetHeight(me.GlobalPosition + toGoal * k, out float gh))
                             GD.Print($"{Log}   the terrain {k:F1} m on: {gh:F2} (feet {me.GlobalPosition.Y:F2})");
                     var space = me.GetWorld3D().DirectSpaceState;
                     var q = PhysicsRayQueryParameters3D.Create(me.GlobalPosition + Vector3.Up * 0.3f, me.GlobalPosition + Vector3.Up * 0.3f + toGoal * 1.2f);

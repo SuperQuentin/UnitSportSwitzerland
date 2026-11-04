@@ -45,7 +45,7 @@ public partial class GarageLinkProbe : Node
 
     private void Land(Vector3 at, float yaw = 0)
     {
-        if (!_chunks.TryGetHeight(at, out float g)) g = at.Y;
+        if (!_chunks.Ground.TryGetHeight(at, out float g)) g = at.Y;
         _player!.LeaveInterior(new Vector3(at.X, g + 1f, at.Z), yaw);
     }
 
@@ -57,8 +57,8 @@ public partial class GarageLinkProbe : Node
         {
             var (se, sn) = SpawnPoint.ParseTarget();
             var sat = _origin.ToWorld(se, sn, 0);
-            if (!_chunks.TryGetHeight(sat, out float sg)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!_chunks.Ground.TryGetHeight(sat, out float sg)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(sat.X, sg + 1f, sat.Z);
             _cam = new Camera3D { Fov = 70, Far = 600 };
@@ -76,7 +76,7 @@ public partial class GarageLinkProbe : Node
             case 0: // fly to the village
             {
                 var at = _origin.ToWorld(town.E, town.N, 0);
-                if (!_chunks.TryGetHeight(at, out _))
+                if (!_chunks.Ground.TryGetHeight(at, out _))
                 {
                     // stream the village in: stand over it, then wait for its ground
                     if (!_sent) { _sent = true; GD.Print($"[garage] flying to {town.Name}"); _player.LeaveInterior(new Vector3(at.X, 600, at.Z), 0); }
@@ -120,7 +120,7 @@ public partial class GarageLinkProbe : Node
     {
         if (_shoot is not { } d || _cam == null) return;
         if (_player!.GlobalPosition.DistanceTo(_stand) > 3f) Land(_stand);
-        float g = _chunks.TryGetHeight(_player.GlobalPosition, out float gg) ? gg : _player.GlobalPosition.Y;
+        float g = _chunks.Ground.TryGetHeight(_player.GlobalPosition, out float gg) ? gg : _player.GlobalPosition.Y;
         _cam.GlobalPosition = new Vector3(_player.GlobalPosition.X, g + 1.7f, _player.GlobalPosition.Z);
         _cam.LookAt(_look, Vector3.Up);
         _cam.MakeCurrent();
@@ -213,7 +213,7 @@ public partial class GarageLinkProbe : Node
                 var p = d.World + t * along + o * out_;
                 float u = Mathf.Clamp(out_ / len, 0, 1);
                 float expect = d.World.Y + dy * u + d.Link.Hump * Mathf.Sin(Mathf.Pi * u) + 0.03f;
-                if (!_chunks.TryGetHeight(p, out float ground)) continue;
+                if (!_chunks.Ground.TryGetHeight(p, out float ground)) continue;
                 // the last 0.8 m meets the road's own kerb, up to ~15 cm proud of its centreline height
                 bool atRoad = out_ > len - 0.8f;
                 samples++;

@@ -66,7 +66,7 @@ public partial class BirdStrikeProbe : Node
 
         if (_player == null)
         {
-            if (!_chunks.TryGetHeight(at, out float g))
+            if (!_chunks.Ground.TryGetHeight(at, out float g))
             {
                 if (_wait < 20) return;
                 GD.Print("[birdstrike] no terrain under the spawn; flying over the void");
@@ -77,7 +77,7 @@ public partial class BirdStrikeProbe : Node
                 AddChild(pad);
                 pad.GlobalPosition = at + Vector3.Down * 0.5f;
             }
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
             if (_noGround) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);
@@ -94,7 +94,7 @@ public partial class BirdStrikeProbe : Node
         }
         if (!_started)
         {
-            if ((!_noGround && !_chunks.HasCollisionAt(at)) || !_player.IsOnFloor()) return;
+            if ((!_noGround && !_chunks.Ground.HasCollisionAt(at)) || !_player.IsOnFloor()) return;
             _player.SetRide(RideKind.Plane);
             _player.DebugLaunch(_player.GlobalPosition + Vector3.Up * 400f, new Vector3(0, 0, -50));
             _started = true;
@@ -146,7 +146,7 @@ public partial class BirdStrikeProbe : Node
             float a = (float)_t * 0.03f;
             var dir = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
             var at = p.GlobalPosition;
-            if (_chunks.TryGetHeight(at + dir * 40f, out float g)) at.Y = g + 60f;
+            if (_chunks.Ground.TryGetHeight(at + dir * 40f, out float g)) at.Y = g + 60f;
             p.DebugLaunch(at, dir * 45f);
         }
         if (_t < _survey * 60 && p.Ride == RideKind.Plane) return;

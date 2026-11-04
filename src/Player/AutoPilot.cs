@@ -190,7 +190,7 @@ public sealed class AutoPilot
         // be one, or it drives through the forest (FootPlayer registers itself; this is the guard)
         if (player.Terrain is { } terrain && !terrain.HasAnchor(player)) terrain.AddAnchor(player, collision: true);
         // the verge: surveyed off the main thread, swapped in when it lands (same point count)
-        if (!route.Line.Surveyed && player.Terrain is { Source: { } source, Origin: { } origin })
+        if (!route.Line.Surveyed && ChunkManager.Of(player.Terrain) is { Source: { } source, Origin: { } origin })
             _widen = RaceLine.Widen(route, source, origin);
         if (kind == Mount.Foot) player.WalkControls = Walk;
     }

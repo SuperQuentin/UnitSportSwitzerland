@@ -48,7 +48,7 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
 
     /// <summary>The player this client fires as. Resolved per frame, never captured.</summary>
     public Func<FootPlayer?>? LocalPlayer { get; set; }
-    public ChunkManager? Terrain { get; set; }
+    public IWorldGround? Terrain { get; set; }
 
     // --- for the HUD and the probe ---
     public int Ammo { get; private set; } = Magazine;
@@ -104,7 +104,7 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     /// <summary>This peer's origin: rounds go to the server and back in LV95 (#185).</summary>
     private Core.WorldOrigin _origin = null!;
 
-    public static CombatManager Create(Node world, ChunkManager? terrain, Core.WorldOrigin origin, bool server)
+    public static CombatManager Create(Node world, IWorldGround? terrain, Core.WorldOrigin origin, bool server)
     {
         var c = new CombatManager { Name = NodeName, Terrain = terrain, _origin = origin, _server = server };
         world.AddChild(c);

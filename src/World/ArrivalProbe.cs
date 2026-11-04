@@ -95,7 +95,7 @@ public partial class ArrivalProbe : Node
         if (_stand == null)
         {
             var p0 = NpcArrival.PointAt(_lane, _zero);
-            if (!_chunks.TryGetHeight(p0, out float g0)) return;
+            if (!_chunks.Ground.TryGetHeight(p0, out float g0)) return;
             // the player who asked for the race, parked at the start (on the left of the road): in the way of the ones from behind
             var t0 = NpcArrival.TangentAt(_lane, _zero);
             _stand = Body("Player", (p0 + t0.Cross(Vector3.Up) * -1.2f) with { Y = g0 + 1.2f }, Mathf.Atan2(-t0.X, -t0.Z));
@@ -165,7 +165,7 @@ public partial class ArrivalProbe : Node
 
     private FootPlayer Body(string name, Vector3 at, float yaw)
     {
-        var p = new FootPlayer { Name = name, Terrain = _chunks, Npc = true };
+        var p = new FootPlayer { Name = name, Terrain = _chunks?.Ground, Npc = true };
         AddChild(p);
         p.GlobalPosition = at;
         p.Rotation = new Vector3(0, yaw, 0);
@@ -208,7 +208,7 @@ public partial class ArrivalProbe : Node
         var want = car + t.Cross(Vector3.Up) * 13f - t * 6f + Vector3.Up * 9f;
         _cam.GlobalPosition = _placed ? _cam.GlobalPosition.Lerp(want, MathX.Damp(2f, dt)) : want;
         _placed = true;
-        if (_chunks.TryGetHeight(_cam.GlobalPosition, out float g) && _cam.GlobalPosition.Y < g + 2f)
+        if (_chunks.Ground.TryGetHeight(_cam.GlobalPosition, out float g) && _cam.GlobalPosition.Y < g + 2f)
             _cam.GlobalPosition = _cam.GlobalPosition with { Y = g + 2f };
         var look = car - _cam.GlobalPosition;
         if (look.LengthSquared() > 0.25f && Mathf.Abs(look.Normalized().Y) < 0.98f)
