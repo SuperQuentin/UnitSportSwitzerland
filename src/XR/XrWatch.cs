@@ -144,7 +144,7 @@ internal sealed partial class XrWatch : Node3D
         if (player != null && Adventure.Navigation.NavTarget.Current is { } t)
         {
             var g = player.Global;
-            Set(_speed, "◆ " + Adventure.Navigation.NavFormat.Distance(Math.Sqrt((t.E - g.E) * (t.E - g.E) + (t.N - g.N) * (t.N - g.N))));
+            Set(_speed, "◆ " + Adventure.Navigation.NavFormat.Distance(g.HorizontalDistanceTo(Core.GlobalPos.FromLv95(t.E, t.N, 0))));
         }
         else Set(_speed, player != null ? $"{player.Velocity.Length() * 3.6f:0} km/h" : "");
     }
@@ -164,7 +164,8 @@ internal sealed partial class XrWatch : Node3D
         if (player != null && Adventure.Navigation.NavTarget.Current is { } t)
         {
             var g = player.Global;
-            float bearing = Ui.CompassStrip.Bearing(new Vector2((float)(t.E - g.E), (float)(t.N - g.N)));
+            var (toEast, toNorth, _) = g.OffsetTo(Core.GlobalPos.FromLv95(t.E, t.N, 0));
+            float bearing = Ui.CompassStrip.Bearing(new Vector2((float)toEast, (float)toNorth));
             _notch.Rotation = new Vector3(0, 0, -Mathf.DegToRad(bearing));
             _notch.Visible = true;
         }
