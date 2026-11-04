@@ -249,7 +249,8 @@ public static class AirlinerCatalog
         StaticThrust = 700000f,
         ThrustLapse = 0f,
         ReverseShare = 0f,
-        IdleSpool = 0.05f,
+        // a rocket has no idle: the levers back, it is out
+        IdleSpool = 0f,
         SpoolTime = 2.5f,
         EngineStartTime = 3f,
         IdleFuelFlow = 0f,
@@ -266,7 +267,8 @@ public static class AirlinerCatalog
         GearCd = 0.03f,
         GearLimit = 310 * Kt,
         GearTransit = 6f,
-        MaxPitchRate = 0.12f,
+        // the elevons round a 19° glide out in a few seconds: quicker than an airliner's 6°/s
+        MaxPitchRate = 0.17f,
         MaxRollRate = 0.35f,
         TailStrike = 0.27f,
         Wheelbase = 22.4f,

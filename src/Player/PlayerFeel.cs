@@ -902,17 +902,34 @@ public partial class PlayerFeel : Node3D
         var s = a.State;
         const float Knot = 0.514444f, Foot = 0.3048f;
         float altitude = _player.Origin is { } o ? (float)o.ToGlobal(_player.GlobalPosition).Alt : _player.GlobalPosition.Y;
-        sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
-        sb.Append($"    N1 {s.Spool * 100f:0}%");
+        // the shuttle in Space (#1492): its orbit or its drive instead of the airspeed
+        if (a.InSpace)
+        {
+            if (a.DriveOn)
+                sb.Append(System.FormattableString.Invariant($"DRIVE {s.Velocity.Length() / 1000f:0.00} km/s    {altitude / 1000f:0.0} km    LEVER {s.Lever * 100f:0}%"));
+            else if (a.Space?.Orbit is { } orbit)
+                AppendOrbit(sb, orbit);
+        }
+        else
+            sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
+        if (!a.DriveOn) sb.Append(a.Spec.Rocket ? "    THRUST " : "    N1 ").Append((int)(s.Spool * 100f + 0.5f)).Append('%');
         if (s.Reverse > 0.05f) sb.Append(" REV");
         // the configuration on a line of its own: one line ran under the corner's key hints (#420)
-        sb.Append("\nFLAPS ").Append(a.Spec.FlapNames[s.FlapLever]);
-        if (Mathf.Abs(s.Flaps - s.FlapLever) > 0.02f) sb.Append('~');
-        sb.Append(s.GearBroken ? "    GEAR DAMAGED" : s.Gear >= 1f ? "    GEAR DOWN" : s.Gear <= 0f ? "    GEAR UP" : "    GEAR MOVING");
+        sb.Append('\n');
+        if (a.Spec.FlapSettings > 1)
+        {
+            sb.Append("FLAPS ").Append(a.Spec.FlapNames[s.FlapLever]);
+            if (Mathf.Abs(s.Flaps - s.FlapLever) > 0.02f) sb.Append('~');
+            sb.Append("    ");
+        }
+        // re-entry's glow, and the drive's switch where it may be thrown (#1492)
+        if (a.Heat > 0.02f) sb.Append("HEAT ").Append((int)(a.Heat * 100f + 0.5f)).Append("%    ");
+        if (a.DriveAvailable) sb.Append(a.DriveOn ? "DRIVE ON [" : "DRIVE OFF [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]    ");
+        sb.Append(s.GearBroken ? "GEAR DAMAGED" : s.Gear >= 1f ? "GEAR DOWN" : s.Gear <= 0f ? "GEAR UP" : "GEAR MOVING");
         if (s.SpeedBrake > 0) sb.Append(s.SpeedBrake == 1 ? "    SPD BRK ½" : "    SPD BRK FULL");
         if (s.ParkingBrake) sb.Append("    PARK BRK");
         else if (s.Braking > 0.05f) sb.Append("    BRAKES");
-        if (!s.OnGround && s.Alpha > s.AlphaStall - 0.04f) sb.Append("    STALL");
+        if (!s.OnGround && !a.InSpace && s.Alpha > s.AlphaStall - 0.04f) sb.Append("    STALL");
         if (s.Ias > a.Spec.FlapLimit[s.FlapLever] && s.FlapLever > 0) sb.Append("    FLAPS OVERSPEED");
         else if (s.Ias > a.Spec.Vmo) sb.Append("    OVERSPEED");
         if (!s.OnGround && s.Gear < 1f && _player.Clearance < 230f && s.Velocity.Y < 0f) sb.Append("    TOO LOW GEAR");
@@ -923,8 +940,12 @@ public partial class PlayerFeel : Node3D
             sb.Append(s.Starting ? (s.Apu < 1f ? $"APU {s.Apu * 100f:0}%    " : $"START ENG {Mathf.FloorToInt(s.Lit) + 1}    ") : "ENGINES OFF    ");
         if (s.Autopilot)
             sb.Append($"AP HDG {Mathf.PosMod(-Mathf.RadToDeg(s.ApHeading), 360f):000} ALT {s.ApAltitude / Foot:0} SPD {s.ApSpeed / Knot:0}    ");
-        sb.Append($"FUEL {s.Fuel:0} kg");
-        if (s.Fuel <= 0f) sb.Append(" EMPTY");
+        // a rocket's propellant is unlimited (#1492)
+        if (!a.Spec.Rocket)
+        {
+            sb.Append($"FUEL {s.Fuel:0} kg");
+            if (s.Fuel <= 0f) sb.Append(" EMPTY");
+        }
         if (!a.Spec.FlyByWire) sb.Append($"    TRIM {Mathf.RadToDeg(s.TrimAlpha):0.0}");
     }
 

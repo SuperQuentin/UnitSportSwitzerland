@@ -4671,6 +4671,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (flyer is Pigeon) PigeonStep(input, dt);
         if (flyer is Ufo saucer) UfoStep(saucer);
+        if (flyer is ISpacecraft { Space: { } space }) SpaceStep(space);
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);

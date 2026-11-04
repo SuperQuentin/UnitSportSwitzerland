@@ -70,6 +70,7 @@ public partial class TestWorld : Node3D
             : FlightCheckProbe.ParseArgs() is { } fly ? new FlightCheckProbe(null, origin, fly.Kind, fly.Shot)
             : BeamCheck.Requested ? new BeamCheck(origin)
             : OrbitCheck.Requested ? new OrbitCheck(origin)
+            : ShuttleCheck.Requested ? new ShuttleCheck(origin)
             : Terrain.Construction.ShellWalkProbe.Requested() ? new Terrain.Construction.ShellWalkProbe()
             : Terrain.Construction.CraneCheck.Requested ? new Terrain.Construction.CraneCheck(origin)
             : Collision.CollisionMatrixProbe.Requested() ? new Collision.CollisionMatrixProbe(origin)
@@ -80,7 +81,7 @@ public partial class TestWorld : Node3D
             : null;
         if (probe == null)
         {
-            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --beamcheck, --orbitcheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck, --concertwalkcheck, --creativecheck)");
+            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --beamcheck, --orbitcheck, --shuttlecheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck, --concertwalkcheck, --creativecheck)");
             GetTree().Quit(2);
             return;
         }

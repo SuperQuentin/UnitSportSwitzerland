@@ -4,7 +4,7 @@ using UnitSport.Avatar;
 namespace UnitSport.Player;
 
 /// <summary>A pressed airliner control (#414): one step's edges, consumed by the next <see cref="Airliner.Fly"/>.</summary>
-public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights, Engines, Autopilot }
+public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights, Engines, Autopilot, Drive }
 
 /// <summary>
 /// A heavy aircraft as a ride (#414): the A320, the military freighter (#420) and the AN-124 (#419). Flown by <see cref="AirlinerFlight"/> (its <see cref="State"/>), on the yaw-only body
@@ -290,6 +290,7 @@ public sealed partial class Airliner : Flyer
             case AirlinerCommand.Lights: LandingLights = !LandingLights; break;
             case AirlinerCommand.Engines: _engines = !_engines; break;
             case AirlinerCommand.Autopilot: _autopilot = !_autopilot; break;
+            case AirlinerCommand.Drive: _drive = !_drive; break;
         }
     }
 
@@ -340,7 +341,10 @@ public sealed partial class Airliner : Flyer
         _flapsDelta = 0;
         _gear = _speedbrake = _parking = _engines = _autopilot = false;
         Clearance = env.Clearance;
+        // the shuttle above the Space handover flies its orbit or its drive (#1492, Airliner.Shuttle.cs)
+        if (Space is { } space && SpaceStep(space, input, c.GearToggle, dt, ref m)) return FlightEvent.None;
         var ev = AirlinerFlight.Step(Spec, ref State, c, new AirlinerFlight.Env(env.OnFloor, env.Altitude), dt);
+        AirHeat(env.Altitude);
         ToMotion(ref m);
         return ev == AirlinerFlight.Event.Crashed ? FlightEvent.Crashed : FlightEvent.None;
     }
@@ -398,6 +402,8 @@ public sealed partial class Airliner : Flyer
         Autopilot = s.Autopilot,
         Warning = WarningOf(s),
         Fuel = Spec.FuelCapacity > 0f ? s.Fuel / Spec.FuelCapacity : 0f,
+        Heat = Heat,
+        Drive = DriveOn,
     };
 
     /// <summary>Height over the ground last step, m: the gear warning's "low" (#421).</summary>
@@ -421,6 +427,8 @@ public sealed partial class Airliner : Flyer
         var s = State;
         bool ground = s.Spoilers > s.SpeedBrake * 0.5f + 0.25f;
         return (s.FlapLever & 7)
+            // the shuttle (#1492) has one flap setting: its lever's top bit carries the drive
+            | (DriveOn ? 1 << 2 : 0)
             | (s.GearDown ? 1 << 3 : 0)
             | (s.GearBroken ? 1 << 4 : 0)
             | (s.SpeedBrake & 3) << 5
@@ -443,7 +451,9 @@ public sealed partial class Airliner : Flyer
         // the stick as two quantised halves of one float: −1..1 each, 1/50 steps
         float stick = Mathf.Round((look.Stick.X + 1f) * 50f) * 101f + Mathf.Round((look.Stick.Y + 1f) * 50f);
         // and over it, for the cockpit (#421): the fuel in % and the engines running (under 2^24, exact)
-        stick += StickSpan * (Mathf.Clamp(Mathf.RoundToInt(look.Fuel * 100f), 0, 100) + 101 * Mathf.Clamp(look.Lit, 0, 4));
+        // (the shuttle's propellant is unlimited: its fuel's place carries re-entry's heat, #1492)
+        float tank = Spec.Rocket ? look.Heat : look.Fuel;
+        stick += StickSpan * (Mathf.Clamp(Mathf.RoundToInt(tank * 100f), 0, 100) + 101 * Mathf.Clamp(look.Lit, 0, 4));
         return new Vector4(State.Spool, State.Lever, stick, Bits());
     }
 
@@ -486,8 +496,18 @@ public sealed partial class Airliner : Flyer
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
     {
-        if (visual is AirlinerRig rig) rig.Show(LookOf(pose), dt);
+        if (visual is AirlinerRig rig) rig.Show(Spec.Rocket ? ShuttleLook(LookOf(pose)) : LookOf(pose), dt);
     }
+
+    /// <summary>The shuttle's look from the generic one (#1492): the flap lever's top bit is the drive, the fuel the heat.</summary>
+    public static AirlinerLook ShuttleLook(AirlinerLook look) => look with
+    {
+        Drive = (look.FlapLever & 4) != 0,
+        Flaps = 0f,
+        FlapLever = 0,
+        Heat = look.Fuel,
+        Fuel = 0f,
+    };
 
     // ---- parked ----------------------------------------------------------------------------
 

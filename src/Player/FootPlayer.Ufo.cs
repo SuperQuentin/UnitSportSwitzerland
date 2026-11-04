@@ -44,11 +44,13 @@ public partial class FootPlayer
         ufo.Below = float.IsNaN(ground) ? 999f : GlobalPosition.Y - ground;
         // no terrain to measure from (the flat test world): the HUD's height is the ray's
         if (Clearance >= 999f) Clearance = ufo.Below;
-        // where it is on the Earth, for its orbit above the Space handover (#1430 H5)
-        ufo.Place = Origin is { } origin
-            ? new Ufo.SpacePlace(origin.Frame, GlobalPosition, origin.AltitudeOf(GlobalPosition), Net.ClockSync.SimNow)
-            : null;
     }
+
+    /// <summary>Before a spacecraft's step (the saucer, the shuttle): where it is on the Earth, for its orbit above the Space handover (#1430 H5).</summary>
+    private void SpaceStep(SpaceOrbit space) =>
+        space.Place = Origin is { } origin
+            ? new SpacePlace(origin.Frame, GlobalPosition, origin.AltitudeOf(GlobalPosition), Net.ClockSync.SimNow)
+            : null;
 
     /// <summary>The lowest and highest <c>/orbit</c>, km: above the Space handover, short of the Moon.</summary>
     public const double OrbitMinKm = 100, OrbitMaxKm = 100_000;
@@ -60,7 +62,7 @@ public partial class FootPlayer
     /// </summary>
     public string PutInOrbit(double km)
     {
-        if (_ride is not Ufo ufo) return "Fly a UFO first (R, Mounts): only the saucer reaches orbit for now.";
+        if (_ride is not (Ufo or Airliner { Space: not null })) return "Fly a UFO or the space shuttle first (R, Mounts): only they reach orbit.";
         if (Origin is not { } origin) return "No orbit in this world: it has no place on the Earth.";
         if (!(km >= OrbitMinKm && km <= OrbitMaxKm)) return FormattableString.Invariant($"An orbit is {OrbitMinKm:F0} to {OrbitMaxKm:F0} km up.");
         var earth = Planet.Earth;
@@ -70,12 +72,18 @@ public partial class FootPlayer
         double angle = Orbit.RotationAngle(earth, Net.ClockSync.SimNow);
         var heading = frame.EcefDirection(GlobalPosition, UfoFlight.Heading(_flight.Yaw));
         var state = Orbit.Circular(earth, Orbit.ToEci(at, angle), Orbit.ToEci(heading, angle));
-        ufo.SetOrbit(state);
+        if (_ride is Ufo ufo) ufo.SetOrbit(state);
+        else if (_ride is Airliner shuttle)
+        {
+            shuttle.SetOrbit(state);
+            // level along its track, gear up: flying, not standing (#1492)
+            shuttle.Aloft(new Vector3(0f, _flight.Yaw, 0f), Vector3.Zero);
+        }
         // straight there: the next step finds the body where its orbit is
         GlobalPosition = frame.FromEcef(at);
         _flight.Velocity = Vector3.Zero;
         var (peri, _, a) = Orbit.Apsides(earth, state);
-        GD.Print(FormattableString.Invariant($"[ufo] /orbit {km:F0} km: {state.V.Length:F0} m/s, one turn in {Orbit.Period(earth, a) / 60:F1} min"));
+        GD.Print(FormattableString.Invariant($"[{(_ride is Ufo ? "ufo" : "shuttle")}] /orbit {km:F0} km: {state.V.Length:F0} m/s, one turn in {Orbit.Period(earth, a) / 60:F1} min"));
         return FormattableString.Invariant($"In orbit {km:F0} km up at {state.V.Length:F0} m/s: once round in {Orbit.Period(earth, a) / 60:F0} min.");
     }
 

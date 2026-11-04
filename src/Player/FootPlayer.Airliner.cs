@@ -47,11 +47,26 @@ public partial class FootPlayer
     /// </summary>
     private bool AirlinerEngines()
     {
+        if (_ride is Airliner { DriveAvailable: true } shuttle) return ShuttleDrive(shuttle);
         if (_ride is not Airliner airliner || Airliner.Handling != AirlinerHandling.Sim) return false;
         airliner.Command(AirlinerCommand.Engines);
         bool starting = !airliner.State.Starting;
         Announced?.Invoke(starting ? "Engine start: battery, APU, then each engine" : "Engines shutting down", true);
         // the vehicle's switch stays on: the aircraft's own state says what runs (its spool, for every peer)
+        EngineOn = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Z / D-pad ↑ at the shuttle's controls above 60 km (#1492): the cruise drive on or off (off leaves it on a
+    /// circular orbit). Below it the switch is the engines', as every airliner's. In VR the guarded switch on the
+    /// panel, gripped (<c>XrCabControls</c>), ends here too.
+    /// </summary>
+    public bool ShuttleDrive(Airliner shuttle)
+    {
+        if (!shuttle.DriveAvailable) return false;
+        shuttle.Command(AirlinerCommand.Drive);
+        Announced?.Invoke(shuttle.DriveOn ? "Cruise drive off: a circular orbit" : "Cruise drive on: the levers set its speed", true);
         EngineOn = true;
         return true;
     }
