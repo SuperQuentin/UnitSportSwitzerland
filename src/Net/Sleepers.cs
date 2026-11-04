@@ -96,8 +96,9 @@ public partial class Sleepers : Node
         RpcId(peer, MethodName.Snapshot,
             list.Select(s => s.Id).ToArray(),
             list.Select(s => s.NameShown(PlayerIds.Server)).ToArray(),
-            list.SelectMany(s => new[] { s.E, s.N, s.Alt }).ToArray(),
-            list.Select(s => s.Yaw).ToArray(),
+            // ECEF and headings from true north (#1503); the book keeps LV95 and grid north until A2b
+            list.SelectMany(s => { var (x, y, z) = Where(s).ToWire(); return new[] { x, y, z }; }).ToArray(),
+            list.Select(s => Where(s).TrueYaw(s.Yaw)).ToArray(),
             list.Select(s => s.Rider).ToArray(),
             list.Select(s => s.Outfit).ToArray(),
             list.Select(s => s.Appearance).ToArray(),
@@ -137,7 +138,20 @@ public partial class Sleepers : Node
         Unshow(s.Id);
         Save();
         GD.Print($"[sleepers] {s.Name} wakes at {s.E:F1}/{s.N:F1}/{s.Alt:F1}");
-        RpcId(peer, MethodName.WakeAt, s.E, s.N, s.Alt, s.Yaw);
+        var (x, y, z) = Where(s).ToWire();
+        RpcId(peer, MethodName.WakeAt, x, y, z, Where(s).TrueYaw(s.Yaw));
+    }
+
+    /// <summary>A sleeper's place (the book keeps it in LV95 notation until G2 A2b).</summary>
+    private static GlobalPos Where(Sleeper s) => GlobalPos.FromLv95(s.E, s.N, s.Alt);
+
+    /// <summary>A sleeper from the wire (#1503): ECEF and a heading from true north, kept as the book has them.</summary>
+    private static Sleeper FromWire(long id, string name, double x, double y, double z, float trueYaw, int rider, long outfit,
+        int appearance, int hat)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        var l = at.Lv95;
+        return new Sleeper(id, "", name, l.E, l.N, at.Alt, at.OffsetYaw(trueYaw), rider, outfit, appearance, hat);
     }
 
     /// <summary>
@@ -173,7 +187,10 @@ public partial class Sleepers : Node
     private void Show(Sleeper s)
     {
         foreach (int p in Multiplayer.GetPeers())
-            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), s.E, s.N, s.Alt, s.Yaw, s.Rider, s.Outfit, s.Appearance, s.Headwear);
+        {
+            var (x, y, z) = Where(s).ToWire();
+            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), x, y, z, Where(s).TrueYaw(s.Yaw), s.Rider, s.Outfit, s.Appearance, s.Headwear);
+        }
     }
 
     private void Unshow(long id)
@@ -209,21 +226,23 @@ public partial class Sleepers : Node
     {
         foreach (long id in _shown.Keys.ToList()) Drop(id);
         for (int i = 0; i < ids.Length; i++)
-            Put(new Sleeper(ids[i], "", names[i], pos[3 * i], pos[3 * i + 1], pos[3 * i + 2], yaws[i], riders[i],
+            Put(FromWire(ids[i], names[i], pos[3 * i], pos[3 * i + 1], pos[3 * i + 2], yaws[i], riders[i],
                 outfits[i], appearances[i], hats[i]));
         GD.Print($"[sleepers] snapshot: {ids.Length} asleep");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Add(long id, string name, double e, double n, double alt, float yaw, int rider, long outfit,
-        int appearance, int hat) => Put(new Sleeper(id, "", name, e, n, alt, yaw, rider, outfit, appearance, hat));
+    private void Add(long id, string name, double x, double y, double z, float yaw, int rider, long outfit,
+        int appearance, int hat) => Put(FromWire(id, name, x, y, z, yaw, rider, outfit, appearance, hat));
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Remove(long id) => Drop(id);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void WakeAt(double e, double n, double alt, float yaw)
+    private void WakeAt(double x, double y, double z, float yaw)
     {
+        var at = GlobalPos.FromWire(x, y, z);
+        var (e, n, alt) = at.Lv95;
         GD.Print($"[sleepers] waking at {e:F1}/{n:F1}/{alt:F1}");
         LastWake = (e, n);
         Teleporter?.TeleportTo(e, n, "where you fell asleep");
@@ -250,7 +269,7 @@ public partial class Sleepers : Node
         _shown[s.Id] = s;
         var node = Draw(s);
         node.Position = _origin.ToWorld(s.E, s.N, s.Alt);
-        node.Rotation = new Vector3(0, s.Yaw, 0);
+        node.Rotation = new Vector3(0, _origin.Frame.WorldYawOf(Where(s), s.Yaw), 0);
         AddChild(node);
         _visuals[s.Id] = node;
     }

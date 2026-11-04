@@ -7,7 +7,7 @@ using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Rewards;
 
-// Plain C#, no Godot: linked into the unit tests (docs/notes/adventure/rewards.md).
+// Plain C#, no Godot nodes: linked into the unit tests (docs/notes/adventure/rewards.md); GlobalPos for the ghosts' wire (#1503).
 
 /// <summary>What a trial is run as. Append only (sent as a number).</summary>
 public enum TrialKind : byte
@@ -304,15 +304,20 @@ public sealed class TrialRuns
 }
 
 /// <summary>
-/// A trial's ghost (#1227): the run sampled at 4 Hz (LV95 relative to its first point, altitude, yaw), ~4 KB a
-/// minute, capped at <see cref="MaxBytes"/>. The client records and uploads it after a personal best; the server
-/// keeps the top 3; a retry races it.
+/// A trial's ghost (#1227): the run sampled at 4 Hz, ~4 KB a minute, capped at <see cref="MaxBytes"/>. The client
+/// records and uploads it after a personal best; the server keeps the top 3 (on disk, as uploaded); a retry races it.
+/// In memory a <see cref="Sample"/> is LV95, the altitude and a heading on the grid (GlobalPos's offset axes). The
+/// bytes are <c>GSH2</c> since protocol 93 (#1503): an ECEF origin (the first sample) and per sample a float offset
+/// in the local east-up-south there and a heading from true north at the sample; a stored <c>GSH1</c> (LV95 offsets
+/// from the first point, grid headings) still decodes.
 /// </summary>
 public static class GhostTrack
 {
     public const int MaxBytes = 64 * 1024;
     public const double Rate = 4;
-    private const uint Magic = 0x31485347; // "GSH1"
+    private const uint Magic1 = 0x31485347; // "GSH1"
+    private const uint Magic = 0x32485347;  // "GSH2"
+    private const int Header1 = 24, Header = 32, PerSample = 16;
 
     public readonly record struct Sample(double E, double N, float Alt, float Yaw);
 
@@ -321,17 +326,21 @@ public static class GhostTrack
         using var ms = new MemoryStream();
         using var w = new BinaryWriter(ms);
         w.Write(Magic);
-        int n = Math.Min(samples.Count, (MaxBytes - 24) / 16);
+        int n = Math.Min(samples.Count, (MaxBytes - Header) / PerSample);
         w.Write(n);
-        double e0 = n > 0 ? samples[0].E : 0, n0 = n > 0 ? samples[0].N : 0;
-        w.Write(e0);
-        w.Write(n0);
+        var origin = n > 0 ? Core.GlobalPos.FromLv95(samples[0].E, samples[0].N, samples[0].Alt).ToEcef() : default;
+        w.Write(origin.X);
+        w.Write(origin.Y);
+        w.Write(origin.Z);
+        var enu = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(origin));
         for (int i = 0; i < n; i++)
         {
-            w.Write((float)(samples[i].E - e0));
-            w.Write((float)(samples[i].N - n0));
-            w.Write(samples[i].Alt);
-            w.Write(samples[i].Yaw);
+            var at = Core.GlobalPos.FromLv95(samples[i].E, samples[i].N, samples[i].Alt);
+            var (x, y, z) = enu.ToLocal(at.ToEcef());
+            w.Write((float)x);
+            w.Write((float)y);
+            w.Write((float)z);
+            w.Write(at.TrueYaw(samples[i].Yaw));
         }
         return ms.ToArray();
     }
@@ -339,11 +348,33 @@ public static class GhostTrack
     /// <summary>The samples, or null for bytes that are not a ghost (a forged upload).</summary>
     public static List<Sample>? Decode(byte[] bytes)
     {
-        if (bytes.Length < 24 || bytes.Length > MaxBytes) return null;
+        if (bytes.Length < Header1 || bytes.Length > MaxBytes) return null;
         using var r = new BinaryReader(new MemoryStream(bytes));
-        if (r.ReadUInt32() != Magic) return null;
+        uint magic = r.ReadUInt32();
+        if (magic == Magic1) return Decode1(r, bytes.Length);
+        if (magic != Magic || bytes.Length < Header) return null;
         int n = r.ReadInt32();
-        if (n < 0 || 24 + n * 16L != bytes.Length) return null;
+        if (n < 0 || Header + n * (long)PerSample != bytes.Length) return null;
+        var origin = new EcefPos(r.ReadDouble(), r.ReadDouble(), r.ReadDouble());
+        if (!double.IsFinite(origin.X) || !double.IsFinite(origin.Y) || !double.IsFinite(origin.Z) || origin.Length < 1e6) return null;
+        var enu = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(origin));
+        var list = new List<Sample>(n);
+        for (int i = 0; i < n; i++)
+        {
+            float x = r.ReadSingle(), y = r.ReadSingle(), z = r.ReadSingle(), yaw = r.ReadSingle();
+            if (!float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z) || !float.IsFinite(yaw)) return null;
+            var at = Core.GlobalPos.FromEcef(enu.ToEcef(x, y, z));
+            var l = at.Lv95;
+            list.Add(new Sample(l.E, l.N, (float)at.Alt, at.OffsetYaw(yaw)));
+        }
+        return list;
+    }
+
+    /// <summary>A ghost stored before protocol 93: LV95 offsets from its first point, grid headings.</summary>
+    private static List<Sample>? Decode1(BinaryReader r, int length)
+    {
+        int n = r.ReadInt32();
+        if (n < 0 || Header1 + n * (long)PerSample != length) return null;
         double e0 = r.ReadDouble(), n0 = r.ReadDouble();
         var list = new List<Sample>(n);
         for (int i = 0; i < n; i++)
