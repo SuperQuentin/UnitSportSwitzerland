@@ -30,7 +30,11 @@ public partial class VersteckisManager
     private void RequestDisguise(int kind) => Reply(ServeDisguise(Multiplayer.GetRemoteSenderId(), kind));
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestTag(double e, double n, float alt) => Reply(ServeTag(Multiplayer.GetRemoteSenderId(), e, n, alt));
+    private void RequestTag(double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);   // (#1503) the wire is ECEF
+        Reply(ServeTag(Multiplayer.GetRemoteSenderId(), at.E, at.N, (float)at.Alt));
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestSniff() => Reply(ServeSniff(Multiplayer.GetRemoteSenderId()));
@@ -234,6 +238,7 @@ public partial class VersteckisManager
         if (seeker.SniffBackAt <= 0) seeker.SniffBackAt = Now + VsRules.SniffRecharge;
         var es = new List<double>();
         var ns = new List<double>();
+        var xyz = new List<double>();   // (#1503) the same puffs as ECEF for the wire, three per puff
         foreach (var h in s.Entrants)
         {
             if (!h.Hiding || PositionOf(h.Peer) is not { } at) continue;
@@ -242,9 +247,14 @@ public partial class VersteckisManager
             var puff = at.Moved(Math.Cos(a) * r, Math.Sin(a) * r);
             es.Add(puff.Lv95.E);
             ns.Add(puff.Lv95.N);
+            if (seeker.Bot) continue;
+            var (x, y, z) = puff.ToWire();
+            xyz.Add(x);
+            xyz.Add(y);
+            xyz.Add(z);
         }
         if (seeker.Bot) BotSniffed(peer, es, ns);
-        else if (Connected(peer)) RpcId(peer, MethodName.Sniffed, es.ToArray(), ns.ToArray());
+        else if (Connected(peer)) RpcId(peer, MethodName.Sniffed, xyz.ToArray());
         GD.Print($"[vs] {seeker.Name} sniffed: {es.Count} puffs");
         Push();
         return null;
@@ -365,11 +375,12 @@ public partial class VersteckisManager
     private void SoundAt(Game g, double e, double n, long from, VsVoice voice, bool everyone = false)
     {
         const double reach = 80;
+        var (x, y, z) = GlobalPos.FromLv95(e, n, g.S.Ground).ToWire();   // (#1503) the wire is ECEF
         foreach (long p in Multiplayer.GetPeers())
         {
             bool inGame = g.S.Find(p) is { Left: false };
             bool near = PositionOf(p) is { } at && at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, at.Alt)) <= reach * reach;
-            if (near || everyone && inGame) RpcId(p, MethodName.Sounded, from, (int)voice, e, n);
+            if (near || everyone && inGame) RpcId(p, MethodName.Sounded, from, (int)voice, x, y, z);
         }
         BotHeard(g, e, n, voice);
     }

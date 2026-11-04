@@ -41,7 +41,8 @@ public partial class VersteckisManager
             else if (Connected(e.Peer))
             {
                 RpcId(e.Peer, MethodName.Enter, s.Id);
-                RpcId(e.Peer, MethodName.PutAt, pe, pn);
+                var (px, py, pz) = GlobalPos.FromLv95(pe, pn, s.Ground).ToWire();   // (#1503) the wire is ECEF
+                RpcId(e.Peer, MethodName.PutAt, px, py, pz);
             }
             g.RunOf(e.Peer).Last = null;
         }
@@ -114,7 +115,11 @@ public partial class VersteckisManager
         var s = g.S;
         if (s.Find(seeker) is not { } e) return;
         if (e.Bot) PlaceBot(seeker, s.DoorE, s.DoorN);
-        else if (Connected(seeker)) RpcId(seeker, MethodName.PutAt, s.DoorE, s.DoorN);
+        else if (Connected(seeker))
+        {
+            var (x, y, z) = GlobalPos.FromLv95(s.DoorE, s.DoorN, s.Ground).ToWire();   // (#1503) the wire is ECEF
+            RpcId(seeker, MethodName.PutAt, x, y, z);
+        }
         g.RunOf(seeker).Last = null;
     }
 
