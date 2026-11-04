@@ -113,7 +113,7 @@ public static class GeoPackageReader
     /// </para>
     /// </summary>
     public static IEnumerable<Row> TileRows(SqliteConnection conn, string table, string geomColumn,
-        IReadOnlyList<string> columns, TileRegion region)
+        IReadOnlyList<string> columns, ISourceRegion region)
     {
         var ids = new List<long>();
         using (var index = conn.CreateCommand())
@@ -165,9 +165,9 @@ public static class GeoPackageReader
         }
     }
 
-    /// <summary><see cref="TileRows(SqliteConnection, string, string, IReadOnlyList{string}, TileRegion)"/> that resolves the geometry column itself.</summary>
+    /// <summary><see cref="TileRows(SqliteConnection, string, string, IReadOnlyList{string}, ISourceRegion)"/> that resolves the geometry column itself.</summary>
     public static IEnumerable<Row> TileRows(SqliteConnection conn, string table,
-        IReadOnlyList<string> columns, TileRegion region)
+        IReadOnlyList<string> columns, ISourceRegion region)
         => TileRows(conn, table, GeometryColumn(conn, table), columns, region);
 
     /// <summary>A closed ring as flat x,y,z triples in map coordinates.</summary>

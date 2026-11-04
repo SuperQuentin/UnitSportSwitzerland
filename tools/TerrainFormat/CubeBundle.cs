@@ -190,6 +190,9 @@ public sealed class CubeManifest
     [JsonPropertyName("orientation")] public string Orientation { get; set; } =
         FormattableString.Invariant($"face 0 at {CubeSphere.CentreLatDeg}N {CubeSphere.CentreLonDeg}E, twist {CubeSphere.TwistDeg}");
     [JsonPropertyName("sources")] public List<string> Sources { get; set; } = new();
+
+    /// <summary>A leaf region's (<c>.cubl</c>, #1507): every kind some leaf holds; null (not written) for a pyramid.</summary>
+    [JsonPropertyName("kinds"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? Kinds { get; set; }
     [JsonPropertyName("tiles")] public List<CubeManifestTile> Tiles { get; set; } = new();
 
     public string ToJson() => JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
@@ -218,4 +221,7 @@ public sealed class CubeManifestTile
     [JsonPropertyName("roads")] public int Roads { get; set; }
     [JsonPropertyName("buildings")] public int Buildings { get; set; }
     [JsonPropertyName("bytes")] public int Bytes { get; set; }
+
+    /// <summary>A leaf's (#1507): the kinds of its sections; null (not written) for a pyramid tile.</summary>
+    [JsonPropertyName("kinds"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? Kinds { get; set; }
 }
