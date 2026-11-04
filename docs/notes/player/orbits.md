@@ -84,6 +84,11 @@ The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`
   scale (it grows toward the oblique cylinder's poles, 43° N 172.6° W and 43° S 7.4° E), so a low orbit
   there is drawn at the wrong speed against the globe. Orbits live higher (400 km); round tiles (G2) end it.
 - No vertical origin yet: world Y is still ~altitude in Space anchors (3 cm floats at 400 km).
+  **The camera's near plane follows it** (#1497, `Styles/CameraGlobal.NearOfDistance`): at least the camera's
+  distance from the world's origin / 200,000 (1.5 m at 300 km, 2 m at 400 km). With the player's 0.08 m near
+  plane, every view above 250 km drew black (no shuttle, globe or stars): its corners fell within a few float
+  steps of the eye, the frustum degenerated. The headless orbit checks never saw it; `--shuttlefilm orbit,400`
+  takes a picture there.
 
 ## Online
 

@@ -77,6 +77,27 @@ velocity there reads up to ~17x its speed). Piloted craft are client-authoritati
 Passengers only (seats, as any vehicle's); the drive switch is `AirlinerCommand.Drive` on the aircraft, so a
 bot pilot can come later. Row in `bots/bot-capability-map`.
 
+## The scripted pilot (`ShuttlePilot`, #1497)
+
+- The mission pilot of the checks and the film, on the shuttle's own intents (`FlyControls`, `AirlinerCommand`,
+  `ShuttleDrive`): given a `Mission` (the runway to take off from and the one to land on, by LV95 threshold,
+  heading and height; a taxi start; the orbit's height; round the Earth, or `TurnOutKm` out along the take-off's
+  heading and back over home; the coast; the retro burn's perigee; the time in the air), it flies stage by stage
+  (`Taxi`, `LineUp`, `Roll`, `Climb`, `DriveUp`, `Round`/`TurnHome`, `Orbit`, `Retro`, `Entry`, `Air`, `BackUp`,
+  `DriveHome`, `Fall`, `Glide`, `Rollout`) and says what it wants of the time scale; the host judges and films.
+- Client-side only: a server-run bot pilot is #1498, after #1443 G2 (on the server a body above 60 km stays in
+  the main region's flat LV95 frame), with a long orbital path.
+- The taxi: square to the centreline, round onto it from 40 m out, on a whisper of rocket (6 %) and the brakes.
+
+## The film (`--shuttlefilm`, `tools/shuttlefilm.sh`, #1497)
+
+- At Geneva on the real map (D:'s tiles and globe), windowed, silent (`--audio-driver Dummy`), frame-exact
+  (`--fixed-fps 30 --clip-hq`): `ShuttlePilot` flies the Europe mission (taxi onto 04, out 2,000 km NE in the
+  drive and back over home, a minute of orbit, a retro burn to a -3,500 km perigee, re-entry ~1,600 km SW, back up
+  and the drive home, the approach to 22 over the lake), `ClipRecorder.Film`/`Cut` film five clips, faster
+  between them; the script cuts them into `shuttle-film.mp4` with captions (ffmpeg's `drawtext`).
+- The same mission headless on the flat world: `--shuttlecheck europe`.
+
 ## Checks
 
 - `--shuttlecheck --world flat` (`Player/ShuttleCheck`, quick, ~50 s): a scripted pilot flies the whole
