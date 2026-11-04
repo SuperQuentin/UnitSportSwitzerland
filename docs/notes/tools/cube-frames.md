@@ -125,6 +125,10 @@ across frame edges), 0 differ; ground against the sources median 6.1 mm; against
 D: region overlaps it (Riddes, 6 tiles) median 26 mm, 99.6 % within 50 cm (2 m data against the
 LV95 build's 0.5 m).
 
+`--cube-compare --kinds heights` (PR 0) of the D: region's `.cubl` against its `.terr` (`DOTNET_gcServer=0`,
+10 threads, 228 s): 432 M dry vertices, mean −0.77 cm, p50 1.62, p95 5.95, p99 12.3 cm, fitted shift
+0.3 mm, every bar held; the same numbers as G1's `.cubb` (the same bits).
+
 `--cube-swiss` from the D: region's `.cubl` (levels 5-13, 1,340 tiles, 231 s, peak 9.5 GB) is
 **byte-identical** to the pyramid built from G1's `.cubb` leaves (all 88 bundles).
 
